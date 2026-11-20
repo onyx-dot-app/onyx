@@ -2,7 +2,7 @@
 
 > The shared machinery for every tool the chat model can call: the `Tool`
 > interface, the built-in tool registry, per-model tool construction and gating,
-> and the research and coding sub-agents. Concrete tools live in their own
+> and research subagents. Concrete tools live in their own
 > components; this one owns the rules that they all depend on.
 
 **Verified against:** `6bac4e012f` (2026-10-29)
@@ -21,10 +21,8 @@ The interface is `tools/interface.py:Tool`, which returns
   it to an agent. Keep [[#built-in-needs-constructor-branch]],
   [[#is-available-cheap-and-silent]], [[#run-errors-become-results]],
   [[#renderer-dispatches-by-name]], [[#durable-details-registered]],
-  [[#parallel-by-default]], [[#tool-name-is-lookup-key]] and
-  [[#child-wait-cleanup]]. Checkpoint resume is not wired ([[agent-runtime]]).
-  When it is, a change to `tool_definition()` stops saved checkpoints from
-  resuming ([[agent-runtime#restored-tools-must-match]]). The concrete tools are
+  [[#parallel-by-default]] and [[#tool-name-is-lookup-key]]. Changing a tool
+  definition can prevent a saved checkpoint from resuming ([[agent-runtime#restored-tools-must-match]]). The concrete tools are
   [[internal-search]], [[web-search]], [[image-generation]],
   [[code-execution]], [[mcp-and-custom-tools]], [[chat-preferences]]
   (`MemoryTool`) and [[file-store-and-user-files]] (`read_file`).
@@ -36,9 +34,7 @@ The interface is `tools/interface.py:Tool`, which returns
   `skills_list` and `skills_read` in its research phase, and gets the skills
   catalog ([[skills]]). It passes the tools to each
   `deep_research/research_agent.py:ResearchAgent` child, which binds them with
-  its own `ToolContext`. `coding_agent/agent.py:CodingAgent` calls `BashTool.run` from its own
-  `AgentTool`, so `Tool.run` error handling applies but no construction gate
-  does ([[code-execution#errors-are-results]]).
+  its own `ToolContext`.
 - **[[citations]]** gets a block of citation numbers per search-like call.
 
 ---
@@ -46,8 +42,7 @@ The interface is `tools/interface.py:Tool`, which returns
 ## Scope
 
 This component owns the `Tool` interface and `ToolContext`, tool construction
-and its gates, the built-in tool registry, the research-agent and coding-agent
-features, and the `CodingAgentTool` wrapper.
+and its gates, the built-in tool registry, and the research-agent features.
 
 Neighbours own the rest:
 - Each concrete tool belongs to the component listed in Callers.
@@ -83,48 +78,52 @@ chat/presentation.py:ResponsePresenter       tool events -> chat/renderer.py:Too
 ```
 
 **Captured configuration.** `db/tools.py:capture_persona_tool_configuration`
-copies the agent's `Tool` rows into frozen `ToolConfiguration` models before the
-run starts. `construct_tools` opens its own short DB session, so no session
-stays open for a turn that can last minutes. MCP tool schemas come from the
-captured `mcp_input_schema`, not from a live MCP call.
+copies the agent's built-in `Tool` rows into frozen `ToolConfiguration` models,
+and its `persona__integration` rows into `IntegrationLinkConfiguration` models
+(integration id and parsed `action_settings`), before the run starts. The MCP and OpenAPI
+`Tool` rows of the agent are not copied. `construct_tools` opens its own short
+DB session, so no session stays open for a turn that can last minutes.
 
 **Construction per model.** `chat/execution.py:create_chat_agent` calls
 `construct_tools` for each model response, so a multi-model turn has separate
-tool instances. `tools/tool_constructor.py:_construct_tools_impl` walks the
-captured tools in order and applies these gates:
+tool instances. `construct_tools` returns a flat list. For built-in tools,
+`tools/tool_constructor.py:_construct_tools_impl` walks the captured tools in
+order and applies these gates:
 
-1. `server/features/tool/tool_visibility.py:is_tool_available_for_persona`. An
-   MCP or built-in tool with `enabled=False` is skipped for every agent. An
-   OpenAPI tool with `enabled=False` is skipped only in Default Chat.
-2. `allowed_tool_ids`, the per-message list that the web client sends.
-3. For a built-in tool, `is_available(db_session)`. An exception counts as "not
-   available" and is logged.
+1. A tool with `enabled=False` is skipped.
+2. `tool_options.allowed` (`tools/models.py:ToolOptions`), the per-message
+   choice that the client sends or the chat saved. A capability entry keeps a
+   built-in tool by its id. An integration entry keeps the integration, and
+   its optional `actions` keep only those action keys
+   (`tools/models.py:IntegrationChatRequest.allowed_integrations`). The options
+   only pick integrations and actions: the settings of the agent link of
+   an integration still apply, so a request cannot drop a Blocked link.
+   NULL keeps every tool and integration of the agent. The web composer
+   (`web/src/lib/tools/hooks.ts`) sends a saved `actions` list back unchanged,
+   and it does not rewrite the allow-list while a plugin catalog request has
+   failed.
+3. `is_available(db_session)`. An exception counts as "not available" and is
+   logged.
 4. A class-specific branch builds the instance, and some branches skip the
    tool with no error:
    - `SearchTool` is skipped when the search usage setting from
      `chat/files.py:determine_search_params` is `DISABLED`.
    - `OpenURLTool` is skipped when web search is off for the message and
      `DISABLE_VECTOR_DB` is set ([[web-search]]).
-   - An OpenAPI tool with `oauth_config_id` or `passthrough_auth` is skipped
-     for an anonymous user, with only a warning in the log.
-   - OpenAPI and MCP rows go through their own branches
-     ([[mcp-and-custom-tools]]). Both first apply the user's plugin
-     preferences ([[plugins]]), which exist only for Default Chat
-     (`DEFAULT_PERSONA_ID`). The MCP branch then applies
-     `user_can_access_mcp_server` in Default Chat only
-     ([[mcp-and-custom-tools#access-grants-default-chat-only]]), resolves
-     credentials once per server, including unavailable servers, and applies
-     the same `can_authenticate_with_headers` gate
-     as execution before building `MCPTool` instances from the captured rows.
-     Missing or rejected credentials exclude the server's tools; refreshable
-     OAuth grants and request-supplied credentials remain usable
-     ([[mcp-and-custom-tools]]).
 
-Two tools are added outside this loop. `SearchTool` is added when the request
-forces search on (`SearchToolUsage.ENABLED`), `DISABLE_VECTOR_DB` is off, and
-the loop did not build it. `MemoryTool` is added when `user.enable_memory_tool`
-is set ([[#memory-tool-bypasses-filters]]). MCP and OpenAPI tools receive stable
-qualified names at construction, independent of the other selected tools.
+Then `integrations/chat_tools.py:build_integration_chat_tools` adds the MCP and
+OpenAPI actions of the integrations that the agent can use, through the
+integration tables ([[mcp-and-custom-tools]]). It drops each action that the
+policy function (`integrations/policy.py:resolve_action_policies`) blocks, and
+each integration whose credential does not resolve.
+
+Two tools are added outside the built-in loop. `SearchTool` is added when the
+request forces search on (`SearchToolUsage.ENABLED`), `DISABLE_VECTOR_DB` is
+off, and the loop did not build it. `MemoryTool` is added when
+`user.enable_memory_tool` is set ([[#memory-tool-bypasses-filters]]). MCP and
+OpenAPI actions receive stable qualified names with the integration id
+(`mcp__<integration id>__<name>__<tool>`, `custom__<integration id>__<operationId>`),
+independent of the other selected tools, and have `id = None`.
 
 **Execution.** A tool implements `_run(invocation, context)` and returns a
 `ToolResult`, or a `ChildRunWait` when it delegates to a sub-agent. Call data,
@@ -151,6 +150,9 @@ receives); see [[code-execution]]. A tool that must not run twice sets
 that a lost execution owner left running (`agents/tools.py:AgentTool`).
 `inner_tools` lists the tools that run inside a tool's calls, such as the
 functions of `execute_code`; `chat/prompt_utils.py:callable_tools` reads it.
+`inner_call_hint` answers a call of such a tool as a tool of its own: the
+result says how to call it through the offered tool
+(`agents/tool_execution.py`).
 
 When the run completes normally, every call gets a result: `ToolBatch` answers
 an unknown tool name, malformed arguments or truncated arguments with an error
@@ -163,7 +165,7 @@ work.
 **Chat skill tools.** `chat/execution.py:create_chat_agent` adds `skills_list`
 and `skills_read` (`tools/tool_implementations/skills/skill_tools.py`) to the
 chat agent's configured tools when the turn's user has a chat skill
-([[skills]]): the agent's tools and the request's `allowed_tool_ids` do not
+([[skills]]): the agent's tools and the request's tool options do not
 remove them. Restored and child agents receive them with the other configured
 tools. The tools hold only the user and read the user's current chat skills
 on each call; `skills_read` checks that the user can still see the skill and
@@ -174,6 +176,17 @@ both in its research phase, its research agents bind both, and each gets the
 skills catalog. The two tools have no
 tool catalog rows, are `DIRECT` in code mode, and render as generic tool cards with
 a short JSON summary, not the SKILL.md text.
+
+**Chat sandbox tools.** `chat/execution.py:create_chat_agent` also adds
+`exec_command`, `write_stdin` and the file tools (`apply_patch`, or `edit` and
+`write` when the turn's model is Claude) ([[code-execution]]) when
+`ChatTurnSetup.sandbox_tools` is set. `chat/process_message.py:prepare_chat_turn`
+sets it in one expression: harness sandboxes run
+(`microvm/configs.py:HARNESS_SANDBOX_ENABLED`), the user is not anonymous, the
+chat is not incognito, the turn has one response, and no Slack or Discord bot
+sent it (`SendMessageRequest.origin`). The agent's tools and
+`allowed_tool_ids` do not remove them. They have no tool catalog rows, so no
+admin switch, picker entry or forced-tool request reaches them.
 
 **Argument models.** A tool declares its arguments as one Pydantic
 `*Arguments` model. `parse_tool_arguments` validates calls with it, and
@@ -189,7 +202,7 @@ strict mode requires every object to be closed. Parsing ignores unknown argument
 sets `extra="forbid"`, because not every provider enforces the schema. A
 validation error names the argument and returns to the model as a tool error.
 The skill, subagent, memory, file reader, knowledge graph, internal search, web
-search, open URL, Python, bash, image generation, coding agent, `execute_code`
+search, open URL, Python, image generation, `execute_code`
 and `wait_code` tools use it.
 
 **Default subagent controls.** `ChatAgent` adds the tools in
@@ -199,8 +212,7 @@ delivers follow-up responses, the request sets `accepts_follow_ups`, as the web 
 the turn has one model.
 Mobile, the CLI and other API clients omit the flag. Incognito chats and one-shot callers
 (`chat/process_message.py:run_chat_turn`, used by Slack, evals and the non-streaming API)
-omit these controls. In incognito, chat also excludes the coding agent from tool configuration
-(`chat/execution.py:create_chat_agent`), and preparation rejects deep research before it saves
+omit these controls. Preparation also rejects deep research in incognito before it saves
 the user message (`chat/process_message.py:prepare_chat_turn`). These controls have no
 catalog rows or persona switches. `chat/agent.py:chat_subagent_factory` builds children
 with `build_chat_agent`, the same builder that restores saved children.
@@ -236,26 +248,36 @@ The root can finish its response while background children continue.
 An idle agent starts a follow-up response for unread child results.
 Only the root gets `wait_agents` and the `ROOT_AGENT_INSTRUCTIONS` prompt block; the wait rule is in [[chat-persistence]]. These results
 stay in model history; only the parent's response appears as a chat message.
-Tool replies use concise text. The `agent_id` from spawn/list is the control
-handle; paths are display labels and need not be unique.
+Tool replies use concise text, and models see agent paths, never IDs. `send_message` and
+`interrupt_agent` take a `target`, and `wait_agents` takes `targets`: a path from spawn/list, or
+`..` for the caller's parent (`tools/tool_implementations/subagents/subagent_tools.py:_find_agent`, over `discover_agents`). A path names one agent on the branch: `spawn_agent` refuses a name whose
+path any visible agent holds, finished agents included (`agents/agent_coordination.py:register_child`).
 
-**Sub-agents.** `DeepResearchAgent`, `ResearchAgent` and `CodingAgent` are
-runtime agents. `DeepResearchAgent` and `CodingAgentTool` spawn a child run and
-return `ChildRunWait`; the runtime calls `result_from_children` when the child
-ends ([[#child-wait-cleanup]]). A step count bounds the coding agent, not time:
-`CodingAgentTool` gives it `MAX_CODING_AGENT_CYCLES + 1` steps.
-`coding_agent/agent.py:CodingAgent._prepare_step` forces a final answer step
-with tool execution disabled on the last step, after a `generate_answer` call, or after a step
-with no tool calls. Definitions remain advertised for cache reuse where the provider permits it.
-Their control functions, such as `think_tool`, `generate_report` and
-`generate_answer`, are plain `AgentTool` objects with no `Tool` row, and
+**Question tool.** `tools/tool_implementations/question/question_tool.py:QuestionTool`
+asks the user 1-3 multiple-choice questions and waits for the answers. Only the
+root `ChatAgent` gets it (`question_tool`), after code mode wraps the configured
+tools, so it stays direct and subagents never get it. Its name is
+`ask_user_question` for Claude models and `request_user_input` for others
+(`tools/constants.py:QUESTION_TOOL_NAMES`); a restored root gets it under the
+name its saved step declared (`chat/restoration.py:restore_chat_agent`). Which
+turns offer it, and how its call parks and resumes, is
+[[mcp-and-custom-tools#chat-approval-needs-waiting-client]]. Its arguments are not
+strict: the nested question models are `$defs` references. The model reads a card
+answer as `{"answers": {"<id>": {"answers": ["<label>", "user_note: <text>"]}}}`,
+or the text that the user typed, after the query hook and with nothing added
+(`chat/tool_questions.py:question_answer`).
+
+**Subagents.** `DeepResearchAgent` spawns a `ResearchAgent` child and returns
+`ChildRunWait`. The runtime calls `result_from_children` when the child ends.
+Research control functions, such as `generate_report`,
+are plain `AgentTool` objects with no `Tool` row, and
 `chat/renderer.py:HIDDEN_TOOLS` keeps them out of the stream.
 
 ---
 
 ## Contracts and traps
 
-1. `memory-tool-bypasses-filters` **`MemoryTool` bypasses `allowed_tool_ids`
+1. `memory-tool-bypasses-filters` **`MemoryTool` bypasses the tool options
    and the agent's tools.** `tools/tool_constructor.py:_construct_tools_impl`
    adds it after the agent tool loop whenever `user.enable_memory_tool` is set.
    A user who turns every tool off for a message can still get a memory write.
@@ -320,7 +342,9 @@ Their control functions, such as `think_tool`, `generate_report` and
    deltas go only to `run_python` and `execute_code`
    (`chat/renderer.py:MessageRenderer.consume`). Code mode calls render with
    `chat/renderer.py:CodeModeRenderer`, a `ToolRenderer` that
-   `tool_renderer` picks by tool name. A result that a run release hook sets
+   `tool_renderer` picks by tool name; question calls render only their card
+   (`chat/renderer.py:QuestionToolRenderer`: `tool_question_request` and
+   `tool_question_resolved`, then a section end). A result that a run release hook sets
    streams through `ToolRenderer.amend`. Only a code mode card renders what
    the amendment added (the cell's closing record), after the call's section
    end, live and on replay. The generic display adds nothing live; replay
@@ -361,7 +385,8 @@ Their control functions, such as `think_tool`, `generate_report` and
    `finish_tool`, the saved result is the raw result and no `ToolEndEvent` is
    sent. A tool whose calls must not overlap
    returns `ToolExecutionMode.SEQUENTIAL` from `execution_mode`, as
-   `MemoryTool` does. This orders only calls with the same name: each starts
+   `MemoryTool` does. This orders only calls with the same name, or with the
+   same `sequence_group` (the sandbox file tools share one): each starts
    after the previous one is finalized, and a call that waits for a child run
    or input blocks the calls after it.
 10. `tool-name-is-lookup-key` **`Tool.name` is a lookup key and must be a valid
@@ -385,8 +410,8 @@ Their control functions, such as `think_tool`, `generate_report` and
    ([[#renderer-dispatches-by-name]]). Older messages with no saved response
    replay through
    `server/query_and_chat/session_loading.py:translate_assistant_message_to_packets`,
-   which dispatches on `Tool.in_code_tool_id`, the class name. A rename of
-   either needs a migration, or old chats lose their tool blocks.
+   which dispatches on `Tool.in_code_tool_id`, the class name. Legacy replay
+   skips calls whose tool row is missing ([[chat-persistence#tool-id-not-foreign-key]]).
 12. `calls-are-merged` **Merged calls share one execution and one result.**
     `agents/tool_execution.py:ToolBatch._start_compatible_calls` merges later
     calls to the same tool when the tool sets `merge_list_argument` and all
@@ -402,14 +427,6 @@ Their control functions, such as `think_tool`, `generate_report` and
     return a `ToolResult`: a `ChildRunWait` fails the batch with `ValueError`.
     Search, web search and `open_url` merge. A tool whose calls must stay
     separate leaves `merge_list_argument` unset.
-13. `child-wait-cleanup` **A tool that returns `ChildRunWait` releases its
-    resources through the child's completion.** `_run` returns before the
-    child ends, so register cleanup with
-    `invocation.agents.add_completion_cleanup(run_id, cleanup)` during `_run`.
-    It runs on completion, cancellation or release. If `_run` fails before it
-    returns the wait, clean up in `_run`. `CodingAgentTool._run` does both for
-    its sandbox ([[code-execution]]). `result_from_children` must not depend on
-    state held from `_run`.
 
 ---
 
@@ -458,8 +475,7 @@ Their control functions, such as `think_tool`, `generate_report` and
   resolution, `Tool.enabled` and the `Tool` table helpers.
 - [[plugins]]: Default Chat tool selection and per-user preferences.
 - [[chat-persistence]]: `StoredToolResult` saves each result and its details.
-- [[code-execution]]: the coding agent runs `BashTool` in a Code Interpreter
-  session.
+- [[code-execution]]: Python, code mode, and sandbox tools.
 - [[observability]]: `Tool.run` opens one `function_span` per call.
 
 ---
@@ -509,14 +525,14 @@ Their control functions, such as `think_tool`, `generate_report` and
   | The deployment cannot run it (no provider, no service) | `is_available` |
   | An admin, per agent | persona attachment (`Persona__Tool`) |
   | An admin, for all agents | `Tool.enabled` ([[mcp-and-custom-tools]]); built-in and MCP tools only |
-  | A user, per message | `allowed_tool_ids`; `TOOL_VISIBILITY_CONFIG` decides whether chat offers the toggle |
+  | A user, per message | `tool_options.allowed`; `TOOL_VISIBILITY_CONFIG` decides whether chat offers the toggle |
 
   Do not inject a tool outside the agent tool loop as `MemoryTool` does, unless
   it is a user-level feature. Such a tool escapes every admin and per-message
   control.
 - `investigate-tool-not-called` **Investigate "the model never calls tool X".** Walk the gates in order.
   Check that the tool is attached to the agent and that `Tool.enabled` is true.
-  Check the `allowed_tool_ids` that the client sent. For a built-in tool, run its
+  Check the `tool_options` that the client sent or the chat saved. For a built-in tool, run its
   `is_available` in a shell, or look for "Failed checking availability" in
   `backend/log/api_server_debug.log`; the "Skipping tool" line is at debug
   level. Check the branch skips in gate 4: search usage `DISABLED`, an
@@ -525,7 +541,10 @@ Their control functions, such as `think_tool`, `generate_report` and
   look for the credential warning. Last, check for a name collision (Known
   issues).
 - `force-tool-call` **Prefer an Action for the current request.** Send
-  `preferred_tool_id` with the message. The trailing reminder names that Action's
+  `tool_options.preferred` with the message: a capability (a built-in tool id) or
+  an action (an integration id and an action key, matched by
+  `Tool.integration_action`).
+  The trailing reminder names that Action's
   operations on every model step. The model may call another tool or answer directly;
   the preference does not change tool definitions or execution permissions.
   Use a scripted model to test a required call deterministically, as in

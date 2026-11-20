@@ -41,10 +41,29 @@ func TestReadCraftFCPins(t *testing.T) {
 	}
 }
 
+func TestReadCraftFCPinsKernelTagForms(t *testing.T) {
+	cases := map[string]string{
+		"kernel6.18-6.18.62-127.179.amzn2023":        "6.18.62-127.179.amzn2023",
+		"microvm-kernel6.18-6.18.36-71.136.amzn2023": "6.18.36-71.136.amzn2023",
+	}
+	for tag, version := range cases {
+		content := strings.Replace(testArtifactsDockerfile, "microvm-kernel-6.18.25-57.115.amzn2023", tag, 1)
+		pins, err := ReadCraftFCPins(writeArtifactsDockerfile(t, content))
+		if err != nil {
+			t.Fatalf("%s: %v", tag, err)
+		}
+		if pins.KernelPackage != "kernel6.18" || pins.KernelVersion != version {
+			t.Fatalf("%s: got %+v", tag, pins)
+		}
+	}
+}
+
 func TestReadCraftFCPinsRejectsUnknownKernelTag(t *testing.T) {
-	content := strings.Replace(testArtifactsDockerfile, "microvm-kernel-6.18.25-57.115.amzn2023", "v6.18.25", 1)
-	if _, err := ReadCraftFCPins(writeArtifactsDockerfile(t, content)); err == nil {
-		t.Fatal("expected an error for a kernel tag that is not a microvm-kernel tag")
+	for _, tag := range []string{"v6.18.25", "kernel-6.18.62-127.179.amzn2023", "kernel6.1-6.18.62-127.179.amzn2023"} {
+		content := strings.Replace(testArtifactsDockerfile, "microvm-kernel-6.18.25-57.115.amzn2023", tag, 1)
+		if _, err := ReadCraftFCPins(writeArtifactsDockerfile(t, content)); err == nil {
+			t.Fatalf("expected an error for kernel tag %q", tag)
+		}
 	}
 }
 

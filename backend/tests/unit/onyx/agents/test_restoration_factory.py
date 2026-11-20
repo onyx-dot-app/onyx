@@ -39,6 +39,7 @@ from onyx.llm.models import (
 from onyx.skills.models import ChatSkill
 from onyx.tools.constants import WAIT_CODE_TOOL_NAME
 from onyx.tools.interface import Tool
+from onyx.tools.models import CapabilityEntry
 from onyx.tools.tool_implementations.code_mode.code_mode_tool import CodeModeTool
 from onyx.tools.tool_implementations.skills.skill_tools import (
     SkillsListTool,
@@ -61,7 +62,7 @@ def feature(
         chat = ChatAgent(
             messages=context.messages,
             tools=[EchoTool()],
-            preferred_tool_id=1,
+            preferred_tool=CapabilityEntry(tool_id=1),
             custom_agent_prompt="Hello {{user.name}}",
             additional_context="Use the current request context.",
             base_system_prompt="Base instructions",
@@ -88,7 +89,6 @@ def feature(
                 ),
             ),
             llm=llm,
-            token_counter=len,
             reasoning_effort=ReasoningEffort.LOW,
             include_citations=False,
             inject_memories_in_prompt=False,
@@ -178,6 +178,13 @@ def test_factory_rebuilds_feature_and_preserves_saved_context(
     )
     checkpoint = ExecutionCheckpoint.model_validate_json(checkpoint.model_dump_json())
     saved = checkpoint.model_copy(deep=True)
+    if name == "chat":
+        monkeypatch.setattr(
+            "onyx.llm.factory.get_llm_tokenizer_encode_func",
+            lambda _model: pytest.fail(
+                "Restored chat loaded a tokenizer for telemetry"
+            ),
+        )
     rebuilt = restore_chat_agent(
         checkpoint,
         0,
@@ -209,6 +216,10 @@ def test_factory_rebuilds_feature_and_preserves_saved_context(
             )
         )
         request = prepared.generation_request(context.messages)
+        retained = next(
+            msg for msg in request.messages if msg.text == "Retained conversation"
+        )
+        assert retained.estimated_tokens == 6
         assert request.messages[0].text.startswith("Help {{user.role}}")
         assert (
             "The user selected these operations for this request: echo."
@@ -239,12 +250,52 @@ def test_factory_rebuilds_feature_and_preserves_saved_context(
     assert rebuilt.state == saved.agent_state
 
 
+def test_restore_drops_an_old_preferred_tool_id_that_no_tool_offers() -> None:
+    llm = FakeModelClient(
+        lambda _request, _signal: AssistantMessage(content=[TextContent(text="done")])
+    )
+    original = feature("chat", llm, AgentState())
+    state = original.capture_state().model_dump(mode="json")
+    del state["preferred_tool"]
+    # An MCP tool id from a run saved before tool options; MCP tools have no id now.
+    state["preferred_tool_id"] = 999
+    checkpoint = ExecutionCheckpoint(
+        agent_state=original.state,
+        run_state=RunState(
+            run_id="legacy-run",
+            agent_id=original.id,
+            status=RunStatus.SUSPENDED,
+            steps=[],
+            progress=RunProgress(step_limit=3, feature_state=state),
+        ),
+    )
+    rebuilt = restore_chat_agent(
+        checkpoint,
+        0,
+        llm=llm,
+        tools=[EchoTool()],
+        user_identity=None,
+        subagent_factory=lambda _depth: pytest.fail("No agent tools"),
+    )
+    assert isinstance(rebuilt, ChatAgent)
+    rebuilt.restore_state(state)
+    assert rebuilt.preferred_tool is None
+    rebuilt._prepare_step(
+        StepInput(
+            history=[UserMessage(content="Question")],
+            input_messages=[],
+            messages=[],
+            step=AgentStep(index=0, limit=2),
+        )
+    )
+
+
 def test_factory_rejects_checkpoint_without_supported_feature_state() -> None:
     checkpoint = ExecutionCheckpoint(
         agent_state=AgentState(),
         run_state=RunState(
             run_id="unsupported-run",
-            agent_id="coding-agent",
+            agent_id="unsupported-agent",
             status=RunStatus.SUSPENDED,
             steps=[],
             progress=RunProgress(step_limit=3),
@@ -298,8 +349,7 @@ def _chat_agent(
         persona=None,
         user_memory_context=None,
         llm=llm,
-        token_counter=len,
-        preferred_tool_id=EchoTool().id,
+        preferred_tool=CapabilityEntry(tool_id=EchoTool().id),
         agent_id="retained-agent",
     )
 
@@ -322,7 +372,7 @@ def _suspended(agent: Agent, state: dict[str, JsonValue]) -> ExecutionCheckpoint
     )
 
 
-_CODE_MODE_ECHO = "echo (a function in `execute_code` programs)"
+_CODE_MODE_ECHO = "tools.echo (a function in `execute_code` programs)"
 
 
 @pytest.mark.parametrize(

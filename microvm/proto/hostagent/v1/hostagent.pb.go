@@ -1977,11 +1977,13 @@ type NodeInfoResponse struct {
 	DiskFreeMib   uint64              `protobuf:"varint,9,opt,name=disk_free_mib,json=diskFreeMib,proto3" json:"disk_free_mib,omitempty"`
 	ManagedImages []*ManagedImageInfo `protobuf:"bytes,10,rep,name=managed_images,json=managedImages,proto3" json:"managed_images,omitempty"`
 	// Memory admission and drain. Create needs
-	// mem_available_mib >= mem_starting_mib + mem_mib + mem_reserve_mib.
+	// min(mem_available_mib, VM slice room below its memory.max) >=
+	// mem_starting_mib + mem_mib / --starting-mem-divisor (rounded up) +
+	// mem_reserve_mib.
 	// The memory reserve (--min-free-mem-mib).
 	MemReserveMib uint64 `protobuf:"varint,11,opt,name=mem_reserve_mib,json=memReserveMib,proto3" json:"mem_reserve_mib,omitempty"`
-	// Guest memory of the VMs that are starting. Their memory is not in
-	// mem_available_mib yet, so Create counts it.
+	// Guest memory / --starting-mem-divisor of the VMs that are starting.
+	// Their memory is not in mem_available_mib yet, so Create counts it.
 	MemStartingMib uint64       `protobuf:"varint,12,opt,name=mem_starting_mib,json=memStartingMib,proto3" json:"mem_starting_mib,omitempty"`
 	Drain          *DrainStatus `protobuf:"bytes,13,opt,name=drain,proto3" json:"drain,omitempty"`
 	// The VM cap (--max-vms); 0 is no cap. Create refuses with
@@ -2321,13 +2323,9 @@ type TemplateInfo struct {
 	// True when the template key fits this node. Create refuses the others
 	// with TEMPLATE_INCOMPATIBLE.
 	Compatible bool `protobuf:"varint,13,opt,name=compatible,proto3" json:"compatible,omitempty"`
-	// Managed drive slots of the template's VMs: 2 (layout 3 and later, the VMs can
-	// swap the managed drive) or 1.
+	// Managed drive slots of the template's VMs: 2 (slot A and the spare
+	// slot B of a swap).
 	ManagedSlots uint32 `protobuf:"varint,14,opt,name=managed_slots,json=managedSlots,proto3" json:"managed_slots,omitempty"`
-	// True when the template VMs have the balloon device with free page
-	// reporting (layout 4 and later): the guest returns free
-	// memory to the node.
-	Balloon bool `protobuf:"varint,15,opt,name=balloon,proto3" json:"balloon,omitempty"`
 	// Managed mounts that the template's VMs can swap: "skills" from layout
 	// 3, also "user-uploads" and "spaces" from layout 5 when the root drive's
 	// guest daemon serves them (rootfs manifest managed_mounts). Empty from
@@ -2463,13 +2461,6 @@ func (x *TemplateInfo) GetManagedSlots() uint32 {
 		return x.ManagedSlots
 	}
 	return 0
-}
-
-func (x *TemplateInfo) GetBalloon() bool {
-	if x != nil {
-		return x.Balloon
-	}
-	return false
 }
 
 func (x *TemplateInfo) GetManagedMounts() []string {
@@ -3383,7 +3374,7 @@ const file_hostagent_v1_hostagent_proto_rawDesc = "" +
 	"\x0fSetDrainRequest\x12\x14\n" +
 	"\x05drain\x18\x01 \x01(\bR\x05drain\"I\n" +
 	"\x10SetDrainResponse\x125\n" +
-	"\x05drain\x18\x01 \x01(\v2\x1f.craft.hostagent.v1.DrainStatusR\x05drain\"\xb4\x04\n" +
+	"\x05drain\x18\x01 \x01(\v2\x1f.craft.hostagent.v1.DrainStatusR\x05drain\"\xa9\x04\n" +
 	"\fTemplateInfo\x12\x18\n" +
 	"\aversion\x18\x01 \x01(\tR\aversion\x12\x14\n" +
 	"\x05vcpus\x18\x02 \x01(\rR\x05vcpus\x12\x17\n" +
@@ -3403,9 +3394,8 @@ const file_hostagent_v1_hostagent_proto_rawDesc = "" +
 	"\n" +
 	"compatible\x18\r \x01(\bR\n" +
 	"compatible\x12#\n" +
-	"\rmanaged_slots\x18\x0e \x01(\rR\fmanagedSlots\x12\x18\n" +
-	"\aballoon\x18\x0f \x01(\bR\aballoon\x12%\n" +
-	"\x0emanaged_mounts\x18\x10 \x03(\tR\rmanagedMounts\"\x16\n" +
+	"\rmanaged_slots\x18\x0e \x01(\rR\fmanagedSlots\x12%\n" +
+	"\x0emanaged_mounts\x18\x10 \x03(\tR\rmanagedMountsJ\x04\b\x0f\x10\x10R\aballoon\"\x16\n" +
 	"\x14BuildTemplateRequest\"\xa0\x01\n" +
 	"\x15BuildTemplateResponse\x12<\n" +
 	"\btemplate\x18\x01 \x01(\v2 .craft.hostagent.v1.TemplateInfoR\btemplate\x12\x14\n" +

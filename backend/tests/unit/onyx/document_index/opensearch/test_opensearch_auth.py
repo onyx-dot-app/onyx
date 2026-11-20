@@ -6,8 +6,8 @@ import pytest
 from opensearchpy import Urllib3AWSV4SignerAuth
 
 import onyx.configs.app_configs as app_configs
+from onyx.configs.constants import OpenSearchAuthMethod
 from onyx.document_index.opensearch.client import OpenSearchClient
-from onyx.document_index.opensearch.constants import OpenSearchAuthMethod
 
 _OS_AUTH_ENV = (
     "OPENSEARCH_AUTH_METHOD",

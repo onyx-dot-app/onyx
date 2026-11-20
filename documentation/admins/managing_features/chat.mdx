@@ -106,9 +106,8 @@ Turn on the tools that the default chat can use:
 - **Web Search**: Searches the web. Configure a provider on the [Web Search](/admins/actions/web_search) page.
 - **Open URL**: Reads the content of a URL that a user pastes.
 - **Code Interpreter**: Writes and runs code. See [Code Interpreter](/admins/actions/code_interpreter).
-- **Coding Agent**: Delegates coding tasks to a coding agent.
 
-To add MCP servers and OpenAPI actions to the default chat, configure them in **Admin Panel → Plugins**.
+To add MCP servers and OpenAPI actions to the default chat, configure them in **Admin Panel → Integrations**.
 See [Plugins](/admins/plugins/overview).
 
 <Note>
@@ -122,19 +121,10 @@ See [Plugins](/admins/plugins/overview).
 
 <img className="rounded-image" src="/assets/admins/chat_preferences/chat_preferences_advanced_options.webp" alt="Advanced Options on Chat Preferences"/>
 
-### Keep Chat History
-
-Set how long Onyx keeps chats for your organization. Choose **Forever**, a preset period, or **Custom**.
-This setting needs an Enterprise plan or Onyx Cloud.
-
-<Warning>
-  If you **shorten** retention, Onyx permanently deletes chats with no activity for longer than the new period.
-</Warning>
-
-### Query History Visibility
-
-Set what admins see on the [Query History](/admins/analytics/query_history) page: **Show with User Info**,
-**Anonymized**, or **Hidden**.
+<Note>
+  Chat retention, query history visibility,
+  and anonymous access are on the [Security & Hardening](/admins/advanced_configs/security_hardening) page.
+</Note>
 
 ### File Attachment Size Limit
 
@@ -148,11 +138,6 @@ Files attached in chats and projects must fit within **both** limits:
   Larger files increase latency, memory use, and token cost.
   Large text files such as CSVs can stay under the size limit but exceed the token limit.
 </Info>
-
-### Allow Anonymous Users
-
-When on, visitors can start chats **without signing in**. Anonymous users see only their own chats.
-They cannot create Agents or change settings. Their chats use your models and count toward usage and cost.
 
 ### Always Start with an Agent
 

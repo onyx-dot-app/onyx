@@ -31,9 +31,9 @@ from ee.onyx.server.log_export.storage import (
 from onyx import __version__
 from onyx.auth.permissions import require_permission
 from onyx.background.celery.versioned_apps.client import app as client_app
-from onyx.cache.interface import CacheBackendType
-from onyx.configs.app_configs import CACHE_BACKEND
+from onyx.configs.app_configs import CACHE_BACKEND, ENABLE_CONVERSION_STAGE
 from onyx.configs.constants import (
+    CacheBackendType,
     OnyxCeleryPriority,
     OnyxCeleryQueues,
     OnyxCeleryTask,
@@ -110,6 +110,15 @@ WORKER_COLLECT_QUEUES: dict[str, str] = {
     "user_file_processing": OnyxCeleryQueues.USER_FILE_PROCESSING,
     "scheduled_tasks": OnyxCeleryQueues.SCHEDULED_TASKS,
     "monitoring": OnyxCeleryQueues.MONITORING,
+    # The docconversion worker runs only with the conversion stage. An export
+    # waits for each worker that it asks, so it asks this one only then. On
+    # Kubernetes, the API server does not get the setting; the Kubernetes
+    # collection reads that worker's logs.
+    **(
+        {"docconversion": OnyxCeleryQueues.DOCCONVERSION}
+        if ENABLE_CONVERSION_STAGE
+        else {}
+    ),
 }
 
 # Covers every replica, stdout, and crashed containers, which file collection

@@ -8,7 +8,7 @@ import {
 } from "@/app/app/services/streamingModels";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import AgentMessage from "@/app/app/message/messageComponents/AgentMessage";
-import { useToolApprovalUi } from "@/lib/chat/toolApprovals";
+import { useToolRequestUi } from "@/lib/chat/toolApprovals";
 import { FullChatState } from "@/app/app/message/messageComponents/types";
 import type { MinimalAgent } from "@/lib/agents/types";
 
@@ -114,12 +114,25 @@ function seedSessionAwaitingAnswer() {
   store.setCurrentSession(SESSION_ID);
 }
 
+// Opens the run card when it is folded, then its steps, which start closed.
+// The card's fold button is named by the step count.
+async function openRun() {
+  await act(async () => {});
+  const fold = screen.queryByRole("button", { name: /^\d+ steps?$/ });
+  if (fold?.getAttribute("aria-expanded") === "false") {
+    await act(async () => fold.click());
+  }
+  for (const step of screen.queryAllByRole("button", { expanded: false })) {
+    await act(async () => step.click());
+  }
+}
+
 afterEach(() => {
   useChatSessionStore.setState({ currentSessionId: null, sessions: new Map() });
   jest.useRealTimers();
 });
 
-test("parallel search tabs complete independently", async () => {
+test("parallel searches render as separate steps in order", async () => {
   seedSessionAwaitingAnswer();
   const packets: Packet[] = [
     {
@@ -151,54 +164,23 @@ test("parallel search tabs complete independently", async () => {
     />
   );
   try {
-    const internalTab = await screen.findByRole("tab", {
-      name: /Internal Search/,
-    });
-    const webTab = await screen.findByRole("tab", { name: /Web Search/ });
+    await openRun();
+    const internal = await screen.findByText("Searching internal documents");
+    const web = screen.getAllByText("Searching the web").at(-1);
+    expect(web).toBeDefined();
     expect(
-      within(internalTab).getByRole("status", { name: "Loading" })
-    ).toBeInTheDocument();
-    expect(
-      within(webTab).getByRole("status", { name: "Loading" })
-    ).toBeInTheDocument();
-    const completedWeb: Packet[] = [
-      ...packets,
-      {
-        placement: { turn_index: 0, tab_index: 1 },
-        obj: { type: "section_end" },
-      },
-    ];
-    view.rerender(
-      <AgentMessage
-        rawPackets={completedWeb}
-        packetCount={completedWeb.length}
-        chatState={chatState}
-        nodeId={NEW_ANSWER_NODE_ID}
-        llmManager={null}
-        hideFooter
-        disableTTS
-      />
-    );
-    await waitFor(() => {
-      expect(
-        within(screen.getByRole("tab", { name: /Web Search/ })).queryByRole(
-          "status"
-        )
-      ).not.toBeInTheDocument();
-      expect(
-        within(screen.getByRole("tab", { name: /Internal Search/ })).getByRole(
-          "status",
-          { name: "Loading" }
-        )
-      ).toBeInTheDocument();
-    });
+      internal.compareDocumentPosition(web!) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(screen.getByText("company policy")).toBeInTheDocument();
+    expect(screen.getByText("public policy")).toBeInTheDocument();
+    expect(screen.queryByRole("tab")).not.toBeInTheDocument();
   } finally {
     view.unmount();
   }
 });
 
 test.each([undefined, 0])(
-  "restored output appears immediately and only unfinished tools remain loading (tab: %s)",
+  "restored steps and output appear immediately (tab: %s)",
   (tabIndex) => {
     seedSessionAwaitingAnswer();
     const placement = { turn_index: 0, tab_index: tabIndex };
@@ -237,17 +219,15 @@ test.each([undefined, 0])(
       />
     );
     try {
+      // The run works, so it is open; its steps start closed.
+      for (const step of screen.getAllByRole("button", { expanded: false })) {
+        act(() => step.click());
+      }
       expect(
-        within(screen.getByRole("tab", { name: /Internal Search/ })).getByRole(
-          "status",
-          { name: "Loading" }
-        )
+        screen.getByText("Searching internal documents")
       ).toBeInTheDocument();
-      expect(
-        within(screen.getByRole("tab", { name: /Web Search/ })).queryByRole(
-          "status"
-        )
-      ).not.toBeInTheDocument();
+      expect(screen.getByText("internal")).toBeInTheDocument();
+      expect(screen.getByText("web")).toBeInTheDocument();
       const withAnswer: Packet[] = [
         ...packets,
         {
@@ -589,10 +569,7 @@ test("code mode reads as the tool calls it makes", async () => {
   try {
     expect(await screen.findByText("You have 3 orders.")).toBeInTheDocument();
     // One cell, observed twice, made one call.
-    expect(screen.getByText("1 step")).toBeInTheDocument();
-    await act(async () => {
-      screen.getByRole("button", { name: "Expand timeline" }).click();
-    });
+    await openRun();
     const timeline = view.container;
     await waitFor(() =>
       expect(screen.getAllByText(/lookup_orders/)).toHaveLength(1)
@@ -671,9 +648,7 @@ test("a later report of a code mode call replaces what the step shows", async ()
   );
   const view = render(renderMessage(yielded));
   try {
-    await act(async () => {
-      (await screen.findByRole("button", { name: "Expand timeline" })).click();
-    });
+    await openRun();
     expect(await screen.findByText("checking more")).toBeInTheDocument();
 
     view.rerender(renderMessage(completed));
@@ -689,7 +664,11 @@ test("a later report of a code mode call replaces what the step shows", async ()
 
 test("a program call whose stream stopped for approval shows a waiting header and, once decided, the record", async () => {
   seedSessionAwaitingAnswer();
-  useToolApprovalUi.setState({ localStatuses: new Map(), nudge: null });
+  useToolRequestUi.setState({
+    localStatuses: new Map(),
+    localAnswers: new Map(),
+    nudge: null,
+  });
   const cell = { turn_index: 0, tab_index: 0 };
   const nested = { ...cell, sub_turn_index: 0 };
   // The program's call starts, then the request arrives at the cell's placement.
@@ -721,7 +700,7 @@ test("a program call whose stream stopped for approval shows a waiting header an
     // The stream ends while the call waits; the response is not finished.
     {
       placement: { turn_index: 0 },
-      obj: { type: PacketType.STOP, stop_reason: StopReason.AWAITING_APPROVAL },
+      obj: { type: PacketType.STOP, stop_reason: StopReason.AWAITING_USER },
     },
   ];
   const view = render(
@@ -745,7 +724,7 @@ test("a program call whose stream stopped for approval shows a waiting header an
 
     // A decision this client made ends the wait before its packet arrives.
     act(() =>
-      useToolApprovalUi.setState({
+      useToolRequestUi.setState({
         localStatuses: new Map([["approval", "approved"]]),
       })
     );
@@ -780,6 +759,121 @@ test("a program call whose stream stopped for approval shows a waiting header an
     ).not.toHaveLength(0);
     expect(
       screen.queryByText("Waiting for your approval")
+    ).not.toBeInTheDocument();
+  } finally {
+    view.unmount();
+  }
+});
+
+test("a question waits with a header, then a typed answer shows as the user's message", async () => {
+  seedSessionAwaitingAnswer();
+  useToolRequestUi.setState({
+    localStatuses: new Map(),
+    localAnswers: new Map(),
+    nudge: null,
+  });
+  const asked: Packet[] = [
+    {
+      placement: { turn_index: 0, tab_index: 0 },
+      obj: {
+        type: PacketType.TOOL_QUESTION_REQUEST,
+        question_request_id: "question",
+        tool_call_id: "call",
+        questions: [
+          {
+            id: "scope",
+            header: "Scope",
+            question: "Which files should I change?",
+            options: [
+              { label: "All files", description: "Change every file." },
+              { label: "Docs", description: "Only the docs." },
+            ],
+          },
+        ],
+      },
+    },
+    {
+      placement: { turn_index: 0 },
+      obj: { type: PacketType.STOP, stop_reason: StopReason.AWAITING_USER },
+    },
+  ];
+  const view = render(
+    <AgentMessage
+      rawPackets={asked}
+      packetCount={asked.length}
+      chatState={chatState}
+      nodeId={NEW_ANSWER_NODE_ID}
+      llmManager={null}
+      hideFooter
+      disableTTS
+    />
+  );
+  try {
+    expect(
+      await screen.findByText("Waiting for your answer")
+    ).toBeInTheDocument();
+    // The waiting card shows in the transcript's trailing region.
+    expect(screen.queryByTestId("tool-question-card")).not.toBeInTheDocument();
+
+    // The continuation's replay resolves the question, then answers.
+    const answered: Packet[] = [
+      asked[0]!,
+      {
+        placement: { turn_index: 0, tab_index: 0 },
+        obj: {
+          type: PacketType.TOOL_QUESTION_RESOLVED,
+          question_request_id: "question",
+          outcome: "answered",
+          answered_via: "message",
+          answers: null,
+          message: "Only the README",
+        },
+      },
+      {
+        placement: { turn_index: 1, tab_index: 0 },
+        obj: {
+          type: PacketType.MESSAGE_START,
+          id: "answer",
+          content: "",
+          final_documents: null,
+        },
+      },
+      {
+        placement: { turn_index: 1, tab_index: 0 },
+        obj: { type: PacketType.MESSAGE_DELTA, content: "README updated." },
+      },
+      {
+        placement: { turn_index: 1 },
+        obj: { type: PacketType.STOP, stop_reason: StopReason.FINISHED },
+      },
+    ];
+    view.rerender(
+      <AgentMessage
+        rawPackets={answered}
+        packetCount={answered.length}
+        chatState={chatState}
+        nodeId={NEW_ANSWER_NODE_ID}
+        llmManager={null}
+        hideFooter
+        disableTTS
+      />
+    );
+    const record = await screen.findByTestId("tool-question-card");
+    expect(within(record).getByRole("status")).toHaveTextContent(
+      "Answered in the chat"
+    );
+    expect(
+      within(record).getByText("Which files should I change?")
+    ).toBeInTheDocument();
+    expect(screen.getByText("Only the README")).toBeInTheDocument();
+    // The user's message comes after the record and before the answer.
+    expect(
+      record.compareDocumentPosition(screen.getByText("Only the README")) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy();
+    expect(await screen.findByText("README updated.")).toBeInTheDocument();
+    expect(
+      screen.queryByText("Waiting for your answer")
     ).not.toBeInTheDocument();
   } finally {
     view.unmount();
@@ -861,9 +955,7 @@ test("an expanded step keeps its state when a call is inserted before it", async
   );
   const view = render(renderMessage(packets));
   try {
-    await act(async () => {
-      (await screen.findByRole("button", { name: "Expand timeline" })).click();
-    });
+    await openRun();
     const weather = await screen.findByText("sunny");
 
     // The new call takes the turn index that the direct step had.
@@ -874,6 +966,11 @@ test("an expanded step keeps its state when a call is inserted before it", async
       ])
     );
 
+    // The new step starts closed.
+    await screen.findByRole("button", {
+      name: "Expand lookup_refunds completed",
+    });
+    await openRun();
     expect(await screen.findByText("1 refund")).toBeInTheDocument();
     // The same node: React kept the step and its state, such as expanded.
     expect(screen.getByText("sunny")).toBe(weather);
@@ -1209,9 +1306,7 @@ test("a research step shows each of its nested calls once", async () => {
     />
   );
   try {
-    await act(async () => {
-      (await screen.findByRole("button", { name: "Expand timeline" })).click();
-    });
+    await openRun();
     expect(await screen.findByText("Compare vendor pricing")).toBeVisible();
     const first = screen.getAllByText("first query");
     const second = screen.getAllByText("second query");
@@ -1271,9 +1366,7 @@ test("a tool step after an accepted user message follows that message", async ()
     const bubble = await screen.findByText("Use the latest report");
     // Each search gets its own timeline, on its side of the user message.
     expect(screen.queryByText("2 steps")).not.toBeInTheDocument();
-    const timelines = screen.getAllByRole("button", {
-      name: "Toggle timeline",
-    });
+    const timelines = screen.getAllByRole("button", { name: "1 step" });
     expect(timelines).toHaveLength(2);
     expect(
       timelines[0]!.compareDocumentPosition(bubble) &

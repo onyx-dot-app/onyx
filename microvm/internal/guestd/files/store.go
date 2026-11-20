@@ -3,7 +3,9 @@
 // <SessionsRoot>/<session_id>, which is opened as an os.Root: a path that
 // leaves it (with ".." or a symlink) fails. With no session ID, the read,
 // write, list, delete and zip calls take an absolute path anywhere in the VM
-// except DeniedVMPaths.
+// except DeniedVMPaths. A path in OnyxRoot is confined like a session path:
+// the daemon opens OnyxRoot as an os.Root, so no link redirects a call out
+// of it.
 package files
 
 import (
@@ -37,6 +39,8 @@ var (
 const (
 	// DefaultSessionsRoot holds one directory per session.
 	DefaultSessionsRoot = "/home/onyx/workspaces"
+	// DefaultOnyxRoot holds the files that Onyx writes outside every session.
+	DefaultOnyxRoot = "/tmp/onyx"
 	// GiB is 1 << 30 bytes.
 	GiB = int64(1) << 30
 	// ChunkBytes is the size of a data message the daemon sends.
@@ -85,6 +89,9 @@ var DefaultLimits = Limits{StoredBytes: GiB, ExpandedBytes: 4 * GiB, Entries: 50
 // Config configures a Store. Zero values take the defaults.
 type Config struct {
 	SessionsRoot string
+	// OnyxRoot: calls with no session ID open paths in it through an
+	// os.Root and follow no link out of it.
+	OnyxRoot string
 	// ReadLinkRoots: a top-level link of a session (for example
 	// user_library) that points into one of these directories can be
 	// followed by Read, List and Zip.
@@ -108,7 +115,8 @@ type Config struct {
 	// 2 vCPUs it is ~9x faster than SpeedDefault and only a few percent larger.
 	ZstdLevel zstd.EncoderLevel
 	// Owner gets the files and directories that Write, Upload and Restore
-	// make, and the session directories. Nil: they keep the daemon's user.
+	// make, the session directories and OnyxRoot. Nil: they keep the
+	// daemon's user.
 	Owner *Owner
 }
 
@@ -137,8 +145,9 @@ func ParseOwner(s string) (*Owner, error) {
 // Store runs the file calls.
 type Store struct {
 	cfg Config
-	// chown is (*os.Root).Lchown; tests replace it.
-	chown func(root *os.Root, name string, uid, gid int) error
+	// chown changes the owner of an open file; name is its path in its
+	// root, for errors. Tests replace it.
+	chown func(f *os.File, name string, uid, gid int) error
 
 	mu    sync.Mutex
 	locks map[string]chan struct{}
@@ -149,8 +158,16 @@ func New(cfg Config) (*Store, error) {
 	if cfg.SessionsRoot == "" {
 		cfg.SessionsRoot = DefaultSessionsRoot
 	}
-	if !filepath.IsAbs(cfg.SessionsRoot) {
-		return nil, fmt.Errorf("sessions root %q is not absolute", cfg.SessionsRoot)
+	cfg.SessionsRoot = path.Clean(cfg.SessionsRoot)
+	if !filepath.IsAbs(cfg.SessionsRoot) || cfg.SessionsRoot == "/" {
+		return nil, fmt.Errorf("sessions root %q is not an absolute directory below /", cfg.SessionsRoot)
+	}
+	if cfg.OnyxRoot == "" {
+		cfg.OnyxRoot = DefaultOnyxRoot
+	}
+	cfg.OnyxRoot = path.Clean(cfg.OnyxRoot)
+	if !filepath.IsAbs(cfg.OnyxRoot) || cfg.OnyxRoot == "/" {
+		return nil, fmt.Errorf("onyx root %q is not an absolute directory below /", cfg.OnyxRoot)
 	}
 	for _, r := range cfg.ReadLinkRoots {
 		if !filepath.IsAbs(r) {
@@ -205,15 +222,35 @@ func New(cfg Config) (*Store, error) {
 	if o := cfg.Owner; o != nil && (o.UID < 0 || o.GID < 0) {
 		return nil, errors.New("owner uid and gid must not be negative")
 	}
-	return &Store{cfg: cfg, chown: (*os.Root).Lchown, locks: map[string]chan struct{}{}}, nil
+	st := &Store{cfg: cfg, chown: chownFile, locks: map[string]chan struct{}{}}
+	if err := st.checkVMPath(cfg.OnyxRoot); err != nil {
+		return nil, fmt.Errorf("onyx root: %w", err)
+	}
+	return st, nil
 }
 
-// own gives name in root to the configured owner.
+func chownFile(f *os.File, _ string, uid, gid int) error { return f.Chown(uid, gid) }
+
+// own gives name in root to the configured owner. It changes the entry
+// through an open handle, never a link's target.
 func (s *Store) own(root *os.Root, name string) error {
 	if s.cfg.Owner == nil {
 		return nil
 	}
-	if err := s.chown(root, name, s.cfg.Owner.UID, s.cfg.Owner.GID); err != nil {
+	f, err := root.OpenFile(name, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		return fmt.Errorf("set the owner of %s: %w", name, err)
+	}
+	defer func() { _ = f.Close() }()
+	return s.ownFile(f, name)
+}
+
+// ownFile gives an open file to the configured owner.
+func (s *Store) ownFile(f *os.File, name string) error {
+	if s.cfg.Owner == nil {
+		return nil
+	}
+	if err := s.chown(f, name, s.cfg.Owner.UID, s.cfg.Owner.GID); err != nil {
 		return fmt.Errorf("set the owner of %s: %w", name, err)
 	}
 	return nil
@@ -341,6 +378,13 @@ func (s *Store) openVMRead(p string) (readTarget, error) {
 	if err != nil {
 		return readTarget{}, err
 	}
+	if rel, ok := s.onyxRel(abs); ok {
+		r, err := s.openOnyx(false)
+		if err != nil {
+			return readTarget{}, err
+		}
+		return readTarget{root: r, rel: rel, display: s.cfg.OnyxRoot}, nil
+	}
 	real, err := s.resolveVM(abs)
 	if err != nil {
 		return readTarget{}, err
@@ -374,6 +418,8 @@ type vmEntry struct {
 // openVMEntry opens the parent of an absolute path for a write or delete.
 // mkParents makes missing parents first. followLink resolves a symlink in
 // the last part to its existing target (a write); a delete removes the link.
+// A path in OnyxRoot opens as an os.Root on OnyxRoot and its path in it,
+// with no link followed out of it: the call makes the missing parents.
 func (s *Store) openVMEntry(p string, mkParents, followLink bool) (vmEntry, error) {
 	abs, err := vmPath(p)
 	if err != nil {
@@ -381,6 +427,13 @@ func (s *Store) openVMEntry(p string, mkParents, followLink bool) (vmEntry, erro
 	}
 	if abs == "/" {
 		return vmEntry{}, fmt.Errorf("%w: path is the VM root", ErrInvalid)
+	}
+	if rel, ok := s.onyxRel(abs); ok {
+		if rel == "." {
+			return vmEntry{}, fmt.Errorf("%w: path is the onyx root", ErrInvalid)
+		}
+		r, err := s.openOnyx(mkParents)
+		return vmEntry{root: r, name: rel, abs: abs}, err
 	}
 	if err := s.checkVMPath(abs); err != nil {
 		return vmEntry{}, err
@@ -443,6 +496,69 @@ func (s *Store) mkdirVM(dir string) error {
 	return fsErr(os.MkdirAll(dir, 0o755))
 }
 
+// onyxRel returns the path of abs in OnyxRoot ("." for OnyxRoot itself),
+// and whether abs is in it.
+func (s *Store) onyxRel(abs string) (string, bool) {
+	if abs == s.cfg.OnyxRoot {
+		return ".", true
+	}
+	rel, ok := strings.CutPrefix(abs, s.cfg.OnyxRoot+"/")
+	return rel, ok
+}
+
+// openOnyx opens OnyxRoot. With create, a missing one is made.
+func (s *Store) openOnyx(create bool) (*os.Root, error) {
+	return s.openOwnedDir(path.Dir(s.cfg.OnyxRoot), path.Base(s.cfg.OnyxRoot), create)
+}
+
+// openOwnedDir opens the directory name in parent as an os.Root; see
+// openChildDir.
+func (s *Store) openOwnedDir(parent, name string, create bool) (*os.Root, error) {
+	base, err := os.OpenRoot(parent)
+	if err != nil {
+		return nil, fsErr(err)
+	}
+	defer func() { _ = base.Close() }()
+	return s.openChildDir(base, name, create)
+}
+
+// openChildDir opens the directory name in base as an os.Root. With create,
+// a missing one is made (mode 0755) and given to the owner. It must be a
+// directory, not a link, also when a command swaps it meanwhile.
+func (s *Store) openChildDir(base *os.Root, name string, create bool) (*os.Root, error) {
+	fi, err := base.Lstat(name)
+	if errors.Is(err, fs.ErrNotExist) && create {
+		mkErr := base.Mkdir(name, 0o755)
+		if mkErr == nil {
+			if mkErr = s.own(base, name); mkErr != nil {
+				_ = base.Remove(name)
+			}
+		} else if errors.Is(mkErr, fs.ErrExist) {
+			mkErr = nil
+		}
+		if mkErr != nil {
+			return nil, mkErr
+		}
+		fi, err = base.Lstat(name)
+	}
+	if err != nil {
+		return nil, fsErr(err)
+	}
+	if !fi.IsDir() {
+		return nil, fmt.Errorf("%w: %s is not a directory", ErrInvalid, path.Join(base.Name(), name))
+	}
+	r, err := base.OpenRoot(name)
+	if err != nil {
+		return nil, fsErr(err)
+	}
+	opened, err := r.Stat(".")
+	if err != nil || !os.SameFile(fi, opened) {
+		_ = r.Close()
+		return nil, fmt.Errorf("%w: %s changed while it was opened", ErrInvalid, path.Join(base.Name(), name))
+	}
+	return r, nil
+}
+
 // ValidSessionID applies the Init rules for a session ID.
 func ValidSessionID(id string) error {
 	if id == "" || len(id) > 128 || strings.ContainsAny(id, "/\\\x00") || id == "." || id == ".." ||
@@ -500,60 +616,21 @@ func cleanPath(p string) (string, error) {
 	return strings.Join(parts, "/"), nil
 }
 
-// openSession opens the session directory. With create, a missing one is
-// made (mode 0755). The session directory must not be a symlink.
+// openSession opens the session directory. With create, a missing sessions
+// root (in an existing parent) and session directory are made (mode 0755).
+// Neither may be a symlink.
 func (s *Store) openSession(id string, create bool) (*os.Root, error) {
 	if err := ValidSessionID(id); err != nil {
 		return nil, err
 	}
-	madeRoot := false
-	if create {
-		if _, err := os.Lstat(s.cfg.SessionsRoot); errors.Is(err, fs.ErrNotExist) {
-			if err := os.MkdirAll(s.cfg.SessionsRoot, 0o755); err != nil {
-				return nil, err
-			}
-			madeRoot = true
-		}
-	}
-	base, err := os.OpenRoot(s.cfg.SessionsRoot)
+	// The sandbox user owns the sessions root and its parent: it must not be
+	// a link either.
+	sessions, err := s.openOwnedDir(path.Dir(s.cfg.SessionsRoot), path.Base(s.cfg.SessionsRoot), create)
 	if err != nil {
-		return nil, fsErr(err)
+		return nil, err
 	}
-	defer func() { _ = base.Close() }()
-	// Only the sessions root itself: parents it needed keep root's owner.
-	if madeRoot {
-		if err := s.own(base, "."); err != nil {
-			_ = base.Close()
-			_ = os.Remove(s.cfg.SessionsRoot)
-			return nil, err
-		}
-	}
-	fi, err := base.Lstat(id)
-	if errors.Is(err, fs.ErrNotExist) && create {
-		mkErr := base.Mkdir(id, 0o755)
-		if mkErr == nil {
-			if mkErr = s.own(base, id); mkErr != nil {
-				_ = base.Remove(id)
-			}
-		} else if errors.Is(mkErr, fs.ErrExist) {
-			mkErr = nil
-		}
-		if mkErr != nil {
-			return nil, mkErr
-		}
-		fi, err = base.Lstat(id)
-	}
-	if err != nil {
-		return nil, fsErr(err)
-	}
-	if !fi.IsDir() {
-		return nil, fmt.Errorf("%w: session %s is not a directory", ErrInvalid, id)
-	}
-	r, err := base.OpenRoot(id)
-	if err != nil {
-		return nil, fsErr(err)
-	}
-	return r, nil
+	defer func() { _ = sessions.Close() }()
+	return s.openChildDir(sessions, id, create)
 }
 
 // readTarget is where a read call looks: a root and a path in it. display

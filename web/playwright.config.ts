@@ -23,7 +23,9 @@ export default defineConfig({
   workers: process.env.CI ? 4 : undefined,
   // workers: 1,
 
-  reporter: [["list"]],
+  reporter: process.env.GITHUB_STEP_SUMMARY
+    ? [["list"], ["./tests/e2e/utils/flakyReporter.ts"]]
+    : [["list"]],
   // Only run Playwright tests from tests/e2e directory (ignore Jest tests in src/)
   testMatch: /.*\/tests\/e2e\/.*\.spec\.ts/,
   outputDir: "output/playwright",

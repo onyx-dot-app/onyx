@@ -22,6 +22,9 @@ type Kind struct {
 	BaselineHeader string
 	// DefaultTolerance is the --tolerance default, in percentage points.
 	DefaultTolerance float64
+	// FloorStep is the step `--update` rounds each floor down to, in
+	// percentage points. Zero means 0.1.
+	FloorStep float64
 	// RequireBaseline makes --check fail when the baseline is missing. Without
 	// it, a missing baseline means the measurement has not opted in yet.
 	RequireBaseline bool
@@ -36,6 +39,9 @@ var GoTests = Kind{
 	BaselineFile:     BaselineFile,
 	BaselineHeader:   baselineHeader,
 	DefaultTolerance: DefaultTolerance,
+	// A floor is a coarse minimum, not the last measurement, so small changes
+	// in coverage do not need a baseline update.
+	FloorStep: 5,
 }
 
 // TypeBaselineFile is the name of the committed TypeScript type coverage

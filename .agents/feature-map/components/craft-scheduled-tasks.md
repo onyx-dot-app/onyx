@@ -14,7 +14,7 @@
 A Craft user writes a prompt, picks a schedule (an interval, a daily or weekly
 time, or a cron expression), and chooses which connected apps the task may use.
 New tasks start with every app off. For each enabled app the user can set
-Auto-approve, Ask or Disabled per action, within the limits the admin set.
+Allow, Ask or Blocked per action, within the limits the admin set.
 "Run once" fires the task at once, even when it is paused. Pause stops the
 fires; Resume schedules the next fire from the time of resume, so missed fires
 do not run.
@@ -100,7 +100,7 @@ preview (`web/src/app/craft/v1/tasks/schedule.ts:localPayloadToUtcPayload`,
 
 **Origin.** `create_session(origin=SessionOrigin.SCHEDULED)` marks the
 session. The sidebar query filters on `INTERACTIVE`
-(`server/features/build/db/build_session.py:get_user_build_sessions`). The
+(`db/build_session.py:get_user_build_sessions`). The
 proxy uses the origin to refuse personal policies for a scheduled session.
 
 **Live view.** `backend/onyx/server/features/build/session/api.py:get_session_scheduled_run_events` attaches the
@@ -108,13 +108,32 @@ API server as one more reader of the sandbox's event stream for a `RUNNING`
 run. It sends keepalives until the executor stores the opencode session id, so
 a quick click on a new run does not fail.
 
-**App policies.** Task create and patch accept per-app settings.
-`db/action_policy.py:replace_task_action_policies` stores them as
-`ScheduledTaskEnabledApp` rows (which apps the task may use) and
-`ScheduledTaskActionPolicy` rows (choices per action). An empty map stores no
-choices; it does not copy personal choices. The editor copies personal choices
-into the draft on the first edit or enable. Edits apply to the next request,
-including requests of a run in progress.
+**Integrations and action settings.** Task create and patch accept
+`integrations: [{integration_id, action_settings}]`.
+`integrations/craft.py:replace_task_integrations__no_commit` checks that the
+owner has access to each integration and that each action key
+is an action of it, then stores `scheduled_task__integration` rows. A stored
+link that the owner lost access to is not in the catalog, so a save keeps it.
+A run can use only these integrations, while the owner has
+access to them; the proxy blocks each other integration. Each
+action value is Allow, Ask, Blocked or Inherit (the integration setting).
+`GET /scheduled-tasks/{id}/action-policies` and the new-task catalog
+`GET /build/action-policies` return `TaskIntegrationView` rows
+(`integrations/craft.py:list_task_integration_views`), each with `enabled`
+and the stored `action_settings`. The rows leave out OpenAPI
+integrations, which Craft does not offer. Each action has the policy
+that Inherit gives, and `locked` when a task Allow keeps that policy; the
+editor does not offer Allow for a locked action. A task integration that an
+admin turned off still has a row, with `runnable` false, and the stored
+settings leave out action keys that the integration has no more, so a save of
+an unrelated edit keeps the integration and passes the action check. A session of a
+scheduled run gets the MCP servers of the task integrations in its opencode config,
+also those the owner turned off, with the task settings as disabled tools
+(`resolve_craft_mcp_servers(..., task_id)`). The executor passes the task to
+`SessionManager.create_session`, because the run row names the session only
+after creation; later rebuilds read it with
+`db/scheduled_task.py:get_scheduled_task_id_for_session`. Edits apply to the next request, including
+requests of a run in progress.
 
 ---
 
@@ -139,17 +158,18 @@ including requests of a run in progress.
 4. `link-session-before-turn` **Link the session to the run before any agent
    turn.** The proxy finds a task's authority through
    `ScheduledTaskRun.session_id` and a `RUNNING` status
-   (`db/action_policy.py:get_active_scheduled_task_context`). An unlinked or
+   (`db/scheduled_task.py:get_active_scheduled_task_context`). An unlinked or
    finished run gives `no_active_session` for every app request. The authority
    also ends with the run
    ([[craft-external-apps#task-authority-ends-with-run]]). Do not add a
    fallback to personal policies for scheduled sessions.
-5. `task-choices-default-ask` **Task choices follow the precedence in
-   [[craft-external-apps]].** Two rules differ from personal choices: an app
-   not enabled for the task denies every action, and a missing task choice
-   means Ask, not the workspace default. When the app does not let users
-   manage policies, the workspace policy applies to tasks too
-   (`db/action_policy.py:effective_action_policy`).
+5. `task-choices-default-ask` **Task choices follow the policy function in
+   [[craft-external-apps]].** An integration that the task does not have
+   blocks every action. The `action_settings` of the task are the link
+   settings: an admin Blocked stays final, and Allow does not apply when users
+   cannot save Always allow on the integration
+   (`integrations/policy.py:resolve_action_policies`). A task that the
+   migration copied has `default: ask`, as the old tables gave.
 6. `origin-filter-not-join` **Hide scheduled sessions by `BuildSession.origin`,
    not by a join.**
    `server/features/build/session/manager.py:SessionManager.create_session` commits the session and
@@ -260,7 +280,7 @@ including requests of a run in progress.
   `queued > N min` means the `scheduled_tasks` worker did not pick it up. For other classes, search the logs
   for `Failed to create scheduled-task notification`. The failure notice is
   INFO, so look for it in the notification list, not the banner queue.
-- `setup-task-policy-test` **Set up a task-policy test.** Set one task action to Auto-approve while the
+- `setup-task-policy-test` **Set up a task-policy test.** Set one task action to Allow while the
   personal choice is Ask. Run the task: the action runs with no prompt. After
   the run ends, send a follow-up that uses the same action: the proxy blocks
   it.
@@ -270,7 +290,6 @@ including requests of a run in progress.
 ## Verification
 
 - Dispatch, executor and sweeps: `backend/tests/external_dependency_unit/craft/`.
-- Task choices and enablement: `backend/tests/external_dependency_unit/permissions/`.
 - Task context in the proxy: `backend/tests/unit/sandbox_proxy/`.
 - Schedule compilation: `backend/tests/unit/onyx/server/features/craft/scheduled_tasks/`.
 - The API: `backend/tests/integration/tests/craft/`.

@@ -79,7 +79,7 @@ backend = [
     "msal==1.37.0",
     "msoffcrypto-tool==6.0.0",
     "Office365-REST-Python-Client==2.6.2",
-    "oauthlib==4.0.0",
+    "oauthlib==4.0.1",
     # NOTE: This is frozen to avoid https://foss.heptapod.net/openpyxl/openpyxl/-/issues/2147
     "openpyxl==3.0.10",
     "opensearch-py==3.2.0",
@@ -152,7 +152,8 @@ dev = [
     "matplotlib==3.10.8",
     "ty==0.0.63",
     "openapi-generator-cli==7.17.0",
-    "pre-commit==4.6.2",
+    # deployment/tests and tools/helm import yaml when CI installs only this group.
+    "pyyaml==6.0.3",
     "pytest-alembic==0.12.1",
     "pytest-asyncio==1.4.0",
     "pytest-dotenv==0.5.2",
@@ -161,6 +162,8 @@ dev = [
     "pytest-repeat==0.9.4",
     "pytest-xdist==3.8.0",
     "pytest==9.0.3",
+    # backend/onyx/skills/builtin/pptx/scripts/lint.py measures text with it.
+    "power-pptx==2.15.0",
     "types-docker==7.1.0.20260518",
     "types-beautifulsoup4==4.12.0.3",
     "types-html5lib==1.1.11.13",
@@ -175,7 +178,9 @@ dev = [
     "types-pytz==2023.3.1.1",
     "types-regex==2023.3.23.1",
     "types-requests==2.32.0.20250328",
+    "pytest-split==0.11.0",
     { include-group = "ods" },
+    { include-group = "prek" },
     { include-group = "ruff" },
     { include-group = "zizmor" },
 ]
@@ -186,6 +191,11 @@ dev = [
 ods = ["onyx-devtools[audit]==0.13.16"]
 ruff = ["ruff==0.16.1"]
 zizmor = ["zizmor==1.25.2"]
+
+# The hook runner for .pre-commit-config.yaml. Keep the same version in
+# prek-version of the j178/prek-action steps, in .devcontainer/Dockerfile and
+# in cve-alerts.yml.
+prek = ["prek==0.5.10"]
 
 # Enterprise Edition features
 ee = ["posthog==3.7.4"]
@@ -231,6 +241,10 @@ override-dependencies = [
     # explicit so a future resolver change can't drop back to the <=6.4.2 that
     # mitmproxy 11.x capped to (CVE-2025-47287, multipart logging DoS).
     "tornado>=6.5.0,<7.0",
+    # mitmproxy 12.2.3 caps urwid at 3.0.5, below the 4.0.7 fix for
+    # GHSA-cp25-j9x5-p5xm (request-handling DoS). Only its console UI imports
+    # urwid, and the sandbox proxy never runs it.
+    "urwid>=4.0.7,<5.0",
     "msgpack>=1.0.0,<2.0",
 ]
 
@@ -300,7 +314,6 @@ ignore = [
     # Revisit only if we adopt trio or anyio cancel scopes.
     "ASYNC109", # async-function-with-timeout.
     # flake8-bandit (S) rules ignored as noisy / low-signal:
-    "S101", # `assert` — used heavily in pytest and as runtime invariant checks.
     "S105", # Hardcoded password string — very high false-positive rate.
     "S106", # Hardcoded password func arg — very high false-positive rate.
     "S107", # Hardcoded password default — very high false-positive rate.
@@ -309,9 +322,9 @@ ignore = [
     "S311", # Non-crypto random — used for jitter/sampling/non-security purposes.
     "S603", # subprocess without shell=True — this is the *correct* invocation form.
     "S607", # Start-process with partial path — common and low signal.
-    # Tracked in kanban ticket #491 — to be removed once existing violations are
-    # cleaned up:
-    "S113", # request-without-timeout (~463 existing violations).
+    # Calendar dates have no time of day or timezone.
+    "DTZ011",
+    "DTZ012",
     # flake8-bugbear (B) rule deferred — to be removed once existing violations
     # are cleaned up:
     "B904", # raise-without-from-inside-except (~465 existing violations).
@@ -323,6 +336,7 @@ select = [
   "B",
   "C4",
   "C901",
+  "DTZ",
   "E",
   "F",
   "FURB",
@@ -356,6 +370,9 @@ extend-immutable-calls = [
     "onyx.auth.permissions.require_permission",
 ]
 
+[tool.ruff.lint.flake8-tidy-imports.banned-api]
+"dataclasses.dataclass".msg = "Use a Pydantic BaseModel."
+
 [tool.ruff.lint.isort]
 known-first-party = ["onyx", "ee", "tests", "shared_configs", "model_server"]
 
@@ -367,6 +384,24 @@ known-first-party = ["onyx", "ee", "tests", "shared_configs", "model_server"]
 # Tests use asserts, mock credentials, and lots of patterns the bandit rules
 # flag as suspicious. Disable the full S rule set in tests.
 "backend/tests/**" = ["S"]
+# S101 (`assert`) applies to application code only: backend/AGENTS.md "Key Rules".
+# `python -O` removes asserts, and a failed one gives the caller no useful error.
+# Write an explicit check that raises:
+#   - Type narrowing:   `if x is None: raise RuntimeError("why x is always set")`
+#   - Invariant:        `if not ok: raise RuntimeError("Bug: ...")` (or ValueError
+#                       for a bad argument)
+#   - Input validation: `raise OnyxError(OnyxErrorCode.INVALID_INPUT, "...")` on a
+#                       request path; ValueError for configuration;
+#                       ConnectorMissingCredentialError for connector credentials
+# A deliberate exception goes on the line: `# noqa: S101 - <reason>`.
+# Scope the assert, timeout, datetime, and dataclass checks to application code.
+"!backend/{onyx,ee,shared_configs,model_server}/**" = ["S101", "S113", "DTZ", "TID251"]
+# pytest files that live in the application tree.
+"backend/onyx/connectors/salesforce/shelve_stuff/*test_salesforce_shelves.py" = ["S101"]
+# Vendored skill scripts; they run in the sandbox, not in the backend.
+"backend/onyx/skills/builtin/pptx/**" = ["S101"]
+# Vendored sandbox scripts use stdlib dataclasses.
+"backend/onyx/skills/builtin/**" = ["TID251"]
 # Docs site tooling (documentation/scripts, documentation/audit), imported with the
 # docs. format_docs.py is one long line-by-line formatter; leave its shape alone.
 "documentation/**" = ["C901", "PERF401", "ARG001"]
@@ -375,6 +410,10 @@ known-first-party = ["onyx", "ee", "tests", "shared_configs", "model_server"]
 # pipe shell commands, and build ad-hoc SQL against trusted internal inputs
 # (tenant IDs, schema names). Other S rules still apply.
 "backend/scripts/**" = ["S108", "S602", "S608"]
+# Existing request, datetime, and dataclass findings. Remove each code after
+# you fix its last finding in that file. An ignore covers new findings of
+# the same code in that file.
+"backend/ee/onyx/background/celery/tasks/tenant_provisioning/tasks.py" = ["DTZ005"] # DTZ005 × 1
 # Functions above the max-complexity of 20 when C901 was enabled. The trailing
 # number is the highest complexity in that file at the time. Remove an entry
 # once its functions are simplified. NOTE: the ignore is per file, so it also

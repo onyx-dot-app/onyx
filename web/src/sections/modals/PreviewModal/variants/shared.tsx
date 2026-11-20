@@ -12,7 +12,11 @@ export function DownloadButton({ fileUrl, fileName }: DownloadButtonProps) {
   const t = useTranslations("chat.modals.preview");
 
   return (
-    <a href={fileUrl} download={fileName}>
+    <a
+      href={fileUrl}
+      download={fileName}
+      aria-label={t("downloadButton.tooltip")}
+    >
       <Button
         prominence="tertiary"
         size="sm"

@@ -2,10 +2,12 @@ import re
 from datetime import datetime
 from enum import Enum
 from typing import TYPE_CHECKING, Any
+from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from onyx.auth.permissions import SCOPED_MANAGER_PERMISSIONS_EXPANDED
+from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from onyx.context.search.models import CCPairAccessMode, SavedSearchSettings
 from onyx.db.enums import (
     AccountType,
@@ -22,6 +24,7 @@ from onyx.db.models import SlackChannelConfig as SlackChannelConfigModel
 from onyx.db.models import StandardAnswer as StandardAnswerModel
 from onyx.db.models import StandardAnswerCategory as StandardAnswerCategoryModel
 from onyx.db.port_attempt import ReindexProgressCounts
+from onyx.db.skill_models import PluginRename
 from onyx.llm.models import ReasoningEffort
 from onyx.onyxbot.slack.config import VALID_SLACK_FILTERS
 from onyx.server.features.persona.models import FullPersonaSnapshot, PersonaSnapshot
@@ -63,6 +66,9 @@ class SSOProviderOption(BaseModel):
     display_name: str
     provider_type: SSOProviderType
     authorize_url: str
+    # The authorize URL takes the native-app SSO parameters (desktop, mobile), so
+    # an app can sign in through the system browser. SAML cannot yet.
+    native_app_sso: bool
 
 
 class AuthConfigResponse(BaseModel):
@@ -87,13 +93,41 @@ class AuthConfigResponse(BaseModel):
     # on instances with no provider rows, so the page falls back to the built-in
     # password (and Google when oauth_enabled) login.
     sso_providers: list[SSOProviderOption] = []
+    # The session cookie's name (AUTH_COOKIE_NAME). Native apps sign in with a
+    # bearer token and hand it to their embedded web UI under this name.
+    auth_cookie_name: str = FASTAPI_USERS_AUTH_COOKIE_NAME
     # Workspace UI language for signed-out pages, which cannot read GET /settings
     # unless anonymous access is on. None on cloud, which has no tenant yet.
     default_language: SupportedLanguage | None = None
 
 
 class UserSpecificAssistantPreference(BaseModel):
-    disabled_tool_ids: list[int]
+    # The built-in tools and the integrations that the user turned off for
+    # the agent. None on a write keeps the saved list.
+    disabled_tool_ids: list[int] | None = None
+    disabled_integration_ids: list[int] | None = None
+    # The integration ids as text, for the released mobile app. A write
+    # reads it when disabled_integration_ids is not sent and each value is
+    # an integration id.
+    disabled_plugin_ids: list[str] | None = None
+
+    @model_validator(mode="after")
+    def _one_list_of_integrations(self) -> "UserSpecificAssistantPreference":
+        # A plugin id from before the upgrade (a UUID) maps to no integration.
+        # Then the write keeps the saved list rather than replace it in part.
+        if (
+            self.disabled_integration_ids is None
+            and self.disabled_plugin_ids is not None
+            and all(value.isdecimal() for value in self.disabled_plugin_ids)
+        ):
+            self.disabled_integration_ids = [
+                int(value) for value in self.disabled_plugin_ids
+            ]
+        if self.disabled_integration_ids is not None:
+            self.disabled_plugin_ids = [
+                str(value) for value in self.disabled_integration_ids
+            ]
+        return self
 
 
 UserSpecificAssistantPreferences = dict[int, UserSpecificAssistantPreference]
@@ -261,6 +295,16 @@ class UserInfo(BaseModel):
 
 class UserByEmail(BaseModel):
     user_email: str
+
+
+class TransferPrivatePluginsRequest(BaseModel):
+    user_email: str
+    new_owner_user_id: UUID
+
+
+class TransferPrivatePluginsResponse(BaseModel):
+    plugin_ids: list[UUID]
+    renames: list[PluginRename]
 
 
 class UserAdminAccessUpdateRequest(BaseModel):

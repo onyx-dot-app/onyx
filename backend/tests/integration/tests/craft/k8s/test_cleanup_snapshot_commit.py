@@ -8,15 +8,15 @@ from kubernetes import client
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from onyx.db.sandbox import (
+    get_latest_snapshot_for_session,
+    get_snapshots_for_session,
+)
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import (
     SANDBOX_BACKEND,
     SANDBOX_NAMESPACE,
     SandboxBackend,
-)
-from onyx.server.features.build.db.sandbox import (
-    get_latest_snapshot_for_session,
-    get_snapshots_for_session,
 )
 from tests.common.craft.cleanup_worker import (
     isolated_cleanup_deployment as isolated_cleanup_deployment,

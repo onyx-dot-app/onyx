@@ -28,7 +28,6 @@ import { useIncognito } from "@/providers/IncognitoProvider";
 import { useUser } from "@/providers/UserProvider";
 import { chatPageUrl, reloadLatestChatPage } from "@/lib/chat/pagedSession";
 import type { ProjectFile } from "@/lib/projects/types";
-import { getProjectFilesForSession } from "@/lib/projects/svc";
 import { AppInputBarHandle } from "@/sections/input/AppInputBar";
 import type { ErrorResponseBody } from "@/lib/fetcher";
 import {
@@ -93,7 +92,6 @@ export default function useChatSessionController({
   const navigation = useNavigation();
   const { mutate: mutateCache } = useSWRConfig();
   const tReadiness = useTranslations("chat.readiness");
-  const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
   const [sessionFetchError, setSessionFetchError] =
     useState<SessionFetchError>(null);
   // Store actions
@@ -168,6 +166,9 @@ export default function useChatSessionController({
       }
     }
 
+    // Each run owns its load: cleanup cancels the request and stops the run.
+    const load = new AbortController();
+
     async function initialSessionFetch() {
       setSessionFetchError(null);
 
@@ -203,18 +204,21 @@ export default function useChatSessionController({
       const ownsFetch = () => {
         const store = useChatSessionStore.getState();
         return (
+          !load.signal.aborted &&
           store.currentSessionId === existingChatSessionId &&
           store.sessions.get(existingChatSessionId)?.abortController ===
             fetchOwner
         );
       };
 
-      const toolSelectionVersion =
+      const toolOptionsVersion =
         useChatSessionStore.getState().sessions.get(existingChatSessionId)
-          ?.toolSelectionVersion ?? 0;
+          ?.toolOptionsVersion ?? 0;
       let response: Response;
       try {
-        response = await fetch(chatPageUrl(existingChatSessionId));
+        response = await fetch(chatPageUrl(existingChatSessionId), {
+          signal: load.signal,
+        });
       } catch (error) {
         if (!ownsFetch()) return;
         setIsFetchingChatMessages(existingChatSessionId, false);
@@ -267,7 +271,7 @@ export default function useChatSessionController({
       initializeSession(
         chatSession.chat_session_id,
         chatSession,
-        toolSelectionVersion
+        toolOptionsVersion
       );
       const sessionOwner = useChatSessionStore
         .getState()
@@ -369,20 +373,6 @@ export default function useChatSessionController({
         });
       }
 
-      // Fetch project files for this chat session (if any)
-      try {
-        if (chatSession.chat_session_id) {
-          const files = await getProjectFilesForSession(
-            chatSession.chat_session_id
-          );
-          setProjectFiles(files || []);
-        } else {
-          setProjectFiles([]);
-        }
-      } catch (e) {
-        setProjectFiles([]);
-      }
-
       // If this is a seeded chat, then kick off the AI message generation
       if (
         newMessageHistory.length === 1 &&
@@ -431,7 +421,14 @@ export default function useChatSessionController({
         existingChatSession.chatState === "unconfirmed" ||
         existingChatSession.abortController.signal.aborted
       ) {
-        initialSessionFetch();
+        void initialSessionFetch().catch((error: unknown) => {
+          // Only the cancelled request ends quietly; other failures surface.
+          if (
+            !load.signal.aborted ||
+            !(error instanceof Error && error.name === "AbortError")
+          )
+            throw error;
+        });
       } else {
         // no need to fetch if the chat session is currently streaming (it would be )
         // out of date).
@@ -454,6 +451,8 @@ export default function useChatSessionController({
         navigation.go(newUrl as Route, { replace: true, shallow: true });
       }
     }
+
+    return () => load.abort();
   }, [
     existingChatSessionId,
     searchParams?.get(SEARCH_PARAM_NAMES.AGENT_ID),
@@ -521,7 +520,6 @@ export default function useChatSessionController({
 
   return {
     onMessageSelection,
-    projectFiles,
     sessionFetchError,
     queue,
   };

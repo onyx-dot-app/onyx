@@ -124,7 +124,7 @@ def test_share_update_filters_owner_silently(db_session: Session) -> None:
 
 
 def test_share_update_denied_for_viewer(db_session: Session) -> None:
-    from fastapi import HTTPException
+    from onyx.error_handling.exceptions import OnyxError
 
     owner = create_test_user(db_session, "owner")
     viewer = create_test_user(db_session, "viewer")
@@ -132,7 +132,7 @@ def test_share_update_denied_for_viewer(db_session: Session) -> None:
     persona = create_test_persona(db_session, owner)
     share_persona_with_user(db_session, persona, viewer, PersonaSharePermission.VIEWER)
 
-    with pytest.raises(HTTPException):
+    with pytest.raises(OnyxError):
         update_persona_shared(
             persona_id=persona.id,
             user=viewer,

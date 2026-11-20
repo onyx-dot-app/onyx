@@ -7,14 +7,11 @@ from collections.abc import Generator
 from pathlib import Path
 from uuid import uuid4
 
+import httpx
 import pytest
 from pydantic import BaseModel
 
-from onyx.db.enums import (
-    MCPAuthenticationPerformer,
-    MCPAuthenticationType,
-    MCPTransport,
-)
+from onyx.db.enums import MCPTransport
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import DATestUser
@@ -34,14 +31,21 @@ NO_AUTH_MCP_SERVER_SCRIPT = (
 )
 
 
+def release_hold(key: str) -> None:
+    """Let the no-auth mock server's `hold` calls for `key` answer."""
+    httpx.post(
+        f"http://{NO_AUTH_MCP_SERVER_HOST}:{NO_AUTH_MCP_SERVER_PORT}/release/{key}"
+    ).raise_for_status()
+
+
 class ConnectedMCPServer(BaseModel):
-    id: int
     name: str
-    tool_ids: dict[str, int]
+    # The integration of the server.
+    integration_id: int
 
     def callable_name(self, tool_name: str) -> str:
         """The name the LLM sees for one of the server's tools."""
-        return f"mcp__{self.id}__{self.name}__{tool_name}"
+        return f"mcp__{self.integration_id}__{self.name}__{tool_name}"
 
 
 @pytest.fixture(scope="session")
@@ -88,52 +92,43 @@ def connected_mcp_server(
     mcp_no_auth_server: None,  # noqa: ARG001
     admin_user: DATestUser,
 ) -> Generator[ConnectedMCPServer, None, None]:
-    """A connected no-auth MCP server with its tools saved. Teardown deletes
-    the server with its tools, policies and approval requests."""
+    """A no-auth MCP integration for the organization, with its tools
+    discovered at create. Teardown deletes it and its plugin."""
     name = f"integration-mcp-{uuid4().hex[:8]}"
     create_response = client.post(
-        f"{API_SERVER_URL}/admin/mcp/servers/create",
+        f"{API_SERVER_URL}/admin/integrations",
         json={
+            "for_organization": True,
             "name": name,
             "description": "Integration test MCP server",
-            "server_url": NO_AUTH_MCP_SERVER_URL,
-            "transport": MCPTransport.STREAMABLE_HTTP.value,
-            "auth_type": MCPAuthenticationType.NONE.value,
-            "auth_performer": MCPAuthenticationPerformer.ADMIN.value,
+            "auth_mode": "none",
+            "auth_method": None,
+            "config": {
+                "shape": "mcp_server",
+                "server_url": NO_AUTH_MCP_SERVER_URL,
+                "transport": MCPTransport.STREAMABLE_HTTP.value,
+            },
         },
         headers=admin_user.headers,
         cookies=admin_user.cookies,
     )
     create_response.raise_for_status()
-    server_id = create_response.json()["server_id"]
+    detail = create_response.json()
+    integration_id = detail["id"]
     try:
-        client.get(
-            f"{API_SERVER_URL}/admin/mcp/server/{server_id}/tools",
-            headers=admin_user.headers,
-            cookies=admin_user.cookies,
-        ).raise_for_status()
-        client.patch(
-            f"{API_SERVER_URL}/admin/mcp/server/{server_id}/status",
-            params={"status": "CONNECTED"},
-            headers=admin_user.headers,
-            cookies=admin_user.cookies,
-        ).raise_for_status()
-        db_tools_response = client.get(
-            f"{API_SERVER_URL}/admin/mcp/server/{server_id}/db-tools",
-            headers=admin_user.headers,
-            cookies=admin_user.cookies,
-        )
-        db_tools_response.raise_for_status()
+        if detail["action_count"] == 0:
+            client.post(
+                f"{API_SERVER_URL}/admin/integrations/{integration_id}/actions/refresh",
+                headers=admin_user.headers,
+                cookies=admin_user.cookies,
+            ).raise_for_status()
         yield ConnectedMCPServer(
-            id=server_id,
             name=name,
-            tool_ids={
-                tool["name"]: tool["id"] for tool in db_tools_response.json()["tools"]
-            },
+            integration_id=integration_id,
         )
     finally:
         client.delete(
-            f"{API_SERVER_URL}/admin/mcp/server/{server_id}",
+            f"{API_SERVER_URL}/admin/integrations/{integration_id}",
             headers=admin_user.headers,
             cookies=admin_user.cookies,
         ).raise_for_status()

@@ -40,6 +40,8 @@ from onyx.redis.redis_hierarchy import (
     get_ancestors_from_node_id,
     get_ancestors_from_raw_id,
 )
+
+# no-direct-redis: allow hierarchy cache of the Celery indexing pipeline
 from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.logger import setup_logger
 
@@ -64,7 +66,11 @@ class DocumentIndexingBatchAdapter(IndexingBatchAdapter):
         self.connector_id = connector_id
         self.credential_id = credential_id
         self.tenant_id = tenant_id
-        self.index_attempt_metadata = index_attempt_metadata
+        self._index_attempt_metadata = index_attempt_metadata
+
+    @property
+    def index_attempt_metadata(self) -> IndexAttemptMetadata:
+        return self._index_attempt_metadata
 
     def prepare(
         self,
@@ -201,6 +207,7 @@ class DocumentIndexingBatchAdapter(IndexingBatchAdapter):
         if not documents:
             return {}
 
+        # no-direct-redis: allow hierarchy cache of the Celery indexing pipeline
         redis_client = get_redis_client(tenant_id=tenant_id)
         result: dict[str, list[int]] = {}
 
@@ -238,7 +245,7 @@ class DocumentIndexingBatchAdapter(IndexingBatchAdapter):
         filtered_documents: list[Document],
         enrichment: ChunkEnrichmentContext,
         db_session: Session,
-        index_to_secondary: bool,  # noqa: ARG002
+        index_to_secondary: bool,
         failed_document_ids: set[str],
     ) -> None:
         """Finalize DB updates, store plaintext, and mark docs as indexed."""
@@ -249,8 +256,15 @@ class DocumentIndexingBatchAdapter(IndexingBatchAdapter):
         for doc in context.updatable_docs:
             last_modified_ids.append(doc.id)
             # doc_updated_at is the source's idea (on the other end of the connector)
-            # of when the doc was last modified
-            if doc.doc_updated_at is not None:
+            # of when the doc was last modified. It marks the version in the
+            # PRESENT index, so a failed write keeps the old one and is
+            # retried, and a FUTURE write does not set it: a FUTURE attempt
+            # that fails before the swap leaves PRESENT with the old version.
+            if (
+                doc.doc_updated_at is not None
+                and doc.id not in failed_document_ids
+                and not index_to_secondary
+            ):
                 ids_to_new_updated_at[doc.id] = doc.doc_updated_at
             # doc_created_at is written to the index on this path; persist it so the
             # DB reflects that this doc's creation time is collected (the backfill

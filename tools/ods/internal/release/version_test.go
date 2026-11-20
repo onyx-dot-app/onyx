@@ -65,13 +65,6 @@ func TestIsBareVersion(t *testing.T) {
 	}
 }
 
-func TestParseVersions_emptyWhenNothingMatches(t *testing.T) {
-	// Under test and postcondition.
-	if versions := parseVersions([]string{"main", "hotfix/abc-v4.4"}); len(versions) != 0 {
-		t.Errorf("expected no versions, got %v", versions)
-	}
-}
-
 func TestFindTargetVersion_postCutCommitTargetsNewestBranch(t *testing.T) {
 	// Precondition.
 	repo := gittest.SetupReleaseBranchRepo(t)

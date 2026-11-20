@@ -78,6 +78,7 @@ def test_picks_most_free_memory_and_writes_record(
     assert small.agent.create_calls == mid.agent.create_calls == 0
     # mem_mib and vcpus come from the node's template.
     assert placed.vm.mem_mib == 2048 and placed.vm.vcpus == 2
+    assert placed.vm.scratch_gib == 32
     record = get_sandbox_placement(tenant_cache, sandbox_id)
     assert record is not None
     assert (record.node_id, record.attempt, record.generation) == (
@@ -297,9 +298,11 @@ def test_capacity_error_has_real_reason(
     assert exc.value.error_code is OnyxErrorCode.SANDBOX_CAPACITY_UNAVAILABLE
     assert exc.value.extra == {"reason": "NO_NODES", "nodes": {}}
 
+    # The host agent owns memory admission: placement asks each node, and the
+    # agents refuse with CAPACITY_MEMORY.
     full_a, full_b = _node("full"), _node("full")
-    add_node(full_a, FakeHostAgent(mem_available_mib=1024))
-    add_node(full_b, FakeHostAgent(mem_available_mib=512))
+    agent_a = add_node(full_a, FakeHostAgent(mem_available_mib=1024)).agent
+    agent_b = add_node(full_b, FakeHostAgent(mem_available_mib=512)).agent
     gone_id = _node("gone")
     add_node(gone_id).stop()
 
@@ -321,6 +324,7 @@ def test_capacity_error_has_real_reason(
             gone_id: "NODE_UNREACHABLE",
         },
     }
+    assert agent_a.create_calls == agent_b.create_calls == 1
 
 
 def test_refusal_reason_from_agent(

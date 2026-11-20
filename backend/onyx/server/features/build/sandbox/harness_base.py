@@ -13,8 +13,8 @@ events and read the last one, an `ExecCommandResult`, or call
 
 Exec contract (Codex `exec_command` / `write_stdin`):
 - `exec_command` starts a command and waits up to `yield_time_ms`. If the
-  command ended, the result has its exit code. Otherwise it has an
-  `exec_session_id` for `write_stdin`.
+  command ended, the result has its exit code. Otherwise it has a
+  `session_id` for `write_stdin`.
 - `write_stdin` with no chars polls for new output. Chars go to the
   command's stdin. "\\x03" interrupts the command.
 - Output of one call keeps at most `EXEC_CALL_OUTPUT_MAX_BYTES` (head and
@@ -22,31 +22,34 @@ Exec contract (Codex `exec_command` / `write_stdin`):
 - Exec session IDs stay valid across turns and API pods until the command's
   record is evicted, or the sandbox stops (idle stop, restore): then the call
   raises `ExecSessionEndedError`.
+- A cancel of the current signal (`onyx.llm.cancellation`: a Stop, or the
+  end of the code mode cell that made the call) ends the wait at once and
+  kills the command (SIGKILL), however the wait ends; the call raises
+  `AgentCancelled`. A call cancelled before it starts its command, or writes
+  its input, does neither.
 """
 
 import abc
-from collections.abc import Iterator
+import posixpath
+from collections.abc import Generator, Iterator, Sequence
+from typing import IO
 from uuid import UUID
 
 from onyx.server.features.build.sandbox.models import (
     ExecCommandResult,
     ExecEvent,
     HarnessSandboxRef,
+    SandboxPathInfo,
 )
 
 # Parent of each chat session's working directory in the sandbox.
 SESSION_WORKSPACE_ROOT = "/home/onyx/workspaces"
 
-EXEC_DEFAULT_YIELD_MS = 10_000
-EXEC_MIN_YIELD_MS = 250
-EXEC_MAX_YIELD_MS = 30_000
-WRITE_STDIN_DEFAULT_YIELD_MS = 250
-WRITE_STDIN_MAX_YIELD_MS = 30_000
-# An empty write_stdin (a poll) waits at least this long for new output.
-POLL_MIN_YIELD_MS = 5_000
-POLL_MAX_YIELD_MS = 300_000
-DEFAULT_MAX_OUTPUT_TOKENS = 10_000
-EXEC_CALL_OUTPUT_MAX_BYTES = 1 << 20
+# Parent of the files that Onyx writes outside every session directory (for
+# example large tool results). No session save keeps them; they go when the
+# sandbox stops.
+ONYX_VM_FILES_ROOT = "/tmp/onyx"  # noqa: S108 - a path in the sandbox VM.
+
 # Most exec session records per sandbox; the least recently used goes
 # first. The guest daemon caps the running commands.
 MAX_EXEC_SESSIONS_PER_SANDBOX = 64
@@ -117,6 +120,38 @@ class SandboxFileTooLargeError(HarnessSandboxError):
     pass
 
 
+class SandboxFileNotFoundError(HarnessSandboxError):
+    def __init__(self, path: str) -> None:
+        super().__init__(f"{path!r} does not exist")
+
+
+def session_relative_path(ref: HarnessSandboxRef, path: str) -> str:
+    """The session-relative form of `path` ("" = the session directory).
+    Accepts a relative path or an absolute path in the session directory."""
+    root = session_workspace(ref.session_id)
+    normalized = posixpath.normpath(path or ".")
+    if posixpath.isabs(normalized):
+        if normalized == root:
+            return ""
+        if not normalized.startswith(root + "/"):
+            raise SandboxPathError(
+                f"{path!r} is outside the working directory {root}; use "
+                "exec_command elsewhere"
+            )
+        return normalized[len(root) + 1 :]
+    if normalized == ".." or normalized.startswith("../"):
+        raise SandboxPathError(f"{path!r} leaves the working directory")
+    return "" if normalized == "." else normalized
+
+
+def onyx_vm_path(path: str) -> str | None:
+    """`path` normalized when it is an absolute path under
+    ONYX_VM_FILES_ROOT, the only place outside the session directories that
+    file calls reach; else None."""
+    normalized = posixpath.normpath(path)
+    return normalized if normalized.startswith(ONYX_VM_FILES_ROOT + "/") else None
+
+
 class HarnessSandbox(abc.ABC):
     """What the harness calls. All methods block; see the module docstring."""
 
@@ -134,7 +169,7 @@ class HarnessSandbox(abc.ABC):
         workdir: str | None = None,
         yield_time_ms: int | None = None,
         max_output_tokens: int | None = None,
-    ) -> Iterator[ExecEvent]:
+    ) -> Generator[ExecEvent]:
         """Run `cmd` with bash in `workdir` (default: the session
         directory)."""
 
@@ -147,27 +182,59 @@ class HarnessSandbox(abc.ABC):
         *,
         yield_time_ms: int | None = None,
         max_output_tokens: int | None = None,
-    ) -> Iterator[ExecEvent]:
+    ) -> Generator[ExecEvent]:
         """Write to a running command, or poll it with empty chars."""
 
-    # Files: only what exec_command cannot do well. view_image needs exact
-    # bytes (exec output is text), and apply_patch needs an exact write of
-    # any content (no shell quoting). Listing, moving and deleting go
-    # through exec_command.
+    # Files: only what exec_command cannot do well. publish_files needs exact
+    # bytes (exec output is text), and apply_patch needs exact writes of any
+    # content (no shell quoting) and typed path facts. Paths are relative to
+    # the session directory, or absolute inside it; read_file also takes,
+    # and write_onyx_file only takes, an absolute path under
+    # ONYX_VM_FILES_ROOT (onyx_vm_path). Write data is
+    # bytes, or a seekable binary file (for example a file store temp file)
+    # that is streamed whole, from its start, in chunks.
 
     @abc.abstractmethod
     def read_file(self, ref: HarnessSandboxRef, path: str, *, max_bytes: int) -> bytes:
-        """Raises SandboxFileTooLargeError over max_bytes."""
+        """Read a regular file in the session directory, or under
+        ONYX_VM_FILES_ROOT; links are followed only inside that root. Raises
+        SandboxPathError for another path, SandboxFileNotFoundError for a
+        missing file, SandboxFileTooLargeError over max_bytes, and
+        HarnessSandboxError for a path that is not a regular file or that a
+        link takes out of its root."""
 
     @abc.abstractmethod
-    def write_file(self, ref: HarnessSandboxRef, path: str, data: bytes) -> None:
-        """Atomic replace; creates parent directories."""
+    def write_file(
+        self,
+        ref: HarnessSandboxRef,
+        path: str,
+        data: bytes | IO[bytes],
+        *,
+        mode: int = 0o644,
+    ) -> None:
+        """Atomic replace (a link is replaced, not followed); creates parent
+        directories. `mode`: permission bits."""
 
     @abc.abstractmethod
-    def publish_artifact(
-        self, ref: HarnessSandboxRef, path: str, *, display_name: str | None = None
-    ) -> str:
-        """Copy a session file to the file store. Returns the file ID."""
+    def write_onyx_file(
+        self, ref: HarnessSandboxRef, path: str, data: bytes | IO[bytes]
+    ) -> None:
+        """Atomic replace of an absolute path under ONYX_VM_FILES_ROOT, mode
+        0644; creates parent directories. Starts the sandbox if needed but
+        sets up no session. Raises SandboxPathError for another path."""
+
+    @abc.abstractmethod
+    def stat_files(
+        self, ref: HarnessSandboxRef, paths: Sequence[str]
+    ) -> list[SandboxPathInfo]:
+        """The facts of each path, in order: the entry itself, and what it
+        names through the links inside the session directory. A missing path,
+        a link out of the session and a link loop are reported, not raised."""
+
+    @abc.abstractmethod
+    def delete_file(self, ref: HarnessSandboxRef, path: str) -> bool:
+        """Delete a file or a link (not a directory). False when nothing was
+        at the path."""
 
     @abc.abstractmethod
     def touch(self, ref: HarnessSandboxRef) -> None:

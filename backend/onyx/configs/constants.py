@@ -81,6 +81,7 @@ POSTGRES_CELERY_WORKER_PRIMARY_APP_NAME = "celery_worker_primary"
 POSTGRES_CELERY_WORKER_LIGHT_APP_NAME = "celery_worker_light"
 POSTGRES_CELERY_WORKER_DOCPROCESSING_APP_NAME = "celery_worker_docprocessing"
 POSTGRES_CELERY_WORKER_DOCFETCHING_APP_NAME = "celery_worker_docfetching"
+POSTGRES_CELERY_WORKER_DOCCONVERSION_APP_NAME = "celery_worker_docconversion"
 POSTGRES_CELERY_WORKER_INDEXING_CHILD_APP_NAME = "celery_worker_indexing_child"
 POSTGRES_CELERY_WORKER_HEAVY_APP_NAME = "celery_worker_heavy"
 POSTGRES_CELERY_WORKER_MONITORING_APP_NAME = "celery_worker_monitoring"
@@ -211,9 +212,17 @@ PERMISSION_SYNC_TASK_EXPIRES = 6 * 60 * 60  # seconds
 # A NOT_STARTED attempt this old whose task is not in the broker queue lost its
 # task (e.g. a Redis restart without persistence), so the reaper fails it.
 PERMISSION_SYNC_LOST_TASK_GRACE = 10 * 60  # seconds
+# Celery drops a targeted reindex task that waited longer than this in the
+# queue. The stale-job validator then fails its NOT_STARTED job.
+TARGETED_REINDEX_TASK_EXPIRES = 10 * 60  # seconds
+TARGETED_REINDEX_TIMEOUT = 30 * 60  # seconds
 
-# how long a task should wait for associated fence to be ready
-CELERY_TASK_WAIT_FOR_FENCE_TIMEOUT = 5 * 60  # 5 min
+# Celery drops a user-started export task that waited longer than this. The
+# hourly export cleanup fails its job once the expiry and the grace have passed.
+USER_EXPORT_TASK_EXPIRES = 60 * 60  # seconds
+USER_JOB_LOST_TASK_GRACE = 5 * 60  # seconds
+
+PRUNING_GENERATOR_TASK_EXPIRES = 10 * 60  # seconds
 
 # needs to be long enough to cover the maximum time it takes to download an object
 # if we can get callbacks as object bytes download, we could lower this a lot.
@@ -260,6 +269,12 @@ CELERY_DOCUMENT_SYNC_TASK_EXPIRES = 60 * 60  # 1 hour (in seconds)
 
 # Generous: a big prune can queue thousands of cleanup tasks on a busy fleet.
 CELERY_DOCUMENT_CLEANUP_TASK_EXPIRES = 6 * 60 * 60  # 6 hours (in seconds)
+
+# The cleanup checks send a task for every stale row on each run and do not
+# track what is queued. A worker drops a copy older than the check interval
+# when it takes it: the next run has sent the row again.
+CELERY_CHECKPOINT_CLEANUP_TASK_EXPIRES = 60 * 60  # 1 hour (in seconds)
+CELERY_INDEX_ATTEMPT_CLEANUP_TASK_EXPIRES = 30 * 60  # 30 minutes (in seconds)
 
 # Max queue depth before the delete beat stops enqueuing more delete tasks.
 USER_FILE_DELETE_MAX_QUEUE_DEPTH = 500
@@ -463,13 +478,16 @@ class FileStoreType(str, Enum):
 
 
 # Key in FileRecord.file_metadata naming the chat session that produced a
-# CHAT_IMAGE_GEN file. user_can_access_chat_file scopes the file by it.
+# chat output file (CHAT_OUTPUT_FILE_ORIGINS). user_can_access_chat_file gives
+# the file to the session's readers.
 CHAT_SESSION_ID_FILE_METADATA_KEY = "chat_session_id"
 
 
 class FileOrigin(str, Enum):
     CHAT_UPLOAD = "chat_upload"
     CHAT_IMAGE_GEN = "chat_image_gen"
+    # A file that the model published from its sandbox (publish_files).
+    CHAT_ARTIFACT = "chat_artifact"
     CONNECTOR = "connector"
     CONNECTOR_FILE_UPLOAD = "connector_file_upload"
     CONNECTOR_METADATA = "connector_metadata"
@@ -484,6 +502,13 @@ class FileOrigin(str, Enum):
     SANDBOX_SNAPSHOT = "sandbox_snapshot"
     SKILL_BUNDLE = "skill_bundle"
     USER_FILE = "user_file"
+
+
+# Files that a chat produced for its readers: generated images and code
+# interpreter outputs, and the files that the model published from its sandbox.
+CHAT_OUTPUT_FILE_ORIGINS = frozenset(
+    {FileOrigin.CHAT_IMAGE_GEN, FileOrigin.CHAT_ARTIFACT}
+)
 
 
 class FileType(str, Enum):
@@ -545,6 +570,8 @@ class OnyxCeleryQueues:
     USER_FILE_DELETE = "user_file_delete"
     # Document processing pipeline queue
     DOCPROCESSING = "docprocessing"
+    # Stub batches that the conversion stage fetches and parses.
+    DOCCONVERSION = "docconversion"
     CONNECTOR_DOC_FETCHING = "connector_doc_fetching"
 
     # Reindex port queue (heavy PRESENT -> FUTURE re-embed; kept off the
@@ -742,6 +769,7 @@ class OnyxCeleryTask:
     # New split indexing tasks
     CONNECTOR_DOC_FETCHING_TASK = "connector_doc_fetching_task"
     DOCPROCESSING_TASK = "docprocessing_task"
+    DOCCONVERSION_TASK = "docconversion_task"
 
     CONNECTOR_PRUNING_GENERATOR_TASK = "connector_pruning_generator_task"
     CONNECTOR_HIERARCHY_FETCHING_TASK = "connector_hierarchy_fetching_task"
@@ -791,6 +819,8 @@ class OnyxCeleryTask:
     # Sandbox cleanup
     CLEANUP_IDLE_SANDBOXES = "cleanup_idle_sandboxes"
     RECONCILE_SANDBOX_RUNTIMES = "reconcile_sandbox_runtimes"
+    PURGE_EXPIRED_HARNESS_SESSIONS = "purge_expired_harness_sessions"
+    PUSH_SKILLS_TO_USERS = "push_skills_to_users"
 
     # Scheduled tasks (Craft)
     SCHEDULED_TASKS_DISPATCH_DUE = "scheduled_tasks_dispatch_due"
@@ -887,3 +917,40 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.YOUTRACK: "Issues and project tracking",
     DocumentSource.AZURE_DATALAKE: "Files in Azure Data Lake Storage containers",
 }
+
+# Prefix of the file id of a query-history report in the file store.
+QUERY_REPORT_NAME_PREFIX = "query-history"
+# Prefix of the task name of a query-history export.
+QUERY_HISTORY_TASK_NAME_PREFIX = OnyxCeleryTask.EXPORT_QUERY_HISTORY_TASK
+
+
+# Values of settings in app_configs.py.
+class AuthBackend(str, Enum):
+    REDIS = "redis"
+    POSTGRES = "postgres"
+    JWT = "jwt"
+
+
+class CacheBackendType(str, Enum):
+    REDIS = "redis"
+    POSTGRES = "postgres"
+
+
+class OpenSearchAuthMethod(str, Enum):
+    """Authentication method for connecting to OpenSearch.
+
+    BASIC uses HTTP basic auth (username/password); the only option for
+    self-hosted / docker-compose OpenSearch. IAM uses AWS SigV4 request signing
+    and is only valid against an AWS managed domain whose fine-grained access
+    control master is an IAM ARN.
+    """
+
+    BASIC = "basic"
+    IAM = "iam"
+
+
+class HtmlBasedConnectorTransformLinksStrategy(str, Enum):
+    # remove links entirely
+    STRIP = "strip"
+    # turn HTML links into markdown links
+    MARKDOWN = "markdown"

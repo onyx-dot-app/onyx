@@ -2,8 +2,9 @@ import copy
 import json
 import os
 import re
+import time
 from collections.abc import Callable, Generator, Iterable, Iterator
-from datetime import datetime, timedelta
+from datetime import timedelta
 from typing import Any
 
 from more_itertools import chunked
@@ -514,28 +515,21 @@ class JiraConnector(
             raise ConnectorMissingCredentialError("Jira")
         return self._source_operations
 
-    def _get_project_permissions(
-        self, project_key: str, add_prefix: bool = False
-    ) -> Any:
+    def _get_project_permissions(self, project_key: str) -> Any:
         """Get project permissions with caching.
 
         Args:
             project_key: The Jira project key
-            add_prefix: When True, prefix group IDs with source type (for indexing path).
-                       When False (default), leave unprefixed (for permission sync path).
 
         Returns:
             The external access permissions for the project
         """
-        # Use different cache keys for prefixed vs unprefixed to avoid mixing
-        cache_key = f"{project_key}:{'prefixed' if add_prefix else 'unprefixed'}"
-        if cache_key not in self._project_permissions_cache:
-            self._project_permissions_cache[cache_key] = get_project_permissions(
+        if project_key not in self._project_permissions_cache:
+            self._project_permissions_cache[project_key] = get_project_permissions(
                 source_operations=self.source_operations,
                 jira_project=project_key,
-                add_prefix=add_prefix,
             )
-        return self._project_permissions_cache[cache_key]
+        return self._project_permissions_cache[project_key]
 
     def _is_epic(self, issue: JiraIssue) -> bool:
         """Check if issue is an Epic. A parent reference has the same shape
@@ -814,7 +808,6 @@ class JiraConnector(
             if include_permissions:
                 document.external_access = self._get_project_permissions(
                     project_key,  # ty: ignore[invalid-argument-type]
-                    add_prefix=True,  # Indexing path - prefix here
                 )
             yield document
 
@@ -1013,7 +1006,7 @@ class JiraConnector(
 
         start = start or 0
         end = (
-            end or datetime.now().timestamp() + one_day
+            end or time.time() + one_day
         )  # we add one day to account for any potential timezone issues
 
         jql = self._get_jql_query(start, end)
@@ -1078,9 +1071,8 @@ class JiraConnector(
                 slim_doc_batch.append(
                     SlimDocument(
                         id=doc_id,
-                        # Permission sync path - don't prefix, upsert_document_external_perms handles it
                         external_access=(
-                            self._get_project_permissions(project_key, add_prefix=False)
+                            self._get_project_permissions(project_key)
                             if include_permissions
                             else None
                         ),
@@ -1215,8 +1207,8 @@ def make_checkpoint_callback(
 if __name__ == "__main__":
     import os
 
+    from onyx.connectors.load_all import load_all_from_connector
     from onyx.utils.variable_functionality import global_version
-    from tests.daily.connectors.utils import load_all_from_connector
 
     # For connector permission testing, set EE to true.
     global_version.set_ee()
@@ -1235,7 +1227,7 @@ if __name__ == "__main__":
     )
 
     start = 0
-    end = datetime.now().timestamp()
+    end = time.time()
 
     for slim_doc in connector.retrieve_all_slim_docs_perm_sync(
         start=start,

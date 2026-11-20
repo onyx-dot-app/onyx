@@ -13,7 +13,6 @@ from sqlalchemy.orm import Session
 
 from onyx.db.enums import (
     PluginInstallationPolicy,
-    SkillInstallationPolicy,
     SkillSharePermission,
 )
 from onyx.db.models import (
@@ -31,7 +30,7 @@ from onyx.db.plugin import (
 )
 from onyx.db.plugin_access import version_user_runs
 from onyx.db.skill import (
-    SkillManagementPolicy,
+    fetch_editable_skill,
     fetch_skill,
     list_runtime_skills_for_user,
     set_skill_enabled_for_user,
@@ -55,11 +54,10 @@ from tests.external_dependency_unit.craft.db_helpers import (
 )
 
 
-def _visible(skill: Skill, user: User, db_session: Session) -> bool:
+def _visible(skill: Plugin | Skill, user: User, db_session: Session) -> bool:
     return (
         fetch_skill(
             skill.id,
-            policy=SkillManagementPolicy.VIEW,
             user=user,
             db_session=db_session,
         )
@@ -67,11 +65,10 @@ def _visible(skill: Skill, user: User, db_session: Session) -> bool:
     )
 
 
-def _editable(skill: Skill, user: User, db_session: Session) -> bool:
+def _editable(skill: Plugin | Skill, user: User, db_session: Session) -> bool:
     return (
-        fetch_skill(
+        fetch_editable_skill(
             skill.id,
-            policy=SkillManagementPolicy.EDIT,
             user=user,
             db_session=db_session,
         )
@@ -80,7 +77,7 @@ def _editable(skill: Skill, user: User, db_session: Session) -> bool:
 
 
 def _ids(
-    skills: dict[str, Skill], keep: Iterable[UUID] | None = None
+    skills: dict[str, Plugin | Skill], keep: Iterable[UUID] | None = None
 ) -> dict[UUID, str]:
     names = {skill.id: key for key, skill in skills.items()}
     if keep is None:
@@ -88,14 +85,12 @@ def _ids(
     return {skill_id: names[skill_id] for skill_id in keep if skill_id in names}
 
 
-def test_access_results_match_the_skill_rows_except_organization_edit(
+def test_access_results_come_from_the_plugin_tables(
     db_session: Session,
     test_user: User,  # noqa: ARG001
 ) -> None:
     """Owners, user and group shares, published skills, a skill with no
-    author, a built-in skill, choices and install settings give the results
-    the skill rows gave, with one change: the organization only views a skill
-    that had organization-wide edit."""
+    author, a built-in skill, choices and install settings."""
     owner = make_user(db_session, standard_account=True)
     viewer = make_user(db_session, standard_account=True)
     editor = make_user(db_session, standard_account=True)
@@ -108,7 +103,7 @@ def test_access_results_match_the_skill_rows_except_organization_edit(
     add_user_to_group(db_session, group_editor, editors_group)
 
     tag = uuid4().hex[:8]
-    skills = {
+    skills: dict[str, Plugin | Skill] = {
         "private": make_skill(
             db_session, name=f"eq-private-{tag}", author_user_id=owner.id
         ),
@@ -119,35 +114,31 @@ def test_access_results_match_the_skill_rows_except_organization_edit(
             db_session, name=f"eq-published-{tag}", author_user_id=owner.id
         ),
         "no_author": make_skill(db_session, name=f"eq-no-author-{tag}", is_public=True),
-        "org_editor": make_skill(
-            db_session,
-            name=f"eq-org-editor-{tag}",
-            is_public=True,
-            public_permission=SkillSharePermission.EDITOR,
-            author_user_id=owner.id,
-        ),
         "built_in": make_built_in_skill_row(
             db_session, built_in_skill_id=f"eq-built-in-{tag}"
         ),
     }
-    share_skill_with_user(db_session, skills["private"], viewer)
-    share_skill_with_user(
-        db_session, skills["private"], editor, SkillSharePermission.EDITOR
-    )
-    share_skill_with_group(db_session, skills["private"], viewers_group)
+    private = skills["private"]
+    assert isinstance(private, Plugin)
+    share_skill_with_user(db_session, private, viewer)
+    share_skill_with_user(db_session, private, editor, SkillSharePermission.EDITOR)
+    share_skill_with_group(db_session, private, viewers_group)
     share_skill_with_group(
-        db_session, skills["private"], editors_group, SkillSharePermission.EDITOR
+        db_session, private, editors_group, SkillSharePermission.EDITOR
     )
+    published = skills["published"]
+    no_author = skills["no_author"]
+    assert isinstance(published, Plugin) and isinstance(no_author, Plugin)
     set_skill_public_permission(
-        skill=skills["published"],
+        skill=published,
         public_permission=SkillSharePermission.VIEWER,
         db_session=db_session,
     )
     set_skill_installation_policy(
-        skills["published"], SkillInstallationPolicy.DEFAULT, db_session
+        published, PluginInstallationPolicy.DEFAULT, db_session
     )
     set_skill_installation_policy(
-        skills["no_author"], SkillInstallationPolicy.REQUIRED, db_session
+        no_author, PluginInstallationPolicy.REQUIRED, db_session
     )
     # Choices: the viewer turns the private skill on, the outsider turns the
     # installed-by-default skill off.
@@ -169,7 +160,7 @@ def test_access_results_match_the_skill_rows_except_organization_edit(
         "group_editor": group_editor,
         "outsider": outsider,
     }
-    everyone_sees = {"published", "no_author", "org_editor", "built_in"}
+    everyone_sees = {"published", "no_author", "built_in"}
     expected_visible = {
         "owner": everyone_sees | {"private", "unshared"},
         "viewer": everyone_sees | {"private"},
@@ -178,9 +169,8 @@ def test_access_results_match_the_skill_rows_except_organization_edit(
         "group_editor": everyone_sees | {"private"},
         "outsider": everyone_sees,
     }
-    # Before plugins, org_editor was editable by every user here.
     expected_editable = {
-        "owner": {"private", "unshared", "published", "org_editor"},
+        "owner": {"private", "unshared", "published"},
         "viewer": set(),
         "editor": {"private"},
         "group_viewer": set(),
@@ -217,7 +207,7 @@ def test_access_results_match_the_skill_rows_except_organization_edit(
             _ids(
                 skills,
                 (
-                    skill.skill.id
+                    skill.id
                     for skill in list_runtime_skills_for_user(
                         user=user, db_session=db_session
                     )
@@ -263,7 +253,7 @@ def test_a_plugin_with_no_setting_follows_its_marketplace_default(
         assert _visible(skill, owner, db_session)
         # A setting on the plugin wins over the default.
         set_skill_installation_policy(
-            skill, SkillInstallationPolicy.DEFAULT, db_session
+            skill, PluginInstallationPolicy.DEFAULT, db_session
         )
         assert state() == (True, True)
     finally:
@@ -281,7 +271,7 @@ def test_group_settings_take_the_most_open_value_and_a_share_gives_available(
     writes them yet."""
     owner = make_user(db_session, standard_account=True)
     skill = make_skill(db_session, author_user_id=owner.id, is_public=True)
-    set_skill_installation_policy(skill, SkillInstallationPolicy.REQUIRED, db_session)
+    set_skill_installation_policy(skill, PluginInstallationPolicy.REQUIRED, db_session)
     group_a = make_group(db_session)
     group_b = make_group(db_session)
     share_plugin_with_group(
@@ -334,19 +324,24 @@ def test_group_settings_take_the_most_open_value_and_a_share_gives_available(
     assert not _visible(unrelated, b_only, db_session)
 
 
-def _add_draft_version(db_session: Session, skill: Skill) -> UUID:
+def _add_draft_version(db_session: Session, plugin: Plugin) -> UUID:
     """Add version 2 with a new description and move only the current pointer,
     as an edit does once a published plugin keeps drafts (V6)."""
-    plugin = db_session.get(Plugin, skill.id)
-    assert plugin is not None
+    current = db_session.get(PluginVersion, plugin.current_version_id)
+    assert current is not None
+    name = db_session.scalar(
+        select(PluginSkill.frontmatter["name"].astext).where(
+            PluginSkill.plugin_version_id == current.id
+        )
+    )
     version_id = uuid4()
     db_session.add(
         PluginVersion(
             id=version_id,
             plugin_id=plugin.id,
             version_number=2,
-            bundle_file_id=skill.bundle_file_id,
-            bundle_sha256=skill.bundle_sha256,
+            bundle_file_id=current.bundle_file_id,
+            bundle_sha256=current.bundle_sha256,
         )
     )
     db_session.flush()
@@ -354,7 +349,7 @@ def _add_draft_version(db_session: Session, skill: Skill) -> UUID:
         PluginSkill(
             plugin_version_id=version_id,
             path="",
-            frontmatter={"name": skill.name, "description": "Draft"},
+            frontmatter={"name": name, "description": "Draft"},
         )
     )
     db_session.execute(
@@ -417,13 +412,9 @@ def test_user_delete_guard_reads_my_uploads(
     db_session: Session,
     test_user: User,  # noqa: ARG001
 ) -> None:
-    """The guard asks whether the user's "My uploads" holds a plugin. It does
-    not read the skill row's columns."""
+    """The guard asks whether the user's "My uploads" holds a plugin."""
     owner = make_user(db_session, standard_account=True)
     skill = make_skill(db_session, author_user_id=owner.id)
-    # The skill row says published, but the plugin is still private.
-    skill.public_permission = SkillSharePermission.VIEWER
-    db_session.flush()
 
     with pytest.raises(OnyxError) as exc:
         delete_user_from_db__no_commit(owner, db_session)
@@ -432,8 +423,6 @@ def test_user_delete_guard_reads_my_uploads(
 
     # Once published, the plugin stays in the Organization library with no
     # author and does not block the delete.
-    skill.public_permission = None
-    db_session.flush()
     set_skill_public_permission(
         skill=skill,
         public_permission=SkillSharePermission.VIEWER,

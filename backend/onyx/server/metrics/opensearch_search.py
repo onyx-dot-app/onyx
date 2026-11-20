@@ -96,12 +96,12 @@ _searches_in_progress = Gauge(
 
 
 def record_opensearch_search_error(
-    search_type: OpenSearchSearchType, exc: BaseException
+    search_type: OpenSearchSearchType, error_type: str
 ) -> None:
-    """Increments the search-error counter, labeled by exception class name."""
+    """Increments the search-error counter, labeled by error type."""
     try:
         _search_errors.labels(
-            search_type=search_type.value, error_type=type(exc).__name__
+            search_type=search_type.value, error_type=error_type
         ).inc()
     except Exception:
         logger.warning(

@@ -140,6 +140,19 @@ func TestInitKVM(t *testing.T) {
 		}
 	})
 
+	t.Run("kernel_hardening_sysctls", func(t *testing.T) {
+		out := rootSh(ctx, t, c, key, `cd /proc/sys/kernel && for k in io_uring_disabled kptr_restrict dmesg_restrict sysrq kexec_load_disabled modules_disabled; do echo "$k=$(cat $k)"; done
+for k in modules_disabled kexec_load_disabled; do echo 0 >$k 2>/dev/null && echo "$k=reset"; done; true`)
+		for _, want := range []string{"io_uring_disabled=2", "kptr_restrict=2", "dmesg_restrict=1", "sysrq=0", "kexec_load_disabled=1", "modules_disabled=1"} {
+			if !strings.Contains(out, want+"\n") {
+				t.Errorf("sysctls:\n%s\nhave no %q", out, want)
+			}
+		}
+		if strings.Contains(out, "reset") {
+			t.Errorf("a one-way sysctl was set back:\n%s", out)
+		}
+	})
+
 	// The root drive has no CA. SetKey carries the deployment CA,
 	// Init installs it, and a later SetKey + Init replaces it (a CA rotation).
 	t.Run("egress_ca_from_set_key", func(t *testing.T) {

@@ -13,7 +13,7 @@ import {
   Text,
   type TableColumn,
 } from "@opal/components";
-import { Content, Section, toast } from "@opal/layouts";
+import { Section, toast } from "@opal/layouts";
 import { SvgBlocks, SvgCheck, SvgEye, SvgX } from "@opal/icons";
 import { errorHandlingFetcher, fetchErrorDetail } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -49,6 +49,7 @@ export default function SkillReviewRequests({
   const versionCopy = useTranslations("skills.modals.versions");
   const format = useFormatter();
   const versionLabel = useVersionLabel();
+  const [listOpen, setListOpen] = useState(false);
   const [reviewing, setReviewing] = useState<SkillReviewRequest | null>(null);
   const [busy, setBusy] = useState(false);
   const {
@@ -79,7 +80,8 @@ export default function SkillReviewRequests({
       toast.error(err instanceof Error ? err.message : t("failedToast"));
     } finally {
       setBusy(false);
-      await refreshRequests();
+      const remaining = await refreshRequests();
+      if (!remaining?.length) setListOpen(false);
     }
   }
 
@@ -157,29 +159,49 @@ export default function SkillReviewRequests({
   if (isLoading || error || !requests || requests.length === 0) return null;
 
   return (
-    <Section gap={3} height="auto" alignItems="stretch">
-      <Content
-        font="main-content-emphasis"
-        title={t("title")}
+    <>
+      <MessageCard
+        variant="info"
+        title={t("banner.title", { count: requests.length })}
         description={t("description")}
+        rightChildren={
+          <Button prominence="secondary" onClick={() => setListOpen(true)}>
+            {t("banner.review")}
+          </Button>
+        }
       />
-      <Table
-        label={t("title")}
-        items={requests}
-        columns={columns}
-        getRowId={(row) => row.version_id}
-        pageSize={false}
-        size={2.25}
-      />
-      {reviewing && (
+      {reviewing ? (
         <SkillReviewModal
           request={reviewing}
           busy={busy}
           onDecide={(decision) => void review(reviewing, decision)}
           onClose={() => setReviewing(null)}
         />
+      ) : (
+        <Modal open={listOpen} onOpenChange={setListOpen}>
+          <Modal.Content width="lg">
+            <Modal.Header
+              icon={SvgBlocks}
+              title={t("title")}
+              description={t("description")}
+              onClose={() => setListOpen(false)}
+            />
+            <Modal.Body>
+              <Section alignItems="stretch" height="auto">
+                <Table
+                  label={t("title")}
+                  items={requests}
+                  columns={columns}
+                  getRowId={(row) => row.version_id}
+                  pageSize={false}
+                  size={2.25}
+                />
+              </Section>
+            </Modal.Body>
+          </Modal.Content>
+        </Modal>
       )}
-    </Section>
+    </>
   );
 }
 

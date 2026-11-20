@@ -10,9 +10,9 @@ jest.mock("next/navigation", () => ({
 
 beforeEach(() => jest.clearAllMocks());
 
-test("old Apps routes redirect to Plugins", async () => {
+test("old Apps routes redirect to the Integrations tab", async () => {
   await Page({ searchParams: Promise.resolve({}) });
-  expect(redirect).toHaveBeenCalledWith("/craft/v1/plugins");
+  expect(redirect).toHaveBeenCalledWith("/app/customize/integrations");
 });
 
 test("redirect preserves external-app connect intent and OAuth return values", async () => {
@@ -26,6 +26,6 @@ test("redirect preserves external-app connect intent and OAuth return values", a
     }),
   });
   expect(redirect).toHaveBeenCalledWith(
-    "/craft/v1/plugins?connect=7&code=oauth%2Fcode&state=return+state&tag=one&tag=two"
+    "/app/customize/integrations?connect=7&code=oauth%2Fcode&state=return+state&tag=one&tag=two"
   );
 });

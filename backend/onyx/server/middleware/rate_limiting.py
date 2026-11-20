@@ -13,6 +13,8 @@ from onyx.configs.app_configs import (
 )
 from onyx.db.enums import AccountType
 from onyx.db.models import User
+
+# no-direct-redis: allow fastapi-limiter needs a Redis client
 from onyx.redis.redis_pool import get_async_redis_connection
 
 RATE_LIMITING_ENABLED = (
@@ -24,6 +26,7 @@ _RATE_LIMIT_USER_ID_STATE_KEY = "rate_limit_user_id"
 
 async def setup_auth_limiter() -> None:
     # Use the centralized async Redis connection
+    # no-direct-redis: allow fastapi-limiter needs a Redis client
     redis = await get_async_redis_connection()
     await FastAPILimiter.init(redis)
 

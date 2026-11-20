@@ -129,7 +129,7 @@ def classify_section_relevance(
 
     budget = SearchPromptBudget(llm) if enforce_llm_input_budget else None
     options = (
-        budget.options()
+        budget.options
         if budget
         else GenerationOptions(reasoning_effort=ReasoningEffort.OFF)
     )
@@ -155,12 +155,20 @@ def classify_section_relevance(
         )
 
     request = build_request(section_text, section_above_text, section_below_text)
-    if budget and not budget.fits(request):
-        fitted_text = budget.fit_text(section_text, build_request)
-        if fitted_text is None:
+    if (
+        budget
+        and budget.token_counter(request.model_dump_json(exclude_none=True))
+        > budget.input_tokens
+    ):
+        fit = budget.fitting_prefix(
+            len(section_text),
+            lambda end: build_request(section_text[:end]),
+            allow_slack=True,
+        )
+        if fit is None:
             logger.warning("Search classification prompt exceeds its input budget")
             return default_classification
-        request = build_request(fitted_text)
+        _, request = fit
 
     try:
         response = llm.invoke(
@@ -331,7 +339,7 @@ def select_sections_for_expansion(
     extra_instructions = TRY_TO_FILL_TO_MAX_INSTRUCTIONS if try_to_fill_to_max else ""
     budget = SearchPromptBudget(llm) if enforce_llm_input_budget else None
     options = (
-        budget.options()
+        budget.options
         if budget
         else GenerationOptions(reasoning_effort=ReasoningEffort.OFF)
     )
@@ -355,33 +363,38 @@ def select_sections_for_expansion(
             options=options,
         )
 
-    request = build_request(sections_dict)
+    num_sections = len(sections_dict)
     if budget:
-        while len(sections_dict) > 1 and not budget.fits(request):
-            sections_dict.pop()
-            request = build_request(sections_dict)
-        if not budget.fits(request):
-            first_section = sections_dict[0]
-            sections_dict[0] = {
-                key: first_section[key]
+        fit = budget.fitting_prefix(
+            num_sections, lambda end: build_request(sections_dict[:end])
+        )
+        if fit and fit[0]:
+            num_sections, request = fit
+        else:
+            num_sections = 1
+            first_section = {
+                key: sections_dict[0][key]
                 for key in ("section_id", "title", "source_type", "content")
             }
-            first_section = sections_dict[0]
 
-            def build_content_request(content: str) -> GenerationRequest:
-                return build_request([{**first_section, "content": content}])
-
-            original_content = str(first_section["content"])
-            fitted_content = budget.fit_text(original_content, build_content_request)
-            if fitted_content is None:
-                first_section["title"] = ""
-                fitted_content = budget.fit_text(
-                    original_content, build_content_request
+            content = str(first_section["content"])
+            for title in (first_section["title"], ""):
+                first_section["title"] = title
+                fit = budget.fitting_prefix(
+                    len(content),
+                    lambda end: build_request(
+                        [{**first_section, "content": content[:end]}]
+                    ),
+                    allow_slack=True,
                 )
-            if fitted_content is None:
+                if fit is not None:
+                    _, request = fit
+                    break
+            else:
                 logger.warning("Search selection prompt exceeds its input budget")
                 return sections[:max_sections], None
-            request = build_content_request(fitted_content)
+    else:
+        request = build_request(sections_dict)
 
     try:
         response = llm.invoke(
@@ -411,7 +424,6 @@ def select_sections_for_expansion(
         # Skip out-of-range IDs and don't count them toward max_sections
         selected_sections = []
         document_ids_with_exclamation = []  # Collect document_ids for sections with "!"
-        num_sections = len(sections_dict)
 
         for section_id_str in section_ids:
             # Convert to int

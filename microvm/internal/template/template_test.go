@@ -384,65 +384,26 @@ func TestVerifyCacheDoesNotCoverANewManifest(t *testing.T) {
 	}
 }
 
-// Layout 2 templates (no managed slot B) still load, verify and restore. The
-// layout 2 snapshot hash is the one that the layout 2 agent wrote.
-func TestLayout2StillRestores(t *testing.T) {
-	files := map[string]string{}
-	for _, f := range FilesFor(2) {
-		files[f] = strings.Repeat("a", 64)
-	}
-	if got := SnapshotHash(2, "k", files); got != "49823fc19879179bd4251cc5d836357557aa7010e308cb18dbb057852d40b288" {
-		t.Fatalf("layout 2 snapshot hash changed: %s", got)
-	}
-	dir := t.TempDir()
-	if _, err := WriteFakeLayout(dir, "old", testKey, 2); err != nil {
-		t.Fatal(err)
-	}
-	if _, err := WriteFake(dir, "new", testKey); err != nil {
-		t.Fatal(err)
-	}
-	s := &Store{Dir: dir}
-	for name, want := range map[string]int{"old": 1, "new": 2} {
-		tpl, err := s.Get(name)
-		if err != nil {
-			t.Fatalf("%s: %v", name, err)
+// Templates of a layout without the balloon (before layout 4) do not load,
+// so every VM returns freed memory to the node.
+func TestLayoutsWithoutBalloonRefused(t *testing.T) {
+	for _, layout := range []int{1, 2, 3} {
+		if SupportedLayout(layout) || BalloonFor(layout) != nil {
+			t.Errorf("layout %d is supported", layout)
 		}
-		if err := tpl.CheckNode(testNode); err != nil {
-			t.Fatalf("%s: %v", name, err)
+		k := testKey
+		k.LayoutVersion = layout
+		if err := k.CheckNode(testNode); apierr.ReasonOf(err) != pb.ErrorReason_TEMPLATE_INCOMPATIBLE {
+			t.Errorf("layout %d key: %v", layout, err)
 		}
-		if err := s.Verify(tpl); err != nil {
-			t.Fatalf("%s: %v", name, err)
-		}
-		if err := tpl.CheckUnchanged(); err != nil {
-			t.Fatalf("%s: %v", name, err)
-		}
-		if got := tpl.ManagedSlots(); got != want {
-			t.Errorf("%s: %d managed slots, want %d", name, got, want)
-		}
-	}
-	if _, err := os.Stat(filepath.Join(dir, "old", ManagedBFile)); err == nil {
-		t.Error("a layout 2 template has a slot B file")
-	}
-	if d := DrivesFor(3); d[len(d)-1].ID != ManagedBDriveID || len(d) != 6 {
-		t.Errorf("slot B must be the last drive (vdf) of layout 3: %+v", d)
-	}
-	for i, d := range DrivesFor(2) {
-		if DrivesFor(LayoutVersion)[i] != d {
-			t.Errorf("drive %d moved: %+v", i, DrivesFor(LayoutVersion)[i])
-		}
-	}
-	k := testKey
-	k.LayoutVersion = 1
-	if err := k.CheckNode(testNode); apierr.ReasonOf(err) != pb.ErrorReason_TEMPLATE_INCOMPATIBLE {
-		t.Errorf("layout 1: %v", err)
 	}
 }
 
-// Layout 4 adds only the balloon: same drives and files as layout 3, so the
-// guest devices do not move. Layout 3 templates still restore, without it.
+// Layout 4 and later have the balloon, with managed slot B last of the
+// layout 4 drives (vdf).
 func TestLayout4Balloon(t *testing.T) {
-	if !slices.Equal(DrivesFor(4), DrivesFor(3)) || !slices.Equal(FilesFor(4), FilesFor(3)) {
-		t.Error("layout 4 changed the drives or files of layout 3")
+	if d := DrivesFor(4); d[len(d)-1].ID != ManagedBDriveID || len(d) != 6 {
+		t.Errorf("slot B must be the last drive (vdf) of layout 4: %+v", d)
 	}
 	for layout, want := range map[int]bool{2: false, 3: false, 4: true, 5: true, 6: false} {
 		if got := BalloonFor(layout) != nil; got != want {
@@ -459,24 +420,19 @@ func TestLayout4Balloon(t *testing.T) {
 	}
 
 	dir := t.TempDir()
-	if _, err := WriteFakeLayout(dir, "l3", testKey, 3); err != nil {
-		t.Fatal(err)
-	}
 	if _, err := WriteFakeLayout(dir, "l4", testKey, 4); err != nil {
 		t.Fatal(err)
 	}
 	s := &Store{Dir: dir}
-	for name, want := range map[string]bool{"l3": false, "l4": true} {
-		tpl, err := s.Get(name)
-		if err != nil {
-			t.Fatalf("%s: %v", name, err)
-		}
-		if err := s.Verify(tpl); err != nil {
-			t.Fatalf("%s: %v", name, err)
-		}
-		if tpl.HasBalloon() != want || tpl.ManagedSlots() != 2 {
-			t.Errorf("%s: balloon %v slots %d", name, tpl.HasBalloon(), tpl.ManagedSlots())
-		}
+	tpl, err := s.Get("l4")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := s.Verify(tpl); err != nil {
+		t.Fatal(err)
+	}
+	if got := SwapMounts(tpl.LayoutVersion); !slices.Equal(got, []string{SkillsMount}) {
+		t.Errorf("l4 swap mounts %v", got)
 	}
 }
 
@@ -497,7 +453,7 @@ func TestLayout5ManagedMounts(t *testing.T) {
 		}
 	}
 	for layout, mounts := range map[int][]string{
-		2: nil, 3: {SkillsMount}, 4: {SkillsMount}, 5: {SkillsMount, "user-uploads", "spaces"},
+		3: nil, 4: {SkillsMount}, 5: {SkillsMount, "user-uploads", "spaces"},
 	} {
 		if got := SwapMounts(layout); !slices.Equal(got, mounts) {
 			t.Errorf("layout %d mounts %v, want %v", layout, got, mounts)
@@ -527,7 +483,7 @@ func TestLayout5ManagedMounts(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if got := tpl.ManagedMounts(); len(got) != 3 || !tpl.HasBalloon() || tpl.ManagedSlots() != 2 {
-		t.Errorf("template mounts %v balloon %v slots %d", got, tpl.HasBalloon(), tpl.ManagedSlots())
+	if got := tpl.ManagedMounts(); len(got) != 3 {
+		t.Errorf("template mounts %v", got)
 	}
 }

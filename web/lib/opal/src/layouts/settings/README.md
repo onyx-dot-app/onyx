@@ -36,7 +36,6 @@ Headers are only sticky when `actions` is non-empty.
 | `moreIcon2`            | `IconFunctionComponent`   | —         | Third icon in the title's icon row (see `Content`)                                                                                                        |
 | `title`                | `string`                  | —         | Page title (required)                                                                                                                                     |
 | `description`          | `string`                  | —         | Subtitle below the title                                                                                                                                  |
-| `descriptionTag`       | `TagProps`                | —         | Tag inline after the description, e.g. a status                                                                                                           |
 | `editable`             | `boolean`                 | `false`   | The title can be edited in place (see `Content`)                                                                                                          |
 | `editButton`           | `"hover" \| "rest"`       | `"hover"` | When the editable title shows its pencil: on hover, or at rest too (see `Content`)                                                                        |
 | `onTitleChange`        | `(title: string) => void` | —         | Called when the user commits a title edit                                                                                                                 |
@@ -45,6 +44,7 @@ Headers are only sticky when `actions` is non-empty.
 | `cancel`               | `boolean \| string \| () => void` | `false` | Render a secondary Cancel as the first action. `true` goes back within the app, or to `/` from a page not reached within it; a path does the same with that path as the fallback; a function replaces the action |
 | `divider`              | `boolean`                 | `false`   | Show a horizontal divider at the bottom of the header                                                                                                     |
 | `stackActionsOnMobile` | `boolean`                 | `false`   | Place actions below the title on a full-width row on narrow screens                                                                                       |
+| `back`                 | `ReactNode`               | —         | A link back to the parent page, above the title, for example a tertiary `Button` with `SvgArrowLeft`                                                       |
 
 ### Body
 

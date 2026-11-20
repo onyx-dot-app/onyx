@@ -18,13 +18,18 @@ return the job_id + per-request counts for the API response.
 
 from collections import defaultdict
 from collections.abc import Sequence
+from datetime import timedelta
 from typing import Any
 from uuid import UUID, uuid4
 
 from pydantic import BaseModel
-from sqlalchemy import case, select, tuple_, update
+from sqlalchemy import and_, case, func, or_, select, tuple_, update
 from sqlalchemy.orm import Session
 
+from onyx.configs.constants import (
+    TARGETED_REINDEX_TASK_EXPIRES,
+    TARGETED_REINDEX_TIMEOUT,
+)
 from onyx.connectors.models import ConnectorFailure, DocumentFailure
 from onyx.db.cc_pair_run_resolution import index_attempt_error_closure
 from onyx.db.enums import (
@@ -147,7 +152,7 @@ def create_targeted_reindex_job(
 
     Writes the job row, target rows, and one synthetic IndexAttempt per
     `(cc_pair_id, search_settings_id)` tuple. Pre-allocates the celery
-    task UUID so the orphan-detector can clean up if `apply_async` fails
+    task UUID so the stale-job validator can clean up if enqueue fails
     after this returns.
 
     `upstream_skipped_count` is added to the dedup-skipped count and
@@ -264,9 +269,12 @@ def create_targeted_reindex_job(
 
 
 def get_targeted_reindex_job(
-    db_session: Session, job_id: int
+    db_session: Session, job_id: int, *, for_update: bool = False
 ) -> TargetedReindexJob | None:
-    return db_session.get(TargetedReindexJob, job_id)
+    stmt = select(TargetedReindexJob).where(TargetedReindexJob.id == job_id)
+    if for_update:
+        stmt = stmt.with_for_update().execution_options(populate_existing=True)
+    return db_session.scalar(stmt)
 
 
 def count_targets_for_job(db_session: Session, job_id: int) -> int:
@@ -457,3 +465,45 @@ def targets_to_connector_failures(
             )
         )
     return failures
+
+
+def fail_stale_targeted_reindex_jobs(db_session: Session) -> None:
+    started_at = (
+        select(func.max(IndexAttempt.time_started))
+        .where(IndexAttempt.targeted_reindex_job_id == TargetedReindexJob.id)
+        .correlate(TargetedReindexJob)
+        .scalar_subquery()
+    )
+    grace = timedelta(minutes=5)
+    jobs = db_session.scalars(
+        select(TargetedReindexJob)
+        .where(
+            or_(
+                and_(
+                    TargetedReindexJob.status == IndexingStatus.NOT_STARTED,
+                    TargetedReindexJob.requested_at
+                    < func.now()
+                    - timedelta(seconds=TARGETED_REINDEX_TASK_EXPIRES)
+                    - grace,
+                ),
+                and_(
+                    TargetedReindexJob.status == IndexingStatus.IN_PROGRESS,
+                    func.coalesce(started_at, TargetedReindexJob.requested_at)
+                    < func.now() - timedelta(seconds=TARGETED_REINDEX_TIMEOUT) - grace,
+                ),
+            )
+        )
+        .with_for_update(skip_locked=True)
+        .execution_options(populate_existing=True)
+    ).all()
+    for job in jobs:
+        for attempt in get_index_attempts_for_targeted_reindex_job(db_session, job.id):
+            if not attempt.status.is_terminal():
+                attempt.status = IndexingStatus.FAILED
+                attempt.error_msg = (
+                    "Targeted reindex did not start or finish before its deadline."
+                )
+                attempt.time_finished = func.now()
+        job.status = IndexingStatus.FAILED
+        job.completed_at = func.now()
+    db_session.commit()

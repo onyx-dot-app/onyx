@@ -6,7 +6,6 @@ from celery import Celery
 from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import DB_YIELD_PER_DEFAULT
 from onyx.configs.constants import (
     CELERY_DOCUMENT_SYNC_BEAT_LOCK_TIMEOUT,
     OnyxCeleryPriority,
@@ -14,6 +13,7 @@ from onyx.configs.constants import (
     OnyxCeleryTask,
     OnyxRedisConstants,
 )
+from onyx.db.document import stream_document_ids
 from onyx.redis.redis_object_helper import RedisObjectHelper
 from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.utils.variable_functionality import (
@@ -84,7 +84,7 @@ class RedisUserGroup(RedisObjectHelper):
             return 0, 0
 
         stmt = construct_document_id_select_by_usergroup(int(self._id))
-        for doc_id in db_session.scalars(stmt).yield_per(DB_YIELD_PER_DEFAULT):
+        for doc_id in stream_document_ids(db_session, stmt):
             doc_id = cast(str, doc_id)
             current_time = time.monotonic()
             if current_time - last_lock_time >= (
@@ -103,7 +103,10 @@ class RedisUserGroup(RedisObjectHelper):
             redis_client.sadd(self.taskset_key, custom_task_id)
             redis_client.expire(self.taskset_key, self.TASKSET_TTL)
 
-            celery_app.send_task(
+            # No expires=: on_task_revoked removes an expired task from the
+            # taskset, so the group would be marked synced with this document
+            # not synced. The fence allows one task per document at a time.
+            celery_app.send_task(  # celery-expires: allow (an expired task would count as synced)
                 OnyxCeleryTask.DOCUMENT_INDEX_METADATA_SYNC_TASK,
                 kwargs={"document_id": doc_id, "tenant_id": tenant_id},
                 queue=OnyxCeleryQueues.VESPA_METADATA_SYNC,

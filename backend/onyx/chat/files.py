@@ -16,6 +16,7 @@ from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import DEFAULT_PERSONA_ID, FileOrigin
 from onyx.context.search.models import SearchDoc
 from onyx.context.search.utils import sandbox_filename_for_document
+from onyx.db.enums import UserFileStatus
 from onyx.db.file_record import FileRecordNotFoundError
 from onyx.db.models import ChatMessage, Persona, UserFile
 from onyx.db.projects import get_user_files_from_project
@@ -41,7 +42,7 @@ from onyx.llm.constants import APPROX_CHARS_PER_TOKEN
 from onyx.llm.models import UserMessage
 from onyx.prompts.chat_prompts import CONTENT_PENDING_NOTICE, CONTENT_UNAVAILABLE_NOTICE
 from onyx.server.query_and_chat.chat_utils import (
-    is_code_interpreter_staged_mime_type,
+    is_code_interpreter_staged_file,
     mime_type_to_chat_file_type,
 )
 from onyx.tools.models import ChatFile, SearchToolUsage
@@ -112,7 +113,7 @@ def load_context_user_files_for_tools(
     user_files: list[UserFileMetadata],
     existing_filenames: set[str],
 ) -> list[ChatFile]:
-    """Stage tabular and Office project/persona files for code-interpreter as
+    """Stage tabular, Office and code project/persona files for code-interpreter as
     lazy ChatFile instances.
 
     Raw bytes are not read here; each ChatFile carries a loader closure that
@@ -131,7 +132,7 @@ def load_context_user_files_for_tools(
             continue
         seen_file_ids.add(user_file.file_id)
 
-        if not is_code_interpreter_staged_mime_type(user_file.file_type):
+        if not is_code_interpreter_staged_file(user_file.name, user_file.file_type):
             continue
 
         filename = _deduped_filename(
@@ -251,10 +252,12 @@ def extract_context_files(
         if DISABLE_VECTOR_DB:
             overflow_tool_metadata = [_build_tool_metadata(uf) for uf in user_files]
         else:
+            # Search cannot find files that skipped indexing, so list them.
             overflow_tool_metadata = [
                 _build_tool_metadata(uf)
                 for uf in user_files
                 if mime_type_to_chat_file_type(uf.file_type).use_metadata_only()
+                or uf.status == UserFileStatus.SKIPPED
             ]
         return ExtractedContextFiles(
             file_texts=[],
@@ -344,9 +347,10 @@ def _build_tool_metadata(user_file: UserFileMetadata) -> FileToolMetadata:
         approx_char_count=(user_file.token_count or 0) * APPROX_CHARS_PER_TOKEN,
     ).tool_metadata.model_copy(
         update={
-            "staged_for_tools": is_code_interpreter_staged_mime_type(
-                user_file.file_type
-            )
+            "staged_for_tools": is_code_interpreter_staged_file(
+                user_file.name, user_file.file_type
+            ),
+            "indexed": user_file.status != UserFileStatus.SKIPPED,
         }
     )
 
@@ -395,6 +399,7 @@ def build_file_context(
     token_count: int = 0,
     approx_char_count: int | None = None,
     content_pending: bool = False,
+    indexed: bool = True,
 ) -> FileContextResult:
     """Build file content and tool metadata with the same file ID."""
     if file_type.use_metadata_only():
@@ -446,6 +451,7 @@ def build_file_context(
             if approx_char_count is not None
             else len(content_text or "")
         ),
+        indexed=indexed,
     )
 
     return FileContextResult(message=message, tool_metadata=metadata)
@@ -487,6 +493,7 @@ def _load_chat_file(
     token_count: int,
     content_pending: bool,
     include_text: bool = True,
+    indexed: bool = True,
 ) -> ChatLoadedFile:
     """Build a ChatLoadedFile whose raw ``content`` bytes are loaded lazily.
 
@@ -576,6 +583,7 @@ def _load_chat_file(
         token_count=token_count,
         loader=_load_content,
         content_pending=content_pending,
+        indexed=indexed,
     )
 
 
@@ -589,7 +597,11 @@ def load_chat_files(
     if text_file_ids is not None and not text_file_ids:
         return [
             _load_chat_file(
-                item.descriptor, item.token_count, item.content_pending, False
+                item.descriptor,
+                item.token_count,
+                item.content_pending,
+                False,
+                item.indexed,
             )
             for item in inputs
         ]
@@ -607,6 +619,7 @@ def load_chat_files(
                         item.token_count,
                         item.content_pending,
                         text_file_ids is None or item.descriptor["id"] in text_file_ids,
+                        item.indexed,
                     ),
                 )
                 for item in inputs

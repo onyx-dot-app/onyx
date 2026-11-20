@@ -1,6 +1,6 @@
 from collections.abc import Collection, Sequence
 from datetime import datetime, timedelta, timezone
-from typing import Tuple
+from typing import NoReturn, Tuple
 from uuid import UUID
 
 from pydantic import TypeAdapter
@@ -40,8 +40,8 @@ from onyx.chat.models import (
     PresentationMode,
     ResponseAncestry,
     SessionAncestor,
+    read_message_rendering,
 )
-from onyx.chat.response import message_thinking
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
 from onyx.configs.constants import ANONYMOUS_USER_UUID, MessageType
 from onyx.context.search.models import InferenceSection, SavedSearchDoc
@@ -66,17 +66,20 @@ from onyx.db.models import SearchDoc as DBSearchDoc
 from onyx.db.persona import get_best_persona_id_for_user
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.file_store.constants import AGENT_CHECKPOINT_FILE_PREFIX
+from onyx.file_store.constants import (
+    AGENT_CHECKPOINT_FILE_PREFIX,
+    CHAT_ARTIFACT_FILE_PREFIX,
+)
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import FileDescriptor
-from onyx.llm.models import GenerationRequestParams
+from onyx.llm.models import GenerationRequestParams, TextContent, ThinkingContent
 from onyx.llm.override_models import LLMOverride, PromptOverride
 from onyx.server.query_and_chat.models import (
     AUTO_PLACE_AFTER_LATEST_MESSAGE,
     ChatMessageDetail,
 )
 from onyx.server.query_and_chat.streaming_models import StreamingError
-from onyx.tools.models import ChatToolSelection
+from onyx.tools.models import IntegrationEntry, ToolOptions
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_string
 
@@ -329,16 +332,23 @@ def delete_messages_and_files_from_chat_session(
                 continue
             file_store.delete_file(file_id=file_info["id"], error_on_missing=False)
 
-    checkpoint_files = db_session.scalars(
+    # Checkpoint files, and published files that no message lists, such as
+    # those of a response that ended without its save.
+    session_files = db_session.scalars(
         select(FileRecord.file_id)
         .where(
-            FileRecord.file_id.startswith(
-                f"{AGENT_CHECKPOINT_FILE_PREFIX}{chat_session_id}/"
+            or_(
+                FileRecord.file_id.startswith(
+                    f"{AGENT_CHECKPOINT_FILE_PREFIX}{chat_session_id}/"
+                ),
+                FileRecord.file_id.startswith(
+                    f"{CHAT_ARTIFACT_FILE_PREFIX}{chat_session_id}-"
+                ),
             )
         )
         .execution_options(yield_per=FILE_CLEANUP_BATCH_SIZE)
     )
-    for file_id in checkpoint_files:
+    for file_id in session_files:
         file_store.delete_file(file_id=file_id, error_on_missing=False)
 
     # Delete ChatMessage records - CASCADE constraints will automatically handle:
@@ -473,7 +483,8 @@ def update_chat_session(
 
 def delete_all_chat_sessions_for_user(
     user: User, db_session: Session, hard_delete: bool = HARD_DELETE_CHATS
-) -> None:
+) -> list[UUID]:
+    """Returns the ids of the chat sessions that were not deleted before."""
     user_id = user.id
 
     chat_sessions = (
@@ -485,29 +496,28 @@ def delete_all_chat_sessions_for_user(
         )
         .all()
     )
+    chat_session_ids = [chat_session.id for chat_session in chat_sessions]
+    newly_deleted_ids = [
+        chat_session.id for chat_session in chat_sessions if not chat_session.deleted
+    ]
 
+    # Only the sessions read above: one that a concurrent request creates now
+    # stays, instead of going without its cleanup.
     if hard_delete:
-        for chat_session in chat_sessions:
-            delete_messages_and_files_from_chat_session(chat_session.id, db_session)
+        for chat_session_id in chat_session_ids:
+            delete_messages_and_files_from_chat_session(chat_session_id, db_session)
         db_session.execute(
-            delete(ChatSession).where(
-                ChatSession.user_id == user_id,
-                ChatSession.onyxbot_flow.is_(False),
-                ChatSession.spawned_by_message_id.is_(None),
-            )
+            delete(ChatSession).where(ChatSession.id.in_(chat_session_ids))
         )
     else:
         db_session.execute(
             update(ChatSession)
-            .where(
-                ChatSession.user_id == user_id,
-                ChatSession.onyxbot_flow.is_(False),
-                ChatSession.spawned_by_message_id.is_(None),
-            )
+            .where(ChatSession.id.in_(chat_session_ids))
             .values(deleted=True)
         )
 
     db_session.commit()
+    return newly_deleted_ids
 
 
 def delete_chat_session(
@@ -1028,22 +1038,29 @@ def set_response_model_names__no_commit(
         )
 
 
-# A selection is user input stored on the chat and loaded with it, so its size
-# is bounded before anything reads or stores it.
-MAX_TOOL_SELECTION_ITEMS = 1000
-MAX_TOOL_SELECTION_BYTES = 64 * 1024
+# Tool options are user input stored on the chat and loaded with it, so their
+# size is bounded before anything reads or stores them.
+MAX_TOOL_OPTIONS_ITEMS = 1000
+MAX_TOOL_OPTIONS_BYTES = 64 * 1024
 
 
-def set_chat_session_tool_selection__no_commit(
+def _raise_tool_options_too_large() -> NoReturn:
+    raise OnyxError(
+        OnyxErrorCode.PAYLOAD_TOO_LARGE,
+        "The tool options are too large to save",
+    )
+
+
+def set_chat_session_tool_options__no_commit(
     db_session: Session,
     chat_session_id: UUID,
-    tool_selection: ChatToolSelection,
+    tool_options: ToolOptions,
     user: User,
-) -> ChatToolSelection | None:
-    """Save the fields set on `tool_selection`; unset fields keep their saved values.
+) -> ToolOptions | None:
+    """Save the fields set on `tool_options`; unset fields keep their saved values.
 
-    A chat that keeps no content stores no selection, because search filters
-    carry user choices such as tag values. Returns the stored selection, or
+    A chat that keeps no content stores no options, because search filters
+    carry user choices such as tag values. Returns the stored options, or
     None when the chat stores none.
     """
     chat_session = db_session.get(ChatSession, chat_session_id)
@@ -1051,38 +1068,38 @@ def set_chat_session_tool_selection__no_commit(
         chat_session.incognito_record_mode
     ):
         return None
-    filters = tool_selection.internal_search_filters
+    filters = tool_options.internal_search_filters
     item_lists = [
-        tool_selection.allowed_tool_ids,
+        tool_options.allowed,
+        *(
+            entry.actions
+            for entry in tool_options.allowed or []
+            if isinstance(entry, IntegrationEntry)
+        ),
         filters.source_type if filters else None,
         filters.document_set if filters else None,
         filters.tags if filters else None,
     ]
-    if (
-        any(len(items) > MAX_TOOL_SELECTION_ITEMS for items in item_lists if items)
-        or len(tool_selection.model_dump_json().encode()) > MAX_TOOL_SELECTION_BYTES
-    ):
-        raise OnyxError(
-            OnyxErrorCode.PAYLOAD_TOO_LARGE,
-            "The tool selection is too large to save",
-        )
+    if any(len(items) > MAX_TOOL_OPTIONS_ITEMS for items in item_lists if items):
+        _raise_tool_options_too_large()
     require_document_set_access(
         db_session, filters.document_set if filters else None, user
     )
-    changes = tool_selection.model_dump(include=tool_selection.model_fields_set)
-    saved = chat_session.tool_selection
+    changes = tool_options.model_dump(include=tool_options.model_fields_set)
+    saved = chat_session.tool_options
     if (
         saved is not None
-        and ChatToolSelection.model_validate(saved.model_dump() | changes) == saved
+        and ToolOptions.model_validate(saved.model_dump() | changes) == saved
     ):
         return saved
     # Merge under the row lock, so a concurrent save keeps the fields it set.
     db_session.refresh(chat_session, with_for_update=True)
-    current = chat_session.tool_selection or ChatToolSelection()
-    chat_session.tool_selection = ChatToolSelection.model_validate(
-        current.model_dump() | changes
-    )
-    return chat_session.tool_selection
+    current = chat_session.tool_options or ToolOptions()
+    merged = ToolOptions.model_validate(current.model_dump() | changes)
+    if len(merged.model_dump_json().encode()) > MAX_TOOL_OPTIONS_BYTES:
+        _raise_tool_options_too_large()
+    chat_session.tool_options = merged
+    return chat_session.tool_options
 
 
 def set_preferred_response(
@@ -1332,17 +1349,20 @@ def get_chat_message_reasoning(chat_message: ChatMessage) -> str | None:
         if chat_message.response_status == RunStatus.COMPLETE and not item.is_answer:
             continue
         rendering = (
-            MessageRendering.model_validate(item.rendering)
+            read_message_rendering(item.rendering)
             if item.rendering is not None
             else MessageRendering()
         )
-        if rendering.mode != PresentationMode.ANSWER:
+        if rendering.mode not in (PresentationMode.ANSWER, PresentationMode.RESEARCH):
             continue
-        return message_thinking(
-            item.message,
-            rendering.think_tool,
-            text_as_thinking=rendering.text_as_thinking,
-        )
+        message = item.message
+        if rendering.mode == PresentationMode.RESEARCH:
+            return "".join(
+                block.text
+                for block in message.content
+                if isinstance(block, (TextContent, ThinkingContent))
+            )
+        return message.thinking
     return None
 
 
@@ -2092,3 +2112,7 @@ def parent_session_id(db_session: Session, session: ChatSession) -> UUID | None:
     if parent_id is None:
         raise ValueError("Agent creation message is unavailable")
     return parent_id
+
+
+def add_chat_session__no_commit(db_session: Session, row: ChatSession) -> None:
+    db_session.add(row)

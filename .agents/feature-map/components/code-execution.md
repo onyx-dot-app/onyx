@@ -1,9 +1,10 @@
 # Code Execution
 
-> Runs code for the user: `run_python` and the coding agent's `bash` send code
-> to an external Code Interpreter service, and code mode's `execute_code` runs
+> `run_python` sends Python code to an external Code Interpreter service.
+> Code mode's `execute_code` runs
 > a Python program that calls the other chat tools in local Monty sandbox
-> workers.
+> workers, and the sandbox tools run commands, edit files and publish files
+> in the user's Firecracker VM.
 
 **Verified against:** `6bac4e012f` (2026-10-29)
 **Edition:** CE
@@ -16,9 +17,6 @@
   assistant writes Python, the user sees the code, then the output as it
   streams. Files that the code writes, such as a chart or a CSV, appear as
   downloads. Files that the user attached to the chat are available to the code.
-- **An end user** asks a question about a public GitHub repository. The coding
-  agent downloads the repository and runs shell commands to explore it. The
-  user sees its thinking and bash steps, then an answer.
 - **With code mode on** (`CODE_MODE_ENABLED=true`), the chat model gets the
   `execute_code` and `wait_code` tools instead of the tools it can nest, when
   it has any. Deep research does not use code mode. A
@@ -41,32 +39,43 @@
   service is reachable and healthy, and has a switch that turns code execution
   off for the whole deployment.
 - **When the admin switch is off, the service is unreachable, or the URL is
-  set to an empty value**, the model is not offered `run_python` or the coding
-  agent. The user sees no error. When code fails or
+  set to an empty value**, the model cannot call `run_python`. When code fails or
   times out, the user sees the error output and the turn continues.
+- **With harness sandboxes** (`SANDBOX_RUNTIME=firecracker` and
+  `SANDBOX_FC_TEMPLATE`), every chat agent gives the model `exec_command`,
+  `write_stdin` and file tools: `edit` and `write` for Claude models (in
+  the shapes of Claude Code's Edit and Write), `apply_patch` for all other
+  models. This applies except in anonymous,
+  incognito and multi-model turns and in Slack and Discord bot turns (bots
+  get service-account sandboxes later). Admins cannot turn them off
+  per agent, and users cannot pick or force them. Commands run in the user's
+  private VM, in the chat's session directory, whose files stay for later
+  turns. The user sees each command and its output as it streams, and the
+  files that each patch, edit or write changed, on the same patch card. Every
+  model also gets `publish_files`, which gives files from the VM to the user
+  as download cards; owners and viewers of a shared chat can download them,
+  and a hard chat delete deletes them.
 
 ---
 
 ## Scope
 
-This component owns `PythonTool`, `BashTool`, the Code Interpreter client and
-its version gates, the one-row settings table with its admin API and page, the
-meaning of `BASH_TOOL_SENTINEL_ID`, and code mode: its sandbox driver, tool
+This component owns `PythonTool`, the Code Interpreter client, the settings
+table with its admin API and page, and code mode's sandbox driver, tool
 stubs, program store, model-facing text, `CodeModeTool` and its result
-details. Code mode's packets and replay belong to [[streaming-protocol]], and
+details, and the sandbox tools (`exec_command`, `write_stdin`,
+`apply_patch`, `edit`, `write`, `publish_files`). Code mode's packets and replay belong to [[streaming-protocol]], and
 the shared reader of result documents belongs to [[citations]].
 
 It does not own:
 - The Code Interpreter service. It is a separate deployment with its own
   release line. This repository has only the client and a pinned image tag in
   the Docker Compose files.
-- The coding-agent loop and its wrapper tool `CodingAgentTool`
-  ([[tools-framework]]). This document describes only the session that the loop
-  creates for bash.
 - Access to generated files. They use the chat-session stamp that
   [[file-store-and-user-files]] defines.
 - The Craft sandboxes ([[craft-sandboxes]]). They are a separate system and do
-  not use the Code Interpreter client.
+  not use the Code Interpreter client. The sandbox tools call their
+  `HarnessSandbox` client, which [[craft-sandboxes]] owns.
 
 ---
 
@@ -82,17 +91,6 @@ run_python (stateless, one call = one execution)
     per output event                 invocation.update(ToolProgress(details=PythonExecutionDelta))
     generated files                  download -> file store (session stamp)
                                      -> delete the service copy
-
-bash (one session per coding-agent call)
-  CodingAgentTool._run               tools/tool_implementations/coding_agent/
-    coding_sandbox_session           download HEAD archive -> upload -> create_session
-                                     (1 h TTL) -> extract -> session_id
-    CodingAgent(BashTool(BASH_TOOL_SENTINEL_ID, session_id))
-    spawn_agent -> ChildRunWait      the child run calls bash, one call at a time
-    add_completion_cleanup           after the child's first run completes or releases
-                                     and its workers drain: mark the agent's sandbox
-                                     unavailable, delete_session; best effort, the
-                                     TTL is the backstop
 ```
 
 ```
@@ -113,12 +111,18 @@ execute_code / wait_code (code mode; a cell per program, a store per chat)
                                         execute_code is offered; in both modes
                                         SearchTool._run, not the prompt, caps queries at 3
   stubs.py:build_tool_stubs             function names `<namespace>__<name>` from
-                                        Tool.code_mode_function_name (MCP: server);
+                                        Tool.code_mode_function_name (MCP: server), as
+                                        methods of `class tools` (programs call
+                                        `await tools.<name>(...)`);
                                         `listed_text` (no DEFERRED ones, in the description);
                                         `program_text(code)` types one program: the listed
                                         functions, the DEFERRED ones whose names the code
                                         uses, and the imported modules; tool_search()
-                                        (tool_search.py, BM25) only when some are DEFERRED
+                                        (tool_search.py, BM25) only when some are DEFERRED,
+                                        scoring the name, namespace and description plus
+                                        PARAMETER_WEIGHT times a separate score of the
+                                        argument schema's property names and descriptions
+                                        (tool_search.py:ToolIndex.search)
   CodeModeTool._run -> CodeCells.start  MAX_OPEN_CELLS per response, MAX_RUNNING_CELLS per
                                         process (else BUSY_MESSAGE); cell id = 1 + the highest
                                         id in the branch; store snapshot = store.py:store_snapshot
@@ -127,10 +131,12 @@ execute_code / wait_code (code mode; a cell per program, a store per chat)
                                         tool names); the call returns at yield_time_ms, at
                                         yield_control(), or at the end
       execute_program                   sandbox.py: checkout a new Monty worker (the wait
-                                        observes Stop), feed the imports of IMPORTABLE_MODULES,
+                                        observes Stop), feed the imports of IMPORTABLE_MODULES
+                                        and of the `tools` module (_tools_module),
                                         type-check tool and store/load calls against the
                                         program's stubs, feed_start
-        FunctionSnapshot                tool call -> CodeCell._call on a thread, at most
+        FunctionSnapshot                `tools.<name>` call -> CodeCell._call on a thread
+                                        (a bare tool name is a NameError), at most
                                         MAX_CONCURRENT_TOOL_CALLS per cell and
                                         an equal share of MAX_TOOL_CALL_THREADS per process
                                         at once (the rest queue); store()/load()/yield_control() answered at
@@ -158,7 +164,9 @@ execute_code / wait_code (code mode; a cell per program, a store per chat)
                                         sent to the observer or buffered until the next one
   WaitCodeTool._run -> CodeCells.wait   the cell's one observer: output and calls since the
                                         previous observation, the final result, or
-                                        terminate=true stops the cell
+                                        terminate=true stops the cell; for a closed cell,
+                                        a sentence that names where its saved results
+                                        hold its end (tools/tool_implementations/code_mode/prompt.py:closed_cell_text)
   each observation                      taken under the cell lock, formatted after it:
                                         prompt.py:format_content (model text, cut once in the
                                         middle to max_output_tokens, 10,000 by
@@ -172,10 +180,14 @@ execute_code / wait_code (code mode; a cell per program, a store per chat)
                                         result of each observation Stop interrupted, and one
                                         with a CellClosing for each cell whose last saved
                                         observation is running
+  chat/agent.py:_prepare_step (a run's first step) -> CodeCells.reopen
+                                        empty cells for the next run of the same agent (a
+                                        message or results to an idle child) after finish
   chat/agent.py:_suspended_cells (Agent.on_suspend) -> CodeCells.suspend
-                                        the same when the run suspends, with
-                                        reason="suspended"; later calls can start cells. A
-                                        cell whose observation waits for input stays parked
+                                        the same when the run suspends (see
+                                        ToolInvocation.run_work), with reason="suspended";
+                                        later calls can start cells. A cell whose program
+                                        waits for input stays parked
   ChatAgent.capture_state / restore_state  CodeCells.saved / restore: a parked cell is a
                                         SavedCodeCell in ChatFeatureState.code_cells; its
                                         dump goes to the file store at handoff, under a
@@ -185,16 +197,125 @@ execute_code / wait_code (code mode; a cell per program, a store per chat)
                                         continue the observation that waited, with the
                                         answers, in any process (sandbox.execute_program
                                         with `parked`)
+  CodeModeTool / WaitCodeTool.continue_open_input -> CodeCells.continue_open
+                                        a program that parked in the background, with
+                                        no observation, continues there once each of its
+                                        requests has an answer (CodeCell.continue_background)
   chat/renderer.py:CodeModeRenderer one child ToolRenderer per call, sub_turn_index = n;
                                         a closing record follows the card section end
 ```
 
+```
+exec_command / write_stdin / apply_patch | edit + write / publish_files (no tool row; Tool.id is None)
+  prepare_chat_turn                     ChatTurnSetup.sandbox_tools: HARNESS_SANDBOX_ENABLED,
+                                        and not for anonymous users (one VM per user), in
+                                        incognito or when the request selects more than
+                                        one model, and not for
+                                        Slack or Discord bot turns (MessageOrigin
+                                        SLACKBOT / DISCORDBOT; the chat route sets
+                                        DISCORDBOT from the bot's service API key)
+  chat/execution.py:create_chat_agent   builds the tools with one SandboxTurn for every
+                                        agent, as it adds the skill tools; a durable resume
+                                        prepares the turn again and builds them the same way.
+                                        sandbox_tools_for_model(model names) owns the set and
+                                        its order: EditTool and WriteTool when any of the turn
+                                        LLM's names (model_identity_names) contains "claude"
+                                        (model_capabilities.is_claude_model, the one rule that
+                                        LLM requests and prompt caching use too), else
+                                        ApplyPatchTool; never both; PublishFilesTool for every
+                                        model. The reserved-token prompt
+                                        (calculate_reserved_tokens) names the same set
+  prompt_utils.py:build_system_prompt   the `## Sandbox` section describes the VM once
+                                        (sandbox_tools.py:sandbox_guidance): one use per
+                                        SandboxTool that the turn offers, in order, named
+                                        as the model calls it (CodeModeTool.called_name in
+                                        code mode), except tools whose USE is None
+                                        (publish_files); the tool descriptions describe
+                                        only the tools
+  SandboxTurn.start_call                first call: the user's Sandbox row
+                                        (build/db/sandbox.py:get_or_create_sandbox); before
+                                        each call: HarnessSandbox.begin_turn (an error is
+                                        logged, the call still runs)
+  ExecCommandTool / WriteStdinTool      HarnessSandbox.exec_command / write_stdin; each
+                                        ExecOutputDelta -> ToolProgress; the result is the
+                                        exec header text (wall time, exit code or ending,
+                                        session ID while it runs, token count, output) and
+                                        SandboxExecResult. A cancel of the current signal (a
+                                        Stop, or the end of the calling cell) ends the wait,
+                                        kills the command (SIGKILL) and raises AgentCancelled;
+                                        the stopped call has no result and renders as stopped
+  ApplyPatchTool (SEQUENTIAL)           sandbox/patch.py parses; paths become session-relative
+                                        (harness_base.session_relative_path); one
+                                        stat_files call gets the facts of every path and its
+                                        directory. A path is an existing file's device
+                                        and inode, or its directory's and its name
+                                        (patch.ensure_unique_targets). Add, Update and Move
+                                        onto a link fail ("<path> is a symbolic link to
+                                        <target>; edit that path instead"); a link out of
+                                        the session or with an absolute target, a link loop,
+                                        or the directory itself fails; every file is read and
+                                        every result computed (at most
+                                        APPLY_PATCH_MAX_STAGED_BYTES of updated files held in
+                                        memory; each search is linear, and the searches of one
+                                        patch read at most MAX_SEEK_LINES source lines and
+                                        stop at a Stop); a Stop before the
+                                        first write changes nothing; then write_file (keeps
+                                        an existing file's mode) and delete_file (a link
+                                        goes, not its target). No lock spans runs: a patch
+                                        whose context changed fails verification, and two
+                                        runs that patch one file at once can lose an edit
+  EditTool / WriteTool (SEQUENTIAL)     sandbox_tools._change_file: one stat_files call; the
+                                        same checks, read (_read_text) and mode-keeping write
+                                        (_write_file) as apply_patch, and the same size caps
+                                        (patch.FILE_TOOL_MAX_INPUT_BYTES / _MAX_FILE_BYTES;
+                                        an edit whose result passes the file cap fails before
+                                        it is built). edit: patch.edit_text, exact text with
+                                        no fuzzy passes; only line breaks may differ. Unchanged
+                                        text keeps its line breaks; new text gets the file's
+                                        first one, as an apply_patch update does. An empty
+                                        old_string creates a file, or fills an empty one;
+                                        on a file with content it fails ("Cannot create new
+                                        file - file already exists."). Errors and results use
+                                        Claude Code's texts. write creates or overwrites
+                                        (parents created); no read-first rule, as reads are
+                                        not tracked. Both save ApplyPatchResult.
+                                        The file tools and publish_files share one
+                                        sequence_group: their calls of one step run one at
+                                        a time, so a publish sees the step's earlier edits
+  PublishFilesTool (SEQUENTIAL)         at most PUBLISH_FILES_MAX_FILES (20) files a call;
+                                        for each file in order: HarnessSandbox.read_file
+                                        (a working-directory path, or an absolute path
+                                        under ONYX_VM_FILES_ROOT; other paths are refused
+                                        with a hint to copy the file into the working
+                                        directory; a regular file of at most
+                                        PUBLISH_FILES_MAX_BYTES, 100 MiB), then
+                                        file_store/utils.save_chat_output_file with
+                                        FileOrigin.CHAT_ARTIFACT and the SandboxTurn's chat
+                                        session (the root chat's: subagents share the turn;
+                                        file ID chat-artifact-<session>-<hex>).
+                                        A failure, or a Stop during or after the copies,
+                                        deletes the files that the call saved: all or none.
+                                        Saves PublishedFiles (file ID, name, title, absolute
+                                        path, size, MIME type); each publish is a new file,
+                                        and files of one name are versions of one file.
+                                        save_chat_turn adds the files to the response's
+                                        ChatMessage.files ([[chat-persistence]])
+  Agent.on_drained (root ChatAgent)     SandboxTurn.end: create_chat_agent passes it to the
+                                        root chat agent only (bind_run_store: also to a
+                                        restored root), not to subagents or deep research
+                                        (which gets no sandbox tools). end_turn after each
+                                        finish or suspension of the root run, once its work
+                                        (tool threads, program calls, foreground children)
+                                        drains. A background child that outlives the root
+                                        lets its renewed mark expire (TURN_LEASE_SECONDS). A
+                                        suspension with a waiting or working foreground
+                                        child, and a handoff in that state, end no turn; the
+                                        run's later end or the lease does
+```
+
 **Availability.** `PythonTool.is_available` needs three things: a non-empty
 `CODE_INTERPRETER_BASE_URL`, `CodeInterpreterServer.server_enabled`, and a
-healthy service. `BashTool.is_available` adds a version check:
-`client.supports(...)` compares the service version with the `@requires`
-minimum of the session methods. `CodingAgentTool.is_available` returns
-`BashTool.is_available`. The health result is cached for 30 seconds per base
+healthy service. The process caches the health result for 30 seconds per base
 URL in the process (`_HEALTH_CACHE_TTL_SECONDS`). The admin health endpoint
 makes a live check, and every live check refreshes that cache.
 
@@ -203,7 +324,9 @@ makes a live check, and every live check refreshes that cache.
 `chat/files.py:load_context_user_files_for_tools` adds project and agent files
 as lazy chat files, but only the types in
 `OnyxMimeTypes.CODE_INTERPRETER_STAGED_MIME_TYPES` (CSV, Excel, Word,
-PowerPoint). Other project and agent files reach the model only as prompt
+PowerPoint) and code files by extension
+(`server/query_and_chat/chat_utils.py:is_code_interpreter_staged_file`,
+`OnyxFileExtensions.SANDBOX_ONLY_EXTENSIONS`). Other project and agent files reach the model only as prompt
 text or through search. `chat/agent.py:ChatAgent._finalize_tool` attaches the
 raw source files of search hits to `ChatSearchResult.staged_files`
 (`chat/files.py:build_python_chat_files_from_search_docs`, connector-origin
@@ -218,35 +341,25 @@ the files of its nested searches the same way
 count, total bytes and parallel uploads. When files are dropped, the model gets
 a `staging_notice` in the result.
 
-**Busy service.** Execution, session creation and session bash calls go through
+**Busy service.** Python execution requests go through
 `CodeInterpreterClient._send_with_admission_retry`. It retries HTTP 429 and 503,
 follows `Retry-After`, and stays inside the call's time budget. Then it raises
-`CodeInterpreterBusyError`. File upload, download, delete, session delete and
-health calls are not retried.
+`CodeInterpreterBusyError`. The client sends file and health requests once.
 
 ---
 
 ## Contracts and traps
 
-1. `isolation-is-service-job` **Isolation of `run_python` and `bash` is the
-   service's job, not Onyx's.** Nothing in `backend/onyx` sandboxes the code
-   that they send or checks that the service does. Code mode programs are
-   different: Onyx runs them in its own sandbox
-   ([[#code-mode-sandbox-is-language-level]]).
-   Onyx trusts the URL in `CODE_INTERPRETER_BASE_URL`. The "no network access"
-   rule for bash sessions exists only as text. The model reads it in
-   `coding_agent/tool_definitions.py:BASH_TOOL_DESCRIPTION` and the coding-agent
-   prompt (`prompts/coding_agent/coding_agent.py:CODING_AGENT_PROMPT`).
-   `BashTool.DESCRIPTION` is not sent to the model, because `CodingAgent`
-   registers its own bash definition. Treat a change to what that URL may point
-   at as a security change.
+1. `isolation-is-service-job` **The Code Interpreter service isolates Python execution.**
+   Onyx trusts the service at `CODE_INTERPRETER_BASE_URL`. Changing this URL changes where user code runs.
+   Code mode runs programs in its own sandbox ([[#code-mode-sandbox-is-language-level]]).
 2. `default-url-not-empty` **The default URL is not empty.**
    `CODE_INTERPRETER_BASE_URL` defaults to `http://localhost:8000` in
-   `configs/app_configs.py`. Only an explicit empty value turns the tools off
+   `configs/app_configs.py`. Only an explicit empty value turns the tool off
    without a network call. An unset value makes every turn depend on the health
    check, which fails when nothing listens.
 3. `truncate-before-model` **Truncate output before it reaches the model.**
-   `run_python` and `bash` pass stdout and stderr through
+   `run_python` passes stdout and stderr through
    `tools/tool_implementations/utils.py:truncate_output`, each capped at
    `CODE_INTERPRETER_MAX_OUTPUT_LENGTH`. Only the live `PythonExecutionDelta`
    stream is complete. The saved `details` hold the truncated output, so a
@@ -255,18 +368,15 @@ health calls are not retried.
    stdout and stderr and only the new file IDs, so the client must keep the
    deltas it already has.
 4. `errors-are-results` **Execution errors are results, not exceptions.**
-   `PythonTool._run` and `BashTool._run` catch client errors and return the result JSON with
+   `PythonTool._run` catches client errors and returns result JSON with
    `exit_code=-1` and `error` set. The model sees the failure and can fix its
-   code. `Tool.run` is a second guard for both
-   ([[tools-framework#run-errors-become-results]]): the coding agent calls
-   `BashTool.run` from `coding_agent/agent.py:CodingAgent._bash`.
+   code. `Tool.run` also handles exceptions ([[tools-framework#run-errors-become-results]]).
 5. `run-python-result-json` **`LlmPythonExecutionResult` is saved in two
    forms.** `tools/models.py:LlmPythonExecutionResult` is the model text, as
    JSON in `content`, and the typed `details` that chat saves in
    `ToolCall.result` and in checkpoints. Checkpoints store `details` under a
    tag in `chat/checkpoint.py:CHECKPOINT_PAYLOAD_TYPES` that comes from the
-   `type` literal (`result.python_execution.v1`, `result.bash_execution.v1`,
-   `result.coding_result.v1`). Register a new details type in
+   `type` literal (`result.python_execution.v1`). Register a new details type in
    `db/models.py:SavedToolResultDetails`, or saving and checkpoint restore fail.
    `server/query_and_chat/session_loading.py:translate_assistant_message_to_packets`
    parses the JSON for messages saved before response items existed. Both
@@ -276,28 +386,10 @@ health calls are not retried.
    able to parse it.
 6. `generated-files-need-session` **Generated files need the chat session ID.**
    `PythonTool` saves them with
-   `file_store/utils.py:chat_image_gen_metadata` and the chat session ID.
+   `file_store/utils.py:save_chat_output_file` and the chat session ID.
    `tools/tool_constructor.py:_require_chat_session_id` raises when a caller
    builds the tool without one. The access rule is in
    [[file-store-and-user-files]].
-7. `bash-tool-sentinel` **`BashTool` exists only inside the coding agent.** It
-   has no `Tool` row and is not in `BUILT_IN_TOOL_MAP`.
-   `tools/tool_implementations/coding_agent/coding_agent_tool.py:CodingAgentTool._run`
-   builds it with `BASH_TOOL_SENTINEL_ID = 0`. Its calls are saved with the
-   coding agent's child run and replay on reload, but they have no `tool_id`.
-   Persona attachment, `Tool.enabled` and `allowed_tool_ids` act on
-   `CodingAgentTool`, not on `bash`.
-8. `bash-calls-sequential` **Bash calls in one coding-agent call share a file
-   system and run in order.** `coding_agent/agent.py:CodingAgent` registers
-   bash with `ToolExecutionMode.SEQUENTIAL` on purpose. Do not make it
-   parallel.
-9. `coding-sandbox-one-run` **The coding sandbox lives for one child run.**
-   `CodingAgentTool._run` registers the sandbox cleanup with
-   `add_completion_cleanup` on the first run. The cleanup sets
-   `CodingAgent.is_sandbox_available` to false, and
-   `coding_agent/agent.py:CodingAgent._prepare_step` then rejects a new run. Before
-   a feature sends a follow-up run to a coding agent, tie the cleanup to the
-   agent's lifetime. Only a locally owned child run can register the cleanup.
 10. `run-python-stateless` **`run_python` has no state between calls.** Each call
    is a new execution, and variables do not carry over. `run_python` is a
    `PARALLEL` tool, so the calls of one model step run at the same time on one
@@ -313,14 +405,6 @@ health calls are not retried.
 11. `keep-run-python-name` **Do not rename `run_python` to `python`.** OpenAI
     rejects a function named `python` (the comment on
     `tools/tool_implementations/python/python_tool.py:PythonTool`).
-12. `version-gate-new-routes` **A new service route needs a version gate.** The
-    service ships on its own release line, and a deployment can run an older
-    image. Mark a client method that needs a newer service with
-    `@requires("x.y.z")`
-    (`tools/tool_implementations/python/code_interpreter_client.py:requires`),
-    and check it with `CodeInterpreterClient.supports` in `is_available`. Otherwise an older service makes the tool appear and then
-    fail on every call. `execute_streaming` shows the other pattern: it falls
-    back to `/v1/execute` when the service answers 404.
 13. `code-mode-sandbox-is-language-level` **The code mode sandbox is Monty,
     not a container.** `pydantic-monty` runs programs in its own worker
     processes (`tools/tool_implementations/code_mode/sandbox.py:sandbox_pool`,
@@ -358,8 +442,8 @@ health calls are not retried.
     costs its driver thread, and also a worker while its program waits on a
     tool and its dump does not fit in `MAX_SUSPENDED_BYTES`. A server process runs at most
     `MAX_RUNNING_CELLS` (64) cells whose program has not ended
-    (`tools/tool_implementations/code_mode/cells.py:_RunningCells`); a new cell over this limit gets `BUSY_MESSAGE`
-    and does not start. A new program that finds no free worker for
+    (`tools/tool_implementations/code_mode/cells.py:_RunningCells`); a new cell over this limit, or
+    while a continuing program waits for a slot, gets `BUSY_MESSAGE` and does not start. A new program that finds no free worker for
     `CHECKOUT_TIMEOUT_SECONDS` gets `BUSY_MESSAGE`; a resumed program waits for
     a worker up to its lifetime. A program that waits (an `await` on
     unfinished tool calls or sleeps, or a synchronous `time.sleep`) keeps its
@@ -415,17 +499,31 @@ health calls are not retried.
     `IMMEDIATE` (a function whose stub the description lists: the built-in
     tools) or `DEFERRED` (a callable function that the description omits; the
     model finds it with `tool_search(query)`: MCP and OpenAPI tools). A tool
-    that waits for a child run (`Tool.result_from_children`, as the coding
-    agent does) must be `DIRECT`;
+    that waits for a child run (`Tool.result_from_children`) must be `DIRECT`.
     `tools/tool_implementations/code_mode/code_mode_tool.py:with_code_mode`
     raises otherwise. The code mode tools are `DIRECT` too. MCP functions are
     named from `mcp__<server id>__<server>__<tool>`
     (`MCPTool.code_mode_function_name`), converted to a Python identifier
     that stays unique among the turn's functions; the description names the
-    MCP servers with deferred functions in one fixed paragraph. Every function is also an
-    attribute of the importable module `functions`
-    (`tools/tool_implementations/code_mode/sandbox.py:FUNCTIONS_MODULE`), so `from functions import f`
-    works like the global. `CodeModeResultSpec.usage` adds a code-mode-only
+    namespaces of deferred functions (an MCP tool's is its server) as tool
+    groups in one fixed paragraph. Programs call
+    every function through the `tools` namespace, `await tools.f(...)`: a
+    module that every program imports
+    (`tools/tool_implementations/code_mode/sandbox.py:TOOLS_NAMESPACE`), which
+    the program's stubs declare as `class tools`, so the type checker checks
+    each call. Bare names stay free for the program's own functions, and a
+    model does not read the functions as tools that it can call directly.
+    `store`, `load`, `yield_control` and `tool_search` stay globals; a
+    function can take one of their names, and only the result types that the
+    stubs declare avoid them. An explicit `import tools` or
+    `from tools import f` stops the program before it runs
+    (`TOOLS_IMPORT_MESSAGE`). The system prompt's tool sections name each
+    tool as the model calls it (`CodeModeTool.called_name`). A
+    direct call of a function name, or of its tool's name, also after
+    `tools.` or `tools_`, as a tool of its own returns how to call it from a
+    program
+    (`Tool.inner_call_hint`, `agents/tool_execution.py`).
+    `CodeModeResultSpec.usage` adds a code-mode-only
     docstring note; `internal_search` uses it to ask for all queries of one
     need in one call, since each call runs its own retrieval pipeline. Image
     generation is nested: a program gets `list[ImageResult]` (`file_id`,
@@ -440,7 +538,11 @@ health calls are not retried.
     direct calls do (`ToolInvocation.nested_calls`, a `NestedCallGate`;
     `tools/tool_implementations/code_mode/cells.py:CodeCell._call`): a
     `ToolResult` decision becomes the call's result, so a denial raises in the
-    program as a tool error does. A request decision shows the request at once,
+    program as a tool error does. The cell keeps one gate (`CodeCell._gate`):
+    each of its requests belongs to the call that started it, or that rebuilt
+    it in this process, also while `wait_code` observes it, so the run offers
+    their answers together; `before_tool_call` sees that call's step, or for
+    a cell rebuilt from a saved run, the step in which it continued. A request decision shows the request at once,
     also for a cell that runs in the background, and the call waits without a
     thread (the handler returns
     `tools/tool_implementations/code_mode/sandbox.py:AWAITS_INPUT`). Once the program
@@ -457,12 +559,13 @@ health calls are not retried.
     `tools/tool_implementations/code_mode/cells.py:PARK_REFUSED_MESSAGE`, and the program continues. A dump that
     still runs out of memory loses the worker, so the program stops with
     `tools/tool_implementations/code_mode/sandbox.py:PARK_MEMORY_MESSAGE`. When the run
-    suspends, a parked cell whose observation waits is saved with the Monty
-    version that dumped it; other cells close. The cell keeps only the request
-    ID of each waiting call (`SavedCodeCell.requests`); the run's
-    `NestedInputWait` holds the requests.
-    After the answers, the observation's continuation builds the cell, takes a
-    running-cell slot, waiting for one, and loads the dump on a new worker.
+    suspends, a cell whose program is parked for input is saved with the Monty
+    version that dumped it, with or without an observation; other cells close.
+    The cell keeps the request of each waiting call (`SavedCodeCell.requests`).
+    After the answers, the cell continues as the `CodeCells.resume` (an
+    observation waited) or `CodeCells.continue_open` (no observation) row of
+    the Architecture flow says: it takes a running-cell slot, waiting for one,
+    and loads the dump on a new worker.
     A dump from another Monty version stops the program with
     `tools/tool_implementations/code_mode/cells.py:PROGRAM_VERSION_MESSAGE`. An approved call runs then, unless its
     tool is gone, its function name now names another tool, or its parameters
@@ -481,8 +584,7 @@ health calls are not retried.
     the cells raises `agents/models.py:ReleaseFailed` from the run's finish or
     suspend hook, and the run fails. Nested calls run in the program's
     cancellation scope: the program's end, timeout or Stop cancels their model
-    work and the HTTP work of tools that observe cancellation; `run_python` and
-    `bash` do not (see Known issues). Calls to a sequential tool run one at a time, and the wait
+    work and the HTTP work of tools that observe cancellation. Python execution continues until its next output chunk (see Known issues). Calls to a sequential tool run one at a time, and the wait
     for that lock is cancellable. Each `CodeModeCall` has a `state` (`ok`,
     `error`, `unfinished`, or `running` for a call that had not ended when an
     observation returned); `is_error` derives from it and is False for
@@ -590,7 +692,7 @@ health calls are not retried.
 17. `single-settings-row` **The settings table has exactly one row.**
     `db/code_interpreter.py:fetch_code_interpreter_server` uses `.one()`. A
     migration seeds the row with `server_enabled=true`. Without the row,
-    `is_available` raises and `run_python` and the coding agent are hidden.
+    `is_available` raises and the model cannot call `run_python`.
 18. `code-mode-interrupted-run` **A stopped or interrupted program keeps its
     calls and never runs twice.** On Stop, the observation that is attached to
     the cell returns no result (`AgentCancelled`) and stays attached. At the
@@ -613,17 +715,35 @@ health calls are not retried.
     each cell whose last saved observation is `running`. The amendment adds a `CellClosing` (`reason="response_ended"`)
     with the calls, output, result and store commit after that observation;
     its text is formatted like an observation (`format_content`). When the
-    run suspends (for example on `ChildRunWait`), `Agent.on_suspend`
+    run suspends (see `ToolInvocation.run_work`), `Agent.on_suspend`
     (`chat/agent.py:_suspended_cells`) calls `CodeCells.suspend`, which does
-    the same with `reason="suspended"` before the run captures its state, so no
-    cell runs while nothing owns the run. For a
+    the same with `reason="suspended"` before the run captures its state. A
+    cell that ended keeps its end in that closing record; a later `wait_code`
+    of the cell says so (`tools/tool_implementations/code_mode/prompt.py:closed_cell_text`). A cell whose program
+    waits for input, with or without an observation, is saved instead
+    (`CodeCells.saved`); its requests stay open. For a
     restored run, `tools/tool_implementations/code_mode/cells.py:_interrupted_amendments` closes such observations
     with `reason="interrupted"` and status `cancelled`, since what the cell did
-    after them is not known. The run applies the amendments before it saves
+    after them is not known; a cell that stays saved gets none. A cell that a
+    restored run rebuilds takes its last running observation from the
+    recorded results, so it gets its closing record as a live cell does, also
+    when it ends in the background with no `wait_code`. The run applies the amendments before it saves
     and publishes `ToolResultAmendedEvent` for each, before `AgentEndEvent`.
     Their calls, also the unfinished ones, may have had effects. The final
     `code_mode_delta` has `status="cancelled"` live and on replay. A tool whose
     rerun can repeat effects must set `interrupted_result`.
+19. `sandbox-program-value` **A sandbox call gives a program other data
+    than the model.** `exec_command` and `write_stdin` use
+    `CodeModeResultKind.DETAILS`:
+    `tools/tool_implementations/code_mode/stubs.py:program_value` returns the result
+    details as the spec's model declares them (`ExecCommandOutput`, a base of
+    the saved `SandboxExecResult`, so `type` and `truncated` stay out), while
+    the model reads the exec header text. A tool whose program value is not its
+    content uses this kind; do not special-case a tool name. All sandbox
+    tools set `interrupted_result`, and a patch that fails verification writes
+    nothing; a sandbox error during the writes can leave some files changed,
+    and the error names them and the file that failed. `edit` and `write`
+    change one file, after all checks pass.
 
 ---
 
@@ -643,18 +763,16 @@ health calls are not retried.
   keeps running; the model works on and gets the rest with `wait_code`. A cell
   never outlives its response: `CodeCells.finish` stops it, and a closing
   record saves what it did after its last observation, so the saved history
-  and the next turn see its side effects.
+  and the next turn see its side effects. Its driver and tool call threads join
+  the run's work (`ToolInvocation.run_work`); the tool phase waits for the
+  driver, and the run drains only after a call that outlived the program
+  returns.
 - **Code mode keeps values with `store()`, not interpreter state.** The
   model chooses what persists, so the saved data stays small and JSON. Workers
   stay stateless, so any worker in any process can run the next program. The
   store lives in saved tool results, so it follows edits and regenerations
   and needs no memory in the API server. Codex code mode makes the same
   choice; its store lives in process memory, this one in the conversation.
-- **`run_python` is stateless and `bash` has a session.** A Python call is one
-  self-contained script, so no session cleanup is needed. The coding agent
-  explores a repository over many commands, so it needs a file system that stays
-  between calls. The session TTL removes the pod if Onyx crashes before it
-  deletes the session.
 
 ---
 
@@ -662,20 +780,8 @@ health calls are not retried.
 
 - **Uploaded input files stay on the service.** `PythonTool` does not delete
   staged files, because its upload cache reuses their IDs.
-  `coding_agent/agent.py:coding_sandbox_session` does not delete the uploaded
-  repository archive (up to 500 MB). The service's own file TTL removes them.
+  The service removes these files when their TTL expires.
   Onyx cannot see that TTL.
-- **The coding agent reaches only public repositories.**
-  `tools/tool_constructor.py:_construct_tools_impl` builds `CodingAgentTool`
-  without a `github_token`, so `coding_sandbox_session` downloads without
-  credentials.
-- **Nothing resumes an interrupted coding-agent call.** After a process stops,
-  the next read of the turn marks it ERROR
-  (`chat/run_store.py:ChatRunStore._load_status` calls
-  `db/chat_checkpoint.py:interrupt_response__no_commit`). The cleanup never
-  runs, so the sandbox stays until its 1 h TTL. Also,
-  `chat/restoration.py:restore_subagent` raises for a coding
-  agent: the coding child is saved without a restoration configuration.
 - **Code mode limits.** Monty's `asyncio.gather` takes no keyword arguments,
   so the tool description teaches a `try`/`except` wrapper instead of
   `return_exceptions=True`. Parallel `internal_search` calls in one program
@@ -699,10 +805,8 @@ health calls are not retried.
   content (incognito) saves no tool results, so its writes last only for that
   response. Responses saved without response items replay without `details`
   and contribute nothing.
-- **Stop does not abort a running `run_python` or `bash` execution.** Neither
-  tool cancels its HTTP request. A bash call blocks until the service returns, up to
-  `CODE_INTERPRETER_DEFAULT_TIMEOUT_MS` plus 10 s, and the sandbox delete waits
-  for it. A `run_python` stream stops at its next output chunk. The result is
+- **Stop takes effect at the next Python output chunk.**
+  `run_python` waits for the next chunk before it stops reading. The result is
   discarded, and generated files that `PythonTool` already saved belong to no
   `ToolCall`.
 
@@ -710,10 +814,9 @@ health calls are not retried.
 
 ## Dependencies
 
-- [[tools-framework]]: the `Tool` interface, construction, and the coding
-  agent.
+- [[tools-framework]]: the `Tool` interface and tool construction.
 - [[file-store-and-user-files]]: generated files and their session stamp.
-- [[streaming-protocol]]: the Python, bash and coding-agent packets.
+- [[streaming-protocol]]: Python execution packets.
 - [[authorization]]: `require_permission(FULL_ADMIN_PANEL_ACCESS)` guards the admin
   API.
 
@@ -731,23 +834,15 @@ health calls are not retried.
 - `investigate-python-not-run` **Investigate "the model never runs Python".** Check, in order: that
   `CODE_INTERPRETER_BASE_URL` is set and not empty
   ([[#default-url-not-empty]]); that the admin switch is on
-  ([[#single-settings-row]]); that the admin health endpoint reports healthy;
-  for the coding agent, that the service version supports the session routes
-  ([[#version-gate-new-routes]]). The agent and per-message gates are in
+  ([[#single-settings-row]]) and that the admin health endpoint reports healthy. The agent and per-message gates are in
   [[tools-framework#investigate-tool-not-called]].
-- `client-method-new-route` **A client method for a new service route.** Copy
-  `CodeInterpreterClient.create_session`: a `@requires` minimum version and a
-  call through `_send_with_admission_retry` when the service can be busy. List
-  the current methods in `CodeInterpreterClient`. Add the method to the
-  `client.supports(...)` check of each tool that uses it.
 
 ---
 
 ## Verification
 
-- Unit tests: `backend/tests/unit/onyx/tools/` (the Python tool availability and
-  coding-agent files) and the `python/`, `bash/` and `coding_agent/` folders
-  under `backend/tests/unit/onyx/tools/tool_implementations/`.
+- Unit tests cover Python tool availability in `backend/tests/unit/onyx/tools/` and execution in
+  `backend/tests/unit/onyx/tools/tool_implementations/python/`.
 - External dependency unit tests, against a running service:
   `backend/tests/external_dependency_unit/tools/`.
 - Integration: `backend/tests/integration/tests/code_interpreter/`.
@@ -770,10 +865,10 @@ health calls are not retried.
   (`backend/tests/external_dependency_unit/conftest.py`) to run in both modes. Web:
   the code mode cases in
   `web/src/app/app/message/messageComponents/AgentMessage.test.tsx`,
-  `web/src/app/app/message/messageComponents/timeline/transformers.test.ts`,
-  `web/src/app/app/message/messageComponents/timeline/hooks/useTimelineHeader.test.tsx`
+  `web/src/lib/timeline/chat/transformers.test.ts`,
+  `web/src/lib/timeline/chat/hooks/useTimelineHeader.test.tsx`
   and the code mode block of
-  `web/src/app/app/message/messageComponents/timeline/hooks/packetProcessor.test.ts`
+  `web/src/lib/timeline/chat/hooks/packetProcessor.test.ts`
   (cells and closing records, live and replay order).
   Playwright: `web/tests/e2e/chat/code_mode.spec.ts` (a call that outlives a yield reads
   as one direct call, with `wait_code` or at response end) and

@@ -23,24 +23,25 @@ the viewer's ([[#preview-routes-skip-access-gate]]). When the admin turns access
 task, the next fire records a skipped run instead of running
 ([[craft-scheduled-tasks]]).
 
-**Plugins.** The admin sees built-in apps, custom apps and MCP servers on one
-Plugins page. For each one the admin can turn it on or off for Craft, set
-credentials, attach skills, and set a policy per action: Auto-approve
-(`ALWAYS`), Ask (`ASK`) or Disabled (`DENY`). A switch decides whether users
-may override the workspace policy with their own choices. When the agent later
-tries a Disabled action, the call fails with a policy error. When it tries an
-Ask action, the user gets an approval card in the session. On Onyx Cloud, the
-admin cannot see or edit credentials or URL patterns of Onyx-managed built-ins,
-and cannot create or delete them. The admin can only enable them and set
-policy.
+**Integrations.** The admin sets up built-in apps (from a preset), custom apps
+and MCP servers as integrations on the Integrations page
+(`/admin/integrations`, [[plugins]]). For each one the admin can turn it on or
+off, set the sign-in and the organization connection, and set a policy per
+action: Allow, Ask or Blocked. A switch decides whether users may save Always
+allow over Ask. When the agent later tries a Blocked action, the call fails
+with a policy error. When it tries an Ask action, the user gets an approval
+card in the session. The same list sets the install setting of each
+integration. On Onyx Cloud, the
+admin cannot see or edit the sign-in of an Onyx-managed built-in app, and
+cannot add a second one or delete it. The admin can change its name,
+description, switch, Always allow setting and action policies.
 
 **Preferences.** The admin writes organization instructions and picks a Craft
 default model. Instructions appear in each new session's `AGENTS.md` under an
 "Organization instructions" heading. A read-only preview shows the base
 template the text is added to. With no Craft default model, sessions use the
-workspace chat default, and the page shows that model as inherited. The
-**Skill Publishing** select sets `Settings.plugin_publishing` (Open,
-Requires review, Off); [[skills#publishing-review]] owns what it does.
+workspace chat default, and the page shows that model as inherited. The skill settings (Skill Publishing, Default Access, Sharing) are on
+Admin Panel → Skills ([[skills#publishing-review]]).
 
 In this document "workspace" always means the tenant-wide scope (workspace
 default, workspace policy). The sandbox directory of a session is the "session
@@ -53,18 +54,17 @@ workspace" ([[craft-sandboxes]]).
 This component owns:
 - the access decision for each user and its enforcement on every Craft user
   route;
-- the Craft admin router and its routes: external-app configuration, the
-  read-only workspace policy views, and the base-instructions preview;
-- the Craft admin pages (Access, Preferences) and the external-app admin
-  editor.
+- the Craft admin router and its routes, such as the base-instructions
+  preview;
+- the Craft admin pages (Access, Preferences).
 
 Neighbours own the rest:
 - [[craft-external-apps]]: what a policy means at request time, the precedence
   of workspace, personal and task choices, the action catalogs, and OAuth.
 - [[mcp-and-custom-tools]]: the MCP server admin routes. They write the same
   policy tables ([[#two-gates-one-policy-table]]).
-- [[plugins]]: the Plugins page shell, which hosts the external-app editor,
-  and the MCP and OpenAPI editors.
+- [[plugins]]: the admin Integrations page, which edits apps, MCP
+  servers and OpenAPI tools as integrations.
 - [[chat-preferences]]: the workspace `Settings` store, which holds the Craft
   default and the organization instructions. The admin writes them through
   `PATCH /admin/settings`, like any other workspace setting.
@@ -104,25 +104,15 @@ clears `User.craft_enabled` and writes an audit event. The Access table sends
 `null` when a toggle matches the workspace default, so the user follows later
 default changes (`web/src/views/admin/CraftPage/AccessCell.tsx`).
 
-**Policy writes.** Every workspace policy write goes through
-`db/action_policy.py:replace_workspace_action_policies`, keyed by a `GatedApp`
-row for `(kind, target_id)`:
-
-```
-External app (FULL_ADMIN_PANEL_ACCESS)        MCP server (MANAGE_ACTIONS, scoped allowed)
-  PATCH /build/admin/apps/{id}                  PATCH /admin/mcp/server/{id}
-    update_external_app                           update_mcp_server_simple
-    -> _write_policies__no_commit               POST setup flows
-    -> replace_workspace_action_policies          _publish_mcp_setup
-  commit, then push_skills_for_users            -> replace_workspace_action_policies
-  (SKILL.md lists DENY actions as unavailable)  commit, then _hot_reload_craft_sessions
-                                                (restamps mcp_config_hash only)
-```
-
-`replace_workspace_action_policies` validates action ids against the catalog
-and stores only the entries that differ from the catalog default
-(`external_apps/providers/registry.py:normalize_action_policies`). A submitted
-map replaces the old rows. It does not merge.
+**Policy writes.** Every admin policy write goes through
+`PUT /admin/integrations/{id}/actions`
+(`backend/onyx/integrations/service.py:set_admin_actions__no_commit`), which
+writes the admin rows of `integration_action_policy`. After the commit,
+`backend/onyx/integrations/service.py:reload_craft_sessions` restamps
+`mcp_config_hash` and pushes the skills of the users who have access to the
+integration. A built-in app skill lists the actions the admin
+blocked as unavailable (`skills/rendering.py:build_action_availability_section`,
+from `backend/onyx/integrations/policy.py:admin_blocked_actions`).
 
 **Instructions.** A sandbox manager reads `Settings.craft_instructions` with
 `load_settings()` when it builds a session's `AGENTS.md`
@@ -159,13 +149,15 @@ then the chat default.
 4. `two-gates-one-policy-table` **Two permission gates write the same policy
    tables.** External-app policies need `FULL_ADMIN_PANEL_ACCESS`. MCP policies
    need `MANAGE_ACTIONS`, and a group-scoped action manager may write them for
-   its servers. `web/src/lib/plugins/hooks.ts:useInstalledPlugins` must not
-   fetch the external-app admin list (organization credentials) for a user
-   without full admin access.
+   its servers. The admin pages read apps only through
+   `GET /admin/integrations`, which returns no organization credentials.
 5. `save-paths-refresh-differently` **The save paths refresh sandboxes
    differently.** The external-app PATCH commits, then calls
    `skills/push.py:push_skills_for_users` so the skill file lists DENY actions as
    unavailable (`skills/rendering.py:build_action_availability_section`).
+   The PATCH and the delete push to the users who have access to the app's
+   integration,
+   because only they get its built-in skill ([[skills#built-in-app-skill-rule]]).
    Built-in create and app delete push before commit, so a push failure rolls
    the write back. Custom create pushes nothing. The MCP routes only restamp
    `mcp_config_hash`; tool policies need no push because the proxy reads them
@@ -173,25 +165,26 @@ then the chat default.
 6. `unset-action-is-catalog-default` **An unset action is not "no policy".**
    It resolves to the catalog `default_policy` at read time, and an override
    equal to the default is not stored. An MCP tool defaults to `ASK`, or to
-   `ALWAYS` when the last sync stored `Tool.mcp_read_only` true
-   (`db/action_policy.py:mcp_tool_default_policy`). A change to a catalog default changes
+   `ALWAYS` when the tool is read-only
+   (`backend/onyx/integrations/kinds/mcp_server.py:mcp_action_default_policy`). A change to a catalog default changes
    behaviour for every app that kept the default, with no migration and no
    row change.
 7. `app-type-immutable` **`app_type` cannot change on update.** The PATCH
-   request has no `app_type` field, and `db/external_app.py:update_external_app`
-   raises on a mismatch, because the type decides the skill and provider.
+   request has no `app_type` field, and
+   `backend/onyx/integrations/service.py:update_integration__no_commit` refuses
+   a preset change, because the type decides the skill and provider.
    Delete and recreate instead.
 8. `managed-builtins-locked-multi-tenant` **Onyx-managed built-ins are locked
-   only when `MULTI_TENANT`.** `backend/onyx/server/features/build/external_apps/api.py:_to_admin_response` blanks
-   credentials, auth template and URL patterns. The create and delete routes
-   refuse them. The PATCH route silently ignores those three fields and
-   applies the rest (`enabled`, name, policies, the user-management switch and
-   skill associations). Self-hosted built-ins of the same type
-   stay editable. A new admin field for apps needs the same `managed` check.
+   only when `MULTI_TENANT`.** `integrations/service.py:_is_onyx_managed`
+   decides it. The admin detail hides the OAuth client and headers. Create and
+   delete refuse them. The PATCH refuses the sign-in and config fields
+   (`_ONYX_MANAGED_FIELDS`) and applies the rest (name, description, `enabled`
+   and Always allow). Self-hosted built-ins of the same type stay editable. A
+   new admin field for integrations needs the same check.
 9. `masked-credentials-round-trip` **Masked credentials round-trip.** The
-   admin response masks organization credentials. The write path restores
-   masked values that come back unchanged
-   (`db/external_app.py:resolve_masked_credentials`). A per-account provider
+   admin response masks organization credentials. The write path keeps the
+   stored secret when a masked value or no value comes back
+   (`backend/onyx/integrations/service.py:update_integration__no_commit`). A per-account provider
    (Zendesk) then derives its URL patterns from the restored credentials. Do
    not compare a masked value with the stored value.
 10. `preferences-picker-no-fallback` **`fallbackToDefault={false}` and
@@ -226,8 +219,8 @@ then the chat default.
   have no callers in this repository. On multi-tenant the admin API refuses to
   create a managed built-in. The code that seeds managed app rows on Cloud is
   not in this tree, so how Cloud tenants get them is unverified.
-- `web/src/app/admin/craft/apps/page.tsx` only redirects old app links to the
-  Plugins page. It is a false lead for app admin work.
+- `/admin/craft/apps` has no page. `web/next.config.js` redirects it to the
+  integration list. It is a false lead for app admin work.
 
 ---
 
@@ -238,7 +231,7 @@ then the chat default.
 - [[mcp-and-custom-tools]]: MCP server routes and data that share the policy
   tables.
 - [[craft-sandboxes]]: renders organization instructions into `AGENTS.md`.
-- [[skills]]: `push_skills_for_users` and skill association rules.
+- [[skills]]: `push_skills_for_users` and the built-in app skill rule.
 - [[llm-providers]]: the `CRAFT` model flow.
 - [[editions-and-gating]]: `tier_at_least` and the PostHog flag provider.
 - [[authorization]]: `require_permission` and the group-scoped action manager.
@@ -258,8 +251,8 @@ then the chat default.
   Read the value with `load_settings()` at the point of use. If a sandbox
   needs it, read it where `AGENTS.md` or the opencode config is built, not at
   image build time.
-- `external-app-admin-field` **A new admin field for an external app.** Copy `users_can_manage_policies`
-  on the create and PATCH requests in `server/features/build/external_apps/api.py`.
+- `external-app-admin-field` **A new admin field for an external app.** Copy `users_can_save_always_allow`
+  on `IntegrationCreate` and `IntegrationUpdate` in `server/features/integrations/models.py`.
   Add the `managed` check ([[#managed-builtins-locked-multi-tenant]]) and pick
   a refresh path ([[#save-paths-refresh-differently]]).
 - `investigate-craft-off` **Investigate "Craft is off for me".** Read `GET /api/settings` as that user
@@ -279,8 +272,7 @@ then the chat default.
   and `backend/tests/unit/onyx/server/features/craft/`.
 - External-app admin and the Cloud lockdown:
   `backend/tests/external_dependency_unit/craft/`.
-- Policy storage: `backend/tests/external_dependency_unit/permissions/` and
-  `backend/tests/integration/tests/external_apps/`.
+- Policy storage: `backend/tests/external_dependency_unit/integrations/`.
 - Default model: `backend/tests/external_dependency_unit/llm/`.
 - By hand: save organization instructions, start a new session, and confirm
   the section in the session's `AGENTS.md`.

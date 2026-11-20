@@ -236,6 +236,25 @@ export interface IndexAttemptSnapshot {
   is_new_model: boolean;
   /** A one-off run over a window outside the pair's incremental cursor, such as an added scope. */
   is_backfill: boolean;
+  /** Set for an attempt that lists, converts and indexes in separate stages. */
+  progress?: IndexAttemptProgress | null;
+}
+
+/** Mirror of `onyx.server.documents.models.IndexAttemptProgress`. */
+export interface IndexAttemptProgress {
+  /** False while the listing runs. The totals are then not final. */
+  listing_done: boolean;
+  docs_listed: number;
+  docs_skipped: number;
+  docs_indexed: number;
+  docs_failed: number;
+  batches_listed: number;
+  batches_converted: number;
+  batches_indexed: number;
+  /** Set when the listing is done. */
+  batches_total: number | null;
+  /** Seconds until the slowest stage finishes at its rate so far. */
+  eta_seconds: number | null;
 }
 
 // Mirror of `onyx.db.index_attempt_metrics_models.IndexAttemptStage`. The
@@ -249,6 +268,11 @@ export const INDEX_ATTEMPT_STAGES = [
   "HIERARCHY_UPSERT",
   "DOC_BATCH_STORE",
   "DOC_BATCH_ENQUEUE",
+  "CONVERSION_QUEUE_WAIT",
+  "STUB_BATCH_LOAD",
+  "CONVERSION",
+  "CONVERSION_DOC_BATCH_STORE",
+  "CONVERSION_DISPATCH",
   "QUEUE_WAIT",
   "DOCPROCESSING_SETUP",
   "BATCH_LOAD",

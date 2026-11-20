@@ -8,16 +8,24 @@ import { customElement, property, state } from "lit/decorators.js";
 import { unsafeHTML } from "lit/directives/unsafe-html.js";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
-import { WidgetConfig, ChatMessage, TokenProvider } from "./types/widget-types";
+import {
+  WidgetConfig,
+  ChatMessage,
+  MessageFeedback,
+  TokenProvider,
+} from "./types/widget-types";
 import {
   ApprovalDecisionResponse,
   ChatSessionStatus,
   ChatStream,
   Packet,
+  QuestionAnswersRequest,
+  QuestionAnswersResponse,
   SearchDocument,
   ResolvedCitation,
   StreamCursor,
   ToolApprovalRequest,
+  ToolQuestionRequest,
 } from "./types/api-types";
 import {
   resolveConfig,
@@ -36,14 +44,25 @@ import {
 import {
   APPROVAL_PENDING_ERROR_CODE,
   ApprovalDecision,
-  ApprovalEntry,
   approvalStatus,
   decidedStatus,
-  findPendingApproval,
   LocalApproval,
   readOutcome,
 } from "./services/approvals";
 import { renderApprovalCard } from "./services/approval-card";
+import {
+  draftAnswers,
+  draftChoice,
+  findPendingWait,
+  LocalQuestion,
+  PendingWait,
+  QuestionChoice,
+  QuestionDraft,
+  questionResolution,
+  QuestionResolution,
+  readQuestionResolution,
+} from "./services/questions";
+import { renderQuestionCard } from "./services/question-card";
 import {
   MessageIDs,
   processPacket,
@@ -51,6 +70,34 @@ import {
 } from "./services/stream-parser";
 import { saveSession, loadSession, clearSession } from "./utils/storage";
 import { DEFAULT_LOGO } from "./assets/logo";
+
+let linkHookAdded = false;
+
+/** Sanitizes answer HTML; its links open in a new tab so the visitor keeps the host page. */
+function sanitizeAnswerHtml(dirty: string): string {
+  // Added on first use: DOMPurify has no hooks API until it runs with a DOM
+  if (!linkHookAdded) {
+    DOMPurify.addHook("afterSanitizeAttributes", (node) => {
+      if (node.tagName === "A") {
+        node.setAttribute("target", "_blank");
+        node.setAttribute("rel", "noopener noreferrer");
+      }
+    });
+    linkHookAdded = true;
+  }
+  return DOMPurify.sanitize(dirty, { ADD_TAGS: ["sup"] });
+}
+
+/**
+ * How the server took answers to the agent's questions from this widget:
+ * "blocked" while an approval request of the response waits, `failed` with
+ * the error of any other failure.
+ */
+type QuestionAnswerResult =
+  | "answered"
+  | "closed"
+  | "blocked"
+  | { failed: unknown };
 
 /** What a followed stream applied, and where a reattach continues from. */
 interface StreamFollow {
@@ -117,18 +164,30 @@ export class OnyxChatWidget extends LitElement {
   // Expanded argument values, as `[approval id, key]` JSON, and cards that
   // show all their rows, as `[approval id]` JSON
   @state() private expandedArguments: ReadonlySet<string> = new Set();
+  // This widget's state for each question request, by its id, until the
+  // server resolves it
+  @state() private localQuestions = new Map<string, LocalQuestion>();
+  // The question cards' choices, by question request id
+  @state() private questionDrafts: ReadonlyMap<string, QuestionDraft> =
+    new Map();
+  // The question that each card shows, from 0, by question request id
+  @state() private questionPages: ReadonlyMap<string, number> = new Map();
+  // The answer whose Copy button shows its "copied" check
+  @state() private copiedMessageId: ChatMessage["id"] | null = null;
 
   private config!: WidgetConfig;
+  private copiedTimer?: ReturnType<typeof setTimeout>;
   private apiService!: ApiService;
   private sessionRestored = false;
   private abortController?: AbortController;
   // Citation state — plain fields (not @state) since Map mutations don't trigger Lit re-renders
   private documentMap = new Map<string, SearchDocument>();
   private citationMap = new Map<number, string>();
-  // A continuation a decision named while another stream was followed
+  // A continuation a decision or answer named while another stream was
+  // followed
   private continuationStreamId: number | null = null;
-  // A decision with no continuation landed while a follow ran; the follow
-  // reads the status again before it ends
+  // A decision or answer with no continuation landed while a follow ran;
+  // the follow reads the status again before it ends
   private statusRecheck = false;
   // Answers that a status read named as the latest and the transcript
   // lacks: they can start and finish between two reads. The next session
@@ -335,6 +394,9 @@ export class OnyxChatWidget extends LitElement {
     this.streamingStatus = "";
     this.localApprovals = new Map();
     this.expandedArguments = new Set();
+    this.localQuestions = new Map();
+    this.questionDrafts = new Map();
+    this.questionPages = new Map();
     this.continuationStreamId = null;
     this.statusRecheck = false;
     this.unseenAnswerIds = new Set();
@@ -345,43 +407,157 @@ export class OnyxChatWidget extends LitElement {
     clearSession();
   }
 
-  /**
-   * Render markdown content safely.
-   * Strips [[n]](url) citation links before markdown parsing so they render
-   * as plain [n] text references. Citation badges are rendered separately.
-   * Renumbers citations to sequential display numbers (1, 2, 3...).
-   */
+  /** Render markdown content safely. */
   private renderMarkdown(content: string, citations?: ResolvedCitation[]) {
     try {
-      let stripped = content;
-      if (this.config.includeCitations) {
-        if (citations?.length) {
-          // Build a map from backend citation number → sequential display number
-          const displayMap = new Map<number, number>();
-          citations.forEach((c, i) => displayMap.set(c.citation_number, i + 1));
-
-          // Replace [[n]](url) with superscript-style display number
-          stripped = stripped.replace(
-            /\[\[(\d+)\]\]\([^)]*\)/g,
-            (_match, num) => {
-              const displayNum = displayMap.get(Number(num));
-              return displayNum ? `<sup>[${displayNum}]</sup>` : "";
-            }
-          );
-        } else {
-          // Still streaming or no citations resolved yet — strip raw links
-          stripped = stripped.replace(/\[\[(\d+)\]\]\([^)]*\)/g, "");
-        }
-      }
-      const htmlContent = marked.parse(stripped, { async: false }) as string;
-      const sanitizedHTML = DOMPurify.sanitize(htmlContent, {
-        ADD_TAGS: ["sup"],
-      });
-      return unsafeHTML(sanitizedHTML);
+      return unsafeHTML(this.answerHtml(content, citations));
     } catch (err) {
       console.error("Failed to parse markdown:", err);
       return content; // Fallback to plain text
     }
+  }
+
+  /**
+   * An answer's markdown as sanitized HTML.
+   * Strips [[n]](url) citation links before markdown parsing so they render
+   * as plain [n] text references. Citation badges are rendered separately.
+   * Renumbers citations to sequential display numbers (1, 2, 3...).
+   */
+  private answerHtml(content: string, citations?: ResolvedCitation[]): string {
+    let stripped = content;
+    if (this.config.includeCitations) {
+      if (citations?.length) {
+        // Build a map from backend citation number → sequential display number
+        const displayMap = new Map<number, number>();
+        citations.forEach((c, i) => displayMap.set(c.citation_number, i + 1));
+
+        // Replace [[n]](url) with superscript-style display number
+        stripped = stripped.replace(
+          /\[\[(\d+)\]\]\([^)]*\)/g,
+          (_match, num) => {
+            const displayNum = displayMap.get(Number(num));
+            return displayNum ? `<sup>[${displayNum}]</sup>` : "";
+          }
+        );
+      } else {
+        // Still streaming or no citations resolved yet — strip raw links
+        stripped = stripped.replace(/\[\[(\d+)\]\]\([^)]*\)/g, "");
+      }
+    }
+    const htmlContent = marked.parse(stripped, { async: false }) as string;
+    return sanitizeAnswerHtml(htmlContent);
+  }
+
+  /**
+   * Copy an answer as rich HTML, so pasted text keeps its formatting, with
+   * plain text for targets that take no HTML.
+   */
+  private async copyAnswer(msg: ChatMessage, e: Event) {
+    const body = (e.currentTarget as HTMLElement)
+      .closest(".message")
+      ?.querySelector(".answer-body");
+    if (!(body instanceof HTMLElement)) return;
+    const text = body.innerText;
+    try {
+      try {
+        const answerHtml = this.answerHtml(msg.content, msg.citations);
+        await navigator.clipboard.write([
+          new ClipboardItem({
+            "text/html": new Blob([answerHtml], { type: "text/html" }),
+            "text/plain": new Blob([text], { type: "text/plain" }),
+          }),
+        ]);
+      } catch {
+        // Older browsers and some embeds allow only plain text
+        await navigator.clipboard.writeText(text);
+      }
+    } catch (err) {
+      console.error("Failed to copy answer:", err);
+      this.error = "Could not copy the answer.";
+      return;
+    }
+    clearTimeout(this.copiedTimer);
+    this.copiedMessageId = msg.id;
+    this.copiedTimer = setTimeout(() => {
+      this.copiedMessageId = null;
+    }, 2000);
+  }
+
+  /** Rate an answer; rating it the same way again removes the rating. */
+  private async rateAnswer(msg: ChatMessage, rating: MessageFeedback) {
+    if (typeof msg.id !== "number") return;
+    const messageId = msg.id;
+    const previous = msg.feedback;
+    const next = previous === rating ? undefined : rating;
+    await this.storeFeedback(messageId, next);
+    try {
+      await this.apiService.setMessageFeedback(
+        messageId,
+        next === undefined ? null : next === "like"
+      );
+    } catch (err) {
+      console.error("Failed to submit feedback:", err);
+      await this.storeFeedback(messageId, previous);
+      this.error = "Could not save your feedback. Please try again.";
+    }
+  }
+
+  private async storeFeedback(
+    messageId: number,
+    feedback: MessageFeedback | undefined
+  ) {
+    this.messages = this.messages.map((m) =>
+      m.id === messageId ? { ...m, feedback } : m
+    );
+    const sessionId = this.chatSessionId;
+    if (sessionId) {
+      saveSession(sessionId, this.messages, await this.currentIdentity());
+    }
+  }
+
+  private renderAnswerActions(msg: ChatMessage) {
+    const copied = this.copiedMessageId === msg.id;
+    const rateable = typeof msg.id === "number";
+    return html`
+      <div class="answer-actions">
+        <button
+          class="answer-action"
+          @click=${(e: Event) => this.copyAnswer(msg, e)}
+          title=${copied ? "Copied" : "Copy"}
+          aria-label="Copy answer"
+        >
+          ${
+            copied
+              ? html`<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 8.5L6.5 12L13 4.5" /></svg>`
+              : html`<svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><rect x="5.5" y="5.5" width="8" height="8" rx="1.5" /><path d="M10.5 5.5V3.5C10.5 2.95 10.05 2.5 9.5 2.5H3.5C2.95 2.5 2.5 2.95 2.5 3.5V9.5C2.5 10.05 2.95 10.5 3.5 10.5H5.5" /></svg>`
+          }
+        </button>
+        ${
+          rateable
+            ? html`
+                <button
+                  class="answer-action ${msg.feedback === "like" ? "selected" : ""}"
+                  @click=${() => this.rateAnswer(msg, "like")}
+                  title="Good response"
+                  aria-label="Good response"
+                  aria-pressed=${msg.feedback === "like"}
+                >
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4.5 7V14H2.5C2.22 14 2 13.78 2 13.5V7.5C2 7.22 2.22 7 2.5 7H4.5ZM4.5 7L7.5 1.5C8.33 1.5 9 2.17 9 3V5.5H12.6C13.5 5.5 14.18 6.3 14.04 7.18L13.24 12.18C13.12 12.91 12.5 13.45 11.76 13.45H4.5" /></svg>
+                </button>
+                <button
+                  class="answer-action ${msg.feedback === "dislike" ? "selected" : ""}"
+                  @click=${() => this.rateAnswer(msg, "dislike")}
+                  title="Bad response"
+                  aria-label="Bad response"
+                  aria-pressed=${msg.feedback === "dislike"}
+                >
+                  <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M11.5 9V2H13.5C13.78 2 14 2.22 14 2.5V8.5C14 8.78 13.78 9 13.5 9H11.5ZM11.5 9L8.5 14.5C7.67 14.5 7 13.83 7 13V10.5H3.4C2.5 10.5 1.82 9.7 1.96 8.82L2.76 3.82C2.88 3.09 3.5 2.55 4.24 2.55H11.5" /></svg>
+                </button>
+              `
+            : ""
+        }
+      </div>
+    `;
   }
 
   private static readonly CITATIONS_COLLAPSED_COUNT = 1;
@@ -486,15 +662,23 @@ export class OnyxChatWidget extends LitElement {
     }
   }
 
-  /** The request that still waits for this user, if any. */
-  private get pendingApproval(): ApprovalEntry | null {
-    return findPendingApproval(this.messages, this.localApprovals);
+  /** The request or question that still waits for this user, if any. */
+  private get pendingWait(): PendingWait | null {
+    return findPendingWait(
+      this.messages,
+      this.localApprovals,
+      this.localQuestions
+    );
   }
 
-  /** Brings a waiting card into view and focuses its first decision. */
-  private pointAtApproval(approvalId: string) {
+  /** Brings a waiting card into view and focuses its first control. */
+  private pointAtWait(wait: PendingWait) {
     const card = this.shadowRoot?.querySelector<HTMLElement>(
-      `[data-approval-id="${CSS.escape(approvalId)}"]`
+      wait.kind === "approval"
+        ? `[data-approval-id="${CSS.escape(wait.entry.request.approval_id)}"]`
+        : `[data-question-request-id="${CSS.escape(
+            wait.entry.request.question_request_id
+          )}"]`
     );
     if (!card) return;
     const reduceMotion = window.matchMedia(
@@ -504,9 +688,9 @@ export class OnyxChatWidget extends LitElement {
       behavior: reduceMotion ? "auto" : "smooth",
       block: "center",
     });
-    card.querySelector<HTMLButtonElement>(".approval-button")?.focus({
-      preventScroll: true,
-    });
+    card
+      .querySelector<HTMLElement>(".approval-button, .question input")
+      ?.focus({ preventScroll: true });
   }
 
   private async decideApproval(
@@ -534,29 +718,53 @@ export class OnyxChatWidget extends LitElement {
       id,
       result === "closed" ? "closed" : decidedStatus(result)
     );
-    // Follow the continuation the server names. A running follow reads it
-    // after its current stream; with no continuation it reads the status
-    // again before it ends. A request that no longer waits (404 or 409)
-    // follows the session's status, and the saved session shows its
-    // outcome. A background agent continues without a stream, so its later
-    // requests come from the saved session.
-    // The last root decision with no continuation landed while another turn
-    // held the chat: the follow reads the current stream, then each stream
-    // the status reports, and the saved session when the session is idle.
-    const continuation = result === "closed" ? null : result.continuation;
+    // A request that no longer waits (404 or 409) follows the session's
+    // status, and the saved session shows its outcome. A background agent
+    // continues without a stream, so its later requests come from the saved
+    // session. "Approve for this chat" also approved this chat's other
+    // requests for the tool, which only the saved session shows.
+    await this.followReply(
+      sessionId,
+      result === "closed" ? null : result.continuation,
+      result === "closed" || request.agent_name
+        ? "status"
+        : decision === "approve_session"
+          ? "reload"
+          : "current"
+    );
+  }
+
+  /**
+   * Follows the response after the server took a decision or answers from
+   * this widget, then moves focus on from the control that is gone.
+   *
+   * With no follow running, the follow starts at the continuation that the
+   * server names. With none: "status" starts at the session's status;
+   * "reload" starts at the current stream with a session load; "current"
+   * starts at the current stream once nothing waits for this user. That
+   * last reply landed while another turn held the chat: the follow reads
+   * the current stream, then each stream the status reports, and the saved
+   * session when the session is idle.
+   *
+   * A running follow reads a named continuation after its current stream;
+   * with no continuation it reads the status again before it ends.
+   */
+  private async followReply(
+    sessionId: string | undefined,
+    continuation: ChatStream | null,
+    fallback: "status" | "reload" | "current"
+  ) {
     if (sessionId && !this.abortController) {
       if (continuation) {
         void this.resumeStream(sessionId, {
           streamId: continuation.stream_id,
         });
-      } else if (result === "closed" || request.agent_name) {
+      } else if (fallback === "status") {
         void this.resumeStream(sessionId, null);
-      } else if (decision === "approve_session") {
-        // The server also approved this chat's other requests for the tool,
-        // which only the saved session shows.
+      } else if (fallback === "reload") {
         this.approvalsChanged = true;
         void this.resumeStream(sessionId, { streamId: null });
-      } else if (this.pendingApproval === null) {
+      } else if (this.pendingWait === null) {
         void this.resumeStream(sessionId, { streamId: null });
       }
     } else if (continuation) {
@@ -564,24 +772,219 @@ export class OnyxChatWidget extends LitElement {
     } else {
       this.statusRecheck = true;
     }
-    // The focused button is gone, so focus moves on.
     if (!this.isConnected) return;
     await this.updateComplete;
-    const next = this.pendingApproval;
+    const next = this.pendingWait;
     if (next) {
-      this.pointAtApproval(next.request.approval_id);
+      this.pointAtWait(next);
     } else {
       this.shadowRoot?.querySelector<HTMLInputElement>(".input")?.focus();
     }
   }
 
+  /**
+   * After the server refused a message with 409 APPROVAL_PENDING: says so,
+   * shows the waiting card from the saved session, and points at it. The
+   * draft stays.
+   */
+  private async showPendingApproval(sessionId: string) {
+    this.error = "Approve or reject the pending tool calls first.";
+    this.approvalsChanged = true;
+    await this.resumeStream(sessionId, null);
+    const pending = this.pendingWait;
+    if (!pending || !this.isConnected) return;
+    await this.updateComplete;
+    this.pointAtWait(pending);
+  }
+
+  /**
+   * Records one question's choice on its card. Choosing "Other" moves focus
+   * to its note.
+   */
+  private async chooseAnswer(
+    request: ToolQuestionRequest,
+    questionId: string,
+    choice: QuestionChoice
+  ) {
+    const id = request.question_request_id;
+    const previous = draftChoice(this.questionDrafts.get(id), questionId);
+    this.questionDrafts = new Map(this.questionDrafts).set(id, {
+      ...this.questionDrafts.get(id),
+      [questionId]: choice,
+    });
+    if (!("note" in choice) || (previous && "note" in previous)) return;
+    await this.updateComplete;
+    this.shadowRoot
+      ?.querySelector<HTMLInputElement>(
+        `[data-question-request-id="${CSS.escape(id)}"] ` +
+          `[data-question-id="${CSS.escape(questionId)}"] .question-note`
+      )
+      ?.focus();
+  }
+
+  /**
+   * Shows another question of a card, and moves focus to its chosen option,
+   * or to its first one.
+   */
+  private async turnPage(request: ToolQuestionRequest, page: number) {
+    const id = request.question_request_id;
+    if (page < 0 || page >= request.questions.length) return;
+    this.questionPages = new Map(this.questionPages).set(id, page);
+    await this.updateComplete;
+    const fieldset = this.shadowRoot?.querySelector<HTMLElement>(
+      `[data-question-request-id="${CSS.escape(id)}"] .question`
+    );
+    (
+      fieldset?.querySelector<HTMLInputElement>('input[type="radio"]:checked') ??
+      fieldset?.querySelector<HTMLInputElement>('input[type="radio"]')
+    )?.focus();
+  }
+
+  /**
+   * Submits a question request's card answers, or a message that the user
+   * typed, which answers every question of its response that waits. The
+   * answer shows until the server's resolution arrives. Null when a reset
+   * or another chat opened meanwhile, or when an answer is in flight.
+   */
+  private async answerQuestions(
+    request: ToolQuestionRequest,
+    body: QuestionAnswersRequest
+  ): Promise<QuestionAnswerResult | null> {
+    const id = request.question_request_id;
+    const response = this.messages.find((message) =>
+      message.questions?.some(
+        (entry) => entry.request.question_request_id === id
+      )
+    );
+    const ids =
+      "message" in body
+        ? (response?.questions ?? [])
+            .filter(
+              (entry) =>
+                questionResolution(
+                  entry,
+                  this.localQuestions.get(entry.request.question_request_id)
+                ) === null
+            )
+            .map((entry) => entry.request.question_request_id)
+        : [id];
+    if (!ids.includes(id)) ids.push(id);
+    if (ids.some((each) => this.localQuestions.get(each) === "submitting"))
+      return null;
+    const sessionId = this.chatSessionId;
+    const setLocal = (state: (each: string) => LocalQuestion | null) => {
+      const local = new Map(this.localQuestions);
+      for (const each of ids) {
+        const next = state(each);
+        if (next === null) local.delete(each);
+        else local.set(each, next);
+      }
+      this.localQuestions = local;
+    };
+    setLocal(() => "submitting");
+    let result: QuestionAnswersResponse | "closed";
+    try {
+      result = await this.apiService.submitQuestionAnswers(id, body);
+    } catch (err) {
+      console.error("Failed to submit answers:", err);
+      if (this.chatSessionId !== sessionId) return null;
+      const blocked =
+        err instanceof ApiError &&
+        err.errorCode === APPROVAL_PENDING_ERROR_CODE;
+      // A card shows its failure; the chat input shows a message's.
+      setLocal(() => ("answers" in body ? "failed" : null));
+      return blocked ? "blocked" : { failed: err };
+    }
+    if (this.chatSessionId !== sessionId) return null;
+    if (result === "closed") {
+      setLocal(() => "closed");
+    } else {
+      setLocal(
+        (each): QuestionResolution => ({
+          type: "tool_question_resolved",
+          question_request_id: each,
+          outcome: "answered",
+          ...("answers" in body
+            ? { answered_via: "card", answers: body.answers }
+            : { answered_via: "message", message: body.message }),
+        })
+      );
+      const drafts = new Map(this.questionDrafts);
+      const pages = new Map(this.questionPages);
+      for (const each of ids) {
+        drafts.delete(each);
+        pages.delete(each);
+      }
+      this.questionDrafts = drafts;
+      this.questionPages = pages;
+    }
+    // A question that no longer waits (404 or 409) follows the session's
+    // status, and the saved session shows its outcome.
+    await this.followReply(
+      sessionId,
+      result === "closed" ? null : result.continuation,
+      result === "closed" ? "status" : "current"
+    );
+    return result === "closed" ? "closed" : "answered";
+  }
+
+  /**
+   * Answers the waiting questions with the message that the user typed. The
+   * draft stays when the server does not take it.
+   */
+  private async answerWithMessage(
+    request: ToolQuestionRequest,
+    message: string
+  ) {
+    this.error = undefined;
+    const result = await this.answerQuestions(request, { message });
+    switch (result) {
+      case "answered":
+        if (this.inputValue.trim() === message) this.inputValue = "";
+        return;
+      case "closed":
+        this.error = "The question no longer waits. Send your message again.";
+        return;
+      case "blocked":
+        if (this.chatSessionId)
+          await this.showPendingApproval(this.chatSessionId);
+        return;
+      case null:
+        return;
+      default:
+        // A refusal, for example by a query hook, shows as a send's does.
+        this.error =
+          result.failed instanceof ApiError
+            ? result.failed.message
+            : "Could not send your answer. Try again.";
+    }
+  }
+
+  /** Submits a question card's choices once every question has one. */
+  private async submitCard(request: ToolQuestionRequest) {
+    const answers = draftAnswers(
+      request,
+      this.questionDrafts.get(request.question_request_id)
+    );
+    if (!answers) return;
+    const result = await this.answerQuestions(request, { answers });
+    // The card says that it failed; the server's reason shows as a send's.
+    if (typeof result === "object" && result?.failed instanceof ApiError)
+      this.error = result.failed.message;
+  }
+
   private async sendMessage() {
     const message = this.inputValue.trim();
     if (!message || this.isLoading) return;
+    const waiting = this.pendingWait;
+    // A message while the agent's question waits answers it.
+    if (waiting?.kind === "question") {
+      await this.answerWithMessage(waiting.entry.request, message);
+      return;
+    }
     if (this.isStreaming) {
       // The draft stays while a followed response holds the chat.
-      const pending = this.pendingApproval;
-      if (pending) this.pointAtApproval(pending.request.approval_id);
+      if (waiting) this.pointAtWait(waiting);
       return;
     }
 
@@ -696,11 +1099,9 @@ export class OnyxChatWidget extends LitElement {
         blocked =
           err instanceof ApiError &&
           err.errorCode === APPROVAL_PENDING_ERROR_CODE;
-        this.error = blocked
-          ? "Approve or reject the pending tool calls first."
-          : err instanceof Error
-            ? err.message
-            : "Failed to send message";
+        if (!blocked)
+          this.error =
+            err instanceof Error ? err.message : "Failed to send message";
         if (follow.assistantMessageId === null) {
           this.messages = this.messages.filter(
             (item) => item.id !== userMessage.id
@@ -719,13 +1120,7 @@ export class OnyxChatWidget extends LitElement {
     if (!sentSessionId || controller.signal.aborted || this.abortController)
       return;
     if (blocked) {
-      // The saved session shows the waiting card.
-      this.approvalsChanged = true;
-      await this.resumeStream(sentSessionId, null);
-      const pending = this.pendingApproval;
-      if (!pending || !this.isConnected) return;
-      await this.updateComplete;
-      this.pointAtApproval(pending.request.approval_id);
+      await this.showPendingApproval(sentSessionId);
       return;
     }
     // An unacknowledged send left no stream; only the idle wait remains.
@@ -830,7 +1225,7 @@ export class OnyxChatWidget extends LitElement {
           applied = false;
           if (!stillOurs()) return;
           let status: ChatSessionStatus;
-          if (current.message?.awaitingApproval) {
+          if (current.message?.awaitingUser) {
             const named = this.continuationStreamId;
             this.continuationStreamId = null;
             if (named !== null && named !== current.streamId) {
@@ -850,7 +1245,7 @@ export class OnyxChatWidget extends LitElement {
             );
             // After the last decision, an idle session finished the response.
             waitsForDecisions =
-              !status.is_processing && this.pendingApproval !== null;
+              !status.is_processing && this.pendingWait !== null;
           } else if (current.ended) {
             // The server can still save the turn after its stream ends, and
             // another client can start a new response meanwhile.
@@ -1002,7 +1397,7 @@ export class OnyxChatWidget extends LitElement {
       .map((message) => message.id)
       .filter((id): id is number => typeof id === "number");
     const recoverIds = this.messages
-      .filter((message) => message.isStreaming || message.awaitingApproval)
+      .filter((message) => message.isStreaming || message.awaitingUser)
       .map((message) => message.id)
       .filter((id): id is number => typeof id === "number");
     for (const answerId of [sentAnswerId, ...this.unseenAnswerIds]) {
@@ -1079,7 +1474,8 @@ export class OnyxChatWidget extends LitElement {
             session.packets[index]?.some(
               (packet) =>
                 "type" in packet.obj &&
-                packet.obj.type === "tool_approval_request"
+                (packet.obj.type === "tool_approval_request" ||
+                  packet.obj.type === "tool_question_request")
             ))
         ) {
           recoverIds.push(message.message_id);
@@ -1230,6 +1626,16 @@ export class OnyxChatWidget extends LitElement {
         local.delete(packet.obj.approval_id);
         this.localApprovals = local;
       }
+      if (
+        "type" in packet.obj &&
+        packet.obj.type === "tool_question_resolved" &&
+        readQuestionResolution(packet.obj) !== null &&
+        this.localQuestions.has(packet.obj.question_request_id)
+      ) {
+        const local = new Map(this.localQuestions);
+        local.delete(packet.obj.question_request_id);
+        this.localQuestions = local;
+      }
 
       if (result.message) {
         // Reset per-message citation state when a new message starts
@@ -1301,7 +1707,9 @@ export class OnyxChatWidget extends LitElement {
         }
         if (
           !currentMessage.isStreaming ||
-          ("type" in packet.obj && packet.obj.type === "tool_approval_request")
+          ("type" in packet.obj &&
+            (packet.obj.type === "tool_approval_request" ||
+              packet.obj.type === "tool_question_request"))
         ) {
           saveSession(sessionId, this.messages, identity);
         }
@@ -1434,7 +1842,7 @@ export class OnyxChatWidget extends LitElement {
     // AND no card waits for the user
     const showEllipsis =
       this.isStreaming &&
-      !this.pendingApproval &&
+      !this.pendingWait &&
       (this.streamingStatus || !hasStreamingContent);
 
     return html`
@@ -1449,18 +1857,26 @@ export class OnyxChatWidget extends LitElement {
               ${
                 msg.role === "assistant" &&
                 !msg.content &&
-                msg.approvals?.length
+                (msg.approvals?.length || msg.questions?.length)
                   ? ""
                   : html`<div class="message-bubble">
                       ${
                         msg.role === "assistant"
-                          ? html`${this.renderMarkdown(
-                              msg.content,
-                              msg.citations
-                            )}${this.renderCitations(msg.citations)}`
+                          ? html`<div class="answer-body">
+                                ${this.renderMarkdown(msg.content, msg.citations)}
+                              </div>
+                              ${this.renderCitations(msg.citations)}`
                           : msg.content
                       }
                     </div>`
+              }
+              ${
+                msg.role === "assistant" &&
+                msg.content &&
+                !msg.isStreaming &&
+                !msg.awaitingUser
+                  ? this.renderAnswerActions(msg)
+                  : ""
               }
               ${(msg.approvals ?? []).map((entry) => {
                 const local = this.localApprovals.get(
@@ -1479,6 +1895,26 @@ export class OnyxChatWidget extends LitElement {
                   },
                 });
               })}
+              ${(msg.questions ?? []).map((entry) => {
+                const id = entry.request.question_request_id;
+                const local = this.localQuestions.get(id);
+                return renderQuestionCard(
+                  entry,
+                  questionResolution(entry, local),
+                  {
+                    submitting: local === "submitting",
+                    failed: local === "failed",
+                    draft: this.questionDrafts.get(id),
+                    page: this.questionPages.get(id) ?? 0,
+                    onChoose: (request, questionId, choice) =>
+                      void this.chooseAnswer(request, questionId, choice),
+                    onPage: (request, page) =>
+                      void this.turnPage(request, page),
+                    onSubmit: (request) => void this.submitCard(request),
+                  }
+                );
+              })}
+
             </div>
           `
         )}
@@ -1513,17 +1949,22 @@ export class OnyxChatWidget extends LitElement {
   }
 
   private renderInput() {
-    const pending = this.pendingApproval !== null;
-    const inputDisabled = this.isLoading || (this.isStreaming && !pending);
+    const pending = this.pendingWait;
+    const inputDisabled =
+      this.isLoading || (this.isStreaming && pending === null);
     return html`
       <div class="input-wrapper">
         ${
-          pending
+          pending?.kind === "approval"
             ? html`<div class="approval-notice">
                 Approve or reject the tool request above to continue. Your
                 message stays here.
               </div>`
-            : ""
+            : pending?.kind === "question"
+              ? html`<div class="approval-notice">
+                  Answer the question above, or type your answer here.
+                </div>`
+              : ""
         }
         <div class="input-container">
           <input
@@ -1532,7 +1973,11 @@ export class OnyxChatWidget extends LitElement {
             .value=${this.inputValue}
             @input=${this.handleInput}
             @keydown=${this.handleKeyDown}
-            placeholder="Type your message..."
+            placeholder=${
+              pending?.kind === "question"
+                ? "Type your answer..."
+                : "Type your message..."
+            }
             ?disabled=${inputDisabled}
           />
           <button

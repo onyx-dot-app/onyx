@@ -30,7 +30,8 @@ var profileServices = map[string][]string{
 	ProfileDefault: {
 		"Web Server", "API Server",
 		"Celery primary", "Celery light", "Celery beat",
-		"Celery docfetching", "Celery docprocessing", "Celery user_file_processing",
+		"Celery docfetching", "Celery docconversion", "Celery docprocessing",
+		"Celery user_file_processing",
 	},
 }
 
@@ -334,6 +335,7 @@ func AppPortRequests(opts Options) []PortRequest {
 		{"Celery primary", 9097, false},
 		{"Celery light", 9095, false},
 		{"Celery docfetching", 9092, false},
+		{"Celery docconversion", 9099, false},
 		{"Celery docprocessing", 9093, false},
 		{"Celery heavy", 9094, true},
 		{"Celery scheduled_tasks", 9098, true},

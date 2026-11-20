@@ -63,6 +63,13 @@ class TenantState(BaseModel):
         return self
 
 
+class KeywordTermCounts(BaseModel):
+    """Terms the index analyzer produces for a query's keyword text."""
+
+    total: int
+    distinct: int
+
+
 class DocumentInsertionRecord(BaseModel):
     """
     Result of indexing a document.
@@ -421,6 +428,18 @@ class HybridCapable(abc.ABC):
 
         Returns:
             Score-ranked (highest first) list of highest matching chunks.
+        """
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def count_keyword_terms(self, query: str) -> KeywordTermCounts:
+        """Analyzes the keyword text hybrid retrieval would send for this query.
+
+        Args:
+            query: User query.
+
+        Returns:
+            The total and distinct terms the index analyzer produces.
         """
         raise NotImplementedError
 

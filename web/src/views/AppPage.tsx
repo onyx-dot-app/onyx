@@ -24,14 +24,6 @@ import { useSendChatMessageFromURL } from "@/lib/chat/hooks";
 import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/types";
 import { useToolConfiguration } from "@/lib/tools/hooks";
-import { useMemberPlugins } from "@/lib/plugins/member";
-import {
-  applyChatPluginIntent,
-  chatPluginIntentLoadState,
-  chatPluginsForAgent,
-  parseChatPluginIntent,
-  withoutChatPluginIntent,
-} from "@/lib/plugins/chat";
 import { useSettings } from "@/lib/settings/hooks";
 import Dropzone from "react-dropzone";
 import AppInputBar, { AppInputBarHandle } from "@/sections/input/AppInputBar";
@@ -104,7 +96,8 @@ import useScreenSize from "@/hooks/useScreenSize";
 import { useSidebarState } from "@opal/layouts";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import WelcomeMessage from "@/app/app/components/WelcomeMessage";
-import ChatUI, { FULL_WIDTH_TRANSITION } from "@/sections/chat/ChatUI";
+import ChatUI from "@/sections/chat/ChatUI";
+import { FULL_WIDTH_TRANSITION } from "@/lib/chat/layout";
 import { useFullWidthChat } from "@/providers/FullWidthChatProvider";
 import { paidTierGated } from "@/ce";
 import EESearchUI from "@/ee/sections/SearchUI";
@@ -219,65 +212,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   }, [searchParams, navigation]);
 
   const toolConfiguration = useToolConfiguration();
-  const pluginCopy = useTranslations("actions.memberPlugins");
-  const memberPlugins = useMemberPlugins({
-    agentId: activeAgent?.id,
-    surface: "chat",
-  });
-  const handledPluginIntent = useRef<string | null>(null);
-
-  useEffect(() => {
-    const params = new URLSearchParams(searchParams?.toString() ?? "");
-    if (!params.has("pluginKind") && !params.has("pluginId")) {
-      handledPluginIntent.current = null;
-      return;
-    }
-    const reference = parseChatPluginIntent(params);
-    const intentLoadState = reference
-      ? chatPluginIntentLoadState(reference, memberPlugins)
-      : null;
-    if (!toolConfiguration.ready) return;
-    if (
-      reference &&
-      (!activeAgent ||
-        isLoadingAgents ||
-        isLoadingChatSessions ||
-        intentLoadState === "loading")
-    ) {
-      return;
-    }
-    const intentKey = `${pathname}?${params}`;
-    if (handledPluginIntent.current === intentKey) return;
-    handledPluginIntent.current = intentKey;
-    if (!reference) {
-      toast.error(pluginCopy("chat.intent.invalid"));
-    } else if (
-      !activeAgent ||
-      intentLoadState === "error" ||
-      !applyChatPluginIntent(
-        reference,
-        chatPluginsForAgent(memberPlugins.plugins, activeAgent),
-        toolConfiguration
-      )
-    ) {
-      toast.error(pluginCopy("chat.intent.unavailable"));
-    }
-    const remaining = withoutChatPluginIntent(params).toString();
-    navigation.go(remaining ? `/app?${remaining}` : "/app", {
-      replace: true,
-      scroll: false,
-    });
-  }, [
-    activeAgent,
-    isLoadingAgents,
-    isLoadingChatSessions,
-    memberPlugins,
-    pathname,
-    pluginCopy,
-    navigation,
-    searchParams,
-    toolConfiguration,
-  ]);
 
   const { deepResearchEnabled, toggleDeepResearch } = useDeepResearchToggle({
     chatSessionId: currentChatSessionId,
@@ -510,23 +444,18 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     }
   }, [multiModel.selectedModels]);
 
-  const {
-    onSubmit,
-    stopGenerating,
-    handleMessageSpecificFileUpload,
-    availableContextTokens,
-  } = useChatController({
-    llmManager,
-    toolConfiguration,
-    availableAgents: agents,
-    activeAgent,
-    memberPlugins: memberPlugins.plugins,
-    existingChatSessionId: currentChatSessionId,
-    selectedDocuments,
-    searchParams,
-    resetInputBar,
-    restoreInputBar,
-  });
+  const { onSubmit, stopGenerating, handleMessageSpecificFileUpload } =
+    useChatController({
+      llmManager,
+      toolConfiguration,
+      availableAgents: agents,
+      activeAgent,
+      existingChatSessionId: currentChatSessionId,
+      selectedDocuments,
+      searchParams,
+      resetInputBar,
+      restoreInputBar,
+    });
 
   const { onMessageSelection, sessionFetchError, queue } =
     useChatSessionController({
@@ -1068,7 +997,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     <div className="w-full max-h-[50vh] overflow-y-auto overscroll-y-none px-2 sm:px-4">
                       <ProjectContextPanel
                         projectTokenCount={projectContextTokenCount}
-                        availableContextTokens={availableContextTokens}
+                        agentId={activeAgent?.id}
+                        hasAnyProvider={llmManager.hasAnyProvider}
                         setPresentingDocument={setPresentingDocument}
                       />
                     </div>
@@ -1198,7 +1128,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       <AppInputBar
                         queue={queue}
                         toolConfiguration={toolConfiguration}
-                        memberPlugins={memberPlugins.plugins}
                         ref={chatInputBarRef}
                         deepResearchEnabled={
                           deepResearchEnabledForCurrentWorkflow

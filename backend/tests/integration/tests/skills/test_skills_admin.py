@@ -11,7 +11,7 @@ from sqlalchemy import select
 from onyx.configs.constants import FileOrigin
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import SkillSharePermission
-from onyx.db.models import Plugin, PluginVersion, Skill
+from onyx.db.models import Plugin, PluginVersion
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.skill.models import SkillPatchRequest
 from onyx.skills.bundle import DEFAULT_MAX_FILE_COUNT
@@ -29,11 +29,13 @@ from tests.integration.common_utils.test_models import DATestUser
 # ---------------------------------------------------------------------------
 
 
-def _fetch_skill_row(skill_id: UUID) -> Skill | None:
+def _current_bundle_file_id(skill_id: UUID) -> str | None:
     with get_session_with_current_tenant() as db_session:
-        return db_session.execute(
-            select(Skill).where(Skill.id == skill_id)
-        ).scalar_one_or_none()
+        return db_session.scalar(
+            select(PluginVersion.bundle_file_id)
+            .join(Plugin, Plugin.current_version_id == PluginVersion.id)
+            .where(Plugin.id == skill_id)
+        )
 
 
 def _mark_skill_invalid(skill_id: UUID) -> None:
@@ -182,13 +184,12 @@ def test_create_skill_201_persists_row_group_shares_bundle(
 
     assert [share.group_id for share in skill.group_shares] == [group.id]
 
-    row = _fetch_skill_row(skill.id)
-    assert row is not None, "skill row missing after create"
-    assert row.name == name
-    assert row.public_permission is None
-    assert row.bundle_file_id, "skill row has no bundle_file_id"
-    assert _bundle_blob_exists(row.bundle_file_id), (
-        f"bundle blob {row.bundle_file_id} not present in file store after create"
+    assert skill.name == name
+    assert skill.public_permission is None
+    bundle_file_id = _current_bundle_file_id(skill.id)
+    assert bundle_file_id, "current version has no bundle_file_id"
+    assert _bundle_blob_exists(bundle_file_id), (
+        f"bundle blob {bundle_file_id} not present in file store after create"
     )
 
 

@@ -15,7 +15,6 @@ from ee.onyx.external_permissions.azure_datalake.connector import (
 )
 from ee.onyx.external_permissions.azure_datalake.group_sync import tenant_groups
 from onyx.access.models import ExternalAccess
-from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.azure_datalake.connector import AzureDataLakeConnector
 from onyx.connectors.azure_datalake.models import AzureDataLakePathPage
@@ -63,7 +62,7 @@ ACLS = {
 
 
 @pytest.mark.usefixtures("enable_ee")
-def test_slim_walk_names_bare_groups_on_files_and_prefixed_groups_on_nodes() -> None:
+def test_slim_walk_names_bare_groups_on_files_and_nodes() -> None:
     ops = fake_ops(ACLS)
     ops.list_paths_page.return_value = AzureDataLakePathPage(
         paths=[
@@ -92,10 +91,8 @@ def test_slim_walk_names_bare_groups_on_files_and_prefixed_groups_on_nodes() -> 
     assert document_access.external_user_group_ids == {GROUP_A, RBAC_GROUP}
     node_access = nodes[f"azure_datalake:{ACCOUNT}:{CONTAINER}:docs"].external_access
     assert node_access is not None
-    assert node_access.external_user_group_ids == {
-        build_ext_group_name_for_onyx(GROUP_A, DocumentSource.AZURE_DATALAKE),
-        build_ext_group_name_for_onyx(RBAC_GROUP, DocumentSource.AZURE_DATALAKE),
-    }
+    # Storage adds the source prefix to both.
+    assert node_access.external_user_group_ids == {GROUP_A, RBAC_GROUP}
     container_access = nodes[f"azure_datalake:{ACCOUNT}:{CONTAINER}"].external_access
     assert container_access is not None
 

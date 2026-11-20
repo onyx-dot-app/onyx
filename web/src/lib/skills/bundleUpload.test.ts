@@ -9,6 +9,7 @@ import {
 } from "@zip.js/zip.js";
 import type { FileWithPath } from "react-dropzone";
 import {
+  mergeSkillFilesUploads,
   prepareSkillBundleUpload,
   prepareSkillFilesUpload,
 } from "./bundleUpload";
@@ -163,5 +164,72 @@ describe("skill file upload preparation", () => {
         fileAt("./notes.md", "notes"),
       ])
     ).rejects.toThrow("Upload ZIP files separately");
+  });
+});
+
+describe("merging skill file uploads", () => {
+  async function contents(
+    file: File | undefined
+  ): Promise<Record<string, string>> {
+    if (!file) return {};
+    const reader = new ZipReader(new BlobReader(file));
+    const out: Record<string, string> = {};
+    for (const entry of await reader.getEntries()) {
+      if (entry.directory) continue;
+      out[entry.filename] = await (entry as FileEntry).getData(
+        new TextWriter()
+      );
+    }
+    await reader.close();
+    return out;
+  }
+
+  it("joins files, ZIPs and a bundle, with the bundle's SKILL.md at the root", async () => {
+    const bundle = await zipFile({
+      "my-skill/SKILL.md": "---\nname: my-skill\n---",
+      "my-skill/references/guide.md": "guide",
+      "my-skill/template.md": "old template",
+    });
+    const merged = await mergeSkillFilesUploads(
+      [
+        {
+          file: bundle,
+          displayName: "my-skill.zip",
+          entries: [
+            { path: "references/guide.md", size: 5 },
+            { path: "template.md", size: 12 },
+          ],
+          containsSkillMd: true,
+        },
+        await prepareSkillFilesUpload([fileAt("template.md", "new template")]),
+        await prepareSkillFilesUpload([
+          await zipFile({ "scripts/run.sh": "run", "notes.md": "notes" }),
+        ]),
+      ],
+      new Set(["notes.md"])
+    );
+
+    expect(await contents(merged)).toEqual({
+      "SKILL.md": "---\nname: my-skill\n---",
+      "references/guide.md": "guide",
+      "scripts/run.sh": "run",
+      "template.md": "new template",
+    });
+  });
+
+  it("stops before unpacking a ZIP past the server's file limit", async () => {
+    const many: Record<string, string> = {};
+    for (let index = 0; index <= 5_000; index += 1) many[`f${index}.md`] = "";
+    const upload = await prepareSkillFilesUpload([await zipFile(many)]);
+    await expect(
+      mergeSkillFilesUploads([upload], new Set())
+    ).rejects.toMatchObject({ limit: "files", max: 5_000 });
+  });
+
+  it("gives no upload when every file was removed", async () => {
+    const upload = await prepareSkillFilesUpload([fileAt("a.md", "a")]);
+    expect(await mergeSkillFilesUploads([upload], new Set(["a.md"]))).toBe(
+      undefined
+    );
   });
 });

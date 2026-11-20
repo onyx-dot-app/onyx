@@ -31,13 +31,9 @@ from onyx.sandbox_proxy.destination_policy import (
     parse_destination_policy,
 )
 from onyx.sandbox_proxy.models import DestinationPolicyConfig
-from onyx.sandbox_proxy.request_evaluator import (
-    CompositeRequestEvaluator,
-    ExternalAppRequestEvaluator,
-    McpRequestEvaluator,
-)
-from onyx.sandbox_proxy.resolvers.external_app import ExternalAppResolver
-from onyx.sandbox_proxy.resolvers.mcp_server import MCPServerResolver
+from onyx.sandbox_proxy.relay_tls import RelayTLSConfig, RelayTLSListener, loopback_for
+from onyx.sandbox_proxy.request_evaluator import IntegrationRequestEvaluator
+from onyx.sandbox_proxy.resolvers.integration import IntegrationResolver
 from onyx.sandbox_proxy.resolvers.onyx_pat import OnyxPatResolver
 from onyx.sandbox_proxy.sandbox_identity.resolution import (
     IdentityResolver,
@@ -50,6 +46,7 @@ from onyx.sandbox_proxy.sandbox_identity.signed_lookups import (
     CacheReplayGuard,
     CacheSandboxPlacementLookup,
 )
+from onyx.sandbox_proxy.usable_integrations import UsableIntegrations
 from onyx.server.features.build.configs import (
     ONYX_SERVER_URL,
     SANDBOX_NAMESPACE,
@@ -58,10 +55,16 @@ from onyx.server.features.build.configs import (
     SANDBOX_PROXY_INTERNAL_CIDRS,
     SANDBOX_PROXY_LISTEN_HOST,
     SANDBOX_PROXY_LISTEN_PORT,
+    SANDBOX_PROXY_RELAY_TLS_ALLOWED_SANS,
+    SANDBOX_PROXY_RELAY_TLS_CERT_PATH,
+    SANDBOX_PROXY_RELAY_TLS_CLIENT_CA_PATH,
+    SANDBOX_PROXY_RELAY_TLS_KEY_PATH,
+    SANDBOX_PROXY_RELAY_TLS_PORT,
     SANDBOX_PROXY_SSL_VERIFY_UPSTREAM_TRUSTED_CA,
     SANDBOX_RUNTIME,
     SandboxRuntime,
 )
+from onyx.utils.encryption import validate_encryption_configuration
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import set_is_ee_if_available
 
@@ -212,19 +215,22 @@ async def _run_master(master: DumpMaster) -> None:
 
 
 def build_resolvers(
-    mcp_resolver: MCPServerResolver | None = None,
+    integration_resolver: IntegrationResolver | None = None,
 ) -> list[CredentialResolver]:
     """Builds the registered credential resolvers, in first-claim-wins order.
 
-    Host-claim sets are designed to be disjoint (external-app requests are
-    attributed by the matcher; host-only resolvers added later claim their own
-    canonical hosts). Order is a safety net against accidental overlap, not a
+    Host-claim sets are designed to be disjoint (integration requests are
+    attributed by the evaluator; the Onyx PAT resolver claims the Onyx API
+    host). Order is a safety net against accidental overlap, not a
     designed-in priority.
     """
     return [
         OnyxPatResolver(),
-        mcp_resolver if mcp_resolver is not None else MCPServerResolver(),
-        ExternalAppResolver(),
+        (
+            integration_resolver
+            if integration_resolver is not None
+            else IntegrationResolver()
+        ),
     ]
 
 
@@ -272,9 +278,51 @@ def _build_destination_policy() -> DestinationPolicyConfig:
     return parse_destination_policy(ONYX_SERVER_URL, cidrs)
 
 
+def _relay_tls_config() -> RelayTLSConfig | None:
+    if not SANDBOX_PROXY_RELAY_TLS_PORT:
+        return None
+    if SANDBOX_RUNTIME is not SandboxRuntime.FIRECRACKER:
+        raise ValueError(
+            "SANDBOX_PROXY_RELAY_TLS_PORT needs SANDBOX_RUNTIME=firecracker"
+        )
+    paths = (
+        SANDBOX_PROXY_RELAY_TLS_CERT_PATH,
+        SANDBOX_PROXY_RELAY_TLS_KEY_PATH,
+        SANDBOX_PROXY_RELAY_TLS_CLIENT_CA_PATH,
+    )
+    if not all(paths):
+        raise ValueError(
+            "SANDBOX_PROXY_RELAY_TLS_PORT needs SANDBOX_PROXY_RELAY_TLS_CERT_PATH, "
+            "SANDBOX_PROXY_RELAY_TLS_KEY_PATH and SANDBOX_PROXY_RELAY_TLS_CLIENT_CA_PATH"
+        )
+    return RelayTLSConfig(
+        port=SANDBOX_PROXY_RELAY_TLS_PORT,
+        cert_path=SANDBOX_PROXY_RELAY_TLS_CERT_PATH,
+        key_path=SANDBOX_PROXY_RELAY_TLS_KEY_PATH,
+        client_ca_path=SANDBOX_PROXY_RELAY_TLS_CLIENT_CA_PATH,
+        allowed_sans=frozenset(SANDBOX_PROXY_RELAY_TLS_ALLOWED_SANS),
+    )
+
+
+def build_relay_tls_listener() -> RelayTLSListener | None:
+    """Raises if the setup is partial or a file does not load: the proxy
+    then exits instead of leaving the relays without their port."""
+    config = _relay_tls_config()
+    if config is None:
+        return None
+    return RelayTLSListener(
+        config,
+        listen_host=SANDBOX_PROXY_LISTEN_HOST,
+        upstream_host=loopback_for(SANDBOX_PROXY_LISTEN_HOST),
+        upstream_port=SANDBOX_PROXY_LISTEN_PORT,
+    )
+
+
 def main() -> int:
     destination_policy = _build_destination_policy()
+    relay_tls = build_relay_tls_listener()
     set_is_ee_if_available()
+    validate_encryption_configuration()
 
     logger.info(
         "Starting sandbox proxy host=%s listen=%d healthz=%d namespace=%s",
@@ -318,8 +366,9 @@ def main() -> int:
 
         identity = IdentityResolver(ip_lookup=lookup)
         proxy_instance_id = os.environ.get("HOSTNAME") or str(uuid.uuid4())
-        mcp_resolver = MCPServerResolver()
-        resolvers = build_resolvers(mcp_resolver)
+        usable = UsableIntegrations()
+        integration_resolver = IntegrationResolver(usable)
+        resolvers = build_resolvers(integration_resolver)
         logger.info(
             "Credential resolvers registered: %s",
             [type(r).__name__ for r in resolvers],
@@ -336,13 +385,11 @@ def main() -> int:
             else None
         )
         gate = GateAddon(
-            mcp_resolver=mcp_resolver,
+            integration_resolver=integration_resolver,
             destination_policy=destination_policy,
             identity=identity,
             signed_identity=signed_identity,
-            request_evaluator=CompositeRequestEvaluator(
-                [ExternalAppRequestEvaluator(), McpRequestEvaluator()]
-            ),
+            request_evaluator=IntegrationRequestEvaluator(usable),
             cache_factory=cache_factory,
             proxy_instance_id=proxy_instance_id,
             credential_dispatcher=CredentialInjectionDispatcher(resolvers),
@@ -359,7 +406,13 @@ def main() -> int:
                 lookup,
                 gate,
             )
-            await _run_master(master)
+            if relay_tls is not None:
+                await relay_tls.start()
+            try:
+                await _run_master(master)
+            finally:
+                if relay_tls is not None:
+                    await relay_tls.close()
 
         asyncio.run(_async_main(), loop_factory=UpstreamEventLoop)
     finally:

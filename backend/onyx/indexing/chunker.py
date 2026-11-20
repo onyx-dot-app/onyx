@@ -144,8 +144,8 @@ class Chunker:
         self.enable_multipass = enable_multipass
         self.enable_large_chunks = enable_large_chunks
         self.enable_contextual_rag = enable_contextual_rag
-        if enable_contextual_rag:
-            assert USE_CHUNK_SUMMARY or USE_DOCUMENT_SUMMARY, (
+        if enable_contextual_rag and not (USE_CHUNK_SUMMARY or USE_DOCUMENT_SUMMARY):
+            raise ValueError(
                 "Contextual RAG requires at least one of chunk summary and document summary enabled"
             )
         self.default_contextual_rag_reserved_tokens = (

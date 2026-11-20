@@ -101,9 +101,7 @@ def test_snapshot_retains_partial_output_after_producer_continues() -> None:
         StreamingClient(lambda *_: AssistantMessage()),
         generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
         prepare_step=lambda _input: PreparedStep(
-            output_metadata=ResearchMessageMetadata(
-                phase=ResearchPhase.CLARIFICATION, is_reasoning_model=False
-            )
+            output_metadata=ResearchMessageMetadata(phase=ResearchPhase.CLARIFICATION)
         ),
     )
 

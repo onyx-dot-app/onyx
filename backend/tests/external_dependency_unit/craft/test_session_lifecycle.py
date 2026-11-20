@@ -18,6 +18,11 @@ from fastapi_users.password import PasswordHelper
 from sqlalchemy.orm import Query, Session
 
 from onyx.configs.constants import FileOrigin, MessageType
+from onyx.db.build_session import (
+    get_user_build_sessions,
+    reserve_nextjs_port__no_commit,
+    session_runtime_stale,
+)
 from onyx.db.enums import (
     AccountType,
     ArtifactType,
@@ -26,16 +31,13 @@ from onyx.db.enums import (
     SessionOrigin,
 )
 from onyx.db.models import Artifact, BuildMessage, BuildSession, Sandbox, Snapshot, User
+from onyx.db.sandbox import (
+    get_sandbox_by_user_id,
+    set_sandbox_skills_states__no_commit,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
-from onyx.redis.redis_pool import get_redis_client
-from onyx.server.features.build.db.build_session import (
-    get_user_build_sessions,
-    reserve_nextjs_port__no_commit,
-    session_runtime_stale,
-)
-from onyx.server.features.build.db.sandbox import get_sandbox_by_user_id
 from onyx.server.features.build.sandbox.models import SandboxInfo
 from onyx.server.features.build.sandbox.user_library import (
     USER_LIBRARY_MOUNT_PATH,
@@ -48,6 +50,8 @@ from onyx.server.features.build.sandbox.util.mcp_config import (
 from onyx.server.features.build.session import api as session_api_module
 from onyx.server.features.build.session import locks as session_locks
 from onyx.server.features.build.session.api import (
+    get_sandbox_status,
+    get_session_details,
     reload_session_skills,
     restore_session,
 )
@@ -63,6 +67,8 @@ from onyx.server.features.build.session.sandbox_lifecycle import (
     record_managed_content_hashes__no_commit,
     refresh_mcp_config_hashes_for_users,
 )
+from onyx.skills.limits import SKILL_RUNTIME_MAX_BYTES, SKILL_RUNTIME_MAX_FILES
+from onyx.skills.models import SandboxSkillsState, SkillOmission
 from onyx.skills.push import compute_skill_runtime_hash
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.common.craft.stubs import StubSandboxManager
@@ -81,7 +87,12 @@ def _hydrate_managed_content_for_test(
     payload = ManagedContentPayload(
         connectable_apps_section=connectable_apps_section,
         skills_files=skills_files,
-        skills_hash=compute_skill_runtime_hash(skills_files, connectable_apps_section),
+        skills_state=SandboxSkillsState(
+            skills_hash=compute_skill_runtime_hash(
+                skills_files, connectable_apps_section
+            ),
+            omissions=(),
+        ),
         mcp_fingerprint=craft_mcp_fingerprint(
             resolve_craft_mcp_servers(db_session, user)
         ),
@@ -511,6 +522,97 @@ class TestDeleteSessionCascade:
         )
 
 
+class TestSessionSkillOmissions:
+    def test_session_read_returns_sandbox_omissions(
+        self,
+        db_session: Session,
+        test_user: User,
+        sandbox: Callable[..., Sandbox],
+        session_manager_with_stub: SessionManager,  # noqa: ARG002
+    ) -> None:
+        sandbox_row = sandbox(user=test_user, status=SandboxStatus.RUNNING)
+        session_row = BuildSession(
+            user_id=test_user.id, status=BuildSessionStatus.ACTIVE
+        )
+        db_session.add(session_row)
+        db_session.commit()
+
+        response = get_session_details(
+            session_row.id, test_user, db_session, check_workspace=False
+        )
+        assert response.skill_omissions is None
+
+        omission = SkillOmission(
+            plugin_id=uuid4(),
+            name="big-skill",
+            bytes=600 * 1024 * 1024,
+            files=12,
+            reason="bytes",
+        )
+        set_sandbox_skills_states__no_commit(
+            db_session,
+            {
+                sandbox_row.id: SandboxSkillsState(
+                    skills_hash="hash", omissions=(omission,)
+                )
+            },
+        )
+        db_session.commit()
+
+        response = get_session_details(
+            session_row.id, test_user, db_session, check_workspace=False
+        )
+        assert response.skill_omissions is not None
+        assert response.skill_omissions.skills == [omission]
+        assert response.skill_omissions.max_bytes == SKILL_RUNTIME_MAX_BYTES
+        assert response.skill_omissions.max_files == SKILL_RUNTIME_MAX_FILES
+        body = response.model_dump(mode="json")["skill_omissions"]
+        assert body["skills"] == [
+            {
+                "plugin_id": str(omission.plugin_id),
+                "name": "big-skill",
+                "bytes": 600 * 1024 * 1024,
+                "files": 12,
+                "reason": "bytes",
+            }
+        ]
+
+    def test_status_poll_returns_a_push_by_someone_else(
+        self,
+        db_session: Session,
+        test_user: User,
+        sandbox: Callable[..., Sandbox],
+    ) -> None:
+        """The 30 s poll carries the stale flag and the omissions, so an open
+        session sees a push it did not make."""
+        sandbox_row = sandbox(user=test_user, status=SandboxStatus.RUNNING)
+        session_row = BuildSession(
+            user_id=test_user.id, status=BuildSessionStatus.ACTIVE
+        )
+        db_session.add(session_row)
+        db_session.commit()
+        session_row.opencode_session_id = "live-opencode"
+        session_row.skills_hash = "before"
+        omission = SkillOmission(
+            plugin_id=uuid4(), name="big-skill", bytes=1, files=1, reason="bytes"
+        )
+        set_sandbox_skills_states__no_commit(
+            db_session,
+            {
+                sandbox_row.id: SandboxSkillsState(
+                    skills_hash="after", omissions=(omission,)
+                )
+            },
+        )
+        db_session.commit()
+
+        response = get_sandbox_status(session_row.id, test_user, db_session)
+
+        assert response.skills_stale is True
+        assert response.skill_omissions is not None
+        assert response.skill_omissions.skills == [omission]
+
+
 class TestReloadSessionSkills:
     def test_disposes_runtime_and_clears_stale_state(
         self,
@@ -537,10 +639,26 @@ class TestReloadSessionSkills:
         stub_sandbox_manager.regenerate_session_config_silent = True
         stub_sandbox_manager.dispose_opencode_instance_silent = True
         stub_sandbox_manager.write_sandbox_file_silent = True
+        omission = SkillOmission(
+            plugin_id=uuid4(), name="big-skill", bytes=1, files=1, reason="bytes"
+        )
+        set_sandbox_skills_states__no_commit(
+            db_session,
+            {
+                sandbox_row.id: SandboxSkillsState(
+                    skills_hash="current", omissions=(omission,)
+                )
+            },
+        )
+        db_session.commit()
 
         response = reload_session_skills(session_row.id, test_user, db_session)
 
         assert response.skills_stale is False
+        assert response.skill_omissions is not None
+        assert [skill.name for skill in response.skill_omissions.skills] == [
+            "big-skill"
+        ]
         db_session.refresh(session_row)
         assert session_row.skills_hash == sandbox_row.skills_hash
         assert stub_sandbox_manager.regenerate_session_config_count == 1
@@ -1063,11 +1181,11 @@ class TestPortAllocator:
         # Narrow the search range to [50000, 50004) so the test stays fast and
         # uses high ports unlikely to clash with anything on the test host.
         monkeypatch.setattr(
-            "onyx.server.features.build.db.build_session.SANDBOX_NEXTJS_PORT_START",
+            "onyx.db.build_session.SANDBOX_NEXTJS_PORT_START",
             50000,
         )
         monkeypatch.setattr(
-            "onyx.server.features.build.db.build_session.SANDBOX_NEXTJS_PORT_END",
+            "onyx.db.build_session.SANDBOX_NEXTJS_PORT_END",
             50004,
         )
 
@@ -1103,11 +1221,11 @@ class TestPortAllocator:
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
         monkeypatch.setattr(
-            "onyx.server.features.build.db.build_session.SANDBOX_NEXTJS_PORT_START",
+            "onyx.db.build_session.SANDBOX_NEXTJS_PORT_START",
             50100,
         )
         monkeypatch.setattr(
-            "onyx.server.features.build.db.build_session.SANDBOX_NEXTJS_PORT_END",
+            "onyx.db.build_session.SANDBOX_NEXTJS_PORT_END",
             50103,
         )
 
@@ -1143,11 +1261,11 @@ class TestPortAllocator:
         # Ports only collide within one user's sandbox: another user holding
         # the sole port in the range must not block this user's allocation.
         monkeypatch.setattr(
-            "onyx.server.features.build.db.build_session.SANDBOX_NEXTJS_PORT_START",
+            "onyx.db.build_session.SANDBOX_NEXTJS_PORT_START",
             50250,
         )
         monkeypatch.setattr(
-            "onyx.server.features.build.db.build_session.SANDBOX_NEXTJS_PORT_END",
+            "onyx.db.build_session.SANDBOX_NEXTJS_PORT_END",
             50251,
         )
 
@@ -1194,11 +1312,11 @@ class TestPortAllocator:
         # reservation must roll back just that attempt and take the next
         # port instead of failing.
         monkeypatch.setattr(
-            "onyx.server.features.build.db.build_session.SANDBOX_NEXTJS_PORT_START",
+            "onyx.db.build_session.SANDBOX_NEXTJS_PORT_START",
             50200,
         )
         monkeypatch.setattr(
-            "onyx.server.features.build.db.build_session.SANDBOX_NEXTJS_PORT_END",
+            "onyx.db.build_session.SANDBOX_NEXTJS_PORT_END",
             50204,
         )
 
@@ -1257,10 +1375,9 @@ class TestConcurrentCreateLock:
         test_user: User,
         monkeypatch: pytest.MonkeyPatch,
     ) -> None:
-        redis_client = get_redis_client(
-            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+        held_lock = get_session_creation_lock(
+            POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, test_user.id
         )
-        held_lock = get_session_creation_lock(redis_client, test_user.id)
         assert held_lock.acquire(blocking=False)
 
         monkeypatch.setattr(

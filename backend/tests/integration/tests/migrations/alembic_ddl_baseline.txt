@@ -1,0 +1,1027 @@
+op.create_table('milestone',
+sa.Column('id', sa.UUID(), nullable=False),
+sa.Column('user_id', fastapi_users_db_sqlalchemy.generics.GUID(), nullable=True),
+sa.Column('event_type', sa.String(), nullable=False),
+sa.Column('event_tracker', postgresql.JSONB(astext_type=sa.Text()), nullable=True),
+sa.Column('time_created', sa.DateTime(timezone=True), server_default=sa.text('now()'), nullable=False),
+sa.ForeignKeyConstraint(['user_id'], ['user.id'], ondelete='CASCADE'),
+sa.PrimaryKeyConstraint('id'),
+sa.UniqueConstraint('event_type', name='uq_milestone_event_type')
+)
+
+op.create_table('celery_taskmeta',
+sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
+sa.Column('task_id', sa.String(length=155), nullable=True),
+sa.Column('status', sa.String(length=50), nullable=True),
+sa.Column('result', sa.PickleType(), nullable=True),
+sa.Column('date_done', sa.DateTime(), nullable=True),
+sa.Column('traceback', sa.Text(), nullable=True),
+sa.Column('name', sa.String(length=155), nullable=True),
+sa.Column('args', sa.LargeBinary(), nullable=True),
+sa.Column('kwargs', sa.LargeBinary(), nullable=True),
+sa.Column('worker', sa.String(length=155), nullable=True),
+sa.Column('retries', sa.Integer(), nullable=True),
+sa.Column('queue', sa.String(length=155), nullable=True),
+sa.PrimaryKeyConstraint('id'),
+sa.UniqueConstraint('task_id'),
+sqlite_autoincrement=True
+)
+
+op.create_table('celery_tasksetmeta',
+sa.Column('id', sa.Integer(), autoincrement=True, nullable=False),
+sa.Column('taskset_id', sa.String(length=155), nullable=True),
+sa.Column('result', sa.PickleType(), nullable=True),
+sa.Column('date_done', sa.DateTime(), nullable=True),
+sa.PrimaryKeyConstraint('id'),
+sa.UniqueConstraint('taskset_id'),
+sqlite_autoincrement=True
+)
+
+op.drop_index(op.f('ix_oauth_provider_client_last_used_at'), table_name='oauth_provider_client')
+
+op.drop_table('oauth_provider_client')
+
+op.create_foreign_key(None, 'api_key', 'user', ['user_id'], ['id'])
+
+op.create_foreign_key(None, 'api_key', 'user', ['owner_id'], ['id'])
+
+op.alter_column('build_message', 'type',
+           existing_type=sa.VARCHAR(length=9),
+           type_=sa.Enum('SYSTEM', 'USER', 'ASSISTANT', 'SUMMARY', 'TOOL_CALL_RESPONSE', 'USER_REMINDER', 'AGENT_RESULTS', name='messagetype', native_enum=False),
+           existing_nullable=False)
+
+op.alter_column('build_session', 'status',
+           existing_type=sa.VARCHAR(length=12),
+           server_default=None,
+           existing_nullable=False)
+
+op.drop_index(op.f('ix_cache_store_expires'), table_name='cache_store', postgresql_where='(expires_at IS NOT NULL)')
+
+op.alter_column('chat_message', 'chat_session_id',
+           existing_type=sa.UUID(),
+           nullable=False)
+
+op.alter_column('chat_message', 'message_type',
+           existing_type=sa.VARCHAR(length=32),
+           type_=sa.Enum('SYSTEM', 'USER', 'ASSISTANT', 'SUMMARY', 'TOOL_CALL_RESPONSE', 'USER_REMINDER', 'AGENT_RESULTS', name='messagetype', native_enum=False),
+           existing_nullable=False)
+
+op.alter_column('chat_message', 'is_clarification',
+           existing_type=sa.BOOLEAN(),
+           server_default=None,
+           existing_nullable=False)
+
+op.drop_constraint(op.f('chat_message_id_key'), 'chat_message', type_='unique')
+
+op.drop_index(op.f('idx_chat_message_tsv'), table_name='chat_message', postgresql_using='gin')
+
+op.drop_column('chat_message', 'message_tsv')
+
+op.alter_column('chat_session', 'id',
+           existing_type=sa.UUID(),
+           server_default=None,
+           existing_nullable=False)
+
+op.drop_index(op.f('idx_chat_session_desc_tsv'), table_name='chat_session', postgresql_using='gin')
+
+op.drop_index(op.f('ix_chat_session_project_id'), table_name='chat_session')
+
+op.drop_column('chat_session', 'description_tsv')
+
+op.alter_column('chunk_stats', 'last_modified',
+           existing_type=postgresql.TIMESTAMP(timezone=True),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('code_interpreter_server', 'server_enabled',
+           existing_type=sa.BOOLEAN(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('connector', 'source',
+           existing_type=sa.VARCHAR(length=50),
+           type_=sa.Enum('INGESTION_API', 'SLACK', 'WEB', 'GOOGLE_DRIVE', 'GMAIL', 'GITHUB', 'GITBOOK', 'GITLAB', 'GURU', 'BOOKSTACK', 'OUTLINE', 'CONFLUENCE', 'JIRA', 'SLAB', 'PRODUCTBOARD', 'FILE', 'CODA', 'CANVAS', 'NOTION', 'ZULIP', 'LINEAR', 'HUBSPOT', 'DOCUMENT360', 'GONG', 'GOOGLE_SITES', 'ZENDESK', 'LOOPIO', 'BOX', 'DROPBOX', 'SHAREPOINT', 'ONEDRIVE', 'TEAMS', 'OUTLOOK', 'SALESFORCE', 'DISCOURSE', 'AXERO', 'CLICKUP', 'MEDIAWIKI', 'WIKIPEDIA', 'ASANA', 'S3', 'R2', 'GOOGLE_CLOUD_STORAGE', 'OCI_STORAGE', 'XENFORO', 'NOT_APPLICABLE', 'DISCORD', 'FRESHDESK', 'FIREFLIES', 'ZOOM', 'EGNYTE', 'AIRTABLE', 'HIGHSPOT', 'DRUPAL_WIKI', 'IMAP', 'BITBUCKET', 'TESTRAIL', 'BRAINTRUST', 'LUMAPPS', 'YOUTRACK', 'AZURE_DATALAKE', 'MOCK_CONNECTOR', 'USER_FILE', 'CRAFT_FILE', name='documentsource', native_enum=False),
+           existing_nullable=False)
+
+op.alter_column('connector', 'input_type',
+           existing_type=sa.VARCHAR(length=10),
+           type_=sa.Enum('LOAD_STATE', 'POLL', 'EVENT', 'SLIM_RETRIEVAL', name='inputtype', native_enum=False),
+           existing_nullable=True)
+
+op.alter_column('connector', 'kg_processing_enabled',
+           existing_type=sa.BOOLEAN(),
+           server_default=None,
+           nullable=False,
+           comment='Whether this connector should extract knowledge graph entities')
+
+op.alter_column('connector_credential_pair', 'id',
+           existing_type=sa.INTEGER(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('connector_credential_pair', 'in_repeated_error_state',
+           existing_type=sa.BOOLEAN(),
+           server_default=None,
+           nullable=False)
+
+op.create_index(op.f('ix_connector_credential_pair_last_pruned'), 'connector_credential_pair', ['last_pruned'], unique=False)
+
+op.alter_column('credential', 'source',
+           existing_type=sa.VARCHAR(length=100),
+           type_=sa.Enum('INGESTION_API', 'SLACK', 'WEB', 'GOOGLE_DRIVE', 'GMAIL', 'GITHUB', 'GITBOOK', 'GITLAB', 'GURU', 'BOOKSTACK', 'OUTLINE', 'CONFLUENCE', 'JIRA', 'SLAB', 'PRODUCTBOARD', 'FILE', 'CODA', 'CANVAS', 'NOTION', 'ZULIP', 'LINEAR', 'HUBSPOT', 'DOCUMENT360', 'GONG', 'GOOGLE_SITES', 'ZENDESK', 'LOOPIO', 'BOX', 'DROPBOX', 'SHAREPOINT', 'ONEDRIVE', 'TEAMS', 'OUTLOOK', 'SALESFORCE', 'DISCOURSE', 'AXERO', 'CLICKUP', 'MEDIAWIKI', 'WIKIPEDIA', 'ASANA', 'S3', 'R2', 'GOOGLE_CLOUD_STORAGE', 'OCI_STORAGE', 'XENFORO', 'NOT_APPLICABLE', 'DISCORD', 'FRESHDESK', 'FIREFLIES', 'ZOOM', 'EGNYTE', 'AIRTABLE', 'HIGHSPOT', 'DRUPAL_WIKI', 'IMAP', 'BITBUCKET', 'TESTRAIL', 'BRAINTRUST', 'LUMAPPS', 'YOUTRACK', 'AZURE_DATALAKE', 'MOCK_CONNECTOR', 'USER_FILE', 'CRAFT_FILE', name='documentsource', native_enum=False),
+           nullable=False)
+
+op.alter_column('credential', 'curator_public',
+           existing_type=sa.BOOLEAN(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('document', 'last_modified',
+           existing_type=postgresql.TIMESTAMP(timezone=True),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('document', 'is_public',
+           existing_type=sa.BOOLEAN(),
+           nullable=False)
+
+op.alter_column('document', 'kg_stage',
+           existing_type=sa.VARCHAR(),
+           nullable=False,
+           comment='Status of knowledge graph extraction for this document')
+
+op.drop_index(op.f('ix_document_by_connector_credential_pair_pkey__connecto_27dc'), table_name='document_by_connector_credential_pair')
+
+op.drop_constraint(op.f('document_set_user_id_fkey'), 'document_set', type_='foreignkey')
+
+op.create_foreign_key(None, 'document_set', 'user', ['user_id'], ['id'], ondelete='CASCADE')
+
+op.alter_column('document_set__user', 'user_id',
+           existing_type=sa.UUID(),
+           nullable=True)
+
+op.drop_constraint(op.f('document_set__user_user_id_fkey'), 'document_set__user', type_='foreignkey')
+
+op.create_foreign_key(None, 'document_set__user', 'user', ['user_id'], ['id'], ondelete='CASCADE')
+
+op.alter_column('embedding_provider', 'provider_type',
+           existing_type=sa.VARCHAR(length=50),
+           type_=sa.Enum('OPENAI', 'COHERE', 'VOYAGE', 'GOOGLE', 'LITELLM', 'AZURE', 'BIFROST', 'OPENAI_COMPATIBLE', name='embeddingprovider'),
+           existing_nullable=False)
+
+op.alter_column('file_content', 'file_size',
+           existing_type=sa.BIGINT(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('file_record', 'file_origin',
+           existing_type=sa.VARCHAR(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('file_record', 'file_type',
+           existing_type=sa.VARCHAR(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('file_record', 'bucket_name',
+           existing_type=sa.VARCHAR(),
+           nullable=False)
+
+op.alter_column('file_record', 'object_key',
+           existing_type=sa.VARCHAR(),
+           nullable=False)
+
+op.alter_column('hierarchy_fetch_attempt', 'nodes_fetched',
+           existing_type=sa.INTEGER(),
+           server_default=None,
+           existing_nullable=True)
+
+op.alter_column('hierarchy_fetch_attempt', 'nodes_updated',
+           existing_type=sa.INTEGER(),
+           server_default=None,
+           existing_nullable=True)
+
+op.alter_column('hierarchy_node', 'is_public',
+           existing_type=sa.BOOLEAN(),
+           server_default=None,
+           existing_nullable=False)
+
+op.drop_index(op.f('uq_hierarchy_node_one_source_per_type'), table_name='hierarchy_node', postgresql_where="((node_type)::text = 'SOURCE'::text)")
+
+op.alter_column('hook', 'is_active',
+           existing_type=sa.BOOLEAN(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('hook', 'deleted',
+           existing_type=sa.BOOLEAN(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('index_attempt', 'error_msg',
+           existing_type=sa.VARCHAR(),
+           type_=sa.Text(),
+           existing_nullable=True)
+
+op.alter_column('index_attempt', 'cancellation_requested',
+           existing_type=sa.BOOLEAN(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('index_attempt', 'completed_batches',
+           existing_type=sa.INTEGER(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('index_attempt', 'total_failures_batch_level',
+           existing_type=sa.INTEGER(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('index_attempt', 'total_chunks',
+           existing_type=sa.INTEGER(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('index_attempt', 'last_batches_completed_count',
+           existing_type=sa.INTEGER(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('index_attempt', 'heartbeat_counter',
+           existing_type=sa.INTEGER(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('index_attempt', 'last_heartbeat_value',
+           existing_type=sa.INTEGER(),
+           server_default=None,
+           existing_nullable=False)
+
+op.drop_index(op.f('ix_index_attempt_status'), table_name='index_attempt')
+
+op.alter_column('index_attempt_stage_metric', 'event_count',
+           existing_type=sa.BIGINT(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('index_attempt_stage_metric', 'total_duration_ms',
+           existing_type=sa.BIGINT(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('index_attempt_stage_metric', 'm2_duration_ms',
+           existing_type=sa.DOUBLE_PRECISION(precision=53),
+           server_default=None,
+           existing_nullable=False)
+
+op.drop_constraint(op.f('inputprompt_user_id_fkey'), 'inputprompt', type_='foreignkey')
+
+op.create_foreign_key(None, 'inputprompt', 'user', ['user_id'], ['id'], ondelete='CASCADE')
+
+op.alter_column('inputprompt__user', 'user_id',
+           existing_type=sa.UUID(),
+           nullable=True)
+
+op.drop_constraint(op.f('inputprompt__user_input_prompt_id_fkey'), 'inputprompt__user', type_='foreignkey')
+
+op.drop_constraint(op.f('inputprompt__user_user_id_fkey'), 'inputprompt__user', type_='foreignkey')
+
+op.create_foreign_key(None, 'inputprompt__user', 'user', ['user_id'], ['id'])
+
+op.create_foreign_key(None, 'inputprompt__user', 'inputprompt', ['input_prompt_id'], ['id'])
+
+op.alter_column('internet_content_provider', 'is_active',
+           existing_type=sa.BOOLEAN(),
+           server_default=None,
+           existing_nullable=False)
+
+op.drop_index(op.f('ix_internet_content_provider_is_active'), table_name='internet_content_provider')
+
+op.alter_column('internet_search_provider', 'is_active',
+           existing_type=sa.BOOLEAN(),
+           server_default=None,
+           existing_nullable=False)
+
+op.drop_index(op.f('ix_internet_search_provider_is_active'), table_name='internet_search_provider')
+
+op.alter_column('kg_entity', 'attributes',
+           existing_type=postgresql.JSONB(astext_type=sa.Text()),
+           comment='Attributes for this entity',
+           existing_nullable=False,
+           existing_server_default=sa.text("'{}'::jsonb"))
+
+op.alter_column('kg_entity', 'alternative_names',
+           existing_type=postgresql.ARRAY(sa.VARCHAR()),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('kg_entity', 'keywords',
+           existing_type=postgresql.ARRAY(sa.VARCHAR()),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('kg_entity', 'occurrences',
+           existing_type=sa.INTEGER(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('kg_entity', 'acl',
+           existing_type=postgresql.ARRAY(sa.VARCHAR()),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('kg_entity', 'boosts',
+           existing_type=postgresql.JSONB(astext_type=sa.Text()),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('kg_entity', 'event_time',
+           existing_type=postgresql.TIMESTAMP(timezone=True),
+           comment='Time of the event being processed',
+           existing_nullable=True)
+
+op.alter_column('kg_entity', 'time_updated',
+           existing_type=postgresql.TIMESTAMP(timezone=True),
+           nullable=False,
+           existing_server_default=sa.text('now()'))
+
+op.alter_column('kg_entity', 'time_created',
+           existing_type=postgresql.TIMESTAMP(timezone=True),
+           nullable=False,
+           existing_server_default=sa.text('now()'))
+
+op.drop_constraint(op.f('uq_kg_entity_name_type_doc'), 'kg_entity', type_='unique')
+
+op.drop_constraint(op.f('kg_entity_document_id_fkey'), 'kg_entity', type_='foreignkey')
+
+op.alter_column('kg_entity_extraction_staging', 'attributes',
+           existing_type=postgresql.JSONB(astext_type=sa.Text()),
+           comment='Attributes for this entity',
+           existing_nullable=False,
+           existing_server_default=sa.text("'{}'::jsonb"))
+
+op.alter_column('kg_entity_extraction_staging', 'alternative_names',
+           existing_type=postgresql.ARRAY(sa.VARCHAR()),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('kg_entity_extraction_staging', 'keywords',
+           existing_type=postgresql.ARRAY(sa.VARCHAR()),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('kg_entity_extraction_staging', 'occurrences',
+           existing_type=sa.INTEGER(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('kg_entity_extraction_staging', 'acl',
+           existing_type=postgresql.ARRAY(sa.VARCHAR()),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('kg_entity_extraction_staging', 'boosts',
+           existing_type=postgresql.JSONB(astext_type=sa.Text()),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('kg_entity_extraction_staging', 'event_time',
+           existing_type=postgresql.TIMESTAMP(timezone=True),
+           comment='Time of the event being processed',
+           existing_nullable=True)
+
+op.alter_column('kg_entity_extraction_staging', 'time_created',
+           existing_type=postgresql.TIMESTAMP(timezone=True),
+           nullable=False,
+           existing_server_default=sa.text('now()'))
+
+op.drop_constraint(op.f('kg_entity_extraction_staging_document_id_fkey'), 'kg_entity_extraction_staging', type_='foreignkey')
+
+op.alter_column('kg_entity_type', 'attributes',
+           existing_type=postgresql.JSONB(astext_type=sa.Text()),
+           nullable=True,
+           comment='Filtering based on document attribute',
+           existing_server_default=sa.text("'{}'::jsonb"))
+
+op.alter_column('kg_entity_type', 'occurrences',
+           existing_type=sa.INTEGER(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('kg_entity_type', 'time_updated',
+           existing_type=postgresql.TIMESTAMP(timezone=True),
+           nullable=False,
+           existing_server_default=sa.text('now()'))
+
+op.alter_column('kg_entity_type', 'time_created',
+           existing_type=postgresql.TIMESTAMP(timezone=True),
+           nullable=False,
+           existing_server_default=sa.text('now()'))
+
+op.alter_column('kg_entity_type', 'clustering',
+           existing_type=postgresql.JSONB(astext_type=sa.Text()),
+           comment='Clustering information for this entity type',
+           existing_nullable=False,
+           existing_server_default=sa.text("'{}'::jsonb"))
+
+op.alter_column('kg_relationship', 'source_document',
+           existing_type=sa.VARCHAR(),
+           nullable=True)
+
+op.alter_column('kg_relationship', 'occurrences',
+           existing_type=sa.INTEGER(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('kg_relationship', 'time_updated',
+           existing_type=postgresql.TIMESTAMP(timezone=True),
+           nullable=False,
+           existing_server_default=sa.text('now()'))
+
+op.alter_column('kg_relationship', 'time_created',
+           existing_type=postgresql.TIMESTAMP(timezone=True),
+           nullable=False,
+           existing_server_default=sa.text('now()'))
+
+op.alter_column('kg_relationship_extraction_staging', 'source_document',
+           existing_type=sa.VARCHAR(),
+           nullable=True)
+
+op.alter_column('kg_relationship_extraction_staging', 'occurrences',
+           existing_type=sa.INTEGER(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('kg_relationship_extraction_staging', 'transferred',
+           existing_type=sa.BOOLEAN(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('kg_relationship_extraction_staging', 'time_created',
+           existing_type=postgresql.TIMESTAMP(timezone=True),
+           nullable=False,
+           existing_server_default=sa.text('now()'))
+
+op.drop_constraint(op.f('uq_kg_relationship_extraction_staging_source_target_type'), 'kg_relationship_extraction_staging', type_='unique')
+
+op.create_unique_constraint('uq_kg_relationship_source_target_type', 'kg_relationship_extraction_staging', ['source_node', 'target_node', 'type'])
+
+op.alter_column('kg_relationship_type', 'definition',
+           existing_type=sa.BOOLEAN(),
+           comment='Whether this relationship type represents a definition',
+           existing_nullable=False)
+
+op.alter_column('kg_relationship_type', 'clustering',
+           existing_type=postgresql.JSONB(astext_type=sa.Text()),
+           comment='Clustering information for this relationship type',
+           existing_nullable=False,
+           existing_server_default=sa.text("'{}'::jsonb"))
+
+op.alter_column('kg_relationship_type', 'occurrences',
+           existing_type=sa.INTEGER(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('kg_relationship_type', 'time_updated',
+           existing_type=postgresql.TIMESTAMP(timezone=True),
+           nullable=False,
+           existing_server_default=sa.text('now()'))
+
+op.alter_column('kg_relationship_type', 'time_created',
+           existing_type=postgresql.TIMESTAMP(timezone=True),
+           nullable=False,
+           existing_server_default=sa.text('now()'))
+
+op.alter_column('kg_relationship_type_extraction_staging', 'definition',
+           existing_type=sa.BOOLEAN(),
+           comment='Whether this relationship type represents a definition',
+           existing_nullable=False)
+
+op.alter_column('kg_relationship_type_extraction_staging', 'clustering',
+           existing_type=postgresql.JSONB(astext_type=sa.Text()),
+           comment='Clustering information for this relationship type',
+           existing_nullable=False,
+           existing_server_default=sa.text("'{}'::jsonb"))
+
+op.alter_column('kg_relationship_type_extraction_staging', 'occurrences',
+           existing_type=sa.INTEGER(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('kg_relationship_type_extraction_staging', 'transferred',
+           existing_type=sa.BOOLEAN(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('kg_relationship_type_extraction_staging', 'time_created',
+           existing_type=postgresql.TIMESTAMP(timezone=True),
+           nullable=False,
+           existing_server_default=sa.text('now()'))
+
+op.alter_column('kg_term', 'entity_types',
+           existing_type=postgresql.ARRAY(sa.VARCHAR()),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('kg_term', 'time_updated',
+           existing_type=postgresql.TIMESTAMP(timezone=True),
+           nullable=False,
+           existing_server_default=sa.text('now()'))
+
+op.alter_column('kg_term', 'time_created',
+           existing_type=postgresql.TIMESTAMP(timezone=True),
+           nullable=False,
+           existing_server_default=sa.text('now()'))
+
+op.alter_column('llm_model_flow', 'llm_model_flow_type',
+           existing_type=sa.VARCHAR(length=20),
+           type_=sa.Enum('CHAT', 'VISION', 'CONTEXTUAL_RAG', 'REASONING', 'CHAT_NAMING', 'SEARCH_SELECTION', 'DECISION', 'CRAFT', 'IMAGE_GENERATION', name='llmmodelflowtype', native_enum=False),
+           existing_nullable=False)
+
+op.alter_column('llm_model_flow', 'is_default',
+           existing_type=sa.BOOLEAN(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('llm_provider', 'provider',
+           existing_type=sa.VARCHAR(),
+           nullable=False)
+
+op.alter_column('llm_provider', 'is_public',
+           existing_type=sa.BOOLEAN(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('llm_provider', 'is_auto_mode',
+           existing_type=sa.BOOLEAN(),
+           server_default=None,
+           existing_nullable=False)
+
+op.drop_index(op.f('ix_llm_provider__persona_composite'), table_name='llm_provider__persona')
+
+op.drop_index(op.f('ix_llm_provider__persona_llm_provider_id'), table_name='llm_provider__persona')
+
+op.drop_index(op.f('ix_llm_provider__persona_persona_id'), table_name='llm_provider__persona')
+
+op.alter_column('mcp_server', 'available_in_craft',
+           existing_type=sa.BOOLEAN(),
+           server_default=sa.text('false'),
+           existing_nullable=False)
+
+op.drop_constraint(op.f('mcp_server__user_group_mcp_server_id_fkey'), 'mcp_server__user_group', type_='foreignkey')
+
+op.create_foreign_key(None, 'mcp_server__user_group', 'mcp_server', ['mcp_server_id'], ['id'])
+
+op.drop_index(op.f('ix_memory_user_id'), table_name='memory')
+
+op.drop_constraint(op.f('model_configuration_llm_provider_id_name_key'), 'model_configuration', type_='unique')
+
+op.alter_column('notification', 'severity',
+           existing_type=sa.VARCHAR(length=16),
+           type_=sa.Enum('INFO', 'WARNING', 'ERROR', name='notificationseverity', native_enum=False),
+           existing_nullable=False,
+           existing_server_default=sa.text("'INFO'::character varying"))
+
+op.alter_column('notification', 'title',
+           existing_type=sa.VARCHAR(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('notification', 'description',
+           existing_type=sa.VARCHAR(),
+           server_default=None,
+           existing_nullable=True)
+
+op.drop_index(op.f('ix_notification_user_type_data'), table_name='notification')
+
+op.alter_column('oauth_account', 'refresh_token',
+           existing_type=sa.TEXT(),
+           nullable=False)
+
+op.alter_column('persona', 'is_featured',
+           existing_type=sa.BOOLEAN(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('persona', 'replace_base_system_prompt',
+           existing_type=sa.BOOLEAN(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('persona', 'datetime_aware',
+           existing_type=sa.BOOLEAN(),
+           server_default=None,
+           existing_nullable=False)
+
+op.drop_index(op.f('ix_persona__document_document_id'), table_name='persona__document')
+
+op.drop_index(op.f('ix_persona__hierarchy_node_hierarchy_node_id'), table_name='persona__hierarchy_node')
+
+op.alter_column('persona__user', 'user_id',
+           existing_type=sa.UUID(),
+           nullable=True)
+
+op.drop_constraint(op.f('persona__user_user_id_fkey'), 'persona__user', type_='foreignkey')
+
+op.create_foreign_key(None, 'persona__user', 'user', ['user_id'], ['id'], ondelete='CASCADE')
+
+op.drop_constraint(op.f('persona__user_file_user_file_id_fkey'), 'persona__user_file', type_='foreignkey')
+
+op.drop_constraint(op.f('persona__user_file_persona_id_fkey'), 'persona__user_file', type_='foreignkey')
+
+op.create_foreign_key(None, 'persona__user_file', 'user_file', ['user_file_id'], ['id'], ondelete='CASCADE')
+
+op.create_foreign_key(None, 'persona__user_file', 'persona', ['persona_id'], ['id'], ondelete='CASCADE')
+
+op.drop_column('persona_label', 'description')
+
+op.drop_index(op.f('idx_project__user_file_user_file_id'), table_name='project__user_file')
+
+op.alter_column('public_external_user_group', 'stale',
+           existing_type=sa.BOOLEAN(),
+           server_default=None,
+           existing_nullable=False)
+
+op.drop_index(op.f('ix_public_external_user_group_cc_pair_id_stale'), table_name='public_external_user_group')
+
+op.drop_index(op.f('ix_public_external_user_group_stale'), table_name='public_external_user_group')
+
+op.create_index('ix_public_external_group_cc_pair_stale', 'public_external_user_group', ['cc_pair_id', 'stale'], unique=False)
+
+op.create_index('ix_public_external_group_stale', 'public_external_user_group', ['stale'], unique=False)
+
+op.alter_column('saml', 'expires_at',
+           existing_type=postgresql.TIMESTAMP(timezone=True),
+           nullable=False)
+
+op.drop_constraint(op.f('saml_user_id_fkey'), 'saml', type_='foreignkey')
+
+op.create_foreign_key(None, 'saml', 'user', ['user_id'], ['id'], ondelete='CASCADE')
+
+op.alter_column('sandbox', 'status',
+           existing_type=sa.VARCHAR(length=12),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('search_doc', 'source_type',
+           existing_type=sa.VARCHAR(length=50),
+           type_=sa.Enum('INGESTION_API', 'SLACK', 'WEB', 'GOOGLE_DRIVE', 'GMAIL', 'GITHUB', 'GITBOOK', 'GITLAB', 'GURU', 'BOOKSTACK', 'OUTLINE', 'CONFLUENCE', 'JIRA', 'SLAB', 'PRODUCTBOARD', 'FILE', 'CODA', 'CANVAS', 'NOTION', 'ZULIP', 'LINEAR', 'HUBSPOT', 'DOCUMENT360', 'GONG', 'GOOGLE_SITES', 'ZENDESK', 'LOOPIO', 'BOX', 'DROPBOX', 'SHAREPOINT', 'ONEDRIVE', 'TEAMS', 'OUTLOOK', 'SALESFORCE', 'DISCOURSE', 'AXERO', 'CLICKUP', 'MEDIAWIKI', 'WIKIPEDIA', 'ASANA', 'S3', 'R2', 'GOOGLE_CLOUD_STORAGE', 'OCI_STORAGE', 'XENFORO', 'NOT_APPLICABLE', 'DISCORD', 'FRESHDESK', 'FIREFLIES', 'ZOOM', 'EGNYTE', 'AIRTABLE', 'HIGHSPOT', 'DRUPAL_WIKI', 'IMAP', 'BITBUCKET', 'TESTRAIL', 'BRAINTRUST', 'LUMAPPS', 'YOUTRACK', 'AZURE_DATALAKE', 'MOCK_CONNECTOR', 'USER_FILE', 'CRAFT_FILE', name='documentsource', native_enum=False),
+           existing_nullable=False)
+
+op.drop_index(op.f('ix_search_query_created_at'), table_name='search_query')
+
+op.drop_index(op.f('ix_search_query_user_id'), table_name='search_query')
+
+op.alter_column('search_settings', 'query_prefix',
+           existing_type=sa.VARCHAR(),
+           nullable=True)
+
+op.alter_column('search_settings', 'passage_prefix',
+           existing_type=sa.VARCHAR(),
+           nullable=True)
+
+op.alter_column('search_settings', 'status',
+           existing_type=sa.VARCHAR(),
+           nullable=False)
+
+op.alter_column('search_settings', 'provider_type',
+           existing_type=sa.VARCHAR(length=50),
+           type_=sa.Enum('OPENAI', 'COHERE', 'VOYAGE', 'GOOGLE', 'LITELLM', 'AZURE', 'BIFROST', 'OPENAI_COMPATIBLE', name='embeddingprovider'),
+           existing_nullable=True)
+
+op.alter_column('search_settings', 'switchover_type',
+           existing_type=sa.VARCHAR(length=11),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('search_settings', 'multipass_indexing',
+           existing_type=sa.BOOLEAN(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('search_settings', 'enable_contextual_rag',
+           existing_type=sa.BOOLEAN(),
+           server_default=None,
+           existing_nullable=False)
+
+op.create_index('ix_embedding_model_future_unique', 'search_settings', ['status'], unique=True, postgresql_where=sa.text("status = 'FUTURE'"))
+
+op.create_index('ix_embedding_model_present_unique', 'search_settings', ['status'], unique=True, postgresql_where=sa.text("status = 'PRESENT'"))
+
+op.alter_column('slack_bot', 'enabled',
+           existing_type=sa.BOOLEAN(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('slack_bot', 'bot_token',
+           existing_type=postgresql.BYTEA(),
+           nullable=True)
+
+op.alter_column('slack_bot', 'app_token',
+           existing_type=postgresql.BYTEA(),
+           nullable=True)
+
+op.alter_column('slack_channel_config', 'enable_auto_filters',
+           existing_type=sa.BOOLEAN(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('slack_channel_config', 'is_default',
+           existing_type=sa.BOOLEAN(),
+           server_default=None,
+           existing_nullable=False)
+
+op.create_unique_constraint('uq_slack_channel_config_slack_bot_id_default', 'slack_channel_config', ['slack_bot_id', 'is_default'])
+
+op.create_foreign_key(None, 'slack_channel_config__standard_answer_category', 'slack_channel_config', ['slack_channel_config_id'], ['id'])
+
+op.alter_column('snapshot', 'size_bytes',
+           existing_type=sa.BIGINT(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('sso_provider', 'allowed_email_domains',
+           existing_type=postgresql.ARRAY(sa.VARCHAR()),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('sso_provider', 'enabled',
+           existing_type=sa.BOOLEAN(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('standard_answer', 'match_regex',
+           existing_type=sa.BOOLEAN(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('standard_answer', 'match_any_keywords',
+           existing_type=sa.BOOLEAN(),
+           server_default=None,
+           existing_nullable=False)
+
+op.drop_constraint(op.f('standard_answer_keyword_key'), 'standard_answer', type_='unique')
+
+op.create_index('unique_keyword_active', 'standard_answer', ['keyword', 'active'], unique=True, postgresql_where=sa.text('active = true'))
+
+op.alter_column('sync_record', 'sync_type',
+           existing_type=sa.VARCHAR(length=40),
+           type_=sa.Enum('DOCUMENT_SET', 'USER_GROUP', 'CONNECTOR_DELETION', 'PRUNING', 'EXTERNAL_PERMISSIONS', 'EXTERNAL_GROUP', name='synctype', native_enum=False),
+           existing_nullable=False)
+
+op.alter_column('sync_record', 'sync_status',
+           existing_type=sa.VARCHAR(length=40),
+           type_=sa.Enum('IN_PROGRESS', 'SUCCESS', 'FAILED', 'CANCELED', name='syncstatus', native_enum=False),
+           existing_nullable=False)
+
+op.alter_column('tag', 'source',
+           existing_type=sa.VARCHAR(length=50),
+           type_=sa.Enum('INGESTION_API', 'SLACK', 'WEB', 'GOOGLE_DRIVE', 'GMAIL', 'GITHUB', 'GITBOOK', 'GITLAB', 'GURU', 'BOOKSTACK', 'OUTLINE', 'CONFLUENCE', 'JIRA', 'SLAB', 'PRODUCTBOARD', 'FILE', 'CODA', 'CANVAS', 'NOTION', 'ZULIP', 'LINEAR', 'HUBSPOT', 'DOCUMENT360', 'GONG', 'GOOGLE_SITES', 'ZENDESK', 'LOOPIO', 'BOX', 'DROPBOX', 'SHAREPOINT', 'ONEDRIVE', 'TEAMS', 'OUTLOOK', 'SALESFORCE', 'DISCOURSE', 'AXERO', 'CLICKUP', 'MEDIAWIKI', 'WIKIPEDIA', 'ASANA', 'S3', 'R2', 'GOOGLE_CLOUD_STORAGE', 'OCI_STORAGE', 'XENFORO', 'NOT_APPLICABLE', 'DISCORD', 'FRESHDESK', 'FIREFLIES', 'ZOOM', 'EGNYTE', 'AIRTABLE', 'HIGHSPOT', 'DRUPAL_WIKI', 'IMAP', 'BITBUCKET', 'TESTRAIL', 'BRAINTRUST', 'LUMAPPS', 'YOUTRACK', 'AZURE_DATALAKE', 'MOCK_CONNECTOR', 'USER_FILE', 'CRAFT_FILE', name='documentsource', native_enum=False),
+           existing_nullable=False)
+
+op.alter_column('tag', 'is_list',
+           existing_type=sa.BOOLEAN(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('tenant_usage', 'llm_cost_cents',
+           existing_type=sa.DOUBLE_PRECISION(precision=53),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('tenant_usage', 'chunks_indexed',
+           existing_type=sa.INTEGER(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('tenant_usage', 'api_calls',
+           existing_type=sa.INTEGER(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('tenant_usage', 'non_streaming_api_calls',
+           existing_type=sa.INTEGER(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('tenant_usage', 'updated_at',
+           existing_type=postgresql.TIMESTAMP(timezone=True),
+           nullable=False,
+           existing_server_default=sa.text('now()'))
+
+op.alter_column('tool', 'passthrough_auth',
+           existing_type=sa.BOOLEAN(),
+           server_default=None,
+           existing_nullable=False)
+
+op.drop_index(op.f('ix_tool_mcp_server_enabled'), table_name='tool')
+
+op.drop_constraint(op.f('tool_user_fk'), 'tool', type_='foreignkey')
+
+op.create_foreign_key(None, 'tool', 'user', ['user_id'], ['id'], ondelete='CASCADE')
+
+op.alter_column('tool_call', 'turn_number',
+           existing_type=sa.INTEGER(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('tool_call', 'tab_index',
+           existing_type=sa.INTEGER(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('tool_call', 'tool_call_id',
+           existing_type=sa.VARCHAR(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('tool_call', 'tool_call_tokens',
+           existing_type=sa.INTEGER(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('tracing_provider_config', 'enabled',
+           existing_type=sa.BOOLEAN(),
+           server_default=None,
+           existing_nullable=False)
+
+op.drop_constraint(op.f('usage_reports_requestor_user_id_fkey'), 'usage_reports', type_='foreignkey')
+
+op.create_foreign_key(None, 'usage_reports', 'user', ['requestor_user_id'], ['id'], ondelete='CASCADE')
+
+op.alter_column('user', 'temperature_override_enabled',
+           existing_type=sa.BOOLEAN(),
+           server_default=None,
+           existing_nullable=True)
+
+op.alter_column('user', 'shortcut_enabled',
+           existing_type=sa.BOOLEAN(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('user', 'default_app_mode',
+           existing_type=sa.VARCHAR(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('user', 'use_memories',
+           existing_type=sa.BOOLEAN(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('user', 'enable_memory_tool',
+           existing_type=sa.BOOLEAN(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('user', 'visible_assistants',
+           existing_type=postgresql.JSONB(astext_type=sa.Text()),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('user', 'hidden_assistants',
+           existing_type=postgresql.JSONB(astext_type=sa.Text()),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('user', 'paste_as_tile',
+           existing_type=sa.BOOLEAN(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('user', 'voice_auto_send',
+           existing_type=sa.BOOLEAN(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('user', 'voice_auto_playback',
+           existing_type=sa.BOOLEAN(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('user', 'voice_playback_speed',
+           existing_type=sa.DOUBLE_PRECISION(precision=53),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('user__external_user_group_id', 'stale',
+           existing_type=sa.BOOLEAN(),
+           server_default=None,
+           existing_nullable=False)
+
+op.drop_index(op.f('ix_user__external_user_group_id_cc_pair_id_stale'), table_name='user__external_user_group_id')
+
+op.drop_index(op.f('ix_user__external_user_group_id_stale'), table_name='user__external_user_group_id')
+
+op.create_index('ix_user_external_group_cc_pair_stale', 'user__external_user_group_id', ['cc_pair_id', 'stale'], unique=False)
+
+op.create_index('ix_user_external_group_stale', 'user__external_user_group_id', ['stale'], unique=False)
+
+op.drop_constraint(op.f('fk_user__external_user_group_id_cc_pair_id'), 'user__external_user_group_id', type_='foreignkey')
+
+op.create_foreign_key(None, 'user__external_user_group_id', 'connector_credential_pair', ['cc_pair_id'], ['id'])
+
+op.create_foreign_key(None, 'user__external_user_group_id', 'user', ['user_id'], ['id'])
+
+op.alter_column('user__user_group', 'is_curator',
+           existing_type=sa.BOOLEAN(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('user__user_group', 'user_id',
+           existing_type=sa.UUID(),
+           nullable=True)
+
+op.drop_constraint(op.f('user__user_group_user_id_fkey'), 'user__user_group', type_='foreignkey')
+
+op.create_foreign_key(None, 'user__user_group', 'user', ['user_id'], ['id'], ondelete='CASCADE')
+
+op.alter_column('user_file', 'id',
+           existing_type=sa.UUID(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('user_file', 'user_id',
+           existing_type=sa.UUID(),
+           nullable=False)
+
+op.alter_column('user_file', 'created_at',
+           existing_type=postgresql.TIMESTAMP(),
+           nullable=False)
+
+op.alter_column('user_file', 'file_type',
+           existing_type=sa.VARCHAR(),
+           nullable=False)
+
+op.alter_column('user_file', 'status',
+           existing_type=sa.VARCHAR(length=10),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('user_file', 'needs_project_sync',
+           existing_type=sa.BOOLEAN(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('user_file', 'needs_persona_sync',
+           existing_type=sa.BOOLEAN(),
+           server_default=None,
+           existing_nullable=False)
+
+op.create_foreign_key(None, 'user_file', 'user', ['user_id'], ['id'])
+
+op.alter_column('user_group', 'is_default',
+           existing_type=sa.BOOLEAN(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('user_group', 'incognito_enabled',
+           existing_type=sa.BOOLEAN(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('user_project', 'user_id',
+           existing_type=sa.UUID(),
+           nullable=False)
+
+op.alter_column('user_project', 'name',
+           existing_type=sa.VARCHAR(length=255),
+           nullable=False)
+
+op.alter_column('user_project', 'created_at',
+           existing_type=postgresql.TIMESTAMP(timezone=True),
+           nullable=False,
+           existing_server_default=sa.text('now()'))
+
+op.alter_column('user_project', 'instructions',
+           existing_type=sa.VARCHAR(),
+           nullable=False)
+
+op.drop_column('user_project', 'display_priority')
+
+op.alter_column('user_usage', 'cache_read_tokens',
+           existing_type=sa.BIGINT(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('user_usage', 'cache_creation_tokens',
+           existing_type=sa.BIGINT(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('user_usage', 'cost_cents',
+           existing_type=sa.NUMERIC(precision=18, scale=6),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('voice_provider', 'is_default_stt',
+           existing_type=sa.BOOLEAN(),
+           server_default=None,
+           existing_nullable=False)
+
+op.alter_column('voice_provider', 'is_default_tts',
+           existing_type=sa.BOOLEAN(),
+           server_default=None,
+           existing_nullable=False)

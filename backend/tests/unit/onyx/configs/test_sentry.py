@@ -13,15 +13,16 @@ def _event(data: dict) -> Event:
 
 
 def _reset_state() -> None:
-    """Reset the module-level resolved flag between tests."""
+    """Reset the module-level state between tests."""
     sentry_module._instance_id_resolved = False
+    sentry_module._instance_id_resolver = None
 
 
 class TestAddInstanceTags:
     def setup_method(self) -> None:
         _reset_state()
 
-    @patch("onyx.utils.telemetry.get_or_generate_uuid", return_value="test-uuid-1234")
+    @patch.object(sentry_module, "_instance_id_resolver", return_value="test-uuid-1234")
     @patch("sentry_sdk.set_tag")
     def test_first_event_sets_instance_id(
         self, mock_set_tag: MagicMock, mock_uuid: MagicMock
@@ -33,7 +34,7 @@ class TestAddInstanceTags:
         mock_set_tag.assert_called_once_with("instance_id", "test-uuid-1234")
         mock_uuid.assert_called_once()
 
-    @patch("onyx.utils.telemetry.get_or_generate_uuid", return_value="test-uuid-1234")
+    @patch.object(sentry_module, "_instance_id_resolver", return_value="test-uuid-1234")
     @patch("sentry_sdk.set_tag")
     def test_second_event_skips_resolution(
         self, _mock_set_tag: MagicMock, mock_uuid: MagicMock
@@ -45,8 +46,9 @@ class TestAddInstanceTags:
         assert "tags" not in result  # second event not modified
         mock_uuid.assert_called_once()  # only resolved once
 
-    @patch(
-        "onyx.utils.telemetry.get_or_generate_uuid",
+    @patch.object(
+        sentry_module,
+        "_instance_id_resolver",
         side_effect=Exception("DB unavailable"),
     )
     @patch("sentry_sdk.set_tag")
@@ -59,8 +61,9 @@ class TestAddInstanceTags:
         assert result["message"] == "test error"
         assert "tags" not in result or "instance_id" not in result.get("tags", {})
 
-    @patch(
-        "onyx.utils.telemetry.get_or_generate_uuid",
+    @patch.object(
+        sentry_module,
+        "_instance_id_resolver",
         side_effect=Exception("DB unavailable"),
     )
     @patch("sentry_sdk.set_tag")
@@ -73,7 +76,7 @@ class TestAddInstanceTags:
 
         assert mock_uuid.call_count == 2  # retried on second event
 
-    @patch("onyx.utils.telemetry.get_or_generate_uuid", return_value="test-uuid-1234")
+    @patch.object(sentry_module, "_instance_id_resolver", return_value="test-uuid-1234")
     @patch("sentry_sdk.set_tag")
     def test_preserves_existing_tags(
         self, _mock_set_tag: MagicMock, _mock_uuid: MagicMock
@@ -85,3 +88,22 @@ class TestAddInstanceTags:
         assert result is not None
         assert result["tags"]["existing"] == "tag"
         assert result["tags"]["instance_id"] == "test-uuid-1234"
+
+    @patch("sentry_sdk.set_tag")
+    def test_no_resolver_leaves_event_untagged(self, mock_set_tag: MagicMock) -> None:
+        """The model server has no KV store and passes no resolver."""
+        result = _add_instance_tags(_event({"message": "test error"}), {})
+
+        assert result is not None
+        assert "tags" not in result
+        mock_set_tag.assert_not_called()
+
+    @patch("sentry_sdk.init")
+    def test_init_sentry_stores_the_resolver(self, _mock_init: MagicMock) -> None:
+        sentry_module.init_sentry(
+            traces_sample_rate=0.0, instance_id_resolver=lambda: "id-from-entry-point"
+        )
+        result = _add_instance_tags(_event({"message": "test error"}), {})
+
+        assert result is not None
+        assert result["tags"]["instance_id"] == "id-from-entry-point"

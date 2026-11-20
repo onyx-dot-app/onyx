@@ -3,7 +3,6 @@
 import { useMemo } from "react";
 
 import {
-  isCodingAgentPackets,
   isResearchAgentPackets,
   stepSupportsCollapsedStreaming,
 } from "@/chat/timeline/packetHelpers";
@@ -15,7 +14,6 @@ export interface TimelineMetrics {
   lastTurnGroup: TurnGroup | undefined;
   lastStep: TransformedStep | undefined;
   lastStepIsResearchAgent: boolean;
-  lastStepIsCodingAgent: boolean;
   lastStepSupportsCollapsedStreaming: boolean;
 }
 
@@ -35,9 +33,6 @@ export function useTimelineMetrics(
     const lastStepIsResearchAgent = lastStep
       ? isResearchAgentPackets(lastStep.packets)
       : false;
-    const lastStepIsCodingAgent = lastStep
-      ? isCodingAgentPackets(lastStep.packets)
-      : false;
     const lastStepSupportsCollapsedStreaming = lastStep
       ? stepSupportsCollapsedStreaming(lastStep.packets)
       : false;
@@ -48,7 +43,6 @@ export function useTimelineMetrics(
       lastTurnGroup,
       lastStep,
       lastStepIsResearchAgent,
-      lastStepIsCodingAgent,
       lastStepSupportsCollapsedStreaming,
     };
   }, [turnGroups, userStopped]);

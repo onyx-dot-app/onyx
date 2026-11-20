@@ -2,7 +2,7 @@
 
 from collections.abc import Mapping, Sequence
 
-from pydantic import BaseModel, JsonValue, TypeAdapter, ValidationError
+from pydantic import BaseModel, JsonValue
 
 from onyx.agents.compaction import is_input_context
 from onyx.agents.models import (
@@ -19,8 +19,6 @@ from onyx.deep_research.models import ResearchConfiguration
 from onyx.llm.models import (
     AssistantMessage,
     Message,
-    TextContent,
-    ThinkingContent,
     ToolCall,
     ToolResultMessage,
 )
@@ -28,7 +26,6 @@ from onyx.tools.tool_implementations.subagents.models import ChatConfiguration
 from onyx.utils.logger import setup_logger
 from onyx.utils.streaming_json import parse_partial_object
 
-_STRING = TypeAdapter(str)
 logger = setup_logger()
 
 
@@ -41,34 +38,6 @@ def tool_arguments_for_display(call: ToolCall) -> dict[str, JsonValue]:
     except ValueError:
         logger.debug("Interrupted tool arguments cannot be displayed", exc_info=True)
         return call.arguments
-
-
-def thinking_tool_text(call: ToolCall) -> str:
-    try:
-        return _STRING.validate_python(
-            tool_arguments_for_display(call).get("reasoning", "")
-        )
-    except ValidationError:
-        logger.debug("Thinking tool arguments are not text", exc_info=True)
-        return ""
-
-
-def message_thinking(
-    message: AssistantMessage,
-    think_tool: str | None = None,
-    *,
-    text_as_thinking: bool = False,
-) -> str:
-    """Collect model and configured-tool thinking in accepted content order."""
-    return "".join(
-        block.text
-        if isinstance(block, (ThinkingContent, TextContent))
-        else thinking_tool_text(block)
-        for block in message.content
-        if isinstance(block, ThinkingContent)
-        or (text_as_thinking and isinstance(block, TextContent))
-        or (isinstance(block, ToolCall) and block.name == think_tool)
-    )
 
 
 def response_record(

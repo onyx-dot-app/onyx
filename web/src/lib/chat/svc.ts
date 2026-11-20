@@ -1,5 +1,9 @@
 import { fetchErrorFrom } from "@/lib/fetcher";
-import type { ApprovalDecisionResponse } from "@/lib/chat/types";
+import type {
+  ApprovalDecisionResponse,
+  QuestionAnswersBody,
+  QuestionAnswersResponse,
+} from "@/lib/chat/types";
 import type { ApprovalSubmitDecision } from "@/lib/approvals/types";
 
 const CHAT_FILE_PREFIX = "/api/chat/file";
@@ -53,6 +57,30 @@ export async function postChatApprovalDecision(
     throw await fetchErrorFrom(
       response,
       `Failed to submit the approval decision: ${response.status}`
+    );
+  }
+  return response.json();
+}
+
+/** Throws a `FetchError`; status 409 means the question no longer waits or
+ * has a different answer, or, with error code APPROVAL_PENDING, that an
+ * approval of the response still waits. */
+export async function postQuestionAnswers(
+  questionRequestId: string,
+  body: QuestionAnswersBody
+): Promise<QuestionAnswersResponse> {
+  const response = await fetch(
+    `/api/chat/question-requests/${encodeURIComponent(questionRequestId)}/answers`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    }
+  );
+  if (!response.ok) {
+    throw await fetchErrorFrom(
+      response,
+      `Failed to submit the answers: ${response.status}`
     );
   }
   return response.json();

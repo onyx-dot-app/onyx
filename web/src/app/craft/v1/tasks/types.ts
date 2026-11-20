@@ -1,4 +1,10 @@
-import type { TaskAppActionPolicies } from "@/lib/plugins/types";
+import type { ExternalAppType } from "@/app/craft/v1/apps/registry";
+import type {
+  ConnectionState,
+  IntegrationKind,
+  LinkValue,
+  PolicyValue,
+} from "@/lib/integrations/types";
 /**
  * Shared types for the Scheduled Tasks feature.
  *
@@ -82,7 +88,7 @@ export interface ScheduledTaskDetail {
   next_run_at: string | null;
   next_runs: string[];
   last_run: ScheduledRunSummary | null;
-  action_policies: TaskAppActionPolicies[];
+  integrations: TaskIntegrationLink[];
   created_at: string;
   updated_at: string;
 }
@@ -94,7 +100,7 @@ export interface ScheduledTaskCreateBody {
   editor_payload: EditorPayload;
   status?: ScheduledTaskStatus;
   run_immediately?: boolean;
-  action_policies?: TaskAppActionPolicies[];
+  integrations?: TaskIntegrationLink[];
 }
 
 export interface ScheduledTaskPatchBody {
@@ -103,7 +109,7 @@ export interface ScheduledTaskPatchBody {
   editor_mode?: EditorMode;
   editor_payload?: EditorPayload;
   status?: ScheduledTaskStatus;
-  action_policies?: TaskAppActionPolicies[];
+  integrations?: TaskIntegrationLink[];
 }
 
 export interface ScheduledTaskListResponse {
@@ -133,4 +139,45 @@ export interface ScheduledRunContextResponse {
 
 export interface UnviewedTaskCountResponse {
   count: number;
+}
+
+export interface TaskActionSettings {
+  default: LinkValue;
+  actions: Record<string, LinkValue>;
+}
+
+/** An integration the task uses, with its action settings. */
+export interface TaskIntegrationLink {
+  integration_id: number;
+  action_settings: TaskActionSettings;
+}
+
+export interface TaskActionView {
+  key: string;
+  display_name: string;
+  description: string | null;
+  integration_policy: PolicyValue;
+  /** A task Allow keeps the integration policy. */
+  locked: boolean;
+}
+
+/** An integration a task can use; mirrors ``TaskIntegrationView`` in the
+ * backend. */
+export interface TaskIntegrationView {
+  id: number;
+  name: string;
+  kind: IntegrationKind;
+  app_type: ExternalAppType | null;
+  status: {
+    state: ConnectionState;
+    reason: string | null;
+  };
+  actions: TaskActionView[];
+  /** The task uses the integration. */
+  enabled: boolean;
+  /** The stored settings of the task; null when not enabled. */
+  action_settings: TaskActionSettings | null;
+  /** False: a run does not use the integration now. The task keeps its
+   * settings. */
+  runnable: boolean;
 }

@@ -13,13 +13,15 @@ jobs:
   # real verdicts come from the pull_request runs of pr-integration-tests.yml
   # and pr-playwright-tests.yml. The same-named jobs there also run on
   # merge_group, but the queue does not wait for them: these two jobs satisfy
-  # the ruleset in seconds. Before passing, each one checks that the
+  # the ruleset in seconds, or, for a lower stack PR, once its stack tip passes
+  # in the queue. Before passing, each one checks that the
   # pull_request verdict was computed against a base that landed, so a PR that
   # was retargeted or stacked on an abandoned branch cannot merge on a stale
   # verdict (see .github/actions/check-tested-base).
   required:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # A lower stack PR waits up to about 27 minutes for its stack tip.
+    timeout-minutes: 29
     steps:
       - name: Checkout check-tested-base action
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
@@ -32,7 +34,8 @@ jobs:
           context: ci/tested-base/integration
   playwright-required:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    # A lower stack PR waits up to about 27 minutes for its stack tip.
+    timeout-minutes: 29
     steps:
       - name: Checkout check-tested-base action
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6

@@ -32,16 +32,14 @@ export type AdminNavItemId =
   | "skills"
   | "customAnalytics"
   | "agents"
-  | "plugins"
-  | "mcpActions"
-  | "openapiActions"
+  | "integrations"
   | "indexingStatus"
   | "connectors"
   | "documentSets"
   | "indexSettings"
   | "serviceAccounts"
-  | "slackIntegration"
-  | "discordIntegration"
+  | "slackBot"
+  | "discordBot"
   | "hookExtensions"
   | "users"
   | "groups"
@@ -64,9 +62,9 @@ export type AdminNavItemId =
  */
 export type AdminNavSectionId =
   | "craft"
-  | "agentsAndActions"
+  | "agentsAndPlugins"
   | "documentsAndKnowledge"
-  | "integrations"
+  | "channels"
   | "permissions"
   | "organization"
   | "usage";
@@ -93,10 +91,7 @@ export const NAV_ITEM_IDS: Record<
   SKILLS: "skills",
   CUSTOM_ANALYTICS: "customAnalytics",
   AGENTS: "agents",
-  PLUGINS: "plugins",
-  PLUGINS_EXTERNAL_APP: null,
-  MCP_ACTIONS: null,
-  OPENAPI_ACTIONS: null,
+  INTEGRATIONS: "integrations",
   INDEXING_STATUS: "indexingStatus",
   CONNECTORS: "connectors",
   DOCUMENT_SETS: "documentSets",
@@ -105,8 +100,8 @@ export const NAV_ITEM_IDS: Record<
   INDEX_SETTINGS: "indexSettings",
   DOCUMENT_PROCESSING: null,
   API_KEYS: "serviceAccounts",
-  SLACK_BOTS: "slackIntegration",
-  DISCORD_BOTS: "discordIntegration",
+  SLACK_BOTS: "slackBot",
+  DISCORD_BOTS: "discordBot",
   HOOKS: "hookExtensions",
   USERS: "users",
   GROUPS: "groups",
@@ -175,9 +170,9 @@ const NAV_SECTION_IDS: readonly (readonly [
   id: AdminNavSectionId,
 ])[] = [
   ["Craft", "craft"],
-  ["Agents & Actions", "agentsAndActions"],
+  ["Agents & Plugins", "agentsAndPlugins"],
   ["Documents & Knowledge", "documentsAndKnowledge"],
-  ["Integrations", "integrations"],
+  ["Channels", "channels"],
   ["Permissions", "permissions"],
   ["Organization", "organization"],
   ["Usage", "usage"],
@@ -250,7 +245,8 @@ export function buildItems(
 
   if (
     userCanAccess(Permission.FULL_ADMIN_PANEL_ACCESS) &&
-    !flags.hasSubscription
+    !flags.hasSubscription &&
+    !flags.isPlayground
   ) {
     items.push({
       sectionId: null,

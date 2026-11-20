@@ -41,10 +41,10 @@ test.describe("Connector status page: visual @exclusive", () => {
     const idToDelete = ccPairId;
     ccPairId = null;
 
-    // Let cleanup failures surface: a leaked connector would add a second
-    // "File" row to the next theme test's screenshot, reintroducing exactly
-    // the non-determinism this spec exists to remove.
-    await apiClient.deleteCCPair(idToDelete);
+    // The next theme reuses the connector name.
+    await apiClient.deleteCCPair(idToDelete, {
+      waitForConnectorDeletion: true,
+    });
   });
 
   for (const theme of THEMES) {

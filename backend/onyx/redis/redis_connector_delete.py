@@ -8,7 +8,7 @@ from pydantic import AliasChoices, BaseModel, Field
 from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import DB_YIELD_PER_DEFAULT, DOCUMENT_CLEANUP_BATCH_SIZE
+from onyx.configs.app_configs import DOCUMENT_CLEANUP_BATCH_SIZE
 from onyx.configs.constants import (
     CELERY_DOCUMENT_CLEANUP_TASK_EXPIRES,
     CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
@@ -17,7 +17,10 @@ from onyx.configs.constants import (
     OnyxCeleryTask,
     OnyxRedisConstants,
 )
-from onyx.db.document import construct_document_id_select_for_connector_credential_pair
+from onyx.db.document import (
+    construct_document_id_select_for_connector_credential_pair,
+    stream_document_ids,
+)
 from onyx.redis.tenant_redis_client import TenantRedisClient
 
 
@@ -131,7 +134,7 @@ class RedisConnectorDelete:
         stmt = construct_document_id_select_for_connector_credential_pair(
             connector_id, credential_id
         ).limit(max_docs)
-        for doc_id in db_session.scalars(stmt).yield_per(DB_YIELD_PER_DEFAULT):
+        for doc_id in stream_document_ids(db_session, stmt):
             batch.append(cast(str, doc_id))
             if len(batch) < DOCUMENT_CLEANUP_BATCH_SIZE:
                 continue

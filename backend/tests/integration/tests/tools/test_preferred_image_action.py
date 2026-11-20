@@ -8,6 +8,7 @@ from sqlalchemy import select
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import Tool
+from onyx.tools.models import CapabilityEntry, ToolOptions
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.test_models import (
     DATestImageGenerationConfig,
@@ -38,7 +39,9 @@ def test_preferred_image_action(
         chat_session_id=chat_session.id,
         message=message,
         user_performing_action=basic_user,
-        preferred_tool_id=image_generation_tool_id,
+        tool_options=ToolOptions(
+            preferred=CapabilityEntry(tool_id=image_generation_tool_id)
+        ),
     )
 
     assert analyzed_response.error is None, "Chat response should not have an error"

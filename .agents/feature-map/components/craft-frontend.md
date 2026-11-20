@@ -108,6 +108,18 @@ packet was missed. It then reads messages, checks for a successor turn
 inventory read, and replaces the live stream items with saved history. A
 scheduled run settles on its saved run status instead.
 
+**Live timeline.** The stream processor also turns each packet into ACP
+timeline events (`web/src/lib/timeline/craft/events.ts:craftPacketToEvents`)
+and appends them to the session's `timelineEvents`. `BuildMessageList` renders
+the in-progress turn from the reducer (`web/src/lib/timeline/reducer.ts`). A
+saved assistant message renders from its own `timelineEvents` (set from the
+saved rows, or kept at turn end). A subagent's packets go to its own turn's
+`timelineEvents` (`appendSubagentTimelineEvents`, filtered by
+`craftChildSessionId`), and `SubagentView` renders them the same way.
+`streamItems` is still kept for queue, settlement and stop logic, but nothing
+renders it. Both live states are cleared and restored together, so a change to
+one must change the other.
+
 **The queue.** `enqueueMessage` adds to `queuedMessages`. The dispatcher in
 `web/src/app/craft/hooks/useBuildStreaming.ts` subscribes to the store and
 calls `claimQueuedMessage`, which marks the head `starting` inside one store
@@ -131,6 +143,29 @@ open panel marks the active file's card as viewed.
 keyed by path, inventory revision and an explicit reload counter.
 `web/src/app/craft/components/OutputPanel.tsx` keeps a few recent file viewers
 mounted but hidden and `inert`, so switching tabs does not fetch them again.
+
+**Transcript timeline.** `BuildMessageList` splits a turn's reducer entries
+into rail blocks (consecutive tool calls and thinking) and inline items
+(messages, notices), in arrival order. An entry is keyed by tool-call id or
+part id, so a late update changes it in place.
+Both products draw a block with the same components in
+`web/src/lib/timeline/components/` ([[chat-frontend]]): `RunCard` is the card (`Line`'s `card` flavour)
+(run header, fold, timer, Done or Stopped row) and `RunStep` is a step (its
+status sets the spinner, the alert icon and red tint of a failed step, or
+the red stop icon of a stopped one; a step that did not finish keeps its
+running title, and a done step shows its finished title). `CraftTimeline`
+and chat's `AgentTimeline` only map their steps onto them. Each step is an
+Opal `Line`, built on `Collapsible`'s parts (it shares its base row with the
+connector check card's `LogLine`): icon, a full-width title (Craft puts the
+command or path in it as a code span), trailing content and the chevron; the
+row is a `Collapsible.Header` with a subtle hover and only it folds the step,
+so a click or a text selection in the body never folds it, and a failed step is an `error-heavy` line. Every block folds, even with one entry, once
+a text reply follows. A whole response is laid out by the shared `Response`
+(`web/src/lib/timeline/components/Response.tsx`): `BuildMessageList` and chat's
+`AgentMessage` only build its items (runs, text, cards) in arrival order, and
+`Response` spaces them and lines text up with the run header. The message list
+uses chat's frame from `web/src/lib/chat/layout.ts` (`CHAT_GUTTER`,
+`CHAT_COLUMN_ROW`), not a Craft-only width.
 
 ---
 

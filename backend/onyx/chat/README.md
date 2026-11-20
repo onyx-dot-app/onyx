@@ -266,7 +266,7 @@ The internal constant `CHAT_EXECUTION_TIMEOUT_S` sets the execution deadline to
 until model calls, tools, storage, and delivery drain. A disconnected browser
 only detaches its reader.
 
-`MAX_LLM_CYCLES` (default 6) caps the steps of a chat response. The last step offers
+`MAX_LLM_CYCLES` (default 30) caps the steps of a chat response. The last step offers
 no tools, so the model must answer. When code mode applies (`CODE_MODE_ENABLED` and at
 least one tool runs inside programs), the cap is `CODE_MODE_MAX_LLM_CYCLES`: a safety
 cap of 100, or `MAX_LLM_CYCLES` when that is higher.
@@ -283,4 +283,4 @@ fences and new ownership leases cannot safely coordinate overlapping writers.
 
 Stream reconnection replays cached packets. It does not restart computation.
 Only a valid suspended checkpoint, resumed through a runtime caller, restores
-computation. A cleaned-up coding sandbox cannot generally be restored.
+computation.

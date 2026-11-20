@@ -34,7 +34,6 @@ from onyx.db.file_record import (
     get_filerecord_by_file_id_optional,
     get_filerecord_by_prefix,
     rename_filerecord,
-    upsert_filerecord,
 )
 from onyx.db.models import FileRecord
 from onyx.file_store.file_store import (
@@ -43,6 +42,7 @@ from onyx.file_store.file_store import (
     PresignedUrlsNotSupportedError,
     content_byte_size,
     presign_expiry,
+    record_uploaded_object,
 )
 from onyx.file_store.models import (
     PendingPresignedUpload,
@@ -286,49 +286,18 @@ class AzureBlobBackedFileStore(PresignableFileStore):
             content_settings=ContentSettings(content_type=file_type),
         )
 
-        try:
-            with get_session_with_current_tenant_if_none(db_session) as db_session:
-                upsert_filerecord(
-                    file_id=file_id,
-                    display_name=display_name or file_id,
-                    file_origin=file_origin,
-                    file_type=file_type,
-                    bucket_name=self._container_name,
-                    object_key=object_key,
-                    db_session=db_session,
-                    file_metadata=file_metadata,
-                    file_size=content_byte_size(file_content),
-                )
-                db_session.commit()
-        except Exception:
-            # Clean up the uploaded blob unless a committed record still
-            # references this exact object — on a failed overwrite the record
-            # survives the rollback, so deleting the blob it points at would
-            # turn the failed save into data loss. A record pointing at a
-            # different container/key does not reference this upload, so the
-            # blob is safe (and necessary) to remove.
-            try:
-                with get_session_with_current_tenant() as cleanup_session:
-                    existing_record = get_filerecord_by_file_id_optional(
-                        file_id=file_id, db_session=cleanup_session
-                    )
-                record_references_upload = (
-                    existing_record is not None
-                    and existing_record.bucket_name == self._container_name
-                    and existing_record.object_key == object_key
-                )
-                if not record_references_upload:
-                    blob_client.delete_blob()
-            except Exception:
-                logger.warning(
-                    "Failed to clean up orphaned Azure blob %s/%s "
-                    "after DB persistence failure for file %s",
-                    self._container_name,
-                    object_key,
-                    file_id,
-                    exc_info=True,
-                )
-            raise
+        record_uploaded_object(
+            file_id=file_id,
+            display_name=display_name,
+            file_origin=file_origin,
+            file_type=file_type,
+            file_metadata=file_metadata,
+            file_size=content_byte_size(file_content),
+            bucket_name=self._container_name,
+            object_key=object_key,
+            db_session=db_session,
+            delete_object=blob_client.delete_blob,
+        )
 
         return file_id
 

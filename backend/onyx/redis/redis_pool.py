@@ -392,25 +392,12 @@ def get_redis_replica_client(
     return redis_pool.get_replica_client(tenant_id)
 
 
-def get_shared_redis_client() -> TenantRedisClient:
-    """
-    Returns a Redis client with a shared namespace prefix.
-
-    Unlike tenant-specific clients, this uses a common prefix for all keys,
-    creating a shared namespace accessible across all tenants.
-
-    Use this for data that should be shared across the application and
-    isn't specific to any individual tenant.
-    """
-    return redis_pool.get_client(DEFAULT_REDIS_PREFIX)
-
-
 def get_shared_redis_replica_client() -> TenantRedisClient:
     """
     Returns a Redis replica client with a shared namespace prefix.
 
-    Similar to get_shared_redis_client(), but connects to a read replica when available.
-    Uses a common prefix for all keys, creating a shared namespace.
+    Connects to a read replica when available. Uses a common prefix for all
+    keys, creating a shared namespace accessible across all tenants.
 
     Use this for read-heavy operations on data that should be shared
     across the application.

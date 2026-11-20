@@ -40,9 +40,11 @@ export interface AddPeoplePickerProps {
   onAddUser: (user: MinimalUserSnapshot) => void;
   onRemoveGroup: (groupId: number) => void;
   onRemoveUser: (userId: string) => void;
-  onStagedPermissionChange: (permission: ShareAccessPermission) => void;
+  /** Left out with `stagedPermission`, the picker shows no permission menu:
+   * the share gives one fixed right. */
+  onStagedPermissionChange?: (permission: ShareAccessPermission) => void;
   stagedGroups: MinimalUserGroupSnapshot[];
-  stagedPermission: ShareAccessPermission;
+  stagedPermission?: ShareAccessPermission;
   stagedUsers: MinimalUserSnapshot[];
   users: MinimalUserSnapshot[];
 }
@@ -229,7 +231,9 @@ export function AddPeoplePicker({
           </Dropdown>
         </div>
 
-        {hasStagedItems ? (
+        {hasStagedItems &&
+        onStagedPermissionChange &&
+        stagedPermission !== undefined ? (
           <div className="w-40 shrink-0">
             <SharePermissionMenu
               ariaLabel={t("addPeople.permissionMenu.ariaLabel")}

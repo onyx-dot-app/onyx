@@ -1,0 +1,30 @@
+{
+  "name": "onyx-desktop-v2",
+  "version": "0.0.0-dev",
+  "private": true,
+  "description": "Onyx Desktop v2 (preview): native desktop app for Onyx",
+  "type": "module",
+  "scripts": {
+    "dev": "tauri dev",
+    "build": "tauri build",
+    "vite:dev": "vite",
+    "vite:build": "vite build",
+    "typecheck": "tsc --noEmit -p tsconfig.json",
+    "lint:rust": "cargo clippy --manifest-path src-tauri/Cargo.toml --all-targets -- -D warnings",
+    "tauri": "tauri"
+  },
+  "dependencies": {
+    "@tauri-apps/api": "2.12.5",
+    "react": "19.2.8",
+    "react-dom": "19.2.8"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "4.3.5",
+    "@tauri-apps/cli": "2.12.5",
+    "@types/react": "^19.2.0",
+    "@types/react-dom": "^19.2.0",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^5.9.0",
+    "vite": "8.3.8"
+  }
+}

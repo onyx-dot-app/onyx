@@ -6,9 +6,20 @@ from pydantic import BaseModel, Field, JsonValue
 
 from onyx.chat.mention_models import RecordedMention
 from onyx.context.search.models import SearchDoc
+from onyx.server.features.build.sandbox.models import ExecCompletionName
 from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.models import CustomToolErrorInfo, GeneratedImage
 from onyx.tools.tool_implementations.code_mode.models import CodeModeStatus
+from onyx.tools.tool_implementations.question.models import (
+    ToolQuestion,
+    ToolQuestionAnswer,
+)
+from onyx.tools.tool_implementations.sandbox.models import (
+    ApplyPatchFileChange,
+    FileToolName,
+    PublishedFile,
+    PublishFileArgument,
+)
 
 
 class StreamingError(BaseModel):
@@ -57,6 +68,8 @@ class StreamingType(Enum):
     CUSTOM_TOOL_DELTA = "custom_tool_delta"
     TOOL_APPROVAL_REQUEST = "tool_approval_request"
     TOOL_APPROVAL_RESOLVED = "tool_approval_resolved"
+    TOOL_QUESTION_REQUEST = "tool_question_request"
+    TOOL_QUESTION_RESOLVED = "tool_question_resolved"
     REPLAY_END = "replay_end"
     FILE_READER_START = "file_reader_start"
     FILE_READER_RESULT = "file_reader_result"
@@ -71,6 +84,9 @@ class StreamingType(Enum):
     MEMORY_TOOL_DELTA = "memory_tool_delta"
     MEMORY_TOOL_NO_ACCESS = "memory_tool_no_access"
 
+    POSTGRES_TOOL_START = "postgres_tool_start"
+    POSTGRES_TOOL_DOCUMENTS = "postgres_tool_documents"
+
     DEEP_RESEARCH_PLAN_START = "deep_research_plan_start"
     DEEP_RESEARCH_PLAN_DELTA = "deep_research_plan_delta"
     RESEARCH_AGENT_START = "research_agent_start"
@@ -78,15 +94,17 @@ class StreamingType(Enum):
     INTERMEDIATE_REPORT_DELTA = "intermediate_report_delta"
     INTERMEDIATE_REPORT_CITED_DOCS = "intermediate_report_cited_docs"
 
-    CODING_AGENT_START = "coding_agent_start"
-    CODING_AGENT_THINKING_DELTA = "coding_agent_thinking_delta"
-    CODING_AGENT_FINAL = "coding_agent_final"
-
-    BASH_TOOL_START = "bash_tool_start"
-    BASH_TOOL_DELTA = "bash_tool_delta"
-
     CODE_MODE_START = "code_mode_start"
     CODE_MODE_DELTA = "code_mode_delta"
+
+    EXEC_COMMAND_START = "exec_command_start"
+    WRITE_STDIN_START = "write_stdin_start"
+    EXEC_OUTPUT_DELTA = "exec_output_delta"
+    EXEC_END = "exec_end"
+    APPLY_PATCH_START = "apply_patch_start"
+    APPLY_PATCH_END = "apply_patch_end"
+    PUBLISH_FILES_START = "publish_files_start"
+    PUBLISH_FILES_END = "publish_files_end"
 
 
 class BaseObj(BaseModel):
@@ -101,9 +119,9 @@ class SectionEnd(BaseObj):
     type: Literal["section_end"] = StreamingType.SECTION_END.value
 
 
-# The stop reason of a response whose run waits for the user's approval
-# decisions; it continues in a new stream after them.
-AWAITING_APPROVAL = "awaiting_approval"
+# The stop reason of a response whose run waits for the user: approval
+# decisions or answers to its questions. It continues in a new stream after them.
+AWAITING_USER = "awaiting_user"
 
 
 class OverallStop(BaseObj):
@@ -374,6 +392,23 @@ class MemoryToolNoAccess(BaseObj):
 
 
 ################################################
+# Postgres Tool Packets
+################################################
+class PostgresToolStart(BaseObj):
+    type: Literal["postgres_tool_start"] = StreamingType.POSTGRES_TOOL_START.value
+
+    # The call's arguments, for the step's query summary.
+    query: dict[str, JsonValue] = Field(default_factory=dict)
+
+
+class PostgresToolDocuments(BaseObj):
+    type: Literal["postgres_tool_documents"] = (
+        StreamingType.POSTGRES_TOOL_DOCUMENTS.value
+    )
+    documents: list[SearchDoc]
+
+
+################################################
 # Deep Research Packets
 ################################################
 class DeepResearchPlanStart(BaseObj):
@@ -416,40 +451,11 @@ class IntermediateReportCitedDocs(BaseObj):
 
 
 ################################################
-# Coding Agent Packets
 ################################################
-class CodingAgentStart(BaseObj):
-    type: Literal["coding_agent_start"] = StreamingType.CODING_AGENT_START.value
-    query: str
-    repo: str
-
-
-class CodingAgentThinkingDelta(BaseObj):
-    type: Literal["coding_agent_thinking_delta"] = (
-        StreamingType.CODING_AGENT_THINKING_DELTA.value
-    )
-    content: str
-
-
-class CodingAgentFinal(BaseObj):
-    type: Literal["coding_agent_final"] = StreamingType.CODING_AGENT_FINAL.value
-    answer: str
 
 
 ################################################
-# Bash Tool Packets
 ################################################
-class BashToolStart(BaseObj):
-    type: Literal["bash_tool_start"] = StreamingType.BASH_TOOL_START.value
-    cmd: str
-
-
-class BashToolDelta(BaseObj):
-    type: Literal["bash_tool_delta"] = StreamingType.BASH_TOOL_DELTA.value
-    stdout: str = ""
-    stderr: str = ""
-    exit_code: int | None = None
-    timed_out: bool = False
 
 
 ################################################
@@ -491,6 +497,75 @@ class CodeModeDelta(BaseObj):
     response_ended: bool = False
 
 
+################################################
+# Sandbox Tool Packets
+################################################
+class ExecCommandStart(BaseObj):
+    type: Literal["exec_command_start"] = StreamingType.EXEC_COMMAND_START.value
+    cmd: str
+    workdir: str | None = None
+
+
+class WriteStdinStart(BaseObj):
+    type: Literal["write_stdin_start"] = StreamingType.WRITE_STDIN_START.value
+    session_id: str
+    chars: str
+
+
+# Live output of exec_command and write_stdin (stdout and stderr in arrival
+# order): a preview that exec_end's output replaces.
+class ExecOutputDelta(BaseObj):
+    type: Literal["exec_output_delta"] = StreamingType.EXEC_OUTPUT_DELTA.value
+    text: str
+
+
+class ExecEnd(BaseObj):
+    type: Literal["exec_end"] = StreamingType.EXEC_END.value
+    # The output that the model got (cut to its token budget, head and tail).
+    # None only with an error.
+    output: str | None = None
+    exit_code: int | None = None
+    # None while the command runs, or when it ended in a way the sandbox
+    # did not report.
+    completion: ExecCompletionName | None = None
+    # Set while the command still runs.
+    session_id: str | None = None
+    wall_time_seconds: float | None = None
+    truncated: bool = False
+    # Set when the call failed: there is no process result.
+    error: str | None = None
+
+
+class ApplyPatchStart(BaseObj):
+    type: Literal["apply_patch_start"] = StreamingType.APPLY_PATCH_START.value
+    patch: str
+    # The file tool that made the change; it names the card.
+    tool_name: FileToolName
+
+
+class ApplyPatchEnd(BaseObj):
+    type: Literal["apply_patch_end"] = StreamingType.APPLY_PATCH_END.value
+    files: list[ApplyPatchFileChange] = []
+    # Set when the patch failed; no file changed then, unless a write failed.
+    error: str | None = None
+
+
+# The files that a publish_files call asks for, as the model wrote them.
+class PublishFilesStart(BaseObj):
+    type: Literal["publish_files_start"] = StreamingType.PUBLISH_FILES_START.value
+    # Empty when the arguments are not valid, for example cut off.
+    files: list[PublishFileArgument] = []
+    description: str | None = None
+
+
+class PublishFilesEnd(BaseObj):
+    type: Literal["publish_files_end"] = StreamingType.PUBLISH_FILES_END.value
+    # In the order of the start's files; each downloads from /chat/file/{file_id}.
+    files: list[PublishedFile] = []
+    # Set when the call failed; it published no file then.
+    error: str | None = None
+
+
 # A tool call waits for the user's decision; placed with the call's tool packets.
 class ToolApprovalRequest(BaseObj):
     type: Literal["tool_approval_request"] = StreamingType.TOOL_APPROVAL_REQUEST.value
@@ -521,6 +596,28 @@ class ToolApprovalResolved(BaseObj):
 
     approval_id: str
     outcome: ToolApprovalOutcome
+
+
+# A question call waits for the user's answers; placed at the call.
+class ToolQuestionRequest(BaseObj):
+    type: Literal["tool_question_request"] = StreamingType.TOOL_QUESTION_REQUEST.value
+
+    question_request_id: str
+    tool_call_id: str
+    questions: list[ToolQuestion]
+
+
+# How a question call ended: answered on its card (`answers`) or by a message
+# that the user typed in the chat (`message`), or cancelled because its run
+# stopped first.
+class ToolQuestionResolved(BaseObj):
+    type: Literal["tool_question_resolved"] = StreamingType.TOOL_QUESTION_RESOLVED.value
+
+    question_request_id: str
+    outcome: Literal["answered", "cancelled"]
+    answered_via: Literal["card", "message"] | None = None
+    answers: list[ToolQuestionAnswer] | None = None
+    message: str | None = None
 
 
 ################################################
@@ -555,12 +652,16 @@ PacketObj = Union[
     CustomToolDelta,
     ToolApprovalRequest,
     ToolApprovalResolved,
+    ToolQuestionRequest,
+    ToolQuestionResolved,
     ReplayEnd,
     FileReaderStart,
     FileReaderResult,
     MemoryToolStart,
     MemoryToolDelta,
     MemoryToolNoAccess,
+    PostgresToolStart,
+    PostgresToolDocuments,
     # Reasoning Packets
     ReasoningStart,
     ReasoningDelta,
@@ -576,16 +677,18 @@ PacketObj = Union[
     IntermediateReportStart,
     IntermediateReportDelta,
     IntermediateReportCitedDocs,
-    # Coding Agent Packets
-    CodingAgentStart,
-    CodingAgentThinkingDelta,
-    CodingAgentFinal,
-    # Bash Tool Packets
-    BashToolStart,
-    BashToolDelta,
     # Code Mode Packets
     CodeModeStart,
     CodeModeDelta,
+    # Sandbox Tool Packets
+    ExecCommandStart,
+    WriteStdinStart,
+    ExecOutputDelta,
+    ExecEnd,
+    ApplyPatchStart,
+    ApplyPatchEnd,
+    PublishFilesStart,
+    PublishFilesEnd,
 ]
 
 

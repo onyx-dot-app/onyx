@@ -7,7 +7,7 @@ from starlette.concurrency import run_in_threadpool
 from onyx.auth.permissions import require_permission
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
-from onyx.db.models import LLMProvider as LLMProviderModel
+from onyx.db.llm import fetch_existing_llm_provider_by_id
 from onyx.db.models import User, VoiceProvider
 from onyx.db.voice import (
     deactivate_stt_provider,
@@ -265,7 +265,9 @@ async def upsert_voice_provider_endpoint(
 
     # If llm_provider_id is specified, copy the API key from that LLM provider
     if request.llm_provider_id is not None:
-        llm_provider = db_session.get(LLMProviderModel, request.llm_provider_id)
+        llm_provider = fetch_existing_llm_provider_by_id(
+            request.llm_provider_id, db_session, include_model_configurations=False
+        )
         if llm_provider is None:
             raise OnyxError(
                 OnyxErrorCode.NOT_FOUND,

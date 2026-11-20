@@ -2,7 +2,8 @@
 
 > Thin clients that bring Onyx outside the main web app: a Tauri desktop
 > shell, a chat widget that a site embeds, and a Chrome extension. None runs
-> product logic, and only the widget calls the chat endpoints itself.
+> product logic, and only the widget and desktop v2's launcher call the chat
+> endpoints themselves.
 
 **Verified against:** `6bac4e012f` (2026-10-29)
 **Edition:** CE. JWT passthrough for the widget works on single-tenant
@@ -50,6 +51,34 @@ This component holds the desktop shell, the widget, the Chrome extension, and
 the framed pages and framed sign-in path in the web app that only these clients
 need. Each client has a README with its build and design notes.
 
+It also holds desktop v2 (`desktop-v2/`), a preview native app that
+installs beside v1 and is not the default. It is built for macOS, and as
+unsigned CI previews for Windows and Linux; only macOS has a release. It signs in through
+`/api/auth/mobile/login`, hands the token to the remote web UI as the session
+cookie, and gives IPC only to its bundled windows. It has its own CI build
+and release; v1's release does not build it. Its launcher panel (global
+shortcut) calls the chat endpoints from Rust with the bearer token:
+`POST /chat/create-chat-session`, then `POST /chat/send-chat-message`
+(`origin "unknown"`), and it reads the streamed packets (text, citations,
+`stop`, `tool_approval_request`). It lists agents with `GET /persona` and
+creates a new chat with the chosen `persona_id`. It attaches files through
+`POST /user/projects/file/upload`, polls `POST /user/projects/file/statuses`
+until they are processed, and sends them as `file_descriptors`. A removed
+attachment is deleted with `DELETE /user/projects/file/{id}`. It reads
+`user_file_max_upload_size_mb` and `disable_default_assistant` from
+`GET /settings`. Search mode
+calls `POST /search/send-search-message`, with `filters.source_type` for a
+source filter. A change to those request or packet shapes must keep the
+launcher working. IT can preset the server and lock
+some settings with managed policy (MDM profile, Windows registry policy, or a
+Linux policy file). The v2 README lists the keys. When the server cannot be
+reached, v2 shows a bundled offline window that polls `GET /api/version` and
+the web UI root `GET /` without a session (a 5xx from either counts as down),
+then checks the session with `GET /api/me`, and loads the web UI again when
+all answer, so `/api/version` must stay public. Sign-out
+retries `POST /api/auth/mobile/logout` in the background while the server
+cannot be reached.
+
 It does not own the chat UI that the desktop shell and the side panel load
 ([[chat-frontend]]), the chat endpoints ([[core-chat-loop]]), API keys and JWT
 verification ([[auth-and-identity]]), or the acting-user rules for the widget
@@ -90,10 +119,22 @@ send → ApiService                                   services/api-service.ts
   │    └─ parseSSEStream (NDJSON lines) → stream-parser.ts:processPacket
   │         └─ saveSession to sessionStorage, scoped by credential identity
   ├─ stream over → resumeStream({sent}): the one follow path below
-  └─ 409 APPROVAL_PENDING → keep the draft, show the message, resumeStream
-       from the status with a session load (shows the waiting card), point
-       at the card
+  ├─ 409 APPROVAL_PENDING → keep the draft, show the message, resumeStream
+  │    from the status with a session load (shows the waiting card), point
+  │    at the card
+  └─ a root question waits (questions.ts:findPendingWait) → no send: the
+       text is a typed answer (below)
 decision → POST /chat/approvals/{id}/decision       widget.ts, services/approvals.ts
+answers  → POST /chat/question-requests/{id}/answers   widget.ts, services/questions.ts
+  card: one question per page (Back/Next, page in widget.ts questionPages);
+    per question, one option or "Other" with a typed answer in place of an
+    option (user_note, no option_label); Submit on the last page
+  typed: {message} answers every waiting question of the response; the
+    input clears and the card record shows the text; 409
+    APPROVAL_PENDING or another error (a query hook's refusal shows its
+    detail) keeps the draft
+  404 or a 409 conflict → "No longer waiting"; resumeStream from the status
+  decisions and answers share followReply:
   no follow runs:
   ├─ continuation set → resumeStream from cursor 0 of continuation.stream_id
   ├─ 404/409 → card shows "No longer waiting"; resumeStream from the status,
@@ -103,9 +144,11 @@ decision → POST /chat/approvals/{id}/decision       widget.ts, services/approv
   ├─ continuation null, "Approve for this chat" → resumeStream from the
   │    current stream with a session load: the server also approved the
   │    chat's other requests for the tool, which only the load shows
-  ├─ continuation null, last root request → resumeStream from the current
-  │    stream, then each stream the status reports, then the saved session
-  └─ continuation null, other root requests wait → nothing starts
+  ├─ continuation null, nothing else waits for the user → resumeStream from
+  │    the current stream, then each stream the status reports, then the
+  │    saved session
+  └─ continuation null, other root requests or questions wait → nothing
+       starts
   a follow runs: a continuation is stored, and the follow takes it before it
     ends (never a stream it just read); with none, the follow reads the
     status once more before it ends
@@ -115,7 +158,7 @@ restore / sent stream / decision / 409 → resumeStream    widget.ts
   ├─ GET /chat/chat-session/{id}/resume-stream (no stream_id: the current
   │    stream; cursor lines track stream_id and next_cursor; only a 404 stops
   │    requests for that stream)
-  ├─ stop with "awaiting_approval" → a continuation a decision named during
+  ├─ stop with "awaiting_user" → a continuation a decision named during
   │    the stream, else one status read: a new stream whose response_ids
   │    include the response → follow from 0; else stop following
   ├─ a replayed user_message whose question the transcript lacks inserts it
@@ -132,8 +175,8 @@ restore / sent stream / decision / 409 → resumeStream    widget.ts
        branch); walk the selected branch from the root along
        latest_child_message and replay its saved answers (by parent_message
        for questions; a question with none is removed; a version change
-       replays answers with approval requests and answers the transcript
-       lacks); the transcript takes the branch order; the load's
+       replays answers with approval or question requests and answers the
+       transcript lacks); the transcript takes the branch order; the load's
        approvals_version becomes the baseline; on failure the response stays
        unfinished and the version change stays pending for the next load
   replay_end and a resolution sent again (replay, then live) change nothing
@@ -143,9 +186,9 @@ any status read with has_active_subagents (a decided agent that waits to
   each approvals_version change or unseen latest_response_id loads the
   session again; a new stream is followed; Send stays enabled, and a send
   ends the poll (its own follow polls on)
-card status = the server's tool_approval_resolved outcome ("cancelled" →
-  "No longer waiting"), else this widget's decision until the outcome
-  arrives; no stop changes a card
+card status = the server's tool_approval_resolved or tool_question_resolved
+  outcome ("cancelled" → "No longer waiting"), else this widget's decision or
+  answer until the outcome arrives; no stop changes a card
 ```
 `widget/src/config/config.ts:resolveAuthToken` picks the credential for each
 request: the `tokenProvider` result, else the API key, else it throws. The
@@ -282,9 +325,10 @@ panel picks up the new session when the user returns.
     `widget/src/services/api-service.ts:ApiService.waitForSessionIdle` before a
     send to an existing session. After every send, `OnyxChatWidget.resumeStream`
     polls it again when the stream stops, because the server can still save the
-    turn after the stream ends. A stop for decisions is the exception: the
-    response is suspended, and the server refuses a send with 409
-    `APPROVAL_PENDING`. Failed polls retry and keep
+    turn after the stream ends. A stop for decisions or answers
+    (`awaiting_user`) is the exception: the response is suspended, and the
+    server refuses a send with 409 `APPROVAL_PENDING`. While a question
+    waits, the widget posts the text to the answers route instead. Failed polls retry and keep
     Send disabled; there is no overall deadline. A 403 or 404, a 405, or three
     401s in a row end the wait with an error, and none counts as idle. A
     backend without the status route answers 404, so a new bundle on an older
@@ -301,7 +345,7 @@ panel picks up the new session when the user returns.
 ## Known issues
 
 - **The extension has no tests, build, type check or lint.** The widget tests
-  cover session readiness, failed drafts and tool approvals.
+  cover session readiness, failed drafts, tool approvals and questions.
 - **`<all_urls>` is broader than the features need.** Only the selection icon
   and tab reading need page access. Open question: the host grant may also be
   what lets the panel iframe send its `SameSite=Lax` auth cookie, because

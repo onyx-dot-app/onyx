@@ -114,3 +114,5 @@ SANDBOX_FC_SCHEDULED_RUN_JITTER_SECONDS = _fc_env_float(
 # "<tag>-<key hash>"; placement takes that node's newest template of the tag.
 # Harness sandboxes need it.
 SANDBOX_FC_TEMPLATE = os.environ.get("SANDBOX_FC_TEMPLATE", "").strip()
+# Harness sandboxes run in this deployment.
+HARNESS_SANDBOX_ENABLED = FIRECRACKER_ENABLED and bool(SANDBOX_FC_TEMPLATE)

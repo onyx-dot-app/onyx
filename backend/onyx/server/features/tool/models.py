@@ -1,9 +1,10 @@
 from typing import Any
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, computed_field, field_validator
 
-from onyx.db.enums import ActionPolicy
+from onyx.db.enums import ActionPolicy, IntegrationAuthMethod, IntegrationAuthMode
 from onyx.db.models import Tool
+from onyx.server.features.integrations.models import CredentialField
 from onyx.server.features.tool.tool_visibility import (
     get_tool_visibility_config,
     is_openapi_tool,
@@ -56,6 +57,15 @@ class ToolSnapshot(BaseModel):
     agent_creation_selectable: bool = True
     default_enabled: bool = False
     default_action_policy: ActionPolicy | None = None
+    # The integration of an OpenAPI or MCP tool; chat tool options name it.
+    integration_id: int | None = None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def plugin_ids(self) -> list[str]:
+        """The integration id under the old name, for the released mobile
+        app. It sends each value back in a ``plugin`` tool option."""
+        return [] if self.integration_id is None else [str(self.integration_id)]
 
     @classmethod
     def from_model(
@@ -64,6 +74,7 @@ class ToolSnapshot(BaseModel):
         *,
         permissions: dict[str, bool] | None = None,
         default_action_policy: ActionPolicy | None = None,
+        integration_id: int | None = None,
     ) -> "ToolSnapshot":
         # Get visibility config for this tool
         config = get_tool_visibility_config(tool)
@@ -81,7 +92,7 @@ class ToolSnapshot(BaseModel):
             mcp_server_id=tool.mcp_server_id,
             user_id=str(tool.user_id) if tool.user_id else None,
             oauth_config_id=tool.oauth_config_id,
-            oauth_config_name=tool.oauth_config.name if tool.oauth_config else None,
+            oauth_config_name=None,
             enabled=tool.enabled or is_openapi_tool(tool),
             # Populate visibility settings from config or use defaults
             chat_selectable=config.chat_selectable if config else True,
@@ -90,6 +101,7 @@ class ToolSnapshot(BaseModel):
             ),
             default_enabled=config.default_enabled if config else False,
             default_action_policy=default_action_policy,
+            integration_id=integration_id,
         )
 
 
@@ -131,3 +143,14 @@ class CustomToolUpdate(BaseModel):
     custom_headers: list[Header] | None = None
     passthrough_auth: bool | None = None
     oauth_config_id: int | None = None
+
+
+class CustomToolAuthSettings(BaseModel):
+    """The integration sign-in that a custom tool request maps to."""
+
+    auth_mode: IntegrationAuthMode
+    auth_method: IntegrationAuthMethod | None
+    header_template: dict[str, str] | None
+    credential_fields: list[CredentialField] | None
+    # The values of the organization connection, by header name.
+    organization_fields: dict[str, str]

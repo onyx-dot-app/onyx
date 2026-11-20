@@ -4,7 +4,6 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any, AsyncContextManager
 
-from fastapi import HTTPException
 from sqlalchemy import event, pool
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 
@@ -34,6 +33,8 @@ from onyx.db.engine.sql_engine import (
     build_connection_string,
     is_valid_schema_name,
 )
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -194,7 +195,7 @@ async def get_async_session(
         tenant_id = get_current_tenant_id()
 
     if not is_valid_schema_name(tenant_id):
-        raise HTTPException(status_code=400, detail="Invalid tenant ID")
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, "Invalid tenant ID")
 
     # Routes to the tenant's shard, not just its schema. With one shard configured
     # this is the same engine the process has always used.

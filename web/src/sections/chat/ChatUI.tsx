@@ -34,16 +34,11 @@ import WindowedRow from "@/sections/chat/WindowedRow";
 import OlderMessagesLoader from "@/sections/chat/OlderMessagesLoader";
 import { useOptionalScrollContainer } from "@/sections/chat/ScrollContainerContext";
 import ToolApprovalsRegion from "@/sections/chat/ToolApprovalsRegion";
+import ToolQuestionsRegion from "@/sections/chat/ToolQuestionsRegion";
 import { cn } from "@opal/utils";
+import { CHAT_COLUMN_WIDTH } from "@/lib/chat/layout";
 
 /** Width constraint for normal (non-multi-model) messages. */
-// The chat column's width comes from the page (`--app-chat-column-width`, set
-// by AppPage for its compact and full-width modes). A page that does not set
-// it gets the compact reading width. The cap only applies at md and up — below
-// that the window is too narrow for it to matter, so chat is always full width
-// (and the top-bar toggle is hidden).
-const MSG_W =
-  "md:max-w-[var(--app-chat-column-width,var(--width-chat-message-max))]";
 
 /**
  * Rows at the end of the chat mount on the first render. Rows above them
@@ -53,10 +48,6 @@ const INITIALLY_MOUNTED_ROWS = 6;
 
 /** Rows at the end of the chat that never unmount: the latest turn. */
 const PINNED_ROWS = 2;
-
-/** Animates the full-width toggle; every surface it widens uses this. */
-export const FULL_WIDTH_TRANSITION =
-  "transition-[max-width] duration-300 ease-in-out motion-reduce:transition-none";
 
 export interface ChatUIProps {
   activeAgent: MinimalAgent;
@@ -171,7 +162,7 @@ const ChatUI = React.memo(
     }, [scrollContainerRef, firstNodeId]);
 
     // Reading-width cap on messages, from the page's chat column width.
-    const msgWidth = cn(MSG_W, FULL_WIDTH_TRANSITION);
+    const msgWidth = CHAT_COLUMN_WIDTH;
 
     // Lookup: model identifier → provider slug (for icon resolution).
     const modelProviderLookup = useMemo(
@@ -366,7 +357,6 @@ const ChatUI = React.memo(
                 >
                   {(message.type !== "error" || message.packets.length > 0) && (
                     <AgentMessage
-                      fullWidthChat={fullWidthChat}
                       rawPackets={message.packets}
                       packetCount={message.packetCount}
                       restoredPacketCount={message.restoredPacketCount}
@@ -410,9 +400,17 @@ const ChatUI = React.memo(
             return null;
           })}
 
-          {/* Approval cards that wait for a decision follow the last message. */}
+          {/* Approval and question cards that wait for the user follow the
+              last message. */}
           <ToolApprovalsRegion
             modelProviderLookup={modelProviderLookup}
+            className={cn(
+              "w-full self-center",
+              msgWidth,
+              !fullWidthChat && "px-3"
+            )}
+          />
+          <ToolQuestionsRegion
             className={cn(
               "w-full self-center",
               msgWidth,

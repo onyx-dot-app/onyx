@@ -1,9 +1,9 @@
 import re
-from dataclasses import dataclass
 from typing import Final
 from urllib.parse import quote, unquote, urlparse
 
 import requests
+from pydantic import BaseModel, ConfigDict
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -18,30 +18,24 @@ _GITHUB_CODELOAD_ARCHIVE_URL_TEMPLATE: Final[str] = (
 _GITHUB_REPOSITORY_COMPONENT_PATTERN: Final[re.Pattern[str]] = re.compile(
     r"[A-Za-z0-9_.-]+"
 )
-_GITHUB_SSH_SOURCE_PATTERN: Final[re.Pattern[str]] = re.compile(
-    r"git@github\.com:([^/]+)/([^/\s]+?)(?:\.git)?$"
-)
 
 
-@dataclass(frozen=True, slots=True)
-class GitHubSource:
+class GitHubSource(BaseModel):
+    model_config = ConfigDict(frozen=True, strict=True)
+
     owner: str
     repo: str
     tree_tail: tuple[str, ...] = ()
 
 
-@dataclass(frozen=True, slots=True)
-class GitHubRevision:
+class GitHubRevision(BaseModel):
+    model_config = ConfigDict(frozen=True, strict=True)
+
     revision: str
     subpath: str | None
 
 
-def parse_github_source(
-    source: str,
-    *,
-    allow_ssh: bool = False,
-    allow_tree_path: bool = False,
-) -> GitHubSource:
+def parse_github_source(source: str) -> GitHubSource:
     """Parse a GitHub repository or repository-folder source."""
     value = source.strip().rstrip("/")
     if not value:
@@ -51,10 +45,7 @@ def parse_github_source(
         )
 
     tree_tail: tuple[str, ...] = ()
-    ssh_match = _GITHUB_SSH_SOURCE_PATTERN.fullmatch(value) if allow_ssh else None
-    if ssh_match:
-        owner, repo = ssh_match.groups()
-    elif "://" not in value:
+    if "://" not in value:
         source_parts = value.removesuffix(".git").split("/")
         if len(source_parts) != 2:
             raise OnyxError(
@@ -80,16 +71,12 @@ def parse_github_source(
             )
         owner, repo = source_parts[0], source_parts[1].removesuffix(".git")
         if len(source_parts) > 2:
-            if allow_tree_path and len(source_parts) >= 4 and source_parts[2] == "tree":
+            if len(source_parts) >= 4 and source_parts[2] == "tree":
                 tree_tail = source_parts[3:]
             else:
                 raise OnyxError(
                     OnyxErrorCode.INVALID_INPUT,
-                    (
-                        "Enter a GitHub repository URL without a branch, file, or subpage."
-                        if not allow_tree_path
-                        else "Enter a repository URL or a URL for a folder within a repository."
-                    ),
+                    "Enter a repository URL or a URL for a folder within a repository.",
                 )
 
     if not all(
@@ -108,7 +95,6 @@ def _github_get(
     authorization: str | None = None,
     stream: bool = False,
     follow_redirects: bool = True,
-    timeout: float | tuple[float, float] = _GITHUB_FETCH_TIMEOUT_SECONDS,
 ) -> requests.Response:
     headers = (
         {
@@ -122,7 +108,7 @@ def _github_get(
         return ssrf_safe_get(
             url,
             headers=headers,
-            timeout=timeout,
+            timeout=_GITHUB_FETCH_TIMEOUT_SECONDS,
             stream=stream,
             follow_redirects=follow_redirects,
         )
@@ -253,7 +239,6 @@ def download_github_archive(
     authorization_header: str | None = None,
     *,
     max_size_bytes: int,
-    timeout: float | tuple[float, float] = _GITHUB_FETCH_TIMEOUT_SECONDS,
 ) -> bytes:
     """Download a bounded tarball without forwarding credentials to archive hosts."""
     encoded_owner = quote(source.owner, safe="")
@@ -264,7 +249,7 @@ def download_github_archive(
         repo=encoded_repo,
         revision=encoded_revision,
     )
-    response = _github_get(archive_url, stream=True, timeout=timeout)
+    response = _github_get(archive_url, stream=True)
     if response.status_code != 200 and authorization_header is not None:
         response.close()
         redirect_response = _github_get(
@@ -313,7 +298,7 @@ def download_github_archive(
                     OnyxErrorCode.BAD_GATEWAY,
                     "GitHub didn't provide a repository download. Try again.",
                 )
-        response = _github_get(archive_url, stream=True, timeout=timeout)
+        response = _github_get(archive_url, stream=True)
 
     with response:
         if response.status_code in {403, 404}:

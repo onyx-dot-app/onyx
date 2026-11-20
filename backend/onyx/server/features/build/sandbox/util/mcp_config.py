@@ -1,24 +1,31 @@
-"""Resolve craft-enabled MCP servers into opencode `mcp` config input."""
+"""Resolve the MCP integrations of a user into opencode `mcp` config input."""
 
 from __future__ import annotations
 
 import hashlib
 import json
 import re
-from collections import defaultdict
 from collections.abc import Sequence
+from uuid import UUID
 
 from sqlalchemy.orm import Session
 
-from onyx.db.mcp import (
-    get_craft_enabled_mcp_servers,
-    get_mcp_tools_for_servers,
-    get_user_connection_configs,
+from onyx.db.enums import IntegrationKind
+from onyx.db.integration import (
+    get_mcp_server_for_integration,
 )
-from onyx.db.models import MCPServer, User
+from onyx.db.models import Integration, User
+from onyx.integrations.actions import integration_actions
+from onyx.integrations.connection_models import ConnectionState
+from onyx.integrations.connections import integration_status
+from onyx.integrations.craft import (
+    TaskIntegrations,
+    list_runnable_integrations,
+    load_task_integrations,
+    resolve_craft_action_policies,
+)
+from onyx.integrations.models import EffectivePolicy
 from onyx.server.features.build.sandbox.models import CraftMCPServerConfig
-from onyx.server.features.mcp.credentials import user_connection_status
-from onyx.server.features.mcp.models import MCPConnectionStatus
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -26,57 +33,81 @@ logger = setup_logger()
 _NON_IDENTIFIER = re.compile(r"[^a-z0-9]+")
 
 
-def _server_key(server: MCPServer) -> str:
+def _server_key(integration: Integration) -> str:
     """Identifier-safe opencode server id; the id suffix keeps it unique across
-    servers that slugify to the same name."""
-    slug = _NON_IDENTIFIER.sub("-", server.name.lower()).strip("-") or "mcp"
-    return f"{slug}-{server.id}"
+    integrations that slugify to the same name."""
+    slug = _NON_IDENTIFIER.sub("-", integration.name.lower()).strip("-") or "mcp"
+    return f"{slug}-{integration.id}"
+
+
+def _blocked_actions(
+    db_session: Session,
+    integration: Integration,
+    user: User,
+    task: TaskIntegrations | None,
+) -> tuple[str, ...]:
+    actions = integration_actions(integration.id, db_session)
+    policies = resolve_craft_action_policies(
+        db_session,
+        integration=integration,
+        actions=actions,
+        action_keys=[action.key for action in actions],
+        user_id=user.id,
+        task=task,
+    )
+    return tuple(
+        sorted(
+            key for key, policy in policies.items() if policy is EffectivePolicy.BLOCKED
+        )
+    )
 
 
 def resolve_craft_mcp_servers(
-    db_session: Session, user: User
+    db_session: Session, user: User, task_id: UUID | None = None
 ) -> list[CraftMCPServerConfig]:
-    """Craft-enabled MCP servers ``user`` may use, as opencode config input.
-
-    Filtered by access and by resolvable credentials — injection blocks an
-    unauthenticated server's tool discovery, so emitting it only buys a
-    permanently failed MCP client.
-
-    Query count is flat in the number of servers: this runs per user in the
-    admin restamp fan-out (``refresh_mcp_config_hashes_for_users``), which for a
-    public server covers every user with a running sandbox."""
-    accessible = get_craft_enabled_mcp_servers(db_session, user)
-    user_configs = get_user_connection_configs(
-        [s.id for s in accessible], user.email, db_session
+    """The MCP integrations that are on for ``user``, as opencode config
+    input. A session of a scheduled run (``task_id``) gets only the task
+    integrations that the owner has access to, also one the owner turned off, and the
+    task settings decide its disabled tools, as in the proxy. Only a connected integration (or one with
+    no sign-in) is listed: injection blocks the tool discovery of an
+    unauthenticated server, so emitting it only buys a permanently failed MCP
+    client. A Blocked action is a disabled tool."""
+    task = (
+        load_task_integrations(db_session, task_id, user.id)
+        if task_id is not None
+        else None
     )
-    servers: list[MCPServer] = []
-    for server in accessible:
-        if (
-            user_connection_status(server, user, db_session, user_configs=user_configs)
-            == MCPConnectionStatus.CONNECTED
-        ):
-            servers.append(server)
-        else:
+    integrations = (
+        list_runnable_integrations(db_session, user.id)
+        if task is None
+        else task.integrations()
+    )
+    configs: list[CraftMCPServerConfig] = []
+    for integration in integrations:
+        if integration.kind is not IntegrationKind.MCP:
+            continue
+        server = get_mcp_server_for_integration(integration.id, db_session)
+        if server is None:
+            continue
+        status = integration_status(integration, user, db_session)
+        if status.state is not ConnectionState.CONNECTED:
             # Craft reads no MCP status back from opencode; this is the only
             # trace of why a server is missing from a session's config.
             logger.info(
-                "craft_mcp_skip_unauthenticated server_id=%s name=%r",
-                server.id,
-                server.name,
+                "craft_mcp_skip_unauthenticated integration_id=%s name=%r",
+                integration.id,
+                integration.name,
             )
-    disabled_by_server: dict[int, list[str]] = defaultdict(list)
-    for tool in get_mcp_tools_for_servers([s.id for s in servers], db_session):
-        if tool.mcp_server_id is not None and not tool.enabled:
-            disabled_by_server[tool.mcp_server_id].append(tool.name)
-    return [
-        CraftMCPServerConfig(
-            key=_server_key(server),
-            url=server.server_url,
-            disabled_tools=tuple(sorted(disabled_by_server.get(server.id, ()))),
-            server_id=server.id,
+            continue
+        configs.append(
+            CraftMCPServerConfig(
+                key=_server_key(integration),
+                url=server.server_url,
+                disabled_tools=_blocked_actions(db_session, integration, user, task),
+                integration_id=integration.id,
+            )
         )
-        for server in servers
-    ]
+    return configs
 
 
 def craft_mcp_fingerprint(mcp_servers: Sequence[CraftMCPServerConfig]) -> str:
@@ -87,7 +118,7 @@ def craft_mcp_fingerprint(mcp_servers: Sequence[CraftMCPServerConfig]) -> str:
     Order-independent."""
     payload = sorted(
         [
-            s.server_id,
+            s.integration_id,
             s.url,
             list(s.disabled_tools),
         ]

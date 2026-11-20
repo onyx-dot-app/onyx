@@ -11,7 +11,7 @@ from pydantic import BaseModel, Field, JsonValue
 from onyx.llm import models as app
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.model_capabilities import model_needs_formatting_reenabled
-from onyx.llm.models import AnyThinkingBlock, ContentPart
+from onyx.llm.models import AnyThinkingBlock, ContentPart, ReasoningItemBlock
 from onyx.tools.tool_name import sanitize_tool_name
 
 if TYPE_CHECKING:
@@ -58,11 +58,28 @@ class UserMessage(CacheableMessage):
     content: str | list[ContentPart]
 
 
+class ReasoningSummaryText(BaseModel):
+    type: Literal["summary_text"] = "summary_text"
+    text: str
+
+
+class ReasoningItem(BaseModel):
+    """An OpenAI reasoning item as LiteLLM's responses bridge replays it."""
+
+    type: Literal["reasoning"] = "reasoning"
+    id: str
+    summary: list[ReasoningSummaryText]
+    encrypted_content: str
+
+
 class AssistantMessage(CacheableMessage):
     role: Literal["assistant"] = "assistant"
     content: str | None = None
     tool_calls: list[ToolCall] | None = None
+    # Anthropic signed thinking; replayed through `thinking_blocks`.
     thinking_blocks: list[AnyThinkingBlock] | None = None
+    # OpenAI reasoning items; replayed through the responses bridge.
+    reasoning_items: list[ReasoningItem] | None = None
 
 
 class ToolMessage(CacheableMessage):
@@ -160,9 +177,23 @@ def format_provider_message(message: app.Message) -> ChatCompletionMessage:
     if isinstance(message, app.UserMessage):
         return UserMessage(content=message.content)
     if isinstance(message, app.AssistantMessage):
+        blocks = message.thinking_blocks or []
+        reasoning_items = [
+            ReasoningItem(
+                id=block.id,
+                summary=[ReasoningSummaryText(text=text) for text in block.summary],
+                encrypted_content=block.encrypted_content,
+            )
+            for block in blocks
+            if isinstance(block, ReasoningItemBlock)
+        ]
+        thinking_blocks = [
+            block for block in blocks if not isinstance(block, ReasoningItemBlock)
+        ]
         return AssistantMessage(
             content=message.text or None,
-            thinking_blocks=message.thinking_blocks,
+            thinking_blocks=thinking_blocks or None,
+            reasoning_items=reasoning_items or None,
             tool_calls=[
                 ToolCall(
                     id=call.id,
@@ -196,6 +227,11 @@ def serialize_tools(tools: Sequence[app.ToolDefinition]) -> list[dict[str, JsonV
     ]
 
 
+def estimate_text_tokens(text: str) -> int:
+    """Estimate text size for prompt cache telemetry."""
+    return (len(text) + 3) // 4
+
+
 def cache_split_stats(
     request: app.GenerationRequest, prefix_length: int
 ) -> dict[str, str]:
@@ -208,7 +244,7 @@ def cache_split_stats(
     prefix_tokens = 0
     remaining = prefix_length
     if request.system_prompt and remaining:
-        prefix_tokens += (len(request.system_prompt) + 3) // 4
+        prefix_tokens += estimate_text_tokens(request.system_prompt)
         remaining -= 1
     for message in request.messages[:remaining]:
         if message.estimated_tokens is None and (
@@ -223,7 +259,7 @@ def cache_split_stats(
         prefix_tokens += (
             message.estimated_tokens
             if message.estimated_tokens is not None
-            else (len(message.text) + 3) // 4
+            else estimate_text_tokens(message.text)
         )
     stats["cacheable_prefix_tokens"] = str(prefix_tokens)
     return stats

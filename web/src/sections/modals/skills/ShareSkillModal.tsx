@@ -3,7 +3,7 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { RichStr } from "@opal/types";
 import { useTranslations } from "next-intl";
-import useSWR, { useSWRConfig } from "swr";
+import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import useShareableGroups, {
@@ -37,24 +37,20 @@ import {
 import { updateSkillShares, transferSkillOwnership } from "@/lib/skills/api";
 import type {
   CustomSkill,
-  SkillEditableDetail,
   SkillSharePermission,
   SkillInstallationPolicy,
 } from "@/lib/skills/types";
 import {
   canChangeOrganizationAccess,
+  groupAccessRows,
+  groupSettingChanges,
   serializeSkillSharing,
+  type GroupSettingRow,
   type SkillSharingDraft,
 } from "@/lib/skills/sharing";
+import SkillGroupAccess from "@/sections/modals/skills/SkillGroupAccess";
 import { Permission, type MinimalUserSnapshot } from "@/lib/types";
-import {
-  Button,
-  Card,
-  MessageCard,
-  SelectCard,
-  Tabs,
-  Text,
-} from "@opal/components";
+import { Button, InputSingleSelect, MessageCard, Text } from "@opal/components";
 import {
   SvgArrowExchange,
   SvgArrowLeft,
@@ -67,13 +63,21 @@ import {
   SvgUsers,
 } from "@opal/icons";
 import { markdown } from "@opal/utils";
-import { SkillPreviewDetails } from "@/sections/modals/SkillPreviewModal";
-import { usePublishAction } from "@/lib/skills/hooks";
-import SkillVersionsTab from "@/sections/modals/skills/SkillVersionsTab";
+import {
+  useInstallationPolicyCopy,
+  usePolicyOptions,
+  usePublishAction,
+  useSharingAllowed,
+} from "@/lib/skills/hooks";
+import {
+  INHERIT,
+  fromPolicyChoice,
+  isPolicyChoice,
+  toPolicyChoice,
+} from "@/lib/skills/installationPolicy";
+import SharingOffNotice from "@/sections/modals/skills/SharingOffNotice";
 
 type ShareModalView = "share" | "transfer";
-
-type SkillDialogTab = "details" | "sharing" | "versions";
 
 type SkillShareDraftState = BaseShareDraftState<SkillSharePermission>;
 
@@ -89,24 +93,13 @@ type ShareSkillModalProps = {
   | {
       mode: "edit";
       skillId: string;
-      initialTab?: SkillDialogTab;
       fallbackTitle?: string | RichStr;
       onSaved: () => void;
-      /** Lets an open editor take the fields of a restored version. */
-      onVersionRestored?: (restored: SkillEditableDetail) => void;
-      /** The open editor has unsaved changes, so Restore is off. */
-      restoreBlocked?: boolean;
     }
 );
 
 export default function ShareSkillModal(props: ShareSkillModalProps) {
   const { open, onClose } = props;
-  const initialTab =
-    props.mode === "edit" ? (props.initialTab ?? "sharing") : "sharing";
-  const [tab, setTab] = useState<SkillDialogTab>(initialTab);
-  const [detailsVisited, setDetailsVisited] = useState(
-    initialTab === "details"
-  );
   const skillId = props.mode === "edit" ? props.skillId : null;
   const {
     data: loadedSkill,
@@ -133,7 +126,14 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
   const { isGlobalHolder: isOrganizationManager } = usePermissionAuthority(
     Permission.MANAGE_PLUGINS
   );
-  const { mutate } = useSWRConfig();
+  const policyCopy = useInstallationPolicyCopy();
+  const companyOptions = usePolicyOptions({
+    inherit: {
+      scope: "skill",
+      policy: loadedSkill?.default_installation_policy ?? null,
+    },
+  });
+  const sharingAllowed = useSharingAllowed();
   const publishAction = usePublishAction();
 
   const [draftState, setDraftState] = useState<SkillShareDraftState | null>(
@@ -152,9 +152,13 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
     useState<TransferOwnershipTarget>(null);
   const [view, setView] = useState<ShareModalView>("share");
   const [installationPolicy, setInstallationPolicy] =
-    useState<SkillInstallationPolicy>("AVAILABLE");
+    useState<SkillInstallationPolicy | null>(null);
   const [initialPolicy, setInitialPolicy] =
-    useState<SkillInstallationPolicy>("AVAILABLE");
+    useState<SkillInstallationPolicy | null>(null);
+  const [groupSettings, setGroupSettings] = useState<GroupSettingRow[]>([]);
+  const [initialGroupSettings, setInitialGroupSettings] = useState<
+    GroupSettingRow[]
+  >([]);
   const [showIndividualAccess, setShowIndividualAccess] = useState(false);
   const [saving, setSaving] = useState(false);
   const [hydrated, setHydrated] = useState(false);
@@ -165,8 +169,6 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
     if (!open) {
       setShowIndividualAccess(false);
       setHydrated(false);
-      setTab(initialTab);
-      setDetailsVisited(initialTab === "details");
       setDraftState(null);
       return;
     }
@@ -180,6 +182,19 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
     };
     setInstallationPolicy(skill.installation_policy);
     setInitialPolicy(skill.installation_policy);
+    // A shared group with no setting comes from the share draft, so its row
+    // goes away with its share.
+    const nextGroupSettings: GroupSettingRow[] = (
+      loadedSkill?.group_summaries ?? []
+    )
+      .filter((summary) => summary.installation_policy !== null)
+      .map((summary) => ({
+        group_id: summary.group_id,
+        group_name: summary.group_name,
+        choice: toPolicyChoice(summary.installation_policy),
+      }));
+    setGroupSettings(nextGroupSettings);
+    setInitialGroupSettings(nextGroupSettings);
     setDraftState(nextState);
     setInitialState(nextState);
     setStagedUsers([]);
@@ -188,7 +203,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
     setTransferTarget(null);
     setView("share");
     setHydrated(true);
-  }, [open, skill, hydrated, skillId, isValidating, initialTab]);
+  }, [open, skill, loadedSkill, hydrated, skillId, isValidating]);
 
   const effectiveState = useMemo(() => {
     if (!draftState) return null;
@@ -203,25 +218,39 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
   const canEditShares =
     skill?.user_permission === "OWNER" || skill?.user_permission === "EDITOR";
   const canEditOrgVisibility =
-    !!skill &&
-    !skill.external_app &&
-    canChangeOrganizationAccess(skill, isOrganizationManager);
+    !!skill && canChangeOrganizationAccess(skill, isOrganizationManager);
   // Publishing is one-way: a saved published skill shows no private option.
   const isPublished = props.mode === "edit" && initialState?.isPublic === true;
   const isPublishing = !!effectiveState?.isPublic && !isPublished;
+  const canSetGroupSettings = props.mode === "edit" && isOrganizationManager;
+  const shownGroupRows = useMemo(
+    () => groupAccessRows(groupSettings, effectiveState?.groupShares ?? []),
+    [effectiveState, groupSettings]
+  );
+  const groupChanges = useMemo(
+    () => groupSettingChanges(initialGroupSettings, shownGroupRows),
+    [initialGroupSettings, shownGroupRows]
+  );
   const viewerLabel = permissionOptions.find(
     (option) => option.value === "VIEWER"
   )?.label;
   const canTransfer =
     props.mode === "edit" &&
     !!skill &&
+    sharingAllowed &&
     (skill.user_permission === "OWNER" || (isAdmin && skill.ownership_vacant));
+  // With Sharing off, a member can remove a share but not change its level.
+  const levelOptions = (current: SkillSharePermission) =>
+    sharingAllowed
+      ? permissionOptions
+      : permissionOptions.filter((option) => option.value === current);
   const isDirty =
     !!effectiveState &&
     !!initialState &&
     (serializeDraftState(effectiveState) !==
       serializeDraftState(initialState) ||
-      installationPolicy !== initialPolicy);
+      installationPolicy !== initialPolicy ||
+      groupChanges.length > 0);
 
   const existingUserIds = useMemo(() => {
     const ids = new Set(draftState?.userShares.map((share) => share.user.id));
@@ -369,11 +398,10 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
         closeModal();
         return;
       }
-      const payload = serializeSkillSharing(
-        nextDraft,
-        isAdmin,
-        isOrganizationManager
-      );
+      const payload = serializeSkillSharing(nextDraft, isOrganizationManager);
+      if (canSetGroupSettings && groupChanges.length > 0) {
+        payload.group_settings = groupChanges;
+      }
       const saved = await updateSkillShares(props.skillId, payload);
       void refreshSkill();
       if (
@@ -395,13 +423,6 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
     } finally {
       setSaving(false);
     }
-  }
-
-  function handleVersionsChanged() {
-    if (props.mode !== "edit") return;
-    void refreshSkill();
-    void mutate(SWR_KEYS.userSkillPreview(props.skillId));
-    props.onSaved();
   }
 
   async function handleTransfer() {
@@ -440,30 +461,24 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
       <Section gap={6} height="auto" alignItems="stretch">
         <Section gap={3} height="auto" alignItems="stretch">
           <Content font="main-ui-action" title={t("share.accessTitle")} />
-          <Card border="solid" padding={2}>
-            {isPublished ? (
-              <ShareAccessRow
-                icon={SvgOrganization}
-                title={t("share.published.title")}
-                description={t("share.published.description")}
-                rightChildren={
-                  viewerLabel ? (
-                    <StaticPermissionLabel
-                      icon={SvgBubbleText}
-                      label={viewerLabel}
-                    />
-                  ) : undefined
-                }
-              />
-            ) : (
-              <Section
-                flexDirection="row"
-                justifyContent="between"
-                wrap
-                gap={2}
-                height="auto"
-                padding={2}
-              >
+          {isPublished ? (
+            <ShareAccessRow
+              icon={SvgOrganization}
+              title={t("share.published.title")}
+              description={t("share.published.description")}
+              rightChildren={
+                viewerLabel ? (
+                  <StaticPermissionLabel
+                    icon={SvgBubbleText}
+                    label={viewerLabel}
+                  />
+                ) : undefined
+              }
+            />
+          ) : (
+            <ShareAccessRow
+              icon={effectiveState.isPublic ? SvgOrganization : SvgLock}
+              titleSlot={
                 <SharePermissionMenu
                   ariaLabel={t("share.scopeMenu.ariaLabel")}
                   disabled={!canEditOrgVisibility}
@@ -475,12 +490,12 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
                     );
                   }}
                   options={scopeOptions}
-                  showTriggerIcon
+                  showTriggerIcon={false}
                   value={effectiveState.isPublic ? "PUBLIC" : "PRIVATE"}
                 />
-              </Section>
-            )}
-          </Card>
+              }
+            />
+          )}
           {isPublishing && publishAction === "off" && (
             <MessageCard
               variant="error"
@@ -503,90 +518,64 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
               }
             />
           )}
-          {skill.external_app && (
-            <Text color="text-03" font="secondary-body">
-              {t("share.externalAppNotice", {
-                appName: skill.external_app.name,
-              })}
-            </Text>
-          )}
         </Section>
 
-        {isAdmin && (
+        {isOrganizationManager && (
           <Section gap={3} height="auto" alignItems="stretch">
             <Content
               font="main-ui-action"
               title={t("share.installation.title")}
               description={t("share.installation.description")}
             />
-            <Section
-              role="group"
-              flexDirection="row"
-              aria-label={t("share.installation.title")}
-              gap={2}
-              height="auto"
-              alignItems="stretch"
-            >
-              {(
-                [
-                  {
-                    value: "AVAILABLE",
-                    label: "available",
-                    icon: SvgUser,
-                  },
-                  {
-                    value: "DEFAULT",
-                    label: "default",
-                    icon: SvgOrganization,
-                  },
-                  {
-                    value: "REQUIRED",
-                    label: "required",
-                    icon: SvgLock,
-                  },
-                ] as const
-              ).map((option) => (
-                <Section key={option.value} height="full" className="min-w-0">
-                  <SelectCard
-                    role="button"
-                    aria-label={t(`share.installation.${option.label}`)}
-                    aria-pressed={installationPolicy === option.value}
-                    state={
-                      installationPolicy === option.value ? "selected" : "empty"
-                    }
-                    disabled={saving || !canEditShares}
-                    onClick={() => setInstallationPolicy(option.value)}
-                    padding={2}
-                    rounding={3}
-                  >
-                    <Section flexDirection="row" gap={2} height="auto">
-                      <option.icon
-                        size={18}
-                        aria-hidden
-                        className="shrink-0 stroke-text-03"
-                      />
-                      <Text font="main-ui-action">
-                        {t(`share.installation.${option.label}`)}
-                      </Text>
-                    </Section>
-                  </SelectCard>
-                </Section>
-              ))}
-            </Section>
-            <Text color="text-03" font="secondary-body" role="status">
-              {t(
-                `share.installation.${
-                  (
-                    {
-                      AVAILABLE: "availableDescription",
-                      DEFAULT: "defaultDescription",
-                      REQUIRED: "requiredDescription",
-                    } as const
-                  )[installationPolicy]
-                }`
-              )}
+            <InputSingleSelect
+              placeholder={t("share.installation.title")}
+              value={toPolicyChoice(installationPolicy)}
+              defaultOption={INHERIT}
+              options={companyOptions}
+              disabled={saving || !canEditShares}
+              onValueChange={(value) => {
+                if (isPolicyChoice(value))
+                  setInstallationPolicy(fromPolicyChoice(value));
+              }}
+            />
+            <Text as="p" color="text-03" font="secondary-body" role="status">
+              {policyCopy.description(installationPolicy)}
             </Text>
           </Section>
+        )}
+
+        {canSetGroupSettings && (
+          <SkillGroupAccess
+            rows={shownGroupRows}
+            company={
+              installationPolicy ??
+              loadedSkill?.default_installation_policy ??
+              null
+            }
+            groups={shareableGroupsData ?? []}
+            disabled={saving}
+            onChoice={(groupId, choice) => {
+              const row = shownGroupRows.find(
+                (shown) => shown.group_id === groupId
+              );
+              if (!row) return;
+              setGroupSettings((settings) => [
+                ...settings.filter((setting) => setting.group_id !== groupId),
+                { group_id: groupId, group_name: row.group_name, choice },
+              ]);
+            }}
+            onAdd={(group) =>
+              setGroupSettings((settings) => [
+                ...settings,
+                { group_id: group.id, group_name: group.name, choice: INHERIT },
+              ])
+            }
+            onRemove={(groupId) =>
+              setGroupSettings((settings) =>
+                settings.filter((setting) => setting.group_id !== groupId)
+              )
+            }
+          />
         )}
 
         {effectiveState.isPublic && (
@@ -610,8 +599,10 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
                   : "share.peopleTitle"
               )}
             />
+            {canEditShares && !sharingAllowed && <SharingOffNotice />}
             {canEditShares ? (
               <AddPeoplePicker
+                disabled={!sharingAllowed}
                 existingGroupIds={existingGroupIds}
                 existingUserIds={existingUserIds}
                 groups={shareableGroupsData ?? []}
@@ -640,122 +631,112 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
             ) : null}
             {(effectiveState.userShares.length > 0 ||
               effectiveState.groupShares.length > 0) && (
-              <Card border="solid" padding={2}>
-                <Section gap={1} height="auto" alignItems="stretch">
-                  {effectiveState.userShares.map((share) => {
-                    const isCurrentUser = currentUser?.id === share.user.id;
-                    return (
-                      <ShareAccessRow
-                        avatarInitial={share.user.email.charAt(0).toUpperCase()}
-                        icon={SvgUser}
-                        key={share.user.id}
-                        rightChildren={
-                          <SharePermissionMenu
-                            ariaLabel={t("share.permissionMenu.ariaLabel", {
-                              name: share.user.email,
-                            })}
-                            disabled={!canEditShares}
-                            onChange={(permission) =>
-                              updateUserSharePermission(
-                                share.user.id,
-                                permission
-                              )
-                            }
-                            onRemove={() => removeUserShare(share.user.id)}
-                            options={permissionOptions}
-                            value={share.permission}
-                          />
-                        }
-                        title={
-                          isCurrentUser
-                            ? t("share.currentUserLabel", {
-                                email: share.user.email,
-                              })
-                            : share.user.email
-                        }
-                      />
-                    );
-                  })}
-
-                  {effectiveState.groupShares.map((share) => (
+              <Section gap={1} height="auto" alignItems="stretch">
+                {effectiveState.userShares.map((share) => {
+                  const isCurrentUser = currentUser?.id === share.user.id;
+                  return (
                     <ShareAccessRow
-                      avatarIcon={SvgUsers}
-                      icon={SvgUsers}
-                      key={share.group_id}
+                      avatarInitial={share.user.email.charAt(0).toUpperCase()}
+                      icon={SvgUser}
+                      key={share.user.id}
                       rightChildren={
                         <SharePermissionMenu
                           ariaLabel={t("share.permissionMenu.ariaLabel", {
-                            name: share.group_name,
+                            name: share.user.email,
                           })}
                           disabled={!canEditShares}
                           onChange={(permission) =>
-                            updateGroupSharePermission(
-                              share.group_id,
-                              permission
-                            )
+                            updateUserSharePermission(share.user.id, permission)
                           }
-                          onRemove={() => removeGroupShare(share.group_id)}
-                          options={permissionOptions}
+                          onRemove={() => removeUserShare(share.user.id)}
+                          options={levelOptions(share.permission)}
                           value={share.permission}
                         />
                       }
-                      title={share.group_name}
+                      title={
+                        isCurrentUser
+                          ? t("share.currentUserLabel", {
+                              email: share.user.email,
+                            })
+                          : share.user.email
+                      }
                     />
-                  ))}
-                </Section>
-              </Card>
+                  );
+                })}
+
+                {effectiveState.groupShares.map((share) => (
+                  <ShareAccessRow
+                    avatarIcon={SvgUsers}
+                    icon={SvgUsers}
+                    key={share.group_id}
+                    rightChildren={
+                      <SharePermissionMenu
+                        ariaLabel={t("share.permissionMenu.ariaLabel", {
+                          name: share.group_name,
+                        })}
+                        disabled={!canEditShares}
+                        onChange={(permission) =>
+                          updateGroupSharePermission(share.group_id, permission)
+                        }
+                        onRemove={() => removeGroupShare(share.group_id)}
+                        options={levelOptions(share.permission)}
+                        value={share.permission}
+                      />
+                    }
+                    title={share.group_name}
+                  />
+                ))}
+              </Section>
             )}
           </Section>
         )}
         <Section gap={3} height="auto" alignItems="stretch">
           <Content font="main-ui-action" title={t("share.ownershipTitle")} />
-          <Card border="solid" padding={2}>
-            {skill.owner ? (
-              <ShareAccessRow
-                avatarInitial={skill.owner.email.charAt(0).toUpperCase()}
-                icon={SvgUser}
-                rightChildren={
-                  <StaticPermissionLabel
-                    icon={SvgUserManage}
-                    label={t("share.ownerLabel")}
-                    muted={!canTransfer}
+          {skill.owner ? (
+            <ShareAccessRow
+              avatarInitial={skill.owner.email.charAt(0).toUpperCase()}
+              icon={SvgUser}
+              rightChildren={
+                <StaticPermissionLabel
+                  icon={SvgUserManage}
+                  label={t("share.ownerLabel")}
+                  muted={!canTransfer}
+                />
+              }
+              title={
+                currentUser && skill.owner.id === currentUser.id
+                  ? t("share.currentUserLabel", {
+                      email: skill.owner.email,
+                    })
+                  : skill.owner.email
+              }
+              trailing={
+                canTransfer ? (
+                  <TransferTrailingButton
+                    onTransfer={() => setView("transfer")}
                   />
-                }
-                title={
-                  currentUser && skill.owner.id === currentUser.id
-                    ? t("share.currentUserLabel", {
-                        email: skill.owner.email,
-                      })
-                    : skill.owner.email
-                }
-                trailing={
-                  canTransfer ? (
-                    <TransferTrailingButton
-                      onTransfer={() => setView("transfer")}
-                    />
-                  ) : undefined
-                }
-              />
-            ) : (
-              <ShareAccessRow
-                icon={SvgUserManage}
-                rightChildren={
-                  <StaticPermissionLabel
-                    icon={SvgUserManage}
-                    label={t("share.ownerLabel")}
+                ) : undefined
+              }
+            />
+          ) : (
+            <ShareAccessRow
+              icon={SvgUserManage}
+              rightChildren={
+                <StaticPermissionLabel
+                  icon={SvgUserManage}
+                  label={t("share.ownerLabel")}
+                />
+              }
+              title={t("share.noOwnerTitle")}
+              trailing={
+                canTransfer ? (
+                  <TransferTrailingButton
+                    onTransfer={() => setView("transfer")}
                   />
-                }
-                title={t("share.noOwnerTitle")}
-                trailing={
-                  canTransfer ? (
-                    <TransferTrailingButton
-                      onTransfer={() => setView("transfer")}
-                    />
-                  ) : undefined
-                }
-              />
-            )}
-          </Card>
+                ) : undefined
+              }
+            />
+          )}
         </Section>
       </Section>
     );
@@ -804,72 +785,6 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
               selectedTarget={transferTarget}
               users={transferableUsersData ?? []}
             />
-          ) : props.mode === "edit" ? (
-            <Tabs
-              value={tab}
-              variant="contained"
-              gap={6}
-              onValueChange={(value) => {
-                if (
-                  saving ||
-                  (value !== "details" &&
-                    value !== "sharing" &&
-                    value !== "versions")
-                )
-                  return;
-                setTab(value);
-                if (value === "details") setDetailsVisited(true);
-              }}
-            >
-              <Tabs.List>
-                <Tabs.Trigger value="details" disabled={saving}>
-                  {t("tabs.details")}
-                </Tabs.Trigger>
-                <Tabs.Trigger value="sharing" disabled={saving}>
-                  {t("tabs.sharing")}
-                </Tabs.Trigger>
-                {canEditShares && (
-                  <Tabs.Trigger value="versions" disabled={saving}>
-                    {t("tabs.versions")}
-                  </Tabs.Trigger>
-                )}
-              </Tabs.List>
-              <Tabs.Content
-                value="details"
-                keepMounted
-                hidden={tab !== "details"}
-              >
-                {detailsVisited && (
-                  <SkillPreviewDetails
-                    skillId={props.skillId}
-                    unavailableReason={loadedSkill?.unavailable_reason}
-                  />
-                )}
-              </Tabs.Content>
-              <Tabs.Content
-                value="sharing"
-                keepMounted
-                hidden={tab !== "sharing"}
-              >
-                {renderSharingContent()}
-              </Tabs.Content>
-              {canEditShares && (
-                <Tabs.Content value="versions">
-                  {loadedSkill && (
-                    <SkillVersionsTab
-                      skill={loadedSkill}
-                      canPublish={canChangeOrganizationAccess(
-                        loadedSkill,
-                        isOrganizationManager
-                      )}
-                      onChanged={handleVersionsChanged}
-                      onRestored={props.onVersionRestored}
-                      restoreBlocked={props.restoreBlocked}
-                    />
-                  )}
-                </Tabs.Content>
-              )}
-            </Tabs>
           ) : (
             renderSharingContent()
           )}
@@ -897,12 +812,9 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
               onClick={closeModal}
               prominence="secondary"
             >
-              {view === "transfer" ||
-              (canEditShares && (tab === "sharing" || isDirty))
+              {view === "transfer" || canEditShares
                 ? t("share.cancelButton.label")
-                : props.mode === "edit" && tab !== "sharing"
-                  ? t("preview.closeButton.label")
-                  : t("share.doneButton.label")}
+                : t("share.doneButton.label")}
             </Button>
             {view === "transfer" ? (
               <Button
@@ -913,7 +825,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
               >
                 {t("share.transferButton.label")}
               </Button>
-            ) : canEditShares && (tab === "sharing" || isDirty) ? (
+            ) : canEditShares ? (
               <Button
                 disabled={
                   !isDirty ||

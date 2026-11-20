@@ -1,6 +1,6 @@
 # Shared Agent Runtime
 
-> A Python engine that runs chat, deep research, research and coding agents
+> A Python engine that runs chat and research agents
 > through model steps and parallel tools, with child agents, cancellation,
 > compaction and suspension. This document is the one record of which chat
 > adapters implement its interfaces, and which runtime features no product path
@@ -27,14 +27,13 @@ document does not repeat it.
   `ChatAgent` or a `DeepResearchAgent` for each response, and the response
   thread starts it with `background=False` ([[#context-captured-at-start]]).
 - **Child agents.** The deep research step starts
-  `deep_research/research_agent.py:ResearchAgent`, and the coding agent tool
-  starts `coding_agent/agent.py:CodingAgent`, through
+  `deep_research/research_agent.py:ResearchAgent` through
   `ToolInvocation.agents.spawn_agent`. The tool returns a `ChildRunWait` and
   sets `result_from_children` instead of blocking, and the parent run suspends
   until the child ends.
 - **Independent children.** ChatAgent and its children expose controls from
   `tools/tool_implementations/subagents/subagent_tools.py` to spawn, list, message, and interrupt children. Incognito chats have no child agents: they omit these controls,
-  the coding agent tool and deep research. Children survive
+  and deep research. Children survive
   the root response. A subagent must incorporate the results of children it spawns before
   completing; `RunOwnership.delegated_runs` lists the unread ones. `WAIT_CHILDREN` releases its execution thread while results are pending and reserves
   the last model step for synthesis. Dependencies belong to the current run, not the
@@ -94,7 +93,8 @@ prompt holds and the compaction prompt text.
 
 ```
 Agent (history, checkpoint, tools, prepare_step / after_step,
-       before_tool_call / after_tool_call / on_finish / on_suspend hooks)
+       before_tool_call / after_tool_call / on_finish / on_suspend /
+       on_drained hooks)
   start() -> Run (one request, step budget, own cancellation signal)
     step: prepare_step -> _compact_context -> model generation
           -> ToolBatch -> after_step: continue or finish
@@ -124,11 +124,33 @@ Agent (history, checkpoint, tools, prepare_step / after_step,
   next request builds its context from the amended result, and compacts only
   when that context is over budget. A hook that fails or stops for
   cancellation sets no results; the run still ends.
+  The tool phase suspends only when the run is idle; the rule is in
+  "Suspend and accept input" in `agents/README.md`, and
+  `agents/tool_execution.py:ToolBatch.execute` waits on
+  `ExecutionWork.held`; each held job that ends wakes it
+  (`Run.notify_tool_activity`).
+  Open requests of calls that tools made for the model stay open while the
+  run suspends (`RunProgress.open_inputs`); `ToolBatch._continue_open_inputs`
+  gives their answers to `AgentTool.continue_open_input`, one call's
+  requests together.
   `Agent.on_suspend` runs before each suspension; `Run._suspend` applies its
   amendments before it captures state. A suspend hook that fails sets no
   results and the run still suspends. A suspend hook that stops for
   cancellation finishes the run as cancelled. Chat uses both hooks to close
   code mode cells ([[code-execution#code-mode-interrupted-run]]).
+  `Agent.on_drained` runs after each finish or suspension once the run's work
+  drains (`Run._work_drained`, from `_drain_workers` and `_suspend`): its tool
+  threads, work that a tool added through `ToolInvocation.run_work` (a code
+  mode cell's driver, and its tool call threads through `track_detached`), and its foreground
+  children's work (`Run.track_child_work`), not background children. A suspension calls it only when no foreground child
+  waits or works (`RunCoordination.pending_children`,
+  `AgentCoordinator.children_idle`, read only); otherwise the run's later end does.
+  A run that hands off in that state calls no hook; the restoring owner's
+  run end does. It cannot change results. Errors, `AgentCancelled`
+  included, are logged and the run still becomes idle and reusable. Only the
+  root `chat/agent.py:ChatAgent` installs it, to end per-run tool state
+  (`create_chat_agent` passes it to the root only), such as the sandbox turn
+  ([[code-execution]]); subagents share the root's tools and install none.
   `chat/presentation.py:ResponsePresenter` renders each amendment with
   `chat/renderer.py:ToolRenderer.amend`. A call without an ended card
   completes with the amended result. An ended card renders only what the
@@ -136,6 +158,10 @@ Agent (history, checkpoint, tools, prepare_step / after_step,
   display adds nothing. `ToolRenderer.complete` renders that part after the
   section end too. Live, the closing record follows the answer; replay places
   it before the answer's `message_start`. Both orders give the same groups.
+  A replayed card, ended or open and in child runs too, takes the later
+  events of its call. A call that no part of this stream drew gets an open
+  card, which closes when its run ends. A continued program's requests keep the message and step
+  of the call that started it (`agents/tool_execution.py:_NestedCallGate`).
 - `backend/onyx/agents/runtime.py:_compact_context` fits each request before the
   model call: it applies the saved checkpoint and summarizes through
   `agents/compaction.py:compact_history` above the trigger. If the summary
@@ -145,8 +171,8 @@ Agent (history, checkpoint, tools, prepare_step / after_step,
   provider context-limit error before any output streams compacts and retries
   once.
 - `backend/onyx/agents/tool_execution.py:ToolBatch` runs a step's calls in
-  parallel. `ToolExecutionMode.SEQUENTIAL` serializes calls to one tool name,
-  and `merge_arguments` merges compatible calls into one worker. It records
+  parallel. `ToolExecutionMode.SEQUENTIAL` serializes calls to one tool name, or
+  to the tools of one `sequence_group`, and `merge_arguments` merges compatible calls into one worker. It records
   results as they complete. Each pass of `ToolBatch.execute` then ends the
   completed calls in call order, and model history replays them in call order. A step with more than `MAX_TOOL_CALLS_PER_STEP` (64) calls or a
   repeated call ID fails the whole run.
@@ -169,12 +195,13 @@ Agent (history, checkpoint, tools, prepare_step / after_step,
 | `RestorableFeature` | `ChatAgent`, `DeepResearchAgent` and `ResearchAgent`. Product calls only `capture_state`, at each suspension. `chat/restoration.py:restore_chat_agent` rebuilds them for `ChatRunStore.resume`. |
 | `AgentTool` | `tools/interface.py:Tool.bind`. |
 
-**Live paths.** In-process suspension is live: deep research and the coding
-agent suspend the parent on `ChildRunWait`, and it continues in the same
-process. Checkpoint transfer is live for chat tool approvals only: the runtime
-gates calls of `AgentTool.approval_required` through the coordinator's
-`ToolApprovals` (`chat/run_store.py:ChatRunStore.request_approval`), and any
-run whose waits are all on people hands off in one park pass of
+**Live paths.** Deep research suspends the parent on `ChildRunWait`. The parent continues in the same
+process. Checkpoint transfer is live for chat tool approvals and the root's
+questions: the runtime gates calls of `AgentTool.approval_required` through
+the coordinator's `ToolApprovals`
+(`chat/run_store.py:ChatRunStore.request_approval`), the question tool returns
+a `RESULT` request (`chat/tool_questions.py:open_tool_question`), and any run
+whose waits are all on people hands off in one park pass of
 `ChatRunStore.poll_control` after `ChatRunStore.may_park`, the root included;
 the root reports its park to its turn through the store's `on_root_parked`
 callback. A parent
@@ -186,8 +213,9 @@ the saved answers), the leaf first
 call waits in a saved `NestedInputWait`
 ([[mcp-and-custom-tools#program-call-waits-in-cell]]). No product code calls
 `Run.suspend`. Only a user Stop calls `Run.submit`:
-`ChatRunStore.reject_waiting_approvals` gives each live run that the Stop
-cancels its saved rejections, then cancels it, under the run's execution lock. `chat/run_store.py:ChatRunStore.restore_agent`
+`ChatRunStore.reject_waiting_inputs` gives each live run that the Stop
+cancels its saved rejections and question cancellations, then cancels it,
+under the run's execution lock. `chat/run_store.py:ChatRunStore.restore_agent`
 loads a saved child for a new run, and `chat/restoration.py:restore_subagent`
 rebuilds it with the current request's tools and settings. Product saves lock
 the response, check the checkpoint owner and delete any row at a terminal
@@ -196,7 +224,8 @@ To check again, run
 `git grep -n "\.handoff(\|\.suspend()\|\.resume(\|\.submit(\|PendingToolInput" -- backend/onyx ':!backend/onyx/agents' ':!backend/onyx/chat/run_store.py'`
 and ignore thread-pool and job `submit` calls and the code mode `resume`
 calls (`state.resume`, `CodeCells.resume`). Expect only `chat/execution.py`
-(`resume`) and `chat/tool_approvals.py:open_tool_approval`.
+(`resume`), `chat/tool_approvals.py:open_tool_approval` and
+`chat/tool_questions.py:open_tool_question`.
 
 ---
 
@@ -214,8 +243,9 @@ calls (`state.resume`, `CodeCells.resume`). Expect only `chat/execution.py`
    from a product path as a side effect.** A new tool, hook or `ToolApprovals`
    that returns a `PendingToolInput`, or a caller of `Run.suspend`, `ChatRunStore.handoff` or
    `ChatRunStore.resume`, makes that path live without review of its storage, ownership and display.
-   Chat tool approvals are the one reviewed source of `PendingToolInput`; a
-   new source needs its own saved requests and resume trigger, as
+   Chat tool approvals and the root's question tool are the reviewed sources
+   of `PendingToolInput`; a new source needs its own saved requests and
+   resume trigger, as
    [[mcp-and-custom-tools#chat-approval-durable-wait]] has. Update the
    Live paths paragraph in the same change ([[#wire-module]]).
 3. `restored-tools-must-match` **A restored run needs the same tools and
@@ -236,8 +266,7 @@ calls (`state.resume`, `CodeCells.resume`). Expect only `chat/execution.py`
    and the run's worker threads use that copy. So set the tenant and open the
    root trace before `Agent.start` or `Agent.resume`. A trace that opens later,
    or a tenant that a tool sets, does not reach the run. `start(background=False)`
-   returns at the first suspension, not at completion: in a deep research or
-   coding-agent turn, chat's `with trace(...)` block in
+   returns at the first suspension. In a deep research turn, chat's `with trace(...)` block in
    `chat/execution.py:ChatTurnExecution._run_response` closes while children
    and later parent steps still run on copied context. A Celery task or a
    process that resumes a checkpoint ([[#restored-tools-must-match]]) must do
@@ -323,17 +352,16 @@ calls (`state.resume`, `CodeCells.resume`). Expect only `chat/execution.py`
   `backend/tests/external_dependency_unit/llm/test_agent_runtime_http.py`.
 - `new-feature` **Build a new feature on the runtime.** Start from
   [[#run-by-hand]], then settle these:
-  - Inside chat, copy `coding_agent/agent.py:CodingAgent` and the tool that
-    starts it as a child (`tools/tool_implementations/coding_agent/coding_agent_tool.py`).
-    Return `ChildRunWait`, set `result_from_children`, and release held
-    resources through `agents.add_completion_cleanup`. The chat adapters then
+  - For a child inside chat, see `deep_research/agent.py:DeepResearchAgent` and
+    the `ResearchAgent` it starts.
+    Return `ChildRunWait` and set `result_from_children`. The chat adapters then
     save and own the child for one run. Incognito chats have no children. To
     rerun it, add a `restoration_config` and a branch in
     `chat/restoration.py:restore_subagent`. `ChatRunStore` authorizes and
     loads saved history; this factory rebuilds Chat and Research children with
     the current request's authorized resources. For suspended execution, add
     a `RestorableFeature` and a branch in `restore_chat_agent`, which rebuilds
-    Chat, Research and DeepResearch agents. Neither factory rebuilds CodingAgent.
+    Chat, Research and DeepResearch agents.
   - Outside chat, only tests implement `RunStore`, `RunOwnership` and
     `AgentDirectory` without chat storage
     (`backend/tests/unit/onyx/agents/fakes.py`). Children and durable completion

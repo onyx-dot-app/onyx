@@ -63,12 +63,6 @@ EXPECTED_TOOLS = {
         in_code_tool_id="MemoryTool",
         user_id=None,
     ),
-    "CodingAgentTool": ToolSeedingExpectedResult(
-        name="coding_agent",
-        display_name="Coding Agent",
-        in_code_tool_id="CodingAgentTool",
-        user_id=None,
-    ),
 }
 
 
@@ -109,8 +103,8 @@ def test_tool_seeding_migration() -> None:
         )
         tools = result.fetchall()
 
-        assert len(tools) == 11, (
-            f"Should have created exactly 11 builtin tools, got {len(tools)}"
+        assert len(tools) == 10, (
+            f"Should have created exactly 10 builtin tools, got {len(tools)}"
         )
 
         def validate_tool(expected: ToolSeedingExpectedResult) -> None:
@@ -152,5 +146,3 @@ def test_tool_seeding_migration() -> None:
 
         # Check MemoryTool
         validate_tool(EXPECTED_TOOLS["MemoryTool"])
-
-        validate_tool(EXPECTED_TOOLS["CodingAgentTool"])

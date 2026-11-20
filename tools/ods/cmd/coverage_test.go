@@ -174,11 +174,18 @@ func TestRunCoverage_measureErrorExitsOne(t *testing.T) {
 		t.Fatal(err)
 	}
 
+	// The error must not reach stdout, where go test would read the logged
+	// "coverage: ..." line as the package's coverage.
+	logs := dbCaptureLog(t)
+
 	if code := runCoverage("ods", &CoverageOptions{}); code != 1 {
 		t.Fatalf("expected exit code 1, got %d", code)
 	}
 	if _, err := os.Stat(record); !os.IsNotExist(err) {
 		t.Fatalf("expected go not to run without a go.mod, got %v", err)
+	}
+	if !strings.Contains(logs.String(), "go.mod") {
+		t.Fatalf("expected the missing go.mod in the error, got:\n%s", logs)
 	}
 }
 

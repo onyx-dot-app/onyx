@@ -3,19 +3,30 @@
 from unittest.mock import MagicMock, patch
 from uuid import uuid4
 
+import pytest
 from sqlalchemy.orm import Session
 
+from onyx.context.search.models import ChunkIndexRequest, IndexFilters
+from onyx.context.search.retrieval.search_runner import search_chunks
 from onyx.context.search.utils import get_query_embeddings
-from onyx.db.search_settings import get_current_search_settings
+from onyx.db.enums import IncognitoRecordMode
+from onyx.db.models import CloudEmbeddingProvider, SearchSettings
+from onyx.document_index.interfaces import DocumentIndex
 from onyx.natural_language_processing.search_nlp_models import EmbeddingModel
-from shared_configs.enums import EmbedTextType
+from shared_configs.contextvars import CURRENT_INCOGNITO_RECORD_MODE_CONTEXTVAR
+from shared_configs.enums import EmbeddingProvider, EmbedTextType
 
 
 def _make_fake_embedding_model(
     encode_return: list[list[float]],
+    settings_id: int | None = 1,
 ) -> tuple[MagicMock, MagicMock]:
     """Returns ``(model_mock, encode_mock)`` so callers can inspect calls."""
     model = MagicMock(spec=EmbeddingModel)
+    model.query_embedding_cache_key = (
+        str(settings_id) if settings_id is not None else None
+    )
+    model.retrim_content = False
     model.provider_type = None
     encode = MagicMock(return_value=encode_return)
     model.encode = encode
@@ -141,22 +152,87 @@ class TestWiring:
             queries=[query], db_session=db_session, embedding_model=model
         )
 
-        # Pretend a different active model is in use; the cache key is
-        # built from search_settings.id, so a different id means a miss.
-        real_settings = get_current_search_settings(db_session)
-        fake = MagicMock()
-        fake.id = real_settings.id + 999_999
-        with patch(
-            "onyx.context.search.utils.get_current_search_settings",
-            return_value=fake,
+        # A prefetched model can differ from the current database settings.
+        model2, encode2 = _make_fake_embedding_model([[8.0, 8.0]], settings_id=2)
+        get_query_embeddings(
+            queries=[query], db_session=db_session, embedding_model=model2
+        )
+        assert encode2.call_count == 1
+
+
+def test_prefetched_model_reuses_embedding_across_searches() -> None:
+    query = f"prefetched query {uuid4().hex}\ud800"
+    index = MagicMock(spec=DocumentIndex)
+    index.hybrid_retrieval.return_value = []
+    request = ChunkIndexRequest(
+        query=query, filters=IndexFilters(access_control_list=[])
+    )
+
+    with (
+        patch("onyx.natural_language_processing.search_nlp_models.get_tokenizer"),
+        patch.object(
+            EmbeddingModel, "encode", side_effect=[[[0.5]], [[0.25]], [[0.125]]]
+        ) as encode,
+    ):
+        for settings_id, deployment in (
+            (1, "first"),
+            (1, "first"),
+            (2, "first"),
+            (2, "second"),
         ):
-            # Under test.
-            model2, encode2 = _make_fake_embedding_model([[8.0, 8.0]])
-            get_query_embeddings(
-                queries=[query],
-                db_session=db_session,
-                embedding_model=model2,
+            model = EmbeddingModel.from_db_model(
+                SearchSettings(
+                    id=settings_id,
+                    model_name="test",
+                    normalize=True,
+                    provider_type=EmbeddingProvider.AZURE,
+                    cloud_provider=CloudEmbeddingProvider(
+                        provider_type=EmbeddingProvider.AZURE,
+                        deployment_name=deployment,
+                    ),
+                ),
+                server_host="localhost",
+                server_port=9000,
+            )
+            search_chunks(
+                query_request=request,
+                user_id=None,
+                document_index=index,
+                embedding_model=model,
+                prefetched_federated_retrieval_infos=[],
             )
 
-            # Postcondition.
-            assert encode2.call_count == 1
+    assert encode.call_count == 3
+    vectors = [
+        call.kwargs["query_embedding"] for call in index.hybrid_retrieval.call_args_list
+    ]
+    assert vectors == [[0.5], [0.5], [0.25], [0.125]]
+
+
+@pytest.mark.parametrize(
+    ("settings_id", "retrim", "mode"),
+    [
+        (None, False, None),
+        (1, True, None),
+        (1, False, IncognitoRecordMode.USAGE_ONLY),
+    ],
+)
+def test_uncacheable_queries_encode_each_time(
+    settings_id: int | None, retrim: bool, mode: IncognitoRecordMode | None
+) -> None:
+    query = f"uncacheable query {uuid4().hex}"
+    model, encode = _make_fake_embedding_model([[0.5]], settings_id=settings_id)
+    model.retrim_content = retrim
+    token = CURRENT_INCOGNITO_RECORD_MODE_CONTEXTVAR.set(mode)
+    try:
+        with (
+            patch("onyx.context.search.utils.get_cached_query_embeddings") as read,
+            patch("onyx.context.search.utils.cache_query_embeddings") as write,
+        ):
+            for _ in range(2):
+                get_query_embeddings([query], embedding_model=model)
+            read.assert_not_called()
+            write.assert_not_called()
+    finally:
+        CURRENT_INCOGNITO_RECORD_MODE_CONTEXTVAR.reset(token)
+    assert encode.call_count == 2

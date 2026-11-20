@@ -5,6 +5,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -201,6 +202,36 @@ func TestStackPruneReportsComposeFailure(t *testing.T) {
 	}
 }
 
+func TestStackPruneLeavesVolumeOnlyOrphansForPruneVolumes(t *testing.T) {
+	calls := stackLsEnv(t, `case "$1" in
+volume) echo removed-1; echo removed-1 ;;
+esac
+exit 0
+`)
+	owner := filepath.Join(runtimeRegistry().Dir, "projects", devstack.ProjectName("removed-1"), "owner.json")
+	if err := os.MkdirAll(filepath.Dir(owner), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	writeFile(t, owner, `{"state_dir":"/missing/ods-stack"}`)
+
+	code, out := runStackCLI(t, "stack", "ls")
+	if code != 0 || !strings.Contains(out, "removed-1") || !strings.Contains(out, "ods stack prune --volumes") {
+		t.Fatalf("ls exit %d:\n%s", code, out)
+	}
+	code, out = runStackCLI(t, "stack", "prune", "--yes")
+	if code != 0 || !strings.Contains(out, "1 removed stack(s) left only Docker volumes") || !strings.Contains(out, "No orphaned stacks") {
+		t.Fatalf("prune exit %d:\n%s", code, out)
+	}
+	for _, call := range devtoolCalls(t, calls) {
+		if call.Args[0] == "compose" {
+			t.Fatalf("prune without --volumes ran %v", call.Args)
+		}
+	}
+	if _, err := os.Stat(owner); err != nil {
+		t.Fatalf("prune removed the owner record of a project with volumes: %v", err)
+	}
+}
+
 func TestPrintStackRowsShowsEachRowState(t *testing.T) {
 	home, err := os.UserHomeDir()
 	if err != nil {
@@ -232,16 +263,34 @@ func TestPrintStackRowsShowsEachRowState(t *testing.T) {
 	}
 }
 
-func TestProjectInCheckoutMatchesTheRecordedProject(t *testing.T) {
-	_, _ = stackTestRepo(t)
-	stack, _ := openStack(nil)
-	if projectInCheckout(stack.Project) {
-		t.Fatal("a checkout without state matched the project")
+func TestStackPruneRejectsANegativeIdle(t *testing.T) {
+	stackLsEnv(t, "exit 0\n")
+	if code, out := runStackCLI(t, "stack", "prune", "--idle", "-1h"); code != 1 || !strings.Contains(out, "--idle must not be negative") {
+		t.Fatalf("prune --idle -1h exit %d:\n%s", code, out)
 	}
-	if err := stack.WriteState(&devstack.State{Phase: devstack.PhaseStopped}); err != nil {
-		t.Fatal(err)
+}
+
+func TestStackPruneIdleWithoutStacks(t *testing.T) {
+	if runtime.GOOS != "linux" && runtime.GOOS != "darwin" {
+		t.Skip("finding coding agents is supported only on Linux and macOS")
 	}
-	if !projectInCheckout(stack.Project) || projectInCheckout("another-project") {
-		t.Fatal("project selection does not follow the checkout's state")
+	stackLsEnv(t, "exit 0\n")
+	if code, out := runStackCLI(t, "stack", "prune", "--idle", "1h", "--yes"); code != 0 || !strings.Contains(out, "No orphaned stacks and no stacks idle for 1h0m0s") {
+		t.Fatalf("prune --idle 1h exit %d:\n%s", code, out)
+	}
+}
+
+func TestLogProjectResultNamesEachStep(t *testing.T) {
+	logger := log.StandardLogger()
+	original := logger.Out
+	t.Cleanup(func() { logger.SetOutput(original) })
+	var logs strings.Builder
+	logger.SetOutput(&logs)
+	logProjectResult(&devstack.ProjectResult{Row: devstack.StackRow{Project: "a-1"}, StoppedServices: 2, RemovedVolumes: true, ReleasedLeases: 3, RemovedOwner: true})
+	logProjectResult(&devstack.ProjectResult{Row: devstack.StackRow{Project: "b-1"}, ComposeDown: true})
+	for _, want := range []string{"2 service(s) stopped, containers and volumes removed, 3 port lease(s) released, owner record removed", "0 service(s) stopped, containers removed"} {
+		if !strings.Contains(logs.String(), want) {
+			t.Fatalf("logs do not contain %q:\n%s", want, logs.String())
+		}
 	}
 }

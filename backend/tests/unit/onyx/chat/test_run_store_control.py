@@ -283,7 +283,6 @@ def test_every_step_receives_a_bounded_number_of_child_results(
         "read_agent_completions",
         lambda _session, ids: [
             AgentCompletion(
-                agent_id="child",
                 agent_path="/root/child",
                 run_id=str(response_id),
                 status=RunStatus.COMPLETE,
