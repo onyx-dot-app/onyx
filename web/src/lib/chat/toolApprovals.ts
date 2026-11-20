@@ -22,6 +22,7 @@ import { getMultiModelChildren } from "@/app/app/message/multiModel";
 import type { Message } from "@/app/app/types";
 import type { ApprovalStatus } from "@/lib/approvals/types";
 import type { ApprovalDecisionResponse } from "@/lib/chat/types";
+import { type CachedRead, readOnce } from "@/lib/chat/packetReads";
 
 /** What one response's packets say about an approval request. */
 export interface ToolApprovalEntry {
@@ -47,43 +48,6 @@ const OUTCOMES: ReadonlySet<string> = new Set<ToolApprovalResolved["outcome"]>([
 
 export interface ToolApprovalRead {
   entries: ToolApprovalEntry[];
-}
-
-interface CachedRead<T> {
-  count: number;
-  read: T;
-}
-
-/**
- * Streams append to a response's packet array and a replay replaces it, so a
- * read stays valid for the same array until a packet of `types` arrives.
- * Packets that cannot change the result keep the same read object.
- */
-function readOnce<T>(
-  cache: WeakMap<Packet[], CachedRead<T>>,
-  packets: Packet[],
-  types: ReadonlySet<string>,
-  read: (packets: Packet[]) => T
-): T {
-  const cached = cache.get(packets);
-  if (cached && cached.count <= packets.length) {
-    let changed = false;
-    for (
-      let index = cached.count;
-      index < packets.length && !changed;
-      index++
-    ) {
-      const type = packets[index]?.obj.type;
-      changed = type !== undefined && types.has(type);
-    }
-    if (!changed) {
-      cached.count = packets.length;
-      return cached.read;
-    }
-  }
-  const result = read(packets);
-  cache.set(packets, { count: packets.length, read: result });
-  return result;
 }
 
 const approvalReads = new WeakMap<Packet[], CachedRead<ToolApprovalRead>>();

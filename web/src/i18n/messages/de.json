@@ -11667,9 +11667,6 @@
       "sessionNotFound": {
         "description": "Diese Chat-Sitzung existiert nicht oder wurde gelöscht.",
         "title": "Chat nicht gefunden"
-      },
-      "sourcesModal": {
-        "title": "Quellen"
       }
     },
     "appChrome": {
@@ -13287,12 +13284,50 @@
     },
     "publishedFiles": {
       "card": {
-        "updated": {
-          "description": "Aktualisierte Version · {details}"
-        },
         "preview": {
           "ariaLabel": "Vorschau von {name}"
         }
+      },
+      "panel": {
+        "preview": {
+          "ariaLabel": "Vorschau von {name}"
+        }
+      }
+    },
+    "rightPanel": {
+      "filesTab": {
+        "label": "Dateien",
+        "description": "Dateien, die das Modell in diesem Chat veröffentlicht hat",
+        "empty": "Dieser Chat hat noch keine Dateien",
+        "tile": {
+          "ariaLabel": "{name} öffnen"
+        },
+        "search": {
+          "placeholder": "Dateien durchsuchen",
+          "empty": "Keine Dateien entsprechen der Suche"
+        }
+      },
+      "fileTab": {
+        "olderVersion": "<isolate>{name}</isolate> (v{version} von {latest})"
+      },
+      "sourcesTab": {
+        "label": "Quellen"
+      },
+      "toggleButton": {
+        "label": "Bereich ein- oder ausblenden"
+      },
+      "reloadButton": {
+        "label": "Dateien aktualisieren",
+        "error": "Die Dateien konnten nicht neu geladen werden. Versuchen Sie es erneut."
+      },
+      "expandButton": {
+        "label": "Bereich erweitern"
+      },
+      "restoreButton": {
+        "label": "Bereich wiederherstellen"
+      },
+      "resizeHandle": {
+        "label": "Bereichsgröße ändern"
       }
     }
   },
@@ -14909,18 +14944,6 @@
       "browser": {
         "label": "Apps"
       },
-      "list": {
-        "label": "Ausgabe-Tabs"
-      },
-      "close": {
-        "label": "{name} schließen"
-      },
-      "reordered": {
-        "label": "Tab auf Position {position} von {count} verschoben"
-      },
-      "open": {
-        "label": "Tab öffnen"
-      },
       "outputs": {
         "label": "Ergebnisse"
       }
@@ -15046,8 +15069,7 @@
       "scope": {
         "turn": "Ausgaben aus Runde {turn, number}",
         "all": "Alle Ausgaben"
-      },
-      "unseen": "Neu oder aktualisiert"
+      }
     },
     "turnOutputs": {
       "showAll": "Alle {count} Ergebnisse anzeigen",
@@ -15116,6 +15138,28 @@
       "description": "Diese Sitzung kann {names} nicht verwenden. Ihre Skills müssen in {maxSize} und {maxFiles, number} Dateien passen. Deaktivieren Sie Skills, die Sie nicht brauchen, um Platz zu schaffen.",
       "manage": "Skills verwalten",
       "dismiss": "Schließen"
+    }
+  },
+  "outputPanel": {
+    "tabStrip": {
+      "list": {
+        "label": "Ausgabe-Tabs"
+      },
+      "close": {
+        "label": "{name} schließen"
+      },
+      "reordered": {
+        "label": "Tab auf Position {position} von {count} verschoben"
+      },
+      "open": {
+        "label": "Tab öffnen"
+      }
+    },
+    "tile": {
+      "download": {
+        "label": "Herunterladen"
+      },
+      "unseen": "Neu oder aktualisiert"
     }
   },
   "knowledge": {

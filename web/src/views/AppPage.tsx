@@ -36,10 +36,14 @@ import { useUser } from "@/providers/UserProvider";
 import { useCurrentUser } from "@/lib/users/hooks";
 import { NoAgentModal } from "@/lib/agents/components";
 import PreviewModal from "@/sections/modals/PreviewModal";
-import { Modal } from "@opal/components";
 import { useSendMessageToParent } from "@/lib/extension/hooks";
 import { FederatedConnectorDetail } from "@/lib/types";
 import DocumentsSidebar from "@/sections/document-sidebar/DocumentsSidebar";
+import {
+  CurrentChatRightPanel,
+  openPublishedFileInChat,
+} from "@/sections/chat/ChatRightPanel";
+import { PublishedFileOpenerContext } from "@/sections/chat/PublishedFileCards";
 import useChatController from "@/hooks/useChatController";
 import useMultiModelChat from "@/hooks/useMultiModelChat";
 import MultiModelSelector from "@/sections/model-selector/MultiModelSelector";
@@ -58,8 +62,10 @@ import {
   useCurrentChatState,
   useIsReady,
   useIsFetchingChatMessages,
-  useDocumentSidebarVisible,
+  useSourcesShown,
   useCurrentIsStreamDraining,
+  useFilesShown,
+  useSelectedNodeForDocDisplay,
 } from "@/app/app/stores/useChatSessionStore";
 import FederatedOAuthModal from "@/components/chat/FederatedOAuthModal";
 import ChatScrollContainer, {
@@ -79,7 +85,7 @@ import { OnboardingFlow } from "@/lib/onboarding/components";
 import { OnboardingStep } from "@/lib/onboarding/types";
 import { STEP_CONFIG } from "@/lib/onboarding/constants";
 import { useShowOnboarding } from "@/lib/onboarding/hooks";
-import { SvgChevronDown, SvgFileText } from "@opal/icons";
+import { SvgChevronDown } from "@opal/icons";
 import { Button, Presence, ShadowDiv, Spacer } from "@opal/components";
 import { ChatMessageLoader } from "@opal/loaders";
 import {
@@ -312,10 +318,12 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   // Access chat state directly from the store
   const currentChatState = useCurrentChatState();
   const isReady = useIsReady();
-  const documentSidebarVisible = useDocumentSidebarVisible();
-  const updateCurrentDocumentSidebarVisible = useChatSessionStore(
-    (state) => state.updateCurrentDocumentSidebarVisible
+  const sourcesPanelVisible = useSourcesShown();
+  const updateCurrentRightPanel = useChatSessionStore(
+    (state) => state.updateCurrentRightPanel
   );
+  const selectedNodeForDocDisplay = useSelectedNodeForDocDisplay();
+  const publishedFilesPanelOpen = useFilesShown();
   const messageHistory = useCurrentMessageHistory();
   const messageTree = useCurrentMessageTree();
   // A chat opened for the first time has nothing to show until its fetch
@@ -490,14 +498,14 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   // left behind by the previous agent.
   useEffect(() => {
     // Already closed.
-    if (!documentSidebarVisible) return;
+    if (!sourcesPanelVisible) return;
 
     // Retrieval is not known yet. Closing now would need a reopen later.
     if (retrievalEnabled === null) return;
 
     // Not reading a conversation, so there are no sources to show.
     if (!appPosition.isChattable()) {
-      updateCurrentDocumentSidebarVisible(false);
+      updateCurrentRightPanel({ type: "hideSources" });
       return;
     }
 
@@ -507,13 +515,13 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     // The user picked documents by hand.
     if (selectedDocuments.length > 0) return;
 
-    updateCurrentDocumentSidebarVisible(false);
+    updateCurrentRightPanel({ type: "hideSources" });
   }, [
-    documentSidebarVisible,
+    sourcesPanelVisible,
     appPosition,
     retrievalEnabled,
     selectedDocuments,
-    updateCurrentDocumentSidebarVisible,
+    updateCurrentRightPanel,
   ]);
 
   const handleResubmitLastMessage = useCallback(() => {
@@ -666,14 +674,40 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     ]
   );
 
-  // Memoized callbacks for DocumentsSidebar
-  const handleMobileDocumentSidebarClose = useCallback(() => {
-    updateCurrentDocumentSidebarVisible(false);
-  }, [updateCurrentDocumentSidebarVisible]);
+  // A stable element, so the panel's memo holds while messages stream
+  const sourcesView = useMemo(
+    () =>
+      retrievalEnabled ? (
+        /* IMPORTANT: this is a memoized component, and it's very important
+        for performance reasons that this stays true. MAKE SURE that all
+        function props are wrapped in useCallback. */
+        <DocumentsSidebar
+          setPresentingDocument={setPresentingDocument}
+          selectedDocuments={selectedDocuments}
+        />
+      ) : null,
+    [retrievalEnabled, selectedDocuments]
+  );
 
-  const handleDesktopDocumentSidebarClose = useCallback(() => {
-    setTimeout(() => updateCurrentDocumentSidebarVisible(false), 300);
-  }, [updateCurrentDocumentSidebarVisible]);
+  const sourcesHaveContent =
+    !!retrievalEnabled &&
+    selectedNodeForDocDisplay !== null &&
+    (messageTree?.get(selectedNodeForDocDisplay)?.documents?.length ?? 0) > 0;
+
+  // A stable element: the app chrome's slot renders again only when one of
+  // these inputs changes, not on each streamed packet or panel change
+  const rightPanelOpen =
+    (!!retrievalEnabled && sourcesPanelVisible) || publishedFilesPanelOpen;
+  const rightPanel = useMemo(
+    () => (
+      <CurrentChatRightPanel
+        open={rightPanelOpen}
+        sources={sourcesView}
+        hasSources={sourcesHaveContent}
+      />
+    ),
+    [rightPanelOpen, sourcesView, sourcesHaveContent]
+  );
 
   // When no chat session exists but a project is selected, fetch the
   // total tokens for the project's files so upload UX can compare
@@ -771,7 +805,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   if (!isReady) return <OnyxInitializingLoader />;
 
   return (
-    <>
+    <PublishedFileOpenerContext.Provider value={openPublishedFileInChat}>
       <AppPopup />
 
       {presentingDocument && (
@@ -783,50 +817,10 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
       <FederatedOAuthModal />
 
-      {retrievalEnabled &&
-        (isMobile ? (
-          documentSidebarVisible && (
-            <Modal
-              open
-              onOpenChange={() => updateCurrentDocumentSidebarVisible(false)}
-            >
-              <Modal.Content>
-                <Modal.Header
-                  icon={SvgFileText}
-                  title={t("sourcesModal.title")}
-                  onClose={() => updateCurrentDocumentSidebarVisible(false)}
-                />
-                <Modal.Body>
-                  {/* IMPORTANT: this is a memoized component, and it's very important
-                for performance reasons that this stays true. MAKE SURE that all function
-                props are wrapped in useCallback. */}
-                  <DocumentsSidebar
-                    setPresentingDocument={setPresentingDocument}
-                    modal
-                    closeSidebar={handleMobileDocumentSidebarClose}
-                    selectedDocuments={selectedDocuments}
-                  />
-                </Modal.Body>
-              </Modal.Content>
-            </Modal>
-          )
-        ) : (
-          <RootLayout.RightPanel>
-            <div
-              className={cn(
-                "overflow-hidden transition-all duration-300 ease-in-out h-full",
-                documentSidebarVisible ? "w-100" : "w-0"
-              )}
-            >
-              <DocumentsSidebar
-                setPresentingDocument={setPresentingDocument}
-                modal={false}
-                closeSidebar={handleDesktopDocumentSidebarClose}
-                selectedDocuments={selectedDocuments}
-              />
-            </div>
-          </RootLayout.RightPanel>
-        ))}
+      {/* Always mounted, so a reply card opens its file whatever the Files
+          list holds. Closed, the panel takes no room and renders only when
+          its state or files change. */}
+      <RootLayout.RightPanel>{rightPanel}</RootLayout.RightPanel>
 
       <div className="w-full h-full overflow-hidden">
         {/* noPaste: the input bar already uploads pasted files itself. Without
@@ -1215,6 +1209,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
           )}
         </Dropzone>
       </div>
-    </>
+    </PublishedFileOpenerContext.Provider>
   );
 }

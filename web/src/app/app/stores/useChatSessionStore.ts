@@ -15,7 +15,25 @@ import {
   MessageTreeState,
 } from "../services/messageTree";
 import { useMemo } from "react";
+import {
+  readPanelPreferences,
+  savePanelPreferences,
+} from "@/lib/outputPanel/preferences";
+import {
+  CHAT_PANEL_STORAGE_PREFIX,
+  INITIAL_RIGHT_PANEL,
+  rightPanelReducer,
+  showsFiles,
+  showsSources,
+  type ChatRightPanelAction,
+  type ChatRightPanelState,
+} from "@/lib/chat/rightPanel";
 import type { ChatToolOptions } from "@/lib/tools/types";
+import {
+  addLoadedPublishedFiles,
+  NO_LOADED_PUBLISHED_FILES,
+  type LoadedPublishedFiles,
+} from "@/lib/chat/publishedFiles";
 
 /** An error that belongs to the session, not to a saved message. */
 export interface SessionError {
@@ -41,13 +59,19 @@ interface ChatSessionData {
   // Resolves after the reader applies its final packets and message state.
   readerFinished?: Promise<void>;
   hasPerformedInitialScroll: boolean;
-  documentSidebarVisible: boolean;
+  // The chat's right panel (lib/chat/rightPanel.ts). It stays while the
+  // panel is closed, so reopening it, or coming back to the chat, restores
+  // its tabs, size, search and seen files.
+  rightPanel: ChatRightPanelState;
   hasSentLocalUserMessage: boolean;
 
   // Session-specific state (previously global)
   isFetchingChatMessages: boolean;
   // Paged loading: the current branch has messages above the loaded ones.
   hasOlderMessages: boolean;
+  // What the chat's loads gave of its published files
+  // (lib/chat/publishedFiles.ts)
+  loadedPublishedFiles: LoadedPublishedFiles;
   // The `approvals_version` of the load whose approval requests the chat shows.
   approvalsVersion?: string;
   isLoadingOlderMessages: boolean;
@@ -97,6 +121,15 @@ interface ChatSessionStore {
     sessionId: string,
     updates: Partial<ChatSessionData>
   ) => void;
+  /**
+   * Applies a load of the chat from the server: the load's approvals version
+   * and published files, with `updates` for the rest.
+   */
+  applyLoadedSession: (
+    sessionId: string,
+    loaded: BackendChatSession,
+    updates: Partial<ChatSessionData>
+  ) => void;
   updateSessionMessageTree: (
     sessionId: string,
     messageTree: MessageTreeState
@@ -131,13 +164,8 @@ interface ChatSessionStore {
     sessionId: string,
     hasPerformedInitialScroll: boolean
   ) => void;
-  updateDocumentSidebarVisible: (
-    sessionId: string,
-    documentSidebarVisible: boolean
-  ) => void;
-  updateCurrentDocumentSidebarVisible: (
-    documentSidebarVisible: boolean
-  ) => void;
+  /** Applies a right panel transition to the open chat. */
+  updateCurrentRightPanel: (action: ChatRightPanelAction) => void;
   updateHasSentLocalUserMessage: (
     sessionId: string,
     hasSentLocalUserMessage: boolean
@@ -201,12 +229,30 @@ const createInitialSessionData = (
   selectedNodeIdForDocDisplay: null,
   abortController: new AbortController(),
   hasPerformedInitialScroll: true,
-  documentSidebarVisible: false,
+  rightPanel: {
+    ...INITIAL_RIGHT_PANEL,
+    // The chat's panel width from session storage, as Craft keeps its panel's
+    proportion:
+      readPanelPreferences(
+        `${CHAT_PANEL_STORAGE_PREFIX}${sessionId}`,
+        // oxlint-disable-next-line anti-slop/no-unknown-parameters -- Parses untrusted browser storage at the I/O boundary.
+        (stored: unknown) =>
+          typeof stored === "object" &&
+          stored !== null &&
+          "proportion" in stored &&
+          typeof stored.proportion === "number" &&
+          stored.proportion > 0 &&
+          stored.proportion < 1
+            ? stored.proportion
+            : undefined
+      ) ?? INITIAL_RIGHT_PANEL.proportion,
+  },
   hasSentLocalUserMessage: false,
 
   // Session-specific state defaults
   isFetchingChatMessages: false,
   hasOlderMessages: false,
+  loadedPublishedFiles: NO_LOADED_PUBLISHED_FILES,
   isLoadingOlderMessages: false,
   uncaughtError: null,
   loadingError: null,
@@ -271,6 +317,22 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
       newSessions.set(sessionId, newSession);
 
       return { sessions: newSessions };
+    });
+  },
+
+  applyLoadedSession: (
+    sessionId: string,
+    loaded: BackendChatSession,
+    updates: Partial<ChatSessionData>
+  ) => {
+    get().updateSessionData(sessionId, {
+      approvalsVersion: loaded.approvals_version,
+      loadedPublishedFiles: addLoadedPublishedFiles(
+        get().sessions.get(sessionId)?.loadedPublishedFiles ??
+          NO_LOADED_PUBLISHED_FILES,
+        loaded
+      ),
+      ...updates,
     });
   },
 
@@ -411,21 +473,17 @@ export const useChatSessionStore = create<ChatSessionStore>()((set, get) => ({
     get().updateSessionData(sessionId, { hasPerformedInitialScroll });
   },
 
-  updateDocumentSidebarVisible: (
-    sessionId: string,
-    documentSidebarVisible: boolean
-  ) => {
-    get().updateSessionData(sessionId, { documentSidebarVisible });
-  },
-
-  updateCurrentDocumentSidebarVisible: (documentSidebarVisible: boolean) => {
-    const { currentSessionId } = get();
-    if (currentSessionId) {
-      get().updateDocumentSidebarVisible(
-        currentSessionId,
-        documentSidebarVisible
-      );
-    }
+  updateCurrentRightPanel: (action: ChatRightPanelAction) => {
+    const { currentSessionId, sessions } = get();
+    const session = currentSessionId ? sessions.get(currentSessionId) : null;
+    if (!currentSessionId || !session) return;
+    const rightPanel = rightPanelReducer(session.rightPanel, action);
+    if (rightPanel === session.rightPanel) return;
+    get().updateSessionData(currentSessionId, { rightPanel });
+    if (rightPanel.proportion !== session.rightPanel.proportion)
+      savePanelPreferences(`${CHAT_PANEL_STORAGE_PREFIX}${currentSessionId}`, {
+        proportion: rightPanel.proportion,
+      });
   },
 
   updateHasSentLocalUserMessage: (
@@ -741,13 +799,34 @@ export const useIsFetchingChatMessages = () =>
     return currentSession?.isFetchingChatMessages ?? false;
   });
 
-export const useDocumentSidebarVisible = () =>
+/** The open chat's right panel (lib/chat/rightPanel.ts). */
+export const useCurrentRightPanelState = () =>
   useChatSessionStore((state) => {
     const { currentSessionId, sessions } = state;
     const currentSession = currentSessionId
       ? sessions.get(currentSessionId)
       : null;
-    return currentSession?.documentSidebarVisible || false;
+    return currentSession?.rightPanel ?? INITIAL_RIGHT_PANEL;
+  });
+
+/** Whether the open chat's right panel shows Sources. */
+export const useSourcesShown = () =>
+  useChatSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    const currentSession = currentSessionId
+      ? sessions.get(currentSessionId)
+      : null;
+    return currentSession ? showsSources(currentSession.rightPanel) : false;
+  });
+
+/** Whether the open chat's right panel shows the Files list or a file. */
+export const useFilesShown = () =>
+  useChatSessionStore((state) => {
+    const { currentSessionId, sessions } = state;
+    const currentSession = currentSessionId
+      ? sessions.get(currentSessionId)
+      : null;
+    return currentSession ? showsFiles(currentSession.rightPanel) : false;
   });
 
 /**

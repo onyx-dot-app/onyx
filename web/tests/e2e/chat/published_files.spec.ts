@@ -1,6 +1,7 @@
 import type { Page } from "@playwright/test";
 import { test, expect } from "@tests/e2e/chat/fixtures";
 import { sendMessage } from "@tests/e2e/utils/chatActions";
+import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 import {
   buildMockPublishFilesStream,
   MockPublishedFile,
@@ -12,14 +13,22 @@ import {
 const REPORT_TEXT = "Revenue grew in every region.";
 const MESSAGE = "The report is ready.";
 
-function report(fileId: string, title: string | null): MockPublishedFile {
+/** Version `version` of the report. */
+function report(
+  fileId: string,
+  title: string | null,
+  version = 1
+): MockPublishedFile {
   return {
     fileId,
     name: "report.md",
     title,
     path: "/home/onyx/workspaces/chat/report.md",
+    displayPath: "report.md",
     size: 2048,
     mimeType: "text/markdown",
+    artifactId: "artifact-report",
+    version,
   };
 }
 
@@ -83,6 +92,79 @@ function savedMessage(
   };
 }
 
+/**
+ * Serves a saved chat of one reply, whose replay packets publish files: the
+ * route stays through a reload. `published` is the load's list of the chat's
+ * files.
+ */
+async function routeSavedChat(
+  page: Page,
+  sessionId: string,
+  replay: Record<string, unknown>[],
+  published: MockPublishedFile[]
+): Promise<void> {
+  await page.route(
+    `**/api/chat/get-chat-session/${sessionId}*`,
+    async (route) => {
+      const response = await route.fetch();
+      const saved: Record<string, unknown> = await response.json();
+      await route.fulfill({
+        response,
+        json: {
+          ...saved,
+          messages: [
+            savedMessage({
+              message_id: 1,
+              message_type: "user",
+              parent_message: null,
+              latest_child_message: 2,
+              message: "Write the quarterly report",
+              files: [],
+            }),
+            savedMessage({
+              message_id: 2,
+              message_type: "assistant",
+              parent_message: 1,
+              latest_child_message: null,
+              message: MESSAGE,
+              files: [],
+            }),
+          ],
+          packets: [
+            [
+              ...replay,
+              {
+                placement: { turn_index: replay.length, tab_index: 0 },
+                obj: {
+                  type: "message_start",
+                  id: "saved-answer",
+                  content: MESSAGE,
+                  final_documents: null,
+                },
+              },
+              {
+                placement: { turn_index: replay.length, tab_index: 0 },
+                obj: { type: "stop", stop_reason: "finished" },
+              },
+            ],
+          ],
+          published_files: published.map((file) => ({
+            file_id: file.fileId,
+            name: file.name,
+            title: file.title,
+            path: file.path,
+            display_path: file.displayPath,
+            size: file.size,
+            mime_type: file.mimeType,
+            artifact_id: file.artifactId,
+            version: file.version,
+          })),
+        },
+      });
+    }
+  );
+}
+
 test.describe("Published files", () => {
   test.beforeEach(() => {
     resetTurnCounter();
@@ -112,69 +194,37 @@ test.describe("Published files", () => {
     await chatPage.expectPublishedFilePreview("Q3 report", REPORT_TEXT);
   });
 
-  test("a saved reply shows each version of a republished file", async ({
+  test("a saved reply shows a card for each publish, and the panel the newest version of each file", async ({
     page,
     chatPage,
     api,
   }) => {
     const first = report("published-file-2", "Q3 report");
-    const second = report("published-file-3", null);
+    const second = report("published-file-3", null, 2);
+    // Published by an answer that the paged load does not hold, such as an
+    // older one or another branch's.
+    const notes: MockPublishedFile = {
+      ...report("published-file-6", "Meeting notes"),
+      name: "notes.md",
+      path: "/home/onyx/workspaces/chat/notes.md",
+      displayPath: "notes.md",
+      artifactId: "artifact-notes",
+    };
     const sessionId = await api.createChatSession("Published files");
     try {
       await mockFile(page, first);
       await mockFile(page, second);
-      const replay = [
-        ...publishFilesPackets(0, [first]),
-        ...publishFilesPackets(1, [second]),
-        {
-          placement: { turn_index: 2, tab_index: 0 },
-          obj: {
-            type: "message_start",
-            id: "saved-answer",
-            content: MESSAGE,
-            final_documents: null,
-          },
-        },
-        {
-          placement: { turn_index: 2, tab_index: 0 },
-          obj: { type: "stop", stop_reason: "finished" },
-        },
-      ];
-      await page.route(
-        `**/api/chat/get-chat-session/${sessionId}*`,
-        async (route) => {
-          const response = await route.fetch();
-          const saved: Record<string, unknown> = await response.json();
-          await route.fulfill({
-            response,
-            json: {
-              ...saved,
-              messages: [
-                savedMessage({
-                  message_id: 1,
-                  message_type: "user",
-                  parent_message: null,
-                  latest_child_message: 2,
-                  message: "Write the quarterly report",
-                  files: [],
-                }),
-                savedMessage({
-                  message_id: 2,
-                  message_type: "assistant",
-                  parent_message: 1,
-                  latest_child_message: null,
-                  message: MESSAGE,
-                  files: [first, second].map((file) => ({
-                    id: file.fileId,
-                    type: "document",
-                    name: file.name,
-                  })),
-                }),
-              ],
-              packets: [replay],
-            },
-          });
-        }
+      await mockFile(page, notes);
+      await routeSavedChat(
+        page,
+        sessionId,
+        [
+          ...publishFilesPackets(0, [first]),
+          ...publishFilesPackets(1, [second]),
+        ],
+        // The server lists the newest version of each file, by its first
+        // publish
+        [notes, second]
       );
 
       await chatPage.goto(sessionId);
@@ -185,13 +235,253 @@ test.describe("Published files", () => {
         details: /MD · 2/,
         href: `/api/chat/file/${first.fileId}`,
       });
-      // The second publish of the path has no title, so it shows its name.
+      // The second version has no title, so it shows its name.
       await chatPage.expectPublishedFile(second.name, {
         fileName: second.name,
-        details: /Updated version · MD · 2/,
+        details: /MD · 2/,
         href: `/api/chat/file/${second.fileId}`,
       });
       await chatPage.expectPublishedFilePreview(second.name, REPORT_TEXT);
+
+      // The panel shows the newest version of each of the chat's files, also
+      // of the answer that the page did not load, newest file first.
+      await chatPage.rightPanelToggle.click();
+      await expect(chatPage.publishedFilesPanelCards()).toHaveCount(2);
+      await chatPage.expectPublishedFilesPanelFile(0, {
+        text: second.name,
+      });
+      await chatPage.expectPublishedFilesPanelFile(1, {
+        text: "Meeting notes",
+      });
+    } finally {
+      await api.deleteChatSession(sessionId);
+    }
+  });
+
+  test("a card opens its file for an agent without search when the chat lists no files", async ({
+    browser,
+    page,
+    chatPage,
+    api,
+  }) => {
+    // A file that the chat's list leaves out: its card shows, but the load
+    // lists no files
+    const file = report("published-file-9", "Q3 report");
+    const adminContext = await browser.newContext({
+      storageState: "admin_auth.json",
+    });
+    const admin = new OnyxApiClient(adminContext.request);
+    const agentId = await admin.createAgent("Published files without search");
+    const sessionId = await api.createChatSession("Unlisted file", agentId);
+    try {
+      await mockFile(page, file);
+      await routeSavedChat(page, sessionId, publishFilesPackets(0, [file]), []);
+      await chatPage.goto(sessionId);
+      await expect(chatPage.answerText(MESSAGE)).toBeVisible();
+      await expect(chatPage.rightPanelToggle).toBeVisible();
+
+      await chatPage.publishedFileCard("Q3 report").click();
+      await expect(chatPage.publishedFilePreview("Q3 report")).toContainText(
+        REPORT_TEXT
+      );
+    } finally {
+      await api.deleteChatSession(sessionId);
+      await admin.deleteAgent(agentId);
+      await adminContext.close();
+    }
+  });
+
+  test("the panel toggle opens a chat without files on the Files list, and closing returns focus to it", async ({
+    page,
+    chatPage,
+    api,
+  }) => {
+    const sessionId = await api.createChatSession("No published files");
+    try {
+      await routeSavedChat(page, sessionId, [], []);
+      await chatPage.goto(sessionId);
+      await expect(chatPage.answerText(MESSAGE)).toBeVisible();
+
+      await expect(chatPage.rightPanelToggle).toHaveAttribute(
+        "aria-expanded",
+        "false"
+      );
+      await chatPage.rightPanelToggle.click();
+      await expect(chatPage.publishedFilesPanel).toBeVisible();
+      await chatPage.expectNoPublishedFiles();
+
+      await chatPage.rightPanelToggle.click();
+      await expect(chatPage.publishedFilesPanel).toBeHidden();
+      await expect(chatPage.rightPanelToggle).toHaveAttribute(
+        "aria-expanded",
+        "false"
+      );
+      await expect(chatPage.rightPanelToggle).toBeFocused();
+    } finally {
+      await api.deleteChatSession(sessionId);
+    }
+  });
+
+  test("the files panel shows the newest version of a file across replies and previews it", async ({
+    page,
+    chatPage,
+  }) => {
+    const first = report("published-file-4", "Q3 report");
+    const second = report("published-file-5", "Q3 report, final", 2);
+    const finalMessage = "The final report is ready.";
+    await chatPage.goto();
+    await mockFile(page, first);
+    await mockFile(page, second);
+
+    await mockChatEndpoint(page, buildMockPublishFilesStream([first], MESSAGE));
+    await sendMessage(page, "Write the quarterly report");
+    await expect(chatPage.answerText(MESSAGE)).toBeVisible();
+    await mockChatEndpoint(
+      page,
+      buildMockPublishFilesStream([second], finalMessage)
+    );
+    await sendMessage(page, "Finalize the report");
+    await expect(chatPage.answerText(finalMessage, 1)).toBeVisible();
+
+    await expect(chatPage.publishedFilesPanel).toBeHidden();
+    await chatPage.rightPanelToggle.click();
+    await expect(chatPage.publishedFilesPanel).toBeVisible();
+
+    // Both replies published one file: the panel shows only the newest
+    // version.
+    await expect(chatPage.publishedFilesPanelCards()).toHaveCount(1);
+    await chatPage.expectPublishedFilesPanelFile(0, {
+      text: "Q3 report, final",
+    });
+    await chatPage.expectPublishedFilesPanelPreview(
+      0,
+      "Q3 report, final",
+      REPORT_TEXT
+    );
+
+    await chatPage.rightPanelToggle.click();
+    await expect(chatPage.publishedFilesPanel).toBeHidden();
+  });
+
+  test("the panel keeps its tabs and width, and Escape leaves full screen, then closes tabs, then the panel", async ({
+    page,
+    chatPage,
+    api,
+  }) => {
+    const reportFile = report("published-file-7", "Q3 report");
+    const notes: MockPublishedFile = {
+      ...report("published-file-8", "Meeting notes"),
+      name: "notes.md",
+      path: "/home/onyx/workspaces/chat/notes.md",
+      displayPath: "notes.md",
+      artifactId: "artifact-notes",
+    };
+    await page.setViewportSize({ width: 1600, height: 900 });
+    const sessionId = await api.createChatSession("Published files panel");
+    try {
+      await mockFile(page, reportFile);
+      await mockFile(page, notes);
+      await routeSavedChat(
+        page,
+        sessionId,
+        publishFilesPackets(0, [reportFile, notes]),
+        [reportFile, notes]
+      );
+      await chatPage.goto(sessionId);
+      await expect(chatPage.answerText(MESSAGE)).toBeVisible();
+
+      // Two previews open in their own tabs.
+      await chatPage.publishedFileCard("Q3 report").click();
+      await expect(chatPage.publishedFilePreview("Q3 report")).toContainText(
+        REPORT_TEXT
+      );
+      await chatPage.publishedFileCard("Meeting notes").click();
+      await expect(
+        chatPage.publishedFilePreview("Meeting notes")
+      ).toContainText(REPORT_TEXT);
+
+      // Closing and reopening the panel keeps the tabs.
+      await chatPage.rightPanelToggle.click();
+      await expect(chatPage.publishedFilesPanel).toBeHidden();
+      await chatPage.rightPanelToggle.click();
+      await expect(chatPage.rightPanelTab("Q3 report")).toBeVisible();
+      await expect(chatPage.rightPanelTab("Meeting notes")).toHaveAttribute(
+        "aria-selected",
+        "true"
+      );
+
+      // A mouse drag of the edge widens the panel.
+      const before = await chatPage.rightPanelWidth();
+      await chatPage.widenRightPanel(200);
+      await expect
+        .poll(() => chatPage.rightPanelWidth())
+        .toBeGreaterThan(before + 150);
+      const width = await chatPage.rightPanelWidth();
+
+      // The chat keeps the width through a reload.
+      await chatPage.reload();
+      await expect(chatPage.answerText(MESSAGE)).toBeVisible();
+      await chatPage.publishedFileCard("Q3 report").click();
+      await chatPage.publishedFileCard("Meeting notes").click();
+      await expect(
+        chatPage.publishedFilePreview("Meeting notes")
+      ).toContainText(REPORT_TEXT);
+      await expect.poll(() => chatPage.rightPanelWidth()).toBe(width);
+
+      // At full size the panel covers the row: a wider window shows no
+      // frame of the page beside it.
+      await chatPage.expectRightPanelSettled(width);
+      await chatPage.expandRightPanel();
+      await chatPage.expectRightPanelSettled("row");
+      const grown = await chatPage.rightPanelFrames(() =>
+        page.setViewportSize({ width: 1900, height: 900 })
+      );
+      expect(grown[grown.length - 1]!.rowEnd).toBeGreaterThan(grown[0]!.rowEnd);
+      grown.forEach((frame) => {
+        expect(frame.start).toBeLessThanOrEqual(frame.rowStart);
+        expect(frame.end).toBeGreaterThanOrEqual(frame.rowEnd);
+      });
+
+      // Escape leaves full screen: the panel shrinks to its medium width at
+      // the workspace's end, and the page beside it stays still. Then Escape
+      // closes each file's tab, then the panel.
+      await chatPage.expectRightPanelSettled("row");
+      const frames = await chatPage.rightPanelFrames(() =>
+        page.keyboard.press("Escape")
+      );
+      await chatPage.expectRightPanelExpanded(false);
+      // The handle hides at full size
+      const medium = await chatPage.rightPanelWidth();
+      const [first, last] = [frames[0]!, frames[frames.length - 1]!];
+      expect(first.width).toBe(first.rowEnd - first.rowStart);
+      // The handle reports the width rounded
+      expect(Math.abs(last.width - medium)).toBeLessThanOrEqual(1);
+      // The panel draws frames between the two widths
+      expect(
+        frames.some(
+          (frame) => frame.width < first.width - 1 && frame.width > medium + 1
+        )
+      ).toBe(true);
+      frames.forEach((frame, index) => {
+        expect(frame.end).toBe(first.end);
+        expect(frame.pageWidth).toBe(first.pageWidth);
+        expect(frame.width).toBeGreaterThanOrEqual(medium - 1);
+        expect(frame.width).toBeLessThanOrEqual(
+          index === 0 ? first.width : frames[index - 1]!.width
+        );
+      });
+      await expect(chatPage.rightPanelTab("Meeting notes")).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(chatPage.rightPanelTab("Meeting notes")).toBeHidden();
+      await expect(chatPage.rightPanelTab("Q3 report")).toHaveAttribute(
+        "aria-selected",
+        "true"
+      );
+      await page.keyboard.press("Escape");
+      await expect(chatPage.rightPanelTab("Q3 report")).toBeHidden();
+      await expect(chatPage.publishedFilesPanel).toBeVisible();
+      await page.keyboard.press("Escape");
+      await expect(chatPage.publishedFilesPanel).toBeHidden();
     } finally {
       await api.deleteChatSession(sessionId);
     }

@@ -346,9 +346,8 @@ export default function useChatSessionController({
         updateSessionAndMessageTree(chatSession.chat_session_id, newMessageMap);
         useChatSessionStore
           .getState()
-          .updateSessionData(chatSession.chat_session_id, {
+          .applyLoadedSession(chatSession.chat_session_id, chatSession, {
             hasOlderMessages: chatSession.has_older_messages ?? false,
-            approvalsVersion: chatSession.approvals_version,
           });
         chatSessionIdRef.current = chatSession.chat_session_id;
       }

@@ -11667,9 +11667,6 @@
       "sessionNotFound": {
         "description": "此聊天会话不存在或已被删除。",
         "title": "未找到聊天"
-      },
-      "sourcesModal": {
-        "title": "来源"
       }
     },
     "appChrome": {
@@ -13287,12 +13284,50 @@
     },
     "publishedFiles": {
       "card": {
-        "updated": {
-          "description": "更新版本 · {details}"
-        },
         "preview": {
           "ariaLabel": "预览 {name}"
         }
+      },
+      "panel": {
+        "preview": {
+          "ariaLabel": "{name} 的预览"
+        }
+      }
+    },
+    "rightPanel": {
+      "filesTab": {
+        "label": "文件",
+        "description": "模型在此聊天中发布的文件",
+        "empty": "此聊天还没有文件",
+        "tile": {
+          "ariaLabel": "打开 {name}"
+        },
+        "search": {
+          "placeholder": "搜索文件",
+          "empty": "没有与搜索匹配的文件"
+        }
+      },
+      "fileTab": {
+        "olderVersion": "<isolate>{name}</isolate>（第 {version} 版，共 {latest} 版）"
+      },
+      "sourcesTab": {
+        "label": "来源"
+      },
+      "toggleButton": {
+        "label": "显示或隐藏面板"
+      },
+      "reloadButton": {
+        "label": "刷新文件",
+        "error": "无法重新加载文件。请重试。"
+      },
+      "expandButton": {
+        "label": "展开面板"
+      },
+      "restoreButton": {
+        "label": "还原面板"
+      },
+      "resizeHandle": {
+        "label": "调整面板大小"
       }
     }
   },
@@ -14909,18 +14944,6 @@
       "browser": {
         "label": "应用"
       },
-      "list": {
-        "label": "输出标签页"
-      },
-      "close": {
-        "label": "关闭{name}"
-      },
-      "reordered": {
-        "label": "标签页已移至第{position}个，共{count}个"
-      },
-      "open": {
-        "label": "打开标签页"
-      },
       "outputs": {
         "label": "输出"
       }
@@ -15046,8 +15069,7 @@
       "scope": {
         "turn": "第 {turn, number} 轮输出",
         "all": "所有输出"
-      },
-      "unseen": "新增或已更新"
+      }
     },
     "turnOutputs": {
       "showAll": "查看全部 {count} 个输出",
@@ -15116,6 +15138,28 @@
       "description": "此会话无法使用 {names}。你的技能必须在 {maxSize} 和 {maxFiles, number} 个文件以内。关闭不需要的技能以腾出空间。",
       "manage": "管理技能",
       "dismiss": "关闭"
+    }
+  },
+  "outputPanel": {
+    "tabStrip": {
+      "list": {
+        "label": "输出标签页"
+      },
+      "close": {
+        "label": "关闭{name}"
+      },
+      "reordered": {
+        "label": "标签页已移至第{position}个，共{count}个"
+      },
+      "open": {
+        "label": "打开标签页"
+      }
+    },
+    "tile": {
+      "download": {
+        "label": "下载"
+      },
+      "unseen": "新增或已更新"
     }
   },
   "knowledge": {

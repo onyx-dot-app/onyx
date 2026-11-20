@@ -47,8 +47,6 @@ export interface PlacedImage extends GeneratedImage {
 
 export interface PlacedPublishedFile extends PublishedFile {
   turnIndex: number;
-  // 1 for the first file of its name in the response, then 2, 3, ...
-  version: number;
 }
 
 export interface ProcessorState {
@@ -340,15 +338,7 @@ function handlePublishedFilesPacket(
   for (const file of packet.obj.files) {
     if (seenFileIds.has(file.file_id)) continue;
     seenFileIds.add(file.file_id);
-    const version =
-      [...state.publishedFiles, ...newFiles].filter(
-        (published) => published.name === file.name
-      ).length + 1;
-    newFiles.push({
-      ...file,
-      turnIndex: packet.placement.turn_index,
-      version,
-    });
+    newFiles.push({ ...file, turnIndex: packet.placement.turn_index });
   }
   if (newFiles.length > 0) {
     // A new array, so memoized consumers see the change

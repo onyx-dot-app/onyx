@@ -168,8 +168,13 @@ export interface MockPublishedFile {
   name: string;
   title: string | null;
   path: string;
+  // The path the backend shows, relative to the chat's working directory
+  displayPath: string;
   size: number;
   mimeType: string;
+  // Null for a file saved without an artifact
+  artifactId: string | null;
+  version: number | null;
 }
 
 /** The packets of one publish_files call, the same live and on replay. */
@@ -196,8 +201,11 @@ export function publishFilesPackets(
           name: file.name,
           title: file.title,
           path: file.path,
+          display_path: file.displayPath,
           size: file.size,
           mime_type: file.mimeType,
+          artifact_id: file.artifactId,
+          version: file.version,
         })),
         error: null,
       },
