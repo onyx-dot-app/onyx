@@ -57,6 +57,9 @@ class SlimConnectorExtractionResult(BaseModel):
     # The start the listing applied, None if it listed all documents. A listing
     # from a start can omit hierarchy nodes that are still live.
     listed_from: SecondsSinceUnixEpoch | None = None
+    # Entities (a site, a channel, a space) the connector could not list. The
+    # listing then omits documents that may still exist at the source.
+    failed_entity_ids: list[str] = []
 
 
 def _checkpointed_batched_items(
@@ -111,6 +114,7 @@ class BatchResult(BaseModel):
     raw_id_to_parent: dict[str, str | None]
     hierarchy_nodes: list[HierarchyNode]
     id_to_created_at: dict[str, datetime]
+    failed_entity_ids: list[str]
 
 
 def _extract_from_batch(
@@ -124,6 +128,7 @@ def _extract_from_batch(
     ids: dict[str, str | None] = {}
     id_to_created_at: dict[str, datetime] = {}
     hierarchy_nodes: list[HierarchyNode] = []
+    failed_entity_ids: list[str] = []
     for item in doc_list:
         if isinstance(item, HierarchyNode):
             hierarchy_nodes.append(item)
@@ -131,6 +136,8 @@ def _extract_from_batch(
             failed_id = _get_failure_id(item)
             if failed_id:
                 ids[failed_id] = None
+            if item.failed_entity:
+                failed_entity_ids.append(item.failed_entity.entity_id)
             logger.warning(
                 "Failed to retrieve document %s: %s", failed_id, item.failure_message
             )
@@ -142,6 +149,7 @@ def _extract_from_batch(
         raw_id_to_parent=ids,
         hierarchy_nodes=hierarchy_nodes,
         id_to_created_at=id_to_created_at,
+        failed_entity_ids=failed_entity_ids,
     )
 
 
@@ -173,6 +181,7 @@ def extract_ids_from_runnable_connector(
     all_raw_id_to_parent: dict[str, str | None] = {}
     all_hierarchy_nodes: list[HierarchyNode] = []
     all_id_to_created_at: dict[str, datetime] = {}
+    all_failed_entity_ids: list[str] = []
 
     # Pruning only needs doc ids, but non-slim tabular connectors won't yield a
     # doc without staging its CSV. Stage to a tracked list and reap in the finally
@@ -239,6 +248,7 @@ def extract_ids_from_runnable_connector(
             all_raw_id_to_parent.update(batch_ids)
             all_hierarchy_nodes.extend(batch_nodes)
             all_id_to_created_at.update(batch_result.id_to_created_at)
+            all_failed_entity_ids.extend(batch_result.failed_entity_ids)
 
             if callback:
                 callback.progress("extract_ids_from_runnable_connector", len(batch_ids))
@@ -267,6 +277,7 @@ def extract_ids_from_runnable_connector(
         hierarchy_nodes=all_hierarchy_nodes,
         id_to_created_at=all_id_to_created_at,
         listed_from=start,
+        failed_entity_ids=all_failed_entity_ids,
     )
 
 

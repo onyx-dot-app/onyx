@@ -18,11 +18,18 @@ from onyx.connectors.file.metadata import (
     load_zip_metadata,
     zip_metadata_entry,
 )
-from onyx.connectors.interfaces import GenerateDocumentsOutput, LoadConnector
+from onyx.connectors.interfaces import (
+    GenerateDocumentsOutput,
+    GenerateSlimDocumentOutput,
+    LoadConnector,
+    SecondsSinceUnixEpoch,
+    SlimConnector,
+)
 from onyx.connectors.models import (
     Document,
     HierarchyNode,
     ImageSection,
+    SlimDocument,
     TabularSection,
     TextSection,
 )
@@ -35,6 +42,7 @@ from onyx.file_processing.file_types import OnyxFileExtensions, is_indexable_fil
 from onyx.file_processing.image_utils import store_image_and_create_section
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.staging import RawFileCallback
+from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -83,6 +91,14 @@ def _create_image_section(
         raise e
 
 
+class FileProcessingError(Exception):
+    """A file that holds content but failed to process."""
+
+    def __init__(self, document_id: str, message: str) -> None:
+        super().__init__(message)
+        self.document_id = document_id
+
+
 def _process_file(
     file_id: str,
     file_name: str,
@@ -93,11 +109,13 @@ def _process_file(
     stage: RawFileCallback | None,
     skip_spreadsheet_content: bool = False,
     file_size: int | None = None,
+    fail_on_error: bool = False,
 ) -> list[Document]:
     """
     Process a file and return a list of Documents.
     For images, creates ImageSection objects without summarization.
     For documents with embedded images, extracts and stores the images.
+    ``fail_on_error`` raises FileProcessingError where it would skip a file.
     """
     if metadata is None:
         metadata = {}
@@ -158,6 +176,8 @@ def _process_file(
                 )
             ]
         except Exception as e:
+            if fail_on_error:
+                raise FileProcessingError(doc_id, str(e)) from e
             logger.error("Failed to process image file %s: %s", file_name, e)
             return []
 
@@ -250,6 +270,8 @@ def _process_file(
                 )
             )
         except Exception as e:
+            if fail_on_error:
+                raise FileProcessingError(doc_id, str(e)) from e
             logger.error("Failed to process tabular file %s: %s", file_name, e)
             return []
         if not sections:
@@ -305,7 +327,7 @@ def _process_file(
     ]
 
 
-class LocalFileConnector(LoadConnector):
+class LocalFileConnector(LoadConnector, SlimConnector):
     """
     Connector that reads files from Postgres and yields Documents, including
     embedded image extraction without summarization.
@@ -344,36 +366,12 @@ class LocalFileConnector(LoadConnector):
         Iterates over each file path, fetches from Postgres, tries to parse text
         or images, and yields Document batches.
         """
-        zip_metadata = load_zip_metadata(
-            self._zip_metadata_file_id, self._zip_metadata_deprecated
-        )
-
+        zip_metadata = self._load_zip_metadata(strict=False)
         documents: list[Document | HierarchyNode] = []
-
         for file_id in self.file_locations:
-            file_store = get_default_file_store()
-            file_record = file_store.read_file_record(file_id=file_id)
-            if not file_record:
-                # typically an unsupported extension
-                logger.warning(
-                    "No file record found for '%s' in PG; skipping.", file_id
-                )
-                continue
-
-            metadata = zip_metadata_entry(zip_metadata, file_record.display_name)
-            file_io = file_store.read_file(file_id=file_id, mode="b")
-            new_docs = _process_file(
-                file_id=file_id,
-                file_name=file_record.display_name,
-                file=file_io,
-                metadata=metadata,
-                pdf_pass=self.pdf_pass,
-                file_type=file_record.file_type,
-                stage=self.raw_file_callback,
-                skip_spreadsheet_content=self.skip_spreadsheet_content,
-                file_size=file_record.file_size,
+            documents.extend(
+                self._process_stored_file(file_id, zip_metadata, fail_on_error=False)
             )
-            documents.extend(new_docs)
 
             if len(documents) >= self.batch_size:
                 yield documents
@@ -382,6 +380,74 @@ class LocalFileConnector(LoadConnector):
 
         if documents:
             yield documents
+
+    def retrieve_all_slim_docs(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        end: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        callback: IndexingHeartbeatInterface | None = None,  # noqa: ARG002
+    ) -> GenerateSlimDocumentOutput:
+        """The prune listing. A file that failed to process keeps its id, so
+        the prune does not delete what indexing stored for it."""
+        zip_metadata = self._load_zip_metadata(strict=True)
+        slim_docs: list[SlimDocument | HierarchyNode] = []
+        for file_id in self.file_locations:
+            try:
+                slim_docs.extend(
+                    SlimDocument(
+                        id=doc.id,
+                        external_access=doc.external_access,
+                        doc_created_at=doc.doc_created_at,
+                    )
+                    for doc in self._process_stored_file(
+                        file_id, zip_metadata, fail_on_error=True
+                    )
+                )
+            except FileProcessingError as e:
+                logger.warning(
+                    "Failed to process file %s, keeping its document: %s",
+                    file_id,
+                    e,
+                )
+                slim_docs.append(SlimDocument(id=e.document_id))
+
+            if len(slim_docs) >= self.batch_size:
+                yield slim_docs
+                slim_docs = []
+
+        if slim_docs:
+            yield slim_docs
+
+    def _load_zip_metadata(self, *, strict: bool) -> dict[str, Any]:
+        # Metadata can set document ids, so the prune listing needs it.
+        return load_zip_metadata(
+            self._zip_metadata_file_id, self._zip_metadata_deprecated, strict=strict
+        )
+
+    def _process_stored_file(
+        self, file_id: str, zip_metadata: dict[str, Any], *, fail_on_error: bool
+    ) -> list[Document]:
+        file_store = get_default_file_store()
+        file_record = file_store.read_file_record(file_id=file_id)
+        if not file_record:
+            # typically an unsupported extension
+            logger.warning("No file record found for '%s' in PG; skipping.", file_id)
+            return []
+
+        metadata = zip_metadata_entry(zip_metadata, file_record.display_name)
+        file_io = file_store.read_file(file_id=file_id, mode="b")
+        return _process_file(
+            file_id=file_id,
+            file_name=file_record.display_name,
+            file=file_io,
+            metadata=metadata,
+            pdf_pass=self.pdf_pass,
+            file_type=file_record.file_type,
+            stage=self.raw_file_callback,
+            skip_spreadsheet_content=self.skip_spreadsheet_content,
+            file_size=file_record.file_size,
+            fail_on_error=fail_on_error,
+        )
 
 
 if __name__ == "__main__":
