@@ -19,6 +19,7 @@ from onyx.configs.app_configs import (
     SHAREPOINT_CONNECTOR_SIZE_THRESHOLD,
     SHAREPOINT_CONVERSION_WORKERS,
     SHAREPOINT_EXHAUSTIVE_AD_ENUMERATION,
+    SHAREPOINT_LISTING_WORKERS,
 )
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
@@ -98,7 +99,7 @@ from onyx.connectors.sharepoint.listing import (
     is_listable_drive_item,
     site_page_stub,
 )
-from onyx.connectors.sharepoint.models import SharepointDrive
+from onyx.connectors.sharepoint.models import DriveChildrenPage, SharepointDrive
 from onyx.connectors.sharepoint.source_operations import (
     CONFIG_AUTHORITY_HOST,
     CONFIG_GRAPH_API_HOST,
@@ -235,6 +236,15 @@ def _drives_matching_url_name(
     ]
 
 
+class FolderCursor(BaseModel):
+    """One children page that a full pass of a drive must still read: the
+    first page of a folder (the drive root when ``folder_id`` is None), or
+    the page behind ``next_link``."""
+
+    folder_id: str | None = None
+    next_link: str | None = None
+
+
 class SharepointConnectorCheckpoint(ConnectorCheckpoint):
     cached_site_descriptors: deque[SiteDescriptor] | None = None
     current_site_descriptor: SiteDescriptor | None = None
@@ -274,6 +284,19 @@ class SharepointConnectorCheckpoint(ConnectorCheckpoint):
     current_drive_delta_next_link: str | None = None
     current_drive_delta_resync_attempted: bool = False
 
+    # The full pass of the current drive, on the stub listing. The walk reads
+    # the folders of the drive with `/children`, several at one time. None
+    # when the drive is read with delta only.
+    # The children pages still to read, as a stack, so that it stays small.
+    full_pass_folders: list[FolderCursor] | None = None
+    # The delta cursor of the drive from before the walk. The walk can miss
+    # an item that is written or moved while it runs, so the delta from this
+    # cursor runs after the walk.
+    full_pass_catch_up_link: str | None = None
+    # True while the delta from that cursor runs. Its items are all changes
+    # since the cursor, so the time window does not filter them.
+    full_pass_catching_up: bool = False
+
     process_site_pages: bool = False
 
     # The raw ids (URLs) of the hierarchy nodes that the walk yielded for the
@@ -307,6 +330,7 @@ class SharepointConnectorCheckpoint(ConnectorCheckpoint):
 
 
 GRAPH_INVALID_REQUEST_CODE = "invalidRequest"
+_EPOCH = datetime.fromtimestamp(0, tz=timezone.utc)
 # The most hierarchy node ids that a checkpoint keeps. A drive with more
 # folders yields some folder nodes again.
 MAX_SEEN_HIERARCHY_NODE_IDS = 20_000
@@ -1122,6 +1146,9 @@ class SharepointConnector(
         checkpoint.current_folder = None
         checkpoint.current_drive_delta_next_link = None
         checkpoint.current_drive_delta_resync_attempted = False
+        checkpoint.full_pass_folders = None
+        checkpoint.full_pass_catch_up_link = None
+        checkpoint.full_pass_catching_up = False
         checkpoint.legacy_seen_document_ids = None
         # The folder nodes of the drive are not needed after it. The site
         # node stays, so that the next drive does not yield it again.
@@ -1877,6 +1904,88 @@ class SharepointConnector(
             if next_link is None:
                 return
 
+    def _start_full_pass(
+        self, checkpoint: SharepointConnectorCheckpoint, drive: SiteDrive
+    ) -> None:
+        """Sets up the full pass of a drive: the delta cursor of the drive's
+        state now, then the walk from the drive root. When Graph gives no
+        cursor, the drive is read with delta only, as before."""
+        try:
+            catch_up_link = self.ops.get_latest_delta_link(drive_id=drive.drive_id)
+        except MicrosoftGraphError as e:
+            if e.is_throttled:
+                raise
+            logger.warning(
+                "No delta cursor for drive '%s' (%s); reading it with delta only.",
+                drive.display_name,
+                e,
+            )
+            return
+        if catch_up_link is None:
+            return
+        checkpoint.full_pass_catch_up_link = catch_up_link
+        checkpoint.full_pass_folders = [FolderCursor()]
+        checkpoint.full_pass_catching_up = False
+        checkpoint.current_drive_delta_next_link = None
+
+    def _read_full_pass_folders(
+        self,
+        checkpoint: SharepointConnectorCheckpoint,
+        drive: SiteDrive,
+        start: datetime,
+        end: datetime,
+    ) -> list[DriveItemData]:
+        """Reads one children page of up to SHAREPOINT_LISTING_WORKERS folders
+        at one time, and returns their files. The subfolders and the next
+        pages go on the stack. When the stack is empty, the checkpoint
+        continues with the delta from the cursor that was taken before the
+        walk."""
+        folders = checkpoint.full_pass_folders or []
+        batch = folders[-SHAREPOINT_LISTING_WORKERS:]
+        pages = cast(
+            list[DriveChildrenPage],
+            run_functions_tuples_in_parallel(
+                [
+                    (self._read_children_page, (drive.drive_id, cursor, start, end))
+                    for cursor in batch
+                ],
+                max_workers=SHAREPOINT_LISTING_WORKERS,
+            ),
+        )
+        remaining = folders[: len(folders) - len(batch)]
+        files: list[DriveItemData] = []
+        for page in pages:
+            files.extend(page.files)
+            if page.next_link:
+                remaining.append(FolderCursor(next_link=page.next_link))
+            remaining.extend(
+                FolderCursor(folder_id=folder_id) for folder_id in page.folder_ids
+            )
+        if remaining:
+            checkpoint.full_pass_folders = remaining
+        else:
+            checkpoint.full_pass_folders = None
+            checkpoint.full_pass_catching_up = True
+            checkpoint.current_drive_delta_next_link = (
+                checkpoint.full_pass_catch_up_link
+            )
+        return files
+
+    def _read_children_page(
+        self,
+        drive_id: str,
+        cursor: FolderCursor,
+        start: datetime,
+        end: datetime,
+    ) -> DriveChildrenPage:
+        return self.ops.get_children_page(
+            drive_id=drive_id,
+            folder_id=cursor.folder_id,
+            next_link=cursor.next_link,
+            start=start,
+            end=end,
+        )
+
     def _walk_from_checkpoint(
         self,
         start: SecondsSinceUnixEpoch,
@@ -2071,6 +2180,8 @@ class SharepointConnector(
                         else DRIVE_DELTA_SELECT_FIELDS
                     ),
                 )
+                if stub_listing and start_dt <= _EPOCH:
+                    self._start_full_pass(checkpoint, checkpoint.current_drive)
         if checkpoint.current_site_descriptor and checkpoint.current_drive is not None:
             site_descriptor = checkpoint.current_site_descriptor
             start_dt = datetime.fromtimestamp(start, tz=timezone.utc)
@@ -2081,7 +2192,30 @@ class SharepointConnector(
             driveitems: Iterable[DriveItemData]
             has_more_delta_pages = False
 
-            if checkpoint.current_drive_delta_next_link:
+            if checkpoint.full_pass_folders is not None:
+                try:
+                    driveitems = self._read_full_pass_folders(
+                        checkpoint, current_drive, start_dt, end_dt
+                    )
+                except Exception as e:
+                    _raise_if_throttled(e)
+                    logger.error(
+                        "Failed to list the folders of drive '%s': %s",
+                        current_drive.display_name,
+                        e,
+                    )
+                    yield _create_entity_failure(
+                        current_drive.drive_id,
+                        f"Failed to list the folders of drive "
+                        f"'{current_drive.display_name}': {str(e)}",
+                        (start_dt, end_dt),
+                        e,
+                    )
+                    self._clear_drive_checkpoint_state(checkpoint)
+                    return checkpoint
+                # The catch-up delta follows the walk.
+                has_more_delta_pages = True
+            elif checkpoint.current_drive_delta_next_link:
                 try:
                     result = self.ops.get_delta_page(
                         drive_id=current_drive.drive_id,
@@ -2116,7 +2250,11 @@ class SharepointConnector(
 
                 if result.resync_after_410:
                     checkpoint.current_drive_delta_resync_attempted = True
-                driveitems = iter_delta_page_files(result.page, start_dt, end_dt)
+                driveitems = (
+                    iter_delta_page_files(result.page, None, None)
+                    if checkpoint.full_pass_catching_up
+                    else iter_delta_page_files(result.page, start_dt, end_dt)
+                )
                 has_more_delta_pages = result.next_checkpoint_url is not None
                 checkpoint.current_drive_delta_next_link = result.next_checkpoint_url
             else:

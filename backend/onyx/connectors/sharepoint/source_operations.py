@@ -35,6 +35,11 @@ from onyx.connectors.microsoft_utils.config import (
     DEFAULT_GRAPH_API_HOST,
 )
 from onyx.connectors.microsoft_utils.drive_delta import (
+    DEFAULT_DRIVE_DELTA_PAGE_SIZE,
+    DRIVE_ITEM_FOLDER_PROPERTY,
+    DRIVE_ITEM_ID_PROPERTY,
+    ODATA_DELTA_LINK_PROPERTY,
+    ODATA_NEXT_LINK_PROPERTY,
     DriveDeltaFetchResult,
     fetch_drive_delta_checkpoint_page,
 )
@@ -45,6 +50,7 @@ from onyx.connectors.microsoft_utils.drive_items import (
     DriveItemData,
     download_via_graph_api,
     download_with_cap,
+    drive_item_in_time_window,
     extract_drive_item_content,
     iter_drive_items_delta,
     iter_drive_items_paged,
@@ -100,6 +106,7 @@ from onyx.connectors.sharepoint.connector_utils import (
     validate_site_url_host,
 )
 from onyx.connectors.sharepoint.models import (
+    DriveChildrenPage,
     SharepointCredentials,
     SharepointDrive,
     SitePagesPage,
@@ -531,6 +538,77 @@ class SharepointSourceOperations(SourceOperations):
                 select_fields=select_fields,
                 allow_full_resync=allow_full_resync,
             )
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
+        untested=(
+            "Reads the delta endpoint that the documents check reads through "
+            "get_delta_page, with the token `latest`."
+        ),
+    )
+    def get_latest_delta_link(self, *, drive_id: str) -> str | None:
+        """The delta cursor of the drive's state now. Graph answers
+        ``token=latest`` with no items and the link. A later read of the
+        link returns the changes after this call."""
+        with raise_microsoft_errors():
+            data: dict[str, Any] = self._get(
+                f"{self._base()}/drives/{drive_id}/root/delta",
+                {"token": "latest", "$select": DRIVE_ITEM_SELECT_FIELDS},
+            )
+        link: object = data.get(ODATA_DELTA_LINK_PROPERTY)
+        return link if isinstance(link, str) and link else None
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
+        untested=(
+            "Reads the children endpoint that iter_folder_items reads, one "
+            "page for each call."
+        ),
+    )
+    def get_children_page(
+        self,
+        *,
+        drive_id: str,
+        folder_id: str | None = None,
+        next_link: str | None = None,
+        start: datetime | None = None,
+        end: datetime | None = None,
+    ) -> DriveChildrenPage:
+        """One page of the children of a folder, the drive root when
+        ``folder_id`` is None, or the page behind ``next_link``. The files
+        are those in the time window."""
+        base: str = f"{self._base()}/drives/{drive_id}"
+        params: dict[str, str] | None = None
+        url: str
+        if next_link is not None:
+            # A next link already holds the query.
+            url = next_link
+        else:
+            url = (
+                f"{base}/items/{folder_id}/children"
+                if folder_id
+                else f"{base}/root/children"
+            )
+            params = {
+                "$top": str(DEFAULT_DRIVE_DELTA_PAGE_SIZE),
+                "$select": DRIVE_ITEM_SELECT_FIELDS,
+            }
+        with raise_microsoft_errors():
+            data: dict[str, Any] = self._get(url, params)
+        files: list[DriveItemData] = []
+        folder_ids: list[str] = []
+        for item in data.get("value", []):
+            if DRIVE_ITEM_FOLDER_PROPERTY in item:
+                folder_ids.append(item[DRIVE_ITEM_ID_PROPERTY])
+            elif drive_item_in_time_window(item, start, end):
+                files.append(DriveItemData.from_graph_json(item))
+        return DriveChildrenPage(
+            files=files,
+            folder_ids=folder_ids,
+            next_link=data.get(ODATA_NEXT_LINK_PROPERTY),
+        )
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},

@@ -1435,6 +1435,10 @@ SHAREPOINT_CONVERSION_WORKERS = max(
     1, _int_env("SHAREPOINT_CONVERSION_WORKERS", 16) or 16
 )
 
+# Folders of one drive that the SharePoint connector lists at once on a full
+# pass. Each one is a children page in flight.
+SHAREPOINT_LISTING_WORKERS = max(1, _int_env("SHAREPOINT_LISTING_WORKERS", 8) or 8)
+
 # Max bytes buffered for the Google Docs advanced (Docs-API structural-JSON)
 # fetch. Native Docs report no `size`, so the fetch can't be checked from
 # metadata; larger Docs are indexed via the basic text export.
