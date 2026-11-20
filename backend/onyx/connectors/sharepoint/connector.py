@@ -3,11 +3,13 @@ import fnmatch
 import html
 import os
 import re
+import threading
 from collections import deque
 from collections.abc import Generator, Iterable
 from datetime import datetime, timezone
 from typing import Any, cast
 from urllib.parse import SplitResult, quote, unquote, urlsplit
+from uuid import uuid4
 
 from pydantic import AliasChoices, BaseModel, Field, ValidationError
 from typing_extensions import override
@@ -289,10 +291,14 @@ class SharepointConnectorCheckpoint(ConnectorCheckpoint):
         validation_alias=AliasChoices("legacy_seen_document_ids", "seen_document_ids"),
         exclude=True,
     )
+    # The id of this listing run, set by its first step. Each stub carries
+    # it, and conversion keys the Redis permission cache by it.
+    listing_run_id: str | None = None
+
     # Checkpoints from before the conversion stage kept the group expansions
-    # here. The connector now keeps them in Redis, where the conversion
-    # threads of every worker share them. Read, so that such a checkpoint
-    # resumes, and not written.
+    # here. Each run now reads them again; conversion shares them through
+    # Redis for one listing run. Read, so that such a checkpoint resumes, and
+    # not written.
     legacy_permission_cache: dict[str, Any] | None = Field(
         default=None,
         validation_alias=AliasChoices("legacy_permission_cache", "permission_cache"),
@@ -816,11 +822,12 @@ class SharepointConnector(
         self._ops: SharepointSourceOperations | None = None
         self.include_site_pages = include_site_pages
         self.include_site_documents = include_site_documents
-        # The group expansions of the permission reads, shared through Redis
-        # with the conversion threads of every worker.
-        self._permission_cache: SharepointPermissionCache = (
-            SharedSharepointPermissionCache()
-        )
+        # The group expansions of the permission reads of this connector
+        # object. Conversion uses one cache for each listing run instead
+        # (_run_permission_cache).
+        self._permission_cache = SharepointPermissionCache()
+        self._run_permission_caches: dict[str, SharedSharepointPermissionCache] = {}
+        self._run_permission_caches_lock = threading.Lock()
 
         resolved_env = resolve_microsoft_environment(graph_api_host, authority_host)
         self.authority_host = resolved_env.authority_host
@@ -1692,6 +1699,7 @@ class SharepointConnector(
             include_permissions,
             parent_hierarchy_url,
             is_targeted_reindex,
+            self._permission_cache,
             seen_document_ids,
         )
 
@@ -1703,6 +1711,7 @@ class SharepointConnector(
         include_permissions: bool,
         parent_hierarchy_url: str | None,
         is_targeted_reindex: bool,
+        permission_cache: SharepointPermissionCache,
         seen_document_ids: set[str] | None = None,
     ) -> Generator[Document | ConnectorFailure, None, None]:
         """Downloads one file and yields its document, or a failure. A file
@@ -1719,7 +1728,7 @@ class SharepointConnector(
                 drive,
                 self.ops,
                 site_url,
-                permission_cache=self._permission_cache,
+                permission_cache=permission_cache,
                 include_permissions=include_permissions,
                 parent_hierarchy_raw_node_id=parent_hierarchy_url,
                 treat_sharing_link_as_public=self.treat_sharing_link_as_public,
@@ -1826,6 +1835,7 @@ class SharepointConnector(
                 if folder_path
                 else drive.web_url
             ),
+            listing_run_id=checkpoint.listing_run_id,
         )
 
     def _list_site_page_stubs(
@@ -1833,6 +1843,7 @@ class SharepointConnector(
         site_descriptor: SiteDescriptor,
         start: datetime | None,
         end: datetime | None,
+        listing_run_id: str | None,
     ) -> Generator[SlimDocumentStub, None, None]:
         """One stub for each site page in the time window, from the pages
         listing with no canvas. The Pages API has no time filter, so every
@@ -1858,6 +1869,7 @@ class SharepointConnector(
                     site_id=site_id,
                     site_url=site_descriptor.url,
                     site_name=site_descriptor.drive_name,
+                    listing_run_id=listing_run_id,
                 )
                 if stub is not None:
                     yield stub
@@ -1882,6 +1894,8 @@ class SharepointConnector(
 
         checkpoint = copy.deepcopy(checkpoint)
         self._migrate_legacy_drive_checkpoint(checkpoint)
+        if stub_listing and checkpoint.listing_run_id is None:
+            checkpoint.listing_run_id = uuid4().hex
 
         if (
             checkpoint.has_more
@@ -2207,7 +2221,10 @@ class SharepointConnector(
             try:
                 if stub_listing:
                     yield from self._list_site_page_stubs(
-                        site_descriptor, start=start_dt, end=end_dt
+                        site_descriptor,
+                        start=start_dt,
+                        end=end_dt,
+                        listing_run_id=checkpoint.listing_run_id,
                     )
                 site_pages = (
                     iter(())
@@ -2577,6 +2594,22 @@ class SharepointConnector(
                 raise RuntimeError("Bug: the stub listing yielded a document")
             yield item
 
+    def _run_permission_cache(
+        self, payload: SharepointListingPayload
+    ) -> SharepointPermissionCache:
+        """The permission cache of the listing run of ``payload``, which the
+        conversion threads of every worker share through Redis for that run
+        only. A payload with no run id uses the cache of this object."""
+        run_id = payload.listing_run_id
+        if run_id is None:
+            return self._permission_cache
+        with self._run_permission_caches_lock:
+            cache = self._run_permission_caches.get(run_id)
+            if cache is None:
+                cache = SharedSharepointPermissionCache(scope=run_id)
+                self._run_permission_caches[run_id] = cache
+            return cache
+
     def _convert_listed_drive_item(
         self, payload: SharepointListingPayload, include_permissions: bool
     ) -> Document | ConnectorFailure | None:
@@ -2598,6 +2631,7 @@ class SharepointConnector(
                 include_permissions,
                 payload.parent_hierarchy_raw_node_id,
                 is_targeted_reindex=False,
+                permission_cache=self._run_permission_cache(payload),
             ),
             None,
         )
@@ -2616,7 +2650,7 @@ class SharepointConnector(
             payload.site_name,
             self.ops,
             payload.site_url,
-            permission_cache=self._permission_cache,
+            permission_cache=self._run_permission_cache(payload),
             include_permissions=include_permissions,
             parent_hierarchy_raw_node_id=payload.site_url,
             treat_sharing_link_as_public=self.treat_sharing_link_as_public,
