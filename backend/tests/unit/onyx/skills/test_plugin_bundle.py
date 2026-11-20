@@ -263,6 +263,17 @@ def test_reads_servers_from_an_array_of_files_and_objects() -> None:
         ),
         (
             {
+                "plugin.json": '{"name": "kit", "x": '
+                + "[" * 600
+                + '"a\\u0000b"'
+                + "]" * 600
+                + "}",
+                "skills/a/SKILL.md": _skill_md("a"),
+            },
+            "plugin.json cannot contain a NUL character.",
+        ),
+        (
+            {
                 "plugin.json": json.dumps({"name": "kit"}),
                 ".mcp.json": json.dumps(
                     {"mcpServers": {"do\x00cs": {"command": "docs"}}}

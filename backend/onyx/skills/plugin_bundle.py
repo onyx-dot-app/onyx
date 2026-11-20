@@ -66,21 +66,20 @@ def _read_json(bundle_zip: zipfile.ZipFile, path: str) -> JsonValue:
         raise _invalid(f"{path} is larger than 1 MiB.")
     try:
         value = json.loads(bundle_zip.read(info))
-    except (ValueError, UnicodeDecodeError) as exc:
+    except (ValueError, UnicodeDecodeError, RecursionError) as exc:
         raise _invalid(f"{path} is not valid JSON: {exc}") from exc
-    if _has_nul(value):
-        raise _invalid(f"{path} cannot contain a NUL character.")
+    pending: list[JsonValue] = [value]
+    while pending:
+        item = pending.pop()
+        if isinstance(item, str):
+            if "\x00" in item:
+                raise _invalid(f"{path} cannot contain a NUL character.")
+        elif isinstance(item, list):
+            pending.extend(item)
+        elif isinstance(item, dict):
+            pending.extend(item.keys())
+            pending.extend(item.values())
     return value
-
-
-def _has_nul(value: JsonValue) -> bool:
-    if isinstance(value, str):
-        return "\x00" in value
-    if isinstance(value, list):
-        return any(_has_nul(item) for item in value)
-    if isinstance(value, dict):
-        return any("\x00" in key or _has_nul(item) for key, item in value.items())
-    return False
 
 
 def _optional_string(manifest: Mapping[str, JsonValue], key: str) -> str | None:
