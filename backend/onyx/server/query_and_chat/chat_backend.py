@@ -570,14 +570,6 @@ def get_chat_session(
             if before_message_id is None
             else (),
         )
-    # The client keeps the list from a latest-page load, and the shared view
-    # from its full load; an older page does not need it.
-    published_files = (
-        get_chat_published_files(session_id, db_session)
-        if before_message_id is None and (limit is not None or is_shared)
-        else None
-    )
-
     session_messages = get_chat_messages_by_session(
         chat_session_id=session_id,
         user_id=user_id,
@@ -618,6 +610,14 @@ def get_chat_session(
         )
         for msg in responses
     ]
+    # The client keeps the list from a latest-page load, and the shared view
+    # from its full load; an older page does not need it. Read after the
+    # replay, so the list holds every file that a replayed call published.
+    published_files = (
+        get_chat_published_files(session_id, db_session)
+        if before_message_id is None and (limit is not None or is_shared)
+        else None
+    )
     if is_shared:
         # A shared view shows no skills the owner picked: not on questions and
         # not on messages accepted during a response.
