@@ -735,7 +735,9 @@ up its own branding.
     user message and its replies) in a `data-chat-turn` element. The latest turn
     has `min-height: calc(100cqh - 3rem)` (the scroll element is a size
     container): at the end of every chat, in every tab and after a reload, the
-    latest user message sits 1rem below the top, with space below it. Nothing
+    latest user message sits 1rem below the top, with space below it, while the
+    turn fits in that height. A taller turn ends at the bottom, and its user
+    message is above the viewport. Nothing
     measures it. A send glides to the end through
     `lib/chatScroll/hooks.ts:useScrollToNewTurn` (only while the chat is
     `loading`, and not on a switch back to a running chat, so a resumed run
