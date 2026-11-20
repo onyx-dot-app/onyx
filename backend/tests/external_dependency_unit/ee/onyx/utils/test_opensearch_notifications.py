@@ -32,7 +32,7 @@ from onyx.document_index.opensearch.models import (
     UsageThresholds,
 )
 from onyx.server.settings.models import Tier
-from tests.external_dependency_unit.conftest import create_test_user
+from tests.external_dependency_unit.conftest import MakeTestUser
 
 
 def _status(*issues: ClusterIssue) -> ClusterStatus:
@@ -126,11 +126,13 @@ def _notifications(db_session: Session, user_id: UUID) -> list[Notification]:
 
 @pytest.fixture
 def make_user(
-    db_session: Session,
+    make_test_user: MakeTestUser,
     tenant_context: None,  # noqa: ARG001
 ) -> Callable[[str, bool], User]:
+    """Users that the teardown deletes, so later checks do not tell them."""
+
     def make(name: str, is_admin: bool) -> User:
-        return create_test_user(db_session, name, is_admin=is_admin)
+        return make_test_user(name, is_admin=is_admin)
 
     return make
 
@@ -263,6 +265,38 @@ def test_lost_state_still_clears_and_does_not_repeat(
     assert not red.dismissed
     # Lost again, then healthy: the open banner is still cleared.
     get_shared_cache_backend().delete(STATE_KEY)
+    _check()
+    [red] = _notifications(db_session, admin.id)
+    assert red.dismissed
+
+
+def test_a_failed_dismissal_is_retried_on_the_next_check(
+    db_session: Session,
+    cluster: list[ClusterStatus | None],
+    make_user: Callable[[str, bool], User],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    admin = make_user("os_notif_retry_admin", True)
+    cluster.extend([_status(RED), _status(), _status()])
+    _check()
+
+    def fail(*_args: object) -> None:
+        raise RuntimeError("database unavailable")
+
+    real_dismiss = opensearch_notifications.dismiss_notifications_by_additional_data
+    monkeypatch.setattr(
+        opensearch_notifications, "dismiss_notifications_by_additional_data", fail
+    )
+    with pytest.raises(RuntimeError):
+        _check()
+    [red] = _notifications(db_session, admin.id)
+    assert not red.dismissed
+    # The next healthy check still finds the open banner and clears it.
+    monkeypatch.setattr(
+        opensearch_notifications,
+        "dismiss_notifications_by_additional_data",
+        real_dismiss,
+    )
     _check()
     [red] = _notifications(db_session, admin.id)
     assert red.dismissed
