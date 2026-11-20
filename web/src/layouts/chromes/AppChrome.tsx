@@ -72,7 +72,7 @@ import { useTierAtLeast } from "@/lib/tiers/hooks";
 import { Tier } from "@/lib/tiers/types";
 import { useFullWidthChat } from "@/providers/FullWidthChatProvider";
 import { useIncognito } from "@/providers/IncognitoProvider";
-import { useCurrentPublishedFiles } from "@/lib/chat/hooks";
+import { usePublishedFiles } from "@/lib/chat/hooks";
 import { AppWorkspaceElementsContext } from "@/layouts/chromes/AppWorkspace";
 import {
   useChatSessionStore,
@@ -87,7 +87,7 @@ import { PublishedFilesButton } from "@/sections/chat/PublishedFileViews";
 // Its own component, so a change to the published files or to the panel
 // re-renders the button and not the header
 function ChatPublishedFilesButton() {
-  const hasPublishedFiles = useCurrentPublishedFiles().length > 0;
+  const hasPublishedFiles = usePublishedFiles("current").files.length > 0;
   const visible = useFilesShown();
   const updateCurrentRightPanel = useChatSessionStore(
     (state) => state.updateCurrentRightPanel

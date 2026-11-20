@@ -65,6 +65,7 @@ import {
 import {
   chatPublishedFiles,
   type LoadedPublishedFiles,
+  publishOrder,
 } from "@/lib/chat/publishedFiles";
 import {
   awaitsDecision,
@@ -891,29 +892,57 @@ export function useSendChatMessageFromURL({
   }, [pendingMessage, onSubmit, currentMessageFiles, deepResearch]);
 }
 
-const NO_PUBLISHED_FILES: PublishedFile[] = [];
+export interface ChatPublishedFiles {
+  // The newest publish of each path, newest first
+  files: PublishedFile[];
+  // The place of each of the chat's files in publish order, by file ID
+  publishIndex: ReadonlyMap<string, number>;
+}
+
+// A chat's loads of its file list and its message tree
+export interface PublishedFilesSource {
+  loadedPublishedFiles: LoadedPublishedFiles;
+  messageTree: MessageTreeState;
+}
+
+const NO_PUBLISHED_FILES: ChatPublishedFiles = {
+  files: [],
+  publishIndex: new Map(),
+};
 // The files of each message tree, keyed by the loads they came from
-const publishedFileLists = new WeakMap<
+const publishedFilesByTree = new WeakMap<
   MessageTreeState,
-  { loaded: LoadedPublishedFiles; files: PublishedFile[] }
+  { loaded: LoadedPublishedFiles; published: ChatPublishedFiles }
 >();
 
 /**
- * The files the model published in the open chat: the newest publish of each
- * path, newest first. The array stays the same while the files do, so a
+ * The files the model published in a chat: the open chat in the store, or a
+ * chat that the page holds, such as a shared chat. Both are built once per
+ * message tree and loads. Each stays the same while its content does, so a
  * packet that publishes nothing re-renders nothing.
  */
-export function useCurrentPublishedFiles(): PublishedFile[] {
-  return useChatSessionStore(
-    useShallow((state) => {
-      const session = state.sessions.get(state.currentSessionId ?? "");
-      if (!session) return NO_PUBLISHED_FILES;
-      const { loadedPublishedFiles: loaded, messageTree } = session;
-      const cached = publishedFileLists.get(messageTree);
-      if (cached && cached.loaded === loaded) return cached.files;
-      const files = chatPublishedFiles(loaded, messageTree);
-      publishedFileLists.set(messageTree, { loaded, files });
-      return files;
-    })
+export function usePublishedFiles(
+  chat: "current" | PublishedFilesSource | null
+): ChatPublishedFiles {
+  const select = (state: ReturnType<typeof useChatSessionStore.getState>) => {
+    const source =
+      chat === "current"
+        ? state.sessions.get(state.currentSessionId ?? "")
+        : chat;
+    if (!source) return NO_PUBLISHED_FILES;
+    const { loadedPublishedFiles: loaded, messageTree } = source;
+    const cached = publishedFilesByTree.get(messageTree);
+    if (cached && cached.loaded === loaded) return cached.published;
+    const published = {
+      files: chatPublishedFiles(loaded, messageTree),
+      publishIndex: publishOrder(loaded, messageTree),
+    };
+    publishedFilesByTree.set(messageTree, { loaded, published });
+    return published;
+  };
+  const files = useChatSessionStore(useShallow((state) => select(state).files));
+  const publishIndex = useChatSessionStore(
+    useShallow((state) => select(state).publishIndex)
   );
+  return { files, publishIndex };
 }

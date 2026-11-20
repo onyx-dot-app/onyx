@@ -10,22 +10,18 @@ import {
   useRef,
 } from "react";
 import { useTranslations } from "next-intl";
-import { useShallow } from "zustand/react/shallow";
 import { Button } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { SvgFiles, SvgSearchMenu, SvgX } from "@opal/icons";
 import { cn, richNodes } from "@opal/utils";
-import type { MessageTreeState } from "@/app/app/services/messageTree";
 import type { PublishedFile } from "@/app/app/services/streamingModels";
 import {
   useChatSessionStore,
   useCurrentRightPanelState,
 } from "@/app/app/stores/useChatSessionStore";
-import { useCurrentPublishedFiles } from "@/lib/chat/hooks";
+import { usePublishedFiles } from "@/lib/chat/hooks";
 import {
   filesSharingALabel,
-  type LoadedPublishedFiles,
-  publishOrder,
   publishedFileLabel,
   publishedFilePath,
 } from "@/lib/chat/publishedFiles";
@@ -434,13 +430,6 @@ export const ChatRightPanel = memo(function ChatRightPanel({
   );
 });
 
-const NO_PUBLISH_INDEX: ReadonlyMap<string, number> = new Map();
-// The publish index of each message tree, keyed by the loads it came from
-const publishIndexes = new WeakMap<
-  MessageTreeState,
-  { loaded: LoadedPublishedFiles; index: ReadonlyMap<string, number> }
->();
-
 interface CurrentChatRightPanelProps {
   open: boolean;
   sources: ReactNode;
@@ -457,22 +446,7 @@ export function CurrentChatRightPanel(props: CurrentChatRightPanelProps) {
   const sessionId = useChatSessionStore((store) => store.currentSessionId);
   const state = useCurrentRightPanelState();
   const dispatch = useChatSessionStore.getState().updateCurrentRightPanel;
-  const files = useCurrentPublishedFiles();
-  // Built again only when the message tree or the loads change, not on each
-  // store update. An equal index keeps its identity, so a packet that
-  // publishes nothing renders nothing.
-  const publishIndex = useChatSessionStore(
-    useShallow((store) => {
-      const session = store.sessions.get(store.currentSessionId ?? "");
-      if (!session) return NO_PUBLISH_INDEX;
-      const { loadedPublishedFiles: loaded, messageTree } = session;
-      const cached = publishIndexes.get(messageTree);
-      if (cached && cached.loaded === loaded) return cached.index;
-      const index = publishOrder(loaded, messageTree);
-      publishIndexes.set(messageTree, { loaded, index });
-      return index;
-    })
-  );
+  const { files, publishIndex } = usePublishedFiles("current");
   return (
     <ChatRightPanel
       {...props}

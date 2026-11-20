@@ -6,7 +6,7 @@ import {
 } from "@/app/app/services/streamingModels";
 import {
   useChatSessionQueue,
-  useCurrentPublishedFiles,
+  usePublishedFiles,
   useSendChatMessageFromURL,
   useToolRequests,
 } from "@/lib/chat/hooks";
@@ -336,7 +336,7 @@ describe("useSendChatMessageFromURL", () => {
   });
 });
 
-describe("useCurrentPublishedFiles", () => {
+describe("usePublishedFiles", () => {
   function answer(packets: Packet[]): Message {
     return {
       nodeId: 2,
@@ -378,16 +378,17 @@ describe("useCurrentPublishedFiles", () => {
     },
   };
 
-  it("keeps the same array until a packet publishes a file", () => {
+  it("keeps the same files and publish index until a packet publishes a file", () => {
     useChatSessionStore.setState({
       sessions: new Map(),
       currentSessionId: "files-session",
     });
     useChatSessionStore.getState().createSession("files-session");
     setAnswer([publishEnd]);
-    const { result, rerender } = renderHook(() => useCurrentPublishedFiles());
+    const { result, rerender } = renderHook(() => usePublishedFiles("current"));
     const first = result.current;
-    expect(first.map((file) => file.file_id)).toEqual(["file-1"]);
+    expect(first.files.map((file) => file.file_id)).toEqual(["file-1"]);
+    expect([...first.publishIndex]).toEqual([["file-1", 0]]);
 
     // A streamed answer delta replaces the packet array.
     setAnswer([
@@ -398,6 +399,7 @@ describe("useCurrentPublishedFiles", () => {
       },
     ]);
     rerender();
-    expect(result.current).toBe(first);
+    expect(result.current.files).toBe(first.files);
+    expect(result.current.publishIndex).toBe(first.publishIndex);
   });
 });
