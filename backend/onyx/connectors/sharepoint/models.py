@@ -100,6 +100,11 @@ class SharepointListingPayload(ListingPayload):
     size: int | None = None
     last_modified_by_display_name: str | None = None
     last_modified_by_email: str | None = None
+    # The listing run that listed the document. Conversion keys the shared
+    # permission cache by it, so that a run never reads access that another
+    # run or another credential cached. None: conversion keeps the cache in
+    # the process.
+    listing_run_id: str | None = None
 
     # A site page: the site's Graph id, and the page as the listing returned
     # it, with no canvas.

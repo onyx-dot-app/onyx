@@ -158,11 +158,18 @@ target makes one download by `/drives/{d}/items/{i}/content` and, with
 permission sync, the role-assignment reads from the list ids of the payload. A
 page target makes one read of the page with its canvas. No target makes a
 metadata call, and the listing already yielded the hierarchy nodes. A target
-with no payload goes through `reindex`. The group expansions of the permission
-reads are in `SharedSharepointPermissionCache`
+with no payload goes through `reindex`. The first step of a listing sets
+`listing_run_id` in the checkpoint, and each stub carries it. Conversion keeps
+the group expansions of the permission reads in a
+`SharedSharepointPermissionCache` for that run
 (`connectors/microsoft_utils/sharepoint_access.py`): in the process and in
-Redis under `sharepoint_group_expansion:<hash>` for one hour, so the threads of
-every worker expand a group one time. The checkpoint no longer holds them.
+Redis under `sharepoint_group_expansion:<run id>:<hash>`, so the threads of
+every worker expand a group one time in a run. A later run, or a connector on
+another credential, never reads these keys. The fetching path, the slim walk
+and permission sync keep the expansions in the connector object only, for one
+run, as before. The checkpoint no longer holds them. The docconversion
+Postgres pool holds a connection for each file thread of the source with the
+most threads (`docconversion_pool_size`).
 
 ---
 

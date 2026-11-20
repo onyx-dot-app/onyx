@@ -191,8 +191,9 @@ class _FakeRedis:
 def test_the_shared_group_cache_serves_another_worker(
     mock_get_group: MagicMock, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """A second cache object stands in for a conversion thread of another
-    worker: it reads the expansion that the first one stored."""
+    """A second cache object for the same listing run stands in for a
+    conversion thread of another worker: it reads the expansion that the
+    first one stored. A cache for another run does not."""
     redis = _FakeRedis()
     monkeypatch.setattr(
         "onyx.connectors.microsoft_utils.sharepoint_access.get_redis_client",
@@ -200,15 +201,20 @@ def test_the_shared_group_cache_serves_another_worker(
     )
     group = _make_ad_group("Engineering", "engineering-id")
     nested_group = _make_ad_group("Platform", "platform-id")
-    mock_get_group.side_effect = [{nested_group}, set()]
+    mock_get_group.side_effect = [{nested_group}, set(), {nested_group}, set()]
 
-    first = SharedSharepointPermissionCache()
+    first = SharedSharepointPermissionCache(scope="run-a")
     resolved = _resolve_document_groups(MagicMock(), SITE_URL, {group}, first)
-    second = SharedSharepointPermissionCache()
+    second = SharedSharepointPermissionCache(scope="run-a")
     again = _resolve_document_groups(MagicMock(), SITE_URL, {group}, second)
 
     assert again == resolved
     assert mock_get_group.call_count == 2
+    other_run = SharedSharepointPermissionCache(scope="run-b")
+    assert _resolve_document_groups(MagicMock(), SITE_URL, {group}, other_run) == (
+        resolved
+    )
+    assert mock_get_group.call_count == 4
     assert isinstance(next(iter(second.group_expansions.values())).nested_groups, set)
     # The keys hold no site URL and no group name.
     assert all(SITE_URL not in key and "Engineering" not in key for key in redis.values)
