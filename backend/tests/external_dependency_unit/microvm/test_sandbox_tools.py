@@ -44,8 +44,15 @@ from onyx.chat.stop_signal_checker import request_stop
 from onyx.configs.constants import (
     CHAT_SESSION_ID_FILE_METADATA_KEY,
     DEFAULT_PERSONA_ID,
+    DocumentSource,
     FileOrigin,
     MessageType,
+)
+from onyx.context.search.models import (
+    InferenceChunk,
+    InferenceSection,
+    SearchDoc,
+    SearchDocsResponse,
 )
 from onyx.db import chat as db_chat
 from onyx.db.chat import (
@@ -76,6 +83,7 @@ from onyx.db.sandbox import (
     get_or_create_sandbox,
     get_sandbox_by_user_id,
 )
+from onyx.db.tools import get_builtin_tool
 from onyx.db.users import fetch_user_by_id
 from onyx.deep_research.agent import DeepResearchAgent
 from onyx.error_handling.exceptions import OnyxError
@@ -154,13 +162,25 @@ from onyx.tools.constants import (
 )
 from onyx.tools.interface import Tool
 from onyx.tools.models import (
+    CapabilityEntry,
     CustomToolCallSummary,
+    SearchResult,
+    SearchResults,
     ToolContext,
     ToolOptions,
 )
 from onyx.tools.tool_constructor import construct_tools
 from onyx.tools.tool_implementations.code_mode import cells
 from onyx.tools.tool_implementations.code_mode.models import CodeModeExecutionResult
+from onyx.tools.tool_implementations.open_url import open_url_tool
+from onyx.tools.tool_implementations.open_url.open_url_tool import (
+    MAX_CHARS_ACROSS_URLS,
+    MAX_URLS_PER_CALL,
+    IndexedDocumentRequest,
+    IndexedRetrievalResult,
+    OpenedPage,
+    OpenURLTool,
+)
 from onyx.tools.tool_implementations.sandbox import sandbox_tools, spill
 from onyx.tools.tool_implementations.sandbox.models import (
     PUBLISH_FILES_MAX_FILES,
@@ -185,6 +205,13 @@ from onyx.tools.tool_implementations.sandbox.spill import (
     SPILL_FAILED_NOTE,
 )
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
+from onyx.tools.tool_implementations.web_search.models import WEB_SEARCH_PREFIX
+from onyx.tools.tool_implementations.web_search.utils import (
+    TRUNCATED_CONTENT_PREFIX,
+    TRUNCATED_CONTENT_SUFFIX,
+    inference_section_from_internet_page_scrape,
+)
+from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from tests.external_dependency_unit.chat.test_chat_tool_approvals import ACTION
 from tests.external_dependency_unit.chat.test_parked_agent_handoff import _gated
 from tests.external_dependency_unit.chat.test_wait_agents import (
@@ -217,6 +244,14 @@ from tests.external_dependency_unit.microvm.conftest import (
 from tests.external_dependency_unit.microvm.fake_agent import (
     InsecureClientFactory,
     RunningFakeAgent,
+)
+from tests.external_dependency_unit.mock_content_provider import (
+    MockWebContent,
+    use_mock_content_provider,
+)
+from tests.external_dependency_unit.mock_search_provider import (
+    MockWebSearchResult,
+    use_mock_web_provider,
 )
 from tests.unit.onyx.agents.fakes import ScriptedLLM
 from tests.unit.onyx.tools.code_mode.fakes import FakeMCPTool
@@ -395,7 +430,10 @@ class SandboxChat(BaseModel):
         *,
         code_mode: bool = False,
         on_part: Callable[[object], None] = lambda _part: None,
+        tool_ids: Sequence[int] = (),
     ) -> list[object]:
+        """Send a message; the agent's tools in `tool_ids` join the sandbox
+        tools."""
         return list(
             send(
                 self.chat_session_id,
@@ -404,7 +442,9 @@ class SandboxChat(BaseModel):
                 "Work in the sandbox.",
                 code_mode=code_mode,
                 on_part=on_part,
-                tool_options=ToolOptions(allowed=[]),
+                tool_options=ToolOptions(
+                    allowed=[CapabilityEntry(tool_id=tool_id) for tool_id in tool_ids]
+                ),
             )
         )
 
@@ -3414,3 +3454,627 @@ def test_a_program_that_prints_a_mebibyte_of_command_output_spills_its_cell(
     shown = last_tool_text(llm, "big")
     assert shown.startswith("Warning: truncated output")
     assert len(shown) < 42_000
+
+
+# open_url
+
+
+def _web_page(index: int, chars: int) -> MockWebContent:
+    """A page of about `chars` characters, with its search snippet in the
+    middle."""
+    half = "w" * (chars // 2)
+    return MockWebContent(
+        title=f"Page {index}",
+        url=f"https://docs.example.com/{index}",
+        content=f"START-{index}\n{half} {_snippet(index)} {half}\nEND-{index}",
+    )
+
+
+def _snippet(index: int) -> str:
+    return f"The guide's section {index} explains the setup."
+
+
+def _send_with_pages(
+    chat: SandboxChat,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+    pages: Sequence[MockWebContent],
+    llm: ChatLLM,
+    *,
+    code_mode: bool = False,
+) -> list[object]:
+    """Send a message with web search and open_url, whose search finds
+    `pages`. The pages come from the web, not the index."""
+    monkeypatch.setattr(open_url_tool, "DISABLE_VECTOR_DB", True)
+    tool_ids = [
+        get_builtin_tool(db_session, tool).id for tool in (WebSearchTool, OpenURLTool)
+    ]
+    with (
+        use_mock_web_provider(db_session) as web,
+        use_mock_content_provider() as content,
+    ):
+        web.add_results(
+            "guide",
+            [
+                MockWebSearchResult(
+                    title=page.title, link=page.url, snippet=_snippet(index)
+                )
+                for index, page in enumerate(pages, start=1)
+            ],
+        )
+        for page in pages:
+            content.add_content(page)
+        return chat.send(llm, tool_ids=tool_ids, code_mode=code_mode)
+
+
+def _search_and_open(pages: Sequence[MockWebContent], answer: str) -> ChatLLM:
+    """A model that finds `pages` with web search, opens them all with one
+    open_url call, and answers `answer`."""
+    return ChatLLM(
+        [
+            tool_step(WebSearchTool.NAME, "search", {"queries": ["guide"]}),
+            tool_step(OpenURLTool.NAME, "open", {"urls": [p.url for p in pages]}),
+            Delta(content=answer),
+        ]
+    )
+
+
+def _excerpt(index: int, page: MockWebContent) -> str:
+    """The text that the model gets of a page: 15,000 characters around its
+    snippet."""
+    return inference_section_from_internet_page_scrape(
+        page.to_web_content(), _snippet(index)
+    ).combined_content
+
+
+def _file_pages(data: bytes) -> list[SearchResult]:
+    return [SearchResult.model_validate_json(line) for line in data.splitlines()]
+
+
+def _open_url_packets(parts: Sequence[object]) -> list[packets.PacketObj]:
+    """The open_url card's packets and the citations of streamed parts or
+    replayed packets. Replay sends saved documents, which add their row IDs;
+    the comparison keeps the fields that both have."""
+    objects: list[packets.PacketObj] = []
+    for part in parts:
+        obj = part.obj if isinstance(part, packets.Packet) else part
+        if isinstance(obj, packets.OpenUrlDocuments):
+            objects.append(
+                packets.OpenUrlDocuments(
+                    documents=[
+                        SearchDoc.model_validate(dict(document))
+                        for document in obj.documents
+                    ]
+                )
+            )
+        elif isinstance(
+            obj, (packets.OpenUrlStart, packets.OpenUrlUrls, packets.CitationInfo)
+        ):
+            objects.append(obj)
+    return objects
+
+
+@pytest.mark.parametrize("vm_fails", [False, True], ids=["spilled", "vm_fails"])
+@pytest.mark.usefixtures("node")
+def test_open_url_spills_whole_pages_and_the_model_keeps_excerpts_and_citations(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    node: RunningFakeAgent,
+    chat: SandboxChat,
+    vm_fails: bool,
+) -> None:
+    if vm_fails:
+        node.agent.write_file_error = SandboxDaemonErrorReason.INTERNAL
+    # Each page is over its 15,000-character excerpt.
+    pages = [_web_page(index, 40_000) for index in range(1, MAX_URLS_PER_CALL + 1)]
+    whole = [page.content for page in pages]
+    # The answer cites a page whose middle only the file holds.
+    llm = _search_and_open(pages, "The seventh page explains it [7].")
+    parts = _send_with_pages(chat, db_session, monkeypatch, pages, llm)
+
+    if vm_fails:
+        # The model keeps the excerpts, with a note that the save failed.
+        shown, failed = last_tool_text(llm, "open").split("\n\n")
+        assert failed == SPILL_FAILED_NOTE
+        assert [
+            page.content
+            for page in SearchResults.model_validate_json(shown).results[:5]
+        ] == [_excerpt(index, page) for index, page in enumerate(pages[:5], start=1)]
+        return
+    document_ids = [WEB_SEARCH_PREFIX + page.url for page in pages]
+    [(path, data)] = _spills(node, chat.ref(db_session)).items()
+    # The file holds each whole page, one for each line, with its citation
+    # number.
+    assert _file_pages(data) == [
+        SearchResult(document=number, title=page.title, url=page.url, content=text)
+        for number, (page, text) in enumerate(zip(pages, whole, strict=True), start=1)
+    ]
+    # The model gets the excerpts that a chat without a sandbox gets, then
+    # the note with the list of pages.
+    shown = last_tool_text(llm, "open")
+    excerpts, note = shown.split("\n\n<persisted-output ")
+    shown_pages = SearchResults.model_validate_json(excerpts).results
+    assert [page.content for page in shown_pages[:5]] == [
+        _excerpt(index, page) for index, page in enumerate(pages[:5], start=1)
+    ]
+    assert "END-7" not in shown
+    listing = "\n".join(
+        f'{number}. [{number}] "{page.title}" "{page.url}": {len(text):,} characters'
+        for number, (page, text) in enumerate(zip(pages, whole, strict=True), start=1)
+    )
+    assert f"<persisted-output {note}" == _note(
+        path,
+        len(data),
+        "The pages above are excerpts. The file holds each page whole, one JSON "
+        f"object for each line; cite a page by its number:\n{listing}",
+    )
+    # The citation resolves, and the card's highlights are the excerpts.
+    [saved] = [
+        result
+        for result in _saved_results(db_session, chat.chat_session_id)
+        if isinstance(result.details, SearchDocsResponse)
+        and result.details.queries == []
+    ]
+    assert saved.content == shown
+    assert isinstance(saved.details, SearchDocsResponse)
+    assert saved.details.citation_mapping == dict(enumerate(document_ids, start=1))
+    live = _open_url_packets(parts)
+    assert [packet for packet in live if isinstance(packet, packets.CitationInfo)] == [
+        packets.CitationInfo(citation_number=7, document_id=document_ids[6])
+    ]
+    [documents] = [
+        packet.documents
+        for packet in live
+        if isinstance(packet, packets.OpenUrlDocuments)
+    ]
+    assert [document.match_highlights for document in documents] == [
+        [_excerpt(index, page)] for index, page in enumerate(pages, start=1)
+    ]
+    [replayed] = chat.replayed(db_session)
+    assert _open_url_packets(replayed) == live
+
+
+@pytest.mark.usefixtures("node")
+def test_pages_within_their_excerpts_do_not_spill(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    node: RunningFakeAgent,
+    chat: SandboxChat,
+) -> None:
+    pages = [_web_page(index, 10_000) for index in range(1, 3)]
+    llm = _search_and_open(pages, "Done.")
+    _send_with_pages(chat, db_session, monkeypatch, pages, llm)
+
+    shown = SearchResults.model_validate_json(last_tool_text(llm, "open")).results
+    assert [page.content for page in shown] == [page.content for page in pages]
+    assert _spills(node, chat.ref(db_session)) == {}
+
+
+@pytest.mark.usefixtures("node")
+def test_a_page_a_little_longer_than_its_excerpt_spills(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    node: RunningFakeAgent,
+    chat: SandboxChat,
+) -> None:
+    page = _web_page(1, 15_100)
+    llm = _search_and_open([page], "Done.")
+    _send_with_pages(chat, db_session, monkeypatch, [page], llm)
+
+    assert len(page.content) - len(_excerpt(1, page)) < 200
+    [data] = _spills(node, chat.ref(db_session)).values()
+    assert [spilled.content for spilled in _file_pages(data)] == [page.content]
+
+
+def _program_pages(urls: Sequence[str]) -> str:
+    """A program that opens `urls` and prints each page's citation number,
+    length and whether a limit cut it."""
+    return (
+        f"r = await tools.open_url(urls={list(urls)!r})\n"
+        "for page in r['results']:\n"
+        "    print(page['document'], len(page['content']), "
+        "page['content'].endswith(' [...truncated]'))\n"
+    )
+
+
+def _printed_pages(llm: ChatLLM, call_id: str) -> list[tuple[int, int, bool]]:
+    output = last_tool_text(llm, call_id).rsplit("Output:\n", 1)[1]
+    return [
+        (int(number), int(length), cut == "True")
+        for number, length, cut in (line.split() for line in output.splitlines())
+    ]
+
+
+@pytest.mark.usefixtures("node")
+@pytest.mark.parametrize("code_mode", [False, True], ids=["direct", "nested"])
+def test_a_page_past_the_call_limit_keeps_the_excerpt_that_the_model_got(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    node: RunningFakeAgent,
+    chat: SandboxChat,
+    code_mode: bool,
+) -> None:
+    monkeypatch.setattr(
+        open_url_tool,
+        "OPEN_URL_PROGRAM_MAX_CHARS" if code_mode else "OPEN_URL_MAX_CHARS",
+        110_000,
+    )
+    pages = [_web_page(index, 40_000) for index in range(1, 5)]
+    if code_mode:
+        llm = ChatLLM(
+            [
+                code_step("cell", _program_pages([page.url for page in pages])),
+                Delta(content="Done."),
+            ]
+        )
+        _send_with_pages(chat, db_session, monkeypatch, pages, llm, code_mode=True)
+        kept = _printed_pages(llm, "cell")
+        # Results of calls inside a program do not spill.
+        assert _spills(node, chat.ref(db_session)) == {}
+    else:
+        llm = _search_and_open(pages, "Done.")
+        _send_with_pages(chat, db_session, monkeypatch, pages, llm)
+        [(path, data)] = _spills(node, chat.ref(db_session)).items()
+        saved = _file_pages(data)
+        kept = [
+            (
+                page.document,
+                len(page.content),
+                page.content.endswith(TRUNCATED_CONTENT_SUFFIX),
+            )
+            for page in saved
+        ]
+        shown, note = last_tool_text(llm, "open").split("\n\n<persisted-output ")
+        # The fourth page holds the excerpt that the model got, and the note
+        # names every page.
+        assert saved[3] == SearchResults.model_validate_json(shown).results[3]
+        assert "\n4. [4] " in note
+    # Two pages whole, the third cut at the limit after its snippet, so
+    # longer than its excerpt, and the fourth an excerpt.
+    lengths = [len(page.content) for page in pages]
+    assert [(number, length) for number, length, _ in kept[:2]] == [
+        (1, lengths[0]),
+        (2, lengths[1]),
+    ]
+    assert kept[2][2] and len(_excerpt(3, pages[2])) < kept[2][1] < lengths[2]
+    assert len(kept) == 4 and kept[3][0] == 4 and kept[3][1] < 20_000
+
+
+@pytest.mark.usefixtures("node")
+@pytest.mark.parametrize(
+    ("code_mode", "kept_chars"),
+    [
+        pytest.param(False, 5_000, id="direct_cut_shorter_than_the_excerpt"),
+        pytest.param(False, 40_000, id="direct_cut_before_the_snippet"),
+        pytest.param(True, 5_000, id="nested_cut_shorter_than_the_excerpt"),
+    ],
+)
+def test_a_page_that_the_limit_cuts_short_keeps_its_excerpt(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    node: RunningFakeAgent,
+    chat: SandboxChat,
+    code_mode: bool,
+    kept_chars: int,
+) -> None:
+    # The limit keeps about `kept_chars` of the second page, whose snippet
+    # is 100,000 characters in.
+    pages = [_web_page(1, 40_000), _web_page(2, 200_000)]
+    monkeypatch.setattr(
+        open_url_tool,
+        "OPEN_URL_PROGRAM_MAX_CHARS" if code_mode else "OPEN_URL_MAX_CHARS",
+        len(pages[0].content) + kept_chars,
+    )
+    if code_mode:
+        llm = ChatLLM(
+            [
+                code_step("cell", _program_pages([page.url for page in pages])),
+                Delta(content="Done."),
+            ]
+        )
+        _send_with_pages(chat, db_session, monkeypatch, pages, llm, code_mode=True)
+        # With no search before it, the call has no snippets, so its excerpt
+        # is the page's head.
+        head = inference_section_from_internet_page_scrape(
+            pages[1].to_web_content(), ""
+        ).combined_content
+        assert _printed_pages(llm, "cell") == [
+            (1, len(pages[0].content), False),
+            (2, len(head), True),
+        ]
+        return
+    llm = _search_and_open(pages, "Done.")
+    _send_with_pages(chat, db_session, monkeypatch, pages, llm)
+    [data] = _spills(node, chat.ref(db_session)).values()
+    [first, second] = _file_pages(data)
+    assert first.content == pages[0].content
+    assert second.content == _excerpt(2, pages[1])
+
+
+@pytest.mark.usefixtures("node")
+def test_a_program_gets_less_of_one_call_than_a_direct_call(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    chat: SandboxChat,
+) -> None:
+    """A program holds its results in its memory, so each of its calls keeps
+    OPEN_URL_PROGRAM_MAX_CHARS of whole pages."""
+    pages = [_web_page(index, 150_000) for index in range(1, 3)]
+    llm = ChatLLM(
+        [
+            code_step("cell", _program_pages([page.url for page in pages])),
+            Delta(content="Done."),
+        ]
+    )
+    _send_with_pages(chat, db_session, monkeypatch, pages, llm, code_mode=True)
+
+    fields = [
+        open_url_tool._estimate_result_chars(
+            SearchResult(document=number, title=page.title, url=page.url, content="")
+        )
+        for number, page in enumerate(pages, start=1)
+    ]
+    # The second page keeps what the first page and both pages' other fields
+    # leave of the limit, then the marker.
+    assert _printed_pages(llm, "cell") == [
+        (1, len(pages[0].content), False),
+        (
+            2,
+            open_url_tool.OPEN_URL_PROGRAM_MAX_CHARS
+            - len(pages[0].content)
+            - sum(fields)
+            + len(TRUNCATED_CONTENT_SUFFIX),
+            True,
+        ),
+    ]
+
+
+@pytest.mark.usefixtures("node")
+def test_a_spilled_page_keeps_the_citation_number_of_an_earlier_turn(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    node: RunningFakeAgent,
+    chat: SandboxChat,
+) -> None:
+    pages = [_web_page(index, 40_000) for index in range(1, 4)]
+    first = ChatLLM(
+        [
+            tool_step(OpenURLTool.NAME, "first", {"urls": [pages[1].url]}),
+            Delta(content="Read."),
+        ]
+    )
+    _send_with_pages(chat, db_session, monkeypatch, pages, first)
+    earlier = SearchResults.model_validate_json(
+        last_tool_text(first, "first").split("\n\n<persisted-output ")[0]
+    ).results[0]
+    second = ChatLLM(
+        [
+            tool_step(OpenURLTool.NAME, "again", {"urls": [p.url for p in pages]}),
+            Delta(content=f"As before [{earlier.document}]."),
+        ]
+    )
+    parts = _send_with_pages(chat, db_session, monkeypatch, pages, second)
+
+    [data] = [
+        data
+        for path, data in _spills(node, chat.ref(db_session)).items()
+        if path.endswith("_again.txt")
+    ]
+    saved = _file_pages(data)
+    assert [page.url for page in saved] == [page.url for page in pages]
+    assert saved[1].document == earlier.document
+    assert earlier.document not in {saved[0].document, saved[2].document}
+    assert [
+        packet
+        for packet in _open_url_packets(parts)
+        if isinstance(packet, packets.CitationInfo)
+    ] == [
+        packets.CitationInfo(
+            citation_number=earlier.document,
+            document_id=WEB_SEARCH_PREFIX + pages[1].url,
+        )
+    ]
+
+
+def _section(document_id: str, title: str, url: str, content: str) -> InferenceSection:
+    chunk = InferenceChunk(
+        document_id=document_id,
+        chunk_id=0,
+        content=content,
+        source_type=DocumentSource.WEB,
+        semantic_identifier=title,
+        title=title,
+        boost=1,
+        score=1.0,
+        hidden=False,
+        metadata={},
+        match_highlights=[],
+        doc_summary="",
+        chunk_context="",
+        updated_at=None,
+        image_file_id=None,
+        source_links={0: url},
+        section_continuation=False,
+        blurb=title,
+    )
+    return InferenceSection(
+        center_chunk=chunk, chunks=[chunk], combined_content=content
+    )
+
+
+def _open_pages(
+    chat: SandboxChat,
+    db_session: Session,
+    monkeypatch: pytest.MonkeyPatch,
+    opened: Sequence[OpenedPage],
+) -> ChatLLM:
+    """Send a message whose one open_url call opens `opened`; the model."""
+    monkeypatch.setattr(
+        OpenURLTool, "_merge_indexed_and_crawled_results", lambda *_args: list(opened)
+    )
+    llm = ChatLLM(
+        [
+            tool_step(
+                OpenURLTool.NAME, "open", {"urls": ["https://docs.example.com/page"]}
+            ),
+            Delta(content="Done."),
+        ]
+    )
+    _send_with_pages(chat, db_session, monkeypatch, [], llm)
+    return llm
+
+
+@pytest.mark.usefixtures("node")
+def test_a_page_whose_excerpt_the_call_budget_cuts_in_its_marker_spills_whole(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    node: RunningFakeAgent,
+    chat: SandboxChat,
+) -> None:
+    url = "https://docs.example.com/long"
+    overhead = open_url_tool._estimate_result_chars(
+        SearchResult(document=1, title="Long", url=url, content="")
+    )
+    # The call's budget cuts the excerpt 7 characters before its end, in its
+    # closing marker.
+    excerpt_text = "m" * (MAX_CHARS_ACROSS_URLS - overhead + 7 - 30)
+    excerpt = f"{TRUNCATED_CONTENT_PREFIX}{excerpt_text}{TRUNCATED_CONTENT_SUFFIX}"
+    text = f"{'h' * 1_000}{excerpt_text}{'t' * 1_000}"
+    section = _section(WEB_SEARCH_PREFIX + url, "Long", url, excerpt)
+    llm = _open_pages(chat, db_session, monkeypatch, [OpenedPage(section, text)])
+
+    shown, _ = last_tool_text(llm, "open").split("\n\n<persisted-output ")
+    [shown_page] = SearchResults.model_validate_json(shown).results
+    assert shown_page.content == excerpt[:-7] + TRUNCATED_CONTENT_SUFFIX
+    [data] = _spills(node, chat.ref(db_session)).values()
+    assert [page.content for page in _file_pages(data)] == [text]
+
+
+@pytest.mark.usefixtures("node")
+def test_pages_that_share_a_citation_number_each_spill_their_own_text(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    node: RunningFakeAgent,
+    chat: SandboxChat,
+) -> None:
+    document_id = WEB_SEARCH_PREFIX + "https://docs.example.com/shared"
+    opened = [
+        OpenedPage(
+            _section(
+                document_id,
+                f"Page {fill}",
+                f"https://docs.example.com/{fill}",
+                fill * 15_000 + TRUNCATED_CONTENT_SUFFIX,
+            ),
+            fill * 40_000,
+        )
+        for fill in ("x", "y")
+    ]
+    _open_pages(chat, db_session, monkeypatch, opened)
+
+    [data] = _spills(node, chat.ref(db_session)).values()
+    saved = _file_pages(data)
+    assert [page.content for page in saved] == ["x" * 40_000, "y" * 40_000]
+    assert saved[0].document == saved[1].document
+
+
+def _index_document(monkeypatch: pytest.MonkeyPatch, url: str, text: str) -> None:
+    """Make open_url find `url` in the index as one document with `text`."""
+    monkeypatch.setattr(open_url_tool, "DISABLE_VECTOR_DB", False)
+    monkeypatch.setattr(
+        open_url_tool,
+        "_resolve_urls_to_document_ids",
+        lambda urls, _db_session: (
+            [IndexedDocumentRequest(document_id="indexed-guide", original_url=urls[0])],
+            [],
+        ),
+    )
+    monkeypatch.setattr(
+        OpenURLTool,
+        "_retrieve_indexed_documents_with_filters",
+        lambda _self, _requests, _filters: IndexedRetrievalResult(
+            sections=[_section("indexed-guide", "Indexed guide", url, text)],
+            missing_document_ids=[],
+        ),
+    )
+
+
+@pytest.mark.usefixtures("node")
+def test_an_indexed_document_spills_whole(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    node: RunningFakeAgent,
+    chat: SandboxChat,
+) -> None:
+    # Over the 150,000 characters that the model gets of one call.
+    url = "https://wiki.example.com/guide"
+    text = "i" * 200_000
+    _index_document(monkeypatch, url, text)
+    llm = ChatLLM(
+        [tool_step(OpenURLTool.NAME, "open", {"urls": [url]}), Delta(content="Done.")]
+    )
+    with use_mock_content_provider():
+        chat.send(llm, tool_ids=[get_builtin_tool(db_session, OpenURLTool).id])
+
+    [data] = _spills(node, chat.ref(db_session)).values()
+    [saved] = _file_pages(data)
+    assert saved.content == text
+    [shown] = SearchResults.model_validate_json(
+        last_tool_text(llm, "open").split("\n\n<persisted-output ")[0]
+    ).results
+    assert len(shown.content) < MAX_CHARS_ACROSS_URLS
+
+
+@pytest.mark.usefixtures("node")
+@pytest.mark.parametrize("code_mode", [False, True], ids=["direct", "nested"])
+def test_an_indexed_document_past_the_call_limit_keeps_more_than_its_excerpt(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    node: RunningFakeAgent,
+    chat: SandboxChat,
+    code_mode: bool,
+) -> None:
+    url = "https://wiki.example.com/guide"
+    if code_mode:
+        text = "i" * (open_url_tool.OPEN_URL_PROGRAM_MAX_CHARS + 50_000)
+    else:
+        monkeypatch.setattr(open_url_tool, "OPEN_URL_MAX_CHARS", 300_000)
+        text = "i" * 400_000
+    _index_document(monkeypatch, url, text)
+    tool_ids = [get_builtin_tool(db_session, OpenURLTool).id]
+    if code_mode:
+        llm = ChatLLM(
+            [code_step("cell", _program_pages([url])), Delta(content="Done.")]
+        )
+        with use_mock_content_provider():
+            chat.send(llm, tool_ids=tool_ids, code_mode=True)
+        [(_, length, cut)] = _printed_pages(llm, "cell")
+        assert cut and MAX_CHARS_ACROSS_URLS < length < len(text)
+        return
+    llm = ChatLLM(
+        [tool_step(OpenURLTool.NAME, "open", {"urls": [url]}), Delta(content="Done.")]
+    )
+    with use_mock_content_provider():
+        chat.send(llm, tool_ids=tool_ids)
+
+    [data] = _spills(node, chat.ref(db_session)).values()
+    [saved] = _file_pages(data)
+    head = saved.content.removesuffix(TRUNCATED_CONTENT_SUFFIX)
+    assert MAX_CHARS_ACROSS_URLS < len(head) < len(text)
+    assert text.startswith(head)
+
+
+def test_open_url_without_a_sandbox_keeps_its_page_excerpts(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    chat: SandboxChat,
+) -> None:
+    monkeypatch.setattr(process_message, "HARNESS_SANDBOX_ENABLED", False)
+    pages = [_web_page(index, 40_000) for index in range(1, 4)]
+    llm = _search_and_open(pages, "Done.")
+    _send_with_pages(chat, db_session, monkeypatch, pages, llm)
+
+    shown = SearchResults.model_validate_json(last_tool_text(llm, "open")).results
+    assert [page.content for page in shown] == [
+        _excerpt(index, page) for index, page in enumerate(pages, start=1)
+    ]

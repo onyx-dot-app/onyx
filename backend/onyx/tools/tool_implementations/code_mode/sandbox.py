@@ -118,6 +118,12 @@ DUMP_MEMORY_MESSAGE = (
     "completed; check before you retry. Keep less data in memory, for example by "
     "storing results with store() and keeping only what you need."
 )
+# Follows the MemoryError of a program that ran out of its memory.
+PROGRAM_MEMORY_HINT = (
+    "The program ran out of memory. Keep less data in memory: keep only the "
+    "parts of tool results that you need, or, in a chat with a sandbox, save "
+    "large results such as pages to files and read them back in parts."
+)
 # A program that waits for the user's approval when its dump runs out of
 # memory. Its worker is lost, so it cannot continue without its waiting calls.
 PARK_MEMORY_MESSAGE = (
@@ -1249,7 +1255,13 @@ def _segment(
     except MontyRuntimeError as error:
         if _is_compute_limit(error):
             return ProgramStopped(status="timed_out", error=error.display())
-        return ProgramStopped(status="failed", error=error.display(), raised=True)
+        return ProgramStopped(
+            status="failed",
+            error=f"{error.display()}\n{PROGRAM_MEMORY_HINT}"
+            if isinstance(error.exception(), MemoryError)
+            else error.display(),
+            raised=True,
+        )
     if isinstance(outcome, MontyComplete):
         return ProgramCompleted(output=outcome.output)
     return ProgramWaiting(state=outcome)
