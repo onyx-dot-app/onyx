@@ -26,10 +26,12 @@
     ],
     "category": "Productivity",
     "shortDescription": "Onyx for desktop",
+    "longDescription": "The Onyx desktop app connects to your Onyx server. It gives you chat, search and a launcher in a native window.",
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",
-      "icons/128x128@2x.png",
+      "icons/256x256.png",
+      "icons/512x512.png",
       "icons/icon.icns",
       "icons/icon.ico"
     ],
@@ -59,8 +61,13 @@
     "linux": {
       "deb": {
         "depends": [
-          "libayatana-appindicator3-1"
-        ]
+          "libc6 (>= 2.35)"
+        ],
+        "section": "utils",
+        "desktopTemplate": "linux/onyx-v2.desktop",
+        "files": {
+          "/usr/share/doc/onyx-v2/copyright": "linux/copyright"
+        }
       }
     },
     "createUpdaterArtifacts": false
