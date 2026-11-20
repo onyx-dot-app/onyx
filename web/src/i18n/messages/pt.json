@@ -16811,7 +16811,6 @@
       "enable": "Ativar para mim",
       "disable": "Desativar para mim",
       "delete": "Excluir",
-      "selectSkill": "Selecionar {name}",
       "updated": "{count, plural, one {# habilidade atualizada} other {# habilidades atualizadas}}",
       "failed": "Não foi possível atualizar as habilidades. Tente novamente.",
       "partialFailure": "{count, plural, one {Não foi possível atualizar # habilidade} other {Não foi possível atualizar # habilidades}}",
