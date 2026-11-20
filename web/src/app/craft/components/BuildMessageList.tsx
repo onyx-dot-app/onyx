@@ -117,12 +117,12 @@ export default function BuildMessageList({
   const showStreamingArea =
     hasStreamItems ||
     (isStreaming && (!isFinalizing || lastMessage?.type !== "assistant"));
+  // The turn's cursor waits at the end while nothing streams: before the
+  // first entry and under a finished run. Streaming text carries it; while
+  // a step runs, its card shows the work, so the cursor stays hidden.
   const showStreamCursor =
     isStreaming &&
-    !timelineState.entries.some(
-      (entry) =>
-        entry.payload.kind === "message" && entry.status === "streaming"
-    );
+    !timelineState.entries.some((entry) => entry.status === "streaming");
 
   // Inline items between timeline steps.
   const renderConnectCard = (

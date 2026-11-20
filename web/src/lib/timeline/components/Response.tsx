@@ -19,15 +19,19 @@ import {
 /** The key of the cursor item (`responseCursorItem`). */
 export const RESPONSE_CURSOR_KEY = "cursor";
 
-const InResponseContext = createContext(false);
+const InCursorScopeContext = createContext(false);
 
 /**
- * True inside a `Response`. A streaming cursor there is a marker for the
- * response's one cursor, not a cursor of its own.
+ * True inside a `Response` (or the `ResponseCursorScope` of its turn). A
+ * streaming cursor there is a marker for the turn's one cursor, not a cursor
+ * of its own.
  */
 export function useInResponse(): boolean {
-  return useContext(InResponseContext);
+  return useContext(InCursorScopeContext);
 }
+
+/** How long the cursor glides when it moves to another block. */
+const CURSOR_GLIDE_MS = 250;
 
 /**
  * One item of a response, in arrival order. A `run` is a run card, `text` is
@@ -50,13 +54,14 @@ export interface ResponseProps {
 }
 
 /**
- * Keeps the response's one cursor on its last marker (see
+ * Keeps the turn's one cursor on its last marker (see
  * `RESPONSE_CURSOR_ANCHOR_ATTRIBUTE`). The cursor is a single element, so it
- * never restarts its pulse: text pushes it along, and it moves from the
- * waiting slot into the text. It follows its marker each frame while one
- * exists, and fades out when none does.
+ * never restarts its pulse. Text pushes it along at once; a move between a
+ * waiting slot and text, or back after it was hidden, glides. It follows its
+ * marker each frame while one exists, and fades out, in place, when none
+ * does.
  */
-function useResponseCursor(
+function useTurnCursor(
   rootRef: React.RefObject<HTMLDivElement | null>,
   cursorRef: React.RefObject<HTMLSpanElement | null>
 ): void {
@@ -64,8 +69,13 @@ function useResponseCursor(
     const root = rootRef.current;
     const cursor = cursorRef.current;
     if (!root || !cursor) return;
+    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
     let frame: number | null = null;
+    let placed = false;
+    let visible = false;
+    let anchorKind: string | null = null;
+    let glideUntil = 0;
     const place = () => {
       frame = null;
       const anchors = root.querySelectorAll(
@@ -74,13 +84,26 @@ function useResponseCursor(
       const anchor = anchors.item(anchors.length - 1);
       if (!anchor) {
         cursor.style.opacity = "0";
+        visible = false;
         return;
       }
+      const kind = anchor.getAttribute(RESPONSE_CURSOR_ANCHOR_ATTRIBUTE);
+      if (placed && (!visible || kind !== anchorKind)) {
+        glideUntil = performance.now() + CURSOR_GLIDE_MS;
+      }
+      anchorKind = kind;
+      cursor.style.transition = reducedMotion.matches
+        ? "none"
+        : performance.now() < glideUntil
+          ? `opacity 250ms, transform ${CURSOR_GLIDE_MS}ms ease-out`
+          : "opacity 250ms";
       const rootRect = root.getBoundingClientRect();
       const anchorRect = anchor.getBoundingClientRect();
       // Physical offsets: the cursor sits at `left-0`, in any direction.
       cursor.style.transform = `translate(${anchorRect.left - rootRect.left}px, ${anchorRect.top - rootRect.top}px)`;
       cursor.style.opacity = "1";
+      placed = true;
+      visible = true;
       frame = requestAnimationFrame(place);
     };
     const start = () => {
@@ -95,6 +118,40 @@ function useResponseCursor(
       if (frame !== null) cancelAnimationFrame(frame);
     };
   }, [rootRef, cursorRef]);
+}
+
+interface ResponseCursorScopeProps {
+  children: React.ReactNode;
+}
+
+/**
+ * Draws one cursor for everything inside it: a whole turn, which in chat can
+ * span several responses. A `Response` opens its own scope unless one is
+ * already open around it.
+ */
+export function ResponseCursorScope({ children }: ResponseCursorScopeProps) {
+  const inScope = useContext(InCursorScopeContext);
+  const rootRef = useRef<HTMLDivElement>(null);
+  const cursorRef = useRef<HTMLSpanElement>(null);
+  useTurnCursor(rootRef, cursorRef);
+
+  if (inScope) return <>{children}</>;
+  return (
+    <InCursorScopeContext.Provider value>
+      <div ref={rootRef} className="relative">
+        {children}
+        {/* The outer element places and fades the cursor; the inner one
+            pulses. A pulse animates opacity, which would override the fade. */}
+        <span
+          ref={cursorRef}
+          aria-hidden
+          className="absolute top-0 left-0 pointer-events-none opacity-0"
+        >
+          <span className={cn(STREAMING_CURSOR_LOOK, "block")} />
+        </span>
+      </div>
+    </InCursorScopeContext.Provider>
+  );
 }
 
 /**
@@ -126,51 +183,36 @@ export function Response({ items }: ResponseProps) {
     previousKeys.includes(RESPONSE_CURSOR_KEY) &&
     !keys.includes(RESPONSE_CURSOR_KEY);
 
-  const rootRef = useRef<HTMLDivElement>(null);
-  const cursorRef = useRef<HTMLSpanElement>(null);
-  useResponseCursor(rootRef, cursorRef);
-
   return (
-    <InResponseContext.Provider value>
-      <div ref={rootRef} className="relative">
-        <Section alignItems="stretch" gap={3} height="auto">
-          {items.map((item) =>
-            item.kind === "run" ? (
-              <React.Fragment key={item.key}>{item.node}</React.Fragment>
-            ) : (
-              <Presence
-                key={item.key}
-                appear={
-                  item.appear ??
-                  (!initialKeys.has(item.key) &&
-                    !(
-                      cursorReplaced &&
-                      item.kind === "text" &&
-                      !previousKeys.includes(item.key)
-                    ))
-                }
-                grow
-              >
-                {item.kind === "text" ? (
-                  <AnswerText>{item.node}</AnswerText>
-                ) : (
-                  item.node
-                )}
-              </Presence>
-            )
-          )}
-        </Section>
-        {/* The outer element places and fades the cursor; the inner one
-            pulses. A pulse animates opacity, which would override the fade. */}
-        <span
-          ref={cursorRef}
-          aria-hidden
-          className="absolute top-0 left-0 pointer-events-none opacity-0 transition-opacity duration-250 motion-reduce:transition-none"
-        >
-          <span className={cn(STREAMING_CURSOR_LOOK, "block")} />
-        </span>
-      </div>
-    </InResponseContext.Provider>
+    <ResponseCursorScope>
+      <Section alignItems="stretch" gap={3} height="auto">
+        {items.map((item) =>
+          item.kind === "run" ? (
+            <React.Fragment key={item.key}>{item.node}</React.Fragment>
+          ) : (
+            <Presence
+              key={item.key}
+              appear={
+                item.appear ??
+                (!initialKeys.has(item.key) &&
+                  !(
+                    cursorReplaced &&
+                    item.kind === "text" &&
+                    !previousKeys.includes(item.key)
+                  ))
+              }
+              grow
+            >
+              {item.kind === "text" ? (
+                <AnswerText>{item.node}</AnswerText>
+              ) : (
+                item.node
+              )}
+            </Presence>
+          )
+        )}
+      </Section>
+    </ResponseCursorScope>
   );
 }
 

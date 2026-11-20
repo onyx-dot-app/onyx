@@ -10,6 +10,11 @@ import {
 } from "@/lib/timeline/components/Response";
 
 interface ResponseCursorAnchorProps {
+  /**
+   * A waiting `slot` or `text`. The cursor glides when it moves between the
+   * two, and follows text at once.
+   */
+  kind?: "slot" | "text";
   addMargin?: boolean;
 }
 
@@ -18,12 +23,13 @@ interface ResponseCursorAnchorProps {
  * cursor's box, so the cursor lands where an inline cursor would be.
  */
 export function ResponseCursorAnchor({
+  kind = "text",
   addMargin = false,
 }: ResponseCursorAnchorProps) {
   return (
     <span
       aria-hidden
-      {...{ [RESPONSE_CURSOR_ANCHOR_ATTRIBUTE]: "" }}
+      {...{ [RESPONSE_CURSOR_ANCHOR_ATTRIBUTE]: kind }}
       className={cn(
         STREAMING_CURSOR_CLASS_NAME,
         "invisible",
@@ -34,15 +40,16 @@ export function ResponseCursorAnchor({
 }
 
 /**
- * The slot the cursor waits in while a response works with nothing to show
- * yet: after a send, before the first packet. Chat and Craft both use it. It
- * is one run header tall, so the first run card takes its place without a
- * jump; text that takes its place carries the cursor on.
+ * The slot the cursor waits in while a turn works with nothing streaming:
+ * after a send, before the first packet, and under a finished run until what
+ * comes next. Chat and Craft both use it. It is one run header tall, so a run
+ * card takes its place without a jump; text that takes its place carries the
+ * cursor on.
  */
 export function ResponseCursor() {
   return (
     <Section flexDirection="row" justifyContent="start" height={2.25} gap={0}>
-      <ResponseCursorAnchor />
+      <ResponseCursorAnchor kind="slot" />
     </Section>
   );
 }

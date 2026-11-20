@@ -8,7 +8,6 @@ import {
   MessageRenderer,
   RenderType,
 } from "@/app/app/message/messageComponents/types";
-import { BlinkingBar } from "@/app/app/message/BlinkingBar";
 import { ValidSources } from "@/lib/connectors/types/source";
 import {
   SearchChipList,
@@ -91,7 +90,6 @@ export const WebSearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
               expansionCount={QUERIES_PER_EXPANSION}
               getKey={(_, index) => index}
               toSourceInfo={queryToSourceInfo}
-              emptyState={!stopPacketSeen ? <BlinkingBar /> : undefined}
               showDetailsCard={false}
               isQuery={true}
             />
@@ -116,7 +114,6 @@ export const WebSearchToolRenderer: MessageRenderer<SearchToolPacket, {}> = ({
             expansionCount={QUERIES_PER_EXPANSION}
             getKey={(_, index) => index}
             toSourceInfo={queryToSourceInfo}
-            emptyState={!stopPacketSeen ? <BlinkingBar /> : undefined}
             showDetailsCard={false}
             isQuery={true}
           />

@@ -39,7 +39,7 @@ function cursor(anchor: boolean): Element {
     properties: anchor
       ? {
           ariaHidden: "true",
-          dataResponseCursor: "",
+          dataResponseCursor: "text",
           className: [STREAMING_CURSOR_CLASS_NAME, "ms-1", "invisible"],
         }
       : {
