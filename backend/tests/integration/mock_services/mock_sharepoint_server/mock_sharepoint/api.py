@@ -1379,6 +1379,18 @@ class MockMicrosoftApi:
                 "-2147024891, System.UnauthorizedAccessException",
                 "The download URL is expired.",
             )
+        faults = self.settings.faults
+        if faults.download_url_throttled_calls > 0:
+            faults.download_url_throttled_calls -= 1
+            throttled = rest_error(
+                self.settings.quota.throttle_status,
+                "activityLimitReached",
+                "The request has been throttled.",
+            )
+            throttled.headers["Retry-After"] = str(
+                faults.download_url_retry_after_seconds
+            )
+            return throttled
         item = self.corpus.items.get(token.item_id)
         if item is None or item.deleted or item.is_folder:
             return rest_not_found()

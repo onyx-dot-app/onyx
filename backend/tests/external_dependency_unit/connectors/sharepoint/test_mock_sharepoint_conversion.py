@@ -3,13 +3,18 @@ server: every entry point makes the same documents with the same access, and
 conversion makes only the calls it needs."""
 
 import time
+from collections.abc import Iterator
 from datetime import timedelta
 from typing import Any
+from uuid import uuid4
 
 import pytest
 
 from onyx.access.models import ExternalAccess
+from onyx.configs.constants import DocumentSource
+from onyx.connectors import source_api_limiter
 from onyx.connectors.load_all import load_all_from_connector
+from onyx.connectors.microsoft_utils.request_pacer import GRAPH_LIMITER_API
 from onyx.connectors.models import (
     ConnectorFailure,
     Document,
@@ -26,6 +31,12 @@ from onyx.connectors.sharepoint.listing import (
     SharepointListedKind,
     SharepointListingPayload,
 )
+from onyx.connectors.source_api_limiter import (
+    RedisSourceApiLimiter,
+    build_source_api_limiter,
+)
+from onyx.redis.redis_pool import get_redis_client
+from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.external_dependency_unit.connectors.sharepoint.conftest import (
     MockSharepoint,
     list_stubs,
@@ -160,6 +171,117 @@ def test_a_refused_listed_link_falls_back_to_content(
     # Each file: one refused listed link, then the redirect of /content.
     assert stats["ops"]["download_url.get"]["errors"] == len(files)
     assert stats["ops"]["download_url.get"]["count"] == 2 * len(files)
+
+
+_LINK_RETRY_AFTER_SECONDS = 1
+
+
+@pytest.fixture
+def limiter_tenant(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
+    """The limiter on, in a tenant of its own, so runs cannot collide."""
+    monkeypatch.setattr(source_api_limiter, "ENABLE_SOURCE_API_LIMITER", True)
+    tenant = f"tenant_test_{uuid4().hex[:12]}"
+    token = CURRENT_TENANT_ID_CONTEXTVAR.set(tenant)
+    yield tenant
+    CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
+    client = get_redis_client(tenant_id=tenant)
+    for key in client.scan_iter("*"):
+        client.delete(key)
+
+
+def _with_shared_limiter(
+    mock: MockSharepoint,
+    connector: SharepointConnector,
+    monkeypatch: pytest.MonkeyPatch,
+) -> list[float]:
+    """Gives the connector the limiter of its app, as the factory does, and
+    returns the list of the Retry-After waits that it reports."""
+    limiter = build_source_api_limiter(
+        DocumentSource.SHAREPOINT,
+        credential_id=int(uuid4().int % 1_000_000_000),
+        load_credential_json=mock.credentials,
+    )
+    assert isinstance(limiter, RedisSourceApiLimiter)
+    reported: list[float] = []
+    report = limiter.report_retry_after
+
+    def record(api: str, seconds: float) -> None:
+        if api == GRAPH_LIMITER_API:
+            reported.append(seconds)
+        report(api, seconds)
+
+    monkeypatch.setattr(limiter, "report_retry_after", record)
+    connector.set_source_api_limiter(limiter)
+    return reported
+
+
+@pytest.mark.usefixtures("limiter_tenant")
+def test_a_throttled_listed_link_pauses_and_is_tried_again(
+    own_mock_sharepoint: MockSharepoint, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """The download host answers 429 with Retry-After. /content redirects to
+    the same host, so conversion does not fall back: the shared limiter gets
+    the pause, and the fresh link is tried again."""
+    mock = own_mock_sharepoint
+    connector = mock.build_connector(include_site_pages=False)
+    stubs = list_stubs(connector).stubs
+    reported = _with_shared_limiter(mock, connector, monkeypatch)
+    mock.patch_config(
+        {
+            "faults": {
+                "download_url_throttled_calls": 2,
+                "download_url_retry_after_seconds": _LINK_RETRY_AFTER_SECONDS,
+            }
+        }
+    )
+    mock.reset_stats()
+
+    converted = _convert(connector, stubs)
+
+    files = mock.supported_file_ids()
+    assert set(converted) == files
+    stats = mock.stats()
+    assert "graph.item.content" not in stats["ops"]
+    assert stats["item_downloads"] == dict.fromkeys(files, 1)
+    assert stats["ops"]["download_url.get"]["errors"] == 2
+    assert stats["ops"]["download_url.get"]["count"] == len(files) + 2
+    assert reported == [_LINK_RETRY_AFTER_SECONDS] * 2
+
+
+@pytest.mark.usefixtures("limiter_tenant")
+def test_a_throttled_redirect_of_content_pauses_the_app(
+    own_mock_sharepoint: MockSharepoint, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """With an old link, conversion reads /content, which redirects to the
+    download host. A 429 there reaches the shared limiter too, and /content
+    is read again."""
+    mock = own_mock_sharepoint
+    connector = mock.build_connector(include_site_pages=False)
+    stubs = _file_stubs(list_stubs(connector).stubs)
+    for stub in stubs:
+        payload = stub.listing_payload
+        assert isinstance(payload, SharepointListingPayload)
+        assert payload.download_url_listed_at is not None
+        payload.download_url_listed_at -= DOWNLOAD_URL_MAX_AGE + timedelta(minutes=1)
+    reported = _with_shared_limiter(mock, connector, monkeypatch)
+    mock.patch_config(
+        {
+            "faults": {
+                "download_url_throttled_calls": 1,
+                "download_url_retry_after_seconds": _LINK_RETRY_AFTER_SECONDS,
+            }
+        }
+    )
+    mock.reset_stats()
+
+    converted = _convert(connector, stubs)
+
+    files = mock.supported_file_ids()
+    assert set(converted) == files
+    stats = mock.stats()
+    assert stats["ops"]["graph.item.content"]["count"] == len(files) + 1
+    assert stats["ops"]["download_url.get"]["errors"] == 1
+    assert reported == [_LINK_RETRY_AFTER_SECONDS]
 
 
 @pytest.mark.usefixtures("ee_permission_sync")

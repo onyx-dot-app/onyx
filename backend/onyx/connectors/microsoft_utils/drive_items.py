@@ -36,6 +36,7 @@ from onyx.connectors.microsoft_utils.drive_delta import (
     parse_graph_sharepoint_ids,
 )
 from onyx.connectors.microsoft_utils.graph_client import (
+    GRAPH_API_RETRYABLE_STATUSES,
     TRANSIENT_TRANSPORT_EXCEPTIONS,
     GraphApiClient,
     backoff_seconds,
@@ -44,6 +45,7 @@ from onyx.connectors.microsoft_utils.graph_client import (
 )
 from onyx.connectors.microsoft_utils.request_pacer import (
     MICROSOFT_USER_AGENT,
+    THROTTLE_STATUSES,
     USER_AGENT_HEADER,
     MicrosoftCall,
     MicrosoftRequestPacer,
@@ -393,14 +395,14 @@ def stream_response_to_buffer_with_cap(
     cap: int,
     description: str,
     max_retries: int = STREAM_DOWNLOAD_MAX_RETRIES,
-    retry_statuses: bool = True,
+    retry_statuses: frozenset[int] = GRAPH_API_RETRYABLE_STATUSES,
     pacer: MicrosoftRequestPacer | None = None,
     call: MicrosoftCall = MicrosoftCall.DOWNLOAD,
     on_redirect: Callable[[str], bytes] | None = None,
 ) -> bytes:
     """Stream a GET into memory under a byte cap, retrying transport drops
-    (Graph closes a connection mid-body now and then) and, unless told
-    otherwise, Graph's retryable statuses with Retry-After. Each attempt calls
+    (Graph closes a connection mid-body now and then) and the answers in
+    ``retry_statuses`` with Retry-After. Each attempt calls
     ``request_factory`` for a fresh ``Response``, so a stale pooled socket is
     never reused.
 
@@ -434,9 +436,7 @@ def stream_response_to_buffer_with_cap(
                     )
                 if on_redirect is not None and resp.status_code in _REDIRECT_STATUSES:
                     redirect_to = resp.headers.get("Location")
-                sleep_time: float | None = (
-                    retry_wait(resp, attempt, max_retries) if retry_statuses else None
-                )
+                sleep_time = retry_wait(resp, attempt, max_retries, retry_statuses)
                 if redirect_to is not None:
                     sleep_time = None
                 elif sleep_time is None:
@@ -524,9 +524,10 @@ def download_with_cap(
     Behavior:
     - Checks `Content-Length` first and aborts early if it exceeds `cap`.
     - Otherwise streams the body in chunks and stops once `cap` is surpassed.
-    - Retries transport errors (e.g. mid-stream connection drops) only: the
-      caller's Graph `/content` fallback is the second chance for a refused
-      or throttled answer.
+    - Retries transport errors (e.g. mid-stream connection drops), and a
+      throttled answer (429 or 503) after its Retry-After. The pacer reports
+      the throttle, so every caller on the app pauses. Any other refusal is
+      final: the caller's Graph `/content` fallback is its second chance.
     - Raises `SizeCapExceeded` when the cap would be exceeded.
     - Returns the full bytes if the content fits within `cap`.
     """
@@ -543,7 +544,7 @@ def download_with_cap(
         _factory,
         cap,
         description=f"downloadUrl:{redact_url_for_logging(url)}",
-        retry_statuses=False,
+        retry_statuses=THROTTLE_STATUSES,
         pacer=pacer,
         call=MicrosoftCall.LINK_DOWNLOAD,
     )
@@ -720,6 +721,18 @@ def extract_drive_item_content(
             return None
         except requests.RequestException as e:
             status = e.response.status_code if e.response is not None else -1
+            if status in THROTTLE_STATUSES:
+                # /content redirects to the same download host, so a
+                # fallback would only add load and spend Graph RU.
+                logger.warning(
+                    "Download via downloadUrl for '%s' stayed throttled "
+                    "(status=%s) after its retries.",
+                    driveitem.name,
+                    status,
+                )
+                raise DriveItemContentError(
+                    f"Download link throttled (status={status})"
+                ) from e
             logger.warning(
                 "Failed to download via downloadUrl for '%s' (status=%s); falling back to Graph API.",
                 driveitem.name,
