@@ -218,3 +218,51 @@ def test_warnings_and_community_tier_do_not_notify(
     cluster.extend([_status(RED)])
     _check()
     assert _notifications(db_session, admin.id) == []
+
+
+def test_a_failed_read_keeps_known_alerts_open(
+    db_session: Session,
+    cluster: list[ClusterStatus | None],
+    make_user: Callable[[str, bool], User],
+) -> None:
+    admin = make_user("os_notif_timeout_admin", True)
+    # Disk is told after two checks; a timeout does not clear it or restart its
+    # wait, and red health is not told again for the same incident.
+    cluster.extend(
+        [
+            _status(DISK_CRITICAL, RED),
+            _status(DISK_CRITICAL, RED),
+            None,
+            _status(DISK_CRITICAL, RED),
+        ]
+    )
+    for _ in range(4):
+        _check()
+    open_titles = [
+        n.title for n in _notifications(db_session, admin.id) if not n.dismissed
+    ]
+    assert sorted(open_titles) == [
+        "OpenSearch disk at 91% on node-2",
+        "The OpenSearch cluster is red",
+    ]
+    assert len(_notifications(db_session, admin.id)) == 2
+
+
+def test_lost_state_still_clears_and_does_not_repeat(
+    db_session: Session,
+    cluster: list[ClusterStatus | None],
+    make_user: Callable[[str, bool], User],
+) -> None:
+    admin = make_user("os_notif_lost_admin", True)
+    cluster.extend([_status(RED), _status(RED), _status()])
+    _check()
+    # The cache is lost while the cluster stays red: no second notification.
+    get_shared_cache_backend().delete(STATE_KEY)
+    _check()
+    [red] = _notifications(db_session, admin.id)
+    assert not red.dismissed
+    # Lost again, then healthy: the open banner is still cleared.
+    get_shared_cache_backend().delete(STATE_KEY)
+    _check()
+    [red] = _notifications(db_session, admin.id)
+    assert red.dismissed

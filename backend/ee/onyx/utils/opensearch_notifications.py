@@ -10,7 +10,7 @@ Warnings stay on the page.
 
 from datetime import datetime, timezone
 
-from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 from ee.onyx.utils.tier import get_tier
 from onyx.cache.factory import get_shared_cache_backend
@@ -21,7 +21,8 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import NotificationSeverity
 from onyx.db.notification import (
     batch_create_notifications,
-    dismiss_notifications_with_value,
+    dismiss_notifications_by_additional_data,
+    get_undismissed_additional_data,
 )
 from onyx.db.users import get_active_admin_users
 from onyx.document_index.opensearch.cluster_status import (
@@ -33,6 +34,7 @@ from onyx.document_index.opensearch.models import (
     ClusterIssue,
     ClusterIssueKind,
     ClusterIssueSeverity,
+    ClusterIssueState,
     ClusterStatus,
 )
 from onyx.server.settings.models import Tier
@@ -63,12 +65,6 @@ SUSTAINED: frozenset[str] = frozenset(
         UNREACHABLE,
     }
 )
-
-
-class IssueState(BaseModel):
-    # When each critical issue was first seen, by kind; an issue that clears
-    # leaves the map, so its return is a new occurrence.
-    first_seen: dict[str, datetime] = {}
 
 
 def _copy(kind: str, issue: ClusterIssue | None) -> tuple[str, str]:
@@ -110,9 +106,25 @@ def _copy(kind: str, issue: ClusterIssue | None) -> tuple[str, str]:
     )
 
 
-def _read_state(cache: CacheBackend) -> IssueState:
+def _read_state(cache: CacheBackend) -> ClusterIssueState:
     raw: bytes | None = cache.get(STATE_KEY)
-    return IssueState.model_validate_json(raw) if raw else IssueState()
+    return ClusterIssueState.model_validate_json(raw) if raw else ClusterIssueState()
+
+
+def _read_issues(db_session: Session) -> dict[str, ClusterIssue] | None:
+    """The cluster's critical issues that notify, by kind; None when the
+    cluster did not answer."""
+    try:
+        status: ClusterStatus = collect_cluster_status(onyx_index_refs(db_session))
+    except Exception:
+        logger.exception("Unable to read the OpenSearch cluster for notifications")
+        return None
+    return {
+        issue.kind.value: issue
+        for issue in status.issues
+        if issue.severity == ClusterIssueSeverity.CRITICAL
+        and issue.kind.value in IMMEDIATE | SUSTAINED
+    }
 
 
 def notify_admins_of_cluster_issues() -> None:
@@ -129,35 +141,58 @@ def notify_admins_of_cluster_issues() -> None:
         return
 
     now: datetime = datetime.now(timezone.utc)
+    previous: ClusterIssueState = _read_state(cache)
     with get_session_with_current_tenant() as db_session:
-        current: dict[str, ClusterIssue | None]
-        try:
-            status: ClusterStatus = collect_cluster_status(onyx_index_refs(db_session))
-            current = {
-                issue.kind.value: issue
-                for issue in status.issues
-                if issue.severity == ClusterIssueSeverity.CRITICAL
-                and issue.kind.value in IMMEDIATE | SUSTAINED
-            }
-        except Exception:
-            logger.exception("Unable to read the OpenSearch cluster for notifications")
-            current = {UNREACHABLE: None}
-
-        previous: IssueState = _read_state(cache)
-        state = IssueState(
-            first_seen={kind: previous.first_seen.get(kind, now) for kind in current}
+        issues: dict[str, ClusterIssue] | None = _read_issues(db_session)
+        # The open notifications are the record of what admins were told, so
+        # a lost cache neither strands a banner nor repeats a notification.
+        open_rows: list[dict] = get_undismissed_additional_data(
+            NotificationType.OPENSEARCH_CLUSTER_ISSUE, db_session
         )
-        cache.set(STATE_KEY, state.model_dump_json(), ex=STATE_TTL_SECONDS)
+        told: dict[str, str] = {
+            row["issue"]: row["since"]
+            for row in open_rows
+            if isinstance(row.get("issue"), str) and isinstance(row.get("since"), str)
+        }
 
-        for kind in previous.first_seen.keys() - current.keys():
-            dismiss_notifications_with_value(
-                NotificationType.OPENSEARCH_CLUSTER_ISSUE, "issue", kind, db_session
-            )
+        current: dict[str, ClusterIssue | None]
+        if issues is None:
+            # A failed read proves nothing about the known issues: keep them
+            # open and only count toward "unreachable".
+            current = dict.fromkeys(previous.first_seen)
+            current[UNREACHABLE] = None
+        else:
+            current = dict(issues)
+        state = ClusterIssueState(
+            first_seen={
+                kind: previous.first_seen.get(kind)
+                or (datetime.fromisoformat(told[kind]) if kind in told else now)
+                for kind in current
+            }
+        )
+
+        if issues is not None:
+            # Only a successful read clears: any open notification for an
+            # issue it no longer sees, or for an earlier occurrence.
+            for row in open_rows:
+                kind = str(row.get("issue"))
+                if (
+                    kind not in current
+                    or row.get("since") != state.first_seen[kind].isoformat()
+                ):
+                    dismiss_notifications_by_additional_data(
+                        NotificationType.OPENSEARCH_CLUSTER_ISSUE, row, db_session
+                    )
         db_session.commit()
+        cache.set(STATE_KEY, state.model_dump_json(), ex=STATE_TTL_SECONDS)
 
         admin_ids = [admin.id for admin in get_active_admin_users(db_session)]
         for kind, issue in current.items():
-            if kind in SUSTAINED and kind not in previous.first_seen:
+            seen_before: bool = kind in previous.first_seen or kind in told
+            if kind in SUSTAINED and not seen_before:
+                continue
+            if issue is None and kind != UNREACHABLE:
+                # Kept from before a failed read; already told, or not yet due.
                 continue
             title, description = _copy(kind, issue)
             # One row per admin and occurrence: a returning issue has a new

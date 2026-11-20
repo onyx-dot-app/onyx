@@ -20,7 +20,7 @@ import { getNotificationIcon, openNotificationLink } from "@/lib/notifications";
 import {
   NotificationSeverity,
   NotificationType,
-} from "@/lib/notifications/interfaces";
+} from "@/lib/notifications/types";
 import { useBannerQueue } from "@/lib/banner/hooks";
 
 // Inset from the content area's left edge, matching the card's bottom inset.

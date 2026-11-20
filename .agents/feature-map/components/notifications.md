@@ -143,7 +143,7 @@ banner queue adds it to its list.
    inserts can both succeed. A new producer must choose per-user or global
    before it ships.
 6. `web-enum-mirrored` **The web enum mirrors `NotificationType` by hand.** A
-   new type needs a value in `web/src/lib/notifications/interfaces.ts`, an
+   new type needs a value in `web/src/lib/notifications/types.ts`, an
    icon, and a `bannerTypeConfig` entry in
    `web/src/sections/banners/BannerQueue.tsx` if it needs its own link or
    aggregate text. Severity alone decides whether it shows as a banner.

@@ -2,7 +2,7 @@ import { type Navigation } from "@opal/navigation";
 import type { Route } from "next";
 import { SvgAlertCircle, SvgAlertTriangle, SvgBullhorn } from "@opal/icons";
 import type { IconProps } from "@opal/types";
-import { NotificationType } from "@/lib/notifications/interfaces";
+import { NotificationType } from "@/lib/notifications/types";
 
 export function isExternalLink(link: string): boolean {
   return link.startsWith("http://") || link.startsWith("https://");
