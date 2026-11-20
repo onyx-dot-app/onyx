@@ -200,17 +200,25 @@ fn on_window_event(app: &AppHandle, event: &WindowEvent) {
         if MOVE_ID.load(Ordering::SeqCst) != id {
             return;
         }
-        let pending = PENDING_POSITION
-            .lock()
-            .unwrap_or_else(|p| p.into_inner())
-            .take();
-        if let Some(position) = pending {
-            let _ = app
-                .state::<AppState>()
-                .config
-                .update(|c| c.aonyx_position = Some(position));
-        }
+        save_pending_position(&app);
     });
+}
+
+/// Saves a position the pet was dragged to less than a moment ago (quit).
+pub fn save_pending_position(app: &AppHandle) {
+    let pending = PENDING_POSITION
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .take();
+    if let Some(position) = pending {
+        if let Err(e) = app
+            .state::<AppState>()
+            .config
+            .update(|c| c.aonyx_position = Some(position))
+        {
+            log::warn!("could not save the Aonyx position: {e}");
+        }
+    }
 }
 
 /// The right-click menu on the pet.
