@@ -14,6 +14,14 @@ interface SavedChatMessage {
   message: string;
 }
 
+/** The right panel's box and the page's width in one frame, in pixels. */
+export interface PanelFrame {
+  start: number;
+  end: number;
+  width: number;
+  pageWidth: number;
+}
+
 export class ChatPage {
   readonly page: Page;
   readonly inputBar: InputBar;
@@ -214,6 +222,48 @@ export class ChatPage {
         name: expanded ? "Restore panel" : "Expand panel",
       })
     ).toBeVisible();
+  }
+
+  /**
+   * Runs `action`, then records the right panel's box and the page's width on
+   * each of the next 45 frames, while the panel settles.
+   */
+  async rightPanelFrames(action: () => Promise<void>): Promise<PanelFrame[]> {
+    await this.page.evaluate(() => {
+      const panel = document.querySelector(
+        'aside[aria-label="Files"]'
+      )?.parentElement;
+      // The panel's reserve, the app chrome's right panel slot, its row
+      const row = panel?.parentElement?.parentElement?.parentElement;
+      const pageColumn = row?.firstElementChild;
+      if (!panel || !pageColumn) throw new Error("The panel is not mounted");
+      const recorder = window as unknown as { panelFrames: PanelFrame[] };
+      recorder.panelFrames = [];
+      const record = () => {
+        const box = panel.getBoundingClientRect();
+        recorder.panelFrames.push({
+          start: Math.round(box.left),
+          end: Math.round(box.right),
+          width: Math.round(box.width),
+          pageWidth: Math.round(pageColumn.getBoundingClientRect().width),
+        });
+        if (recorder.panelFrames.length < 45) requestAnimationFrame(record);
+      };
+      requestAnimationFrame(record);
+    });
+    await action();
+    await expect
+      .poll(() =>
+        this.page.evaluate(
+          () =>
+            (window as unknown as { panelFrames: PanelFrame[] }).panelFrames
+              .length
+        )
+      )
+      .toBe(45);
+    return this.page.evaluate(
+      () => (window as unknown as { panelFrames: PanelFrame[] }).panelFrames
+    );
   }
 
   private rightPanelResizeHandle(): Locator {

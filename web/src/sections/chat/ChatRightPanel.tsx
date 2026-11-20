@@ -170,7 +170,7 @@ export const ChatRightPanel = memo(function ChatRightPanel({
   );
 
   // Width: Craft's medium share of the workspace, its narrow rule, and full
-  // size over the page. Outside the app chrome the panel keeps 25rem.
+  // size over the page
   const workspace = useContext(AppWorkspaceElementsContext);
   const noElement = useRef<HTMLDivElement>(null);
   const closeButtonRef = useRef<HTMLElement>(null);
@@ -284,13 +284,10 @@ export const ChatRightPanel = memo(function ChatRightPanel({
     <ChatSidePanel
       open={open}
       onEscape={escape}
-      width={
-        layout.workspaceWidth === 0
-          ? "default"
-          : layout.covers
-            ? "cover"
-            : layout.mediumWidth
-      }
+      // The page keeps the medium reserve while the panel is full, so a
+      // change of size moves only the panel's edge
+      width={layout.covers ? layout.workspaceWidth : layout.mediumWidth}
+      reserve={layout.narrow ? 0 : layout.mediumWidth}
       focusOnOpen={false}
       animate={!layout.dragging}
       shows={shown}

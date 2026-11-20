@@ -350,11 +350,25 @@ test.describe("Published files", () => {
       ).toContainText(REPORT_TEXT);
       await expect.poll(() => chatPage.rightPanelWidth()).toBe(width);
 
-      // Escape leaves full screen, then closes each file's tab, then the
-      // panel.
+      // Escape leaves full screen: the panel shrinks to its medium width at
+      // the workspace's end, and the page beside it stays still. Then Escape
+      // closes each file's tab, then the panel.
       await chatPage.expandRightPanel();
-      await page.keyboard.press("Escape");
+      const frames = await chatPage.rightPanelFrames(() =>
+        page.keyboard.press("Escape")
+      );
       await chatPage.expectRightPanelExpanded(false);
+      const [first, last] = [frames[0]!, frames[frames.length - 1]!];
+      // The handle reports the width rounded
+      expect(Math.abs(last.width - width)).toBeLessThanOrEqual(1);
+      frames.forEach((frame, index) => {
+        expect(frame.end).toBe(first.end);
+        expect(frame.pageWidth).toBe(first.pageWidth);
+        expect(frame.width).toBeGreaterThanOrEqual(width - 1);
+        expect(frame.width).toBeLessThanOrEqual(
+          index === 0 ? first.width : frames[index - 1]!.width
+        );
+      });
       await expect(chatPage.rightPanelTab("Meeting notes")).toBeVisible();
       await page.keyboard.press("Escape");
       await expect(chatPage.rightPanelTab("Meeting notes")).toBeHidden();
