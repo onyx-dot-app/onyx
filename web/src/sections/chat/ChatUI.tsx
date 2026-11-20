@@ -275,8 +275,18 @@ const ChatUI = React.memo(
       ) {
         const message = messages[savedRowMountEnd];
         if (!message) break;
-        covered +=
-          rowHeightCache.get(messageRowId(message)) ?? ESTIMATED_ROW_HEIGHT_PX;
+        const previous = messages[savedRowMountEnd - 1];
+        // A multi-model reply renders in its user message's row, not its own.
+        const ownRow = !(
+          (message.type === "assistant" || message.type === "error") &&
+          previous?.type === "user" &&
+          getMultiModelResponsesForMessage(previous)
+        );
+        if (ownRow) {
+          covered +=
+            rowHeightCache.get(messageRowId(message)) ??
+            ESTIMATED_ROW_HEIGHT_PX;
+        }
         savedRowMountEnd += 1;
       }
     }
