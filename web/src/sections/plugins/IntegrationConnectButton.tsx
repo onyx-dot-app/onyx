@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Button, Text } from "@opal/components";
 import { toast } from "@opal/layouts";
@@ -24,6 +24,10 @@ interface IntegrationConnectButtonProps {
   returnPath: string;
   allowDisconnect?: boolean;
   onConnected?: () => void;
+  /** Called when a connect attempt fails or is abandoned. */
+  onConnectFailed?: () => void;
+  /** Called before a blocked popup moves the sign-in to this tab. */
+  onRedirect?: () => void;
 }
 
 /** Connect, Reconnect, Disconnect or "Ask your admin" for one integration. */
@@ -32,11 +36,14 @@ export default function IntegrationConnectButton({
   returnPath,
   allowDisconnect = false,
   onConnected,
+  onConnectFailed,
+  onRedirect,
 }: IntegrationConnectButtonProps) {
   const t = useTranslations("plugins.member.connection");
   const { mutate } = useSWRConfig();
   const [busy, setBusy] = useState(false);
   const [credentialsOpen, setCredentialsOpen] = useState(false);
+  const connectRef = useRef<HTMLSpanElement>(null);
   const { state } = integration.status;
   const action = connectAction(integration);
   const name = integration.name;
@@ -60,7 +67,8 @@ export default function IntegrationConnectButton({
     try {
       const result = await connectWithOAuth(
         (path) => startUserOAuth(integration.id, path),
-        returnPath
+        returnPath,
+        onRedirect
       );
       if (result === "connected") await connected();
     } catch (error) {
@@ -71,6 +79,7 @@ export default function IntegrationConnectButton({
               ? error.message
               : t("failed"))
         );
+      onConnectFailed?.();
       await refresh();
     } finally {
       setBusy(false);
@@ -95,20 +104,22 @@ export default function IntegrationConnectButton({
   return (
     <>
       {action ? (
-        <Button
-          key="connect"
-          size="md"
-          prominence={action === "reconnect" ? "primary" : "secondary"}
-          icon={busy ? IconLoader : SvgKey}
-          disabled={busy}
-          aria-label={t(`${action}.ariaLabel`, { name })}
-          onClick={(event) => {
-            event.stopPropagation();
-            void connect();
-          }}
-        >
-          {t(`${action}.label`)}
-        </Button>
+        <span ref={connectRef} className="contents">
+          <Button
+            key="connect"
+            size="md"
+            prominence={action === "reconnect" ? "primary" : "secondary"}
+            icon={busy ? IconLoader : SvgKey}
+            disabled={busy}
+            aria-label={t(`${action}.ariaLabel`, { name })}
+            onClick={(event) => {
+              event.stopPropagation();
+              void connect();
+            }}
+          >
+            {t(`${action}.label`)}
+          </Button>
+        </span>
       ) : needsAdmin(integration) ? (
         <Text font="secondary-body" color="text-03">
           {t("askAdmin")}
@@ -133,7 +144,13 @@ export default function IntegrationConnectButton({
       {credentialsOpen && (
         <IntegrationCredentialsModal
           integration={integration}
-          onClose={() => setCredentialsOpen(false)}
+          onClose={() => {
+            setCredentialsOpen(false);
+            onConnectFailed?.();
+            window.requestAnimationFrame(() =>
+              connectRef.current?.querySelector("button")?.focus()
+            );
+          }}
           onConnected={() => {
             setCredentialsOpen(false);
             void connected();

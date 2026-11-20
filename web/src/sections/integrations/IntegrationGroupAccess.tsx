@@ -33,6 +33,7 @@ export default function IntegrationGroupAccess({
   integration,
 }: IntegrationGroupAccessProps) {
   const t = useTranslations("admin.integrations.groupAccess");
+  const tInstall = useTranslations("admin.integrations.installation");
   const { mutate } = useSWRConfig();
   const { isGlobalHolder } = usePermissionAuthority(Permission.MANAGE_ACTIONS);
   const { data: groups } = useShareableGroups();
@@ -111,6 +112,7 @@ export default function IntegrationGroupAccess({
       onChoice={choose}
       onAdd={add}
       onRemove={remove}
+      requiredDescription={tInstall("required")}
     />
   );
 }

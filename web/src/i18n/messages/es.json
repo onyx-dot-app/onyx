@@ -10673,7 +10673,8 @@
         "saveFailed": "No se pudo guardar la configuración de instalación.",
         "title": "Configuración de Instalación",
         "description": "Quién recibe esta integración. No disponible la mantiene privada: solo la usan su propietario, las personas con quienes se comparte y los grupos con su propia configuración. Quita esas configuraciones de grupo para limitarla al propietario y a las personas con acceso compartido.",
-        "notAvailable": "Privada. Solo la usan el propietario, las personas con quienes se comparte y los grupos con su propia configuración."
+        "notAvailable": "Privada. Solo la usan el propietario, las personas con quienes se comparte y los grupos con su propia configuración.",
+        "required": "Los miembros que inician sesión con su propia cuenta deben conectarla antes de usar el chat y Craft."
       },
       "ownedBy": "Propiedad de {owner}",
       "groupAccess": {
@@ -17372,6 +17373,18 @@
         "done": "{name} ahora está disponible para la organización.",
         "failed": "No se pudo publicar la integración."
       }
+    },
+    "requiredGate": {
+      "title": "Conecta tus herramientas de trabajo",
+      "description": "Tu administrador requiere estas integraciones. Conecta cada una para continuar.",
+      "adminDescription": "Los miembros deben conectar estas integraciones antes de usar Onyx. Puedes continuar sin ellas porque eres administrador.",
+      "connected": "Conectada",
+      "progress": "{connected} de {total} conectadas",
+      "askAdmin": "¿No puede conectar {name}? Pida ayuda a su administrador. Puede omitirlo por ahora.",
+      "skip": "Omitir por ahora",
+      "continue": "Continuar",
+      "signOut": "Cerrar sesión",
+      "signOutFailed": "No se pudo cerrar la sesión. Inténtalo de nuevo."
     }
   },
   "customize": {
