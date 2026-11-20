@@ -325,7 +325,7 @@ class FileSource:
                 item,
                 size_threshold=TEAMS_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD,
                 graph_api_base=self._session.graph_root,
-                access_token=self._session.access_token(),
+                get_access_token=self._session.access_token,
                 raw_file_callback=self._raw_file_callback(),
                 pacer=self._session.request_pacer,
             )

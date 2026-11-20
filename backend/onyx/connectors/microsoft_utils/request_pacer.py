@@ -14,8 +14,6 @@ the User-Agent.
 """
 
 import re
-import threading
-import weakref
 from collections.abc import Callable
 from enum import Enum
 
@@ -122,13 +120,10 @@ class MicrosoftRequestPacer:
             self._limiter.report_rate_limit(GRAPH_LIMITER_API, None, user_scope=False)
 
 
-# The pacer of each SDK client, so that the retry loop can report a refusal
-# of a query from the query's client.
 PacerSource = Callable[[], MicrosoftRequestPacer | None]
-_client_pacers: "weakref.WeakKeyDictionary[ClientRuntimeContext, PacerSource]" = (
-    weakref.WeakKeyDictionary()
-)
-_client_pacers_lock = threading.Lock()
+# The client keeps its own pacer source, so that a retry loop can report a
+# refusal from the client and the source lives only as long as the client.
+_PACER_SOURCE_ATTRIBUTE = "_onyx_pacer_source"
 
 
 def prepare_sdk_client[C: ClientRuntimeContext](
@@ -149,9 +144,16 @@ def prepare_sdk_client[C: ClientRuntimeContext](
             pacer.acquire(call or graph_call_type(request.url))
 
     client.before_execute(before_request, once=False)
-    with _client_pacers_lock:
-        _client_pacers[client] = get_pacer
+    vars(client)[_PACER_SOURCE_ATTRIBUTE] = get_pacer
     return client
+
+
+def sdk_client_pacer(client: object) -> MicrosoftRequestPacer | None:
+    """The pacer of a client from ``prepare_sdk_client``, if it has one."""
+    if not isinstance(client, ClientRuntimeContext):
+        return None
+    get_pacer = vars(client).get(_PACER_SOURCE_ATTRIBUTE)
+    return get_pacer() if callable(get_pacer) else None
 
 
 def sdk_query_pacer(query: object) -> MicrosoftRequestPacer | None:
@@ -159,6 +161,4 @@ def sdk_query_pacer(query: object) -> MicrosoftRequestPacer | None:
     from ``prepare_sdk_client`` and has one."""
     if not isinstance(query, (ClientQuery, ClientObject)):
         return None
-    with _client_pacers_lock:
-        get_pacer = _client_pacers.get(query.context)
-    return get_pacer() if get_pacer is not None else None
+    return sdk_client_pacer(query.context)
