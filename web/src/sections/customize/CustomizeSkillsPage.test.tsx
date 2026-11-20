@@ -103,3 +103,43 @@ test("Turn on enables a skill that is off", async () => {
     requestBody(fetchMock, "PUT", "/api/skills/off-skill/enabled")
   ).toEqual({ enabled: true, replace_conflict: false });
 });
+
+test("marks unpublished changes only on a skill the user can edit", async () => {
+  window.history.replaceState(null, "", "/app/customize/skills");
+  const changed = {
+    current_version_number: 3,
+    published_version_number: 2,
+  };
+  mockFetch({
+    "/api/skills": {
+      builtins: [],
+      customs: [
+        customFixture({
+          id: "mine",
+          name: "release-notes",
+          user_permission: "OWNER",
+          owner: { id: "user-me", email: "me@example.com" },
+          ...changed,
+        }),
+        customFixture({
+          id: "theirs",
+          name: "weekly-report",
+          user_permission: "VIEWER",
+          owner: { id: "other", email: "other@example.com" },
+          ...changed,
+        }),
+      ],
+    },
+  });
+  render(<CustomizeSkillsPage />);
+  const label = messages.cards.skill.tags.unpublished.label;
+
+  const mine = await screen.findByRole("button", {
+    name: copy.open.replace("{name}", "release-notes"),
+  });
+  expect(within(mine).getByText(label)).toBeVisible();
+  const theirs = screen.getByRole("button", {
+    name: copy.open.replace("{name}", "weekly-report"),
+  });
+  expect(within(theirs).queryByText(label)).not.toBeInTheDocument();
+});
