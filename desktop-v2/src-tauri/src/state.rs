@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use crate::api::Api;
-use crate::config::ConfigStore;
+use crate::config::{ConfigStore, TOKEN_NEEDS_RECORD};
 use crate::policy::Policy;
 use crate::session_store;
 
@@ -178,6 +178,17 @@ impl AppState {
             }
         }
         let token = session_store::load(server)?;
+        if !self
+            .config
+            .get()
+            .trusts_stored_token(server, TOKEN_NEEDS_RECORD)
+        {
+            // Left by an earlier install: remove it so it signs no one in.
+            if let Err(e) = session_store::clear(server) {
+                log::warn!("could not remove a session from an earlier install: {e}");
+            }
+            return None;
+        }
         *cache = Some((server.to_string(), token.clone()));
         Some(token)
     }
@@ -190,6 +201,12 @@ impl AppState {
         let mut cache = self.token.lock().unwrap_or_else(|p| p.into_inner());
         if self.epoch() != epoch || self.server().ok().as_deref() != Some(server) {
             return Ok(false);
+        }
+        // Recorded first: a record with no token is harmless.
+        if TOKEN_NEEDS_RECORD {
+            self.config.update(|c| {
+                c.session_servers.insert(server.to_string());
+            })?;
         }
         session_store::store(server, token)?;
         *cache = Some((server.to_string(), token.to_string()));
