@@ -324,7 +324,9 @@ makes a live check, and every live check refreshes that cache.
 `chat/files.py:load_context_user_files_for_tools` adds project and agent files
 as lazy chat files, but only the types in
 `OnyxMimeTypes.CODE_INTERPRETER_STAGED_MIME_TYPES` (CSV, Excel, Word,
-PowerPoint). Other project and agent files reach the model only as prompt
+PowerPoint) and code files by extension
+(`server/query_and_chat/chat_utils.py:is_code_interpreter_staged_file`,
+`OnyxFileExtensions.SANDBOX_ONLY_EXTENSIONS`). Other project and agent files reach the model only as prompt
 text or through search. `chat/agent.py:ChatAgent._finalize_tool` attaches the
 raw source files of search hits to `ChatSearchResult.staged_files`
 (`chat/files.py:build_python_chat_files_from_search_docs`, connector-origin

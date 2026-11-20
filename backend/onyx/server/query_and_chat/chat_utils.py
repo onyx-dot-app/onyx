@@ -8,7 +8,11 @@ from onyx.file_processing.extract_file_text import (
     XLSX_TRUNCATION_MARKER,
     xlsx_sheet_extraction,
 )
-from onyx.file_processing.file_types import SPREADSHEET_MIME_TYPES, OnyxMimeTypes
+from onyx.file_processing.file_types import (
+    SPREADSHEET_MIME_TYPES,
+    OnyxMimeTypes,
+    is_sandbox_only_file,
+)
 from onyx.file_processing.zip_limits import ZipSizeLimitError
 from onyx.file_store.models import ChatFileType
 
@@ -45,6 +49,13 @@ def is_code_interpreter_staged_mime_type(mime_type: str | None) -> bool:
         mime_type is not None
         and _normalize_mime_type(mime_type)
         in OnyxMimeTypes.CODE_INTERPRETER_STAGED_MIME_TYPES
+    )
+
+
+def is_code_interpreter_staged_file(file_name: str, mime_type: str | None) -> bool:
+    """Code files are staged by extension: browsers send no reliable mime type."""
+    return is_sandbox_only_file(file_name) or is_code_interpreter_staged_mime_type(
+        mime_type
     )
 
 

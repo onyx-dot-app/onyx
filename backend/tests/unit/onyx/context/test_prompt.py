@@ -411,3 +411,32 @@ def test_omitted_file_notice_splits_python_staged_and_unstaged_files() -> None:
     assert "python tool" in python_part and "template.docx" in python_part
     assert "report.pdf" not in python_part
     assert "report.pdf" in unreadable_part
+
+
+def test_omitted_file_notice_sends_unindexed_files_to_python_not_search() -> None:
+    indexed = FileToolMetadata(
+        file_id="pdf-id", filename="report.pdf", approx_char_count=2000
+    )
+    code = FileToolMetadata(
+        file_id="py-id",
+        filename="analyze.py",
+        approx_char_count=2000,
+        indexed=False,
+    )
+    messages = prepare_prompt(
+        [UserMessage(content="Check the script against the report")],
+        system_prompt=None,
+        custom_agent_prompt=None,
+        reminder_message=None,
+        context_files=None,
+        token_counter=len,
+        all_injected_file_metadata={
+            indexed.file_id: indexed,
+            code.file_id: code,
+        },
+        available_tool_names={"internal_search", "run_python"},
+    )
+    notice = next(m.text for m in messages if "analyze.py" in m.text)
+    search_part, python_part = notice.split("The python tool receives them")
+    assert "report.pdf" in search_part and "analyze.py" not in search_part
+    assert "analyze.py" in python_part
