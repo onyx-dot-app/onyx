@@ -16,7 +16,7 @@ from onyx.db.models import Plugin, Skill
 from onyx.db.plugin_access import PluginAccess
 from onyx.db.skill import SkillSharingChange
 from onyx.db.utils import UNSET
-from onyx.integrations.plugin_needs import NeedCounts, PluginNeedView
+from onyx.integrations.models import NeedCounts, PluginNeedView
 from onyx.server.models import MinimalUserSnapshot
 from onyx.skills.built_in import BuiltInSkillDefinition
 from onyx.skills.models import (
@@ -273,7 +273,10 @@ class SkillVersionResponse(BaseModel):
 
 class SkillVersionPreviewResponse(BaseModel):
     description: str
+    # Empty for a plugin version, which has no root SKILL.md.
     instructions_markdown: str
+    files: list[SkillBundleFile] = Field(default_factory=list)
+    plugin: PluginDetail | None = None
 
 
 class SkillVersionRestoreRequest(BaseModel):

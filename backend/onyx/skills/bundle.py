@@ -30,6 +30,7 @@ from onyx.skills.metadata import (
     split_skill_md,
 )
 from onyx.skills.models import (
+    BundleLayout,
     CustomSkillBundleContents,
     PluginFileEntry,
     SkillBundleFile,
@@ -67,14 +68,6 @@ _ZIP_UNIX_CREATE_SYSTEM: Final[int] = 3
 _IGNORED_BUNDLE_FILE_NAMES: Final[frozenset[str]] = frozenset(
     {".DS_Store", "Thumbs.db"}
 )
-
-
-class BundleLayout(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    markers: tuple[str, ...]
-    missing_detail: str
-    outside_detail: str
 
 
 SKILL_BUNDLE_LAYOUT: Final = BundleLayout(
@@ -248,11 +241,21 @@ def custom_bundle_contents_from_stored(
     return CustomSkillBundleContents(
         instructions_markdown=strip_skill_md_frontmatter(skill_md),
         files=[
-            SkillBundleFile(path=entry.path, size=entry.size)
-            for entry in sorted(file_manifest, key=lambda entry: entry.path)
-            if entry.path != SKILL_MD_NAME and not _is_ignored_bundle_path(entry.path)
+            file
+            for file in bundle_files_from_manifest(file_manifest)
+            if file.path != SKILL_MD_NAME
         ],
     )
+
+
+def bundle_files_from_manifest(
+    file_manifest: Iterable[PluginFileEntry],
+) -> list[SkillBundleFile]:
+    return [
+        SkillBundleFile(path=entry.path, size=entry.size)
+        for entry in sorted(file_manifest, key=lambda entry: entry.path)
+        if not _is_ignored_bundle_path(entry.path)
+    ]
 
 
 def read_custom_bundle_instructions(zip_bytes: bytes) -> str:

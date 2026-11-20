@@ -20,12 +20,12 @@ from onyx.skills.bundle import (
 )
 from onyx.skills.metadata import frontmatter_for_jsonb, parse_skill_document
 from onyx.skills.models import (
+    PluginBundle,
     PluginManifest,
     PluginNeed,
     PluginSkillContent,
     PluginVersionContent,
 )
-from onyx.skills.plugin_bundle import PluginBundle
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()

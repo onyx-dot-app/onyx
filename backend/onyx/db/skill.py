@@ -548,12 +548,14 @@ def create_uploaded_plugin__no_commit(
     return plugin, enabled
 
 
-def add_uploaded_plugin_version__no_commit(
+def _add_plugin_version_for_user__no_commit(
     plugin_id: UUID,
     content: PluginVersionContent,
+    base_version_id: UUID | None,
+    skip_if_unchanged: bool,
     user: User,
     db_session: Session,
-) -> tuple[Plugin, PluginVersion]:
+) -> tuple[Plugin, PluginVersion | None]:
     lock_user_skill_preferences(user.id, db_session)
     plugin = fetch_editable_skill(
         plugin_id,
@@ -568,14 +570,39 @@ def add_uploaded_plugin_version__no_commit(
         version = add_plugin_version__no_commit(
             plugin=plugin,
             content=content,
-            base_version_id=None,
+            base_version_id=base_version_id,
             created_by=user,
-            skip_if_unchanged=False,
+            skip_if_unchanged=skip_if_unchanged,
             db_session=db_session,
         )
+    return plugin, version
+
+
+def add_uploaded_plugin_version__no_commit(
+    plugin_id: UUID,
+    content: PluginVersionContent,
+    user: User,
+    db_session: Session,
+) -> tuple[Plugin, PluginVersion]:
+    plugin, version = _add_plugin_version_for_user__no_commit(
+        plugin_id, content, None, False, user, db_session
+    )
     if version is None:
         raise RuntimeError("Bug: an upload always adds a version.")
     return plugin, version
+
+
+def restore_plugin_version__no_commit(
+    plugin_id: UUID,
+    content: PluginVersionContent,
+    base_version_id: UUID,
+    user: User,
+    db_session: Session,
+) -> PluginVersion | None:
+    """None, and no write, when the content equals the current version."""
+    return _add_plugin_version_for_user__no_commit(
+        plugin_id, content, base_version_id, True, user, db_session
+    )[1]
 
 
 def lock_skill_for_save(plugin: Plugin, user: User, db_session: Session) -> None:

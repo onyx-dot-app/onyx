@@ -314,6 +314,26 @@ def holds_one_root_skill(version_id: ColumnElement[UUID]) -> ColumnElement[bool]
     )
 
 
+def manifest_description_in_version(
+    version_id: ColumnElement[UUID],
+) -> ColumnElement[str | None]:
+    """The plugin.json description of a version, "" when it has none. NULL for
+    a version with no plugin.json."""
+    return (
+        select(
+            case(
+                (
+                    PluginVersion.manifest.has_key("name"),
+                    func.coalesce(PluginVersion.manifest["description"].astext, ""),
+                )
+            )
+        )
+        .where(PluginVersion.id == version_id)
+        .correlate_except(PluginVersion)
+        .scalar_subquery()
+    )
+
+
 def version_is_valid(version_id: ColumnElement[UUID]) -> ColumnElement[bool | None]:
     """Lazy validity of a version. NULL while the push has not classified it."""
     return (
@@ -912,7 +932,8 @@ def load_plugin_access(
                     (
                         holds_one_root_skill(runs),
                         frontmatter_in_version("description", runs),
-                    )
+                    ),
+                    else_=manifest_description_in_version(runs),
                 ),
                 Plugin.description,
             ),

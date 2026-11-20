@@ -193,6 +193,31 @@ class PluginVersionContent(BaseModel):
     needs: list[PluginNeed] | None = None
 
 
+class PluginBundleSkill(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    content: PluginSkillContent
+    warnings: list[str]
+
+
+class PluginBundle(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    content: bytes
+    manifest: PluginManifest
+    skills: list[PluginBundleSkill]
+    needs: list[PluginNeed]
+    warnings: list[str]
+
+
+class BundleLayout(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    markers: tuple[str, ...]
+    missing_detail: str
+    outside_detail: str
+
+
 class CustomSkillBundleContents(BaseModel):
     model_config = ConfigDict(frozen=True)
 

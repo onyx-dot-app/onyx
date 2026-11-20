@@ -210,21 +210,27 @@ def skill_response_for_user(
         current_version_id=shown_version_id,
         counts=need_counts(version_needs),
         plugin_detail=(
-            PluginDetail(
-                manifest=get_version_manifest(runs, db_session),
-                skills=[
-                    PluginSkillSummary(
-                        path=skill_row.path,
-                        name=skill_row.name,
-                        description=skill_row.description,
-                    )
-                    for skill_row in list_version_skills(runs, db_session)
-                ],
-                needs=version_needs,
-            )
+            plugin_version_detail(runs, version_needs, db_session)
             if include_plugin_detail
             else None
         ),
+    )
+
+
+def plugin_version_detail(
+    version_id: UUID, needs: list[PluginNeedView], db_session: Session
+) -> PluginDetail:
+    return PluginDetail(
+        manifest=get_version_manifest(version_id, db_session),
+        skills=[
+            PluginSkillSummary(
+                path=skill_row.path,
+                name=skill_row.name,
+                description=skill_row.description,
+            )
+            for skill_row in list_version_skills(version_id, db_session)
+        ],
+        needs=needs,
     )
 
 

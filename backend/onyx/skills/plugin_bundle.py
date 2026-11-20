@@ -3,7 +3,7 @@ import zipfile
 from collections.abc import Mapping
 from typing import Final
 
-from pydantic import BaseModel, ConfigDict, JsonValue
+from pydantic import JsonValue
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -22,6 +22,8 @@ from onyx.skills.models import (
     SKILL_NAME_MAX_LENGTH,
     SKILL_NAME_PATTERN,
     PluginAuthor,
+    PluginBundle,
+    PluginBundleSkill,
     PluginManifest,
     PluginNeed,
     PluginSkillContent,
@@ -52,23 +54,6 @@ _UNUSED_PART_KEYS: Final[Mapping[PluginUnusedPart, str]] = {
     PluginUnusedPart.THEMES: "themes",
     PluginUnusedPart.MONITORS: "monitors",
 }
-
-
-class PluginBundleSkill(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    content: PluginSkillContent
-    warnings: list[str]
-
-
-class PluginBundle(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    content: bytes
-    manifest: PluginManifest
-    skills: list[PluginBundleSkill]
-    needs: list[PluginNeed]
-    warnings: list[str]
 
 
 def _invalid(detail: str) -> OnyxError:

@@ -16,14 +16,17 @@ from onyx.skills.bundle import (
     SKILL_BUNDLE_LAYOUT,
     SKILL_MD_NAME,
     STORED_ZIP_MAX_BYTES,
-    BundleLayout,
     NormalizedSkillBundle,
     normalize_stored_bundle,
     open_bundle_zip,
     read_bundle_file,
 )
 from onyx.skills.metadata import parse_skill_document
-from onyx.skills.models import SKILL_NAME_MAX_LENGTH, SKILL_NAME_PATTERN
+from onyx.skills.models import (
+    SKILL_NAME_MAX_LENGTH,
+    SKILL_NAME_PATTERN,
+    BundleLayout,
+)
 
 
 class SkillValidationResult(BaseModel):

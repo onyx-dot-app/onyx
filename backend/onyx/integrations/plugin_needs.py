@@ -1,46 +1,21 @@
 """A plugin never gives access to an integration: each match shows the user's own state of that integration."""
 
 from collections.abc import Iterable, Sequence
-from enum import Enum
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import IntegrationKind
+from onyx.db.integration import list_mcp_servers_by_integration
 from onyx.db.models import User
 from onyx.db.plugin import get_versions_needs
 from onyx.integrations.access import set_integration_enabled__no_commit
 from onyx.integrations.connection_models import ConnectionState
+from onyx.integrations.models import NeedCounts, PluginNeedState, PluginNeedView
 from onyx.integrations.service import list_member_integrations
 from onyx.server.features.integrations.models import MemberIntegration
 from onyx.skills.models import PluginNeed
 from onyx.utils.url import normalize_mcp_server_url
-
-
-class PluginNeedState(str, Enum):
-    ON = "on"
-    TURN_ON = "turn_on"
-    SIGN_IN = "sign_in"
-    NO_ACCESS = "no_access"
-    TURNED_OFF = "turned_off"
-    NOT_ADDED = "not_added"
-    MORE_THAN_ONE = "more_than_one"
-    NOT_SUPPORTED = "not_supported"
-
-
-class PluginNeedView(PluginNeed):
-    model_config = ConfigDict(frozen=True)
-
-    state: PluginNeedState
-    integration_id: int | None
-
-
-class NeedCounts(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    available_count: int
-    needed_count: int
 
 
 def need_views(
@@ -77,6 +52,31 @@ def need_views(
     return views
 
 
+def integrations_for_needs(user: User, db_session: Session) -> list[MemberIntegration]:
+    """The member integrations, with the server URL of each no-access MCP
+    integration for matching only. Never return these rows to the user."""
+    integrations = list_member_integrations(user, db_session)
+    servers = list_mcp_servers_by_integration(
+        [
+            integration.id
+            for integration in integrations
+            if integration.kind is IntegrationKind.MCP
+            and integration.server_url is None
+        ],
+        db_session,
+    )
+    return [
+        (
+            integration.model_copy(
+                update={"server_url": servers[integration.id].server_url}
+            )
+            if integration.id in servers
+            else integration
+        )
+        for integration in integrations
+    ]
+
+
 def need_counts(views: Iterable[PluginNeedView]) -> NeedCounts:
     supported = [view for view in views if view.supported]
     return NeedCounts(
@@ -97,7 +97,7 @@ def needs_of_versions(
     }
     if not needs:
         return {}
-    integrations = list_member_integrations(user, db_session)
+    integrations = integrations_for_needs(user, db_session)
     return {
         version_id: need_views(version_needs, integrations)
         for version_id, version_needs in needs.items()
@@ -109,7 +109,7 @@ def turn_on_needed_integrations__no_commit(
 ) -> bool:
     if not needs:
         return False
-    integrations = list_member_integrations(user, db_session)
+    integrations = integrations_for_needs(user, db_session)
     connected = {
         integration.id
         for integration in integrations

@@ -11,12 +11,14 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.enums import SkillSharePermission
+from onyx.db.enums import PluginInstallationPolicy, SkillSharePermission
 from onyx.db.models import (
     Integration__User,
+    Integration__UserGroup,
     Plugin,
     PluginVersion,
     User,
+    UserGroup,
     UserIntegrationPreference,
 )
 from onyx.db.plugin import (
@@ -28,9 +30,14 @@ from onyx.db.skill import list_chat_skills, list_runtime_skills_for_user
 from onyx.db.users import delete_user_from_db__no_commit
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
-from onyx.integrations.plugin_needs import PluginNeedState
+from onyx.integrations.models import PluginNeedState
+from onyx.integrations.service import list_member_integrations
 from onyx.server.features.skill import api
-from onyx.server.features.skill.models import SkillEnableRequest
+from onyx.server.features.skill.models import (
+    SkillBulkActionRequest,
+    SkillEnableRequest,
+    SkillVersionRestoreRequest,
+)
 from onyx.skills.ingest import delete_bundle_blob
 from onyx.skills.push import build_user_skills_payload
 from onyx.tools.tool_implementations.skills.skill_tools import (
@@ -38,7 +45,7 @@ from onyx.tools.tool_implementations.skills.skill_tools import (
     skills_catalog_message,
 )
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
-from tests.external_dependency_unit.craft.db_helpers import make_user
+from tests.external_dependency_unit.craft.db_helpers import make_group, make_user
 from tests.external_dependency_unit.integration_helpers import (
     delete_integrations,
     give_access,
@@ -58,12 +65,13 @@ def _plugin_zip(
     *,
     servers: dict[str, object] | None = None,
     version: str = "1.0.0",
+    description: str = "Kit.",
 ) -> UploadFile:
     output = io.BytesIO()
     with zipfile.ZipFile(output, "w") as bundle_zip:
         bundle_zip.writestr(
             f"{name}/.claude-plugin/plugin.json",
-            json.dumps({"name": name, "version": version, "description": "Kit."}),
+            json.dumps({"name": name, "version": version, "description": description}),
         )
         for skill in skills:
             bundle_zip.writestr(f"{name}/skills/{skill}/SKILL.md", _skill_md(skill))
@@ -456,3 +464,189 @@ def test_chat_names_the_integrations_a_loaded_plugin_cannot_use(
         "use now: tracker. If a step needs one, tell the user to add it, turn it "
         "on or sign in under Customize > Integrations."
     )
+
+
+def test_org_viewers_see_the_published_description_not_a_draft(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    users: tuple[User, User, User],
+) -> None:
+    author, _, viewer = users
+    plugin_id = _save(
+        author, _plugin_zip("draft-kit", ["drafted"]), db_session
+    ).plugin.id
+    apply_plugin_access_change__no_commit(
+        [plugin_id], PluginAccessChange(publish=True), None, db_session
+    ).raise_first_failure()
+    db_session.commit()
+
+    _save(
+        author,
+        _plugin_zip("draft-kit", ["drafted"], description="Draft."),
+        db_session,
+    )
+
+    def description(user: User) -> str:
+        listed = {
+            skill.id: skill.description
+            for skill in api.list_skills_for_current_user(user, db_session).customs
+        }
+        fetched = api.fetch_skill_for_current_user(plugin_id, user, db_session)
+        assert listed[plugin_id] == fetched.description
+        return fetched.description
+
+    assert description(viewer) == "Kit."
+    assert description(author) == "Draft."
+
+
+def test_plugin_versions_preview_and_restore(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    users: tuple[User, User, User],
+) -> None:
+    author, _, _ = users
+    first = _save(
+        author,
+        _plugin_zip("restore-kit", ["kept"], servers={"main": _http()}),
+        db_session,
+    )
+    plugin_id = first.plugin.id
+    _save(
+        author,
+        _plugin_zip("restore-kit", ["kept", "added"], description="Two."),
+        db_session,
+    )
+    versions = api.list_custom_skill_versions(plugin_id, author, db_session)
+    second_id, first_id = versions[0].id, versions[1].id
+
+    preview = api.preview_custom_skill_version(plugin_id, first_id, author, db_session)
+
+    assert (preview.description, preview.instructions_markdown) == ("Kit.", "")
+    assert preview.plugin is not None
+    assert [skill.name for skill in preview.plugin.skills] == ["kept"]
+    assert [(need.name, need.state) for need in preview.plugin.needs] == [
+        ("main", PluginNeedState.NOT_ADDED)
+    ]
+    assert [file.path for file in preview.files] == [
+        ".claude-plugin/plugin.json",
+        ".mcp.json",
+        "skills/kept/SKILL.md",
+        "skills/kept/notes.md",
+    ]
+
+    restored = api.restore_custom_skill_version(
+        plugin_id,
+        first_id,
+        SkillVersionRestoreRequest(base_version_id=second_id),
+        author,
+        db_session,
+    )
+
+    assert restored.current_version_id is not None
+    assert restored.current_version_number == 3
+    assert restored.description == "Kit."
+    assert restored.plugin is not None
+    assert [skill.name for skill in restored.plugin.skills] == ["kept"]
+    again = api.restore_custom_skill_version(
+        plugin_id,
+        first_id,
+        SkillVersionRestoreRequest(base_version_id=restored.current_version_id),
+        author,
+        db_session,
+    )
+    assert again.current_version_id == restored.current_version_id
+    with pytest.raises(OnyxError):
+        api.restore_custom_skill_version(
+            plugin_id,
+            first_id,
+            SkillVersionRestoreRequest(base_version_id=second_id),
+            author,
+            db_session,
+        )
+
+
+def test_bulk_enable_turns_on_the_integrations_of_a_plugin(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    users: tuple[User, User, User],
+    integration_ids: list[int],
+) -> None:
+    author, _, _ = users
+    integration, _ = make_mcp_integration(db_session, server_url=MCP_URL)
+    give_access(db_session, [integration])
+    integration_ids.append(integration.id)
+    plugin_id = _save(
+        author,
+        _plugin_zip("bulk-kit", ["bulked"], servers={"main": _http()}),
+        db_session,
+    ).plugin.id
+    api.bulk_update_skills(
+        SkillBulkActionRequest(skill_ids=[plugin_id], action="disable"),
+        author,
+        db_session,
+    )
+    db_session.execute(
+        delete(UserIntegrationPreference).where(
+            UserIntegrationPreference.user_id == author.id
+        )
+    )
+    db_session.commit()
+
+    with patch("onyx.server.features.skill.api.reload_craft_sessions") as reload:
+        result = api.bulk_update_skills(
+            SkillBulkActionRequest(skill_ids=[plugin_id], action="enable"),
+            author,
+            db_session,
+        )
+
+    assert (result.succeeded, result.failed) == ([plugin_id], [])
+    on = api.fetch_skill_for_current_user(plugin_id, author, db_session)
+    assert (on.enabled, on.available_count, on.needed_count) == (True, 1, 1)
+    reload.assert_called_once_with({author.id}, db_session)
+
+
+def test_a_group_limited_integration_is_no_access_without_its_url(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    users: tuple[User, User, User],
+    integration_ids: list[int],
+) -> None:
+    author, _, _ = users
+    limited_url = "https://limited.plugin-upload.test/mcp"
+    integration, _ = make_mcp_integration(db_session, server_url=limited_url)
+    integration_ids.append(integration.id)
+    integration_id = integration.id
+    group = make_group(db_session)
+    group_id = group.id
+    integration.installation_policy = PluginInstallationPolicy.NOT_AVAILABLE
+    db_session.add(
+        Integration__UserGroup(
+            integration_id=integration_id,
+            user_group_id=group_id,
+            installation_policy=PluginInstallationPolicy.AVAILABLE,
+        )
+    )
+    db_session.commit()
+    try:
+        plugin_id = _save(
+            author,
+            _plugin_zip(
+                "limited-kit", ["limited"], servers={"main": _http(limited_url)}
+            ),
+            db_session,
+        ).plugin.id
+
+        assert _need_states(author, plugin_id, db_session) == [
+            ("main", PluginNeedState.NO_ACCESS, integration_id)
+        ]
+        rows = {row.id: row for row in list_member_integrations(author, db_session)}
+        assert rows[integration_id].server_url is None
+    finally:
+        db_session.rollback()
+        db_session.execute(
+            delete(Integration__UserGroup).where(
+                Integration__UserGroup.user_group_id == group_id
+            )
+        )
+        db_session.execute(delete(UserGroup).where(UserGroup.id == group_id))
+        db_session.commit()
