@@ -17663,7 +17663,7 @@
       "markAllViewed": "Mark all viewed",
       "markAllViewedFailed": "Could not mark the runs as viewed. Try again.",
       "trigger": "{source, select, MANUAL_RUN_NOW {Run once} other {Schedule}}",
-      "errorClass": "{errorClass, select, superseded_by_next_fire {Cancelled: the next run started before anyone answered the approval.} approval_timeout {Cancelled: nobody answered the approval within 24 hours.} user_cancelled {Stopped by you.} agent_permission_required {An action needed approval.} other {Failed: {errorClass}}}",
+      "errorClass": "{errorClass, select, superseded_by_next_fire {Cancelled: the next run started before anyone answered the approval.} approval_timeout {Cancelled: nobody answered the approval within 24 hours.} user_cancelled {Stopped by you.} agent_permission_required {An action needed approval.} agent_exception {Failed: the run hit an error.} stuck {Failed: the run did not start in time.} other {Failed: {errorClass}}}",
       "columns": {
         "started": "Started",
         "status": "Status",
@@ -17674,7 +17674,7 @@
       "closed": {
         "queued": "This run has not started yet, so there is no chat to open.",
         "skipped": "This run was skipped, so there is no chat to open.",
-        "craft": "This run is from before tasks ran in chat, so there is no chat to open."
+        "noChat": "This run has no chat to open."
       },
       "empty": {
         "title": "No runs yet",

@@ -17663,7 +17663,7 @@
       "markAllViewed": "すべて既読にする",
       "markAllViewedFailed": "実行を既読にできませんでした。もう一度お試しください。",
       "trigger": "{source, select, MANUAL_RUN_NOW {1回実行} other {スケジュール}}",
-      "errorClass": "{errorClass, select, superseded_by_next_fire {キャンセル済み: 承認に誰も応答する前に次の実行が開始されました。} approval_timeout {キャンセル済み: 24 時間以内に誰も承認に応答しませんでした。} user_cancelled {あなたが停止しました。} agent_permission_required {操作に承認が必要でした。} other {失敗: {errorClass}}}",
+      "errorClass": "{errorClass, select, superseded_by_next_fire {キャンセル済み: 承認に誰も応答する前に次の実行が開始されました。} approval_timeout {キャンセル済み: 24 時間以内に誰も承認に応答しませんでした。} user_cancelled {あなたが停止しました。} agent_permission_required {操作に承認が必要でした。} agent_exception {失敗: 実行中にエラーが発生しました。} stuck {失敗: 実行が時間内に開始されませんでした。} other {失敗: {errorClass}}}",
       "columns": {
         "started": "開始",
         "status": "ステータス",
@@ -17674,7 +17674,7 @@
       "closed": {
         "queued": "この実行はまだ開始されていないため、開くチャットはありません。",
         "skipped": "この実行はスキップされたため、開くチャットはありません。",
-        "craft": "この実行はタスクがチャットで実行されるようになる前のものなので、開くチャットはありません。"
+        "noChat": "この実行には開くチャットがありません。"
       },
       "empty": {
         "title": "まだ実行はありません",

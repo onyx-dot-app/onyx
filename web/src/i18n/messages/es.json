@@ -17663,7 +17663,7 @@
       "markAllViewed": "Marcar todo como visto",
       "markAllViewedFailed": "No se pudieron marcar las ejecuciones como vistas. Inténtalo de nuevo.",
       "trigger": "{source, select, MANUAL_RUN_NOW {Ejecutar una vez} other {Programación}}",
-      "errorClass": "{errorClass, select, superseded_by_next_fire {Cancelada: la siguiente ejecución empezó antes de que alguien respondiera la aprobación.} approval_timeout {Cancelada: nadie respondió la aprobación en 24 horas.} user_cancelled {Detenida por ti.} agent_permission_required {Una acción necesitaba aprobación.} other {Fallida: {errorClass}}}",
+      "errorClass": "{errorClass, select, superseded_by_next_fire {Cancelada: la siguiente ejecución empezó antes de que alguien respondiera la aprobación.} approval_timeout {Cancelada: nadie respondió la aprobación en 24 horas.} user_cancelled {Detenida por ti.} agent_permission_required {Una acción necesitaba aprobación.} agent_exception {Error: la ejecución encontró un error.} stuck {Error: la ejecución no empezó a tiempo.} other {Fallida: {errorClass}}}",
       "columns": {
         "started": "Inicio",
         "status": "Estado",
@@ -17674,7 +17674,7 @@
       "closed": {
         "queued": "Esta ejecución aún no ha empezado, así que no hay ningún chat que abrir.",
         "skipped": "Esta ejecución se omitió, así que no hay ningún chat que abrir.",
-        "craft": "Esta ejecución es de antes de que las tareas se ejecutaran en el chat, así que no hay ningún chat que abrir."
+        "noChat": "Esta ejecución no tiene un chat que abrir."
       },
       "empty": {
         "title": "Aún no hay ejecuciones",

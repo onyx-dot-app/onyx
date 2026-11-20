@@ -12,14 +12,18 @@ test.describe("Scheduled tasks in chat", () => {
     const name = `E2E chat task ${Date.now()}`;
 
     await tasks.gotoList();
-    await tasks.createAndRun(name, "say hi");
-    await tasks.expectRunSucceeded();
-    await tasks.expectUnseenRun();
+    try {
+      await tasks.createAndRun(name, "say hi");
+      await tasks.expectRunSucceeded();
+      await tasks.expectUnseenRun();
 
-    await tasks.openRun();
-    await tasks.expectRunBanner(name);
+      await tasks.openRun();
+      await tasks.expectRunBanner(name);
 
-    await tasks.backToTask();
-    await tasks.expectRunViewed();
+      await tasks.backToTask();
+      await tasks.expectRunViewed();
+    } finally {
+      await tasks.deleteCreatedTask();
+    }
   });
 });

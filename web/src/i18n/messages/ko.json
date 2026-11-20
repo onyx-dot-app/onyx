@@ -17663,7 +17663,7 @@
       "markAllViewed": "모두 확인함으로 표시",
       "markAllViewedFailed": "실행을 확인함으로 표시하지 못했습니다. 다시 시도하세요.",
       "trigger": "{source, select, MANUAL_RUN_NOW {한 번 실행} other {일정}}",
-      "errorClass": "{errorClass, select, superseded_by_next_fire {취소됨: 누군가 승인에 응답하기 전에 다음 실행이 시작되었습니다.} approval_timeout {취소됨: 24시간 이내에 아무도 승인에 응답하지 않았습니다.} user_cancelled {사용자가 중지했습니다.} agent_permission_required {작업에 승인이 필요했습니다.} other {실패: {errorClass}}}",
+      "errorClass": "{errorClass, select, superseded_by_next_fire {취소됨: 누군가 승인에 응답하기 전에 다음 실행이 시작되었습니다.} approval_timeout {취소됨: 24시간 이내에 아무도 승인에 응답하지 않았습니다.} user_cancelled {사용자가 중지했습니다.} agent_permission_required {작업에 승인이 필요했습니다.} agent_exception {실패: 실행 중 오류가 발생했습니다.} stuck {실패: 실행이 제때 시작되지 않았습니다.} other {실패: {errorClass}}}",
       "columns": {
         "started": "시작",
         "status": "상태",
@@ -17674,7 +17674,7 @@
       "closed": {
         "queued": "이 실행은 아직 시작되지 않아 열 채팅이 없습니다.",
         "skipped": "이 실행은 건너뛰어 열 채팅이 없습니다.",
-        "craft": "이 실행은 작업이 채팅에서 실행되기 전의 것이어서 열 채팅이 없습니다."
+        "noChat": "이 실행에는 열 수 있는 채팅이 없습니다."
       },
       "empty": {
         "title": "아직 실행이 없습니다",

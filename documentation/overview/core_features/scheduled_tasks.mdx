@@ -106,7 +106,8 @@ Onyx stores each schedule in UTC. **Daily / Weekly** times use the local time of
 <Note>
   A saved daily or weekly time does not change when your UTC offset changes,
   for example after a daylight-saving transition. The task pages show the true local time of each run.
-  Edit and save the task again after a daylight-saving transition or a change of time zone.
+  After a daylight-saving transition or a change of time zone, edit the task, select the local time again, and save.
+  Saving without selecting the time again keeps the old UTC time.
 </Note>
 
 ## Set task action settings carefully
@@ -140,7 +141,7 @@ and you get an Onyx notification. Select the notification to open the run chat.
 - Select **Approve once** or **Approve for this chat**. The action runs, and the run continues from that point.
 - Select **Reject**. The action does not run, and the agent finishes the run without it.
 
-If nobody answers, Onyx cancels the run when the next scheduled run starts, or after 24 hours.
+If nobody answers, Onyx cancels the run when the next scheduled run starts, or 24 hours after the run started.
 The next scheduled run then runs as usual.
 
 ## Review run history

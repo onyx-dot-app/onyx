@@ -17663,7 +17663,7 @@
       "markAllViewed": "Alle als gesehen markieren",
       "markAllViewedFailed": "Die Ausführungen konnten nicht als gesehen markiert werden. Versuchen Sie es erneut.",
       "trigger": "{source, select, MANUAL_RUN_NOW {Einmal ausführen} other {Zeitplan}}",
-      "errorClass": "{errorClass, select, superseded_by_next_fire {Abgebrochen: Die nächste Ausführung begann, bevor jemand die Genehmigung beantwortet hat.} approval_timeout {Abgebrochen: Niemand hat die Genehmigung innerhalb von 24 Stunden beantwortet.} user_cancelled {Von Ihnen gestoppt.} agent_permission_required {Eine Aktion benötigte eine Genehmigung.} other {Fehlgeschlagen: {errorClass}}}",
+      "errorClass": "{errorClass, select, superseded_by_next_fire {Abgebrochen: Die nächste Ausführung begann, bevor jemand die Genehmigung beantwortet hat.} approval_timeout {Abgebrochen: Niemand hat die Genehmigung innerhalb von 24 Stunden beantwortet.} user_cancelled {Von Ihnen gestoppt.} agent_permission_required {Eine Aktion benötigte eine Genehmigung.} agent_exception {Fehlgeschlagen: Bei der Ausführung ist ein Fehler aufgetreten.} stuck {Fehlgeschlagen: Die Ausführung hat nicht rechtzeitig begonnen.} other {Fehlgeschlagen: {errorClass}}}",
       "columns": {
         "started": "Gestartet",
         "status": "Status",
@@ -17674,7 +17674,7 @@
       "closed": {
         "queued": "Diese Ausführung hat noch nicht begonnen, daher gibt es keinen Chat zum Öffnen.",
         "skipped": "Diese Ausführung wurde übersprungen, daher gibt es keinen Chat zum Öffnen.",
-        "craft": "Diese Ausführung stammt aus der Zeit, bevor Aufgaben im Chat liefen, daher gibt es keinen Chat zum Öffnen."
+        "noChat": "Diese Ausführung hat keinen Chat zum Öffnen."
       },
       "empty": {
         "title": "Noch keine Ausführungen",

@@ -7,6 +7,8 @@ const RUN_TIMEOUT_MS = 120_000;
 /** The scheduled tasks pages under /app and the run banner in chat. */
 export class AppScheduledTasksPage {
   readonly page: Page;
+  /** The task that `createAndRun` made, for `deleteCreatedTask`. */
+  private createdTaskId: string | null = null;
 
   constructor(page: Page) {
     this.page = page;
@@ -39,6 +41,19 @@ export class AppScheduledTasksPage {
     await expect(runButton).toBeEnabled();
     await runButton.click();
     await this.page.waitForURL(DETAIL_PATH);
+    this.createdTaskId =
+      new URL(this.page.url()).pathname.split("/").pop() ?? null;
+  }
+
+  /** Delete the task that `createAndRun` made, so its hourly runs do not
+   * leave unseen results on the worker account. */
+  async deleteCreatedTask(): Promise<void> {
+    if (!this.createdTaskId) return;
+    const response = await this.page.request.delete(
+      `/api/scheduled-tasks/${this.createdTaskId}`
+    );
+    expect(response.ok()).toBe(true);
+    this.createdTaskId = null;
   }
 
   /** The newest run row once its chat can open. */

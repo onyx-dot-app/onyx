@@ -23,13 +23,14 @@ jest.mock("@/lib/scheduledTasks/hooks", () => ({
 }));
 
 let mockRuns: ScheduledRunSummary[] = [];
+let mockCursor: string | null = null;
 jest.mock("swr", () => ({
   ...jest.requireActual("swr"),
   __esModule: true,
   default: (key: string) => ({
     data: {
       items: key.includes("unviewed=true") ? [] : mockRuns,
-      next_cursor: null,
+      next_cursor: key.includes("unviewed=true") ? null : mockCursor,
     },
     error: undefined,
     isLoading: false,
@@ -57,17 +58,18 @@ function run(
 }
 
 beforeEach(() => {
+  mockCursor = null;
   window.history.replaceState(null, "", "/app/scheduled-tasks/task");
   mockReplace.mockReset();
   jest.mocked(listScheduledTaskRuns).mockReset();
   jest.mocked(markScheduledRunsViewed).mockReset();
 });
 
-it("opens a run's chat and leaves a Craft run closed", async () => {
+it("opens a run's chat and leaves a run without a chat closed", async () => {
   const user = setupUser();
   mockRuns = [
     run("chat", { status: "CANCELLED", error_class: "approval_timeout" }),
-    run("craft", { chat_session_id: null }),
+    run("closed", { chat_session_id: null }),
   ];
   render(<ScheduledRunHistory taskId="task" />);
 
@@ -110,4 +112,35 @@ it("marks every unviewed run viewed", async () => {
     limit: 100,
     unviewed: true,
   });
+});
+
+it("keeps a run that a new run pushes off the first page", async () => {
+  const user = setupUser();
+  const at = (hour: number) =>
+    `2026-10-30T${String(hour).padStart(2, "0")}:00:00Z`;
+  mockRuns = [
+    run("two", { started_at: at(2), summary: "second run" }),
+    run("one", { started_at: at(1), summary: "first run" }),
+  ];
+  mockCursor = "after-one";
+  jest.mocked(listScheduledTaskRuns).mockResolvedValue({
+    items: [run("zero", { started_at: at(0), summary: "oldest run" })],
+    next_cursor: null,
+  });
+  const { rerender } = render(<ScheduledRunHistory taskId="task" />);
+  await user.click(screen.getByRole("button", { name: "Load more" }));
+  await screen.findByText("oldest run");
+
+  mockRuns = [
+    run("three", { started_at: at(3), summary: "newest run" }),
+    run("two", { started_at: at(2), summary: "second run" }),
+  ];
+  rerender(<ScheduledRunHistory taskId="task" />);
+
+  expect(screen.getAllByText(/run$/).map((cell) => cell.textContent)).toEqual([
+    "newest run",
+    "second run",
+    "first run",
+    "oldest run",
+  ]);
 });

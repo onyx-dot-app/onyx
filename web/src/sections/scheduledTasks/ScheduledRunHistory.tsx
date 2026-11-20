@@ -36,14 +36,14 @@ const RUNS_PAGE_SIZE = 50;
 const RUNS_MAX_PAGE_SIZE = 100;
 const REFRESH_INTERVAL_MS = 5000;
 
-type ClosedReason = "queued" | "skipped" | "craft";
+type ClosedReason = "queued" | "skipped" | "noChat";
 
 /** Why a run has no chat to open, or null when it has one. */
 function closedReason(run: ScheduledRunSummary): ClosedReason | null {
   if (run.chat_session_id) return null;
   if (run.status === "QUEUED" || run.status === "RUNNING") return "queued";
   if (run.status === "SKIPPED") return "skipped";
-  return "craft";
+  return "noChat";
 }
 
 interface ClosedCellProps {
@@ -104,6 +104,9 @@ export default function ScheduledRunHistory({
     { refreshInterval: REFRESH_INTERVAL_MS }
   );
 
+  // The first page wins for a run in both; the older pages also keep the
+  // first page of their first load, so a run that a new run pushes off the
+  // first page stays listed.
   const runs: ScheduledRunSummary[] = [];
   const seen = new Set<string>();
   for (const run of [...(data?.items ?? []), ...olderPages.flat()]) {
@@ -111,6 +114,7 @@ export default function ScheduledRunHistory({
     seen.add(run.id);
     runs.push(run);
   }
+  runs.sort((a, b) => b.started_at.localeCompare(a.started_at));
   const loadMoreCursor =
     olderPages.length > 0 ? olderCursor : (data?.next_cursor ?? null);
   const hasUnviewed =
@@ -125,7 +129,11 @@ export default function ScheduledRunHistory({
         cursor: loadMoreCursor,
         limit: RUNS_PAGE_SIZE,
       });
-      setOlderPages((pages) => [...pages, page.items]);
+      setOlderPages((pages) =>
+        pages.length === 0
+          ? [data?.items ?? [], page.items]
+          : [...pages, page.items]
+      );
       setOlderCursor(page.next_cursor);
     } catch {
       toast.error(t("loadFailed"));
@@ -137,6 +145,7 @@ export default function ScheduledRunHistory({
   async function markAllViewed() {
     setMarkingViewed(true);
     const viewed = new Map<string, ScheduledRunSummary>();
+    let allViewed = false;
     try {
       // A marked run leaves the unviewed filter, so each pass reads the next batch.
       for (;;) {
@@ -149,12 +158,23 @@ export default function ScheduledRunHistory({
         for (const run of res.items) viewed.set(run.id, run);
         if (page.items.length < RUNS_MAX_PAGE_SIZE) break;
       }
+      allViewed = true;
     } catch {
       toast.error(t("markAllViewedFailed"));
     } finally {
-      if (viewed.size > 0) {
+      if (viewed.size > 0 || allViewed) {
+        // With every run viewed, a loaded row still unviewed is stale: another
+        // tab viewed it.
         setOlderPages((pages) =>
-          pages.map((page) => page.map((run) => viewed.get(run.id) ?? run))
+          pages.map((page) =>
+            page.map(
+              (run) =>
+                viewed.get(run.id) ??
+                (allViewed && isRunUnviewed(run)
+                  ? { ...run, viewed_revision: run.revision }
+                  : run)
+            )
+          )
         );
         await revalidateChatScheduledRunViews(taskId).catch(() => undefined);
       }
