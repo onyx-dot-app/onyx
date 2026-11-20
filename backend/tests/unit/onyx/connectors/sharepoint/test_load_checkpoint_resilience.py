@@ -22,6 +22,7 @@ from onyx.connectors.models import (
     HierarchyNode,
     TextSection,
 )
+from onyx.connectors.sharepoint import connector as connector_module
 from onyx.connectors.sharepoint.connector import (
     DriveItemData,
     FolderCursor,
@@ -610,9 +611,13 @@ class TestSitePagesPerPageFailure:
         }
 
 
-def test_a_next_page_of_a_deleted_folder_is_skipped() -> None:
+def test_a_next_page_of_a_deleted_folder_is_skipped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
     """A folder deleted between two pages of its children answers 404 on
     the next page. The walk skips it and keeps the other folders."""
+    # The second read takes both pending pages in one batch.
+    monkeypatch.setattr(connector_module, "SHAREPOINT_LISTING_WORKERS", 2)
     connector = _setup_connector()
     drive = SiteDrive(
         drive_id=DRIVE_ID,
