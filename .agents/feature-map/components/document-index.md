@@ -50,7 +50,12 @@ different shard settings on AWS-managed OpenSearch.
   threshold; hovering a minute shows its p90 and p10),
   each data node's disk and vector memory, the indexes, and an issues panel.
   An admin can dismiss a warning in their browser until it changes; critical
-  issues stay.
+  issues stay. Every 5 minutes the OpenSearch monitoring task also sends each
+  critical issue to every active full admin as an ERROR notification (bell and
+  banner) that links to the page (EE, Business tier). Red health and a missing
+  index notify at once; unanswered nodes, critical disk, critical vector memory
+  and an unreachable cluster need two checks in a row. A cleared issue's
+  notifications are dismissed, and a returning one notifies again.
 - **An operator** sees the old index deleted about a day after a switch, once
   the new index is healthy. A reclaim that fails repeatedly stops and needs a
   person.

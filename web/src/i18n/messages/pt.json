@@ -11888,6 +11888,14 @@
           "label": "Licença"
         }
       },
+      "searchCluster": {
+        "source": {
+          "label": "Cluster de busca"
+        },
+        "cta": {
+          "label": "Abrir status do serviço"
+        }
+      },
       "nextButton": {
         "ariaLabel": "Próximo aviso"
       },

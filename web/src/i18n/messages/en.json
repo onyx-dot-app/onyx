@@ -11888,6 +11888,14 @@
           "label": "License"
         }
       },
+      "searchCluster": {
+        "source": {
+          "label": "Search cluster"
+        },
+        "cta": {
+          "label": "Open Service Status"
+        }
+      },
       "nextButton": {
         "ariaLabel": "Next banner"
       },

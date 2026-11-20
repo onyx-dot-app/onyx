@@ -1,0 +1,220 @@
+"""External dependency unit tests for the OpenSearch cluster issue notifications.
+
+The cluster read is replaced; notifications go to the real PostgreSQL database
+and the issue state to the real shared cache.
+"""
+
+from collections.abc import Callable, Generator
+from datetime import datetime, timezone
+from uuid import UUID
+
+import pytest
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from ee.onyx.utils import opensearch_notifications
+from ee.onyx.utils.opensearch_notifications import (
+    LEASE_KEY,
+    SERVICE_STATUS_LINK,
+    STATE_KEY,
+    notify_admins_of_cluster_issues,
+)
+from onyx.cache.factory import get_shared_cache_backend
+from onyx.configs.constants import NotificationType
+from onyx.db.enums import NotificationSeverity
+from onyx.db.models import Notification, User
+from onyx.db.notification import delete_notifications_by_type
+from onyx.document_index.opensearch.models import (
+    ClusterIssue,
+    ClusterIssueKind,
+    ClusterIssueSeverity,
+    ClusterStatus,
+    UsageThresholds,
+)
+from onyx.server.settings.models import Tier
+from tests.external_dependency_unit.conftest import create_test_user
+
+
+def _status(*issues: ClusterIssue) -> ClusterStatus:
+    return ClusterStatus(
+        checked_at=datetime.now(timezone.utc),
+        version="3.6",
+        health="green",
+        data_node_count=1,
+        primary_shards=1,
+        active_shards=1,
+        unassigned_shards=0,
+        nodes=[],
+        indexes=[],
+        issues=list(issues),
+        thresholds=UsageThresholds(
+            disk_warning_percent=75,
+            disk_critical_percent=85,
+            vector_warning_percent=90,
+            vector_critical_percent=100,
+        ),
+    )
+
+
+RED = ClusterIssue(
+    kind=ClusterIssueKind.CLUSTER_RED, severity=ClusterIssueSeverity.CRITICAL, value=3
+)
+DISK_CRITICAL = ClusterIssue(
+    kind=ClusterIssueKind.DISK,
+    severity=ClusterIssueSeverity.CRITICAL,
+    node_names=["node-2"],
+    value=91,
+)
+DISK_WARNING = ClusterIssue(
+    kind=ClusterIssueKind.DISK,
+    severity=ClusterIssueSeverity.WARNING,
+    node_names=["node-1"],
+    value=78,
+)
+
+
+@pytest.fixture
+def cluster(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+) -> Generator[list[ClusterStatus | None]]:
+    """The reads the next checks return, in order; None means unreachable.
+
+    The notifier tells every active admin in the shared database, so the
+    teardown deletes this type's notifications.
+    """
+    reads: list[ClusterStatus | None] = []
+
+    def read(_: object) -> ClusterStatus:
+        status: ClusterStatus | None = reads.pop(0)
+        if status is None:
+            raise ConnectionError("OpenSearch did not answer")
+        return status
+
+    monkeypatch.setattr(opensearch_notifications, "MULTI_TENANT", False)
+    monkeypatch.setattr(opensearch_notifications, "DISABLE_VECTOR_DB", False)
+    monkeypatch.setattr(opensearch_notifications, "get_tier", lambda: Tier.BUSINESS)
+    monkeypatch.setattr(opensearch_notifications, "onyx_index_refs", lambda _: [])
+    monkeypatch.setattr(opensearch_notifications, "collect_cluster_status", read)
+    cache = get_shared_cache_backend()
+    cache.delete(STATE_KEY)
+    yield reads
+    cache.delete(STATE_KEY)
+    cache.delete(LEASE_KEY)
+    delete_notifications_by_type(NotificationType.OPENSEARCH_CLUSTER_ISSUE, db_session)
+
+
+def _check() -> None:
+    """Runs one scheduled check; the lease only stops duplicate runs."""
+    get_shared_cache_backend().delete(LEASE_KEY)
+    notify_admins_of_cluster_issues()
+
+
+def _notifications(db_session: Session, user_id: UUID) -> list[Notification]:
+    db_session.expire_all()
+    return list(
+        db_session.scalars(
+            select(Notification)
+            .where(
+                Notification.user_id == user_id,
+                Notification.notif_type == NotificationType.OPENSEARCH_CLUSTER_ISSUE,
+            )
+            .order_by(Notification.id)
+        ).all()
+    )
+
+
+@pytest.fixture
+def make_user(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+) -> Callable[[str, bool], User]:
+    def make(name: str, is_admin: bool) -> User:
+        return create_test_user(db_session, name, is_admin=is_admin)
+
+    return make
+
+
+def test_red_cluster_notifies_admins_once(
+    db_session: Session,
+    cluster: list[ClusterStatus | None],
+    make_user: Callable[[str, bool], User],
+) -> None:
+    admin = make_user("os_notif_admin", True)
+    basic = make_user("os_notif_basic", False)
+    cluster.extend([_status(RED), _status(RED)])
+    _check()
+    _check()
+
+    [notification] = _notifications(db_session, admin.id)
+    assert notification.severity == NotificationSeverity.ERROR
+    assert notification.title == "The OpenSearch cluster is red"
+    assert notification.additional_data is not None
+    assert notification.additional_data["link"] == SERVICE_STATUS_LINK
+    assert not notification.dismissed
+    # Only full admins can open the page, so only they hear about it.
+    assert _notifications(db_session, basic.id) == []
+
+
+def test_sustained_issue_waits_for_a_second_check(
+    db_session: Session,
+    cluster: list[ClusterStatus | None],
+    make_user: Callable[[str, bool], User],
+) -> None:
+    admin = make_user("os_notif_disk_admin", True)
+    cluster.extend([_status(DISK_CRITICAL), _status(DISK_CRITICAL)])
+    _check()
+    assert _notifications(db_session, admin.id) == []
+    _check()
+    [notification] = _notifications(db_session, admin.id)
+    assert notification.title == "OpenSearch disk at 91% on node-2"
+
+
+def test_cleared_issue_is_dismissed_and_a_return_notifies_again(
+    db_session: Session,
+    cluster: list[ClusterStatus | None],
+    make_user: Callable[[str, bool], User],
+) -> None:
+    admin = make_user("os_notif_return_admin", True)
+    cluster.extend([_status(RED), _status(), _status(RED)])
+    _check()
+    _check()
+    [cleared] = _notifications(db_session, admin.id)
+    assert cleared.dismissed
+    _check()
+    first, returned = _notifications(db_session, admin.id)
+    assert first.dismissed
+    assert not returned.dismissed
+
+
+def test_unreachable_cluster_notifies_after_two_checks(
+    db_session: Session,
+    cluster: list[ClusterStatus | None],
+    make_user: Callable[[str, bool], User],
+) -> None:
+    admin = make_user("os_notif_down_admin", True)
+    cluster.extend([None, None])
+    _check()
+    assert _notifications(db_session, admin.id) == []
+    _check()
+    [notification] = _notifications(db_session, admin.id)
+    assert notification.title == "OpenSearch is not reachable"
+
+
+def test_warnings_and_community_tier_do_not_notify(
+    db_session: Session,
+    cluster: list[ClusterStatus | None],
+    make_user: Callable[[str, bool], User],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    admin = make_user("os_notif_quiet_admin", True)
+    cluster.extend([_status(DISK_WARNING), _status(DISK_WARNING)])
+    _check()
+    _check()
+    assert _notifications(db_session, admin.id) == []
+
+    # The page needs the Business tier, so a Community deployment is not told.
+    monkeypatch.setattr(opensearch_notifications, "get_tier", lambda: Tier.COMMUNITY)
+    cluster.extend([_status(RED)])
+    _check()
+    assert _notifications(db_session, admin.id) == []

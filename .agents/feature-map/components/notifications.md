@@ -45,8 +45,9 @@ Producers own the decision to notify. [[cc-pairs-and-creds]] and
 notifies on sharing. [[file-store-and-user-files]] notifies when files are
 ready. [[craft-scheduled-tasks]] notifies when a run fails or waits for approval.
 [[craft-external-apps]] notifies on a pending approval (`APPROVAL_REQUESTED`,
-from the egress proxy). [[billing]] owns the license state that the expiry
-warning reads. The admin banner editor sits on the theme page
+from the egress proxy). [[document-index]] notifies full admins of critical
+OpenSearch cluster issues (`OPENSEARCH_CLUSTER_ISSUE`). [[billing]] owns the
+license state that the expiry warning reads. The admin banner editor sits on the theme page
 ([[whitelabelling-and-theme]]).
 
 ---

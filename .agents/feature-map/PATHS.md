@@ -201,6 +201,7 @@ covers new files that match it.
 | `backend/ee/onyx/db/standard_answer.py`, `backend/ee/onyx/server/manage/standard_answer.py`, `backend/ee/onyx/onyxbot/slack/handlers/handle_standard_answers.py`, `backend/ee/onyx/server/query_and_chat/query_backend.py` | standard-answers |
 | `backend/onyx/db/notification.py`, `backend/onyx/db/release_notes.py`, `backend/onyx/db/admin_banner.py`, `backend/onyx/server/features/notifications/`, `backend/onyx/server/features/release_notes/`, `backend/onyx/server/features/admin_banner/`, `backend/onyx/db/connector_alerts.py` | notifications |
 | `backend/ee/onyx/utils/license_notifications.py` | notifications |
+| `backend/ee/onyx/utils/opensearch_notifications.py` | notifications, document-index |
 | `backend/ee/onyx/background/celery/tasks/license_notifications/` | notifications, billing |
 
 ## Backend: integrations

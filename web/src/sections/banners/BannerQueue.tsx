@@ -89,6 +89,10 @@ export default function BannerQueue() {
     [NotificationType.TRIAL_ENDS_TWO_DAYS]: {
       sourceLabel: t("trialEnds.source.label"),
     },
+    [NotificationType.OPENSEARCH_CLUSTER_ISSUE]: {
+      sourceLabel: t("searchCluster.source.label"),
+      ctaLabel: t("searchCluster.cta.label"),
+    },
     [NotificationType.CONNECTOR_REPEATED_ERRORS]: {
       sourceLabel: t("connectors.source.label"),
       ctaLabel: t("connectors.cta.label"),

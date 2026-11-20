@@ -11888,6 +11888,14 @@
           "label": "라이선스"
         }
       },
+      "searchCluster": {
+        "source": {
+          "label": "검색 클러스터"
+        },
+        "cta": {
+          "label": "서비스 상태 열기"
+        }
+      },
       "nextButton": {
         "ariaLabel": "다음 배너"
       },
