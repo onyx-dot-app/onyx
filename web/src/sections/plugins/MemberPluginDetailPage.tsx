@@ -3,7 +3,14 @@
 import { useEffect, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
-import { Badge, Card, InputSwitch, Text } from "@opal/components";
+import {
+  Badge,
+  Button,
+  Card,
+  InputSwitch,
+  MessageCard,
+  Text,
+} from "@opal/components";
 import { Content, Section } from "@opal/layouts";
 import { SvgBlocks } from "@opal/icons";
 import { SvgGitHub } from "@opal/logos";
@@ -16,6 +23,7 @@ import {
   type MemberPluginEntry,
 } from "@/lib/plugins/directory";
 import {
+  MARKETPLACES_PATH,
   customizeTabHref,
   parsePluginPageTab,
   pluginHref,
@@ -76,6 +84,36 @@ interface OverviewTabProps extends PluginTabProps {
   plugin: PluginDetail | null;
 }
 
+interface ManagedNoteProps {
+  marketplace: NonNullable<MemberPluginEntry["marketplace"]>;
+}
+
+/** Why a synced plugin has no edit, upload or delete: GitHub holds its files. */
+function ManagedNote({ marketplace }: ManagedNoteProps) {
+  const t = useTranslations("plugins.member.detail.managed");
+  const navigation = useNavigation();
+  return (
+    <MessageCard
+      variant="info"
+      outerPadding={1}
+      innerPadding={1}
+      title={t("title", { name: marketplace.name })}
+      description={t("description", {
+        repository: marketplace.repository ?? marketplace.name,
+      })}
+      rightChildren={
+        <Button
+          prominence="secondary"
+          size="sm"
+          {...navigation.linkTo(MARKETPLACES_PATH)}
+        >
+          {t("open")}
+        </Button>
+      }
+    />
+  );
+}
+
 function OverviewTab({ entry, plugin }: OverviewTabProps) {
   const t = useTranslations("plugins.member.detail.overview");
   const switchCopy = useTranslations("plugins.member.detail.switch");
@@ -88,42 +126,51 @@ function OverviewTab({ entry, plugin }: OverviewTabProps) {
     : entry.skills.map((skill) => skill.name);
   const author = manifest?.author?.name ?? manifest?.author?.email ?? null;
   const link = manifest?.homepage ?? manifest?.repository ?? null;
+  const location = entry.marketplace
+    ? t("marketplace", {
+        name: entry.marketplace.name,
+        repository: entry.marketplace.repository ?? "",
+      })
+    : sections(entry.section);
   return (
-    <DetailOverview
-      descriptionLabel={t("description")}
-      description={entry.description ?? t("noDescription")}
-      facts={[
-        {
-          label: switchCopy("title"),
-          value: blocked ? switchCopy(blocked) : switchCopy("description"),
-        },
-        { label: t("location"), value: sections(entry.section) },
-        ...(entry.ownerEmail
-          ? [{ label: t("owner"), value: entry.ownerEmail }]
-          : []),
-        ...(manifest?.version
-          ? [{ label: t("version"), value: manifest.version }]
-          : []),
-        ...(author ? [{ label: t("author"), value: author }] : []),
-        ...(link ? [{ label: t("homepage"), value: link, mono: true }] : []),
-        ...(manifest?.license
-          ? [{ label: t("license"), value: manifest.license }]
-          : []),
-        ...(skillNames.length > 0
-          ? [{ label: t("skills"), value: skillNames.join(", ") }]
-          : []),
-        ...(manifest && manifest.unused_parts.length > 0
-          ? [
-              {
-                label: t("notUsed"),
-                value: manifest.unused_parts
-                  .map((part) => unusedCopy(part))
-                  .join(", "),
-              },
-            ]
-          : []),
-      ]}
-    />
+    <Section gap={2} alignItems="stretch" height="auto">
+      {entry.marketplace && <ManagedNote marketplace={entry.marketplace} />}
+      <DetailOverview
+        descriptionLabel={t("description")}
+        description={entry.description ?? t("noDescription")}
+        facts={[
+          {
+            label: switchCopy("title"),
+            value: blocked ? switchCopy(blocked) : switchCopy("description"),
+          },
+          { label: t("location"), value: location },
+          ...(entry.ownerEmail
+            ? [{ label: t("owner"), value: entry.ownerEmail }]
+            : []),
+          ...(manifest?.version
+            ? [{ label: t("version"), value: manifest.version }]
+            : []),
+          ...(author ? [{ label: t("author"), value: author }] : []),
+          ...(link ? [{ label: t("homepage"), value: link, mono: true }] : []),
+          ...(manifest?.license
+            ? [{ label: t("license"), value: manifest.license }]
+            : []),
+          ...(skillNames.length > 0
+            ? [{ label: t("skills"), value: skillNames.join(", ") }]
+            : []),
+          ...(manifest && manifest.unused_parts.length > 0
+            ? [
+                {
+                  label: t("notUsed"),
+                  value: manifest.unused_parts
+                    .map((part) => unusedCopy(part))
+                    .join(", "),
+                },
+              ]
+            : []),
+        ]}
+      />
+    </Section>
   );
 }
 

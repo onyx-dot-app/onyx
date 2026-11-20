@@ -105,6 +105,7 @@ function AddMarketplaceForm({
           folder: resolved.folder,
           ref: resolved.ref,
           scope: company ? "company" : "personal",
+          name: resolved.name,
           default_installation_policy: company ? policy : null,
         })
       );
@@ -129,7 +130,6 @@ function AddMarketplaceForm({
       <Modal.Body padding={2}>
         {preview ? (
           <>
-            <MarketplacePreview preview={preview} />
             {isGlobalHolder && preview.status === "complete" && (
               <Card padding={2}>
                 <Section gap={3} alignItems="stretch" height="auto">
@@ -176,6 +176,7 @@ function AddMarketplaceForm({
                 </Section>
               </Card>
             )}
+            <MarketplacePreview preview={preview} />
           </>
         ) : (
           <Card padding={2}>

@@ -373,7 +373,7 @@ export default function CustomizeSkillPage({
                   new URL(skillHref(skill.id), window.location.origin).href
                 }
               />,
-              ...(canEdit
+              ...(canEdit && !listed?.marketplace?.personal
                 ? [
                     <Button
                       key="share"

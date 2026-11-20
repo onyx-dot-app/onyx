@@ -16872,7 +16872,9 @@
       "sections": {
         "organization": "Organisationsbibliothek",
         "mine": "Meine Uploads",
-        "shared": "Mit Ihnen geteilt"
+        "shared": "Mit Ihnen geteilt",
+        "marketplace": "Aus einem Marketplace",
+        "private": "Privat für einen anderen Benutzer"
       },
       "detail": {
         "title": "Plugin",
@@ -16893,7 +16895,8 @@
           "author": "Autor",
           "homepage": "Homepage",
           "license": "Lizenz",
-          "notUsed": "Nicht in Onyx verwendet"
+          "notUsed": "Nicht in Onyx verwendet",
+          "marketplace": "Marketplace {name} ({repository})"
         },
         "skills": {
           "off": "Aus",
@@ -16907,7 +16910,12 @@
           "unavailable": "Sie können dieses Plugin nicht aktivieren oder deaktivieren.",
           "failed": "Das Plugin konnte nicht geändert werden."
         },
-        "syncedFrom": "Synchronisiert aus {repository}"
+        "syncedFrom": "Synchronisiert aus {repository}",
+        "managed": {
+          "title": "Vom Marketplace {name} verwaltet",
+          "description": "Onyx synchronisiert dieses Plugin aus {repository}. Ändern Sie es in GitHub und synchronisieren Sie dann den Marketplace.",
+          "open": "Marketplaces öffnen"
+        }
       },
       "connection": {
         "askAdmin": "Fragen Sie Ihren Admin",
@@ -17094,7 +17102,7 @@
     "marketplaces": {
       "status": {
         "ok": "Bereit",
-        "blocked": "Blockiert",
+        "blocked": "Nicht installierbar",
         "not_supported": "Nicht unterstützt"
       },
       "scope": {
@@ -17115,7 +17123,9 @@
         "failedTitle": "Onyx kann dieses Marketplace nicht lesen",
         "version": "v{version}",
         "willInstall": "Wird installiert",
-        "skills": "{count, plural, one {Skill} other {Skills}}: {names}"
+        "skills": "{count, plural, one {Skill} other {Skills}}: {names}",
+        "showUnusable": "{count, plural, one {# Eintrag anzeigen, den Onyx nicht verwenden kann} other {# Einträge anzeigen, die Onyx nicht verwenden kann}}",
+        "hideUnusable": "Einträge ausblenden, die Onyx nicht verwenden kann"
       },
       "add": {
         "menuItem": "Marketplace hinzufügen",
@@ -17126,7 +17136,7 @@
         "repository": {
           "title": "Repository",
           "description": "Geben Sie owner/repo oder die URL des Repositorys ein.",
-          "placeholder": "Zum Beispiel anthropics/claude-plugins"
+          "placeholder": "Zum Beispiel anthropics/claude-plugins-official"
         },
         "folder": {
           "title": "Ordner",
@@ -17174,7 +17184,7 @@
       "columns": {
         "marketplace": "Marketplace",
         "sync": "Synchronisierung",
-        "items": "Einträge"
+        "items": "Plugins"
       },
       "items": "{count, plural, one {# Plugin} other {# Plugins}}",
       "tableLabel": "Marketplaces",
@@ -17209,14 +17219,15 @@
       "remove": {
         "label": "Entfernen",
         "title": "{name} entfernen?",
-        "description": "Dadurch werden das Marketplace und {count, plural, one {sein Plugin} other {seine # Plugins}} gelöscht. Benutzer verlieren diese Plugins.",
+        "description": "Dadurch werden das Marketplace und {count, plural, one {sein Plugin} other {seine # Plugins}} gelöscht. Mitglieder verlieren diese Plugins.",
         "listLabel": "Zu löschende Plugins",
         "noPlugins": "Dieses Marketplace hat keine Plugins.",
         "confirm": "Entfernen",
         "done": "{name} wurde entfernt.",
         "failed": "Das Marketplace konnte nicht entfernt werden.",
         "loadFailed": "Die Plugins dieses Marketplace konnten nicht geladen werden.",
-        "retry": "Erneut versuchen"
+        "retry": "Erneut versuchen",
+        "personalDescription": "Dadurch werden das Marketplace und {count, plural, one {sein Plugin} other {seine # Plugins}} gelöscht. Sie verlieren diese Plugins."
       },
       "detail": {
         "title": "Marketplace",
@@ -17229,7 +17240,8 @@
         "entries": "Einträge ({count})",
         "noEntries": "Die letzte Synchronisierung hat keine Einträge gefunden.",
         "close": "Schließen"
-      }
+      },
+      "readOnly": "Ihr Administrator verwaltet diesen Marketplace."
     }
   },
   "integrations": {
@@ -17324,14 +17336,18 @@
         "mine": "Von Ihnen erstellt",
         "organization": "Aus Ihrer Organisation",
         "shared": "Mit Ihnen geteilt",
-        "builtin": "Integriert"
+        "builtin": "Integriert",
+        "marketplace": "Aus Marketplaces",
+        "private": "Privat für andere Benutzer"
       },
       "source": {
         "mine": "von Ihnen",
         "organization": "aus Ihrer Organisation",
         "sharedBy": "geteilt von {email}",
         "shared": "mit Ihnen geteilt",
-        "builtin": "integriert"
+        "builtin": "integriert",
+        "marketplace": "aus {name}",
+        "privateTo": "privat für {email}"
       },
       "subtitle": "{source} · {description}",
       "tag": {
@@ -17393,13 +17409,13 @@
       },
       "empty": {
         "title": "Noch keine Plugins",
-        "description": "Laden Sie ein Plugin hoch oder erstellen Sie einen Skill. Jeder Skill ist ein Plugin."
+        "description": "Laden Sie ein Plugin hoch, fügen Sie einen Marketplace aus GitHub hinzu oder erstellen Sie einen Skill. Jeder Skill ist ein Plugin."
       },
       "noMatches": {
         "title": "Keine passenden Plugins",
         "clear": "Alle Plugins anzeigen"
       },
-      "intro": "Ein Plugin bündelt Skills und die Integrationen, die sie benötigen. Laden Sie ein Claude Code- oder Codex-Plugin hoch oder fügen Sie einen Skill hinzu. Jeder hinzugefügte Skill kommt in einem eigenen Plugin.",
+      "intro": "Ein Plugin bündelt Skills und die Integrationen, die sie benötigen. Laden Sie ein Claude-Code- oder Codex-Plugin hoch, fügen Sie einen Marketplace aus GitHub hinzu oder fügen Sie einen Skill hinzu. Jeder Skill, den Sie hinzufügen, kommt in einem eigenen Plugin.",
       "integrations": "{available} von {needed} Integrationen verfügbar"
     },
     "skillPage": {

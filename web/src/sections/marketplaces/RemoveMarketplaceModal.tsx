@@ -56,7 +56,12 @@ export default function RemoveMarketplaceModal({
     <ConfirmationModalLayout
       icon={SvgAlertTriangle}
       title={t("title", { name: marketplace.name })}
-      description={t("description", { count: marketplace.plugin_count })}
+      description={t(
+        marketplace.scope === "personal"
+          ? "personalDescription"
+          : "description",
+        { count: marketplace.plugin_count }
+      )}
       onClose={() => {
         if (!busy) onClose();
       }}

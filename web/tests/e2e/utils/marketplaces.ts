@@ -73,7 +73,10 @@ export class FakeMarketplacesApi {
       folder: request.folder,
       ref: request.ref,
       default_installation_policy:
-        request.default_installation_policy ?? "AVAILABLE",
+        request.scope === "company"
+          ? (request.default_installation_policy ?? "AVAILABLE")
+          : null,
+      can_manage: true,
       login_user: { id: crypto.randomUUID(), email: "admin_user@example.com" },
       plugin_count: 1,
       last_synced_at: now,

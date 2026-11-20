@@ -30,6 +30,7 @@ import {
   useRefreshSkillLists,
 } from "@/lib/skills/hooks";
 import { needsAttention } from "@/lib/plugins/needs";
+import { canShareSkill } from "@/lib/skills/sharing";
 import type { Skill } from "@/lib/skills/types";
 import { useUser } from "@/providers/UserProvider";
 import CustomizeLayout from "@/sections/customize/CustomizeLayout";
@@ -67,17 +68,19 @@ function PluginRow({
   const enabled = skill ? enablement.enabledOf(skill) : false;
   const busy = skill ? enablement.isPending(skill.id) : false;
   const canToggle = blocked === null;
-  const canShare =
-    skill !== undefined &&
-    (skill.user_permission === "OWNER" || skill.user_permission === "EDITOR");
+  const canShare = skill !== undefined && canShareSkill(skill);
   const source =
-    group === "mine"
-      ? t("skills.source.mine")
-      : group === "organization"
-        ? t("skills.source.organization")
-        : entry.ownerEmail
-          ? t("skills.source.sharedBy", { email: entry.ownerEmail })
-          : t("skills.source.shared");
+    entry.marketplace !== null
+      ? t("skills.source.marketplace", { name: entry.marketplace.name })
+      : group === "mine"
+        ? t("skills.source.mine")
+        : group === "organization"
+          ? t("skills.source.organization")
+          : group === "private" && entry.ownerEmail
+            ? t("skills.source.privateTo", { email: entry.ownerEmail })
+            : entry.ownerEmail
+              ? t("skills.source.sharedBy", { email: entry.ownerEmail })
+              : t("skills.source.shared");
   const contents =
     skill?.kind !== "plugin"
       ? t("plugins.contents", { skills: entry.skills.length })

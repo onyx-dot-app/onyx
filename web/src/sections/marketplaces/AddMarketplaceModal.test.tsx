@@ -52,8 +52,12 @@ test("shows the resolved source and the plugins before it adds a personal market
   expect(screen.getByText("Will install")).toBeInTheDocument();
   expect(screen.getByText("Skills: review, summarize")).toBeInTheDocument();
   expect(screen.getByText("linear")).toBeInTheDocument();
+  expect(screen.queryByText("Cannot install")).not.toBeInTheDocument();
+  await user.click(
+    screen.getByRole("button", { name: /that Onyx cannot use$/ })
+  );
   expect(screen.getByText("The plugin has no skills.")).toBeInTheDocument();
-  expect(screen.getByText("Blocked")).toBeInTheDocument();
+  expect(screen.getByText("Cannot install")).toBeInTheDocument();
   expect(screen.queryByText("Marketplace Type")).not.toBeInTheDocument();
 
   await user.click(screen.getByRole("button", { name: "Add marketplace" }));
@@ -63,6 +67,7 @@ test("shows the resolved source and the plugins before it adds a personal market
     folder: "catalog",
     ref: "main",
     scope: "personal",
+    name: "acme-plugins",
     default_installation_policy: null,
   });
   expect(onAdded).toHaveBeenCalledWith(detailFixture());

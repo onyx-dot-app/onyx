@@ -32,7 +32,7 @@ export default function MarketplaceDefaultAccessModal({
   const options = usePolicyOptions({ levels: MARKETPLACE_DEFAULT_POLICIES });
   const refreshSkillLists = useRefreshSkillLists();
   const [policy, setPolicy] = useState<MarketplaceDefaultPolicy>(
-    marketplace.default_installation_policy
+    marketplace.default_installation_policy ?? "AVAILABLE"
   );
   const [busy, setBusy] = useState(false);
 

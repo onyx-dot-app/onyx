@@ -16872,7 +16872,9 @@
       "sections": {
         "organization": "组织库",
         "mine": "我的上传",
-        "shared": "与你共享"
+        "shared": "与你共享",
+        "marketplace": "来自市场",
+        "private": "其他用户私有"
       },
       "detail": {
         "title": "插件",
@@ -16893,7 +16895,8 @@
           "author": "作者",
           "homepage": "主页",
           "license": "许可证",
-          "notUsed": "Onyx 不使用的部分"
+          "notUsed": "Onyx 不使用的部分",
+          "marketplace": "{name} 市场 ({repository})"
         },
         "skills": {
           "off": "已关闭",
@@ -16907,7 +16910,12 @@
           "unavailable": "你无法开启或关闭此插件。",
           "failed": "无法更改插件。"
         },
-        "syncedFrom": "同步自 {repository}"
+        "syncedFrom": "同步自 {repository}",
+        "managed": {
+          "title": "由 {name} 市场管理",
+          "description": "Onyx 从 {repository} 同步此插件。请在 GitHub 中更改，然后同步市场。",
+          "open": "打开市场"
+        }
       },
       "connection": {
         "askAdmin": "请询问管理员",
@@ -17094,7 +17102,7 @@
     "marketplaces": {
       "status": {
         "ok": "就绪",
-        "blocked": "已阻止",
+        "blocked": "无法安装",
         "not_supported": "不支持"
       },
       "scope": {
@@ -17115,7 +17123,9 @@
         "failedTitle": "Onyx 无法读取此市场",
         "version": "v{version}",
         "willInstall": "将安装",
-        "skills": "{count, plural, one {技能} other {技能}}：{names}"
+        "skills": "{count, plural, one {技能} other {技能}}：{names}",
+        "showUnusable": "{count, plural, one {显示 # 个 Onyx 无法使用的条目} other {显示 # 个 Onyx 无法使用的条目}}",
+        "hideUnusable": "隐藏 Onyx 无法使用的条目"
       },
       "add": {
         "menuItem": "添加市场",
@@ -17126,7 +17136,7 @@
         "repository": {
           "title": "仓库",
           "description": "输入 owner/repo 或仓库的 URL。",
-          "placeholder": "例如 anthropics/claude-plugins"
+          "placeholder": "例如 anthropics/claude-plugins-official"
         },
         "folder": {
           "title": "文件夹",
@@ -17174,7 +17184,7 @@
       "columns": {
         "marketplace": "市场",
         "sync": "同步",
-        "items": "条目"
+        "items": "插件"
       },
       "items": "{count, plural, one {# 个插件} other {# 个插件}}",
       "tableLabel": "市场",
@@ -17209,14 +17219,15 @@
       "remove": {
         "label": "移除",
         "title": "移除 {name}？",
-        "description": "这会删除该市场及{count, plural, one {其插件} other {其 # 个插件}}。用户将失去这些插件。",
+        "description": "这将删除市场及{count, plural, one {其插件} other {其 # 个插件}}。成员将失去这些插件。",
         "listLabel": "要删除的插件",
         "noPlugins": "此市场没有插件。",
         "confirm": "移除",
         "done": "已移除 {name}。",
         "failed": "无法移除市场。",
         "loadFailed": "无法加载此插件市场的插件。",
-        "retry": "重试"
+        "retry": "重试",
+        "personalDescription": "这将删除市场及{count, plural, one {其插件} other {其 # 个插件}}。您将失去这些插件。"
       },
       "detail": {
         "title": "市场",
@@ -17229,7 +17240,8 @@
         "entries": "条目（{count}）",
         "noEntries": "上次同步未发现条目。",
         "close": "关闭"
-      }
+      },
+      "readOnly": "您的管理员管理此市场。"
     }
   },
   "integrations": {
@@ -17324,14 +17336,18 @@
         "mine": "由你创建",
         "organization": "来自你的组织",
         "shared": "与你共享",
-        "builtin": "内置"
+        "builtin": "内置",
+        "marketplace": "来自市场",
+        "private": "其他用户私有"
       },
       "source": {
         "mine": "由你",
         "organization": "来自你的组织",
         "sharedBy": "由 {email} 共享",
         "shared": "与你共享",
-        "builtin": "内置"
+        "builtin": "内置",
+        "marketplace": "来自 {name}",
+        "privateTo": "{email} 私有"
       },
       "subtitle": "{source} · {description}",
       "tag": {
@@ -17393,13 +17409,13 @@
       },
       "empty": {
         "title": "还没有插件",
-        "description": "上传插件或创建技能。每个技能都是一个插件。"
+        "description": "上传插件、从 GitHub 添加市场，或创建技能。每个技能都是一个插件。"
       },
       "noMatches": {
         "title": "没有匹配的插件",
         "clear": "显示所有插件"
       },
-      "intro": "插件将技能及其所需的集成打包在一起。上传 Claude Code 或 Codex 插件，或添加技能。您添加的每个技能都位于各自的插件中。",
+      "intro": "插件打包了技能及其所需的集成。上传 Claude Code 或 Codex 插件、从 GitHub 添加市场，或添加技能。您添加的每个技能都在其自己的插件中。",
       "integrations": "{needed} 个集成中有 {available} 个可用"
     },
     "skillPage": {

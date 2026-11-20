@@ -16872,7 +16872,9 @@
       "sections": {
         "organization": "Organization library",
         "mine": "My uploads",
-        "shared": "Shared with you"
+        "shared": "Shared with you",
+        "marketplace": "From a marketplace",
+        "private": "Private to another user"
       },
       "detail": {
         "title": "Plugin",
@@ -16893,7 +16895,8 @@
           "author": "Author",
           "homepage": "Homepage",
           "license": "License",
-          "notUsed": "Not used in Onyx"
+          "notUsed": "Not used in Onyx",
+          "marketplace": "{name} marketplace ({repository})"
         },
         "skills": {
           "off": "Off",
@@ -16907,7 +16910,12 @@
           "unavailable": "You cannot turn this plugin on or off.",
           "failed": "Could not change the plugin."
         },
-        "syncedFrom": "Synced from {repository}"
+        "syncedFrom": "Synced from {repository}",
+        "managed": {
+          "title": "Managed by the {name} marketplace",
+          "description": "Onyx syncs this plugin from {repository}. Change it in GitHub, then sync the marketplace.",
+          "open": "Open Marketplaces"
+        }
       },
       "connection": {
         "askAdmin": "Ask your admin",
@@ -17094,7 +17102,7 @@
     "marketplaces": {
       "status": {
         "ok": "Ready",
-        "blocked": "Blocked",
+        "blocked": "Cannot install",
         "not_supported": "Not supported"
       },
       "scope": {
@@ -17115,7 +17123,9 @@
         "failedTitle": "Onyx cannot read this marketplace",
         "version": "v{version}",
         "willInstall": "Will install",
-        "skills": "{count, plural, one {Skill} other {Skills}}: {names}"
+        "skills": "{count, plural, one {Skill} other {Skills}}: {names}",
+        "showUnusable": "{count, plural, one {Show # entry that Onyx cannot use} other {Show # entries that Onyx cannot use}}",
+        "hideUnusable": "Hide the entries that Onyx cannot use"
       },
       "add": {
         "menuItem": "Add marketplace",
@@ -17126,7 +17136,7 @@
         "repository": {
           "title": "Repository",
           "description": "Type owner/repo or the URL of the repository.",
-          "placeholder": "For example, anthropics/claude-plugins"
+          "placeholder": "For example, anthropics/claude-plugins-official"
         },
         "folder": {
           "title": "Folder",
@@ -17174,7 +17184,7 @@
       "columns": {
         "marketplace": "Marketplace",
         "sync": "Sync",
-        "items": "Items"
+        "items": "Plugins"
       },
       "items": "{count, plural, one {# plugin} other {# plugins}}",
       "tableLabel": "Marketplaces",
@@ -17209,14 +17219,15 @@
       "remove": {
         "label": "Remove",
         "title": "Remove {name}?",
-        "description": "This deletes the marketplace and {count, plural, one {its plugin} other {its # plugins}}. Users lose these plugins.",
+        "description": "This deletes the marketplace and {count, plural, one {its plugin} other {its # plugins}}. Members lose these plugins.",
         "listLabel": "Plugins to delete",
         "noPlugins": "This marketplace has no plugins.",
         "confirm": "Remove",
         "done": "Removed {name}.",
         "failed": "Could not remove the marketplace.",
         "loadFailed": "Could not load the plugins of this marketplace.",
-        "retry": "Retry"
+        "retry": "Retry",
+        "personalDescription": "This deletes the marketplace and {count, plural, one {its plugin} other {its # plugins}}. You lose these plugins."
       },
       "detail": {
         "title": "Marketplace",
@@ -17229,7 +17240,8 @@
         "entries": "Entries ({count})",
         "noEntries": "The last sync found no entries.",
         "close": "Close"
-      }
+      },
+      "readOnly": "Your admin manages this marketplace."
     }
   },
   "integrations": {
@@ -17324,14 +17336,18 @@
         "mine": "Created by you",
         "organization": "From your organization",
         "shared": "Shared with you",
-        "builtin": "Built-in"
+        "builtin": "Built-in",
+        "marketplace": "From marketplaces",
+        "private": "Private to other users"
       },
       "source": {
         "mine": "by you",
         "organization": "from your organization",
         "sharedBy": "shared by {email}",
         "shared": "shared with you",
-        "builtin": "built-in"
+        "builtin": "built-in",
+        "marketplace": "from {name}",
+        "privateTo": "private to {email}"
       },
       "subtitle": "{source} · {description}",
       "tag": {
@@ -17393,13 +17409,13 @@
       },
       "empty": {
         "title": "No plugins yet",
-        "description": "Upload a plugin or create a skill. Each skill is a plugin."
+        "description": "Upload a plugin, add a marketplace from GitHub, or create a skill. Each skill is a plugin."
       },
       "noMatches": {
         "title": "No matching plugins",
         "clear": "Show all plugins"
       },
-      "intro": "A plugin packages skills and the integrations that they need. Upload a Claude Code or Codex plugin, or add a skill. Each skill that you add comes in its own plugin.",
+      "intro": "A plugin packages skills and the integrations that they need. Upload a Claude Code or Codex plugin, add a marketplace from GitHub, or add a skill. Each skill that you add comes in its own plugin.",
       "integrations": "{available} of {needed} integrations available"
     },
     "skillPage": {

@@ -15,6 +15,8 @@ export interface MarketplaceSource {
 
 export interface MarketplaceCreateRequest extends MarketplaceSource {
   scope: MarketplaceScope;
+  /** The name that the preview read. The first sync replaces it. */
+  name: string | null;
   default_installation_policy: MarketplaceDefaultPolicy | null;
 }
 
@@ -59,7 +61,10 @@ export interface MarketplaceSummary {
   repository: string;
   folder: string | null;
   ref: string | null;
-  default_installation_policy: MarketplaceDefaultPolicy;
+  /** Null for a personal marketplace, which has no default. */
+  default_installation_policy: MarketplaceDefaultPolicy | null;
+  /** False for a member who sees a company marketplace read-only. */
+  can_manage: boolean;
   login_user: MarketplaceLoginUser | null;
   plugin_count: number;
   last_synced_at: string | null;
@@ -101,6 +106,8 @@ export interface SkillMarketplace {
   name: string;
   kind: MarketplaceKind;
   repository: string | null;
+  /** A personal GitHub marketplace: only its owner gets the plugin. */
+  personal: boolean;
 }
 
 export type MarketplaceSyncState =

@@ -185,3 +185,18 @@ test("the default access item shows only for a company marketplace", async () =>
     ).toEqual({ installation_policy: "DEFAULT" })
   );
 });
+
+test("a member sees a company marketplace with no actions", async () => {
+  mockFetch({
+    "/api/marketplaces": {
+      marketplaces: [summaryFixture({ scope: "company", can_manage: false })],
+    },
+  });
+  render(<MarketplacesTable />);
+
+  const table = await screen.findByRole("table", { name: "Marketplaces" });
+  expect(within(table).getByText("Company")).toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Actions for acme/plugins" })
+  ).not.toBeInTheDocument();
+});

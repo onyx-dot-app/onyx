@@ -16872,7 +16872,9 @@
       "sections": {
         "organization": "組織ライブラリ",
         "mine": "マイアップロード",
-        "shared": "あなたと共有"
+        "shared": "あなたと共有",
+        "marketplace": "マーケットプレイスから",
+        "private": "別のユーザー専用"
       },
       "detail": {
         "title": "プラグイン",
@@ -16893,7 +16895,8 @@
           "author": "作成者",
           "homepage": "ホームページ",
           "license": "ライセンス",
-          "notUsed": "Onyx では使用しない部分"
+          "notUsed": "Onyx では使用しない部分",
+          "marketplace": "マーケットプレイス {name} ({repository})"
         },
         "skills": {
           "off": "オフ",
@@ -16907,7 +16910,12 @@
           "unavailable": "このプラグインのオンとオフを切り替えることはできません。",
           "failed": "プラグインを変更できませんでした。"
         },
-        "syncedFrom": "{repository} から同期"
+        "syncedFrom": "{repository} から同期",
+        "managed": {
+          "title": "マーケットプレイス {name} が管理しています",
+          "description": "Onyx はこのプラグインを {repository} から同期します。GitHub で変更してから、マーケットプレイスを同期してください。",
+          "open": "マーケットプレイスを開く"
+        }
       },
       "connection": {
         "askAdmin": "管理者に問い合わせてください",
@@ -17094,7 +17102,7 @@
     "marketplaces": {
       "status": {
         "ok": "準備完了",
-        "blocked": "ブロック済み",
+        "blocked": "インストール不可",
         "not_supported": "未対応"
       },
       "scope": {
@@ -17115,7 +17123,9 @@
         "failedTitle": "Onyx はこのマーケットプレイスを読み取れません",
         "version": "v{version}",
         "willInstall": "インストールされるもの",
-        "skills": "{count, plural, one {スキル} other {スキル}}: {names}"
+        "skills": "{count, plural, one {スキル} other {スキル}}: {names}",
+        "showUnusable": "{count, plural, one {Onyx が使えない # 件のエントリを表示} other {Onyx が使えない # 件のエントリを表示}}",
+        "hideUnusable": "Onyx が使えないエントリを非表示"
       },
       "add": {
         "menuItem": "マーケットプレイスを追加",
@@ -17126,7 +17136,7 @@
         "repository": {
           "title": "リポジトリ",
           "description": "owner/repo またはリポジトリの URL を入力してください。",
-          "placeholder": "例: anthropics/claude-plugins"
+          "placeholder": "例: anthropics/claude-plugins-official"
         },
         "folder": {
           "title": "フォルダ",
@@ -17174,7 +17184,7 @@
       "columns": {
         "marketplace": "マーケットプレイス",
         "sync": "同期",
-        "items": "項目"
+        "items": "プラグイン"
       },
       "items": "{count, plural, one {# 件のプラグイン} other {# 件のプラグイン}}",
       "tableLabel": "マーケットプレイス",
@@ -17209,14 +17219,15 @@
       "remove": {
         "label": "削除",
         "title": "{name} を削除しますか？",
-        "description": "マーケットプレイスと{count, plural, one {そのプラグイン} other {その # 件のプラグイン}}を削除します。ユーザーはこれらのプラグインを使えなくなります。",
+        "description": "マーケットプレイスと{count, plural, one {そのプラグイン} other {その # 件のプラグイン}}を削除します。メンバーはこれらのプラグインを使えなくなります。",
         "listLabel": "削除するプラグイン",
         "noPlugins": "このマーケットプレイスにはプラグインがありません。",
         "confirm": "削除",
         "done": "{name} を削除しました。",
         "failed": "マーケットプレイスを削除できませんでした。",
         "loadFailed": "このマーケットプレイスのプラグインを読み込めませんでした。",
-        "retry": "再試行"
+        "retry": "再試行",
+        "personalDescription": "マーケットプレイスと{count, plural, one {そのプラグイン} other {その # 件のプラグイン}}を削除します。あなたはこれらのプラグインを使えなくなります。"
       },
       "detail": {
         "title": "マーケットプレイス",
@@ -17229,7 +17240,8 @@
         "entries": "エントリ（{count}）",
         "noEntries": "前回の同期ではエントリが見つかりませんでした。",
         "close": "閉じる"
-      }
+      },
+      "readOnly": "このマーケットプレイスは管理者が管理しています。"
     }
   },
   "integrations": {
@@ -17324,14 +17336,18 @@
         "mine": "自分が作成",
         "organization": "組織から",
         "shared": "共有されたもの",
-        "builtin": "組み込み"
+        "builtin": "組み込み",
+        "marketplace": "マーケットプレイスから",
+        "private": "他のユーザー専用"
       },
       "source": {
         "mine": "自分",
         "organization": "組織から",
         "sharedBy": "{email} が共有",
         "shared": "共有されたもの",
-        "builtin": "組み込み"
+        "builtin": "組み込み",
+        "marketplace": "{name} から",
+        "privateTo": "{email} 専用"
       },
       "subtitle": "{source} · {description}",
       "tag": {
@@ -17393,13 +17409,13 @@
       },
       "empty": {
         "title": "プラグインはまだありません",
-        "description": "プラグインをアップロードするか、スキルを作成します。各スキルは 1 つのプラグインです。"
+        "description": "プラグインをアップロードするか、GitHub からマーケットプレイスを追加するか、スキルを作成します。各スキルは 1 つのプラグインです。"
       },
       "noMatches": {
         "title": "一致するプラグインはありません",
         "clear": "すべてのプラグインを表示"
       },
-      "intro": "プラグインは、スキルとそれらが必要とする連携をまとめたものです。Claude Code または Codex のプラグインをアップロードするか、スキルを追加します。追加した各スキルは個別のプラグインに入ります。",
+      "intro": "プラグインはスキルと、そのスキルに必要な連携をまとめたものです。Claude Code または Codex のプラグインをアップロードするか、GitHub からマーケットプレイスを追加するか、スキルを追加します。追加した各スキルは個別のプラグインになります。",
       "integrations": "{needed} 件中 {available} 件の連携が利用可能"
     },
     "skillPage": {

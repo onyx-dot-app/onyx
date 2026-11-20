@@ -16872,7 +16872,9 @@
       "sections": {
         "organization": "مكتبة المؤسسة",
         "mine": "ملفاتي المرفوعة",
-        "shared": "تمت مشاركتها معك"
+        "shared": "تمت مشاركتها معك",
+        "marketplace": "من سوق",
+        "private": "خاص بمستخدم آخر"
       },
       "detail": {
         "title": "إضافة",
@@ -16893,7 +16895,8 @@
           "author": "المؤلف",
           "homepage": "الصفحة الرئيسية",
           "license": "الترخيص",
-          "notUsed": "غير مستخدم في Onyx"
+          "notUsed": "غير مستخدم في Onyx",
+          "marketplace": "سوق {name} ({repository})"
         },
         "skills": {
           "off": "متوقفة",
@@ -16907,7 +16910,12 @@
           "unavailable": "لا يمكنك تشغيل هذا المكوّن الإضافي أو إيقافه.",
           "failed": "تعذّر تغيير المكوّن الإضافي."
         },
-        "syncedFrom": "تمت المزامنة من {repository}"
+        "syncedFrom": "تمت المزامنة من {repository}",
+        "managed": {
+          "title": "يديره سوق {name}",
+          "description": "يزامن Onyx هذه الإضافة من {repository}. غيّرها في GitHub، ثم زامن السوق.",
+          "open": "فتح الأسواق"
+        }
       },
       "connection": {
         "askAdmin": "اسأل المسؤول",
@@ -17094,7 +17102,7 @@
     "marketplaces": {
       "status": {
         "ok": "جاهز",
-        "blocked": "محظور",
+        "blocked": "لا يمكن التثبيت",
         "not_supported": "غير مدعوم"
       },
       "scope": {
@@ -17115,7 +17123,9 @@
         "failedTitle": "لا يستطيع Onyx قراءة هذا السوق",
         "version": "v{version}",
         "willInstall": "سيتم تثبيتها",
-        "skills": "{count, plural, one {المهارة} other {المهارات}}: {names}"
+        "skills": "{count, plural, one {المهارة} other {المهارات}}: {names}",
+        "showUnusable": "{count, plural, one {إظهار # إدخال لا يمكن لـ Onyx استخدامه} other {إظهار # إدخالات لا يمكن لـ Onyx استخدامها}}",
+        "hideUnusable": "إخفاء الإدخالات التي لا يمكن لـ Onyx استخدامها"
       },
       "add": {
         "menuItem": "إضافة سوق",
@@ -17126,7 +17136,7 @@
         "repository": {
           "title": "المستودع",
           "description": "اكتب owner/repo أو عنوان URL للمستودع.",
-          "placeholder": "على سبيل المثال: anthropics/claude-plugins"
+          "placeholder": "على سبيل المثال: anthropics/claude-plugins-official"
         },
         "folder": {
           "title": "المجلد",
@@ -17174,7 +17184,7 @@
       "columns": {
         "marketplace": "السوق",
         "sync": "المزامنة",
-        "items": "العناصر"
+        "items": "الإضافات"
       },
       "items": "{count, plural, one {# إضافة} other {# إضافات}}",
       "tableLabel": "الأسواق",
@@ -17209,14 +17219,15 @@
       "remove": {
         "label": "إزالة",
         "title": "هل تريد إزالة {name}؟",
-        "description": "يؤدي هذا إلى حذف السوق و{count, plural, one {إضافته} other {إضافاته (#)}}. يفقد المستخدمون هذه الإضافات.",
+        "description": "يؤدي هذا إلى حذف السوق و{count, plural, one {إضافته} other {إضافاته (#)}}. يفقد الأعضاء هذه الإضافات.",
         "listLabel": "الإضافات المراد حذفها",
         "noPlugins": "لا توجد إضافات في هذا السوق.",
         "confirm": "إزالة",
         "done": "تمت إزالة {name}.",
         "failed": "تعذرت إزالة السوق.",
         "loadFailed": "تعذّر تحميل إضافات هذا السوق.",
-        "retry": "إعادة المحاولة"
+        "retry": "إعادة المحاولة",
+        "personalDescription": "يؤدي هذا إلى حذف السوق و{count, plural, one {إضافته} other {إضافاته (#)}}. تفقد هذه الإضافات."
       },
       "detail": {
         "title": "السوق",
@@ -17229,7 +17240,8 @@
         "entries": "الإدخالات ({count})",
         "noEntries": "لم تجد آخر مزامنة أي إدخالات.",
         "close": "إغلاق"
-      }
+      },
+      "readOnly": "يدير المسؤول هذا السوق."
     }
   },
   "integrations": {
@@ -17324,14 +17336,18 @@
         "mine": "أنشأتها أنت",
         "organization": "من مؤسستك",
         "shared": "تمت مشاركتها معك",
-        "builtin": "مدمجة"
+        "builtin": "مدمجة",
+        "marketplace": "من الأسواق",
+        "private": "خاصة بمستخدمين آخرين"
       },
       "source": {
         "mine": "بواسطتك",
         "organization": "من مؤسستك",
         "sharedBy": "شاركها {email}",
         "shared": "تمت مشاركتها معك",
-        "builtin": "مدمجة"
+        "builtin": "مدمجة",
+        "marketplace": "من {name}",
+        "privateTo": "خاص بـ {email}"
       },
       "subtitle": "{source} · {description}",
       "tag": {
@@ -17393,13 +17409,13 @@
       },
       "empty": {
         "title": "لا توجد إضافات بعد",
-        "description": "ارفع إضافة أو أنشئ مهارة. كل مهارة هي إضافة."
+        "description": "ارفع إضافة، أو أضف سوقًا من GitHub، أو أنشئ مهارة. كل مهارة هي إضافة."
       },
       "noMatches": {
         "title": "لا توجد إضافات مطابقة",
         "clear": "عرض كل الإضافات"
       },
-      "intro": "تجمع الإضافة المهارات والتكاملات التي تحتاجها. ارفع إضافة Claude Code أو Codex، أو أضف مهارة. كل مهارة تضيفها تأتي في إضافة خاصة بها.",
+      "intro": "تجمع الإضافة المهارات والتكاملات التي تحتاجها. ارفع إضافة Claude Code أو Codex، أو أضف سوقًا من GitHub، أو أضف مهارة. تأتي كل مهارة تضيفها في إضافة خاصة بها.",
       "integrations": "{available} من {needed} من التكاملات متاحة"
     },
     "skillPage": {

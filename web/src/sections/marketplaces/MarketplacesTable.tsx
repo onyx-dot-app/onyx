@@ -224,23 +224,24 @@ export default function MarketplacesTable() {
       kind: "actions",
       showColumnVisibility: false,
       showSorting: false,
-      cell: (row) => (
-        <Dropdown align="end">
-          <Dropdown.Trigger asChild>
-            <Button
-              prominence="tertiary"
-              size="sm"
-              icon={SvgMoreHorizontal}
-              aria-label={t("menu", { name: row.name })}
-              tooltip={t("menu", { name: row.name })}
+      cell: (row) =>
+        row.can_manage ? (
+          <Dropdown align="end">
+            <Dropdown.Trigger asChild>
+              <Button
+                prominence="tertiary"
+                size="sm"
+                icon={SvgMoreHorizontal}
+                aria-label={t("menu", { name: row.name })}
+                tooltip={t("menu", { name: row.name })}
+              />
+            </Dropdown.Trigger>
+            <Dropdown.Data
+              label={t("menu", { name: row.name })}
+              items={menu(row)}
             />
-          </Dropdown.Trigger>
-          <Dropdown.Data
-            label={t("menu", { name: row.name })}
-            items={menu(row)}
-          />
-        </Dropdown>
-      ),
+          </Dropdown>
+        ) : null,
     },
   ];
 
@@ -262,7 +263,7 @@ export default function MarketplacesTable() {
     );
   const rows = marketplaces ?? [];
   const attention = rows.filter(
-    (row) => marketplaceSyncState(row) === "failed"
+    (row) => row.can_manage && marketplaceSyncState(row) === "failed"
   );
   return (
     <Section gap={2} alignItems="stretch" height="auto">

@@ -68,7 +68,7 @@ function DetailBody({ marketplace }: DetailBodyProps) {
             label={t("detail.scope")}
             value={t(`scope.${marketplace.scope}`)}
           />
-          {marketplace.scope === "company" && (
+          {marketplace.default_installation_policy && (
             <KeyValue
               label={t("defaultAccess.title")}
               value={policyCopy.label(marketplace.default_installation_policy)}
@@ -180,7 +180,7 @@ export default function MarketplaceDetailModal({
           <Button prominence="secondary" disabled={busy} onClick={onClose}>
             {t("detail.close")}
           </Button>
-          {marketplace && (
+          {marketplace?.can_manage && (
             <Button
               icon={SvgRefreshCw}
               disabled={busy || syncing}

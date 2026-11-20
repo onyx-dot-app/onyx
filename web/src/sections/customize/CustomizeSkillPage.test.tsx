@@ -600,6 +600,7 @@ test("a skill synced from GitHub offers no content changes, and says why", async
         name: "acme/plugins",
         kind: "github",
         repository: "acme/plugins",
+        personal: false,
       },
     }),
     "/app/customize/skills/custom-1?edit=1"

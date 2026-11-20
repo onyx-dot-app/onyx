@@ -267,6 +267,7 @@ test("a synced plugin names its repository and hides restore and publish", async
       name: "acme/plugins",
       kind: "github",
       repository: "acme/plugins",
+      personal: true,
     },
     plugin: { manifest: null, skills: [], needs: [] },
   });
@@ -309,4 +310,37 @@ test("a synced plugin names its repository and hides restore and publish", async
   expect(
     screen.queryByRole("button", { name: "Publish update" })
   ).not.toBeInTheDocument();
+});
+
+test("a synced plugin names its marketplace and says that GitHub holds it", async () => {
+  window.history.replaceState(null, "", `/app/customize/plugins/${PLUGIN_ID}`);
+  const plugin = customFixture({
+    id: PLUGIN_ID,
+    name: "review-kit",
+    kind: "plugin",
+    user_permission: "OWNER",
+    owner: { id: "me", email: "me@example.com" },
+    content_locked: true,
+    marketplace: {
+      id: "22222222-2222-4222-8222-222222222222",
+      name: "acme-tools",
+      kind: "github",
+      repository: "acme/plugins",
+      personal: true,
+    },
+    plugin: { manifest: null, skills: [], needs: [] },
+  });
+  mockFetch({
+    "/api/skills": { builtins: [], customs: [plugin] },
+    [`/api/skills/${PLUGIN_ID}`]: plugin,
+  });
+  render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
+
+  expect(
+    await screen.findByText("Managed by the acme-tools marketplace")
+  ).toBeInTheDocument();
+  expect(
+    screen.getByText("acme-tools marketplace (acme/plugins)")
+  ).toBeInTheDocument();
+  expect(screen.queryByText("My uploads")).not.toBeInTheDocument();
 });

@@ -16872,7 +16872,9 @@
       "sections": {
         "organization": "조직 라이브러리",
         "mine": "내 업로드",
-        "shared": "나와 공유됨"
+        "shared": "나와 공유됨",
+        "marketplace": "마켓플레이스에서",
+        "private": "다른 사용자 전용"
       },
       "detail": {
         "title": "플러그인",
@@ -16893,7 +16895,8 @@
           "author": "작성자",
           "homepage": "홈페이지",
           "license": "라이선스",
-          "notUsed": "Onyx에서 사용하지 않음"
+          "notUsed": "Onyx에서 사용하지 않음",
+          "marketplace": "{name} 마켓플레이스 ({repository})"
         },
         "skills": {
           "off": "꺼짐",
@@ -16907,7 +16910,12 @@
           "unavailable": "이 플러그인을 켜거나 끌 수 없습니다.",
           "failed": "플러그인을 변경할 수 없습니다."
         },
-        "syncedFrom": "{repository}에서 동기화됨"
+        "syncedFrom": "{repository}에서 동기화됨",
+        "managed": {
+          "title": "{name} 마켓플레이스에서 관리합니다",
+          "description": "Onyx는 이 플러그인을 {repository}에서 동기화합니다. GitHub에서 변경한 다음 마켓플레이스를 동기화하세요.",
+          "open": "마켓플레이스 열기"
+        }
       },
       "connection": {
         "askAdmin": "관리자에게 문의하세요",
@@ -17094,7 +17102,7 @@
     "marketplaces": {
       "status": {
         "ok": "준비됨",
-        "blocked": "차단됨",
+        "blocked": "설치할 수 없음",
         "not_supported": "지원되지 않음"
       },
       "scope": {
@@ -17115,7 +17123,9 @@
         "failedTitle": "Onyx에서 이 마켓플레이스를 읽을 수 없습니다",
         "version": "v{version}",
         "willInstall": "설치될 항목",
-        "skills": "{count, plural, one {스킬} other {스킬}}: {names}"
+        "skills": "{count, plural, one {스킬} other {스킬}}: {names}",
+        "showUnusable": "{count, plural, one {Onyx가 사용할 수 없는 항목 #개 표시} other {Onyx가 사용할 수 없는 항목 #개 표시}}",
+        "hideUnusable": "Onyx가 사용할 수 없는 항목 숨기기"
       },
       "add": {
         "menuItem": "마켓플레이스 추가",
@@ -17126,7 +17136,7 @@
         "repository": {
           "title": "저장소",
           "description": "owner/repo 또는 저장소 URL을 입력하세요.",
-          "placeholder": "예: anthropics/claude-plugins"
+          "placeholder": "예: anthropics/claude-plugins-official"
         },
         "folder": {
           "title": "폴더",
@@ -17174,7 +17184,7 @@
       "columns": {
         "marketplace": "마켓플레이스",
         "sync": "동기화",
-        "items": "항목"
+        "items": "플러그인"
       },
       "items": "{count, plural, one {플러그인 #개} other {플러그인 #개}}",
       "tableLabel": "마켓플레이스",
@@ -17209,14 +17219,15 @@
       "remove": {
         "label": "제거",
         "title": "{name}을(를) 제거하시겠습니까?",
-        "description": "마켓플레이스와 {count, plural, one {해당 플러그인} other {해당 플러그인 #개}}가 삭제됩니다. 사용자는 이 플러그인을 사용할 수 없게 됩니다.",
+        "description": "마켓플레이스와 {count, plural, one {해당 플러그인} other {해당 플러그인 #개}}을 삭제합니다. 멤버는 이 플러그인을 잃게 됩니다.",
         "listLabel": "삭제할 플러그인",
         "noPlugins": "이 마켓플레이스에는 플러그인이 없습니다.",
         "confirm": "제거",
         "done": "{name}을(를) 제거했습니다.",
         "failed": "마켓플레이스를 제거할 수 없습니다.",
         "loadFailed": "이 마켓플레이스의 플러그인을 불러올 수 없습니다.",
-        "retry": "다시 시도"
+        "retry": "다시 시도",
+        "personalDescription": "마켓플레이스와 {count, plural, one {해당 플러그인} other {해당 플러그인 #개}}을 삭제합니다. 이 플러그인을 잃게 됩니다."
       },
       "detail": {
         "title": "마켓플레이스",
@@ -17229,7 +17240,8 @@
         "entries": "항목 ({count})",
         "noEntries": "마지막 동기화에서 항목을 찾지 못했습니다.",
         "close": "닫기"
-      }
+      },
+      "readOnly": "관리자가 이 마켓플레이스를 관리합니다."
     }
   },
   "integrations": {
@@ -17324,14 +17336,18 @@
         "mine": "내가 만든 항목",
         "organization": "조직에서",
         "shared": "나와 공유됨",
-        "builtin": "기본 제공"
+        "builtin": "기본 제공",
+        "marketplace": "마켓플레이스에서",
+        "private": "다른 사용자 전용"
       },
       "source": {
         "mine": "내가 만듦",
         "organization": "조직에서",
         "sharedBy": "{email}님이 공유함",
         "shared": "나와 공유됨",
-        "builtin": "기본 제공"
+        "builtin": "기본 제공",
+        "marketplace": "{name}에서",
+        "privateTo": "{email} 전용"
       },
       "subtitle": "{source} · {description}",
       "tag": {
@@ -17393,13 +17409,13 @@
       },
       "empty": {
         "title": "아직 플러그인이 없습니다",
-        "description": "플러그인을 업로드하거나 스킬을 만드세요. 각 스킬은 하나의 플러그인입니다."
+        "description": "플러그인을 업로드하거나, GitHub에서 마켓플레이스를 추가하거나, 스킬을 만드세요. 각 스킬은 하나의 플러그인입니다."
       },
       "noMatches": {
         "title": "일치하는 플러그인이 없습니다",
         "clear": "모든 플러그인 보기"
       },
-      "intro": "플러그인은 스킬과 스킬에 필요한 통합을 묶습니다. Claude Code 또는 Codex 플러그인을 업로드하거나 스킬을 추가하세요. 추가한 각 스킬은 자체 플러그인에 들어갑니다.",
+      "intro": "플러그인은 스킬과 스킬에 필요한 통합을 묶은 것입니다. Claude Code 또는 Codex 플러그인을 업로드하거나, GitHub에서 마켓플레이스를 추가하거나, 스킬을 추가하세요. 추가한 각 스킬은 자체 플러그인으로 제공됩니다.",
       "integrations": "{needed}개 중 {available}개 통합 사용 가능"
     },
     "skillPage": {

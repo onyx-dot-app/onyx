@@ -1,7 +1,8 @@
 "use client";
 
+import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { Card, MessageCard, Text } from "@opal/components";
+import { Button, Card, MessageCard, Text } from "@opal/components";
 import { Content, KeyValue, Section } from "@opal/layouts";
 import { SvgBlocks } from "@opal/icons";
 import type { StatusColor } from "@opal/types";
@@ -83,7 +84,9 @@ export default function MarketplacePreview({
   preview,
 }: MarketplacePreviewProps) {
   const t = useTranslations("plugins.marketplaces");
+  const [showUnusable, setShowUnusable] = useState(false);
   const ready = preview.entries.filter((entry) => entry.status === "ok");
+  const unusable = preview.entries.filter((entry) => entry.status !== "ok");
   return (
     <Section gap={3} alignItems="stretch" height="auto">
       <Card padding={4} border="solid">
@@ -133,9 +136,28 @@ export default function MarketplacePreview({
               {t("preview.empty")}
             </Text>
           ) : (
-            preview.entries.map((entry) => (
-              <PreviewEntry key={entry.key} entry={entry} />
-            ))
+            <>
+              {ready.map((entry) => (
+                <PreviewEntry key={entry.key} entry={entry} />
+              ))}
+              {unusable.length > 0 && (
+                <Section height="auto" alignItems="start">
+                  <Button
+                    prominence="tertiary"
+                    size="sm"
+                    onClick={() => setShowUnusable((shown) => !shown)}
+                  >
+                    {showUnusable
+                      ? t("preview.hideUnusable")
+                      : t("preview.showUnusable", { count: unusable.length })}
+                  </Button>
+                </Section>
+              )}
+              {showUnusable &&
+                unusable.map((entry) => (
+                  <PreviewEntry key={entry.key} entry={entry} />
+                ))}
+            </>
           )}
         </Section>
       )}

@@ -16872,7 +16872,9 @@
       "sections": {
         "organization": "Bibliothèque de l’organisation",
         "mine": "Mes envois",
-        "shared": "Partagés avec vous"
+        "shared": "Partagés avec vous",
+        "marketplace": "D'une marketplace",
+        "private": "Privé à un autre utilisateur"
       },
       "detail": {
         "title": "Plugin",
@@ -16893,7 +16895,8 @@
           "author": "Auteur",
           "homepage": "Page d'accueil",
           "license": "Licence",
-          "notUsed": "Non utilisé dans Onyx"
+          "notUsed": "Non utilisé dans Onyx",
+          "marketplace": "Marketplace {name} ({repository})"
         },
         "skills": {
           "off": "Désactivée",
@@ -16907,7 +16910,12 @@
           "unavailable": "Vous ne pouvez pas activer ou désactiver ce plugin.",
           "failed": "Impossible de modifier le plugin."
         },
-        "syncedFrom": "Synchronisé depuis {repository}"
+        "syncedFrom": "Synchronisé depuis {repository}",
+        "managed": {
+          "title": "Géré par la marketplace {name}",
+          "description": "Onyx synchronise ce plugin depuis {repository}. Modifiez-le dans GitHub, puis synchronisez la marketplace.",
+          "open": "Ouvrir les marketplaces"
+        }
       },
       "connection": {
         "askAdmin": "Demandez à votre administrateur",
@@ -17094,7 +17102,7 @@
     "marketplaces": {
       "status": {
         "ok": "Prêt",
-        "blocked": "Bloqué",
+        "blocked": "Impossible d'installer",
         "not_supported": "Non pris en charge"
       },
       "scope": {
@@ -17115,7 +17123,9 @@
         "failedTitle": "Onyx ne peut pas lire ce marketplace",
         "version": "v{version}",
         "willInstall": "Sera installé",
-        "skills": "{count, plural, one {Compétence} other {Compétences}} : {names}"
+        "skills": "{count, plural, one {Compétence} other {Compétences}} : {names}",
+        "showUnusable": "{count, plural, one {Afficher # entrée qu'Onyx ne peut pas utiliser} other {Afficher # entrées qu'Onyx ne peut pas utiliser}}",
+        "hideUnusable": "Masquer les entrées qu'Onyx ne peut pas utiliser"
       },
       "add": {
         "menuItem": "Ajouter un marketplace",
@@ -17126,7 +17136,7 @@
         "repository": {
           "title": "Dépôt",
           "description": "Saisissez owner/repo ou l’URL du dépôt.",
-          "placeholder": "Par exemple, anthropics/claude-plugins"
+          "placeholder": "Par exemple, anthropics/claude-plugins-official"
         },
         "folder": {
           "title": "Dossier",
@@ -17174,7 +17184,7 @@
       "columns": {
         "marketplace": "Marketplace",
         "sync": "Synchronisation",
-        "items": "Éléments"
+        "items": "Plugins"
       },
       "items": "{count, plural, one {# plugin} other {# plugins}}",
       "tableLabel": "Marketplaces",
@@ -17209,14 +17219,15 @@
       "remove": {
         "label": "Supprimer",
         "title": "Supprimer {name} ?",
-        "description": "Cela supprime le marketplace et {count, plural, one {son plugin} other {ses # plugins}}. Les utilisateurs perdent ces plugins.",
+        "description": "Cela supprime la marketplace et {count, plural, one {son plugin} other {ses # plugins}}. Les membres perdent ces plugins.",
         "listLabel": "Plugins à supprimer",
         "noPlugins": "Ce marketplace n’a aucun plugin.",
         "confirm": "Supprimer",
         "done": "{name} supprimé.",
         "failed": "Impossible de supprimer le marketplace.",
         "loadFailed": "Impossible de charger les plugins de ce marketplace.",
-        "retry": "Réessayer"
+        "retry": "Réessayer",
+        "personalDescription": "Cela supprime la marketplace et {count, plural, one {son plugin} other {ses # plugins}}. Vous perdez ces plugins."
       },
       "detail": {
         "title": "Marketplace",
@@ -17229,7 +17240,8 @@
         "entries": "Entrées ({count})",
         "noEntries": "La dernière synchronisation n’a trouvé aucune entrée.",
         "close": "Fermer"
-      }
+      },
+      "readOnly": "Votre administrateur gère cette marketplace."
     }
   },
   "integrations": {
@@ -17324,14 +17336,18 @@
         "mine": "Créées par vous",
         "organization": "De votre organisation",
         "shared": "Partagées avec vous",
-        "builtin": "Intégrées"
+        "builtin": "Intégrées",
+        "marketplace": "Des marketplaces",
+        "private": "Privés à d'autres utilisateurs"
       },
       "source": {
         "mine": "par vous",
         "organization": "de votre organisation",
         "sharedBy": "partagée par {email}",
         "shared": "partagée avec vous",
-        "builtin": "intégrée"
+        "builtin": "intégrée",
+        "marketplace": "de {name}",
+        "privateTo": "privé à {email}"
       },
       "subtitle": "{source} · {description}",
       "tag": {
@@ -17393,13 +17409,13 @@
       },
       "empty": {
         "title": "Aucun plugin pour le moment",
-        "description": "Importez un plugin ou créez un skill. Chaque skill est un plugin."
+        "description": "Importez un plugin, ajoutez une marketplace depuis GitHub ou créez une compétence. Chaque compétence est un plugin."
       },
       "noMatches": {
         "title": "Aucun plugin correspondant",
         "clear": "Afficher tous les plugins"
       },
-      "intro": "Un plugin regroupe des skills et les intégrations dont ils ont besoin. Importez un plugin Claude Code ou Codex, ou ajoutez un skill. Chaque skill ajouté a son propre plugin.",
+      "intro": "Un plugin regroupe des compétences et les intégrations dont elles ont besoin. Importez un plugin Claude Code ou Codex, ajoutez une marketplace depuis GitHub ou ajoutez une compétence. Chaque compétence que vous ajoutez est dans son propre plugin.",
       "integrations": "{available} intégrations disponibles sur {needed}"
     },
     "skillPage": {
