@@ -4015,7 +4015,8 @@
               "label": "RU pro Minute",
               "description": "Der Anteil am Ratenlimit Ihrer Microsoft-App-Registrierung, den dieser Connector nutzen darf, in Ressourceneinheiten (RU) pro Minute. Microsoft legt das Limit der App nach Lizenzstufe fest, von 1.250 bis 6.250 RU pro Minute. Leer lassen, damit Onyx das Limit lernt. [So finden Sie Ihre Stufe](https://docs.onyx.app/admins/connectors/official/microsoft-365/setup#rate-limits)",
               "others": "Andere Connectors mit dieser App-Registrierung: {connectors}. Summe: {total} RU pro Minute.",
-              "none": "Kein anderer Connector mit dieser App-Registrierung legt RU pro Minute fest."
+              "none": "Kein anderer Connector mit dieser App-Registrierung legt RU pro Minute fest.",
+              "unavailable": "Die RU pro Minute der anderen Connectors mit dieser App-Registrierung konnten nicht geladen werden."
             }
           }
         }

@@ -3,6 +3,7 @@
 import useSWR from "swr";
 import { useFormatter, useTranslations } from "next-intl";
 import { Text } from "@opal/components";
+import { IconLoader } from "@opal/loaders";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import type { StoredReportScope } from "@/lib/connectors/checks/findings";
@@ -34,13 +35,22 @@ export default function MicrosoftRateBudgetNote({
 }: MicrosoftRateBudgetNoteProps) {
   const t = useTranslations("admin.connectorsList");
   const format = useFormatter();
-  const { data } = useSWR<MicrosoftRateBudgets>(
+  const { data, error } = useSWR<MicrosoftRateBudgets>(
     scope === null
       ? null
       : SWR_KEYS.microsoftRateBudgets(scope.credentialId, scope.connectorId),
     errorHandlingFetcher
   );
-  if (!data) return null;
+  if (scope === null) return null;
+  if (!data) {
+    return error ? (
+      <Text font="secondary-body" color="text-03" as="p">
+        {t("connectors.microsoft.fields.ru_per_minute.unavailable")}
+      </Text>
+    ) : (
+      <IconLoader size={16} />
+    );
+  }
 
   const withValue = data.connectors.filter(
     (connector) => connector.ru_per_minute !== null

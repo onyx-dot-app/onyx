@@ -4015,7 +4015,8 @@
               "label": "每分钟 RU",
               "description": "此连接器可使用的 Microsoft 应用注册速率限制份额，单位为每分钟资源单位 (RU)。Microsoft 按许可证层级设置应用的限制，为每分钟 1,250 至 6,250 RU。留空则由 Onyx 学习该限制。[如何查找您的层级](https://docs.onyx.app/admins/connectors/official/microsoft-365/setup#rate-limits)",
               "others": "此应用注册上的其他连接器：{connectors}。合计：每分钟 {total} RU。",
-              "none": "此应用注册上没有其他连接器设置每分钟 RU。"
+              "none": "此应用注册上没有其他连接器设置每分钟 RU。",
+              "unavailable": "无法加载此应用注册上其他连接器的每分钟 RU。"
             }
           }
         }
