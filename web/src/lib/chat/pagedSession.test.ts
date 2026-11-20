@@ -29,6 +29,7 @@ function published(fileId: string, version: number): PublishedFile {
     mime_type: "text/markdown",
     artifact_id: "artifact",
     version,
+    thumbnail_file_id: null,
   };
 }
 

@@ -225,7 +225,9 @@
   starts (`lib/chat/publishedFiles.ts:startChatLoad`), and a load's list
   replaces the chat's list only when no load that started later gave it, so an
   older load never overwrites a newer list. The button is off while the reload
-  runs, and a failure shows a toast. A file tab's URL bar shows the file's path. It
+  runs, and a failure shows a toast. A file tab's URL bar shows the file's
+  path, then a Download button; the preview in the panel draws no copy,
+  download or count of its own (`FilePreviewBody`'s `actions`). It
   opens at half the page; the user drags its edge, or uses the arrow keys on
   the edge, to resize it, and the width is kept per chat through a reload. A
   button expands it over the whole page and back. A page too narrow for both
@@ -237,8 +239,15 @@
   on every branch, also by answers that are not loaded and by subagents: one
   tile per artifact, its newest version, newest artifact first (a new
   version keeps its artifact's place), with its title or else its
-  name, and a search in the URL bar. An image tile shows a thumbnail; other
-  tiles show the file's icon. The first time the panel shows Files, by
+  name, and a search in the URL bar. A text or markdown tile up to 256 KB
+  shows the start of its file, scaled down, once it nears the view
+  (`SWR_KEYS.chatFileTileText`), read through the preview's bounded
+  `loadChatFilePreview`; it loads at most once per file and session,
+  and a failure is kept as well, so a failed tile does not fetch its file
+  again. A PDF, PowerPoint or Word tile shows the JPEG of its first page that
+  the server drew when the file was published (`thumbnail_file_id`, lazy), and
+  its icon when it has none or the image fails. Other tiles show an image
+  thumbnail or the file's icon. The first time the panel shows Files, by
   any route, every listed file counts as seen; a file published later shows
   Craft's new-file marker until the panel shows it, also as a new version
   in its open tab. Several files can be open at once; tabs switch
@@ -254,7 +263,27 @@
   mounted, so switching back does not load the file again; a hidden one
   leaves layout (`content-visibility: hidden`). During a drag of the panel's
   edge, the content follows the width live, as in Craft, under an overlay
-  so the pointer hovers nothing in it. Closing the panel
+  so the pointer hovers nothing in it. A file tab and
+  the preview modal show a file the same way: markdown as a document, a CSV
+  or workbook as a grid with a sheet bar, a PDF one page at a time with page
+  thumbnails and zoom, a PowerPoint deck one slide at a time with a slide
+  list, a Word file as pages scaled to fit the width, an image fit to the
+  panel, and code, data, SVG and text as highlighted source. The PDF and
+  slide views share Craft's toolbar and resizable thumbnail column
+  (`sections/file-preview/PreviewControls.tsx`). The column is one tab stop,
+  the current page or slide, and the arrow keys move it, with focus. A
+  preview under 480 px wide, as on a phone, starts with the column hidden:
+  `lib/filePreview/hooks.ts:useThumbnailColumn` measures the row that holds
+  the column and the page when it mounts, before the first paint, then
+  follows its width until the user toggles the column. The
+  modal adds the counts,
+  copy and download over the content's bottom, and an image's actual-size
+  toggle. A loader shows only when a load takes over 300 ms. A file over its
+  format's limit (5 MB of text, 20 MB for Word or PowerPoint, 100 MB for a
+  PDF), a legacy `.ppt` and other types show one card with a download
+  instead. So does a failed load, with a retry, and a PDF, deck, Word file or
+  image that does not render, such as a HEIC image.
+  Closing the panel
   keeps its tabs, so reopening it, or coming back to the chat, restores them.
   A closed panel cannot be focused, and closing it returns focus to the
   control that opened it, or that last switched it from outside the panel,
@@ -316,7 +345,8 @@ This component owns:
   of [[llm-providers]];
 - the development `/api` proxy route.
 
-It shares the file preview renderers with [[craft-frontend]].
+It owns the chat file previews; [[craft-frontend]] has its own previewers
+for sandbox files.
 
 Neighbours own the rest. [[streaming-protocol]] owns the packet vocabulary,
 the enum mirrors, line framing and heartbeats. [[citations]] owns marker
@@ -439,9 +469,36 @@ is built from the output-panel parts that it shares with Craft's panel
 the tab rules, and `sections/output-panel/PanelResize.tsx:useOutputPanelWorkspace`, which measures
 the workspace, resizes the panel, makes the covered page inert after it moves
 focus out, and restores a full panel on Escape. [[craft-frontend]] lists the
-parts, and a change to them changes Craft's panel too. Its previews use
-`sections/modals/PreviewModal/ChatFilePreview.tsx`, the chat file previewer
-that `PreviewModal` also uses; Craft's previewers read sandbox paths, not
+parts, and a change to them changes Craft's panel too. A file tab and
+`PreviewModal` show a file through `sections/file-preview/FilePreview.tsx:FilePreviewBody`,
+with one renderer per format in `sections/file-preview/`. Each loads the file
+with `lib/filePreview/hooks.ts:useChatFilePreview`, an SWR read that
+`FilePreviewScope` scopes to the preview, so the file's bytes go and its
+download stops when the preview closes, and that does not revalidate. A
+file tab keys the scope by the shown file, so a tab that moves to another
+version starts a new preview with fresh controls.
+`FilePreviewBody` owns the card for a file that cannot show; a renderer only
+reports that it failed. Its loader,
+`lib/filePreview/loadChatFilePreview.ts:loadChatFilePreview`, reads
+`/api/chat/file/{id}` once with the default cache mode. The response's name
+and type pick the format (`lib/filePreview/format.ts:resolveFilePreviewFormat`).
+A spreadsheet reads the server's parsed sheets (`?parsed=true`) instead of
+the workbook, and an image or an unsupported file reads no body: the image
+loads from the file URL in an `<img>`. SVG shows as XML source, because the
+server serves it as `application/octet-stream`. Other bodies
+are read up to the format's limit while they stream, because the server sends
+no length. Text over 200,000 characters shows without highlighting, and
+markdown over it shows as source. Nothing makes an object URL. PDF.js loads only for a PDF, from
+the build's `/pdfjs/` assets, with `isEvalSupported` off. A Word file renders
+through `lib/docx/renderDocx.ts`, which sanitizes it, into a shadow root. A
+PowerPoint deck parses in the browser with `@jvmr/pptx-to-html` through
+`lib/pptx/renderPptx.ts`, which sanitizes each slide: no script, no style
+element, and no image or CSS `url()` from outside the deck: a style property
+with any `url()` that is not an embedded image goes. Each slide
+renders into its own shadow root, scaled from the deck's slide size. The
+parser uses namespaced selectors that jsdom lacks, so Jest tests give its
+output.
+Markdown shows raw HTML as text. Craft's previewers read sandbox paths, not
 chat files. Published files belong to the chat, not to a branch.
 `lib/chat/publishedFiles.ts:chatPublishedFiles` owns the Files list: the
 newest load's `published_files` (the newest version of each artifact, by

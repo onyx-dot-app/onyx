@@ -1043,6 +1043,7 @@ test("published files show in the timeline and as download cards after the answe
     mime_type: "text/csv",
     artifact_id: "artifact-report",
     version,
+    thumbnail_file_id: null,
   });
   const view = render(
     renderMessage([

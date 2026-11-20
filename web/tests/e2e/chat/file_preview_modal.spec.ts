@@ -257,30 +257,36 @@ test.describe("File preview modal from chat file links", () => {
       mockContent
     );
 
-    const aiMessage = page.getByTestId("onyx-ai-message").last();
-    const fileLink = aiMessage.getByRole("button", { name: "report.docx" });
-    await expect(fileLink).toBeVisible({ timeout: 5000 });
-    await fileLink.click();
+    const previewModal = new FilePreviewModalPage(page);
+    await previewModal.openFromLastAnswer("report.docx");
+    await previewModal.expectFileWithDownload("report.docx");
+    await previewModal.expectDocxPages();
+  });
 
-    const modal = page.getByRole("dialog");
-    await expect(modal).toBeVisible({ timeout: 5000 });
+  test("clicking a PDF file link opens the preview modal and pages through it", async ({
+    page,
+  }) => {
+    const mockContent = `Here is your report: [report.pdf](/api/chat/file/${MOCK_FILE_ID})`;
+    const pdfBuffer = fs.readFileSync(
+      path.join(__dirname, "../fixtures/two_pages.pdf")
+    );
 
-    // Verify the file name is shown in the header
-    await expect(modal.getByText("report.docx")).toBeVisible();
+    await page.route(`**/api/chat/file/${MOCK_FILE_ID}`, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/pdf",
+        body: pdfBuffer,
+      });
+    });
 
-    // Verify the header describes it as a Word Document
-    await expect(
-      modal
-        .locator("div")
-        .filter({ hasText: /Word Document/ })
-        .first()
-    ).toBeVisible();
+    await sendMessageWithMockResponse(page, "Give me the report", mockContent);
 
-    // Verify docx-preview rendered content into the body container
-    await expect(modal.locator(".docx-host")).toBeVisible({ timeout: 10000 });
-
-    // Verify the download button exists
-    await expect(modal.locator("a[download]")).toBeVisible();
+    const previewModal = new FilePreviewModalPage(page);
+    await previewModal.openFromLastAnswer("report.pdf");
+    await previewModal.expectPdfPage(1, 2);
+    await previewModal.nextPdfPage();
+    await previewModal.expectPdfPage(2, 2);
+    await previewModal.expectLastPdfPage();
   });
 
   test("clicking a legacy .doc file link shows unsupported message", async ({
@@ -302,25 +308,9 @@ test.describe("File preview modal from chat file links", () => {
       mockContent
     );
 
-    const aiMessage = page.getByTestId("onyx-ai-message").last();
-    const fileLink = aiMessage.getByRole("button", {
-      name: "old_report.doc",
-    });
-    await expect(fileLink).toBeVisible({ timeout: 5000 });
-    await fileLink.click();
-
-    const modal = page.getByRole("dialog");
-    await expect(modal).toBeVisible({ timeout: 5000 });
-
-    // Verify the file name is shown
-    await expect(modal.getByText("old_report.doc")).toBeVisible();
-
-    // Verify the legacy .doc message is shown
-    await expect(
-      modal.getByText(/Legacy .doc format cannot be previewed/)
-    ).toBeVisible();
-
-    // Verify download button is still available
-    await expect(modal.locator("a[download]")).toBeVisible();
+    const previewModal = new FilePreviewModalPage(page);
+    await previewModal.openFromLastAnswer("old_report.doc");
+    await previewModal.expectFileWithDownload("old_report.doc");
+    await previewModal.expectUnsupported();
   });
 });

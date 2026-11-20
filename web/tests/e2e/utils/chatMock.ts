@@ -175,6 +175,8 @@ export interface MockPublishedFile {
   // Null for a file saved without an artifact
   artifactId: string | null;
   version: number | null;
+  // The JPEG of a document's first page; none when it did not render
+  thumbnailFileId?: string;
 }
 
 /** The packets of one publish_files call, the same live and on replay. */
@@ -206,6 +208,7 @@ export function publishFilesPackets(
           mime_type: file.mimeType,
           artifact_id: file.artifactId,
           version: file.version,
+          thumbnail_file_id: file.thumbnailFileId ?? null,
         })),
         error: null,
       },

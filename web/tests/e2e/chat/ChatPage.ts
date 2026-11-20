@@ -49,6 +49,8 @@ export class ChatPage {
   /** The toggle at the header's end that opens and closes the right panel. */
   readonly rightPanelToggle: Locator;
   readonly publishedFilesPanel: Locator;
+  /** A file tab's Download button, in the right panel's URL bar. */
+  readonly rightPanelDownload: Locator;
 
   // Model picker: the "Add Model" button, then one pill per selected model
   readonly modelSelector: Locator;
@@ -84,6 +86,9 @@ export class ChatPage {
     });
     this.publishedFilesPanel = page.getByRole("complementary", {
       name: "Files",
+    });
+    this.rightPanelDownload = this.publishedFilesPanel.getByRole("button", {
+      name: "Download file",
     });
     this.modelSelector = page.getByTestId("model-selector");
     this.modelPills = this.modelSelector.locator(
@@ -160,6 +165,123 @@ export class ChatPage {
     });
   }
 
+  /**
+   * Opens a reply card's file in the right panel and checks that markdown
+   * shows as a document: its heading, not the source.
+   */
+  async expectMarkdownPreview(title: string, heading: string): Promise<void> {
+    await this.publishedFileCard(title).click();
+    const preview = this.publishedFilePreview(title);
+    await expect(preview.getByRole("heading", { name: heading })).toBeVisible();
+    await expect(preview).not.toContainText(`# ${heading}`);
+  }
+
+  /**
+   * Opens a reply card's file in the right panel and checks that it shows as
+   * a grid with `cell` in one cell.
+   */
+  async expectSpreadsheetPreview(title: string, cell: string): Promise<void> {
+    await this.publishedFileCard(title).click();
+    const preview = this.publishedFilePreview(title);
+    await expect(
+      preview.getByRole("cell", { name: cell, exact: true })
+    ).toBeVisible();
+  }
+
+  /**
+   * Opens a reply card's PDF in the right panel, checks that its first page
+   * draws, and pages to its last page.
+   */
+  async expectPdfPreview(title: string, pageCount: number): Promise<void> {
+    await this.publishedFileCard(title).click();
+    const preview = this.publishedFilePreview(title);
+    const controls = preview.getByRole("toolbar", { name: "PDF controls" });
+    await expect(controls).toContainText(`1 / ${pageCount}`);
+    await expect(
+      preview.getByRole("region", { name: "Page 1 preview" }).locator("canvas")
+    ).toBeVisible();
+    for (let page = 2; page <= pageCount; page++) {
+      await controls.getByRole("button", { name: "Next page" }).click();
+      await expect(controls).toContainText(`${page} / ${pageCount}`);
+    }
+    await expect(
+      controls.getByRole("button", { name: "Next page" })
+    ).toBeDisabled();
+    await expect(this.rightPanelDownload).toBeVisible();
+  }
+
+  /**
+   * Opens a reply card's PowerPoint deck in the right panel and checks its
+   * slides: the first shows `firstSlideText`, and the arrows step through
+   * the rest.
+   */
+  async expectPptxPreview(
+    title: string,
+    slideCount: number,
+    firstSlideText: string
+  ): Promise<void> {
+    await this.publishedFileCard(title).click();
+    const preview = this.publishedFilePreview(title);
+    const controls = preview.getByRole("toolbar", {
+      name: "Presentation controls",
+    });
+    await expect(controls).toContainText(`Slide 1 of ${slideCount}`);
+    await expect(
+      preview.getByRole("region", { name: `Slide 1 of ${slideCount}` })
+    ).toContainText(firstSlideText);
+    await expect(
+      preview
+        .getByRole("toolbar", { name: "Slides" })
+        .getByRole("button", { name: /^Slide \d+ of/ })
+    ).toHaveCount(slideCount);
+    for (let slide = 2; slide <= slideCount; slide++) {
+      await controls.getByRole("button", { name: "Next slide" }).click();
+      await expect(controls).toContainText(`Slide ${slide} of ${slideCount}`);
+    }
+    await expect(this.rightPanelDownload).toBeVisible();
+  }
+
+  /**
+   * Opens a reply card's Word file in the right panel and checks that its
+   * first page fits the panel's width. The page scale settles after the
+   * pages insert, so the width is read again on each try.
+   */
+  async expectDocxPreviewFitsPanel(title: string): Promise<void> {
+    await this.publishedFileCard(title).click();
+    const preview = this.publishedFilePreview(title);
+    const firstPage = preview.locator("section.docx").first();
+    await expect(firstPage).toBeVisible();
+    await expect
+      .poll(async () => {
+        const [previewBox, pageBox] = await Promise.all([
+          preview.boundingBox(),
+          firstPage.boundingBox(),
+        ]);
+        return (
+          previewBox !== null &&
+          pageBox !== null &&
+          pageBox.width <= previewBox.width
+        );
+      })
+      .toBe(true);
+  }
+
+  /** Checks that the right panel's resize handle is the top element at its center. */
+  async expectResizeHandleOnTop(): Promise<void> {
+    const handle = this.rightPanelResizeHandle();
+    await expect(handle).toBeVisible();
+    await expect
+      .poll(async () => {
+        const box = await handle.boundingBox();
+        if (!box) return null;
+        return this.page.evaluate(
+          ({ x, y }) => document.elementFromPoint(x, y)?.getAttribute("role"),
+          { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+        );
+      })
+      .toBe("separator");
+  }
+
   /** A tab of the right panel's tab strip, by its label. */
   rightPanelTab(label: string): Locator {
     return this.page.getByRole("tab", { name: label, exact: true });
@@ -182,7 +304,7 @@ export class ChatPage {
       "aria-selected",
       "true"
     );
-    await expect(preview.getByRole("link", { name: "Download" })).toBeVisible();
+    await expect(this.rightPanelDownload).toBeVisible();
     await expect(this.page.getByRole("dialog")).toHaveCount(0);
     await this.page.keyboard.press("Escape");
     await expect(preview).toBeHidden();
@@ -360,6 +482,25 @@ export class ChatPage {
     await expect(this.publishedFilesPanelCards().nth(index)).toContainText(
       text
     );
+  }
+
+  /** Checks that a Files tile shows its document's published thumbnail. */
+  async expectPublishedFilesPanelThumbnail(
+    title: string,
+    thumbnailFileId: string
+  ): Promise<void> {
+    const image = this.publishedFilesPanel
+      .getByRole("button", { name: `Open ${title}` })
+      .locator("img");
+    await expect(image).toHaveAttribute(
+      "src",
+      `/api/chat/file/${thumbnailFileId}`
+    );
+    await expect
+      .poll(() =>
+        image.evaluate((element: HTMLImageElement) => element.naturalWidth)
+      )
+      .toBeGreaterThan(0);
   }
 
   /**

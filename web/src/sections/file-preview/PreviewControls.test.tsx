@@ -1,12 +1,21 @@
 import { render, screen, fireEvent } from "@tests/setup/test-utils";
-import PreviewSidebar from "@/app/craft/components/output-panel/PreviewSidebar";
+import { PreviewSidebar } from "@/sections/file-preview/PreviewControls";
+
+afterEach(() => {
+  jest.restoreAllMocks();
+});
 
 // --- Thumbnail sidebar resizing ---
 it("resizes thumbnails with quick pointer release and keyboard limits", async () => {
   render(
     <div>
-      <PreviewSidebar label="Resize slide thumbnails" initialWidth={112}>
-        <div />
+      <PreviewSidebar
+        label="Resize slide thumbnails"
+        initialWidth={112}
+        previewWidth={0}
+        hidden={false}
+      >
+        {() => <div />}
       </PreviewSidebar>
     </div>
   );
@@ -39,8 +48,13 @@ it("resizes thumbnails with quick pointer release and keyboard limits", async ()
 it("keeps the resized width when thumbnails are hidden and shown", () => {
   const view = (hidden: boolean) => (
     <div>
-      <PreviewSidebar label="Resize thumbnails" hidden={hidden}>
-        <div />
+      <PreviewSidebar
+        label="Resize thumbnails"
+        initialWidth={144}
+        previewWidth={0}
+        hidden={hidden}
+      >
+        {() => <div />}
       </PreviewSidebar>
     </div>
   );

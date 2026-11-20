@@ -20,7 +20,7 @@ import { Section } from "@opal/layouts";
 import { codeSpan, markdown, stripBidiControls } from "@opal/utils";
 import type { PublishedFile } from "@/app/app/services/streamingModels";
 import { buildImgUrl } from "@/app/app/components/files/images/utils";
-import { DownloadButton } from "@/sections/modals/PreviewModal/variants/shared";
+import { DownloadButton } from "@/sections/file-preview/DownloadButton";
 import { useFormatBytes } from "@/hooks/useFormatBytes";
 import { getFileIcon } from "@/lib/utils";
 

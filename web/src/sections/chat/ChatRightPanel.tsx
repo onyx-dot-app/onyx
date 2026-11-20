@@ -15,9 +15,16 @@ import { createPortal } from "react-dom";
 import { useTranslations } from "next-intl";
 import { Button } from "@opal/components";
 import { Section, toast } from "@opal/layouts";
-import { SvgFiles, SvgSearchMenu, SvgSidebar } from "@opal/icons";
+import {
+  SvgDownloadCloud,
+  SvgFiles,
+  SvgSearchMenu,
+  SvgSidebar,
+} from "@opal/icons";
 import { cn, richNodes } from "@opal/utils";
 import type { PublishedFile } from "@/app/app/services/streamingModels";
+import { buildImgUrl } from "@/app/app/components/files/images/utils";
+import { downloadFile } from "@/lib/download";
 import {
   useChatSessionStore,
   useCurrentRightPanelState,
@@ -433,7 +440,8 @@ export const ChatRightPanel = memo(function ChatRightPanel({
               />
             }
             toolbar={
-              // As Craft's: reload before the search or the file's path
+              // As Craft's: reload before the search or the file's path, and
+              // a file's download after it
               shown !== RIGHT_PANEL_SOURCES_TAB && (
                 <PanelUrlBar
                   displayUrl={
@@ -452,7 +460,24 @@ export const ChatRightPanel = memo(function ChatRightPanel({
                     isRefreshing: false,
                     isUserRefreshing: reloading,
                   }}
-                />
+                >
+                  {shownFile && (
+                    <Button
+                      icon={SvgDownloadCloud}
+                      prominence="tertiary"
+                      size="sm"
+                      onClick={() =>
+                        downloadFile(shownFile.name, {
+                          url: buildImgUrl(shownFile.file_id),
+                        })
+                      }
+                      tooltip={t("downloadButton.tooltip")}
+                      aria-label={t("downloadButton.tooltip")}
+                    >
+                      {t("downloadButton.label")}
+                    </Button>
+                  )}
+                </PanelUrlBar>
               )
             }
           >

@@ -15,6 +15,7 @@ const FILE_A: PublishedFile = {
   mime_type: "text/markdown",
   artifact_id: "artifact-a",
   version: 1,
+  thumbnail_file_id: null,
 };
 
 function panel(sessionId: string) {

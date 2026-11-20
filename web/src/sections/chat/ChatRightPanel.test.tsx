@@ -3,8 +3,10 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
   within,
 } from "@tests/setup/test-utils";
+import { fileResponse } from "@tests/setup/fileResponse";
 import {
   PacketType,
   type PublishedFile,
@@ -77,6 +79,7 @@ const REPORT: PublishedFile = {
   mime_type: "text/markdown",
   artifact_id: "artifact-report",
   version: 1,
+  thumbnail_file_id: null,
 };
 const CHART: PublishedFile = {
   ...REPORT,
@@ -327,7 +330,11 @@ test("an older version's card opens that version in the artifact's tab, which sa
     cards[0]!.click();
   });
   expect(await preview("Draft report")).toBeVisible();
-  expect(fetchChatFile).toHaveBeenLastCalledWith("file-v1");
+  expect(fetchChatFile).toHaveBeenLastCalledWith(
+    "file-v1",
+    false,
+    expect.any(AbortSignal)
+  );
   // The name shows apart from the sentence, so a U+202E or right-to-left
   // name cannot reorder the version
   const tab = screen.getByRole("tab", { name: "Draft report (v1 of 2)" });
@@ -339,7 +346,11 @@ test("an older version's card opens that version in the artifact's tab, which sa
     cards[1]!.click();
   });
   expect(await preview("Final report")).toBeVisible();
-  expect(fetchChatFile).toHaveBeenLastCalledWith("file-v2");
+  expect(fetchChatFile).toHaveBeenLastCalledWith(
+    "file-v2",
+    false,
+    expect.any(AbortSignal)
+  );
   expect(panel().fileTabs).toHaveLength(1);
   expect(screen.getByRole("tab", { name: "Final report" })).toBeVisible();
   expect(screen.queryByRole("tab", { name: /v\d of/ })).toBeNull();
@@ -354,13 +365,21 @@ test("an open tab follows the newest version after a reload and a live publish; 
     screen.getByRole("button", { name: "Open Q3 report" }).click();
   });
   await preview("Q3 report");
-  expect(fetchChatFile).toHaveBeenLastCalledWith("file-v1");
+  expect(fetchChatFile).toHaveBeenLastCalledWith(
+    "file-v1",
+    false,
+    expect.any(AbortSignal)
+  );
 
   // A reload lists a version that a background subagent published
   await act(async () => {
     applyLoad([reportVersion(2)], [[first]]);
   });
-  expect(fetchChatFile).toHaveBeenLastCalledWith("file-v2");
+  expect(fetchChatFile).toHaveBeenLastCalledWith(
+    "file-v2",
+    false,
+    expect.any(AbortSignal)
+  );
   expect(
     document.querySelector('[data-published-preview="file-v2"]')
   ).not.toBeNull();
@@ -369,7 +388,11 @@ test("an open tab follows the newest version after a reload and a live publish; 
   await act(async () => {
     setReplies([[first], [reportVersion(3)]]);
   });
-  expect(fetchChatFile).toHaveBeenLastCalledWith("file-v3");
+  expect(fetchChatFile).toHaveBeenLastCalledWith(
+    "file-v3",
+    false,
+    expect.any(AbortSignal)
+  );
   expect(screen.getByRole("tab", { name: "Q3 report" })).toBeVisible();
 
   // The first card pins the tab to its version, through later publishes
@@ -383,7 +406,59 @@ test("an open tab follows the newest version after a reload and a live publish; 
   expect(
     screen.getByRole("tab", { name: "Q3 report (v1 of 4)" })
   ).toBeVisible();
-  expect(fetchChatFile).toHaveBeenLastCalledWith("file-v1");
+  expect(fetchChatFile).toHaveBeenLastCalledWith(
+    "file-v1",
+    false,
+    expect.any(AbortSignal)
+  );
+});
+
+test("a tab that moves to a new version starts a fresh preview and stops the old download", async () => {
+  const photo = (version: number): PublishedFile => ({
+    ...reportVersion(version),
+    name: "photo.png",
+    path: "/home/onyx/photo.png",
+    display_path: "photo.png",
+    mime_type: "image/png",
+  });
+  // The first version's download never ends
+  jest
+    .mocked(fetchChatFile)
+    .mockImplementation((fileId) =>
+      fileId === "file-v1"
+        ? new Promise(() => undefined)
+        : Promise.resolve(fileResponse("png", "image/png", "photo.png"))
+    );
+  renderChat([[photo(1)]]);
+  await act(async () => {
+    screen.getByRole("button", { name: "Preview photo.png" }).click();
+  });
+  await preview("Q3 report");
+  const firstDownload = jest
+    .mocked(fetchChatFile)
+    .mock.calls.find(([fileId]) => fileId === "file-v1")?.[2];
+  expect(firstDownload?.aborted).toBe(false);
+
+  await act(async () => {
+    setReplies([[photo(1)], [photo(2)]]);
+  });
+  await waitFor(() => expect(firstDownload?.aborted).toBe(true));
+  fireEvent.error(
+    await within(await preview("Q3 report")).findByRole("img", {
+      name: "photo.png",
+    })
+  );
+  expect(await screen.findByText("Cannot preview this file")).toBeVisible();
+
+  await act(async () => {
+    setReplies([[photo(1)], [photo(2)], [photo(3)]]);
+  });
+  expect(
+    await within(await preview("Q3 report")).findByRole("img", {
+      name: "photo.png",
+    })
+  ).toBeVisible();
+  expect(screen.queryByText("Cannot preview this file")).toBeNull();
 });
 
 test("several files open, switch and close like Craft's tabs", async () => {
@@ -676,7 +751,11 @@ test("a tab of a version newer than the listed one shows that version, without a
   expect(screen.getByRole("tab", { name: "Q3 report" })).toBeInTheDocument();
   expect(screen.queryByRole("tab", { name: /v\d of/ })).toBeNull();
   await preview("Q3 report");
-  expect(fetchChatFile).toHaveBeenLastCalledWith("file-v2");
+  expect(fetchChatFile).toHaveBeenLastCalledWith(
+    "file-v2",
+    false,
+    expect.any(AbortSignal)
+  );
 });
 
 test("the keyboard and a double click resize the panel and keep the width for the chat", () => {
@@ -937,6 +1016,7 @@ test("a card opens its own file, also one that the Files list does not hold", as
     title: "Pathless",
     artifact_id: null,
     version: null,
+    thumbnail_file_id: null,
   };
   renderChat([[pathless]]);
   applyLoad([], [[pathless]]);
@@ -952,7 +1032,11 @@ test("a card opens its own file, also one that the Files list does not hold", as
   });
 
   expect(await preview("Pathless")).toBeVisible();
-  expect(fetchChatFile).toHaveBeenLastCalledWith("file-pathless");
+  expect(fetchChatFile).toHaveBeenLastCalledWith(
+    "file-pathless",
+    false,
+    expect.any(AbortSignal)
+  );
   expect(screen.getByRole("tab", { name: "Pathless" })).toHaveAttribute(
     "aria-selected",
     "true"
@@ -987,7 +1071,11 @@ test("an open tab that moves to a new version marks that version seen", async ()
   await act(async () => {
     setReplies([[first], [reportVersion(2)]]);
   });
-  expect(fetchChatFile).toHaveBeenLastCalledWith("file-v2");
+  expect(fetchChatFile).toHaveBeenLastCalledWith(
+    "file-v2",
+    false,
+    expect.any(AbortSignal)
+  );
   expect(panel().seenFileIds).toContain("file-v2");
   update({ type: "showTab", tabId: "files" });
   expect(screen.queryByRole("img", { name: "New or updated" })).toBeNull();
@@ -1115,4 +1203,24 @@ test("a reload that fails says so and keeps the list", async () => {
   );
   expect(reload).toBeEnabled();
   expect(screen.getByRole("button", { name: "Open Q3 report" })).toBeVisible();
+});
+
+test("a file tab's URL bar shows its path and downloads it", async () => {
+  renderChat([[REPORT]]);
+  await act(async () => {
+    screen.getByRole("button", { name: "Preview report.md" }).click();
+  });
+  expect(await preview("Q3 report")).toBeVisible();
+  expect(screen.getByTestId("url-bar-pill")).toHaveTextContent("report.md");
+  // The preview draws no download of its own: the URL bar has it
+  expect(
+    within(await preview("Q3 report")).queryByRole("link", {
+      name: "Download",
+    })
+  ).toBeNull();
+  const click = jest
+    .spyOn(HTMLAnchorElement.prototype, "click")
+    .mockImplementation(() => undefined);
+  act(() => screen.getByRole("button", { name: "Download file" }).click());
+  expect(click).toHaveBeenCalledTimes(1);
 });

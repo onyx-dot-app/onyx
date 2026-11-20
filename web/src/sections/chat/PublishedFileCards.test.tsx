@@ -24,6 +24,7 @@ test("a card shows the title, type and size, and downloads the file", () => {
           mime_type: "text/csv",
           artifact_id: "artifact-report",
           version: 1,
+          thumbnail_file_id: null,
         },
         {
           file_id: "file-2",
@@ -35,6 +36,7 @@ test("a card shows the title, type and size, and downloads the file", () => {
           mime_type: "text/csv",
           artifact_id: "artifact-report",
           version: 2,
+          thumbnail_file_id: null,
         },
       ]}
     />
@@ -76,6 +78,7 @@ test("files that show one name also show their path in the chat's folder", () =>
     mime_type: "text/csv",
     artifact_id: null,
     version: null,
+    thumbnail_file_id: null,
   });
   render(
     <PublishedFileCards
@@ -120,6 +123,7 @@ test("a path or name that the model chose cannot reorder the type and size", () 
     mime_type: "text/csv",
     artifact_id: null,
     version: null,
+    thumbnail_file_id: null,
   };
   render(
     <PublishedFileCards
@@ -151,6 +155,7 @@ test("a click opens the file in the Files panel, not in a modal", () => {
     mime_type: "text/html",
     artifact_id: null,
     version: null,
+    thumbnail_file_id: null,
   };
   render(
     <PublishedFilesPanelContext.Provider
@@ -180,6 +185,7 @@ test("without a Files panel, every file shows as a card", () => {
     mime_type: "text/markdown",
     artifact_id: null,
     version: null,
+    thumbnail_file_id: null,
   }));
   render(<PublishedFileCards files={files} />);
 
@@ -206,6 +212,7 @@ test("without a Files panel, a click previews the file in a modal", async () => 
           mime_type: "text/markdown",
           artifact_id: null,
           version: null,
+          thumbnail_file_id: null,
         },
       ]}
     />
@@ -216,7 +223,11 @@ test("without a Files panel, a click previews the file in a modal", async () => 
   });
 
   expect(await screen.findByRole("dialog")).toBeInTheDocument();
-  expect(fetchChatFile).toHaveBeenCalledWith("file-md");
+  expect(fetchChatFile).toHaveBeenCalledWith(
+    "file-md",
+    false,
+    expect.any(AbortSignal)
+  );
 });
 
 test("a card and its preview show the name without its bidi controls", async () => {
@@ -242,6 +253,7 @@ test("a card and its preview show the name without its bidi controls", async () 
           mime_type: "image/jpeg",
           artifact_id: null,
           version: null,
+          thumbnail_file_id: null,
         },
       ]}
     />

@@ -1462,6 +1462,7 @@ describe("published files", () => {
     mime_type: "text/markdown",
     artifact_id: "artifact-report",
     version: 1,
+    thumbnail_file_id: null,
   };
   const publishStep: Packet[] = [
     {

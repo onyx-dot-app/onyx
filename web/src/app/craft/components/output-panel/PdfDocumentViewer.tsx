@@ -18,8 +18,11 @@ import {
   SvgChevronDown,
   SvgDownloadCloud,
 } from "@opal/icons";
-import DocumentPreviewControls from "@/app/craft/components/output-panel/DocumentPreviewControls";
-import PreviewSidebar from "@/app/craft/components/output-panel/PreviewSidebar";
+import {
+  DocumentToolbar,
+  PreviewSidebar,
+} from "@/sections/file-preview/PreviewControls";
+import { useThumbnailColumn } from "@/lib/filePreview/hooks";
 import { WorkspaceHome } from "@/sections/output-panel/WorkspaceHome";
 import "react-pdf/dist/Page/TextLayer.css";
 import "react-pdf/dist/Page/AnnotationLayer.css";
@@ -80,7 +83,7 @@ export default function PdfDocumentViewer({
   }
   const { pdf, failed, generation, pageNumber, pageSize } = documentState;
   const [zoom, setZoom] = useState<Zoom>("width");
-  const [showThumbnails, setShowThumbnails] = useState(true);
+  const thumbnails = useThumbnailColumn();
   const viewportRef = useRef<HTMLDivElement>(null);
   const [viewportSize, setViewportSize] = useState({ width: 0, height: 0 });
   const pageCount = pdf?.numPages ?? 0;
@@ -229,7 +232,7 @@ export default function PdfDocumentViewer({
     >
       {pageCount > 0 && (
         <>
-          <DocumentPreviewControls
+          <DocumentToolbar
             label={t("controls.label")}
             previousLabel={t("page.previous")}
             nextLabel={t("page.next")}
@@ -240,8 +243,8 @@ export default function PdfDocumentViewer({
             })}
             page={activePage}
             pageCount={pageCount}
-            showThumbnails={showThumbnails}
-            onToggleThumbnails={() => setShowThumbnails((value) => !value)}
+            showThumbnails={thumbnails.show}
+            onToggleThumbnails={thumbnails.toggle}
             onPageChange={selectPage}
           >
             <div className="flex items-center gap-0.5">
@@ -296,11 +299,16 @@ export default function PdfDocumentViewer({
                 onClick={() => zoomBy(0.25)}
               />
             </div>
-          </DocumentPreviewControls>
-          <div className="flex min-h-0 flex-1 overflow-hidden">
+          </DocumentToolbar>
+          <div
+            ref={thumbnails.observePreview}
+            className="flex min-h-0 flex-1 overflow-hidden"
+          >
             <PreviewSidebar
-              hidden={!showThumbnails}
+              hidden={!thumbnails.show}
+              previewWidth={thumbnails.previewWidth}
               label={t("thumbnails.resize")}
+              initialWidth={144}
             >
               {(width) => (
                 <div
