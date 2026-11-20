@@ -70,17 +70,11 @@ def _authorize_scope(scope: MarketplaceScope, user: User) -> None:
 
 
 def _authorized_marketplace(
-    marketplace_id: UUID,
-    user: User,
-    db_session: Session,
-    *,
-    manager_may_remove: bool = False,
+    marketplace_id: UUID, user: User, db_session: Session
 ) -> Marketplace:
     marketplace = get_github_marketplace(marketplace_id, db_session)
     if marketplace is None or (
-        marketplace.owner_user_id is not None
-        and marketplace.owner_user_id != user.id
-        and not (manager_may_remove and _is_manager(user))
+        marketplace.owner_user_id is not None and marketplace.owner_user_id != user.id
     ):
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Marketplace not found.")
     if marketplace.owner_user_id is None and not _is_manager(user):
@@ -326,11 +320,6 @@ def replace_marketplace_login(
     db_session: Session = Depends(get_session),
 ) -> MarketplaceDetail:
     _authorized_marketplace(marketplace_id, user, db_session)
-    if github_authorization_for(user.id, db_session) is None:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "Connect your GitHub account first, then replace the login.",
-        )
     replace_marketplace_login__no_commit(marketplace_id, user.id, db_session)
     _request_sync(marketplace_id, background_tasks, db_session)
     return _detail(
@@ -344,8 +333,7 @@ def delete_marketplace(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    # A manager removes a personal marketplace to finish deleting its owner.
-    _authorized_marketplace(marketplace_id, user, db_session, manager_may_remove=True)
+    _authorized_marketplace(marketplace_id, user, db_session)
     affected, file_ids = delete_github_marketplace__no_commit(
         marketplace_id, db_session
     )

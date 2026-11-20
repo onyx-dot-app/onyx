@@ -49,6 +49,7 @@ from onyx.db.sandbox import (
 from onyx.db.utils import is_check_violation, is_fk_violation
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.file_store.staging import delete_files_best_effort
 from onyx.server.features.build.sandbox.firecracker.purge import (
     purge_harness_sandboxes_in_background,
 )
@@ -973,16 +974,16 @@ def release_personas_owned_by_user__no_commit(
 _PRIVATE_SKILLS_BLOCK_DELETE = (
     "Transfer or delete this user's private skills before deleting the user."
 )
-_PERSONAL_MARKETPLACES_BLOCK_DELETE = (
-    "Delete this user's personal marketplaces before deleting the user."
-)
 
 
 def delete_user_from_db__no_commit(
     user_to_delete: User,
     db_session: Session,
-) -> None:
+) -> list[str]:
+    """Returns the bundle files of the user's personal marketplaces, which the
+    caller deletes after the commit."""
     # onyx.db.plugin imports this module through onyx.db.user_group.
+    from onyx.db.marketplace import delete_github_marketplace__no_commit
     from onyx.db.plugin import private_plugins_blocking_user_delete
 
     # A private plugin lives in its owner's "My uploads". Published plugins stay
@@ -992,30 +993,28 @@ def delete_user_from_db__no_commit(
     blocking = db_session.scalars(
         private_plugins_blocking_user_delete(user_to_delete.id)
     ).all()
-    personal_marketplaces = db_session.scalars(
-        select(Marketplace)
-        .where(
-            Marketplace.kind == MarketplaceKind.GITHUB,
-            Marketplace.owner_user_id == user_to_delete.id,
-        )
-        .order_by(Marketplace.name, Marketplace.id)
-    ).all()
-    if blocking or personal_marketplaces:
+    if blocking:
         raise OnyxError(
             OnyxErrorCode.CONFLICT,
-            _PRIVATE_SKILLS_BLOCK_DELETE
-            if blocking
-            else _PERSONAL_MARKETPLACES_BLOCK_DELETE,
+            _PRIVATE_SKILLS_BLOCK_DELETE,
             extra={
                 "private_plugins": [
                     {"id": str(plugin.id), "name": plugin.name} for plugin in blocking
                 ],
-                "personal_marketplaces": [
-                    {"id": str(marketplace.id), "name": marketplace.name}
-                    for marketplace in personal_marketplaces
-                ],
             },
         )
+    # A personal marketplace holds only copies of its repository.
+    marketplace_file_ids: list[str] = []
+    for marketplace_id in db_session.scalars(
+        select(Marketplace.id)
+        .where(
+            Marketplace.kind == MarketplaceKind.GITHUB,
+            Marketplace.owner_user_id == user_to_delete.id,
+        )
+        .order_by(Marketplace.id)
+    ).all():
+        _, file_ids = delete_github_marketplace__no_commit(marketplace_id, db_session)
+        marketplace_file_ids.extend(file_ids)
     for oauth_account in user_to_delete.oauth_accounts:
         db_session.delete(oauth_account)
 
@@ -1056,6 +1055,7 @@ def delete_user_from_db__no_commit(
         ):
             raise
         raise OnyxError(OnyxErrorCode.CONFLICT, _PRIVATE_SKILLS_BLOCK_DELETE) from exc
+    return marketplace_file_ids
 
 
 def delete_user_from_db(
@@ -1065,8 +1065,9 @@ def delete_user_from_db(
     # Collect before the cascade removes the rows; delete only after commit.
     sandbox_blob_paths = get_user_sandbox_blob_paths(db_session, user_to_delete.id)
     purge_targets = get_sandbox_purge_targets(db_session, user_to_delete.id)
-    delete_user_from_db__no_commit(user_to_delete, db_session)
+    marketplace_file_ids = delete_user_from_db__no_commit(user_to_delete, db_session)
     db_session.commit()
+    delete_files_best_effort(marketplace_file_ids, "personal marketplace cleanup")
     delete_sandbox_blobs_best_effort(sandbox_blob_paths)
     purge_harness_sandboxes_in_background(purge_targets)
 

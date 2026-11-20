@@ -97,6 +97,9 @@ def _unique_object(pairs: list[tuple[str, JsonValue]]) -> dict[str, JsonValue]:
     return result
 
 
+_NESTED_TOO_DEEPLY: Final = "The marketplace files are nested too deeply."
+
+
 def _json_object(data: bytes, path: str) -> dict[str, JsonValue]:
     if len(data) > _MANIFEST_MAX_BYTES:
         raise ValueError(f"{path} is larger than 1 MiB.")
@@ -106,6 +109,8 @@ def _json_object(data: bytes, path: str) -> dict[str, JsonValue]:
         raise ValueError(f"{path} is not UTF-8 text.") from exc
     except json.JSONDecodeError as exc:
         raise ValueError(f"{path} is not valid JSON: {exc}") from exc
+    except RecursionError as exc:
+        raise ValueError(f"{path} is nested too deeply.") from exc
     if not isinstance(value, dict):
         raise ValueError(f"{path} must be a JSON object.")
     return value
@@ -249,6 +254,8 @@ def build_entry_bundle(
         return BlockedPlugin(entry_key=entry_key, path=root, reason=exc.detail)
     except ValueError as exc:
         return BlockedPlugin(entry_key=entry_key, path=root, reason=str(exc))
+    except RecursionError:
+        return BlockedPlugin(entry_key=entry_key, path=root, reason=_NESTED_TOO_DEEPLY)
     return ReadyPlugin(
         entry_key=entry_key,
         path=root,
@@ -401,4 +408,6 @@ def read_marketplace(
             entries.append(result)
     except ValueError as exc:
         return FailedMarketplace(reason=str(exc))
+    except RecursionError:
+        return FailedMarketplace(reason=_NESTED_TOO_DEEPLY)
     return CompleteMarketplace(name=name.strip(), entries=tuple(entries))

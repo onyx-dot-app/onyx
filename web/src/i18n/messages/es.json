@@ -9282,12 +9282,6 @@
           },
           "ownersLoadFailed": "No se pudieron cargar los usuarios que pueden recibir las habilidades.",
           "retry": "Reintentar"
-        },
-        "marketplaces": {
-          "description": "<strong>{email}</strong> tiene {count, plural, one {# marketplace personal} other {# marketplaces personales}}. Al eliminar al usuario se quitan junto con los plugins que sincronizaron.",
-          "submit": {
-            "label": "Quitar y eliminar"
-          }
         }
       },
       "editModal": {
@@ -17208,8 +17202,8 @@
       },
       "replaceLogin": {
         "label": "Reemplazar el inicio de sesión",
-        "description": "Leer el repositorio con su conexión de GitHub.",
-        "done": "Onyx ahora lee {name} con su conexión de GitHub.",
+        "description": "Sincroniza el repositorio como tú. Onyx usa tu conexión de GitHub si tienes una.",
+        "done": "Onyx ahora sincroniza {name} como tú.",
         "failed": "No se pudo reemplazar el inicio de sesión."
       },
       "remove": {

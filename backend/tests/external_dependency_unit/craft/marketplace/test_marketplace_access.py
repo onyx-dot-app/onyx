@@ -1,10 +1,11 @@
 from typing import Any
 
-import pytest
+from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import PluginInstallationPolicy, SkillSharePermission
-from onyx.db.models import User
+from onyx.db.marketplace import get_github_marketplace
+from onyx.db.models import Plugin, PluginVersion, User
 from onyx.db.plugin import (
     PluginAccessChange,
     PluginUserGrant,
@@ -13,15 +14,14 @@ from onyx.db.plugin import (
 )
 from onyx.db.plugin_access import get_visible_plugin_ids
 from onyx.db.skill import list_chat_skills
-from onyx.db.users import delete_user_from_db__no_commit
-from onyx.error_handling.error_codes import OnyxErrorCode
-from onyx.error_handling.exceptions import OnyxError
+from onyx.db.users import delete_user_from_db
 from onyx.skills.marketplace import sync
 from tests.external_dependency_unit.craft.fake_github import FakeGitHub
 from tests.external_dependency_unit.craft.marketplace.helpers import (
     OWNER,
     REPO,
     Connections,
+    existing_files,
     make_marketplace,
     plugin_files,
     synced_plugins,
@@ -128,24 +128,38 @@ def test_personal_marketplace_is_seen_by_its_owner_and_shares(
     assert plugin_id not in get_visible_plugin_ids(other.id, db_session)
 
 
-def test_personal_marketplace_blocks_its_owners_delete(
+def test_user_delete_removes_their_personal_marketplace(
     db_session: Session,
     users: tuple[User, User, User],
+    fake_github: FakeGitHub,
+    connections: Connections,  # noqa: ARG001
     marketplace_ids: list[Any],
 ) -> None:
     owner = users[0]
+    fake_github.push(OWNER, REPO, plugin_files("alpha"))
     marketplace = make_marketplace(
         db_session, marketplace_ids, login=owner, owner=owner
     )
+    sync.sync_marketplace(marketplace.id)
+    plugin = synced_plugins(db_session, marketplace.id)["alpha"]
+    bundle_ids = [
+        file_id
+        for file_id in db_session.scalars(
+            select(PluginVersion.bundle_file_id).where(
+                PluginVersion.plugin_id == plugin.id
+            )
+        )
+        if file_id is not None
+    ]
+    assert bundle_ids
+    assert existing_files(db_session, bundle_ids) == set(bundle_ids)
     row = db_session.get(User, owner.id)
     assert row is not None
-    with pytest.raises(OnyxError) as exc:
-        delete_user_from_db__no_commit(row, db_session)
-    db_session.rollback()
-    assert exc.value.error_code == OnyxErrorCode.CONFLICT
-    assert exc.value.extra == {
-        "private_plugins": [],
-        "personal_marketplaces": [
-            {"id": str(marketplace.id), "name": marketplace.name}
-        ],
-    }
+
+    delete_user_from_db(row, db_session)
+
+    db_session.expire_all()
+    assert db_session.get(User, owner.id) is None
+    assert get_github_marketplace(marketplace.id, db_session) is None
+    assert db_session.get(Plugin, plugin.id) is None
+    assert existing_files(db_session, bundle_ids) == set()

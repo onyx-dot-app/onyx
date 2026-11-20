@@ -23,7 +23,8 @@ class GitHubMarketplaceConfig(BaseModel):
             value
         ):
             raise ValueError("Use a valid GitHub owner and repository name.")
-        return value
+        # GitHub names ignore case, so one form lets the unique indexes match.
+        return value.lower()
 
     @field_validator("folder")
     @classmethod

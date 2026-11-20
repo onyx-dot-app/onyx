@@ -9282,12 +9282,6 @@
           },
           "ownersLoadFailed": "スキルを受け取れるユーザーを読み込めませんでした。",
           "retry": "再試行"
-        },
-        "marketplaces": {
-          "description": "<strong>{email}</strong> には個人マーケットプレイスが {count, plural, other {# 件}} あります。ユーザーを削除すると、それらと同期されたプラグインも削除されます。",
-          "submit": {
-            "label": "削除してユーザーを削除"
-          }
         }
       },
       "editModal": {
@@ -17208,8 +17202,8 @@
       },
       "replaceLogin": {
         "label": "ログインを置き換え",
-        "description": "GitHub 接続でリポジトリを読み取ります。",
-        "done": "Onyx は {name} を GitHub 接続で読み取るようになりました。",
+        "description": "あなたとしてリポジトリを同期します。GitHub 接続がある場合は、それを使います。",
+        "done": "Onyx は {name} をあなたとして同期します。",
         "failed": "ログインを置き換えられませんでした。"
       },
       "remove": {

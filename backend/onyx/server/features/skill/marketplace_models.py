@@ -3,7 +3,7 @@ from enum import Enum
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from onyx.db.enums import PluginInstallationPolicy
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -41,8 +41,9 @@ class MarketplaceSourceRequest(BaseModel):
             return GitHubMarketplaceConfig(
                 owner=source.owner, repo=source.repo, folder=self.folder, ref=self.ref
             )
-        except ValueError as exc:
-            raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(exc)) from exc
+        except ValidationError as exc:
+            message = str(exc.errors()[0]["msg"]).removeprefix("Value error, ")
+            raise OnyxError(OnyxErrorCode.INVALID_INPUT, message) from exc
 
 
 class MarketplaceCreateRequest(MarketplaceSourceRequest):

@@ -167,6 +167,7 @@ from onyx.error_handling.exceptions import (
     log_onyx_error,
     onyx_error_to_json_response,
 )
+from onyx.file_store.staging import delete_files_best_effort
 from onyx.oauth_provider.auth import (
     authenticate_oauth_provider_request,
     extract_oauth_provider_bearer,
@@ -634,10 +635,15 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         purge_targets = await self.user_db.session.run_sync(
             partial(get_sandbox_purge_targets, user_id=user.id)
         )
-        await self.user_db.session.run_sync(
+        marketplace_file_ids = await self.user_db.session.run_sync(
             partial(delete_user_from_db__no_commit, user)
         )
         await self.user_db.session.commit()
+        await asyncio.to_thread(
+            delete_files_best_effort,
+            marketplace_file_ids,
+            "personal marketplace cleanup",
+        )
         await asyncio.to_thread(delete_sandbox_blobs_best_effort, sandbox_blob_paths)
         await asyncio.to_thread(purge_harness_sandboxes, purge_targets)
         await self.on_after_delete(user, request)

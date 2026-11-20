@@ -9282,12 +9282,6 @@
           },
           "ownersLoadFailed": "스킬을 받을 수 있는 사용자를 불러올 수 없습니다.",
           "retry": "다시 시도"
-        },
-        "marketplaces": {
-          "description": "<strong>{email}</strong>에게 개인 마켓플레이스가 {count, plural, other {#개}} 있습니다. 사용자를 삭제하면 해당 마켓플레이스와 동기화된 플러그인이 함께 제거됩니다.",
-          "submit": {
-            "label": "제거 후 삭제"
-          }
         }
       },
       "editModal": {
@@ -17208,8 +17202,8 @@
       },
       "replaceLogin": {
         "label": "로그인 교체",
-        "description": "GitHub 연결로 저장소를 읽습니다.",
-        "done": "이제 Onyx가 GitHub 연결로 {name}을(를) 읽습니다.",
+        "description": "사용자 본인으로 저장소를 동기화합니다. GitHub 연결이 있으면 그 연결을 사용합니다.",
+        "done": "이제 Onyx가 {name}을(를) 사용자 본인으로 동기화합니다.",
         "failed": "로그인을 교체할 수 없습니다."
       },
       "remove": {

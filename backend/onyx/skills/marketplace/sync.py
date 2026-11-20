@@ -1,3 +1,4 @@
+from collections.abc import Callable
 from typing import Final
 from uuid import UUID
 
@@ -60,7 +61,9 @@ from shared_configs.contextvars import (
 
 logger = setup_logger()
 
-SYNC_LOCK_TIMEOUT_SECONDS: Final = 30 * 60
+# Short so a killed worker frees the marketplace soon; a running sync extends it
+# between steps.
+SYNC_LOCK_TIMEOUT_SECONDS: Final = 5 * 60
 SYNC_TASK_EXPIRES_SECONDS: Final = 60 * 60
 LOGIN_GONE_ERROR: Final = (
     "The login user of this marketplace is gone. Replace the login."
@@ -72,6 +75,7 @@ _BUNDLE_CLEANUP = "marketplace bundle cleanup"
 def _resolve_remote_entries(
     entries: tuple[ReadyPlugin | BlockedPlugin | UnsupportedPlugin | RemotePlugin, ...],
     adapter: GitHubMarketplaceAdapter,
+    keep_alive: Callable[[], None],
 ) -> list[ReadyPlugin | BlockedPlugin | UnsupportedPlugin]:
     """Holds the files of one remote repository at a time. Raises ValueError
     when all ready plugins together pass the marketplace limits."""
@@ -96,6 +100,7 @@ def _resolve_remote_entries(
                 "other repositories."
             )
         else:
+            keep_alive()
             try:
                 files = adapter.fetch_remote(source)
             except OnyxError as exc:
@@ -116,16 +121,20 @@ def _resolve_remote_entries(
 
 
 def read_marketplace_repository(
-    adapter: GitHubMarketplaceAdapter, folder: str | None
+    adapter: GitHubMarketplaceAdapter,
+    folder: str | None,
+    keep_alive: Callable[[], None] = lambda: None,
 ) -> MarketplaceRead:
     revision = adapter.resolve_revision()
+    keep_alive()
     read = read_marketplace(read_repository_archive(adapter.fetch(revision)), folder)
+    keep_alive()
     if not isinstance(read, CompleteMarketplace):
         return MarketplaceRead(
             revision=revision, name=None, failure=read.reason, entries=[]
         )
     try:
-        entries = _resolve_remote_entries(read.entries, adapter)
+        entries = _resolve_remote_entries(read.entries, adapter, keep_alive)
     except ValueError as exc:
         return MarketplaceRead(
             revision=revision, name=None, failure=str(exc), entries=[]
@@ -171,6 +180,13 @@ def _record_failure(marketplace_id: UUID, error: str) -> MarketplaceSyncResult:
 def sync_marketplace(
     marketplace_id: UUID, lock: CacheLock | None = None
 ) -> MarketplaceSyncResult:
+    def keep_alive() -> None:
+        if lock is not None and lock.owned():
+            lock.extend(SYNC_LOCK_TIMEOUT_SECONDS)
+            get_cache_backend().set(
+                _syncing_key(marketplace_id), b"1", ex=SYNC_LOCK_TIMEOUT_SECONDS
+            )
+
     with get_session_with_current_tenant() as db_session:
         marketplace = get_github_marketplace(marketplace_id, db_session)
         if marketplace is None:
@@ -192,7 +208,7 @@ def sync_marketplace(
         db_session.expunge(login_user)
 
     try:
-        read = read_marketplace_repository(adapter, folder)
+        read = read_marketplace_repository(adapter, folder, keep_alive)
     except OnyxError as exc:
         if exc.error_code == OnyxErrorCode.NOT_FOUND and authorization is None:
             return _record_failure(
@@ -208,7 +224,9 @@ def sync_marketplace(
         plan = plan_marketplace_sync(
             entries, list_synced_plugins(marketplace_id, db_session)
         )
+    keep_alive()
     staged = _stage(entries, set(plan.create) | set(plan.add_version))
+    keep_alive()
     file_store = get_default_file_store()
     if lock is not None and not lock.owned():
         # The lock expired during a long read; a newer sync may have written.
@@ -281,8 +299,10 @@ def run_marketplace_sync(marketplace_id: UUID) -> None:
         _record_failure(marketplace_id, SYNC_FAILED_ERROR)
         raise
     finally:
-        cache.delete(_syncing_key(marketplace_id))
+        # A sync that lost its lock leaves the key to the newer sync, or to
+        # its expiry.
         if lock.owned():
+            cache.delete(_syncing_key(marketplace_id))
             lock.release()
 
 
