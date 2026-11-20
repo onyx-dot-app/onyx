@@ -16,63 +16,17 @@ from onyx.connectors.microsoft_utils.drive_items import (
 from onyx.connectors.models import (
     ConnectorFailure,
     Document,
-    HierarchyNode,
     ResolveTarget,
-    SlimDocumentStub,
 )
 from onyx.connectors.sharepoint import connector as sharepoint_connector
-from onyx.connectors.sharepoint.connector import SharepointConnector
 from onyx.connectors.sharepoint.listing import (
     SharepointListedKind,
     SharepointListingPayload,
 )
 from tests.external_dependency_unit.connectors.sharepoint.conftest import (
     MockSharepoint,
+    list_stubs,
 )
-
-
-class _Listing:
-    def __init__(self) -> None:
-        self.stubs: list[SlimDocumentStub] = []
-        self.nodes: list[HierarchyNode] = []
-        self.failures: list[ConnectorFailure] = []
-        self.steps = 0
-        self.largest_checkpoint = 0
-
-
-def list_stubs(
-    connector: SharepointConnector,
-    start: float = 0,
-    end: float | None = None,
-    include_permissions: bool = False,
-) -> _Listing:
-    """Runs the stub listing to its end, each step from the checkpoint as
-    docfetching stores it."""
-    listing = _Listing()
-    checkpoint = connector.build_dummy_checkpoint()
-    end = time.time() if end is None else end
-    while checkpoint.has_more:
-        listing.steps += 1
-        assert listing.steps < 10_000, "the listing does not end"
-        step = connector.retrieve_slim_docs_from_checkpoint(
-            start, end, checkpoint, include_permissions
-        )
-        while True:
-            try:
-                item = next(step)
-            except StopIteration as stop:
-                checkpoint = stop.value
-                break
-            if isinstance(item, SlimDocumentStub):
-                listing.stubs.append(item)
-            elif isinstance(item, HierarchyNode):
-                listing.nodes.append(item)
-            elif isinstance(item, ConnectorFailure):
-                listing.failures.append(item)
-        stored = checkpoint.model_dump_json()
-        listing.largest_checkpoint = max(listing.largest_checkpoint, len(stored))
-        checkpoint = connector.validate_checkpoint_json(stored)
-    return listing
 
 
 def test_the_listing_has_a_stub_for_each_file_and_page_and_downloads_nothing(

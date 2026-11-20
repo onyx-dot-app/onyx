@@ -104,7 +104,11 @@ def drive_item_from_payload(payload: SharepointListingPayload) -> DriveItemData:
 
 
 def site_page_stub(
-    site_page: dict[str, Any], *, site_id: str, site_url: str
+    site_page: dict[str, Any],
+    *,
+    site_id: str,
+    site_url: str,
+    site_name: str | None = None,
 ) -> SlimDocumentStub | None:
     """The stub of a listed site page, or None when the page has no id."""
     page_id = site_page.get("id")
@@ -131,6 +135,7 @@ def site_page_stub(
             created_datetime=created,
             last_modified_datetime=updated,
             site_id=site_id,
+            site_name=site_name,
             site_page=metadata,
         ),
     )

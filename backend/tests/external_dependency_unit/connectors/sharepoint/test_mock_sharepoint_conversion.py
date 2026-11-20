@@ -1,0 +1,228 @@
+"""The SharePoint conversion from the listing payload against the mock
+server: every entry point makes the same documents with the same access, and
+conversion makes only the calls it needs."""
+
+import time
+from typing import Any
+
+import pytest
+
+from onyx.access.models import ExternalAccess
+from onyx.connectors.load_all import load_all_from_connector
+from onyx.connectors.models import (
+    ConnectorFailure,
+    Document,
+    DocumentFailure,
+    HierarchyNode,
+    ResolveTarget,
+    SlimDocument,
+    SlimDocumentStub,
+)
+from onyx.connectors.sharepoint import connector as sharepoint_connector
+from onyx.connectors.sharepoint.connector import SharepointConnector
+from tests.external_dependency_unit.connectors.sharepoint.conftest import (
+    MockSharepoint,
+    list_stubs,
+)
+
+
+def _targets(stubs: list[SlimDocumentStub]) -> list[ResolveTarget]:
+    """The targets as the conversion stage builds them from stored stubs."""
+    return [
+        ResolveTarget(document_id=stub.id, listing_payload=stub.listing_payload)
+        for stub in stubs
+    ]
+
+
+def _convert(
+    connector: SharepointConnector,
+    stubs: list[SlimDocumentStub],
+    include_permissions: bool = False,
+) -> dict[str, Document]:
+    converted = list(connector.resolve_targets(_targets(stubs), include_permissions))
+    failures = [item for item in converted if isinstance(item, ConnectorFailure)]
+    assert not failures, failures[0].failure_message
+    assert not [item for item in converted if isinstance(item, HierarchyNode)]
+    documents = [item for item in converted if isinstance(item, Document)]
+    assert len(documents) == len({document.id for document in documents})
+    return {document.id: document for document in documents}
+
+
+def _comparable(document: Document) -> dict[str, Any]:
+    return document.model_dump(exclude={"file_id"})
+
+
+def test_conversion_makes_the_documents_of_the_fetching_path(
+    mock_sharepoint: MockSharepoint,
+) -> None:
+    end = time.time()
+    fetched = {
+        document.id: document
+        for document in load_all_from_connector(
+            mock_sharepoint.build_connector(), 0, end
+        ).documents
+    }
+    connector = mock_sharepoint.build_connector()
+    listing = list_stubs(connector, end=end)
+    mock_sharepoint.reset_stats()
+
+    converted = _convert(connector, listing.stubs)
+
+    assert set(converted) == set(fetched) == mock_sharepoint.document_ids()
+    for document_id, document in converted.items():
+        assert _comparable(document) == _comparable(fetched[document_id])
+
+    # One download for each file by its ids, one read for each page, and no
+    # metadata call, listing call or permission read.
+    stats = mock_sharepoint.stats()
+    files = mock_sharepoint.supported_file_ids()
+    assert stats["item_downloads"] == dict.fromkeys(files, 1)
+    assert stats["ops"]["graph.item.content"]["count"] == len(files)
+    assert stats["ops"]["graph.site.page.get"]["count"] == len(
+        mock_sharepoint.page_ids()
+    )
+    allowed = {"graph.item.content", "graph.site.page.get", "download_url.get"}
+    assert {op for op in stats["ops"] if not op.startswith("login.")} <= allowed, stats[
+        "ops"
+    ].keys()
+    assert stats["unmatched_requests"] == []
+
+
+@pytest.mark.usefixtures("ee_permission_sync")
+def test_every_entry_point_gives_the_same_documents_and_access(
+    mock_sharepoint: MockSharepoint,
+) -> None:
+    """The fetching path, the stub listing with conversion, the slim listing
+    and ``reindex`` agree on the documents and on who can read each one."""
+    end = time.time()
+    expected: dict[str, ExternalAccess] = {}
+    for file_id in mock_sharepoint.supported_file_ids():
+        effective = mock_sharepoint.describe_file(file_id)["effective_access"]
+        expected[file_id] = ExternalAccess(
+            external_user_emails=set(effective["user_emails"]),
+            external_user_group_ids=set(effective["group_ids"]),
+            is_public=effective["is_public"],
+        )
+    for page_id in mock_sharepoint.page_ids():
+        effective = mock_sharepoint.describe_page(page_id)["effective_access"]
+        expected[page_id] = ExternalAccess(
+            external_user_emails=set(effective["user_emails"]),
+            external_user_group_ids=set(effective["group_ids"]),
+            is_public=effective["is_public"],
+        )
+
+    fetching = load_all_from_connector(
+        mock_sharepoint.build_connector(certificate=True),
+        0,
+        end,
+        include_permissions=True,
+    )
+    fetched = {document.id: document for document in fetching.documents}
+    assert {doc_id: doc.external_access for doc_id, doc in fetched.items()} == expected
+
+    connector = mock_sharepoint.build_connector(certificate=True)
+    listing = list_stubs(connector, end=end, include_permissions=True)
+    converted = _convert(connector, listing.stubs, include_permissions=True)
+    assert {
+        doc_id: doc.external_access for doc_id, doc in converted.items()
+    } == expected
+    # The listing yields the same hierarchy nodes with the same access.
+    assert {node.raw_node_id: node.external_access for node in listing.nodes} == {
+        node.raw_node_id: node.external_access for node in fetching.hierarchy_nodes
+    }
+
+    slim = {
+        item.id: item.external_access
+        for batch in mock_sharepoint.build_connector(
+            certificate=True
+        ).retrieve_all_slim_docs_perm_sync(0, end)
+        for item in batch
+        if isinstance(item, SlimDocument)
+    }
+    assert {doc_id: slim[doc_id] for doc_id in expected} == expected
+
+    reindexed = [
+        item
+        for item in mock_sharepoint.build_connector(certificate=True).reindex(
+            [
+                ConnectorFailure(
+                    failed_document=DocumentFailure(
+                        document_id=document.id,
+                        document_link=document.sections[0].link,
+                    ),
+                    failure_message="again",
+                )
+                for document in fetched.values()
+            ],
+            include_permissions=True,
+        )
+        if isinstance(item, Document)
+    ]
+    assert {document.id: document.external_access for document in reindexed} == (
+        expected
+    )
+
+
+def test_a_second_run_downloads_only_the_changed_files(
+    own_mock_sharepoint: MockSharepoint,
+) -> None:
+    """Docfetching drops a stub whose document is in the index with the same
+    modified time and size (``drop_unchanged_stubs``). The stubs of a second
+    listing give it what it needs, so only a changed file is downloaded and
+    only a changed page is read."""
+    connector = own_mock_sharepoint.build_connector()
+    indexed = _convert(connector, list_stubs(connector).stubs)
+    changed = sorted(own_mock_sharepoint.supported_file_ids())[:2]
+    own_mock_sharepoint.touch(changed)
+    own_mock_sharepoint.reset_stats()
+
+    connector = own_mock_sharepoint.build_connector()
+    second = list_stubs(connector)
+    assert {stub.id for stub in second.stubs} == set(indexed)
+    to_convert = [
+        stub
+        for stub in second.stubs
+        if (stub.doc_updated_at, stub.size_bytes)
+        != (indexed[stub.id].doc_updated_at, indexed[stub.id].source_size_bytes)
+    ]
+    converted = _convert(connector, to_convert)
+
+    assert set(converted) == set(changed)
+    stats = own_mock_sharepoint.stats()
+    assert set(stats["item_downloads"]) == set(changed)
+    # The listing read no canvas, and no page changed.
+    assert stats["ops"]["graph.site.pages.list"]["canvas_expanded"] == 0
+    assert "graph.site.page.get" not in stats["ops"]
+
+
+def test_conversion_runs_in_a_thread_pool(
+    mock_sharepoint: MockSharepoint, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    mock_sharepoint.patch_config({"latency": {"enabled": True, "content_ms": 150}})
+    try:
+        connector = mock_sharepoint.build_connector()
+        stubs = list_stubs(connector).stubs
+        mock_sharepoint.reset_stats()
+        monkeypatch.setattr(sharepoint_connector, "SHAREPOINT_CONVERSION_WORKERS", 8)
+
+        _convert(connector, stubs)
+
+        assert 2 <= mock_sharepoint.stats()["max_inflight"] <= 8
+    finally:
+        mock_sharepoint.patch_config({"latency": {"enabled": False}})
+
+
+def test_a_target_with_no_payload_goes_through_reindex(
+    mock_sharepoint: MockSharepoint,
+) -> None:
+    file_id = min(mock_sharepoint.supported_file_ids())
+    target = ResolveTarget(
+        document_id=file_id,
+        document_link=mock_sharepoint.describe_file(file_id)["web_url"],
+    )
+
+    converted = list(mock_sharepoint.build_connector().resolve_targets([target]))
+
+    assert [item.id for item in converted if isinstance(item, Document)] == [file_id]
+    # `reindex` reads the item's metadata to find it. Conversion does not.
+    assert mock_sharepoint.op_count("graph.item.get") >= 1
