@@ -15,6 +15,7 @@ from onyx.db.marketplace import (
 from onyx.db.models import User
 from onyx.db.users import delete_user_from_db__no_commit
 from onyx.file_store.file_store import FileStore, get_default_file_store
+from onyx.server.features.skill import marketplace_api
 from onyx.skills import ingest
 from onyx.skills.ingest import delete_bundle_blob
 from onyx.skills.marketplace import sync
@@ -35,7 +36,10 @@ def fake_github(monkeypatch: pytest.MonkeyPatch) -> FakeGitHub:
 @pytest.fixture
 def connections(monkeypatch: pytest.MonkeyPatch) -> Connections:
     connections = Connections()
-    monkeypatch.setattr(sync, "github_authorization_for", connections.authorization_for)
+    for module in (sync, marketplace_api):
+        monkeypatch.setattr(
+            module, "github_authorization_for", connections.authorization_for
+        )
     return connections
 
 

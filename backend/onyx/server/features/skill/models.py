@@ -28,7 +28,6 @@ from onyx.skills.models import (
     SkillBundleFile,
     UserPastWriteLimit,
 )
-from onyx.utils.github import GITHUB_COMMIT_SHA_PATTERN
 
 
 class SkillUserShare(BaseModel):
@@ -371,33 +370,6 @@ class SkillBundleInspectResponse(BaseModel):
     description: str
     instructions_markdown: str
     files: list[SkillBundleFile]
-
-
-class GitHubSkillPreview(BaseModel):
-    path: str
-    name: str
-    description: str | None
-    unavailable_reason: str | None
-
-
-class GitHubSkillsPreviewRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    repository: str
-
-
-class GitHubSkillsPreviewResponse(BaseModel):
-    repository: str
-    revision: str
-    subpath: str | None
-    skills: list[GitHubSkillPreview]
-
-
-class GitHubSkillsImportRequest(GitHubSkillsPreviewRequest):
-    revision: str = Field(pattern=GITHUB_COMMIT_SHA_PATTERN)
-    subpath: str | None = None
-    paths: list[str] = Field(min_length=1, max_length=GITHUB_SKILL_MAX_COUNT)
-    sharing: "SkillShareRequest | None" = None
 
 
 class GitHubImportedSkill(BaseModel):

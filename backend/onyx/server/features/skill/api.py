@@ -10,7 +10,7 @@ from onyx.auth.permissions import (
     has_global_permission,
     require_permission,
 )
-from onyx.db.engine.sql_engine import get_session, get_session_with_tenant
+from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import Plugin, Skill, User
 from onyx.db.plugin import (
@@ -65,7 +65,6 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore, get_default_file_store
 from onyx.file_store.staging import delete_files_best_effort
-from onyx.integrations.github_auth import github_authorization_for
 from onyx.integrations.plugin_needs import (
     integrations_for_needs,
     need_views,
@@ -76,11 +75,7 @@ from onyx.integrations.service import reload_craft_sessions
 from onyx.server.features.skill.models import (
     GitHubImportedSkill,
     GitHubSkillNotImported,
-    GitHubSkillPreview,
-    GitHubSkillsImportRequest,
     GitHubSkillsImportResponse,
-    GitHubSkillsPreviewRequest,
-    GitHubSkillsPreviewResponse,
     OrganizationLibraryDefaultAccess,
     PluginUploadPreview,
     PluginUploadResponse,
@@ -136,7 +131,6 @@ from onyx.skills.ingest import (
     ingested_skill_bundle,
     stored_plugin_bundle,
 )
-from onyx.skills.ingest_from_github import fetch_github_skill_bundles
 from onyx.skills.limits import SKILL_WRITE_MAX_BYTES, SKILL_WRITE_MAX_FILES
 from onyx.skills.metadata import parse_skill_document
 from onyx.skills.models import (
@@ -150,7 +144,6 @@ from onyx.skills.push import (
     push_skill_to_affected_sandboxes,
     push_skills_and_commit,
 )
-from shared_configs.contextvars import get_current_tenant_id
 
 user_router = APIRouter(prefix="/skills")
 
@@ -246,12 +239,6 @@ def _import_response(
             )
         )
     return GitHubSkillsImportResponse(imported=imported, not_imported=not_imported)
-
-
-def _github_authorization_header(user: User) -> str | None:
-    """The Authorization header of the user's GitHub connection, or None."""
-    with get_session_with_tenant(tenant_id=get_current_tenant_id()) as db_session:
-        return github_authorization_for(user.id, db_session)
 
 
 def _skill_name(skill: Plugin, db_session: Session) -> str:
@@ -715,93 +702,6 @@ def save_plugin_upload(
             include_plugin_detail=True,
         ),
         enabled=enabled,
-    )
-
-
-@user_router.post("/github/preview")
-def preview_github_skills(
-    request: GitHubSkillsPreviewRequest,
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
-) -> GitHubSkillsPreviewResponse:
-    repository, skills = fetch_github_skill_bundles(
-        request.repository,
-        _github_authorization_header(user),
-    )
-    return GitHubSkillsPreviewResponse(
-        repository=f"{repository.owner}/{repository.repo}",
-        revision=repository.revision,
-        subpath=repository.subpath,
-        skills=[
-            GitHubSkillPreview(
-                path=skill.path,
-                name=skill.name,
-                description=skill.description,
-                unavailable_reason=skill.unavailable_reason,
-            )
-            for skill in skills
-        ],
-    )
-
-
-@user_router.post("/github/import")
-def import_github_skills(
-    request: GitHubSkillsImportRequest,
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
-    db_session: Session = Depends(get_session),
-) -> GitHubSkillsImportResponse:
-    _, discovered_skills = fetch_github_skill_bundles(
-        request.repository,
-        _github_authorization_header(user),
-        revision=request.revision,
-        subpath=request.subpath,
-        selected_paths=set(request.paths),
-    )
-    skills_by_path = {skill.path: skill for skill in discovered_skills}
-    not_imported: list[GitHubSkillNotImported] = []
-    sources: list[_BundleSource] = []
-    for path in dict.fromkeys(request.paths):
-        selected_skill = skills_by_path.get(path)
-        if selected_skill is None:
-            not_imported.append(
-                GitHubSkillNotImported(
-                    path=path,
-                    name=path.rsplit("/", maxsplit=1)[-1],
-                    reason="This skill was not found in the previewed revision.",
-                )
-            )
-            continue
-        if (
-            selected_skill.bundle_bytes is None
-            or selected_skill.unavailable_reason is not None
-        ):
-            not_imported.append(
-                GitHubSkillNotImported(
-                    path=path,
-                    name=selected_skill.name,
-                    reason=selected_skill.unavailable_reason
-                    or "This skill cannot be imported.",
-                )
-            )
-            continue
-        sources.append(
-            _BundleSource(
-                path=path,
-                name=selected_skill.name,
-                ingest=lambda file_store, skill=selected_skill: ingest_skill_bundle(
-                    skill.bundle_bytes or b"",
-                    f"{skill.name}.zip",
-                    file_store,
-                    expected_name=skill.name,
-                ),
-            )
-        )
-    return _import_skill_bundles(
-        sources,
-        not_imported,
-        request.sharing.to_change() if request.sharing is not None else None,
-        True,
-        user,
-        db_session,
     )
 
 

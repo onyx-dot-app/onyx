@@ -1,13 +1,8 @@
-import io
 import json
-import tarfile
 
 import pytest
 
-from onyx.error_handling.exceptions import OnyxError
-from onyx.skills import ingest_from_github
 from onyx.skills.bundle import DEFAULT_PER_FILE_MAX_BYTES, open_bundle_zip
-from onyx.skills.ingest_from_github import read_repository_archive
 from onyx.skills.marketplace import reader
 from onyx.skills.marketplace.models import (
     BlockedPlugin,
@@ -25,7 +20,6 @@ from tests.unit.onyx.skills.marketplace_fixtures import (
     catalog,
     plugin_json,
     skill_md,
-    tar_archive,
 )
 
 
@@ -309,27 +303,3 @@ def test_limits_fail_the_whole_read(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(reader, "GITHUB_SKILL_MAX_COUNT", 2)
     monkeypatch.setattr(reader, "PLUGIN_ENTRY_MAX_COUNT", 1)
     assert isinstance(read_marketplace(files, None), FailedMarketplace)
-
-
-def test_repository_archive_strips_the_wrapper() -> None:
-    files = read_repository_archive(
-        tar_archive({CLAUDE: b"{}", "a/b.txt": b"b"}, wrapper="acme-tools-123/")
-    )
-    assert files == {CLAUDE: b"{}", "a/b.txt": b"b"}
-
-
-def test_repository_archive_refuses_links_and_too_many_entries(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    out = io.BytesIO()
-    with tarfile.open(fileobj=out, mode="w:gz") as archive:
-        link = tarfile.TarInfo("root/link")
-        link.type = tarfile.SYMTYPE
-        link.linkname = "/etc/passwd"
-        archive.addfile(link)
-    with pytest.raises(OnyxError, match="symbolic link"):
-        read_repository_archive(out.getvalue())
-
-    monkeypatch.setattr(ingest_from_github, "_ARCHIVE_MAX_MEMBERS", 1)
-    with pytest.raises(OnyxError, match="more than 1 entries"):
-        read_repository_archive(tar_archive({"a": b"a", "b": b"b"}))

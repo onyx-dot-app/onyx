@@ -183,12 +183,10 @@ def list_synced_plugins(
     ]
 
 
-def list_marketplace_plugin_ids(
-    marketplace_id: UUID, db_session: Session
-) -> list[UUID]:
+def list_marketplace_plugins(marketplace_id: UUID, db_session: Session) -> list[Plugin]:
     return list(
         db_session.scalars(
-            select(Plugin.id)
+            select(Plugin)
             .where(Plugin.marketplace_id == marketplace_id)
             .order_by(Plugin.id)
         )
@@ -438,7 +436,8 @@ def delete_github_marketplace__no_commit(
     if marketplace is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Marketplace not found.")
     affected, file_ids = _delete_plugins__no_commit(
-        list_marketplace_plugin_ids(marketplace_id, db_session), db_session
+        [plugin.id for plugin in list_marketplace_plugins(marketplace_id, db_session)],
+        db_session,
     )
     db_session.delete(marketplace)
     db_session.flush()

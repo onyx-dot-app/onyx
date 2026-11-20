@@ -41,6 +41,7 @@ from onyx.skills.marketplace.models import (
     BlockedPlugin,
     CompleteMarketplace,
     GitHubRepoSource,
+    MarketplaceRead,
     MarketplaceSyncResult,
     MarketplaceSyncStatus,
     ReadyPlugin,
@@ -128,6 +129,33 @@ def _resolve_remote_entries(
     return resolved
 
 
+def read_marketplace_repository(
+    adapter: MarketplaceProviderAdapter, folder: str | None
+) -> MarketplaceRead:
+    """Read the marketplace at the newest commit of its ref. Raises OnyxError
+    when GitHub fails; a bad marketplace is a read with a failure."""
+    revision = adapter.resolve_revision()
+    archive = adapter.fetch(revision)
+    read = read_marketplace(
+        read_repository_archive(archive.archive_bytes), folder, archive.tree_shas
+    )
+    if not isinstance(read, CompleteMarketplace):
+        return MarketplaceRead(
+            revision=revision,
+            tree_shas=archive.tree_shas,
+            name=None,
+            failure=read.reason,
+            entries=[],
+        )
+    return MarketplaceRead(
+        revision=revision,
+        tree_shas=archive.tree_shas,
+        name=read.name,
+        failure=None,
+        entries=_resolve_remote_entries(read.entries, adapter),
+    )
+
+
 def _stage(
     entries: list[ReadyPlugin | BlockedPlugin | UnsupportedPlugin],
     keys: set[str],
@@ -185,9 +213,7 @@ def sync_marketplace(marketplace_id: UUID) -> MarketplaceSyncResult:
         db_session.expunge(login_user)
 
     try:
-        revision = adapter.resolve_revision()
-        archive = adapter.fetch(revision)
-        files = read_repository_archive(archive.archive_bytes)
+        read = read_marketplace_repository(adapter, folder)
     except OnyxError as exc:
         if exc.error_code == OnyxErrorCode.NOT_FOUND and authorization is None:
             return _record_failure(
@@ -195,10 +221,9 @@ def sync_marketplace(marketplace_id: UUID) -> MarketplaceSyncResult:
                 f"The GitHub connection of {login_email} is gone. Replace the login.",
             )
         return _record_failure(marketplace_id, exc.detail)
-    read = read_marketplace(files, folder, archive.tree_shas)
-    if not isinstance(read, CompleteMarketplace):
-        return _record_failure(marketplace_id, read.reason)
-    entries = _resolve_remote_entries(read.entries, adapter)
+    if read.failure is not None or read.name is None:
+        return _record_failure(marketplace_id, read.failure or SYNC_FAILED_ERROR)
+    entries = read.entries
 
     with get_session_with_current_tenant() as db_session:
         plan = plan_marketplace_sync(
@@ -216,8 +241,8 @@ def sync_marketplace(marketplace_id: UUID) -> MarketplaceSyncResult:
             result = apply_marketplace_sync__no_commit(
                 marketplace_id=marketplace_id,
                 name=read.name,
-                revision=revision,
-                tree_sha=(archive.tree_shas or {}).get(folder or ""),
+                revision=read.revision,
+                tree_sha=(read.tree_shas or {}).get(folder or ""),
                 entries=entries,
                 staged=staged,
                 created_by=login,

@@ -207,3 +207,17 @@ class MarketplaceSyncResult(BaseModel):
     blocked: list[str] = []
     cleanup_file_ids: list[str] = []
     affected_user_ids: set[UUID] = set()
+
+
+class MarketplaceRead(BaseModel):
+    """One read of a marketplace repository, with remote entries built."""
+
+    model_config = ConfigDict(frozen=True)
+
+    revision: str
+    tree_shas: dict[str, str] | None
+    # The marketplace.json name; None when the read failed.
+    name: str | None
+    # Why the read failed; None when it completed.
+    failure: str | None
+    entries: list[ReadyPlugin | BlockedPlugin | UnsupportedPlugin]
