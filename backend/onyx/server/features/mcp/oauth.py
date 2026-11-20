@@ -746,7 +746,7 @@ class IntegrationTokenStorage(TokenStorage):
             if (
                 record is None
                 or not self.load_stored_tokens
-                or record.status is IntegrationConnectionStatus.NEEDS_RECONNECT
+                or record.status is not IntegrationConnectionStatus.CONNECTED
             ):
                 return None
             return oauth_token_from_secret(record.secret, record.granted_scopes)

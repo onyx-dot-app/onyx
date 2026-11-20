@@ -9,7 +9,6 @@ from sqlalchemy.orm import Session
 from onyx.auth.permissions import require_permission
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
-from onyx.db.integration_connection import delete_connection__no_commit
 from onyx.db.models import User
 from onyx.integrations.access import (
     agent_integration_ids_for_user,
@@ -21,6 +20,7 @@ from onyx.integrations.access import (
 )
 from onyx.integrations.connections import (
     IntegrationStatus,
+    disconnect__no_commit,
     integration_status,
 )
 from onyx.integrations.service import (
@@ -201,7 +201,7 @@ def delete_member_connection(
     db_session: Session = Depends(get_session),
 ) -> IntegrationStatus:
     integration = get_member_integration(user, integration_id, db_session)
-    delete_connection__no_commit(db_session, integration.id, user.id)
+    disconnect__no_commit(integration, user, db_session)
     db_session.commit()
     reload_craft_sessions({user.id}, db_session)
     return integration_status(integration, user, db_session)
