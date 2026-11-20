@@ -1,7 +1,7 @@
 "use client";
 
 import useSWR from "swr";
-import { useTranslations } from "next-intl";
+import { useFormatter, useTranslations } from "next-intl";
 import { Text } from "@opal/components";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -33,6 +33,7 @@ export default function MicrosoftRateBudgetNote({
   scope,
 }: MicrosoftRateBudgetNoteProps) {
   const t = useTranslations("admin.connectorsList");
+  const format = useFormatter();
   const { data } = useSWR<MicrosoftRateBudgets>(
     scope === null
       ? null
@@ -51,10 +52,11 @@ export default function MicrosoftRateBudgetNote({
         : t("connectors.microsoft.fields.ru_per_minute.others", {
             connectors: withValue
               .map(
-                (connector) => `${connector.name} (${connector.ru_per_minute})`
+                (connector) =>
+                  `${connector.name} (${format.number(connector.ru_per_minute ?? 0)})`
               )
               .join(", "),
-            total: data.total_ru_per_minute,
+            total: format.number(data.total_ru_per_minute),
           })}
     </Text>
   );

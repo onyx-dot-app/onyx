@@ -42,8 +42,11 @@ class MicrosoftRateBudget(BaseModel):
 
 def configured_ru_per_minute(connector_specific_config: dict[str, Any]) -> int | None:
     """The connector's RU per minute, or None when it has none or the stored
-    value is not a positive integer."""
+    value is not a positive integer. The write path validates a numeric
+    string such as "600" and stores it as sent, so the reader accepts one."""
     value = connector_specific_config.get(RU_PER_MINUTE_FIELD)
+    if isinstance(value, str) and value.strip().isdigit():
+        value = int(value.strip())
     if isinstance(value, bool) or not isinstance(value, int) or value < 1:
         return None
     return value
