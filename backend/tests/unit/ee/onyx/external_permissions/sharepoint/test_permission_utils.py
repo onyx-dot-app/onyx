@@ -29,6 +29,8 @@ from onyx.connectors.microsoft_utils.models import (
     SharepointSecurableKind,
 )
 from onyx.connectors.microsoft_utils.sharepoint_access import (
+    GROUP_EXPANSION_TTL_SECONDS,
+    SharedSharepointPermissionCache,
     SharepointGroup,
     SharepointPermissionCache,
     get_sharepoint_external_access,
@@ -173,36 +175,55 @@ def test_ad_group_claims_token_and_guid_share_cache(
     assert result.group_ids == {"Engineering Members", "Engineering Owners"}
 
 
+class _FakeRedis:
+    def __init__(self) -> None:
+        self.values: dict[str, str] = {}
+
+    def get(self, key: str) -> str | None:
+        return self.values.get(key)
+
+    def set(self, key: str, value: str, ex: int | None = None) -> None:
+        assert ex == GROUP_EXPANSION_TTL_SECONDS
+        self.values[key] = value
+
+
 @patch(f"{MODULE}._get_nested_azuread_groups")
-def test_document_group_cache_survives_checkpoint(
-    mock_get_group: MagicMock,
+def test_the_shared_group_cache_serves_another_worker(
+    mock_get_group: MagicMock, monkeypatch: pytest.MonkeyPatch
 ) -> None:
+    """A second cache object stands in for a conversion thread of another
+    worker: it reads the expansion that the first one stored."""
+    redis = _FakeRedis()
+    monkeypatch.setattr(
+        "onyx.connectors.microsoft_utils.sharepoint_access.get_redis_client",
+        lambda: redis,
+    )
     group = _make_ad_group("Engineering", "engineering-id")
     nested_group = _make_ad_group("Platform", "platform-id")
     mock_get_group.side_effect = [{nested_group}, set()]
-    cache = SharepointPermissionCache()
-    _resolve_document_groups(MagicMock(), SITE_URL, {group}, cache)
 
-    checkpoint = SharepointConnectorCheckpoint(
-        has_more=True,
-        permission_cache=cache,
-    )
-    check_checkpoint_size(checkpoint)
-    restored = SharepointConnectorCheckpoint.model_validate_json(
-        checkpoint.model_dump_json()
-    )
-    _resolve_document_groups(
-        MagicMock(),
-        SITE_URL,
-        {group},
-        restored.permission_cache,
-    )
+    first = SharedSharepointPermissionCache()
+    resolved = _resolve_document_groups(MagicMock(), SITE_URL, {group}, first)
+    second = SharedSharepointPermissionCache()
+    again = _resolve_document_groups(MagicMock(), SITE_URL, {group}, second)
 
-    assert isinstance(
-        next(iter(restored.permission_cache.group_expansions.values())).nested_groups,
-        set,
-    )
+    assert again == resolved
     assert mock_get_group.call_count == 2
+    assert isinstance(next(iter(second.group_expansions.values())).nested_groups, set)
+    # The keys hold no site URL and no group name.
+    assert all(SITE_URL not in key and "Engineering" not in key for key in redis.values)
+
+
+def test_a_checkpoint_from_before_the_shared_cache_loads() -> None:
+    old = SharepointConnectorCheckpoint(has_more=True).model_dump(mode="json")
+    old["permission_cache"] = {
+        "group_expansions": {"4:engineering-id": {"nested_groups": []}}
+    }
+
+    restored = SharepointConnectorCheckpoint.model_validate(old)
+
+    check_checkpoint_size(restored)
+    assert "permission_cache" not in restored.model_dump_json()
 
 
 @patch(f"{MODULE}._get_nested_azuread_groups")

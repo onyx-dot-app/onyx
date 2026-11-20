@@ -152,6 +152,18 @@ drive from a time token, as the fetching path does. The listing does not keep
 the `@odata.deltaLink`: the walk drops items modified after the window end, so
 a run that continued from that link would miss them.
 
+**SharePoint conversion.** `SharepointConnector.resolve_targets` converts a
+batch of stubs in a thread pool of `SHAREPOINT_CONVERSION_WORKERS` (16). A file
+target makes one download by `/drives/{d}/items/{i}/content` and, with
+permission sync, the role-assignment reads from the list ids of the payload. A
+page target makes one read of the page with its canvas. No target makes a
+metadata call, and the listing already yielded the hierarchy nodes. A target
+with no payload goes through `reindex`. The group expansions of the permission
+reads are in `SharedSharepointPermissionCache`
+(`connectors/microsoft_utils/sharepoint_access.py`): in the process and in
+Redis under `sharepoint_group_expansion:<hash>` for one hour, so the threads of
+every worker expand a group one time. The checkpoint no longer holds them.
+
 ---
 
 ## Contracts and traps
