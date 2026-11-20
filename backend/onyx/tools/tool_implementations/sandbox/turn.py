@@ -5,6 +5,7 @@ from uuid import UUID
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.sandbox import get_or_create_sandbox
+from onyx.db.users import fetch_user_by_id
 from onyx.server.features.build.sandbox.harness_base import HarnessSandbox
 from onyx.server.features.build.sandbox.models import HarnessSandboxRef
 from onyx.utils.logger import setup_logger
@@ -33,6 +34,8 @@ class SandboxTurn:
         self._chat_session_id = chat_session_id
         self._lock = threading.Lock()
         self._ref: HarnessSandboxRef | None = None
+        self._skills_lock = threading.Lock()
+        self._skills_synced = False
 
     @property
     def sandbox(self) -> HarnessSandbox:
@@ -69,7 +72,31 @@ class SandboxTurn:
                 ref.sandbox_id,
                 ref.session_id,
             )
+        self._sync_skills(ref)
         return ref
+
+    def _sync_skills(self, ref: HarnessSandboxRef) -> None:
+        """Show the user's chat built-ins in the sandbox once per turn, before
+        the turn's first call runs. A failure leaves the last skills there."""
+        # Deferred: the skills push stack loads only when a tool runs.
+        from onyx.skills.push import build_chat_built_in_files
+
+        with self._skills_lock:
+            if self._skills_synced:
+                return
+            self._skills_synced = True
+            try:
+                with get_session_with_tenant(tenant_id=self._tenant_id) as db_session:
+                    user = fetch_user_by_id(db_session, self._user_id)
+                    files = build_chat_built_in_files(user, db_session) if user else {}
+                if files:
+                    self.sandbox.sync_skills(ref, files)
+            except Exception:
+                logger.exception(
+                    "sandbox_skills_sync_failed sandbox=%s session=%s",
+                    ref.sandbox_id,
+                    ref.session_id,
+                )
 
     def end(self) -> None:
         """End the turn if a call started one. Never raises."""

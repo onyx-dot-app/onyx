@@ -9,9 +9,13 @@ durable cache records (`harness_state`), so any API pod can serve
 a user's sandbox keeps (Onyx delete hooks call them through `purge`).
 """
 
+import hashlib
+import io
 import random
 import secrets
+import stat
 import time
+import zipfile
 from collections.abc import Callable, Generator, Iterable, Sequence
 from typing import IO
 from uuid import UUID
@@ -94,6 +98,7 @@ from onyx.server.features.build.sandbox.firecracker.harness_state import (
     get_exec_session,
     get_ids,
     get_session_save,
+    get_skills_image,
     has_marks,
     has_session_records,
     is_purged,
@@ -106,11 +111,13 @@ from onyx.server.features.build.sandbox.firecracker.harness_state import (
     remove_exec_session,
     sessions_on_instance,
     set_mark,
+    set_skills_image,
 )
 from onyx.server.features.build.sandbox.firecracker.models import (
     ExecSessionRecord,
     ExecSessionTable,
     SessionInstanceTable,
+    SkillsImage,
 )
 from onyx.server.features.build.sandbox.firecracker.session_saves import (
     BackgroundIdleStop,
@@ -146,6 +153,7 @@ from onyx.server.features.build.sandbox.models import (
     ExecCompletionName,
     ExecEvent,
     ExecOutputDelta,
+    FileSet,
     HarnessSandboxRef,
     SandboxFileType,
     SandboxPathFault,
@@ -176,6 +184,8 @@ _SESSION_SETUP_LOCK_PREFIX = "sandbox_fc:session_setup:"
 _SESSION_SETUP_LOCK_SECONDS = 30 * 60.0
 # Client token on each started command, to find it when Start gets no answer.
 _START_LABEL = "onyx_start_id"
+# Fixed zip entry times keep a skills bundle's bytes stable.
+_ZIP_EPOCH = (1980, 1, 1, 0, 0, 0)
 # The daemon refuses Start and Run with these while it keeps its most commands.
 _EXEC_CAP_REASONS = frozenset(
     {
@@ -241,6 +251,35 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
 
     def ensure_running(self, ref: HarnessSandboxRef) -> None:
         self._place(ref)
+
+    def sync_skills(self, ref: HarnessSandboxRef, files: FileSet) -> None:
+        bundle = _skills_bundle(files)
+        placed = self._place(ref)
+        tenant_cache = get_cache_backend(tenant_id=ref.tenant_id)
+        image = SkillsImage(
+            instance=(placed.vm.attempt, placed.vm.generation),
+            image_id=hashlib.sha256(bundle).hexdigest(),
+        )
+        if get_skills_image(tenant_cache, ref.sandbox_id) == image:
+            return
+        agent = self._client_factory.client(placed.node.address)
+        put = agent.put_managed_image(bundle)
+        swap = agent.swap_managed(
+            image_id=put.image.image_id,
+            targets=[
+                VmInstance(
+                    sandbox_id=placed.vm.sandbox_id,
+                    attempt=placed.vm.attempt,
+                    generation=placed.vm.generation,
+                    sandboxd_key=placed.sandboxd_key,
+                )
+            ],
+        )[0]
+        if not swap.ok:
+            raise HarnessSandboxError(
+                f"The skills drive did not change: {swap.reason}: {swap.message}"
+            )
+        set_skills_image(tenant_cache, ref.sandbox_id, image)
 
     def _place(self, ref: HarnessSandboxRef) -> PlacedVm:
         """The running, initialized VM. Init runs only when the daemon is not
@@ -1179,6 +1218,19 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
                 attempt=placement.attempt,
                 generation=placement.generation,
             )
+
+
+def _skills_bundle(files: FileSet) -> bytes:
+    """A managed bundle zip of `files`. The same files give the same bytes,
+    so the same image ID."""
+    buffer = io.BytesIO()
+    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+        for path in sorted(files):
+            info = zipfile.ZipInfo(path, _ZIP_EPOCH)
+            info.compress_type = zipfile.ZIP_DEFLATED
+            info.external_attr = (stat.S_IFREG | 0o644) << 16
+            zf.writestr(info, files[path])
+    return buffer.getvalue()
 
 
 def _raise_first(errors: list[Exception], what: str) -> None:

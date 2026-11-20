@@ -16,7 +16,11 @@ from onyx.skills.bundle import (
     normalize_custom_bundle,
     open_bundle_zip,
 )
-from onyx.skills.metadata import frontmatter_for_jsonb, parse_skill_document
+from onyx.skills.metadata import (
+    SKILLS_DIR,
+    frontmatter_for_jsonb,
+    parse_skill_document,
+)
 from onyx.skills.models import (
     SKILL_NAME_MAX_LENGTH,
     SKILL_NAME_PATTERN,
@@ -31,7 +35,6 @@ from onyx.skills.models import (
 )
 from onyx.utils.url import mcp_server_url_problem, normalize_mcp_server_url
 
-SKILLS_DIR: Final = "skills"
 MCP_JSON_PATH: Final = ".mcp.json"
 _JSON_MAX_BYTES: Final = 1024 * 1024
 NO_SKILL_OR_MCP_SERVER: Final = (

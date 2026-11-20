@@ -74,6 +74,7 @@ from onyx.integrations.plugin_needs import (
     turn_on_needed_integrations__no_commit,
 )
 from onyx.integrations.service import reload_craft_sessions
+from onyx.microvm.configs import HARNESS_SANDBOX_ENABLED
 from onyx.server.features.skill.models import (
     GitHubImportedSkill,
     GitHubSkillNotImported,
@@ -367,8 +368,9 @@ def list_chat_skills_for_current_user(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[ChatSkill]:
-    """The custom skills that the user's chat agents get, for the `@` picker."""
-    return list_chat_skills(db_session, user)
+    """The skills that the user's chat agents get, for the `@` picker. Built-ins
+    are in it when the deployment has chat VMs."""
+    return list_chat_skills(db_session, user, built_ins=HARNESS_SANDBOX_ENABLED)
 
 
 @user_router.post("/bulk")

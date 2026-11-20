@@ -203,7 +203,7 @@ def test_three_skills_load_as_three_run_time_and_chat_skills(
     ]
     chat = [
         (skill.name, skill.path)
-        for skill in list_chat_skills(db_session, author)
+        for skill in list_chat_skills(db_session, author, built_ins=False)
         if skill.name in {"alpha", "beta", "gamma"}
     ]
     assert chat == [
@@ -460,7 +460,7 @@ def test_chat_names_the_integrations_a_loaded_plugin_cannot_use(
         db_session,
     )
 
-    message = skills_catalog_message([SkillsListTool(author)], 200_000)
+    message = skills_catalog_message([SkillsListTool(author, built_ins=False)], 200_000)
 
     assert message is not None
     assert message.content.endswith(

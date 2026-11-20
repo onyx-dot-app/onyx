@@ -33,6 +33,13 @@ class SessionInstanceTable(BaseModel):
     sessions: dict[str, tuple[int, int]] = {}
 
 
+class SkillsImage(BaseModel):
+    """The skills image on the managed drive of one VM instance."""
+
+    instance: tuple[int, int]
+    image_id: str
+
+
 class SessionSave(BaseModel):
     """The committed save of one chat session's directory."""
 

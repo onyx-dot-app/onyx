@@ -429,7 +429,7 @@ def _user_skills(monkeypatch: pytest.MonkeyPatch) -> User:
     )
     monkeypatch.setattr(
         "onyx.tools.tool_implementations.skills.skill_tools.list_chat_skills",
-        lambda _session, _user: [
+        lambda _session, _user, **_kwargs: [
             ChatSkill(name="triage", description="Sort.", version_id=uuid4())
         ],
     )
@@ -441,7 +441,11 @@ def test_restored_chat_offers_the_skill_tools_once(_user_skills: User) -> None:
     llm = ScriptedLLM([Delta(content="done")])
     original = _chat_agent(
         llm,
-        tools=[EchoTool(), SkillsListTool(_user_skills), SkillsReadTool(_user_skills)],
+        tools=[
+            EchoTool(),
+            SkillsListTool(_user_skills, built_ins=False),
+            SkillsReadTool(_user_skills, built_ins=False),
+        ],
     )
     state = original.capture_state().model_dump(mode="json")
 
@@ -467,7 +471,10 @@ def test_restored_deep_research_offers_the_skill_tools_like_the_original(
     llm = ScriptedLLM([])
     original = DeepResearchAgent(
         messages=[],
-        allowed_tools=[SkillsListTool(_user_skills), SkillsReadTool(_user_skills)],
+        allowed_tools=[
+            SkillsListTool(_user_skills, built_ins=False),
+            SkillsReadTool(_user_skills, built_ins=False),
+        ],
         llm=llm,
         token_counter=len,
         user_identity=None,

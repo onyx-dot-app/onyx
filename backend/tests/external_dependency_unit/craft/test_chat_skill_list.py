@@ -30,7 +30,8 @@ from onyx.db.skill import (
 )
 from onyx.db.users import delete_user_from_db__no_commit
 from onyx.file_store.file_store import get_default_file_store
-from onyx.skills.content import read_versions_skill_md
+from onyx.skills.built_in import CHAT_BUILT_IN_SKILL_IDS
+from onyx.skills.content import read_chat_skills_md, read_versions_skill_md
 from onyx.skills.ingest import delete_bundle_blob, ingest_skill_bundle
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.craft.db_helpers import (
@@ -138,9 +139,13 @@ def test_chat_skills_use_the_version_each_user_runs(
     db_session.commit()
 
     author_skills = {
-        skill.name: skill for skill in list_chat_skills(db_session, author)
+        skill.name: skill
+        for skill in list_chat_skills(db_session, author, built_ins=False)
     }
-    org_skills = {skill.name: skill for skill in list_chat_skills(db_session, org_only)}
+    org_skills = {
+        skill.name: skill
+        for skill in list_chat_skills(db_session, org_only, built_ins=False)
+    }
 
     # Each skill has its version's description and short description.
     assert (
@@ -195,7 +200,9 @@ def test_chat_skills_keep_app_skills_and_leave_out_invalid_skills(
         runtime.name
         for runtime in list_runtime_skills_for_user(db_session=db_session, user=user)
     }
-    chat_names = {skill.name for skill in list_chat_skills(db_session, user)}
+    chat_names = {
+        skill.name for skill in list_chat_skills(db_session, user, built_ins=False)
+    }
 
     assert {app_skill.name, valid_skill.name} <= runtime_names
     assert invalid_skill.name not in runtime_names
@@ -236,7 +243,10 @@ def test_chat_skills_follow_install_settings_and_the_name_order(
     set_plugin_preferences__no_commit(user.id, [own.id], True, db_session)
     db_session.commit()
 
-    chat = {skill.name: skill for skill in list_chat_skills(db_session, user)}
+    chat = {
+        skill.name: skill
+        for skill in list_chat_skills(db_session, user, built_ins=False)
+    }
     runtime = {
         runtime.name: runtime.version.id
         for runtime in list_runtime_skills_for_user(db_session=db_session, user=user)
@@ -245,13 +255,17 @@ def test_chat_skills_follow_install_settings_and_the_name_order(
 
     assert hidden.name not in chat
     assert required.name in chat
-    assert hidden.name in {skill.name for skill in list_chat_skills(db_session, other)}
+    assert hidden.name in {
+        skill.name for skill in list_chat_skills(db_session, other, built_ins=False)
+    }
     assert required.name not in {
-        skill.name for skill in list_chat_skills(db_session, other)
+        skill.name for skill in list_chat_skills(db_session, other, built_ins=False)
     }
     # One skill keeps the name: the published one beats the user's own, as in
     # the sandbox.
-    assert [skill.name for skill in list_chat_skills(db_session, user)].count(name) == 1
+    assert [
+        skill.name for skill in list_chat_skills(db_session, user, built_ins=False)
+    ].count(name) == 1
     assert {skill.name: skill.version_id for skill in chat.values()} == runtime
     published_plugin = db_session.get(Plugin, published.id)
     hidden_plugin = db_session.get(Plugin, hidden.id)
@@ -264,3 +278,32 @@ def test_chat_skills_follow_install_settings_and_the_name_order(
     assert get_visible_versions_skill_md(
         [(hidden_plugin.current_version_id, "")], other.id, db_session
     )
+
+
+def test_chat_built_ins_need_the_sandbox_and_name_their_vm_folder(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    users: tuple[User, User],
+) -> None:
+    user, _ = users
+    assert not any(
+        skill.built_in_skill_id
+        for skill in list_chat_skills(db_session, user, built_ins=False)
+    )
+
+    built_ins = {
+        skill.name: skill
+        for skill in list_chat_skills(db_session, user, built_ins=True)
+        if skill.built_in_skill_id is not None
+    }
+    assert "pptx" in built_ins
+    assert {skill.built_in_skill_id for skill in built_ins.values()} <= (
+        CHAT_BUILT_IN_SKILL_IDS
+    )
+
+    pptx = built_ins["pptx"]
+    skill_md = read_chat_skills_md([pptx], user.id, db_session)[
+        (pptx.version_id, pptx.path)
+    ]
+    assert skill_md.startswith("Skill files: /mnt/skills/pptx/")
+    assert "python /mnt/skills/pptx/scripts/lint.py" in skill_md

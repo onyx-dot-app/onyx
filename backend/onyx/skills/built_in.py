@@ -31,7 +31,7 @@ from sqlalchemy.orm import Session
 from onyx.db.enums import ExternalAppType
 from onyx.image_gen.generation import is_image_generation_configured
 from onyx.server.features.build.configs import ENABLE_BROWSER
-from onyx.skills.metadata import parse_skill_document
+from onyx.skills.metadata import SKILLS_DIR, parse_skill_document
 from onyx.skills.models import SkillName, SkillUsage
 
 # On-disk root for built-in skill content (one ``<skill_id>/`` dir each). Pushed
@@ -56,6 +56,51 @@ def _always_available(_: Session) -> bool:
     return True
 
 
+class BuiltInPluginSkill(BaseModel):
+    """One skill of a built-in plugin. ``path`` is "" when the built-in is one
+    skill with SKILL.md at its root, else ``skills/<folder>``, as in an
+    uploaded plugin version."""
+
+    model_config = ConfigDict(frozen=True)
+
+    path: str
+    name: str
+    description: str
+
+
+@cache
+def _plugin_skills(source_dir: Path) -> tuple[BuiltInPluginSkill, ...]:
+    for root in (source_dir / "SKILL.md", source_dir / "SKILL.md.template"):
+        if root.is_file():
+            document = parse_skill_document(
+                root.read_bytes(), directory_name=source_dir.name
+            )
+            return (
+                BuiltInPluginSkill(
+                    path="",
+                    name=source_dir.name,
+                    description=document.metadata.description,
+                ),
+            )
+    skills: list[BuiltInPluginSkill] = []
+    skills_dir = source_dir / SKILLS_DIR
+    for folder in sorted(skills_dir.iterdir()) if skills_dir.is_dir() else ():
+        skill_md = folder / "SKILL.md"
+        if not skill_md.is_file():
+            continue
+        document = parse_skill_document(
+            skill_md.read_bytes(), directory_name=folder.name
+        )
+        skills.append(
+            BuiltInPluginSkill(
+                path=f"{SKILLS_DIR}/{folder.name}",
+                name=document.metadata.name,
+                description=document.metadata.description,
+            )
+        )
+    return tuple(skills)
+
+
 class BuiltInSkillDefinition(BaseModel):
     """Runtime behavior for one built-in skill (the resolved view a provider
     produces). ``built_in_skill_id`` is the stable identifier and on-disk
@@ -77,6 +122,11 @@ class BuiltInSkillDefinition(BaseModel):
     @property
     def source_dir(self) -> Path:
         return BUILTIN_SKILLS_PATH / self.built_in_skill_id
+
+    @property
+    def skills(self) -> tuple[BuiltInPluginSkill, ...]:
+        """The skills of this built-in plugin, read once from disk."""
+        return _plugin_skills(self.source_dir)
 
     @computed_field
     @property
@@ -147,16 +197,11 @@ class BuiltInSkillRegistry:
             if provider.skill_id in definitions:
                 raise ValueError(f"Duplicate built-in skill_id: {provider.skill_id!r}")
             definition = provider.to_definition()
-            source_name = "SKILL.md.template" if definition.has_template else "SKILL.md"
-            source_path = definition.source_dir / source_name
-            if not source_path.is_file():
+            if not definition.skills:
                 raise ValueError(
-                    f"Built-in skill {provider.skill_id!r} is missing {source_name}"
+                    f"Built-in {provider.skill_id!r} has no SKILL.md at its root "
+                    f"or in {SKILLS_DIR}/<name>/"
                 )
-            parse_skill_document(
-                source_path.read_bytes(),
-                directory_name=provider.skill_id,
-            )
             definitions[provider.skill_id] = definition
 
             if isinstance(provider, ExternalAppBuiltInProvider):
@@ -248,6 +293,13 @@ def built_in_skills_usage() -> SkillUsage:
     return SkillUsage(
         bytes=sum(path.stat().st_size for path in paths), files=len(paths)
     )
+
+
+# The built-ins that chat offers when its turn has the sandbox tools. They run
+# from the chat VM's skills drive and need no Onyx API access from the VM.
+CHAT_BUILT_IN_SKILL_IDS: Final[frozenset[str]] = frozenset({"pptx", "browser"})
+# Where the chat VM shows the built-ins, one folder for each skill.
+CHAT_SKILLS_MOUNT_PATH: Final = "/mnt/skills"
 
 
 # Named handles so callers avoid bare identity literals.

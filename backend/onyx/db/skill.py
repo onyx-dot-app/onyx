@@ -106,7 +106,12 @@ from onyx.db.users import fetch_user_by_id
 from onyx.db.utils import UNSET, UnsetType, is_fk_violation
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.skills.built_in import BUILT_IN_SKILLS, EXTERNAL_APP_SKILL_ID_TO_APP_TYPE
+from onyx.skills.built_in import (
+    BUILT_IN_SKILLS,
+    CHAT_BUILT_IN_SKILL_IDS,
+    EXTERNAL_APP_SKILL_ID_TO_APP_TYPE,
+    BuiltInSkillDefinition,
+)
 from onyx.skills.ingest import IngestedBundle
 from onyx.skills.models import (
     ChatSkill,
@@ -347,6 +352,19 @@ def list_skills(*, db_session: Session, user: User) -> list[StoredSkill]:
     return [*built_ins, *customs]
 
 
+def _built_in_skill_folders(
+    definition: BuiltInSkillDefinition,
+) -> tuple[RuntimeSkillFolder, ...]:
+    """The skill folders of a built-in plugin; none for a one-skill built-in,
+    as for a custom skill version."""
+    if is_skill_version(skill.path for skill in definition.skills):
+        return ()
+    return tuple(
+        RuntimeSkillFolder(path=skill.path, name=skill.name)
+        for skill in definition.skills
+    )
+
+
 def _runtime_built_in_skills(
     app_skills: Mapping[str, int], db_session: Session
 ) -> list[RuntimeSkill]:
@@ -362,11 +380,15 @@ def _runtime_built_in_skills(
             and built_in_skill_id not in app_skills
         ):
             continue
+        definition = BUILT_IN_SKILLS.get(built_in_skill_id)
         runtime.append(
             RuntimeSkill(
                 id=skill.id,
                 built_in_skill_id=built_in_skill_id,
                 name=skill.name,
+                plugin_skills=_built_in_skill_folders(definition)
+                if definition is not None
+                else (),
                 external_app_id=app_skills.get(built_in_skill_id),
             )
         )
@@ -413,25 +435,35 @@ def list_runtime_skills_for_user(
     ]
 
 
-def list_chat_skills(db_session: Session, user: User) -> list[ChatSkill]:
+def list_chat_skills(
+    db_session: Session, user: User, *, built_ins: bool
+) -> list[ChatSkill]:
+    """``built_ins``: also the available built-ins of
+    ``CHAT_BUILT_IN_SKILL_IDS``, which need the chat VM's sandbox tools."""
     if user.is_anonymous:
         return []
+    skills: list[ChatSkill] = []
+    if built_ins:
+        skills += [
+            ChatSkill(
+                name=plugin_skill.name if plugin_skill.path else row.name,
+                description=plugin_skill.description,
+                version_id=row.id,
+                path=plugin_skill.path,
+                built_in_skill_id=row.built_in_skill_id,
+            )
+            for row in db_session.scalars(
+                _built_in_skill_select(db_session, include_unavailable=False).where(
+                    Skill.built_in_skill_id.in_(CHAT_BUILT_IN_SKILL_IDS)
+                )
+            )
+            for plugin_skill in BUILT_IN_SKILLS[row.built_in_skill_id or ""].skills
+        ]
     version_ids = [
         state.version_id for state in _user_skill_selection(user, db_session).loaded()
     ]
-    if not version_ids:
-        return []
-    rows = db_session.execute(
-        select(
-            PluginSkill.plugin_version_id,
-            PluginSkill.path,
-            PluginSkill.frontmatter["name"].astext,
-            PluginSkill.frontmatter["description"].astext,
-            PluginSkill.frontmatter[("metadata", "short-description")].astext,
-        ).where(PluginSkill.plugin_version_id.in_(version_ids))
-    )
-    return sorted(
-        (
+    if version_ids:
+        skills += [
             ChatSkill(
                 name=name,
                 description=description,
@@ -439,10 +471,21 @@ def list_chat_skills(db_session: Session, user: User) -> list[ChatSkill]:
                 version_id=version_id,
                 path=path,
             )
-            for version_id, path, name, description, short_description in rows
-        ),
-        key=lambda skill: (skill.name, skill.version_id),
-    )
+            for version_id, path, name, description, short_description in (
+                db_session.execute(
+                    select(
+                        PluginSkill.plugin_version_id,
+                        PluginSkill.path,
+                        PluginSkill.frontmatter["name"].astext,
+                        PluginSkill.frontmatter["description"].astext,
+                        PluginSkill.frontmatter[
+                            ("metadata", "short-description")
+                        ].astext,
+                    ).where(PluginSkill.plugin_version_id.in_(version_ids))
+                )
+            )
+        ]
+    return sorted(skills, key=lambda skill: (skill.name, skill.version_id))
 
 
 def fetch_skill(

@@ -42,6 +42,7 @@ from onyx.server.features.build.sandbox.util.agent_instructions import (
 from onyx.server.features.build.timeouts import QUEUE_RESIDENCY_SECONDS
 from onyx.skills.built_in import (
     BUILT_IN_SKILLS,
+    CHAT_BUILT_IN_SKILL_IDS,
     COMPANY_SEARCH,
     EXTERNAL_APP_SKILL_ID_TO_APP_TYPE,
     BuiltInSkillDefinition,
@@ -128,15 +129,20 @@ class UserSkillsPayload(BaseModel):
 
 
 def _add_static_builtin(
-    files: FileSet, name: str, definition: BuiltInSkillDefinition
+    files: FileSet,
+    folders: Iterable[RuntimeSkillFolder],
+    definition: BuiltInSkillDefinition,
 ) -> None:
+    """Each skill folder of a built-in plugin goes in a folder named by its
+    skill, and no other file of the plugin, as for a custom plugin."""
     source_dir = definition.source_dir
     for path in iter_builtin_skill_files(source_dir):
         # Template sources are rendered separately; never ship them raw.
         if path.suffix == TEMPLATE_SUFFIX:
             continue
-        rel = path.relative_to(source_dir)
-        files[f"{name}/{rel.as_posix()}"] = path.read_bytes()
+        sandbox_path = _sandbox_path(path.relative_to(source_dir).as_posix(), folders)
+        if sandbox_path is not None:
+            files[sandbox_path] = path.read_bytes()
 
 
 def _render_template(
@@ -369,7 +375,7 @@ def _assemble_skills(
                     runtime_skill.built_in_skill_id,
                 )
                 continue
-            _add_static_builtin(skill_files, runtime_skill.name, definition)
+            _add_static_builtin(skill_files, folders, definition)
             if definition.has_template:
                 _render_template(
                     skill_files, runtime_skill, definition, db_session, user
@@ -438,6 +444,19 @@ def build_user_skills_payload(user: User, db_session: Session) -> UserSkillsPayl
 def build_skills_fileset_for_user(user: User, db_session: Session) -> FileSet:
     """Return the skill files a sandbox of the user gets."""
     return build_user_skills_payload(user, db_session).files
+
+
+def build_chat_built_in_files(user: User, db_session: Session) -> FileSet:
+    """The files of the built-ins that chat offers the user, one folder each."""
+    return _assemble_fileset(
+        [
+            skill
+            for skill in list_runtime_skills_for_user(user=user, db_session=db_session)
+            if skill.built_in_skill_id in CHAT_BUILT_IN_SKILL_IDS
+        ],
+        user,
+        db_session,
+    )
 
 
 def push_skill_to_affected_sandboxes(skill: Plugin, db_session: Session) -> None:

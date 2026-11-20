@@ -122,6 +122,7 @@ def new_ref(
     for ref in refs:
         tenant_cache.delete(harness_state.EXEC_SESSIONS_PREFIX + str(ref.sandbox_id))
         tenant_cache.delete(harness_state.ACTIVITY_PREFIX + str(ref.sandbox_id))
+        tenant_cache.delete(harness_state.SKILLS_IMAGE_PREFIX + str(ref.sandbox_id))
 
 
 @pytest.fixture
@@ -1276,3 +1277,27 @@ def test_the_least_recently_used_exec_session_record_goes_over_the_cap(
     with pytest.raises(ExecSessionNotFoundError):
         _run(sandbox.write_stdin(ref, first, "x"))
     assert _output(_run(sandbox.write_stdin(ref, second, "y"))[1]) == "y"
+
+
+def test_skills_go_to_each_vm_instance_once_per_change(
+    sandbox: FirecrackerHarnessSandbox, node: RunningFakeAgent, new_ref: NewRef
+) -> None:
+    ref = new_ref()
+    files = {"pptx/SKILL.md": b"# pptx", "pptx/scripts/lint.py": b"print(1)"}
+    sandbox.sync_skills(ref, files)
+    # The same files in another order are the same image: no new swap.
+    sandbox.sync_skills(ref, dict(reversed(list(files.items()))))
+    assert node.agent.swap_mounts == ["skills"]
+    assert len(node.agent.managed_images) == 1
+
+    sandbox.sync_skills(ref, {**files, "pptx/SKILL.md": b"# pptx v2"})
+    assert len(node.agent.swap_mounts) == 2
+
+    # A new VM instance shows no skills until a turn pushes them again.
+    vm = node.agent.vms[str(ref.sandbox_id)]
+    sandbox._client_factory.client(node.address).stop(
+        sandbox_id=str(ref.sandbox_id), attempt=vm.attempt, generation=vm.generation
+    )
+    sandbox.sync_skills(ref, {**files, "pptx/SKILL.md": b"# pptx v2"})
+    assert len(node.agent.swap_mounts) == 3
+    assert node.agent.create_calls == 2

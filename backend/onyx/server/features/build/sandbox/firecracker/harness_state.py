@@ -10,6 +10,8 @@
 - Session saves (no TTL): per chat session, the committed archive in the
   file store. A new save is committed before the old file is deleted.
 - Last attempt (no TTL): an agent never creates a stopped attempt again.
+- Skills image (no TTL): per sandbox, the skills image that a VM instance
+  shows. A new instance gets the push again.
 - Saved sessions (no TTL): per sandbox, the chat sessions with a committed
   save. A purge deletes their files.
 - Wanted (expires): when a call last asked for the sandbox. A stop that
@@ -38,6 +40,7 @@ from onyx.server.features.build.sandbox.firecracker.models import (
     IdSet,
     SessionInstanceTable,
     SessionSave,
+    SkillsImage,
 )
 
 EXEC_SESSIONS_PREFIX = "sandbox_fc:exec_sessions:"
@@ -45,6 +48,7 @@ ACTIVITY_PREFIX = "sandbox_fc:harness_activity:"
 SESSION_INSTANCES_PREFIX = "sandbox_fc:session_instances:"
 SESSION_SAVE_PREFIX = "sandbox_fc:session_save:"
 LAST_ATTEMPT_PREFIX = "sandbox_fc:last_attempt:"
+SKILLS_IMAGE_PREFIX = "sandbox_fc:skills_image:"
 SAVED_SESSIONS_PREFIX = "sandbox_fc:saved_sessions:"
 WANTED_PREFIX = "sandbox_fc:wanted:"
 PURGED_SESSION_PREFIX = "sandbox_fc:purged_session:"
@@ -61,6 +65,7 @@ SANDBOX_STATE_PREFIXES = (
     ACTIVITY_PREFIX,
     SESSION_INSTANCES_PREFIX,
     LAST_ATTEMPT_PREFIX,
+    SKILLS_IMAGE_PREFIX,
     WANTED_PREFIX,
 )
 _CAS_TRIES = 16
@@ -98,6 +103,15 @@ def _update(
         elif payload.encode() == raw or cache.replace_if_value(key, raw, payload):
             return
     raise StateContentionError(key)
+
+
+def get_skills_image(cache: CacheBackend, sandbox_id: UUID) -> SkillsImage | None:
+    raw = cache.get(SKILLS_IMAGE_PREFIX + str(sandbox_id))
+    return None if raw is None else SkillsImage.model_validate_json(raw)
+
+
+def set_skills_image(cache: CacheBackend, sandbox_id: UUID, image: SkillsImage) -> None:
+    cache.set(SKILLS_IMAGE_PREFIX + str(sandbox_id), image.model_dump_json())
 
 
 def get_exec_session(

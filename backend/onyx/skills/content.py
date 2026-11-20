@@ -13,7 +13,12 @@ from onyx.db.plugin import (
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore, get_default_file_store
-from onyx.skills.built_in import BuiltInSkillDefinition
+from onyx.prompts.skill_prompts import BUILT_IN_SKILL_FILES_LINE
+from onyx.skills.built_in import (
+    BUILT_IN_SKILLS,
+    CHAT_SKILLS_MOUNT_PATH,
+    BuiltInSkillDefinition,
+)
 from onyx.skills.bundle import (
     SKILL_MD_NAME,
     TEMPLATE_SUFFIX,
@@ -22,17 +27,21 @@ from onyx.skills.bundle import (
     read_stored_bundle,
     strip_skill_md_frontmatter,
 )
-from onyx.skills.models import CustomSkillBundleContents
+from onyx.skills.models import ChatSkill, CustomSkillBundleContents
 from onyx.skills.validation import read_stored_bundle_bytes
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
 
 
-def read_builtin_skill_instructions(definition: BuiltInSkillDefinition) -> str:
-    source_path = definition.source_dir / SKILL_MD_NAME
+def read_builtin_skill_instructions(
+    definition: BuiltInSkillDefinition, path: str = ""
+) -> str:
+    """``path``: the skill's folder in the built-in plugin."""
+    source_dir = definition.source_dir / path
+    source_path = source_dir / SKILL_MD_NAME
     if not source_path.is_file():
-        source_path = definition.source_dir / f"{SKILL_MD_NAME}{TEMPLATE_SUFFIX}"
+        source_path = source_dir / f"{SKILL_MD_NAME}{TEMPLATE_SUFFIX}"
     if not source_path.is_file():
         raise OnyxError(
             OnyxErrorCode.INTERNAL_ERROR,
@@ -115,4 +124,37 @@ def read_versions_skill_md(
                 version_id,
                 exc_info=True,
             )
+    return skill_md
+
+
+def read_chat_skills_md(
+    skills: Collection[ChatSkill], user_id: UUID, db_session: Session
+) -> dict[SkillKey, str]:
+    """The SKILL.md of each chat skill that can be read, by
+    ``(version_id, path)``. A built-in's starts with the folder of its files
+    in the chat VM."""
+    skill_md = read_versions_skill_md(
+        {
+            (skill.version_id, skill.path)
+            for skill in skills
+            if skill.built_in_skill_id is None
+        },
+        user_id,
+        db_session,
+    )
+    for skill in skills:
+        definition = BUILT_IN_SKILLS.get(skill.built_in_skill_id or "")
+        if definition is None:
+            continue
+        try:
+            instructions = read_builtin_skill_instructions(definition, skill.path)
+        except OnyxError:
+            logger.warning("Could not read built-in skill %s", skill.name)
+            continue
+        skill_md[(skill.version_id, skill.path)] = (
+            BUILT_IN_SKILL_FILES_LINE.format(
+                folder=f"{CHAT_SKILLS_MOUNT_PATH}/{skill.name}"
+            )
+            + instructions
+        )
     return skill_md

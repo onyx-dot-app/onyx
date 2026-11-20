@@ -87,7 +87,9 @@ def test_custom_app_skill_runs_without_a_connection(session: Session) -> None:
         state.plugin_id: state for state in load_user_plugin_states([user.id], session)
     }
     assert states[skill.id].can_run
-    assert skill.name in {s.name for s in list_chat_skills(session, user)}
+    assert skill.name in {
+        s.name for s in list_chat_skills(session, user, built_ins=False)
+    }
     assert skill.id in {
         runtime.id
         for runtime in list_runtime_skills_for_user(db_session=session, user=user)

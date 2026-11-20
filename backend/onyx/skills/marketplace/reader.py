@@ -25,6 +25,7 @@ from onyx.skills.marketplace.models import (
     RemotePlugin,
     UnsupportedPlugin,
 )
+from onyx.skills.metadata import SKILLS_DIR
 from onyx.skills.models import (
     GITHUB_SKILL_MAX_COUNT,
     SKILL_NAME_MAX_LENGTH,
@@ -33,7 +34,6 @@ from onyx.skills.models import (
 from onyx.skills.plugin_bundle import (
     MCP_JSON_PATH,
     NO_SKILL_OR_MCP_SERVER,
-    SKILLS_DIR,
     has_unused_part,
     read_plugin_bundle,
 )

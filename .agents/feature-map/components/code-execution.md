@@ -237,6 +237,11 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files (no tool
                                         (build/db/sandbox.py:get_or_create_sandbox); before
                                         each call: HarnessSandbox.begin_turn (an error is
                                         logged, the call still runs)
+  SandboxTurn._sync_skills              once per turn, before the first call runs (parallel
+                                        first calls wait): skills/push.py:
+                                        build_chat_built_in_files, then
+                                        HarnessSandbox.sync_skills shows them at /mnt/skills
+                                        (an error is logged; the last skills stay)
   ExecCommandTool / WriteStdinTool      HarnessSandbox.exec_command / write_stdin; each
                                         ExecOutputDelta -> ToolProgress, which the tool
                                         stops at max_output_chars; the result is the exec

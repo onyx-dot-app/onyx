@@ -34,7 +34,7 @@ def _on(db_session: Session, user: User) -> set[str]:
     db_session.expire_all()
     row = db_session.get(User, user.id)
     assert row is not None
-    return {skill.name for skill in list_chat_skills(db_session, row)}
+    return {skill.name for skill in list_chat_skills(db_session, row, built_ins=False)}
 
 
 def test_company_marketplace_follows_its_default(

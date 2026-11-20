@@ -134,6 +134,7 @@ from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.staging import delete_files_best_effort
 from onyx.llm.cancellation import CancelReason
 from onyx.llm.models import Message, ToolCall, ToolResult, UserMessage
+from onyx.microvm.configs import HARNESS_SANDBOX_ENABLED
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.skills.chat import accept_picked_skills
 from onyx.tools.constants import QUESTION_TOOL_NAMES, SPAWN_AGENT_TOOL_NAME
@@ -672,7 +673,12 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
             ]
             accepted = (
                 accept_picked_skills(
-                    picks, list_chat_skills(session, self._user), self._user.id, session
+                    picks,
+                    list_chat_skills(
+                        session, self._user, built_ins=HARNESS_SANDBOX_ENABLED
+                    ),
+                    self._user.id,
+                    session,
                 )
                 if any(picks)
                 else [AcceptedPicks() for _ in received]
