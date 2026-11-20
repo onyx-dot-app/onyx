@@ -11,7 +11,12 @@ import type { TimelineEvent } from "@/lib/timeline/events";
 
 jest.mock("@/components/chat/MinimalMarkdown", () => ({
   __esModule: true,
-  default: ({ content }: { content: string }) => <div>{content}</div>,
+  default: ({ content, cursor }: { content: string; cursor?: boolean }) => (
+    <div>
+      {content}
+      {cursor && " (cursor)"}
+    </div>
+  ),
 }));
 
 jest.mock("@/app/app/message/BlinkingBar", () => ({
@@ -134,9 +139,8 @@ test("uses the text cursor without adding a second progress cursor", async () =>
     isStreaming: true,
     timelineEvents: [text("Writing")],
   });
-  // The text cursor is the inline `[*]()` marker in the (mocked) markdown.
-  // Live text types out.
-  expect(await screen.findByText(/Writing \[\*\]\(\)/)).toBeInTheDocument();
+  // The text cursor is inline in the (mocked) markdown. Live text types out.
+  expect(await screen.findByText(/Writing \(cursor\)/)).toBeInTheDocument();
   expect(screen.queryByTestId("blinking-bar")).not.toBeInTheDocument();
 });
 

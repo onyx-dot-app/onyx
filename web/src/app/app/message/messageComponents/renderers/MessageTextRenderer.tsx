@@ -38,6 +38,7 @@ import { InMessageImage } from "@/app/app/components/files/images/InMessageImage
 import { extractChatImageFileId } from "@/app/app/components/files/images/utils";
 import { transformLinkUri } from "@/lib/utils";
 import { rehypeDirection } from "@/lib/rehypeDirection";
+import { rehypeStreamingCursor } from "@/lib/rehypeStreamingCursor";
 import { cn } from "@opal/utils";
 import { useSmoothStreaming } from "@/hooks/useSmoothStreaming";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
@@ -446,11 +447,17 @@ export const MessageTextRenderer: MessageRenderer<
       (!isStreamingAnimationEnabled && !stopPacketSeen) ||
       (shouldUseAutoPlaybackSync && content.length < fullContent.length));
 
-  // `[*]() ` is rendered by the anchor component as an inline blinking
-  // caret, keeping it flush with the trailing character.
-  const markdownInput = shouldShowCursor
-    ? processedContent + " [*]() "
-    : processedContent;
+  const baseRehypePlugins = streamFullyDisplayed
+    ? fullRehypePlugins
+    : STREAMING_REHYPE_PLUGINS;
+  // The cursor sits inline after the last character of the parsed tree.
+  const rehypePlugins = useMemo<PluggableList>(
+    () =>
+      shouldShowCursor
+        ? [...baseRehypePlugins, rehypeStreamingCursor]
+        : baseRehypePlugins,
+    [shouldShowCursor, baseRehypePlugins]
+  );
 
   return children([
     {
@@ -476,14 +483,10 @@ export const MessageTextRenderer: MessageRenderer<
                   ? FULL_REMARK_PLUGINS
                   : STREAMING_REMARK_PLUGINS
               }
-              rehypePlugins={
-                streamFullyDisplayed
-                  ? fullRehypePlugins
-                  : STREAMING_REHYPE_PLUGINS
-              }
+              rehypePlugins={rehypePlugins}
               urlTransform={transformLinkUri}
             >
-              {markdownInput}
+              {processedContent}
             </ReactMarkdown>
           </div>
         ) : (

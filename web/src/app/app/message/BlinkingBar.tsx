@@ -1,13 +1,11 @@
 import { cn } from "@opal/utils";
+import { STREAMING_CURSOR_CLASS_NAME } from "@/lib/rehypeStreamingCursor";
 
 export function BlinkingBar({ addMargin = false }: { addMargin?: boolean }) {
   return (
     <span
       aria-hidden
-      className={cn(
-        "animate-pulse motion-reduce:animate-none flex-none bg-text-04 rounded-xs relative top-[0.2rem] inline-block w-1.5 h-3.5",
-        addMargin && "ms-1"
-      )}
+      className={cn(STREAMING_CURSOR_CLASS_NAME, addMargin && "ms-1")}
     ></span>
   );
 }
