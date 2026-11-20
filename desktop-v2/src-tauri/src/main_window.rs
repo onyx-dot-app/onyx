@@ -253,7 +253,10 @@ fn handle_download(event: DownloadEvent) -> bool {
     match event {
         DownloadEvent::Requested { destination, .. } => choose_download_path(destination),
         DownloadEvent::Finished { url, success, .. } => {
-            log::info!("download of {url} finished (success: {success})");
+            log::info!(
+                "download of {} finished (success: {success})",
+                log_safe(url.as_str())
+            );
             true
         }
         _ => true,
@@ -269,7 +272,22 @@ fn popup_title(url: &Url) -> String {
 
 pub fn open_external(app: &AppHandle, url: &str) {
     if let Err(e) = app.opener().open_url(url, None::<&str>) {
-        log::warn!("could not open {url}: {e}");
+        log::warn!("could not open {}: {e}", log_safe(url));
+    }
+}
+
+/// A URL or server path for the log file: no user info, query or fragment,
+/// which can carry passwords, tokens or sign-in codes.
+pub fn log_safe(url: &str) -> String {
+    match Url::parse(url) {
+        Ok(mut parsed) => {
+            let _ = parsed.set_username("");
+            let _ = parsed.set_password(None);
+            parsed.set_query(None);
+            parsed.set_fragment(None);
+            parsed.to_string()
+        }
+        Err(_) => url.split(['?', '#']).next().unwrap_or_default().to_string(),
     }
 }
 
@@ -677,7 +695,8 @@ pub fn spawn_session_renewal(app: &AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::{
-        classify, classify_popup, is_web_sign_in, return_path, server_url_join, LinkAction,
+        classify, classify_popup, is_web_sign_in, log_safe, return_path, server_url_join,
+        LinkAction,
     };
     use url::Url;
 
@@ -688,6 +707,19 @@ mod tests {
         server_url_join(&server, path)
             .ok()
             .map(|url| url.to_string())
+    }
+
+    #[test]
+    fn log_lines_drop_secrets_from_urls() {
+        assert_eq!(
+            log_safe("https://user:pw@files.example/doc.pdf?X-Amz-Signature=abc#p=2"),
+            "https://files.example/doc.pdf"
+        );
+        assert_eq!(
+            log_safe("/auth/oauth/callback?code=abc&state=xyz"),
+            "/auth/oauth/callback"
+        );
+        assert_eq!(log_safe("/app"), "/app");
     }
 
     #[test]
