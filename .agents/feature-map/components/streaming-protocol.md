@@ -217,7 +217,7 @@ reports. A later fragment that arrives within the interval is held. There is
 no timer: held fragments report with the next fragment that arrives after the
 interval, at the next content block boundary, or at the call's end. A block
 boundary is the start of another content block of the message (another call,
-text or thinking), so held reasoning shows before the next call, as on replay.
+text or thinking), so live sections come in the same order as on replay.
 The call's end is the end of the model's stream, which ends every call of the
 message (`ToolCallEndEvent`). It reports the complete arguments, or, for
 invalid arguments, what the fragments parse to. A stream that stops without an
