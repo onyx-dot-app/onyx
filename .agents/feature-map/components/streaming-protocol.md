@@ -233,7 +233,9 @@ Pre-start packets: `tool_call_argument_delta` and `file_tool_progress` open a
 call before its start packet, and clients do not count them as its start
 (`server/query_and_chat/acp_stream.py:_PRE_STARTS`,
 `web/src/lib/timeline/chat/hooks/packetProcessor.ts`). The call's start
-packet, such as `apply_patch_start`, follows them at the same placement.
+packet, such as `apply_patch_start`, follows them at the same placement. If
+the stream stops first, no start follows, and clients close the call on the
+stop.
 
 Code mode (`code_mode_start`,
 `code_mode_delta`) renders each tool call its program makes with that tool's
