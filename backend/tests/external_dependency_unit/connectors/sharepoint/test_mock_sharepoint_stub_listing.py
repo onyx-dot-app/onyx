@@ -1,14 +1,16 @@
 """The SharePoint stub listing against the mock server: it lists every file
 and site page that indexing keeps, and it downloads nothing."""
 
+import base64
+import json
 import time
-from collections.abc import Generator
-from datetime import datetime
+from typing import Any
+from urllib.parse import urlsplit
 
 import pytest
 
+from ee.onyx.utils import encryption as ee_encryption
 from onyx.connectors.load_all import load_all_from_connector
-from onyx.connectors.microsoft_utils.drive_delta import DriveDeltaPage
 from onyx.connectors.microsoft_utils.drive_items import (
     DRIVE_ITEM_DOWNLOAD_URL_PROPERTY,
     DriveItemData,
@@ -17,11 +19,12 @@ from onyx.connectors.models import (
     ConnectorFailure,
     Document,
     ResolveTarget,
+    SlimDocumentStub,
 )
-from onyx.connectors.sharepoint import connector as sharepoint_connector
 from onyx.connectors.sharepoint.listing import (
     SharepointListedKind,
     SharepointListingPayload,
+    fresh_download_url,
 )
 from tests.external_dependency_unit.connectors.sharepoint.conftest import (
     MockSharepoint,
@@ -78,28 +81,47 @@ def test_the_listing_has_a_stub_for_each_file_and_page_and_downloads_nothing(
         assert stub.doc_updated_at is not None and stub.doc_created_at is not None
 
 
-def test_the_listing_selects_no_download_url(
+@pytest.mark.usefixtures("ee_permission_sync")
+def test_the_listing_stores_each_download_link_encrypted(
     mock_sharepoint: MockSharepoint, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The delta pages of the listing do not carry the download URL of each
-    file: the listing downloads nothing."""
-    listed_files = 0
-    original = sharepoint_connector.iter_delta_page_files
+    """Each file's stub keeps the download link that the listing read,
+    encrypted with the deployment's key: the stored stub holds no part of
+    the link. Conversion gets the link back from the stored stub."""
+    keys = json.dumps({"test": base64.b64encode(b"k" * 32).decode()})
+    keyring = ee_encryption.build_keyring("", keys, "test")
+    monkeypatch.setattr(ee_encryption, "get_keyring", lambda: keyring)
+    links: dict[str, str] = {}
+    original = DriveItemData.from_graph_json
 
-    def spy(
-        page: DriveDeltaPage, start: datetime | None, end: datetime | None
-    ) -> Generator[DriveItemData, None, None]:
-        nonlocal listed_files
-        for item in page.items:
-            assert DRIVE_ITEM_DOWNLOAD_URL_PROPERTY not in item.to_graph_json()
-            listed_files += 0 if item.is_folder else 1
-        yield from original(page, start, end)
+    def spy(item: dict[str, Any]) -> DriveItemData:
+        link = item.get(DRIVE_ITEM_DOWNLOAD_URL_PROPERTY)
+        if isinstance(link, str):
+            links[item["id"]] = link
+        return original(item)
 
-    monkeypatch.setattr(sharepoint_connector, "iter_delta_page_files", spy)
+    monkeypatch.setattr(DriveItemData, "from_graph_json", spy)
 
     listing = list_stubs(mock_sharepoint.build_connector())
 
-    assert listing.stubs and listed_files
+    files = mock_sharepoint.supported_file_ids()
+    file_stubs = [stub for stub in listing.stubs if stub.id in files]
+    assert {stub.id for stub in file_stubs} == files
+    for stub in file_stubs:
+        link = links[stub.id]
+        stored = stub.model_dump_json()
+        for secret in (
+            link,
+            urlsplit(link).query,
+            base64.b64encode(link.encode()).decode(),
+        ):
+            assert secret not in stored
+        assert "tempauth" not in stored
+        loaded = SlimDocumentStub.model_validate_json(stored)
+        assert loaded.listing_payload is not None
+        payload = loaded.listing_payload.as_type(SharepointListingPayload)
+        assert payload.download_url_listed_at is not None
+        assert fresh_download_url(payload) == link
 
 
 def test_the_stubs_match_the_documents_of_the_fetching_path(
