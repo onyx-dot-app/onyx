@@ -254,7 +254,7 @@ Its answer goes to `AgentTool.continue_open_input` of the tool that made the cal
 The tool returns the requests that it took; the run ends those, and offers the others again at its next wake.
 The run offers one call's answered requests together, so a tool keeps all requests that one task waits for under one call.
 For example, a code cell opens all of its requests under the call that started it, also while a `wait_code` call observes it.
-The `before_tool_call` hook then sees the step of that call, not the current step.
+The `before_tool_call` hook then sees the step of that call; for a cell rebuilt from a saved run, it sees the step in which the cell continued.
 Open requests end with the run.
 A hook that raises fails the run, as for a direct call: `decide` raises `BeforeToolCallFailed`, which the tool lets leave `execute`.
 A code mode program stops at the failure; the observation that reports its end raises it.

@@ -723,7 +723,9 @@ class CodeCell:
         # Decides the program's calls. It stays the gate of the call that
         # started the cell, or that rebuilt it in this process, so every
         # request of the cell belongs to that call and the run offers their
-        # answers together. The before_tool_call hook sees that call's step.
+        # answers together. before_tool_call sees the step of the call that
+        # started the cell, or for a cell rebuilt from a saved run, the step in
+        # which it continued.
         self._gate: NestedCallGate | None = invocation.nested_calls
         # Files of documents that nested calls found, for later Python calls of
         # the program, as the chat stages them for direct calls.
@@ -1861,8 +1863,16 @@ class CodeCells:
         with self._lock:
             if self._finished:
                 raise _rejected("The response has ended; no new cell can start.")
+            # Saved cells of a restored run stay open until they end.
             open_ids = sorted(
-                cell_id for cell_id, cell in self._cells.items() if not cell.closed
+                {
+                    *(
+                        cell_id
+                        for cell_id, cell in self._cells.items()
+                        if not cell.closed
+                    ),
+                    *self._saved,
+                }
             )
             if len(open_ids) >= MAX_OPEN_CELLS:
                 names = ", ".join(str(cell_id) for cell_id in open_ids)

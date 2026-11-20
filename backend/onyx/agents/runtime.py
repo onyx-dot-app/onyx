@@ -588,7 +588,7 @@ class Run:
         self._on_drained: Callable[[], None] | None = None
         self._restoration: RestorableFeature | None = None
         self._step_tools: list[AgentTool] | None = None
-        self.work = ExecutionWork(self.notify_tool_activity)
+        self.work = ExecutionWork(self._execution_condition, self.notify_tool_activity)
         self.coordination: RunCoordination | None = None
         self._thread_context = copy_context()
         self._cancellation_link = ExitStack()
@@ -766,10 +766,11 @@ class Run:
             self._execution_condition.notify_all()
 
     @property
-    def has_tool_activity(self) -> bool:
-        """Whether `notify_tool_activity` ran since the tool phase's cycle began."""
-        with self.execution_lock:
-            return self._tool_activity
+    def tool_phase_idle(self) -> bool:
+        """Whether no held work runs and none ended since the tool phase's
+        cycle began; read under the lock that `self.work` ends held jobs in."""
+        with self._execution_condition:
+            return self.work.held.idle and not self._tool_activity
 
     @property
     def suspension_requested(self) -> bool:
@@ -1195,7 +1196,9 @@ class Run:
             if resuming:
                 self._idle = Future()
                 self._settled = Future()
-                self.work = ExecutionWork(self.notify_tool_activity)
+                self.work = ExecutionWork(
+                    self._execution_condition, self.notify_tool_activity
+                )
             self._execution_active = True
             self._state.status = RunStatus.RUNNING
             if self.event_delivery is not None:

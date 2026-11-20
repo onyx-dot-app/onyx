@@ -6,7 +6,7 @@ import json
 import sys
 import threading
 import time
-from collections.abc import Callable, Mapping
+from collections.abc import Callable, Mapping, Sequence
 from typing import Any
 
 import pydantic_monty
@@ -26,6 +26,7 @@ from onyx.agents.models import (
     RunState,
     RunStatus,
     ToolCallContext,
+    ToolResultAmendment,
 )
 from onyx.agents.runtime import Agent, RestorableFeature, Run
 from onyx.agents.tool_execution import UNAVAILABLE_CALL_MESSAGE
@@ -66,6 +67,7 @@ from onyx.tools.models import ToolContext
 from onyx.tools.tool_implementations.code_mode import sandbox
 from onyx.tools.tool_implementations.code_mode import store as store_module
 from onyx.tools.tool_implementations.code_mode.cells import (
+    MAX_OPEN_CELLS,
     PARK_REFUSED_MESSAGE,
     PROGRAM_VERSION_MESSAGE,
     CodeCells,
@@ -844,13 +846,34 @@ def test_a_saved_background_cell_stays_open_across_another_suspend() -> None:
     assert sorted(map(str, agents.sent)) == ["bg", "x"]
 
 
+@pytest.mark.parametrize("late_wake", [False, True], ids=["wake", "late_wake"])
 def test_a_program_that_parks_right_after_its_offer_takes_the_answer(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, late_wake: bool
 ) -> None:
     """The background program parks, and its driver ends, after the offer of
     its answer took nothing and before the tool phase checks for work. The
-    run offers the answer again instead of suspending with it."""
+    run offers the answer again instead of suspending with it. With
+    `late_wake`, the driver's wake waits for the run to start suspending:
+    the run must not read the driver's end without its wake."""
     runs: list[Run] = []
+    if late_wake:
+        suspending = threading.Event()
+        notify = Run.notify_tool_activity
+        suspend = CodeCells.suspend
+
+        def late_notify(self: Run) -> None:
+            if threading.current_thread().name == "code-mode-cell-1":
+                suspending.wait(2)
+            notify(self)
+
+        def marked_suspend(
+            self: CodeCells, results: Sequence[ToolResultMessage]
+        ) -> list[ToolResultAmendment]:
+            suspending.set()
+            return suspend(self, results)
+
+        monkeypatch.setattr(Run, "notify_tool_activity", late_notify)
+        monkeypatch.setattr(CodeCells, "suspend", marked_suspend)
     agents = Agents(
         reply=_one_call_per_step(
             _execute(
@@ -887,6 +910,38 @@ def test_a_program_that_parks_right_after_its_offer_takes_the_answer(
         agents.gate.set()
         run.cancel()
         assert run.wait_for_idle(10)
+
+
+def test_saved_cells_count_against_the_open_cell_limit() -> None:
+    """Background cells that stay saved across steps are open cells."""
+    agents = Agents(_execute("program", PROGRAM))
+    run = agents.agent().start(max_steps=3, messages=[UserMessage(content="Send")])
+    _suspended(run)
+    progress = _transferred(run).run_state.progress
+    assert progress is not None
+    [saved] = SavedCells.model_validate(progress.feature_state).cells
+    run.cancel()
+    assert run.wait_for_idle(10)
+
+    cells = CodeCells()
+    cells.restore(
+        [
+            saved.model_copy(update={"cell_id": cell_id, "observer": None})
+            for cell_id in range(1, MAX_OPEN_CELLS + 1)
+        ]
+    )
+    execute = CodeModeTool([], cells=cells, limits=PARKING_LIMITS)
+    refused = execute.run(
+        ToolInvocation(
+            call_id="next",
+            arguments={"code": "1\n"},
+            cancellation=CancellationSignal(),
+            update=lambda _progress: None,
+        ),
+        ToolContext(),
+    )
+    assert isinstance(refused, ToolResult) and refused.is_error
+    assert "Open cells: 1, 2, 3, 4." in refused.content
 
 
 def test_a_program_too_large_to_park_continues_without_the_call(
@@ -1351,17 +1406,12 @@ def test_a_continued_background_program_shows_its_next_request_at_its_call() -> 
     try:
         _suspended(run)
         run.submit(_answer(InputDecision.APPROVE, BACKGROUND_REQUEST_ID))
-        until(
-            lambda: (
-                SECOND_BACKGROUND_REQUEST_ID
-                in {request.request_id for request in run.pending_inputs}
-            )
-        )
+        # Events arrive on the events worker.
+        until(lambda: _approval_cards(packets) == [SECOND_BACKGROUND_REQUEST_ID])
 
         assert _placement(events, SECOND_BACKGROUND_REQUEST_ID) == _placement(
             events, BACKGROUND_REQUEST_ID
         )
-        assert _approval_cards(packets) == [SECOND_BACKGROUND_REQUEST_ID]
     finally:
         run.cancel()
         assert run.wait_for_idle(10)

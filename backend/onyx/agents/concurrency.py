@@ -5,6 +5,7 @@ import time
 from collections import Counter, deque
 from collections.abc import Callable
 from concurrent.futures import Future
+from contextlib import nullcontext
 from contextvars import copy_context
 
 from onyx.agents.events import (
@@ -99,14 +100,20 @@ class ExecutionWork:
 
     `tracker` counts every job: the run drains after all of them end. `held`
     counts the jobs that the tool phase also waits for before it suspends:
-    all but those of `track_detached`. `on_held_finished` runs after each held
-    job ends, such as a program driver that parked, so the tool phase checks
-    its calls and open requests again.
+    all but those of `track_detached`. When a held job ends, such as a
+    program driver that parked, `on_held_finished` runs in one step with the
+    `held` decrement, under `lock`: a reader that holds `lock` sees both or
+    neither, so the tool phase never reads it idle without its activity.
     """
 
-    def __init__(self, on_held_finished: Callable[[], None] | None = None) -> None:
+    def __init__(
+        self,
+        lock: threading.Condition | None = None,
+        on_held_finished: Callable[[], None] | None = None,
+    ) -> None:
         self.tracker = WorkTracker()
         self.held = WorkTracker()
+        self._lock = lock
         self._on_held_finished = on_held_finished
 
     def start[T](self, operation: Callable[[], T]) -> Future[T]:
@@ -134,9 +141,10 @@ class ExecutionWork:
 
     def _finished(self, *, held: bool) -> None:
         if held:
-            self.held.finished()
-            if self._on_held_finished is not None:
-                self._on_held_finished()
+            with self._lock if self._lock is not None else nullcontext():
+                self.held.finished()
+                if self._on_held_finished is not None:
+                    self._on_held_finished()
         self.tracker.finished()
 
 
