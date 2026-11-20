@@ -13,7 +13,7 @@ from onyx.db.plugin import (
     apply_plugin_access_change__no_commit,
     set_marketplace_default__no_commit,
 )
-from onyx.db.plugin_access import get_visible_plugin_ids
+from onyx.db.plugin_access import plugin_ids_visible_to
 from onyx.db.skill import list_chat_skills
 from onyx.db.users import delete_user_from_db
 from onyx.skills.marketplace import sync
@@ -81,13 +81,13 @@ def test_company_marketplace_follows_its_default(
     db_session.commit()
     assert "alpha" not in _on(db_session, member)
     assert "beta" in _on(db_session, member)
-    assert {alpha_id, beta_id} <= get_visible_plugin_ids(member.id, db_session)
+    assert {alpha_id, beta_id} <= plugin_ids_visible_to(member.id, db_session)
 
     set_marketplace_default__no_commit(
         marketplace.id, PluginInstallationPolicy.NOT_AVAILABLE, db_session
     )
     db_session.commit()
-    visible = get_visible_plugin_ids(member.id, db_session)
+    visible = plugin_ids_visible_to(member.id, db_session)
     assert alpha_id not in visible
     assert beta_id in visible
 
@@ -111,7 +111,7 @@ def test_personal_marketplace_is_seen_by_its_owner_and_shares(
     sync.sync_marketplace(marketplace.id)
     plugin_id = synced_plugins(db_session, marketplace.id)["alpha"].id
     assert "alpha" in _on(db_session, owner)
-    assert plugin_id not in get_visible_plugin_ids(shared.id, db_session)
+    assert plugin_id not in plugin_ids_visible_to(shared.id, db_session)
 
     apply_plugin_access_change__no_commit(
         [plugin_id],
@@ -126,8 +126,8 @@ def test_personal_marketplace_is_seen_by_its_owner_and_shares(
         db_session,
     ).raise_first_failure()
     db_session.commit()
-    assert plugin_id in get_visible_plugin_ids(shared.id, db_session)
-    assert plugin_id not in get_visible_plugin_ids(other.id, db_session)
+    assert plugin_id in plugin_ids_visible_to(shared.id, db_session)
+    assert plugin_id not in plugin_ids_visible_to(other.id, db_session)
 
 
 def test_user_delete_removes_their_personal_marketplace(
