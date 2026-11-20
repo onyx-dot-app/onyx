@@ -726,7 +726,9 @@ up its own branding.
     the content shrinks, an upward scroll up to the shrinkage is layout, not
     the user, so only movement beyond it stops following. An upward move
     counts as the user's only within 600ms of scroll input (wheel, touch,
-    scroll keys, a held pointer, a focus move into the view); Firefox can clamp the position while
+    scroll keys, a focus move into the view), or while a pointer is held on
+    the view. Each move counted as the user's restarts the 600ms, so a fling
+    stays the user's while it moves. Firefox can clamp the position while
     content briefly shrinks, and a following view is put back at the end.
     Following measures "at the bottom" from the real scroll end, spacer
     included.
