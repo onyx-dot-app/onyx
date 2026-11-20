@@ -215,7 +215,12 @@ def list_minimal_user_groups(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> list[MinimalUserGroupSnapshot]:
-    if Permission.FULL_ADMIN_PANEL_ACCESS in get_effective_permissions(user):
+    # An organization-wide skill or action manager sets the access of any
+    # group, so it picks from every group.
+    if Permission.FULL_ADMIN_PANEL_ACCESS in get_effective_permissions(user) or any(
+        has_global_permission(user, permission)
+        for permission in (Permission.MANAGE_PLUGINS, Permission.MANAGE_ACTIONS)
+    ):
         user_groups = fetch_user_groups(
             db_session,
             only_up_to_date=False,

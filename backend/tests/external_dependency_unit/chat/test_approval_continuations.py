@@ -10,7 +10,7 @@ import json
 from collections.abc import Generator
 from threading import Event, Lock
 from typing import Any
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
 from uuid import UUID, uuid4
 
 import pytest
@@ -84,7 +84,7 @@ from tests.external_dependency_unit.chat.test_wait_agents import (
 from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.external_dependency_unit.integration_helpers import (
     delete_integrations,
-    hold_in_plugin,
+    give_access,
     make_mcp_integration,
 )
 from tests.unit.onyx.tools.code_mode.fakes import FakeMCPTool
@@ -93,6 +93,14 @@ from tests.unit.onyx.tools.code_mode.fakes import FakeMCPTool
 _NO_HEADERS = Request({"type": "http", "headers": []})
 # Two models of one turn; the patched model factory serves both.
 _TWO_MODELS = [LLMOverride(model_version="a"), LLMOverride(model_version="b")]
+
+
+@pytest.fixture(autouse=True)
+def direct_tools() -> Generator[None, None, None]:
+    """The scripted model calls the gated tool directly, so code mode is off;
+    see the `code_mode` fixture in tests/external_dependency_unit/conftest.py."""
+    with patch("onyx.chat.agent.CODE_MODE_ENABLED", False):
+        yield
 
 
 class Script:
@@ -229,7 +237,7 @@ def turns(
         name=f"continuations_{uuid4().hex[:8]}",
         tools=[ACTION],
     )
-    hold_in_plugin(
+    give_access(
         db_session, [integration], installation_policy=PluginInstallationPolicy.DEFAULT
     )
     chat = ChatSession(

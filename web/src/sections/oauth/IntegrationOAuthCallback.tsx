@@ -10,8 +10,9 @@ import { validateInternalRedirect } from "@/lib/auth/utils";
 import { completeIntegrationOAuth } from "@/lib/integrations/svc";
 import { leaveOAuthCallback, reportOAuthCallback } from "@/lib/oauth/launch";
 import { withDesktopOAuthHandoff } from "@/sections/oauth/DesktopOAuthHandoff";
+import { customizeTabHref } from "@/lib/customize/paths";
 
-const FALLBACK_PATH = "/app/plugins";
+const FALLBACK_PATH = customizeTabHref("integrations");
 
 type CallbackState =
   | { phase: "processing" }

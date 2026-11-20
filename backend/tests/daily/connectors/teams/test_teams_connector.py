@@ -2,8 +2,6 @@ import time
 
 import pytest
 
-from onyx.access.utils import build_ext_group_name_for_onyx
-from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import HierarchyNode
 from onyx.connectors.teams.connector import TeamsConnector
 from tests.daily.connectors.teams.models import TeamsThread, readers_of
@@ -89,19 +87,11 @@ def _build_map(threads: list[TeamsThread]) -> dict[str, TeamsThread]:
     return map
 
 
-def _readers_by_group(
-    connector: TeamsConnector, for_indexing: bool
-) -> dict[str, set[str]]:
+def _readers_by_group(connector: TeamsConnector) -> dict[str, set[str]]:
     """The people the group sync puts in each group, under the id a document
-    names it by. Indexing stores the source prefix, and the permission sync adds
-    it to the ids its walk yields."""
+    names it by. Storage adds the source prefix to both."""
     return {
-        (
-            build_ext_group_name_for_onyx(group_id, DocumentSource.TEAMS)
-            if for_indexing
-            else group_id
-        ): set(emails)
-        for group_id, emails in connector.channel_member_groups()
+        group_id: set(emails) for group_id, emails in connector.channel_member_groups()
     }
 
 
@@ -120,7 +110,7 @@ def test_loading_all_docs_from_teams_connector(
             end=time.time(),
         ).documents
     )
-    readers_by_group = _readers_by_group(teams_connector, for_indexing=True)
+    readers_by_group = _readers_by_group(teams_connector)
     actual_teams_threads = [TeamsThread.from_doc(doc, readers_by_group) for doc in docs]
     actual_teams_threads_map = _build_map(threads=actual_teams_threads)
     expected_teams_threads_map = _build_map(threads=expected_teams_threads)
@@ -137,7 +127,7 @@ def test_slim_docs_retrieval_from_teams_connector(
         for slim_doc_batch in teams_connector.retrieve_all_slim_docs_perm_sync()
         for slim_doc in slim_doc_batch
     ]
-    readers_by_group = _readers_by_group(teams_connector, for_indexing=False)
+    readers_by_group = _readers_by_group(teams_connector)
 
     for slim_doc in slim_docs:
         if isinstance(slim_doc, HierarchyNode):
@@ -165,7 +155,7 @@ def test_load_from_checkpoint_with_perm_sync(
 
     # We should have at least some documents
     assert len(docs) > 0, "Expected to find at least one document"
-    readers_by_group = _readers_by_group(teams_connector, for_indexing=True)
+    readers_by_group = _readers_by_group(teams_connector)
 
     for doc in docs:
         assert doc.external_access is not None, (

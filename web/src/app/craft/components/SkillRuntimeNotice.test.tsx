@@ -64,7 +64,7 @@ describe("SkillRuntimeNotice", () => {
     ).toBeInTheDocument();
     expect(screen.getByRole("link", { name: "Manage skills" })).toHaveAttribute(
       "href",
-      "/craft/v1/skills"
+      "/app/customize/skills"
     );
   });
 

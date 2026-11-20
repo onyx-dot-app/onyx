@@ -19,7 +19,7 @@ from onyx.server.metrics.opensearch_search import (
 
 
 class TestRecordOpenSearchSearchError:
-    def test_increments_error_counter_with_exception_class_name(self) -> None:
+    def test_increments_error_counter_with_error_type(self) -> None:
         # Precondition.
         search_type = OpenSearchSearchType.HYBRID
         error_type = "ValueError"
@@ -28,7 +28,7 @@ class TestRecordOpenSearchSearchError:
         )._value.get()
 
         # Under test.
-        record_opensearch_search_error(search_type, ValueError("boom"))
+        record_opensearch_search_error(search_type, "ValueError")
 
         # Postcondition.
         after = _search_errors.labels(
@@ -47,8 +47,8 @@ class TestRecordOpenSearchSearchError:
         )._value.get()
 
         # Under test.
-        record_opensearch_search_error(search_type, ValueError("a"))
-        record_opensearch_search_error(search_type, RuntimeError("b"))
+        record_opensearch_search_error(search_type, "ValueError")
+        record_opensearch_search_error(search_type, "RuntimeError")
 
         # Postcondition.
         after_value = _search_errors.labels(
@@ -73,9 +73,7 @@ class TestRecordOpenSearchSearchError:
 
             # Under test and postcondition.
             # Should not raise.
-            record_opensearch_search_error(
-                search_type, ValueError("simulated search failure")
-            )
+            record_opensearch_search_error(search_type, "ValueError")
 
             # Sanity check: the production code reached the fully-labeled child
             # for this specific error_type.

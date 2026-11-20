@@ -25,7 +25,6 @@ import { hasUnpublishedChanges } from "@/lib/skills/sharing";
 import { usePublishAction, useSkillLimitCopy } from "@/lib/skills/hooks";
 import type {
   CustomSkill,
-  SkillEditableDetail,
   SkillVersion,
   SkillVersionPreview,
 } from "@/lib/skills/types";
@@ -37,18 +36,12 @@ interface SkillVersionsTabProps {
   canPublish: boolean;
   /** Called after a restore or a publish changes the skill. */
   onChanged: () => void;
-  /** Called with the new current version after a restore. */
-  onRestored?: (restored: SkillEditableDetail) => void;
-  /** The open editor has unsaved changes that a restore would replace. */
-  restoreBlocked?: boolean;
 }
 
 export default function SkillVersionsTab({
   skill,
   canPublish,
   onChanged,
-  onRestored,
-  restoreBlocked = false,
 }: SkillVersionsTabProps) {
   const skillId = skill.id;
   const t = useTranslations("skills.modals.versions");
@@ -73,7 +66,7 @@ export default function SkillVersionsTab({
     versions.find((version) => version.id === previewVersionId) ?? null;
 
   async function handleRestore(version: SkillVersion) {
-    if (!currentVersion || busy || restoreBlocked) return;
+    if (!currentVersion || busy) return;
     setBusy(true);
     try {
       const restored = await restoreSkillVersion(
@@ -92,7 +85,6 @@ export default function SkillVersionsTab({
             newNumber: restored.current_version_number ?? 0,
           })
         );
-        onRestored?.(restored);
         onChanged();
       }
       setPreviewVersionId(null);
@@ -165,7 +157,7 @@ export default function SkillVersionsTab({
         prominence="secondary"
         size="sm"
         icon={SvgHistory}
-        disabled={busy || isStale || restoreBlocked}
+        disabled={busy || isStale}
         aria-label={t("restore.ariaLabel", { number: version.version_number })}
         onClick={() => void handleRestore(version)}
       >
@@ -256,13 +248,6 @@ export default function SkillVersionsTab({
 
   return (
     <Section gap={4} height="auto" alignItems="stretch">
-      {restoreBlocked && (
-        <MessageCard
-          variant="warning"
-          title={t("restore.unsavedChanges.title")}
-          description={t("restore.unsavedChanges.description")}
-        />
-      )}
       {isStale && (
         <MessageCard
           variant="warning"

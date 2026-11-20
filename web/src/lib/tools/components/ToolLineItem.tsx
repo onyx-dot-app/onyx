@@ -16,7 +16,6 @@ import { hasPermission } from "@/lib/permissions/utils";
 import { useProjectsContext } from "@/lib/projects/providers";
 import { useSettings } from "@/lib/settings/hooks";
 import {
-  CODING_AGENT_TOOL_ID,
   IMAGE_GENERATION_TOOL_ID,
   PYTHON_TOOL_ID,
   SEARCH_TOOL_ID,
@@ -29,8 +28,6 @@ import { getAdminConfigureInfo, getToolTooltip } from "@/lib/tools/utils";
 import { Permission } from "@/lib/types";
 import EnabledCount from "@/lib/tools/components/EnabledCount";
 import { useUser } from "@/providers/UserProvider";
-import { useIncognito } from "@/providers/IncognitoProvider";
-import { isBlockedInIncognito } from "@/lib/plugins/chat";
 
 // Names the hover group that swaps the source count for the disable button.
 const HOVER_GROUP = "ToolLineItem";
@@ -71,7 +68,6 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
   const builtInToolNames = useBuiltInToolNames();
   const { ccPairs } = useCCPairs(vectorDbEnabled);
   const { currentProjectId } = useProjectsContext();
-  const { incognitoEnabled } = useIncognito();
 
   const tooltipMessages = useMemo(
     () => ({
@@ -82,9 +78,6 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
         ),
         [WEB_SEARCH_TOOL_ID]: t("toolsPopover.tooltips.webSearch.description"),
         [PYTHON_TOOL_ID]: t("toolsPopover.tooltips.python.description"),
-        [CODING_AGENT_TOOL_ID]: t(
-          "toolsPopover.tooltips.codingAgent.description"
-        ),
       },
       defaultDescription: t("toolsPopover.tooltips.default.description"),
       configure: t("toolsPopover.tooltips.configureSuffix.text"),
@@ -106,9 +99,7 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
     [t]
   );
 
-  const blockedInIncognito = isBlockedInIncognito(tool, incognitoEnabled);
-  const isPreferred =
-    toolConfiguration.preferredToolId === tool.id && !blockedInIncognito;
+  const isPreferred = toolConfiguration.preferredToolId === tool.id;
   // Switched off for this chat. The row stays interactive: pressing it turns
   // the tool back on and pins it in one gesture.
   const isDisabled = toolConfiguration.disabledToolIds.includes(tool.id);
@@ -271,33 +262,27 @@ export default function ToolLineItem({ tool }: ToolLineItemProps) {
         titleColor={
           (isUnavailable && isPreferred) || isDisabled ? "text-03" : undefined
         }
-        disabled={
-          needsConnectors ||
-          blockedInIncognito ||
-          (isUnavailable && !isPreferred)
-        }
+        disabled={needsConnectors || (isUnavailable && !isPreferred)}
         tooltip={
-          blockedInIncognito
-            ? t("actionLineItem.codingAgentIncognito.tooltip")
-            : !isUnavailable
-              ? markdown(
-                  t("actionLineItem.preference.tooltip", {
-                    description: escapeMarkdown(
-                      getToolTooltip(
-                        tool,
-                        isConfigured,
-                        canManageActions,
-                        tooltipMessages
-                      )
-                    ),
-                  })
-                )
-              : getToolTooltip(
-                  tool,
-                  isConfigured,
-                  canManageActions,
-                  tooltipMessages
-                )
+          !isUnavailable
+            ? markdown(
+                t("actionLineItem.preference.tooltip", {
+                  description: escapeMarkdown(
+                    getToolTooltip(
+                      tool,
+                      isConfigured,
+                      canManageActions,
+                      tooltipMessages
+                    )
+                  ),
+                })
+              )
+            : getToolTooltip(
+                tool,
+                isConfigured,
+                canManageActions,
+                tooltipMessages
+              )
         }
         onClick={handleClick}
         rightChildren={

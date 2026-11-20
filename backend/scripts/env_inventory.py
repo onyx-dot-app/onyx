@@ -69,6 +69,7 @@ CONFIG_DIR_MARKERS = ("/configs/", "/shared_configs/")
 # Custom helper functions whose FIRST string arg is an env var name and whose
 # SECOND arg is the default. Extend this as new helpers are introduced.
 ENV_HELPER_FUNCS = {
+    "_int_env": "int",
     "_non_negative_int_env": "int",
     "lock_timeout_from_env": "int",
     "_fc_env_int": "int",

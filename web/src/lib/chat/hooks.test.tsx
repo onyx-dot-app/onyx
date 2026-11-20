@@ -4,7 +4,13 @@ import {
   PacketType,
   ToolApprovalRequest,
 } from "@/app/app/services/streamingModels";
-import { useChatSessionQueue, useToolRequests } from "@/lib/chat/hooks";
+import {
+  useChatSessionQueue,
+  useSendChatMessageFromURL,
+  useToolRequests,
+} from "@/lib/chat/hooks";
+import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import { useToolRequestUi } from "@/lib/chat/toolApprovals";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { refreshChatSession } from "@/lib/chat/settleChatSession";
@@ -13,6 +19,27 @@ jest.mock("next-intl", () => ({ useTranslations: () => (key: string) => key }));
 jest.mock("@/lib/chat/settleChatSession", () => ({
   ...jest.requireActual("@/lib/chat/settleChatSession"),
   refreshChatSession: jest.fn(async () => {}),
+}));
+jest.mock("@opal/navigation", () => ({
+  ...jest.requireActual("@opal/navigation"),
+  useNavigation: () => ({ go: jest.fn() }),
+  useSearchParams: () =>
+    new URLSearchParams({
+      "user-prompt": "hello",
+      "send-on-load": "true",
+      tags: "eng",
+    }),
+}));
+jest.mock("@/lib/projects/providers", () => ({
+  useProjectsContext: () => ({ currentMessageFiles: [] }),
+}));
+jest.mock("@/lib/connectors/hooks", () => ({
+  useAvailableSources: () => ({
+    availableSources: [],
+    isLoading: false,
+    settled: true,
+    error: undefined,
+  }),
 }));
 
 function request(
@@ -249,5 +276,60 @@ describe("useChatSessionQueue", () => {
     expect(
       fetchMock.mock.calls.every(([input]) => String(input).endsWith("/status"))
     ).toBe(true);
+  });
+});
+
+describe("useSendChatMessageFromURL", () => {
+  const toolConfiguration: ToolConfigurationHandle = {
+    stateOf: () => null,
+    setToolState: jest.fn(),
+    toggleToolState: jest.fn(),
+    clearPreferredTool: jest.fn(),
+    preferredToolId: null,
+    preferredAction: null,
+    disabledToolIds: [],
+    isIntegrationEnabled: () => true,
+    setIntegrationEnabled: jest.fn(),
+    allowed: null,
+    ready: true,
+    optionsLoaded: true,
+    filters: {
+      selectedSources: null,
+      documentSets: [],
+      tags: [],
+      timeRange: null,
+    },
+    setFilters: jest.fn(),
+    handOffTo: jest.fn(),
+    handOffToNewChatWith: jest.fn(),
+  };
+
+  test("a send-on-load query naming tags waits for them and applies them", async () => {
+    const fetchMock = jest.fn(async (input: RequestInfo | URL) => {
+      const body =
+        String(input) === SWR_KEYS.tags
+          ? { tags: [{ tag_key: "team", tag_value: "eng", source: "web" }] }
+          : [];
+      return new Response(JSON.stringify(body), { status: 200 });
+    });
+    global.fetch = fetchMock;
+    const onSubmit = jest.fn();
+
+    renderHook(() =>
+      useSendChatMessageFromURL({
+        onSubmit,
+        deepResearch: false,
+        toolConfiguration,
+      })
+    );
+
+    await waitFor(() => expect(onSubmit).toHaveBeenCalled());
+    const requested = fetchMock.mock.calls.map(([input]) => String(input));
+    expect(requested).toContain(SWR_KEYS.tags);
+    expect(requested).not.toContain(SWR_KEYS.documentSets);
+    const update = jest.mocked(toolConfiguration.setFilters).mock.calls[0]![0];
+    expect(
+      update(toolConfiguration.filters).tags.map((tag) => tag.tag_value)
+    ).toEqual(["eng"]);
   });
 });

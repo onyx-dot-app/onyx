@@ -29,6 +29,7 @@ from onyx.db.cost_override import (
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import AccountType, Permission
 from onyx.db.models import (
+    LLMModelFlow,
     LLMProvider,
     ModelConfiguration,
     ModelCostOverride,
@@ -75,7 +76,13 @@ def db_session() -> Generator[Session, None, None]:
 
     # voice_provider only because llm_provider references it; with foreign
     # keys on, SQLite needs every referenced table to exist.
-    for model in (VoiceProvider, LLMProvider, ModelConfiguration, ModelCostOverride):
+    for model in (
+        VoiceProvider,
+        LLMProvider,
+        ModelConfiguration,
+        LLMModelFlow,
+        ModelCostOverride,
+    ):
         cast(Table, model.__table__).create(bind=engine)
     SessionLocal = sessionmaker(bind=engine)
     session = SessionLocal()

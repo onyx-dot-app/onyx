@@ -18,9 +18,9 @@ from onyx.chat.incognito_context import incognito_context_available
 from onyx.chat.models import (
     ChatHistoryMessage,
     ChatHistoryResult,
-    MessageRendering,
     PromptMetadata,
     picked_skill_messages,
+    read_message_rendering,
 )
 from onyx.chat.prompt_formatting import count_message_tokens
 from onyx.chat.response import restore_response_sources
@@ -313,7 +313,7 @@ def capture_chat_history(
                         for document in message.search_docs
                     },
                     {
-                        item.id: MessageRendering.model_validate(item.rendering)
+                        item.id: read_message_rendering(item.rendering)
                         for item in message.response_items
                         if item.rendering is not None
                     },

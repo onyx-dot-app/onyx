@@ -84,6 +84,7 @@ from onyx.db.chat_inputs import (
     submit_human_message__no_commit,
 )
 from onyx.db.chat_response import (
+    load_child_responses,
     read_chat_execution,
     read_response__no_commit,
     save_response_record__no_commit,
@@ -1668,7 +1669,10 @@ def test_background_agent_tools_work_from_later_turn_and_preserve_branch_access(
         parent_response = db_session.get(ChatMessage, branch[1])
         assert parent_response is not None
         packets = translate_assistant_message_to_packets(
-            parent_response, {}, db_session
+            parent_response,
+            {},
+            db_session,
+            child_responses=load_child_responses(db_session, [parent_response]),
         )
         assert "Child answer" not in "".join(
             packet.model_dump_json() for packet in packets
@@ -2374,9 +2378,11 @@ def test_follow_ups_answer_unread_results_under_a_hidden_question(
         history = load_agent_history(load_chat_branch(branch[1]), child.agent_id)
         assert history.previous_run_id == child.id
         assert history.messages[-1].text == "The final research report"
-        execution = read_chat_execution(response)
-        assert execution is not None
-        assert child.id in {item.run_id for item in execution.response.child_runs}
+        read = read_chat_execution(
+            response, load_child_responses(db_session, [response])
+        )
+        assert read is not None
+        assert child.id in {item.run_id for item in read[0].response.child_runs}
         fresh_owner = store(branch)
         assert (
             fresh_owner.read_run_status(child.id, str(branch[0])) == RunStatus.COMPLETE

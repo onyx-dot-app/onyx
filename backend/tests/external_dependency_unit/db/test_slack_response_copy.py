@@ -23,7 +23,11 @@ from onyx.db.chat import (
     get_or_create_root_message,
     update_db_session_with_messages,
 )
-from onyx.db.chat_response import read_response_steps, write_response_items
+from onyx.db.chat_response import (
+    load_child_responses,
+    read_response_steps,
+    write_response_items,
+)
 from onyx.db.models import ChatMessage, ChatSession
 from onyx.llm.models import (
     AssistantContent,
@@ -163,7 +167,10 @@ def test_slack_copy_preserves_sdk_and_legacy_display_content(
         assert len(history[0].response_messages) == 1
         assert history[0].response_messages[0].text == display_answer
         packets = translate_assistant_message_to_packets(
-            copied, load_session_tools([copied], db_session), db_session
+            copied,
+            load_session_tools([copied], db_session),
+            db_session,
+            child_responses=load_child_responses(db_session, [copied]),
         )
         assert (
             "".join(

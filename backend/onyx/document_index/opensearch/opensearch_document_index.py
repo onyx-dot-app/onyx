@@ -38,6 +38,7 @@ from onyx.document_index.interfaces import (
     DocumentInsertionRecord,
     DocumentSectionRequest,
     IndexingMetadata,
+    KeywordTermCounts,
     MetadataUpdateRequest,
     SecondaryIndexDocumentMissingError,
     TenantState,
@@ -77,6 +78,7 @@ from onyx.document_index.opensearch.search import (
     get_zscore_normalization_pipeline_name_and_config,
 )
 from onyx.indexing.models import DocMetadataAwareIndexChunk
+from onyx.natural_language_processing.english_stopwords import strip_stopwords
 from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
 from onyx.utils.text_processing import remove_invalid_unicode_chars
@@ -1255,6 +1257,14 @@ class OpenSearchDocumentIndex(DocumentIndex):
 
         return inference_chunks
 
+    def count_keyword_terms(self, query: str) -> KeywordTermCounts:
+        # The keyword text hybrid_retrieval matches. Title and content share
+        # one analyzer, so one field covers both.
+        terms = self._client.analyze(
+            " ".join(strip_stopwords(query)) or query, field=CONTENT_FIELD_NAME
+        )
+        return KeywordTermCounts(total=len(terms), distinct=len(set(terms)))
+
     def semantic_retrieval(
         self,
         query_embedding: Embedding,
@@ -1489,6 +1499,9 @@ class OpenSearchIndexPair(DocumentIndex):
         return self._primary.keyword_retrieval(
             query, filters, num_to_retrieve, include_hidden=include_hidden
         )
+
+    def count_keyword_terms(self, query: str) -> KeywordTermCounts:
+        return self._primary.count_keyword_terms(query)
 
     def semantic_retrieval(
         self,

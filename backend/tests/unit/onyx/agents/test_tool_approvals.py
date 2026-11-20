@@ -454,9 +454,12 @@ def test_a_program_call_waits_in_the_saved_run(restored: bool, approved: bool) -
     assert approvals.withdrawn == []
 
 
-def test_open_requests_that_no_wait_saved_end_when_the_run_suspends() -> None:
+@pytest.mark.parametrize("restored", [False, True], ids=["resident", "restored"])
+def test_an_open_request_stays_open_while_the_run_suspends(restored: bool) -> None:
     """A request that a tool opened and did not return in a NestedInputWait,
-    such as one of a program that runs in the background, is not saved."""
+    such as one of a program that runs in the background, is saved with the
+    run. Its answer goes to the tool's continue_open_input, also after a
+    fresh agent resumes the run."""
 
     class OneRequestEach(Approvals):
         def request_approval(
@@ -466,6 +469,7 @@ def test_open_requests_that_no_wait_saved_end_when_the_run_suspends() -> None:
             return _request(f"{(nested_call or tool_call).id}-request")
 
     approvals = OneRequestEach({"send": None})
+    continued: list[tuple[str, list[str]]] = []
 
     def background(invocation: ToolInvocation) -> ToolResult:
         gate = invocation.nested_calls
@@ -476,39 +480,65 @@ def test_open_requests_that_no_wait_saved_end_when_the_run_suspends() -> None:
         )
         return ToolResult(content="still running")
 
-    ends: list[tuple[str, HumanToolAnswer | None]] = []
-    run = _run(
-        [
-            ToolCall(id="program", name="program", arguments={}),
-            ToolCall(id="send-1", name="send", arguments={}),
-        ],
-        [
+    def continue_open(
+        invocation: ToolInvocation, answers: list[NestedInputAnswer]
+    ) -> list[str]:
+        request_ids = [answer.request.request.request_id for answer in answers]
+        continued.append((invocation.call_id, request_ids))
+        return request_ids
+
+    def tools() -> list[AgentTool]:
+        return [
             AgentTool(
                 definition=ToolDefinition(
                     name="program", description="", parameters={}
                 ),
                 execute=background,
+                continue_open_input=continue_open,
                 approval_required=["send"],
             ),
             _recording_tool("send", [], approval_required=True),
-        ],
-        approvals,
-        on_event=lambda event: (
-            ends.append((event.request.request_id, event.answer))
-            if isinstance(event, InputEndedEvent)
-            else None
-        ),
-    )
-    try:
-        _until_suspended(run)
-        assert approvals.withdrawn == ["background-send-request"]
-        assert ends == [("background-send-request", None)]
-        assert [request.request_id for request in run.pending_inputs] == [
-            "send-1-request"
         ]
-    finally:
-        run.cancel()
-        assert run.wait_for_idle(5)
+
+    ends: list[tuple[str, HumanToolAnswer | None]] = []
+
+    def on_event(event: AgentEvent) -> None:
+        if isinstance(event, InputEndedEvent):
+            ends.append((event.request.request_id, event.answer))
+
+    calls = [
+        ToolCall(id="program", name="program", arguments={}),
+        ToolCall(id="send-1", name="send", arguments={}),
+    ]
+    run = _run(calls, tools(), approvals, on_event=on_event)
+    saved = _until_suspended(run)
+    assert approvals.withdrawn == []
+    assert ends == []
+    assert saved.progress is not None
+    assert list(saved.progress.open_inputs) == ["background-send-request"]
+    assert sorted(request.request_id for request in run.pending_inputs) == [
+        "background-send-request",
+        "send-1-request",
+    ]
+
+    answers = [_approve("background-send-request"), _approve("send-1-request")]
+    if restored:
+        history = run.capture().agent_state
+        run = _agent(calls, tools(), state=history).resume(
+            saved,
+            answers=answers,
+            coordinator=AgentCoordinator(approvals=approvals),
+            on_event=on_event,
+        )
+    else:
+        for answer in answers:
+            run.submit(answer)
+
+    assert run.result(timeout=5).output.text == "done"
+    assert run.wait_for_idle(5)
+    assert continued == [("program", ["background-send-request"])]
+    assert ("background-send-request", answers[0]) in ends
+    assert approvals.withdrawn == []
 
 
 def _suspended_send(executed: list[str]) -> tuple[Approvals, AgentState, RunState]:

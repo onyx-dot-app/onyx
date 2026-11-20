@@ -9,10 +9,10 @@ NUM_RETURNED_HITS = 50
 MAX_CHUNKS_FED_TO_CHAT = int(os.environ.get("MAX_CHUNKS_FED_TO_CHAT") or 25)
 
 # Maximum number of LLM cycles (one tool-call round-trip per cycle) before the
-# agent is forced to answer: the last cycle offers no tools. Default 6 covers the
-# common search → open_url pattern; raise via env when integrating with tool-heavy
-# MCPs that need more turns.
-MAX_LLM_CYCLES: int = int(os.environ.get("MAX_LLM_CYCLES") or 6)
+# agent is forced to answer: the last cycle offers no tools. Default 30 leaves
+# room for multi-step work, such as paging through a long listing, while still
+# ending a runaway turn; set the env var to change it.
+MAX_LLM_CYCLES: int = int(os.environ.get("MAX_LLM_CYCLES") or 30)
 # The cycle cap when code mode applies. Programs batch tool calls, and each
 # wait_code observation of a running cell takes a cycle, so it is only a safety
 # cap, never lower than MAX_LLM_CYCLES.

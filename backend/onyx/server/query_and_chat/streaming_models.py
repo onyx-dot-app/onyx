@@ -94,13 +94,6 @@ class StreamingType(Enum):
     INTERMEDIATE_REPORT_DELTA = "intermediate_report_delta"
     INTERMEDIATE_REPORT_CITED_DOCS = "intermediate_report_cited_docs"
 
-    CODING_AGENT_START = "coding_agent_start"
-    CODING_AGENT_THINKING_DELTA = "coding_agent_thinking_delta"
-    CODING_AGENT_FINAL = "coding_agent_final"
-
-    BASH_TOOL_START = "bash_tool_start"
-    BASH_TOOL_DELTA = "bash_tool_delta"
-
     CODE_MODE_START = "code_mode_start"
     CODE_MODE_DELTA = "code_mode_delta"
 
@@ -458,40 +451,11 @@ class IntermediateReportCitedDocs(BaseObj):
 
 
 ################################################
-# Coding Agent Packets
 ################################################
-class CodingAgentStart(BaseObj):
-    type: Literal["coding_agent_start"] = StreamingType.CODING_AGENT_START.value
-    query: str
-    repo: str
-
-
-class CodingAgentThinkingDelta(BaseObj):
-    type: Literal["coding_agent_thinking_delta"] = (
-        StreamingType.CODING_AGENT_THINKING_DELTA.value
-    )
-    content: str
-
-
-class CodingAgentFinal(BaseObj):
-    type: Literal["coding_agent_final"] = StreamingType.CODING_AGENT_FINAL.value
-    answer: str
 
 
 ################################################
-# Bash Tool Packets
 ################################################
-class BashToolStart(BaseObj):
-    type: Literal["bash_tool_start"] = StreamingType.BASH_TOOL_START.value
-    cmd: str
-
-
-class BashToolDelta(BaseObj):
-    type: Literal["bash_tool_delta"] = StreamingType.BASH_TOOL_DELTA.value
-    stdout: str = ""
-    stderr: str = ""
-    exit_code: int | None = None
-    timed_out: bool = False
 
 
 ################################################
@@ -713,13 +677,6 @@ PacketObj = Union[
     IntermediateReportStart,
     IntermediateReportDelta,
     IntermediateReportCitedDocs,
-    # Coding Agent Packets
-    CodingAgentStart,
-    CodingAgentThinkingDelta,
-    CodingAgentFinal,
-    # Bash Tool Packets
-    BashToolStart,
-    BashToolDelta,
     # Code Mode Packets
     CodeModeStart,
     CodeModeDelta,

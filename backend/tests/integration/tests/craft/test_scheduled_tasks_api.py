@@ -24,7 +24,7 @@ from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.external_dependency_unit.integration_helpers import (
     delete_integrations,
-    hold_in_plugin,
+    give_access,
     make_mcp_integration,
 )
 from tests.integration.common_utils.constants import API_SERVER_URL
@@ -58,7 +58,7 @@ def _create_task(
     editor_payload: dict[str, Any] | None = None,
     status: ScheduledTaskStatus = ScheduledTaskStatus.ACTIVE,
     run_immediately: bool = False,
-    plugins: list[dict[str, Any]] | None = None,
+    integrations: list[dict[str, Any]] | None = None,
 ) -> httpx.Response:
     body: dict[str, Any] = {
         "name": name or f"task-{uuid4().hex[:8]}",
@@ -68,8 +68,8 @@ def _create_task(
         "status": status.value,
         "run_immediately": run_immediately,
     }
-    if plugins is not None:
-        body["plugins"] = plugins
+    if integrations is not None:
+        body["integrations"] = integrations
     return client.post(
         _url(),
         json=body,
@@ -149,8 +149,8 @@ def _get_runs_for_task(task_id: UUID) -> list[ScheduledTaskRun]:
 
 
 @pytest.fixture
-def task_plugin() -> Generator[UUID, None, None]:
-    """A published plugin that holds an MCP integration with one action."""
+def task_integration() -> Generator[int, None, None]:
+    """An MCP integration with one action that each user has on."""
     with get_session_with_current_tenant() as db_session:
         integration, _ = make_mcp_integration(
             db_session,
@@ -158,16 +158,15 @@ def task_plugin() -> Generator[UUID, None, None]:
             name=f"task-mcp-{uuid4().hex[:6]}",
             tools=("send_report",),
         )
-        plugin = hold_in_plugin(
+        give_access(
             db_session,
             [integration],
             published=True,
             installation_policy=PluginInstallationPolicy.DEFAULT,
         )
         integration_id = integration.id
-        plugin_id = plugin.id
     try:
-        yield plugin_id
+        yield integration_id
     finally:
         with get_session_with_current_tenant() as db_session:
             delete_integrations(db_session, [integration_id])
@@ -190,17 +189,17 @@ def test_create_task_compiles_cron(admin_user: DATestUser) -> None:
     assert row.cron_expression == cron
 
 
-def test_create_and_patch_task_plugins(
-    admin_user: DATestUser, task_plugin: UUID
+def test_create_and_patch_task_integrations(
+    admin_user: DATestUser, task_integration: int
 ) -> None:
     link = {
-        "plugin_id": str(task_plugin),
+        "integration_id": task_integration,
         "action_settings": {"default": "inherit", "actions": {"send_report": "allow"}},
     }
-    response = _create_task(admin_user, plugins=[link])
+    response = _create_task(admin_user, integrations=[link])
     response.raise_for_status()
     task_id = UUID(response.json()["id"])
-    assert response.json()["plugins"] == [link]
+    assert response.json()["integrations"] == [link]
 
     response = client.get(
         _url(str(task_id), "action-policies"),
@@ -208,31 +207,35 @@ def test_create_and_patch_task_plugins(
         cookies=admin_user.cookies,
     )
     response.raise_for_status()
-    view = next(p for p in response.json() if p["plugin_id"] == str(task_plugin))
+    view = next(row for row in response.json() if row["id"] == task_integration)
     assert view["enabled"] is True
-    action = view["integrations"][0]["actions"][0]
+    assert view["runnable"] is True
+    assert view["action_settings"] == link["action_settings"]
+    action = view["actions"][0]
     assert action["key"] == "send_report"
     assert action["integration_policy"] == "ask"
     assert action["locked"] is False
 
     response = _patch_task(admin_user, task_id, {"name": "Renamed"})
     response.raise_for_status()
-    assert response.json()["plugins"] == [link]
-    response = _patch_task(admin_user, task_id, {"plugins": []})
+    assert response.json()["integrations"] == [link]
+    response = _patch_task(admin_user, task_id, {"integrations": []})
     response.raise_for_status()
-    assert response.json()["plugins"] == []
+    assert response.json()["integrations"] == []
 
 
-def test_task_plugins_reject_unknown_plugins_and_actions(
-    admin_user: DATestUser, task_plugin: UUID
+def test_task_integrations_reject_unknown_integrations_and_actions(
+    admin_user: DATestUser, task_integration: int
 ) -> None:
     unknown_action = {
-        "plugin_id": str(task_plugin),
+        "integration_id": task_integration,
         "action_settings": {"actions": {"not_an_action": "allow"}},
     }
-    assert _create_task(admin_user, plugins=[unknown_action]).status_code == 400
-    unknown_plugin = {"plugin_id": str(uuid4()), "action_settings": {}}
-    assert _create_task(admin_user, plugins=[unknown_plugin]).status_code == 404
+    assert _create_task(admin_user, integrations=[unknown_action]).status_code == 400
+    unknown_integration = {"integration_id": -1, "action_settings": {}}
+    assert (
+        _create_task(admin_user, integrations=[unknown_integration]).status_code == 404
+    )
 
 
 def test_create_task_interval_days_requires_time_of_day(admin_user: DATestUser) -> None:

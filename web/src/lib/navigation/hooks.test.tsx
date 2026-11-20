@@ -19,23 +19,23 @@ beforeEach(() => {
   mockParams = new URLSearchParams();
 });
 
-test.each(["/app/plugins", "/app/plugins/7"])(
+test.each(["/app/customize", "/app/customize/skills/7"])(
   "recognizes %s without highlighting New chat",
   (pathname) => {
     mockPathname = pathname;
     mockParams = new URLSearchParams("chatId=existing-chat");
     const { result } = renderHook(() => useAppPosition());
-    expect(result.current.isPlugins()).toBe(true);
+    expect(result.current.isCustomize()).toBe(true);
     expect(result.current.isNewSession()).toBe(false);
     expect(result.current.isChat()).toBe(false);
-    expect(result.current.href()).toBe("/app/plugins");
+    expect(result.current.href()).toBe("/app/customize");
   }
 );
 
-test("keeps conversation routing separate from Plugins", () => {
+test("keeps conversation routing separate from Customize", () => {
   mockParams = new URLSearchParams("chatId=existing-chat");
   const { result } = renderHook(() => useAppPosition());
-  expect(result.current.isPlugins()).toBe(false);
+  expect(result.current.isCustomize()).toBe(false);
   expect(result.current.chat()).toBe("existing-chat");
   expect(result.current.href()).toBe("/app?chatId=existing-chat");
 });

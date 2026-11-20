@@ -595,4 +595,4 @@ def test_document_access_collects_users_and_prefixed_groups() -> None:
     )
 
     assert result.external_user_emails == {"ada@contoso.com"}
-    assert result.external_user_group_ids == {f"sharepoint_{SITE_URL}::members".lower()}
+    assert result.external_user_group_ids == {f"{SITE_URL}::members".lower()}

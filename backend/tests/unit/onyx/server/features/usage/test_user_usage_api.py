@@ -23,6 +23,7 @@ from onyx.configs.constants import TokenRateLimitPeriod
 from onyx.db.cost_override import create_cost_override
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import (
+    LLMModelFlow,
     LLMProvider,
     ModelConfiguration,
     ModelCostOverride,
@@ -69,6 +70,7 @@ def db_session() -> Generator[Session, None, None]:
         UserUsage,
         LLMProvider,
         ModelConfiguration,
+        LLMModelFlow,
         ModelCostOverride,
         TokenRateLimit,
         User__UserGroup,

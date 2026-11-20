@@ -4,15 +4,22 @@ a read after the listing. A folder shared only by link is a node only as the
 parent of another node."""
 
 from typing import Any
+from unittest.mock import MagicMock, patch
 
 import pytest
 
+from onyx.connectors.google_drive import connector as connector_module
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.google_drive.constants import DRIVE_FOLDER_TYPE
+from onyx.connectors.google_drive.doc_conversion import PermissionSyncContext
 from onyx.connectors.google_drive.models import (
     DriveListingState,
     GoogleDriveCheckpoint,
     RetrievedDriveFile,
+)
+from onyx.connectors.google_drive.source_operations import (
+    GoogleDriveHttpError,
+    GoogleDriveSourceOperations,
 )
 from onyx.connectors.google_utils.shared_constants import GoogleDriveFileType
 from onyx.connectors.models import HierarchyNode
@@ -60,9 +67,7 @@ def _nodes(
 ) -> list[HierarchyNode]:
     listing = checkpoint.listing
     assert listing is not None
-    return connector._listed_folder_nodes(
-        listing, checkpoint, folders, [], None, add_prefix=False
-    )
+    return connector._listed_folder_nodes(listing, checkpoint, folders, [], None)
 
 
 def _readers(listing: DriveListingState) -> dict[str, list[str]]:
@@ -114,9 +119,7 @@ def test_a_read_after_the_listing_gives_a_parentless_folder_its_parent(
     monkeypatch.setattr(GoogleDriveConnector, "_is_my_drive_root", lambda *_args: False)
 
     batches = list(
-        connector._resolve_unlisted_parents(
-            checkpoint, include_permissions=False, add_prefix=False
-        )
+        connector._resolve_unlisted_parents(checkpoint, include_permissions=False)
     )
 
     nodes = [
@@ -172,7 +175,6 @@ def test_an_unlisted_parent_is_read_as_a_later_user_who_can_read_it(
         [],
         [_file_under("parent", "first@x.com"), _file_under("parent", "second@x.com")],
         None,
-        add_prefix=False,
     )
     assert _readers(listing) == {"parent": ["first@x.com", "second@x.com"]}
     read_as: list[str] = []
@@ -193,9 +195,7 @@ def test_an_unlisted_parent_is_read_as_a_later_user_who_can_read_it(
     monkeypatch.setattr(GoogleDriveConnector, "_is_my_drive_root", lambda *_args: True)
 
     batches = list(
-        connector._resolve_unlisted_parents(
-            checkpoint, include_permissions=False, add_prefix=False
-        )
+        connector._resolve_unlisted_parents(checkpoint, include_permissions=False)
     )
 
     assert [node.raw_node_id for batch in batches for node in batch] == ["parent"]
@@ -215,9 +215,7 @@ def test_a_read_round_with_no_node_still_yields_a_batch(
     )
 
     batches = list(
-        connector._resolve_unlisted_parents(
-            checkpoint, include_permissions=False, add_prefix=False
-        )
+        connector._resolve_unlisted_parents(checkpoint, include_permissions=False)
     )
 
     assert batches == [[]]
@@ -304,13 +302,11 @@ def test_an_unlisted_parent_is_read_first_as_its_organizer_or_owner(
     checkpoint.organizer_email_by_drive_id = {"drive": "organizer@x.com"}
     listing = checkpoint.listing
     assert listing is not None
-    connector._listed_folder_nodes(listing, checkpoint, [], [child], None, False)
+    connector._listed_folder_nodes(listing, checkpoint, [], [child], None)
     reads = _read_as(monkeypatch, {"parent": {first_reader, "viewer@x.com"}})
 
     batches = list(
-        connector._resolve_unlisted_parents(
-            checkpoint, include_permissions=False, add_prefix=False
-        )
+        connector._resolve_unlisted_parents(checkpoint, include_permissions=False)
     )
 
     assert [node.raw_node_id for batch in batches for node in batch] == ["parent"]
@@ -328,7 +324,6 @@ def test_an_owner_outside_the_domain_is_not_read_as() -> None:
         [],
         [_file_in("parent", "viewer@x.com", owner="someone@gmail.com")],
         None,
-        False,
     )
 
     (parent,) = listing.unresolved_parents.values()
@@ -350,14 +345,11 @@ def test_every_user_who_saw_a_child_can_read_an_unlisted_parent(
         [],
         [_file_in("parent", user) for user in users],
         None,
-        add_prefix=False,
     )
     reads = _read_as(monkeypatch, {"parent": {users[-1]}})
 
     batches = list(
-        connector._resolve_unlisted_parents(
-            checkpoint, include_permissions=False, add_prefix=False
-        )
+        connector._resolve_unlisted_parents(checkpoint, include_permissions=False)
     )
 
     assert [node.raw_node_id for batch in batches for node in batch] == ["parent"]
@@ -397,9 +389,7 @@ def test_a_folder_that_one_reader_cannot_read_is_read_again_as_a_later_one(
     monkeypatch.setattr(GoogleDriveConnector, "_is_my_drive_root", lambda *_args: False)
 
     batches = list(
-        connector._resolve_unlisted_parents(
-            checkpoint, include_permissions=False, add_prefix=False
-        )
+        connector._resolve_unlisted_parents(checkpoint, include_permissions=False)
     )
 
     nodes = sorted(node.raw_node_id for batch in batches for node in batch)
@@ -435,9 +425,7 @@ def test_a_folder_read_with_no_parent_is_read_again_as_the_next_reader(
     monkeypatch.setattr(GoogleDriveConnector, "_is_my_drive_root", lambda *_args: False)
 
     batches = list(
-        connector._resolve_unlisted_parents(
-            checkpoint, include_permissions=False, add_prefix=False
-        )
+        connector._resolve_unlisted_parents(checkpoint, include_permissions=False)
     )
 
     nodes = [
@@ -481,9 +469,7 @@ def test_a_folder_read_with_no_parent_is_read_again_for_a_later_child(
     monkeypatch.setattr(GoogleDriveConnector, "_is_my_drive_root", lambda *_args: False)
 
     batches = list(
-        connector._resolve_unlisted_parents(
-            checkpoint, include_permissions=False, add_prefix=False
-        )
+        connector._resolve_unlisted_parents(checkpoint, include_permissions=False)
     )
 
     nodes = [
@@ -492,3 +478,93 @@ def test_a_folder_read_with_no_parent_is_read_again_for_a_later_child(
     assert ("C", "P") in nodes
     # The last node yielded for P has its parent.
     assert [node for node in nodes if node[0] == "P"][-1] == ("P", "top")
+
+
+def _shared_drive_file(parent_id: str) -> RetrievedDriveFile:
+    return RetrievedDriveFile(
+        drive_file={"id": "file-1", "driveId": "drive-1", "parents": [parent_id]},
+        user_email=_LISTER,
+    )
+
+
+def test_a_shared_drive_path_that_ends_before_the_drive_is_not_complete() -> None:
+    """The listing user cannot see the parent of `inner`. The path would lack
+    the folders above it, so the stub gets no path and conversion builds
+    it."""
+    connector = _connector()
+    checkpoint = _checkpoint(connector)
+    listing = checkpoint.listing
+    assert listing is not None
+    listing.drive_names["drive-1"] = "Team"
+    listing.folder_names["inner"] = ("Inner", None)
+
+    assert (
+        connector._listed_folder_path(checkpoint, listing, _shared_drive_file("inner"))
+        is None
+    )
+
+
+def test_a_shared_drive_path_that_reaches_the_drive_is_complete() -> None:
+    connector = _connector()
+    checkpoint = _checkpoint(connector)
+    listing = checkpoint.listing
+    assert listing is not None
+    listing.drive_names["drive-1"] = "Team"
+    listing.folder_names["inner"] = ("Inner", "outer")
+    listing.folder_names["outer"] = ("Outer", "drive-1")
+
+    assert connector._listed_folder_path(
+        checkpoint, listing, _shared_drive_file("inner")
+    ) == ["Team", "Outer", "Inner"]
+
+
+def test_a_failed_folder_permission_read_keeps_the_stored_access() -> None:
+    """The listing gave no permission ids, and the read of them fails. The
+    node has no access value, so the stored access stays: an unread access
+    is never written as no access."""
+    connector = _connector()
+    connector._ops = MagicMock(spec=GoogleDriveSourceOperations)
+    connector._primary_admin_email = "admin@x.com"
+    ops = connector.ops
+    assert isinstance(ops, MagicMock)
+    ops.get_file.side_effect = GoogleDriveHttpError(
+        status_code=500, reasons=(), access_denied=False, message="backend error"
+    )
+    context = PermissionSyncContext(
+        primary_admin_email="admin@x.com", google_domain="x.com"
+    )
+
+    with patch.object(
+        connector_module, "get_external_access_for_folder"
+    ) as external_access:
+        node = connector._listed_folder_node(
+            _folder("folder-1", parent_id="drive-1"), context
+        )
+
+    external_access.assert_not_called()
+    assert node.external_access is None
+
+
+def test_the_folder_name_map_stops_at_its_cap(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Past the cap, a folder is not in the map. A file under it gets no
+    stored path, and conversion builds the path."""
+    monkeypatch.setattr(connector_module, "MAX_LISTED_FOLDER_NAMES", 1)
+    connector = _connector()
+    checkpoint = _checkpoint(connector)
+    listing = checkpoint.listing
+    assert listing is not None
+    listing.drive_names["drive-1"] = "Team"
+
+    _nodes(connector, checkpoint, [_folder("outer", parent_id="drive-1")])
+    _nodes(connector, checkpoint, [_folder("inner", parent_id="outer")])
+
+    assert list(listing.folder_names) == ["outer"]
+    assert (
+        connector._listed_folder_path(checkpoint, listing, _shared_drive_file("inner"))
+        is None
+    )
+    assert connector._listed_folder_path(
+        checkpoint, listing, _shared_drive_file("outer")
+    ) == ["Team", "outer"]

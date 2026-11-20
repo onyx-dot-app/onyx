@@ -3,7 +3,7 @@ actions that a chat offers, and name the preferred tool."""
 
 from collections.abc import Generator
 from typing import Any
-from uuid import UUID, uuid4
+from uuid import uuid4
 
 import pytest
 from sqlalchemy.orm import Session
@@ -17,7 +17,7 @@ from onyx.server.query_and_chat.models import ChatSessionCreationRequest
 from onyx.tools.models import (
     ActionPreference,
     CapabilityEntry,
-    PluginEntry,
+    IntegrationEntry,
     ToolOptions,
 )
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
@@ -28,7 +28,7 @@ from tests.external_dependency_unit.code_mode_helpers import ChatLLM, send
 from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.external_dependency_unit.integration_helpers import (
     delete_integrations,
-    hold_in_plugin,
+    give_access,
     link_persona,
     make_mcp_integration,
     make_openapi_integration,
@@ -53,7 +53,6 @@ class Agent:
         self,
         persona: Persona,
         user: User,
-        plugin_id: UUID,
         mcp_id: int,
         api_id: int,
         api_tool_id: int,
@@ -61,7 +60,8 @@ class Agent:
     ) -> None:
         self.persona = persona
         self.user = user
-        self.plugin_id = plugin_id
+        self.mcp_id = mcp_id
+        self.api_id = api_id
         self.open_url_id = open_url_id
         self.api_tool_id = api_tool_id
         self.hello = normalize_external_tool_name(f"mcp__{mcp_id}__{SERVER}__hello")
@@ -85,12 +85,12 @@ def agent(
         tools=("hello", "bye"),
     )
     api, api_tool = make_openapi_integration(db_session, openapi_schema=ORDERS_SPEC)
-    plugin = hold_in_plugin(db_session, [mcp, api])
+    give_access(db_session, [mcp, api])
     open_url = get_builtin_tool(db_session, OpenURLTool)
     web_search = get_builtin_tool(db_session, WebSearchTool)
     persona = Persona(
         name=f"Tool options agent {uuid4().hex[:8]}",
-        description="Agent with built-in tools and a plugin",
+        description="Agent with built-in tools and two integrations",
         system_prompt="You are a helpful assistant",
         task_prompt="",
         tools=[open_url, web_search],
@@ -105,12 +105,12 @@ def agent(
     )
     db_session.add(persona)
     db_session.commit()
-    link_persona(db_session, persona.id, plugin.id)
+    link_persona(db_session, persona.id, mcp.id)
+    link_persona(db_session, persona.id, api.id)
     try:
         yield Agent(
             persona,
             user,
-            plugin.id,
             mcp.id,
             api.id,
             api_tool.id,
@@ -151,7 +151,7 @@ def _offered(
     }
 
 
-def test_without_options_the_chat_offers_each_action_of_the_plugin(
+def test_without_options_the_chat_offers_each_action_of_each_integration(
     db_session: Session, agent: Agent
 ) -> None:
     offered = _offered(db_session, agent, None)
@@ -161,14 +161,16 @@ def test_without_options_the_chat_offers_each_action_of_the_plugin(
     assert offered[OpenURLTool.NAME] == OpenURLTool.DESCRIPTION
 
 
-def test_a_plugin_entry_with_one_action_offers_only_that_action(
+def test_an_integration_entry_with_one_action_offers_only_that_action(
     db_session: Session, agent: Agent
 ) -> None:
     offered = _offered(
         db_session,
         agent,
         ToolOptions(
-            allowed=[PluginEntry(plugin_id=agent.plugin_id, actions=["listOrders"])]
+            allowed=[
+                IntegrationEntry(integration_id=agent.api_id, actions=["listOrders"])
+            ]
         ),
     )
     assert agent.list_orders in offered
@@ -177,7 +179,7 @@ def test_a_plugin_entry_with_one_action_offers_only_that_action(
     assert OpenURLTool.NAME not in offered
 
 
-def test_a_plugin_that_is_not_allowed_offers_no_action(
+def test_an_integration_that_is_not_allowed_offers_no_action(
     db_session: Session, agent: Agent
 ) -> None:
     offered = _offered(
@@ -203,7 +205,8 @@ def test_open_url_does_not_fetch_from_the_web_when_web_search_is_not_allowed(
         ToolOptions(
             allowed=[
                 CapabilityEntry(tool_id=agent.open_url_id),
-                PluginEntry(plugin_id=agent.plugin_id),
+                IntegrationEntry(integration_id=agent.mcp_id),
+                IntegrationEntry(integration_id=agent.api_id),
             ]
         ),
     )
@@ -225,7 +228,7 @@ def test_an_action_preference_reaches_the_agent(
         "Help me.",
         code_mode=False,
         tool_options=ToolOptions(
-            preferred=ActionPreference(plugin_id=agent.plugin_id, action="listOrders")
+            preferred=ActionPreference(integration_id=agent.api_id, action="listOrders")
         ),
     )
     prompt_text = "\n".join(
@@ -237,10 +240,31 @@ def test_an_action_preference_reaches_the_agent(
     )
 
 
-def test_the_catalog_names_the_plugin_of_each_tool(
+def test_the_catalog_names_the_integration_of_each_tool(
     db_session: Session, agent: Agent
 ) -> None:
     tools = list_tools(db_session=db_session, user=agent.user)
-    assert [tool.plugin_ids for tool in tools if tool.id == agent.api_tool_id] == [
-        [agent.plugin_id]
-    ]
+    assert [
+        (tool.integration_id, tool.plugin_ids)
+        for tool in tools
+        if tool.id == agent.api_tool_id
+    ] == [(agent.api_id, [str(agent.api_id)])]
+
+
+def test_a_plugin_entry_of_the_mobile_app_names_the_integration(
+    db_session: Session, agent: Agent
+) -> None:
+    """The released mobile app sends each ``plugin_ids`` value of the tool
+    list back in a ``plugin`` entry."""
+    options = ToolOptions.model_validate(
+        {
+            "allowed": [
+                {"type": "plugin", "plugin_id": str(agent.api_id)},
+                {"type": "plugin", "plugin_id": str(uuid4())},
+            ]
+        }
+    )
+    assert options.allowed == [IntegrationEntry(integration_id=agent.api_id)]
+    offered = _offered(db_session, agent, options)
+    assert {agent.list_orders, agent.create_order} <= set(offered)
+    assert not {agent.hello, agent.bye} & set(offered)

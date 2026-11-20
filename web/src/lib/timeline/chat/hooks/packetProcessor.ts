@@ -114,8 +114,7 @@ export interface GroupedPacket {
   packets: Packet[];
   /** The tool calls nested under this group, ordered by sub_turn_index. */
   nestedCalls: NestedCall[];
-  /** Every packet of the group, nested calls included, in stream order. Only
-   * renderers that interleave nested sections read it (coding agent). */
+  /** Every packet of the group, nested calls included, in stream order. */
   streamPackets: Packet[];
   /** The program of a code mode group; null for other groups. */
   codeMode: CodeModeProgram | null;
@@ -196,7 +195,6 @@ const CONTENT_PACKET_TYPES_SET = new Set<PacketType>([
   PacketType.REASONING_START,
   PacketType.DEEP_RESEARCH_PLAN_START,
   PacketType.RESEARCH_AGENT_START,
-  PacketType.CODING_AGENT_START,
   PacketType.EXEC_COMMAND_START,
   PacketType.WRITE_STDIN_START,
   PacketType.APPLY_PATCH_START,

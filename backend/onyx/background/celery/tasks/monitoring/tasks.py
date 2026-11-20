@@ -217,6 +217,7 @@ def monitor_celery_queues_helper(
     n_docfetching = celery_get_queue_length(
         OnyxCeleryQueues.CONNECTOR_DOC_FETCHING, r_celery
     )
+    n_docconversion = celery_get_queue_length(OnyxCeleryQueues.DOCCONVERSION, r_celery)
     n_docprocessing = celery_get_queue_length(OnyxCeleryQueues.DOCPROCESSING, r_celery)
     n_port = celery_get_queue_length(OnyxCeleryQueues.PORT, r_celery)
 
@@ -272,6 +273,9 @@ def monitor_celery_queues_helper(
     n_docfetching_prefetched = celery_get_unacked_task_ids(
         OnyxCeleryQueues.CONNECTOR_DOC_FETCHING, r_celery
     )
+    n_docconversion_prefetched = celery_get_unacked_task_ids(
+        OnyxCeleryQueues.DOCCONVERSION, r_celery
+    )
     n_docprocessing_prefetched = celery_get_unacked_task_ids(
         OnyxCeleryQueues.DOCPROCESSING, r_celery
     )
@@ -280,6 +284,8 @@ def monitor_celery_queues_helper(
         f"Queue lengths: celery={n_celery} "
         f"docfetching={n_docfetching} "
         f"docfetching_prefetched={len(n_docfetching_prefetched)} "
+        f"docconversion={n_docconversion} "
+        f"docconversion_prefetched={len(n_docconversion_prefetched)} "
         f"docprocessing={n_docprocessing} "
         f"docprocessing_prefetched={len(n_docprocessing_prefetched)} "
         f"port={n_port} "

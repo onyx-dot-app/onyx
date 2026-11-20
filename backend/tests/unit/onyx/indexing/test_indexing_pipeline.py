@@ -1857,6 +1857,60 @@ def test_get_docs_to_update_permission_change_bypasses_deduplication() -> None:
     assert hashes == {"doc1": doc.content_hash()}
 
 
+def _unchanged_box_doc_with_groups(
+    group_ids: set[str], stored_group_ids: list[str]
+) -> tuple[Document, MagicMock]:
+    updated_at = datetime(2020, 1, 1, tzinfo=timezone.utc)
+    doc = _doc_with_text("Title", "unchanged content")
+    doc.id = "doc1"
+    doc.source = DocumentSource.BOX
+    doc.doc_updated_at = updated_at
+    doc.external_access = ExternalAccess(
+        external_user_emails=set(),
+        external_user_group_ids=group_ids,
+        is_public=False,
+    )
+    db_doc = _make_db_doc(
+        "doc1",
+        content_hash=doc.content_hash(),
+        doc_updated_at=updated_at,
+    )
+    db_doc.external_user_group_ids = stored_group_ids
+    return doc, db_doc
+
+
+def test_get_docs_to_update_compares_bare_group_ids_in_stored_form() -> None:
+    """Box yields bare ids and storage adds the prefix, so the stored form of
+    the same groups is no change."""
+    doc, db_doc = _unchanged_box_doc_with_groups(
+        {"Eng-Team", "box-group-1"}, ["box_eng-team", "box_box-group-1"]
+    )
+
+    docs, hashes = get_docs_to_update([doc], db_docs=[db_doc])
+
+    assert docs == []
+    assert hashes == {}
+
+
+def test_get_docs_to_update_bare_group_ids_stored_bare_are_a_change() -> None:
+    """Rows stored bare before the storage prefix are re-written once."""
+    doc, db_doc = _unchanged_box_doc_with_groups({"box-group-1"}, ["box-group-1"])
+
+    docs, _ = get_docs_to_update([doc], db_docs=[db_doc])
+
+    assert docs == [doc]
+
+
+def test_get_docs_to_update_added_bare_group_id_is_a_change() -> None:
+    doc, db_doc = _unchanged_box_doc_with_groups(
+        {"box-group-1", "box-group-2"}, ["box_box-group-1"]
+    )
+
+    docs, _ = get_docs_to_update([doc], db_docs=[db_doc])
+
+    assert docs == [doc]
+
+
 def test_get_docs_to_update_new_source_info_bypasses_both_gates_once() -> None:
     """A type or size the source newly reports is otherwise skipped forever by an
     unchanged timestamp and hash. Matching or no longer reported values skip."""
@@ -1980,6 +2034,85 @@ def test_post_index_leaves_chunk_count_alone_for_a_failed_write() -> None:
         )
 
     assert update_chunk_count.call_args.kwargs["document_ids"] == ["written"]
+
+
+def test_post_index_keeps_the_old_modified_time_for_a_failed_write() -> None:
+    """The stored modified time marks the version in the index. A failed write
+    left the old version there, so the run that lists the new version again
+    must not read it as indexed."""
+    new_time = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    context = MagicMock()
+    context.updatable_docs = [
+        MagicMock(id="written", doc_updated_at=new_time, doc_created_at=None),
+        MagicMock(id="failed", doc_updated_at=new_time, doc_created_at=None),
+    ]
+    adapter = DocumentIndexingBatchAdapter(
+        connector_id=1,
+        credential_id=1,
+        tenant_id="t",
+        index_attempt_metadata=MagicMock(connector_id=1, credential_id=1),
+    )
+
+    module = "onyx.indexing.adapters.document_indexing_adapter"
+    with (
+        patch(f"{module}.update_docs_chunk_count__no_commit"),
+        patch(f"{module}.update_docs_updated_at__no_commit") as update_updated_at,
+        patch(f"{module}.update_docs_created_at__no_commit"),
+        patch(f"{module}.update_docs_last_modified__no_commit"),
+        patch(f"{module}.mark_document_as_indexed_for_cc_pair__no_commit"),
+        patch(f"{module}.update_chunk_boost_components__no_commit"),
+    ):
+        adapter.post_index(
+            context=context,
+            updatable_chunk_data=[],
+            filtered_documents=[],
+            enrichment=MagicMock(doc_id_to_new_chunk_cnt={}),
+            db_session=MagicMock(),
+            index_to_secondary=False,
+            failed_document_ids={"failed"},
+        )
+
+    assert update_updated_at.call_args.kwargs["ids_to_new_updated_at"] == {
+        "written": new_time
+    }
+
+
+def test_post_index_keeps_the_modified_time_for_a_future_write() -> None:
+    """A FUTURE write goes to the secondary index. The stored modified time
+    marks the version in PRESENT, so the write must not move it: a FUTURE
+    attempt that fails before the swap would make PRESENT skip the change."""
+    new_time = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    context = MagicMock()
+    context.updatable_docs = [
+        MagicMock(id="written", doc_updated_at=new_time, doc_created_at=None)
+    ]
+    adapter = DocumentIndexingBatchAdapter(
+        connector_id=1,
+        credential_id=1,
+        tenant_id="t",
+        index_attempt_metadata=MagicMock(connector_id=1, credential_id=1),
+    )
+
+    module = "onyx.indexing.adapters.document_indexing_adapter"
+    with (
+        patch(f"{module}.update_docs_chunk_count__no_commit"),
+        patch(f"{module}.update_docs_updated_at__no_commit") as update_updated_at,
+        patch(f"{module}.update_docs_created_at__no_commit"),
+        patch(f"{module}.update_docs_last_modified__no_commit"),
+        patch(f"{module}.mark_document_as_indexed_for_cc_pair__no_commit"),
+        patch(f"{module}.update_chunk_boost_components__no_commit"),
+    ):
+        adapter.post_index(
+            context=context,
+            updatable_chunk_data=[],
+            filtered_documents=[],
+            enrichment=MagicMock(doc_id_to_new_chunk_cnt={}),
+            db_session=MagicMock(),
+            index_to_secondary=True,
+            failed_document_ids=set(),
+        )
+
+    assert update_updated_at.call_args.kwargs["ids_to_new_updated_at"] == {}
 
 
 def test_ancestors_come_from_the_raw_id_whenever_the_document_has_one() -> None:

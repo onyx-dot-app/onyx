@@ -54,7 +54,6 @@ from onyx.connectors.models import (
 )
 from onyx.connectors.onedrive.access import (
     get_onedrive_external_access,
-    prefix_onedrive_external_groups,
 )
 from onyx.connectors.onedrive.models import (
     OneDriveCheckpoint,
@@ -370,8 +369,6 @@ class OneDriveConnector(
         user: OneDriveUser,
         drive: OneDriveDrive,
         item_id: str,
-        *,
-        add_prefix: bool,
     ) -> ExternalAccess:
         permissions: list[OneDrivePermission] = self._list_all_permissions(
             drive.id, item_id
@@ -380,7 +377,6 @@ class OneDriveConnector(
             permissions,
             user.user_principal_name,
             self.settings.treat_organization_link_as_public,
-            add_prefix=add_prefix,
         )
 
     def _item_access(
@@ -388,8 +384,6 @@ class OneDriveConnector(
         user: OneDriveUser,
         drive: OneDriveDrive,
         item: DriveDeltaItem,
-        *,
-        add_prefix: bool,
     ) -> ExternalAccess:
         parent_id = item.parent_reference.id if item.parent_reference else None
         parent_access = self._folder_access.get(
@@ -397,7 +391,7 @@ class OneDriveConnector(
         )
         if not item.is_folder and item.shared is None and parent_access is not None:
             return parent_access
-        access = self._direct_access(user, drive, item.id, add_prefix=add_prefix)
+        access = self._direct_access(user, drive, item.id)
         if item.is_folder:
             cache_key = hierarchy_item_id(drive.id, item.id)
             self._folder_access[cache_key] = access
@@ -557,7 +551,6 @@ class OneDriveConnector(
         end: SecondsSinceUnixEpoch,
         *,
         include_permissions: bool,
-        add_group_prefix: bool,
     ) -> Generator[
         OneDriveDiscoveredFile | HierarchyNode | ConnectorFailure, None, None
     ]:
@@ -616,12 +609,7 @@ class OneDriveConnector(
                     continue
                 try:
                     access = (
-                        self._item_access(
-                            user,
-                            drive,
-                            item,
-                            add_prefix=add_group_prefix,
-                        )
+                        self._item_access(user, drive, item)
                         if include_permissions
                         else None
                     )
@@ -633,23 +621,13 @@ class OneDriveConnector(
                 except Exception as error:
                     yield _entity_failure(item.id, str(error), error)
                     continue
-                node_access = (
-                    prefix_onedrive_external_groups(access)
-                    if access is not None and not add_group_prefix
-                    else access
-                )
-                yield folder_node(drive, item, node_access)
+                yield folder_node(drive, item, access)
                 continue
             if not item.is_file or not self._item_allowed(item, None, end_at):
                 continue
             try:
                 access = (
-                    self._item_access(
-                        user,
-                        drive,
-                        item,
-                        add_prefix=add_group_prefix,
-                    )
+                    self._item_access(user, drive, item)
                     if include_permissions
                     else None
                 )
@@ -680,7 +658,6 @@ class OneDriveConnector(
         checkpoint: OneDriveCheckpoint,
         *,
         include_permissions: bool,
-        add_group_prefix: bool,
     ) -> Generator[
         OneDriveDiscoveredFile | HierarchyNode | ConnectorFailure,
         None,
@@ -706,7 +683,6 @@ class OneDriveConnector(
             start,
             end,
             include_permissions=include_permissions,
-            add_group_prefix=add_group_prefix,
         )
         return checkpoint
 
@@ -723,7 +699,6 @@ class OneDriveConnector(
             end,
             checkpoint,
             include_permissions=include_permissions,
-            add_group_prefix=True,
         ):
             if not isinstance(item, OneDriveDiscoveredFile):
                 yield item
@@ -779,7 +754,6 @@ class OneDriveConnector(
                 0,
                 checkpoint,
                 include_permissions=include_permissions,
-                add_group_prefix=False,
             ):
                 if isinstance(item, ConnectorFailure):
                     if item.exception is None:
@@ -954,9 +928,7 @@ class OneDriveConnector(
         # Top-down, so each folder's access is cached before its children use it.
         for folder in reversed(folders):
             access = (
-                self._item_access(user, drive, folder, add_prefix=True)
-                if include_permissions
-                else None
+                self._item_access(user, drive, folder) if include_permissions else None
             )
             node = folder_node(drive, folder, access)
             cache.emitted_node_ids.add(node.raw_node_id)
@@ -977,7 +949,7 @@ class OneDriveConnector(
             )
         yield from self._ancestor_nodes(owned, item, cache, include_permissions)
         access = (
-            self._item_access(owned.user, owned.drive, item, add_prefix=True)
+            self._item_access(owned.user, owned.drive, item)
             if include_permissions
             else None
         )

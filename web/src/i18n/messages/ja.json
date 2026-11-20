@@ -119,9 +119,6 @@
       "addConnectors": {
         "label": "コネクタを追加"
       },
-      "codingAgentIncognito": {
-        "tooltip": "シークレットモードではコーディングエージェントを使用できません"
-      },
       "configure": {
         "tooltip": "設定"
       },
@@ -266,9 +263,6 @@
       },
       "addMemory": {
         "label": "メモリに追加"
-      },
-      "codingAgent": {
-        "label": "コーディングエージェント"
       }
     },
     "toolsPopover": {
@@ -323,9 +317,6 @@
       "tooltips": {
         "askAdminSuffix": {
           "text": "管理者に設定を依頼してください。"
-        },
-        "codingAgent": {
-          "description": "GitHubリポジトリを調査し、そのコードに関する質問に答えます。"
         },
         "configureSuffix": {
           "text": "有効にするには設定の歯車を押してください。"
@@ -1507,10 +1498,6 @@
           "description": "コードを生成して実行します。",
           "title": "コードインタープリター"
         },
-        "codingAgent": {
-          "description": "GitHub リポジトリを調査し、そのコードに関する質問に回答します。",
-          "title": "コーディングエージェント"
-        },
         "description": "チャットで使用できるツールと機能です。エージェントには適用されません。",
         "pluginsNote": "MCP サーバーと OpenAPI アプリは[連携]({url})で管理します。",
         "imageGeneration": {
@@ -2178,7 +2165,15 @@
           "close": "閉じる",
           "count": "({count})"
         },
-        "showing": "<mono>{total}</mono> 件中 <mono>{from}</mono>~<mono>{to}</mono> 件を表示"
+        "showing": "<mono>{total}</mono> 件中 <mono>{from}</mono>~<mono>{to}</mono> 件を表示",
+        "progress": {
+          "listed": "一覧取得済み",
+          "converted": "変換済み",
+          "indexed": "インデックス済み",
+          "listedSoFar": "{count, plural, other {これまでに # 件のドキュメントを一覧取得}}",
+          "skipped": "{count, plural, other {変更のないドキュメント # 件をスキップ}}",
+          "eta": "残り約 {duration}"
+        }
       },
       "activity": {
         "search": {
@@ -10364,65 +10359,36 @@
         }
       }
     },
-    "plugins": {
-      "title": "プラグイン",
-      "description": "プラグインはユーザーにスキルと連携を提供します。このページには連携を含むプラグインが表示されます。",
-      "search": "プラグインを検索",
-      "loadFailed": "プラグインを読み込めませんでした。",
-      "manageIntegrations": "連携を管理",
-      "columns": {
-        "name": "プラグイン",
-        "library": "ライブラリ",
-        "installation": "インストール設定",
-        "integrations": "連携"
-      },
-      "library": {
-        "organization": "組織ライブラリ",
-        "personal": "{owner} のマイアップロード"
-      },
-      "installationSelect": "{name} のインストール設定",
-      "installationSaved": "{name} は {policy} になりました。",
-      "installationSaveFailed": "インストール設定を保存できませんでした。",
-      "openIntegration": "{name} を開く",
-      "empty": {
-        "title": "連携を含むプラグインはありません",
-        "description": "連携を追加してください。Onyx がそれを含むプラグインを作成します。"
-      }
-    },
     "integrations": {
       "title": "連携",
-      "description": "MCP サーバーとアプリを接続します。各連携はプラグインに含まれ、プラグインがユーザーにアクセスを提供します。",
+      "description": "MCP サーバーとアプリを接続します。各統合には所有者、インストール設定、独自の共有があります。",
       "search": "連携を検索",
       "open": "{name} を開く",
       "loadFailed": "連携を読み込めませんでした。",
       "add": {
         "label": "追加",
         "title": "連携を追加",
-        "description": "連携の種類を選択してください。",
+        "description": "サービスを接続すると、チャットと Craft で使えるようになります。",
         "created": "{name} を追加しました。",
         "createFailed": "連携を追加できませんでした。",
-        "formTitle": {
-          "mcp_server": "MCP サーバーを追加",
-          "openapi": "OpenAPI アプリを追加",
-          "preset": "プリセットからアプリを追加",
-          "custom": "カスタムアプリを追加"
-        },
-        "kindDescription": {
-          "mcp_server": "URL を指定してリモート MCP サーバーに接続します。",
-          "openapi": "OpenAPI スキーマからアクションを作成します。",
-          "preset": "GitHub や Slack などの組み込みアプリに接続します。",
-          "custom": "URL パターンに一致する HTTP サービスを Craft から呼び出せるようにします。"
-        },
         "openapi": {
-          "title": "OpenAPI アプリを追加"
+          "title": "OpenAPI アプリを追加",
+          "schema": {
+            "title": "スキーマ",
+            "description": "アクションを定義するOpenAPIスキーマを追加します。",
+            "added": "{count, plural, other {スキーマには # 個のパスがあります。}}",
+            "required": "スキーマを追加してください。",
+            "add": "スキーマを追加",
+            "edit": "スキーマを編集"
+          }
         },
         "preset": {
-          "title": "プリセット",
-          "placeholder": "プリセットを選択",
-          "required": "プリセットを選択してください。",
+          "title": "開始点",
           "loadFailed": "プリセットを読み込めませんでした。",
           "instructions": "セットアップ手順",
-          "credentialRequired": "この値を入力してください。"
+          "credentialRequired": "この値を入力してください。",
+          "description": "プリセットは、組み込みアプリの名前とサインインを入力します。任意のHTTPサービスを設定するには「カスタムアプリ」を選択します。",
+          "custom": "カスタムアプリ"
         },
         "name": {
           "title": "名前",
@@ -10465,16 +10431,38 @@
           "title": "所有者",
           "personal": "自分用",
           "organization": "組織用",
-          "personalDescription": "Onyx は連携をマイアップロード内のプラグインに追加します。プラグインは後で共有できます。",
-          "organizationDescription": "Onyx は連携を組織ライブラリ内のプラグインに追加します。"
+          "personalDescription": "この統合を使えるのはあなただけです。後で共有できます。",
+          "organizationDescription": "組織の各ユーザーがこの統合をオンにできます。"
         },
-        "back": "戻る",
         "submit": "追加",
-        "adding": "追加しています…"
+        "adding": "追加しています…",
+        "cancel": "キャンセル",
+        "type": {
+          "title": "種類",
+          "description": "Onyxがサービスに接続する方法を選択します。",
+          "mcp_server": {
+            "title": "MCPサーバー",
+            "description": "URLでリモートのMCPサーバーに接続します。"
+          },
+          "openapi": {
+            "title": "OpenAPIアプリ",
+            "description": "OpenAPIスキーマからアクションを作成します。"
+          },
+          "app": {
+            "title": "アプリ",
+            "description": "GitHubなどのプリセット、またはカスタムアプリから始めます。"
+          }
+        },
+        "details": {
+          "title": "詳細"
+        },
+        "signIn": {
+          "title": "サインイン"
+        }
       },
       "filters": {
         "label": "連携の種類",
-        "all": "すべて",
+        "all": "すべての種類",
         "mcp": "MCP サーバー",
         "api": "アプリ"
       },
@@ -10482,8 +10470,8 @@
         "name": "名前",
         "type": "種類",
         "signIn": "ログイン",
-        "access": "アクセス",
-        "status": "ステータス"
+        "status": "ステータス",
+        "installation": "インストール設定"
       },
       "empty": {
         "title": "連携はありません",
@@ -10498,12 +10486,6 @@
         "custom": "カスタムアプリ"
       },
       "signInSummary": "{mode, select, none {ログインなし} shared {{method, select, oauth2 {組織アカウント (OAuth)} api_key {組織の API キー} onyx_login {Onyx ログイン} managed {Onyx が管理} other {組織アカウント}}} individual {{method, select, oauth2 {各ユーザー (OAuth)} api_key {各ユーザー (API キー)} onyx_login {Onyx ログイン} managed {Onyx が管理} other {各ユーザー}}} other {不明}}",
-      "access": {
-        "none": "プラグインに含まれていません",
-        "many": "{count, plural, one {# 個のプラグイン} other {# 個のプラグイン}}",
-        "organization": "{plugin}（組織ライブラリ）",
-        "personal": "{plugin}（{owner} のマイアップロード）"
-      },
       "status": {
         "needsSetup": "要セットアップ",
         "off": "オフ",
@@ -10583,23 +10565,14 @@
           "createdBy": "追加したユーザー",
           "needsSetup": "要セットアップ",
           "needsSetupDefault": "「設定」タブでログイン設定を完了してください。",
-          "plugins": {
-            "title": "プラグイン",
-            "description": "ユーザーはこれらのプラグインを通じてこの連携を利用します。",
-            "organization": "{policy, select, REQUIRED {組織ライブラリ、必須} DEFAULT {組織ライブラリ、デフォルトでオン} AVAILABLE {組織ライブラリ、利用可能} NOT_AVAILABLE {組織ライブラリ、利用不可} other {組織ライブラリ}}",
-            "personal": "{owner} のマイアップロード",
-            "manage": "プラグインを管理"
-          },
           "enabled": {
             "title": "有効",
             "description": "オフにすると、エージェントもユーザーもこの連携を使用できません。"
           },
           "delete": {
-            "title": "連携を削除",
-            "description": "各プラグインから連携を削除し、その接続とアクション設定を削除します。",
             "label": "削除",
             "confirmTitle": "{name} を削除しますか？",
-            "confirmDescription": "Onyx は各プラグインから連携を削除し、その接続とアクション設定を削除します。この操作は元に戻せません。",
+            "confirmDescription": "Onyx は統合とその接続およびアクション設定を削除し、各エージェントとタスクから外します。元に戻すことはできません。",
             "confirm": "削除"
           },
           "deleted": "{name} を削除しました。",
@@ -10610,8 +10583,15 @@
             "nameRequired": "連携に名前を付けてください。",
             "description": "説明",
             "save": "保存",
-            "saved": "名前と説明を保存しました。"
-          }
+            "saved": "名前と説明を保存しました。",
+            "edit": "詳細を編集",
+            "title": "詳細を編集",
+            "cancel": "キャンセル",
+            "saveFailed": "名前と説明を保存できませんでした。"
+          },
+          "description": "説明",
+          "menu": "その他の操作",
+          "owner": "所有者"
         },
         "configuration": {
           "readOnly": "この連携は表示できますが、変更はできません。",
@@ -10681,10 +10661,23 @@
             "title": "まずサーバーに接続してください",
             "description": "Onyx は MCP サーバーの接続後にそのアクションを読み込みます。",
             "open": "設定を開く",
-            "individualDescription": "各ユーザーがこのサーバーにサインインします。プラグインページで自分のアカウントを接続してから、「更新」をクリックしてください。",
-            "openPlugins": "プラグインを開く"
+            "individualDescription": "各ユーザーがこのサーバーにサインインします。統合のページで自分のアカウントを接続してから、[更新]をクリックしてください。",
+            "openIntegration": "統合を開く"
           }
         }
+      },
+      "installation": {
+        "select": "{name} のインストール設定",
+        "saved": "{name} は {policy} になりました。",
+        "saveFailed": "インストール設定を保存できませんでした。",
+        "title": "インストール設定",
+        "description": "この連携を使える人。利用不可にすると非公開になり、所有者、共有相手、独自の設定を持つグループだけが使えます。所有者と共有相手だけに限定するには、それらのグループ設定を削除してください。",
+        "notAvailable": "非公開。所有者、共有相手、独自の設定を持つグループだけが使えます。"
+      },
+      "ownedBy": "所有者: {owner}",
+      "groupAccess": {
+        "saved": "{name} のグループ設定を保存しました。",
+        "saveFailed": "グループ設定を保存できませんでした。"
       }
     }
   },
@@ -10720,10 +10713,6 @@
         "codeInterpreter": {
           "description": "コードを生成して実行します。",
           "title": "コードインタープリター"
-        },
-        "codingAgent": {
-          "description": "GitHubリポジトリを調査し、そのコードに関する質問に回答します。",
-          "title": "コーディングエージェント"
         },
         "description": "このエージェントが使用できるツールと機能です。",
         "imageGeneration": {
@@ -10808,52 +10797,6 @@
       },
       "page": {
         "ariaLabel": "エージェントエディターページ"
-      },
-      "plugins": {
-        "askHint": "確認なしで実行するには、エージェントの設定を変更するか、管理者が統合でこれを許可に設定するか、各ユーザーが常に許可を選びます。",
-        "askHintAdminOnly": "確認なしで実行するには、管理者が統合でこれを許可に設定します。",
-        "askHintAgent": "確認なしで実行するには、エージェントの設定を変更するか、各ユーザーが常に許可を選びます。",
-        "askHintAgentOnly": "確認なしで実行するには、エージェントの設定を変更します。",
-        "choice": {
-          "inherit": "統合の設定を使う",
-          "agentDefault": "エージェントのデフォルトを使用"
-        },
-        "default": {
-          "description": "独自の設定がない各アクションに適用されます。統合が後で追加するアクションにも適用されます。",
-          "title": "その他のアクションのデフォルト"
-        },
-        "description": "エージェントにプラグインを付与します。別の設定を選ばない限り、各アクションは統合の設定を使います。",
-        "effective": "{policy, select, allow {許可} ask {確認} other {ブロック}}（{source, select, integration {統合の設定} agentDefault {エージェントのデフォルト} other {エージェントの設定}}）",
-        "empty": "利用できる統合付きのプラグインはありません。",
-        "loadFailed": "プラグインを読み込めませんでした。",
-        "lock": {
-          "adminBlocked": "許可は選べません: 管理者がこのアクションをブロックしました。",
-          "alwaysAsks": "許可は使用できません: Craft はこれらのリクエストごとに承認を求めます。",
-          "adminFinal": "許可は選べません: この統合の管理者設定は確定しています。",
-          "defaultFinal": "許可は選べません: これらの統合の管理者設定は確定しています。"
-        },
-        "noActions": "この統合にはまだアクションがありません。",
-        "notVisible": "このプラグインのアクションは表示できません。設定はそのまま保持されます。",
-        "title": "プラグイン",
-        "add": {
-          "placeholder": "プラグインを追加"
-        },
-        "remove": {
-          "ariaLabel": "{plugin} を削除"
-        },
-        "retry": {
-          "label": "再試行"
-        },
-        "actionSetting": {
-          "label": "{action} の設定"
-        },
-        "defaultSetting": {
-          "label": "{plugin} のデフォルト設定"
-        },
-        "openIntegration": {
-          "label": "{integration} のアクションを開く"
-        },
-        "stricterPlugin": "このエージェントの {plugin} プラグインが、このアクションにより厳しい設定を適用しています。"
       },
       "prompts": {
         "instructions": {
@@ -10946,6 +10889,51 @@
       },
       "warnings": {
         "openUrl": "URLを開く機能なしのウェブ検索では、ウェブベースの結果が大幅に悪化する可能性があります。"
+      },
+      "integrations": {
+        "askHint": "確認なしで実行するには、エージェントの設定を変更するか、管理者が統合でこれを許可に設定するか、各ユーザーが常に許可を選びます。",
+        "askHintAdminOnly": "確認なしで実行するには、管理者が統合でこれを許可に設定します。",
+        "askHintAgent": "確認なしで実行するには、エージェントの設定を変更するか、各ユーザーが常に許可を選びます。",
+        "askHintAgentOnly": "確認なしで実行するには、エージェントの設定を変更します。",
+        "choice": {
+          "inherit": "統合の設定を使う",
+          "agentDefault": "エージェントのデフォルトを使用"
+        },
+        "default": {
+          "description": "独自の設定がない各アクションに適用されます。統合が後で追加するアクションにも適用されます。",
+          "title": "その他のアクションのデフォルト"
+        },
+        "description": "エージェントに統合を追加します。別の設定を選ばない限り、各アクションは統合の設定を使います。",
+        "effective": "{policy, select, allow {許可} ask {確認} other {ブロック}}（{source, select, integration {統合の設定} agentDefault {エージェントのデフォルト} other {エージェントの設定}}）",
+        "empty": "利用できる統合はありません。",
+        "loadFailed": "統合を読み込めませんでした。",
+        "lock": {
+          "adminBlocked": "許可は選べません: 管理者がこのアクションをブロックしました。",
+          "alwaysAsks": "許可は使用できません: Craft はこれらのリクエストごとに承認を求めます。",
+          "adminFinal": "許可は選べません: この統合の管理者設定は確定しています。"
+        },
+        "noActions": "この統合にはまだアクションがありません。",
+        "notVisible": "この統合のアクションは表示できません。設定はそのまま残ります。",
+        "title": "統合",
+        "add": {
+          "placeholder": "統合を追加"
+        },
+        "remove": {
+          "ariaLabel": "{integration}を削除"
+        },
+        "retry": {
+          "label": "再試行"
+        },
+        "actionSetting": {
+          "label": "{action} の設定"
+        },
+        "defaultSetting": {
+          "label": "{integration}のデフォルト設定"
+        },
+        "openIntegration": {
+          "label": "{integration} のアクションを開く"
+        },
+        "sharedWider": "このエージェントを使える一部のユーザーは{integration}を使えません。そのユーザーのチャットはこの統合なしで動作します。アクセスを付与するには、{integration}を共有してください。"
       }
     },
     "filters": {
@@ -11086,7 +11074,8 @@
           "empty": {
             "title": "アクションなし"
           },
-          "title": "アクションとツール"
+          "title": "アクションとツール",
+          "noAccess": "この統合は使用できません。このエージェントとのチャットは統合なしで動作します。"
         },
         "conversationStarters": {
           "title": "会話のきっかけ"
@@ -11633,50 +11622,11 @@
       }
     },
     "skill": {
-      "edit": {
-        "tooltip": "スキルを編集"
-      },
-      "invalid": {
-        "description": "この無効なスキルを削除して、新しいスキルを作成してください。"
-      },
       "tags": {
-        "builtin": {
-          "label": "組み込み"
-        },
-        "invalid": {
-          "label": "無効"
-        },
-        "personal": {
-          "label": "個人用"
-        },
-        "required": {
-          "tooltip": "組織の管理者により、このスキルの利用が必須になっています。"
-        },
-        "unavailable": {
-          "label": "利用できません - クリックして詳細を表示"
-        },
-        "shared": {
-          "label": "共有"
-        },
-        "organization": {
-          "label": "組織"
-        },
         "unpublished": {
           "label": "未公開の変更",
           "tooltip": "組織はまだバージョン {number} を使用しています。"
         }
-      },
-      "toggle": {
-        "disable": {
-          "ariaLabel": "{name} を無効にする"
-        },
-        "enable": {
-          "ariaLabel": "{name} を有効にする"
-        }
-      },
-      "tooltips": {
-        "invalid": "このスキルは無効です。削除して新しいスキルを作成してください。",
-        "unavailable": "このスキルは現在利用できません。クリックすると詳細を表示します。"
       }
     }
   },
@@ -12014,6 +11964,9 @@
         },
         "skillsGroup": {
           "label": "スキル"
+        },
+        "manageSkills": {
+          "label": "スキルを管理"
         }
       },
       "inputChip": {
@@ -12360,41 +12313,6 @@
         }
       },
       "timeline": {
-        "codingAgent": {
-          "bashExit": {
-            "header": "Bash · 終了コード {exitCode}"
-          },
-          "bashFailed": {
-            "header": "Bash · 失敗"
-          },
-          "bashRequest": {
-            "label": "リクエスト"
-          },
-          "bashResponse": {
-            "label": "レスポンス"
-          },
-          "bashRunning": {
-            "header": "Bash · 実行中…"
-          },
-          "bashTimedOut": {
-            "header": "Bash · タイムアウト"
-          },
-          "noOutput": {
-            "text": "出力なし"
-          },
-          "response": {
-            "header": "レスポンス"
-          },
-          "task": {
-            "header": "コーディングタスク"
-          },
-          "taskWithRepo": {
-            "text": "{query}\n\nリポジトリ: {repo}"
-          },
-          "thinking": {
-            "header": "思考中"
-          }
-        },
         "collapseButton": {
           "ariaLabel": "タイムラインを折りたたむ"
         },
@@ -12657,7 +12575,6 @@
         },
         "toolNames": {
           "codeInterpreter": "コードインタープリター",
-          "codingAgent": "コーディングエージェント",
           "customTool": "カスタムツール",
           "generateImage": "画像生成",
           "generatePlan": "プラン生成",
@@ -14646,15 +14563,12 @@
         "empty": "さあ、作り始めましょう！セッション履歴がここに表示されます。",
         "title": "セッション"
       },
-      "skills": {
-        "label": "スキル"
-      },
       "toast": {
         "deleteFailed": "セッションを削除できませんでした",
         "deleted": "「{title}」を削除しました。"
       },
-      "plugins": {
-        "label": "プラグイン"
+      "customize": {
+        "label": "カスタマイズ"
       }
     },
     "skillsStale": {
@@ -15164,7 +15078,7 @@
       "appTitle": "{name} の承認設定",
       "title": "承認設定",
       "personalDescription": "これらの設定は、Craftの会話、新しいタスク、チャットでのMCPツール呼び出しでアクションを自動実行するか承認を必要とするかを制御し、既存のタスクは独自の設定を保持します。",
-      "taskDescription": "このタスクが使用できるプラグインを選び、自動実行するアクションを管理します。変更はこのタスクにのみ適用されます。",
+      "taskDescription": "このタスクで使える統合を選び、自動で実行するアクションを管理します。変更はこのタスクにのみ適用されます。",
       "userManagement": "ユーザーによる承認設定の管理を許可",
       "userManagementDescription": "ユーザーは利用可能なアクションの承認設定を変更できます。",
       "loading": "承認設定を読み込み中…",
@@ -15178,9 +15092,9 @@
       "enableAppForTask": "このタスクで{app}を有効にする",
       "enabledForTask": "このタスクで有効",
       "disabledForTask": "このタスクで無効",
-      "taskAppsTitle": "プラグイン",
-      "taskAccessTitle": "プラグインへのアクセス",
-      "noEnabledApps": "このタスクで有効なプラグインはありません。",
+      "taskAppsTitle": "統合",
+      "taskAccessTitle": "統合へのアクセス",
+      "noEnabledApps": "このタスクでオンになっている統合はありません。",
       "actionPolicies": "承認設定",
       "manageActions": "アクションを管理",
       "taskModalDescription": "変更はタスクの保存時に適用されます。ワークスペースの制限は常に適用されます。",
@@ -15191,8 +15105,6 @@
       "saveChanges": "変更を保存",
       "resetDefaults": "すべて既定値に戻す",
       "resetAll": "すべてワークスペースの既定値に戻す",
-      "newTaskPluginsDescription": "このタスクで使用できるプラグインをオンにします。変更するまで、各アクションは連携の設定を使用します。",
-      "emptyPlugins": "連携を含むプラグインはありません。",
       "needsSignIn": "{name} にはサインインが必要です。",
       "taskPolicyCounts": "許可 {allow} · 確認 {ask} · ブロック {blocked}",
       "actionSetting": "{action} の設定",
@@ -15202,7 +15114,10 @@
         "allow": "許可",
         "ask": "確認",
         "blocked": "ブロック"
-      }
+      },
+      "newTaskIntegrationsDescription": "このタスクで使える統合をオンにします。変更するまで、各アクションは統合の設定を使います。",
+      "emptyIntegrations": "利用できる統合はありません。",
+      "notRunnable": "Craft は現在 {name} を実行できないため、タスクはこれをスキップします。"
     },
     "skillRuntimeNotice": {
       "title": "{count, plural, other {# 件のスキルを読み込めませんでした}}",
@@ -15633,7 +15548,9 @@
       "sort": "並べ替え",
       "sortBy": "並べ替え基準",
       "sortingOrder": "並べ替え順",
-      "viewSelected": "選択項目を表示"
+      "viewSelected": "選択項目を表示",
+      "selectAll": "すべて選択",
+      "selectRow": "行を選択"
     },
     "tabs": {
       "scrollLeft": "タブを左にスクロール",
@@ -16181,9 +16098,6 @@
         "llmGateway": {
           "label": "LLM ゲートウェイ"
         },
-        "plugins": {
-          "label": "プラグイン"
-        },
         "plansAndBilling": {
           "label": "プランと請求"
         },
@@ -16309,8 +16223,8 @@
       "searchChats": {
         "label": "チャットを検索"
       },
-      "plugins": {
-        "label": "プラグイン"
+      "customize": {
+        "label": "カスタマイズ"
       }
     },
     "chatButton": {
@@ -16431,12 +16345,7 @@
         "importSubmit": {
           "label": "スキルをインポート"
         },
-        "importTitle": "このスキルをインポートしますか？",
-        "replaceBody": "このアップロードは同じスキル名を使用する必要があります。続行すると、説明、指示、ファイルがアップロードされたバンドルに置き換えられます。",
-        "replaceSubmit": {
-          "label": "内容を置き換え"
-        },
-        "replaceTitle": "スキルの内容を置き換えますか？"
+        "importTitle": "このスキルをインポートしますか？"
       },
       "delete": {
         "button": {
@@ -16450,68 +16359,21 @@
         "label": "削除",
         "pendingLabel": "削除中..."
       },
-      "details": {
-        "description": "Craftがこのスキルをいつどのように使用するかを定義します。",
-        "descriptionField": {
-          "description": "このスキルをいつ使用すべきかを説明します。",
-          "placeholder": "このスキルは何に役立ちますか？",
-          "title": "説明"
-        },
-        "name": {
-          "createDescription": "小文字、数字、単一のハイフンを使用してください。",
-          "lockedDescription": "スキル名は作成後に変更できません。",
-          "placeholder": "スキルに名前を付ける",
-          "title": "名前"
-        },
-        "title": "詳細"
-      },
       "files": {
-        "busyLabel": "アップロード中...",
-        "description": "このスキルで使用する参照、スクリプト、アセット、その他のファイルを追加します。ZIPファイルは自動的に展開されます。",
-        "input": {
-          "ariaLabel": "サポートファイルを追加"
-        },
-        "pendingUpload": {
-          "emptyMessage": "このアップロードのファイルは、スキルの作成後に表示されます。"
-        },
-        "title": "サポートファイル"
-      },
-      "filesTooltip": {
-        "noPermission": "このスキルのファイルを更新する権限がありません。",
-        "saveFirst": "スキルファイルを更新する前に詳細の変更を保存してください。",
-        "updating": "スキルファイルを更新中..."
+        "addedOnCreate": "「作成」でこのファイルがスキルに追加されます。"
       },
       "header": {
         "createDescription": "個人スキルを作成",
         "createTitle": "スキルを作成",
-        "editDescription": "スキルの詳細とファイルを更新",
         "editTitle": "スキルを編集",
         "save": {
-          "label": "保存",
-          "pendingLabel": "保存中..."
-        }
-      },
-      "import": {
-        "busyLabel": "インポート中...",
-        "button": {
-          "label": "スキルをインポート"
+          "label": "作成",
+          "pendingLabel": "作成中..."
         },
-        "description": "SKILL.md、ZIP、またはスキルフォルダをインポートすると、フォームが事前入力され、ファイルが含まれます。",
-        "input": {
-          "ariaLabel": "既存のスキルをインポート"
-        },
-        "prompt": "SKILL.mdまたはZIPを選択するか、スキルフォルダをここにドロップしてください。",
-        "title": "既存のスキルがありますか？"
-      },
-      "instructions": {
-        "description": "このスキルがCraftに追加する動作とワークフローを記述します。",
-        "emptyFallback": "まだ指示がありません。",
-        "placeholder": "スキルの指示を書いてください。",
-        "title": "指示"
+        "cancel": "キャンセル"
       },
       "loadError": {
-        "description": "このスキルは存在しないか、組み込みであるか、またはお使いのアカウントでは編集できない可能性があります。",
-        "title": "スキルを利用できません"
+        "description": "このスキルは存在しないか、組み込みであるか、またはお使いのアカウントでは編集できない可能性があります。"
       },
       "management": {
         "sharing": {
@@ -16521,12 +16383,9 @@
         }
       },
       "saveTooltip": {
-        "missingDescription": "保存する前に説明を追加してください。",
         "missingInstructions": "保存する前に指示を追加してください。",
         "missingName": "保存する前に名前を追加してください。",
         "noChanges": "変更はありません。",
-        "noPermission": "このスキルの詳細を編集する権限がありません。",
-        "savingChanges": "変更を保存中...",
         "savingSkill": "スキルを保存中..."
       },
       "staleVersion": {
@@ -16540,14 +16399,10 @@
         "created": "「{name}」を作成しました",
         "deleteFailed": "スキルの削除に失敗しました",
         "deleted": "「{name}」を削除しました",
-        "fileRemoveFailed": "スキルファイルの削除に失敗しました",
-        "fileRemoved": "「{path}」を削除しました",
-        "filesUpdateFailed": "スキルファイルの更新に失敗しました",
-        "filesUpdated": "「{name}」のファイルを更新しました",
-        "importMissingSkillMd": "SKILL.md、ZIP、またはSKILL.mdを含むフォルダをインポートしてください。",
         "inspectFailed": "スキルバンドルの検査に失敗しました",
         "saveFailed": "スキルの保存に失敗しました",
-        "saved": "「{name}」を保存しました"
+        "saved": "「{name}」を保存しました",
+        "mergeLimit": "{limit, select, files {スキルに含められるファイルは最大 {max, number} 個です。ファイルをいくつか削除してから「作成」を選択してください。} other {スキルに含められるファイルは最大 {max, number} MB です。ファイルをいくつか削除してから「作成」を選択してください。}}"
       },
       "creationAccess": {
         "title": "アクセス権"
@@ -16821,11 +16676,7 @@
           "ariaLabel": "バージョン {number} を復元",
           "successToast": "バージョン {number} をバージョン {newNumber} として復元しました。",
           "unchangedToast": "バージョン {number} のファイルは現在のバージョンと同じです。",
-          "failedToast": "このバージョンを復元できませんでした。",
-          "unsavedChanges": {
-            "title": "先に変更を保存してください",
-            "description": "バージョンを復元する前に、エディターの変更を保存するか破棄してください。"
-          }
+          "failedToast": "このバージョンを復元できませんでした。"
         },
         "loadError": {
           "title": "バージョンを読み込めませんでした",
@@ -16851,12 +16702,6 @@
       }
     },
     "page": {
-      "browse": {
-        "title": "スキルを選択"
-      },
-      "countSeparator": {
-        "label": "{count, plural, one {スキル} other {スキル}}"
-      },
       "createMenu": {
         "github": {
           "description": "リポジトリから1つ以上のスキルをインポートします。",
@@ -16886,7 +16731,6 @@
         }
       },
       "header": {
-        "description": "Craftエージェントが利用できる機能バンドルです。このページには、組み込みスキル、共有されたスキル、あなたの個人スキルが表示されます。",
         "title": "スキル"
       },
       "loadError": {
@@ -16911,10 +16755,8 @@
       "toasts": {
         "disableFailed": "{name}を無効にできませんでした",
         "enableFailed": "{name}を有効にできませんでした",
-        "refreshFailed": "{name}は更新されましたが、スキル一覧を更新できませんでした。"
-      },
-      "builtins": {
-        "title": "組み込みスキル（{count, number}）"
+        "refreshFailed": "{name}は更新されましたが、スキル一覧を更新できませんでした。",
+        "listRefreshFailed": "スキル一覧を更新できませんでした。ページを再読み込みして変更を確認してください。"
       }
     },
     "sections": {
@@ -16932,26 +16774,12 @@
           "label": "ドラッグ＆ドロップするか、クリックしてアップロード"
         }
       },
-      "fileTree": {
-        "empty": {
-          "description": "補助ファイルはまだありません。"
-        },
-        "remove": {
-          "label": "{name} を削除"
-        }
-      },
       "filesPicker": {
-        "addFiles": {
-          "label": "ファイルを追加"
-        },
         "input": {
           "ariaLabel": "スキルファイルを追加"
         },
         "preparing": {
           "label": "準備中..."
-        },
-        "prompt": {
-          "description": "ファイルまたは ZIP を選択するか、フォルダーをここにドロップしてください。"
         }
       },
       "instructionsToggle": {
@@ -16978,7 +16806,6 @@
     },
     "bulk": {
       "adminDescription": "組織全体のスキルとアクセス権を管理します。",
-      "selectAll": "表示中のカスタムスキルをすべて選択",
       "selected": "{count, plural, one {# 件選択中} other {# 件選択中}}",
       "share": "共有",
       "enable": "自分用に有効化",
@@ -17028,6 +16855,10 @@
       "version": {
         "firstPublish": "v{number} · 初回公開",
         "update": "v{number} · v{published} からの更新"
+      },
+      "banner": {
+        "title": "{count, plural, other {# 件のスキルが公開を待っています}}",
+        "review": "確認"
       }
     },
     "installationPolicy": {
@@ -17036,11 +16867,11 @@
         "description": "インストール済みで常にオンです。メンバーはオフにできません。"
       },
       "DEFAULT": {
-        "label": "既定でインストール",
+        "label": "インストール済み",
         "description": "すべてのメンバーにインストールされます。メンバーはオフにできます。"
       },
       "AVAILABLE": {
-        "label": "インストール可能",
+        "label": "利用可能",
         "description": "メンバーが見つけて、必要に応じてオンにします。"
       },
       "NOT_AVAILABLE": {
@@ -17069,6 +16900,25 @@
         "user": "{email}: {size}、{files, plural, other {# ファイル}}、読み込まれなかったスキル {notLoaded, plural, other {# 件}}",
         "more": "ほか {count, number} 人。"
       }
+    },
+    "adminTable": {
+      "label": "カスタムスキル",
+      "columns": {
+        "name": "名前",
+        "source": "ソース",
+        "version": "バージョン",
+        "audience": "対象"
+      },
+      "organizationLibrary": "組織ライブラリ",
+      "noOwner": "所有者なし",
+      "version": "v{current}{published, select, none {} other { · v{published} 公開中}}",
+      "private": "所有者のみ",
+      "shared": "ユーザーまたはグループと共有",
+      "open": "{name} を開く",
+      "menu": "{name} のその他の操作",
+      "share": "共有",
+      "delete": "削除",
+      "select": "{name} を選択"
     }
   },
   "opensearchHealth": {
@@ -17086,46 +16936,10 @@
   },
   "plugins": {
     "member": {
-      "title": "プラグイン",
-      "description": "チャットとエージェントで使えるスキルと連携です。",
-      "filters": {
-        "label": "プラグインの種類",
-        "all": {
-          "label": "すべて"
-        },
-        "skills": {
-          "label": "スキル"
-        },
-        "integrations": {
-          "label": "連携"
-        }
-      },
       "sections": {
         "organization": "組織ライブラリ",
         "mine": "マイアップロード",
         "shared": "あなたと共有"
-      },
-      "row": {
-        "skillCount": "{count, plural, other {# 件のスキル}}",
-        "integrationCount": "{count, plural, other {# 件の連携}}",
-        "needsConnection": "{count, plural, other {# 件がサインインを必要としています}}",
-        "open": {
-          "label": "{name} を開く"
-        }
-      },
-      "state": {
-        "loading": "プラグインを読み込み中",
-        "loadFailed": "一部のプラグインを読み込めませんでした。",
-        "emptyTitle": "プラグインはまだありません",
-        "emptyDescription": "管理者にプラグインの追加を依頼してください。",
-        "noResultsTitle": "一致するプラグインはありません",
-        "noResultsDescription": "別の名前またはフィルターを試してください。",
-        "retry": {
-          "label": "再試行"
-        },
-        "clear": {
-          "label": "すべてのプラグインを表示"
-        }
       },
       "detail": {
         "title": "プラグイン",
@@ -17134,7 +16948,6 @@
         "tabs": {
           "overview": "概要",
           "skills": "スキル",
-          "integrations": "連携",
           "versions": "バージョン"
         },
         "overview": {
@@ -17142,34 +16955,19 @@
           "location": "場所",
           "owner": "所有者",
           "skills": "スキル",
-          "integrations": "連携"
+          "description": "説明"
         },
         "skills": {
           "off": "オフ",
           "invalid": "無効"
-        },
-        "back": {
-          "label": "プラグイン"
         },
         "switch": {
           "title": "このプラグインを使用",
           "description": "オンにすると、デフォルトのエージェントがこのプラグインを使用できます。",
           "label": "{name} を使用",
           "required": "管理者がこのプラグインを必須にしました。オフにできません。",
-          "notAvailable": "管理者がこのプラグインを利用不可にしました。",
           "unavailable": "このプラグインのオンとオフを切り替えることはできません。",
           "failed": "プラグインを変更できませんでした。"
-        },
-        "share": {
-          "label": "共有"
-        },
-        "publish": {
-          "label": "公開",
-          "blocked": "連携を含むプラグインを公開できるのは、組織全体のアクション管理権限を持つユーザーだけです。",
-          "confirmTitle": "{name} を公開しますか？",
-          "confirmMessage": "プラグインは組織ライブラリに移動します。元に戻すことはできません。その後、管理者がインストール設定を決めます。",
-          "done": "{name} は組織ライブラリに移動しました。",
-          "failed": "プラグインを公開できませんでした。"
         }
       },
       "connection": {
@@ -17215,7 +17013,9 @@
         },
         "retry": {
           "label": "再試行"
-        }
+        },
+        "readOnlyTitle": "アクション",
+        "readOnlyDescription": "各アクションの実行方法は管理者が設定します。"
       },
       "oauthCallback": {
         "processing": "アカウントを接続中…",
@@ -17226,55 +17026,30 @@
         "invalidLink": "このサインインリンクは無効です。もう一度サインインを始めてください。",
         "failed": "サインインが完了しませんでした。もう一度お試しください。",
         "back": {
-          "label": "プラグインに戻る"
+          "label": "統合に戻る"
         }
-      },
-      "search": {
-        "placeholder": "プラグインを検索"
-      },
-      "addIntegration": {
-        "label": "連携を追加"
-      },
-      "manage": {
-        "label": "プラグインを管理"
-      },
-      "share": {
-        "title": "{name} を共有",
-        "description": "ユーザーとグループにこのプラグインへのアクセス権を付与します。",
-        "sharedSignIn": "{names} は 1 つのアカウントを使用します。アクセス権を持つユーザーは、あなたが接続したアカウントを使用します。",
-        "loadFailed": "アクセス権を持つユーザーを読み込めませんでした。",
-        "empty": "アクセス権を持つのはあなただけです。",
-        "remove": {
-          "label": "{name} を削除"
-        },
-        "cancel": {
-          "label": "キャンセル"
-        },
-        "submit": {
-          "label": "保存",
-          "pendingLabel": "保存中..."
-        },
-        "saved": "{name} のアクセス権を保存しました。",
-        "failed": "アクセス権を保存できませんでした。"
       }
     },
     "chat": {
       "popover": {
-        "empty": "このエージェントには連携を含むプラグインがありません。",
-        "searchEmpty": "検索に一致するプラグインはありません。",
-        "loading": "プラグインを読み込み中",
-        "loadError": "一部のプラグインを読み込めませんでした。もう一度お試しください。",
+        "empty": "このエージェントには統合がありません。",
+        "searchEmpty": "検索に一致する統合はありません。",
+        "loading": "統合を読み込み中",
+        "loadError": "一部の統合を読み込めませんでした。もう一度お試しください。",
         "trigger": {
-          "label": "プラグイン"
+          "label": "統合"
         },
         "retry": {
           "label": "再試行"
         },
         "browse": {
-          "label": "プラグインを見る"
+          "label": "統合を参照"
         },
         "toggle": {
           "label": "このエージェントで {name} を使用"
+        },
+        "search": {
+          "placeholder": "統合を検索"
         }
       },
       "connectPrompt": {
@@ -17292,6 +17067,263 @@
     }
   },
   "integrations": {
-    "connectionState": "{state, select, connected {接続済み} not_connected {未接続} needs_reconnect {要再接続} not_set_up {未設定} other {不明}}"
+    "connectionState": "{state, select, connected {接続済み} not_connected {未接続} needs_reconnect {要再接続} not_set_up {未設定} other {不明}}",
+    "share": {
+      "title": "{name} を共有",
+      "description": "特定のユーザーにこの統合の使用を許可します。共有で付与されるのは使用のみです。",
+      "sharedSignIn": "{name}は1つのアカウントを使います。アクセス権のあるユーザーは、あなたが接続したアカウントを使います。",
+      "loadFailed": "アクセス権を持つユーザーを読み込めませんでした。",
+      "empty": "アクセス権を持つのはあなただけです。",
+      "remove": {
+        "label": "{name} を削除"
+      },
+      "cancel": {
+        "label": "キャンセル"
+      },
+      "submit": {
+        "label": "保存",
+        "pendingLabel": "保存中..."
+      },
+      "saved": "{name} のアクセス権を保存しました。",
+      "failed": "アクセス権を保存できませんでした。"
+    },
+    "memberState": {
+      "on": {
+        "label": "オン"
+      },
+      "turn_on": {
+        "label": "オンにする"
+      },
+      "sign_in": {
+        "label": "サインイン"
+      },
+      "no_access": {
+        "label": "アクセス権なし",
+        "reason": "アクセス権なし: この統合はあなたと共有されていません。",
+        "reasonOwner": "アクセス権なし: {owner}はあなたと共有していません。"
+      },
+      "turned_off": {
+        "label": "オフ",
+        "reason": "管理者がオフにしました。"
+      },
+      "switch": {
+        "label": "{name}を使用",
+        "required": "管理者がこの統合を必須にしました。オフにすることはできません。",
+        "failed": "統合を変更できませんでした。"
+      }
+    },
+    "menu": {
+      "label": "{name}のその他の操作",
+      "share": "共有",
+      "publish": {
+        "label": "組織に公開",
+        "blocked": "統合を公開できるのは、組織全体のアクション管理権限を持つユーザーだけです。",
+        "confirmTitle": "{name}を組織に公開しますか？",
+        "confirmMessage": "組織の各ユーザーがオンにできるようになります。インストール設定は管理者が決めます。共有したユーザーはアクセス権を保持します。",
+        "done": "{name}は組織で利用できるようになりました。",
+        "failed": "統合を公開できませんでした。"
+      }
+    }
+  },
+  "customize": {
+    "title": "カスタマイズ",
+    "tabs": {
+      "label": "カスタマイズのセクション",
+      "skills": "スキル",
+      "integrations": "インテグレーション",
+      "plugins": "プラグイン"
+    },
+    "skills": {
+      "loadFailed": "スキルを読み込めませんでした。",
+      "filter": {
+        "label": "フィルター",
+        "all": "すべてのスキル",
+        "on": "オン",
+        "off": "オフ"
+      },
+      "sort": {
+        "label": "並べ替え",
+        "updated": "最近更新",
+        "name": "名前"
+      },
+      "add": {
+        "label": "追加",
+        "upload": "スキルをアップロード",
+        "create": "スキルを作成",
+        "github": "GitHub からインポート"
+      },
+      "groups": {
+        "mine": "自分が作成",
+        "organization": "組織から",
+        "shared": "共有されたもの",
+        "builtin": "組み込み"
+      },
+      "source": {
+        "mine": "自分",
+        "organization": "組織から",
+        "sharedBy": "{email} が共有",
+        "shared": "共有されたもの",
+        "builtin": "組み込み"
+      },
+      "subtitle": "{source} · {description}",
+      "tag": {
+        "off": "無効",
+        "required": "必須",
+        "pending": "レビュー待ち",
+        "invalid": "無効な形式"
+      },
+      "open": "{name} を開く",
+      "menu": {
+        "label": "{name} のその他の操作",
+        "turnOn": "オンにする",
+        "turnOff": "オフにする",
+        "share": "共有",
+        "remove": "削除"
+      },
+      "empty": {
+        "title": "スキルはまだありません",
+        "description": "スキルを作成またはアップロードして、アシスタントにタスクを教えます。"
+      },
+      "noMatches": {
+        "title": "一致するスキルはありません",
+        "description": "別の検索語またはフィルターを試してください。",
+        "clear": "すべてのスキルを表示"
+      }
+    },
+    "integrations": {
+      "title": "インテグレーション",
+      "loadFailed": "インテグレーションを読み込めませんでした。",
+      "columns": {
+        "name": "インテグレーション",
+        "type": "種類",
+        "authorization": "認可",
+        "status": "ステータス"
+      },
+      "status": {
+        "connected": "接続済み"
+      },
+      "add": {
+        "label": "追加",
+        "integration": "インテグレーションを追加",
+        "manage": "インテグレーションを管理"
+      },
+      "open": "{name} を開く",
+      "empty": {
+        "title": "インテグレーションはまだありません",
+        "description": "管理者にインテグレーションの追加を依頼してください。"
+      },
+      "noMatches": {
+        "title": "一致するインテグレーションはありません",
+        "description": "別の検索語を試してください。"
+      }
+    },
+    "plugins": {
+      "contents": "{skills, plural, one {スキル 1 件} other {スキル {skills} 件}}",
+      "loadFailed": "プラグインを読み込めませんでした。",
+      "filter": {
+        "all": "すべてのプラグイン"
+      },
+      "empty": {
+        "title": "プラグインはまだありません",
+        "description": "スキルを作成します。各スキルが1つのプラグインです。"
+      },
+      "noMatches": {
+        "title": "一致するプラグインはありません",
+        "clear": "すべてのプラグインを表示"
+      },
+      "intro": "プラグインは、まとめてオンにするスキルをパッケージ化したものです。追加した各スキルは個別のプラグインになります。統合は[統合]タブにあります。"
+    },
+    "skillPage": {
+      "title": "スキル",
+      "back": "スキル",
+      "meta": "{owner} · v{version}{published, select, none {} other { · v{published} が組織で公開中}} · {updated} に更新",
+      "ownerYou": "自分",
+      "ownerEmail": "{email} が作成",
+      "ownerYouTitle": "自分",
+      "fromOrganization": "組織ライブラリから",
+      "copyLink": "リンクをコピー",
+      "share": "共有",
+      "menu": "その他",
+      "edit": "編集",
+      "remove": "削除",
+      "add": "追加",
+      "switch": "{name} を使用",
+      "loadFailed": "このスキルは利用できません。",
+      "tabs": {
+        "overview": "概要",
+        "contents": "コンテンツ",
+        "versions": "バージョン",
+        "contentsCount": "コンテンツ · {count}"
+      },
+      "overview": {
+        "description": "説明",
+        "noDescription": "説明はありません。",
+        "createdBy": "作成者",
+        "access": "アクセス",
+        "accessValue": "{access, select, personal {自分のみ} private {所有者のみ} shared {ユーザーまたはグループと共有} other {組織ライブラリ}}",
+        "tools": "インテグレーションとアクション",
+        "instructionsOnly": "エージェントへの指示のみを追加します"
+      },
+      "backAdmin": "スキル一覧",
+      "contents": {
+        "version": "{name} v{version} · 現在",
+        "edit": "編集",
+        "cancel": "キャンセル",
+        "saveVersion": "バージョンを保存",
+        "saving": "保存中…",
+        "addFile": "ファイルを追加",
+        "removeFile": "{name} を削除",
+        "editorLabel": "SKILL.md",
+        "noPreview": "Onyx は SKILL.md のテキストのみを表示します。このファイルはスキルの一部です。",
+        "addedFile": "「バージョンを保存」でこのファイルがスキルに追加されます。",
+        "errors": {
+          "frontmatter": "SKILL.md は名前と説明を含む --- ブロックで始める必要があります。",
+          "description": "SKILL.md の --- ブロックに説明を追加してください。",
+          "name": "名前は「{name}」のままにしてください。",
+          "skillMd": "SKILL.md はエディターで編集してください。ここでは補助ファイルのみを追加します。"
+        },
+        "loadFailed": "このスキルの内容を読み込めませんでした。",
+        "retry": "再試行",
+        "reloadFailed": "最新バージョンを読み込めませんでした。変更は保持されています。もう一度再読み込みしてください。"
+      },
+      "required": {
+        "label": "必須",
+        "tooltip": "管理者がこのスキルを必須にしているため、オフにできません。"
+      }
+    },
+    "integrationPage": {
+      "title": "インテグレーション",
+      "back": "インテグレーション",
+      "loadFailed": "このインテグレーションは利用できません。",
+      "tabs": {
+        "overview": "概要",
+        "configuration": "設定",
+        "actions": "アクション"
+      },
+      "overview": {
+        "description": "説明",
+        "noDescription": "説明はありません。",
+        "type": "種類",
+        "signIn": "サインイン",
+        "url": "サーバー URL",
+        "owner": "所有者",
+        "organization": "組織",
+        "status": "ステータス",
+        "switch": {
+          "title": "この統合を使用",
+          "description": "オンにすると、チャットと Craft で使えます。",
+          "required": "管理者がこの統合を必須にしました。オフにすることはできません。"
+        }
+      },
+      "configuration": {
+        "description": "{mode, select, individual {このインテグレーションへの接続です。使用するのはあなただけです。} shared {このインテグレーションのアカウントです。アクセス権を持つ全員が使用します。} other {このインテグレーションにサインインは不要です。}}"
+      }
+    },
+    "pluginPage": {
+      "tabs": {
+        "skills": "スキル · {count}"
+      }
+    },
+    "search": "検索"
   }
 }

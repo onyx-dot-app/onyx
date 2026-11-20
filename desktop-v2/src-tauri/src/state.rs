@@ -1,13 +1,16 @@
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Mutex;
+use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
+use std::sync::{Arc, Mutex};
 
 use crate::api::Api;
 use crate::config::ConfigStore;
+use crate::policy::Policy;
 use crate::session_store;
 
 pub struct AppState {
     pub config: ConfigStore,
     pub api: Api,
+    policy: Mutex<Policy>,
     // Cached so the keychain is read once per run.
     token: Mutex<Option<(String, String)>>,
     /// Bumped when a session ends (sign-out, server change). Work that started
@@ -15,16 +18,77 @@ pub struct AppState {
     epoch: AtomicU64,
     /// The server's session cookie name, by server origin.
     cookie_name: Mutex<Option<(String, String)>>,
+    /// Launcher uploads in flight, by the page's upload id: true once cancelled.
+    uploads: Mutex<HashMap<u64, Arc<AtomicBool>>>,
+}
+
+/// Ends an upload's entry in `AppState::uploads` when the upload ends.
+pub struct UploadEntry<'a> {
+    state: &'a AppState,
+    id: u64,
+    cancelled: Arc<AtomicBool>,
+}
+
+impl UploadEntry<'_> {
+    pub fn cancelled(&self) -> bool {
+        self.cancelled.load(Ordering::SeqCst)
+    }
+
+    /// The flag `cancel_upload` sets, for work that outlives a borrow of the state.
+    pub fn cancel_flag(&self) -> Arc<AtomicBool> {
+        self.cancelled.clone()
+    }
+}
+
+impl Drop for UploadEntry<'_> {
+    fn drop(&mut self) {
+        // A reloaded launcher can reuse the id for a newer upload; leave that one.
+        let mut uploads = self.state.uploads.lock().unwrap_or_else(|p| p.into_inner());
+        if uploads
+            .get(&self.id)
+            .is_some_and(|flag| Arc::ptr_eq(flag, &self.cancelled))
+        {
+            uploads.remove(&self.id);
+        }
+    }
 }
 
 impl AppState {
-    pub fn new(config: ConfigStore) -> Self {
+    pub fn new(config: ConfigStore, policy: Policy) -> Self {
         Self {
             config,
             api: Api::new(),
+            policy: Mutex::new(policy),
             token: Mutex::new(None),
             epoch: AtomicU64::new(0),
             cookie_name: Mutex::new(None),
+            uploads: Mutex::new(HashMap::new()),
+        }
+    }
+
+    /// Tracks an upload until the returned entry drops.
+    pub fn begin_upload(&self, id: u64) -> UploadEntry<'_> {
+        let cancelled = Arc::new(AtomicBool::new(false));
+        self.uploads
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .insert(id, cancelled.clone());
+        UploadEntry {
+            state: self,
+            id,
+            cancelled,
+        }
+    }
+
+    /// Marks an upload in flight as cancelled; other ids are ignored.
+    pub fn cancel_upload(&self, id: u64) {
+        if let Some(cancelled) = self
+            .uploads
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .get(&id)
+        {
+            cancelled.store(true, Ordering::SeqCst);
         }
     }
 
@@ -83,11 +147,27 @@ impl AppState {
         }
     }
 
+    pub fn policy(&self) -> Policy {
+        self.policy
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .clone()
+    }
+
+    pub fn set_policy(&self, policy: Policy) {
+        *self.policy.lock().unwrap_or_else(|p| p.into_inner()) = policy;
+    }
+
+    /// The server in use; a managed one wins as `Policy::server` says.
     pub fn server(&self) -> Result<String, String> {
-        self.config
-            .get()
-            .server_url
+        self.policy()
+            .server(self.config.get().server_url)
             .ok_or_else(|| "No server is configured.".to_string())
+    }
+
+    /// The launcher shortcut to register, or `None` if the launcher is off.
+    pub fn hotkey(&self) -> Option<String> {
+        self.policy().hotkey(self.config.get().hotkey())
     }
 
     pub fn token(&self, server: &str) -> Option<String> {
@@ -164,6 +244,14 @@ impl AppState {
         }
         *cache = None;
         session_store::clear(server).map(|()| true)
+    }
+
+    /// Runs `f` only if session `epoch` is still current. The check and `f`
+    /// hold the lock `end_session` takes, so a sign-out cannot end the session
+    /// between them.
+    pub fn while_current<T>(&self, epoch: u64, f: impl FnOnce() -> T) -> Option<T> {
+        let _cache = self.token.lock().unwrap_or_else(|p| p.into_inner());
+        (self.epoch() == epoch).then(f)
     }
 
     /// The server and token for an authenticated call.

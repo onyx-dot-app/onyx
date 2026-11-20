@@ -1,8 +1,8 @@
 import json
-from collections.abc import Collection
+from collections.abc import Collection, Mapping
 from uuid import UUID
 
-from sqlalchemy import delete, exists, inspect, select
+from sqlalchemy import Integer, column, delete, exists, func, inspect, select, values
 from sqlalchemy.orm import Session, aliased, joinedload, object_session, selectinload
 
 from onyx.agents.compaction import count_tokens, is_input_context
@@ -34,6 +34,7 @@ from onyx.chat.models import (
     ToolRecordReference,
     ToolReplayData,
     accepted_input_messages,
+    read_message_rendering,
     recorded_mentions,
     skill_message_id,
 )
@@ -75,6 +76,7 @@ from onyx.db.models import (
     QuestionRequest,
     StoredToolResult,
     ToolCall,
+    UnavailableStoredToolResult,
 )
 from onyx.db.question_request import get_response_question_requests
 from onyx.file_processing.file_types import guess_mime_type
@@ -85,6 +87,7 @@ from onyx.llm.models import (
     Message,
     UserMessage,
 )
+from onyx.llm.models import ToolCall as ModelToolCall
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
 from onyx.tools.constants import SEND_MESSAGE_TOOL_NAME, SPAWN_AGENT_TOOL_NAME
@@ -415,63 +418,99 @@ def save_chat_response_to_db(
     return answer
 
 
-def _child_responses(db_session: Session, response_ids: list[int]) -> list[ChatMessage]:
+def _child_responses(
+    db_session: Session, root_by_parent: dict[int, int]
+) -> list[ChatMessage]:
     question = aliased(ChatMessage)
+    parents = values(
+        column("parent_id", Integer), column("root_id", Integer), name="parents"
+    ).data(list(root_by_parent.items()))
+    ranked = (
+        select(
+            ChatMessage.id,
+            ChatResponseItem.step_index,
+            func.row_number()
+            .over(
+                partition_by=parents.c.root_id,
+                order_by=(ChatResponseItem.step_index, ChatMessage.id),
+            )
+            .label("rank"),
+        )
+        .join(question, ChatMessage.parent_message_id == question.id)
+        .join(ToolCall, question.invoking_tool_call_id == ToolCall.id)
+        .join(parents, ToolCall.parent_chat_message_id == parents.c.parent_id)
+        .join(
+            ChatResponseItem,
+            (ChatResponseItem.chat_message_id == ToolCall.parent_chat_message_id)
+            & (ChatResponseItem.step_index == ToolCall.turn_number),
+        )
+        .where(ChatMessage.response_status.is_not(None))
+        .subquery()
+    )
     return list(
         db_session.scalars(
             select(ChatMessage)
-            .join(question, ChatMessage.parent_message_id == question.id)
-            .join(ToolCall, question.invoking_tool_call_id == ToolCall.id)
-            .join(
-                ChatResponseItem,
-                (ChatResponseItem.chat_message_id == ToolCall.parent_chat_message_id)
-                & (ChatResponseItem.step_index == ToolCall.turn_number),
-            )
-            .where(
-                ToolCall.parent_chat_message_id.in_(response_ids),
-                ChatMessage.response_status.is_not(None),
-            )
+            .join(ranked, ranked.c.id == ChatMessage.id)
+            # Each root reads at most one run past its limit, to detect it.
+            .where(ranked.c.rank <= MAX_AGENT_HISTORY_RUNS + 1)
             .options(
                 joinedload(ChatMessage.chat_session),
                 joinedload(ChatMessage.parent_message).joinedload(
                     ChatMessage.invoking_tool_call
                 ),
                 selectinload(ChatMessage.response_items),
-                selectinload(ChatMessage.tool_calls),
+                # The replay reads these tool calls' search docs.
+                selectinload(ChatMessage.tool_calls).selectinload(ToolCall.search_docs),
             )
             # Stable display order; predecessor links determine child history.
-            .order_by(ChatResponseItem.step_index, ChatMessage.id)
-            .limit(MAX_AGENT_HISTORY_RUNS + 1)
+            .order_by(ranked.c.step_index, ChatMessage.id)
         )
     )
 
 
-def _load_child_responses(
-    db_session: Session, response_id: int
+def load_child_responses(
+    db_session: Session, responses: Collection[ChatMessage]
 ) -> dict[int, list[ChatMessage]]:
-    """Load each hierarchy level together before assembling the response tree."""
+    """The child responses of `responses`' response trees, by parent response.
+    Each hierarchy level of all trees loads together; each tree keeps its own
+    run limit."""
     children: dict[int, list[ChatMessage]] = {}
-    parents = [response_id]
-    visited = {response_id}
+    # A child response must be linked through one of its parent's tool calls.
+    root_by_response = {
+        response.id: response.id for response in responses if response.tool_calls
+    }
+    run_counts = dict.fromkeys(root_by_response, 1)
+    parents = dict(root_by_response)
     # Messages between agents add levels, so the run count bounds the walk.
     while parents:
         rows = _child_responses(db_session, parents)
-        parents = []
+        parents = {}
         for row in rows:
-            if len(visited) >= MAX_AGENT_HISTORY_RUNS or row.id in visited:
-                raise ValueError(
-                    "Response hierarchy exceeds its limit or contains a cycle"
-                )
             invocation = response_invocation(row)
             if invocation is None or invocation.parent_chat_message_id is None:
                 raise ValueError("Child response has no parent invocation")
+            root_id = root_by_response[invocation.parent_chat_message_id]
+            if run_counts[root_id] >= MAX_AGENT_HISTORY_RUNS or (
+                row.id in root_by_response
+            ):
+                raise ValueError(
+                    "Response hierarchy exceeds its limit or contains a cycle"
+                )
+            if isinstance(invocation.result, UnavailableStoredToolResult):
+                continue
             children.setdefault(invocation.parent_chat_message_id, []).append(row)
-            visited.add(row.id)
-            parents.append(row.id)
+            run_counts[root_id] += 1
+            root_by_response[row.id] = root_id
+            parents[row.id] = root_id
     return children
 
 
-def read_chat_execution(message: ChatMessage) -> ChatExecutionRecord | None:
+def read_chat_execution(
+    message: ChatMessage, child_responses: Mapping[int, list[ChatMessage]]
+) -> tuple[ChatExecutionRecord, dict[int, ToolCall]] | None:
+    """The saved execution of `message` and the tool call rows that its tool
+    records reference, by record id. `child_responses` holds the child
+    responses of responses that include this one (`load_child_responses`)."""
     if message.response_status is None or not record_mode_persists_content(
         message.chat_session.incognito_record_mode
     ):
@@ -481,10 +520,7 @@ def read_chat_execution(message: ChatMessage) -> ChatExecutionRecord | None:
         raise ValueError("Response content must be loaded inside its database session")
     presentation: dict[str, MessageRendering] = {}
     tool_records: list[ToolRecordReference] = []
-    # A child response must be linked through one of this message's tool calls.
-    children = (
-        _load_child_responses(db_session, message.id) if message.tool_calls else {}
-    )
+    tool_calls: dict[int, ToolCall] = {}
 
     def read(
         response: ChatMessage,
@@ -500,10 +536,13 @@ def read_chat_execution(message: ChatMessage) -> ChatExecutionRecord | None:
         message_ids_by_tool: dict[int, str] = {}
         for row in response.response_items:
             if row.rendering:
-                presentation[row.id] = MessageRendering.model_validate(row.rendering)
+                presentation[row.id] = read_message_rendering(row.rendering)
         for tool in response.tool_calls or []:
+            if isinstance(tool.result, UnavailableStoredToolResult):
+                continue
             assistant_message_id = message_ids_by_step[tool.turn_number]
             message_ids_by_tool[tool.id] = assistant_message_id
+            tool_calls[tool.id] = tool
             tool_records.append(
                 ToolRecordReference(
                     message_id=assistant_message_id,
@@ -511,7 +550,7 @@ def read_chat_execution(message: ChatMessage) -> ChatExecutionRecord | None:
                     record_id=tool.id,
                 )
             )
-        for child in children.get(response.id, []):
+        for child in child_responses.get(response.id, []):
             invocation = response_invocation(child)
             name = child.chat_session.agent_name
             if invocation is None or name is None:
@@ -526,8 +565,11 @@ def read_chat_execution(message: ChatMessage) -> ChatExecutionRecord | None:
         return record
 
     root = read(message, agent_session_path(db_session, message.chat_session))
-    return ChatExecutionRecord(
-        response=root, presentation=presentation, tool_records=tool_records
+    return (
+        ChatExecutionRecord(
+            response=root, presentation=presentation, tool_records=tool_records
+        ),
+        tool_calls,
     )
 
 
@@ -913,6 +955,13 @@ def read_response_steps(response: ChatMessage) -> list[StepRecord]:
                 or result.tool_name != call.name
             ):
                 raise ValueError("Response tool result has no matching call")
+            if isinstance(result, UnavailableStoredToolResult):
+                step.message.content = [
+                    part
+                    for part in step.message.content
+                    if not (isinstance(part, ModelToolCall) and part.id == call.id)
+                ]
+                continue
             if tool.operation_status is not None:
                 step.tools[call.id] = ToolExecutionRecord(
                     status=tool.operation_status,
@@ -1237,7 +1286,7 @@ def read_response__no_commit(
             for doc in saved.search_docs or []
         },
         {
-            item.id: MessageRendering.model_validate(item.rendering)
+            item.id: read_message_rendering(item.rendering)
             for item in response.response_items
             if item.rendering is not None
         },
@@ -1298,25 +1347,30 @@ def read_suspended_response_replay(
     """The saved output of a suspended response, to replay where its run
     continues."""
     message = db_session.get(ChatMessage, response_id)
-    execution = read_chat_execution(message) if message is not None else None
-    if execution is None or execution.response.status != RunStatus.SUSPENDED:
+    if message is None:
         raise ValueError("The response is not suspended")
-    return execution, read_response_replay_data(execution, db_session)
+    read = read_chat_execution(message, load_child_responses(db_session, [message]))
+    if read is None or read[0].response.status != RunStatus.SUSPENDED:
+        raise ValueError("The response is not suspended")
+    execution, tool_calls = read
+    return execution, read_response_replay_data(
+        execution, tool_calls, message, db_session
+    )
 
 
 def read_response_replay_data(
     execution: ChatExecutionRecord,
+    tool_calls: Mapping[int, ToolCall],
+    root: ChatMessage,
     db_session: Session,
     chat_approvals: ChatApprovals | None = None,
 ) -> ResponseReplayData:
     """Load detached display data for an already authorized response execution.
 
-    `chat_approvals` holds the requests of a page of responses that includes
-    this one (`load_chat_approvals`); it is read for this response when not
-    given."""
-    root = db_session.get(ChatMessage, int(execution.response.run_id))
-    if root is None:
-        raise ValueError("Chat response is unavailable")
+    `execution` and `tool_calls` are what `read_chat_execution` read from
+    `root`. `chat_approvals` holds the requests of a page of responses that
+    includes this one (`load_chat_approvals`); it is read for this response
+    when not given."""
     if chat_approvals is None:
         chat_approvals = load_chat_approvals(
             db_session, root.chat_session_id, [root.id]
@@ -1365,23 +1419,12 @@ def read_response_replay_data(
     ):
         raise ValueError("Tool replay reference is not part of this response")
 
-    rows = (
-        db_session.execute(
-            select(ToolCall, ChatResponseItem.id)
-            .join(
-                ChatResponseItem,
-                (ChatResponseItem.chat_message_id == ToolCall.parent_chat_message_id)
-                & (ChatResponseItem.step_index == ToolCall.turn_number),
-            )
-            .where(ToolCall.id.in_(references))
-        ).all()
-        if references
-        else []
-    )
     # The session replay prefetches these tool calls' search docs; load them
     # only for calls that do not have them yet, in one query.
     unloaded_ids = [
-        tool.id for tool, _ in rows if "search_docs" in inspect(tool).unloaded
+        tool.id
+        for tool in tool_calls.values()
+        if "search_docs" in inspect(tool).unloaded
     ]
     if unloaded_ids:
         db_session.execute(
@@ -1389,27 +1432,18 @@ def read_response_replay_data(
             .where(ToolCall.id.in_(unloaded_ids))
             .options(selectinload(ToolCall.search_docs))
         ).all()
-    for tool, message_id in rows:
-        reference = references[tool.id]
-        if (
-            reference.message_id != message_id
-            or reference.tool_call_id != tool.tool_call_id
-        ):
-            raise ValueError(
-                "Tool replay reference does not match its accepted invocation"
-            )
+    for record_id, reference in references.items():
+        tool = tool_calls[record_id]
         search_docs = [
             translate_db_search_doc_to_saved_search_doc(document)
             for document in tool.search_docs or []
         ]
         for document in search_docs:
             documents.setdefault(document.document_id, document)
-        tools[(message_id, tool.tool_call_id)] = ToolReplayData(
+        tools[(reference.message_id, reference.tool_call_id)] = ToolReplayData(
             tool_id=tool.tool_id,
             search_docs=search_docs,
         )
-    if len(rows) != len(references):
-        raise ValueError("Accepted tool replay data is unavailable")
     # A running response's requests reach the client through its stream.
     approvals: dict[tuple[str, str], list[SavedToolApproval]] = {}
     status = execution.response.status

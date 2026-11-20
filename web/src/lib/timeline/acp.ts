@@ -61,9 +61,7 @@ export type OnyxToolType =
   | "file_reader"
   | "memory"
   | "deep_research_plan"
-  | "research_agent"
-  | "coding_agent"
-  | "bash";
+  | "research_agent";
 
 /** ACP's extension field on every object. */
 export interface AcpMeta {

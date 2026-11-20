@@ -21,12 +21,14 @@ from ee.onyx.external_permissions.utils import (
 )
 from onyx.access.utils import build_domain_group_id
 from onyx.configs.app_configs import PERMISSION_SYNC_TIMEOUT
+from onyx.configs.constants import DocumentSource
 from onyx.connectors.factory import build_connector_kwargs
 from onyx.connectors.google_drive.connector import GoogleDriveConnector
 from onyx.connectors.google_drive.source_operations import (
     GoogleDriveHttpError,
     GoogleDriveSourceOperations,
 )
+from onyx.connectors.source_api_limiter import build_source_api_limiter
 from onyx.db.enums import SyncEntityKind
 from onyx.db.models import ConnectorCredentialPair
 from onyx.utils.logger import setup_logger
@@ -45,6 +47,13 @@ as groups.
 class FolderInfo(BaseModel):
     id: str
     permissions: list[GoogleDrivePermission]
+
+
+def _deadline_passed(deadline: float) -> bool:
+    """A stop check for the API limiter: raises the deadline's TimeoutError,
+    so a wait for the budget ends as the other phases do."""
+    _check_sync_deadline(deadline)
+    return False
 
 
 def _check_sync_deadline(deadline: float) -> None:
@@ -256,8 +265,9 @@ def _get_drive_members(
         # the Google Workspace directory — the connector is misconfigured
         # (primary admin is not an admin, or delegation isn't granted).
         # Raise PermissionError so the caller marks the sync attempt as a
-        # clean failure instead of treating this as an unhandled crash.
-        if e.status_code == 403:
+        # clean failure instead of treating this as an unhandled crash. A
+        # 403 for the rate is no such denial: it raises as it is.
+        if e.access_denied and e.status_code == 403:
             raise PermissionError(
                 f"Primary admin {google_drive_connector.primary_admin_email} "
                 "is not authorized on the Google Workspace directory API. "
@@ -287,7 +297,9 @@ def _get_drive_members(
                 elif permission["type"] == PermissionType.USER:
                     user_emails.add(permission["emailAddress"])
         except GoogleDriveHttpError as e:
-            if e.status_code in (403, 404):
+            # Only a denial means "no access". A rate refusal must fail the
+            # sync: a drive with no members would remove its users' access.
+            if e.access_denied:
                 logger.warning(
                     "Error getting permissions for drive id %s. User '%s' likely does not have access to this drive (status=%s). Exception: %s",
                     drive_id,
@@ -384,12 +396,22 @@ def gdrive_group_sync(
             cc_pair.connector.source, cc_pair.connector.connector_specific_config
         )
     )
-    google_drive_connector.load_credentials(credential_json(cc_pair))
-    ops = google_drive_connector.ops
-
     # One budget for the whole sync: every long enumeration phase below checks
     # this deadline, since none of them yield often (or at all) on big domains.
     sync_deadline = time.monotonic() + PERMISSION_SYNC_TIMEOUT
+
+    # Group sync spends the indexing budget of the credential, and reports
+    # Google's rate limits to it. A wait for the budget also checks the
+    # deadline.
+    limiter = build_source_api_limiter(
+        DocumentSource.GOOGLE_DRIVE,
+        cc_pair.credential_id,
+        lambda: _deadline_passed(sync_deadline),
+    )
+    if limiter is not None:
+        google_drive_connector.set_source_api_limiter(limiter)
+    google_drive_connector.load_credentials(credential_json(cc_pair))
+    ops = google_drive_connector.ops
 
     # Get all drive members
     drive_id_to_members_map = _get_drive_members(google_drive_connector, sync_deadline)

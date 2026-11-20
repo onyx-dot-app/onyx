@@ -119,9 +119,6 @@
       "addConnectors": {
         "label": "إضافة موصّلات"
       },
-      "codingAgentIncognito": {
-        "tooltip": "وكيل البرمجة غير متاح في وضع التخفي"
-      },
       "configure": {
         "tooltip": "تكوين"
       },
@@ -266,9 +263,6 @@
       },
       "addMemory": {
         "label": "إضافة إلى الذاكرة"
-      },
-      "codingAgent": {
-        "label": "وكيل البرمجة"
       }
     },
     "toolsPopover": {
@@ -323,9 +317,6 @@
       "tooltips": {
         "askAdminSuffix": {
           "text": "اطلب من مسؤول تهيئته."
-        },
-        "codingAgent": {
-          "description": "استقصِ مستودع GitHub وأجب عن أسئلة حول كوده."
         },
         "configureSuffix": {
           "text": "اضغط على ترس الإعدادات للتفعيل."
@@ -1507,10 +1498,6 @@
           "description": "توليد الأكواد وتشغيلها.",
           "title": "مفسر الأكواد"
         },
-        "codingAgent": {
-          "description": "استقصاء مستودع GitHub والإجابة عن أسئلة حول كوده.",
-          "title": "وكيل البرمجة"
-        },
         "description": "الأدوات والقدرات المتاحة للمحادثة. لا ينطبق هذا على الوكلاء.",
         "pluginsNote": "أدِر خوادم MCP وتطبيقات OpenAPI من [التكاملات]({url}).",
         "imageGeneration": {
@@ -2178,7 +2165,15 @@
           "close": "إغلاق",
           "count": "({count})"
         },
-        "showing": "عرض <mono>{from}</mono>~<mono>{to}</mono> من <mono>{total}</mono>"
+        "showing": "عرض <mono>{from}</mono>~<mono>{to}</mono> من <mono>{total}</mono>",
+        "progress": {
+          "listed": "مُدرجة",
+          "converted": "محوَّلة",
+          "indexed": "مفهرسة",
+          "listedSoFar": "{count, plural, one {تم إدراج مستند واحد حتى الآن} other {تم إدراج # مستندات حتى الآن}}",
+          "skipped": "{count, plural, one {تم تخطي مستند واحد لم يتغير} other {تم تخطي # مستندات لم تتغير}}",
+          "eta": "يتبقى نحو {duration}"
+        }
       },
       "activity": {
         "search": {
@@ -10364,65 +10359,36 @@
         }
       }
     },
-    "plugins": {
-      "title": "الإضافات",
-      "description": "تمنح الإضافات المستخدمين مهارات وتكاملات. تعرض هذه الصفحة الإضافات التي تحتوي على تكاملات.",
-      "search": "البحث في الإضافات",
-      "loadFailed": "تعذّر تحميل الإضافات.",
-      "manageIntegrations": "إدارة التكاملات",
-      "columns": {
-        "name": "الإضافة",
-        "library": "المكتبة",
-        "installation": "إعداد التثبيت",
-        "integrations": "التكاملات"
-      },
-      "library": {
-        "organization": "مكتبة المؤسسة",
-        "personal": "«مرفوعاتي» لـ {owner}"
-      },
-      "installationSelect": "إعداد التثبيت لـ {name}",
-      "installationSaved": "أصبح {name} الآن {policy}.",
-      "installationSaveFailed": "تعذّر حفظ إعداد التثبيت.",
-      "openIntegration": "فتح {name}",
-      "empty": {
-        "title": "لا توجد إضافات تحتوي على تكاملات",
-        "description": "أضف تكاملًا. ينشئ Onyx إضافة تحتوي عليه."
-      }
-    },
     "integrations": {
       "title": "التكاملات",
-      "description": "اربط خوادم MCP والتطبيقات. تحتوي إضافة على كل تكامل وتمنح المستخدمين الوصول إليه.",
+      "description": "اربط خوادم MCP والتطبيقات. لكل تكامل مالك وإعداد تثبيت ومشاركات خاصة به.",
       "search": "البحث في التكاملات",
       "open": "فتح {name}",
       "loadFailed": "تعذّر تحميل التكاملات.",
       "add": {
         "label": "إضافة",
         "title": "إضافة تكامل",
-        "description": "اختر نوع التكامل.",
+        "description": "اربط خدمة ليتمكن الأشخاص من استخدامها في المحادثة وCraft.",
         "created": "تمت إضافة {name}.",
         "createFailed": "تعذّرت إضافة التكامل.",
-        "formTitle": {
-          "mcp_server": "إضافة خادم MCP",
-          "openapi": "إضافة تطبيق OpenAPI",
-          "preset": "إضافة تطبيق من قالب جاهز",
-          "custom": "إضافة تطبيق مخصص"
-        },
-        "kindDescription": {
-          "mcp_server": "اربط خادم MCP بعيدًا باستخدام عنوان URL الخاص به.",
-          "openapi": "أنشئ إجراءات من مخطط OpenAPI.",
-          "preset": "اربط تطبيقًا مدمجًا، مثل GitHub أو Slack.",
-          "custom": "اسمح لـ Craft باستدعاء خدمة HTTP تطابق أنماط URL."
-        },
         "openapi": {
-          "title": "إضافة تطبيق OpenAPI"
+          "title": "إضافة تطبيق OpenAPI",
+          "schema": {
+            "title": "المخطط",
+            "description": "أضف مخطط OpenAPI الذي يحدد الإجراءات.",
+            "added": "{count, plural, zero {لا يحتوي المخطط على مسارات.} one {يحتوي المخطط على مسار واحد.} two {يحتوي المخطط على مسارين.} few {يحتوي المخطط على # مسارات.} many {يحتوي المخطط على # مسارًا.} other {يحتوي المخطط على # مسار.}}",
+            "required": "أضف مخططًا.",
+            "add": "إضافة مخطط",
+            "edit": "تعديل المخطط"
+          }
         },
         "preset": {
-          "title": "القالب الجاهز",
-          "placeholder": "اختر قالبًا جاهزًا",
-          "required": "اختر قالبًا جاهزًا.",
+          "title": "البدء من",
           "loadFailed": "تعذّر تحميل القوالب الجاهزة.",
           "instructions": "تعليمات الإعداد",
-          "credentialRequired": "أدخل هذه القيمة."
+          "credentialRequired": "أدخل هذه القيمة.",
+          "description": "يملأ الإعداد المسبق اسم تطبيق مدمج وطريقة تسجيل الدخول إليه. اختر تطبيق مخصص لإعداد أي خدمة HTTP.",
+          "custom": "تطبيق مخصص"
         },
         "name": {
           "title": "الاسم",
@@ -10465,16 +10431,38 @@
           "title": "المالك",
           "personal": "لي",
           "organization": "للمؤسسة",
-          "personalDescription": "يضع Onyx التكامل في إضافة ضمن مرفوعاتي. يمكنك مشاركة الإضافة لاحقًا.",
-          "organizationDescription": "يضع Onyx التكامل في إضافة ضمن مكتبة المؤسسة."
+          "personalDescription": "يمكنك وحدك استخدام التكامل. يمكنك مشاركته لاحقًا.",
+          "organizationDescription": "يمكن لكل مستخدم في المؤسسة تفعيل التكامل."
         },
-        "back": "رجوع",
         "submit": "إضافة",
-        "adding": "جارٍ الإضافة…"
+        "adding": "جارٍ الإضافة…",
+        "cancel": "إلغاء",
+        "type": {
+          "title": "النوع",
+          "description": "اختر طريقة اتصال Onyx بالخدمة.",
+          "mcp_server": {
+            "title": "خادم MCP",
+            "description": "اربط خادم MCP بعيدًا عبر عنوان URL الخاص به."
+          },
+          "openapi": {
+            "title": "تطبيق OpenAPI",
+            "description": "أنشئ إجراءات من مخطط OpenAPI."
+          },
+          "app": {
+            "title": "تطبيق",
+            "description": "ابدأ من إعداد مسبق، مثل GitHub، أو من تطبيق مخصص."
+          }
+        },
+        "details": {
+          "title": "التفاصيل"
+        },
+        "signIn": {
+          "title": "تسجيل الدخول"
+        }
       },
       "filters": {
         "label": "نوع التكامل",
-        "all": "الكل",
+        "all": "كل الأنواع",
         "mcp": "خوادم MCP",
         "api": "التطبيقات"
       },
@@ -10482,8 +10470,8 @@
         "name": "الاسم",
         "type": "النوع",
         "signIn": "تسجيل الدخول",
-        "access": "الوصول",
-        "status": "الحالة"
+        "status": "الحالة",
+        "installation": "إعداد التثبيت"
       },
       "empty": {
         "title": "لا توجد تكاملات",
@@ -10498,12 +10486,6 @@
         "custom": "تطبيق مخصص"
       },
       "signInSummary": "{mode, select, none {بدون تسجيل دخول} shared {{method, select, oauth2 {حساب المؤسسة (OAuth)} api_key {مفتاح API للمؤسسة} onyx_login {تسجيل الدخول إلى Onyx} managed {يديره Onyx} other {حساب المؤسسة}}} individual {{method, select, oauth2 {كل مستخدم (OAuth)} api_key {كل مستخدم (مفتاح API)} onyx_login {تسجيل الدخول إلى Onyx} managed {يديره Onyx} other {كل مستخدم}}} other {غير معروف}}",
-      "access": {
-        "none": "ليس ضمن أي إضافة",
-        "many": "{count, plural, zero {لا توجد إضافات} one {إضافة واحدة} two {إضافتان} few {# إضافات} many {# إضافة} other {# إضافة}}",
-        "organization": "{plugin} (مكتبة المؤسسة)",
-        "personal": "{plugin} («مرفوعاتي» لـ {owner})"
-      },
       "status": {
         "needsSetup": "يحتاج إلى إعداد",
         "off": "متوقف",
@@ -10583,23 +10565,14 @@
           "createdBy": "أضافه",
           "needsSetup": "يحتاج إلى إعداد",
           "needsSetupDefault": "أكمل إعدادات تسجيل الدخول في علامة تبويب التكوين.",
-          "plugins": {
-            "title": "الإضافات",
-            "description": "يحصل المستخدمون على هذا التكامل من خلال هذه الإضافات.",
-            "organization": "{policy, select, REQUIRED {مكتبة المؤسسة، مطلوبة} DEFAULT {مكتبة المؤسسة، مفعّلة افتراضيًا} AVAILABLE {مكتبة المؤسسة، متاحة} NOT_AVAILABLE {مكتبة المؤسسة، غير متاحة} other {مكتبة المؤسسة}}",
-            "personal": "«مرفوعاتي» لـ {owner}",
-            "manage": "إدارة الإضافات"
-          },
           "enabled": {
             "title": "مفعّل",
             "description": "عند إيقاف هذا الخيار، لا يمكن لأي وكيل أو مستخدم استخدام التكامل."
           },
           "delete": {
-            "title": "حذف التكامل",
-            "description": "إزالة التكامل من كل إضافة، وحذف اتصالاته وإعدادات إجراءاته.",
             "label": "حذف",
             "confirmTitle": "هل تريد حذف {name}؟",
-            "confirmDescription": "يزيل Onyx التكامل من كل إضافة ويحذف اتصالاته وإعدادات إجراءاته. لا يمكنك التراجع عن ذلك.",
+            "confirmDescription": "يحذف Onyx التكامل مع اتصالاته وإعدادات إجراءاته، ويزيله من كل وكيل ومهمة. لا يمكنك التراجع عن ذلك.",
             "confirm": "حذف"
           },
           "deleted": "تم حذف {name}.",
@@ -10610,8 +10583,15 @@
             "nameRequired": "أدخل اسمًا للتكامل.",
             "description": "الوصف",
             "save": "حفظ",
-            "saved": "تم حفظ الاسم والوصف."
-          }
+            "saved": "تم حفظ الاسم والوصف.",
+            "edit": "تعديل التفاصيل",
+            "title": "تعديل التفاصيل",
+            "cancel": "إلغاء",
+            "saveFailed": "تعذّر حفظ الاسم والوصف."
+          },
+          "description": "الوصف",
+          "menu": "إجراءات أخرى",
+          "owner": "المالك"
         },
         "configuration": {
           "readOnly": "يمكنك رؤية هذا التكامل، لكن لا يمكنك تغييره.",
@@ -10681,10 +10661,23 @@
             "title": "اتصل بالخادم أولًا",
             "description": "يحمّل Onyx إجراءات خادم MCP بعد اتصال الخادم.",
             "open": "فتح التكوين",
-            "individualDescription": "يسجّل كل مستخدم الدخول إلى هذا الخادم. اربط حسابك الخاص في صفحة الإضافات، ثم انقر على تحديث.",
-            "openPlugins": "فتح الإضافات"
+            "individualDescription": "يسجل كل مستخدم الدخول إلى هذا الخادم. اربط حسابك على صفحة التكامل، ثم انقر على تحديث.",
+            "openIntegration": "فتح التكامل"
           }
         }
+      },
+      "installation": {
+        "select": "إعداد التثبيت لـ {name}",
+        "saved": "أصبح {name} الآن {policy}.",
+        "saveFailed": "تعذّر حفظ إعداد التثبيت.",
+        "title": "إعداد التثبيت",
+        "description": "من يحصل على هذا التكامل. غير متاح يبقيه خاصًا: لا يستخدمه إلا مالكه والأشخاص الذين تمت مشاركته معهم والمجموعات التي لها إعدادها الخاص. أزل إعدادات المجموعات هذه لقصره على المالك والمشاركات.",
+        "notAvailable": "خاص. لا يستخدمه إلا المالك والأشخاص الذين تمت مشاركته معهم والمجموعات التي لها إعدادها الخاص."
+      },
+      "ownedBy": "يملكه {owner}",
+      "groupAccess": {
+        "saved": "تم حفظ إعدادات المجموعة لـ {name}.",
+        "saveFailed": "تعذّر حفظ إعداد المجموعة."
       }
     }
   },
@@ -10720,10 +10713,6 @@
         "codeInterpreter": {
           "description": "أنشئ التعليمات البرمجية وشغّلها.",
           "title": "مفسر التعليمات البرمجية"
-        },
-        "codingAgent": {
-          "description": "افحص مستودع GitHub وأجب عن الأسئلة المتعلقة بكوده.",
-          "title": "وكيل البرمجة"
         },
         "description": "الأدوات والقدرات المتاحة لهذا الوكيل لاستخدامها.",
         "imageGeneration": {
@@ -10808,52 +10797,6 @@
       },
       "page": {
         "ariaLabel": "صفحة محرر الوكلاء"
-      },
-      "plugins": {
-        "askHint": "لتشغيل هذا دون سؤال، غيّر إعداد الوكيل، أو يضبطه أحد المسؤولين على السماح في التكامل، أو يختار كل مستخدم السماح دائمًا.",
-        "askHintAdminOnly": "لتشغيل هذا دون سؤال، يضبطه أحد المسؤولين على السماح في التكامل.",
-        "askHintAgent": "لتشغيل هذا دون تأكيد، غيّر إعداد الوكيل، أو يختار كل مستخدم السماح دائمًا.",
-        "askHintAgentOnly": "لتشغيل هذا دون تأكيد، غيّر إعداد الوكيل.",
-        "choice": {
-          "inherit": "استخدام إعداد التكامل",
-          "agentDefault": "استخدام الإعداد الافتراضي للوكيل"
-        },
-        "default": {
-          "description": "ينطبق على كل إجراء ليس له إعداد خاص، وكذلك على الإجراءات التي يضيفها التكامل لاحقًا.",
-          "title": "الافتراضي للإجراءات الأخرى"
-        },
-        "description": "امنح الوكيل إضافات. يستخدم كل إجراء إعداد التكامل ما لم تختر إعدادًا آخر.",
-        "effective": "{policy, select, allow {يسمح} ask {يسأل} other {محظور}} ({source, select, integration {إعداد التكامل} agentDefault {افتراضي الوكيل} other {إعداد الوكيل}})",
-        "empty": "لا توجد إضافات بتكاملات متاحة لك.",
-        "loadFailed": "تعذر تحميل الإضافات.",
-        "lock": {
-          "adminBlocked": "السماح غير متاح: حظر أحد المسؤولين هذا الإجراء.",
-          "alwaysAsks": "السماح غير متاح: يطلب Craft الموافقة على كل طلب من هذه الطلبات.",
-          "adminFinal": "السماح غير متاح: إعداد المسؤول لهذا التكامل نهائي.",
-          "defaultFinal": "السماح غير متاح: إعدادات المسؤول لهذه التكاملات نهائية."
-        },
-        "noActions": "لا يحتوي هذا التكامل على إجراءات بعد.",
-        "notVisible": "لا يمكنك رؤية إجراءات هذه الإضافة. تبقى إعداداتها كما هي.",
-        "title": "الإضافات",
-        "add": {
-          "placeholder": "إضافة إضافة"
-        },
-        "remove": {
-          "ariaLabel": "إزالة {plugin}"
-        },
-        "retry": {
-          "label": "حاول مرة أخرى"
-        },
-        "actionSetting": {
-          "label": "إعداد {action}"
-        },
-        "defaultSetting": {
-          "label": "الإعداد الافتراضي لـ {plugin}"
-        },
-        "openIntegration": {
-          "label": "فتح إجراءات {integration}"
-        },
-        "stricterPlugin": "تضبط الإضافة {plugin} لهذا الوكيل إعدادًا أكثر صرامة لهذا الإجراء."
       },
       "prompts": {
         "instructions": {
@@ -10946,6 +10889,51 @@
       },
       "warnings": {
         "openUrl": "قد يؤدي البحث على الويب دون القدرة على فتح عناوين URL إلى نتائج ويب أسوأ بكثير."
+      },
+      "integrations": {
+        "askHint": "لتشغيل هذا دون سؤال، غيّر إعداد الوكيل، أو يضبطه أحد المسؤولين على السماح في التكامل، أو يختار كل مستخدم السماح دائمًا.",
+        "askHintAdminOnly": "لتشغيل هذا دون سؤال، يضبطه أحد المسؤولين على السماح في التكامل.",
+        "askHintAgent": "لتشغيل هذا دون تأكيد، غيّر إعداد الوكيل، أو يختار كل مستخدم السماح دائمًا.",
+        "askHintAgentOnly": "لتشغيل هذا دون تأكيد، غيّر إعداد الوكيل.",
+        "choice": {
+          "inherit": "استخدام إعداد التكامل",
+          "agentDefault": "استخدام الإعداد الافتراضي للوكيل"
+        },
+        "default": {
+          "description": "ينطبق على كل إجراء ليس له إعداد خاص، وكذلك على الإجراءات التي يضيفها التكامل لاحقًا.",
+          "title": "الافتراضي للإجراءات الأخرى"
+        },
+        "description": "امنح الوكيل تكاملات. يستخدم كل إجراء إعداد التكامل ما لم تختر إعدادًا آخر.",
+        "effective": "{policy, select, allow {يسمح} ask {يسأل} other {محظور}} ({source, select, integration {إعداد التكامل} agentDefault {افتراضي الوكيل} other {إعداد الوكيل}})",
+        "empty": "لا تتوفر لك أي تكاملات.",
+        "loadFailed": "تعذر تحميل التكاملات.",
+        "lock": {
+          "adminBlocked": "السماح غير متاح: حظر أحد المسؤولين هذا الإجراء.",
+          "alwaysAsks": "السماح غير متاح: يطلب Craft الموافقة على كل طلب من هذه الطلبات.",
+          "adminFinal": "السماح غير متاح: إعداد المسؤول لهذا التكامل نهائي."
+        },
+        "noActions": "لا يحتوي هذا التكامل على إجراءات بعد.",
+        "notVisible": "لا يمكنك رؤية إجراءات هذا التكامل. تبقى إعداداته كما هي.",
+        "title": "التكاملات",
+        "add": {
+          "placeholder": "أضف تكاملًا"
+        },
+        "remove": {
+          "ariaLabel": "إزالة {integration}"
+        },
+        "retry": {
+          "label": "حاول مرة أخرى"
+        },
+        "actionSetting": {
+          "label": "إعداد {action}"
+        },
+        "defaultSetting": {
+          "label": "الإعداد الافتراضي لـ {integration}"
+        },
+        "openIntegration": {
+          "label": "فتح إجراءات {integration}"
+        },
+        "sharedWider": "بعض الأشخاص الذين يمكنهم استخدام هذا الوكيل لا يمكنهم استخدام {integration}. تعمل محادثاتهم بدونه. شارك {integration} معهم لمنحهم الوصول."
       }
     },
     "filters": {
@@ -11086,7 +11074,8 @@
           "empty": {
             "title": "لا توجد إجراءات"
           },
-          "title": "الإجراءات والأدوات"
+          "title": "الإجراءات والأدوات",
+          "noAccess": "لا يمكنك استخدام هذا التكامل. تعمل المحادثة مع هذا الوكيل بدونه."
         },
         "conversationStarters": {
           "title": "بادئات المحادثة"
@@ -11633,50 +11622,11 @@
       }
     },
     "skill": {
-      "edit": {
-        "tooltip": "تعديل المهارة"
-      },
-      "invalid": {
-        "description": "احذف هذه المهارة غير الصالحة وأنشئ واحدة جديدة."
-      },
       "tags": {
-        "builtin": {
-          "label": "مدمجة"
-        },
-        "invalid": {
-          "label": "غير صالحة"
-        },
-        "personal": {
-          "label": "شخصية"
-        },
-        "required": {
-          "tooltip": "يفرض مسؤول مؤسستك أن تكون هذه المهارة لديك."
-        },
-        "unavailable": {
-          "label": "غير متاحة - انقر لمعرفة المزيد"
-        },
-        "shared": {
-          "label": "مُشاركة"
-        },
-        "organization": {
-          "label": "المؤسسة"
-        },
         "unpublished": {
           "label": "تغييرات غير منشورة",
           "tooltip": "لا تزال المؤسسة تستخدم الإصدار {number}."
         }
-      },
-      "toggle": {
-        "disable": {
-          "ariaLabel": "تعطيل {name}"
-        },
-        "enable": {
-          "ariaLabel": "تفعيل {name}"
-        }
-      },
-      "tooltips": {
-        "invalid": "هذه المهارة غير صالحة. احذفها وأنشئ مهارة جديدة.",
-        "unavailable": "المهارة غير متاحة حاليًا. انقر لعرض التفاصيل."
       }
     }
   },
@@ -12014,6 +11964,9 @@
         },
         "skillsGroup": {
           "label": "المهارات"
+        },
+        "manageSkills": {
+          "label": "إدارة المهارات"
         }
       },
       "inputChip": {
@@ -12360,41 +12313,6 @@
         }
       },
       "timeline": {
-        "codingAgent": {
-          "bashExit": {
-            "header": "Bash · خرج بالرمز {exitCode}"
-          },
-          "bashFailed": {
-            "header": "Bash · فشل"
-          },
-          "bashRequest": {
-            "label": "الطلب"
-          },
-          "bashResponse": {
-            "label": "الاستجابة"
-          },
-          "bashRunning": {
-            "header": "Bash · قيد التشغيل…"
-          },
-          "bashTimedOut": {
-            "header": "Bash · انتهت المهلة"
-          },
-          "noOutput": {
-            "text": "لا يوجد إخراج"
-          },
-          "response": {
-            "header": "الاستجابة"
-          },
-          "task": {
-            "header": "مهمة برمجية"
-          },
-          "taskWithRepo": {
-            "text": "{query}\n\nالمستودع: {repo}"
-          },
-          "thinking": {
-            "header": "جارٍ التفكير"
-          }
-        },
         "collapseButton": {
           "ariaLabel": "طي الخط الزمني"
         },
@@ -12657,7 +12575,6 @@
         },
         "toolNames": {
           "codeInterpreter": "مفسر الأكواد",
-          "codingAgent": "وكيل البرمجة",
           "customTool": "أداة مخصصة",
           "generateImage": "توليد صورة",
           "generatePlan": "توليد خطة",
@@ -14646,15 +14563,12 @@
         "empty": "ابدأ البناء! سيظهر سجل الجلسات هنا.",
         "title": "الجلسات"
       },
-      "skills": {
-        "label": "المهارات"
-      },
       "toast": {
         "deleteFailed": "فشل حذف الجلسة",
         "deleted": "تم حذف \"{title}\"."
       },
-      "plugins": {
-        "label": "الإضافات"
+      "customize": {
+        "label": "التخصيص"
       }
     },
     "skillsStale": {
@@ -15164,7 +15078,7 @@
       "appTitle": "إعدادات الموافقة لـ {name}",
       "title": "إعدادات الموافقة",
       "personalDescription": "تحدد هذه الإعدادات ما إذا كانت الإجراءات تُنفّذ تلقائيًا أو تتطلب موافقة في محادثات Craft والمهام الجديدة واستدعاءات أدوات MCP في الدردشة؛ وتحتفظ المهام الحالية بإعداداتها الخاصة.",
-      "taskDescription": "اختر الإضافات التي يمكن للمهمة استخدامها، ثم حدّد الإجراءات التي تعمل تلقائيًا. تنطبق التغييرات على هذه المهمة فقط.",
+      "taskDescription": "اختر التكاملات التي يمكن لهذه المهمة استخدامها، ثم حدد الإجراءات التي تعمل تلقائيًا. تنطبق التغييرات على هذه المهمة فقط.",
       "userManagement": "السماح للمستخدمين بإدارة إعدادات الموافقة",
       "userManagementDescription": "يمكن للمستخدمين تغيير إعدادات الموافقة للإجراءات المتاحة.",
       "loading": "جارٍ تحميل إعدادات الموافقة…",
@@ -15178,9 +15092,9 @@
       "enableAppForTask": "تفعيل {app} لهذه المهمة",
       "enabledForTask": "مفعّل لهذه المهمة",
       "disabledForTask": "معطّل لهذه المهمة",
-      "taskAppsTitle": "الإضافات",
-      "taskAccessTitle": "وصول الإضافات",
-      "noEnabledApps": "لا توجد إضافات مفعّلة لهذه المهمة.",
+      "taskAppsTitle": "التكاملات",
+      "taskAccessTitle": "الوصول إلى التكاملات",
+      "noEnabledApps": "لا توجد تكاملات مفعّلة لهذه المهمة.",
       "actionPolicies": "إعدادات الموافقة",
       "manageActions": "إدارة الإجراءات",
       "taskModalDescription": "تُطبّق التغييرات عند حفظ المهمة. تسري قيود مساحة العمل دائمًا.",
@@ -15191,8 +15105,6 @@
       "saveChanges": "حفظ التغييرات",
       "resetDefaults": "إعادة تعيين الكل إلى الإعدادات الافتراضية",
       "resetAll": "إعادة تعيين الكل إلى إعدادات مساحة العمل الافتراضية",
-      "newTaskPluginsDescription": "شغّل الإضافات التي يمكن لهذه المهمة استخدامها. يستخدم كل إجراء إعداد التكامل الخاص به حتى تغيّره.",
-      "emptyPlugins": "لا تتوفر إضافات تحتوي على تكاملات.",
       "needsSignIn": "يتطلب {name} تسجيل الدخول.",
       "taskPolicyCounts": "{allow} سماح · {ask} سؤال · {blocked} محظور",
       "actionSetting": "إعداد {action}",
@@ -15202,7 +15114,10 @@
         "allow": "سماح",
         "ask": "سؤال",
         "blocked": "محظور"
-      }
+      },
+      "newTaskIntegrationsDescription": "فعّل التكاملات التي يمكن لهذه المهمة استخدامها. يستخدم كل إجراء إعداد التكامل حتى تغيره.",
+      "emptyIntegrations": "لا تتوفر أي تكاملات.",
+      "notRunnable": "لا يمكن لـ Craft تشغيل {name} الآن، لذلك تتخطاه المهمة."
     },
     "skillRuntimeNotice": {
       "title": "{count, plural, zero {لم يتم تحميل أي مهارة} one {لم يتم تحميل مهارة واحدة} two {لم يتم تحميل مهارتين} few {لم يتم تحميل # مهارات} many {لم يتم تحميل # مهارة} other {لم يتم تحميل # مهارة}}",
@@ -15633,7 +15548,9 @@
       "sort": "ترتيب",
       "sortBy": "ترتيب حسب",
       "sortingOrder": "اتجاه الترتيب",
-      "viewSelected": "عرض المحدد"
+      "viewSelected": "عرض المحدد",
+      "selectAll": "تحديد الكل",
+      "selectRow": "تحديد الصف"
     },
     "tabs": {
       "scrollLeft": "تمرير التبويبات لليسار",
@@ -16181,9 +16098,6 @@
         "llmGateway": {
           "label": "بوابة LLM"
         },
-        "plugins": {
-          "label": "الإضافات"
-        },
         "plansAndBilling": {
           "label": "الخطط والفوترة"
         },
@@ -16309,8 +16223,8 @@
       "searchChats": {
         "label": "البحث في المحادثات"
       },
-      "plugins": {
-        "label": "الإضافات"
+      "customize": {
+        "label": "التخصيص"
       }
     },
     "chatButton": {
@@ -16431,12 +16345,7 @@
         "importSubmit": {
           "label": "استيراد المهارة"
         },
-        "importTitle": "استيراد هذه المهارة؟",
-        "replaceBody": "يجب أن يستخدم هذا الرفع اسم المهارة نفسه. ستؤدي المتابعة إلى استبدال الوصف والتعليمات والملفات بالحزمة المرفوعة.",
-        "replaceSubmit": {
-          "label": "استبدال المحتوى"
-        },
-        "replaceTitle": "استبدال محتوى المهارة؟"
+        "importTitle": "استيراد هذه المهارة؟"
       },
       "delete": {
         "button": {
@@ -16450,68 +16359,21 @@
         "label": "حذف",
         "pendingLabel": "جارٍ الحذف..."
       },
-      "details": {
-        "description": "حدد متى وكيف ينبغي لـ Craft استخدام هذه المهارة.",
-        "descriptionField": {
-          "description": "صف متى ينبغي استخدام هذه المهارة.",
-          "placeholder": "بمَ تساعد هذه المهارة؟",
-          "title": "الوصف"
-        },
-        "name": {
-          "createDescription": "استخدم أحرفًا صغيرة وأرقامًا وشرطات مفردة.",
-          "lockedDescription": "لا يمكن تغيير أسماء المهارات بعد إنشائها.",
-          "placeholder": "سمِّ مهارتك",
-          "title": "الاسم"
-        },
-        "title": "التفاصيل"
-      },
       "files": {
-        "busyLabel": "جارٍ الرفع...",
-        "description": "أضف مراجع أو نصوصًا برمجية أو أصولًا أو ملفات أخرى تستخدمها هذه المهارة. يتم فك ضغط ملفات ZIP تلقائيًا.",
-        "input": {
-          "ariaLabel": "إضافة ملفات داعمة"
-        },
-        "pendingUpload": {
-          "emptyMessage": "ستظهر ملفات هذا الرفع بعد إنشاء المهارة."
-        },
-        "title": "الملفات الداعمة"
-      },
-      "filesTooltip": {
-        "noPermission": "ليست لديك صلاحية تحديث ملفات هذه المهارة.",
-        "saveFirst": "احفظ تغييرات التفاصيل قبل تحديث ملفات المهارة.",
-        "updating": "جارٍ تحديث ملفات المهارة..."
+        "addedOnCreate": "يضيف الإنشاء هذا الملف إلى المهارة."
       },
       "header": {
         "createDescription": "أنشئ مهارة شخصية",
         "createTitle": "إنشاء مهارة",
-        "editDescription": "حدّث تفاصيل المهارة وملفاتها",
         "editTitle": "تعديل المهارة",
         "save": {
-          "label": "حفظ",
-          "pendingLabel": "جارٍ الحفظ..."
-        }
-      },
-      "import": {
-        "busyLabel": "جارٍ الاستيراد...",
-        "button": {
-          "label": "استيراد مهارة"
+          "label": "إنشاء",
+          "pendingLabel": "جارٍ الإنشاء..."
         },
-        "description": "استورد ملف SKILL.md أو ملف ZIP أو مجلد مهارة لملء النموذج مسبقًا وتضمين ملفاته.",
-        "input": {
-          "ariaLabel": "استيراد مهارة موجودة"
-        },
-        "prompt": "اختر ملف SKILL.md أو ZIP، أو أسقط مجلد مهارة هنا.",
-        "title": "لديك مهارة موجودة بالفعل؟"
-      },
-      "instructions": {
-        "description": "اكتب السلوك وسير العمل الذي تضيفه هذه المهارة إلى Craft.",
-        "emptyFallback": "لا توجد تعليمات بعد.",
-        "placeholder": "اكتب تعليمات المهارة.",
-        "title": "التعليمات"
+        "cancel": "إلغاء"
       },
       "loadError": {
-        "description": "قد لا تكون هذه المهارة موجودة، أو قد تكون مدمجة، أو قد لا يكون حسابك قادرًا على تعديلها.",
-        "title": "المهارة غير متاحة"
+        "description": "قد لا تكون هذه المهارة موجودة، أو قد تكون مدمجة، أو قد لا يكون حسابك قادرًا على تعديلها."
       },
       "management": {
         "sharing": {
@@ -16521,12 +16383,9 @@
         }
       },
       "saveTooltip": {
-        "missingDescription": "أضف وصفًا قبل الحفظ.",
         "missingInstructions": "أضف تعليمات قبل الحفظ.",
         "missingName": "أضف اسمًا قبل الحفظ.",
         "noChanges": "لم يتم إجراء أي تغييرات.",
-        "noPermission": "ليست لديك صلاحية تعديل تفاصيل هذه المهارة.",
-        "savingChanges": "جارٍ حفظ التغييرات...",
         "savingSkill": "جارٍ حفظ المهارة..."
       },
       "staleVersion": {
@@ -16540,14 +16399,10 @@
         "created": "تم إنشاء \"{name}\"",
         "deleteFailed": "فشل حذف المهارة",
         "deleted": "تم حذف \"{name}\"",
-        "fileRemoveFailed": "فشلت إزالة ملف المهارة",
-        "fileRemoved": "تمت إزالة \"{path}\"",
-        "filesUpdateFailed": "فشل تحديث ملفات المهارة",
-        "filesUpdated": "تم تحديث ملفات \"{name}\"",
-        "importMissingSkillMd": "استورد ملف SKILL.md أو ملف ZIP أو مجلدًا يحتوي على SKILL.md.",
         "inspectFailed": "فشل فحص حزمة المهارة",
         "saveFailed": "فشل حفظ المهارة",
-        "saved": "تم حفظ \"{name}\""
+        "saved": "تم حفظ \"{name}\"",
+        "mergeLimit": "{limit, select, files {يمكن أن تحتوي المهارة على {max, number} ملف كحد أقصى. أزل بعض الملفات، ثم اختر إنشاء.} other {يمكن أن تحتوي المهارة على {max, number} ميغابايت من الملفات كحد أقصى. أزل بعض الملفات، ثم اختر إنشاء.}}"
       },
       "creationAccess": {
         "title": "الوصول"
@@ -16821,11 +16676,7 @@
           "ariaLabel": "استعادة الإصدار {number}",
           "successToast": "تمت استعادة الإصدار {number} بصفته الإصدار {newNumber}.",
           "unchangedToast": "الإصدار {number} له نفس ملفات الإصدار الحالي.",
-          "failedToast": "تعذّرت استعادة هذا الإصدار.",
-          "unsavedChanges": {
-            "title": "احفظ تغييراتك أولاً",
-            "description": "احفظ التغييرات في المحرر أو تجاهلها قبل استعادة إصدار."
-          }
+          "failedToast": "تعذّرت استعادة هذا الإصدار."
         },
         "loadError": {
           "title": "تعذّر تحميل الإصدارات",
@@ -16851,12 +16702,6 @@
       }
     },
     "page": {
-      "browse": {
-        "title": "تحديد المهارات"
-      },
-      "countSeparator": {
-        "label": "{count, plural, one {مهارة} other {مهارات}}"
-      },
       "createMenu": {
         "github": {
           "description": "استورد مهارة واحدة أو أكثر من مستودع.",
@@ -16886,7 +16731,6 @@
         }
       },
       "header": {
-        "description": "حزم قدرات يمكن لوكيل Craft الخاص بك استخدامها. تعرض هذه الصفحة المهارات المدمجة والمهارات المشاركة معك ومهاراتك الشخصية.",
         "title": "المهارات"
       },
       "loadError": {
@@ -16911,10 +16755,8 @@
       "toasts": {
         "disableFailed": "فشل تعطيل {name}",
         "enableFailed": "فشل تفعيل {name}",
-        "refreshFailed": "تم تحديث {name}، لكن تعذّر تحديث قائمة المهارات."
-      },
-      "builtins": {
-        "title": "المهارات المضمنة ({count, number})"
+        "refreshFailed": "تم تحديث {name}، لكن تعذّر تحديث قائمة المهارات.",
+        "listRefreshFailed": "تعذّر تحديث قائمة المهارات. أعد تحميل الصفحة لرؤية التغيير."
       }
     },
     "sections": {
@@ -16932,26 +16774,12 @@
           "label": "اسحب وأفلت أو انقر للرفع"
         }
       },
-      "fileTree": {
-        "empty": {
-          "description": "لا توجد ملفات داعمة بعد."
-        },
-        "remove": {
-          "label": "إزالة {name}"
-        }
-      },
       "filesPicker": {
-        "addFiles": {
-          "label": "إضافة ملفات"
-        },
         "input": {
           "ariaLabel": "إضافة ملفات المهارة"
         },
         "preparing": {
           "label": "جارٍ التجهيز..."
-        },
-        "prompt": {
-          "description": "اختر ملفات أو ملف ZIP، أو أفلت مجلدًا هنا."
         }
       },
       "instructionsToggle": {
@@ -16978,7 +16806,6 @@
     },
     "bulk": {
       "adminDescription": "إدارة المهارات والوصول في مؤسستك.",
-      "selectAll": "تحديد جميع المهارات المخصصة الظاهرة",
       "selected": "{count, plural, zero {لم يتم تحديد أي مهارة} one {تم تحديد مهارة واحدة} two {تم تحديد مهارتين} few {تم تحديد # مهارات} many {تم تحديد # مهارة} other {تم تحديد # مهارة}}",
       "share": "مشاركة",
       "enable": "تفعيل لي",
@@ -17028,6 +16855,10 @@
       "version": {
         "firstPublish": "v{number} · أول نشر",
         "update": "v{number} · تحديث من v{published}"
+      },
+      "banner": {
+        "title": "{count, plural, zero {لا توجد مهارات بانتظار النشر} one {مهارة واحدة بانتظار النشر} two {مهارتان بانتظار النشر} few {# مهارات بانتظار النشر} many {# مهارة بانتظار النشر} other {# مهارة بانتظار النشر}}",
+        "review": "مراجعة"
       }
     },
     "installationPolicy": {
@@ -17036,11 +16867,11 @@
         "description": "مثبتة ومفعلة دائمًا. لا يمكن للأعضاء إيقافها."
       },
       "DEFAULT": {
-        "label": "مثبتة افتراضيًا",
+        "label": "مثبتة",
         "description": "مثبتة لكل عضو. يمكن للأعضاء إيقافها."
       },
       "AVAILABLE": {
-        "label": "متاح للتثبيت",
+        "label": "متاحة",
         "description": "يجدها الأعضاء ويفعّلونها إذا أرادوا."
       },
       "NOT_AVAILABLE": {
@@ -17069,6 +16900,25 @@
         "user": "{email}: {size}، {files, plural, zero {لا ملفات} one {ملف واحد} two {ملفان} few {# ملفات} many {# ملفًا} other {# ملف}}، {notLoaded, plural, zero {لا مهارات غير محمّلة} one {مهارة واحدة لم تُحمَّل} two {مهارتان لم تُحمَّلا} few {# مهارات لم تُحمَّل} many {# مهارة لم تُحمَّل} other {# مهارة لم تُحمَّل}}",
         "more": "و{count, number} آخرون."
       }
+    },
+    "adminTable": {
+      "label": "المهارات المخصصة",
+      "columns": {
+        "name": "الاسم",
+        "source": "المصدر",
+        "version": "الإصدار",
+        "audience": "الجمهور"
+      },
+      "organizationLibrary": "مكتبة المؤسسة",
+      "noOwner": "بلا مالك",
+      "version": "v{current}{published, select, none {} other { · v{published} منشور}}",
+      "private": "المالك فقط",
+      "shared": "مشاركة مع أشخاص أو مجموعات",
+      "open": "فتح {name}",
+      "menu": "المزيد لـ {name}",
+      "share": "مشاركة",
+      "delete": "حذف",
+      "select": "تحديد {name}"
     }
   },
   "opensearchHealth": {
@@ -17086,46 +16936,10 @@
   },
   "plugins": {
     "member": {
-      "title": "الإضافات",
-      "description": "المهارات والتكاملات التي يمكنك استخدامها في المحادثات والوكلاء.",
-      "filters": {
-        "label": "نوع الإضافة",
-        "all": {
-          "label": "الكل"
-        },
-        "skills": {
-          "label": "المهارات"
-        },
-        "integrations": {
-          "label": "التكاملات"
-        }
-      },
       "sections": {
         "organization": "مكتبة المؤسسة",
         "mine": "ملفاتي المرفوعة",
         "shared": "تمت مشاركتها معك"
-      },
-      "row": {
-        "skillCount": "{count, plural, one {مهارة واحدة} other {# مهارات}}",
-        "integrationCount": "{count, plural, one {تكامل واحد} other {# تكاملات}}",
-        "needsConnection": "{count, plural, one {واحد يحتاج إلى تسجيل الدخول} other {# تحتاج إلى تسجيل الدخول}}",
-        "open": {
-          "label": "فتح {name}"
-        }
-      },
-      "state": {
-        "loading": "جارٍ تحميل الإضافات",
-        "loadFailed": "تعذر تحميل بعض الإضافات.",
-        "emptyTitle": "لا توجد إضافات بعد",
-        "emptyDescription": "اطلب من المسؤول إضافة إضافة.",
-        "noResultsTitle": "لا توجد إضافات مطابقة",
-        "noResultsDescription": "جرّب اسمًا أو عامل تصفية آخر.",
-        "retry": {
-          "label": "حاول مرة أخرى"
-        },
-        "clear": {
-          "label": "عرض كل الإضافات"
-        }
       },
       "detail": {
         "title": "إضافة",
@@ -17134,7 +16948,6 @@
         "tabs": {
           "overview": "نظرة عامة",
           "skills": "المهارات",
-          "integrations": "التكاملات",
           "versions": "الإصدارات"
         },
         "overview": {
@@ -17142,34 +16955,19 @@
           "location": "الموقع",
           "owner": "المالك",
           "skills": "المهارات",
-          "integrations": "التكاملات"
+          "description": "الوصف"
         },
         "skills": {
           "off": "متوقفة",
           "invalid": "غير صالحة"
-        },
-        "back": {
-          "label": "الإضافات"
         },
         "switch": {
           "title": "استخدام هذا المكوّن الإضافي",
           "description": "عند تشغيل هذا الخيار، يمكن للوكيل الافتراضي استخدام هذا المكوّن الإضافي.",
           "label": "استخدام {name}",
           "required": "جعل المسؤول هذا المكوّن الإضافي مطلوبًا. لا يمكنك إيقافه.",
-          "notAvailable": "جعل المسؤول هذا المكوّن الإضافي غير متاح.",
           "unavailable": "لا يمكنك تشغيل هذا المكوّن الإضافي أو إيقافه.",
           "failed": "تعذّر تغيير المكوّن الإضافي."
-        },
-        "share": {
-          "label": "مشاركة"
-        },
-        "publish": {
-          "label": "نشر",
-          "blocked": "لا يمكن نشر مكوّن إضافي يحتوي على تكامل إلا لمستخدم لديه إذن إدارة الإجراءات على مستوى المؤسسة.",
-          "confirmTitle": "نشر {name}؟",
-          "confirmMessage": "ينتقل المكوّن الإضافي إلى مكتبة المؤسسة. لا يمكنك التراجع عن ذلك. يضبط المسؤولون بعد ذلك إعداد التثبيت.",
-          "done": "أصبح {name} الآن في مكتبة المؤسسة.",
-          "failed": "تعذّر نشر المكوّن الإضافي."
         }
       },
       "connection": {
@@ -17215,7 +17013,9 @@
         },
         "retry": {
           "label": "حاول مرة أخرى"
-        }
+        },
+        "readOnlyTitle": "الإجراءات",
+        "readOnlyDescription": "يحدد المسؤول طريقة تشغيل كل إجراء."
       },
       "oauthCallback": {
         "processing": "جارٍ ربط حسابك…",
@@ -17226,55 +17026,30 @@
         "invalidLink": "رابط تسجيل الدخول هذا غير صالح. ابدأ تسجيل الدخول من جديد.",
         "failed": "لم يكتمل تسجيل الدخول. حاول مرة أخرى.",
         "back": {
-          "label": "العودة إلى الإضافات"
+          "label": "العودة إلى التكاملات"
         }
-      },
-      "search": {
-        "placeholder": "البحث في الإضافات"
-      },
-      "addIntegration": {
-        "label": "إضافة تكامل"
-      },
-      "manage": {
-        "label": "إدارة الإضافات"
-      },
-      "share": {
-        "title": "مشاركة {name}",
-        "description": "امنح الأشخاص والمجموعات حق الوصول إلى هذا المكوّن الإضافي.",
-        "sharedSignIn": "يستخدم {names} حسابًا واحدًا. يستخدم الأشخاص الذين لديهم حق الوصول الحساب الذي ربطته.",
-        "loadFailed": "تعذّر تحميل الأشخاص الذين لديهم حق الوصول.",
-        "empty": "أنت وحدك لديك حق الوصول.",
-        "remove": {
-          "label": "إزالة {name}"
-        },
-        "cancel": {
-          "label": "إلغاء"
-        },
-        "submit": {
-          "label": "حفظ",
-          "pendingLabel": "جارٍ الحفظ..."
-        },
-        "saved": "تم حفظ حق الوصول إلى {name}.",
-        "failed": "تعذّر حفظ حق الوصول."
       }
     },
     "chat": {
       "popover": {
-        "empty": "لا يملك هذا الوكيل إضافات بها تكاملات.",
-        "searchEmpty": "لا توجد إضافات تطابق بحثك.",
-        "loading": "جارٍ تحميل الإضافات",
-        "loadError": "تعذر تحميل بعض الإضافات. حاول مرة أخرى.",
+        "empty": "لا يحتوي هذا الوكيل على تكاملات.",
+        "searchEmpty": "لا توجد تكاملات تطابق بحثك.",
+        "loading": "جارٍ تحميل التكاملات",
+        "loadError": "تعذر تحميل بعض التكاملات. حاول مرة أخرى.",
         "trigger": {
-          "label": "الإضافات"
+          "label": "التكاملات"
         },
         "retry": {
           "label": "حاول مرة أخرى"
         },
         "browse": {
-          "label": "تصفح الإضافات"
+          "label": "تصفح التكاملات"
         },
         "toggle": {
           "label": "استخدام {name} مع هذا الوكيل"
+        },
+        "search": {
+          "placeholder": "ابحث في التكاملات"
         }
       },
       "connectPrompt": {
@@ -17292,6 +17067,263 @@
     }
   },
   "integrations": {
-    "connectionState": "{state, select, connected {متصل} not_connected {غير متصل} needs_reconnect {يحتاج إلى إعادة الاتصال} not_set_up {غير مُعد} other {غير معروف}}"
+    "connectionState": "{state, select, connected {متصل} not_connected {غير متصل} needs_reconnect {يحتاج إلى إعادة الاتصال} not_set_up {غير مُعد} other {غير معروف}}",
+    "share": {
+      "title": "مشاركة {name}",
+      "description": "امنح أشخاصًا محددين حق استخدام هذا التكامل. تمنح المشاركة الاستخدام فقط.",
+      "sharedSignIn": "يستخدم {name} حسابًا واحدًا. يستخدم الأشخاص الذين لديهم وصول الحساب الذي ربطته.",
+      "loadFailed": "تعذّر تحميل الأشخاص الذين لديهم حق الوصول.",
+      "empty": "أنت وحدك لديك حق الوصول.",
+      "remove": {
+        "label": "إزالة {name}"
+      },
+      "cancel": {
+        "label": "إلغاء"
+      },
+      "submit": {
+        "label": "حفظ",
+        "pendingLabel": "جارٍ الحفظ..."
+      },
+      "saved": "تم حفظ حق الوصول إلى {name}.",
+      "failed": "تعذّر حفظ حق الوصول."
+    },
+    "memberState": {
+      "on": {
+        "label": "مفعّل"
+      },
+      "turn_on": {
+        "label": "تفعيل"
+      },
+      "sign_in": {
+        "label": "تسجيل الدخول"
+      },
+      "no_access": {
+        "label": "لا يوجد وصول",
+        "reason": "لا يوجد وصول: لم تتم مشاركة هذا التكامل معك.",
+        "reasonOwner": "لا يوجد وصول: لم يشاركه {owner} معك."
+      },
+      "turned_off": {
+        "label": "متوقف",
+        "reason": "أوقفه أحد المسؤولين."
+      },
+      "switch": {
+        "label": "استخدام {name}",
+        "required": "جعل المسؤول هذا التكامل مطلوبًا. لا يمكنك إيقاف تشغيله.",
+        "failed": "تعذر تغيير التكامل."
+      }
+    },
+    "menu": {
+      "label": "مزيد من الإجراءات لـ {name}",
+      "share": "مشاركة",
+      "publish": {
+        "label": "النشر في المؤسسة",
+        "blocked": "لا يمكن نشر تكامل إلا لمستخدم لديه إذن إدارة الإجراءات على مستوى المؤسسة.",
+        "confirmTitle": "هل تريد نشر {name} في المؤسسة؟",
+        "confirmMessage": "يمكن بعد ذلك لكل مستخدم في المؤسسة تفعيله. يحدد المسؤولون إعداد التثبيت الخاص به. يحتفظ الأشخاص الذين شاركته معهم بالوصول.",
+        "done": "أصبح {name} متاحًا الآن للمؤسسة.",
+        "failed": "تعذر نشر التكامل."
+      }
+    }
+  },
+  "customize": {
+    "title": "التخصيص",
+    "tabs": {
+      "label": "أقسام التخصيص",
+      "skills": "المهارات",
+      "integrations": "عمليات التكامل",
+      "plugins": "الإضافات"
+    },
+    "skills": {
+      "loadFailed": "تعذر تحميل مهاراتك.",
+      "filter": {
+        "label": "تصفية",
+        "all": "كل المهارات",
+        "on": "مفعّلة",
+        "off": "معطّلة"
+      },
+      "sort": {
+        "label": "ترتيب",
+        "updated": "المحدّثة مؤخرًا",
+        "name": "الاسم"
+      },
+      "add": {
+        "label": "إضافة",
+        "upload": "رفع مهارة",
+        "create": "إنشاء مهارة",
+        "github": "استيراد من GitHub"
+      },
+      "groups": {
+        "mine": "أنشأتها أنت",
+        "organization": "من مؤسستك",
+        "shared": "تمت مشاركتها معك",
+        "builtin": "مدمجة"
+      },
+      "source": {
+        "mine": "بواسطتك",
+        "organization": "من مؤسستك",
+        "sharedBy": "شاركها {email}",
+        "shared": "تمت مشاركتها معك",
+        "builtin": "مدمجة"
+      },
+      "subtitle": "{source} · {description}",
+      "tag": {
+        "off": "معطّلة",
+        "required": "مطلوبة",
+        "pending": "بانتظار المراجعة",
+        "invalid": "غير صالحة"
+      },
+      "open": "فتح {name}",
+      "menu": {
+        "label": "المزيد لـ {name}",
+        "turnOn": "تفعيل",
+        "turnOff": "تعطيل",
+        "share": "مشاركة",
+        "remove": "إزالة"
+      },
+      "empty": {
+        "title": "لا توجد مهارات بعد",
+        "description": "أنشئ مهارة أو ارفعها لتعليم المساعد مهمة."
+      },
+      "noMatches": {
+        "title": "لا توجد مهارات مطابقة",
+        "description": "جرّب بحثًا أو عامل تصفية آخر.",
+        "clear": "عرض كل المهارات"
+      }
+    },
+    "integrations": {
+      "title": "عمليات التكامل",
+      "loadFailed": "تعذر تحميل عمليات التكامل.",
+      "columns": {
+        "name": "التكامل",
+        "type": "النوع",
+        "authorization": "التفويض",
+        "status": "الحالة"
+      },
+      "status": {
+        "connected": "متصل"
+      },
+      "add": {
+        "label": "إضافة",
+        "integration": "إضافة تكامل",
+        "manage": "إدارة عمليات التكامل"
+      },
+      "open": "فتح {name}",
+      "empty": {
+        "title": "لا توجد عمليات تكامل بعد",
+        "description": "اطلب من المسؤول إضافة تكامل."
+      },
+      "noMatches": {
+        "title": "لا توجد عمليات تكامل مطابقة",
+        "description": "جرّب بحثًا آخر."
+      }
+    },
+    "plugins": {
+      "contents": "{skills, plural, one {مهارة واحدة} other {{skills} مهارات}}",
+      "loadFailed": "تعذر تحميل الإضافات.",
+      "filter": {
+        "all": "كل الإضافات"
+      },
+      "empty": {
+        "title": "لا توجد إضافات بعد",
+        "description": "أنشئ مهارة. كل مهارة هي إضافة."
+      },
+      "noMatches": {
+        "title": "لا توجد إضافات مطابقة",
+        "clear": "عرض كل الإضافات"
+      },
+      "intro": "تجمع الإضافة المهارات التي تفعّلها معًا. تأتي كل مهارة تضيفها في إضافة خاصة بها. توجد التكاملات في علامة تبويب التكاملات."
+    },
+    "skillPage": {
+      "title": "مهارة",
+      "back": "المهارات",
+      "meta": "{owner} · v{version}{published, select, none {} other { · الإصدار v{published} متاح لمؤسستك}} · حُدّثت {updated}",
+      "ownerYou": "بواسطتك",
+      "ownerEmail": "بواسطة {email}",
+      "ownerYouTitle": "أنت",
+      "fromOrganization": "من مكتبة المؤسسة",
+      "copyLink": "نسخ الرابط",
+      "share": "مشاركة",
+      "menu": "المزيد",
+      "edit": "تعديل",
+      "remove": "إزالة",
+      "add": "إضافة",
+      "switch": "استخدام {name}",
+      "loadFailed": "هذه المهارة غير متاحة لك.",
+      "tabs": {
+        "overview": "نظرة عامة",
+        "contents": "المحتويات",
+        "versions": "الإصدارات",
+        "contentsCount": "المحتويات · {count}"
+      },
+      "overview": {
+        "description": "الوصف",
+        "noDescription": "لا يوجد وصف.",
+        "createdBy": "أنشأها",
+        "access": "الوصول",
+        "accessValue": "{access, select, personal {أنت فقط} private {المالك فقط} shared {مشاركة مع أشخاص أو مجموعات} other {مكتبة المؤسسة}}",
+        "tools": "عمليات التكامل والإجراءات",
+        "instructionsOnly": "تضيف تعليمات للوكيل فقط"
+      },
+      "backAdmin": "مخزون المهارات",
+      "contents": {
+        "version": "{name} الإصدار {version} · الحالي",
+        "edit": "تعديل",
+        "cancel": "إلغاء",
+        "saveVersion": "حفظ الإصدار",
+        "saving": "جارٍ الحفظ…",
+        "addFile": "إضافة ملف",
+        "removeFile": "إزالة {name}",
+        "editorLabel": "SKILL.md",
+        "noPreview": "يعرض Onyx نص SKILL.md فقط. هذا الملف جزء من المهارة.",
+        "addedFile": "يضيف «حفظ الإصدار» هذا الملف إلى المهارة.",
+        "errors": {
+          "frontmatter": "يجب أن يبدأ SKILL.md بكتلة --- تحتوي على الاسم والوصف.",
+          "description": "أضف وصفًا إلى كتلة --- في SKILL.md.",
+          "name": "يجب أن يبقى الاسم \"{name}\".",
+          "skillMd": "عدّل SKILL.md في المحرر. أضف الملفات الداعمة فقط هنا."
+        },
+        "loadFailed": "تعذّر تحميل محتويات هذه المهارة.",
+        "retry": "إعادة المحاولة",
+        "reloadFailed": "تعذّر تحميل أحدث إصدار. تم الاحتفاظ بتغييراتك. جرّب إعادة التحميل مرة أخرى."
+      },
+      "required": {
+        "label": "مطلوبة",
+        "tooltip": "يتطلب المسؤول هذه المهارة، لذا لا يمكنك إيقافها."
+      }
+    },
+    "integrationPage": {
+      "title": "تكامل",
+      "back": "عمليات التكامل",
+      "loadFailed": "هذا التكامل غير متاح لك.",
+      "tabs": {
+        "overview": "نظرة عامة",
+        "configuration": "الإعداد",
+        "actions": "الإجراءات"
+      },
+      "overview": {
+        "description": "الوصف",
+        "noDescription": "لا يوجد وصف.",
+        "type": "النوع",
+        "signIn": "تسجيل الدخول",
+        "url": "عنوان URL للخادم",
+        "owner": "المالك",
+        "organization": "المؤسسة",
+        "status": "الحالة",
+        "switch": {
+          "title": "استخدام هذا التكامل",
+          "description": "عند تفعيل هذا، يمكنك استخدامه في المحادثات وفي Craft.",
+          "required": "جعل المسؤول هذا التكامل مطلوبًا. لا يمكنك إيقاف تشغيله."
+        }
+      },
+      "configuration": {
+        "description": "{mode, select, individual {اتصالك بهذا التكامل. أنت فقط من يستخدمه.} shared {حساب هذا التكامل. يستخدمه كل من لديه صلاحية الوصول.} other {لا يحتاج هذا التكامل إلى تسجيل الدخول.}}"
+      }
+    },
+    "pluginPage": {
+      "tabs": {
+        "skills": "المهارات · {count}"
+      }
+    },
+    "search": "بحث"
   }
 }

@@ -1,4 +1,5 @@
 import importlib
+from collections.abc import Callable
 from enum import Enum
 from typing import Any, Type
 from uuid import UUID
@@ -30,6 +31,7 @@ from onyx.connectors.interfaces import (
 )
 from onyx.connectors.models import InputType
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP
+from onyx.connectors.source_api_limiter import build_source_api_limiter
 from onyx.db.connector import fetch_connector_by_id
 from onyx.db.connector_credential_pair import get_cc_pairs_using_credential
 from onyx.db.credentials import (
@@ -206,6 +208,11 @@ def instantiate_connector(
     connector_specific_config: dict[str, Any],
     credential: Credential,
     raw_file_callback: RawFileCallback | None = None,
+    # Ends a wait for the shared source-API budget, for example on cancel.
+    should_stop: Callable[[], bool] | None = None,
+    # Every source-API call of the connector waits after the calls of other
+    # workers, for a worker with many threads such as docconversion.
+    bulk_source_api_calls: bool = False,
 ) -> BaseConnector:
     connector_class = identify_connector_class(source, input_type)
 
@@ -249,6 +256,12 @@ def instantiate_connector(
 
     if raw_file_callback is not None:
         connector.set_raw_file_callback(raw_file_callback)
+
+    source_api_limiter = build_source_api_limiter(
+        source, credential.id, should_stop, bulk_source_api_calls
+    )
+    if source_api_limiter is not None:
+        connector.set_source_api_limiter(source_api_limiter)
 
     return connector
 

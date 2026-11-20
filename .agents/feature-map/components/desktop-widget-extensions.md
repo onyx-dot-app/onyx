@@ -51,17 +51,33 @@ This component holds the desktop shell, the widget, the Chrome extension, and
 the framed pages and framed sign-in path in the web app that only these clients
 need. Each client has a README with its build and design notes.
 
-It also holds desktop v2 (`desktop-v2/`), a preview native macOS app that
-installs beside v1 and is not the default. It signs in through
+It also holds desktop v2 (`desktop-v2/`), a preview native app that
+installs beside v1 and is not the default. It is built for macOS, and as
+unsigned CI previews for Windows and Linux; only macOS has a release. It signs in through
 `/api/auth/mobile/login`, hands the token to the remote web UI as the session
 cookie, and gives IPC only to its bundled windows. It has its own CI build
 and release; v1's release does not build it. Its launcher panel (global
 shortcut) calls the chat endpoints from Rust with the bearer token:
 `POST /chat/create-chat-session`, then `POST /chat/send-chat-message`
 (`origin "unknown"`), and it reads the streamed packets (text, citations,
-`stop`, `tool_approval_request`). Search mode calls
-`POST /search/send-search-message`. A change to those request or packet
-shapes must keep the launcher working.
+`stop`, `tool_approval_request`). It lists agents with `GET /persona` and
+creates a new chat with the chosen `persona_id`. It attaches files through
+`POST /user/projects/file/upload`, polls `POST /user/projects/file/statuses`
+until they are processed, and sends them as `file_descriptors`. A removed
+attachment is deleted with `DELETE /user/projects/file/{id}`. It reads
+`user_file_max_upload_size_mb` and `disable_default_assistant` from
+`GET /settings`. Search mode
+calls `POST /search/send-search-message`, with `filters.source_type` for a
+source filter. A change to those request or packet shapes must keep the
+launcher working. IT can preset the server and lock
+some settings with managed policy (MDM profile, Windows registry policy, or a
+Linux policy file). The v2 README lists the keys. When the server cannot be
+reached, v2 shows a bundled offline window that polls `GET /api/version` and
+the web UI root `GET /` without a session (a 5xx from either counts as down),
+then checks the session with `GET /api/me`, and loads the web UI again when
+all answer, so `/api/version` must stay public. Sign-out
+retries `POST /api/auth/mobile/logout` in the background while the server
+cannot be reached.
 
 It does not own the chat UI that the desktop shell and the side panel load
 ([[chat-frontend]]), the chat endpoints ([[core-chat-loop]]), API keys and JWT

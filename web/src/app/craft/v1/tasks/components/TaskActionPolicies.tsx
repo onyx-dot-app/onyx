@@ -9,11 +9,11 @@ import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import type {
   TaskActionSettings,
-  TaskPluginLink,
-  TaskPluginView,
+  TaskIntegrationLink,
+  TaskIntegrationView,
 } from "@/app/craft/v1/tasks/types";
 import styles from "@/sections/plugins/PluginsPage.module.css";
-import TaskPluginCard from "@/app/craft/v1/tasks/components/TaskPluginCard";
+import TaskIntegrationCard from "@/app/craft/v1/tasks/components/TaskIntegrationCard";
 import TaskAppActionsModal from "@/app/craft/v1/tasks/components/TaskAppActionsModal";
 import ActionPoliciesLoadError from "@/app/craft/v1/tasks/components/ActionPoliciesLoadError";
 
@@ -21,8 +21,8 @@ const INHERIT_ALL: TaskActionSettings = { default: "inherit", actions: {} };
 
 interface TaskActionPoliciesProps {
   taskId: string | null;
-  value: TaskPluginLink[] | null;
-  onChange: (value: TaskPluginLink[]) => void;
+  value: TaskIntegrationLink[] | null;
+  onChange: (value: TaskIntegrationLink[]) => void;
 }
 
 export default function TaskActionPolicies({
@@ -32,8 +32,8 @@ export default function TaskActionPolicies({
 }: TaskActionPoliciesProps) {
   const t = useTranslations("craft.actionPolicies");
   const openingId = useId();
-  const [catalog, setCatalog] = useState<TaskPluginView[] | null>(null);
-  const { error, mutate } = useSWR<TaskPluginView[], Error>(
+  const [catalog, setCatalog] = useState<TaskIntegrationView[] | null>(null);
+  const { error, mutate } = useSWR<TaskIntegrationView[], Error>(
     [
       taskId
         ? SWR_KEYS.taskActionPolicies(taskId)
@@ -49,10 +49,10 @@ export default function TaskActionPolicies({
         setCatalog(data);
         onChange(
           data
-            .filter((plugin) => plugin.enabled)
-            .map((plugin) => ({
-              plugin_id: plugin.plugin_id,
-              action_settings: plugin.action_settings ?? INHERIT_ALL,
+            .filter((integration) => integration.enabled)
+            .map((integration) => ({
+              integration_id: integration.id,
+              action_settings: integration.action_settings ?? INHERIT_ALL,
             }))
         );
       },
@@ -64,66 +64,76 @@ export default function TaskActionPolicies({
     <Section height="auto" alignItems="stretch" gap={3}>
       <Text font="main-content-emphasis">{t("taskAppsTitle")}</Text>
       <Text font="secondary-body" color="text-03">
-        {t(taskId ? "taskDescription" : "newTaskPluginsDescription")}
+        {t(taskId ? "taskDescription" : "newTaskIntegrationsDescription")}
       </Text>
-      <PluginGroups plugins={catalog} value={value ?? []} onChange={onChange} />
+      <IntegrationGrid
+        integrations={catalog}
+        value={value ?? []}
+        onChange={onChange}
+      />
     </Section>
   );
 }
 
-interface PluginGroupsProps {
-  plugins: TaskPluginView[] | null;
-  value: TaskPluginLink[];
-  onChange: (value: TaskPluginLink[]) => void;
+interface IntegrationGridProps {
+  integrations: TaskIntegrationView[] | null;
+  value: TaskIntegrationLink[];
+  onChange: (value: TaskIntegrationLink[]) => void;
 }
-function PluginGroups({ plugins, value, onChange }: PluginGroupsProps) {
+function IntegrationGrid({
+  integrations,
+  value,
+  onChange,
+}: IntegrationGridProps) {
   const t = useTranslations("craft.actionPolicies");
-  const [editingId, setEditingId] = useState<string | null>(null);
-  // The settings of a plugin the user turned off, so turning it on again
-  // restores them.
-  const turnedOff = useRef<Record<string, TaskActionSettings>>({});
+  const [editingId, setEditingId] = useState<number | null>(null);
+  // The settings of an integration the user turned off, so turning it on
+  // again restores them.
+  const turnedOff = useRef<Record<number, TaskActionSettings>>({});
   const actionsModal = useCreateModal();
-  if (!plugins) return <Text font="secondary-body">{t("loading")}</Text>;
-  if (plugins.length === 0)
-    return <Text font="secondary-body">{t("emptyPlugins")}</Text>;
-  const linkFor = (pluginId: string) =>
-    value.find((link) => link.plugin_id === pluginId);
-  const editing = plugins.find((plugin) => plugin.plugin_id === editingId);
-  function save(pluginId: string, settings: TaskActionSettings) {
+  if (!integrations) return <Text font="secondary-body">{t("loading")}</Text>;
+  if (integrations.length === 0)
+    return <Text font="secondary-body">{t("emptyIntegrations")}</Text>;
+  const linkFor = (integrationId: number) =>
+    value.find((link) => link.integration_id === integrationId);
+  const editing = integrations.find(
+    (integration) => integration.id === editingId
+  );
+  function save(integrationId: number, settings: TaskActionSettings) {
     onChange([
-      ...value.filter((link) => link.plugin_id !== pluginId),
-      { plugin_id: pluginId, action_settings: settings },
+      ...value.filter((link) => link.integration_id !== integrationId),
+      { integration_id: integrationId, action_settings: settings },
     ]);
   }
   return (
     <>
       <div className={styles.grid}>
-        {plugins.map((plugin) => {
-          const link = linkFor(plugin.plugin_id);
+        {integrations.map((integration) => {
+          const link = linkFor(integration.id);
           return (
-            <TaskPluginCard
-              key={plugin.plugin_id}
-              plugin={plugin}
+            <TaskIntegrationCard
+              key={integration.id}
+              integration={integration}
               enabled={link !== undefined}
               settings={link?.action_settings ?? INHERIT_ALL}
               onEdit={() => {
-                setEditingId(plugin.plugin_id);
+                setEditingId(integration.id);
                 actionsModal.toggle(true);
               }}
               onToggle={(enabled) => {
                 if (enabled) {
                   save(
-                    plugin.plugin_id,
+                    integration.id,
                     link?.action_settings ??
-                      turnedOff.current[plugin.plugin_id] ??
+                      turnedOff.current[integration.id] ??
                       INHERIT_ALL
                   );
                   return;
                 }
                 if (link)
-                  turnedOff.current[plugin.plugin_id] = link.action_settings;
+                  turnedOff.current[integration.id] = link.action_settings;
                 onChange(
-                  value.filter((item) => item.plugin_id !== plugin.plugin_id)
+                  value.filter((item) => item.integration_id !== integration.id)
                 );
               }}
             />
@@ -133,17 +143,17 @@ function PluginGroups({ plugins, value, onChange }: PluginGroupsProps) {
       <actionsModal.Provider>
         {editing && (
           <TaskAppActionsModal
-            key={editing.plugin_id}
-            plugin={editing}
+            key={editing.id}
+            integration={editing}
             settings={
-              linkFor(editing.plugin_id)?.action_settings ??
-              turnedOff.current[editing.plugin_id] ??
+              linkFor(editing.id)?.action_settings ??
+              turnedOff.current[editing.id] ??
               INHERIT_ALL
             }
             onClose={() => actionsModal.toggle(false)}
             onSave={(settings) => {
-              // Setting actions turns the plugin on for the task.
-              save(editing.plugin_id, settings);
+              // Setting actions turns the integration on for the task.
+              save(editing.id, settings);
               actionsModal.toggle(false);
             }}
           />

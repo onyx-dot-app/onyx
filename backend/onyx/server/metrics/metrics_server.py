@@ -38,6 +38,7 @@ _DEFAULT_PORTS: dict[str, int] = {
     "light": 9095,
     "primary": 9097,
     "scheduled_tasks": 9098,
+    "docconversion": 9099,
 }
 
 # Tried in order. The IPv6 wildcard is dual-stack (see _DualStackWSGIServer) and

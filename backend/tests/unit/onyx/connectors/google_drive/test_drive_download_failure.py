@@ -12,6 +12,7 @@ from onyx.connectors.google_drive.doc_conversion import (
 )
 from onyx.connectors.google_drive.source_operations import (
     GoogleDriveHttpError,
+    GoogleDriveRefreshError,
     GoogleDriveSourceOperations,
 )
 from onyx.connectors.models import ConnectorFailure, Document
@@ -72,6 +73,20 @@ def test_a_failed_download_is_a_failure_not_a_skip(error: GoogleDriveHttpError) 
 def test_a_download_the_lister_is_denied_goes_to_the_next_user() -> None:
     with patch.object(doc_conversion, "extract_file_text", return_value="body"):
         result, ops = _convert([_http_error(403), b"# Title"], _MARKDOWN_FILE)
+
+    assert isinstance(result, Document)
+    assert [call.kwargs["user_email"] for call in ops.download_file.call_args_list] == [
+        _LISTER,
+        _OWNER,
+    ]
+
+
+def test_a_user_that_cannot_be_impersonated_goes_to_the_next_user() -> None:
+    with patch.object(doc_conversion, "extract_file_text", return_value="body"):
+        result, ops = _convert(
+            [GoogleDriveRefreshError("cannot impersonate"), b"# Title"],
+            _MARKDOWN_FILE,
+        )
 
     assert isinstance(result, Document)
     assert [call.kwargs["user_email"] for call in ops.download_file.call_args_list] == [

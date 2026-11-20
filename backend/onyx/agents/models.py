@@ -16,6 +16,7 @@ from onyx.agents.execution_records import messages_for_model
 from onyx.agents.tools import (
     ChildRunWait,
     HumanToolAnswer,
+    NestedInputRequest,
     NestedInputWait,
     PendingToolInput,
 )
@@ -377,6 +378,9 @@ class RunProgress(BaseModel):
     pending_tool_calls: dict[str, PendingToolInput | ChildRunWait | NestedInputWait] = (
         Field(default_factory=dict)
     )
+    # Requests that tools opened for the calls they make for the model, by
+    # request ID, while no NestedInputWait holds them; see NestedCallGate.
+    open_inputs: dict[str, NestedInputRequest] = Field(default_factory=dict)
     human_tool_answers: dict[str, HumanToolAnswer] = Field(default_factory=dict)
     child_run_ids: list[str] = Field(default_factory=list)
     observed_child_run_ids: list[str] = Field(default_factory=list)
@@ -385,17 +389,20 @@ class RunProgress(BaseModel):
     @property
     def input_requests(self) -> list[PendingToolInput]:
         """The saved input requests: of direct calls, and of calls that tools
-        made for the model."""
+        made for the model, open or held in a NestedInputWait."""
         return [
-            request
-            for pending in self.pending_tool_calls.values()
-            for request in (
-                [pending]
-                if isinstance(pending, PendingToolInput)
-                else [nested.request for nested in pending.requests]
-                if isinstance(pending, NestedInputWait)
-                else []
-            )
+            *(
+                request
+                for pending in self.pending_tool_calls.values()
+                for request in (
+                    [pending]
+                    if isinstance(pending, PendingToolInput)
+                    else [nested.request for nested in pending.requests]
+                    if isinstance(pending, NestedInputWait)
+                    else []
+                )
+            ),
+            *(nested.request for nested in self.open_inputs.values()),
         ]
 
     @field_serializer("allowed_tool_names", when_used="json")

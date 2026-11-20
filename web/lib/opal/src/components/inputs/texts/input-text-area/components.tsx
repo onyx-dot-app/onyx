@@ -104,9 +104,9 @@ function InputTextArea({
         readOnly={isReadOnly}
         className={cn(
           "opal-input-field opal-input-textarea-field",
-          autoResize || !resizable ? "resize-none" : "resize-y",
-          mono && "font-main-ui-mono"
+          autoResize || !resizable ? "resize-none" : "resize-y"
         )}
+        data-mono={mono || undefined}
         rows={rows}
         {...props}
         // After the spread so uncontrolled typing also resizes. The effect

@@ -1,5 +1,5 @@
-import SkillsPage from "@/views/SkillsPage";
+import AdminSkillsPage from "@/views/SkillsPage";
 
 export default function Page() {
-  return <SkillsPage admin />;
+  return <AdminSkillsPage />;
 }

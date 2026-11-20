@@ -257,6 +257,16 @@ fn run(app: &AppHandle, action: &Value) -> Result<Value, String> {
             menu::handle(app, id);
             Ok(json!({ "ok": true }))
         }
+        "pasteboard" => {
+            let field = |k: &str| action.get(k).and_then(Value::as_str).map(str::to_string);
+            let content = match (field("file"), field("image"), field("text")) {
+                (Some(path), _, _) => Some(native::Clip::File(path)),
+                (_, Some(path), _) => Some(native::Clip::Image(path)),
+                (_, _, Some(text)) => Some(native::Clip::Text(text)),
+                _ => None,
+            };
+            native::pasteboard(app, content)
+        }
         "toggle_launcher" => {
             windows::toggle_launcher(app);
             Ok(json!({ "ok": true }))
@@ -685,6 +695,67 @@ mod native {
         Ok(())
     }
 
+    pub enum Clip {
+        /// A file reference, as Finder's Copy puts it.
+        File(String),
+        /// Image data read from a file, as a screenshot to the clipboard puts it.
+        Image(String),
+        Text(String),
+    }
+
+    /// Puts `content` on the general pasteboard (for paste tests), or reads
+    /// its text without `content` (for copy tests).
+    pub fn pasteboard(app: &AppHandle, content: Option<Clip>) -> Result<serde_json::Value, String> {
+        // SAFETY: main thread; every object is created and used in the closure.
+        on_main(app, move || unsafe {
+            let class = AnyClass::get(c"NSPasteboard").expect("NSPasteboard");
+            let board: *mut AnyObject = msg_send![class, generalPasteboard];
+            let Some(content) = content else {
+                let kind = NSString::from_str("public.utf8-plain-text");
+                let text: *mut AnyObject = msg_send![board, stringForType: &*kind];
+                if text.is_null() {
+                    return Ok(serde_json::json!({ "text": null }));
+                }
+                let utf8: *const std::ffi::c_char = msg_send![text, UTF8String];
+                let text = std::ffi::CStr::from_ptr(utf8)
+                    .to_string_lossy()
+                    .into_owned();
+                return Ok(serde_json::json!({ "text": text }));
+            };
+            let _: isize = msg_send![board, clearContents];
+            let object: *mut AnyObject = match &content {
+                Clip::File(path) => {
+                    let url = AnyClass::get(c"NSURL").expect("NSURL");
+                    let path = NSString::from_str(path);
+                    msg_send![url, fileURLWithPath: &*path]
+                }
+                Clip::Image(path) => {
+                    let image = AnyClass::get(c"NSImage").expect("NSImage");
+                    let path = NSString::from_str(path);
+                    let allocated: *mut AnyObject = msg_send![image, alloc];
+                    let image: *mut AnyObject =
+                        msg_send![allocated, initWithContentsOfFile: &*path];
+                    if !image.is_null() {
+                        let _: *mut AnyObject = msg_send![image, autorelease];
+                    }
+                    image
+                }
+                Clip::Text(text) => {
+                    let string = AnyClass::get(c"NSString").expect("NSString");
+                    let text = NSString::from_str(text);
+                    msg_send![string, stringWithString: &*text]
+                }
+            };
+            if object.is_null() {
+                return Err("could not read that file".to_string());
+            }
+            let array = AnyClass::get(c"NSArray").expect("NSArray");
+            let objects: *mut AnyObject = msg_send![array, arrayWithObject: object];
+            let written: Bool = msg_send![board, writeObjects: objects];
+            Ok(serde_json::json!({ "ok": written.as_bool() }))
+        })?
+    }
+
     pub fn post_drag(
         app: &AppHandle,
         label: &str,
@@ -719,6 +790,16 @@ mod native {
         Err("QA input is macOS only".into())
     }
     pub fn post_drag(_: &AppHandle, _: &str, _: (f64, f64), _: (f64, f64)) -> Result<(), String> {
+        Err("QA input is macOS only".into())
+    }
+
+    #[allow(dead_code)]
+    pub enum Clip {
+        File(String),
+        Image(String),
+        Text(String),
+    }
+    pub fn pasteboard(_: &AppHandle, _: Option<Clip>) -> Result<serde_json::Value, String> {
         Err("QA input is macOS only".into())
     }
 }

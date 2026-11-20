@@ -25,7 +25,7 @@ import { MinimalOnyxDocument } from "@/lib/search/types";
 import { ChatState } from "@/app/app/types";
 import { useQueuedMessageNavigation } from "@/hooks/useQueuedMessageNavigation";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
-import { effectiveChatPreference } from "@/lib/plugins/chat";
+import { effectiveChatPreference } from "@/lib/tools/chat";
 import { useAppPosition } from "@/lib/navigation/hooks";
 import { settleChatSession } from "@/lib/chat/settleChatSession";
 import type {
@@ -97,6 +97,7 @@ import {
 import { useAnswerWithMessage, useWaitingQuestionIds } from "@/lib/chat/hooks";
 import QueuedMessageBar from "@/sections/input/QueuedMessageBar";
 import { handleInputNavKeys } from "@/sections/input/inputBarKeys";
+import { customizeTabHref } from "@/lib/customize/paths";
 
 export interface AppInputBarHandle {
   reset: () => void;
@@ -467,8 +468,7 @@ const AppInputBar = React.memo(
       requestedToolId: toolConfiguration.preferredToolId,
       requestedAction: toolConfiguration.preferredAction,
       agent: activeAgent,
-      incognito: incognitoEnabled,
-      isPluginEnabled: toolConfiguration.isPluginEnabled,
+      isIntegrationEnabled: toolConfiguration.isIntegrationEnabled,
     });
     const preferredToolId =
       preference?.type === "capability" ? preference.tool_id : null;
@@ -1543,6 +1543,7 @@ const AppInputBar = React.memo(
               onEscape={mentionPicker.onEscape}
               onDismiss={mentionPicker.reset}
               trigger={MENTION_TRIGGER}
+              onManageSkills={() => navigation.go(customizeTabHref("skills"))}
             />
           </div>
         </Disabled>

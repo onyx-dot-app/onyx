@@ -121,11 +121,11 @@ def get_external_access_permission(repo: GitHubRepository) -> ExternalAccess:
 
     # Fetch the EE implementation
     ee_get_external_access_permission = cast(
-        Callable[[GitHubRepository, bool], ExternalAccess],
+        Callable[[GitHubRepository], ExternalAccess],
         fetch_versioned_implementation(
             "onyx.external_permissions.github.utils",
             "get_external_access_permission",
         ),
     )
 
-    return ee_get_external_access_permission(repo, True)
+    return ee_get_external_access_permission(repo)

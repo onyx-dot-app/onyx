@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-cancel-upload"
+description = "Enables the cancel_upload command without any pre-configured scope."
+commands.allow = ["cancel_upload"]
+
+[[permission]]
+identifier = "deny-cancel-upload"
+description = "Denies the cancel_upload command without any pre-configured scope."
+commands.deny = ["cancel_upload"]

@@ -89,11 +89,15 @@ def get_latest_valid_checkpoint(
     window_end: datetime,
     connector: BaseConnector,
     connector_config_hash: str | None,
+    uses_conversion_stage: bool,
 ) -> tuple[ConnectorCheckpoint, bool]:
     """Get the latest valid checkpoint for a given connector credential pair.
 
     ``connector_config_hash`` is the hash of the config the new run uses. A
     candidate built with a different config is not valid.
+    ``uses_conversion_stage`` is the mode of the new run. A listing and a
+    fetch share one checkpoint model, but a checkpoint of one cannot continue
+    the other, so a candidate of the other mode is not valid.
     """
     checkpoint_candidates = get_recent_completed_attempts_for_cc_pair(
         cc_pair_id=cc_pair_id,
@@ -145,6 +149,7 @@ def get_latest_valid_checkpoint(
         if (
             candidate.poll_range_start == window_start
             and candidate.poll_range_end == window_end
+            and candidate.uses_conversion_stage == uses_conversion_stage
             and candidate.status.should_reuse_checkpoint()
             and candidate.checkpoint_pointer is not None
             # NOTE: There are a couple connectors that may make progress but not have

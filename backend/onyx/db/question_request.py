@@ -85,6 +85,8 @@ def get_question_requests(
     db_session: Session, question_request_ids: Collection[UUID]
 ) -> dict[UUID, QuestionRequest]:
     """The saved requests by ID; deleting their chat or response deletes them."""
+    if not question_request_ids:
+        return {}
     return {
         row.id: row
         for row in db_session.scalars(

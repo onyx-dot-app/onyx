@@ -12,29 +12,7 @@ from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import IntegrationConnectionStatus
-from onyx.db.models import (
-    IntegrationConnection,
-    IntegrationOAuthClient,
-    Plugin__Integration,
-)
-from onyx.db.plugin_access import visible_plugin_ids
-
-
-def user_can_see_integration(
-    db_session: Session, integration_id: int, user_id: UUID
-) -> bool:
-    """True when a plugin the user can see holds the integration."""
-    return (
-        db_session.scalar(
-            select(Plugin__Integration.integration_id)
-            .where(
-                Plugin__Integration.integration_id == integration_id,
-                Plugin__Integration.plugin_id.in_(visible_plugin_ids(user_id)),
-            )
-            .limit(1)
-        )
-        is not None
-    )
+from onyx.db.models import IntegrationConnection, IntegrationOAuthClient
 
 
 def get_connection(

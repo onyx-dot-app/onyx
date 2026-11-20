@@ -15,7 +15,7 @@ import {
 import { isToolComplete } from "@/chat/timeline/toolDisplay";
 
 import { makePlacedPacket } from "../../__tests__/fixtures";
-import { isCodingAgentPackets } from "../packetHelpers";
+import { isResearchAgentPackets } from "../packetHelpers";
 
 const reasoningStart = (turn: number, tab = 0): Packet =>
   makePlacedPacket(
@@ -440,19 +440,19 @@ describe("nested research packet ownership", () => {
   );
 
   it("gives a group only its own packets, so nested calls do not change or end it", () => {
-    const codingStart = makePlacedPacket(
-      { type: "coding_agent_start", query: "fix", repo: null },
+    const researchStart = makePlacedPacket(
+      { type: "research_agent_start", research_task: "compare sources" },
       { turn_index: 0 },
     );
     const nested = { turn_index: 0, sub_turn_index: 0 };
     const state = run([
-      codingStart,
-      makePlacedPacket({ type: "bash_tool_start", cmd: "ls" }, nested),
+      researchStart,
+      makePlacedPacket({ type: "search_tool_start" }, nested),
       makePlacedPacket({ type: "error", message: "exit 1" }, nested),
     ]);
     const [group] = state.toolGroups;
-    expect(group?.packets).toEqual([codingStart]);
-    expect(isCodingAgentPackets(group?.packets ?? [])).toBe(true);
+    expect(group?.packets).toEqual([researchStart]);
+    expect(isResearchAgentPackets(group?.packets ?? [])).toBe(true);
     expect(isToolComplete(group?.packets ?? [])).toBe(false);
   });
 

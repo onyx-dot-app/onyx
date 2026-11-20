@@ -25,6 +25,7 @@ from sqlalchemy.engine import CursorResult
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session, aliased
 
+from onyx.access.utils import build_ext_group_names_for_storage
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import HierarchyNode as PydanticHierarchyNode
 from onyx.db.enums import HierarchyNodeType, IndexingStatus
@@ -347,7 +348,11 @@ def upsert_hierarchy_node(
             else None
         )
         external_user_group_ids = (
-            list(node.external_access.external_user_group_ids)
+            list(
+                build_ext_group_names_for_storage(
+                    node.external_access.external_user_group_ids, source
+                )
+            )
             if node.external_access.external_user_group_ids
             else None
         )
@@ -820,7 +825,11 @@ def update_hierarchy_node_permissions(
 
     existing_node.is_public = is_public
     existing_node.external_user_emails = external_user_emails
-    existing_node.external_user_group_ids = external_user_group_ids
+    existing_node.external_user_group_ids = (
+        list(build_ext_group_names_for_storage(external_user_group_ids, source))
+        if external_user_group_ids
+        else None
+    )
 
     if commit:
         db_session.commit()

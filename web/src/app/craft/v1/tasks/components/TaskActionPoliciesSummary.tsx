@@ -6,7 +6,7 @@ import { Text } from "@opal/components";
 import { Section, TagList } from "@opal/layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import type { TaskPluginView } from "@/app/craft/v1/tasks/types";
+import type { TaskIntegrationView } from "@/app/craft/v1/tasks/types";
 import ActionPoliciesLoadError from "@/app/craft/v1/tasks/components/ActionPoliciesLoadError";
 
 export default function TaskActionPoliciesSummary({
@@ -15,11 +15,13 @@ export default function TaskActionPoliciesSummary({
   taskId: string;
 }) {
   const t = useTranslations("craft.actionPolicies");
-  const { data, error, mutate } = useSWR<TaskPluginView[], Error>(
+  const { data, error, mutate } = useSWR<TaskIntegrationView[], Error>(
     SWR_KEYS.taskActionPolicies(taskId),
     errorHandlingFetcher
   );
-  const enabledPlugins = data?.filter((plugin) => plugin.enabled);
+  const enabledIntegrations = data?.filter(
+    (integration) => integration.enabled
+  );
   return (
     <Section height="auto" alignItems="stretch" gap={2}>
       <Text font="secondary-action" color="text-03">
@@ -27,19 +29,19 @@ export default function TaskActionPoliciesSummary({
       </Text>
       {error && !data ? (
         <ActionPoliciesLoadError retry={() => void mutate()} />
-      ) : !enabledPlugins ? (
+      ) : !enabledIntegrations ? (
         <Text font="secondary-body" color="text-03">
           {t("loading")}
         </Text>
-      ) : enabledPlugins.length === 0 ? (
+      ) : enabledIntegrations.length === 0 ? (
         <Text font="secondary-body" color="text-03">
           {t("noEnabledApps")}
         </Text>
       ) : (
         <TagList
-          items={enabledPlugins.map((plugin) => ({
-            id: plugin.plugin_id,
-            label: plugin.plugin_name,
+          items={enabledIntegrations.map((integration) => ({
+            id: String(integration.id),
+            label: integration.name,
           }))}
         />
       )}

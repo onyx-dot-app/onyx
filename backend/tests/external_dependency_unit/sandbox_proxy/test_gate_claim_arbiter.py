@@ -38,9 +38,8 @@ from onyx.db.models import (
     BuildSession,
     Integration,
     Notification,
-    Plugin,
     ScheduledTask,
-    ScheduledTask__Plugin,
+    ScheduledTask__Integration,
     ScheduledTaskRun,
     Skill,
 )
@@ -68,7 +67,7 @@ from tests.external_dependency_unit.craft.db_helpers import (
 )
 from tests.external_dependency_unit.integration_helpers import (
     delete_integrations,
-    hold_in_plugin,
+    give_access,
     make_app_integration,
     make_mcp_integration,
     set_policy,
@@ -404,7 +403,7 @@ def _session_ctx(db_session: Session) -> SessionContext:
 
 
 def _task_with_run(
-    db_session: Session, ctx: SessionContext, links: dict[UUID, dict[str, Any]]
+    db_session: Session, ctx: SessionContext, links: dict[int, dict[str, Any]]
 ) -> tuple[ScheduledTask, ScheduledTaskRun]:
     task = ScheduledTask(
         user_id=ctx.user_id,
@@ -423,10 +422,12 @@ def _task_with_run(
     )
     db_session.add(run)
     db_session.add_all(
-        ScheduledTask__Plugin(
-            scheduled_task_id=task.id, plugin_id=plugin_id, action_settings=settings
+        ScheduledTask__Integration(
+            scheduled_task_id=task.id,
+            integration_id=integration_id,
+            action_settings=settings,
         )
-        for plugin_id, settings in links.items()
+        for integration_id, settings in links.items()
     )
     db_session.commit()
     return task, run
@@ -452,8 +453,8 @@ def _action(action_type: str, policy: ActionPolicy = ActionPolicy.ASK) -> Matche
     )
 
 
-def _published(db_session: Session, integration: Integration) -> Plugin:
-    return hold_in_plugin(
+def _published(db_session: Session, integration: Integration) -> None:
+    give_access(
         db_session,
         [integration],
         published=True,
@@ -471,10 +472,10 @@ def test_gate_reads_task_settings_and_rejects_finished_run(
         tools=("send_message",),
     )
     integration_ids.append(integration.id)
-    plugin = _published(db_session, integration)
+    _published(db_session, integration)
     ctx = _session_ctx(db_session)
     task, run = _task_with_run(
-        db_session, ctx, {plugin.id: {"actions": {"send_message": "allow"}}}
+        db_session, ctx, {integration.id: {"actions": {"send_message": "allow"}}}
     )
     recognized = _recognized(integration, _action("send_message"))
     addon = _build_addon()
@@ -484,8 +485,8 @@ def test_gate_reads_task_settings_and_rejects_finished_run(
     assert resolved.governing_action.policy is ActionPolicy.ALWAYS
 
     link = db_session.scalar(
-        select(ScheduledTask__Plugin).where(
-            ScheduledTask__Plugin.scheduled_task_id == task.id
+        select(ScheduledTask__Integration).where(
+            ScheduledTask__Integration.scheduled_task_id == task.id
         )
     )
     assert link is not None
@@ -563,7 +564,7 @@ def test_woken_request_rechecks_persisted_approval_scope(
 @pytest.mark.parametrize(
     "source", [None, ApprovalDecidedVia.USER, ApprovalDecidedVia.SESSION_GRANT]
 )
-def test_removing_a_task_plugin_blocks_all_approval_paths(
+def test_removing_a_task_integration_blocks_all_approval_paths(
     db_session: Session,
     integration_ids: list[int],
     monkeypatch: pytest.MonkeyPatch,
@@ -583,13 +584,13 @@ def test_removing_a_task_plugin_blocks_all_approval_paths(
         )[0]
     )
     integration_ids.append(integration.id)
-    plugin = _published(db_session, integration)
+    _published(db_session, integration)
     ctx = _session_ctx(db_session)
     policy = ActionPolicy.ALWAYS if source is None else ActionPolicy.ASK
     task, _ = _task_with_run(
         db_session,
         ctx,
-        {plugin.id: {"actions": {"send": "allow" if source is None else "ask"}}},
+        {integration.id: {"actions": {"send": "allow" if source is None else "ask"}}},
     )
     recognized = _recognized(integration, _action("send", policy))
     addon = _build_addon()
@@ -609,8 +610,8 @@ def test_removing_a_task_plugin_blocks_all_approval_paths(
         )
         db_session.add(approval)
     db_session.execute(
-        delete(ScheduledTask__Plugin).where(
-            ScheduledTask__Plugin.scheduled_task_id == task.id
+        delete(ScheduledTask__Integration).where(
+            ScheduledTask__Integration.scheduled_task_id == task.id
         )
     )
     db_session.commit()

@@ -46,3 +46,13 @@ MAX_CHUNKS_FOR_RELEVANCE = 3
 
 # Search queries one call runs; later queries are ignored.
 MAX_QUERIES_PER_CALL = 3
+
+# Query size admission. OpenSearch rejects a query whose analyzed keyword text
+# exceeds its clause limit (1,024), so a long lane, usually the user's full
+# message, runs only when its terms stay under these limits.
+# ASCII text up to this many characters runs without analysis.
+UNANALYZED_QUERY_MAX_CHARS = 512
+# Longer text is skipped without analysis.
+ANALYZED_QUERY_MAX_CHARS = 8_192
+QUERY_MAX_TERMS = 1_000
+QUERY_MAX_DISTINCT_TERMS = 500

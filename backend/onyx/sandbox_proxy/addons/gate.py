@@ -23,7 +23,7 @@ from onyx.db.enums import (
     ApprovalDecidedVia,
     ApprovalDecision,
 )
-from onyx.db.integration import get_integration_by_id, list_integration_actions
+from onyx.db.integration import get_integration_by_id
 from onyx.db.notification import create_notification
 from onyx.db.scheduled_task import (
     get_active_scheduled_task_context,
@@ -36,11 +36,11 @@ from onyx.external_apps.matching.engine import (
     GatedTarget,
     actions_requiring_approval,
 )
+from onyx.integrations.actions import integration_actions
 from onyx.integrations.craft import (
     always_asks,
-    load_task_plugins,
+    load_task_integrations,
     resolve_craft_action_policies,
-    task_link_settings,
 )
 from onyx.integrations.models import EffectivePolicy
 from onyx.sandbox_proxy import approval_cache
@@ -128,11 +128,11 @@ def resolve_gate_policies(
     resolved = resolve_craft_action_policies(
         db_session,
         integration=integration,
-        actions=list_integration_actions(integration.id, db_session),
+        actions=integration_actions(integration.id, db_session),
         action_keys={action.action_type for action in recognized_actions.actions},
         user_id=user_id,
         task=(
-            load_task_plugins(db_session, task_id, user_id)
+            load_task_integrations(db_session, task_id, user_id)
             if task_id is not None
             else None
         ),
@@ -759,13 +759,15 @@ class GateAddon:
             return None
 
     def _task_can_use_app(self, ctx: SessionContext, target: GatedTarget) -> bool:
-        """A scheduled run uses only the integrations of its task plugins."""
+        """A scheduled run uses only the integrations of its task."""
         with get_session_with_tenant(tenant_id=ctx.tenant_id) as db:
             scheduled_context = get_active_scheduled_task_context(db, ctx.session_id)
-            return scheduled_context is None or bool(
-                task_link_settings(
-                    db, scheduled_context[1], ctx.user_id, target.integration_id
-                )
+            return (
+                scheduled_context is None
+                or load_task_integrations(
+                    db, scheduled_context[1], ctx.user_id
+                ).link_settings(target.integration_id)
+                is not None
             )
 
     def _resolve_request_policies(

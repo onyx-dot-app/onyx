@@ -1,7 +1,9 @@
 //! The launcher panel. On macOS it is a non-activating `NSPanel`, like
 //! Spotlight: the global shortcut shows it over whatever app is in front (also
 //! full-screen apps and on every Space), it takes keystrokes without bringing
-//! Onyx's other windows forward, and it hides when it loses focus.
+//! Onyx's other windows forward, and it hides when it loses focus. On Windows
+//! and Linux it is a borderless, always-on-top window with no taskbar entry
+//! that takes focus when shown and hides when it loses focus.
 
 use tauri::{AppHandle, Manager, WebviewUrl};
 
@@ -68,6 +70,8 @@ mod platform {
                     .focused(false)
                     .on_navigation(move |url| local_navigation_allowed(&nav_app, url))
                     .on_new_window(new_window)
+                    // Dropped files reach the page as HTML drops (attachments).
+                    .disable_drag_drop_handler()
             })
             .build()
             .map_err(|e| e.to_string())?;
@@ -225,6 +229,9 @@ mod platform {
             .inner_size(720.0, 460.0)
             .decorations(false)
             .transparent(true)
+            // The page draws its own rounded frame; a native shadow would
+            // outline the transparent corners on Windows.
+            .shadow(false)
             .always_on_top(true)
             .skip_taskbar(true)
             .visible_on_all_workspaces(true)
@@ -232,6 +239,7 @@ mod platform {
             .visible(false)
             .on_navigation(move |url| local_navigation_allowed(&nav_app, url))
             .on_new_window(local_new_window(app))
+            .disable_drag_drop_handler()
             .build()
             .map_err(|e| e.to_string())?;
         let handle = window.clone();
@@ -286,6 +294,9 @@ pub fn keep_app_shown(app: &AppHandle) {
 /// results and recent questions. Updates from requests still running reach
 /// the old page only.
 pub fn reset(app: &AppHandle) {
+    // The cleared answer must not notify later (a rejected session resets
+    // the launcher without a sign-out).
+    crate::aonyx::answer_discarded(app);
     let handle = app.clone();
     let _ = app.run_on_main_thread(move || {
         platform::hide(&handle);
@@ -313,16 +324,51 @@ pub fn preload(app: &AppHandle) {
 pub fn toggle(app: &AppHandle, when_signed_out: impl FnOnce(&AppHandle) + Send + 'static) {
     let handle = app.clone();
     let _ = app.run_on_main_thread(move || {
-        if platform::is_visible(&handle) {
+        let state = handle.state::<crate::state::AppState>();
+        // Checked here too: a policy read can turn the launcher off after
+        // the caller checked.
+        if platform::is_visible(&handle) || state.policy().disable_launcher {
             platform::hide(&handle);
-        } else if handle.state::<crate::state::AppState>().session().is_err() {
-            when_signed_out(&handle);
-        } else if let Err(e) = platform::ensure(&handle, WebviewUrl::App("launcher.html".into()))
-            .and_then(|()| platform::show(&handle))
-        {
-            log::warn!("could not show launcher: {e}");
         } else {
-            crate::aonyx::set_mood(&handle, crate::aonyx::Mood::Hop);
+            show_now(&handle, when_signed_out);
         }
     });
+}
+
+/// Shows the launcher with what it last showed if `wanted` still holds on the
+/// main thread. Does nothing if the launcher is showing.
+pub fn show(
+    app: &AppHandle,
+    wanted: impl FnOnce(&AppHandle) -> bool + Send + 'static,
+    when_signed_out: impl FnOnce(&AppHandle) + Send + 'static,
+) {
+    let handle = app.clone();
+    let _ = app.run_on_main_thread(move || {
+        // `wanted` runs for a visible launcher too: it can route the page
+        // (a notification click switches to the answer).
+        if wanted(&handle) && !platform::is_visible(&handle) {
+            show_now(&handle, when_signed_out);
+        }
+    });
+}
+
+fn show_now(app: &AppHandle, when_signed_out: impl FnOnce(&AppHandle)) {
+    let state = app.state::<crate::state::AppState>();
+    if state.policy().disable_launcher {
+        log::info!("not showing the launcher: managed policy turns it off");
+    } else if state.session().is_err() {
+        when_signed_out(app);
+    } else if let Err(e) = platform::ensure(app, WebviewUrl::App("launcher.html".into()))
+        .and_then(|()| platform::show(app))
+    {
+        log::warn!("could not show launcher: {e}");
+    } else {
+        crate::aonyx::set_mood(app, crate::aonyx::Mood::Hop);
+    }
+}
+
+/// Whether the launcher is on screen. Safe to call off the main thread.
+pub fn is_visible(app: &AppHandle) -> bool {
+    app.get_webview_window(LAUNCHER)
+        .is_some_and(|w| w.is_visible().unwrap_or(false))
 }

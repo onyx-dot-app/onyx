@@ -108,23 +108,26 @@ API server as one more reader of the sandbox's event stream for a `RUNNING`
 run. It sends keepalives until the executor stores the opencode session id, so
 a quick click on a new run does not fail.
 
-**Plugins and action settings.** Task create and patch accept
-`plugins: [{plugin_id, action_settings}]`.
-`integrations/craft.py:replace_task_plugins__no_commit` checks that the owner
-can see each plugin and that each action key belongs to one of its
-integrations, then stores `scheduled_task__plugin` rows. A run can use only the
-integrations of these plugins; the proxy blocks each other integration. Each
+**Integrations and action settings.** Task create and patch accept
+`integrations: [{integration_id, action_settings}]`.
+`integrations/craft.py:replace_task_integrations__no_commit` checks that the
+owner has access to each integration and that each action key
+is an action of it, then stores `scheduled_task__integration` rows. A stored
+link that the owner lost access to is not in the catalog, so a save keeps it.
+A run can use only these integrations, while the owner has
+access to them; the proxy blocks each other integration. Each
 action value is Allow, Ask, Blocked or Inherit (the integration setting).
 `GET /scheduled-tasks/{id}/action-policies` and the new-task catalog
-`GET /build/action-policies` return `TaskPluginView` rows
-(`integrations/craft.py:list_task_plugin_views`). The rows leave out OpenAPI
+`GET /build/action-policies` return `TaskIntegrationView` rows
+(`integrations/craft.py:list_task_integration_views`), each with `enabled`
+and the stored `action_settings`. The rows leave out OpenAPI
 integrations, which Craft does not offer. Each action has the policy
 that Inherit gives, and `locked` when a task Allow keeps that policy; the
-editor does not offer Allow for a locked action. A task plugin whose
-integrations are all off still has a row with no integrations, and the stored
-settings leave out action keys that no integration has any more, so a save of
-an unrelated edit keeps the plugin and passes the action check. A session of a
-scheduled run gets the MCP servers of the task plugins in its opencode config,
+editor does not offer Allow for a locked action. A task integration that an
+admin turned off still has a row, with `runnable` false, and the stored
+settings leave out action keys that the integration has no more, so a save of
+an unrelated edit keeps the integration and passes the action check. A session of a
+scheduled run gets the MCP servers of the task integrations in its opencode config,
 also those the owner turned off, with the task settings as disabled tools
 (`resolve_craft_mcp_servers(..., task_id)`). The executor passes the task to
 `SessionManager.create_session`, because the run row names the session only
@@ -161,7 +164,7 @@ requests of a run in progress.
    ([[craft-external-apps#task-authority-ends-with-run]]). Do not add a
    fallback to personal policies for scheduled sessions.
 5. `task-choices-default-ask` **Task choices follow the policy function in
-   [[craft-external-apps]].** An integration that no plugin of the task holds
+   [[craft-external-apps]].** An integration that the task does not have
    blocks every action. The `action_settings` of the task are the link
    settings: an admin Blocked stays final, and Allow does not apply when users
    cannot save Always allow on the integration

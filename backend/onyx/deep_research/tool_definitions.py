@@ -8,9 +8,6 @@ RESEARCH_AGENT_TASK_KEY = "task"
 
 GENERATE_REPORT_TOOL_NAME = "generate_report"
 
-THINK_TOOL_NAME = "think_tool"
-
-
 # ruff: noqa: E501, W605 start
 GENERATE_PLAN_TOOL_DESCRIPTION: ToolDefinition = ToolDefinition(
     name=GENERATE_PLAN_TOOL_NAME,
@@ -56,79 +53,8 @@ GENERATE_REPORT_TOOL_DESCRIPTION: ToolDefinition = ToolDefinition(
 )
 
 
-THINK_TOOL_DESCRIPTION: ToolDefinition = ToolDefinition(
-    name=THINK_TOOL_NAME,
-    description="Use this for reasoning between research_agent calls and before calling generate_report. Think deeply about key results, identify knowledge gaps, and plan next steps.",
-    strict=True,
-    parameters={
-        "type": "object",
-        "additionalProperties": False,
-        "properties": {
-            "reasoning": {
-                "type": "string",
-                "description": "Your chain of thought reasoning, use paragraph format, no lists.",
-            }
-        },
-        "required": ["reasoning"],
-    },
-)
-
-
-RESEARCH_AGENT_THINK_TOOL_DESCRIPTION: ToolDefinition = ToolDefinition(
-    name=THINK_TOOL_NAME,
-    description="Use this for reasoning between research steps. Think deeply about key results, identify knowledge gaps, and plan next steps.",
-    strict=True,
-    parameters={
-        "type": "object",
-        "additionalProperties": False,
-        "properties": {
-            "reasoning": {
-                "type": "string",
-                "description": "Your chain of thought reasoning, can be as long as a lengthy paragraph.",
-            }
-        },
-        "required": ["reasoning"],
-    },
-)
-
-
-RESEARCH_AGENT_GENERATE_REPORT_TOOL_DESCRIPTION: ToolDefinition = ToolDefinition(
-    name=GENERATE_REPORT_TOOL_NAME,
-    description="Generate the final research report from all findings. Should be called when research is complete.",
-    strict=True,
-    parameters={
-        "type": "object",
-        "additionalProperties": False,
-        "properties": {},
-        "required": [],
-    },
-)
-
-
-THINK_TOOL_RESPONSE_MESSAGE = "Acknowledged, please continue."
-
-
 def get_clarification_tool_definitions() -> list[ToolDefinition]:
     return [GENERATE_PLAN_TOOL_DESCRIPTION]
-
-
-def get_orchestrator_tools(include_think_tool: bool) -> list[ToolDefinition]:
-    tools = [
-        RESEARCH_AGENT_TOOL_DESCRIPTION,
-        GENERATE_REPORT_TOOL_DESCRIPTION,
-    ]
-    if include_think_tool:
-        tools.append(THINK_TOOL_DESCRIPTION)
-    return tools
-
-
-def get_research_agent_additional_tool_definitions(
-    include_think_tool: bool,
-) -> list[ToolDefinition]:
-    tools = [GENERATE_REPORT_TOOL_DESCRIPTION]
-    if include_think_tool:
-        tools.append(RESEARCH_AGENT_THINK_TOOL_DESCRIPTION)
-    return tools
 
 
 # ruff: noqa: E501, W605 end

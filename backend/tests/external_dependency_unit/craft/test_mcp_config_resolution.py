@@ -27,7 +27,7 @@ from onyx.server.features.integrations.api import list_integrations_for_member
 from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.external_dependency_unit.integration_helpers import (
     delete_integrations,
-    hold_in_plugin,
+    give_access,
     make_mcp_integration,
     set_policy,
 )
@@ -68,7 +68,7 @@ def _mcp(
         header_template=header_template,
     )
     created.append(integration.id)
-    hold_in_plugin(
+    give_access(
         db_session,
         [integration],
         published=True,

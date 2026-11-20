@@ -9,11 +9,13 @@ import {
   mockLlmApiBase,
 } from "@tests/e2e/utils/mockLlm";
 import type { ProjectFile, UserFileStatus } from "@/lib/projects/types";
-import type { AgentPluginLink } from "@/lib/agents/types";
+import type { AgentIntegrationLink } from "@/lib/agents/types";
 import type {
   AdminIntegrationDetail,
+  InstallationPolicy,
   IntegrationActionsResponse,
   IntegrationCreate,
+  MemberIntegration,
   PolicyValue,
 } from "@/lib/integrations/types";
 
@@ -1234,7 +1236,7 @@ export class OnyxApiClient {
     return success;
   }
 
-  /** Adds an integration and the plugin that holds it; syncs its actions. */
+  /** Adds an integration; syncs its actions. */
   async createIntegration(
     body: IntegrationCreate
   ): Promise<AdminIntegrationDetail> {
@@ -1276,10 +1278,48 @@ export class OnyxApiClient {
     );
   }
 
-  /** Creates an agent that attaches the given plugins. */
-  async createAgentWithPlugins(
+  /** Sets the company install setting of an integration. */
+  async setIntegrationInstallationPolicy(
+    integrationId: number,
+    installationPolicy: InstallationPolicy
+  ): Promise<void> {
+    const response = await this.put(
+      `/admin/integrations/${integrationId}/installation-policy`,
+      { installation_policy: installationPolicy }
+    );
+    await this.handleResponse(
+      response,
+      `Failed to set the install setting of integration ${integrationId}`
+    );
+  }
+
+  /** Turns an integration on or off for the user of this client. */
+  async setIntegrationEnabled(
+    integrationId: number,
+    enabled: boolean
+  ): Promise<MemberIntegration> {
+    const response = await this.put(`/integrations/${integrationId}/enabled`, {
+      enabled,
+    });
+    return await this.handleResponse<MemberIntegration>(
+      response,
+      `Failed to turn integration ${integrationId} ${enabled ? "on" : "off"}`
+    );
+  }
+
+  /** The integrations of the user of this client, with their states. */
+  async listMemberIntegrations(): Promise<MemberIntegration[]> {
+    const response = await this.get("/integrations");
+    return await this.handleResponse<MemberIntegration[]>(
+      response,
+      "Failed to list the integrations of the user"
+    );
+  }
+
+  /** Creates an agent that links the given integrations. */
+  async createAgentWithIntegrations(
     name: string,
-    pluginIds: string[],
+    integrationIds: number[],
     options: CreateAgentOptions = {}
   ): Promise<number> {
     const response = await this.post("/persona", {
@@ -1293,8 +1333,8 @@ export class OnyxApiClient {
       users: options.userIds ?? [],
       groups: options.groupIds ?? [],
       tool_ids: [],
-      plugins: pluginIds.map((plugin_id) => ({
-        plugin_id,
+      integrations: integrationIds.map((integration_id) => ({
+        integration_id,
         action_settings: { default: "inherit", actions: {} },
       })),
     });
@@ -1377,7 +1417,7 @@ export class OnyxApiClient {
       in_code_tool_id?: string | null;
       mcp_server_id?: number | null;
     }>;
-    plugins: AgentPluginLink[];
+    integrations: AgentIntegrationLink[];
   }> {
     const response = await this.get(`/persona/${agentId}`);
     return await this.handleResponse(

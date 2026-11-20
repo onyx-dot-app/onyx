@@ -78,7 +78,7 @@ from tests.external_dependency_unit.code_mode_helpers import (
 )
 from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.external_dependency_unit.integration_helpers import (
-    hold_in_plugin,
+    give_access,
     link_persona,
     make_mcp_integration,
     set_policy,
@@ -211,7 +211,7 @@ def _persona_with_mcp_tool(
             "required": ["result"],
         },
     )
-    plugin = hold_in_plugin(db_session, [integration])
+    give_access(db_session, [integration])
     persona = Persona(
         name=f"Code Mode Persona {uuid4().hex[:8]}",
         description="Persona with one MCP tool",
@@ -229,7 +229,7 @@ def _persona_with_mcp_tool(
     )
     db_session.add(persona)
     db_session.flush()
-    link_persona(db_session, persona.id, plugin.id)
+    link_persona(db_session, persona.id, integration.id)
     # These tests run programs, not approvals, so the tools run without asking.
     for name in tool_names:
         set_policy(db_session, integration.id, name, IntegrationActionPolicyValue.ALLOW)

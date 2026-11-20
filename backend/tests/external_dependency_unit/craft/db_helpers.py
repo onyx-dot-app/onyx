@@ -16,7 +16,6 @@ Conventions:
 
 from __future__ import annotations
 
-from collections.abc import Iterable
 from datetime import datetime
 from typing import Any
 from uuid import UUID, uuid4
@@ -40,6 +39,7 @@ from onyx.db.enums import (
     SandboxStatus,
     SkillSharePermission,
 )
+from onyx.db.integration_access import set_integration_preferences__no_commit
 from onyx.db.models import (
     ActionApproval,
     ActionReceipt,
@@ -48,10 +48,10 @@ from onyx.db.models import (
     Credential,
     ExternalApp,
     Integration,
+    Integration__User,
     IntegrationActionPolicy,
     IntegrationOAuthClient,
     Plugin,
-    Plugin__Integration,
     Plugin__User,
     Plugin__UserGroup,
     PluginSkill,
@@ -68,7 +68,6 @@ from onyx.db.plugin import (
     free_plugin_name,
     get_or_create_organization_library__no_commit,
     get_or_create_user_uploads__no_commit,
-    set_plugin_preferences__no_commit,
 )
 from onyx.db.users import assign_user_to_default_groups__no_commit
 
@@ -338,8 +337,8 @@ def make_external_app(
 ) -> ExternalApp:
     """Insert an ``ExternalApp`` row and its integration, plus the preset
     OAuth client that holds ``organization_credentials`` and the admin rows
-    in ``action_policies`` (``{action_key: policy}``). The plugin of a custom
-    ``skill`` holds the integration. ``skill`` also gives the default name."""
+    in ``action_policies`` (``{action_key: policy}``). ``skill`` gives the
+    default name."""
     from tests.external_dependency_unit.integration_helpers import (
         make_app_integration,
     )
@@ -369,8 +368,6 @@ def make_external_app(
     app.enabled = enabled
     integration.enabled = enabled
     db_session.flush()
-    if isinstance(skill, Plugin):
-        hold_external_app(db_session, app=app, plugin_id=skill.id)
     if action_policies:
         db_session.add_all(
             IntegrationActionPolicy(
@@ -390,28 +387,21 @@ def app_integration_id(db_session: Session, app: ExternalApp) -> int:
     return integration_id
 
 
-def hold_external_app(
-    db_session: Session, *, app: ExternalApp, plugin_id: UUID
+def give_app_to_user(
+    db_session: Session, *, app: ExternalApp, user: User, enabled: bool = True
 ) -> None:
-    """Make the plugin hold the integration of ``app``."""
-    db_session.add(
-        Plugin__Integration(
-            plugin_id=plugin_id, integration_id=app_integration_id(db_session, app)
-        )
+    """Share the integration of ``app`` with ``user``, with the user's on/off
+    choice set to ``enabled``."""
+    integration_id = app_integration_id(db_session, app)
+    db_session.execute(
+        pg_insert(Integration__User)
+        .values(integration_id=integration_id, user_id=user.id)
+        .on_conflict_do_nothing()
+    )
+    set_integration_preferences__no_commit(
+        user.id, [integration_id], enabled, db_session
     )
     db_session.flush()
-
-
-def make_app_plugin_for_user(
-    db_session: Session, *, app: ExternalApp, user: User, enabled: bool = True
-) -> Plugin:
-    """A private plugin of ``user`` that holds the integration of ``app``,
-    with the user's on/off choice set to ``enabled``."""
-    plugin = make_skillless_plugin(db_session, author_user_id=user.id)
-    hold_external_app(db_session, app=app, plugin_id=plugin.id)
-    set_plugin_preferences__no_commit(user.id, [plugin.id], enabled, db_session)
-    db_session.flush()
-    return plugin
 
 
 def share_skill_with_user(
@@ -479,64 +469,6 @@ def share_plugin_with_group(
         )
     )
     db_session.flush()
-
-
-def make_skillless_plugin(
-    db_session: Session,
-    *,
-    author_user_id: UUID | None = None,
-    name: str | None = None,
-    published: bool = False,
-    installation_policy: PluginInstallationPolicy | None = None,
-    shared_user_ids: Iterable[UUID] = (),
-    shared_group_ids: Iterable[int] = (),
-) -> Plugin:
-    """A plugin with no skills, as an integration makes it: no plugin_skill
-    rows, a current version with no bundle, size or file count, and no legacy
-    skill row. Private (in the author's "My uploads") unless ``published``.
-    The shares are VIEWER rows. A private plugin with NOT_AVAILABLE and shares
-    is the row set the U1 migration writes for a private MCP server."""
-    if author_user_id is None and not published:
-        author_user_id = make_user(db_session, standard_account=True).id
-    marketplace_id = (
-        get_or_create_organization_library__no_commit(db_session)
-        if published or author_user_id is None
-        else get_or_create_user_uploads__no_commit(author_user_id, db_session)
-    )
-    plugin_id = uuid4()
-    version_id = uuid4()
-    plugin = Plugin(
-        id=plugin_id,
-        name=name or f"integration-{plugin_id.hex[:8]}",
-        description="",
-        marketplace_id=marketplace_id,
-        author_user_id=author_user_id,
-        installation_policy=installation_policy,
-        current_version_id=version_id,
-        published_version_id=version_id if published else None,
-    )
-    db_session.add(plugin)
-    db_session.flush()
-    db_session.add(
-        PluginVersion(
-            id=version_id,
-            plugin_id=plugin_id,
-            version_number=1,
-            bundle_file_id=None,
-            unpacked_size_bytes=None,
-            file_count=None,
-        )
-    )
-    db_session.flush()
-    for user_id in shared_user_ids:
-        share_plugin_with_user(
-            db_session, plugin_id, user_id, SkillSharePermission.VIEWER
-        )
-    for group_id in shared_group_ids:
-        share_plugin_with_group(
-            db_session, plugin_id, group_id, SkillSharePermission.VIEWER
-        )
-    return plugin
 
 
 def make_cc_pair(

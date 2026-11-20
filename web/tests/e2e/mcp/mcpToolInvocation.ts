@@ -71,11 +71,11 @@ export async function expectMcpToolInvoked(
   expect(counts.debug).toBeGreaterThan(0);
 }
 
-/** Assert the tool did NOT run because its plugin is off in this chat. */
+/** Assert the tool did NOT run because its integration is off in this chat. */
 export async function expectMcpToolNotInvoked(
   page: Page,
   toolName: string,
-  excludedPluginId: string
+  excludedIntegrationId: number
 ): Promise<void> {
   const requestPromise = page.waitForRequest(
     (request) =>
@@ -86,7 +86,10 @@ export async function expectMcpToolNotInvoked(
   const body = (await requestPromise).postDataJSON();
   expect(body.tool_options.allowed).toEqual(
     expect.not.arrayContaining([
-      { type: "plugin", plugin_id: excludedPluginId },
+      expect.objectContaining({
+        type: "integration",
+        integration_id: excludedIntegrationId,
+      }),
     ])
   );
   expect(counts.start).toBe(0);

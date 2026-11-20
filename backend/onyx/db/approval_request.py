@@ -124,6 +124,8 @@ def get_approval_requests(
 ) -> dict[UUID, ApprovalRequest]:
     """The saved requests by ID; a deleted request is absent. Deleting its
     chat or response deletes a request."""
+    if not approval_ids:
+        return {}
     return {
         row.id: row
         for row in db_session.scalars(

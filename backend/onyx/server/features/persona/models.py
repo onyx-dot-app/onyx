@@ -18,7 +18,10 @@ from onyx.db.models import (
     StarterMessage,
 )
 from onyx.db.persona_sharing import derive_persona_sharing_status
-from onyx.integrations.models import PersonaPluginLink, PersonaPluginSnapshot
+from onyx.integrations.models import (
+    PersonaIntegrationLink,
+    PersonaIntegrationSnapshot,
+)
 from onyx.server.features.document_set.models import DocumentSetSummary
 from onyx.server.features.tool.models import ToolSnapshot
 from onyx.server.features.tool.tool_visibility import should_expose_tool_to_fe
@@ -169,14 +172,13 @@ class PersonaUpsertRequest(BaseModel):
     # For Private Personas, who should be able to access these
     users: list[UUID] | None = None
     groups: list[int] | None = None
-    # Built-in tool ids. An old custom or MCP tool id adds the plugin of its
-    # integration.
+    # Built-in tool ids. An old custom or MCP tool id adds its integration.
     tool_ids: list[int]
-    # The plugins of the agent with their action settings. None keeps the
-    # current links, except the links of plugins that hold an OpenAPI tool or
-    # an old MCP tool: tool_ids replaces those, so a link that tool_ids does
-    # not select is removed.
-    plugins: list[PersonaPluginLink] | None = None
+    # The integrations of the agent with their action settings. None keeps
+    # the current links, except the links of integrations that have an
+    # OpenAPI tool or an old MCP tool: tool_ids replaces those, so a link that
+    # tool_ids does not select is removed.
+    integrations: list[PersonaIntegrationLink] | None = None
     remove_image: bool | None = None
     uploaded_image_id: str | None = None  # New field for uploaded image
     icon_name: str | None = (
@@ -422,7 +424,7 @@ class PersonaSnapshot(BaseModel):
 # This is used for flows which need to know all settings
 class FullPersonaSnapshot(PersonaSnapshot):
     search_start_date: datetime | None = None
-    plugins: list[PersonaPluginSnapshot] = Field(default_factory=list)
+    integrations: list[PersonaIntegrationSnapshot] = Field(default_factory=list)
     # Per-requesting-user context, set by the single-persona endpoint
     user_permission: PersonaAccessLevel | None = None
     admin_count: int = 0

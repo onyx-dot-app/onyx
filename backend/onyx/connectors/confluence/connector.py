@@ -1016,9 +1016,7 @@ class ConfluenceConnector(
         yield from self._yield_space_hierarchy_nodes()
 
         space_level_access: dict[str, ExternalAccess] = (
-            get_all_space_permissions(
-                self.source_operations, self.is_cloud, add_prefix=True
-            )
+            get_all_space_permissions(self.source_operations, self.is_cloud)
             if include_permissions
             else {}
         )
@@ -1079,7 +1077,6 @@ class ConfluenceConnector(
                     doc_or_failure.id,
                     page.get("restrictions") or {},
                     page.get("ancestors", []),
-                    add_prefix=True,
                 ) or space_level_access.get(space_key)
             yield doc_or_failure
 

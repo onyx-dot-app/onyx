@@ -81,6 +81,21 @@ const TABLE_COPY_AI_RESPONSE = `Here is a table:
 | [Onyx](https://onyx.app) | Available |
 | Search | Beta |`;
 
+const LONG_CELL =
+  "Whether the scan results were taken off the security tab on purpose, even though the recent runs reported issues";
+
+const WIDE_TABLES_AI_RESPONSE = `A short table with one long cell:
+
+| Date | Question |
+| --- | --- |
+| Jun 12 | ${LONG_CELL} |
+
+A table with many long columns:
+
+| One | Two | Three | Four | Five | Six |
+| --- | --- | --- | --- | --- | --- |
+| ${Array(6).fill(LONG_CELL).join(" | ")} |`;
+
 const MARKDOWN_AI_RESPONSE = `Here's a quick overview with various formatting:
 
 ### Key Features
@@ -278,6 +293,17 @@ for (const theme of THEMES) {
         await chat.expectClipboardText(
           "Tool\tStatus\nOnyx (https://onyx.app)\tAvailable\nSearch\tBeta"
         );
+      });
+
+      test("wide tables wrap and scroll inside the answer column", async ({
+        page,
+      }) => {
+        await chat.goto();
+        await mockChatEndpoint(page, buildMockStream(WIDE_TABLES_AI_RESPONSE));
+
+        await sendMessage(page, "Show me wide tables");
+        await chat.expectAnswerTableWraps(0);
+        await chat.expectAnswerTableScrolls(1);
       });
 
       test("AI response with LaTeX math renders correctly", async ({
