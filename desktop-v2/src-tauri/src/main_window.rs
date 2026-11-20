@@ -24,6 +24,7 @@ fn window_token() -> MutexGuard<'static, Option<String>> {
 #[cfg(target_os = "macos")]
 const DESKTOP_CHROME_JS: &str = include_str!("desktop_chrome.js");
 const LINK_SHIM_JS: &str = include_str!("link_shim.js");
+const SIGN_IN_GUARD_JS: &str = include_str!("sign_in_guard.js");
 
 /// Tells the page script the current zoom and full-screen state, so the
 /// traffic-light row keeps its size in screen points (see desktop_chrome.js).
@@ -373,6 +374,7 @@ pub async fn open_url(
         .min_inner_size(800.0, 600.0)
         .center()
         .initialization_script(LINK_SHIM_JS)
+        .initialization_script(SIGN_IN_GUARD_JS)
         .on_page_load(|window, payload| match payload.event() {
             tauri::webview::PageLoadEvent::Started => {
                 crate::offline::load_committed(window.app_handle());

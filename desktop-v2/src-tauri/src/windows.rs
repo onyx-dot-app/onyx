@@ -226,6 +226,11 @@ pub fn route_to(app: &AppHandle, path: &str) {
                     Ok(None) => return,
                     Err(_) => (token, false),
                 };
+                // A sign-out or server change during the wait wins; the old
+                // token must not reopen the window.
+                if state.epoch() != epoch || state.server().ok().as_deref() != Some(&server) {
+                    return;
+                }
                 if let Err(e) = main_window::open(&app, &server, &token, &path).await {
                     log::warn!("could not open main window: {e}");
                     match state.api.health(&server).await {
