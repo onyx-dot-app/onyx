@@ -116,7 +116,8 @@ class MarketplaceSummary(BaseModel):
     last_synced_at: datetime.datetime | None
     last_synced_revision: str | None
     last_error: str | None
-    # A sync is asked for and has not started yet.
+    # A sync is asked for and has not started yet. False once the request is
+    # older than the sync lock timeout, so Sync now works again.
     sync_requested: bool
     # A sync waits for a user to confirm its deletes.
     needs_confirmation: bool

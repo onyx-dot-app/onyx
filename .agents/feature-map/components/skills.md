@@ -936,7 +936,11 @@ the app from the same rule
     failed read or a GitHub error only sets `last_error`. A failure before the
     commit deletes the stored bundles. One sync runs at a time per
     marketplace (cache lock `marketplace_sync:{id}`); a request during a sync
-    sets `sync_requested_at`, and the holder syncs again. The Celery task
+    sets `sync_requested_at`, and the holder syncs again. A holder that stops
+    for its time budget or an error with the mark set starts one follow-up
+    sync. The API reports a mark older than the lock timeout plus 5 minutes
+    as not syncing (`sync_request_is_live`), so Sync now recovers a mark that
+    a dead worker left. The Celery task
     `sync_marketplace` runs on the `sandbox` queue; Onyx Lite runs the sync
     in the API server after the response. Company plugins have no author and
     `published_version_id` follows each version;

@@ -57,6 +57,7 @@ from onyx.skills.marketplace.provider import (
 from onyx.skills.marketplace.sync import (
     enqueue_marketplace_sync,
     read_marketplace_repository,
+    sync_request_is_live,
 )
 from onyx.skills.push import push_skills_and_commit
 
@@ -123,7 +124,7 @@ def _summary(
         last_synced_at=marketplace.last_synced_at,
         last_synced_revision=marketplace.last_synced_revision,
         last_error=marketplace.last_error,
-        sync_requested=marketplace.sync_requested_at is not None,
+        sync_requested=sync_request_is_live(marketplace.sync_requested_at),
         needs_confirmation=marketplace.pending_delete_revision is not None,
         created_at=marketplace.created_at,
     )
