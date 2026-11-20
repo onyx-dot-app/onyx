@@ -216,6 +216,9 @@ test.describe("Turn anchoring - Fresh Chat Effect", () => {
         { timeout: 5000 }
       )
       .toBeLessThan(150);
+    // Above the viewport is not near its top.
+    const position = await getElementPositionInContainer(page, lastUserMessage);
+    expect(position?.topOffset).toBeGreaterThanOrEqual(0);
   });
 
   test("A reloaded chat keeps the space below its latest turn", async ({
@@ -232,6 +235,8 @@ test.describe("Turn anchoring - Fresh Chat Effect", () => {
     await expect
       .poll(() => chat.latestHumanMessageOffset(), { timeout: 5000 })
       .toBeLessThan(150);
+    // Above the viewport is not near its top.
+    expect(await chat.latestHumanMessageOffset()).toBeGreaterThanOrEqual(0);
   });
 
   test("User can scroll up to see previous messages after fresh chat effect", async ({
