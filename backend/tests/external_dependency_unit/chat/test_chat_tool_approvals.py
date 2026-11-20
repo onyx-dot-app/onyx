@@ -1524,7 +1524,12 @@ def test_a_failed_dump_save_deletes_the_dumps_saved_before_it(
     [cell] = state.code_cells
     state.code_cells.append(
         cell.model_copy(
-            update={"cell_id": cell.cell_id + 1, "observer_call_id": "second"},
+            update={
+                "cell_id": cell.cell_id + 1,
+                "observer": None
+                if cell.observer is None
+                else cell.observer.model_copy(update={"call_id": "second"}),
+            },
             deep=True,
         )
     )

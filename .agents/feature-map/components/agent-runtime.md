@@ -124,6 +124,15 @@ Agent (history, checkpoint, tools, prepare_step / after_step,
   next request builds its context from the amended result, and compacts only
   when that context is over budget. A hook that fails or stops for
   cancellation sets no results; the run still ends.
+  The tool phase suspends only when the run is idle; the rule is in
+  "Suspend and accept input" in `agents/README.md`, and
+  `agents/tool_execution.py:ToolBatch.execute` waits on
+  `ExecutionWork.held`; each held job that ends wakes it
+  (`Run.notify_tool_activity`).
+  Open requests of calls that tools made for the model stay open while the
+  run suspends (`RunProgress.open_inputs`); `ToolBatch._continue_open_inputs`
+  gives their answers to `AgentTool.continue_open_input`, one call's
+  requests together.
   `Agent.on_suspend` runs before each suspension; `Run._suspend` applies its
   amendments before it captures state. A suspend hook that fails sets no
   results and the run still suspends. A suspend hook that stops for
@@ -132,7 +141,7 @@ Agent (history, checkpoint, tools, prepare_step / after_step,
   `Agent.on_drained` runs after each finish or suspension once the run's work
   drains (`Run._work_drained`, from `_drain_workers` and `_suspend`): its tool
   threads, work that a tool added through `ToolInvocation.run_work` (a code
-  mode cell's driver and its tool call threads), and its foreground
+  mode cell's driver, and its tool call threads through `track_detached`), and its foreground
   children's work (`Run.track_child_work`), not background children. A suspension calls it only when no foreground child
   waits or works (`RunCoordination.pending_children`,
   `AgentCoordinator.children_idle`, read only); otherwise the run's later end does.
@@ -149,6 +158,10 @@ Agent (history, checkpoint, tools, prepare_step / after_step,
   display adds nothing. `ToolRenderer.complete` renders that part after the
   section end too. Live, the closing record follows the answer; replay places
   it before the answer's `message_start`. Both orders give the same groups.
+  A replayed card, ended or open and in child runs too, takes the later
+  events of its call. A call that no part of this stream drew gets an open
+  card, which closes when its run ends. A continued program's requests keep the message and step
+  of the call that started it (`agents/tool_execution.py:_NestedCallGate`).
 - `backend/onyx/agents/runtime.py:_compact_context` fits each request before the
   model call: it applies the saved checkpoint and summarizes through
   `agents/compaction.py:compact_history` above the trigger. If the summary

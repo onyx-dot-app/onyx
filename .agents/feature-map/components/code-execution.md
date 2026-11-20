@@ -164,7 +164,9 @@ execute_code / wait_code (code mode; a cell per program, a store per chat)
                                         sent to the observer or buffered until the next one
   WaitCodeTool._run -> CodeCells.wait   the cell's one observer: output and calls since the
                                         previous observation, the final result, or
-                                        terminate=true stops the cell
+                                        terminate=true stops the cell; for a closed cell,
+                                        a sentence that names where its saved results
+                                        hold its end (tools/tool_implementations/code_mode/prompt.py:closed_cell_text)
   each observation                      taken under the cell lock, formatted after it:
                                         prompt.py:format_content (model text, cut once in the
                                         middle to max_output_tokens, 10,000 by
@@ -182,9 +184,10 @@ execute_code / wait_code (code mode; a cell per program, a store per chat)
                                         empty cells for the next run of the same agent (a
                                         message or results to an idle child) after finish
   chat/agent.py:_suspended_cells (Agent.on_suspend) -> CodeCells.suspend
-                                        the same when the run suspends, with
-                                        reason="suspended"; later calls can start cells. A
-                                        cell whose observation waits for input stays parked
+                                        the same when the run suspends (see
+                                        ToolInvocation.run_work), with reason="suspended";
+                                        later calls can start cells. A cell whose program
+                                        waits for input stays parked
   ChatAgent.capture_state / restore_state  CodeCells.saved / restore: a parked cell is a
                                         SavedCodeCell in ChatFeatureState.code_cells; its
                                         dump goes to the file store at handoff, under a
@@ -194,6 +197,10 @@ execute_code / wait_code (code mode; a cell per program, a store per chat)
                                         continue the observation that waited, with the
                                         answers, in any process (sandbox.execute_program
                                         with `parked`)
+  CodeModeTool / WaitCodeTool.continue_open_input -> CodeCells.continue_open
+                                        a program that parked in the background, with
+                                        no observation, continues there once each of its
+                                        requests has an answer (CodeCell.continue_background)
   chat/renderer.py:CodeModeRenderer one child ToolRenderer per call, sub_turn_index = n;
                                         a closing record follows the card section end
 ```
@@ -433,8 +440,8 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
     costs its driver thread, and also a worker while its program waits on a
     tool and its dump does not fit in `MAX_SUSPENDED_BYTES`. A server process runs at most
     `MAX_RUNNING_CELLS` (64) cells whose program has not ended
-    (`tools/tool_implementations/code_mode/cells.py:_RunningCells`); a new cell over this limit gets `BUSY_MESSAGE`
-    and does not start. A new program that finds no free worker for
+    (`tools/tool_implementations/code_mode/cells.py:_RunningCells`); a new cell over this limit, or
+    while a continuing program waits for a slot, gets `BUSY_MESSAGE` and does not start. A new program that finds no free worker for
     `CHECKOUT_TIMEOUT_SECONDS` gets `BUSY_MESSAGE`; a resumed program waits for
     a worker up to its lifetime. A program that waits (an `await` on
     unfinished tool calls or sleeps, or a synchronous `time.sleep`) keeps its
@@ -529,7 +536,11 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
     direct calls do (`ToolInvocation.nested_calls`, a `NestedCallGate`;
     `tools/tool_implementations/code_mode/cells.py:CodeCell._call`): a
     `ToolResult` decision becomes the call's result, so a denial raises in the
-    program as a tool error does. A request decision shows the request at once,
+    program as a tool error does. The cell keeps one gate (`CodeCell._gate`):
+    each of its requests belongs to the call that started it, or that rebuilt
+    it in this process, also while `wait_code` observes it, so the run offers
+    their answers together; `before_tool_call` sees that call's step, or for
+    a cell rebuilt from a saved run, the step in which it continued. A request decision shows the request at once,
     also for a cell that runs in the background, and the call waits without a
     thread (the handler returns
     `tools/tool_implementations/code_mode/sandbox.py:AWAITS_INPUT`). Once the program
@@ -546,12 +557,13 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
     `tools/tool_implementations/code_mode/cells.py:PARK_REFUSED_MESSAGE`, and the program continues. A dump that
     still runs out of memory loses the worker, so the program stops with
     `tools/tool_implementations/code_mode/sandbox.py:PARK_MEMORY_MESSAGE`. When the run
-    suspends, a parked cell whose observation waits is saved with the Monty
-    version that dumped it; other cells close. The cell keeps only the request
-    ID of each waiting call (`SavedCodeCell.requests`); the run's
-    `NestedInputWait` holds the requests.
-    After the answers, the observation's continuation builds the cell, takes a
-    running-cell slot, waiting for one, and loads the dump on a new worker.
+    suspends, a cell whose program is parked for input is saved with the Monty
+    version that dumped it, with or without an observation; other cells close.
+    The cell keeps the request of each waiting call (`SavedCodeCell.requests`).
+    After the answers, the cell continues as the `CodeCells.resume` (an
+    observation waited) or `CodeCells.continue_open` (no observation) row of
+    the Architecture flow says: it takes a running-cell slot, waiting for one,
+    and loads the dump on a new worker.
     A dump from another Monty version stops the program with
     `tools/tool_implementations/code_mode/cells.py:PROGRAM_VERSION_MESSAGE`. An approved call runs then, unless its
     tool is gone, its function name now names another tool, or its parameters
@@ -701,13 +713,19 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
     each cell whose last saved observation is `running`. The amendment adds a `CellClosing` (`reason="response_ended"`)
     with the calls, output, result and store commit after that observation;
     its text is formatted like an observation (`format_content`). When the
-    run suspends (for example on `ChildRunWait`), `Agent.on_suspend`
+    run suspends (see `ToolInvocation.run_work`), `Agent.on_suspend`
     (`chat/agent.py:_suspended_cells`) calls `CodeCells.suspend`, which does
-    the same with `reason="suspended"` before the run captures its state, so no
-    cell runs while nothing owns the run. For a
+    the same with `reason="suspended"` before the run captures its state. A
+    cell that ended keeps its end in that closing record; a later `wait_code`
+    of the cell says so (`tools/tool_implementations/code_mode/prompt.py:closed_cell_text`). A cell whose program
+    waits for input, with or without an observation, is saved instead
+    (`CodeCells.saved`); its requests stay open. For a
     restored run, `tools/tool_implementations/code_mode/cells.py:_interrupted_amendments` closes such observations
     with `reason="interrupted"` and status `cancelled`, since what the cell did
-    after them is not known. The run applies the amendments before it saves
+    after them is not known; a cell that stays saved gets none. A cell that a
+    restored run rebuilds takes its last running observation from the
+    recorded results, so it gets its closing record as a live cell does, also
+    when it ends in the background with no `wait_code`. The run applies the amendments before it saves
     and publishes `ToolResultAmendedEvent` for each, before `AgentEndEvent`.
     Their calls, also the unfinished ones, may have had effects. The final
     `code_mode_delta` has `status="cancelled"` live and on replay. A tool whose
@@ -744,8 +762,9 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
   never outlives its response: `CodeCells.finish` stops it, and a closing
   record saves what it did after its last observation, so the saved history
   and the next turn see its side effects. Its driver and tool call threads join
-  the run's work (`ToolInvocation.run_work`), so the run drains only after a
-  call that outlived the program returns.
+  the run's work (`ToolInvocation.run_work`); the tool phase waits for the
+  driver, and the run drains only after a call that outlived the program
+  returns.
 - **Code mode keeps values with `store()`, not interpreter state.** The
   model chooses what persists, so the saved data stays small and JSON. Workers
   stay stateless, so any worker in any process can run the next program. The

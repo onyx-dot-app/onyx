@@ -375,6 +375,24 @@ def test_running_cell_limit_is_process_wide(monkeypatch: pytest.MonkeyPatch) -> 
     assert _details(Response().run("1\n")).status == "completed"
 
 
+def test_a_continuing_program_takes_the_next_slot_before_new_cells() -> None:
+    running = cells_module._RunningCells(1)
+    assert running.acquire("tenant")
+    cancellation = CancellationSignal()
+    continued = start_thread_future(
+        lambda: running.acquire("tenant", wait=cancellation), name="continued"
+    )
+    until(lambda: running._waiting == 1)
+    assert not running.acquire("tenant")
+
+    running.release("tenant", 0.0)
+    # The freed slot goes to the continuing program, not to a new cell.
+    assert not running.acquire("tenant")
+    assert continued.result(timeout=10)
+    running.release("tenant", 0.0)
+    assert running.acquire("tenant")
+
+
 def test_a_cell_whose_driver_cannot_start_ends_and_frees_its_slot(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

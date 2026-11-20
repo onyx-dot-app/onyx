@@ -7,6 +7,7 @@ from collections.abc import Generator
 from pathlib import Path
 from uuid import uuid4
 
+import httpx
 import pytest
 from pydantic import BaseModel
 
@@ -28,6 +29,13 @@ NO_AUTH_MCP_SERVER_SCRIPT = (
     / "mcp_test_server"
     / "run_mcp_server_no_auth.py"
 )
+
+
+def release_hold(key: str) -> None:
+    """Let the no-auth mock server's `hold` calls for `key` answer."""
+    httpx.post(
+        f"http://{NO_AUTH_MCP_SERVER_HOST}:{NO_AUTH_MCP_SERVER_PORT}/release/{key}"
+    ).raise_for_status()
 
 
 class ConnectedMCPServer(BaseModel):
