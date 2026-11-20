@@ -3,6 +3,8 @@ from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urlsplit
 
+from typing_extensions import override
+
 from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
@@ -16,6 +18,7 @@ from onyx.connectors.interfaces import (
     SecondsSinceUnixEpoch,
     SlimConnector,
     SlimConnectorWithPermSync,
+    SourceApiLimiter,
 )
 from onyx.connectors.microsoft_utils.config import (
     DEFAULT_AUTHORITY_HOST,
@@ -42,6 +45,7 @@ from onyx.connectors.microsoft_utils.graph_errors import (
 from onyx.connectors.microsoft_utils.graph_errors import (
     MicrosoftGraphError as OneDriveGraphError,
 )
+from onyx.connectors.microsoft_utils.request_pacer import MicrosoftRequestPacer
 from onyx.connectors.models import (
     BasicExpertInfo,
     ConnectorFailure,
@@ -312,6 +316,17 @@ class OneDriveConnector(
                 CONFIG_USERS: self.settings.users,
             },
         )
+        self._ops.request_pacer = self._request_pacer()
+
+    def _request_pacer(self) -> MicrosoftRequestPacer | None:
+        limiter = self.source_api_limiter
+        return MicrosoftRequestPacer(limiter) if limiter is not None else None
+
+    @override
+    def set_source_api_limiter(self, limiter: SourceApiLimiter) -> None:
+        super().set_source_api_limiter(limiter)
+        if self._ops is not None:
+            self._ops.request_pacer = self._request_pacer()
 
     def validate_connector_settings(self) -> None:
         resolve_microsoft_environment(

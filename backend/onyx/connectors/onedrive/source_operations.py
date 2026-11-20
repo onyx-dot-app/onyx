@@ -52,6 +52,7 @@ from onyx.connectors.microsoft_utils.graph_gateway import (
     build_graph_user_url,
 )
 from onyx.connectors.microsoft_utils.models import MicrosoftTokenInfo
+from onyx.connectors.microsoft_utils.request_pacer import MicrosoftRequestPacer
 from onyx.connectors.onedrive.models import (
     OneDriveCredentials,
     OneDriveDrive,
@@ -95,6 +96,8 @@ class OneDriveSourceOperations(SourceOperations):
     config_keys = frozenset({CONFIG_AUTHORITY_HOST, CONFIG_GRAPH_API_HOST})
 
     _graph_gateway: MicrosoftGraphGateway | None = None
+    # Paces every Graph call. None: the calls are not limited.
+    request_pacer: MicrosoftRequestPacer | None = None
 
     def _config(self, key: str, default: str) -> str:
         return str((self.connector_specific_config or {}).get(key) or default).rstrip(
@@ -133,6 +136,7 @@ class OneDriveSourceOperations(SourceOperations):
             ),
             graph_api_host=self._graph_host(),
             graph_api_version=GRAPH_API_VERSION,
+            get_pacer=lambda: self.request_pacer,
         )
         return self._graph_gateway
 
@@ -311,6 +315,7 @@ class OneDriveSourceOperations(SourceOperations):
             self._base(),
             self._access_token(),
             raw_file_callback,
+            self.request_pacer,
         )
 
     @source_operation(

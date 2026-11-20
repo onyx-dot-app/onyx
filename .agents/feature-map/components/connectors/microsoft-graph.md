@@ -76,6 +76,36 @@ it.
 those modules in the SharePoint connector and its EE permission code. It keeps
 one office365 REST context per thread.
 
+**Rate limiting.** Microsoft limits the resource units (RU) of each app
+registration in a tenant: 1,250 to 6,250 RU per minute by license tier. With
+`ENABLE_SOURCE_API_LIMITER` on, `connectors/source_api_limiter.py:build_source_api_limiter`
+gives SharePoint, OneDrive, Outlook and Teams a `RedisSourceApiLimiter` keyed
+`microsoft:<directory id>:<client id>` (`microsoft_app_key`), so every
+connector on one app shares one budget and one pause, whatever credential row
+holds the app. The budget is `MICROSOFT_GRAPH_RU_PER_MINUTE` (6,250) in a 10 s
+window. A new window starts at `MICROSOFT_START_SHARE` (0.2) and learns the
+limit from 429 answers, with the cut and growth rules of [[google-drive]].
+`connectors/microsoft_utils/request_pacer.py:MicrosoftRequestPacer` takes the
+cost of each call before it goes out: `graph_call_type` reads the type from
+the URL and `RU_COSTS` gives its cost (item, delta page and download 1,
+children page 2, permission 5, SharePoint REST 5 as an estimate). The raw GET
+(`graph_api_get_json`), the downloads in
+`connectors/microsoft_utils/drive_items.py`, and every request
+of an office365 SDK client from `prepare_sdk_client` pass through it. Each try
+of a retry takes its cost again. On a 429 or 503 with `Retry-After`, the pacer
+calls `report_retry_after`: the limiter stores the end time in
+`<tenant>:source_api_limit:microsoft:<directory id>:<client id>:blocked_until`
+(the later time wins), and every `acquire` of every worker on the app waits
+for it. The wait checks the stop signal. A 429 also counts toward a cut. The
+limiter logs "graph asked its callers to wait Ns (Retry-After); every call of
+the shared pause ... waits Ns." and counts
+`onyx_source_api_limiter_units_total` (RU taken),
+`onyx_source_api_limiter_pauses_total` and
+`onyx_source_api_limiter_paused_seconds_total`
+(`server/metrics/source_api_metrics.py`). Every Graph and REST request carries
+`User-Agent: ISV|Onyx|Onyx/<version>`, also with the limiter off: Microsoft
+gives such traffic priority.
+
 ---
 
 ## Contracts and traps
@@ -102,6 +132,14 @@ one office365 REST context per thread.
 6. `site-urls-full` **Site URLs must be full.** The SharePoint `sites` field
    accepts only `https` URLs with a `/sites/`, `/teams/` or `/personal/` path
    (`connectors/sharepoint/config.py:is_site_url_well_formed`).
+
+7. `sdk-client-prepared` **Build an office365 client through
+   `prepare_sdk_client`.** A `GraphClient` or `ClientContext` built without it
+   sends requests that take no cost from the limiter and carry no User-Agent.
+   The pacer is read for each request, because the factory gives a connector
+   its limiter after its credentials.
+8. `call-cost-from-url` **A new Graph call gets its cost from its URL.** Add a
+   pattern to `graph_call_type` when a new endpoint has a cost above 1 RU.
 
 ---
 

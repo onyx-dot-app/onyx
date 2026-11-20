@@ -88,6 +88,11 @@ from onyx.connectors.microsoft_utils.models import (
     SharepointRoleAssignment,
     SharepointSecurable,
 )
+from onyx.connectors.microsoft_utils.request_pacer import (
+    MicrosoftCall,
+    MicrosoftRequestPacer,
+    prepare_sdk_client,
+)
 from onyx.connectors.microsoft_utils.sharepoint_rest import SharepointRestReads
 from onyx.connectors.sharepoint.connector_utils import (
     tenant_domain_from_site_urls,
@@ -176,6 +181,8 @@ class SharepointSourceOperations(SourceOperations):
     _graph_gateway: MicrosoftGraphGateway | None = None
     _sdk_client: GraphClient | None = None
     _tenant_domain_cache: str | None = None
+    # Paces every Graph and REST call. None: the calls are not limited.
+    request_pacer: MicrosoftRequestPacer | None = None
 
     def _config(self, key: str, default: str) -> str:
         return str((self.connector_specific_config or {}).get(key) or default).rstrip(
@@ -217,6 +224,7 @@ class SharepointSourceOperations(SourceOperations):
             ),
             graph_api_host=self._env().graph_host,
             graph_api_version=GRAPH_API_VERSION,
+            get_pacer=lambda: self.request_pacer,
         )
         self._graph_gateway = gateway
         return gateway
@@ -239,8 +247,11 @@ class SharepointSourceOperations(SourceOperations):
         one, so every read gets its own client. Tests set ``_sdk_client``."""
         if self._sdk_client is not None:
             return self._sdk_client
-        return GraphClient(
-            self._gateway().token_response, environment=self._env().environment
+        return prepare_sdk_client(
+            GraphClient(
+                self._gateway().token_response, environment=self._env().environment
+            ),
+            lambda: self.request_pacer,
         )
 
     def _tenant_domain(self) -> str:
@@ -303,8 +314,12 @@ class SharepointSourceOperations(SourceOperations):
 
         msal_app: msal.ConfidentialClientApplication = self._auth().app
         tenant_domain: str = self._tenant_domain()
-        context = ClientContext(site_url).with_access_token(
-            lambda: acquire_token_for_rest(msal_app, tenant_domain, suffix)
+        context = prepare_sdk_client(
+            ClientContext(site_url).with_access_token(
+                lambda: acquire_token_for_rest(msal_app, tenant_domain, suffix)
+            ),
+            lambda: self.request_pacer,
+            MicrosoftCall.REST,
         )
         local.entry = (context, site_url, time.monotonic())
         return context
@@ -541,7 +556,10 @@ class SharepointSourceOperations(SourceOperations):
                 try:
                     return len(
                         download_with_cap(
-                            item.download_url, REQUEST_TIMEOUT_SECONDS, max_bytes
+                            item.download_url,
+                            REQUEST_TIMEOUT_SECONDS,
+                            max_bytes,
+                            self.request_pacer,
                         )
                     )
                 except requests.RequestException as error:
@@ -553,7 +571,12 @@ class SharepointSourceOperations(SourceOperations):
                     )
             gateway: MicrosoftGraphGateway = self._gateway()
             content: bytes = download_via_graph_api(
-                gateway.access_token, drive_id, item.id, max_bytes, self._base()
+                gateway.access_token,
+                drive_id,
+                item.id,
+                max_bytes,
+                self._base(),
+                self.request_pacer,
             )
         return len(content)
 
@@ -578,6 +601,7 @@ class SharepointSourceOperations(SourceOperations):
             self._base(),
             self._gateway().access_token(),
             raw_file_callback,
+            self.request_pacer,
         )
 
     @source_operation(

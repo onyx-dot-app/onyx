@@ -22,11 +22,13 @@ from onyx.connectors.interfaces import (
     SecondsSinceUnixEpoch,
     SlimConnector,
     SlimConnectorWithPermSync,
+    SourceApiLimiter,
 )
 from onyx.connectors.microsoft_utils.config import (
     DEFAULT_AUTHORITY_HOST,
     DEFAULT_GRAPH_API_HOST,
 )
+from onyx.connectors.microsoft_utils.request_pacer import MicrosoftRequestPacer
 from onyx.connectors.microsoft_utils.sharepoint_rest import SharepointRestReads
 from onyx.connectors.models import (
     ConnectorCheckpoint,
@@ -216,6 +218,10 @@ class TeamsConnector(
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         self.open(credentials)
         return None
+
+    def set_source_api_limiter(self, limiter: SourceApiLimiter) -> None:
+        super().set_source_api_limiter(limiter)
+        self.request_pacer = MicrosoftRequestPacer(limiter)
 
     def reindex(
         self,
