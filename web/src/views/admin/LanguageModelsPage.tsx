@@ -704,6 +704,7 @@ export default function LanguageModelsPage() {
                     : undefined
                 }
                 withLabel
+                disabled={autoModeLocked}
               >
                 <Tooltip
                   tooltip={
@@ -737,6 +738,7 @@ export default function LanguageModelsPage() {
                       : undefined
                   }
                   withLabel
+                  disabled={!!routerProvidersError}
                   // The loader spans the input column; the select hugs.
                   fillInput={routerProvidersLoading}
                 >

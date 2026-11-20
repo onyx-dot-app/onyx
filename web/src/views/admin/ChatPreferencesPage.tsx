@@ -431,6 +431,7 @@ export default function ChatPreferencesPage() {
                 tag={!businessTier ? plans[Tier.BUSINESS].tag : betaTag}
                 description={t("searchMode.description")}
                 withLabel
+                disabled={!businessTier || uniqueSources.length === 0}
               >
                 <Tooltip
                   tooltip={

@@ -16,7 +16,7 @@ Low-level `<label>` wrapper with cursor styling. Most consumers should use `Inpu
 | Prop       | Type      | Default | Description                                           |
 | ---------- | --------- | ------- | ----------------------------------------------------- |
 | `label`    | `string`  | —       | Sets `htmlFor` to associate with a form element by id |
-| `disabled` | `boolean` | `false` | Switches cursor to `not-allowed`                      |
+| `disabled` | `boolean` | `false` | Dims the row and switches cursor to `not-allowed`     |
 
 ### Vertical
 

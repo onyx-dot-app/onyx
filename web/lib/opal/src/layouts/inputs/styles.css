@@ -12,6 +12,12 @@
   @apply cursor-not-allowed;
 }
 
+/* The whole row dims, like `Disabled`. Inside a `Disabled` region it is
+   already dimmed. */
+.opal-input-label[data-disabled]:not([data-opal-disabled] *) {
+  @apply opacity-50;
+}
+
 /* A wrapping label is part of a switch's hit area, so hovering anywhere on
    the row paints the switch's hover state. */
 .opal-input-label:not([data-disabled]):hover .switch-normal {

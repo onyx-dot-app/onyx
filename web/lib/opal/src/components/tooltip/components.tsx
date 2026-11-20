@@ -78,6 +78,21 @@ function isRtl(): boolean {
   );
 }
 
+/**
+ * Keeps the tooltip open on a press of a disabled control inside the trigger.
+ * Radix closes on the trigger's pointer down and click, and skips that for a
+ * prevented event. A disabled control's tooltip gives the reason, so a press
+ * (including a click on its label) shows it until blur or the pointer leaves.
+ */
+function keepOpenOnDisabledPress(event: React.SyntheticEvent<HTMLElement>) {
+  const target = event.target;
+  if (!(target instanceof Element)) return;
+  const disabledElement = target.closest('[aria-disabled="true"]');
+  if (disabledElement && event.currentTarget.contains(disabledElement)) {
+    event.preventDefault();
+  }
+}
+
 /** Radix positions by physical side, so `start` and `end` follow `dir`. */
 function physicalSide(side: TooltipSide): "top" | "bottom" | "left" | "right" {
   if (side === "top" || side === "bottom") return side;
@@ -184,6 +199,8 @@ function Tooltip({
               ? trackPointer
               : undefined
         }
+        onPointerDown={keepOpenOnDisabledPress}
+        onClick={keepOpenOnDisabledPress}
       >
         {children}
       </TooltipPrimitive.Trigger>

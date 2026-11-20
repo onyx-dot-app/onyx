@@ -23,7 +23,7 @@ interface LabelProps extends WithoutStyles<
 > {
   /** Sets `htmlFor` on the `<label>` to associate it with a form element by id. */
   label?: string;
-  /** Switches cursor from `pointer` to `not-allowed`. */
+  /** Dims the row and switches its cursor from `pointer` to `not-allowed`. */
   disabled?: boolean;
   ref?: React.Ref<HTMLLabelElement>;
 }
