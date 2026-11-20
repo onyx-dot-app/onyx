@@ -356,6 +356,7 @@
   "GET /skills/review-requests": "manage:plugins",
   "GET /skills/users-over-limit": "manage:plugins",
   "GET /skills/{skill_id}": "basic",
+  "GET /skills/{skill_id}/plugin-skill": "basic",
   "GET /skills/{skill_id}/preview": "basic",
   "GET /tenants/anonymous-user-path": "admin",
   "GET /tenants/billing-information": "admin",
