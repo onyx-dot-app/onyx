@@ -1,0 +1,5 @@
+# Registered connectors whose docs page has another name, or that have no page.
+# One `<source> <page path under documentation/admins/connectors/official/>`
+# or `<source> none: <reason>` per line. check_connector_docs.py reads it.
+google_cloud_storage google_storage.mdx
+mock_connector none: test-only connector for the indexing pipeline tests

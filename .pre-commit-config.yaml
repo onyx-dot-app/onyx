@@ -365,6 +365,33 @@ repos:
         # Deleted task files must also trigger the check.
         always_run: true
         stages: [pre-commit]
+      - id: connector-docs
+        name: every registered connector has a docs page
+        description: "Fail a connector in registry.py with no page under documentation/admins/connectors/official/"
+        language: system
+        entry: python3 backend/lint/check_connector_docs.py
+        pass_filenames: false
+        # Deleted pages and worker files must also trigger the check.
+        always_run: true
+        stages: [pre-commit]
+      - id: desktop-v2-update-feed
+        name: every OS desktop-v2 builds has an update feed entry
+        description: "Fail a desktop-v2 build OS with no latest.json platform entry in the release"
+        language: python
+        entry: python tools/desktop_v2/check_update_feed.py
+        additional_dependencies: [PyYAML==6.0.3]
+        pass_filenames: false
+        files: ^(\.github/workflows/desktop-v2\.yml|tools/desktop_v2/.*)$
+        stages: [pre-commit]
+      - id: celery-queue-consumers
+        name: every Celery queue a task is sent to has a worker
+        description: "Fail a send_task, apply_async or beat queue that no worker consumes in supervisord.conf and Helm"
+        language: system
+        entry: python3 backend/lint/check_celery_queue_consumers.py
+        pass_filenames: false
+        # Deleted pages and worker files must also trigger the check.
+        always_run: true
+        stages: [pre-commit]
       # Lower the baseline with `check_no_http_exception.py --write-baseline`.
       - id: no-http-exception
         name: OnyxError, not HTTPException
