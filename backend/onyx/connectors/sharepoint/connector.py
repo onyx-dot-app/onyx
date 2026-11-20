@@ -1778,12 +1778,7 @@ class SharepointConnector(
                 parent_hierarchy_raw_node_id=parent_hierarchy_url,
                 treat_sharing_link_as_public=self.treat_sharing_link_as_public,
                 raw_file_callback=self.raw_file_callback,
-                # Only passed when the file inherits, for the fetching path.
-                **(
-                    {"inherited_access": inherited_access}
-                    if inherited_access is not None
-                    else {}
-                ),
+                inherited_access=inherited_access,
             )
 
             if isinstance(doc_or_failure, Document):
@@ -1944,7 +1939,9 @@ class SharepointConnector(
         return include_permissions and not self.treat_sharing_link_as_public
 
     def _inherited_access(
-        self, payload: SharepointListingPayload
+        self,
+        payload: SharepointListingPayload,
+        permission_cache: SharepointPermissionCache,
     ) -> ExternalAccess | None:
         """The access of the parent of a listed file that has no permissions
         of its own: its folder, or the library for a file at the root. The
@@ -1970,14 +1967,14 @@ class SharepointConnector(
         with self._container_locks_guard:
             lock = self._container_locks.setdefault(key, threading.Lock())
         with lock:
-            cached = self._permission_cache.get_container_access(key)
+            cached = permission_cache.get_container_access(key)
             if cached is not None:
                 return cached
             try:
                 access = get_sharepoint_hierarchy_node_external_access(
                     self.ops,
                     payload.site_url,
-                    self._permission_cache,
+                    permission_cache,
                     HierarchyNodeType.FOLDER
                     if server_relative_path
                     else HierarchyNodeType.DRIVE,
@@ -1995,7 +1992,7 @@ class SharepointConnector(
                     e,
                 )
                 return None
-            self._permission_cache.set_container_access(key, access)
+            permission_cache.set_container_access(key, access)
             return access
 
     def _start_full_pass(
@@ -2905,6 +2902,7 @@ class SharepointConnector(
             web_url="",
             list_id=payload.list_id,
         )
+        permission_cache = self._run_permission_cache(payload)
         return next(
             self._convert_drive_item(
                 driveitem,
@@ -2913,9 +2911,11 @@ class SharepointConnector(
                 include_permissions,
                 payload.parent_hierarchy_raw_node_id,
                 is_targeted_reindex=False,
-                permission_cache=self._run_permission_cache(payload),
+                permission_cache=permission_cache,
                 inherited_access=(
-                    self._inherited_access(payload) if include_permissions else None
+                    self._inherited_access(payload, permission_cache)
+                    if include_permissions
+                    else None
                 ),
             ),
             None,

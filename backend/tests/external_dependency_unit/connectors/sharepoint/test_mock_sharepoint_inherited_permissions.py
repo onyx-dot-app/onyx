@@ -22,7 +22,6 @@ from onyx.connectors.sharepoint.listing import (
 )
 from tests.external_dependency_unit.connectors.sharepoint.conftest import (
     MockSharepoint,
-    clear_sharepoint_permission_cache,
     list_stubs,
 )
 
@@ -172,9 +171,9 @@ def test_sharing_links_as_public_keeps_a_read_for_each_file(
 def test_a_change_of_a_folders_permissions_reaches_its_files(
     own_mock_sharepoint: MockSharepoint,
 ) -> None:
-    """A second conversion does not use the access that the first one read
-    for the folder for more than a short time, and a file whose folder gets
-    new permissions gets them."""
+    """A second listing run does not use the access that the first run read
+    for the folder, in Redis or in the connector object, so a file whose
+    folder gets new permissions gets them."""
     mock = own_mock_sharepoint
     mock.set_corpus(_CORPUS | {"unique_permission_fraction": 0.0})
     connector = mock.build_connector(certificate=True)
@@ -188,10 +187,7 @@ def test_a_change_of_a_folders_permissions_reaches_its_files(
         inherit=False,
         grants=[{"principal": {"kind": "user", "key": user}, "role": "read"}],
     )
-    # The folder's access is kept in Redis for a short time. A new task
-    # after that time reads it again.
-    connector = mock.build_connector(certificate=True)
-    clear_sharepoint_permission_cache()
+    # The same connector object, as a conversion worker keeps it.
     listing = list_stubs(connector, include_permissions=True)
 
     assert _convert(connector, listing.stubs) == _expected_access(mock)

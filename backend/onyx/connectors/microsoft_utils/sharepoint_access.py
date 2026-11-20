@@ -67,8 +67,9 @@ class SharepointPermissionCache(BaseModel):
         self.container_access[key] = access
 
 
-# The access of a folder or a library in Redis is used for this long. It is
-# short: a change to a folder's permissions must reach the files in it soon.
+# The access of a folder or a library in Redis is used for this long, in one
+# listing run. It is short: a change to a folder's permissions during a long
+# run must reach the files that the run converts later.
 CONTAINER_ACCESS_TTL_SECONDS = 600
 _CONTAINER_ACCESS_KEY_PREFIX = "sharepoint_container_access"
 
@@ -124,10 +125,9 @@ class SharedSharepointPermissionCache(SharepointPermissionCache):
         except RedisError as error:
             logger.warning("Could not store a SharePoint group expansion: %s", error)
 
-    @staticmethod
-    def _container_key(key: str) -> str:
+    def _container_key(self, key: str) -> str:
         digest = hashlib.sha256(key.encode()).hexdigest()
-        return f"{_CONTAINER_ACCESS_KEY_PREFIX}:{digest}"
+        return f"{_CONTAINER_ACCESS_KEY_PREFIX}:{self.scope}:{digest}"
 
     def get_container_access(self, key: str) -> ExternalAccess | None:
         """From Redis, where the entry ends after

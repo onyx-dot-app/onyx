@@ -296,9 +296,8 @@ def list_stubs(
 
 
 def clear_sharepoint_permission_cache() -> None:
-    """Removes the group expansions and the folder access that the connector
-    keeps in Redis for a time. Corpora of different tests use the same site
-    URLs and list ids."""
+    """Removes the group expansions and the folder access that conversion
+    keeps in Redis for a listing run, so that a test leaves none behind."""
     client = get_redis_client()
     for pattern in ("sharepoint_container_access:*", "sharepoint_group_expansion:*"):
         for key in client.scan_iter(pattern):
@@ -306,5 +305,7 @@ def clear_sharepoint_permission_cache() -> None:
 
 
 @pytest.fixture(autouse=True)
-def _fresh_sharepoint_permission_cache() -> None:
+def _fresh_sharepoint_permission_cache() -> Iterator[None]:
+    clear_sharepoint_permission_cache()
+    yield
     clear_sharepoint_permission_cache()
