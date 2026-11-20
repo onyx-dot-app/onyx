@@ -333,8 +333,9 @@ async def search_indexed_documents(
 
     Returns ``{"results": [{title, url, source_type, content, updated_at,
     metadata}, ...]}``. ``metadata`` holds source fields such as a Jira
-    reporter or assignee, and is omitted when the document has none. Results are ordered by LLM-judged relevance. ``content`` is the
-    full chunk of the document the LLM selected; in the rare case the LLM
+    reporter or assignee, and is omitted when the document has none.
+    Results are ordered by LLM-judged relevance. ``content`` is the full
+    chunk of the document the LLM selected; in the rare case the LLM
     selection step yields no full chunk for a doc, it falls back to the
     short search blurb. With `retrieval_only`, results keep retrieval order
     and ``content`` is the retrieved section and its surrounding chunks.
