@@ -60,7 +60,9 @@ export const PublishedFilesGrid = memo(function PublishedFilesGrid({
       )}
       <CardGrid columns="two-to-three">
         {files.map((file) => {
-          const label = publishedFileLabel(file);
+          const name = sharingALabel.has(file.file_id)
+            ? publishedFilePath(file)
+            : publishedFileLabel(file);
           const FileIcon = getFileIcon(file.name);
           const icon = (
             <FileIcon
@@ -71,12 +73,8 @@ export const PublishedFilesGrid = memo(function PublishedFilesGrid({
           return (
             <div key={file.file_id} data-published-file={file.file_id}>
               <OutputTileFrame
-                label={t("filesTab.tile.ariaLabel", { name: label })}
-                name={
-                  sharingALabel.has(file.file_id)
-                    ? publishedFilePath(file)
-                    : label
-                }
+                label={t("filesTab.tile.ariaLabel", { name })}
+                name={name}
                 isUnseen={unseenFileIds.includes(file.file_id)}
                 onOpen={() => onOpen(file)}
                 onDownload={() =>

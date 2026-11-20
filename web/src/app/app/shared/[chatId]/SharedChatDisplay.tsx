@@ -146,7 +146,7 @@ export default function SharedChatDisplay({
             state={rightPanel}
             dispatch={dispatchRightPanel}
             files={publishedFiles}
-            publishOrder={publishOrder(loadedPublishedFiles, messageTree)}
+            publishIndex={publishOrder(loadedPublishedFiles, messageTree)}
             sources={null}
             hasSources={false}
           />

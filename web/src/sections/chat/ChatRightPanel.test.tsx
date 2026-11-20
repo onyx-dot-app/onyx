@@ -461,15 +461,24 @@ test("on a narrow workspace, which hides the size button, Escape first closes th
   expect(screen.queryByRole("tab", { name: "Q3 report" })).toBeNull();
 });
 
-test("file tabs of one shown name show their paths, and an older publish says so", async () => {
+test("files of one shown name show their paths, and an older publish says so", async () => {
   const draft = {
     ...REPORT,
     file_id: "file-draft",
     path: "/home/onyx/drafts/report.md",
     display_path: "drafts/report.md",
   };
-  const older = { ...REPORT, file_id: "file-old" };
+  const older = { ...REPORT, file_id: "file-old", title: "Q2 report" };
   renderChat([[older], [draft, REPORT]]);
+  // Files lists the newest publish of each path, by path where the shown
+  // names match
+  update({ type: "toggleFiles" });
+  expect(
+    screen.getByRole("button", { name: "Open drafts/report.md" })
+  ).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Open report.md" })).toBeVisible();
+  expect(screen.queryByRole("button", { name: "Open Q2 report" })).toBeNull();
+
   act(() => openPublishedFileInChat(draft));
   act(() => openPublishedFileInChat(REPORT));
   act(() => openPublishedFileInChat(older));
@@ -479,15 +488,46 @@ test("file tabs of one shown name show their paths, and an older publish says so
     "dir",
     "auto"
   );
+  // The listed publish of the path is not an earlier version; the older is
   expect(screen.getByRole("tab", { name: "report.md" })).toBeInTheDocument();
   // The name shows apart from the sentence, so a U+202E or right-to-left
   // name cannot reorder "(earlier version)"
   const earlier = screen.getByRole("tab", {
-    name: "report.md (earlier version)",
+    name: "Q2 report (earlier version)",
   });
-  expect(earlier.querySelector("bdi")).toHaveTextContent(/^report\.md$/);
-  expect(earlier).toHaveTextContent(/^report\.md \(earlier version\)$/);
-  await preview("Q3 report");
+  expect(earlier.querySelector("bdi")).toHaveTextContent(/^Q2 report$/);
+  expect(earlier).toHaveTextContent(/^Q2 report \(earlier version\)$/);
+  await preview("Q2 report");
+});
+
+test("Escape from an older publish's preview, which has no tile, focuses the Files tab, and the next Escape closes the panel", async () => {
+  const older = { ...REPORT, file_id: "file-old", title: "Q2 report" };
+  renderChat([[older], [REPORT]]);
+  act(() => openPublishedFileInChat(older));
+  fireEvent.keyDown(await preview("Q2 report"), { key: "Escape" });
+
+  const filesTab = screen.getByRole("tab", { name: "Files" });
+  expect(filesTab).toHaveFocus();
+  fireEvent.keyDown(filesTab, { key: "Escape" });
+  expect(panel().mode).toBe("closed");
+});
+
+test("a card opened after a tab moves takes focus to its preview", async () => {
+  renderChat([[REPORT, CHART]]);
+  act(() => openPublishedFileInChat(REPORT));
+  act(() => openPublishedFileInChat(CHART));
+  await preview("Chart");
+  fireEvent.keyDown(screen.getByRole("tab", { name: "Q3 report" }), {
+    key: "ArrowRight",
+    altKey: true,
+  });
+
+  const card = screen.getByRole("button", { name: "Preview report.md" });
+  await act(async () => {
+    card.focus();
+    card.click();
+  });
+  expect(await preview("Q3 report")).toHaveFocus();
 });
 
 test("a tab of a newer publish whose object is missing is not an earlier version", async () => {
@@ -663,6 +703,12 @@ test("a closed panel does not watch the workspace's width, and measures it again
   const view = render(<Chat replies={[[REPORT]]} workspaceWidth={1000} />);
   update({ type: "toggleFiles" });
   update({ type: "closePanel" });
+  expect(
+    observers.filter(
+      ({ target }) =>
+        target instanceof HTMLElement && target.dataset.workspaceWidth
+    )
+  ).toHaveLength(0);
   const before = mockPanelRenders.mock.calls.length;
 
   for (let width = 900; width < 960; width++)

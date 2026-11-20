@@ -317,6 +317,11 @@ test.each([
     const scrollTo = jest.fn();
     container.scrollTo = scrollTo;
     try {
+      // The reader is at the bottom of the content
+      act(() => {
+        container.scrollTop = 600;
+        container.dispatchEvent(new Event("scroll"));
+      });
       // A side panel opens: the messages wrap into more lines
       await act(async () => {
         containerWidth = width;

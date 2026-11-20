@@ -18,6 +18,7 @@ export function WorkspaceHome({
   return (
     <Section
       flexDirection="row"
+      justifyContent="center"
       alignItems="start"
       gap={0}
       padding={6}
