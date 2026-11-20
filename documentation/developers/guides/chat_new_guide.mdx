@@ -180,7 +180,10 @@ class ChatFullResponse(BaseModel):
 ```
 
 Each `ToolCallResponse` of a `publish_files` call lists the files it published in `published_files`.
-Each entry has the fields `file_id`, `name`, `title`, `path`, `size`, and `mime_type`.
+Each entry has the fields `file_id`, `artifact_id`, `version`, `name`, `title`, `path`, `size`, and `mime_type`.
+Every publish of one `path` in a chat is a version of one artifact.
+It has the same `artifact_id` and the next `version`, from 1.
+A message saved before files had versions has `artifact_id` and `version` set to null.
 
 ## Tool Approvals
 

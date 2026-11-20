@@ -478,8 +478,9 @@ class FileStoreType(str, Enum):
 
 
 # Key in FileRecord.file_metadata naming the chat session that produced a
-# chat output file (CHAT_OUTPUT_FILE_ORIGINS). user_can_access_chat_file gives
-# the file to the session's readers.
+# generated image (FileOrigin.CHAT_IMAGE_GEN). user_can_access_chat_file gives
+# the file to the session's readers. A published file's chat is its
+# artifact's (ChatArtifact).
 CHAT_SESSION_ID_FILE_METADATA_KEY = "chat_session_id"
 
 

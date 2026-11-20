@@ -532,8 +532,10 @@ def prepare_chat_turn(
                     )
             # One sandbox serves one user, and anonymous visitors share one
             # user. Incognito cleanup does not reach the sandbox's files. Two
-            # models must not change one session directory at once. Bots
-            # get no sandbox until they have service-account sandboxes.
+            # models must not change one session directory at once, so a
+            # multi-model turn has no sandbox tools and publishes no files;
+            # the web's file cards rely on it. Bots get no sandbox until they
+            # have service-account sandboxes.
             sandbox_tools = (
                 HARNESS_SANDBOX_ENABLED
                 and not user.is_anonymous

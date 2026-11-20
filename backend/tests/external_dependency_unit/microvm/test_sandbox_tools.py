@@ -12,13 +12,13 @@ from collections.abc import Callable, Generator, Iterator, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from contextvars import copy_context
 from typing import Any
-from unittest.mock import patch
+from unittest.mock import ANY, patch
 from uuid import UUID, uuid4
 
 import pytest
 from fastapi import Request
 from pydantic import BaseModel, ConfigDict, JsonValue
-from sqlalchemy import select, update
+from sqlalchemy import Text, cast, select, update
 from sqlalchemy.orm import Session
 
 from onyx.access.access import user_can_access_chat_file
@@ -42,7 +42,6 @@ from onyx.chat.process_message import (
 from onyx.chat.renderer import SPILLED_OUTPUT_NOTE
 from onyx.chat.stop_signal_checker import request_stop
 from onyx.configs.constants import (
-    CHAT_SESSION_ID_FILE_METADATA_KEY,
     DEFAULT_PERSONA_ID,
     DocumentSource,
     FileOrigin,
@@ -70,6 +69,8 @@ from onyx.db.enums import (
 )
 from onyx.db.models import (
     ApprovalRequest,
+    ChatArtifact,
+    ChatArtifactVersion,
     ChatMessage,
     ChatSession,
     FileRecord,
@@ -87,7 +88,6 @@ from onyx.db.tools import get_builtin_tool
 from onyx.db.users import fetch_user_by_id
 from onyx.deep_research.agent import DeepResearchAgent
 from onyx.error_handling.exceptions import OnyxError
-from onyx.file_store.constants import CHAT_ARTIFACT_FILE_PREFIX
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.utils import plaintext_file_name_for_id
 from onyx.integrations.models import ApprovalMode
@@ -132,13 +132,13 @@ from onyx.server.features.build.sandbox.harness_base import (
     ONYX_VM_FILES_ROOT,
     TOOL_RESULTS_ROOT,
     ExecSessionNotFoundError,
-    session_workspace,
 )
 from onyx.server.features.build.sandbox.models import (
     ExecEvent,
     ExecOutputDelta,
     HarnessSandboxRef,
     SandboxPathInfo,
+    session_workspace,
 )
 from onyx.server.query_and_chat import streaming_models as packets
 from onyx.server.query_and_chat.chat_backend import (
@@ -2236,15 +2236,27 @@ def test_a_bulk_delete_keeps_a_chat_created_while_it_runs(
 
 
 def _published_records(db_session: Session, chat_session_id: UUID) -> list[FileRecord]:
-    """The published files stamped with the chat session."""
+    """The published files of the chat session."""
     db_session.expire_all()
     return list(
         db_session.scalars(
-            select(FileRecord).where(
-                FileRecord.file_origin == FileOrigin.CHAT_ARTIFACT,
-                FileRecord.file_metadata[CHAT_SESSION_ID_FILE_METADATA_KEY].astext
-                == str(chat_session_id),
+            select(FileRecord)
+            .join(
+                ChatArtifactVersion,
+                ChatArtifactVersion.file_id == FileRecord.file_id,
             )
+            .join(ChatArtifact, ChatArtifact.id == ChatArtifactVersion.artifact_id)
+            .where(ChatArtifact.chat_session_id == chat_session_id)
+        )
+    )
+
+
+def _remaining_file_ids(db_session: Session, file_ids: list[str]) -> list[str]:
+    """The file IDs among `file_ids` that still have a file record."""
+    db_session.expire_all()
+    return list(
+        db_session.scalars(
+            select(FileRecord.file_id).where(FileRecord.file_id.in_(file_ids))
         )
     )
 
@@ -2286,7 +2298,7 @@ def test_published_files_stream_replay_belong_to_the_message_and_go_with_the_cha
                     "description": "The report and its chart.",
                 },
             ),
-            # Publishing a name again adds a version.
+            # Publishing a path again adds a version of its artifact.
             tool_step(PublishFilesTool.NAME, "again", {"files": [{"path": report}]}),
             Delta(content="Done."),
         ]
@@ -2297,14 +2309,16 @@ def test_published_files_stream_replay_belong_to_the_message_and_go_with_the_cha
     ends = [obj for obj in live if isinstance(obj, packets.PublishFilesEnd)]
     published = [file for end in ends for file in end.files]
     assert [
-        (file.name, file.title, file.path, file.size, file.mime_type)
+        (file.name, file.title, file.path, file.size, file.mime_type, file.version)
         for file in published
     ] == [
-        ("report.csv", "Report", report, 8, "text/csv"),
-        ("chart.svg", None, chart, 6, "image/svg+xml"),
-        ("report.csv", None, report, 8, "text/csv"),
+        ("report.csv", "Report", report, 8, "text/csv", 1),
+        ("chart.svg", None, chart, 6, "image/svg+xml", 1),
+        ("report.csv", None, report, 8, "text/csv", 2),
     ]
     assert len({file.file_id for file in published}) == 3
+    assert published[0].artifact_id == published[2].artifact_id
+    assert published[0].artifact_id != published[1].artifact_id
     assert live == [
         packets.PublishFilesStart(
             files=[
@@ -2323,7 +2337,10 @@ def test_published_files_stream_replay_belong_to_the_message_and_go_with_the_cha
     assert _sandbox_packets(replayed) == live
     text = last_tool_text(llm, "publish")
     assert text.startswith("Published.")
-    assert f"- {report}: file ID {published[0].file_id}, 8 bytes, text/csv" in text
+    assert (
+        f"- {report}: version 1, file ID {published[0].file_id}, 8 bytes, text/csv"
+        in text
+    )
     assert chart in text
 
     store = get_default_file_store()
@@ -2333,10 +2350,32 @@ def test_published_files_stream_replay_belong_to_the_message_and_go_with_the_cha
         record = store.read_file_record(file.file_id)
         assert record.file_origin == FileOrigin.CHAT_ARTIFACT
         assert record.display_name == file.name
-        assert record.file_metadata == {
-            CHAT_SESSION_ID_FILE_METADATA_KEY: str(chat.chat_session_id)
-        }
+        assert record.file_metadata is None
+        # The chat's file list and access read the artifact and its version.
+        version = db_session.get_one(
+            ChatArtifactVersion, (file.artifact_id, file.version)
+        )
+        artifact = db_session.get_one(ChatArtifact, file.artifact_id)
+        assert (
+            version.file_id,
+            version.title,
+            artifact.chat_session_id,
+            artifact.path,
+        ) == (file.file_id, file.title, chat.chat_session_id, file.path)
         assert store.read_file(file.file_id).read() == data
+    # Packets carry the path to show; the saved details do not store it.
+    assert [file.display_path for file in published] == [
+        "out/report.csv",
+        chart,
+        "out/report.csv",
+    ]
+    saved_results = db_session.scalars(
+        select(cast(ToolCallRecord.result, Text)).where(
+            ToolCallRecord.chat_session_id == chat.chat_session_id
+        )
+    ).all()
+    assert any(published[0].file_id in saved for saved in saved_results)
+    assert not any("display_path" in saved for saved in saved_results)
     assert _answer_file_ids(db_session, chat.chat_session_id) == [
         file.file_id for file in published
     ]
@@ -2344,7 +2383,7 @@ def test_published_files_stream_replay_belong_to_the_message_and_go_with_the_cha
     delete_chat_session_by_id(
         chat.chat_session_id, hard_delete=True, user=chat.user, db_session=db_session
     )
-    assert _published_records(db_session, chat.chat_session_id) == []
+    assert _remaining_file_ids(db_session, [file.file_id for file in published]) == []
 
 
 @pytest.mark.usefixtures("node", "initialize_file_store")
@@ -2363,8 +2402,6 @@ def test_everyone_who_can_read_the_chat_can_download_a_published_file(
     result, _ = _run(tools.publish_files, {"files": [{"path": "report.md"}]})
     assert isinstance(result.details, PublishedFiles)
     [file] = result.details.files
-    # Not a UUID: the download's user file lookup passes it through.
-    assert file.file_id.startswith(f"{CHAT_ARTIFACT_FILE_PREFIX}{chat_session.id}-")
     other = make_test_user("published_viewer")
 
     def download(reader: User) -> int:
@@ -2377,7 +2414,7 @@ def test_everyone_who_can_read_the_chat_can_download_a_published_file(
         ).status_code
 
     try:
-        # No response saved the file yet: the chat stamp alone gives access.
+        # No response saved the file yet: the artifact alone gives access.
         assert download(user) == 200
         with pytest.raises(OnyxError):
             download(other)
@@ -2412,9 +2449,14 @@ def test_a_publish_that_fails_on_one_file_publishes_none(
     make_tools: MakeTools,
     path: str,
     error: str,
+    user: User,
 ) -> None:
     monkeypatch.setattr(sandbox_tools, "PUBLISH_FILES_MAX_BYTES", 16)
-    tools = make_tools()
+    tools = make_tools(
+        create_chat_session(
+            db_session, "published", user.id, persona_id=DEFAULT_PERSONA_ID
+        ).id
+    )
     sandbox.write_file(tools.ref, "report.md", b"# Report\n")
     sandbox.write_file(tools.ref, "out/a.txt", b"a")
     sandbox.write_file(tools.ref, "big.bin", b"x" * 17)
@@ -2427,8 +2469,114 @@ def test_a_publish_that_fails_on_one_file_publishes_none(
 
     assert result.is_error
     assert result.text.endswith(error)
-    # The file that the call copied first is deleted again.
+    # The file that the call copied first is deleted again, with its artifact.
     assert _published_records(db_session, tools.ref.session_id) == []
+    assert (
+        db_session.scalars(
+            select(ChatArtifact.id).where(
+                ChatArtifact.chat_session_id == tools.ref.session_id
+            )
+        ).all()
+        == []
+    )
+
+
+@pytest.mark.usefixtures("node", "initialize_file_store")
+def test_a_paged_chat_load_lists_the_latest_version_of_each_artifact(
+    db_session: Session, sandbox: FirecrackerHarnessSandbox, chat: SandboxChat
+) -> None:
+    """A first answer publishes a report and a chart. A later answer's code
+    mode program publishes the report's path again. A load of only the latest
+    message lists the report's second version and the chart, by first
+    publish, each with its path and title."""
+    try:
+        ref = chat.ref(db_session)
+        sandbox.write_file(ref, "report.md", b"# Draft\n")
+        sandbox.write_file(ref, "chart.svg", b"<svg/>")
+        chat.send(
+            ChatLLM(
+                [
+                    tool_step(
+                        PublishFilesTool.NAME,
+                        "publish",
+                        {
+                            "files": [
+                                {"path": "report.md", "title": "Report"},
+                                {"path": "chart.svg"},
+                            ]
+                        },
+                    ),
+                    Delta(content="Done."),
+                ]
+            )
+        )
+        sandbox.write_file(ref, "report.md", b"# Final report\n")
+        parts = chat.send(
+            ChatLLM(
+                [
+                    code_step(
+                        "code",
+                        "print(await tools.publish_files(files=[{'path': 'report.md'}]))\n",
+                    ),
+                    Delta(content="Done."),
+                ]
+            ),
+            code_mode=True,
+        )
+        [live_end] = [
+            obj
+            for obj in _sandbox_packets(parts)
+            if isinstance(obj, packets.PublishFilesEnd)
+        ]
+        # The path to show is relative to the chat's working directory.
+        assert [file.display_path for file in live_end.files] == ["report.md"]
+
+        db_session.expire_all()
+        first_answer, last_answer = db_session.scalars(
+            select(ChatMessage)
+            .where(
+                ChatMessage.chat_session_id == chat.chat_session_id,
+                ChatMessage.message_type == MessageType.ASSISTANT,
+            )
+            .order_by(ChatMessage.id)
+        ).all()
+        detail = get_chat_session(
+            session_id=chat.chat_session_id,
+            limit=1,
+            user=chat.user,
+            db_session=db_session,
+        )
+
+        assert first_answer.id not in {
+            message.message_id for message in detail.messages
+        }
+        workspace = session_workspace(chat.chat_session_id)
+        assert detail.published_files is not None
+        assert [
+            (file.name, file.title, file.path, file.size, file.mime_type)
+            for file in detail.published_files
+        ] == [
+            ("report.md", None, f"{workspace}/report.md", 15, "text/markdown"),
+            ("chart.svg", None, f"{workspace}/chart.svg", 6, "image/svg+xml"),
+        ]
+        assert [file.display_path for file in detail.published_files] == [
+            "report.md",
+            "chart.svg",
+        ]
+        assert [
+            (file.file_id, file.artifact_id, file.version)
+            for file in detail.published_files
+        ] == [
+            ((last_answer.files or [])[0]["id"], live_end.files[0].artifact_id, 2),
+            ((first_answer.files or [])[1]["id"], ANY, 1),
+        ]
+    finally:
+        delete_chat_session_by_id(
+            chat.chat_session_id,
+            hard_delete=True,
+            user=chat.user,
+            db_session=db_session,
+        )
 
 
 @pytest.mark.usefixtures("node", "initialize_file_store")
@@ -2489,9 +2637,16 @@ def test_the_non_streaming_response_lists_published_files(
     )
 
     [call] = response.tool_calls
+    [file_id] = _answer_file_ids(db_session, chat.chat_session_id)
     assert call.published_files == [
         PublishedFile(
-            file_id=_answer_file_ids(db_session, chat.chat_session_id)[0],
+            file_id=file_id,
+            artifact_id=db_session.scalars(
+                select(ChatArtifactVersion.artifact_id).where(
+                    ChatArtifactVersion.file_id == file_id
+                )
+            ).one(),
+            version=1,
             name="report.md",
             path=f"{session_workspace(chat.chat_session_id)}/report.md",
             size=9,
@@ -2611,18 +2766,23 @@ def test_a_stop_during_the_last_copy_publishes_nothing(
     db_session: Session,
     sandbox: FirecrackerHarnessSandbox,
     make_tools: MakeTools,
+    user: User,
 ) -> None:
-    tools = make_tools()
+    tools = make_tools(
+        create_chat_session(
+            db_session, "published", user.id, persona_id=DEFAULT_PERSONA_ID
+        ).id
+    )
     sandbox.write_file(tools.ref, "report.md", b"# Report\n")
     cancellation = CancellationSignal()
-    save_chat_output_file = sandbox_tools.save_chat_output_file
+    save_chat_artifact = sandbox_tools.save_chat_artifact
 
-    def save_then_stop(*args: Any, **kwargs: Any) -> str:
-        file_id = save_chat_output_file(*args, **kwargs)
+    def save_then_stop(*args: Any, **kwargs: Any) -> PublishedFile:
+        file = save_chat_artifact(*args, **kwargs)
         cancellation.cancel()
-        return file_id
+        return file
 
-    monkeypatch.setattr(sandbox_tools, "save_chat_output_file", save_then_stop)
+    monkeypatch.setattr(sandbox_tools, "save_chat_artifact", save_then_stop)
 
     with pytest.raises(AgentCancelled):
         tools.publish_files.run(
@@ -2676,9 +2836,12 @@ def test_a_parked_response_lists_its_published_file_once_and_a_chat_delete_delet
         )
     ).one()
     response_id = approval.chat_message_id
-    [record] = _published_records(db_session, chat.chat_session_id)
+    [file_id] = [
+        record.file_id
+        for record in _published_records(db_session, chat.chat_session_id)
+    ]
     if not resume:
-        # No save lists the file: the chat delete finds it by its ID.
+        # No save lists the file: the chat delete finds it by its row.
         assert _answer_file_ids(db_session, chat.chat_session_id) == []
         delete_chat_session_by_id(
             chat.chat_session_id,
@@ -2686,7 +2849,7 @@ def test_a_parked_response_lists_its_published_file_once_and_a_chat_delete_delet
             user=chat.user,
             db_session=db_session,
         )
-        assert _published_records(db_session, chat.chat_session_id) == []
+        assert _remaining_file_ids(db_session, [file_id]) == []
         return
 
     with get_session_with_current_tenant() as session:
@@ -2705,18 +2868,25 @@ def test_a_parked_response_lists_its_published_file_once_and_a_chat_delete_delet
 
     _wait_until(completed)
     assert chat_turn_work.wait_idle(timeout=30)
-    assert _answer_file_ids(db_session, chat.chat_session_id) == [record.file_id]
+    assert _answer_file_ids(db_session, chat.chat_session_id) == [file_id]
     delete_chat_session_by_id(
         chat.chat_session_id, hard_delete=True, user=chat.user, db_session=db_session
     )
-    assert _published_records(db_session, chat.chat_session_id) == []
+    assert _remaining_file_ids(db_session, [file_id]) == []
 
 
 @pytest.mark.usefixtures("node", "initialize_file_store")
 def test_a_publish_of_too_many_files_publishes_none(
-    db_session: Session, sandbox: FirecrackerHarnessSandbox, make_tools: MakeTools
+    db_session: Session,
+    sandbox: FirecrackerHarnessSandbox,
+    make_tools: MakeTools,
+    user: User,
 ) -> None:
-    tools = make_tools()
+    tools = make_tools(
+        create_chat_session(
+            db_session, "published", user.id, persona_id=DEFAULT_PERSONA_ID
+        ).id
+    )
     sandbox.write_file(tools.ref, "report.md", b"# Report\n")
 
     result, _ = _run(

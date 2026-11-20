@@ -2,13 +2,15 @@
 
 from uuid import UUID
 
-from sqlalchemy import Row, and_, or_, select
+from sqlalchemy import and_, or_, select
 from sqlalchemy import cast as sa_cast
 from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import CHAT_OUTPUT_FILE_ORIGINS, FileOrigin
 from onyx.db.models import (
+    ChatArtifact,
+    ChatArtifactVersion,
     ChatMessage,
     ChatSession,
     ChatSessionSharedStatus,
@@ -91,16 +93,29 @@ def user_can_access_chat_message_file(
 
 def get_chat_output_file_row(
     db_session: Session, file_id: str
-) -> Row[tuple[FileOrigin, JSON_ro]] | None:
-    """The origin and metadata of a chat output file
-    (`CHAT_OUTPUT_FILE_ORIGINS`); None for any other file. The row is
-    returned, not its values, because the metadata itself can be NULL."""
-    return db_session.execute(
-        select(FileRecord.file_origin, FileRecord.file_metadata).where(
-            FileRecord.file_id == file_id,
-            FileRecord.file_origin.in_(CHAT_OUTPUT_FILE_ORIGINS),
+) -> tuple[FileOrigin, JSON_ro, UUID | None] | None:
+    """The origin, metadata and artifact's chat of a chat output file
+    (`CHAT_OUTPUT_FILE_ORIGINS`); None for any other file. The metadata
+    itself can be NULL."""
+    return (
+        db_session.execute(
+            select(
+                FileRecord.file_origin,
+                FileRecord.file_metadata,
+                ChatArtifact.chat_session_id,
+            )
+            .outerjoin(
+                ChatArtifactVersion, ChatArtifactVersion.file_id == FileRecord.file_id
+            )
+            .outerjoin(ChatArtifact, ChatArtifact.id == ChatArtifactVersion.artifact_id)
+            .where(
+                FileRecord.file_id == file_id,
+                FileRecord.file_origin.in_(CHAT_OUTPUT_FILE_ORIGINS),
+            )
         )
-    ).first()
+        .tuples()
+        .first()
+    )
 
 
 def user_can_read_chat_session(

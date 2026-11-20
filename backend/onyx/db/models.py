@@ -5615,6 +5615,63 @@ class FileContent(Base):
     file_size: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
 
 
+class ChatArtifact(Base):
+    """A file that the model published from its sandbox (publish_files) into a
+    root chat, across its versions (ChatArtifactVersion): every publish of one
+    VM path in the chat. Its files inherit the chat's access, and a hard chat
+    delete deletes them
+    (db/chat.py:delete_messages_and_files_from_chat_session) before the
+    cascade from the chat removes the rows."""
+
+    __tablename__ = "chat_artifact"
+    # Also the index of the chat's artifacts
+    __table_args__ = (UniqueConstraint("chat_session_id", "path"),)
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    # The root chat: a subagent run publishes into its root chat.
+    chat_session_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("chat_session.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # The absolute, normalized VM path
+    path: Mapped[str] = mapped_column(Text, nullable=False)
+    # The first publish
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    # The latest publish
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class ChatArtifactVersion(Base):
+    """One publish of a ChatArtifact: its file, numbered from 1 in publish
+    order."""
+
+    __tablename__ = "chat_artifact_version"
+
+    artifact_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("chat_artifact.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    version: Mapped[int] = mapped_column(Integer, primary_key=True)
+    file_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("file_record.file_id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
+    title: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
 class Skill(Base):
     """A built-in skill. Old custom rows stay in the table for a rollback, with
     columns this model does not map (``alembic/env.py``)."""

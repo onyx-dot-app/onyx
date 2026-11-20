@@ -136,8 +136,12 @@ import AgentsPersonasAssistantsNote from '/snippets/agents-personas-assistants-n
     A replayed call has no `file_tool_progress`
     - `apply_patch_start` (with `patch` and `tool_name`) and `apply_patch_end` show a file edit and the files it changed
     - `publish_files_start` (with `files` and `description`) and `publish_files_end` show the files that the model
-    gave the user. Each file in `publish_files_end` has `file_id`, `name`, `title`, `path`, `size` and `mime_type`.
-    Download it from `/chat/file/{file_id}`. Files with the same `name` are versions of one file.
+    gave the user. Each file in `publish_files_end` has `file_id`, `artifact_id`, `version`, `name`, `title`, `path`,
+    `display_path`, `size` and `mime_type`. Download it from `/chat/file/{file_id}`. `path` is absolute in the VM.
+    Every publish of one `path` in a chat is a version of one artifact:
+    it has the same `artifact_id` and the next `version`, from 1.
+    A message saved without `artifact_id` and `version` replays them as null; each such file is an artifact of its own.
+    `display_path` is the path to show: relative to the chat's working directory, or absolute for a file outside it.
     `error` is set when the call failed; then it published no file
     - A call that the user stopped, or that stopped with its code mode program, has no end packet. Stopping a
     command call also stops the command. A command that a Ctrl-C (`write_stdin` with `\u0003`)
