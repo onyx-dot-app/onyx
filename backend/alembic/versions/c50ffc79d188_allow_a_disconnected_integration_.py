@@ -33,15 +33,14 @@ def _replace_status_check(statuses: tuple[str, ...]) -> None:
         _CONSTRAINT, _TABLE, f"status IN ({values})", postgresql_not_valid=True
     )
     bind.commit()
-    with bind.engine.connect().execution_options(isolation_level="AUTOCOMMIT") as conn:
+    # One transaction, so a transaction-mode pooler keeps the timeout and the
+    # validation on one server connection.
+    with bind.engine.connect() as conn, conn.begin():
         quoted_schema = conn.dialect.identifier_preparer.quote_identifier(schema)
-        conn.exec_driver_sql(f"SET lock_timeout = '{LOCK_TIMEOUT}'")
-        try:
-            conn.exec_driver_sql(
-                f"ALTER TABLE {quoted_schema}.{_TABLE} VALIDATE CONSTRAINT {_CONSTRAINT}"
-            )
-        finally:
-            conn.exec_driver_sql("RESET lock_timeout")
+        conn.exec_driver_sql(f"SET LOCAL lock_timeout = '{LOCK_TIMEOUT}'")
+        conn.exec_driver_sql(
+            f"ALTER TABLE {quoted_schema}.{_TABLE} VALIDATE CONSTRAINT {_CONSTRAINT}"
+        )
 
 
 def upgrade() -> None:
