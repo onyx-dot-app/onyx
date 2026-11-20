@@ -210,6 +210,8 @@ export type Unreachable =
   | { kind: "timeout" }
   | { kind: "refused" }
   | { kind: "serverError"; status: number }
+  | { kind: "notOnyx" }
+  | { kind: "apiNotRouted" }
   | { kind: "unknown" };
 
 export interface OfflineStatus {

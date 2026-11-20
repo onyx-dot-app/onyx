@@ -3048,6 +3048,7 @@ dependencies = [
  "tauri-plugin-window-state",
  "tokio",
  "url",
+ "webkit2gtk",
  "winreg",
 ]
 
