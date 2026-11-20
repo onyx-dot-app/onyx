@@ -1978,13 +1978,25 @@ class SharepointConnector(
         start: datetime,
         end: datetime,
     ) -> DriveChildrenPage:
-        return self.ops.get_children_page(
-            drive_id=drive_id,
-            folder_id=cursor.folder_id,
-            next_link=cursor.next_link,
-            start=start,
-            end=end,
-        )
+        try:
+            return self.ops.get_children_page(
+                drive_id=drive_id,
+                folder_id=cursor.folder_id,
+                next_link=cursor.next_link,
+                start=start,
+                end=end,
+            )
+        except MicrosoftGraphError as e:
+            # A folder deleted after its parent was read. The catch-up delta
+            # lists its deletion, and the walk goes on with the other folders.
+            if e.status_code != 404 or cursor.folder_id is None:
+                raise
+            logger.info(
+                "Skipping folder %s of drive %s: it no longer exists",
+                cursor.folder_id,
+                drive_id,
+            )
+            return DriveChildrenPage(files=[], folder_ids=[])
 
     def _walk_from_checkpoint(
         self,
