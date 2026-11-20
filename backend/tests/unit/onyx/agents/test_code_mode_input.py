@@ -944,6 +944,77 @@ def test_saved_cells_count_against_the_open_cell_limit() -> None:
     assert "Open cells: 1, 2, 3, 4." in refused.content
 
 
+def test_a_stopped_program_reports_its_request_end_once_the_run_ends(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """wait_code stops a background program whose call waits for approval.
+    The program's driver ends the request while the run ends; the run still
+    reports that end. The approval gate's withdrawal holds the driver until
+    the run ends, and the run's last step waits for the withdrawal to start."""
+    withdrawing = threading.Event()
+    withdrawn_after_run_end = threading.Event()
+
+    class Approvals:
+        def withdraw_approval(self, _request_id: str) -> None:
+            withdrawing.set()
+            run.wait_for_completion(10)
+            withdrawn_after_run_end.set()
+
+    approvals = Approvals()
+    monkeypatch.setattr(Run, "approvals", property(lambda _self: approvals))
+    steps = (
+        _execute(
+            "background",
+            "yield_control()\n"
+            'await asyncio.gather(tools.wait(value="a"), tools.send(value="bg2"))\n',
+        ),
+        ToolCall(
+            id="stop",
+            name=WaitCodeTool.NAME,
+            arguments={"cell_id": 1, "terminate": True},
+        ),
+    )
+
+    def reply(
+        request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        results = [m for m in request.messages if isinstance(m, ToolResultMessage)]
+        if not results:
+            return AssistantMessage(content=[steps[0]])
+        if len(results) == 1:
+            assert agents.shown.wait(10)
+            return AssistantMessage(content=[steps[1]])
+        assert withdrawing.wait(10)
+        return AssistantMessage(content=[TextContent(text="done")])
+
+    agents = Agents(reply=reply)
+    agents.gate = threading.Event()
+    events: list[AgentEvent] = []
+
+    def on_event(event: AgentEvent) -> None:
+        events.append(event)
+        if isinstance(event, InputRequiredEvent):
+            agents.shown.set()
+
+    run = agents.agent().start(
+        max_steps=4, messages=[UserMessage(content="Send")], on_event=on_event
+    )
+    try:
+        assert run.result(timeout=20).output.text == "done"
+        assert run.wait_for_idle(10)
+        assert withdrawn_after_run_end.is_set()
+        assert [
+            event.request.request_id
+            for event in events
+            if isinstance(event, InputEndedEvent)
+        ] == [SECOND_BACKGROUND_REQUEST_ID]
+        assert agents.sent == []
+    finally:
+        agents.gate.set()
+        run.cancel()
+        assert run.wait_for_idle(10)
+
+
 def test_a_program_too_large_to_park_continues_without_the_call(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:

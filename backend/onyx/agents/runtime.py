@@ -892,13 +892,23 @@ class Run:
     def withdraw_nested_input(self, request: NestedInputRequest) -> None:
         """End an open request whose call stopped waiting, for example because
         its program ended, with the answer that the run recorded for it, if
-        any; no-op once a NestedInputWait saved it or it ended."""
+        any; no-op once a NestedInputWait saved it or it ended.
+
+        The end event goes out under the lock that removes the request, so
+        either this call or the run's end reports it, exactly once."""
         request_id = request.request.request_id
         with self.execution_lock:
             if self._progress.open_inputs.pop(request_id, None) is None:
                 return
             self._state.revision += 1
-            answer = self._progress.human_tool_answers.get(request_id)
+            if self.event_delivery:
+                self.event_delivery.publish(
+                    InputEndedEvent(
+                        **self.event_context,
+                        **dict(request),
+                        answer=self._progress.human_tool_answers.get(request_id),
+                    )
+                )
         approvals = self.approvals
         if request.request.approval and approvals is not None:
             try:
@@ -909,9 +919,6 @@ class Run:
                 logger.exception(
                     "Run %s could not withdraw approval request %s", self.id, request_id
                 )
-        self.publish_event(
-            InputEndedEvent(**self.event_context, **dict(request), answer=answer)
-        )
 
     def _input_waits(
         self, call: ToolCall, pending: PendingToolInput | ChildRunWait | NestedInputWait
