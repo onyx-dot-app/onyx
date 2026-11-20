@@ -246,6 +246,9 @@ def sync_marketplace(
         logger.warning("Marketplace sync %s lost its lock", marketplace_id)
         for content in staged.values():
             delete_bundle_blob(file_store, content.bundle_file_id)
+        with get_session_with_current_tenant() as db_session:
+            request_marketplace_sync__no_commit(marketplace_id, db_session)
+            db_session.commit()
         return MarketplaceSyncResult(status=MarketplaceSyncStatus.FAILED)
     try:
         with get_session_with_current_tenant() as db_session:

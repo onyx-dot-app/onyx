@@ -122,7 +122,9 @@ def test_sync_that_lost_its_lock_writes_nothing(
     sync.sync_marketplace(marketplace.id, expired)
 
     assert synced_plugins(db_session, marketplace.id) == {}
-    assert reload(db_session, marketplace).last_synced_at is None
+    stored = reload(db_session, marketplace)
+    assert stored.last_synced_at is None
+    assert sync.sync_request_is_live(stored.sync_requested_at)
     assert staged_file_ids
     assert existing_files(db_session, staged_file_ids) == set()
 
