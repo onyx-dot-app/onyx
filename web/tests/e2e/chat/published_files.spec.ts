@@ -1,3 +1,5 @@
+import { readFileSync } from "fs";
+import { join } from "path";
 import type { Page } from "@playwright/test";
 import { test, expect } from "@tests/e2e/chat/fixtures";
 import { sendMessage } from "@tests/e2e/utils/chatActions";
@@ -32,7 +34,11 @@ function report(
   };
 }
 
-async function mockFile(page: Page, file: MockPublishedFile): Promise<void> {
+async function mockFile(
+  page: Page,
+  file: MockPublishedFile,
+  body: string | Buffer = `# Q3\n\n${REPORT_TEXT}\n`
+): Promise<void> {
   await page.route(`**/api/chat/file/${file.fileId}*`, async (route) => {
     await route.fulfill({
       status: 200,
@@ -40,7 +46,7 @@ async function mockFile(page: Page, file: MockPublishedFile): Promise<void> {
       headers: {
         "Content-Disposition": `attachment; filename="${file.name}"`,
       },
-      body: `# Q3\n\n${REPORT_TEXT}\n`,
+      body,
     });
   });
 }
@@ -192,6 +198,91 @@ test.describe("Published files", () => {
       href: `/api/chat/file/${file.fileId}`,
     });
     await chatPage.expectPublishedFilePreview("Q3 report", REPORT_TEXT);
+  });
+
+  test("a file tab shows markdown as a document, a CSV as a grid, a PDF and a Word file as pages, and a deck as slides", async ({
+    page,
+    chatPage,
+  }) => {
+    const notes = report("published-file-10", "Q3 notes");
+    const sales: MockPublishedFile = {
+      ...report("published-file-11", "Q3 sales"),
+      name: "sales.csv",
+      path: "/home/onyx/workspaces/chat/sales.csv",
+      displayPath: "sales.csv",
+      artifactId: "artifact-sales",
+      mimeType: "text/csv",
+    };
+    const pdf: MockPublishedFile = {
+      ...report("published-file-12", "Q3 slides"),
+      name: "report.pdf",
+      path: "/home/onyx/workspaces/chat/report.pdf",
+      displayPath: "report.pdf",
+      artifactId: "artifact-slides",
+      mimeType: "application/pdf",
+    };
+    const letter: MockPublishedFile = {
+      ...report("published-file-13", "Q3 letter"),
+      name: "letter.docx",
+      path: "/home/onyx/workspaces/chat/letter.docx",
+      displayPath: "letter.docx",
+      artifactId: "artifact-letter",
+      mimeType:
+        "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    };
+    const deck: MockPublishedFile = {
+      ...report("published-file-14", "Q3 deck"),
+      name: "deck.pptx",
+      path: "/home/onyx/workspaces/chat/deck.pptx",
+      displayPath: "deck.pptx",
+      artifactId: "artifact-deck",
+      mimeType:
+        "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+    };
+    await page.setViewportSize({ width: 1600, height: 900 });
+    await chatPage.goto();
+    await mockFile(page, notes);
+    await mockFile(
+      page,
+      sales,
+      'Region,Owner\nNorth,"Smith, Jane"\nSouth,Lee\n'
+    );
+    await mockFile(
+      page,
+      pdf,
+      readFileSync(join(__dirname, "../fixtures/two_pages.pdf"))
+    );
+    await mockFile(
+      page,
+      letter,
+      readFileSync(join(__dirname, "../fixtures/three_images.docx"))
+    );
+    await mockFile(
+      page,
+      deck,
+      readFileSync(join(__dirname, "../fixtures/two_slides.pptx"))
+    );
+    await mockChatEndpoint(
+      page,
+      buildMockPublishFilesStream([notes, sales, pdf, letter, deck], MESSAGE)
+    );
+
+    await sendMessage(page, "Write the quarterly report");
+    await expect(chatPage.publishedFileCards()).toHaveCount(5);
+    await chatPage.expectMarkdownPreview("Q3 notes", "Q3");
+    // A quoted comma stays inside its cell
+    await chatPage.expectSpreadsheetPreview("Q3 sales", "Smith, Jane");
+    await chatPage.expectPdfPreview("Q3 slides", 2);
+    await chatPage.expectPptxPreview("Q3 deck", 2, "Q3 review");
+
+    // The pages fit the panel, and the resize handle stays over them
+    await chatPage.expectDocxPreviewFitsPanel("Q3 letter");
+    await chatPage.expectResizeHandleOnTop();
+
+    // The Files list shows the PDF's first page and the deck's first slide
+    await chatPage.rightPanelTab("Files").click();
+    await chatPage.expectPublishedFilesPanelThumbnail("Q3 slides");
+    await chatPage.expectPublishedFilesPanelThumbnail("Q3 deck");
   });
 
   test("a saved reply shows a card for each publish, and the panel the newest version of each file", async ({

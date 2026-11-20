@@ -12743,61 +12743,8 @@
         }
       },
       "preview": {
-        "code": {
-          "headerDescription": "{language} - {lineCount, plural, one {# 行} other {# 行}} · {fileSize}"
-        },
-        "copyButton": {
-          "tooltip": "内容をコピー"
-        },
-        "csv": {
-          "footer": "{columnCount, plural, one {# 列} other {# 列}} • {rowCount, plural, one {# 行} other {# 行}}",
-          "headerDescription": "CSV - {rowCount, plural, one {# 行} other {# 行}} • {fileSize}",
-          "rowSeparator": "{count, plural, one {# 行} other {# 行}}"
-        },
-        "docx": {
-          "headerDescription": "{count, plural, one {Word 文書 • # 語} other {Word 文書 • # 語}}",
-          "headerDescriptionFallback": "Word 文書",
-          "legacyDocMessage": "従来の .doc 形式はプレビューできません。ファイルをダウンロードして表示してください。",
-          "loadError": {
-            "message": "この文書をプレビューできませんでした。ファイルをダウンロードして表示してください。"
-          }
-        },
-        "downloadButton": {
-          "label": "ファイルをダウンロード",
-          "tooltip": "ダウンロード"
-        },
         "exceptionTrace": {
           "defaultTitle": "例外トレースの全文"
-        },
-        "header": {
-          "fallbackTitle": "ドキュメント"
-        },
-        "lineCount": {
-          "label": "{count, plural, one {# 行} other {# 行}}"
-        },
-        "loadError": {
-          "message": "ドキュメントを読み込めませんでした。"
-        },
-        "pdf": {
-          "iframeTitle": "PDF ビューアー"
-        },
-        "text": {
-          "headerDescription": "{lineCount, plural, one {# 行} other {# 行}} · {fileSize}"
-        },
-        "unsupported": {
-          "message": "このファイル形式はプレビューに対応していません。"
-        },
-        "xlsx": {
-          "headerDescription": "スプレッドシート - {count, plural, one {#シート} other {#シート}}",
-          "parseError": {
-            "message": "このスプレッドシートはプレビューできません。"
-          },
-          "sheetCount": "{count, plural, one {#シート} other {#シート}}"
-        },
-        "zoomControls": {
-          "level": "{zoom}%",
-          "zoomInTooltip": "拡大",
-          "zoomOutTooltip": "縮小"
         }
       },
       "share": {
@@ -12944,6 +12891,114 @@
         },
         "selectedCount": {
           "label": "{count, plural, one {# 件のファイルを選択中} other {# 件のファイルを選択中}}"
+        }
+      }
+    },
+    "filePreview": {
+      "header": {
+        "fallbackTitle": "ドキュメント"
+      },
+      "code": {
+        "headerDescription": "{language} - {lineCount, plural, one {# 行} other {# 行}} · {fileSize}"
+      },
+      "text": {
+        "headerDescription": "{lineCount, plural, one {# 行} other {# 行}} · {fileSize}"
+      },
+      "lineCount": {
+        "label": "{count, plural, one {# 行} other {# 行}}"
+      },
+      "wordCount": {
+        "label": "{count, plural, one {# 語} other {# 語}}"
+      },
+      "copyButton": {
+        "tooltip": "内容をコピー"
+      },
+      "downloadButton": {
+        "label": "ファイルをダウンロード",
+        "tooltip": "ダウンロード"
+      },
+      "retryButton": {
+        "label": "再試行"
+      },
+      "error": {
+        "title": "プレビューを読み込めませんでした",
+        "description": "もう一度お試しいただくか、ファイルをダウンロードして開いてください。"
+      },
+      "renderError": {
+        "title": "このファイルはプレビューできません",
+        "description": "ここではファイルを表示できません。ファイルをダウンロードして開いてください。"
+      },
+      "unsupported": {
+        "title": "このファイル形式のプレビューは現在サポートされていません",
+        "description": "ファイルをダウンロードして内容を確認してください。"
+      },
+      "tooLarge": {
+        "title": "ファイルが大きすぎるためプレビューできません",
+        "description": "ここでは{size, number} MBまでのファイルをプレビューできます。ファイルをダウンロードして開いてください。"
+      },
+      "spreadsheet": {
+        "headerDescription": "スプレッドシート - {count, plural, one {#シート} other {#シート}}",
+        "truncated": "プレビューは{rows, number}行、{columns, number}列、{cells, number}セルまでです。すべてのデータを見るには元のファイルをダウンロードしてください。",
+        "malformed": "このCSVには引用符で囲まれた無効なフィールドがあります。確認するには元のファイルをダウンロードしてください。",
+        "empty": "コンテンツがありません"
+      },
+      "image": {
+        "loading": {
+          "label": "画像を読み込んでいます..."
+        },
+        "actualSize": {
+          "label": "実際のサイズ"
+        }
+      },
+      "pdf": {
+        "controls": {
+          "label": "PDFの操作"
+        },
+        "thumbnails": {
+          "toggle": "ページのサムネイルを表示・非表示",
+          "label": "ページのサムネイル",
+          "resize": "ページのサムネイルの幅を変更"
+        },
+        "page": {
+          "previous": "前のページ",
+          "next": "次のページ",
+          "counter": "{current, number} / {total, number}",
+          "preview": "ページ{page, number}のプレビュー",
+          "select": "ページ{page, number}に移動"
+        },
+        "zoom": {
+          "out": "縮小",
+          "in": "拡大",
+          "label": "ズーム",
+          "fitWidth": "幅に合わせる",
+          "fitPage": "ページに合わせる"
+        },
+        "error": {
+          "description": "PDF ファイルを読み込めませんでした。"
+        }
+      },
+      "pptx": {
+        "controls": {
+          "label": "プレゼンテーションの操作"
+        },
+        "thumbnails": {
+          "toggle": "スライドのサムネイルを表示・非表示",
+          "resize": "スライドのサムネイルの幅を変更"
+        },
+        "slides": {
+          "label": "スライド"
+        },
+        "previous": {
+          "label": "前のスライド"
+        },
+        "next": {
+          "label": "次のスライド"
+        },
+        "slide": {
+          "counter": "スライド {current} / {total}"
+        },
+        "empty": {
+          "label": "このプレゼンテーションにはスライドがありません"
         }
       }
     },
@@ -13315,6 +13370,10 @@
       },
       "toggleButton": {
         "label": "パネルの表示を切り替え"
+      },
+      "downloadButton": {
+        "label": "ダウンロード",
+        "tooltip": "ファイルをダウンロード"
       },
       "reloadButton": {
         "label": "ファイルを更新",

@@ -12743,61 +12743,8 @@
         }
       },
       "preview": {
-        "code": {
-          "headerDescription": "{language} - {lineCount, plural, one {# línea} other {# líneas}} · {fileSize}"
-        },
-        "copyButton": {
-          "tooltip": "Copiar el contenido"
-        },
-        "csv": {
-          "footer": "{columnCount, plural, one {# columna} other {# columnas}} • {rowCount, plural, one {# fila} other {# filas}}",
-          "headerDescription": "CSV - {rowCount, plural, one {# fila} other {# filas}} • {fileSize}",
-          "rowSeparator": "{count, plural, one {# fila} other {# filas}}"
-        },
-        "docx": {
-          "headerDescription": "{count, plural, one {Documento de Word • # palabra} other {Documento de Word • # palabras}}",
-          "headerDescriptionFallback": "Documento de Word",
-          "legacyDocMessage": "No se puede previsualizar el formato antiguo .doc. Descarga el archivo para verlo.",
-          "loadError": {
-            "message": "No se pudo previsualizar este documento. Descarga el archivo para verlo."
-          }
-        },
-        "downloadButton": {
-          "label": "Descargar el archivo",
-          "tooltip": "Descargar"
-        },
         "exceptionTrace": {
           "defaultTitle": "Traza completa de la excepción"
-        },
-        "header": {
-          "fallbackTitle": "Documento"
-        },
-        "lineCount": {
-          "label": "{count, plural, one {# línea} other {# líneas}}"
-        },
-        "loadError": {
-          "message": "No se pudo cargar el documento."
-        },
-        "pdf": {
-          "iframeTitle": "Visor de PDF"
-        },
-        "text": {
-          "headerDescription": "{lineCount, plural, one {# línea} other {# líneas}} · {fileSize}"
-        },
-        "unsupported": {
-          "message": "Este formato de archivo no admite la vista previa."
-        },
-        "xlsx": {
-          "headerDescription": "Hoja de cálculo - {count, plural, one {# hoja} other {# hojas}}",
-          "parseError": {
-            "message": "No se pudo previsualizar esta hoja de cálculo."
-          },
-          "sheetCount": "{count, plural, one {# hoja} other {# hojas}}"
-        },
-        "zoomControls": {
-          "level": "{zoom}%",
-          "zoomInTooltip": "Acercar",
-          "zoomOutTooltip": "Alejar"
         }
       },
       "share": {
@@ -12944,6 +12891,114 @@
         },
         "selectedCount": {
           "label": "{count, plural, one {# archivo seleccionado} other {# archivos seleccionados}}"
+        }
+      }
+    },
+    "filePreview": {
+      "header": {
+        "fallbackTitle": "Documento"
+      },
+      "code": {
+        "headerDescription": "{language} - {lineCount, plural, one {# línea} other {# líneas}} · {fileSize}"
+      },
+      "text": {
+        "headerDescription": "{lineCount, plural, one {# línea} other {# líneas}} · {fileSize}"
+      },
+      "lineCount": {
+        "label": "{count, plural, one {# línea} other {# líneas}}"
+      },
+      "wordCount": {
+        "label": "{count, plural, one {# palabra} other {# palabras}}"
+      },
+      "copyButton": {
+        "tooltip": "Copiar el contenido"
+      },
+      "downloadButton": {
+        "label": "Descargar el archivo",
+        "tooltip": "Descargar"
+      },
+      "retryButton": {
+        "label": "Reintentar"
+      },
+      "error": {
+        "title": "No se pudo cargar la vista previa",
+        "description": "No se pudo cargar la vista previa. Inténtalo de nuevo o descarga el archivo para abrirlo."
+      },
+      "renderError": {
+        "title": "No se puede previsualizar este archivo",
+        "description": "El archivo no se puede mostrar aquí. Descarga el archivo para abrirlo."
+      },
+      "unsupported": {
+        "title": "La vista previa de este tipo de archivo no está disponible actualmente",
+        "description": "Descarga el archivo para ver su contenido."
+      },
+      "tooLarge": {
+        "title": "Archivo demasiado grande para la vista previa",
+        "description": "Aquí se pueden previsualizar archivos de hasta {size, number} MB. Descarga el archivo para abrirlo."
+      },
+      "spreadsheet": {
+        "headerDescription": "Hoja de cálculo - {count, plural, one {# hoja} other {# hojas}}",
+        "truncated": "Vista previa limitada a {rows, number} filas, {columns, number} columnas y {cells, number} celdas. Descarga el original para ver todos los datos.",
+        "malformed": "Este CSV contiene un campo entre comillas no válido. Descarga el original para revisarlo.",
+        "empty": "Sin contenido"
+      },
+      "image": {
+        "loading": {
+          "label": "Cargando imagen..."
+        },
+        "actualSize": {
+          "label": "Tamaño real"
+        }
+      },
+      "pdf": {
+        "controls": {
+          "label": "Controles de PDF"
+        },
+        "thumbnails": {
+          "toggle": "Mostrar u ocultar miniaturas",
+          "label": "Miniaturas de páginas",
+          "resize": "Cambiar el tamaño de las miniaturas"
+        },
+        "page": {
+          "previous": "Página anterior",
+          "next": "Página siguiente",
+          "counter": "{current, number} / {total, number}",
+          "preview": "Vista previa de la página {page, number}",
+          "select": "Ir a la página {page, number}"
+        },
+        "zoom": {
+          "out": "Alejar",
+          "in": "Acercar",
+          "label": "Zoom",
+          "fitWidth": "Ajustar al ancho",
+          "fitPage": "Ajustar a la página"
+        },
+        "error": {
+          "description": "No se pudo cargar el archivo PDF."
+        }
+      },
+      "pptx": {
+        "controls": {
+          "label": "Controles de presentación"
+        },
+        "thumbnails": {
+          "toggle": "Mostrar u ocultar miniaturas de diapositivas",
+          "resize": "Cambiar el tamaño de las miniaturas"
+        },
+        "slides": {
+          "label": "Diapositivas"
+        },
+        "previous": {
+          "label": "Diapositiva anterior"
+        },
+        "next": {
+          "label": "Diapositiva siguiente"
+        },
+        "slide": {
+          "counter": "Diapositiva {current} de {total}"
+        },
+        "empty": {
+          "label": "Esta presentación no tiene diapositivas"
         }
       }
     },
@@ -13315,6 +13370,10 @@
       },
       "toggleButton": {
         "label": "Mostrar u ocultar el panel"
+      },
+      "downloadButton": {
+        "label": "Descargar",
+        "tooltip": "Descargar archivo"
       },
       "reloadButton": {
         "label": "Actualizar archivos",

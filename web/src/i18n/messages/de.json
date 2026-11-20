@@ -12743,61 +12743,8 @@
         }
       },
       "preview": {
-        "code": {
-          "headerDescription": "{language} - {lineCount, plural, one {# Zeile} other {# Zeilen}} · {fileSize}"
-        },
-        "copyButton": {
-          "tooltip": "Inhalt kopieren"
-        },
-        "csv": {
-          "footer": "{columnCount, plural, one {# Spalte} other {# Spalten}} • {rowCount, plural, one {# Zeile} other {# Zeilen}}",
-          "headerDescription": "CSV - {rowCount, plural, one {# Zeile} other {# Zeilen}} • {fileSize}",
-          "rowSeparator": "{count, plural, one {# Zeile} other {# Zeilen}}"
-        },
-        "docx": {
-          "headerDescription": "{count, plural, one {Word-Dokument • # Wort} other {Word-Dokument • # Wörter}}",
-          "headerDescriptionFallback": "Word-Dokument",
-          "legacyDocMessage": "Für das alte .doc-Format ist keine Vorschau möglich. Laden Sie die Datei herunter, um sie anzusehen.",
-          "loadError": {
-            "message": "Für dieses Dokument konnte keine Vorschau erstellt werden. Laden Sie die Datei herunter, um sie anzusehen."
-          }
-        },
-        "downloadButton": {
-          "label": "Datei herunterladen",
-          "tooltip": "Herunterladen"
-        },
         "exceptionTrace": {
           "defaultTitle": "Vollständiger Exception-Trace"
-        },
-        "header": {
-          "fallbackTitle": "Dokument"
-        },
-        "lineCount": {
-          "label": "{count, plural, one {# Zeile} other {# Zeilen}}"
-        },
-        "loadError": {
-          "message": "Das Dokument konnte nicht geladen werden."
-        },
-        "pdf": {
-          "iframeTitle": "PDF-Viewer"
-        },
-        "text": {
-          "headerDescription": "{lineCount, plural, one {# Zeile} other {# Zeilen}} · {fileSize}"
-        },
-        "unsupported": {
-          "message": "Für dieses Dateiformat ist keine Vorschau möglich."
-        },
-        "xlsx": {
-          "headerDescription": "Tabelle - {count, plural, one {# Blatt} other {# Blätter}}",
-          "parseError": {
-            "message": "Für diese Tabelle ist keine Vorschau möglich."
-          },
-          "sheetCount": "{count, plural, one {# Blatt} other {# Blätter}}"
-        },
-        "zoomControls": {
-          "level": "{zoom} %",
-          "zoomInTooltip": "Vergrößern",
-          "zoomOutTooltip": "Verkleinern"
         }
       },
       "share": {
@@ -12944,6 +12891,114 @@
         },
         "selectedCount": {
           "label": "{count, plural, one {# Datei ausgewählt} other {# Dateien ausgewählt}}"
+        }
+      }
+    },
+    "filePreview": {
+      "header": {
+        "fallbackTitle": "Dokument"
+      },
+      "code": {
+        "headerDescription": "{language} - {lineCount, plural, one {# Zeile} other {# Zeilen}} · {fileSize}"
+      },
+      "text": {
+        "headerDescription": "{lineCount, plural, one {# Zeile} other {# Zeilen}} · {fileSize}"
+      },
+      "lineCount": {
+        "label": "{count, plural, one {# Zeile} other {# Zeilen}}"
+      },
+      "wordCount": {
+        "label": "{count, plural, one {# Wort} other {# Wörter}}"
+      },
+      "copyButton": {
+        "tooltip": "Inhalt kopieren"
+      },
+      "downloadButton": {
+        "label": "Datei herunterladen",
+        "tooltip": "Herunterladen"
+      },
+      "retryButton": {
+        "label": "Erneut versuchen"
+      },
+      "error": {
+        "title": "Vorschau konnte nicht geladen werden",
+        "description": "Die Vorschau konnte nicht geladen werden. Versuchen Sie es erneut oder laden Sie die Datei herunter."
+      },
+      "renderError": {
+        "title": "Für diese Datei ist keine Vorschau möglich",
+        "description": "Die Datei kann hier nicht angezeigt werden. Laden Sie die Datei herunter, um sie zu öffnen."
+      },
+      "unsupported": {
+        "title": "Die Vorschau für diesen Dateityp wird derzeit nicht unterstützt",
+        "description": "Laden Sie die Datei herunter, um ihren Inhalt anzuzeigen."
+      },
+      "tooLarge": {
+        "title": "Datei zu groß für die Vorschau",
+        "description": "Dateien bis {size, number} MB können hier angezeigt werden. Laden Sie die Datei herunter, um sie zu öffnen."
+      },
+      "spreadsheet": {
+        "headerDescription": "Tabelle - {count, plural, one {# Blatt} other {# Blätter}}",
+        "truncated": "Vorschau auf {rows, number} Zeilen, {columns, number} Spalten und {cells, number} Zellen begrenzt. Laden Sie das Original für alle Daten herunter.",
+        "malformed": "Diese CSV-Datei enthält ein ungültiges Feld in Anführungszeichen. Laden Sie das Original zur Prüfung herunter.",
+        "empty": "Kein Inhalt"
+      },
+      "image": {
+        "loading": {
+          "label": "Bild wird geladen..."
+        },
+        "actualSize": {
+          "label": "Originalgröße"
+        }
+      },
+      "pdf": {
+        "controls": {
+          "label": "PDF-Steuerung"
+        },
+        "thumbnails": {
+          "toggle": "Seitenminiaturen ein-/ausblenden",
+          "label": "Seitenminiaturen",
+          "resize": "Seitenminiaturen skalieren"
+        },
+        "page": {
+          "previous": "Vorherige Seite",
+          "next": "Nächste Seite",
+          "counter": "{current, number} / {total, number}",
+          "preview": "Vorschau von Seite {page, number}",
+          "select": "Zu Seite {page, number}"
+        },
+        "zoom": {
+          "out": "Verkleinern",
+          "in": "Vergrößern",
+          "label": "Zoom",
+          "fitWidth": "Breite anpassen",
+          "fitPage": "Seite anpassen"
+        },
+        "error": {
+          "description": "Die PDF-Datei konnte nicht geladen werden."
+        }
+      },
+      "pptx": {
+        "controls": {
+          "label": "Präsentationssteuerung"
+        },
+        "thumbnails": {
+          "toggle": "Folienminiaturen ein-/ausblenden",
+          "resize": "Folienminiaturen skalieren"
+        },
+        "slides": {
+          "label": "Folien"
+        },
+        "previous": {
+          "label": "Vorherige Folie"
+        },
+        "next": {
+          "label": "Nächste Folie"
+        },
+        "slide": {
+          "counter": "Folie {current} von {total}"
+        },
+        "empty": {
+          "label": "Keine Folien in dieser Präsentation"
         }
       }
     },
@@ -13315,6 +13370,10 @@
       },
       "toggleButton": {
         "label": "Bereich ein- oder ausblenden"
+      },
+      "downloadButton": {
+        "label": "Herunterladen",
+        "tooltip": "Datei herunterladen"
       },
       "reloadButton": {
         "label": "Dateien aktualisieren",

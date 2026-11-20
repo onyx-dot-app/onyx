@@ -216,7 +216,11 @@ test("a shared chat's card of an older version opens that version, labelled", as
   expect(
     await screen.findByRole("region", { name: "Preview of Q3 report" })
   ).toBeVisible();
-  expect(fetchChatFile).toHaveBeenLastCalledWith("file-1");
+  expect(fetchChatFile).toHaveBeenLastCalledWith(
+    "file-1",
+    false,
+    expect.any(AbortSignal)
+  );
   expect(
     screen.getByRole("tab", { name: "Q3 report (v1 of 2)" })
   ).toBeVisible();

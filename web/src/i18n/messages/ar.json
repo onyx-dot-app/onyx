@@ -12743,61 +12743,8 @@
         }
       },
       "preview": {
-        "code": {
-          "headerDescription": "{language} - {lineCount, plural, one {# سطر} other {# أسطر}} · {fileSize}"
-        },
-        "copyButton": {
-          "tooltip": "نسخ المحتوى"
-        },
-        "csv": {
-          "footer": "{columnCount, plural, one {# عمود} other {# أعمدة}} • {rowCount, plural, one {# صف} other {# صفوف}}",
-          "headerDescription": "CSV - {rowCount, plural, one {# صف} other {# صفوف}} • {fileSize}",
-          "rowSeparator": "{count, plural, one {# صف} other {# صفوف}}"
-        },
-        "docx": {
-          "headerDescription": "{count, plural, one {مستند Word • # كلمة} other {مستند Word • # كلمات}}",
-          "headerDescriptionFallback": "مستند Word",
-          "legacyDocMessage": "لا يمكن معاينة تنسيق ‎.doc القديم. نزّل الملف لعرضه.",
-          "loadError": {
-            "message": "تعذّرت معاينة هذا المستند. نزّل الملف لعرضه."
-          }
-        },
-        "downloadButton": {
-          "label": "تنزيل الملف",
-          "tooltip": "تنزيل"
-        },
         "exceptionTrace": {
           "defaultTitle": "تتبع الاستثناء الكامل"
-        },
-        "header": {
-          "fallbackTitle": "مستند"
-        },
-        "lineCount": {
-          "label": "{count, plural, one {# سطر} other {# أسطر}}"
-        },
-        "loadError": {
-          "message": "فشل تحميل المستند."
-        },
-        "pdf": {
-          "iframeTitle": "عارض PDF"
-        },
-        "text": {
-          "headerDescription": "{lineCount, plural, one {# سطر} other {# أسطر}} · {fileSize}"
-        },
-        "unsupported": {
-          "message": "تنسيق الملف هذا غير مدعوم للمعاينة."
-        },
-        "xlsx": {
-          "headerDescription": "جدول بيانات - {count, plural, one {# ورقة} other {# أوراق}}",
-          "parseError": {
-            "message": "تعذّرت معاينة جدول البيانات هذا."
-          },
-          "sheetCount": "{count, plural, one {# ورقة} other {# أوراق}}"
-        },
-        "zoomControls": {
-          "level": "{zoom}%",
-          "zoomInTooltip": "تكبير",
-          "zoomOutTooltip": "تصغير"
         }
       },
       "share": {
@@ -12944,6 +12891,114 @@
         },
         "selectedCount": {
           "label": "{count, plural, one {# ملف محدد} other {# ملفات محددة}}"
+        }
+      }
+    },
+    "filePreview": {
+      "header": {
+        "fallbackTitle": "مستند"
+      },
+      "code": {
+        "headerDescription": "{language} - {lineCount, plural, one {# سطر} other {# أسطر}} · {fileSize}"
+      },
+      "text": {
+        "headerDescription": "{lineCount, plural, one {# سطر} other {# أسطر}} · {fileSize}"
+      },
+      "lineCount": {
+        "label": "{count, plural, one {# سطر} other {# أسطر}}"
+      },
+      "wordCount": {
+        "label": "{count, plural, one {# كلمة} other {# كلمات}}"
+      },
+      "copyButton": {
+        "tooltip": "نسخ المحتوى"
+      },
+      "downloadButton": {
+        "label": "تنزيل الملف",
+        "tooltip": "تنزيل"
+      },
+      "retryButton": {
+        "label": "حاول مجددًا"
+      },
+      "error": {
+        "title": "تعذّر تحميل المعاينة",
+        "description": "تعذّر تحميل المعاينة. حاول مجددًا أو نزّل الملف لفتحه."
+      },
+      "renderError": {
+        "title": "تعذّرت معاينة هذا الملف",
+        "description": "تعذّر عرض الملف هنا. نزّل الملف لفتحه."
+      },
+      "unsupported": {
+        "title": "معاينة هذا النوع من الملفات غير مدعومة حاليًا",
+        "description": "نزّل الملف لعرض محتوياته."
+      },
+      "tooLarge": {
+        "title": "الملف كبير جدًا للمعاينة",
+        "description": "يمكن معاينة الملفات حتى {size, number} ميغابايت هنا. نزّل الملف لفتحه."
+      },
+      "spreadsheet": {
+        "headerDescription": "جدول بيانات - {count, plural, one {# ورقة} other {# أوراق}}",
+        "truncated": "المعاينة محدودة بـ {rows, number} صف و{columns, number} عمود و{cells, number} خلية. نزّل الملف الأصلي للحصول على جميع البيانات.",
+        "malformed": "يحتوي ملف CSV هذا على حقل غير صالح بين علامتي اقتباس. نزّل الملف الأصلي لفحصه.",
+        "empty": "لا يوجد محتوى"
+      },
+      "image": {
+        "loading": {
+          "label": "جارٍ تحميل الصورة..."
+        },
+        "actualSize": {
+          "label": "الحجم الفعلي"
+        }
+      },
+      "pdf": {
+        "controls": {
+          "label": "عناصر التحكم في PDF"
+        },
+        "thumbnails": {
+          "toggle": "إظهار الصور المصغّرة للصفحات أو إخفاؤها",
+          "label": "الصور المصغّرة للصفحات",
+          "resize": "تغيير حجم الصور المصغّرة للصفحات"
+        },
+        "page": {
+          "previous": "الصفحة السابقة",
+          "next": "الصفحة التالية",
+          "counter": "{current, number} / {total, number}",
+          "preview": "معاينة الصفحة {page, number}",
+          "select": "الانتقال إلى الصفحة {page, number}"
+        },
+        "zoom": {
+          "out": "تصغير",
+          "in": "تكبير",
+          "label": "التكبير",
+          "fitWidth": "ملاءمة العرض",
+          "fitPage": "ملاءمة الصفحة"
+        },
+        "error": {
+          "description": "تعذّر تحميل ملف PDF."
+        }
+      },
+      "pptx": {
+        "controls": {
+          "label": "عناصر التحكم في العرض التقديمي"
+        },
+        "thumbnails": {
+          "toggle": "إظهار الصور المصغّرة للشرائح أو إخفاؤها",
+          "resize": "تغيير حجم الصور المصغّرة للشرائح"
+        },
+        "slides": {
+          "label": "الشرائح"
+        },
+        "previous": {
+          "label": "الشريحة السابقة"
+        },
+        "next": {
+          "label": "الشريحة التالية"
+        },
+        "slide": {
+          "counter": "الشريحة {current} من {total}"
+        },
+        "empty": {
+          "label": "لا توجد شرائح في هذا العرض التقديمي"
         }
       }
     },
@@ -13315,6 +13370,10 @@
       },
       "toggleButton": {
         "label": "تبديل اللوحة"
+      },
+      "downloadButton": {
+        "label": "تنزيل",
+        "tooltip": "تنزيل الملف"
       },
       "reloadButton": {
         "label": "تحديث الملفات",

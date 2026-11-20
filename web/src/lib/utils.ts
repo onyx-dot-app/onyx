@@ -11,7 +11,7 @@ import {
 import { ALLOWED_URL_PROTOCOLS } from "@/lib/constants";
 import { DEFAULT_LOCALE } from "@/i18n/config";
 
-const URI_SCHEME_REGEX = /^[a-zA-Z][a-zA-Z\d+.-]*:/;
+export const URI_SCHEME_REGEX = /^[a-zA-Z][a-zA-Z\d+.-]*:/;
 const BARE_EMAIL_REGEX = /^[^\s@/]+@[^\s@/:]+\.[^\s@/:]+$/;
 
 export const INTERACTIVE_SELECTOR =
