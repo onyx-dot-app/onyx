@@ -90,10 +90,12 @@ function isRtl(): boolean {
  * Radix closes on the trigger's pointer down and click, and skips that for a
  * prevented event. A disabled control's tooltip gives the reason, so a press
  * (including a click on its label) shows it until blur or the pointer leaves.
+ * A link keeps its native action: an `allowClick` region stays clickable.
  */
 function keepOpenOnDisabledPress(event: React.SyntheticEvent<HTMLElement>) {
   const target = event.target;
   if (!(target instanceof Element)) return;
+  if (target.closest("a[href]")) return;
   const disabledElement = target.closest('[aria-disabled="true"]');
   if (disabledElement && event.currentTarget.contains(disabledElement)) {
     event.preventDefault();
