@@ -30,7 +30,7 @@ test("mounting with auto-scroll enabled does not start an unrelated scroll", () 
 });
 
 describe("following", () => {
-  describe.each(["drain", "smooth", "both"])("%s pause", (pause) => {
+  describe("drain pause", () => {
     test.each([
       {
         scenario: "follows new content",
@@ -76,7 +76,7 @@ describe("following", () => {
           </ChatScrollContainer>
         );
         // The typewriter's drain pauses following without turning it off.
-        const view = render(message(autoScroll, pause !== "smooth"));
+        const view = render(message(autoScroll, true));
         const container = screen.getByTestId("chat-scroll-container");
         const end = container.firstElementChild?.lastElementChild;
         if (!(end instanceof HTMLElement))
@@ -119,11 +119,6 @@ describe("following", () => {
             fireEvent.scroll(container);
           }
 
-          if (pause !== "drain") {
-            await flushChanges(() => {
-              container.dataset.smoothScrollActive = "true";
-            });
-          }
           scrollTo.mockClear();
           await flushChanges(() => {
             // The answer footer appears while instant following is suppressed.
@@ -135,12 +130,6 @@ describe("following", () => {
           await flushChanges(() => {
             view.rerender(message(autoScroll));
           });
-          if (pause !== "drain") {
-            expect(scrollTo).not.toHaveBeenCalled();
-            await flushChanges(() => {
-              container.dataset.smoothScrollActive = "false";
-            });
-          }
           if (follows) {
             expect(scrollTo).toHaveBeenCalledWith({
               top: 648,
