@@ -177,6 +177,15 @@ const ChatScrollContainer = React.memo(
       const glideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
         null
       );
+      // The running glide's scrollend listener, removed when it ends or is
+      // cancelled.
+      const glideEndRef = useRef<{
+        container: HTMLElement;
+        finish: () => void;
+      } | null>(null);
+      // The chat this view was placed for. Unset until the first placement:
+      // a view with no chat yet (Craft's welcome) still needs one.
+      const placedForRef = useRef<{ key: string | undefined } | null>(null);
       // When the user last gave scroll input, and whether a pointer is held
       // on the view (a scrollbar drag). Only read, never acted on directly.
       const userInputAtRef = useRef(-Infinity);
@@ -302,6 +311,11 @@ const ChatScrollContainer = React.memo(
           clearTimeout(glideTimeoutRef.current);
           glideTimeoutRef.current = null;
         }
+        const glideEnd = glideEndRef.current;
+        if (glideEnd) {
+          glideEnd.container.removeEventListener("scrollend", glideEnd.finish);
+          glideEndRef.current = null;
+        }
       }, []);
 
       /** Keep to the end at once. Never called while the user scrolls. */
@@ -313,18 +327,6 @@ const ChatScrollContainer = React.memo(
           behavior: "instant",
         });
       }, []);
-
-      /** A glide (or a jump) ends: follow if it reached the end. */
-      const settleAtPosition = useCallback(() => {
-        const container = scrollContainerRef.current;
-        if (!container) return;
-        modeRef.current = isAtScrollEnd(container, buttonThresholdPx)
-          ? "following"
-          : "reading";
-        if (modeRef.current === "following") stickToEnd();
-        updateScrollState();
-        savePosition();
-      }, [buttonThresholdPx, stickToEnd, updateScrollState, savePosition]);
 
       // Scroll to the end: a glide for "smooth" (a send, the button), a jump
       // otherwise. Either way the view follows afterwards.
@@ -358,23 +360,23 @@ const ChatScrollContainer = React.memo(
           container.scrollTo({ top: targetScrollTop, behavior: "smooth" });
 
           // The glide ends on scrollend; the timeout covers browsers without
-          // it and a glide that goes nowhere.
+          // it and a glide that goes nowhere. A glide the user did not
+          // interrupt follows from the current end: a streaming reply can
+          // have grown during it.
           const finish = () => {
-            container.removeEventListener("scrollend", finish);
             cancelGlide();
             if (container !== scrollContainerRef.current) return;
-            if (modeRef.current === "gliding") settleAtPosition();
+            if (modeRef.current !== "gliding") return;
+            modeRef.current = "following";
+            stickToEnd();
+            updateScrollState();
+            savePosition();
           };
           container.addEventListener("scrollend", finish, { once: true });
+          glideEndRef.current = { container, finish };
           glideTimeoutRef.current = setTimeout(finish, GLIDE_TIMEOUT_MS);
         },
-        [
-          cancelGlide,
-          stickToEnd,
-          updateScrollState,
-          savePosition,
-          settleAtPosition,
-        ]
+        [cancelGlide, stickToEnd, updateScrollState, savePosition]
       );
 
       useEffect(
@@ -390,8 +392,11 @@ const ChatScrollContainer = React.memo(
       // Catch up on content that arrived while following was paused (the
       // typewriter's drain) or off.
       const followingActive = autoScroll && !pauseFollowing;
+      const wasFollowingActiveRef = useRef(followingActive);
       useEffect(() => {
-        if (followingActive && modeRef.current === "following") {
+        const resumed = followingActive && !wasFollowingActiveRef.current;
+        wasFollowingActiveRef.current = followingActive;
+        if (resumed && modeRef.current === "following") {
           stickToEnd();
           updateScrollState();
         }
@@ -577,10 +582,10 @@ const ChatScrollContainer = React.memo(
       useLayoutEffect(() => {
         const container = scrollContainerRef.current;
         if (!container) return;
-        if (scrolledForSessionRef.current === (sessionId ?? null)) return;
+        if (placedForRef.current?.key === sessionId) return;
 
         // A new chat: reset before placing it.
-        if (scrolledForSessionRef.current !== null) {
+        if (placedForRef.current) {
           setIsScrollReady(false);
           cancelGlide();
           modeRef.current = "following";
@@ -618,6 +623,7 @@ const ChatScrollContainer = React.memo(
         }
         updateScrollState();
         setIsScrollReady(true);
+        placedForRef.current = { key: sessionId };
         scrolledForSessionRef.current = sessionId ?? null;
       }, [
         sessionId,
