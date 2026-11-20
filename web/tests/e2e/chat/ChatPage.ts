@@ -154,6 +154,92 @@ export class ChatPage {
     });
   }
 
+  /**
+   * Opens a reply card's file in the right panel and checks that markdown
+   * shows as a document: its heading, not the source.
+   */
+  async expectMarkdownPreview(title: string, heading: string): Promise<void> {
+    await this.publishedFileCard(title).click();
+    const preview = this.publishedFilePreview(title);
+    await expect(preview.getByRole("heading", { name: heading })).toBeVisible();
+    await expect(preview).not.toContainText(`# ${heading}`);
+  }
+
+  /**
+   * Opens a reply card's file in the right panel and checks that it shows as
+   * a grid with `cell` in one cell.
+   */
+  async expectSpreadsheetPreview(title: string, cell: string): Promise<void> {
+    await this.publishedFileCard(title).click();
+    const preview = this.publishedFilePreview(title);
+    await expect(
+      preview.getByRole("cell", { name: cell, exact: true })
+    ).toBeVisible();
+  }
+
+  /**
+   * Opens a reply card's PDF in the right panel, checks that its first page
+   * draws, and pages to its last page.
+   */
+  async expectPdfPreview(title: string, pageCount: number): Promise<void> {
+    await this.publishedFileCard(title).click();
+    const preview = this.publishedFilePreview(title);
+    const controls = preview.getByRole("toolbar", { name: "PDF controls" });
+    await expect(controls).toContainText(`1 / ${pageCount}`);
+    await expect(
+      preview.getByRole("region", { name: "Page 1 preview" }).locator("canvas")
+    ).toBeVisible();
+    for (let page = 2; page <= pageCount; page++) {
+      await controls.getByRole("button", { name: "Next page" }).click();
+      await expect(controls).toContainText(`${page} / ${pageCount}`);
+    }
+    await expect(
+      controls.getByRole("button", { name: "Next page" })
+    ).toBeDisabled();
+    await expect(preview.getByRole("link", { name: "Download" })).toBeVisible();
+  }
+
+  /**
+   * Opens a reply card's Word file in the right panel and checks that its
+   * first page fits the panel's width. The page scale settles after the
+   * pages insert, so the width is read again on each try.
+   */
+  async expectDocxPreviewFitsPanel(title: string): Promise<void> {
+    await this.publishedFileCard(title).click();
+    const preview = this.publishedFilePreview(title);
+    const firstPage = preview.locator("section.docx").first();
+    await expect(firstPage).toBeVisible();
+    await expect
+      .poll(async () => {
+        const [previewBox, pageBox] = await Promise.all([
+          preview.boundingBox(),
+          firstPage.boundingBox(),
+        ]);
+        return (
+          previewBox !== null &&
+          pageBox !== null &&
+          pageBox.width <= previewBox.width
+        );
+      })
+      .toBe(true);
+  }
+
+  /** Checks that the right panel's resize handle is the top element at its center. */
+  async expectResizeHandleOnTop(): Promise<void> {
+    const handle = this.rightPanelResizeHandle();
+    await expect(handle).toBeVisible();
+    await expect
+      .poll(async () => {
+        const box = await handle.boundingBox();
+        if (!box) return null;
+        return this.page.evaluate(
+          ({ x, y }) => document.elementFromPoint(x, y)?.getAttribute("role"),
+          { x: box.x + box.width / 2, y: box.y + box.height / 2 }
+        );
+      })
+      .toBe("separator");
+  }
+
   /** A tab of the right panel's tab strip, by its label. */
   rightPanelTab(label: string): Locator {
     return this.page.getByRole("tab", { name: label, exact: true });

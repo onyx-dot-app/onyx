@@ -2,6 +2,7 @@ import * as fs from "fs";
 import * as path from "path";
 import { expect, Page, test } from "@playwright/test";
 import { ChatPage } from "@tests/e2e/chat/ChatPage";
+import { FilePreviewModalPage } from "@tests/e2e/pages/FilePreviewModalPage";
 import { CHECKERED_PNG } from "@tests/e2e/fixtures/images";
 import { loginAsWorkerUser } from "@tests/e2e/utils/auth";
 import { sendMessage } from "@tests/e2e/utils/chatActions";
@@ -404,14 +405,10 @@ test.describe("Chat File Uploads", () => {
       await expect(modal.getByText(fileName)).toBeVisible();
 
       // The original .docx binary must round-trip through storage so
-      // docx-preview can render it — never the fallback error.
-      await expect(
-        modal.getByText(/Could not preview this document/)
-      ).toHaveCount(0);
-      await expect(modal.locator(".docx-host")).toBeVisible({ timeout: 10000 });
-      await expect(modal).toContainText("PINEAPPLE-QUASAR-42", {
-        timeout: 10000,
-      });
+      // docx-preview can render it — never the error card.
+      await new FilePreviewModalPage(page).expectDocxPages(
+        "PINEAPPLE-QUASAR-42"
+      );
     });
   });
 });

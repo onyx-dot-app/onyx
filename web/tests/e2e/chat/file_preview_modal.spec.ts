@@ -1,5 +1,6 @@
 import { test, expect, Page } from "@playwright/test";
 import { loginAsRandomUser } from "../utils/auth";
+import { FilePreviewModalPage } from "@tests/e2e/pages/FilePreviewModalPage";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -275,19 +276,36 @@ test.describe("File preview modal from chat file links", () => {
     // Verify the file name is shown in the header
     await expect(modal.getByText("report.docx")).toBeVisible();
 
-    // Verify the header describes it as a Word Document
-    await expect(
-      modal
-        .locator("div")
-        .filter({ hasText: /Word Document/ })
-        .first()
-    ).toBeVisible();
-
-    // Verify docx-preview rendered content into the body container
-    await expect(modal.locator(".docx-host")).toBeVisible({ timeout: 10000 });
+    await new FilePreviewModalPage(page).expectDocxPages();
 
     // Verify the download button exists
     await expect(modal.locator("a[download]")).toBeVisible();
+  });
+
+  test("clicking a PDF file link opens the preview modal and pages through it", async ({
+    page,
+  }) => {
+    const mockContent = `Here is your report: [report.pdf](/api/chat/file/${MOCK_FILE_ID})`;
+    const pdfBuffer = fs.readFileSync(
+      path.join(__dirname, "../fixtures/two_pages.pdf")
+    );
+
+    await page.route(`**/api/chat/file/${MOCK_FILE_ID}`, async (route) => {
+      await route.fulfill({
+        status: 200,
+        contentType: "application/pdf",
+        body: pdfBuffer,
+      });
+    });
+
+    await sendMessageWithMockResponse(page, "Give me the report", mockContent);
+
+    const previewModal = new FilePreviewModalPage(page);
+    await previewModal.openFromLastAnswer("report.pdf");
+    await previewModal.expectPdfPage(1, 2);
+    await previewModal.nextPdfPage();
+    await previewModal.expectPdfPage(2, 2);
+    await previewModal.expectLastPdfPage();
   });
 
   test("clicking a legacy .doc file link shows unsupported message", async ({
@@ -322,9 +340,9 @@ test.describe("File preview modal from chat file links", () => {
     // Verify the file name is shown
     await expect(modal.getByText("old_report.doc")).toBeVisible();
 
-    // Verify the legacy .doc message is shown
+    // Verify the unsupported message is shown
     await expect(
-      modal.getByText(/Legacy .doc format cannot be previewed/)
+      modal.getByText("Preview for this file type is not currently supported")
     ).toBeVisible();
 
     // Verify download button is still available
