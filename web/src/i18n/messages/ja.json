@@ -16597,9 +16597,6 @@
           }
         }
       },
-      "placeholders": {
-        "githubRepository": "ona/ripojitori または https://github.com/ona/ripojitori"
-      },
       "tabs": {
         "details": "詳細",
         "sharing": "共有",

@@ -16597,9 +16597,6 @@
           }
         }
       },
-      "placeholders": {
-        "githubRepository": "proprietario/repositorio ou https://github.com/proprietario/repositorio"
-      },
       "tabs": {
         "details": "Detalhes",
         "sharing": "Compartilhamento",

@@ -16597,9 +16597,6 @@
           }
         }
       },
-      "placeholders": {
-        "githubRepository": "inhaber/repository oder https://github.com/inhaber/repository"
-      },
       "tabs": {
         "details": "Details",
         "sharing": "Freigabe",

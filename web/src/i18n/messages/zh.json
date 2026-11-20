@@ -16597,9 +16597,6 @@
           }
         }
       },
-      "placeholders": {
-        "githubRepository": "suoyouzhe/cangku 或 https://github.com/suoyouzhe/cangku"
-      },
       "tabs": {
         "details": "详情",
         "sharing": "共享",
