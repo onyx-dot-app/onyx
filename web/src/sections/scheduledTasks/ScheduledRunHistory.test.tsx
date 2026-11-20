@@ -4,7 +4,10 @@ import {
   listScheduledTaskRuns,
   markScheduledRunsViewed,
 } from "@/lib/scheduledTasks/svc";
-import type { ScheduledRunSummary } from "@/lib/scheduledTasks/types";
+import type {
+  ScheduledRunListResponse,
+  ScheduledRunSummary,
+} from "@/lib/scheduledTasks/types";
 
 const mockReplace = jest.fn();
 jest.mock("next/navigation", () => ({
@@ -22,20 +25,35 @@ jest.mock("@/lib/scheduledTasks/hooks", () => ({
   revalidateChatScheduledRunViews: jest.fn().mockResolvedValue(undefined),
 }));
 
-let mockRuns: ScheduledRunSummary[] = [];
-let mockCursor: string | null = null;
-jest.mock("swr", () => ({
-  ...jest.requireActual("swr"),
-  __esModule: true,
-  default: (key: string) => ({
-    data: {
-      items: key.includes("unviewed=true") ? [] : mockRuns,
-      next_cursor: key.includes("unviewed=true") ? null : mockCursor,
-    },
-    error: undefined,
-    isLoading: false,
-  }),
-}));
+// The runs the fake server holds, newest first. A page ends with a cursor
+// when more runs follow it.
+let serverRuns: ScheduledRunSummary[] = [];
+let pageSize = 50;
+
+function serve(url: string): ScheduledRunListResponse {
+  const query = new URL(url, "http://localhost").searchParams;
+  if (query.get("unviewed") === "true") return { items: [], next_cursor: null };
+  const cursor = query.get("cursor");
+  const start = cursor
+    ? serverRuns.findIndex((candidate) => candidate.id === cursor) + 1
+    : 0;
+  const items = serverRuns.slice(start, start + pageSize);
+  const last = items[items.length - 1];
+  return {
+    items,
+    next_cursor: last && start + pageSize < serverRuns.length ? last.id : null,
+  };
+}
+
+beforeAll(() => {
+  global.fetch = jest.fn(async (input: RequestInfo | URL) => {
+    const body = serve(String(input));
+    return new Response(JSON.stringify(body), {
+      status: 200,
+      headers: { "Content-Type": "application/json" },
+    });
+  }) as typeof fetch;
+});
 
 function run(
   id: string,
@@ -58,7 +76,7 @@ function run(
 }
 
 beforeEach(() => {
-  mockCursor = null;
+  pageSize = 50;
   window.history.replaceState(null, "", "/app/scheduled-tasks/task");
   mockReplace.mockReset();
   jest.mocked(listScheduledTaskRuns).mockReset();
@@ -67,13 +85,13 @@ beforeEach(() => {
 
 it("opens a run's chat and leaves a run without a chat closed", async () => {
   const user = setupUser();
-  mockRuns = [
+  serverRuns = [
     run("chat", { status: "CANCELLED", error_class: "approval_timeout" }),
     run("closed", { chat_session_id: null }),
   ];
   render(<ScheduledRunHistory taskId="task" />);
 
-  expect(screen.getByText("Cancelled")).toBeInTheDocument();
+  expect(await screen.findByText("Cancelled")).toBeInTheDocument();
   expect(
     screen.getByText("Cancelled: nobody answered the approval within 24 hours.")
   ).toBeInTheDocument();
@@ -93,7 +111,7 @@ it("opens a run's chat and leaves a run without a chat closed", async () => {
 it("marks every unviewed run viewed", async () => {
   const user = setupUser();
   const unviewed = run("new", { revision: 2, viewed_revision: 1 });
-  mockRuns = [unviewed, run("seen")];
+  serverRuns = [unviewed, run("seen")];
   jest
     .mocked(listScheduledTaskRuns)
     .mockResolvedValue({ items: [unviewed], next_cursor: null });
@@ -102,7 +120,9 @@ it("marks every unviewed run viewed", async () => {
     .mockResolvedValue({ items: [], next_cursor: null });
   render(<ScheduledRunHistory taskId="task" />);
 
-  expect(screen.getAllByRole("img", { name: "New results" })).toHaveLength(1);
+  expect(
+    await screen.findAllByRole("img", { name: "New results" })
+  ).toHaveLength(1);
   await user.click(screen.getByRole("button", { name: "Mark all viewed" }));
 
   await waitFor(() =>
@@ -114,33 +134,52 @@ it("marks every unviewed run viewed", async () => {
   });
 });
 
-it("keeps a run that a new run pushes off the first page", async () => {
+it("keeps updating a run that a new run pushes off the first page", async () => {
   const user = setupUser();
+  pageSize = 2;
   const at = (hour: number) =>
     `2026-10-30T${String(hour).padStart(2, "0")}:00:00Z`;
-  mockRuns = [
-    run("two", { started_at: at(2), summary: "second run" }),
-    run("one", { started_at: at(1), summary: "first run" }),
-  ];
-  mockCursor = "after-one";
-  jest.mocked(listScheduledTaskRuns).mockResolvedValue({
-    items: [run("zero", { started_at: at(0), summary: "oldest run" })],
-    next_cursor: null,
+  const pushed = run("one", {
+    started_at: at(1),
+    status: "RUNNING",
+    summary: "first run",
   });
-  const { rerender } = render(<ScheduledRunHistory taskId="task" />);
+  serverRuns = [
+    // Unviewed, so Mark all viewed can refresh the history.
+    run("two", {
+      started_at: at(2),
+      summary: "second run",
+      revision: 1,
+      viewed_revision: null,
+    }),
+    pushed,
+    run("zero", { started_at: at(0), summary: "oldest run" }),
+  ];
+  jest
+    .mocked(listScheduledTaskRuns)
+    .mockResolvedValue({ items: [], next_cursor: null });
+  render(<ScheduledRunHistory taskId="task" />);
+  await screen.findByText("first run");
   await user.click(screen.getByRole("button", { name: "Load more" }));
   await screen.findByText("oldest run");
 
-  mockRuns = [
-    run("three", { started_at: at(3), summary: "newest run" }),
+  // A new run arrives, and the run it pushes off the first page finishes.
+  serverRuns = [
+    run("three", {
+      started_at: at(3),
+      summary: "newest run",
+      revision: 1,
+      viewed_revision: null,
+    }),
     run("two", { started_at: at(2), summary: "second run" }),
+    { ...pushed, status: "SUCCEEDED", summary: "first run done" },
+    run("zero", { started_at: at(0), summary: "oldest run" }),
   ];
-  rerender(<ScheduledRunHistory taskId="task" />);
+  await user.click(screen.getByRole("button", { name: "Mark all viewed" }));
 
-  expect(screen.getAllByText(/run$/).map((cell) => cell.textContent)).toEqual([
-    "newest run",
-    "second run",
-    "first run",
-    "oldest run",
-  ]);
+  await waitFor(() =>
+    expect(
+      screen.getAllByText(/run( done)?$/).map((cell) => cell.textContent)
+    ).toEqual(["newest run", "second run", "first run done", "oldest run"])
+  );
 });

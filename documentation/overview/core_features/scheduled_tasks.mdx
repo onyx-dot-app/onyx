@@ -124,8 +124,8 @@ Other integrations are blocked. Each action starts with **Use integration settin
 
 If your admin set an action to **Blocked**, a task cannot turn it on.
 If your admin does not let users save **Always allow** on an integration,
-**Allow** in a task does not change the admin setting. If you saved **Always allow** for an action,
-the action runs without approval in your tasks also.
+**Allow** in a task does not change the admin setting. Saved **Always allow** choices do not apply to task runs:
+to run an action without approval, set it to **Allow** in the task, where your admin permits it.
 
 <Warning>
   Keep the prompt and the list of integrations that you turn on as narrow as possible.
@@ -164,7 +164,7 @@ not the integration settings of the task.
 | **Running**           | The default agent works on the prompt in the run chat.                                                  |
 | **Awaiting approval** | The run reached an action set to **Ask** and waits for your approval in the run chat.                   |
 | **Succeeded**         | The run completed normally.                                                                             |
-| **Failed**            | The run had an error. Open its chat to investigate.                                                     |
+| **Failed**            | The run had an error or reached the one-hour limit of a chat turn. Open its chat to investigate.        |
 | **Cancelled**         | You stopped the run, or nobody answered an approval in time.                                            |
 | **Skipped**           | The run did not start because the previous run of the task was still queued or running.                 |
 

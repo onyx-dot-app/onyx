@@ -2,6 +2,7 @@
 
 import { useRef, useState, type ReactNode } from "react";
 import useSWR, { mutate } from "swr";
+import useSWRInfinite from "swr/infinite";
 import { useTranslations } from "next-intl";
 import {
   Button,
@@ -75,20 +76,38 @@ export default function ScheduledRunHistory({
   const tTasks = useTranslations("scheduledTasks");
   const appPosition = useAppPosition();
   const timeFormat = useScheduledTaskFormat();
-  const [olderPages, setOlderPages] = useState<ScheduledRunSummary[][]>([]);
-  const [olderCursor, setOlderCursor] = useState<string | null>(null);
-  const [loadingMore, setLoadingMore] = useState(false);
   const [markingViewed, setMarkingViewed] = useState(false);
   const unviewedSignature = useRef<string | null>(null);
 
-  const { data, error, isLoading } = useSWR<ScheduledRunListResponse>(
-    SWR_KEYS.chatScheduledTaskRunsPage(taskId, RUNS_PAGE_SIZE),
+  // Every refresh refetches each loaded page in cursor order, so a run
+  // pushed off the first page stays listed and keeps updating.
+  const {
+    data: pages,
+    error,
+    isLoading,
+    isValidating,
+    size,
+    setSize,
+    mutate: refreshRuns,
+  } = useSWRInfinite<ScheduledRunListResponse>(
+    (index, previous: ScheduledRunListResponse | null) =>
+      index === 0
+        ? SWR_KEYS.chatScheduledTaskRunsPage(taskId, RUNS_PAGE_SIZE)
+        : previous?.next_cursor
+          ? SWR_KEYS.chatScheduledTaskRunsPage(
+              taskId,
+              RUNS_PAGE_SIZE,
+              previous.next_cursor
+            )
+          : null,
     errorHandlingFetcher,
     {
       refreshInterval: REFRESH_INTERVAL_MS,
+      revalidateAll: true,
       // The sidebar polls slowly, so tell it when a run turns unviewed.
-      onSuccess: (page) => {
-        const unviewed = page.items
+      onSuccess: (loaded) => {
+        const unviewed = loaded
+          .flatMap((page) => page.items)
           .filter(isRunUnviewed)
           .map((run) => `${run.id}:${run.revision}`)
           .join();
@@ -104,48 +123,30 @@ export default function ScheduledRunHistory({
     { refreshInterval: REFRESH_INTERVAL_MS }
   );
 
-  // The first page wins for a run in both; the older pages also keep the
-  // first page of their first load, so a run that a new run pushes off the
-  // first page stays listed.
   const runs: ScheduledRunSummary[] = [];
   const seen = new Set<string>();
-  for (const run of [...(data?.items ?? []), ...olderPages.flat()]) {
+  for (const run of (pages ?? []).flatMap((page) => page.items)) {
     if (seen.has(run.id)) continue;
     seen.add(run.id);
     runs.push(run);
   }
-  runs.sort((a, b) => b.started_at.localeCompare(a.started_at));
-  const loadMoreCursor =
-    olderPages.length > 0 ? olderCursor : (data?.next_cursor ?? null);
+  const loadMoreCursor = pages?.[pages.length - 1]?.next_cursor ?? null;
+  const loadingMore = isValidating && size > (pages?.length ?? 0);
   const hasUnviewed =
     runs.some(isRunUnviewed) ||
     (unviewedProbe?.items.some(isRunUnviewed) ?? false);
 
   async function loadMore() {
-    if (!loadMoreCursor) return;
-    setLoadingMore(true);
     try {
-      const page = await listScheduledTaskRuns(taskId, {
-        cursor: loadMoreCursor,
-        limit: RUNS_PAGE_SIZE,
-      });
-      setOlderPages((pages) =>
-        pages.length === 0
-          ? [data?.items ?? [], page.items]
-          : [...pages, page.items]
-      );
-      setOlderCursor(page.next_cursor);
+      await setSize(size + 1);
     } catch {
       toast.error(t("loadFailed"));
-    } finally {
-      setLoadingMore(false);
     }
   }
 
   async function markAllViewed() {
     setMarkingViewed(true);
-    const viewed = new Map<string, ScheduledRunSummary>();
-    let allViewed = false;
+    let marked = false;
     try {
       // A marked run leaves the unviewed filter, so each pass reads the next batch.
       for (;;) {
@@ -154,30 +155,19 @@ export default function ScheduledRunHistory({
           unviewed: true,
         });
         if (page.items.length === 0) break;
-        const res = await markScheduledRunsViewed(taskId, page.items);
-        for (const run of res.items) viewed.set(run.id, run);
+        await markScheduledRunsViewed(taskId, page.items);
+        marked = true;
         if (page.items.length < RUNS_MAX_PAGE_SIZE) break;
       }
-      allViewed = true;
     } catch {
       toast.error(t("markAllViewedFailed"));
     } finally {
-      if (viewed.size > 0 || allViewed) {
-        // With every run viewed, a loaded row still unviewed is stale: another
-        // tab viewed it.
-        setOlderPages((pages) =>
-          pages.map((page) =>
-            page.map(
-              (run) =>
-                viewed.get(run.id) ??
-                (allViewed && isRunUnviewed(run)
-                  ? { ...run, viewed_revision: run.revision }
-                  : run)
-            )
-          )
-        );
+      if (marked) {
         await revalidateChatScheduledRunViews(taskId).catch(() => undefined);
       }
+      // Also when nothing was left to mark: another tab may have viewed a
+      // loaded row.
+      await refreshRuns().catch(() => undefined);
       setMarkingViewed(false);
     }
   }
@@ -273,13 +263,13 @@ export default function ScheduledRunHistory({
     },
   ];
 
-  if (isLoading && !data)
+  if (isLoading && !pages)
     return (
       <Text as="p" font="main-ui-body" color="text-03">
         {t("loading")}
       </Text>
     );
-  if (error && !data)
+  if (error && !pages)
     return (
       <Text as="p" font="main-ui-body" color="status-error-05">
         {t("loadFailed")}

@@ -17663,7 +17663,7 @@
       "markAllViewed": "Marcar tudo como visto",
       "markAllViewedFailed": "Não foi possível marcar as execuções como vistas. Tente novamente.",
       "trigger": "{source, select, MANUAL_RUN_NOW {Executar uma vez} other {Agendamento}}",
-      "errorClass": "{errorClass, select, superseded_by_next_fire {Cancelada: a próxima execução começou antes que alguém respondesse à aprovação.} approval_timeout {Cancelada: ninguém respondeu à aprovação em 24 horas.} user_cancelled {Interrompida por você.} agent_permission_required {Uma ação precisava de aprovação.} agent_exception {Falhou: a execução encontrou um erro.} stuck {Falhou: a execução não começou a tempo.} other {Falhou: {errorClass}}}",
+      "errorClass": "{errorClass, select, superseded_by_next_fire {Cancelada: a próxima execução começou antes que alguém respondesse à aprovação.} approval_timeout {Cancelada: ninguém respondeu à aprovação em 24 horas.} user_cancelled {Interrompida por você.} agent_permission_required {Uma ação precisava de aprovação.} agent_exception {Falhou: a execução encontrou um erro.} stuck {Falhou: a execução não começou a tempo.} timeout {Falhou: a execução atingiu o limite de uma hora.} other {Falhou: {errorClass}}}",
       "columns": {
         "started": "Início",
         "status": "Status",

@@ -17663,7 +17663,7 @@
       "markAllViewed": "وضع علامة مقروء على الكل",
       "markAllViewedFailed": "تعذّر وضع علامة مقروء على عمليات التشغيل. حاول مرة أخرى.",
       "trigger": "{source, select, MANUAL_RUN_NOW {تشغيل مرة واحدة} other {الجدول الزمني}}",
-      "errorClass": "{errorClass, select, superseded_by_next_fire {أُلغي: بدأ التشغيل التالي قبل أن يرد أحد على طلب الموافقة.} approval_timeout {أُلغي: لم يرد أحد على طلب الموافقة خلال 24 ساعة.} user_cancelled {أوقفته أنت.} agent_permission_required {احتاج إجراء إلى موافقة.} agent_exception {فشل: حدث خطأ أثناء التشغيل.} stuck {فشل: لم يبدأ التشغيل في الوقت المحدد.} other {فشل: {errorClass}}}",
+      "errorClass": "{errorClass, select, superseded_by_next_fire {أُلغي: بدأ التشغيل التالي قبل أن يرد أحد على طلب الموافقة.} approval_timeout {أُلغي: لم يرد أحد على طلب الموافقة خلال 24 ساعة.} user_cancelled {أوقفته أنت.} agent_permission_required {احتاج إجراء إلى موافقة.} agent_exception {فشل: حدث خطأ أثناء التشغيل.} stuck {فشل: لم يبدأ التشغيل في الوقت المحدد.} timeout {فشل: وصل التشغيل إلى حد الساعة الواحدة.} other {فشل: {errorClass}}}",
       "columns": {
         "started": "البدء",
         "status": "الحالة",

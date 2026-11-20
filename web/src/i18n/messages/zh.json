@@ -17663,7 +17663,7 @@
       "markAllViewed": "全部标记为已查看",
       "markAllViewedFailed": "无法将运行标记为已查看。请重试。",
       "trigger": "{source, select, MANUAL_RUN_NOW {运行一次} other {计划}}",
-      "errorClass": "{errorClass, select, superseded_by_next_fire {已取消：在有人回应批准之前，下一次运行已开始。} approval_timeout {已取消：24 小时内无人回应批准。} user_cancelled {已由您停止。} agent_permission_required {某个操作需要批准。} agent_exception {失败：运行时出错。} stuck {失败：运行未能按时开始。} other {失败：{errorClass}}}",
+      "errorClass": "{errorClass, select, superseded_by_next_fire {已取消：在有人回应批准之前，下一次运行已开始。} approval_timeout {已取消：24 小时内无人回应批准。} user_cancelled {已由您停止。} agent_permission_required {某个操作需要批准。} agent_exception {失败：运行时出错。} stuck {失败：运行未能按时开始。} timeout {失败：运行达到了一小时的上限。} other {失败：{errorClass}}}",
       "columns": {
         "started": "开始时间",
         "status": "状态",
