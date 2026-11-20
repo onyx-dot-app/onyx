@@ -5,12 +5,19 @@ The listing walks the same delta pages as the fetching path. For each file
 that indexing keeps, it yields a ``SlimDocumentStub`` and no content. A site
 page is listed with its metadata only: the listing does not read the page's
 canvas, which is the page's content.
+
+A file's stub keeps the pre-authenticated download link of the listing
+(``@microsoft.graph.downloadUrl``), encrypted as credentials are, and the
+time of the listing. While the link is younger than ``DOWNLOAD_URL_MAX_AGE``,
+conversion downloads from it, which is no Graph call. An older or refused
+link falls back to Graph ``/content`` (1 RU).
 """
 
+import base64
+from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from onyx.connectors.microsoft_utils.drive_items import (
-    DRIVE_ITEM_DOWNLOAD_URL_SELECT,
     DRIVE_ITEM_SELECT_FIELDS,
     DriveItemData,
     parse_graph_datetime,
@@ -21,15 +28,18 @@ from onyx.connectors.sharepoint.models import (
     SharepointListingPayload,
 )
 from onyx.file_processing.file_types import OnyxMimeTypes, is_indexable_file_type
+from onyx.utils.datetime import datetime_to_utc
+from onyx.utils.encryption import decrypt_bytes_to_string, encrypt_string_to_bytes
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 CANVAS_LAYOUT_PROPERTY = "canvasLayout"
-# The fields of a file that the listing maps. Not the download URL: the
-# listing downloads nothing, and conversion downloads by drive and item id.
-LISTING_SELECT_FIELDS = ",".join(
-    field
-    for field in DRIVE_ITEM_SELECT_FIELDS.split(",")
-    if field != DRIVE_ITEM_DOWNLOAD_URL_SELECT
-)
+# The fields of a file that the listing maps, with its download link.
+LISTING_SELECT_FIELDS = DRIVE_ITEM_SELECT_FIELDS
+# Graph's download links live about one hour. Conversion uses a stored link
+# only while it is younger than this, so a slow download still starts in time.
+DOWNLOAD_URL_MAX_AGE = timedelta(minutes=45)
 
 
 def is_listable_drive_item(item: DriveItemData, size_threshold: int) -> bool:
@@ -45,6 +55,31 @@ def is_listable_drive_item(item: DriveItemData, size_threshold: int) -> bool:
     return item.size is None or item.size <= size_threshold
 
 
+def _encrypt_download_url(url: str) -> str:
+    return base64.b64encode(encrypt_string_to_bytes(url)).decode("ascii")
+
+
+def fresh_download_url(payload: SharepointListingPayload) -> str | None:
+    """The listed download link, while it is younger than
+    ``DOWNLOAD_URL_MAX_AGE``. None when the payload has none, it is too old,
+    or it does not decrypt (for example after a key change)."""
+    if not payload.encrypted_download_url or payload.download_url_listed_at is None:
+        return None
+    age = datetime.now(timezone.utc) - datetime_to_utc(payload.download_url_listed_at)
+    if age >= DOWNLOAD_URL_MAX_AGE:
+        return None
+    try:
+        return decrypt_bytes_to_string(base64.b64decode(payload.encrypted_download_url))
+    except Exception as e:
+        logger.warning(
+            "Could not decrypt the listed download link of item %s (%s); "
+            "downloading by item id",
+            payload.item_id,
+            type(e).__name__,
+        )
+        return None
+
+
 def drive_item_stub(
     item: DriveItemData,
     *,
@@ -55,6 +90,9 @@ def drive_item_stub(
     parent_hierarchy_raw_node_id: str,
     listing_run_id: str | None,
 ) -> SlimDocumentStub:
+    encrypted_download_url = (
+        _encrypt_download_url(item.download_url) if item.download_url else None
+    )
     return SlimDocumentStub(
         id=item.id,
         parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
@@ -80,13 +118,17 @@ def drive_item_stub(
             size=item.size,
             last_modified_by_display_name=item.last_modified_by_display_name,
             last_modified_by_email=item.last_modified_by_email,
+            encrypted_download_url=encrypted_download_url,
+            download_url_listed_at=(
+                datetime.now(timezone.utc) if encrypted_download_url else None
+            ),
             listing_run_id=listing_run_id,
         ),
     )
 
 
 def drive_item_from_payload(payload: SharepointListingPayload) -> DriveItemData:
-    """The listed file, with no download URL."""
+    """The listed file, with its download link while the link is fresh."""
     if not payload.item_id or not payload.drive_id:
         raise ValueError("The listing payload names no drive item")
     return DriveItemData(
@@ -102,6 +144,7 @@ def drive_item_from_payload(payload: SharepointListingPayload) -> DriveItemData:
         parent_reference_path=payload.parent_path,
         drive_id=payload.drive_id,
         list_item_id=payload.list_item_id,
+        download_url=fresh_download_url(payload),
     )
 
 
