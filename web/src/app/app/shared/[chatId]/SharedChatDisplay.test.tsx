@@ -1,3 +1,4 @@
+import { createRef } from "react";
 import { act, render, screen } from "@tests/setup/test-utils";
 import {
   PacketType,
@@ -11,6 +12,7 @@ import {
 import type { Agent } from "@/lib/agents/types";
 import { fetchChatFile } from "@/lib/chat/svc";
 import SharedChatDisplay from "@/app/app/shared/[chatId]/SharedChatDisplay";
+import { AppWorkspaceElementsContext } from "@/layouts/chromes/AppWorkspace";
 
 jest.mock("@/lib/chat/svc", () => ({
   ...jest.requireActual("@/lib/chat/svc"),
@@ -104,6 +106,19 @@ function sharedChat(
   };
 }
 
+// The shared chat in the app chrome's workspace, which the panel needs
+function renderSharedChat(chatSession: BackendChatSession) {
+  const elements = {
+    workspace: createRef<HTMLDivElement>(),
+    page: createRef<HTMLDivElement>(),
+  };
+  render(
+    <AppWorkspaceElementsContext.Provider value={elements}>
+      <SharedChatDisplay chatSession={chatSession} persona={{} as Agent} />
+    </AppWorkspaceElementsContext.Provider>
+  );
+}
+
 beforeAll(() => {
   Object.defineProperty(window.URL, "createObjectURL", {
     configurable: true,
@@ -121,9 +136,7 @@ test("a shared chat's card opens its file in the Files panel, read-only", async 
       headers: { "Content-Type": "text/markdown" },
     })
   );
-  render(
-    <SharedChatDisplay chatSession={sharedChat()} persona={{} as Agent} />
-  );
+  renderSharedChat(sharedChat());
 
   const filesButton = await screen.findByRole("button", { name: "Files" });
   expect(filesButton).toHaveAttribute("aria-pressed", "false");
@@ -150,9 +163,7 @@ test("a shared chat's card opens its file when the chat lists no files", async (
   );
   // A published file without a path: its card shows, but the load lists no
   // files
-  render(
-    <SharedChatDisplay chatSession={sharedChat([])} persona={{} as Agent} />
-  );
+  renderSharedChat(sharedChat([]));
   await screen.findByRole("button", { name: "Preview report.md" });
   expect(screen.queryByRole("button", { name: "Files" })).toBeNull();
 

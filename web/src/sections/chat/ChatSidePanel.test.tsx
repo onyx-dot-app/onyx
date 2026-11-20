@@ -88,3 +88,61 @@ test("Escape closes an open preview first, and the panel on the next press", () 
     document.removeEventListener("keydown", closePreview, true);
   }
 });
+
+test("the width slides on a change of shape, and a change of width within a shape applies at once", () => {
+  const Panel = ({
+    open,
+    reserve,
+    covers,
+  }: {
+    open: boolean;
+    reserve: number;
+    covers: boolean;
+  }) => (
+    <ChatSidePanel
+      open={open}
+      onEscape={jest.fn()}
+      reserve={reserve}
+      covers={covers}
+    >
+      <button type="button">Inside</button>
+    </ChatSidePanel>
+  );
+  const { rerender } = render(
+    <Panel open={false} reserve={600} covers={false} />
+  );
+  const panel = screen.getByText("Inside").parentElement!;
+  const reserve = panel.parentElement!;
+  const sliding = () => ({
+    panel: panel.classList.contains("transition-[width]"),
+    reserve: reserve.classList.contains("transition-[width]"),
+  });
+  // jsdom has no TransitionEvent
+  const endTransition = (target: Element) => {
+    const event = new Event("transitionend", { bubbles: true });
+    Object.defineProperty(event, "propertyName", { value: "width" });
+    fireEvent(target, event);
+  };
+  const settle = () => endTransition(panel);
+  expect(sliding()).toEqual({ panel: false, reserve: false });
+
+  rerender(<Panel open reserve={600} covers={false} />);
+  expect(sliding()).toEqual({ panel: true, reserve: true });
+  // A child's transition does not end the panel's slide
+  endTransition(screen.getByText("Inside"));
+  expect(sliding()).toEqual({ panel: true, reserve: true });
+  settle();
+  expect(sliding()).toEqual({ panel: false, reserve: false });
+
+  // The row grows: the panel and the page follow at once
+  rerender(<Panel open reserve={700} covers={false} />);
+  expect(sliding()).toEqual({ panel: false, reserve: false });
+  expect(panel.style.width).toBe("700px");
+
+  rerender(<Panel open reserve={700} covers />);
+  expect(sliding().panel).toBe(true);
+  expect(panel.style.width).toBe("100%");
+  settle();
+  rerender(<Panel open reserve={800} covers />);
+  expect(sliding().panel).toBe(false);
+});

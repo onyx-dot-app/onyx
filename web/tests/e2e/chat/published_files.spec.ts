@@ -384,21 +384,44 @@ test.describe("Published files", () => {
       ).toContainText(REPORT_TEXT);
       await expect.poll(() => chatPage.rightPanelWidth()).toBe(width);
 
+      // At full size the panel covers the row: a wider window shows no
+      // frame of the page beside it.
+      await chatPage.expectRightPanelSettled(width);
+      await chatPage.expandRightPanel();
+      await chatPage.expectRightPanelSettled("row");
+      const grown = await chatPage.rightPanelFrames(() =>
+        page.setViewportSize({ width: 1900, height: 900 })
+      );
+      expect(grown[grown.length - 1]!.rowEnd).toBeGreaterThan(grown[0]!.rowEnd);
+      grown.forEach((frame) => {
+        expect(frame.start).toBeLessThanOrEqual(frame.rowStart);
+        expect(frame.end).toBeGreaterThanOrEqual(frame.rowEnd);
+      });
+
       // Escape leaves full screen: the panel shrinks to its medium width at
       // the workspace's end, and the page beside it stays still. Then Escape
       // closes each file's tab, then the panel.
-      await chatPage.expandRightPanel();
+      await chatPage.expectRightPanelSettled("row");
       const frames = await chatPage.rightPanelFrames(() =>
         page.keyboard.press("Escape")
       );
       await chatPage.expectRightPanelExpanded(false);
+      // The handle hides at full size
+      const medium = await chatPage.rightPanelWidth();
       const [first, last] = [frames[0]!, frames[frames.length - 1]!];
+      expect(first.width).toBe(first.rowEnd - first.rowStart);
       // The handle reports the width rounded
-      expect(Math.abs(last.width - width)).toBeLessThanOrEqual(1);
+      expect(Math.abs(last.width - medium)).toBeLessThanOrEqual(1);
+      // The panel draws frames between the two widths
+      expect(
+        frames.some(
+          (frame) => frame.width < first.width - 1 && frame.width > medium + 1
+        )
+      ).toBe(true);
       frames.forEach((frame, index) => {
         expect(frame.end).toBe(first.end);
         expect(frame.pageWidth).toBe(first.pageWidth);
-        expect(frame.width).toBeGreaterThanOrEqual(width - 1);
+        expect(frame.width).toBeGreaterThanOrEqual(medium - 1);
         expect(frame.width).toBeLessThanOrEqual(
           index === 0 ? first.width : frames[index - 1]!.width
         );

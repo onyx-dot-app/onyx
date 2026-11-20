@@ -471,8 +471,12 @@ column; the open panel measures the row, so a width change renders the panel
 and nothing else, and a covering panel makes the page column inert. A closed
 panel does not watch the width; it measures again when it opens.
 `ChatSidePanel`'s `reserve` keeps the medium width in the row's flow, and the
-panel sits over the row's end at a pixel width, medium or full. A change of
-size moves only the panel's edge, never the page or the panel's position.
+panel sits over the row's end: at the reserve's width at medium size, at the
+row's full width (`100%`) when it covers. A change of size moves only the
+panel's edge, never the page or the panel's position. The width slides only
+when the panel's shape changes (open, close, beside or over the page); a
+change of the row's width or a drag applies at once. The chat panel throws
+without the workspace context.
 In the panel, `sections/document-sidebar/DocumentsSidebar.tsx` gets no
 `closeSidebar` and draws no frame; NRF draws its frame. `sections/chat/ChatSidePanel.tsx` is
 the sliding panel frame: it returns focus to the opener on close. It records
