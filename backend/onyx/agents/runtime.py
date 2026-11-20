@@ -766,6 +766,12 @@ class Run:
             self._execution_condition.notify_all()
 
     @property
+    def has_tool_activity(self) -> bool:
+        """Whether `notify_tool_activity` ran since the tool phase's cycle began."""
+        with self.execution_lock:
+            return self._tool_activity
+
+    @property
     def suspension_requested(self) -> bool:
         with self.execution_lock:
             return self._execution_request == ExecutionRequest.SUSPEND

@@ -723,7 +723,7 @@ class CodeCell:
         # Decides the program's calls. It stays the gate of the call that
         # started the cell, or that rebuilt it in this process, so every
         # request of the cell belongs to that call and the run offers their
-        # answers together.
+        # answers together. The before_tool_call hook sees that call's step.
         self._gate: NestedCallGate | None = invocation.nested_calls
         # Files of documents that nested calls found, for later Python calls of
         # the program, as the chat stages them for direct calls.

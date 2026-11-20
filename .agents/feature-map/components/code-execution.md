@@ -539,7 +539,7 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
     program as a tool error does. The cell keeps one gate (`CodeCell._gate`):
     each of its requests belongs to the call that started it, or that rebuilt
     it in this process, also while `wait_code` observes it, so the run offers
-    their answers together. A request decision shows the request at once,
+    their answers together; `before_tool_call` sees that call's step. A request decision shows the request at once,
     also for a cell that runs in the background, and the call waits without a
     thread (the handler returns
     `tools/tool_implementations/code_mode/sandbox.py:AWAITS_INPUT`). Once the program

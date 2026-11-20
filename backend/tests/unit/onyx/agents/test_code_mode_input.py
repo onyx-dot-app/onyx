@@ -644,7 +644,7 @@ def test_an_answer_before_a_background_program_parks_still_runs_its_call(
         until(lambda: "program" in _pending_calls(run))
         run.submit(_answer(InputDecision.APPROVE, BACKGROUND_REQUEST_ID))
         # Offered before the park, so the program took nothing.
-        until(lambda: offers == [0])
+        until(lambda: 0 in offers)
         agents.gate.set()
         saved = _suspended(run)
 
@@ -656,12 +656,6 @@ def test_an_answer_before_a_background_program_parks_still_runs_its_call(
         agents.gate.set()
         run.cancel()
         assert run.wait_for_idle(10)
-
-
-def _moved(run: Run) -> ExecutionCheckpoint:
-    """The suspended run as chat restores it in another process: its saved
-    results keep their typed details, which chat saves with the response."""
-    return run.capture()
 
 
 def _result(run: Run, step_index: int, call_id: str) -> ToolResultMessage | None:
@@ -776,7 +770,7 @@ def test_a_program_that_parks_while_a_call_runs_takes_its_answer(
         until(lambda: "busy" in run.snapshot().steps[-1].tools)
         run.submit(_answer(InputDecision.APPROVE, BACKGROUND_REQUEST_ID))
         # Offered before the park, so the program took nothing.
-        until(lambda: offers == [0])
+        until(lambda: 0 in offers)
         background.set()
 
         until(lambda: agents.sent == ["bg"])
@@ -804,7 +798,9 @@ def test_a_restored_background_cell_that_ends_unobserved_keeps_its_output() -> N
     )
     run = agents.agent().start(max_steps=5, messages=[UserMessage(content="Send")])
     _suspended(run)
-    checkpoint = _moved(run)
+    # As chat restores it in another process: the saved results keep their
+    # typed details, which chat saves with the response.
+    checkpoint = run.capture()
     resumed = agents.agent(checkpoint.agent_state).resume(
         checkpoint.run_state,
         answers=[_answer(InputDecision.APPROVE, BACKGROUND_REQUEST_ID)],
@@ -828,13 +824,14 @@ def test_a_saved_background_cell_stays_open_across_another_suspend() -> None:
     agents = _background_send_agents()
     run = agents.agent().start(max_steps=5, messages=[UserMessage(content="Send")])
     _suspended(run)
-    checkpoint = _moved(run)
+    # Typed result details, as chat restores them.
+    checkpoint = run.capture()
 
     resumed = agents.agent(checkpoint.agent_state).resume(checkpoint.run_state)
     state = _suspended(resumed)
     assert _closing(state, "background") is None
 
-    checkpoint = _moved(resumed)
+    checkpoint = resumed.capture()
     last = agents.agent(checkpoint.agent_state).resume(
         checkpoint.run_state,
         answers=[
@@ -845,6 +842,51 @@ def test_a_saved_background_cell_stays_open_across_another_suspend() -> None:
     last.result(timeout=20)
     assert last.wait_for_idle(10)
     assert sorted(map(str, agents.sent)) == ["bg", "x"]
+
+
+def test_a_program_that_parks_right_after_its_offer_takes_the_answer(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The background program parks, and its driver ends, after the offer of
+    its answer took nothing and before the tool phase checks for work. The
+    run offers the answer again instead of suspending with it."""
+    runs: list[Run] = []
+    agents = Agents(
+        reply=_one_call_per_step(
+            _execute(
+                "background",
+                "yield_control()\n"
+                'a, b = await asyncio.gather(tools.wait(value="a"), tools.send(value="bg"))\n'
+                'print("sent", a, b)',
+            ),
+            _execute("program", PROGRAM),
+        )
+    )
+    agents.gate = threading.Event()
+    continue_open = CodeCells.continue_open
+
+    def park_after_offer(self: CodeCells, *args: Any, **kwargs: Any) -> list[str]:
+        taken = continue_open(self, *args, **kwargs)
+        if not taken and agents.gate is not None and not agents.gate.is_set():
+            agents.gate.set()
+            until(lambda: runs[0].work.held.idle)
+        return taken
+
+    monkeypatch.setattr(CodeCells, "continue_open", park_after_offer)
+    run = agents.agent().start(max_steps=5, messages=[UserMessage(content="Send")])
+    runs.append(run)
+    try:
+        until(lambda: "program" in _pending_calls(run))
+        run.submit(_answer(InputDecision.APPROVE, BACKGROUND_REQUEST_ID))
+        saved = _suspended(run)
+
+        assert agents.sent == ["bg"]
+        assert saved.progress is not None
+        assert saved.progress.open_inputs == {}
+    finally:
+        agents.gate.set()
+        run.cancel()
+        assert run.wait_for_idle(10)
 
 
 def test_a_program_too_large_to_park_continues_without_the_call(

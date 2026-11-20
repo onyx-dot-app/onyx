@@ -273,8 +273,10 @@ class ToolBatch:
                     if not self.futures:
                         if len(self._completed_call_ids()) > len(completed_call_ids):
                             continue
-                        # See ToolInvocation.run_work.
-                        if self.run.work.held.idle:
+                        # See ToolInvocation.run_work. Work that ended since
+                        # the cycle began, such as a program that parked
+                        # after its offer, gets another cycle.
+                        if self.run.work.held.idle and not self.run.has_tool_activity:
                             return False
                     # Each held job that ends, such as a call or a program
                     # that parks, starts another cycle.
