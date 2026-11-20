@@ -247,13 +247,15 @@ def sync_marketplace(
         logger.warning("Marketplace sync %s lost its lock", marketplace_id)
         return MarketplaceSyncResult(status=MarketplaceSyncStatus.FAILED)
     file_store = get_default_file_store()
-    if lock is not None and not lock.owned():
-        # The lock expired during a long read; a newer sync may have written.
-        logger.warning("Marketplace sync %s lost its lock", marketplace_id)
-        for content in staged.values():
-            delete_bundle_blob(file_store, content.bundle_file_id)
-        return MarketplaceSyncResult(status=MarketplaceSyncStatus.FAILED)
     try:
+        try:
+            heartbeat()
+        except CacheLockLostError:
+            # The lock expired during a long read; a newer sync may have written.
+            logger.warning("Marketplace sync %s lost its lock", marketplace_id)
+            for content in staged.values():
+                delete_bundle_blob(file_store, content.bundle_file_id)
+            return MarketplaceSyncResult(status=MarketplaceSyncStatus.FAILED)
         with get_session_with_current_tenant() as db_session:
             login = fetch_user_by_id(db_session, login_user_id)
             result = apply_marketplace_sync__no_commit(
