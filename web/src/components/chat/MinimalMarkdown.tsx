@@ -16,6 +16,7 @@ import "katex/dist/katex.min.css";
 import { transformLinkUri } from "@/lib/utils";
 import { rehypeDirection } from "@/lib/rehypeDirection";
 import { rehypeStreamingCursor } from "@/lib/rehypeStreamingCursor";
+import { useInResponse } from "@/lib/timeline/components/Response";
 import { cn } from "@opal/utils";
 
 type MinimalMarkdownComponentOverrides = Partial<Components>;
@@ -44,6 +45,8 @@ export default function MinimalMarkdown({
   cursor = false,
 }: MinimalMarkdownProps) {
   const highlightLanguages = useHighlightLanguages(!streaming);
+  // In a response, the cursor is a marker for the response's one cursor.
+  const inResponse = useInResponse();
   const rehypePlugins = useMemo<PluggableList>(() => {
     const plugins: PluggableList =
       !streaming && highlightLanguages
@@ -53,8 +56,10 @@ export default function MinimalMarkdown({
             rehypeDirection,
           ]
         : [rehypeKatex, rehypeDirection];
-    return cursor ? [...plugins, rehypeStreamingCursor] : plugins;
-  }, [streaming, highlightLanguages, cursor]);
+    return cursor
+      ? [...plugins, [rehypeStreamingCursor, { anchor: inResponse }]]
+      : plugins;
+  }, [streaming, highlightLanguages, cursor, inResponse]);
   const markdownComponents = useMemo(() => {
     const defaults: Components = {
       a: MemoizedLink,

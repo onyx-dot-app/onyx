@@ -39,6 +39,8 @@ import { extractChatImageFileId } from "@/app/app/components/files/images/utils"
 import { transformLinkUri } from "@/lib/utils";
 import { rehypeDirection } from "@/lib/rehypeDirection";
 import { rehypeStreamingCursor } from "@/lib/rehypeStreamingCursor";
+import { useInResponse } from "@/lib/timeline/components/Response";
+import { ResponseCursorAnchor } from "@/lib/timeline/components/ResponseCursor";
 import { cn } from "@opal/utils";
 import { useSmoothStreaming } from "@/hooks/useSmoothStreaming";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
@@ -450,13 +452,18 @@ export const MessageTextRenderer: MessageRenderer<
   const baseRehypePlugins = streamFullyDisplayed
     ? fullRehypePlugins
     : STREAMING_REHYPE_PLUGINS;
-  // The cursor sits inline after the last character of the parsed tree.
+  // The cursor sits inline after the last character of the parsed tree. In
+  // a response, it is a marker for the response's one cursor.
+  const inResponse = useInResponse();
   const rehypePlugins = useMemo<PluggableList>(
     () =>
       shouldShowCursor
-        ? [...baseRehypePlugins, rehypeStreamingCursor]
+        ? [
+            ...baseRehypePlugins,
+            [rehypeStreamingCursor, { anchor: inResponse }],
+          ]
         : baseRehypePlugins,
-    [shouldShowCursor, baseRehypePlugins]
+    [shouldShowCursor, baseRehypePlugins, inResponse]
   );
 
   return children([
@@ -489,6 +496,8 @@ export const MessageTextRenderer: MessageRenderer<
               {processedContent}
             </ReactMarkdown>
           </div>
+        ) : inResponse ? (
+          <ResponseCursorAnchor addMargin />
         ) : (
           <BlinkingBar addMargin />
         ),
