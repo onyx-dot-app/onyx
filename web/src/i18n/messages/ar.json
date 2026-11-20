@@ -17097,13 +17097,18 @@
         "failed": "تعذّر تفعيل {name}."
       },
       "add": {
-        "label": "إضافة لفريقك",
-        "ariaLabel": "إضافة {name} لفريقك"
+        "label": "إضافة تكامل",
+        "ariaLabel": "إضافة تكامل {name}"
+      },
+      "urlProblem": {
+        "variable": "يستخدم عنوان URL متغيرًا. لا يملأ Onyx المتغيرات.",
+        "credential": "يحتوي عنوان URL على بيانات اعتماد. لا يحتفظ Onyx بها.",
+        "invalid": "عنوان URL ليس عنوان http أو https صالحًا."
       }
     },
     "upload": {
       "title": "رفع إضافة",
-      "description": "ارفع إضافة Claude Code أو Codex كملف ‎.zip أو مجلد.",
+      "description": "ارفع مكونًا إضافيًا لـ Claude Code أو Codex. اختر ملف .zip أو اسحب مجلد المكون الإضافي إلى هنا.",
       "reading": "جارٍ القراءة…",
       "requirements": {
         "title": "يستخدم Onyx هذه الأجزاء من الإضافة:",
@@ -17118,9 +17123,10 @@
       },
       "version": "v{version}",
       "target": {
-        "newVersion": "يحدّث {name} إلى v{version}",
+        "newVersion": "يحدّث {name} إلى إصدار Onyx {version}",
         "newPlugin": "إضافة جديدة: {name}"
       },
+      "willBeOff": "يُحفظ المكون الإضافي متوقفًا. لدى {names} مهارة بالاسم نفسه.",
       "saveAsNew": {
         "label": "حفظ كإضافة جديدة",
         "description": "أبقِ الإضافة التي تحمل هذا الاسم كما هي."
@@ -17132,6 +17138,7 @@
         "warnings": "تحذيرات"
       },
       "integrationsNote": "يؤدي الحفظ إلى تفعيل التكاملات التي يمكنك استخدامها بالفعل. لا تمنح الإضافة أبدًا وصولًا إلى أي تكامل.",
+      "integrationsNoteOff": "يبقى المكون الإضافي متوقفًا بعد الحفظ، لذلك لا يشغّل الحفظ أي تكامل.",
       "unusedParts": {
         "commands": "الأوامر",
         "agents": "الوكلاء",
@@ -17149,7 +17156,9 @@
       "saveFailed": "تعذّر حفظ الإضافة.",
       "saved": {
         "newPlugin": "تمت إضافة {name}.",
-        "newVersion": "تم تحديث {name} إلى v{version}."
+        "newVersion": "تم تحديث {name} إلى إصدار Onyx {version}.",
+        "unchanged": "لا توجد تغييرات. {name} بالفعل على إصدار Onyx {version}.",
+        "off": "تمت إضافة {name}. إنه متوقف لأن لدى {names} مهارة بالاسم نفسه."
       }
     },
     "turnOn": {

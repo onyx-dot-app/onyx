@@ -17097,13 +17097,18 @@
         "failed": "Could not turn on {name}."
       },
       "add": {
-        "label": "Add for your team",
-        "ariaLabel": "Add {name} for your team"
+        "label": "Add integration",
+        "ariaLabel": "Add the {name} integration"
+      },
+      "urlProblem": {
+        "variable": "The URL uses a variable. Onyx does not fill in variables.",
+        "credential": "The URL has a credential in it. Onyx does not keep it.",
+        "invalid": "The URL is not a valid http or https URL."
       }
     },
     "upload": {
       "title": "Upload Plugin",
-      "description": "Upload a Claude Code or Codex plugin as a .zip file or a folder.",
+      "description": "Upload a Claude Code or Codex plugin. Choose a .zip file, or drag the plugin folder here.",
       "reading": "Reading…",
       "requirements": {
         "title": "Onyx uses these parts of a plugin:",
@@ -17118,9 +17123,10 @@
       },
       "version": "v{version}",
       "target": {
-        "newVersion": "Updates {name} to v{version}",
+        "newVersion": "Updates {name} to Onyx version {version}",
         "newPlugin": "New plugin: {name}"
       },
+      "willBeOff": "The plugin is saved off. {names} already has a skill with the same name.",
       "saveAsNew": {
         "label": "Save as a New Plugin",
         "description": "Keep the plugin that has this name as it is."
@@ -17132,6 +17138,7 @@
         "warnings": "Warnings"
       },
       "integrationsNote": "Saving turns on the integrations that you can already use. A plugin never gives access to an integration.",
+      "integrationsNoteOff": "The plugin is off after the save, so the save turns on no integrations.",
       "unusedParts": {
         "commands": "Commands",
         "agents": "Agents",
@@ -17149,7 +17156,9 @@
       "saveFailed": "Could not save the plugin.",
       "saved": {
         "newPlugin": "Added {name}.",
-        "newVersion": "Updated {name} to v{version}."
+        "newVersion": "Updated {name} to Onyx version {version}.",
+        "unchanged": "No changes. {name} is already at Onyx version {version}.",
+        "off": "Added {name}. It is off because {names} already has a skill with the same name."
       }
     },
     "turnOn": {

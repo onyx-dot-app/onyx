@@ -17097,13 +17097,18 @@
         "failed": "{name}을(를) 켤 수 없습니다."
       },
       "add": {
-        "label": "팀용으로 추가",
-        "ariaLabel": "팀용으로 {name} 추가"
+        "label": "통합 추가",
+        "ariaLabel": "{name} 통합 추가"
+      },
+      "urlProblem": {
+        "variable": "URL에 변수가 있습니다. Onyx는 변수를 채우지 않습니다.",
+        "credential": "URL에 자격 증명이 있습니다. Onyx는 이를 저장하지 않습니다.",
+        "invalid": "URL이 유효한 http 또는 https URL이 아닙니다."
       }
     },
     "upload": {
       "title": "플러그인 업로드",
-      "description": "Claude Code 또는 Codex 플러그인을 .zip 파일이나 폴더로 업로드하세요.",
+      "description": "Claude Code 또는 Codex 플러그인을 업로드하세요. .zip 파일을 선택하거나 플러그인 폴더를 여기로 끌어오세요.",
       "reading": "읽는 중…",
       "requirements": {
         "title": "Onyx는 플러그인의 다음 부분을 사용합니다:",
@@ -17118,9 +17123,10 @@
       },
       "version": "v{version}",
       "target": {
-        "newVersion": "{name}을(를) v{version}(으)로 업데이트합니다",
+        "newVersion": "{name}을(를) Onyx 버전 {version}(으)로 업데이트합니다",
         "newPlugin": "새 플러그인: {name}"
       },
+      "willBeOff": "플러그인이 꺼진 상태로 저장됩니다. {names}에 같은 이름의 스킬이 이미 있습니다.",
       "saveAsNew": {
         "label": "새 플러그인으로 저장",
         "description": "이 이름의 플러그인은 그대로 둡니다."
@@ -17132,6 +17138,7 @@
         "warnings": "경고"
       },
       "integrationsNote": "저장하면 이미 사용할 수 있는 통합이 켜집니다. 플러그인은 통합에 대한 액세스 권한을 주지 않습니다.",
+      "integrationsNoteOff": "저장 후에도 플러그인이 꺼져 있으므로 통합이 켜지지 않습니다.",
       "unusedParts": {
         "commands": "명령",
         "agents": "에이전트",
@@ -17149,7 +17156,9 @@
       "saveFailed": "플러그인을 저장할 수 없습니다.",
       "saved": {
         "newPlugin": "{name}을(를) 추가했습니다.",
-        "newVersion": "{name}을(를) v{version}(으)로 업데이트했습니다."
+        "newVersion": "{name}을(를) Onyx 버전 {version}(으)로 업데이트했습니다.",
+        "unchanged": "변경 사항이 없습니다. {name}은(는) 이미 Onyx 버전 {version}입니다.",
+        "off": "{name}을(를) 추가했습니다. {names}에 같은 이름의 스킬이 있어 꺼져 있습니다."
       }
     },
     "turnOn": {

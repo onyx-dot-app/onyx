@@ -42,6 +42,7 @@ function need(
     name,
     url: state === "not_supported" ? null : `https://example.com/${name}`,
     transport: state === "not_supported" ? "stdio" : "http",
+    url_problem: null,
     supported: state !== "not_supported",
     state,
     integration_id: integrationId,
@@ -109,13 +110,43 @@ test("each need shows its state and the one action the member can take", async (
   ).toBeInTheDocument();
 });
 
+test("a need whose URL Onyx dropped gives the reason", async () => {
+  mockFetch({ "/api/integrations": [] });
+  render(
+    <PluginNeedList
+      interactive={false}
+      needs={[
+        {
+          ...need("vars", "not_supported"),
+          transport: "http",
+          url_problem: "variable",
+        },
+        {
+          ...need("keyed", "not_supported"),
+          transport: "http",
+          url_problem: "credential",
+        },
+      ]}
+    />
+  );
+  expect(
+    await screen.findByText(
+      "The URL uses a variable. Onyx does not fill in variables."
+    )
+  ).toBeInTheDocument();
+  expect(
+    screen.getByText("The URL has a credential in it. Onyx does not keep it.")
+  ).toBeInTheDocument();
+  expect(screen.queryByText("No server URL")).not.toBeInTheDocument();
+});
+
 test("a user who manages integrations adds a missing one with its name and URL", async () => {
   authority.isGlobalHolder = true;
   mockFetch({ "/api/integrations": [] });
   const user = setupUser();
   render(<PluginNeedList interactive needs={[need("linear", "not_added")]} />);
   await user.click(
-    await screen.findByRole("button", { name: "Add linear for your team" })
+    await screen.findByRole("button", { name: "Add the linear integration" })
   );
   await waitFor(() =>
     expect(window.location.pathname).toBe("/app/customize/integrations/new")

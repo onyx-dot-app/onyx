@@ -101,6 +101,7 @@ def test_reads_a_wrapped_claude_plugin() -> None:
             "url": "https://mcp.linear.app/mcp",
             "transport": "http",
             "supported": True,
+            "url_problem": None,
         },
         {
             "kind": "mcp",
@@ -108,6 +109,7 @@ def test_reads_a_wrapped_claude_plugin() -> None:
             "url": None,
             "transport": "stdio",
             "supported": False,
+            "url_problem": None,
         },
         {
             "kind": "mcp",
@@ -115,6 +117,7 @@ def test_reads_a_wrapped_claude_plugin() -> None:
             "url": None,
             "transport": "sse",
             "supported": False,
+            "url_problem": "variable",
         },
         {
             "kind": "mcp",
@@ -122,6 +125,7 @@ def test_reads_a_wrapped_claude_plugin() -> None:
             "url": "https://untyped.test/mcp",
             "transport": None,
             "supported": False,
+            "url_problem": None,
         },
     ]
     assert bundle.warnings == []
@@ -165,6 +169,7 @@ def test_reads_a_codex_plugin_with_inline_servers() -> None:
             "url": "https://mcp.notion.com/mcp",
             "transport": "streamable-http",
             "supported": True,
+            "url_problem": None,
         },
     ]
     assert bundle.warnings == [

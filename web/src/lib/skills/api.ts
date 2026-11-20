@@ -158,6 +158,8 @@ export interface PluginUploadResult {
   target: PluginUploadTarget;
   plugin: CustomSkill;
   enabled: boolean;
+  unchanged: boolean;
+  name_conflicts: string[];
 }
 
 export async function savePluginUpload(

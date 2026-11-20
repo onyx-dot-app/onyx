@@ -834,6 +834,9 @@ the app from the same rule
     `mcpServers`. It refuses a plugin with no skill and no MCP server. A zip
     with only a SKILL.md stays a skill upload. A need stores the normalized
     URL (`utils/url.py:normalize_mcp_server_url`) and no integration id.
+    Each viewer sees that URL, so a URL with a credential (user info or a
+    query value such as `api_key`), a `${VAR}` or a bad scheme is dropped;
+    `url_problem` keeps the reason (`mcp_server_url_problem`) for the UI.
     `integrations/plugin_needs.py:need_views` matches it at read time against
     the integrations of `integrations_for_needs`, so a private integration
     the user cannot see is `not_added`. `integrations_for_needs` adds the
@@ -842,17 +845,21 @@ the app from the same rule
     URL. One match gives that integration's member state; two give
     `more_than_one`. The save
     (`server/features/skill/api.py:save_plugin_upload`) adds a version to a
-    plugin with the same name that the user owns or edits, in "My uploads" or
-    the Organization library and not a skill
-    (`db/plugin.py:find_upload_target`); `save_as_new` makes a new plugin
-    with the next free name. A new version keeps shares, publishing and user
-    choices. The description is the plugin.json description of the version
+    plugin with the same name that the user edits and that is not a skill:
+    the user's uploads first, then another user's uploads shared as EDITOR,
+    then the Organization library (`db/plugin.py:find_upload_target`);
+    `save_as_new` makes a new plugin with the next free name. A new version
+    keeps shares, publishing and user choices. An upload with the files of
+    the current version adds no version and returns `unchanged`. A new plugin
+    with a skill name that another plugin the user runs holds is saved off;
+    the preview and the save name those plugins (`name_conflicts`). The description is the plugin.json description of the version
     the user runs (`db/plugin_access.py:load_plugin_access`), so a draft
     version does not show to the users who run the published one. Version
     preview and restore take a plugin version too: the preview adds `files`
     and `plugin` (manifest, skills, needs), and a restore adds a version from
     the old bundle (`db/skill.py:restore_plugin_version__no_commit`). Turning a
-    plugin on (`PUT /skills/{id}/enabled`, bulk enable and a new upload) turns
+    plugin on (`PUT /skills/{id}/enabled`, bulk enable, a new upload, and a
+    new version of a plugin the user has on) turns
     on each needed integration in `turn_on` with a connected status, through
     `integrations/access.py:set_integration_enabled__no_commit`, and reloads
     the user's Craft sessions when one changed.

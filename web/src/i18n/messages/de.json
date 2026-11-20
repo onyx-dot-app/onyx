@@ -17097,13 +17097,18 @@
         "failed": "{name} konnte nicht aktiviert werden."
       },
       "add": {
-        "label": "Für Ihr Team hinzufügen",
-        "ariaLabel": "{name} für Ihr Team hinzufügen"
+        "label": "Integration hinzufügen",
+        "ariaLabel": "Integration {name} hinzufügen"
+      },
+      "urlProblem": {
+        "variable": "Die URL enthält eine Variable. Onyx füllt keine Variablen aus.",
+        "credential": "Die URL enthält Zugangsdaten. Onyx speichert sie nicht.",
+        "invalid": "Die URL ist keine gültige http- oder https-URL."
       }
     },
     "upload": {
       "title": "Plugin hochladen",
-      "description": "Laden Sie ein Claude Code- oder Codex-Plugin als .zip-Datei oder Ordner hoch.",
+      "description": "Laden Sie ein Claude Code- oder Codex-Plugin hoch. Wählen Sie eine .zip-Datei oder ziehen Sie den Plugin-Ordner hierher.",
       "reading": "Wird gelesen…",
       "requirements": {
         "title": "Onyx verwendet diese Teile eines Plugins:",
@@ -17118,9 +17123,10 @@
       },
       "version": "v{version}",
       "target": {
-        "newVersion": "Aktualisiert {name} auf v{version}",
+        "newVersion": "Aktualisiert {name} auf Onyx-Version {version}",
         "newPlugin": "Neues Plugin: {name}"
       },
+      "willBeOff": "Das Plugin wird deaktiviert gespeichert. {names} hat bereits einen Skill mit demselben Namen.",
       "saveAsNew": {
         "label": "Als neues Plugin speichern",
         "description": "Das Plugin mit diesem Namen bleibt unverändert."
@@ -17132,6 +17138,7 @@
         "warnings": "Warnungen"
       },
       "integrationsNote": "Beim Speichern werden die Integrationen aktiviert, die Sie bereits verwenden können. Ein Plugin gibt nie Zugriff auf eine Integration.",
+      "integrationsNoteOff": "Das Plugin ist nach dem Speichern deaktiviert, daher werden keine Integrationen aktiviert.",
       "unusedParts": {
         "commands": "Befehle",
         "agents": "Agenten",
@@ -17149,7 +17156,9 @@
       "saveFailed": "Das Plugin konnte nicht gespeichert werden.",
       "saved": {
         "newPlugin": "{name} hinzugefügt.",
-        "newVersion": "{name} auf v{version} aktualisiert."
+        "newVersion": "{name} auf Onyx-Version {version} aktualisiert.",
+        "unchanged": "Keine Änderungen. {name} ist bereits auf Onyx-Version {version}.",
+        "off": "{name} hinzugefügt. Es ist deaktiviert, weil {names} bereits einen Skill mit demselben Namen hat."
       }
     },
     "turnOn": {

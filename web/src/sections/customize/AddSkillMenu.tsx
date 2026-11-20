@@ -79,17 +79,32 @@ export default function AddSkillMenu({ upload = "skill" }: AddSkillMenuProps) {
           setPluginUploadOpen(false);
           navigation.go(newSkillHref(stageSkillCreationDraft(draft)));
         }}
-        onSaved={({ target, plugin }, needsAttention) => {
+        onSaved={(
+          { target, plugin, unchanged, name_conflicts },
+          needsAttention
+        ) => {
           setPluginUploadOpen(false);
           revalidate();
-          toast.success(
-            target.kind === "new_version"
-              ? uploadCopy("saved.newVersion", {
-                  name: target.plugin_name,
-                  version: target.version_number,
-                })
-              : uploadCopy("saved.newPlugin", { name: target.plugin_name })
-          );
+          const values = {
+            name: target.plugin_name,
+            version: target.version_number,
+          };
+          if (unchanged) {
+            toast.info(uploadCopy("saved.unchanged", values));
+          } else if (name_conflicts.length > 0) {
+            toast.warning(
+              uploadCopy("saved.off", {
+                ...values,
+                names: name_conflicts.join(", "),
+              })
+            );
+          } else {
+            toast.success(
+              target.kind === "new_version"
+                ? uploadCopy("saved.newVersion", values)
+                : uploadCopy("saved.newPlugin", values)
+            );
+          }
           navigation.go(
             pluginHref(plugin.id, needsAttention ? "integrations" : undefined)
           );

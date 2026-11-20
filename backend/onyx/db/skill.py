@@ -224,7 +224,7 @@ class _UserSkillSelection(BaseModel):
         ]
 
     def other_skills_named(
-        self, names: Collection[str], skill_id: UUID
+        self, names: Collection[str], skill_id: UUID | None
     ) -> list[UserPluginState]:
         """Skills other than ``skill_id`` that can run and hold one of the
         names: the ones that take part in the name order."""
@@ -583,13 +583,44 @@ def add_uploaded_plugin_version__no_commit(
     content: PluginVersionContent,
     user: User,
     db_session: Session,
-) -> tuple[Plugin, PluginVersion]:
+) -> tuple[Plugin, PluginVersion, bool]:
+    """The plugin, its current version, and False when the files equal the
+    current version's files and no version was added."""
     plugin, version = _add_plugin_version_for_user__no_commit(
-        plugin_id, content, None, False, user, db_session
+        plugin_id, content, None, True, user, db_session
     )
-    if version is None:
-        raise RuntimeError("Bug: an upload always adds a version.")
-    return plugin, version
+    if version is not None:
+        return plugin, version, True
+    if plugin.current_version_id is None:
+        raise RuntimeError("Bug: a plugin with a version has a current version.")
+    return (
+        plugin,
+        get_plugin_version(plugin.id, plugin.current_version_id, db_session),
+        False,
+    )
+
+
+def skill_enabled_for_user(plugin_id: UUID, user: User, db_session: Session) -> bool:
+    """The user turned the skill on and it loses no name."""
+    return _user_skill_selection(user, db_session).enabled(plugin_id)
+
+
+def skill_name_conflicts(
+    skill_names: Collection[str],
+    plugin_id: UUID | None,
+    user: User,
+    db_session: Session,
+) -> list[str]:
+    """The names of the other skills and plugins the user runs that hold one
+    of ``skill_names``. Each one keeps a new plugin with these names off
+    (``enable_new_skill_if_name_available__no_commit``)."""
+    selection = _user_skill_selection(user, db_session)
+    return sorted(
+        {
+            state.plugin_name
+            for state in selection.other_skills_named(skill_names, plugin_id)
+        }
+    )
 
 
 def restore_plugin_version__no_commit(

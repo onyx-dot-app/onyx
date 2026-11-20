@@ -17097,13 +17097,18 @@
         "failed": "{name} をオンにできませんでした。"
       },
       "add": {
-        "label": "チーム用に追加",
-        "ariaLabel": "{name} をチーム用に追加"
+        "label": "インテグレーションを追加",
+        "ariaLabel": "{name} インテグレーションを追加"
+      },
+      "urlProblem": {
+        "variable": "URL に変数が含まれています。Onyx は変数を埋めません。",
+        "credential": "URL に認証情報が含まれています。Onyx はそれを保存しません。",
+        "invalid": "URL は有効な http または https の URL ではありません。"
       }
     },
     "upload": {
       "title": "プラグインをアップロード",
-      "description": "Claude Code または Codex のプラグインを .zip ファイルまたはフォルダーとしてアップロードします。",
+      "description": "Claude Code または Codex のプラグインをアップロードします。.zip ファイルを選択するか、プラグインのフォルダーをここにドラッグしてください。",
       "reading": "読み込み中…",
       "requirements": {
         "title": "Onyx はプラグインの次の部分を使用します:",
@@ -17118,9 +17123,10 @@
       },
       "version": "v{version}",
       "target": {
-        "newVersion": "{name} を v{version} に更新します",
+        "newVersion": "{name} を Onyx バージョン {version} に更新します",
         "newPlugin": "新しいプラグイン: {name}"
       },
+      "willBeOff": "プラグインはオフで保存されます。{names} に同じ名前のスキルがあります。",
       "saveAsNew": {
         "label": "新しいプラグインとして保存",
         "description": "この名前のプラグインは変更しません。"
@@ -17132,6 +17138,7 @@
         "warnings": "警告"
       },
       "integrationsNote": "保存すると、すでに利用できる連携がオンになります。プラグインが連携へのアクセス権を与えることはありません。",
+      "integrationsNoteOff": "保存後もプラグインはオフのため、インテグレーションはオンになりません。",
       "unusedParts": {
         "commands": "コマンド",
         "agents": "エージェント",
@@ -17149,7 +17156,9 @@
       "saveFailed": "プラグインを保存できませんでした。",
       "saved": {
         "newPlugin": "{name} を追加しました。",
-        "newVersion": "{name} を v{version} に更新しました。"
+        "newVersion": "{name} を Onyx バージョン {version} に更新しました。",
+        "unchanged": "変更はありません。{name} はすでに Onyx バージョン {version} です。",
+        "off": "{name} を追加しました。{names} に同じ名前のスキルがあるため、オフになっています。"
       }
     },
     "turnOn": {

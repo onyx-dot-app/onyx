@@ -29,7 +29,7 @@ from onyx.skills.models import (
     PluginUnusedPart,
     strip_bidi_controls,
 )
-from onyx.utils.url import normalize_mcp_server_url
+from onyx.utils.url import mcp_server_url_problem, normalize_mcp_server_url
 
 SKILLS_DIR: Final = "skills"
 MCP_JSON_PATH: Final = ".mcp.json"
@@ -181,8 +181,14 @@ def mcp_need(name: str, entry: JsonValue) -> PluginNeed:
     raw_url = entry.get("url")
     if not isinstance(transport, str):
         transport = "stdio" if "command" in entry else None
-    url = normalize_mcp_server_url(raw_url) if isinstance(raw_url, str) else None
-    return PluginNeed(name=name, url=url, transport=transport)
+    if not isinstance(raw_url, str):
+        return PluginNeed(name=name, url=None, transport=transport)
+    return PluginNeed(
+        name=name,
+        url=normalize_mcp_server_url(raw_url),
+        transport=transport,
+        url_problem=mcp_server_url_problem(raw_url),
+    )
 
 
 def _servers(

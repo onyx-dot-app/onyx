@@ -36,11 +36,14 @@ export type PluginNeedState =
   | "more_than_one"
   | "not_supported";
 
+export type PluginNeedUrlProblem = "variable" | "credential" | "invalid";
+
 export interface PluginNeed {
   kind: "mcp";
   name: string;
   url: string | null;
   transport: string | null;
+  url_problem: PluginNeedUrlProblem | null;
   supported: boolean;
   state: PluginNeedState;
   integration_id: number | null;
@@ -77,4 +80,6 @@ export interface PluginUploadPreview {
   needs: PluginNeed[];
   warnings: string[];
   target: PluginUploadTarget;
+  will_enable: boolean;
+  name_conflicts: string[];
 }

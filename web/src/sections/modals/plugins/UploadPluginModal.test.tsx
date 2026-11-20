@@ -67,6 +67,7 @@ function preview(over: Partial<PluginUploadPreview> = {}): PluginUploadPreview {
         name: "linear",
         url: "https://mcp.linear.app/mcp",
         transport: "http",
+        url_problem: null,
         supported: true,
         state: "not_added",
         integration_id: null,
@@ -79,6 +80,8 @@ function preview(over: Partial<PluginUploadPreview> = {}): PluginUploadPreview {
       plugin_name: "review-kit",
       version_number: 3,
     },
+    will_enable: true,
+    name_conflicts: [],
     ...over,
   };
 }
@@ -130,7 +133,7 @@ test("a plugin zip shows the preview and Save as a new plugin re-reads it", asyn
   const user = await choose(zip("review-kit.zip"));
 
   expect(
-    await screen.findByText("Updates review-kit to v3")
+    await screen.findByText("Updates review-kit to Onyx version 3")
   ).toBeInTheDocument();
   expect(screen.getByText("Not added")).toBeInTheDocument();
   expect(screen.getByText("Commands")).toBeInTheDocument();
@@ -206,4 +209,34 @@ test("a file that finishes preparing after the modal closes is not read", async 
   await mockPendingPrepare;
 
   expect(mockKindReads).toBe(0);
+});
+
+test("a skill name clash says the plugin is saved off", async () => {
+  mockFetch({
+    "/api/integrations": [],
+    "POST /api/skills/plugins/inspect": () =>
+      preview({
+        target: {
+          kind: "new_plugin",
+          plugin_id: null,
+          plugin_name: "review-kit",
+          version_number: 1,
+        },
+        will_enable: false,
+        name_conflicts: ["old-kit"],
+      }),
+  });
+  renderModal();
+  await choose(zip("review-kit.zip"));
+
+  expect(
+    await screen.findByText(
+      "The plugin is saved off. old-kit already has a skill with the same name."
+    )
+  ).toBeInTheDocument();
+  expect(
+    screen.getByText(
+      "The plugin is off after the save, so the save turns on no integrations."
+    )
+  ).toBeInTheDocument();
 });

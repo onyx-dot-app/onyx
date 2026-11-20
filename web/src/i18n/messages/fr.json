@@ -17097,13 +17097,18 @@
         "failed": "Impossible d'activer {name}."
       },
       "add": {
-        "label": "Ajouter pour votre équipe",
-        "ariaLabel": "Ajouter {name} pour votre équipe"
+        "label": "Ajouter l'intégration",
+        "ariaLabel": "Ajouter l'intégration {name}"
+      },
+      "urlProblem": {
+        "variable": "L'URL utilise une variable. Onyx ne remplit pas les variables.",
+        "credential": "L'URL contient un identifiant. Onyx ne le conserve pas.",
+        "invalid": "L'URL n'est pas une URL http ou https valide."
       }
     },
     "upload": {
       "title": "Importer un Plugin",
-      "description": "Importez un plugin Claude Code ou Codex sous forme de fichier .zip ou de dossier.",
+      "description": "Importez un plugin Claude Code ou Codex. Choisissez un fichier .zip ou glissez ici le dossier du plugin.",
       "reading": "Lecture…",
       "requirements": {
         "title": "Onyx utilise ces parties d'un plugin :",
@@ -17118,9 +17123,10 @@
       },
       "version": "v{version}",
       "target": {
-        "newVersion": "Met à jour {name} en v{version}",
+        "newVersion": "Met à jour {name} vers la version Onyx {version}",
         "newPlugin": "Nouveau plugin : {name}"
       },
+      "willBeOff": "Le plugin est enregistré désactivé. {names} a déjà une compétence du même nom.",
       "saveAsNew": {
         "label": "Enregistrer comme Nouveau Plugin",
         "description": "Le plugin qui porte ce nom reste inchangé."
@@ -17132,6 +17138,7 @@
         "warnings": "Avertissements"
       },
       "integrationsNote": "L'enregistrement active les intégrations que vous pouvez déjà utiliser. Un plugin ne donne jamais accès à une intégration.",
+      "integrationsNoteOff": "Le plugin est désactivé après l'enregistrement, donc aucune intégration n'est activée.",
       "unusedParts": {
         "commands": "Commandes",
         "agents": "Agents",
@@ -17149,7 +17156,9 @@
       "saveFailed": "Impossible d'enregistrer le plugin.",
       "saved": {
         "newPlugin": "{name} ajouté.",
-        "newVersion": "{name} mis à jour en v{version}."
+        "newVersion": "{name} mis à jour vers la version Onyx {version}.",
+        "unchanged": "Aucun changement. {name} est déjà à la version Onyx {version}.",
+        "off": "{name} ajouté. Il est désactivé car {names} a déjà une compétence du même nom."
       }
     },
     "turnOn": {

@@ -17097,13 +17097,18 @@
         "failed": "无法开启 {name}。"
       },
       "add": {
-        "label": "为您的团队添加",
-        "ariaLabel": "为您的团队添加 {name}"
+        "label": "添加集成",
+        "ariaLabel": "添加 {name} 集成"
+      },
+      "urlProblem": {
+        "variable": "URL 使用了变量。Onyx 不会填充变量。",
+        "credential": "URL 中包含凭据。Onyx 不会保存它。",
+        "invalid": "URL 不是有效的 http 或 https URL。"
       }
     },
     "upload": {
       "title": "上传插件",
-      "description": "以 .zip 文件或文件夹形式上传 Claude Code 或 Codex 插件。",
+      "description": "上传 Claude Code 或 Codex 插件。选择 .zip 文件，或将插件文件夹拖到此处。",
       "reading": "正在读取…",
       "requirements": {
         "title": "Onyx 使用插件的以下部分：",
@@ -17118,9 +17123,10 @@
       },
       "version": "v{version}",
       "target": {
-        "newVersion": "将 {name} 更新到 v{version}",
+        "newVersion": "将 {name} 更新为 Onyx 版本 {version}",
         "newPlugin": "新插件：{name}"
       },
+      "willBeOff": "插件将以关闭状态保存。{names} 已有同名技能。",
       "saveAsNew": {
         "label": "另存为新插件",
         "description": "保持同名插件不变。"
@@ -17132,6 +17138,7 @@
         "warnings": "警告"
       },
       "integrationsNote": "保存会开启您已经可以使用的集成。插件从不授予集成的访问权限。",
+      "integrationsNoteOff": "保存后插件仍为关闭状态，因此不会开启任何集成。",
       "unusedParts": {
         "commands": "命令",
         "agents": "代理",
@@ -17149,7 +17156,9 @@
       "saveFailed": "无法保存插件。",
       "saved": {
         "newPlugin": "已添加 {name}。",
-        "newVersion": "已将 {name} 更新到 v{version}。"
+        "newVersion": "已将 {name} 更新为 Onyx 版本 {version}。",
+        "unchanged": "没有更改。{name} 已是 Onyx 版本 {version}。",
+        "off": "已添加 {name}。由于 {names} 已有同名技能，它处于关闭状态。"
       }
     },
     "turnOn": {
