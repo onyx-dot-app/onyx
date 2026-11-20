@@ -37,6 +37,7 @@ import { useOptionalScrollContainer } from "@/lib/chatScroll/components/ScrollCo
 import ToolApprovalsRegion from "@/sections/chat/ToolApprovalsRegion";
 import ToolQuestionsRegion from "@/sections/chat/ToolQuestionsRegion";
 import { cn } from "@opal/utils";
+import { Section } from "@opal/layouts";
 import { CHAT_COLUMN_WIDTH } from "@/lib/chat/layout";
 import { messageRowId } from "@/lib/chat/rowIds";
 import { getChatScrollMemory } from "@/lib/chatScroll/scrollMemory";
@@ -470,42 +471,46 @@ const ChatUI = React.memo(
         >
           {hasOlderMessages && <OlderMessagesLoader className={msgWidth} />}
 
-          {turns.map((turn, turnIndex) => (
-            <div
-              key={turn.key}
-              data-chat-turn
-              className="flex flex-col w-full gap-12"
-              style={
-                turnIndex === turns.length - 1
-                  ? { minHeight: "calc(100cqh - 3rem)" }
-                  : undefined
-              }
-            >
-              {messages
-                .slice(turn.start, turn.end)
-                .map((message, offset) =>
-                  renderRow(message, turn.start + offset)
+          {turns.map((turn, turnIndex) => {
+            const latest = turnIndex === turns.length - 1;
+            return (
+              <Section
+                key={turn.key}
+                data-chat-turn
+                justifyContent="start"
+                height="fit"
+                gap={12}
+                className={cn(latest && "min-h-[calc(100cqh-3rem)]")}
+              >
+                {messages
+                  .slice(turn.start, turn.end)
+                  .map((message, offset) =>
+                    renderRow(message, turn.start + offset)
+                  )}
+                {/* Approval and question cards that wait for the user
+                    belong to the latest turn, inside its height. */}
+                {latest && (
+                  <>
+                    <ToolApprovalsRegion
+                      modelProviderLookup={modelProviderLookup}
+                      className={cn(
+                        "w-full self-center",
+                        msgWidth,
+                        !fullWidthChat && "px-3"
+                      )}
+                    />
+                    <ToolQuestionsRegion
+                      className={cn(
+                        "w-full self-center",
+                        msgWidth,
+                        !fullWidthChat && "px-3"
+                      )}
+                    />
+                  </>
                 )}
-            </div>
-          ))}
-
-          {/* Approval and question cards that wait for the user follow the
-              last message. */}
-          <ToolApprovalsRegion
-            modelProviderLookup={modelProviderLookup}
-            className={cn(
-              "w-full self-center",
-              msgWidth,
-              !fullWidthChat && "px-3"
-            )}
-          />
-          <ToolQuestionsRegion
-            className={cn(
-              "w-full self-center",
-              msgWidth,
-              !fullWidthChat && "px-3"
-            )}
-          />
+              </Section>
+            );
+          })}
 
           {error && (
             <div className={cn("p-4 w-full self-center", msgWidth)}>

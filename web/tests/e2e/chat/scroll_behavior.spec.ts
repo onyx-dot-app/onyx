@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import { loginAsRandomUser } from "@tests/e2e/utils/auth";
 import { sendMessage, startNewChat } from "@tests/e2e/utils/chatActions";
+import { ChatPage } from "@tests/e2e/chat/ChatPage";
 
 /**
  * Helper to toggle auto-scroll setting via the settings panel
@@ -222,23 +223,14 @@ test.describe("Turn anchoring - Fresh Chat Effect", () => {
   }) => {
     // The space is layout (the latest turn's min-height), not a side effect
     // of sending, so a chat opened without a send has it too.
+    const chat = new ChatPage(page);
     await sendMessage(page, "Test message to initialize chat");
     await sendMessage(page, "Follow-up message");
-    await page.reload();
-    await page.locator('[data-scroll-ready="true"]').waitFor();
+    await chat.reload();
+    await chat.waitForScrollReady();
 
-    const lastUserMessage = page.locator("#onyx-human-message").last();
     await expect
-      .poll(
-        async () => {
-          const position = await getElementPositionInContainer(
-            page,
-            lastUserMessage
-          );
-          return position?.topOffset ?? Number.POSITIVE_INFINITY;
-        },
-        { timeout: 5000 }
-      )
+      .poll(() => chat.latestHumanMessageOffset(), { timeout: 5000 })
       .toBeLessThan(150);
   });
 
