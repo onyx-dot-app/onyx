@@ -43,10 +43,12 @@ from onyx.llm.models import (
 from onyx.tools.models import ToolContext
 from onyx.tools.tool_implementations.search.constants import (
     ANALYZED_QUERY_MAX_CHARS,
+    KEYWORD_ONLY_HYBRID_ALPHA,
     LLM_NON_CUSTOM_QUERY_WEIGHT,
     LLM_SEMANTIC_QUERY_WEIGHT,
     MAX_QUERIES_PER_CALL,
     MAX_SELECTED_SECTIONS,
+    ORIGINAL_QUERY_WEIGHT,
     QUERY_MAX_DISTINCT_TERMS,
     QUERY_MAX_TERMS,
     UNANALYZED_QUERY_MAX_CHARS,
@@ -113,6 +115,7 @@ def _run(
     fusion_mock: MagicMock | None = None,
     results: list[ToolResult] | None = None,
     user_message: str = "resolve the ticket",
+    excerpt_mock: MagicMock | None = None,
 ) -> MagicMock:
     """Mock retrieval and scope selection; supplied sections exercise context expansion."""
     mock_search_pipeline = (
@@ -142,6 +145,10 @@ def _run(
         ),
         patch(f"{MODULE}.semantic_query_rephrase", return_value="rephrased query"),
         patch(f"{MODULE}.keyword_query_expansion", return_value=[]),
+        patch(
+            f"{MODULE}.extract_verbatim_excerpt",
+            excerpt_mock if excerpt_mock is not None else MagicMock(return_value=None),
+        ),
         patch(f"{MODULE}.decide_search_scope", decide),
         patch(f"{MODULE}.decide_time_filter", MagicMock(return_value=None)),
         patch(
@@ -1667,3 +1674,118 @@ def test_focused_queries_do_not_wait_for_message_analysis() -> None:
     )
 
     assert message in _queries_sent(pipeline)
+
+
+_SOURCE_LOOKUP = (
+    "Which incident report contains 'rollback ownership transferred to storage'?"
+)
+_EXCERPT = "rollback ownership transferred to storage"
+
+
+def _requests_by_query(pipeline: MagicMock) -> dict[str, Any]:
+    return {
+        call.kwargs["chunk_search_request"].query: call.kwargs
+        for call in pipeline.call_args_list
+    }
+
+
+def test_valid_excerpt_replaces_the_message_with_a_keyword_lane() -> None:
+    fusion = MagicMock(return_value=[])
+    pipeline = _run(
+        _make_tool(),
+        connected_sources=[DocumentSource.CONFLUENCE],
+        user_message=_SOURCE_LOOKUP,
+        excerpt_mock=MagicMock(return_value=_EXCERPT),
+        fusion_mock=fusion,
+    )
+
+    requests = _requests_by_query(pipeline)
+    assert _SOURCE_LOOKUP not in requests
+    excerpt_request = requests[_EXCERPT]
+    assert (
+        excerpt_request["chunk_search_request"].hybrid_alpha
+        == KEYWORD_ONLY_HYBRID_ALPHA
+    )
+    assert fusion.call_args.kwargs["weights"][-1] == ORIGINAL_QUERY_WEIGHT
+
+
+def test_no_excerpt_keeps_the_message_lane() -> None:
+    pipeline = _run(
+        _make_tool(),
+        connected_sources=[DocumentSource.CONFLUENCE],
+        user_message="Who owned the rollback?",
+        excerpt_mock=MagicMock(return_value=None),
+    )
+
+    requests = _requests_by_query(pipeline)
+    assert (
+        requests["Who owned the rollback?"]["chunk_search_request"].hybrid_alpha is None
+    )
+
+
+def test_round_without_planning_makes_no_excerpt_call() -> None:
+    excerpt = MagicMock(return_value=_EXCERPT)
+    pipeline = _run(
+        _make_tool(),
+        connected_sources=[DocumentSource.CONFLUENCE],
+        user_message=_SOURCE_LOOKUP,
+        excerpt_mock=excerpt,
+        skip_query_expansion=True,
+    )
+
+    excerpt.assert_not_called()
+    assert _SOURCE_LOOKUP in _queries_sent(pipeline)
+
+
+def test_excerpt_is_not_carried_into_the_next_round() -> None:
+    context = ToolContext()
+    tool = _make_tool()
+    connected = [DocumentSource.ZENDESK, DocumentSource.ASANA]
+    _run(
+        tool,
+        connected_sources=connected,
+        decision=[DocumentSource.ZENDESK],
+        user_message=_SOURCE_LOOKUP,
+        excerpt_mock=MagicMock(return_value=_EXCERPT),
+        context=context,
+    )
+    # A new source reuses the cached expansion without planning again.
+    pipeline = _run(
+        tool,
+        connected_sources=connected,
+        decision=[DocumentSource.ASANA],
+        user_message=_SOURCE_LOOKUP,
+        context=context,
+        skip_query_expansion=True,
+    )
+
+    sent = _queries_sent(pipeline)
+    assert "rephrased query" in sent
+    assert _EXCERPT not in sent
+    assert _SOURCE_LOOKUP in sent
+
+
+def test_excerpt_goes_to_neither_federated_sources_nor_slack() -> None:
+    tool = _make_tool()
+    tool.enable_slack_search = True
+    federated_info = MagicMock()
+    with (
+        patch.object(
+            tool, "_prefetch_slack_data", return_value=("slack-token", None, {})
+        ),
+        patch.object(tool, "_run_slack_search", return_value=[]) as slack,
+    ):
+        pipeline = _run(
+            tool,
+            connected_sources=[DocumentSource.CONFLUENCE],
+            user_message=_SOURCE_LOOKUP,
+            excerpt_mock=MagicMock(return_value=_EXCERPT),
+            federated_mock=MagicMock(return_value=[federated_info]),
+        )
+
+    requests = _requests_by_query(pipeline)
+    assert requests[_EXCERPT]["prefetched_federated_retrieval_infos"] == []
+    assert requests["ticket"]["prefetched_federated_retrieval_infos"] == [
+        federated_info
+    ]
+    assert slack.call_args.args[0] == _SOURCE_LOOKUP

@@ -25,6 +25,7 @@ class LLMFlow(StrEnum):
     SEARCH_FLOW_CLASSIFICATION = "search_flow_classification"
     SEMANTIC_QUERY_REPHRASE = "semantic_query_rephrase"
     KEYWORD_QUERY_EXPANSION = "keyword_query_expansion"
+    VERBATIM_EXCERPT_EXTRACTION = "verbatim_excerpt_extraction"
     SOURCE_FILTER_EXTRACTION = "source_filter_extraction"
     TIME_FILTER_EXTRACTION = "time_filter_extraction"
     CLASSIFY_SECTION_RELEVANCE = "classify_section_relevance"

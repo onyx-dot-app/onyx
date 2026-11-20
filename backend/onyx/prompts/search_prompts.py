@@ -236,3 +236,31 @@ DECISION_EXPANSION_LEVELS = [
         "to the query.",
     ),
 ]
+
+
+VERBATIM_EXCERPT_SYSTEM_PROMPT = """
+You decide whether a user wants to find the document, message, or record that contains wording they supplied, and \
+if so, you copy that wording exactly.
+""".strip()
+
+VERBATIM_EXCERPT_USER_PROMPT = """
+If the user is trying to find the document, message, or record that contains wording they supplied, copy one \
+distinctive, contiguous excerpt from that wording. Use at most {max_chars} characters. Copy it exactly, with the same \
+spelling, capitalization, and punctuation, and without added quotation marks. Do this even when the message also \
+contains background notes or other text.
+
+If the user is asking about the meaning of the text, asking for a summary or rewrite, or has supplied no passage to \
+locate, output {no_excerpt}.
+
+For "Which incident report contains 'rollback ownership transferred to storage'?", output:
+rollback ownership transferred to storage
+
+For "Who owned the rollback?", output:
+{no_excerpt}
+
+=========================
+CRITICAL: ONLY provide the excerpt or {no_excerpt} and nothing else.
+
+Final user message:
+{user_query}
+""".strip()

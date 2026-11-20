@@ -17,8 +17,12 @@ from onyx.prompts.search_prompts import (
     REPHRASE_CONTEXT_PROMPT,
     SEMANTIC_QUERY_REPHRASE_SYSTEM_PROMPT,
     SEMANTIC_QUERY_REPHRASE_USER_PROMPT,
+    VERBATIM_EXCERPT_SYSTEM_PROMPT,
+    VERBATIM_EXCERPT_USER_PROMPT,
 )
+from onyx.server.metrics.internal_search import ExcerptOutcome, record_excerpt_outcome
 from onyx.tools.models import ChatMinimalTextMessage
+from onyx.tools.tool_implementations.search.constants import VERBATIM_EXCERPT_MAX_CHARS
 from onyx.tracing.flows import LLMFlow
 from onyx.utils.logger import setup_logger
 
@@ -232,3 +236,70 @@ def keyword_query_expansion(
 
     queries = [line.strip() for line in content.strip().split("\n") if line.strip()]
     return queries
+
+
+_NO_EXCERPT = "NONE"
+
+
+def extract_verbatim_excerpt(
+    history: list[ChatMinimalTextMessage],
+    llm: LLM,
+) -> str | None:
+    """Copy the wording a user wants to locate from their latest message.
+
+    The model judges whether the user is looking for the source of wording
+    they supplied. The excerpt is used only if it is nonblank, at most
+    VERBATIM_EXCERPT_MAX_CHARS long, and occurs exactly in the latest user
+    message. A failed call returns None, so search continues without it.
+
+    Args:
+        history: Chat message history. Must contain at least one user message.
+        llm: Language model to use for the extraction
+
+    Returns:
+        The excerpt, or None when there is no valid excerpt to search
+    """
+    user_query = next(
+        (
+            message.message
+            for message in reversed(history)
+            if message.message_type == MessageType.USER
+        ),
+        None,
+    )
+    if user_query is None:
+        raise ValueError("History must contain at least one user message")
+
+    # The excerpt must come from the latest message, so earlier turns only
+    # add tokens.
+    try:
+        response = llm.invoke(
+            GenerationRequest(
+                messages=[
+                    SystemMessage(content=VERBATIM_EXCERPT_SYSTEM_PROMPT),
+                    UserMessage(
+                        content=VERBATIM_EXCERPT_USER_PROMPT.format(
+                            max_chars=VERBATIM_EXCERPT_MAX_CHARS,
+                            no_excerpt=_NO_EXCERPT,
+                            user_query=user_query,
+                        )
+                    ),
+                ],
+                options=GenerationOptions(reasoning_effort=ReasoningEffort.OFF),
+            ),
+            context=GenerationContext(flow=LLMFlow.VERBATIM_EXCERPT_EXTRACTION),
+        )
+    except Exception:
+        logger.warning("Verbatim excerpt extraction failed", exc_info=True)
+        record_excerpt_outcome(ExcerptOutcome.FAILED)
+        return None
+
+    excerpt = (response.text or "").strip()
+    if not excerpt or excerpt.upper() == _NO_EXCERPT:
+        record_excerpt_outcome(ExcerptOutcome.NONE)
+        return None
+    if len(excerpt) > VERBATIM_EXCERPT_MAX_CHARS or excerpt not in user_query:
+        record_excerpt_outcome(ExcerptOutcome.INVALID)
+        return None
+    record_excerpt_outcome(ExcerptOutcome.USED)
+    return excerpt

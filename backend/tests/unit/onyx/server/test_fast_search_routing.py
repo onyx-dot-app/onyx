@@ -26,6 +26,9 @@ def test_search_rewrites_and_filters_never_resolve_selection_client() -> None:
         patch.object(
             search_tool, "keyword_query_expansion", return_value=["keyword"]
         ) as keyword,
+        patch.object(
+            search_tool, "extract_verbatim_excerpt", return_value=None
+        ) as excerpt,
         patch.object(search_tool, "decide_search_scope", return_value=None) as scope,
         patch.object(
             search_tool, "decide_time_filter", return_value=None
@@ -47,5 +50,5 @@ def test_search_rewrites_and_filters_never_resolve_selection_client() -> None:
         )
 
     resolver.assert_not_called()
-    for operation in (semantic, keyword, scope, time_filter):
+    for operation in (semantic, keyword, excerpt, scope, time_filter):
         assert operation.call_args.args[1] is primary

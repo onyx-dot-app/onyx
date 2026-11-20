@@ -112,6 +112,7 @@ from onyx.secondary_llm_flows.document_filter import (
     select_sections_for_expansion,
 )
 from onyx.secondary_llm_flows.query_expansion import (
+    extract_verbatim_excerpt,
     keyword_query_expansion,
     semantic_query_rephrase,
 )
@@ -145,6 +146,7 @@ from onyx.tools.tool_implementations.search.constants import (
     ANALYZED_QUERY_MAX_CHARS,
     DECISION_TIMEOUT_S,
     FULL_DOC_NUM_CHUNKS_AROUND,
+    KEYWORD_ONLY_HYBRID_ALPHA,
     KEYWORD_QUERY_HYBRID_ALPHA,
     LLM_KEYWORD_QUERY_WEIGHT,
     LLM_NON_CUSTOM_QUERY_WEIGHT,
@@ -666,7 +668,7 @@ class SearchTool(Tool):
             federated_retrieval_infos: Pre-fetched federated retrieval functions
             effective_filters: Filters for THIS search, with the per-call source
                 scope already applied (computed once in run()).
-            lane: Whether the query is the user's message, for metrics.
+            lane: The kind of query in this lane, for metrics.
 
         Returns:
             List of InferenceChunk results, or None when the query is too large
@@ -818,6 +820,7 @@ class SearchTool(Tool):
             )
             jobs.append((semantic_query_rephrase, expansion_args))
             jobs.append((keyword_query_expansion, expansion_args))
+            jobs.append((extract_verbatim_excerpt, (message_history, self.llm)))
         if decide_scope:
             scope_job_index = len(jobs)
             jobs.append(
@@ -845,9 +848,11 @@ class SearchTool(Tool):
 
         semantic_query: str | None = None
         keyword_queries: list[str] = []
+        verbatim_excerpt: str | None = None
         if expand_queries:
             semantic_query = results[0]
             keyword_queries = results[1] or []
+            verbatim_excerpt = results[2]
 
         plan_scope: list[DocumentSource] | None = None
         if scope_job_index is not None:
@@ -864,6 +869,7 @@ class SearchTool(Tool):
                 else search_context.time_filter
             ),
             time_filter_computed=decide_time,
+            verbatim_excerpt=verbatim_excerpt,
         )
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
@@ -1195,11 +1201,13 @@ class SearchTool(Tool):
         if update is not None:
             update(ToolProgress(details=search_output))
 
+        verbatim_excerpt = expansion.verbatim_excerpt
         queries_run = list(
             dict.fromkeys(
                 llm_queries
                 + ([semantic_query] if semantic_query else [])
                 + keyword_queries
+                + ([verbatim_excerpt] if verbatim_excerpt else [])
             )
         )
         scope_note = _build_scope_note(resolved_scope, queries_run)
@@ -1250,7 +1258,8 @@ class SearchTool(Tool):
             for llm_query in llm_queries
             if llm_query
         )
-        if original_query:
+        # A source lookup's excerpt replaces the user's message.
+        if original_query and not verbatim_excerpt:
             semantic_queries_with_weights.append(
                 (original_query, ORIGINAL_QUERY_WEIGHT)
             )
@@ -1259,7 +1268,9 @@ class SearchTool(Tool):
         )
 
         all_queries_with_weights = (
-            deduplicated_semantic_queries + deduplicated_keyword_queries
+            deduplicated_semantic_queries
+            + deduplicated_keyword_queries
+            + ([(verbatim_excerpt, ORIGINAL_QUERY_WEIGHT)] if verbatim_excerpt else [])
         )
         all_queries_with_weights.sort(key=lambda x: x[1], reverse=True)
 
@@ -1328,6 +1339,26 @@ class SearchTool(Tool):
             )
             search_weights.append(weight)
 
+        # Index-only: federated connectors do not receive the excerpt.
+        if verbatim_excerpt:
+            search_functions.append(
+                (
+                    self._run_search_for_query,
+                    (
+                        verbatim_excerpt,
+                        KEYWORD_ONLY_HYBRID_ALPHA,
+                        NUM_RETURNED_HITS,
+                        acl_filters,
+                        embedding_model,
+                        [],
+                        effective_filters,
+                        SearchLane.EXCERPT,
+                    ),
+                )
+            )
+            search_weights.append(ORIGINAL_QUERY_WEIGHT)
+        index_lane_count = len(search_functions)
+
         # Add Slack federated search (runs once in parallel with all index queries)
         # This avoids the query multiplication problem where each index query
         # would trigger a separate Slack search.
@@ -1383,9 +1414,7 @@ class SearchTool(Tool):
         ]
         # Index lanes come first. The Slack lane returns [] when it fails, so
         # only the index lanes show whether every query was rejected.
-        index_results = search_results[
-            : len(deduplicated_semantic_queries) + len(deduplicated_keyword_queries)
-        ]
+        index_results = search_results[:index_lane_count]
         if (
             index_results
             and all(results is None for results in index_results)

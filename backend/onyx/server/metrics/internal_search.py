@@ -31,7 +31,20 @@ class QueryAdmission(str, Enum):
 class SearchLane(str, Enum):
     # The lane's text is the user's message.
     USER_MESSAGE = "user_message"
+    # An excerpt copied from the user's message for a source lookup.
+    EXCERPT = "excerpt"
     GENERATED = "generated"
+
+
+class ExcerptOutcome(str, Enum):
+    """Outcome of the verbatim excerpt extraction for one search call."""
+
+    USED = "used"
+    # The model found no passage to locate.
+    NONE = "none"
+    # The excerpt was too long or did not occur in the user's message.
+    INVALID = "invalid"
+    FAILED = "failed"
 
 
 class UserMessageSize(str, Enum):
@@ -44,6 +57,12 @@ _query_admissions = Counter(
     "onyx_internal_search_query_admissions_total",
     "Retrieval lanes checked for query size, labeled by tenant, lane and outcome",
     ["tenant_id", "lane", "admission"],
+)
+
+_excerpt_outcomes = Counter(
+    "onyx_internal_search_excerpt_outcomes_total",
+    "Verbatim excerpt extractions, labeled by tenant and outcome",
+    ["tenant_id", "outcome"],
 )
 
 _analyze_duration = Histogram(
@@ -69,6 +88,16 @@ def record_query_admission(lane: SearchLane, admission: QueryAdmission) -> None:
         ).inc()
     except Exception:
         logger.warning("Failed to record query admission metric.", exc_info=True)
+
+
+def record_excerpt_outcome(outcome: ExcerptOutcome) -> None:
+    try:
+        _excerpt_outcomes.labels(
+            tenant_id=CURRENT_TENANT_ID_CONTEXTVAR.get() or "unknown",
+            outcome=outcome.value,
+        ).inc()
+    except Exception:
+        logger.warning("Failed to record excerpt outcome metric.", exc_info=True)
 
 
 def observe_query_analyze(duration_s: float) -> None:

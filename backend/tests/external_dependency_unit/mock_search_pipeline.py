@@ -182,6 +182,10 @@ def use_mock_search_pipeline(
             return_value=[],
         ),
         patch(
+            "onyx.tools.tool_implementations.search.search_tool.extract_verbatim_excerpt",
+            return_value=None,
+        ),
+        patch(
             "onyx.db.connector.check_connectors_exist",
             new=mock_check_connectors_exist,
         ),

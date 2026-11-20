@@ -68,6 +68,7 @@ SearchTool._run -> SearchTool.search
   federated registry, Slack token prefetch            close prefetch session
   -> _expand_queries_and_decide_scope (parallel)
        semantic_query_rephrase, keyword_query_expansion   query_expansion.py
+       extract_verbatim_excerpt                           query_expansion.py
        decide_search_scope                                source_filter.py
        decide_time_filter                                 time_filter.py
   -> lanes in parallel, one per deduplicated query:
@@ -109,6 +110,11 @@ ASCII text up to 512 characters runs at once. Text up to 8,192 characters runs
 only if the index analyzer (`DocumentIndex.count_keyword_terms`) finds at most
 1,000 terms and 500 distinct terms. Longer text is skipped, and other lanes do
 not wait for the check. Raw search skips the check.
+On a planned round, `extract_verbatim_excerpt` runs beside the rephrase. When
+the user wants the source of wording they supplied, it copies one excerpt of at
+most 180 characters, kept only if it occurs exactly in the latest message. The
+excerpt then replaces the user-message lane with a keyword-only, index-only
+lane at the same weight. It is never cached for a later round.
 When the index rejects a lane for exceeding its clause limit
 (`document_index/opensearch/client.py:is_clause_limit_error`), fusion drops that
 lane and its weight. Other errors still fail the call, and a call whose every lane

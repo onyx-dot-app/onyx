@@ -15,6 +15,8 @@ ORIGINAL_QUERY_WEIGHT = 0.5
 # Hybrid Search Configuration
 # This may in the future just use an entirely keyword search. Currently it is a hybrid search with a keyword first phase.
 KEYWORD_QUERY_HYBRID_ALPHA = 0.2
+# Exactly 0 runs keyword-only retrieval in search_chunks, with no embedding.
+KEYWORD_ONLY_HYBRID_ALPHA = 0.0
 
 # Reciprocal Rank Fusion
 RRF_K_VALUE = 50
@@ -56,3 +58,7 @@ UNANALYZED_QUERY_MAX_CHARS = 512
 ANALYZED_QUERY_MAX_CHARS = 8_192
 QUERY_MAX_TERMS = 1_000
 QUERY_MAX_DISTINCT_TERMS = 500
+
+# A source lookup can search one excerpt copied from the user's message, as a
+# keyword-only lane at ORIGINAL_QUERY_WEIGHT in place of the full message.
+VERBATIM_EXCERPT_MAX_CHARS = 180

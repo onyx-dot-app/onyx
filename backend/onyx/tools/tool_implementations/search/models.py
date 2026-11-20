@@ -38,6 +38,8 @@ class QueryExpansionAndScope(BaseModel):
     scope_decision_settled: bool = False
     time_filter: TimeFilter | None = None
     time_filter_computed: bool = False
+    # Planned rounds only; never cached for a later round.
+    verbatim_excerpt: str | None = None
 
 
 class SearchArguments(BaseModel):
