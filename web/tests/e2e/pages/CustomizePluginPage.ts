@@ -119,11 +119,15 @@ export class CustomizePluginPage {
     expect((await response).ok()).toBeTruthy();
   }
 
-  async addNeedForTeam(name: string): Promise<void> {
+  /** An admin's Add integration opens the admin page with the organization
+   * as the owner and the plugin as the page to return to. */
+  async addNeedIntegration(name: string): Promise<void> {
     await this.needRow(name)
-      .getByRole("button", { name: `Add ${name} for your team`, exact: true })
+      .getByRole("button", { name: `Add the ${name} integration`, exact: true })
       .click();
-    await expect(this.page).toHaveURL(/\/app\/customize\/integrations\/new\?/);
+    await expect(this.page).toHaveURL(
+      /\/admin\/integrations\/new\?.*owner=organization.*return_to=/
+    );
   }
 
   async expectIntegrationPrefill(
@@ -136,5 +140,8 @@ export class CustomizePluginPage {
     await expect(
       this.page.getByRole("textbox", { name: "Server URL", exact: true })
     ).toHaveValue(serverUrl);
+    await expect(
+      this.page.getByRole("combobox", { name: "Owner", exact: true })
+    ).toHaveValue("For the organization");
   }
 }

@@ -1,11 +1,13 @@
 "use client";
 
 import { useTranslations } from "next-intl";
+import { useSWRConfig } from "swr";
 import { useNavigation } from "@opal/navigation";
 import { toast } from "@opal/layouts";
 import { newSkillHref, pluginHref } from "@/lib/customize/paths";
 import { stageSkillCreationDraft } from "@/lib/skills/creationDraft";
 import { useRefreshSkillLists } from "@/lib/skills/hooks";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import UploadPluginModal from "@/sections/modals/plugins/UploadPluginModal";
 
 interface UploadPluginFlowProps {
@@ -22,6 +24,7 @@ export default function UploadPluginFlow({
   const uploadCopy = useTranslations("plugins.upload");
   const navigation = useNavigation();
   const revalidate = useRefreshSkillLists();
+  const { mutate } = useSWRConfig();
   return (
     <UploadPluginModal
       open={open}
@@ -36,6 +39,10 @@ export default function UploadPluginFlow({
       ) => {
         onClose();
         revalidate();
+        // The plugin page can be open already, and the navigation below then
+        // keeps it, so refresh its detail and versions here.
+        void mutate(SWR_KEYS.userSkill(plugin.id));
+        void mutate(SWR_KEYS.skillVersions(plugin.id));
         const values = {
           name: target.plugin_name,
           version: target.version_number,
