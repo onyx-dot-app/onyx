@@ -40,8 +40,12 @@ from onyx.connectors.microsoft_utils.config import (
     DEFAULT_GRAPH_API_HOST,
     DEFAULT_SHAREPOINT_DOMAIN_SUFFIX,
 )
-from onyx.connectors.microsoft_utils.drive_delta import build_delta_start_url
+from onyx.connectors.microsoft_utils.drive_delta import (
+    DRIVE_DELTA_SELECT_FIELDS,
+    build_delta_start_url,
+)
 from onyx.connectors.microsoft_utils.drive_items import (
+    DRIVE_ITEM_SELECT_FIELDS,
     DriveFolderReference,
     DriveItemContentError,
     DriveItemData,
@@ -81,11 +85,11 @@ from onyx.connectors.sharepoint.connector_utils import (
     validate_site_url,
 )
 from onyx.connectors.sharepoint.listing import (
+    LISTING_SELECT_FIELDS,
     SharepointListingPayload,
     drive_item_stub,
     is_listable_drive_item,
     site_page_stub,
-    store_drive_delta_link,
 )
 from onyx.connectors.sharepoint.models import SharepointDrive
 from onyx.connectors.sharepoint.source_operations import (
@@ -2005,6 +2009,11 @@ class SharepointConnector(
                     self.graph_api_base,
                     checkpoint.current_drive.drive_id,
                     start_dt,
+                    select_fields=(
+                        LISTING_SELECT_FIELDS
+                        if stub_listing
+                        else DRIVE_DELTA_SELECT_FIELDS
+                    ),
                 )
         if checkpoint.current_site_descriptor and checkpoint.current_drive is not None:
             site_descriptor = checkpoint.current_site_descriptor
@@ -2023,6 +2032,11 @@ class SharepointConnector(
                         page_url=checkpoint.current_drive_delta_next_link,
                         allow_full_resync=not (
                             checkpoint.current_drive_delta_resync_attempted
+                        ),
+                        select_fields=(
+                            LISTING_SELECT_FIELDS
+                            if stub_listing
+                            else DRIVE_ITEM_SELECT_FIELDS
                         ),
                     )
                 except ConnectorStopSignal:
@@ -2046,11 +2060,6 @@ class SharepointConnector(
 
                 if result.resync_after_410:
                     checkpoint.current_drive_delta_resync_attempted = True
-                if stub_listing and result.page.delta_link:
-                    # The last page of the drive's delta.
-                    store_drive_delta_link(
-                        current_drive.drive_id, result.page.delta_link
-                    )
                 driveitems = iter_delta_page_files(result.page, start_dt, end_dt)
                 has_more_delta_pages = result.next_checkpoint_url is not None
                 checkpoint.current_drive_delta_next_link = result.next_checkpoint_url

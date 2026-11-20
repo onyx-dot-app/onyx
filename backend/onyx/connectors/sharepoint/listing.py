@@ -7,30 +7,27 @@ page is listed with its metadata only: the listing does not read the page's
 canvas, which is the page's content.
 """
 
-import json
-from datetime import datetime, timezone
+from datetime import datetime
 from enum import Enum
 from typing import Any
 
-# no-direct-redis: allow indexing keeps the delta links of the drives in Redis
-from redis.exceptions import RedisError
-
 from onyx.connectors.microsoft_utils.drive_items import (
+    DRIVE_ITEM_DOWNLOAD_URL_SELECT,
+    DRIVE_ITEM_SELECT_FIELDS,
     DriveItemData,
     parse_graph_datetime,
 )
 from onyx.connectors.models import ListingPayload, SlimDocumentStub
 from onyx.file_processing.file_types import OnyxMimeTypes, is_indexable_file_type
 
-# no-direct-redis: allow indexing keeps the delta links of the drives in Redis
-from onyx.redis.redis_pool import get_redis_client
-from onyx.utils.logger import setup_logger
-
-logger = setup_logger()
-
 CANVAS_LAYOUT_PROPERTY = "canvasLayout"
-_DELTA_LINK_KEY_PREFIX = "sharepoint_delta_link"
-_DELTA_LINK_TTL_SECONDS = 30 * 24 * 3600
+# The fields of a file that the listing maps. Not the download URL: the
+# listing downloads nothing, and conversion downloads by drive and item id.
+LISTING_SELECT_FIELDS = ",".join(
+    field
+    for field in DRIVE_ITEM_SELECT_FIELDS.split(",")
+    if field != DRIVE_ITEM_DOWNLOAD_URL_SELECT
+)
 
 
 class SharepointListedKind(str, Enum):
@@ -176,43 +173,3 @@ def site_page_stub(
             site_page=metadata,
         ),
     )
-
-
-def store_drive_delta_link(drive_id: str, delta_link: str) -> None:
-    """Keeps the ``@odata.deltaLink`` that ended a full read of a drive's
-    delta, with the time. A later change to the listing can continue from the
-    link. The link holds a cursor and no credential. A failure to store it
-    does not fail the listing."""
-    try:
-        # no-direct-redis: allow indexing keeps the delta links of the drives in Redis
-        get_redis_client().set(
-            f"{_DELTA_LINK_KEY_PREFIX}:{drive_id}",
-            json.dumps(
-                {
-                    "delta_link": delta_link,
-                    "stored_at": datetime.now(timezone.utc).isoformat(),
-                }
-            ),
-            ex=_DELTA_LINK_TTL_SECONDS,
-        )
-    except RedisError as error:
-        logger.warning(
-            "Could not store the delta link of drive %s: %s", drive_id, error
-        )
-
-
-def stored_drive_delta_link(drive_id: str) -> str | None:
-    """The delta link that ``store_drive_delta_link`` kept for the drive."""
-    try:
-        # no-direct-redis: allow indexing keeps the delta links of the drives in Redis
-        raw = get_redis_client().get(f"{_DELTA_LINK_KEY_PREFIX}:{drive_id}")
-    except RedisError:
-        return None
-    if raw is None:
-        return None
-    try:
-        record = json.loads(raw)
-    except ValueError:
-        return None
-    link = record.get("delta_link") if isinstance(record, dict) else None
-    return link if isinstance(link, str) else None
