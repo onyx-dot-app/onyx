@@ -106,7 +106,10 @@ function SkillRow({
             });
   const source =
     group === "marketplace" && skill.marketplace
-      ? t("source.marketplace", { name: skill.marketplace.name })
+      ? t("source.marketplace", {
+          name: skill.marketplace.name,
+          scope: skill.marketplace.personal ? "personal" : "company",
+        })
       : group === "mine"
         ? t("source.mine")
         : group === "organization"
