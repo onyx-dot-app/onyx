@@ -71,6 +71,7 @@ spec:
               "-A",
               "onyx.background.celery.versioned_apps.scheduled_tasks",
               "worker",
+              {{ printf "--concurrency=%d" (int .Values.celery_worker_scheduled_tasks.concurrency) | quote }},
               {{- with .Values.celery_worker_scheduled_tasks.logLevel }}
               {{ printf "--loglevel=%s" . | quote }},
               {{- end }}

@@ -101,7 +101,9 @@ For example:
 ### Understand schedule timing
 
 Onyx stores each schedule in UTC. **Daily / Weekly** times use the local time of your browser when you save the task.
-**Interval** schedules run on repeating clock boundaries, not at a fixed delay after the previous run ends.
+**Interval** schedules run on repeating clock boundaries, not at a fixed delay after the previous run ends. By default,
+each run starts up to five minutes after its scheduled time. The delay is the same for every run of a task,
+so tasks that share a schedule do not all start at the same time. **Next run** shows the time with this delay.
 
 <Note>
   A saved daily or weekly time does not change when your UTC offset changes,
@@ -166,7 +168,7 @@ not the integration settings of the task.
 | **Succeeded**         | The run completed normally.                                                                             |
 | **Failed**            | The run had an error or reached the one-hour limit of a chat turn. Open its chat to investigate.        |
 | **Cancelled**         | You stopped the run, or nobody answered an approval in time.                                            |
-| **Skipped**           | The run did not start because the previous run of the task was still queued or running.                 |
+| **Skipped**           | The run did not start because the previous run of the task was still running.                           |
 
 A failed run sends you an Onyx notification. Onyx does not retry failed or cancelled runs.
 
@@ -202,8 +204,9 @@ or tasks with new results.
   </Accordion>
 
   <Accordion title="A run was skipped">
-    The previous run of the task was still queued or running when the next run was due. Make the prompt smaller,
-    or use a less frequent schedule.
+    The previous run of the task was still running when the next run was due. Make the prompt smaller,
+    or use a less frequent schedule. If the previous run is still queued, Onyx does not record a skip.
+    The queued run starts one time and uses the current prompt.
   </Accordion>
 
   <Accordion title="A run is awaiting approval">

@@ -4,7 +4,8 @@
   brings in-flight runs up to the status of their chat response, then claims
   due tasks with ``FOR UPDATE SKIP LOCKED``, advances ``next_run_at``, and
   writes a QUEUED run (enqueued after commit) or a SKIPPED run. A fire
-  cancels a prior run that still waits for approval.
+  cancels a prior run that still waits for approval, and a still-QUEUED prior
+  run takes the fire and is sent again.
 - ``run_scheduled_task(run_id)`` (``scheduled_tasks`` queue): runs the task
   as a chat turn.
 - ``cleanup_stuck_scheduled_runs`` (primary queue, hourly): fails runs that
@@ -46,9 +47,10 @@ from onyx.db.scheduled_task import (
     list_chat_runs_in_flight,
     mark_run_status,
     missing_chat_session_ids,
+    requeue_queued_run__no_commit,
     sync_chat_run__no_commit,
 )
-from onyx.server.features.build.timeouts import QUEUE_RESIDENCY_SECONDS
+from onyx.server.features.build.timeouts import SCHEDULED_RUN_QUEUE_RESIDENCY_SECONDS
 
 # --- Tunables -----------------------------------------------------------------
 
@@ -61,8 +63,8 @@ DISPATCH_BATCH_SIZE = 50
 # Celery expiry and the stuck-QUEUED sweep are one policy: a run that sat
 # queued past the residency limit is dropped unexecuted and its row reclaimed
 # by the same threshold.
-RUN_EXPIRES_SECONDS = QUEUE_RESIDENCY_SECONDS
-STUCK_QUEUED_OLDER_THAN = timedelta(seconds=QUEUE_RESIDENCY_SECONDS)
+RUN_EXPIRES_SECONDS = SCHEDULED_RUN_QUEUE_RESIDENCY_SECONDS
+STUCK_QUEUED_OLDER_THAN = timedelta(seconds=SCHEDULED_RUN_QUEUE_RESIDENCY_SECONDS)
 APPROVAL_WAIT_LIMIT = timedelta(hours=24)
 
 
@@ -158,11 +160,11 @@ def _cancel_parked_runs(
 def dispatch_due_scheduled_tasks(self: Task, *, tenant_id: str) -> int:
     """Claim due ``ScheduledTask`` rows and dispatch executor tasks.
 
-    Returns the number of run rows inserted (QUEUED + SKIPPED) — useful
-    for tests and metrics.
+    Returns the number of fires handled (queued, sent again, or skipped).
     """
     now = datetime.now(tz=timezone.utc)
     dispatched_count = 0
+    requeued_count = 0
     skipped_count = 0
 
     with get_session_with_current_tenant() as db_session:
@@ -202,17 +204,25 @@ def dispatch_due_scheduled_tasks(self: Task, *, tenant_id: str) -> int:
                     parked,
                     ScheduledTaskErrorClass.SUPERSEDED_BY_NEXT_FIRE,
                 )
+                # A QUEUED prior run takes this fire: it restarts its queue
+                # age and is sent again. Duplicate sends are safe, because
+                # _start_run only starts a QUEUED run, under its row lock.
+                requeued_run_id = requeue_queued_run__no_commit(
+                    db_session, task.id, now
+                )
+                if requeued_run_id is not None:
+                    to_enqueue.append(requeued_run_id)
+                    requeued_count += 1
                 # A parked run that did not cancel (its response is still
                 # parking) stays in flight; the next fire tries again.
-                if has_in_flight_run_for_task(
+                elif has_in_flight_run_for_task(
                     db_session=db_session, task_id=task.id
                 ) or any(
                     run.status == ScheduledTaskRunStatus.AWAITING_APPROVAL
                     for run in parked
                 ):
-                    # SKIP_IF_RUNNING: a prior fire is still in flight.
-                    # Write a skipped row so the user can see the miss,
-                    # then advance next_run_at as if it had fired.
+                    # A prior run is still running. Write a skipped row so the
+                    # user can see the miss, then advance next_run_at.
                     insert_run(
                         db_session=db_session,
                         task_id=task.id,
@@ -242,7 +252,8 @@ def dispatch_due_scheduled_tasks(self: Task, *, tenant_id: str) -> int:
         db_session.commit()
 
     # Post-commit enqueues. If we crash between commit and enqueue, the
-    # stuck-run sweeper picks the QUEUED rows up after ~15 min.
+    # next fire sends the QUEUED run again, or the stuck-run sweeper fails it
+    # after the residency limit.
     for run_id in to_enqueue:
         try:
             self.app.send_task(
@@ -263,15 +274,17 @@ def dispatch_due_scheduled_tasks(self: Task, *, tenant_id: str) -> int:
                 run_id,
             )
 
-    if dispatched_count or skipped_count:
+    if dispatched_count or requeued_count or skipped_count:
         task_logger.info(
-            "dispatch_due_scheduled_tasks tenant=%s dispatched=%d skipped=%d",
+            "dispatch_due_scheduled_tasks tenant=%s dispatched=%d requeued=%d "
+            "skipped=%d",
             tenant_id,
             dispatched_count,
+            requeued_count,
             skipped_count,
         )
 
-    return dispatched_count + skipped_count
+    return dispatched_count + requeued_count + skipped_count
 
 
 # --- Run executor wrapper ----------------------------------------------------

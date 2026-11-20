@@ -40,6 +40,8 @@ The client-I/O taxonomy (connect / RPC / bulk) is orthogonal to the ordering
 chain — a bulk transfer legitimately outlasts a provision deadline.
 """
 
+import os
+
 from onyx.server.features.build.configs import (
     PROMPT_SLOT_LEASE_SECONDS,
     SSE_KEEPALIVE_INTERVAL,
@@ -153,6 +155,13 @@ RUNNER_STALE_AFTER_SECONDS = 6 * SSE_KEEPALIVE_INTERVAL
 # sweeper reclaims its QUEUED row. They must move together or
 # expired-but-unswept / swept-but-unexpired windows appear.
 QUEUE_RESIDENCY_SECONDS = 15 * 60
+
+# The same policy for scheduled-task runs (Celery expires and the stuck-QUEUED
+# sweepers must use the same value). Longer, so a burst of fires at one time
+# drains through the worker pool instead of failing.
+SCHEDULED_RUN_QUEUE_RESIDENCY_SECONDS = int(
+    os.environ.get("SCHEDULED_RUN_QUEUE_RESIDENCY_SECONDS") or 3 * 60 * 60
+)
 
 # =============================================================================
 # Fixed kit — client I/O taxonomy

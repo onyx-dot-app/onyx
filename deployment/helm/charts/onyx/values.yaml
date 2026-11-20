@@ -1161,6 +1161,9 @@ celery_worker_user_file_processing:
 # of worker slots. The dispatcher and stuck-run sweeper are lightweight
 # DB-only coordination tasks and run on the primary queue instead.
 celery_worker_scheduled_tasks:
+  # Threads for each pod (the worker's --concurrency): the scheduled runs that
+  # one pod runs at the same time. A run mostly waits on LLM and tool I/O.
+  concurrency: 32
   extraEnv: []
   replicaCount: 1
   # Per-worker log level override. Empty (default) means use the global
@@ -2012,6 +2015,13 @@ configMap:
   CELERY_WORKER_LIGHT_CONCURRENCY: ""
   CELERY_WORKER_LIGHT_PREFETCH_MULTIPLIER: ""
   CELERY_WORKER_USER_FILE_PROCESSING_CONCURRENCY: ""
+  # Seconds a scheduled run can wait in the queue before it fails (default:
+  # 10800, 3h). Set the worker threads with celery_worker_scheduled_tasks.concurrency.
+  SCHEDULED_RUN_QUEUE_RESIDENCY_SECONDS: ""
+  # Each scheduled task fires a fixed delay inside this window after its cron
+  # time, so tasks with the same schedule do not start at once (default: 300,
+  # 0 turns it off).
+  SCHEDULED_TASK_FIRE_WINDOW_SECONDS: ""
   # Time limit in seconds for one group sync (default: JOB_TIMEOUT_SECONDS, 6h);
   # raise it for a source whose group sync takes longer. A doc permission sync
   # has no time limit. It stops after an hour without progress.

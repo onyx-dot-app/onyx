@@ -58,7 +58,7 @@ from onyx.server.features.build.scheduled_tasks.schedule import (
     human_readable,
     next_n_fires,
 )
-from onyx.server.features.build.timeouts import QUEUE_RESIDENCY_SECONDS
+from onyx.server.features.build.timeouts import SCHEDULED_RUN_QUEUE_RESIDENCY_SECONDS
 from onyx.tools.models import IntegrationLinkConfiguration
 from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
@@ -383,7 +383,7 @@ def _enqueue_executor(run_id: UUID) -> None:
         kwargs={"run_id": str(run_id), "tenant_id": tenant_id},
         queue=OnyxCeleryQueues.SCHEDULED_TASKS,
         priority=OnyxCeleryPriority.MEDIUM,
-        expires=QUEUE_RESIDENCY_SECONDS,
+        expires=SCHEDULED_RUN_QUEUE_RESIDENCY_SECONDS,
     )
 
 

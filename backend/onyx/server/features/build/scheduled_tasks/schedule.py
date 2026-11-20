@@ -22,13 +22,15 @@ them inside ``backend/onyx/db/scheduled_task.py`` for persisted reads/writes.
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Literal
+from uuid import UUID
 
 from cron_descriptor import ExpressionDescriptor
 from croniter import croniter
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from onyx.configs.app_configs import SCHEDULED_TASK_FIRE_WINDOW_SECONDS
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.datetime import datetime_to_utc
@@ -221,6 +223,23 @@ def compute_next_run_at(cron: str, after: datetime) -> datetime:
         ) from e
 
     return datetime_to_utc(next_fire)
+
+
+def offset_seconds(task_id: UUID) -> int:
+    """Seconds after each cron time at which ``task_id`` fires. Stable per task."""
+    if SCHEDULED_TASK_FIRE_WINDOW_SECONDS <= 0:
+        return 0
+    return task_id.int % SCHEDULED_TASK_FIRE_WINDOW_SECONDS
+
+
+def compute_next_dispatch_at(cron: str, after: datetime, task_id: UUID) -> datetime:
+    """The next fire of ``cron`` plus the task's offset, strictly after ``after``.
+
+    Shifting ``after`` back by the offset keeps every fire, even when the
+    offset is longer than the cron interval.
+    """
+    offset = timedelta(seconds=offset_seconds(task_id))
+    return compute_next_run_at(cron, datetime_to_utc(after) - offset) + offset
 
 
 def next_n_fires(
