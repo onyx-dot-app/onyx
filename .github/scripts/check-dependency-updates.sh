@@ -14,11 +14,12 @@ releases="$(python3 .github/scripts/supported-release-branches.py)"
 
 lines=()
 failed=0
-# A repeated alert posts once. A broken check must alert on every run, so it is not stable.
-stable=true
+# A pending update alerts once a day. A past-due update or a broken check alerts on every run.
+urgent=false
+reviewer=""
 if [ "${OBSERVE_OUTCOME:-success}" != success ]; then
   lines+=("• Release observation failed. Deadlines use the last recorded release.")
-  stable=false
+  urgent=true
 fi
 
 while IFS= read -r base; do
@@ -27,7 +28,7 @@ while IFS= read -r base; do
   if ! installed="$(gh api "repos/${GITHUB_REPOSITORY}/contents/${installer}?ref=${base}" --jq .content | base64 --decode | sed -n 's/^version=//p')" || [ -z "$installed" ]; then
     lines+=("• *${base}*: could not read the installed Chrome version.")
     failed=1
-    stable=false
+    urgent=true
     continue
   fi
   # Success covers the first 24 hours after a release. A non-zero exit with JSON is a pending update.
@@ -38,15 +39,20 @@ while IFS= read -r base; do
   if [ -z "$status" ]; then
     lines+=("• *${base}*: the update check failed for Chrome ${installed}.")
     failed=1
-    stable=false
+    urgent=true
     continue
   fi
   marker=""
   if jq -e '.blocking' <<< "$status" > /dev/null; then
     marker=" :rotating_light: *past due*"
     failed=1
+    urgent=true
   fi
-  pr="$(gh pr list --repo "$GITHUB_REPOSITORY" --base "$base" --head "auto/sandbox-browser/${base}" --state open --json url --jq '.[0].url // empty')" || pr=""
+  pr=""
+  if found="$(gh pr list --repo "$GITHUB_REPOSITORY" --base "$base" --head "auto/sandbox-browser/${base}" --state open --json url,reviewRequests --jq '.[0] // empty')" && [ -n "$found" ]; then
+    pr="$(jq -r '.url' <<< "$found")"
+    [ -n "$reviewer" ] || reviewer="$(jq -r '[.reviewRequests[].login // empty] | first // empty' <<< "$found")"
+  fi
   lines+=("• *${base}*: Chrome ${installed}, latest ${latest}, $(jq -r '.message' <<< "$status")${marker}${pr:+ <${pr}|update PR>}")
 done <<< "main"$'\n'"${releases}"
 
@@ -55,15 +61,21 @@ if [ "${#lines[@]}" -eq 0 ]; then
   exit 0
 fi
 
+# One person owns each post: the update PR's reviewer, or a CVE reviewer when no PR has one.
+[ -n "$reviewer" ] || reviewer="$(jq -r '.[]' .github/actions/slack-notify/cve-reviewers.json | shuf -n 1)"
+slack_id="$(jq -r --arg login "$reviewer" 'to_entries[] | select(.value == $login) | .key' .github/actions/slack-notify/user-mappings.json)"
+mention="${slack_id:+<@${slack_id}>}"
+
 {
-  echo "*Dependency updates need attention.* Merge each update PR. If a branch has no PR, check <${repo_url}/actions/workflows/update-sandbox-browser.yml|Update Sandbox Browser>."
+  echo "${mention:-$reviewer} *Dependency updates need attention.* Merge each update PR. If a branch has no PR, check <${repo_url}/actions/workflows/update-sandbox-browser.yml|Update Sandbox Browser>."
   printf '%s\n' "${lines[@]}"
 } > "$alert"
 cat "$alert"
 
-{
-  echo "key=$(printf '%s\n' "${lines[@]}" | sha256sum | cut -d ' ' -f 1)"
-  echo "stable=${stable}"
-} >> "$GITHUB_OUTPUT"
+# Runs are 4 hours apart, so one scheduled run a day starts in this window (8 AM to noon PST).
+hour="$(date -u +%-H)"
+if [ "$urgent" = true ] || [ "${GITHUB_EVENT_NAME:-}" = workflow_dispatch ] || { [ "$hour" -ge 16 ] && [ "$hour" -lt 20 ]; }; then
+  echo "post=true" >> "$GITHUB_OUTPUT"
+fi
 
 exit "$failed"
