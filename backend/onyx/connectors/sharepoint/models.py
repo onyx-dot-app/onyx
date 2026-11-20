@@ -4,6 +4,7 @@ from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
+from onyx.connectors.microsoft_utils.drive_items import DriveItemData
 from onyx.connectors.models import CheckRowText, ListingPayload
 
 
@@ -31,6 +32,17 @@ class SharepointDrive(BaseModel):
     web_url: str | None = None
     drive_type: str | None = None
     list_id: str | None = None
+
+
+class DriveChildrenPage(BaseModel):
+    """One page of a folder's children: its files, the ids of its
+    subfolders, and the link of the next page."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    files: list[DriveItemData]
+    folder_ids: list[str]
+    next_link: str | None = None
 
 
 class SitePagesPage(BaseModel):
