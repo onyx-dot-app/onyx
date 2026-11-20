@@ -163,34 +163,51 @@ def get_organization_library_default(db_session: Session) -> PluginInstallationP
     return policy or PluginInstallationPolicy.AVAILABLE
 
 
-def set_organization_library_default__no_commit(
-    policy: PluginInstallationPolicy, db_session: Session
+def set_marketplace_default__no_commit(
+    marketplace_id: UUID, policy: PluginInstallationPolicy, db_session: Session
 ) -> set[UUID]:
-    """Set the Organization library default and return the users with a
-    running sandbox who could see a plugin that follows it, before or after.
-    REQUIRED is refused: one switch would force every published plugin on
-    every user."""
+    """Set a marketplace default and return the users with a running sandbox
+    who could see a plugin that follows it, before or after. REQUIRED is
+    refused: one switch would force every plugin of the marketplace on every
+    user."""
     if policy == PluginInstallationPolicy.REQUIRED:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
-            "The Organization library default cannot be Required.",
+            "A marketplace default cannot be Required.",
         )
-    library_id = get_or_create_organization_library__no_commit(db_session)
-    library = db_session.scalars(
-        select(Marketplace).where(Marketplace.id == library_id).with_for_update()
-    ).one()
+    if marketplace_id == ORGANIZATION_LIBRARY_ID:
+        get_or_create_organization_library__no_commit(db_session)
+    marketplace = db_session.scalars(
+        select(Marketplace).where(Marketplace.id == marketplace_id).with_for_update()
+    ).one_or_none()
+    if marketplace is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Marketplace not found.")
     affected_ids = list(
         db_session.scalars(
             select(Plugin.id).where(
-                Plugin.marketplace_id == library_id,
+                Plugin.marketplace_id == marketplace_id,
                 Plugin.installation_policy.is_(None),
             )
         )
     )
     before = affected_user_ids_for_plugins(affected_ids, db_session)
-    library.default_installation_policy = policy
+    marketplace.default_installation_policy = policy
     db_session.flush()
     return before | affected_user_ids_for_plugins(affected_ids, db_session)
+
+
+SYNCED_PLUGIN_LOCKED = "Change this plugin in GitHub."
+
+
+def is_synced(plugin: Plugin) -> bool:
+    """A plugin of a GitHub marketplace. Its content comes only from its
+    repository; its access can change."""
+    return plugin.marketplace_entry_key is not None
+
+
+def refuse_if_synced(plugin: Plugin) -> None:
+    if is_synced(plugin):
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, SYNCED_PLUGIN_LOCKED)
 
 
 def free_plugin_name(
@@ -746,6 +763,7 @@ def publish_plugin__no_commit(
     plugin = lock_plugin(plugin_id, db_session)
     if plugin is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Plugin not found.")
+    refuse_if_synced(plugin)
     library_id = get_or_create_organization_library__no_commit(db_session)
     if plugin.marketplace_id == library_id:
         return
@@ -776,6 +794,7 @@ def publish_or_request_review__no_commit(
     ``actor``; OFF raises. The one place the setting applies. ``actor`` None
     is a system or approved publish and always publishes. An organization-wide
     plugin manager always publishes. A publish clears the pending request."""
+    refuse_if_synced(plugin)
     if actor is not None and not has_global_permission(
         actor, Permission.MANAGE_PLUGINS
     ):

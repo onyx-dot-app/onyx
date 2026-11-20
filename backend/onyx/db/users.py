@@ -22,12 +22,13 @@ from onyx.configs.constants import (
     NO_AUTH_PLACEHOLDER_USER_EMAIL,
     SLACK_SERVICE_ACCOUNT_EMAIL,
 )
-from onyx.db.enums import AccountType, Permission
+from onyx.db.enums import AccountType, MarketplaceKind, Permission
 from onyx.db.models import (
     ChatMessage,
     ChatSession,
     DocumentSet,
     DocumentSet__User,
+    Marketplace,
     MCPServer,
     OAuthAccount,
     PermissionGrant,
@@ -972,6 +973,9 @@ def release_personas_owned_by_user__no_commit(
 _PRIVATE_SKILLS_BLOCK_DELETE = (
     "Transfer or delete this user's private skills before deleting the user."
 )
+_PERSONAL_MARKETPLACES_BLOCK_DELETE = (
+    "Delete this user's personal marketplaces before deleting the user."
+)
 
 
 def delete_user_from_db__no_commit(
@@ -988,14 +992,30 @@ def delete_user_from_db__no_commit(
     blocking = db_session.scalars(
         private_plugins_blocking_user_delete(user_to_delete.id)
     ).all()
-    if blocking:
+    # A personal GitHub marketplace cannot change owner; its plugins come from
+    # the repository.
+    personal_marketplaces = db_session.scalars(
+        select(Marketplace)
+        .where(
+            Marketplace.kind == MarketplaceKind.GITHUB,
+            Marketplace.owner_user_id == user_to_delete.id,
+        )
+        .order_by(Marketplace.name, Marketplace.id)
+    ).all()
+    if blocking or personal_marketplaces:
         raise OnyxError(
             OnyxErrorCode.CONFLICT,
-            _PRIVATE_SKILLS_BLOCK_DELETE,
+            _PRIVATE_SKILLS_BLOCK_DELETE
+            if blocking
+            else _PERSONAL_MARKETPLACES_BLOCK_DELETE,
             extra={
                 "private_plugins": [
                     {"id": str(plugin.id), "name": plugin.name} for plugin in blocking
-                ]
+                ],
+                "personal_marketplaces": [
+                    {"id": str(marketplace.id), "name": marketplace.name}
+                    for marketplace in personal_marketplaces
+                ],
             },
         )
     for oauth_account in user_to_delete.oauth_accounts:

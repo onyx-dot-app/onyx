@@ -4,6 +4,7 @@ from uuid import UUID, uuid4
 import pytest
 
 from onyx.db.enums import (
+    MarketplaceKind,
     Permission,
     PluginInstallationPolicy,
     SkillAccessLevel,
@@ -52,6 +53,15 @@ class _Case:
             published=self.published,
             installation_policy=None,
             marketplace_default_policy=PluginInstallationPolicy.AVAILABLE,
+            marketplace_id=uuid4(),
+            marketplace_kind=(
+                MarketplaceKind.ORGANIZATION_LIBRARY
+                if self.published
+                else MarketplaceKind.USER_UPLOADS
+            ),
+            marketplace_name="Marketplace",
+            marketplace_provider_config=None,
+            synced=False,
             required_for_anyone=False,
             current_version_id=self.skill.id,
             current_version_number=1,

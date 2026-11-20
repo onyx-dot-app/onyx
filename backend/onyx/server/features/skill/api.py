@@ -14,6 +14,7 @@ from onyx.db.engine.sql_engine import get_session, get_session_with_tenant
 from onyx.db.enums import Permission
 from onyx.db.models import Plugin, Skill, User
 from onyx.db.plugin import (
+    ORGANIZATION_LIBRARY_ID,
     check_sharing_allowed,
     find_upload_target,
     free_plugin_name,
@@ -26,7 +27,7 @@ from onyx.db.plugin import (
     list_plugin_versions,
     lock_plugin,
     next_version_number,
-    set_organization_library_default__no_commit,
+    set_marketplace_default__no_commit,
     version_is_skill,
 )
 from onyx.db.plugin_access import affected_user_ids_for_plugins, get_version_user_runs
@@ -487,8 +488,8 @@ def set_organization_library_default_access(
     _: User = Depends(require_permission(Permission.MANAGE_PLUGINS)),
     db_session: Session = Depends(get_session),
 ) -> OrganizationLibraryDefaultAccess:
-    affected = set_organization_library_default__no_commit(
-        request.installation_policy, db_session
+    affected = set_marketplace_default__no_commit(
+        ORGANIZATION_LIBRARY_ID, request.installation_policy, db_session
     )
     db_session.commit()
     push_skills_and_commit(affected, db_session)

@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import (
+    MarketplaceKind,
     PluginInstallationPolicy,
     SkillAccessLevel,
     SkillSharePermission,
@@ -19,6 +20,7 @@ from onyx.db.utils import UNSET
 from onyx.integrations.models import NeedCounts, PluginNeedView
 from onyx.server.models import MinimalUserSnapshot
 from onyx.skills.built_in import BuiltInSkillDefinition
+from onyx.skills.marketplace.models import GitHubMarketplaceConfig
 from onyx.skills.models import (
     GITHUB_SKILL_MAX_COUNT,
     PluginManifest,
@@ -61,6 +63,16 @@ class PluginDetail(BaseModel):
     manifest: PluginManifest | None
     skills: list[PluginSkillSummary]
     needs: list[PluginNeedView]
+
+
+class SkillMarketplace(BaseModel):
+    """Where a custom skill or plugin comes from."""
+
+    id: UUID
+    name: str
+    kind: MarketplaceKind
+    # "owner/repo" for a GitHub marketplace, None for the others.
+    repository: str | None
 
 
 class SkillResponse(BaseModel):
@@ -111,6 +123,10 @@ class SkillResponse(BaseModel):
     published_version_number: int | None = None
     # The version that waits for an admin's review, if any.
     pending_version_number: int | None = None
+    # None for built-ins.
+    marketplace: SkillMarketplace | None = None
+    # The content comes from a GitHub repository and cannot change in Onyx.
+    content_locked: bool = False
 
     @classmethod
     def from_builtin(
@@ -203,6 +219,19 @@ class SkillResponse(BaseModel):
             current_version_number=access.current_version_number,
             published_version_number=access.published_version_number,
             pending_version_number=access.pending_version_number,
+            marketplace=SkillMarketplace(
+                id=access.marketplace_id,
+                name=access.marketplace_name,
+                kind=access.marketplace_kind,
+                repository=(
+                    GitHubMarketplaceConfig.model_validate(
+                        access.marketplace_provider_config
+                    ).repository
+                    if access.marketplace_provider_config is not None
+                    else None
+                ),
+            ),
+            content_locked=access.synced,
         )
 
 

@@ -35,6 +35,7 @@ can compute access for many users or many plugins.
 from collections.abc import Collection, Iterable
 from datetime import datetime
 from enum import IntEnum
+from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -892,6 +893,13 @@ class PluginAccess(BaseModel):
     user_shares: tuple[PluginUserShare, ...]
     group_rows: tuple[PluginGroupRowAccess, ...]
 
+    marketplace_id: UUID
+    marketplace_kind: MarketplaceKind
+    marketplace_name: str
+    # GitHub marketplaces only.
+    marketplace_provider_config: dict[str, Any] | None
+    # A plugin of a GitHub marketplace; its content comes from the repository.
+    synced: bool
     # The default of the plugin's marketplace.
     marketplace_default_policy: PluginInstallationPolicy
     # ``plugin_required_for_anyone``.
@@ -952,6 +960,11 @@ def load_plugin_access(
             version_is_valid(runs),
             plugin_required_for_anyone(Plugin, Marketplace),
             holds_one_root_skill(runs),
+            Marketplace.id,
+            Marketplace.kind,
+            Marketplace.name,
+            Marketplace.provider_config,
+            Plugin.marketplace_entry_key.is_not(None),
         )
         .join(Marketplace, Marketplace.id == Plugin.marketplace_id)
         .join(current, current.id == Plugin.current_version_id)
@@ -1018,6 +1031,11 @@ def load_plugin_access(
             is_valid=row[14],
             required_for_anyone=bool(row[15]),
             is_skill=bool(row[16]),
+            marketplace_id=row[17],
+            marketplace_kind=row[18],
+            marketplace_name=row[19],
+            marketplace_provider_config=row[20],
+            synced=bool(row[21]),
             user_shares=tuple(user_shares.get(row[0], ())),
             group_rows=tuple(group_rows.get(row[0], ())),
         )

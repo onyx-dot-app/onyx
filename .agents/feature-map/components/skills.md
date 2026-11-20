@@ -580,9 +580,9 @@ the app from the same rule
     or left in the background (`skills/push.py:enqueue_skill_push`, task
     `push_skills_to_users` on the `sandbox` queue), so a large sync does not
     wait for the pushes. Other routes push in the request, after their commit
-    (`skills/push.py:push_skills_and_commit`). The Organization library
-    default is written by
-    `db/plugin.py:set_organization_library_default__no_commit`, which refuses
+    (`skills/push.py:push_skills_and_commit`). A marketplace default (the
+    Organization library or a company GitHub marketplace) is written by
+    `db/plugin.py:set_marketplace_default__no_commit`, which refuses
     `REQUIRED` and returns the users of the plugins that follow it. EDIT on a skill is not enough
     to change its groups: any
     change to the group set or levels is a `MANAGE_PLUGINS` action within scope

@@ -81,6 +81,7 @@ from onyx.db.plugin import (
     is_skill_version,
     private_plugins_blocking_user_delete,
     publish_or_request_review__no_commit,
+    refuse_if_synced,
     set_plugin_preferences__no_commit,
     transfer_plugin__no_commit,
 )
@@ -566,6 +567,7 @@ def _add_plugin_version_for_user__no_commit(
     )
     if plugin is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Plugin not found.")
+    refuse_if_synced(plugin)
     with check_skill_limit(db_session, [plugin.id], user.id):
         version = add_plugin_version__no_commit(
             plugin=plugin,
@@ -609,6 +611,7 @@ def lock_skill_for_save(plugin: Plugin, user: User, db_session: Session) -> None
     """Take the save locks in the toggle's order, the user's lock and then the
     plugin row, and check that the user may still edit the skill: the edit
     check before the locks can be stale by now. 404 otherwise."""
+    refuse_if_synced(plugin)
     lock_user_skill_preferences(user.id, db_session)
     if (
         fetch_editable_skill(
@@ -869,6 +872,7 @@ def transfer_skill_ownership(
     skill moves to the new owner's "My uploads". On a name clash there,
     "raise" refuses with CONFLICT and "rename" takes the next free name. A
     published skill stays published."""
+    refuse_if_synced(skill)
     previous_owner_user_id = skill.author_user_id
     if new_owner_user_id == previous_owner_user_id:
         return
@@ -1019,6 +1023,7 @@ SkillBulkAction = Literal["enable", "disable", "delete"]
 
 
 def ensure_can_edit_org_visibility(plugin: Plugin, user: User) -> None:
+    refuse_if_synced(plugin)
     if plugin.author_user_id == user.id:
         return
     if has_global_permission(user, Permission.MANAGE_PLUGINS):
@@ -1260,6 +1265,7 @@ def delete_skill_for_user__no_commit(
     """Delete a skill the user may edit. Only a user with organization-wide
     MANAGE_PLUGINS can delete a published skill. Returns the affected users and
     the bundle file ids for caller cleanup."""
+    refuse_if_synced(plugin)
     published = is_published(plugin, db_session)
     required_for_anyone = bool(
         db_session.scalar(
