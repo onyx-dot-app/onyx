@@ -301,7 +301,7 @@ mod platform {
         let time = gtk_window
             .window()
             .and_then(|w| w.downcast::<gdkx11::X11Window>().ok())
-            .map(|w| gdkx11::x11_get_server_time(&w))
+            .map(|w| gdkx11::functions::x11_get_server_time(&w))
             .unwrap_or(gdkx11::gdk::ffi::GDK_CURRENT_TIME as u32);
         gtk_window.present_with_time(time);
         Ok(())
