@@ -11777,28 +11777,6 @@
       }
     },
     "appChrome": {
-      "delete": {
-        "label": "삭제"
-      },
-      "deleteModal": {
-        "description": "이 채팅을 삭제하시겠습니까? 이 작업은 되돌릴 수 없습니다.",
-        "submitButton": {
-          "label": "삭제"
-        },
-        "title": "채팅 삭제"
-      },
-      "exportAs": {
-        "label": "다른 형식으로 내보내기…"
-      },
-      "exportFailed": {
-        "message": "채팅 내보내기에 실패했습니다. 다시 시도해 주세요."
-      },
-      "exportMarkdown": {
-        "label": "Markdown"
-      },
-      "exportPlaintext": {
-        "label": "일반 텍스트"
-      },
       "incognitoExit": {
         "ariaLabel": "시크릿 채팅 종료",
         "tooltip": "시크릿 채팅 종료"
@@ -11825,14 +11803,14 @@
       "modeButton": {
         "ariaLabel": "앱 모드 변경"
       },
-      "moveToProject": {
-        "label": "프로젝트로 이동"
-      },
       "openSidebar": {
         "ariaLabel": "사이드바 열기"
       },
       "share": {
-        "label": "공유"
+        "label": "공유…"
+      },
+      "shareMenu": {
+        "label": "공유 또는 내보내기"
       }
     },
     "banners": {
@@ -13492,6 +13470,26 @@
       },
       "resizeHandle": {
         "label": "패널 크기 조정"
+      }
+    },
+    "export": {
+      "failed": {
+        "message": "채팅 내보내기에 실패했습니다. 다시 시도해 주세요."
+      },
+      "plaintext": {
+        "label": "일반 텍스트"
+      },
+      "asMarkdown": {
+        "label": "Markdown으로 내보내기"
+      },
+      "markdown": {
+        "label": "Markdown"
+      },
+      "asPlaintext": {
+        "label": "일반 텍스트로 내보내기"
+      },
+      "menu": {
+        "label": "다른 형식으로 내보내기…"
       }
     }
   },

@@ -5,7 +5,12 @@
  * individual tests remain declarative.
  */
 
-import { type Page, type Locator, expect } from "@playwright/test";
+import {
+  type Download,
+  type Page,
+  type Locator,
+  expect,
+} from "@playwright/test";
 import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
 import { InputBar } from "@tests/e2e/chat/InputBar";
 
@@ -63,6 +68,11 @@ export class ChatPage {
   readonly selectedModelOptions: Locator;
   readonly unselectedModelOptions: Locator;
 
+  // Header share menu: share the chat or download its transcript
+  readonly shareMenuButton: Locator;
+  readonly shareMenu: Locator;
+  readonly shareDialog: Locator;
+
   constructor(page: Page) {
     this.page = page;
     this.inputBar = new InputBar(page);
@@ -104,6 +114,9 @@ export class ChatPage {
     this.unselectedModelOptions = this.modelPopover.locator(
       '[data-interactive-state="empty"]'
     );
+    this.shareMenuButton = page.getByTestId("share-chat-button");
+    this.shareMenu = page.getByRole("menu", { name: "Share or export" });
+    this.shareDialog = page.getByRole("dialog");
   }
 
   humanMessage(index = 0): Locator {
@@ -883,11 +896,32 @@ export class ChatPage {
     await expect(this.page.getByTestId("incognito-intro")).toBeVisible();
   }
 
+  async openShareMenu(): Promise<void> {
+    await this.shareMenuButton.click();
+    await expect(this.shareMenu).toBeVisible();
+  }
+
+  async openShareModal(): Promise<void> {
+    await this.openShareMenu();
+    await this.shareMenu.getByRole("menuitem", { name: "Share…" }).click();
+    await expect(this.shareDialog).toBeVisible();
+  }
+
+  /** Picks an export row of the share menu and returns the download. */
+  async exportFromShareMenu(
+    format: "Markdown" | "Plain Text"
+  ): Promise<Download> {
+    await this.openShareMenu();
+    const download = this.page.waitForEvent("download");
+    await this.shareMenu
+      .getByRole("menuitem", { name: `Export as ${format}` })
+      .click();
+    return download;
+  }
+
   async expectIncognito(): Promise<void> {
     await expect(this.page.getByTestId("incognito-chat-pill")).toBeVisible();
-    await expect(
-      this.page.getByRole("button", { name: "share-chat-button" })
-    ).toHaveCount(0);
+    await expect(this.shareMenuButton).toHaveCount(0);
     await expect(this.page.getByTestId("AgentMessage/like-button")).toHaveCount(
       0
     );
