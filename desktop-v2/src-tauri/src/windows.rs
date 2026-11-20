@@ -220,17 +220,18 @@ pub fn route_to(app: &AppHandle, path: &str) {
                     main_window::renew_session(&app, &server, &token),
                 )
                 .await;
-                let (token, renewed) = match renewal {
-                    Ok(Some(fresh)) => (fresh, true),
-                    // A sign-out, a new sign-in or a server change came first.
-                    Ok(None) => return,
-                    Err(_) => (token, false),
-                };
-                // A sign-out or server change during the wait wins; the old
-                // token must not reopen the window.
+                // `None` is also a renewal that lost to another one, which
+                // stored a newer token: the session is still on.
+                let renewed = renewal.is_ok();
+                // A sign-out or server change during the wait wins.
                 if state.epoch() != epoch || state.server().ok().as_deref() != Some(&server) {
                     return;
                 }
+                // The stored token, read now: another renewal may have
+                // replaced it, or a rejection cleared it.
+                let Some(token) = state.token(&server) else {
+                    return;
+                };
                 if let Err(e) = main_window::open(&app, &server, &token, &path).await {
                     log::warn!("could not open main window: {e}");
                     match state.api.health(&server).await {
