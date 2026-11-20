@@ -458,8 +458,14 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
 
     # Profile fields, shown in Settings > Account. The user's own settings
     # are in `UserPreferences`.
+    # Full name. SCIM provisioning keeps it in sync with the IdP.
     personal_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    # The name Onyx calls the user. Only the user sets it.
+    preferred_name: Mapped[str | None] = mapped_column(String, nullable=True)
+    # Free text. The web app offers a fixed list of work functions plus "Other".
     personal_role: Mapped[str | None] = mapped_column(String, nullable=True)
+    # File store id of the profile photo (FileOrigin.USER_PROFILE_IMAGE).
+    profile_image_file_id: Mapped[str | None] = mapped_column(String, nullable=True)
 
     # Eagerly loaded: `UserInfo.from_model` reads this without a session, and a
     # lazy load would fail outright under async.
@@ -540,6 +546,11 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         Returns True if the user has at least one OAuth (or OIDC) account.
         """
         return not bool(self.oauth_accounts)
+
+    @property
+    def addressed_name(self) -> str | None:
+        """The name Onyx calls the user: the preferred name, else the full name."""
+        return self.preferred_name or self.personal_name
 
     @property
     def is_anonymous(self) -> bool:

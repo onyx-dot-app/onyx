@@ -132,8 +132,30 @@ export async function refreshToken(
   }
 }
 
+/** The name Onyx calls the user: the preferred name, else the full name. */
+export function getUserAddressedName(user: User | null): string | null {
+  return (
+    user?.personalization?.preferred_name || user?.personalization?.name || null
+  );
+}
+
+/**
+ * URL of a user's profile photo, or null when they have none. The file id
+ * makes a replaced photo a new URL, so the browser can cache each one forever.
+ */
+export function buildUserProfileImageUrl(
+  user:
+    | { id: string | null; profile_image_file_id?: string | null }
+    | null
+    | undefined
+): string | null {
+  if (!user?.id || !user.profile_image_file_id) return null;
+  return `/api/user/${encodeURIComponent(user.id)}/profile-image?v=${encodeURIComponent(user.profile_image_file_id)}`;
+}
+
 export function getUserDisplayName(user: User | null): string {
-  if (user?.personalization?.name) return user.personalization.name;
+  const addressedName = getUserAddressedName(user);
+  if (addressedName) return addressedName;
 
   if (user?.email) {
     const atIndex = user.email.indexOf("@");

@@ -168,22 +168,10 @@ def upsert_user_preferences__no_commit(
     )
 
 
-def update_user_personalization(
-    user_id: UUID,
-    *,
-    personal_name: str | None,
-    personal_role: str | None,
-    preferences: UserPreferenceValues,
-    memories: list[MemoryItem],
-    db_session: Session,
+def replace_user_memories__no_commit(
+    db_session: Session, user_id: UUID, memories: list[MemoryItem]
 ) -> None:
-    db_session.execute(
-        update(User)
-        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
-        .values(personal_name=personal_name, personal_role=personal_role)
-    )
-    upsert_user_preferences__no_commit(db_session, user_id, **preferences)
-
+    """Make the user's memories match `memories`."""
     # ID-based upsert: use real DB IDs from the frontend to match memories.
     incoming_ids = {m.id for m in memories if m.id is not None}
 
@@ -213,8 +201,6 @@ def update_user_personalization(
         db_session.add_all(
             [Memory(user_id=user_id, memory_text=item.content) for item in new_items]
         )
-
-    db_session.commit()
 
 
 def get_memories_for_user(

@@ -39,13 +39,14 @@ def get_memories(
     placeholder_values = profile_views.placeholders
     if user.email:
         placeholder_values.setdefault("email", user.email)
-    if user.personal_name:
-        placeholder_values.setdefault("name", user.personal_name)
+    if user.addressed_name:
+        placeholder_values.setdefault("name", user.addressed_name)
     if user.personal_role:
         placeholder_values.setdefault("role", user.personal_role)
 
     user_info = UserInfo(
-        name=user.personal_name,
+        name=user.addressed_name,
+        full_name=user.personal_name,
         role=user.personal_role,
         email=user.email,
         organization_profile=profile_views.fields,

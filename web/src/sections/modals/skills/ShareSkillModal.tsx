@@ -1,5 +1,6 @@
 "use client";
 
+import { getUserInitials } from "@/lib/users/svc";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { RichStr } from "@opal/types";
 import { useTranslations } from "next-intl";
@@ -647,7 +648,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
                   const isCurrentUser = currentUser?.id === share.user.id;
                   return (
                     <ShareAccessRow
-                      avatarInitial={share.user.email.charAt(0).toUpperCase()}
+                      avatarInitials={getUserInitials(null, share.user.email)}
                       icon={SvgUser}
                       key={share.user.id}
                       rightChildren={
@@ -705,7 +706,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
           <Content font="main-ui-action" title={t("share.ownershipTitle")} />
           {skill.owner ? (
             <ShareAccessRow
-              avatarInitial={skill.owner.email.charAt(0).toUpperCase()}
+              avatarInitials={getUserInitials(null, skill.owner.email)}
               icon={SvgUser}
               rightChildren={
                 <StaticPermissionLabel

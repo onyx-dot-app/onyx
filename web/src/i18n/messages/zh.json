@@ -16102,8 +16102,68 @@
       },
       "workRole": {
         "description": "填写您的职位，以便更好地定制回复。",
-        "placeholder": "您的职位",
-        "title": "职位"
+        "placeholder": "选择职位",
+        "title": "哪项最能描述您的工作？",
+        "other": {
+          "placeholder": "输入您的职位",
+          "title": "您的工作"
+        }
+      },
+      "photo": {
+        "errors": {
+          "tooLarge": "请选择不超过 10 MB 的图片。",
+          "invalidType": "请选择 PNG、JPEG 或 WebP 图片。"
+        },
+        "description": "PNG、JPEG 或 WebP，最大 10 MB。",
+        "toasts": {
+          "updateFailed": "无法更新您的个人资料照片。请重试。"
+        },
+        "title": "个人资料照片",
+        "editButton": {
+          "ariaLabel": "更改头像"
+        },
+        "uploadButton": {
+          "ariaLabel": "上传头像"
+        },
+        "menu": {
+          "label": "头像选项",
+          "replace": {
+            "label": "更换照片"
+          },
+          "remove": {
+            "label": "移除"
+          }
+        },
+        "cropModal": {
+          "title": "裁剪照片",
+          "description": "拖动或使用方向键调整位置。使用滑块或滚动进行缩放。",
+          "area": {
+            "ariaLabel": "裁剪区域"
+          },
+          "zoom": {
+            "ariaLabel": "缩放"
+          },
+          "zoomIn": {
+            "ariaLabel": "放大"
+          },
+          "zoomOut": {
+            "ariaLabel": "缩小"
+          },
+          "reset": {
+            "label": "重置"
+          },
+          "cancel": {
+            "label": "取消"
+          },
+          "save": {
+            "label": "保存"
+          }
+        }
+      },
+      "preferredName": {
+        "description": "{appName} 与您交流时会使用这个名字。",
+        "placeholder": "添加名字",
+        "title": "{appName} 应该怎么称呼您？"
       }
     },
     "promptShortcuts": {
@@ -16205,6 +16265,21 @@
     },
     "interactions": {
       "title": "交互"
+    },
+    "organization": {
+      "role": {
+        "groupManager": "群组管理员",
+        "description": "您在此工作区中的访问级别。",
+        "admin": "管理员",
+        "basic": "普通用户",
+        "title": "您的角色"
+      },
+      "tenantId": {
+        "description": "寻求帮助时，请将此 ID 提供给支持团队。",
+        "copyTooltip": "复制租户 ID",
+        "title": "租户 ID"
+      },
+      "title": "组织"
     }
   },
   "sidebar": {
@@ -17939,6 +18014,49 @@
       "inFlight": "{status, select, AWAITING_APPROVAL {此运行正在等待您在下方批准。} other {此运行正在进行中。}}",
       "startedAt": "开始于 {time}",
       "viewTask": "查看任务"
+    }
+  },
+  "profile": {
+    "workRole": {
+      "marketing": {
+        "label": "市场营销"
+      },
+      "finance": {
+        "label": "财务"
+      },
+      "other": {
+        "label": "其他"
+      },
+      "engineering": {
+        "label": "工程"
+      },
+      "customerSupportSuccess": {
+        "label": "客户支持与成功"
+      },
+      "peopleHr": {
+        "label": "人力资源"
+      },
+      "dataAnalytics": {
+        "label": "数据与分析"
+      },
+      "legal": {
+        "label": "法务"
+      },
+      "design": {
+        "label": "设计"
+      },
+      "product": {
+        "label": "产品"
+      },
+      "operations": {
+        "label": "运营"
+      },
+      "sales": {
+        "label": "销售"
+      },
+      "leadership": {
+        "label": "管理层"
+      }
     }
   }
 }

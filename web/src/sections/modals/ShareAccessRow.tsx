@@ -41,8 +41,11 @@ function PermissionColumns({
 }
 export interface ShareAccessRowProps {
   icon: IconFunctionComponent;
-  /** Initial rendered in a dark avatar circle; omitted → the bare icon */
-  avatarInitial?: string;
+  /**
+   * Initials in a user avatar circle, from `getUserInitials`. Null shows the
+   * avatar's person glyph; omitted → the bare icon.
+   */
+  avatarInitials?: string | null;
   /** Icon rendered inside a dark avatar circle (groups, service accounts) */
   avatarIcon?: IconFunctionComponent;
   title?: string | RichStr;
@@ -56,7 +59,7 @@ export interface ShareAccessRowProps {
 
 export function ShareAccessRow({
   icon,
-  avatarInitial,
+  avatarInitials,
   avatarIcon,
   title,
   titleSlot,
@@ -68,16 +71,16 @@ export function ShareAccessRow({
   // the icon subtree instead of updating it.
   const LeadingIcon: IconFunctionComponent = useMemo(
     () =>
-      avatarInitial
+      avatarInitials !== undefined
         ? function ShareRowAvatar() {
-            return <IconContainer avatar="user" name={avatarInitial} />;
+            return <IconContainer avatar="user" initials={avatarInitials} />;
           }
         : avatarIcon
           ? function ShareRowAvatarIcon() {
               return <IconContainer avatar="icon" icon={avatarIcon} />;
             }
           : icon,
-    [avatarInitial, avatarIcon, icon]
+    [avatarInitials, avatarIcon, icon]
   );
 
   return (
