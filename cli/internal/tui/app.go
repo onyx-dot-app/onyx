@@ -685,6 +685,10 @@ func (m Model) handleStreamEvent(msg StreamEventMsg) (tea.Model, tea.Cmd) {
 	case models.CitationEvent:
 		m.citations[e.CitationNumber] = e.DocumentID
 
+	case models.ToolStatusEvent:
+		if e.Status == "failed" {
+			m.viewport.addWarning("Tool call failed.")
+		}
 	case models.ToolStartEvent:
 		m.viewport.addInfo("Using " + e.ToolName + "…")
 

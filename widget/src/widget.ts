@@ -64,6 +64,7 @@ import {
 } from "./services/questions";
 import { renderQuestionCard } from "./services/question-card";
 import {
+  isStreamError,
   MessageIDs,
   processPacket,
   StreamErrorPacket,
@@ -1552,7 +1553,7 @@ export class OnyxChatWidget extends LitElement {
         "type" in packet.obj &&
         (packet.obj.type === "stop" ||
           packet.obj.type === "overall_stop" ||
-          packet.obj.type === "error")
+          isStreamError(packet))
       ) {
         follow.ended = true;
       }

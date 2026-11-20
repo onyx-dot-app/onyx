@@ -27,6 +27,54 @@ func ParseStreamLine(line string) models.StreamEvent {
 		return models.ErrorEvent{Error: fmt.Sprintf("malformed stream data: %v", err), IsRetryable: false}
 	}
 
+	if data["jsonrpc"] == "2.0" {
+		params, _ := data["params"].(map[string]any)
+		method, _ := data["method"].(string)
+		switch {
+		case method == "session/update":
+			update, _ := params["update"].(map[string]any)
+			meta, _ := update["_meta"].(map[string]any)
+			onyx, _ := meta["onyx"].(map[string]any)
+			placement := parsePlacement(onyx["placement"])
+			status, _ := update["status"].(string)
+			callID, _ := update["toolCallId"].(string)
+			if callID != "" && (status == "completed" || status == "failed") {
+				return models.ToolStatusEvent{ToolCallID: callID, Status: status, Placement: placement}
+			}
+			obj, _ := update["rawOutput"].(map[string]any)
+			if obj == nil {
+				obj, _ = onyx["packet"].(map[string]any)
+			}
+			if obj != nil {
+				// A tool diagnostic precedes its failed status. The agent can still answer.
+				if callID != "" && obj["type"] == "error" {
+					return nil
+				}
+				return parsePacketObj(obj, placement)
+			}
+			content, _ := update["content"].(map[string]any)
+			text, ok := content["text"].(string)
+			if !ok {
+				return nil
+			}
+			switch update["sessionUpdate"] {
+			case "agent_message_chunk":
+				return models.MessageDeltaEvent{Placement: placement, Content: text}
+			case "agent_thought_chunk":
+				return models.ReasoningDeltaEvent{Placement: placement, Reasoning: text}
+			}
+			return nil
+		case strings.HasPrefix(method, "_onyx/"):
+			packet, ok := params["packet"].(map[string]any)
+			if !ok {
+				return nil
+			}
+			data = packet
+		default:
+			return nil
+		}
+	}
+
 	// Case 1: CreateChatSessionID
 	if _, ok := data["chat_session_id"]; ok {
 		if _, hasPlacement := data["placement"]; !hasPlacement {

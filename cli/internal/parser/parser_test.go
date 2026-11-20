@@ -573,3 +573,11 @@ func TestStreamedErrorKeepsItsErrorCode(t *testing.T) {
 		t.Fatalf("event = %#v", event)
 	}
 }
+
+func TestACPToolResultRetainsFailureWithoutEndingTurn(t *testing.T) {
+	event := ParseStreamLine(`{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"s","update":{"sessionUpdate":"tool_call_update","toolCallId":"r/tool/c","status":"failed","_meta":{"onyx":{"placement":{"turn_index":2},"packet":{"type":"section_end"}}}}}}`)
+	result, ok := event.(models.ToolStatusEvent)
+	if !ok || result.ToolCallID != "r/tool/c" || result.Status != "failed" || result.Placement.TurnIndex != 2 {
+		t.Fatalf("unexpected tool result: %#v", event)
+	}
+}

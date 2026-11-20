@@ -1,7 +1,7 @@
 import { DocumentInfoPacket, StreamStopInfo } from "@/lib/search/types";
 import type { ChatToolOptions } from "@/lib/tools/types";
 import { mutate } from "swr";
-import { handleSSEStream } from "@/lib/search/streamingUtils";
+import { readChatNotifications } from "@onyx-ai/shared/acp";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import type { ComposedMention, PendingChatMessage } from "@/lib/chat/types";
 import { requestMentions } from "@/lib/chat/mentions";
@@ -225,6 +225,7 @@ export async function* sendMessage({
   const payload = {
     message: message,
     chat_session_id: chatSessionId,
+    protocol_version: 2,
     parent_message_id: parentMessageId,
     file_descriptors: fileDescriptors,
     mentions: requestMentions(mentions ?? []),
@@ -315,7 +316,13 @@ async function* readChatStream<T extends PacketType | StreamCursor>(
   response: Response,
   signal?: AbortSignal
 ): AsyncGenerator<T, void, unknown> {
-  for await (const packet of handleSSEStream<T>(response, signal)) {
+  for await (const item of readChatNotifications(
+    chatSessionId,
+    response.body,
+    signal
+  )) {
+    // SAFETY: The shared decoder maps the chat notification to its display packet or stream control.
+    const packet = item as T;
     if ("obj" in packet && packet.obj.type === "user_message") {
       const { id } = packet.obj;
       void mutate<PendingChatMessage[]>(
@@ -348,7 +355,7 @@ export async function* resumeStream(
   signal?: AbortSignal
 ): AsyncGenerator<PacketType | StreamCursor, void, unknown> {
   const response = await fetch(
-    `/api/chat/chat-session/${chatSessionId}/resume-stream?stream_id=${streamId}&cursor=${cursor}`,
+    `/api/chat/chat-session/${chatSessionId}/resume-stream?stream_id=${streamId}&cursor=${cursor}&protocol_version=2`,
     { signal }
   );
 

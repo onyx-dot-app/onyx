@@ -56,8 +56,8 @@ interface Turn {
   citations: Citation[];
   streaming: boolean;
   error: string | null;
-  // Set when the answer waits for a tool approval, which only the main window can give.
-  approval: { tool: string | null } | null;
+  // The main window handles approval requests and tool questions.
+  pendingInput: { tool: string | null } | null;
 }
 
 // A file for the next question: uploading while `file` and `error` are null.
@@ -367,7 +367,7 @@ function Launcher() {
       citations: [],
       streaming: true,
       error: null,
-      approval: null,
+      pendingInput: null,
     };
     setTurns((prev) => (followUp ? [...prev, turn] : [turn]));
     if (!followUp) {
@@ -404,8 +404,8 @@ function Launcher() {
                 };
               case "citations":
                 return { ...t, citations: event.docs };
-              case "needsApproval":
-                return { ...t, approval: { tool: event.tool } };
+              case "needsInput":
+                return { ...t, pendingInput: { tool: event.tool } };
               case "done":
                 return { ...t, streaming: false, status: null };
               case "notSent":
@@ -795,9 +795,9 @@ function Launcher() {
     }
   }
 
-  // The server takes no new message in a chat that waits for approval. A
+  // The server takes no new message in a chat that waits for input. A
   // question to another agent starts a new chat, so it can still go.
-  const awaitingApproval = turns.at(-1)?.approval != null && chatAgentId === agentId;
+  const awaitingInput = turns.at(-1)?.pendingInput != null && chatAgentId === agentId;
 
   // ↑ in an empty input steps back through recent questions; ↓ steps forward.
   function browseHistory(event: KeyboardEvent<HTMLInputElement>): boolean {
@@ -836,9 +836,8 @@ function Launcher() {
   }
 
   function submitAsk(text: string) {
-    // The server takes no new message while an answer waits for approval:
-    // keep the draft; ⌘↵ approves in the window, ⌘N starts a new chat.
-    if (awaitingApproval) return;
+    // Keep the draft while the main window handles the pending input.
+    if (awaitingInput) return;
     // Without the saved agent, this question and the next would go to different chats.
     if (agentsPending && !agentWaitOver) {
       setAskQueued(text);
@@ -928,8 +927,8 @@ function Launcher() {
   const placeholder =
     mode === "search"
       ? "Search your company's knowledge…"
-      : awaitingApproval
-        ? `Approve with ${primaryShortcut("Enter")} in the Onyx window, or ${primaryShortcut("N")} for a new chat`
+      : awaitingInput
+        ? `Continue with ${primaryShortcut("Enter")} in the Onyx window, or ${primaryShortcut("N")} for a new chat`
         : followsUp
           ? "Ask a follow-up…"
           : agent
@@ -1230,6 +1229,9 @@ function ChatView({ turns }: ChatViewProps) {
 }
 
 function TurnView({ turn }: { turn: Turn }) {
+  const inputPrompt = turn.pendingInput?.tool
+    ? `Onyx needs your approval to use ${turn.pendingInput.tool}.`
+    : "Onyx needs your input.";
   return (
     <Section gap={2} alignItems="start" justifyContent="start" height="fit">
       <Text font="main-ui-action" color="text-05">
@@ -1254,9 +1256,9 @@ function TurnView({ turn }: { turn: Turn }) {
           {turn.error}
         </Text>
       ) : null}
-      {turn.approval ? (
+      {turn.pendingInput ? (
         <Text font="main-ui-body" color="text-03">
-          {`Onyx needs your approval to use ${turn.approval.tool ?? "a tool"}. Press ${primaryShortcut("Enter")} to continue in the Onyx window.`}
+          {`${inputPrompt} Press ${primaryShortcut("Enter")} to continue in the Onyx window.`}
         </Text>
       ) : null}
       {turn.citations.length > 0 ? (

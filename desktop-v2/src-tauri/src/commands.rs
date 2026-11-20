@@ -482,7 +482,7 @@ pub async fn ask(
     .await;
     crate::aonyx::answer_finished(&app, answer, result.is_ok());
     let outcome = match &result {
-        Ok(a) if a.awaiting_approval => crate::notify::Outcome::NeedsApproval,
+        Ok(a) if a.awaiting_input => crate::notify::Outcome::NeedsInput,
         Ok(_) => crate::notify::Outcome::Answered,
         Err(_) => crate::notify::Outcome::Failed,
     };

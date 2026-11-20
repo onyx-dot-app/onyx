@@ -1,5 +1,7 @@
 "use client";
 
+import { readChatHistory } from "@onyx-ai/shared/acp";
+
 import { useEffect, useCallback, useState } from "react";
 import { useSWRConfig } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
@@ -258,7 +260,10 @@ export default function useChatSessionController({
         return;
       }
 
-      const session: BackendChatSession = await response.json();
+      const session = readChatHistory<BackendChatSession>(
+        existingChatSessionId,
+        await response.json()
+      );
       if (!ownsFetch()) return;
       const chatSession = session;
       // Restore the incognito UI state on reload of a live incognito session.

@@ -3,6 +3,8 @@
 // dispatch boundary, so no `as any` is needed.
 import { memo, useCallback, useState, type ReactElement } from "react";
 
+import { hasToolError } from "@/chat/timeline/toolDisplay";
+import { Text } from "@/components/ui/text";
 import { findRenderer } from "@/components/chat/renderers/findRenderer";
 import {
   RenderType,
@@ -63,12 +65,18 @@ export const TimelineRendererComponent = memo(
     const renderType =
       renderTypeOverride ?? (isExpanded ? RenderType.FULL : RenderType.COMPACT);
 
+    const failed = hasToolError(packets);
     if (!RendererFn) {
       return children([
         {
           icon: null,
-          status: null,
-          content: <></>,
+          status: failed ? "Tool failed" : null,
+          content: failed ? (
+            <Text font="secondary-body">Tool failed</Text>
+          ) : (
+            <></>
+          ),
+          surfaceBackground: failed ? "error" : undefined,
           supportsCollapsible: false,
           timelineLayout: "timeline",
           isExpanded,
@@ -81,6 +89,7 @@ export const TimelineRendererComponent = memo(
 
     const enhanceResult = (result: RendererResult): TimelineRendererResult => ({
       ...result,
+      ...(failed && { status: "Tool failed", surfaceBackground: "error" }),
       isExpanded,
       onToggle: handleToggle,
       renderType,

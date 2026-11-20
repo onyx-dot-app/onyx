@@ -2,7 +2,7 @@
 
 > The React Native and Expo client, and the bearer-token auth gateway it signs
 > in through. It is a second client of the chat backend, built apart from the
-> web chat frontend, with its own copy of the stream parser and packet enum.
+> web chat frontend, with a shared ACP reader and its own display packet enum.
 
 **Verified against:** `6bac4e012f` (2026-10-29)
 **Edition:** CE
@@ -73,7 +73,7 @@ AuthGate (components/auth/AuthGate.tsx) ── resolveAuthGate ── redirect o
        └─ useChatController.onSubmit (hooks/useChatController.ts)
             ├─ chatSessionStore (one entry per session, never persisted)
             └─ streamChatMessage (api/chat/stream.ts, expo/fetch)
-                 └─ NDJSON buffer (chat/ndjson.ts) → messageProcessor → findRenderer
+                 └─ ACP reader (@onyx-ai/shared/acp) → messageProcessor → findRenderer
 ```
 
 **One chat surface.** `mobile/src/app/(app)/_layout.tsx` mounts `ChatSurface`
@@ -339,11 +339,9 @@ search off clears the sources.
 
 ## Decisions
 
-- **The chat layer is not shared with web.** `mobile/src/chat/` duplicates
-  the NDJSON parser, message tree and contracts of the web app. Sharing would
-  need a shared util, a web change, a jest module mapper and coupling to a
-  `dist` build. `mobile/AGENTS.md` ("Shared package") gives the full reason and
-  the rule to extract again if the copies drift.
+- **The clients share the ACP reader.** `@onyx-ai/shared/acp` decodes
+  live and saved chat output in wire order. Mobile owns its message tree,
+  packet types and React Native renderers under `mobile/src/chat/`.
 - **The bearer token is the web session token.** One session strategy serves
   both clients. Only the transport differs, so revocation works the same way.
 

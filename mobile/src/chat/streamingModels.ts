@@ -1,3 +1,4 @@
+import type { ChatToolUpdate } from "@onyx-ai/shared/acp";
 // Streaming-packet contracts (NDJSON wire shapes). Mirror of web's streamingModels, with mobile's
 // SearchDoc for document arrays and the mobile-only root types at the bottom.
 
@@ -504,6 +505,7 @@ export interface Placement {
 }
 
 export interface Packet {
+  acpTool?: ChatToolUpdate;
   placement: Placement;
   obj: ObjTypes;
 }

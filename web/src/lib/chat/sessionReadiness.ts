@@ -1,3 +1,4 @@
+import { readChatHistory } from "@onyx-ai/shared/acp";
 import { mutate } from "swr";
 import type { BackendChatSession, ChatStream } from "@/app/app/types";
 import { chatPageUrl } from "@/lib/chat/pagedSession";
@@ -74,5 +75,5 @@ export async function fetchSettledChatSession(
   });
   if (!response.ok)
     throw new Error(`Session refresh failed: ${response.status}`);
-  return response.json();
+  return readChatHistory<BackendChatSession>(sessionId, await response.json());
 }

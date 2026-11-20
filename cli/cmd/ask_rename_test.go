@@ -192,3 +192,27 @@ func TestAsk_StreamErrorSkipsRename(t *testing.T) {
 		t.Errorf("rename calls = %d, want 0 after a stream error", rec.calls)
 	}
 }
+
+func TestAsk_ToolFailureAllowsTheAgentToAnswer(t *testing.T) {
+	out := &lockedBuffer{}
+	errOut := &bytes.Buffer{}
+	rec := &renameRecord{
+		renameStatus: http.StatusOK,
+		streamPackets: []string{
+			`{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"s","update":{"sessionUpdate":"tool_call_update","toolCallId":"t","_meta":{"onyx":{"placement":{"turn_index":0},"packet":{"type":"error"}}}}}}`,
+			`{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"s","update":{"sessionUpdate":"tool_call_update","toolCallId":"t","status":"failed","_meta":{"onyx":{"placement":{"turn_index":0},"packet":{"type":"section_end"}}}}}}`,
+			`{"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"s","update":{"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":"Recovered answer"}}}}`,
+			`{"jsonrpc":"2.0","method":"_onyx/stop","params":{"sessionId":"s","packet":{"placement":{"turn_index":1},"obj":{"type":"stop"}}}}`,
+		},
+	}
+	newAskServer(t, rec, out)
+	ios := &iostreams.IOStreams{In: &bytes.Buffer{}, Out: out, ErrOut: errOut, IsStdinTTY: true, IsStdoutTTY: true}
+	cmd := newAskCmd(ios)
+	cmd.SetArgs([]string{"question"})
+	if err := cmd.Execute(); err != nil {
+		t.Fatalf("Execute: %v", err)
+	}
+	if !strings.Contains(out.String(), "Recovered answer") || strings.Count(errOut.String(), "Tool call failed.") != 1 {
+		t.Fatalf("stdout = %q, stderr = %q", out.String(), errOut.String())
+	}
+}

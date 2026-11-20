@@ -273,7 +273,7 @@ covers new files that match it.
 | `web/src/lib/app/hooks.ts` | chat-frontend, whitelabelling-and-theme |
 | `web/src/providers/IncognitoProvider.tsx` | chat-frontend, chat-persistence |
 | `web/src/sections/model-selector/` | chat-frontend, llm-providers |
-| `web/src/lib/search/streamingUtils.ts`, `web/src/app/app/services/streamingModels.ts` | streaming-protocol |
+| `web/lib/shared/src/contracts/acp.ts`, `web/src/app/app/services/streamingModels.ts` | streaming-protocol |
 | `web/src/app/app/components/files/`, `web/src/sections/modals/UserFilesModal.tsx`, `web/src/sections/cards/FileCard.tsx` | file-store-and-user-files |
 | `web/src/sections/modals/PreviewModal/` | chat-frontend |
 | `web/src/sections/Suggestions.tsx` | chat-frontend |
@@ -294,7 +294,7 @@ covers new files that match it.
 | `web/src/lib/notifications/`, `web/src/lib/banner/`, `web/src/sections/banners/BannerQueue.tsx`, `web/src/lib/app/components/NotificationsPopover.tsx`, `web/src/hooks/useNotifications.ts` | notifications |
 | `web/src/app/nrf/`, `web/src/app/components/nrf/`, `web/src/lib/extension/` | desktop-widget-extensions, chat-frontend |
 | `mobile/` | mobile-app |
-| `mobile/src/chat/streamingModels.ts`, `mobile/src/chat/ndjson.ts` | mobile-app, streaming-protocol |
+| `mobile/src/chat/streamingModels.ts`, `mobile/src/api/chat/stream.ts` | mobile-app, streaming-protocol |
 | `desktop/`, `desktop-v2/`, `widget/`, `extensions/` | desktop-widget-extensions |
 
 ## Frontend: Craft

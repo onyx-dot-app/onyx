@@ -168,7 +168,11 @@ class OnyxChatUser(HttpUser):
     def _next_payload(self, message: str) -> dict[str, Any] | None:
         """Build the send payload, managing session reuse. None = skip turn
         (a multi-turn session was needed but couldn't be created)."""
-        payload: dict[str, Any] = {"message": message, "stream": True}
+        payload: dict[str, Any] = {
+            "message": message,
+            "stream": True,
+            "protocol_version": 2,
+        }
 
         if self.max_session_turns > 1:
             if self._session_id is None or self._session_turn >= self.max_session_turns:

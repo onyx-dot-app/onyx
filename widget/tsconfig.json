@@ -27,6 +27,7 @@
     "noUnusedParameters": true,
     "noFallthroughCasesInSwitch": true,
     "paths": {
+      "@onyx-acp": ["../web/lib/shared/src/contracts/acp.ts"],
       "@/*": [
         "./src/*"
       ]

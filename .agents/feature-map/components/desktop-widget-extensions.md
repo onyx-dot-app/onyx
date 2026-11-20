@@ -63,8 +63,8 @@ sign-in window. A change to those paths must keep this check. It has its own CI 
 and release; v1's release does not build it. Its launcher panel (global
 shortcut) calls the chat endpoints from Rust with the bearer token:
 `POST /chat/create-chat-session`, then `POST /chat/send-chat-message`
-(`origin "unknown"`), and it reads the streamed packets (text, citations,
-`stop`, `tool_approval_request`). It lists agents with `GET /persona` and
+(`origin "unknown"`), and it reads ACP notifications for text, citations and tool activity.
+An `awaiting_user` stop directs the user to the main window for approvals and questions. It lists agents with `GET /persona` and
 creates a new chat with the chosen `persona_id`. It attaches files through
 `POST /user/projects/file/upload`, polls `POST /user/projects/file/statuses`
 until they are processed, and sends them as `file_descriptors`. A removed
@@ -297,15 +297,11 @@ panel picks up the new session when the user returns.
    `this.abortController` is still its own controller, so a stale send cannot
    clear the state of a newer send. Keep all three when you add an await or a
    new step to a send.
-8. `widget-ignores-unknown-packets` **The widget stream fails only on a
-   malformed line, a line with no `obj`, or an `error` packet.**
-   `widget/src/services/api-service.ts:parseSSEStream` throws on a line that
-   does not parse. `widget/src/services/stream-parser.ts:processPacket` throws
-   on a packet with no `obj` or no `type`, and on an `error` packet. It
-   ignores an unknown packet type. A new backend packet therefore does not
-   break the widget, but it shows nothing until `processPacket` handles it.
-   A new line shape without `obj`, or a new use of the `error` packet, ends
-   the send.
+8. `widget-ignores-unknown-packets` **The widget skips unknown notifications and display packet types.**
+   The shared reader in `web/lib/shared/src/contracts/acp.ts:readChatNotifications`
+   checks the session ID on ACP updates and accepts v1 packets from older self-hosted servers.
+   `widget/src/services/stream-parser.ts:processPacket` handles the decoded
+   display packets and reports stream errors.
 9. `widget-bundle-outlives-backend` **A deployed widget bundle outlives the
    backend version it was built for.** Customer sites keep the old widget
    bundle. A change to the request shape of `create-chat-session` or

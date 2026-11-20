@@ -69,7 +69,16 @@ function makeSession(messages: BackendMessage[]): BackendChatSession {
 function mockFetchOk(session: BackendChatSession): void {
   global.fetch = jest.fn().mockResolvedValue({
     ok: true,
-    json: async () => session,
+    json: async () => ({
+      ...session,
+      packets: session.packets.map((row) =>
+        row.map((packet) => ({
+          jsonrpc: "2.0",
+          method: `_onyx/${packet.obj.type}`,
+          params: { sessionId: session.chat_session_id, packet },
+        }))
+      ),
+    }),
   }) as unknown as typeof fetch;
 }
 

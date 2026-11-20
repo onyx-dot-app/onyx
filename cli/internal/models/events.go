@@ -153,6 +153,15 @@ type CitationEvent struct {
 
 func (e CitationEvent) EventType() string { return EventCitationInfo }
 
+// ToolStatusEvent records a tool outcome without treating it as a failed turn.
+type ToolStatusEvent struct {
+	ToolCallID string     `json:"tool_call_id"`
+	Status     string     `json:"status"`
+	Placement  *Placement `json:"placement,omitempty"`
+}
+
+func (e ToolStatusEvent) EventType() string { return "tool_call_update" }
+
 // ToolStartEvent signals the start of a tool usage.
 type ToolStartEvent struct {
 	Placement *Placement `json:"placement,omitempty"`

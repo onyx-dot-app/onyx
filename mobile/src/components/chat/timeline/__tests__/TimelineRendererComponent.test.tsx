@@ -63,6 +63,22 @@ describe("TimelineRendererComponent", () => {
     mockFindRenderer.mockReturnValue(MockRenderer);
   });
 
+  it("shows the latest tool failure after a completed result", () => {
+    const completed: Packet = {
+      placement: { turn_index: 1 },
+      obj: { type: "section_end" },
+      acpTool: { toolCallId: "run/tool/call", status: "completed" },
+    };
+    const failed: Packet = {
+      ...completed,
+      acpTool: { toolCallId: "run/tool/call", status: "failed" },
+    };
+    const result = renderTimeline({ packets: [completed, failed] })()[0];
+    expect(result.status).toBe("Tool failed");
+    expect(result.surfaceBackground).toBe("error");
+    expect(renderTimeline({ packets: [completed] })()[0].status).toBe("S");
+  });
+
   it("derives FULL when expanded and COMPACT when collapsed", () => {
     expect(renderTimeline({ defaultExpanded: true })()[0].renderType).toBe(
       RenderType.FULL,

@@ -474,7 +474,7 @@ function processPacket(state: ProcessorState, packet: Packet): void {
   );
   state.seenGroupKeys.add(groupKey);
 
-  // Track the packets that end a group (same rule as isToolComplete)
+  // Only a parent-level end closes the group.
   if (isGroupEndPacket(packet)) {
     state.groupKeysWithSectionEnd.add(groupKey);
   }

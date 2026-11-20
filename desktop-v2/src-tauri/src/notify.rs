@@ -131,7 +131,7 @@ pub fn enabled(state: &AppState) -> bool {
 /// How a launcher answer ended.
 pub enum Outcome {
     Answered,
-    NeedsApproval,
+    NeedsInput,
     Failed,
 }
 
@@ -150,9 +150,9 @@ pub fn answer_finished(app: &AppHandle, answer: Answer, outcome: Outcome) {
     }
     let (title, body) = match outcome {
         Outcome::Answered => ("Onyx answered", BODY),
-        Outcome::NeedsApproval => (
-            "Onyx needs your approval",
-            "Approve the tool call in the Onyx window.",
+        Outcome::NeedsInput => (
+            "Onyx needs your input",
+            "Continue the conversation in the Onyx window.",
         ),
         Outcome::Failed => ("Onyx couldn't answer", "See the launcher for details."),
     };

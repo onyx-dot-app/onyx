@@ -1,3 +1,4 @@
+import { readChatNotification } from "@onyx-ai/shared/acp";
 import { expect, Page, Route } from "@playwright/test";
 import { sendMessage } from "./chatActions";
 
@@ -9,7 +10,10 @@ export type ChatStreamPacket = Record<string, unknown> & {
   obj?: ChatStreamObject;
 };
 
-function parseStreamLine(rawLine: string): ChatStreamPacket | null {
+function parseStreamLine(
+  rawLine: string,
+  sessionId: string
+): ChatStreamPacket | null {
   const trimmed = rawLine.trim();
   if (!trimmed) {
     return null;
@@ -23,16 +27,22 @@ function parseStreamLine(rawLine: string): ChatStreamPacket | null {
   }
 
   try {
-    return JSON.parse(withoutPrefix) as ChatStreamPacket;
+    return readChatNotification(
+      JSON.parse(withoutPrefix),
+      sessionId
+    ) as ChatStreamPacket | null;
   } catch {
     return null;
   }
 }
 
-export function parseChatStreamBody(body: string): ChatStreamPacket[] {
+export function parseChatStreamBody(
+  body: string,
+  sessionId: string
+): ChatStreamPacket[] {
   return body
     .split("\n")
-    .map(parseStreamLine)
+    .map((line) => parseStreamLine(line, sessionId))
     .filter((packet): packet is ChatStreamPacket => packet !== null);
 }
 
@@ -144,7 +154,10 @@ export async function sendMessageAndCaptureStreamPackets(
     const response = await responsePromise;
     expect(response.ok()).toBeTruthy();
     const body = await response.text();
-    return parseChatStreamBody(body);
+    return parseChatStreamBody(
+      body,
+      response.request().postDataJSON().chat_session_id
+    );
   } finally {
     await page.unroute(requestUrlPattern, routeHandler);
   }

@@ -214,6 +214,7 @@ type QuestionAnswersResult struct {
 
 // SendMessagePayload is the request body for POST /api/chat/send-chat-message.
 type SendMessagePayload struct {
+	ProtocolVersion  int                      `json:"protocol_version"`
 	Message          string                   `json:"message"`
 	ChatSessionID    *string                  `json:"chat_session_id,omitempty"`
 	ChatSessionInfo  *ChatSessionCreationInfo `json:"chat_session_info,omitempty"`

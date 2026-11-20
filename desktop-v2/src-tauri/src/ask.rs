@@ -45,9 +45,8 @@ pub enum AskEvent {
     Citations {
         docs: Vec<Citation>,
     },
-    /// The answer waits for the user to approve a tool, which the launcher
-    /// cannot ask for; the chat continues in the main window.
-    NeedsApproval {
+    /// Approvals and questions continue in the Onyx window.
+    NeedsInput {
         tool: Option<String>,
     },
     Done,
@@ -64,7 +63,6 @@ struct StreamState {
     cited: BTreeMap<u64, String>,
     finished: bool,
     stop_reason: Option<String>,
-    awaiting_approval: bool,
     approval_tool: Option<String>,
     /// Answer text has been sent since the last message started.
     has_text: bool,
@@ -98,21 +96,50 @@ impl StreamState {
         }
     }
 
-    /// Returns the event for the launcher, if the line carries one.
+    /// Consume the ACP notification received on the chat stream.
     fn apply(&mut self, line: &Value) -> Result<Option<AskEvent>, String> {
-        if let Some(error) = line.get("error").and_then(Value::as_str) {
-            return Err(error.to_string());
-        }
-        let Some(obj) = line.get("obj") else {
-            return Ok(None);
+        let packet = match (line.get("jsonrpc"), line["method"].as_str()) {
+            // Self-hosted servers predating protocol_version return v1 packets.
+            (None, None) => line,
+            (Some(version), method) if version == "2.0" => {
+                let params = &line["params"];
+                match method {
+                    Some("session/update") => {
+                        let update = &params["update"];
+                        if update["sessionUpdate"] == "agent_message_chunk" {
+                            return Ok(update["content"]["text"].as_str().map(|text| {
+                                self.has_text |= !text.is_empty();
+                                AskEvent::Delta {
+                                    text: text.to_owned(),
+                                }
+                            }));
+                        }
+                        let obj = update
+                            .get("rawOutput")
+                            .filter(|value| value["type"].is_string())
+                            .unwrap_or(&update["_meta"]["onyx"]["packet"]);
+                        return Ok(self.apply_obj(obj));
+                    }
+                    Some(method) if method.starts_with("_onyx/") => &params["packet"],
+                    _ => return Ok(None),
+                }
+            }
+            _ => return Err("The server sent an invalid ACP chat notification.".into()),
         };
+        if let Some(error) = packet["error"].as_str() {
+            return Err(error.to_owned());
+        }
+        Ok(self.apply_obj(&packet["obj"]))
+    }
+
+    fn apply_obj(&mut self, obj: &Value) -> Option<AskEvent> {
         let content = || {
             obj.get("content")
                 .and_then(Value::as_str)
                 .unwrap_or_default()
                 .to_string()
         };
-        Ok(match obj.get("type").and_then(Value::as_str) {
+        match obj.get("type").and_then(Value::as_str) {
             Some("message_start") => {
                 self.record_docs(obj.get("final_documents"));
                 let text = content();
@@ -165,11 +192,15 @@ impl StreamState {
                 }
                 None
             }
-            Some("tool_approval_request") => {
+            Some("tool_approval_request") if obj["agent_name"].is_null() => {
                 self.approval_tool = obj
                     .get("display_name")
                     .and_then(Value::as_str)
                     .map(str::to_string);
+                None
+            }
+            Some("tool_approval_resolved" | "tool_question_request") => {
+                self.approval_tool = None;
                 None
             }
             Some("stop") => {
@@ -178,11 +209,10 @@ impl StreamState {
                     .get("stop_reason")
                     .and_then(Value::as_str)
                     .map(str::to_string);
-                self.awaiting_approval = self.stop_reason.as_deref() == Some("awaiting_approval");
                 None
             }
             _ => None,
-        })
+        }
     }
 
     fn citations(&self) -> Vec<Citation> {
@@ -337,21 +367,20 @@ pub async fn run(
     if !citations.is_empty() {
         let _ = channel.send(AskEvent::Citations { docs: citations });
     }
-    if state.awaiting_approval {
-        let _ = channel.send(AskEvent::NeedsApproval {
-            tool: state.approval_tool.clone(),
+    let awaiting_input = state.stop_reason.as_deref() == Some("awaiting_user");
+    if awaiting_input {
+        let _ = channel.send(AskEvent::NeedsInput {
+            tool: state.approval_tool,
         });
     }
     log::info!("ask finished (stop packet: {})", state.finished);
-    Ok(Answered {
-        awaiting_approval: state.awaiting_approval,
-    })
+    Ok(Answered { awaiting_input })
 }
 
 /// How an answer that streamed to the end stopped.
 pub struct Answered {
-    /// The answer stopped to wait for a tool approval in the Onyx window.
-    pub awaiting_approval: bool,
+    /// The answer needs a decision or a reply in the Onyx window.
+    pub awaiting_input: bool,
 }
 
 #[cfg(test)]
@@ -371,20 +400,32 @@ mod tests {
     #[test]
     fn collects_text_and_citations() {
         let mut state = StreamState::default();
+        let extension = |kind: &str, packet| json!({"jsonrpc":"2.0","method":format!("_onyx/{kind}"),"params":{"sessionId":"s","packet":packet}});
+        let update = |body| json!({"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"s","update":body}});
         let lines = [
-            json!({"user_message_id": 1}),
-            json!({"placement": {}, "obj": {"type": "search_tool_documents_delta", "documents": [
-                {"document_id": "d1", "semantic_identifier": "Handbook", "link": "https://x/1"}
-            ]}}),
-            json!({"placement": {}, "obj": {"type": "message_start", "id": "m", "content": "Hi"}}),
-            json!({"placement": {}, "obj": {"type": "message_delta", "content": " there"}}),
-            json!({"placement": {}, "obj": {"type": "citation_info", "citation_number": 1, "document_id": "d1"}}),
-            json!({"placement": {}, "obj": {"type": "brand_new_packet"}}),
-            json!({"placement": {}, "obj": {"type": "stop"}}),
+            extension("message_id_info", json!({"user_message_id":1})),
+            update(
+                json!({"sessionUpdate":"tool_call_update","toolCallId":"search","rawOutput":{
+                    "type":"search_tool_documents_delta","documents":[{"document_id":"d1","semantic_identifier":"Handbook","link":"https://x/1"}]
+                }}),
+            ),
+            extension(
+                "message_start",
+                json!({"placement":{},"obj":{"type":"message_start","id":"m","content":"Hi"}}),
+            ),
+            update(
+                json!({"sessionUpdate":"agent_message_chunk","content":{"type":"text","text":" there"}}),
+            ),
+            extension(
+                "citation_info",
+                json!({"placement":{},"obj":{"type":"citation_info","citation_number":1,"document_id":"d1"}}),
+            ),
+            update(json!({"sessionUpdate":"unrecognized_update"})),
+            extension("stop", json!({"placement":{},"obj":{"type":"stop"}})),
         ];
         let text: String = lines
             .iter()
-            .filter_map(|l| text_of(state.apply(l).unwrap()))
+            .filter_map(|line| text_of(state.apply(line).unwrap()))
             .collect();
         assert_eq!(text, "Hi there");
         assert!(state.finished);
@@ -395,18 +436,57 @@ mod tests {
     }
 
     #[test]
+    fn reads_an_answer_from_a_server_returning_v1() {
+        let mut state = StreamState::default();
+        let raw =
+            json!({"placement":{"turn_index":0},"obj":{"type":"message_delta","content":"Hi"}});
+        assert_eq!(text_of(state.apply(&raw).unwrap()).as_deref(), Some("Hi"));
+        let err = json!({"error":"Model unavailable"});
+        assert_eq!(state.apply(&err).unwrap_err(), "Model unavailable");
+    }
+
+    #[test]
+    fn reasoning_deltas_do_not_repeat_the_launcher_status() {
+        let mut state = StreamState::default();
+        let mut events = Vec::new();
+        let frames = [
+            json!({"jsonrpc":"2.0","method":"_onyx/reasoning_start","params":{"packet":{"obj":{"type":"reasoning_start"}}}}),
+            json!({"jsonrpc":"2.0","method":"session/update","params":{"update":{"sessionUpdate":"agent_thought_chunk","content":{"type":"text","text":"part"}}}}),
+        ];
+        for frame in frames {
+            events.extend(state.apply(&frame).unwrap());
+        }
+        assert!(matches!(events.as_slice(), [AskEvent::Status { text }] if text == "Thinking…"));
+    }
+
+    #[test]
     fn notes_a_stop_that_waits_for_approval() {
         let mut state = StreamState::default();
         let lines = [
             json!({"obj": {"type": "tool_approval_request", "approval_id": "a", "tool_call_id": "t",
                 "tool_name": "send", "display_name": "Send email", "arguments": {}}}),
-            json!({"obj": {"type": "stop", "stop_reason": "awaiting_approval"}}),
+            json!({"obj": {"type": "stop", "stop_reason": "awaiting_user"}}),
         ];
         for line in &lines {
             state.apply(line).unwrap();
         }
-        assert!(state.awaiting_approval);
+        assert_eq!(state.stop_reason.as_deref(), Some("awaiting_user"));
         assert_eq!(state.approval_tool.as_deref(), Some("Send email"));
+    }
+
+    #[test]
+    fn a_question_after_an_approval_waits_for_a_reply() {
+        let mut state = StreamState::default();
+        for obj in [
+            json!({"type":"tool_approval_request","display_name":"Send email"}),
+            json!({"type":"tool_approval_resolved"}),
+            json!({"type":"tool_question_request"}),
+            json!({"type":"stop","stop_reason":"awaiting_user"}),
+        ] {
+            state.apply(&json!({"obj":obj})).unwrap();
+        }
+        assert_eq!(state.stop_reason.as_deref(), Some("awaiting_user"));
+        assert!(state.approval_tool.is_none());
     }
 
     #[test]
@@ -419,7 +499,7 @@ mod tests {
         };
         let mut state = StreamState::default();
         let mut buffer =
-            b"{\"obj\":{\"type\":\"message_delta\",\"content\":\"a\"}}\n\n{\"obj\":{\"ty".to_vec();
+            b"{\"jsonrpc\":\"2.0\",\"method\":\"session/update\",\"params\":{\"sessionId\":\"s\",\"update\":{\"sessionUpdate\":\"agent_message_chunk\",\"content\":{\"type\":\"text\",\"text\":\"a\"}}}}\n\n{\"ty".to_vec();
         drain_records(&mut buffer, &mut state, &send).unwrap();
         assert_eq!(texts.borrow().as_str(), "a");
         assert!(apply_record(&buffer, &mut state, &send).is_err());
@@ -433,10 +513,10 @@ mod tests {
     fn a_stream_without_stop_is_incomplete() {
         let mut state = StreamState::default();
         state
-            .apply(&json!({"obj": {"type": "message_delta", "content": "Half"}}))
+            .apply(&json!({"obj":{"type": "message_delta", "content": "Half"}}))
             .unwrap();
         assert!(stream_complete(&state).is_err());
-        state.apply(&json!({"obj": {"type": "stop"}})).unwrap();
+        state.apply(&json!({"obj":{"type": "stop"}})).unwrap();
         assert!(stream_complete(&state).is_ok());
     }
 
@@ -444,7 +524,7 @@ mod tests {
     fn a_timed_out_stop_is_incomplete() {
         let mut state = StreamState::default();
         state
-            .apply(&json!({"obj": {"type": "stop", "stop_reason": "timed_out"}}))
+            .apply(&json!({"obj":{"type": "stop", "stop_reason": "timed_out"}}))
             .unwrap();
         assert!(stream_complete(&state).is_err());
     }
@@ -461,7 +541,7 @@ mod tests {
             json!({"obj": {"type": "message_start", "content": "I couldn't find"}}),
         ]
         .iter()
-        .filter_map(|l| state.apply(l).unwrap())
+        .filter_map(|line| state.apply(line).unwrap())
         .collect();
         assert!(
             matches!(&events[0], AskEvent::Delta { text } if text == "Retrying with a simpler query.")
@@ -474,6 +554,14 @@ mod tests {
     #[test]
     fn surfaces_stream_errors() {
         let mut state = StreamState::default();
-        assert!(state.apply(&json!({"error": "no LLM configured"})).is_err());
+        assert_eq!(
+            state
+                .apply(&json!({
+                    "jsonrpc": "2.0", "method": "_onyx/error",
+                    "params": {"sessionId": "s", "packet": {"error": "no LLM configured"}}
+                }))
+                .unwrap_err(),
+            "no LLM configured"
+        );
     }
 }

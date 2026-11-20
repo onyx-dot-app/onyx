@@ -88,6 +88,7 @@ const sharedConfig = {
   maxWorkers: "50%",
 
   moduleNameMapper: {
+    "^@onyx-ai/shared/acp$": "<rootDir>/lib/shared/src/contracts/acp.ts",
     // Mock CSS files (before path alias resolution)
     // CSS/static assets cannot be executed in tests and must be mocked
     "^@/.*\\.(css|less|scss|sass)$": "<rootDir>/tests/setup/mocks/cssMock.js",

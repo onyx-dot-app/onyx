@@ -946,6 +946,7 @@ impl Api {
             .bearer_auth(token)
             .json(&json!({
                 "message": message,
+                "protocol_version": 2,
                 "chat_session_id": chat_session_id,
                 "parent_message_id": if follow_up { json!(-1) } else { json!(null) },
                 "file_descriptors": file_descriptors,

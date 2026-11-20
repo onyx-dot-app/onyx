@@ -16,6 +16,7 @@ import {
   QuestionAnswersResponse,
   SendMessageRequest,
 } from "@/types/api-types";
+import { readChatHistory, readChatNotifications, type WireChatHistory } from "@onyx-acp";
 import { TokenProvider } from "@/types/widget-types";
 import {
   APPROVAL_PENDING_ERROR_CODE,
@@ -203,6 +204,7 @@ export class ApiService {
       chat_session_id: params.chatSessionId,
       parent_message_id: params.parentMessageId ?? null,
       origin: "widget",
+      protocol_version: 2,
       include_citations: params.includeCitations ?? false,
     };
 
@@ -220,8 +222,7 @@ export class ApiService {
       throw await apiErrorFrom(response);
     }
 
-    // Parse SSE stream
-    yield* this.parseSSEStream(response);
+    yield* this.readPackets(response, params.chatSessionId, params.signal);
   }
 
   /**
@@ -240,12 +241,12 @@ export class ApiService {
       ? `stream_id=${from.streamId}&cursor=${from.cursor}`
       : "cursor=0";
     const response = await this.fetchWithRetry(
-      `${this.backendUrl}/chat/chat-session/${encodeURIComponent(chatSessionId)}/resume-stream?${query}`,
+      `${this.backendUrl}/chat/chat-session/${encodeURIComponent(chatSessionId)}/resume-stream?${query}&protocol_version=2`,
       async () => ({ headers: await this.getHeaders(), signal })
     );
     if (response.status === 404) return "noBuffer";
     if (!response.ok) throw await apiErrorFrom(response);
-    yield* this.parseSSEStream(response);
+    yield* this.readPackets(response, chatSessionId, signal);
     return "ended";
   }
 
@@ -255,7 +256,7 @@ export class ApiService {
     signal: AbortSignal
   ): Promise<ChatSessionDetail> {
     const response = await this.fetchWithRetry(
-      `${this.backendUrl}/chat/get-chat-session/${encodeURIComponent(chatSessionId)}`,
+      `${this.backendUrl}/chat/get-chat-session/${encodeURIComponent(chatSessionId)}?protocol_version=2`,
       async () => ({ headers: await this.getHeaders(), signal })
     );
     if (!response.ok) throw await apiErrorFrom(response);
@@ -270,7 +271,7 @@ export class ApiService {
     ) {
       throw new Error("Invalid chat session response");
     }
-    return body as ChatSessionDetail;
+    return readChatHistory<ChatSessionDetail>(chatSessionId, body as WireChatHistory<ChatSessionDetail>);
   }
 
   /**
@@ -376,56 +377,20 @@ export class ApiService {
     if (!response.ok) throw await apiErrorFrom(response);
   }
 
-  /**
-   * Parse the NDJSON stream. A response-ID line comes without a packet
-   * wrapper; a resumed stream adds its cursor lines.
-   */
-  private async *parseSSEStream(
-    response: Response
+  /** Give response IDs the same shape as the widget's other display packets. */
+  private async *readPackets(
+    response: Response,
+    sessionId: string,
+    signal?: AbortSignal
   ): AsyncGenerator<Packet | StreamCursor, void, unknown> {
-    const reader = response.body?.getReader();
-    if (!reader) {
-      throw new Error("Response body is not readable");
-    }
-
-    const parse = (line: string): Packet | StreamCursor => {
-      try {
-        const rawData = JSON.parse(line);
-        if (
-          "user_message_id" in rawData &&
-          "reserved_assistant_message_id" in rawData
-        ) {
-          return { obj: rawData as MessageResponseIDInfo };
-        }
-        if ("next_cursor" in rawData && !("obj" in rawData)) {
-          return rawData as StreamCursor;
-        }
-        return rawData as Packet;
-      } catch (e) {
-        // Fail fast on malformed packets - don't hide backend issues
-        throw new Error(`Failed to parse SSE packet: ${line}. Error: ${e}`);
+    for await (const item of readChatNotifications(sessionId, response.body, signal)) {
+      if ("user_message_id" in item && "reserved_assistant_message_id" in item) {
+        yield { obj: item as MessageResponseIDInfo };
+      } else if ("error" in item && typeof item.error === "string") {
+        yield { obj: { type: "error", exception: item.error } };
+      } else {
+        yield item as Packet | StreamCursor;
       }
-    };
-
-    const decoder = new TextDecoder();
-    let buffer = "";
-
-    try {
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) break;
-
-        buffer += decoder.decode(value, { stream: true });
-        const lines = buffer.split("\n");
-        buffer = lines.pop() || ""; // Keep incomplete line in buffer
-
-        for (const line of lines) {
-          if (line.trim()) yield parse(line);
-        }
-      }
-      if (buffer.trim()) yield parse(buffer);
-    } finally {
-      reader.releaseLock();
     }
   }
 

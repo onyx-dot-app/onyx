@@ -1,3 +1,4 @@
+import { readChatHistory } from "@onyx-ai/shared/acp";
 import { redirect } from "@opal/navigation";
 import { fetchSS } from "@/lib/utilsSS";
 import type { Route } from "next";
@@ -37,10 +38,10 @@ async function getSharedChat(
   chatId: string
 ): Promise<BackendChatSession | null> {
   const response = await fetchSS(
-    `/chat/get-chat-session/${chatId}?is_shared=True`
+    `/chat/get-chat-session/${chatId}?is_shared=True&protocol_version=2`
   );
   if (response.ok) {
-    return await response.json();
+    return readChatHistory<BackendChatSession>(chatId, await response.json());
   }
   return null;
 }
