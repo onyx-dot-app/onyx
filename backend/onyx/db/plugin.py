@@ -50,6 +50,7 @@ from onyx.db.plugin_access import (
     affected_user_ids_for_plugins,
     holds_one_root_skill,
     plugin_editable_by_user,
+    seen_by_organization,
     visible_plugin_ids,
 )
 from onyx.db.user_group import assert_not_shared_with_default_group
@@ -252,6 +253,7 @@ def _add_version_rows(
         ),
         created_by_user_id=created_by.id if created_by is not None else None,
         created_by_email=created_by.email if created_by is not None else None,
+        source_tree_sha=content.source_tree_sha,
     )
     db_session.add(version)
     db_session.flush()
@@ -606,6 +608,43 @@ def create_plugin__no_commit(
     return plugin
 
 
+def create_synced_plugin__no_commit(
+    marketplace: Marketplace,
+    entry_key: str,
+    content: PluginVersionContent,
+    created_by: User | None,
+    db_session: Session,
+) -> Plugin:
+    """Create the plugin of a marketplace entry. A personal marketplace's
+    plugin belongs to its owner; a company one has no author and the
+    organization runs its version."""
+    if content.manifest is None:
+        raise RuntimeError("Bug: a synced plugin has a manifest.")
+    plugin_id = uuid4()
+    version_id = uuid4()
+    plugin = Plugin(
+        id=plugin_id,
+        name=free_plugin_name(marketplace.id, content.manifest.name, db_session),
+        description=version_description(content) or "",
+        marketplace_id=marketplace.id,
+        author_user_id=marketplace.owner_user_id,
+        current_version_id=version_id,
+        published_version_id=version_id if marketplace.owner_user_id is None else None,
+        marketplace_entry_key=entry_key,
+    )
+    db_session.add(plugin)
+    db_session.flush()
+    _add_version_rows(
+        version_id=version_id,
+        plugin_id=plugin_id,
+        version_number=1,
+        content=content,
+        created_by=created_by,
+        db_session=db_session,
+    )
+    return plugin
+
+
 def find_upload_target(name: str, user_id: UUID, db_session: Session) -> Plugin | None:
     return db_session.scalars(
         select(Plugin)
@@ -950,10 +989,7 @@ def _lock_for_access_change(
         db_session.scalars(
             select(Plugin.id)
             .join(Marketplace, Marketplace.id == Plugin.marketplace_id)
-            .where(
-                Plugin.id.in_(found),
-                Marketplace.kind == MarketplaceKind.ORGANIZATION_LIBRARY,
-            )
+            .where(Plugin.id.in_(found), seen_by_organization(Marketplace))
         )
     )
     user_grants: dict[UUID, dict[UUID, SkillSharePermission]] = {}
