@@ -1,3 +1,4 @@
+import time
 from collections.abc import Callable
 from typing import Final
 from uuid import UUID
@@ -5,7 +6,7 @@ from uuid import UUID
 from fastapi import BackgroundTasks
 
 from onyx.cache.factory import get_cache_backend
-from onyx.cache.interface import CacheLock
+from onyx.cache.interface import CacheLock, CacheLockLostError
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import (
     OnyxCeleryPriority,
@@ -28,7 +29,7 @@ from onyx.integrations.github_auth import github_authorization_for
 from onyx.integrations.plugin_needs import turn_on_needed_integrations__no_commit
 from onyx.integrations.service import reload_craft_sessions
 from onyx.skills.ingest import delete_bundle_blob, store_version_content
-from onyx.skills.ingest_from_github import read_repository_archive
+from onyx.skills.ingest_from_github import RepositoryArchive, read_repository_archive
 from onyx.skills.marketplace.compare import plan_marketplace_sync
 from onyx.skills.marketplace.models import (
     BlockedPlugin,
@@ -53,6 +54,7 @@ from onyx.skills.marketplace.reader import (
 )
 from onyx.skills.models import PluginVersionContent
 from onyx.skills.push import push_skills_and_commit
+from onyx.utils.github import GITHUB_REPOSITORY_NOT_FOUND
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import (
     CURRENT_TENANT_ID_CONTEXTVAR,
@@ -61,9 +63,10 @@ from shared_configs.contextvars import (
 
 logger = setup_logger()
 
-# Short so a killed worker frees the marketplace soon; a running sync extends it
-# between steps.
+# A short lease that each sync step renews, so a dead worker frees it soon.
 SYNC_LOCK_TIMEOUT_SECONDS: Final = 5 * 60
+# Celery thread pools do not enforce time limits; the sync stops itself.
+SYNC_MAX_SECONDS: Final = 30 * 60
 SYNC_TASK_EXPIRES_SECONDS: Final = 60 * 60
 LOGIN_GONE_ERROR: Final = (
     "The login user of this marketplace is gone. Replace the login."
@@ -72,10 +75,17 @@ SYNC_FAILED_ERROR: Final = "The sync failed. Try again."
 _BUNDLE_CLEANUP = "marketplace bundle cleanup"
 
 
+Heartbeat = Callable[[], None]
+
+
+def _no_heartbeat() -> None:
+    return None
+
+
 def _resolve_remote_entries(
     entries: tuple[ReadyPlugin | BlockedPlugin | UnsupportedPlugin | RemotePlugin, ...],
     adapter: GitHubMarketplaceAdapter,
-    keep_alive: Callable[[], None],
+    heartbeat: Heartbeat,
 ) -> list[ReadyPlugin | BlockedPlugin | UnsupportedPlugin]:
     """Holds the files of one remote repository at a time. Raises ValueError
     when all ready plugins together pass the marketplace limits."""
@@ -93,14 +103,14 @@ def _resolve_remote_entries(
         resolved[index] = entry
     for count, remote_entries in enumerate(by_repository.values()):
         source = remote_entries[0][1].source
-        files: dict[str, bytes] | str
+        files: RepositoryArchive | str
         if count >= REMOTE_REPOSITORY_MAX_COUNT:
             files = (
-                f"The marketplace names more than {REMOTE_REPOSITORY_MAX_COUNT} "
-                "other repositories."
+                f"Onyx reads at most {REMOTE_REPOSITORY_MAX_COUNT} other "
+                "repositories for one marketplace, and this plugin is past the limit."
             )
         else:
-            keep_alive()
+            heartbeat()
             try:
                 files = adapter.fetch_remote(source)
             except OnyxError as exc:
@@ -112,7 +122,11 @@ def _resolve_remote_entries(
                 )
                 continue
             result = build_entry_bundle(
-                files, entry.source.path or "", entry.entry, entry.entry_key
+                files.files,
+                entry.source.path or "",
+                entry.entry,
+                entry.entry_key,
+                files.links,
             )
             if isinstance(result, ReadyPlugin):
                 budget.add(result)
@@ -123,18 +137,20 @@ def _resolve_remote_entries(
 def read_marketplace_repository(
     adapter: GitHubMarketplaceAdapter,
     folder: str | None,
-    keep_alive: Callable[[], None] = lambda: None,
+    heartbeat: Heartbeat = _no_heartbeat,
 ) -> MarketplaceRead:
     revision = adapter.resolve_revision()
-    keep_alive()
-    read = read_marketplace(read_repository_archive(adapter.fetch(revision)), folder)
-    keep_alive()
+    heartbeat()
+    archive = adapter.fetch(revision)
+    heartbeat()
+    repository = read_repository_archive(archive)
+    read = read_marketplace(repository.files, folder, repository.links)
     if not isinstance(read, CompleteMarketplace):
         return MarketplaceRead(
             revision=revision, name=None, failure=read.reason, entries=[]
         )
     try:
-        entries = _resolve_remote_entries(read.entries, adapter, keep_alive)
+        entries = _resolve_remote_entries(read.entries, adapter, heartbeat)
     except ValueError as exc:
         return MarketplaceRead(
             revision=revision, name=None, failure=str(exc), entries=[]
@@ -147,6 +163,7 @@ def read_marketplace_repository(
 def _stage(
     entries: list[ReadyPlugin | BlockedPlugin | UnsupportedPlugin],
     keys: set[str],
+    heartbeat: Heartbeat,
 ) -> dict[str, PluginVersionContent]:
     file_store = get_default_file_store()
     staged: dict[str, PluginVersionContent] = {}
@@ -154,6 +171,7 @@ def _stage(
         for entry in entries:
             if not isinstance(entry, ReadyPlugin) or entry.entry_key not in keys:
                 continue
+            heartbeat()
             bundle = entry.bundle
             staged[entry.entry_key] = store_version_content(
                 bundle.content,
@@ -180,13 +198,6 @@ def _record_failure(marketplace_id: UUID, error: str) -> MarketplaceSyncResult:
 def sync_marketplace(
     marketplace_id: UUID, lock: CacheLock | None = None
 ) -> MarketplaceSyncResult:
-    def keep_alive() -> None:
-        if lock is not None and lock.owned():
-            lock.extend(SYNC_LOCK_TIMEOUT_SECONDS)
-            get_cache_backend().set(
-                _syncing_key(marketplace_id), b"1", ex=SYNC_LOCK_TIMEOUT_SECONDS
-            )
-
     with get_session_with_current_tenant() as db_session:
         marketplace = get_github_marketplace(marketplace_id, db_session)
         if marketplace is None:
@@ -207,13 +218,19 @@ def sync_marketplace(
         login_email = login_user.email
         db_session.expunge(login_user)
 
+    heartbeat = _lock_heartbeat(marketplace_id, lock)
     try:
-        read = read_marketplace_repository(adapter, folder, keep_alive)
+        read = read_marketplace_repository(adapter, folder, heartbeat)
+    except CacheLockLostError:
+        logger.warning("Marketplace sync %s lost its lock", marketplace_id)
+        return MarketplaceSyncResult(status=MarketplaceSyncStatus.FAILED)
     except OnyxError as exc:
-        if exc.error_code == OnyxErrorCode.NOT_FOUND and authorization is None:
+        if exc.detail == GITHUB_REPOSITORY_NOT_FOUND and authorization is None:
             return _record_failure(
                 marketplace_id,
-                f"The GitHub connection of {login_email} is gone. Replace the login.",
+                f"GitHub did not find {config.repository}. If it is private, "
+                f"{login_email} must connect GitHub, or another user must "
+                "replace the login.",
             )
         return _record_failure(marketplace_id, exc.detail)
     if read.failure is not None or read.name is None:
@@ -224,12 +241,16 @@ def sync_marketplace(
         plan = plan_marketplace_sync(
             entries, list_synced_plugins(marketplace_id, db_session)
         )
-    keep_alive()
-    staged = _stage(entries, set(plan.create) | set(plan.add_version))
+    try:
+        staged = _stage(entries, set(plan.create) | set(plan.add_version), heartbeat)
+    except CacheLockLostError:
+        logger.warning("Marketplace sync %s lost its lock", marketplace_id)
+        return MarketplaceSyncResult(status=MarketplaceSyncStatus.FAILED)
     file_store = get_default_file_store()
     try:
-        keep_alive()
-        if lock is not None and not lock.owned():
+        try:
+            heartbeat()
+        except CacheLockLostError:
             # The lock expired during a long read; a newer sync may have written.
             logger.warning("Marketplace sync %s lost its lock", marketplace_id)
             for content in staged.values():
@@ -272,23 +293,50 @@ def sync_marketplace(
     return result
 
 
-def _syncing_key(marketplace_id: UUID) -> str:
+def _lock_name(marketplace_id: UUID) -> str:
+    return f"marketplace_sync:{marketplace_id}"
+
+
+def _queued_key(marketplace_id: UUID) -> str:
+    return f"marketplace_sync_queued:{marketplace_id}"
+
+
+def _running_key(marketplace_id: UUID) -> str:
     return f"marketplace_syncing:{marketplace_id}"
 
 
-def marketplace_syncing(marketplace_id: UUID) -> bool:
-    """The key expires, so a dead worker cannot leave a marketplace syncing."""
-    return get_cache_backend().exists(_syncing_key(marketplace_id))
+def _rerun_key(marketplace_id: UUID) -> str:
+    return f"marketplace_sync_rerun:{marketplace_id}"
 
 
-def run_marketplace_sync(marketplace_id: UUID) -> None:
+def _lock_heartbeat(marketplace_id: UUID, lock: CacheLock | None) -> Heartbeat:
+    """Renews the lock and the running key, and raises CacheLockLostError when
+    the lock is gone or the sync ran too long."""
+    if lock is None:
+        return _no_heartbeat
+    started = time.monotonic()
     cache = get_cache_backend()
-    lock = cache.lock(
-        f"marketplace_sync:{marketplace_id}", timeout=SYNC_LOCK_TIMEOUT_SECONDS
+
+    def heartbeat() -> None:
+        if not lock.owned() or time.monotonic() - started > SYNC_MAX_SECONDS:
+            raise CacheLockLostError(f"Marketplace sync {marketplace_id} stopped.")
+        lock.extend(SYNC_LOCK_TIMEOUT_SECONDS)
+        cache.set(_running_key(marketplace_id), b"1", ex=SYNC_LOCK_TIMEOUT_SECONDS)
+
+    return heartbeat
+
+
+def marketplace_syncing(marketplace_id: UUID) -> bool:
+    """Queued or running. The running key lives as long as the lock lease, so
+    a dead worker cannot leave a marketplace syncing for long."""
+    return bool(
+        get_cache_backend().exists_many(
+            [_queued_key(marketplace_id), _running_key(marketplace_id)]
+        )
     )
-    if not lock.acquire(blocking=False):
-        return
-    cache.set(_syncing_key(marketplace_id), b"1", ex=SYNC_LOCK_TIMEOUT_SECONDS)
+
+
+def _sync_once(marketplace_id: UUID, lock: CacheLock) -> None:
     try:
         sync_marketplace(marketplace_id, lock)
     except OnyxError as exc:
@@ -298,12 +346,47 @@ def run_marketplace_sync(marketplace_id: UUID) -> None:
     except Exception:
         _record_failure(marketplace_id, SYNC_FAILED_ERROR)
         raise
-    finally:
-        # A sync that lost its lock leaves the key to the newer sync, or to
-        # its expiry.
-        if lock.owned():
-            cache.delete(_syncing_key(marketplace_id))
-            lock.release()
+
+
+def run_marketplace_sync(marketplace_id: UUID) -> None:
+    """Runs again while a Sync now came in during the run."""
+    cache = get_cache_backend()
+    while True:
+        lock = cache.lock(_lock_name(marketplace_id), timeout=SYNC_LOCK_TIMEOUT_SECONDS)
+        if not lock.acquire(blocking=False):
+            return
+        try:
+            cache.delete(_queued_key(marketplace_id))
+            while True:
+                cache.delete(_rerun_key(marketplace_id))
+                cache.set(
+                    _running_key(marketplace_id), b"1", ex=SYNC_LOCK_TIMEOUT_SECONDS
+                )
+                _sync_once(marketplace_id, lock)
+                if not lock.owned() or not cache.exists(_rerun_key(marketplace_id)):
+                    break
+        finally:
+            # Only the lock owner clears the flag; a newer run may own it now.
+            if lock.owned():
+                cache.delete(_running_key(marketplace_id))
+                lock.release()
+        if not cache.exists(_rerun_key(marketplace_id)):
+            return
+
+
+def request_marketplace_sync(
+    marketplace_id: UUID, background_tasks: BackgroundTasks
+) -> None:
+    """A request during a run makes the run sync once more when it ends."""
+    cache = get_cache_backend()
+    if cache.exists(_queued_key(marketplace_id)):
+        return
+    if cache.exists(_running_key(marketplace_id)):
+        cache.set(_rerun_key(marketplace_id), b"1", ex=SYNC_TASK_EXPIRES_SECONDS)
+        # The run may have ended before it saw the request.
+        if cache.exists(_running_key(marketplace_id)):
+            return
+    enqueue_marketplace_sync(marketplace_id, background_tasks)
 
 
 def _run_in_tenant(marketplace_id: UUID, tenant_id: str) -> None:
@@ -321,7 +404,7 @@ def enqueue_marketplace_sync(
 ) -> None:
     """Onyx Lite runs no Celery workers, so the API server runs the sync."""
     cache = get_cache_backend()
-    cache.set(_syncing_key(marketplace_id), b"1", ex=SYNC_TASK_EXPIRES_SECONDS)
+    cache.set(_queued_key(marketplace_id), b"1", ex=SYNC_TASK_EXPIRES_SECONDS)
     tenant_id = get_current_tenant_id()
     if DISABLE_VECTOR_DB:
         background_tasks.add_task(_run_in_tenant, marketplace_id, tenant_id)
@@ -329,7 +412,7 @@ def enqueue_marketplace_sync(
     try:
         _send_sync_task(marketplace_id, tenant_id)
     except Exception:
-        cache.delete(_syncing_key(marketplace_id))
+        cache.delete(_queued_key(marketplace_id))
         raise
 
 

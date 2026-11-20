@@ -78,6 +78,7 @@ from onyx.db.plugin import (
     check_base_version,
     create_plugin__no_commit,
     get_plugin_version,
+    is_personal_synced,
     is_skill_version,
     is_synced,
     private_plugins_blocking_user_delete,
@@ -289,10 +290,24 @@ def _built_in_skill_select(
     return stmt.where(Skill.built_in_skill_id.notin_(unavailable))
 
 
+def _not_others_personal_marketplace(user: User) -> ColumnElement[bool]:
+    """A manager reaches every plugin except those of another user's personal
+    GitHub marketplace: only its owner gets them."""
+    return Plugin.marketplace_id.not_in(
+        select(Marketplace.id).where(
+            Marketplace.kind == MarketplaceKind.GITHUB,
+            Marketplace.owner_user_id.is_not(None),
+            Marketplace.owner_user_id != user.id,
+        )
+    )
+
+
 def _visible_custom_skill_select(user: User) -> Select[tuple[Plugin]]:
     runs = version_user_runs(Plugin, user.id)
     stmt = select(Plugin)
-    if not has_global_permission(user, Permission.MANAGE_PLUGINS):
+    if has_global_permission(user, Permission.MANAGE_PLUGINS):
+        stmt = stmt.where(_not_others_personal_marketplace(user))
+    else:
         stmt = stmt.where(Plugin.id.in_(visible_plugin_ids(user.id)))
     return stmt.order_by(
         case(
@@ -467,7 +482,9 @@ def fetch_editable_skill(
     stmt = select(Plugin).where(Plugin.id == skill_id)
     if not any_plugin:
         stmt = stmt.where(holds_one_root_skill(Plugin.current_version_id.expression))
-    if not has_global_permission(user, Permission.MANAGE_PLUGINS):
+    if has_global_permission(user, Permission.MANAGE_PLUGINS):
+        stmt = stmt.where(_not_others_personal_marketplace(user))
+    else:
         stmt = stmt.where(_editable_by_user(user))
     if lock_for_update:
         stmt = stmt.with_for_update(of=Plugin).execution_options(populate_existing=True)
@@ -1083,9 +1100,22 @@ def _plugin_access_change(
     )
 
 
+PERSONAL_SYNCED_PLUGIN_UNSHARED = (
+    "Only the owner of a personal marketplace gets its plugins. "
+    "Add the marketplace for the company to share them."
+)
+
+
 def _check_skill_access_change(
     plugin: Plugin, change: SkillSharingChange, user: User, db_session: Session
 ) -> None:
+    if is_personal_synced(plugin) and (
+        change.user_shares
+        or change.group_shares
+        or change.group_settings
+        or not isinstance(change.installation_policy, UnsetType)
+    ):
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, PERSONAL_SYNCED_PLUGIN_UNSHARED)
     if change.set_public_permission:
         ensure_can_edit_org_visibility(plugin, user)
         _publish_requested(plugin, change.public_permission, db_session)

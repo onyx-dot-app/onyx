@@ -61,6 +61,7 @@ class _Case:
             ),
             marketplace_name="Marketplace",
             marketplace_repository=None,
+            marketplace_owner_user_id=None,
             required_for_anyone=False,
             current_version_id=self.skill.id,
             current_version_number=1,

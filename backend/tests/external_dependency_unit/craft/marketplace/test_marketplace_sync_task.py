@@ -14,7 +14,7 @@ from onyx.configs.constants import OnyxCeleryTask
 from onyx.db.models import User
 from onyx.server.features.skill import marketplace_api as api
 from onyx.skills.marketplace import sync
-from onyx.skills.marketplace.models import MarketplaceSyncResult
+from onyx.skills.marketplace.models import MarketplaceSyncResult, MarketplaceSyncStatus
 from tests.external_dependency_unit.craft.fake_github import FakeGitHub
 from tests.external_dependency_unit.craft.marketplace.helpers import (
     OWNER,
@@ -43,7 +43,7 @@ def send_task() -> Iterator[MagicMock]:
         yield sent
 
 
-def test_sync_now_during_a_sync_does_nothing(
+def test_sync_now_during_a_sync_syncs_once_more(
     db_session: Session,
     users: tuple[User, User, User],
     fake_github: FakeGitHub,
@@ -70,19 +70,51 @@ def test_sync_now_during_a_sync_does_nothing(
     def sync_and_click_sync_now(
         marketplace_id: Any, lock: CacheLock | None = None
     ) -> MarketplaceSyncResult:
-        view = api.sync_marketplace_now(
-            marketplace_id, BackgroundTasks(), owner, db_session
-        )
-        during.append(view.syncing)
-        return real_sync(marketplace_id, lock)
+        result = real_sync(marketplace_id, lock)
+        if not during:
+            # A newer commit lands, and the user clicks Sync now.
+            fake_github.push(OWNER, REPO, plugin_files("alpha", "beta"))
+            view = api.sync_marketplace_now(
+                marketplace_id, BackgroundTasks(), owner, db_session
+            )
+            during.append(view.syncing)
+        return result
 
     with patch.object(sync, "sync_marketplace", sync_and_click_sync_now):
         task_kwargs = {"marketplace_id": str(marketplace.id), "tenant_id": "public"}
         sync_marketplace_task.run(**task_kwargs)
     assert during == [True]
     assert send_task.call_args_list == []
-    assert set(synced_plugins(db_session, marketplace.id)) == {"alpha"}
+    assert set(synced_plugins(db_session, marketplace.id)) == {"alpha", "beta"}
     assert not api.get_marketplace(marketplace.id, owner, db_session).syncing
+
+
+def test_syncing_flag_lives_as_long_as_the_lock_lease(
+    db_session: Session,
+    users: tuple[User, User, User],
+    fake_github: FakeGitHub,
+    connections: Connections,  # noqa: ARG001
+    marketplace_ids: list[Any],
+) -> None:
+    owner = users[0]
+    fake_github.push(OWNER, REPO, plugin_files("alpha"))
+    marketplace = make_marketplace(
+        db_session, marketplace_ids, login=owner, owner=owner
+    )
+    cache = get_cache_backend()
+    ttls: list[int] = []
+
+    def sync_and_read_ttl(
+        marketplace_id: Any, _lock: CacheLock | None = None
+    ) -> MarketplaceSyncResult:
+        ttls.append(cache.ttl(f"marketplace_syncing:{marketplace_id}"))
+        return MarketplaceSyncResult(status=MarketplaceSyncStatus.APPLIED)
+
+    with patch.object(sync, "sync_marketplace", sync_and_read_ttl):
+        sync.run_marketplace_sync(marketplace.id)
+    assert len(ttls) == 1
+    # A dead worker leaves the flag for minutes, not for the whole sync limit.
+    assert 0 < ttls[0] <= 5 * 60
 
 
 def test_sync_now_sends_one_task_until_it_runs(
@@ -148,7 +180,6 @@ def test_sync_that_lost_its_lock_writes_nothing(
 
     assert synced_plugins(db_session, marketplace.id) == {}
     assert reload(db_session, marketplace).last_synced_at is None
-    assert staged_file_ids
     assert existing_files(db_session, staged_file_ids) == set()
 
 

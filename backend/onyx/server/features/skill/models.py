@@ -67,6 +67,8 @@ class SkillMarketplace(BaseModel):
     name: str
     kind: MarketplaceKind
     repository: str | None
+    # A personal GitHub marketplace: only its owner gets the plugin.
+    personal: bool
 
 
 class SkillResponse(BaseModel):
@@ -216,6 +218,7 @@ class SkillResponse(BaseModel):
                 name=access.marketplace_name,
                 kind=access.marketplace_kind,
                 repository=access.marketplace_repository,
+                personal=access.synced and access.marketplace_owner_user_id is not None,
             ),
             content_locked=access.synced,
         )

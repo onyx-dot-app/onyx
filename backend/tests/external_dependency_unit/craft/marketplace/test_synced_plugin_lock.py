@@ -8,10 +8,11 @@ import pytest
 from fastapi import UploadFile
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import SkillSharePermission
+from onyx.db.enums import PluginInstallationPolicy, SkillSharePermission
 from onyx.db.models import Plugin, User
 from onyx.db.plugin import SYNCED_PLUGIN_LOCKED
-from onyx.db.skill import lock_skill_for_save
+from onyx.db.skill import PERSONAL_SYNCED_PLUGIN_UNSHARED, lock_skill_for_save
+from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.skill import api
 from onyx.server.features.skill.models import (
@@ -26,6 +27,7 @@ from onyx.server.features.skill.models import (
     TransferSkillOwnershipRequest,
 )
 from onyx.skills.marketplace import sync
+from tests.external_dependency_unit.craft.db_helpers import make_user
 from tests.external_dependency_unit.craft.fake_github import FakeGitHub
 from tests.external_dependency_unit.craft.marketplace.helpers import (
     OWNER,
@@ -133,43 +135,60 @@ def test_content_and_ownership_changes_are_refused(
     assert db_session.get(Plugin, plugin_id) is not None
 
 
-def test_sharing_still_works(
-    db_session: Session, users: tuple[User, User, User], synced: Plugin
+def test_personal_synced_plugin_is_not_shared(
+    db_session: Session,
+    users: tuple[User, User, User],
+    synced: Plugin,
+    created_user_ids: list[UUID],
 ) -> None:
     owner = db_session.get(User, users[0].id)
     assert owner is not None
-    response = api.share_current_user_skill(
-        synced.id,
-        SkillShareRequest(
-            user_shares=[
-                SkillUserShareRequest(
-                    user_id=users[1].id, permission=SkillSharePermission.VIEWER
-                )
-            ]
-        ),
-        owner,
-        db_session,
-    )
-    assert [share.user.id for share in response.user_shares] == [users[1].id]
-    assert response.content_locked
-    assert response.user_permission == "OWNER"
-    assert not response.can_delete
-    assert response.marketplace is not None
-    assert response.marketplace.repository == f"{OWNER}/{REPO}"
+    viewer_share = [
+        SkillUserShareRequest(
+            user_id=users[1].id, permission=SkillSharePermission.VIEWER
+        )
+    ]
+    with pytest.raises(OnyxError) as exc:
+        api.share_current_user_skill(
+            synced.id, SkillShareRequest(user_shares=viewer_share), owner, db_session
+        )
+    assert exc.value.detail == PERSONAL_SYNCED_PLUGIN_UNSHARED
+    db_session.rollback()
 
     bulk = api.bulk_update_skills(
         SkillBulkShareRequest(
             skill_ids=[synced.id],
             action="share",
-            sharing=SkillBulkSharing(
-                user_shares=[
-                    SkillUserShareRequest(
-                        user_id=users[2].id, permission=SkillSharePermission.VIEWER
-                    )
-                ]
-            ),
+            sharing=SkillBulkSharing(user_shares=viewer_share),
         ),
         owner,
         db_session,
     )
-    assert bulk.succeeded == [synced.id]
+    assert bulk.succeeded == []
+    db_session.rollback()
+
+    manager = make_user(db_session, is_admin=True)
+    db_session.commit()
+    created_user_ids.append(manager.id)
+    assert synced.id not in {
+        skill.id
+        for skill in api.list_skills_for_current_user(manager, db_session).customs
+    }
+    for request in (
+        SkillShareRequest(user_shares=viewer_share),
+        SkillShareRequest(installation_policy=PluginInstallationPolicy.REQUIRED),
+    ):
+        with pytest.raises(OnyxError) as exc:
+            api.share_current_user_skill(synced.id, request, manager, db_session)
+        assert exc.value.error_code == OnyxErrorCode.NOT_FOUND
+        db_session.rollback()
+
+    response = api.share_current_user_skill(
+        synced.id, SkillShareRequest(), owner, db_session
+    )
+    assert response.content_locked
+    assert response.user_permission == "OWNER"
+    assert not response.can_delete
+    assert response.marketplace is not None
+    assert response.marketplace.personal
+    assert response.marketplace.repository == f"{OWNER}/{REPO}"
