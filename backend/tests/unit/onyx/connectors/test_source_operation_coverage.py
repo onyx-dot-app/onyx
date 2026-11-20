@@ -30,7 +30,12 @@ from onyx.connectors.confluence.source_operations import (
     ConfluenceRestSpacePermissionsNotAvailableError,
     ConfluenceSpacePermissionsVariant,
 )
-from onyx.connectors.dealcloud.models import DealCloudEntryType
+from onyx.connectors.dealcloud.models import (
+    DealCloudEntryType,
+    DealCloudUser,
+    DealCloudUserGroup,
+    DealCloudUserGroupRef,
+)
 from onyx.connectors.egnyte.models import (
     EgnyteFile,
     EgnyteFolder,
@@ -417,13 +422,25 @@ def _configure_asana_spy(spy: MagicMock) -> None:
 
 
 def _configure_dealcloud_spy(spy: MagicMock) -> None:
-    """One object holding one entry, so the checks reach the row read."""
+    """One object holding one entry, and one group that reads everything, so
+    the checks reach the row read and the group read."""
     spy.list_entry_types.return_value = [
         DealCloudEntryType(
             id=2014, api_name="Company", plural_name="Companies", entry_list_type=1
         )
     ]
     spy.list_entry_ids.return_value = [7]
+    spy.list_active_users.return_value = [DealCloudUser(id=1, email="a@example.com")]
+    spy.list_user_groups.return_value = [DealCloudUserGroupRef(id=5)]
+    spy.get_user_group.return_value = DealCloudUserGroup.model_validate(
+        {
+            "id": 5,
+            "name": "All",
+            "readData": "All",
+            "entryLevelCapabilities": {"read": {"allEntryListsAllowed": True}},
+            "users": [1],
+        }
+    )
 
 
 def _configure_egnyte_spy(spy: MagicMock) -> None:

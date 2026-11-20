@@ -5,7 +5,9 @@ from typing import Any
 
 from pydantic import JsonValue
 
+from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.dealcloud.access import get_entry_type_access
 from onyx.connectors.dealcloud.models import (
     ENTRY_LIST_TYPE_ATTACHMENT,
     FIELD_TYPE_BINARY,
@@ -33,13 +35,14 @@ from onyx.connectors.exceptions import (
     UnexpectedValidationError,
 )
 from onyx.connectors.interfaces import (
-    CheckpointedConnector,
+    CheckpointedConnectorWithPermSync,
     CheckpointOutput,
     CredentialsConnector,
     CredentialsProviderInterface,
     GenerateSlimDocumentOutput,
     SecondsSinceUnixEpoch,
     SlimConnector,
+    SlimConnectorWithPermSync,
 )
 from onyx.connectors.models import (
     BasicExpertInfo,
@@ -186,8 +189,9 @@ def _value_experts(value: JsonValue) -> list[BasicExpertInfo]:
 
 
 class DealCloudConnector(
-    CheckpointedConnector[DealCloudCheckpoint],
+    CheckpointedConnectorWithPermSync[DealCloudCheckpoint],
     SlimConnector,
+    SlimConnectorWithPermSync,
     CredentialsConnector,
 ):
     def __init__(
@@ -234,14 +238,23 @@ class DealCloudConnector(
     def entry_type_node_id(self, entry_type_id: int) -> str:
         return f"{self.base_url}/entrytypes/{entry_type_id}"
 
-    def _entry_type_node(self, entry_type: DealCloudEntryType) -> HierarchyNode:
+    def _entry_type_node(
+        self, entry_type: DealCloudEntryType, access: ExternalAccess | None
+    ) -> HierarchyNode:
         return HierarchyNode(
             raw_node_id=self.entry_type_node_id(entry_type.id),
             raw_parent_id=None,
             display_name=entry_type.plural_name,
             link=self.base_url,
             node_type=HierarchyNodeType.FOLDER,
+            external_access=access,
         )
+
+    def _access(self, entry_type_id: int, with_access: bool) -> ExternalAccess | None:
+        """Every entry of an object has the object's readers."""
+        if not with_access:
+            return None
+        return get_entry_type_access(self.base_url, entry_type_id)
 
     def _to_document(
         self,
@@ -318,11 +331,12 @@ class DealCloudConnector(
         )
         return self._walk
 
-    def load_from_checkpoint(
+    def _load(
         self,
         start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch,
         checkpoint: DealCloudCheckpoint,
+        with_access: bool,
     ) -> CheckpointOutput[DealCloudCheckpoint]:
         checkpoint = checkpoint.model_copy(deep=True)
         # Listed once per run, so an object removed since the last run is
@@ -342,8 +356,9 @@ class DealCloudConnector(
             return checkpoint
 
         entry_type: DealCloudEntryType = active[checkpoint.entry_type_ids[0]]
+        access: ExternalAccess | None = self._access(entry_type.id, with_access)
         if checkpoint.last_entry_id is None:
-            yield self._entry_type_node(entry_type)
+            yield self._entry_type_node(entry_type, access)
         walk: DealCloudObjectWalk = self._object_walk(entry_type, start)
         position: int = bisect_right(walk.entry_ids, checkpoint.last_entry_id or 0)
         step: list[int] = walk.entry_ids[position : position + _ENTRIES_PER_STEP]
@@ -400,6 +415,7 @@ class DealCloudConnector(
                         or updated_at > latest
                     ):
                         continue
+                    document.external_access = access
                     yield document
             checkpoint.last_entry_id = step[-1]
         if position + len(step) >= len(walk.entry_ids):
@@ -409,11 +425,52 @@ class DealCloudConnector(
         checkpoint.has_more = bool(checkpoint.entry_type_ids)
         return checkpoint
 
+    def load_from_checkpoint(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: DealCloudCheckpoint,
+    ) -> CheckpointOutput[DealCloudCheckpoint]:
+        return self._load(start, end, checkpoint, with_access=False)
+
+    def load_from_checkpoint_with_perm_sync(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: DealCloudCheckpoint,
+    ) -> CheckpointOutput[DealCloudCheckpoint]:
+        return self._load(start, end, checkpoint, with_access=True)
+
     def build_dummy_checkpoint(self) -> DealCloudCheckpoint:
         return DealCloudCheckpoint(has_more=True)
 
     def validate_checkpoint_json(self, checkpoint_json: str) -> DealCloudCheckpoint:
         return DealCloudCheckpoint.model_validate_json(checkpoint_json)
+
+    def _slim_walk(
+        self, callback: IndexingHeartbeatInterface | None, with_access: bool
+    ) -> GenerateSlimDocumentOutput:
+        for entry_type in indexed_entry_types(self.ops, self.entry_types):
+            # A partial walk would read as deleted entries, so stopping raises.
+            if callback is not None and callback.should_stop():
+                raise RuntimeError("DealCloud slim retrieval: stop signal detected")
+            node_id: str = self.entry_type_node_id(entry_type.id)
+            access: ExternalAccess | None = self._access(entry_type.id, with_access)
+            # A prune removes each folder the listing leaves out, and with it
+            # the parent link of the folder's documents.
+            yield [self._entry_type_node(entry_type, access)]
+            entry_ids: list[int] = self.ops.list_entry_ids(entry_type_id=entry_type.id)
+            for offset in range(0, len(entry_ids), _SLIM_BATCH_SIZE):
+                yield [
+                    SlimDocument(
+                        id=self.doc_id(entry_type.id, entry_id),
+                        external_access=access,
+                        parent_hierarchy_raw_node_id=node_id,
+                    )
+                    for entry_id in entry_ids[offset : offset + _SLIM_BATCH_SIZE]
+                ]
+            if callback is not None:
+                callback.progress("dealcloud_slim_docs", len(entry_ids))
 
     def retrieve_all_slim_docs(
         self,
@@ -421,23 +478,14 @@ class DealCloudConnector(
         end: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
-        for entry_type in indexed_entry_types(self.ops, self.entry_types):
-            # A partial walk would read as deleted entries, so stopping raises.
-            if callback is not None and callback.should_stop():
-                raise RuntimeError("DealCloud slim retrieval: stop signal detected")
-            # A prune removes each folder the listing leaves out, and with it
-            # the parent link of the folder's documents.
-            yield [self._entry_type_node(entry_type)]
-            entry_ids: list[int] = self.ops.list_entry_ids(entry_type_id=entry_type.id)
-            for offset in range(0, len(entry_ids), _SLIM_BATCH_SIZE):
-                yield [
-                    SlimDocument(
-                        id=self.doc_id(entry_type.id, entry_id),
-                        parent_hierarchy_raw_node_id=self.entry_type_node_id(
-                            entry_type.id
-                        ),
-                    )
-                    for entry_id in entry_ids[offset : offset + _SLIM_BATCH_SIZE]
-                ]
-            if callback is not None:
-                callback.progress("dealcloud_slim_docs", len(entry_ids))
+        yield from self._slim_walk(callback, with_access=False)
+
+    def retrieve_all_slim_docs_perm_sync(
+        self,
+        start: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        end: SecondsSinceUnixEpoch | None = None,  # noqa: ARG002
+        callback: IndexingHeartbeatInterface | None = None,
+    ) -> GenerateSlimDocumentOutput:
+        """Every entry in scope with who may read it. The doc sync makes any
+        indexed entry this does not list private, so the window is ignored."""
+        yield from self._slim_walk(callback, with_access=True)

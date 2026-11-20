@@ -25,6 +25,9 @@ from onyx.connectors.dealcloud.models import (
     DealCloudEntryType,
     DealCloudField,
     DealCloudRow,
+    DealCloudUser,
+    DealCloudUserGroup,
+    DealCloudUserGroupRef,
 )
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -60,6 +63,13 @@ DEALCLOUD_API_KEY: str = "dealcloud_api_key"
 ROW_BATCH_SIZE: int = 2000
 
 _DATA_SCOPE: str = "data"
+# A separate token, so a user without the user management capability still
+# gets a data token and can index.
+_USER_MANAGEMENT_SCOPE: str = "user_management"
+_USER_GROUP_PATH: str = "/v1/management/user/group"
+_USER_GROUP_PAGE_SIZE: int = 1000
+# A listing still paging past this is a site that ignores pageNumber.
+_MAX_USER_GROUP_PAGES: int = 1000
 _TOKEN_PATH: str = "/v1/oauth/token"
 _SCHEMA_PATH: str = "/v4/schema/entrytypes"
 _DATA_PATH: str = "/v4/data/entrydata"
@@ -259,8 +269,8 @@ class DealCloudSourceOperations(SourceOperations):
     _next_request_at: float = 0.0
     # No call starts before this monotonic time, set by a 429.
     _paused_until: float = 0.0
-    # The bearer token and the monotonic time it stops being used at.
-    _token_cache: tuple[str, float] | None = None
+    # Per scope, the bearer token and the monotonic time it stops being used at.
+    _token_cache: dict[str, tuple[str, float]] | None = None
     _token_lock_cache: threading.Lock | None = None
 
     def _base_url(self) -> str:
@@ -301,6 +311,7 @@ class DealCloudSourceOperations(SourceOperations):
         path: str,
         read: Callable[[requests.Response], T],
         *,
+        scope: str = _DATA_SCOPE,
         authorized: bool = True,
         params: dict[str, str] | None = None,
         body: dict[str, JsonValue] | None = None,
@@ -309,7 +320,7 @@ class DealCloudSourceOperations(SourceOperations):
         """One request with its answer read by `read`. A timeout, a lost
         connection or a 5xx is tried again, also when it happens while the
         answer is read. A 429 waits for the time DealCloud names. `authorized`
-        is False only for the token request."""
+        is False only for the token request, which buys a token for `scope`."""
         base_url = self._base_url()
         renewed_token = False
         failures = 0
@@ -317,7 +328,7 @@ class DealCloudSourceOperations(SourceOperations):
         waited = 0.0
         while True:
             is_last_attempt = failures == _MAX_ATTEMPTS - 1
-            token: str | None = self._token() if authorized else None
+            token: str | None = self._token(scope) if authorized else None
             self._wait_for_turn()
             try:
                 response = _send(
@@ -378,6 +389,11 @@ class DealCloudSourceOperations(SourceOperations):
                 failures += 1
                 continue
             if not authorized and status in _TOKEN_REJECTED_STATUSES:
+                if scope == _USER_MANAGEMENT_SCOPE:
+                    raise InsufficientPermissionsError(
+                        "DealCloud gave the API user no user management token. "
+                        "Give the user's group the User Management capability."
+                    )
                 raise CredentialInvalidError(
                     "DealCloud rejected the client ID or API key. Check both, and "
                     "that the user's group has the API capability."
@@ -387,7 +403,7 @@ class DealCloudSourceOperations(SourceOperations):
                 # is tried.
                 if token is not None and not renewed_token:
                     renewed_token = True
-                    self._drop_token(token)
+                    self._drop_token(scope, token)
                     continue
                 raise CredentialInvalidError(
                     "DealCloud rejected the API user's token. Check the client "
@@ -405,7 +421,7 @@ class DealCloudSourceOperations(SourceOperations):
                 body=detail,
             )
 
-    def _buy_token(self) -> tuple[str, float]:
+    def _buy_token(self, scope: str) -> tuple[str, float]:
         credentials: dict[str, Any] = self.credentials_provider.get_credentials()
         client_id: str | None = credentials.get(DEALCLOUD_CLIENT_ID)
         api_key: str | None = credentials.get(DEALCLOUD_API_KEY)
@@ -415,10 +431,11 @@ class DealCloudSourceOperations(SourceOperations):
             "POST",
             _TOKEN_PATH,
             _read_json,
+            scope=scope,
             authorized=False,
             form={
                 "grant_type": "client_credentials",
-                "scope": _DATA_SCOPE,
+                "scope": scope,
                 "client_id": client_id,
                 "client_secret": api_key,
             },
@@ -430,20 +447,23 @@ class DealCloudSourceOperations(SourceOperations):
             - _TOKEN_REFRESH_MARGIN_SECONDS,
         )
 
-    def _token(self) -> str:
-        cached = self._token_cache
+    def _token(self, scope: str) -> str:
+        cached = (self._token_cache or {}).get(scope)
         if cached is not None and time.monotonic() < cached[1]:
             return cached[0]
         with self._token_lock():
-            cached = self._token_cache
+            if self._token_cache is None:
+                self._token_cache = {}
+            cached = self._token_cache.get(scope)
             if cached is None or time.monotonic() >= cached[1]:
-                cached = self._token_cache = self._buy_token()
+                cached = self._token_cache[scope] = self._buy_token(scope)
             return cached[0]
 
-    def _drop_token(self, token: str) -> None:
+    def _drop_token(self, scope: str, token: str) -> None:
         with self._token_lock():
-            if self._token_cache is not None and self._token_cache[0] == token:
-                self._token_cache = None
+            cached = (self._token_cache or {}).get(scope)
+            if self._token_cache is not None and cached and cached[0] == token:
+                del self._token_cache[scope]
 
     @source_operation(
         capabilities=(CredentialCapability.INDEXING,),
@@ -556,3 +576,63 @@ class DealCloudSourceOperations(SourceOperations):
         return self.get_rows(
             entry_type_id=entry_type_id, entry_ids=entry_ids[:middle]
         ) + self.get_rows(entry_type_id=entry_type_id, entry_ids=entry_ids[middle:])
+
+    @source_operation(
+        capabilities=(CredentialCapability.EXTERNAL_GROUP_SYNC,),
+        consumes=OperationConsumes.BOTH,
+    )
+    def list_active_users(self) -> list[DealCloudUser]:
+        return [
+            DealCloudUser.model_validate(user)
+            for user in self._call(
+                "GET", "/v4/schema/users", _read_json, params={"activeOnly": "true"}
+            )
+        ]
+
+    @source_operation(
+        capabilities=(
+            CredentialCapability.DOC_PERMISSION_SYNC,
+            CredentialCapability.EXTERNAL_GROUP_SYNC,
+        ),
+        consumes=OperationConsumes.BOTH,
+    )
+    def list_user_groups(self) -> list[DealCloudUserGroupRef]:
+        """Every user group of the site, keyed by id so that a group seen on
+        two pages counts once. Needs the User Management capability."""
+        groups: dict[int, DealCloudUserGroupRef] = {}
+        for page_number in range(1, _MAX_USER_GROUP_PAGES + 1):
+            page: list[dict[str, Any]] = self._call(
+                "GET",
+                _USER_GROUP_PATH,
+                _read_json,
+                scope=_USER_MANAGEMENT_SCOPE,
+                params={
+                    "pageNumber": str(page_number),
+                    "pageSize": str(_USER_GROUP_PAGE_SIZE),
+                },
+            )
+            for group in page:
+                ref = DealCloudUserGroupRef.model_validate(group)
+                groups[ref.id] = ref
+            if len(page) < _USER_GROUP_PAGE_SIZE:
+                return list(groups.values())
+        raise RuntimeError(
+            f"DealCloud kept paging user groups past {_MAX_USER_GROUP_PAGES} pages"
+        )
+
+    @source_operation(
+        capabilities=(
+            CredentialCapability.DOC_PERMISSION_SYNC,
+            CredentialCapability.EXTERNAL_GROUP_SYNC,
+        ),
+        consumes=OperationConsumes.BOTH,
+    )
+    def get_user_group(self, *, group_id: int) -> DealCloudUserGroup:
+        return DealCloudUserGroup.model_validate(
+            self._call(
+                "GET",
+                f"{_USER_GROUP_PATH}/{group_id}",
+                _read_json,
+                scope=_USER_MANAGEMENT_SCOPE,
+            )
+        )

@@ -20,7 +20,7 @@ The default is every **30** minutes.
 | Entries     | Fields with a value. A reference, choice, or user field shows the name it points to.                          |
 | Files       | File contents are not indexed. The connector skips the **Attachment** object unless you name it, and it leaves out binary and image fields. |
 | Scope       | Optional. Limit the index to specific objects by API name. Names are not case-sensitive.                      |
-| Permissions | Permission sync is not available for DealCloud. See [Document access](#document-access).                      |
+| Permissions | Optional. **Sync with DealCloud** limits each entry to the DealCloud users whose group reads all data. See [Sync with DealCloud](#sync-with-dealcloud). |
 
 ## Setting up
 
@@ -34,6 +34,11 @@ so use a user who can read every object you want to index.
   <Step title="Give the user's group API access">
     In DealCloud, go to **Admin > User Management** and select the user's group. Under **Capabilities > Site Areas**,
     enable **API**. Check that the group can read the objects you want to index.
+  </Step>
+
+  <Step title="For Sync with DealCloud, add User Management">
+    Under the same group's capabilities, also enable **User Management**. Onyx reads the site's user groups with it.
+    Skip this step if you do not sync permissions.
   </Step>
 
   <Step title="Enable the API key">
@@ -63,7 +68,10 @@ so use a user who can read every object you want to index.
   </Step>
 
   <Step title="Choose who can see the entries">
-    Under **Document Access**, select who can see the indexed entries. See [Document access](#document-access).
+    Under **Document Access**, **Sync with DealCloud** uses DealCloud's user groups.
+    See [Sync with DealCloud](#sync-with-dealcloud) for what it covers.
+    **Specific Groups** and **Sync with DealCloud** are paid features: the Business and Enterprise tiers on Onyx Cloud,
+    and the Enterprise Edition when self-hosted.
   </Step>
 
   <Step title="Run the connection checks">
@@ -82,25 +90,50 @@ Each check reads from DealCloud as the API user, so a failure points at that use
 | DealCloud accepts the URL, client ID and API key | DealCloud lists the site's objects for the user   | The URL, client ID, or API key is wrong, or the user's group does not have the **API** capability |
 | Configured objects are readable                  | Every API name you entered exists for the user    | An API name is misspelled, or the user's group has no access to the object                      |
 | Entries are readable                             | One entry from the first 5 objects in scope returns its row | The user's group cannot read the data of the objects in scope |
+| User groups and what they read are readable | DealCloud lists the user groups and what each one reads | The user's group lacks **User Management** |
+| Users' emails are readable | DealCloud lists the active users | DealCloud does not list the users for the API user |
 
 All checks need the site URL. The other two run only after the first passes,
-and the second only when **Objects** has names.
+and the second only when **Objects** has names. The last two run only with **Sync with DealCloud**,
+and run again before each index run and each scheduled permission sync.
+
+If the API user loses **User Management**, permission syncs fail, and the next index run fails and pauses the connector.
+While this lasts, access changes in DealCloud do not reach Onyx, and DealCloud users can lose access to every entry.
+Restore the capability, and then resume the connector.
+
+The user groups check passes with a warning when no group reads all data of every object,
+and when some groups read only part of the data.
+The emails check passes with a warning when no active user has an email.
+In both cases the next sync hides the DealCloud entries from the users affected.
 
 If no object in scope has an entry yet, the entries check is skipped.
 The check does not finish if the scope has more than 5 objects and the first 5 have no entries,
 or if DealCloud lists an entry but returns no row for it. None of these cases stops you from creating the connector.
 
-## Document access
+## Sync with DealCloud
+
+With **Sync with DealCloud**, an Onyx user finds DealCloud entries only if their DealCloud account, matched by email,
+is an active user in a group that reads all data.
+
+- Onyx treats a DealCloud user group as a reader only when its **Read Data** capability is **All** and it is allowed
+  every object. The members of those groups can find every indexed entry.
+- Members of a group with any narrower read access find no DealCloud entries in Onyx, unless another of their groups
+  reads all data. Onyx does not yet sync access that is limited to some objects or some entries.
+  The **User groups and what they read are readable** check reports how many groups this affects.
+- Entries are never marked public. Only matched DealCloud users find them.
+- Group changes take effect at the next successful permission sync.
+  Onyx syncs DealCloud permissions every **30** minutes.
+- The first index and each full re-index set the access of the entries they read.
+  An entry that DealCloud adds later is hidden from everyone until the next permission sync lists it.
 
 <Warning>
-  The connector does not apply DealCloud permissions.
-  Every Onyx user who can see the connector's documents can see every indexed entry and every indexed field,
-  including the entries and fields DealCloud hides from that user.
+  Onyx does not apply DealCloud's field-level restrictions.
+  A user who can find an entry can read every indexed field of it. If some fields are restricted in DealCloud,
+  do not index the objects that hold them.
 </Warning>
 
-To limit who sees the entries, select **Specific Groups** under **Document Access**,
-and index only the objects those groups are allowed to read. **Specific Groups** is a paid feature:
-the Business and Enterprise tiers on Onyx Cloud, and the Enterprise Edition when self-hosted.
+Without **Sync with DealCloud**, the connector does not apply DealCloud permissions at all.
+Every Onyx user who can see the connector's documents can see every indexed entry.
 
 ## Sync behavior
 
@@ -113,7 +146,7 @@ the Business and Enterprise tiers on Onyx Cloud, and the Enterprise Edition when
   documents when the connector next prunes. If DealCloud lists none of the objects you named,
   the run fails and Onyx pauses the connector, because the user has probably lost access.
   Restore the access or correct the names, and then resume the connector.
-- **Large objects.** A full index and a prune fail if an object has more than 5,000,000 entries.
+- **Large objects.** A full index, a prune, and a permission sync fail if an object has more than 5,000,000 entries.
 - **Large entries.** Onyx does not index an entry whose data is larger than 64 MB. It records the entry as a failed
   document and indexes the other entries.
 - **Rate limit.** DealCloud allows 5 data requests per second. Each index run and each prune paces its own

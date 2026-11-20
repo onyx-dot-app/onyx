@@ -12,10 +12,10 @@ import time
 from collections.abc import Generator
 
 from ee.onyx.db.external_perm import ExternalUserGroup
+from ee.onyx.external_permissions.utils import instance_key
 from ee.onyx.external_permissions.youtrack.access import (
     GroupMembers,
     RoleGrants,
-    instance_key,
     override_group_id,
     project_group_id,
     user_group_id,

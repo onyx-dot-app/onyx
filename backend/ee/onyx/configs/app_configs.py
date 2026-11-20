@@ -165,6 +165,14 @@ LINEAR_PERMISSION_DOC_SYNC_FREQUENCY = int(
 )
 
 #####
+# DealCloud
+#####
+
+# In seconds. A doc sync lists every entry id in scope, and a group sync reads
+# every user group.
+DEALCLOUD_PERMISSION_SYNC_FREQUENCY = 30 * 60
+
+#####
 # YouTrack
 #####
 

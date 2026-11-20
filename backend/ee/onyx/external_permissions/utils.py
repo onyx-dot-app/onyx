@@ -1,5 +1,7 @@
+import hashlib
 from collections.abc import Generator
 from typing import Any
+from urllib.parse import urlsplit, urlunsplit
 
 from ee.onyx.external_permissions.perm_sync_types import FetchAllDocumentsIdsFunction
 from onyx.access.models import (
@@ -21,6 +23,17 @@ logger = setup_logger()
 # Past this share of failed users or groups the cause is the credential or the
 # source, not one entity, so a group sync fails whole instead of skipping them.
 MAX_FAILED_ENTITY_FRACTION = 0.5
+
+
+def instance_key(base_url: str) -> str:
+    """Scopes group ids to one instance of a source, whose ids repeat across
+    instances. Only the scheme and host are case-insensitive, since a
+    context path is not."""
+    parts = urlsplit(base_url.rstrip("/"))
+    normalized: str = urlunsplit(
+        (parts.scheme.lower(), parts.netloc.lower(), parts.path, "", "")
+    )
+    return hashlib.sha256(normalized.encode()).hexdigest()[:12]
 
 
 def credential_json(cc_pair: ConnectorCredentialPair) -> dict[str, Any]:

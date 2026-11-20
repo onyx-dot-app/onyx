@@ -1,4 +1,4 @@
-from pydantic import BaseModel, ConfigDict, Field, JsonValue
+from pydantic import BaseModel, ConfigDict, Field, JsonValue, model_validator
 
 from onyx.connectors.models import ConnectorCheckpoint
 
@@ -66,3 +66,49 @@ class DealCloudCheckpoint(ConnectorCheckpoint):
     # The last entry read of the object being walked. Entries are walked in
     # ascending id order.
     last_entry_id: int | None = None
+
+
+class DealCloudUser(BaseModel):
+    id: int
+    email: str | None = None
+
+
+class DealCloudUserGroupRef(BaseModel):
+    id: int
+
+
+class DealCloudReadCapability(BaseModel):
+    all_entry_lists_allowed: bool = Field(default=False, alias="allEntryListsAllowed")
+
+
+class DealCloudEntryLevelCapabilities(BaseModel):
+    read: DealCloudReadCapability = Field(default_factory=DealCloudReadCapability)
+
+
+class DealCloudUserGroup(BaseModel):
+    id: int
+    # DealCloud's Read Data capability, "All" for every entry of the allowed objects.
+    read_data: str | None = Field(default=None, alias="readData")
+    entry_level_capabilities: DealCloudEntryLevelCapabilities = Field(
+        default_factory=DealCloudEntryLevelCapabilities,
+        alias="entryLevelCapabilities",
+    )
+    users: list[int] = Field(default_factory=list)
+
+    # DealCloud sends the members as `users` or as `memberIds`, and each one
+    # as an id or as an object with an id.
+    @model_validator(mode="before")
+    @classmethod
+    def _member_ids(cls, data: object) -> object:
+        if not isinstance(data, dict):
+            return data
+        members: object = data.get("users") or data.get("memberIds") or []
+        if not isinstance(members, list):
+            return data
+        return {
+            **data,
+            "users": [
+                member.get("id") if isinstance(member, dict) else member
+                for member in members
+            ],
+        }
