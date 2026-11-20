@@ -5,7 +5,6 @@ import {
   MessageRenderer,
   RenderType,
 } from "@/app/app/message/messageComponents/types";
-import { BlinkingBar } from "@/app/app/message/BlinkingBar";
 import { OnyxDocument } from "@/lib/search/types";
 import { openExternalLink } from "@/lib/search/utils";
 import { ValidSources } from "@/lib/connectors/types/source";
@@ -107,7 +106,6 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
                 onClick={(doc: OnyxDocument) => {
                   if (doc.link) openExternalLink(doc.link);
                 }}
-                emptyState={!stopPacketSeen ? <BlinkingBar /> : undefined}
               />
             ) : displayUrls ? (
               <SearchChipList
@@ -117,11 +115,8 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
                 getKey={(url: string) => url}
                 toSourceInfo={urlToSourceInfo}
                 onClick={(url: string) => openExternalLink(url)}
-                emptyState={!stopPacketSeen ? <BlinkingBar /> : undefined}
               />
-            ) : (
-              !stopPacketSeen && <BlinkingBar />
-            )}
+            ) : null}
           </div>
         ),
       },

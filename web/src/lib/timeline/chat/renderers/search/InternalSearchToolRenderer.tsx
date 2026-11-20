@@ -5,7 +5,6 @@ import {
   MessageRenderer,
   RenderType,
 } from "@/app/app/message/messageComponents/types";
-import { BlinkingBar } from "@/app/app/message/BlinkingBar";
 import { OnyxDocument } from "@/lib/search/types";
 import {
   SearchChipList,
@@ -129,13 +128,11 @@ export const InternalSearchToolRenderer: MessageRenderer<
                 }
               }}
               emptyState={
-                !isComplete ? (
-                  <BlinkingBar />
-                ) : (
+                isComplete ? (
                   <Text as="p" font="main-ui-muted" color="text-04">
                     {t("internalSearch.noResults.text")}
                   </Text>
-                )
+                ) : undefined
               }
             />
           </div>
@@ -161,7 +158,6 @@ export const InternalSearchToolRenderer: MessageRenderer<
               expansionCount={QUERIES_PER_EXPANSION}
               getKey={(_, index) => index}
               toSourceInfo={queryToSourceInfo}
-              emptyState={!stopPacketSeen ? <BlinkingBar /> : undefined}
               showDetailsCard={false}
               isQuery={true}
             />
@@ -192,13 +188,11 @@ export const InternalSearchToolRenderer: MessageRenderer<
               }
             }}
             emptyState={
-              !isComplete ? (
-                <BlinkingBar />
-              ) : (
+              isComplete ? (
                 <Text as="p" font="main-ui-muted" color="text-04">
                   {t("internalSearch.noResults.text")}
                 </Text>
-              )
+              ) : undefined
             }
           />
         ),

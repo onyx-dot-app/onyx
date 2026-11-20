@@ -13,7 +13,6 @@ import {
   MessageRenderer,
   RenderType,
 } from "@/app/app/message/messageComponents/types";
-import { BlinkingBar } from "@/app/app/message/BlinkingBar";
 
 interface FileReaderState {
   fileName: string | null;
@@ -134,9 +133,7 @@ export const FileReaderToolRenderer: MessageRenderer<
                 />
               )}
             </>
-          ) : (
-            !stopPacketSeen && <BlinkingBar />
-          )}
+          ) : null}
         </Section>
       ),
     },
