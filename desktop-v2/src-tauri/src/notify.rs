@@ -90,24 +90,119 @@ const SHOW_ANSWER_EVENT: &str = "launcher-show-answer";
 pub fn init(app: &AppHandle) {
     let handle = app.clone();
     let _ = app.notification().on_action(move |performed| {
-        let Some(answer) = tapped(performed) else {
-            return;
-        };
-        // A stale notification is ignored: the launcher no longer holds its
-        // answer, and showing another chat would be wrong.
-        crate::launcher::show(
-            &handle,
-            move |app| {
-                let current = answer.is_current(&app.state::<AppState>());
-                if current {
-                    // The launcher may be in Search mode; the click is for the answer.
-                    let _ = app.emit_to(crate::windows::LAUNCHER, SHOW_ANSWER_EVENT, ());
-                }
-                current
-            },
-            crate::windows::route,
-        );
+        if let Some(answer) = tapped(performed) {
+            open_answer(&handle, answer);
+        }
     });
+}
+
+/// Shows the launcher with the answer of a clicked notification.
+fn open_answer(app: &AppHandle, answer: Answer) {
+    // A stale notification is ignored: the launcher no longer holds its
+    // answer, and showing another chat would be wrong.
+    crate::launcher::show(
+        app,
+        move |app| {
+            let current = answer.is_current(&app.state::<AppState>());
+            if current {
+                // The launcher may be in Search mode; the click is for the answer.
+                let _ = app.emit_to(crate::windows::LAUNCHER, SHOW_ANSWER_EVENT, ());
+            }
+            current
+        },
+        crate::windows::route,
+    );
+}
+
+/// Windows delivers a click on a toast in Action Center only through an
+/// activation that starts the app. A toast that opens this `onyx://` link
+/// reaches the running app (single instance) also from Action Center.
+#[cfg(any(windows, test))]
+const ANSWER_LINK: &str = "onyx://launcher/answer";
+
+#[cfg(any(windows, test))]
+fn answer_link(answer: Answer) -> String {
+    format!(
+        "{ANSWER_LINK}?{ANSWER_KEY}={}&{EPOCH_KEY}={}",
+        answer.id, answer.epoch
+    )
+}
+
+/// The answer of an `onyx://launcher/answer` link.
+#[cfg(any(windows, test))]
+fn linked_answer(url: &url::Url) -> Option<Answer> {
+    if url.scheme() != "onyx" || url.host_str() != Some("launcher") || url.path() != "/answer" {
+        return None;
+    }
+    let param = |key: &str| {
+        url.query_pairs()
+            .find(|(k, _)| k == key)
+            .and_then(|(_, v)| v.parse::<u64>().ok())
+    };
+    Some(Answer {
+        id: param(ANSWER_KEY)?,
+        epoch: param(EPOCH_KEY)?,
+    })
+}
+
+/// Whether a launch argument is a notification click (see `ANSWER_LINK`).
+#[cfg(windows)]
+pub fn is_answer_link(arg: &str) -> bool {
+    url::Url::parse(arg).is_ok_and(|url| linked_answer(&url).is_some())
+}
+
+/// Handles `onyx://launcher/answer?..` from a clicked toast.
+#[cfg(windows)]
+pub fn handle_link(app: &AppHandle, url: &url::Url) {
+    if let Some(answer) = linked_answer(url) {
+        open_answer(app, answer);
+    }
+}
+
+/// A toast that opens `link` when clicked. Text is XML-escaped.
+#[cfg(any(windows, test))]
+fn toast_xml(title: &str, body: &str, link: &str) -> String {
+    let escape = |s: &str| {
+        s.replace('&', "&amp;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;")
+            .replace('"', "&quot;")
+            .replace('\'', "&apos;")
+    };
+    format!(
+        "<toast activationType=\"protocol\" launch=\"{}\"><visual><binding template=\"ToastGeneric\"><text>{}</text><text>{}</text></binding></visual></toast>",
+        escape(link),
+        escape(title),
+        escape(body)
+    )
+}
+
+/// Shows a toast that opens the answer's link when clicked.
+#[cfg(windows)]
+fn show_toast(app: &AppHandle, title: &str, body: &str, answer: Answer) -> Result<(), String> {
+    use windows::core::HSTRING;
+    use windows::Data::Xml::Dom::XmlDocument;
+    use windows::UI::Notifications::{ToastNotification, ToastNotificationManager};
+
+    // Windows shows toasts only for an app ID with a Start menu shortcut. The
+    // installers add one for the identifier; a build run from `target` uses
+    // PowerShell's, as tauri-plugin-notification does.
+    let exe = tauri::utils::platform::current_exe().map_err(|e| e.to_string())?;
+    let in_target = exe
+        .parent()
+        .is_some_and(|dir| dir.ends_with("target/debug") || dir.ends_with("target/release"));
+    let app_id = if in_target {
+        r"{1AC14E77-02E7-4E5D-B744-2EB1AE5198B7}\WindowsPowerShell\v1.0\powershell.exe".to_string()
+    } else {
+        app.config().identifier.clone()
+    };
+    let show = || -> windows::core::Result<()> {
+        let xml = XmlDocument::new()?;
+        xml.LoadXml(&HSTRING::from(toast_xml(title, body, &answer_link(answer))))?;
+        let toast = ToastNotification::CreateToastNotification(&xml)?;
+        ToastNotificationManager::CreateToastNotifierWithId(&HSTRING::from(app_id))?.Show(&toast)
+    };
+    show().map_err(|e| e.to_string())
 }
 
 /// The answer of a clicked notification. Desktop reports a click on the
@@ -161,14 +256,21 @@ pub fn answer_finished(app: &AppHandle, answer: Answer, outcome: Outcome) {
     // Checked again: a sign-out or new chat during the checks above suppresses it.
     let shown = state.while_current(answer.epoch, || {
         crate::aonyx::while_latest(answer.id, || {
-            app.notification()
-                .builder()
-                .id((answer.id % i32::MAX as u64) as i32)
-                .title(title)
-                .body(body)
-                .extra(ANSWER_KEY, answer.id)
-                .extra(EPOCH_KEY, answer.epoch)
-                .show()
+            #[cfg(windows)]
+            {
+                show_toast(app, title, body, answer)
+            }
+            #[cfg(not(windows))]
+            {
+                app.notification()
+                    .builder()
+                    .id((answer.id % i32::MAX as u64) as i32)
+                    .title(title)
+                    .body(body)
+                    .extra(ANSWER_KEY, answer.id)
+                    .extra(EPOCH_KEY, answer.epoch)
+                    .show()
+            }
         })
     });
     if let Some(Some(Err(e))) = shown {
@@ -261,6 +363,31 @@ mod tests {
             "notification": { "id": 3, "title": "Onyx answered", "extra": extra },
         }))
         .expect("an action payload")
+    }
+
+    #[test]
+    fn a_toast_link_carries_the_answer_and_its_session() {
+        let answer = Answer { id: 7, epoch: 2 };
+        let link = url::Url::parse(&answer_link(answer)).expect("a valid link");
+        assert_eq!(linked_answer(&link), Some(answer));
+        let parse = |s: &str| linked_answer(&url::Url::parse(s).unwrap());
+        assert_eq!(parse("onyx://auth/callback?answer=7&epoch=2"), None);
+        assert_eq!(parse("onyx://launcher/answer?answer=7"), None);
+        assert_eq!(parse("onyx://launcher/answer?answer=x&epoch=2"), None);
+        assert_eq!(parse("https://launcher/answer?answer=7&epoch=2"), None);
+    }
+
+    #[test]
+    fn a_toast_opens_its_link_when_clicked() {
+        let xml = toast_xml(
+            "Onyx <answered>",
+            BODY,
+            "onyx://launcher/answer?answer=1&epoch=2",
+        );
+        assert!(xml.starts_with(
+            "<toast activationType=\"protocol\" launch=\"onyx://launcher/answer?answer=1&amp;epoch=2\">"
+        ));
+        assert!(xml.contains("<text>Onyx &lt;answered&gt;</text>"));
     }
 
     #[test]

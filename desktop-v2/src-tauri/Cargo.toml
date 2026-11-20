@@ -60,6 +60,15 @@ webkit2gtk = { version = "=2.0.2", features = ["v2_38"] }
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.56"
+# Answer toasts that open an onyx:// link (notify.rs); the version
+# tauri-winrt-notification uses.
+windows = { version = "0.62", features = ["Data_Xml_Dom", "UI_Notifications"] }
+
+# The versions tao and wry use.
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = "0.18"
+gdkx11 = "0.18"
+webkit2gtk = { version = "2.0", features = ["v2_38"] }
 
 [features]
 default = ["custom-protocol"]
