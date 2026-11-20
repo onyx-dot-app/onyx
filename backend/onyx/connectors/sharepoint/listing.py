@@ -53,6 +53,7 @@ def drive_item_stub(
     drive_name: str,
     list_id: str | None,
     parent_hierarchy_raw_node_id: str,
+    listing_run_id: str | None,
 ) -> SlimDocumentStub:
     return SlimDocumentStub(
         id=item.id,
@@ -79,6 +80,7 @@ def drive_item_stub(
             size=item.size,
             last_modified_by_display_name=item.last_modified_by_display_name,
             last_modified_by_email=item.last_modified_by_email,
+            listing_run_id=listing_run_id,
         ),
     )
 
@@ -108,7 +110,8 @@ def site_page_stub(
     *,
     site_id: str,
     site_url: str,
-    site_name: str | None = None,
+    site_name: str | None,
+    listing_run_id: str | None,
 ) -> SlimDocumentStub | None:
     """The stub of a listed site page, or None when the page has no id."""
     page_id = site_page.get("id")
@@ -137,5 +140,6 @@ def site_page_stub(
             site_id=site_id,
             site_name=site_name,
             site_page=metadata,
+            listing_run_id=listing_run_id,
         ),
     )

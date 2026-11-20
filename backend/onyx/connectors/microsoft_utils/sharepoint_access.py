@@ -57,23 +57,25 @@ class SharepointPermissionCache(BaseModel):
         self.group_expansions[key] = expansion
 
 
-# A group expansion in Redis is used for this long. A change to the nested
-# groups of a group shows in indexed access after at most this time, and the
-# group sync still corrects the members.
+# A group expansion in Redis lives this long. Each key is for one listing run,
+# so this only bounds the memory of a run that ends early.
 GROUP_EXPANSION_TTL_SECONDS = 3600
 _GROUP_EXPANSION_KEY_PREFIX = "sharepoint_group_expansion"
 
 
 class SharedSharepointPermissionCache(SharepointPermissionCache):
     """A permission cache that also keeps each expansion in Redis, so that the
-    conversion threads of every worker expand a group one time. The key holds
-    the site for a SharePoint group and the object id for an Entra group.
-    When Redis cannot be reached, the cache works in the process only."""
+    conversion threads of every worker expand a group one time in one listing
+    run. ``scope`` is the id of that run: another run, or a connector with
+    another credential, never reads these keys, so each run sees access as
+    it is when the run reads it. When Redis cannot be reached, the cache
+    works in the process only."""
 
-    @staticmethod
-    def _redis_key(key: str) -> str:
+    scope: str
+
+    def _redis_key(self, key: str) -> str:
         digest = hashlib.sha256(key.encode()).hexdigest()
-        return f"{_GROUP_EXPANSION_KEY_PREFIX}:{digest}"
+        return f"{_GROUP_EXPANSION_KEY_PREFIX}:{self.scope}:{digest}"
 
     def get_group_expansion(self, key: str) -> SharepointGroupExpansion | None:
         local = self.group_expansions.get(key)

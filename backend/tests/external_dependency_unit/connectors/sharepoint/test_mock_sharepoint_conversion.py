@@ -226,3 +226,40 @@ def test_a_target_with_no_payload_goes_through_reindex(
     assert [item.id for item in converted if isinstance(item, Document)] == [file_id]
     # `reindex` reads the item's metadata to find it. Conversion does not.
     assert mock_sharepoint.op_count("graph.item.get") >= 1
+
+
+_GROUP_EXPANSION_OPS = (
+    "rest.site_group_users",
+    "graph.group.members",
+    "graph.group.transitive_members",
+)
+
+
+def _group_expansion_reads(mock: MockSharepoint) -> int:
+    return sum(mock.op_count(op) for op in _GROUP_EXPANSION_OPS)
+
+
+@pytest.mark.usefixtures("ee_permission_sync")
+def test_a_new_listing_run_reads_the_groups_again(
+    mock_sharepoint: MockSharepoint,
+) -> None:
+    """Conversion shares the group expansions in Redis for one listing run
+    only. A later run, which can be for another credential, reads them
+    again, as a run did before the conversion stage. Other paths keep them
+    in the process."""
+    first = mock_sharepoint.build_connector(certificate=True)
+    _convert(first, list_stubs(first, include_permissions=True).stubs, True)
+    assert _group_expansion_reads(mock_sharepoint) > 0
+
+    second = mock_sharepoint.build_connector(certificate=True)
+    listing = list_stubs(second, include_permissions=True)
+    mock_sharepoint.reset_stats()
+    _convert(second, listing.stubs, include_permissions=True)
+    assert _group_expansion_reads(mock_sharepoint) > 0
+
+    mock_sharepoint.reset_stats()
+    for _ in mock_sharepoint.build_connector(
+        certificate=True
+    ).retrieve_all_slim_docs_perm_sync(0, time.time()):
+        pass
+    assert _group_expansion_reads(mock_sharepoint) > 0
