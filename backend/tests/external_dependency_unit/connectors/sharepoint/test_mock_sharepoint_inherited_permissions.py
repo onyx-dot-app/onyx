@@ -245,3 +245,30 @@ def test_a_resync_marks_no_file(own_mock_sharepoint: MockSharepoint) -> None:
 
     payloads = _file_payloads(listing.stubs)
     assert not any(p.inherits_permissions for p in payloads.values())
+
+
+@pytest.mark.parametrize("parent_path", [None, "/drives/unknown"])
+def test_a_file_with_no_known_parent_gets_its_own_read(
+    own_mock_sharepoint: MockSharepoint, parent_path: str | None
+) -> None:
+    """A file that inherits, but whose parent the listing cannot name, never
+    takes the library's access: it gets a permission read of its own."""
+    mock = own_mock_sharepoint
+    mock.set_corpus(_CORPUS)
+    connector = mock.build_connector(certificate=True)
+    listing = list_stubs(connector, include_permissions=True)
+    changed: list[str] = []
+    for file_id, payload in _file_payloads(listing.stubs).items():
+        if payload.inherits_permissions:
+            payload.parent_path = parent_path
+            changed.append(file_id)
+    assert changed
+    mock.reset_stats()
+
+    converted = _convert(connector, listing.stubs)
+
+    expected = _expected_access(mock)
+    assert {doc_id: converted[doc_id] for doc_id in changed} == {
+        doc_id: expected[doc_id] for doc_id in changed
+    }
+    assert mock.op_count("rest.role_assignments") >= len(changed)
