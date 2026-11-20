@@ -17,6 +17,7 @@ from onyx.configs.app_configs import (
     OPEN_URLS_MAX_URLS_PER_REQUEST,
 )
 from onyx.configs.constants import DocumentSource
+from onyx.context.search.models import Tag
 from onyx.mcp_server.api import mcp_server
 from onyx.mcp_server.utils import (
     AgentEntry,
@@ -84,6 +85,8 @@ def _to_mcp_dict(result: SearchResult) -> dict[str, Any]:
         "source_type": result.source_type,
         "content": result.content,
         "updated_at": result.updated_at,
+        # Omitted when empty to keep results small.
+        **({"metadata": result.metadata} if result.metadata else {}),
     }
 
 
@@ -108,15 +111,7 @@ def _error_payload(error: str) -> dict[str, Any]:
 
 
 def _as_tool_result(payload: dict[str, Any]) -> ToolResult:
-    """Emit the payload once, as content text only.
-
-    Returning a bare dict lets FastMCP derive an output schema from the
-    annotation and send the payload twice - once as ``structuredContent`` and
-    again as serialised JSON in a text block. For search the payload is the
-    retrieved document content, so that duplicate is expensive. The schema is
-    derived from ``dict[str, Any]`` and conveys no structure, so clients gain
-    nothing from the structured copy. The text is byte-identical either way.
-    """
+    """Send the payload once, as text, instead of text plus structuredContent."""
     return ToolResult(content=pydantic_core.to_json(payload, fallback=str).decode())
 
 
@@ -294,6 +289,7 @@ async def search_indexed_documents(
     query: str,
     source_types: list[str] | None = None,
     document_set_names: list[str] | None = None,
+    tags: list[Tag] | None = None,
     time_cutoff: str | None = None,
     skip_query_expansion: bool = False,
     agent: str | None = None,
@@ -314,6 +310,9 @@ async def search_indexed_documents(
     the user gave you; no lookup call is needed first. A value that does not
     resolve returns an error naming close matches or what is available, so you
     can retry with a valid one rather than searching unscoped.
+    `tags` restricts results to documents with any of the given metadata
+    key/value pairs, for example `{"tag_key": "assignee", "tag_value": "Jane Doe"}`.
+    Take keys and values from the `metadata` of earlier results.
     `time_cutoff` accepts an ISO 8601 timestamp; only documents updated on or
     after that moment are returned. Naive (timezone-less) timestamps are
     treated as UTC server-side.
@@ -332,8 +331,9 @@ async def search_indexed_documents(
     context on each side. Use it when you rank results yourself: it is faster and has no LLM
     cost. The server can force it on.
 
-    Returns ``{"results": [{title, url, source_type, content, updated_at},
-    ...]}``. Results are ordered by LLM-judged relevance. ``content`` is the
+    Returns ``{"results": [{title, url, source_type, content, updated_at,
+    metadata}, ...]}``. ``metadata`` holds source fields such as a Jira
+    reporter or assignee, and is omitted when the document has none. Results are ordered by LLM-judged relevance. ``content`` is the
     full chunk of the document the LLM selected; in the rare case the LLM
     selection step yields no full chunk for a doc, it falls back to the
     short search blurb. With `retrieval_only`, results keep retrieval order
@@ -376,6 +376,7 @@ async def search_indexed_documents(
     # through as a filter would read as a scoped search that is not scoped.
     source_types = source_types or None
     document_set_names = document_set_names or None
+    tags = tags or None
     agent = (agent or "").strip() or None
 
     # Get authenticated user from FastMCP's access token
@@ -421,6 +422,7 @@ async def search_indexed_documents(
                 query=query,
                 sources=filters.source_types,
                 document_sets=document_set_names,
+                tags=tags,
                 time_cutoff=parsed_cutoff,
                 persona_id=filters.persona_id,
             )
@@ -430,6 +432,7 @@ async def search_indexed_documents(
                 query=query,
                 sources=filters.source_types,
                 document_sets=document_set_names,
+                tags=tags,
                 time_cutoff=parsed_cutoff,
                 skip_query_expansion=skip_query_expansion,
                 persona_id=filters.persona_id,

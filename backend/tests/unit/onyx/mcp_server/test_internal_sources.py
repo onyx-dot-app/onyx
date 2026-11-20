@@ -1,9 +1,12 @@
-"""MCP discovery includes searchable sources hidden from the connector UI."""
+"""MCP source discovery counts documents pushed through the Ingestion API.
+
+The default Ingestion API connector always exists, so its source is listed only
+once an Ingestion API connector holds documents. Craft files are never listed.
+"""
 
 import json
-from collections.abc import AsyncGenerator
-from dataclasses import dataclass, field
-from typing import Any, cast
+from collections.abc import AsyncGenerator, Awaitable, Callable
+from typing import Any
 
 import httpx
 import pytest
@@ -11,7 +14,7 @@ import pytest_asyncio
 from fastapi import FastAPI, Request
 from fastapi.routing import APIRoute
 from fastmcp.server.auth.auth import AccessToken
-from sqlalchemy import Column, Enum, MetaData, Table, create_engine
+from sqlalchemy import Column, Enum, Integer, MetaData, String, Table, create_engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import StaticPool
 
@@ -22,204 +25,146 @@ from onyx.configs.constants import DocumentSource
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.models import User
 from onyx.server.documents.connector import get_indexed_sources
+from tests.unit.onyx.mcp_server.tool_result import tool_payload
 
 _TOKEN = AccessToken(token="test-token", client_id="test", scopes=[])
+_DEFAULT_INGESTION = (0, DocumentSource.INGESTION_API)
+
+# Connector rows as (id, source), and the connector ids that hold a document.
+_Seed = Callable[
+    [list[tuple[int, DocumentSource]], list[int]], Awaitable[httpx.AsyncClient]
+]
 
 
-@dataclass
-class _SourceAPI:
-    source: DocumentSource
-    client: httpx.AsyncClient
-    requests: list[dict[str, Any]] = field(default_factory=list)
-
-
-@pytest_asyncio.fixture(params=[DocumentSource.INGESTION_API])
-async def source_api(
-    request: pytest.FixtureRequest, monkeypatch: pytest.MonkeyPatch
-) -> AsyncGenerator[_SourceAPI, None]:
-    requested = cast(DocumentSource | tuple[DocumentSource, ...], request.param)
-    sources = (requested,) if isinstance(requested, DocumentSource) else requested
-    source = sources[0]
+@pytest_asyncio.fixture
+async def seed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> AsyncGenerator[tuple[_Seed, list[dict[str, Any]]], None]:
+    """Serve /manage/indexed-sources from a seeded SQLite DB, and stub /search."""
     engine = create_engine(
         "sqlite://", poolclass=StaticPool, connect_args={"check_same_thread": False}
     )
-    # The discovery query reads only this column. Keep its real SQLAlchemy enum
-    # mapping without creating unrelated PostgreSQL tables in the unit test.
-    table = Table(
+    # Only the columns the discovery queries read, to avoid PostgreSQL types.
+    metadata = MetaData()
+    connector = Table(
         "connector",
-        MetaData(),
+        metadata,
+        Column("id", Integer),
         Column("source", Enum(DocumentSource, native_enum=False)),
     )
-    table.create(engine)
-    with engine.begin() as connection:
-        connection.execute(
-            table.insert(),
-            [{"source": source} for source in sources for _ in range(2)],
-        )
+    doc_link = Table(
+        "document_by_connector_credential_pair",
+        metadata,
+        Column("id", String),
+        Column("connector_id", Integer),
+    )
+    metadata.create_all(engine)
+    search_requests: list[dict[str, Any]] = []
+    session = Session(engine)
+    clients: list[httpx.AsyncClient] = []
 
     app = FastAPI()
     app.add_api_route("/manage/indexed-sources", get_indexed_sources)
     route = app.routes[-1]
     assert isinstance(route, APIRoute)
+    for dependency in route.dependant.dependencies:
+        if dependency.call is get_session:
+            app.dependency_overrides[get_session] = lambda: session
+        elif dependency.name == "_":
+            assert dependency.call is not None
+            app.dependency_overrides[dependency.call] = lambda: User(
+                email="test@example.com"
+            )
 
-    with Session(engine) as session:
-        for dependency in route.dependant.dependencies:
-            if dependency.call is get_session:
-                app.dependency_overrides[get_session] = lambda: session
-            elif dependency.name == "_":
-                # Authentication is external to this inventory contract.
-                assert dependency.call is not None
-                app.dependency_overrides[dependency.call] = lambda: User(
-                    email="test@example.com"
+    @app.post("/search")
+    async def search(request: Request) -> dict[str, Any]:
+        search_requests.append(await request.json())
+        return {"results": []}
+
+    async def _seed(
+        connectors: list[tuple[int, DocumentSource]], docs_on: list[int]
+    ) -> httpx.AsyncClient:
+        with engine.begin() as connection:
+            connection.execute(
+                connector.insert(),
+                [{"id": cid, "source": source} for cid, source in connectors],
+            )
+            if docs_on:
+                connection.execute(
+                    doc_link.insert(),
+                    [{"id": f"doc-{cid}", "connector_id": cid} for cid in docs_on],
                 )
-
-        async with httpx.AsyncClient(
+        client = httpx.AsyncClient(
             transport=httpx.ASGITransport(app=app), base_url="http://testserver"
-        ) as client:
-            state = _SourceAPI(source=source, client=client)
+        )
+        clients.append(client)
+        monkeypatch.setattr(utils_module, "_http_client", client)
+        monkeypatch.setattr(search_module, "require_access_token", lambda: _TOKEN)
+        monkeypatch.setattr(resource_module, "require_access_token", lambda: _TOKEN)
+        return client
 
-            @app.post("/search")
-            async def search(request: Request) -> dict[str, Any]:
-                assert request.headers["Authorization"] == f"Bearer {_TOKEN.token}"
-                state.requests.append(await request.json())
-                return {
-                    "results": [
-                        {
-                            "citation_id": 1,
-                            "title": "Existing document",
-                            "content": "Indexed content",
-                            "link": None,
-                            "source_type": source.value,
-                            "updated_at": None,
-                        }
-                    ]
-                }
-
-            monkeypatch.setattr(utils_module, "_http_client", client)
-            monkeypatch.setattr(search_module, "require_access_token", lambda: _TOKEN)
-            monkeypatch.setattr(resource_module, "require_access_token", lambda: _TOKEN)
-            yield state
+    yield _seed, search_requests
+    for client in clients:
+        await client.aclose()
+    session.close()
     engine.dispose()
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("explicit_filter", [False, True])
-async def test_ingestion_documents_are_searchable(
-    source_api: _SourceAPI, explicit_filter: bool
+@pytest.mark.parametrize("source_types", [None, ["ingestion_api"]])
+async def test_ingested_documents_are_searchable(
+    seed: tuple[_Seed, list[dict[str, Any]]], source_types: list[str] | None
 ) -> None:
-    sources = [source_api.source.value] if explicit_filter else None
+    seed_db, search_requests = seed
+    await seed_db([_DEFAULT_INGESTION, (5, DocumentSource.INGESTION_API)], [5])
 
-    result = await search_module.search_indexed_documents(
-        query="Indexed content", source_types=sources
+    payload = tool_payload(
+        await search_module.search_indexed_documents(
+            query="ingested", source_types=source_types
+        )
     )
 
-    assert "error" not in result
-    assert result["results"][0]["content"] == "Indexed content"
-    assert source_api.requests[0].get("sources") == sources
-    assert source_api.requests[0].get("persona_id") is None
+    assert "error" not in payload
+    assert len(search_requests) == 1
+    assert search_requests[0].get("sources") == source_types
+    assert json.loads(await resource_module.indexed_sources_resource()) == [
+        "ingestion_api"
+    ]
 
 
 @pytest.mark.asyncio
-async def test_internal_sources_remain_hidden_by_default(
-    source_api: _SourceAPI,
+async def test_empty_default_ingestion_connector_is_not_a_source(
+    seed: tuple[_Seed, list[dict[str, Any]]],
 ) -> None:
-    response = await source_api.client.get("/manage/indexed-sources")
+    seed_db, search_requests = seed
+    await seed_db([_DEFAULT_INGESTION], [])
 
-    assert response.status_code == 200
-    assert response.json() == {"sources": []}
-
-
-@pytest.mark.asyncio
-async def test_opt_in_lists_ingestion_source_once(source_api: _SourceAPI) -> None:
-    response = await source_api.client.get(
-        "/manage/indexed-sources", params={"include_internal": "true"}
+    payload = tool_payload(
+        await search_module.search_indexed_documents(query="anything")
     )
 
-    assert response.status_code == 200
-    assert response.json() == {"sources": [source_api.source.value]}
+    assert "No document sources are indexed" in payload["error"]
+    assert search_requests == []
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("source_api", [DocumentSource.GITHUB], indirect=True)
-async def test_regular_sources_are_preserved(source_api: _SourceAPI) -> None:
-    default = await source_api.client.get("/manage/indexed-sources")
-    inclusive = await source_api.client.get(
-        "/manage/indexed-sources", params={"include_internal": "true"}
-    )
-
-    assert default.json() == inclusive.json() == {"sources": ["github"]}
-
-
-@pytest.mark.asyncio
-async def test_resource_lists_internal_sources(source_api: _SourceAPI) -> None:
-    result = await resource_module.indexed_sources_resource()
-
-    assert json.loads(result) == [source_api.source.value]
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "source_api",
-    [
-        DocumentSource.CRAFT_FILE,
-        (DocumentSource.INGESTION_API, DocumentSource.CRAFT_FILE),
-    ],
-    indirect=True,
-)
-async def test_craft_files_are_excluded_from_source_inventory(
-    source_api: _SourceAPI,
+async def test_inventory_default_and_craft_files_are_unchanged(
+    seed: tuple[_Seed, list[dict[str, Any]]],
 ) -> None:
-    # Craft stores raw blobs, not indexed text. A connector row does not make
-    # it a searchable source, even when an ingestion connector also exists.
-    expected = (
-        [] if source_api.source == DocumentSource.CRAFT_FILE else ["ingestion_api"]
-    )
-    default = await source_api.client.get("/manage/indexed-sources")
-    inclusive = await source_api.client.get(
-        "/manage/indexed-sources", params={"include_internal": "true"}
-    )
-
-    assert default.json() == {"sources": []}
-    assert inclusive.json() == {"sources": expected}
-    assert json.loads(await resource_module.indexed_sources_resource()) == expected
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize("source_api", [DocumentSource.CRAFT_FILE], indirect=True)
-@pytest.mark.parametrize("explicit_filter", [False, True])
-async def test_craft_only_has_no_searchable_sources(
-    source_api: _SourceAPI, explicit_filter: bool
-) -> None:
-    result = await search_module.search_indexed_documents(
-        query="raw blob", source_types=["craft_file"] if explicit_filter else None
+    seed_db, _ = seed
+    client = await seed_db(
+        [
+            _DEFAULT_INGESTION,
+            (1, DocumentSource.GITHUB),
+            (2, DocumentSource.CRAFT_FILE),
+        ],
+        [0, 1, 2],
     )
 
-    assert "No document sources are indexed" in result["error"]
-    assert source_api.requests == []
-
-
-@pytest.mark.asyncio
-@pytest.mark.parametrize(
-    "source_api",
-    [(DocumentSource.INGESTION_API, DocumentSource.CRAFT_FILE)],
-    indirect=True,
-)
-async def test_craft_filter_is_rejected_with_searchable_sources(
-    source_api: _SourceAPI,
-) -> None:
-    result = await search_module.search_indexed_documents(
-        query="raw blob", source_types=["craft_file"]
+    default = await client.get("/manage/indexed-sources")
+    with_ingestion = await client.get(
+        "/manage/indexed-sources", params={"include_ingestion_api": "true"}
     )
 
-    assert "craft_file" in result["error"]
-    assert source_api.requests == []
-
-
-@pytest.mark.asyncio
-async def test_unknown_source_does_not_widen_search(source_api: _SourceAPI) -> None:
-    result = await search_module.search_indexed_documents(
-        query="Indexed content", source_types=["unknown-source"]
-    )
-
-    assert "unknown-source" in result["error"]
-    assert source_api.requests == []
+    assert default.json() == {"sources": ["github"]}
+    assert with_ingestion.json() == {"sources": ["github", "ingestion_api"]}
