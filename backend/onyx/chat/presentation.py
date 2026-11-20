@@ -5,6 +5,7 @@ from types import MappingProxyType
 
 from pydantic import BaseModel
 
+from onyx.agents.acp import AcpRunTools
 from onyx.agents.events import (
     AgentEndEvent,
     AgentEvent,
@@ -416,6 +417,7 @@ class ResponsePresenter:
     ) -> None:
         self.tool_ids = tool_ids or {}
         self.emitter = emitter
+        self.acp_runs: dict[str, AcpRunTools] = {}
         self.layout = ResponseLayout()
         self.renderers: dict[str, MessageRenderer] = {}
         self.tools: dict[tuple[str, str, str], ToolRenderer] = {}
@@ -439,6 +441,7 @@ class ResponsePresenter:
             agent_approvals=replay.agent_approvals,
             questions=replay.questions,
             open_calls=self.tools,
+            acp_runs=self.acp_runs,
         ):
             self.emitter.emit(packet)
         self.emitter.emit(Packet(placement=Placement(turn_index=0), obj=ReplayEnd()))
@@ -465,6 +468,7 @@ class ResponsePresenter:
                 message_documents(event.metadata),
                 self.layout,
                 parent.placement if parent else None,
+                AcpRunTools.for_message(self.acp_runs, event.run_id, event.message_id),
             )
         elif isinstance(event, MessageUpdateEvent):
             output = self.renderers[event.run_id].consume(event.generation_event)
@@ -482,6 +486,7 @@ class ResponsePresenter:
                     call,
                     tool_placement,
                     self.tool_ids.get(call.name),
+                    acp_tools=renderer.acp_tools,
                 )
         elif isinstance(event, (ToolStartEvent, ToolUpdateEvent, ToolEndEvent)):
             tool = self.tools.get((event.run_id, event.message_id, event.tool_call.id))
@@ -507,6 +512,9 @@ class ResponsePresenter:
                     else self.layout.next_section(parent.placement if parent else None),
                     self.tool_ids.get(event.tool_call.name),
                     event.display_name if amended else None,
+                    AcpRunTools.for_message(
+                        self.acp_runs, event.run_id, event.message_id
+                    ),
                 )
             output = tool.amend(event.result) if amended else tool.consume(event)
         elif isinstance(event, AgentEndEvent):
@@ -553,6 +561,7 @@ def replay_response(
     ] = _NO_AGENT_APPROVALS,
     questions: Mapping[tuple[str, str], SavedToolQuestion] = _NO_QUESTIONS,
     open_calls: dict[tuple[str, str, str], ToolRenderer] | None = None,
+    acp_runs: dict[str, AcpRunTools] | None = None,
 ) -> list[Packet]:
     """Render saved accepted steps using detached tool records and source documents.
 
@@ -577,7 +586,8 @@ def replay_response(
         message = step.message
         message_id = _message_identity(message)
         setting = settings.get(message_id) or MessageRendering()
-        renderer = MessageRenderer(setting, documents, layout, parent)
+        acp_tools = AcpRunTools.for_message(acp_runs, response.run_id, message_id)
+        renderer = MessageRenderer(setting, documents, layout, parent, acp_tools)
         packets.extend(renderer.complete(message))
         calls = [call for call in message.tool_calls if call.name not in HIDDEN_TOOLS]
         if not calls:
@@ -613,6 +623,7 @@ def replay_response(
                 tool_placement,
                 record.tool_id if record is not None else None,
                 execution.display_name if execution is not None else None,
+                acp_tools,
             )
             packets.extend(renderer_of_call.start())
             waits = result is None and response.status == RunStatus.SUSPENDED
@@ -626,9 +637,8 @@ def replay_response(
             for approval, agent_name in shown:
                 approval_id = str(approval.id)
                 packets.append(
-                    Packet(
-                        placement=tool_placement,
-                        obj=ToolApprovalRequest(
+                    renderer_of_call.input_packet(
+                        ToolApprovalRequest(
                             approval_id=approval_id,
                             tool_call_id=call.id,
                             tool_name=approval.tool_name,
@@ -641,9 +651,8 @@ def replay_response(
                 if approval.decision is None:
                     continue
                 packets.append(
-                    Packet(
-                        placement=tool_placement,
-                        obj=ToolApprovalResolved(
+                    renderer_of_call.input_packet(
+                        ToolApprovalResolved(
                             approval_id=approval_id,
                             outcome=approval_outcome(ended_answer(approval)),
                         ),
@@ -652,9 +661,8 @@ def replay_response(
             question = questions.get((response.run_id, call.id))
             if question is not None:
                 packets.append(
-                    Packet(
-                        placement=tool_placement,
-                        obj=ToolQuestionRequest(
+                    renderer_of_call.input_packet(
+                        ToolQuestionRequest(
                             question_request_id=str(question.id),
                             tool_call_id=call.id,
                             questions=question.questions,
@@ -663,9 +671,8 @@ def replay_response(
                 )
                 if question.outcome is not None:
                     packets.append(
-                        Packet(
-                            placement=tool_placement,
-                            obj=question_resolved(
+                        renderer_of_call.input_packet(
+                            question_resolved(
                                 str(question.id),
                                 question_answer(question.id, question),
                             ),
@@ -690,6 +697,9 @@ def replay_response(
                         tool_placement,
                         approvals=approvals,
                         open_calls=open_calls,
+                        acp_runs=acp_runs,
+                        agent_approvals=agent_approvals,
+                        questions=questions,
                     )
                 )
             if open_calls is not None:

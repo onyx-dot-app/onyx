@@ -2,6 +2,7 @@
 cursor that cannot be served is a 404 before any stream starts."""
 
 import json
+import zlib
 from unittest.mock import patch
 from uuid import UUID, uuid4
 
@@ -21,6 +22,8 @@ from onyx.chat.stream_buffer import (
 from onyx.db.models import User
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.query_and_chat import chat_backend
+from onyx.server.query_and_chat.placement import Placement
+from onyx.server.query_and_chat.streaming_models import AgentResponseDelta, Packet
 from tests.unit.fakes import FakeCache
 
 
@@ -31,11 +34,21 @@ def test_resume_freezes_backlog_boundary_and_returns_cursors(
     cache = FakeCache()
     session_id = uuid4()
     writer = StreamBufferWriter(cache, session_id, 42)
+
+    def append(text: str) -> None:
+        writer.append_line(
+            writer.replay_line(
+                Packet(
+                    placement=Placement(turn_index=0),
+                    obj=AgentResponseDelta(content=text),
+                )
+            )
+        )
+
+    writer.open()
     for index in range(initial_chunks):
-        writer.append_line(json.dumps({"content": str(index)}) + "\n")
+        append(str(index))
         writer.flush()
-    if not initial_chunks:
-        cache.set(_meta_key(session_id, 42), StreamBufferMeta().model_dump_json())
     original_read = chat_backend.read_stream_chunks
 
     def read_with_concurrent_write(
@@ -50,7 +63,7 @@ def test_resume_freezes_backlog_boundary_and_returns_cursors(
             cache, chat_session_id, stream_id, cursor, max_chunks=max_chunks
         )
         if read is not None and read.chunk_count == initial_chunks:
-            writer.append_line('{"content":"live"}\n')
+            append("live")
             writer.mark_done()
         return read
 
@@ -80,7 +93,7 @@ def test_resume_freezes_backlog_boundary_and_returns_cursors(
         response = client.get("/resume")
     assert response.status_code == 200
     records = [json.loads(line) for line in response.text.splitlines()]
-    contents = [record["content"] for record in records if "content" in record]
+    contents = [record["obj"]["content"] for record in records if "obj" in record]
     assert contents == [str(index) for index in range(cursor, initial_chunks)] + [
         "live"
     ]
@@ -101,7 +114,11 @@ def test_resume_freezes_backlog_boundary_and_returns_cursors(
     }
     restored = next(record for record in checkpoints if record["replay_complete"])
     assert restored["next_cursor"] == initial_chunks
-    live_index = records.index({"content": "live"})
+    live_index = next(
+        i
+        for i, record in enumerate(records)
+        if record.get("obj", {}).get("content") == "live"
+    )
     assert records.index(restored) < live_index
 
 
@@ -157,3 +174,65 @@ def test_resume_is_not_found_when_the_cursor_cannot_be_served(gap: str) -> None:
             expected_stream_id=42,
             user=User(id=uuid4()),
         )
+
+
+@pytest.mark.parametrize("cached_acp", [True, False])
+@pytest.mark.parametrize("requested_acp", [True, False])
+def test_resume_formats_existing_buffer_at_original_cursor(
+    cached_acp: bool, requested_acp: bool
+) -> None:
+    cache = FakeCache()
+    session_id = uuid4()
+    source = Packet(
+        placement=Placement(turn_index=2), obj=AgentResponseDelta(content="文")
+    )
+    if cached_acp:
+        writer = StreamBufferWriter(cache, session_id, 42)
+        writer.append_line(writer.replay_line(source))
+        writer.mark_done()
+    else:
+        # The previous server stored raw NDJSON and no format marker.
+        cache.set(_meta_key(session_id, 42), '{"chunk_count":1,"done":true}')
+        raw = (source.model_dump_json() + "\n").encode()
+        cache.set(_chunk_key(session_id, 42, 0, acp=False), zlib.compress(raw))
+    # A previous server reads this exact v1 key. A miss makes it fall back
+    # to saved history during a rolling deployment.
+    legacy_chunk = cache.get(f"chatstream_{session_id}_42:0")
+    assert (legacy_chunk is None) == cached_acp
+
+    app = FastAPI()
+
+    @app.get("/resume")
+    def resume() -> StreamingResponse:
+        return chat_backend.resume_chat_stream(
+            session_id,
+            cursor=0,
+            expected_stream_id=42,
+            user=User(id=uuid4()),
+            protocol_version=2 if requested_acp else 1,
+        )
+
+    with (
+        patch.object(chat_backend, "get_session_with_current_tenant"),
+        patch.object(chat_backend, "get_chat_session_by_id"),
+        patch.object(chat_backend, "get_cache_backend", return_value=cache),
+        patch.object(
+            chat_backend,
+            "get_processing_stream",
+            return_value=ProcessingStream(42, [], False),
+        ),
+        TestClient(app) as client,
+    ):
+        response = client.get("/resume")
+    assert response.status_code == 200
+    begin, data, end = [json.loads(line) for line in response.text.splitlines()]
+    if requested_acp:
+        assert begin["method"] == end["method"] == "_onyx/stream_cursor"
+        begin, end = begin["params"]["packet"], end["params"]["packet"]
+        assert data["jsonrpc"] == "2.0"
+        assert data["params"]["sessionId"] == str(session_id)
+        assert data["params"]["update"]["content"]["text"] == "文"
+    else:
+        assert data == source.model_dump()
+    assert begin["next_cursor"] == 0 and end["next_cursor"] == 1
+    assert end["replay_complete"]

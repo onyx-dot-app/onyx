@@ -1044,18 +1044,20 @@ class Run:
                     )
                 )
 
-    def resolve_tool_wait(self, call: ToolCall) -> None:
+    def resolve_tool_wait(self, call: ToolCall, *, resumes_tool: bool = False) -> None:
         """Stop the call's wait; an input request ends with its recorded answer."""
         with self.execution_lock:
             progress = self._progress
             pending = progress.pending_tool_calls.pop(call.id)
             self._state.revision += 1
-            for wait in self._input_waits(call, pending):
+            waits = self._input_waits(call, pending)
+            for index, wait in enumerate(waits):
                 self.publish_event(
                     InputEndedEvent(
                         **self.event_context,
                         **dict(wait),
                         answer=progress.human_tool_answers.get(wait.request.request_id),
+                        resumes_tool=resumes_tool and index == len(waits) - 1,
                     )
                 )
 

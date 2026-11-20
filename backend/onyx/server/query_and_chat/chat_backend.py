@@ -190,7 +190,7 @@ from onyx.server.features.build.sandbox.firecracker.purge import (
     purge_deleted_chat_sessions,
 )
 from onyx.server.middleware.rate_limiting import get_feedback_rate_limiters
-from onyx.server.query_and_chat.acp_stream import ChatAcpTranslator
+from onyx.server.query_and_chat.acp_stream import acp_line, resume_block
 from onyx.server.query_and_chat.chat_utils import (
     is_spreadsheet_mime_type,
     parse_spreadsheet_for_preview,
@@ -225,6 +225,7 @@ from onyx.server.query_and_chat.models import (
     UpdateChatSessionThreadRequest,
 )
 from onyx.server.query_and_chat.session_loading import (
+    AcpChatSessionDetailResponse,
     load_session_tools,
     translate_assistant_message_to_packets,
 )
@@ -486,7 +487,8 @@ def get_chat_session(
         require_permission(Permission.READ_CHAT, allow_anonymous=True)
     ),
     db_session: Session = Depends(get_session),
-) -> ChatSessionDetailResponse:
+    protocol_version: Annotated[int, Query(ge=1, le=2)] = 1,
+) -> AcpChatSessionDetailResponse | ChatSessionDetailResponse:
     user_id = user.id
     try:
         chat_session = get_chat_session_by_id(
@@ -606,6 +608,7 @@ def get_chat_session(
             tools_by_id=tools_by_id,
             chat_approvals=chat_approvals,
             child_responses=child_responses,
+            acp=protocol_version == 2,
             db_session=db_session,
         )
         for msg in responses
@@ -629,7 +632,12 @@ def get_chat_session(
             for packets in replay_packet_lists
         ]
 
-    return ChatSessionDetailResponse(
+    response_type = (
+        AcpChatSessionDetailResponse
+        if protocol_version == 2
+        else ChatSessionDetailResponse
+    )
+    return response_type(
         chat_session_id=session_id,
         description=chat_session.description,
         persona_id=chat_session.persona_id,
@@ -643,7 +651,6 @@ def get_chat_session(
         current_reasoning_effort_override=chat_session.reasoning_effort_override,
         deleted=chat_session.deleted,
         owner_name=chat_session.user.personal_name if chat_session.user else None,
-        # Packets are now directly serialized as Packet Pydantic models
         packets=replay_packet_lists,
         current_stream=current_stream,
         approvals_version=version,
@@ -1106,34 +1113,6 @@ def handle_send_chat_message(
         chat_message_req.llm_overrides is not None
         and len(chat_message_req.llm_overrides) > 1
     )
-    if is_multi_model and chat_message_req.stream:
-        # Narrowed here; is_multi_model already checked llm_overrides is not None
-        llm_overrides = chat_message_req.llm_overrides or []
-
-        def multi_model_stream_generator() -> Generator[str, None, None]:
-            try:
-                for obj in handle_multi_model_stream(
-                    new_msg_req=chat_message_req,
-                    user=user,
-                    llm_overrides=llm_overrides,
-                    litellm_additional_headers=get_relevant_headers(
-                        request.headers, LITELLM_PASS_THROUGH_HEADERS
-                    ),
-                    custom_tool_additional_headers=get_relevant_headers(
-                        request.headers, CUSTOM_TOOL_PASS_THROUGH_HEADERS
-                    ),
-                    mcp_headers=chat_message_req.mcp_headers,
-                    approval_mode=approval_mode,
-                ):
-                    yield get_json_line(obj.model_dump())
-            except Exception as e:
-                logger.exception("Error in multi-model streaming")
-                yield get_json_line(unhandled_stream_error(e).model_dump())
-
-        return StreamingResponse(
-            multi_model_stream_generator(), media_type="text/event-stream"
-        )
-
     if is_multi_model and not chat_message_req.stream:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
@@ -1184,37 +1163,50 @@ def handle_send_chat_message(
     # Streaming path, normal Onyx UI behavior
     def stream_generator() -> Generator[str, None, None]:
         response_future = Future[ChatResponseOutcome]()
-        # v2 re-shapes each object as an ACP update (acp_stream.py).
-        acp = ChatAcpTranslator() if chat_message_req.protocol_version == 2 else None
+        session_id = chat_message_req.chat_session_id
+        native = chat_message_req.protocol_version == 2
         try:
-            for obj in handle_stream_message_objects(
-                new_msg_req=chat_message_req,
-                user=user,
-                litellm_additional_headers=get_relevant_headers(
-                    request.headers, LITELLM_PASS_THROUGH_HEADERS
-                ),
-                custom_tool_additional_headers=get_relevant_headers(
-                    request.headers, CUSTOM_TOOL_PASS_THROUGH_HEADERS
-                ),
-                mcp_headers=chat_message_req.mcp_headers,
-                additional_context=chat_message_req.additional_context,
-                response_future=response_future,
-                approval_mode=approval_mode,
-            ):
-                if acp is None:
-                    yield get_json_line(obj.model_dump())
+            llm_headers = get_relevant_headers(
+                request.headers, LITELLM_PASS_THROUGH_HEADERS
+            )
+            tool_headers = get_relevant_headers(
+                request.headers, CUSTOM_TOOL_PASS_THROUGH_HEADERS
+            )
+            if is_multi_model:
+                parts = handle_multi_model_stream(
+                    new_msg_req=chat_message_req,
+                    user=user,
+                    llm_overrides=chat_message_req.llm_overrides or [],
+                    litellm_additional_headers=llm_headers,
+                    custom_tool_additional_headers=tool_headers,
+                    mcp_headers=chat_message_req.mcp_headers,
+                    approval_mode=approval_mode,
+                )
+            else:
+                parts = handle_stream_message_objects(
+                    new_msg_req=chat_message_req,
+                    user=user,
+                    litellm_additional_headers=llm_headers,
+                    custom_tool_additional_headers=tool_headers,
+                    mcp_headers=chat_message_req.mcp_headers,
+                    additional_context=chat_message_req.additional_context,
+                    response_future=response_future,
+                    approval_mode=approval_mode,
+                )
+            for obj in parts:
+                if native:
+                    if isinstance(obj, CreateChatSessionID):
+                        session_id = obj.chat_session_id
+                    yield acp_line(str(session_id) if session_id else None, obj)
                 else:
-                    for update in acp.translate(obj.model_dump()):
-                        yield get_json_line(update)
-
+                    yield get_json_line(obj.model_dump())
         except Exception as e:
             logger.exception("Error in chat message streaming")
-            error = unhandled_stream_error(e).model_dump()
-            if acp is None:
-                yield get_json_line(error)
+            error = unhandled_stream_error(e)
+            if native:
+                yield acp_line(str(session_id) if session_id else None, error)
             else:
-                for update in acp.translate(error):
-                    yield get_json_line(update)
+                yield get_json_line(error.model_dump())
 
         finally:
             logger.debug("Stream generator finished")
@@ -1601,6 +1593,7 @@ def resume_chat_stream(
     user: User = Depends(
         require_permission(Permission.READ_CHAT, allow_anonymous=True)
     ),
+    protocol_version: Annotated[int, Query(ge=1, le=2)] = 1,
 ) -> StreamingResponse:
     """Replay buffered output from ``cursor`` and tail it while its worker is live.
     Serves any pod: the buffer lives in the shared cache. 404 when nothing can
@@ -1609,6 +1602,7 @@ def resume_chat_stream(
     the session. A 200 stream starts with a cursor packet; a stream that ends
     without a stop packet lost its tail, and a resume from its last cursor gets
     output or 404."""
+    acp = protocol_version == 2
     # Short-lived session: a Depends(get_session) would stay checked out (idle
     # in transaction) for the lifetime of the SSE response.
     with get_session_with_current_tenant() as db_session:
@@ -1648,27 +1642,38 @@ def resume_chat_stream(
     # Freeze the restore boundary so new writes cannot prolong replay.
     replay_through = first_read.chunk_count
 
+    def control_line(item: StreamCursor | Packet) -> str:
+        if acp:
+            return acp_line(str(session_id), item)
+        return get_json_line(item.model_dump())
+
     def stream_buffered_run(read: StreamChunkRead) -> Generator[str, None, None]:
         chunk_cursor = cursor
         writer_stopped = False
         last_emit = time.monotonic()
-        yield get_json_line(
+        yield control_line(
             StreamCursor(
                 stream_id=stream_id,
                 next_cursor=chunk_cursor,
                 replay_complete=chunk_cursor >= replay_through,
-            ).model_dump()
+            )
         )
         while True:
             if read.blocks:
-                yield "".join(read.blocks)
+                for block in read.blocks:
+                    yield resume_block(
+                        block,
+                        cached_acp=read.acp,
+                        requested_acp=acp,
+                        session_id=str(session_id),
+                    )
                 chunk_cursor = read.next_cursor
-                yield get_json_line(
+                yield control_line(
                     StreamCursor(
                         stream_id=stream_id,
                         next_cursor=chunk_cursor,
                         replay_complete=chunk_cursor >= replay_through,
-                    ).model_dump()
+                    )
                 )
                 # Drain the backlog before sleeping; done is only trusted once
                 # a read comes back empty (a capped read can precede the tail).
@@ -1682,7 +1687,7 @@ def resume_chat_stream(
             else:
                 now = time.monotonic()
                 if now - last_emit >= CHAT_HEARTBEAT_INTERVAL_S:
-                    yield get_json_line(heartbeat_packet().model_dump())
+                    yield control_line(heartbeat_packet())
                     last_emit = now
                 time.sleep(CHAT_RESUME_POLL_INTERVAL_S)
             next_read = read_stream_chunks(

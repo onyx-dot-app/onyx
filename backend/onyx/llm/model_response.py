@@ -849,7 +849,9 @@ def recover_tool_calls(
     if not calls:
         return message
     tools = {tool.name: tool for tool in request.tools}
+    taken = _taken_call_ids(request)
     for call in calls:
+        call.id = _unique_call_id(call.id, request, taken)
         call.arguments = _normalize_arguments(call.arguments, tools.get(call.name))
     # Preserve signed thinking for provider replay; hide only XML call payloads.
     content: list[TextContent | ThinkingContent | ToolCall] = []

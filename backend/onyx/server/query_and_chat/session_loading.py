@@ -4,7 +4,7 @@ import json
 from collections.abc import Mapping, Sequence
 from typing import Any, Literal, cast
 
-from pydantic import ValidationError
+from pydantic import ValidationError, field_serializer
 from sqlalchemy.orm import Session
 
 from onyx.chat.citation_utils import extract_citation_order_from_text
@@ -23,6 +23,8 @@ from onyx.deep_research.tool_definitions import (
     RESEARCH_AGENT_IN_CODE_ID,
     RESEARCH_AGENT_TASK_KEY,
 )
+from onyx.server.query_and_chat.acp_stream import acp_message
+from onyx.server.query_and_chat.models import ChatSessionDetailResponse
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     AgentResponseDelta,
@@ -67,6 +69,19 @@ from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearch
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+
+class AcpChatSessionDetailResponse(ChatSessionDetailResponse):
+    """Serialize each assistant's saved packets with the same encoder used live."""
+
+    @field_serializer("packets")
+    def serialize_notifications(
+        self, packets: list[list[Packet]]
+    ) -> list[list[dict[str, Any]]]:
+        session_id = str(self.chat_session_id)
+        return [
+            [acp_message(session_id, packet) for packet in group] for group in packets
+        ]
 
 
 def create_message_packets(
@@ -507,6 +522,7 @@ def translate_assistant_message_to_packets(
     chat_approvals: ChatApprovals | None = None,
     *,
     child_responses: Mapping[int, list[ChatMessage]],
+    acp: bool = False,
 ) -> list[Packet]:
     """
     Translates an assistant message and tool calls to packet format.
@@ -530,6 +546,7 @@ def translate_assistant_message_to_packets(
             replay.tools,
             execution.presentation,
             replay.documents,
+            acp_runs={} if acp else None,
             approvals=replay.approvals,
             agent_approvals=replay.agent_approvals,
             questions=replay.questions,

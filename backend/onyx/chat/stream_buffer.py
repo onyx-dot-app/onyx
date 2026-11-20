@@ -23,8 +23,8 @@ from onyx.configs.chat_configs import (
     CHAT_STREAM_BUFFER_MAX_BYTES,
     CHAT_STREAM_BUFFER_TTL_S,
 )
+from onyx.server.query_and_chat.acp_stream import acp_line
 from onyx.server.query_and_chat.streaming_models import StreamingError, heartbeat_packet
-from onyx.server.utils import get_json_line
 from onyx.utils.fleet_query_telemetry import QueryObservation
 from onyx.utils.logger import setup_logger
 
@@ -38,6 +38,7 @@ _TRUNCATION_RETRY_INTERVAL_S = 1.0
 
 
 class StreamBufferMeta(BaseModel):
+    acp: bool = False
     chunk_count: int = 0
     done: bool = False
     truncated: bool = False
@@ -47,6 +48,7 @@ class StreamChunkRead(BaseModel):
     """One reader pass over the buffer. ``gap`` means the sequence is unrecoverable
     (evicted/truncated) and the caller must fall back to the persisted message."""
 
+    acp: bool = False
     blocks: list[str]
     next_cursor: int
     chunk_count: int
@@ -54,8 +56,13 @@ class StreamChunkRead(BaseModel):
     gap: bool
 
 
-def _chunk_key(chat_session_id: UUID, stream_id: int, chunk_n: int) -> str:
-    return f"{_PREFIX}_{chat_session_id}_{stream_id}:{chunk_n}"
+def _chunk_key(
+    chat_session_id: UUID, stream_id: int, chunk_n: int, *, acp: bool = True
+) -> str:
+    # An older server treats an absent chunk as a gap and reloads history.
+    # Keep ACP frames out of the key it serves as version 1 packets.
+    format_prefix = "acp:" if acp else ""
+    return f"{_PREFIX}_{chat_session_id}_{stream_id}:{format_prefix}{chunk_n}"
 
 
 def _meta_key(chat_session_id: UUID, stream_id: int) -> str:
@@ -90,12 +97,15 @@ class StreamBufferWriter:
         # writing answer chunks behind it, which then live out the buffer TTL
         # if the run never reaches completion.
         self._session_ended = session_ended
-        self._meta = StreamBufferMeta()
+        self._meta = StreamBufferMeta(acp=True)
         self._truncation_persisted = False
         self._next_truncation_retry_at = 0.0
         self._pending: list[str] = []
         self._pending_bytes = 0
         self._compressed_total = 0
+
+    def replay_line(self, item: AnswerStreamPart) -> str:
+        return acp_line(str(self._chat_session_id), item, retain=True)
 
     @property
     def stream_id(self) -> int:
@@ -281,7 +291,7 @@ def read_stream_chunks(
     while chunk_n < meta.chunk_count:
         if max_chunks is not None and len(blocks) >= max_chunks:
             break
-        raw = cache.get(_chunk_key(chat_session_id, stream_id, chunk_n))
+        raw = cache.get(_chunk_key(chat_session_id, stream_id, chunk_n, acp=meta.acp))
         if raw is None or not isinstance(raw, bytes):
             gap = True
             break
@@ -299,6 +309,7 @@ def read_stream_chunks(
         chunk_n += 1
 
     return StreamChunkRead(
+        acp=meta.acp,
         blocks=blocks,
         next_cursor=chunk_n,
         chunk_count=meta.chunk_count,
@@ -379,7 +390,7 @@ class ChatDelivery:
 
     def publish(self, item: AnswerStreamPart) -> None:
         line = (
-            get_json_line(item.model_dump())
+            self._buffer.replay_line(item)
             if self._buffer is not None and not self._replay_unavailable.is_set()
             else None
         )

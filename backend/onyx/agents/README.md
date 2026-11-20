@@ -497,7 +497,16 @@ from the snapshot. Already queued callbacks may still drain.
 Model events describe one LLM request. Agent events add tool execution and run boundaries.
 `ResponsePresenter` translates these events into chat browser packets.
 It formats citations and assigns sections, tool tabs, and child sections through `Placement`.
-The SDK does not use browser packets or layout coordinates.
+For ACP clients, the SDK's `AcpRunTools` identifies a call by its run, accepted assistant message, and tool call ID.
+A program's inner call keeps its own run-scoped ID across observation messages.
+A caller passes the tool result from `ToolEndEvent` or its saved execution record to `AcpRunTools.report`.
+The SDK emits a failed status for an error result or a call that ended without a result.
+Argument generation and approval waits emit a pending status. When the last required answer restarts a tool,
+`InputEndedEvent.resumes_tool` reports that it resumed. A finished call keeps its status when its background program asks for input.
+Chat supplies the public display data and any later failure from a code cell's closing record.
+Resumed runs and amended results use the same tool IDs.
+Chat attaches the tool-specific display data and placement to the ACP update. Text and reasoning
+use the content that chat formatted for the viewer.
 
 Text and reasoning use start, delta, and end packets.
 Tools use packets for their content: search queries and documents, Python output, images, or custom results.

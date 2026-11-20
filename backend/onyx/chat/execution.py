@@ -373,7 +373,9 @@ class ChatTurnExecution:
                     else Future[ChatResponseOutcome](),
                 )
                 emitter = Emitter(
-                    self._publish, persistence.model_index, self._query_observation
+                    self._publish,
+                    persistence.model_index,
+                    self._query_observation,
                 )
                 try:
                     worker = start_thread_future(

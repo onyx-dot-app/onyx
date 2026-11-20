@@ -1,8 +1,11 @@
 from datetime import datetime
 from enum import Enum
+from functools import cached_property
 from typing import Annotated, Any, Literal, Union
 
+from acp.schema import ToolCallProgress, ToolCallStart
 from pydantic import BaseModel, Field, JsonValue
+from pydantic.json_schema import SkipJsonSchema
 
 from onyx.chat.mention_models import RecordedMention
 from onyx.context.search.models import SearchDoc
@@ -695,8 +698,28 @@ PacketObj = Union[
 
 class Packet(BaseModel):
     placement: Placement
+    # Only the native wire reads this SDK event. Saved v1 packets keep their schema.
+    acp_update: SkipJsonSchema[ToolCallStart | ToolCallProgress | None] = Field(
+        default=None, exclude=True, repr=False
+    )
 
     obj: Annotated[PacketObj, Field(discriminator="type")]
+
+    # The replay writer and live reader share one stamped packet. A copied
+    # packet may have a new placement and must receive a fresh wire frame.
+    # Pydantic omits cached properties from serialization and equality.
+    @cached_property
+    def _published_acp(self) -> tuple[int, str | None, str] | None:
+        return None
+
+    def retain_acp_line(self, session_id: str | None, line: str) -> None:
+        self._published_acp = (id(self), session_id, line)
+
+    def published_acp_line(self, session_id: str | None) -> str | None:
+        cached = self._published_acp
+        if cached is not None and cached[0] == id(self) and cached[1] == session_id:
+            return cached[2]
+        return None
 
 
 def heartbeat_packet() -> Packet:

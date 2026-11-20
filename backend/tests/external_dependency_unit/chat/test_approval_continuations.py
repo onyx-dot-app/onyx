@@ -456,6 +456,32 @@ def test_the_latest_page_reaches_back_to_a_waiting_reply(
         )
         assert page.has_older_messages
 
+        # The same page in ACP keeps the pending tool's identity across reloads.
+        native_page = get_chat_session(
+            turns.chat_session_id,
+            limit=2,
+            user=turns.user,
+            db_session=session,
+            protocol_version=2,
+        )
+        groups = native_page.model_dump(mode="json")["packets"]
+        calls = [
+            frame["params"]["update"]
+            for group in groups
+            for frame in group
+            if frame["method"] == "session/update"
+            and frame["params"]["update"]["sessionUpdate"]
+            in ("tool_call", "tool_call_update")
+        ]
+        [pending] = [call for call in calls if call.get("status") == "pending"]
+        assert pending["_meta"]["onyx"]["packet"]["approval_id"] == str(request.id)
+        assert pending["toolCallId"] == calls[0]["toolCallId"]
+        assert all(
+            frame["params"]["sessionId"] == str(turns.chat_session_id)
+            for group in groups
+            for frame in group
+        )
+
         older = get_chat_session(
             turns.chat_session_id,
             limit=2,

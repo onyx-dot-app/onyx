@@ -108,6 +108,7 @@ def _saved(
 @pytest.mark.parametrize(
     ("saved", "ends"),
     [
+        (_saved(ApprovalDecision.APPROVED, ApprovalDecidedVia.USER), "approved"),
         (_saved(ApprovalDecision.REJECTED, ApprovalDecidedVia.POLICY), "disabled"),
         # The request's row was deleted with its tool's server.
         (None, "disabled"),
@@ -115,12 +116,11 @@ def _saved(
         (_saved(ApprovalDecision.EXPIRED), "disabled"),
     ],
 )
-def test_a_program_call_that_ends_without_a_decision_reports_how(
+def test_a_program_call_reports_the_decision_and_continues(
     saved: SavedToolApproval | None,
     ends: ToolApprovalOutcome,
 ) -> None:
-    """Integration covers decided calls; a request can also lose its row or be
-    blocked by the policy when the user approves it."""
+    """A program continues with the decision. Missing or blocked requests supply a denial."""
 
     def program(invocation: ToolInvocation) -> ToolOutcome:
         gate = invocation.nested_calls
@@ -133,6 +133,8 @@ def test_a_program_call_that_ends_without_a_decision_reports_how(
         _invocation: ToolInvocation, answers: list[NestedInputAnswer]
     ) -> ToolOutcome:
         (answered,) = answers
+        if answered.answer.decision == InputDecision.APPROVE:
+            return ToolResult(content="sent")
         assert answered.answer.result is not None
         return answered.answer.result
 
@@ -183,6 +185,9 @@ def test_a_program_call_that_ends_without_a_decision_reports_how(
         ToolApprovalRequest,
         ToolApprovalResolved,
     ]
+    if ends == "approved":
+        assert approval[0].acp_update and approval[0].acp_update.status == "pending"
+        assert approval[1].acp_update and approval[1].acp_update.status == "in_progress"
     assert approval[0].placement == approval[1].placement
     assert approval[1].obj == ToolApprovalResolved(
         approval_id=str(APPROVAL_ID), outcome=ends

@@ -183,7 +183,7 @@ turn. Tool starts, mode updates and terminal packets are not saved.
    subtype of `Error` that the runner recovers
    from by prompting again; Python type tells it apart, not the code.
 9. `event-schema-sole-acp-importer` **`server/features/build/sandbox/event_schema.py`
-   is the only importer of `acp.schema`** in application code. Import event types from the
+   owns Craft's imports from `acp.schema`**. Import Craft event types from the
    wrapper, so an upstream package change stays a one-file change.
 10. `only-connect-app-asks-reach-user` **Only `connect_app` permission asks
     reach the user.**
