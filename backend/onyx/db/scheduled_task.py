@@ -1,4 +1,4 @@
-"""Database operations for Craft Scheduled Tasks.
+"""Database operations for scheduled tasks.
 
 Mirrors the style of ``backend/onyx/db/persona.py`` — every function takes
 ``db_session: Session`` first, all queries live here (per CLAUDE.md), and
@@ -12,27 +12,30 @@ that claimed the task so concurrent beat ticks don't double-fire.
 
 from __future__ import annotations
 
+from collections.abc import Collection
 from datetime import datetime, timedelta, timezone
-from typing import Any
 from uuid import UUID
 
 from sqlalchemy import and_, case, desc, func, literal, select, update
 from sqlalchemy.orm import Session, selectinload
 
+from onyx.agents.models import RunFailureKind, RunStatus
+from onyx.configs.constants import MessageType, NotificationType
 from onyx.db.enums import (
     ScheduledTaskErrorClass,
     ScheduledTaskRunStatus,
     ScheduledTaskSkipReason,
     ScheduledTaskStatus,
     ScheduledTaskTriggerSource,
-    SessionOrigin,
 )
 from onyx.db.models import (
-    BuildSession,
+    ChatMessage,
+    ChatSession,
     ScheduledTask,
     ScheduledTaskRun,
     User,
 )
+from onyx.db.notification import create_notification
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.integrations.craft import replace_task_integrations__no_commit
@@ -44,6 +47,9 @@ from onyx.tools.models import IntegrationLinkConfiguration
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+SUMMARY_MAX_CHARS = 120
+ERROR_DETAIL_MAX_CHARS = 1000
 
 
 # ---------------------------------------------------------------------------
@@ -93,62 +99,6 @@ def create_scheduled_task(
     if integrations is not None:
         replace_task_integrations__no_commit(db_session, user, task.id, integrations)
     return task
-
-
-def get_running_task_id(
-    db_session: Session, session_id: UUID, user_id: UUID
-) -> UUID | None:
-    return db_session.scalar(
-        select(ScheduledTaskRun.task_id)
-        .join(BuildSession, BuildSession.id == ScheduledTaskRun.session_id)
-        .where(
-            BuildSession.id == session_id,
-            BuildSession.user_id == user_id,
-            ScheduledTaskRun.status == ScheduledTaskRunStatus.RUNNING,
-        )
-        .limit(1)
-    )
-
-
-def get_scheduled_task_id_for_session(
-    db_session: Session, session_id: UUID
-) -> UUID | None:
-    """The task of the run that made the session; None for another session."""
-    return db_session.scalar(
-        select(ScheduledTaskRun.task_id).where(
-            ScheduledTaskRun.session_id == session_id
-        )
-    )
-
-
-def get_active_scheduled_task_context(
-    db_session: Session, session_id: UUID
-) -> tuple[UUID, UUID] | None:
-    """Return running task authority; reject inactive scheduled sessions.
-
-    Only interactive and Slack sessions can return None and use personal policies.
-    """
-    row = db_session.execute(
-        select(
-            BuildSession.origin,
-            ScheduledTaskRun.id,
-            ScheduledTaskRun.task_id,
-            ScheduledTaskRun.status,
-        )
-        .outerjoin(ScheduledTaskRun, ScheduledTaskRun.session_id == BuildSession.id)
-        .where(BuildSession.id == session_id)
-    ).first()
-    if row is None:
-        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Session no longer exists")
-    origin, run_id, task_id, status = row
-    if run_id is not None and status == ScheduledTaskRunStatus.RUNNING:
-        return run_id, task_id
-    if run_id is not None or origin == SessionOrigin.SCHEDULED:
-        raise OnyxError(
-            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-            "Scheduled execution is no longer active",
-        )
-    return None
 
 
 def get_scheduled_task(
@@ -417,7 +367,7 @@ def mark_run_status(
     db_session: Session,
     run_id: UUID,
     status: ScheduledTaskRunStatus,
-    session_id: UUID | None = None,
+    chat_session_id: UUID | None = None,
     skip_reason: ScheduledTaskSkipReason | None = None,
     error_class: ScheduledTaskErrorClass | None = None,
     error_detail: str | None = None,
@@ -425,9 +375,8 @@ def mark_run_status(
 ) -> ScheduledTaskRun:
     """Update a run row's status + optional fields.
 
-    Terminal statuses (``succeeded``/``failed``/``skipped``) get a
-    ``finished_at = now()`` written automatically; non-terminal statuses
-    leave it NULL.
+    Terminal statuses get ``finished_at = now()``. A move into a status
+    with results (``has_results``) advances ``version``.
     """
     run = db_session.execute(
         select(ScheduledTaskRun)
@@ -437,11 +386,11 @@ def mark_run_status(
     ).scalar_one_or_none()
     if run is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Scheduled task run not found")
-    if status.is_terminal() and run.status != status:
+    if status.has_results() and run.status != status:
         run.version += 1
     run.status = status
-    if session_id is not None:
-        run.session_id = session_id
+    if chat_session_id is not None:
+        run.chat_session_id = chat_session_id
     if skip_reason is not None:
         run.skip_reason = skip_reason
     if error_class is not None:
@@ -460,17 +409,19 @@ def get_run(
     *,
     db_session: Session,
     run_id: UUID,
+    for_update: bool = False,
 ) -> ScheduledTaskRun:
-    """Fetch a single run by id.
+    """Fetch a single run by id. ``for_update`` locks the row until commit.
 
     Returns the run row. Ownership checks are the caller's responsibility —
     ``list_runs_for_task`` covers the user-scoped case.
 
     Raises ``OnyxError(NOT_FOUND)`` if the run does not exist.
     """
-    run = db_session.execute(
-        select(ScheduledTaskRun).where(ScheduledTaskRun.id == run_id)
-    ).scalar_one_or_none()
+    stmt = select(ScheduledTaskRun).where(ScheduledTaskRun.id == run_id)
+    if for_update:
+        stmt = stmt.with_for_update().execution_options(populate_existing=True)
+    run = db_session.execute(stmt).scalar_one_or_none()
     if run is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Scheduled task run not found")
     return run
@@ -585,82 +536,211 @@ def find_stuck_runs(
     *,
     db_session: Session,
     queued_older_than: timedelta,
-    running_older_than: timedelta,
     now: datetime | None = None,
 ) -> list[ScheduledTaskRun]:
-    """Find runs the stuck-run sweeper should mark ``failed (stuck)``.
-
-    A run is "stuck" when:
-      - its status is QUEUED and ``started_at`` is older than
-        ``queued_older_than`` (worker presumably died between dispatch and
-        pick-up); or
-      - its status is RUNNING and ``started_at`` is older than
-        ``running_older_than`` (worker died mid-execution or the run blew
-        past its budget without crashing).
-    """
-    now = now or datetime.now(tz=timezone.utc)
-    queued_cutoff = now - queued_older_than
-    running_cutoff = now - running_older_than
-
-    stmt = select(ScheduledTaskRun).where(
-        (
-            (ScheduledTaskRun.status == ScheduledTaskRunStatus.QUEUED)
-            & (ScheduledTaskRun.started_at < queued_cutoff)
-        )
-        | (
-            (ScheduledTaskRun.status == ScheduledTaskRunStatus.RUNNING)
-            & (ScheduledTaskRun.started_at < running_cutoff)
+    """QUEUED runs older than ``queued_older_than``: the worker died between
+    dispatch and pick-up, or the message expired."""
+    cutoff = (now or datetime.now(tz=timezone.utc)) - queued_older_than
+    return list(
+        db_session.scalars(
+            select(ScheduledTaskRun).where(
+                ScheduledTaskRun.status == ScheduledTaskRunStatus.QUEUED,
+                ScheduledTaskRun.started_at < cutoff,
+            )
         )
     )
-    return list(db_session.execute(stmt).scalars())
 
 
-# ---------------------------------------------------------------------------
-# Session-view banner helper
-# ---------------------------------------------------------------------------
-
-
-def get_scheduled_run_context(
+def list_chat_runs_in_flight(
     *,
     db_session: Session,
-    session_id: UUID,
-    user_id: UUID,
-) -> dict[str, Any] | None:
-    """Return scheduled-run context for the session-view banner, or ``None``.
+    task_id: UUID | None = None,
+    status: ScheduledTaskRunStatus | None = None,
+    started_before: datetime | None = None,
+) -> list[ScheduledTaskRun]:
+    """Runs whose chat response has not ended."""
+    stmt = select(ScheduledTaskRun).where(
+        ScheduledTaskRun.chat_session_id.is_not(None),
+        ScheduledTaskRun.status.in_(_CHAT_IN_FLIGHT),
+    )
+    if task_id is not None:
+        stmt = stmt.where(ScheduledTaskRun.task_id == task_id)
+    if status is not None:
+        stmt = stmt.where(ScheduledTaskRun.status == status)
+    if started_before is not None:
+        stmt = stmt.where(ScheduledTaskRun.started_at < started_before)
+    return list(db_session.scalars(stmt))
 
-    Result shape::
 
-        {
-            "run_id": UUID,
-            "task_id": UUID,
-            "task_name": str,
-            "status": ScheduledTaskRunStatus,
-            "started_at": datetime,
-            "finished_at": datetime | None,
-        }
+_CHAT_IN_FLIGHT = (
+    ScheduledTaskRunStatus.RUNNING,
+    ScheduledTaskRunStatus.AWAITING_APPROVAL,
+)
 
-    Returns ``None`` when the session was not produced by a scheduled run,
-    or when the owning task is not accessible to ``user_id``.
-    """
-    row = db_session.execute(
-        select(ScheduledTaskRun, ScheduledTask)
+_RUN_STATUS_BY_RESPONSE_STATUS = {
+    RunStatus.RUNNING: ScheduledTaskRunStatus.RUNNING,
+    RunStatus.SUSPENDED: ScheduledTaskRunStatus.AWAITING_APPROVAL,
+    RunStatus.COMPLETE: ScheduledTaskRunStatus.SUCCEEDED,
+    RunStatus.LIMIT: ScheduledTaskRunStatus.SUCCEEDED,
+    RunStatus.CANCELLED: ScheduledTaskRunStatus.CANCELLED,
+    RunStatus.ERROR: ScheduledTaskRunStatus.FAILED,
+}
+
+_NOTIFICATION_BY_RUN_STATUS = {
+    ScheduledTaskRunStatus.FAILED: NotificationType.SCHEDULED_TASK_FAILED,
+    ScheduledTaskRunStatus.AWAITING_APPROVAL: (
+        NotificationType.SCHEDULED_TASK_AWAITING_APPROVAL
+    ),
+}
+
+
+def missing_chat_session_ids(
+    db_session: Session, chat_session_ids: Collection[UUID]
+) -> set[UUID]:
+    """The ids with no chat session row: chats that were hard-deleted."""
+    if not chat_session_ids:
+        return set()
+    present = set(
+        db_session.scalars(
+            select(ChatSession.id).where(ChatSession.id.in_(chat_session_ids))
+        )
+    )
+    return set(chat_session_ids) - present
+
+
+def get_run_response(db_session: Session, chat_session_id: UUID) -> ChatMessage | None:
+    """The response to the task prompt: the first response of the run's chat.
+    Follow-up messages of the owner come after it."""
+    return db_session.scalar(
+        select(ChatMessage)
+        .where(
+            ChatMessage.chat_session_id == chat_session_id,
+            ChatMessage.message_type == MessageType.ASSISTANT,
+            ChatMessage.response_status.is_not(None),
+        )
+        .order_by(ChatMessage.id)
+        .limit(1)
+        # The response changes in other sessions; never decide on a stale copy.
+        .execution_options(populate_existing=True)
+    )
+
+
+def clip_summary(text: str) -> str:
+    if len(text) <= SUMMARY_MAX_CHARS:
+        return text
+    clipped = text[:SUMMARY_MAX_CHARS]
+    last_space = clipped.rfind(" ")
+    if last_space > SUMMARY_MAX_CHARS // 2:
+        clipped = clipped[:last_space]
+    return clipped.rstrip() + "…"
+
+
+def notify_run_owner__no_commit(
+    db_session: Session, run: ScheduledTaskRun, notif_type: NotificationType
+) -> None:
+    """Best effort: a notification error must not undo the status change."""
+    task = run.task
+    title = (
+        f'Scheduled task "{task.name}" failed'
+        if notif_type == NotificationType.SCHEDULED_TASK_FAILED
+        else f'Scheduled task "{task.name}" needs approval'
+    )
+    try:
+        with db_session.begin_nested():
+            create_notification(
+                user_id=task.user_id,
+                notif_type=notif_type,
+                db_session=db_session,
+                title=title,
+                additional_data={
+                    "task_id": str(task.id),
+                    "run_id": str(run.id),
+                    "chat_session_id": (
+                        str(run.chat_session_id) if run.chat_session_id else None
+                    ),
+                    # A run that failed before its chat opens its task.
+                    "link": (
+                        f"/app?chatId={run.chat_session_id}"
+                        if run.chat_session_id
+                        else f"/app/scheduled-tasks/{task.id}"
+                    ),
+                },
+                autocommit=False,
+            )
+    except Exception:
+        logger.exception(
+            "Failed to create scheduled-task notification (task=%s run=%s)",
+            task.id,
+            run.id,
+        )
+
+
+def sync_chat_run__no_commit(
+    db_session: Session, run: ScheduledTaskRun
+) -> ScheduledTaskRunStatus | None:
+    """Give an in-flight run the status of its chat response, and notify the
+    owner when it fails or waits for approval. The response is the source of
+    truth; this converges whenever and however often it runs. Returns the new
+    status, or None when nothing changed."""
+    # Lock and refresh the run first: the executor or another tick may have
+    # moved it since the caller read it.
+    run = get_run(db_session=db_session, run_id=run.id, for_update=True)
+    if (
+        run.chat_session_id is None
+        or run.status not in _CHAT_IN_FLIGHT
+        or (response := get_run_response(db_session, run.chat_session_id)) is None
+        or response.response_status is None
+    ):
+        return None
+    failure = response.response_failure
+    # A turn stopped at the chat deadline is a failed run, not a user Stop.
+    timed_out = failure is not None and failure.kind is RunFailureKind.DEADLINE
+    status = (
+        ScheduledTaskRunStatus.FAILED
+        if timed_out
+        else _RUN_STATUS_BY_RESPONSE_STATUS[response.response_status]
+    )
+    if status == run.status:
+        return None
+    mark_run_status(
+        db_session=db_session,
+        run_id=run.id,
+        status=status,
+        summary=(
+            clip_summary(response.message.strip())
+            if status == ScheduledTaskRunStatus.SUCCEEDED and response.message
+            else None
+        ),
+        error_class=(
+            ScheduledTaskErrorClass.TIMEOUT
+            if timed_out
+            else ScheduledTaskErrorClass.AGENT_EXCEPTION
+            if status == ScheduledTaskRunStatus.FAILED
+            else ScheduledTaskErrorClass.USER_CANCELLED
+            if status == ScheduledTaskRunStatus.CANCELLED
+            else None
+        ),
+        error_detail=(
+            failure.message[:ERROR_DETAIL_MAX_CHARS]
+            if failure is not None and status == ScheduledTaskRunStatus.FAILED
+            else None
+        ),
+    )
+    if notif_type := _NOTIFICATION_BY_RUN_STATUS.get(status):
+        notify_run_owner__no_commit(db_session, run, notif_type)
+    return status
+
+
+def get_run_of_chat_session(
+    db_session: Session, chat_session_id: UUID, user_id: UUID
+) -> ScheduledTaskRun | None:
+    """The run that made the chat, if ``user_id`` owns its task."""
+    return db_session.scalar(
+        select(ScheduledTaskRun)
         .join(ScheduledTask, ScheduledTaskRun.task_id == ScheduledTask.id)
         .where(
-            ScheduledTaskRun.session_id == session_id,
+            ScheduledTaskRun.chat_session_id == chat_session_id,
             ScheduledTask.user_id == user_id,
         )
-        .order_by(desc(ScheduledTaskRun.started_at))
-    ).first()
-    if row is None:
-        return None
-    run, task = row
-    return {
-        "run_id": run.id,
-        "task_id": task.id,
-        "task_name": task.name,
-        "status": run.status,
-        "started_at": run.started_at,
-        "finished_at": run.finished_at,
-        "revision": run.version,
-        "viewed_revision": run.viewed_revision,
-    }
+        .options(selectinload(ScheduledTaskRun.task))
+    )

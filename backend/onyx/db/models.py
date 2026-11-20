@@ -8493,10 +8493,10 @@ class ActionApproval(Base):
 
 
 class ScheduledTask(Base):
-    """A user-defined recurring Craft prompt + schedule.
+    """A user-defined recurring prompt + schedule.
 
-    Each fire spawns a fresh `BuildSession` (via the executor) and records a
-    `ScheduledTaskRun` row pointing back at the session. Soft-deleted tasks
+    Each fire runs the prompt in a new hidden chat and records a
+    `ScheduledTaskRun` row that links the chat. Soft-deleted tasks
     are excluded from dispatch but retained so users can still open past
     runs.
     """
@@ -8565,10 +8565,8 @@ class ScheduledTask(Base):
 class ScheduledTaskRun(Base):
     """One firing of a ScheduledTask.
 
-    `session_id` is nullable for the brief window between the dispatcher
-    inserting this row and the executor creating the BuildSession. On
-    session delete the FK is cleared (SET NULL) so the run row survives
-    as part of the task's run history.
+    `chat_session_id` is set in the commit that creates the run's chat and
+    makes the run RUNNING. It also marks that chat as hidden from history.
     """
 
     __tablename__ = "scheduled_task_run"
@@ -8581,10 +8579,10 @@ class ScheduledTaskRun(Base):
         ForeignKey("scheduled_task.id", ondelete="CASCADE"),
         nullable=False,
     )
-    session_id: Mapped[UUID | None] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("build_session.id", ondelete="SET NULL"),
-        nullable=True,
+    # No foreign key: adding one would lock chat_session. A hard-deleted chat
+    # leaves the id, and the dispatcher cancels a run whose chat is gone.
+    chat_session_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), nullable=True
     )
 
     status: Mapped[ScheduledTaskRunStatus] = mapped_column(
@@ -8630,9 +8628,6 @@ class ScheduledTaskRun(Base):
 
     # Relationships
     task: Mapped[ScheduledTask] = relationship("ScheduledTask", back_populates="runs")
-    session: Mapped[BuildSession | None] = relationship(
-        "BuildSession", foreign_keys=[session_id]
-    )
 
     __table_args__ = (
         Index(
@@ -8641,9 +8636,7 @@ class ScheduledTaskRun(Base):
             desc("started_at"),
         ),
         Index("ix_scheduled_task_run_status", "status"),
-        # Session-view banner lookup: get_scheduled_run_context filters by
-        # session_id on every session open.
-        Index("ix_scheduled_task_run_session", "session_id"),
+        Index("ix_scheduled_task_run_chat_session", "chat_session_id"),
     )
 
 

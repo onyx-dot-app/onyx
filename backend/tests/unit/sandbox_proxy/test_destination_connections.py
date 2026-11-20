@@ -473,10 +473,6 @@ def test_private_mcp_http_enforces_path_credentials_and_policy(
             session_id = uuid4()
             monkeypatch.setattr(gate, "get_session_with_tenant", MagicMock())
             monkeypatch.setattr(
-                gate, "get_active_scheduled_task_context", lambda *_args: None
-            )
-            monkeypatch.setattr(gate, "get_running_task_id", lambda *_args: None)
-            monkeypatch.setattr(
                 gate,
                 "resolve_gate_policies",
                 lambda *_args, **_kwargs: {"delete_records": ActionPolicy.DENY},

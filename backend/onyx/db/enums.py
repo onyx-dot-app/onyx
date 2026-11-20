@@ -541,14 +541,20 @@ class ScheduledTaskRunStatus(str, PyEnum):
     FAILED = "FAILED"
     SKIPPED = "SKIPPED"
     AWAITING_APPROVAL = "AWAITING_APPROVAL"
+    CANCELLED = "CANCELLED"
 
     def is_terminal(self) -> bool:
-        """Terminal statuses produce no further state transitions in V1."""
+        """Terminal statuses produce no further state transitions."""
         return self in (
             ScheduledTaskRunStatus.SUCCEEDED,
             ScheduledTaskRunStatus.FAILED,
             ScheduledTaskRunStatus.SKIPPED,
+            ScheduledTaskRunStatus.CANCELLED,
         )
+
+    def has_results(self) -> bool:
+        """The owner has something new to open in the run's chat."""
+        return self.is_terminal() or self is ScheduledTaskRunStatus.AWAITING_APPROVAL
 
 
 class ScheduledTaskTriggerSource(str, PyEnum):
@@ -562,25 +568,24 @@ class ScheduledTaskErrorClass(str, PyEnum):
     Every code path that writes ``error_class`` must use a member of
     this enum — the column is intentionally a closed set so dashboards
     and triage queries can pivot on a known vocabulary. For unexpected
-    runtime failures inside the agent drive, use ``AGENT_EXCEPTION``
-    and put the actual exception class name + message in
-    ``error_detail``.
+    runtime failures of the chat turn, use ``AGENT_EXCEPTION`` and put
+    the message in ``error_detail``. Older rows can hold Craft-era values.
     """
 
-    TASK_MISSING = "task_missing"
-    SANDBOX_WAKE_FAILED = "sandbox_wake_failed"
-    EXECUTOR_ERROR = "executor_error"
-    TIMEOUT = "timeout"
     STUCK = "stuck"
+    # The turn reached the chat deadline (CHAT_EXECUTION_TIMEOUT_S).
+    TIMEOUT = "timeout"
     AGENT_EXCEPTION = "agent_exception"
-    AGENT_PERMISSION_REQUIRED = "agent_permission_required"
+    # CANCELLED runs: an approval that nobody answered, or a user Stop.
+    SUPERSEDED_BY_NEXT_FIRE = "superseded_by_next_fire"
+    APPROVAL_TIMEOUT = "approval_timeout"
+    USER_CANCELLED = "user_cancelled"
 
 
 class ScheduledTaskSkipReason(str, PyEnum):
     """Well-known values for ``ScheduledTaskRun.skip_reason``."""
 
     PRIOR_IN_FLIGHT = "prior_in_flight"
-    OWNER_CRAFT_DISABLED = "owner_craft_disabled"
 
 
 class SandboxStatus(str, PyEnum):

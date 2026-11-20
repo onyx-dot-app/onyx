@@ -117,7 +117,7 @@ and tag coupling, IPv6), `backend/onyx/server/features/build/sandbox/docker/READ
 `microvm/RUNBOOKS.md` (Firecracker host agent alerts and node procedures).
 
 ```
-SessionManager / scheduled executor / sweep
+SessionManager / sweep
   -> session/sandbox_lifecycle.py:ensure_sandbox_ready
        reserve   (short txn, user row locked) a new provisioning_attempt_number
                  when it must provision; Craft PAT

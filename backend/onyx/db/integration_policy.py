@@ -4,14 +4,21 @@ from uuid import UUID
 from sqlalchemy import delete, or_, select
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import ApprovalDecidedVia, IntegrationActionPolicyValue
+from onyx.configs.constants import MessageType
+from onyx.db.enums import (
+    ApprovalDecidedVia,
+    IntegrationActionPolicyValue,
+    ScheduledTaskRunStatus,
+)
 from onyx.db.models import (
     ApprovalRequest,
+    ChatMessage,
     ChatSession,
     Integration,
     IntegrationActionPolicy,
     Persona__Integration,
     ScheduledTask__Integration,
+    ScheduledTaskRun,
     Tool,
 )
 from onyx.integrations.models import (
@@ -133,6 +140,42 @@ def list_task_integration_links(
             .order_by(ScheduledTask__Integration.integration_id)
         ).all()
     )
+
+
+def list_in_flight_task_links(
+    db_session: Session, chat_session_id: UUID
+) -> list[ScheduledTask__Integration] | None:
+    """The integration links of the task whose run is in flight in the chat.
+    None: no run is in flight there, and the chat uses its agent. The run's
+    response decides: the run status follows a resumed response only at the
+    next dispatch tick."""
+    task_id = db_session.scalar(
+        select(ScheduledTaskRun.task_id).where(
+            ScheduledTaskRun.chat_session_id == chat_session_id,
+            ScheduledTaskRun.status.in_(
+                (
+                    ScheduledTaskRunStatus.RUNNING,
+                    ScheduledTaskRunStatus.AWAITING_APPROVAL,
+                )
+            ),
+        )
+    )
+    if task_id is None:
+        return None
+    # The run's response is the first response of its chat.
+    response_status = db_session.scalar(
+        select(ChatMessage.response_status)
+        .where(
+            ChatMessage.chat_session_id == chat_session_id,
+            ChatMessage.message_type == MessageType.ASSISTANT,
+            ChatMessage.response_status.is_not(None),
+        )
+        .order_by(ChatMessage.id)
+        .limit(1)
+    )
+    if response_status is not None and response_status.is_terminal:
+        return None
+    return list_task_integration_links(db_session, task_id)
 
 
 def replace_task_integration_links__no_commit(
