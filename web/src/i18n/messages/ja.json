@@ -627,6 +627,9 @@
         "youtrack": {
           "description": "課題管理とプロジェクト管理"
         },
+        "dealcloud": {
+          "description": "案件、企業、連絡先"
+        },
         "canvas": {
           "description": "コース、ページ、お知らせ"
         },
@@ -2994,6 +2997,19 @@
             }
           }
         },
+        "dealcloud": {
+          "description": "DealCloud コネクターを設定",
+          "fields": {
+            "base_url": {
+              "label": "DealCloud サイトの URL",
+              "description": "DealCloud サイトのアドレス (例: https://example.dealcloud.com)。"
+            },
+            "entry_types": {
+              "label": "オブジェクト",
+              "description": "インデックスするオブジェクトの API 名 (例: Company、Deal)。空欄にすると、API ユーザーが読み取れるすべてのオブジェクト (Attachment を除く) をインデックスします。"
+            }
+          }
+        },
         "github": {
           "description": "GitHub コネクターを設定",
           "fields": {
@@ -4352,6 +4368,7 @@
         "secretAccessKey": "{source} シークレットアクセスキー",
         "accountId": "{source} アカウント ID",
         "apiToken": "API トークン",
+        "apiKey": "{source} API キー",
         "clientId": "{source} クライアント ID",
         "clientSecret": "{source} クライアントシークレット",
         "clientToken": "{source} クライアントトークン",
@@ -4403,6 +4420,7 @@
         "jiraUserEmail": "Jira Cloud では必須です。",
         "lumappsServiceUser": "代理でインデックスを作成するユーザーです。",
         "youtrackToken": "インデックスするすべてのプロジェクトを読み取れる YouTrack ユーザーの永久トークン。YouTrack プロフィールの「アカウントのセキュリティ」で作成します。",
+        "dealcloudApiKey": "インデックスするすべてのオブジェクトを読み取れる DealCloud ユーザーの API キー。ユーザーの DealCloud プロフィールの「API Key」で有効にしてコピーします。ユーザーのグループには API 機能が必要です。",
         "azureDatalakeAccountKey": "Azure portal でストレージアカウントを開き、[セキュリティとネットワーク]、[アクセスキー] の順に開きます。",
         "outlineBaseUrl": "例: https://app.getoutline.com、またはセルフホストの URL。",
         "pfxFile": "アプリ登録の秘密キーを含む `.pfx` ファイルをアップロードしてください。10 KB 未満である必要があります。",

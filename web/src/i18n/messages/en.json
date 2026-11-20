@@ -627,6 +627,9 @@
         "youtrack": {
           "description": "Issue tracker and project management"
         },
+        "dealcloud": {
+          "description": "Deals, companies, & contacts"
+        },
         "canvas": {
           "description": "Courses, pages, & announcements"
         },
@@ -2994,6 +2997,19 @@
             }
           }
         },
+        "dealcloud": {
+          "description": "Configure DealCloud connector",
+          "fields": {
+            "base_url": {
+              "label": "DealCloud Site URL",
+              "description": "Your DealCloud site address, e.g. https://example.dealcloud.com."
+            },
+            "entry_types": {
+              "label": "Objects",
+              "description": "API names of the objects to index (e.g. Company, Deal). Leave empty to index every object the API user can read, except Attachment."
+            }
+          }
+        },
         "github": {
           "description": "Configure GitHub connector",
           "fields": {
@@ -4352,6 +4368,7 @@
         "secretAccessKey": "{source} Secret Access Key",
         "accountId": "{source} Account ID",
         "apiToken": "API Token",
+        "apiKey": "{source} API Key",
         "clientId": "{source} Client ID",
         "clientSecret": "{source} Client Secret",
         "clientToken": "{source} Client Token",
@@ -4403,6 +4420,7 @@
         "jiraUserEmail": "Required for Jira Cloud.",
         "lumappsServiceUser": "The user to index on behalf of.",
         "youtrackToken": "A permanent token for a YouTrack user that can read every project to index. Create it in your YouTrack profile under Account Security.",
+        "dealcloudApiKey": "The API key of a DealCloud user that can read every object to index. Enable and copy it in the user's DealCloud profile, under API Key. The user's group needs the API capability.",
         "azureDatalakeAccountKey": "In the Azure portal, open the storage account, then Security + networking, then Access keys.",
         "outlineBaseUrl": "For example https://app.getoutline.com, or your self-hosted URL.",
         "pfxFile": "Upload the `.pfx` file containing the private key of the app registration. Must be under 10 KB.",

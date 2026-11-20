@@ -627,6 +627,9 @@
         "youtrack": {
           "description": "متتبع المشكلات وإدارة المشاريع"
         },
+        "dealcloud": {
+          "description": "الصفقات والشركات وجهات الاتصال"
+        },
         "canvas": {
           "description": "الدورات والصفحات والإعلانات"
         },
@@ -2994,6 +2997,19 @@
             }
           }
         },
+        "dealcloud": {
+          "description": "تهيئة موصل DealCloud",
+          "fields": {
+            "base_url": {
+              "label": "عنوان URL لموقع DealCloud",
+              "description": "عنوان موقع DealCloud الخاص بك، مثل https://example.dealcloud.com."
+            },
+            "entry_types": {
+              "label": "الكائنات",
+              "description": "أسماء API للكائنات المراد فهرستها (مثل Company و Deal). اتركه فارغًا لفهرسة كل الكائنات التي يمكن لمستخدم API قراءتها، ما عدا Attachment."
+            }
+          }
+        },
         "github": {
           "description": "تهيئة موصل GitHub",
           "fields": {
@@ -4352,6 +4368,7 @@
         "secretAccessKey": "مفتاح الوصول السري إلى {source}",
         "accountId": "معرّف حساب {source}",
         "apiToken": "رمز API",
+        "apiKey": "مفتاح API لـ {source}",
         "clientId": "معرّف عميل {source}",
         "clientSecret": "سر عميل {source}",
         "clientToken": "رمز عميل {source}",
@@ -4403,6 +4420,7 @@
         "jiraUserEmail": "مطلوب لـ Jira Cloud.",
         "lumappsServiceUser": "المستخدم الذي تتم الفهرسة نيابةً عنه.",
         "youtrackToken": "رمز دائم لمستخدم YouTrack يمكنه قراءة كل المشاريع المراد فهرستها. أنشئه في ملفك الشخصي في YouTrack ضمن أمان الحساب.",
+        "dealcloudApiKey": "مفتاح API لمستخدم DealCloud يمكنه قراءة كل الكائنات المراد فهرستها. فعّله وانسخه من ملف المستخدم الشخصي في DealCloud ضمن API Key. تحتاج مجموعة المستخدم إلى صلاحية API.",
         "azureDatalakeAccountKey": "في مدخل Azure، افتح حساب التخزين، ثم الأمان + الشبكات، ثم مفاتيح الوصول.",
         "outlineBaseUrl": "مثل https://app.getoutline.com، أو عنوان URL الخاص بخادمك المستضاف ذاتيًا.",
         "pfxFile": "ارفع ملف `.pfx` الذي يحتوي على المفتاح الخاص لتسجيل التطبيق. يجب أن يكون أصغر من 10 كيلوبايت.",

@@ -18,6 +18,7 @@ export { default as SvgCoda } from "@opal/logos/coda";
 export { default as SvgCohere } from "@opal/logos/cohere";
 export { default as SvgConfluence } from "@opal/logos/confluence";
 export { default as SvgDatabricks } from "@opal/logos/databricks";
+export { default as SvgDealCloud } from "@opal/logos/dealcloud";
 export { default as SvgDeepSeek } from "@opal/logos/deepseek";
 export { default as SvgDiscord } from "@opal/logos/discord";
 export { default as SvgDiscourse } from "@opal/logos/discourse";

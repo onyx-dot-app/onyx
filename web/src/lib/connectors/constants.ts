@@ -17,6 +17,7 @@ import {
   SvgCloudflare,
   SvgCoda,
   SvgConfluence,
+  SvgDealCloud,
   SvgDiscord,
   SvgDiscourse,
   SvgDocument360,
@@ -146,6 +147,7 @@ export const SOURCE_DESCRIPTION_KEYS = {
   [ValidSources.Braintrust]: "sources.braintrust.description",
   [ValidSources.Lumapps]: "sources.lumapps.description",
   [ValidSources.YouTrack]: "sources.youtrack.description",
+  [ValidSources.DealCloud]: "sources.dealcloud.description",
   [ValidSources.AzureDatalake]: "sources.azureDatalake.description",
   [ValidSources.Canvas]: "sources.canvas.description",
   [ValidSources.CraftFile]: "sources.craftFile.description",
@@ -492,6 +494,12 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     category: SourceCategory.Sales,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/hubspot`,
     isPopular: true,
+  },
+  dealcloud: {
+    icon: SvgDealCloud,
+    displayName: "DealCloud",
+    category: SourceCategory.Sales,
+    docs: `${DOCS_ADMINS_PATH}/connectors/official/dealcloud`,
   },
   gong: {
     icon: SvgGong,

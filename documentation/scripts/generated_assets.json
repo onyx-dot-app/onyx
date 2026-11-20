@@ -50,6 +50,10 @@
       "src": "logos/confluence"
     },
     {
+      "out": "assets/overview/core_features/connectors/dealcloud.svg",
+      "src": "logos/dealcloud"
+    },
+    {
       "out": "assets/overview/core_features/connectors/discord.svg",
       "src": "logos/discord"
     },
