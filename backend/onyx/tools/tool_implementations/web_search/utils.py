@@ -1,3 +1,5 @@
+import re
+
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import InferenceChunk, InferenceSection, SearchDoc
 from onyx.tools.tool_implementations.open_url.models import WebContent
@@ -203,3 +205,18 @@ def extract_url_snippet_map(documents: list[SearchDoc]) -> dict[str, str]:
         if document.source_type == DocumentSource.WEB and document.link:
             url_snippet_map[document.link] = document.blurb
     return url_snippet_map
+
+
+def extract_site_operators(query: str) -> tuple[str, list[str]]:
+    """Extract site: operators and return cleaned query + full domains.
+
+    Returns (cleaned_query, full_domains) where full_domains contains the full
+    values after site: (e.g., ["reddit.com/r/leagueoflegends"]).
+    """
+    full_domains = re.findall(r"site:\s*([^\s]+)", query, re.IGNORECASE)
+    cleaned_query = re.sub(r"site:\s*\S+\s*", "", query, flags=re.IGNORECASE).strip()
+
+    if not cleaned_query and full_domains:
+        cleaned_query = full_domains[0]
+
+    return cleaned_query, full_domains

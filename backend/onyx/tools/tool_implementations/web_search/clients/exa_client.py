@@ -1,4 +1,3 @@
-import re
 from collections.abc import Sequence
 from typing import Any
 
@@ -18,6 +17,7 @@ from onyx.tools.tool_implementations.web_search.models import (
     WebSearchProvider,
     WebSearchResult,
 )
+from onyx.tools.tool_implementations.web_search.utils import extract_site_operators
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
 
@@ -91,21 +91,6 @@ class ExaWithTimeout(Exa):
         return response.json()
 
 
-def _extract_site_operators(query: str) -> tuple[str, list[str]]:
-    """Extract site: operators and return cleaned query + full domains.
-
-    Returns (cleaned_query, full_domains) where full_domains contains the full
-    values after site: (e.g., ["reddit.com/r/leagueoflegends"]).
-    """
-    full_domains = re.findall(r"site:\s*([^\s]+)", query, re.IGNORECASE)
-    cleaned_query = re.sub(r"site:\s*\S+\s*", "", query, flags=re.IGNORECASE).strip()
-
-    if not cleaned_query and full_domains:
-        cleaned_query = full_domains[0]
-
-    return cleaned_query, full_domains
-
-
 class ExaClient(WebSearchProvider, WebContentProvider):
     def __init__(self, api_key: str, num_results: int = 10) -> None:
         self.exa = ExaWithTimeout(api_key=api_key)
@@ -152,7 +137,7 @@ class ExaClient(WebSearchProvider, WebContentProvider):
 
     @retry_builder(tries=3, delay=1, backoff=2)
     def search(self, query: str) -> list[WebSearchResult]:
-        cleaned_query, full_domains = _extract_site_operators(query)
+        cleaned_query, full_domains = extract_site_operators(query)
 
         if full_domains:
             # Try with include_domains using base domains (e.g., ["reddit.com"])

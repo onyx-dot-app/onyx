@@ -8,13 +8,11 @@ import requests
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.tools.tool_implementations.web_search.clients.exa_client import (
-    _extract_site_operators,
-)
 from onyx.tools.tool_implementations.web_search.models import (
     WebSearchProvider,
     WebSearchResult,
 )
+from onyx.tools.tool_implementations.web_search.utils import extract_site_operators
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_wrapper import retry_builder
 
@@ -59,7 +57,7 @@ class ParallelSearchClient(WebSearchProvider):
         return False
 
     def _build_request_body(self, query: str) -> dict[str, Any]:
-        cleaned_query, full_domains = _extract_site_operators(query)
+        cleaned_query, full_domains = extract_site_operators(query)
         advanced_settings: dict[str, Any] = {"max_results": self._num_results}
         if full_domains:
             advanced_settings["source_policy"] = {
