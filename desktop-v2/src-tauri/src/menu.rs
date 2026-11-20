@@ -1,6 +1,10 @@
 use tauri::image::Image;
+#[cfg(any(not(target_os = "macos"), test))]
+use tauri::menu::AboutMetadata;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::TrayIconBuilder;
+#[cfg(any(windows, test))]
+use tauri::tray::{MouseButton, MouseButtonState, TrayIconEvent};
 use tauri::{AppHandle, Manager, Wry};
 
 use crate::main_window;
@@ -20,10 +24,79 @@ const FORWARD: &str = "forward";
 const ZOOM_STEPS: [f64; 9] = [0.67, 0.75, 0.8, 0.9, 1.0, 1.1, 1.25, 1.5, 1.75];
 const OPEN: &str = "open";
 const QUIT: &str = "quit";
-#[cfg(not(target_os = "macos"))]
+#[cfg(any(not(target_os = "macos"), test))]
 const CLOSE_WINDOW: &str = "close_window";
-#[cfg(not(target_os = "macos"))]
+#[cfg(any(not(target_os = "macos"), test))]
 const FULLSCREEN: &str = "fullscreen";
+
+/// The main window's menu accelerators on Windows and Linux. WebView2 keeps
+/// key presses from the menu while the page has focus, so `key_action` maps
+/// them to the same items.
+#[cfg(any(not(target_os = "macos"), test))]
+const WINDOW_ACCELERATORS: [(&str, &str); 11] = [
+    (NEW_CHAT, "Ctrl+N"),
+    (PREFERENCES, "Ctrl+,"),
+    (CLOSE_WINDOW, "Ctrl+W"),
+    (QUIT, "Ctrl+Q"),
+    (RELOAD, "Ctrl+R"),
+    (BACK, "Alt+Left"),
+    (FORWARD, "Alt+Right"),
+    (ZOOM_RESET, "Ctrl+0"),
+    (ZOOM_IN, "Ctrl+="),
+    (ZOOM_OUT, "Ctrl+-"),
+    (FULLSCREEN, "F11"),
+];
+
+#[cfg(not(target_os = "macos"))]
+fn accelerator(id: &str) -> Option<&'static str> {
+    WINDOW_ACCELERATORS
+        .iter()
+        .find(|(item, _)| *item == id)
+        .map(|(_, accelerator)| *accelerator)
+}
+
+/// Modifier keys held with a key press.
+#[cfg(any(windows, test))]
+#[derive(Clone, Copy, Default)]
+pub struct Modifiers {
+    pub ctrl: bool,
+    pub alt: bool,
+    pub shift: bool,
+}
+
+/// The Windows virtual-key codes of a key in an accelerator. Digits, `=` and
+/// `-` also match the numeric keypad.
+#[cfg(any(windows, test))]
+fn virtual_keys(key: &str) -> Vec<u32> {
+    match key {
+        "," => vec![0xBC],
+        "=" => vec![0xBB, 0x6B],
+        "-" => vec![0xBD, 0x6D],
+        "Left" => vec![0x25],
+        "Right" => vec![0x27],
+        "F11" => vec![0x7A],
+        _ => match key.as_bytes() {
+            [c @ b'A'..=b'Z'] => vec![u32::from(*c)],
+            [d @ b'0'..=b'9'] => vec![u32::from(*d), 0x60 + u32::from(d - b'0')],
+            _ => Vec::new(),
+        },
+    }
+}
+
+/// The main window menu item for a key press (a Windows virtual-key code).
+#[cfg(any(windows, test))]
+pub fn key_action(virtual_key: u32, held: Modifiers) -> Option<&'static str> {
+    WINDOW_ACCELERATORS.iter().find_map(|(id, accelerator)| {
+        let mut parts: Vec<&str> = accelerator.split('+').collect();
+        let key = parts.pop()?;
+        let wants = |m: &str| parts.contains(&m);
+        let matches = wants("Ctrl") == held.ctrl
+            && wants("Alt") == held.alt
+            && wants("Shift") == held.shift
+            && virtual_keys(key).contains(&virtual_key);
+        matches.then_some(*id)
+    })
+}
 
 /// The macOS app menu bar.
 #[cfg(target_os = "macos")]
@@ -113,13 +186,25 @@ pub fn build_window_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
         "File",
         true,
         &[
-            &MenuItem::with_id(app, NEW_CHAT, "New Chat", true, Some("Ctrl+N"))?,
+            &MenuItem::with_id(app, NEW_CHAT, "New Chat", true, accelerator(NEW_CHAT))?,
             &MenuItem::with_id(app, LAUNCHER, "Open Launcher", true, None::<&str>)?,
             &separator()?,
-            &MenuItem::with_id(app, PREFERENCES, "Preferences…", true, Some("Ctrl+,"))?,
+            &MenuItem::with_id(
+                app,
+                PREFERENCES,
+                "Preferences…",
+                true,
+                accelerator(PREFERENCES),
+            )?,
             &separator()?,
-            &MenuItem::with_id(app, CLOSE_WINDOW, "Close Window", true, Some("Ctrl+W"))?,
-            &MenuItem::with_id(app, QUIT, "Quit Onyx", true, Some("Ctrl+Q"))?,
+            &MenuItem::with_id(
+                app,
+                CLOSE_WINDOW,
+                "Close Window",
+                true,
+                accelerator(CLOSE_WINDOW),
+            )?,
+            &MenuItem::with_id(app, QUIT, "Quit Onyx", true, accelerator(QUIT))?,
         ],
     )?;
     let view = Submenu::with_items(
@@ -127,24 +212,50 @@ pub fn build_window_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
         "View",
         true,
         &[
-            &MenuItem::with_id(app, RELOAD, "Reload", true, Some("Ctrl+R"))?,
-            &MenuItem::with_id(app, BACK, "Back", true, Some("Alt+Left"))?,
-            &MenuItem::with_id(app, FORWARD, "Forward", true, Some("Alt+Right"))?,
+            &MenuItem::with_id(app, RELOAD, "Reload", true, accelerator(RELOAD))?,
+            &MenuItem::with_id(app, BACK, "Back", true, accelerator(BACK))?,
+            &MenuItem::with_id(app, FORWARD, "Forward", true, accelerator(FORWARD))?,
             &separator()?,
-            &MenuItem::with_id(app, ZOOM_RESET, "Actual Size", true, Some("Ctrl+0"))?,
-            &MenuItem::with_id(app, ZOOM_IN, "Zoom In", true, Some("Ctrl+="))?,
-            &MenuItem::with_id(app, ZOOM_OUT, "Zoom Out", true, Some("Ctrl+-"))?,
+            &MenuItem::with_id(
+                app,
+                ZOOM_RESET,
+                "Actual Size",
+                true,
+                accelerator(ZOOM_RESET),
+            )?,
+            &MenuItem::with_id(app, ZOOM_IN, "Zoom In", true, accelerator(ZOOM_IN))?,
+            &MenuItem::with_id(app, ZOOM_OUT, "Zoom Out", true, accelerator(ZOOM_OUT))?,
             &separator()?,
-            &MenuItem::with_id(app, FULLSCREEN, "Full Screen", true, Some("F11"))?,
+            &MenuItem::with_id(
+                app,
+                FULLSCREEN,
+                "Full Screen",
+                true,
+                accelerator(FULLSCREEN),
+            )?,
         ],
     )?;
     let help = Submenu::with_items(
         app,
         "Help",
         true,
-        &[&PredefinedMenuItem::about(app, Some("About Onyx"), None)?],
+        &[&PredefinedMenuItem::about(
+            app,
+            Some("About Onyx"),
+            Some(about_metadata(&app.package_info().version.to_string())),
+        )?],
     )?;
     Menu::with_items(app, &[&file, &view, &help])
+}
+
+/// Windows shows the About dialog only for an item with metadata.
+#[cfg(any(not(target_os = "macos"), test))]
+fn about_metadata(version: &str) -> AboutMetadata<'static> {
+    AboutMetadata {
+        name: Some("Onyx".into()),
+        version: Some(version.into()),
+        ..Default::default()
+    }
 }
 
 fn updates_item(app: &AppHandle) -> tauri::Result<MenuItem<Wry>> {
@@ -175,17 +286,37 @@ pub fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         &PredefinedMenuItem::separator(app)?,
         &MenuItem::with_id(app, QUIT, "Quit Onyx", true, None::<&str>)?,
     ])?;
-    TrayIconBuilder::with_id("onyx-tray")
+    let tray = TrayIconBuilder::with_id("onyx-tray")
         .icon(Image::from_bytes(include_bytes!("../icons/tray-icon.png"))?)
         .icon_as_template(true)
         .tooltip("Onyx")
         .menu(&menu)
-        .show_menu_on_left_click(true)
-        // No tray `on_menu_event`: Tauri delivers every menu event, tray items
-        // included, to the app-level handler in main.rs. A second listener here
-        // ran each menu action twice.
-        .build(app)?;
+        // Windows convention: a left click opens the app, a right click the menu.
+        .show_menu_on_left_click(!cfg!(windows));
+    #[cfg(windows)]
+    let tray = tray.on_tray_icon_event(|tray, event| {
+        if opens_app(&event) {
+            handle(tray.app_handle(), OPEN);
+        }
+    });
+    // No tray `on_menu_event`: Tauri delivers every menu event, tray items
+    // included, to the app-level handler in main.rs. A second listener here
+    // ran each menu action twice.
+    tray.build(app)?;
     Ok(())
+}
+
+/// A left click on the tray icon (on release, as Windows menus open).
+#[cfg(any(windows, test))]
+fn opens_app(event: &TrayIconEvent) -> bool {
+    matches!(
+        event,
+        TrayIconEvent::Click {
+            button: MouseButton::Left,
+            button_state: MouseButtonState::Up,
+            ..
+        }
+    )
 }
 
 pub fn handle(app: &AppHandle, id: &str) {
@@ -278,4 +409,88 @@ fn set_zoom(app: &AppHandle, id: &str) {
         }
     }
     main_window::sync_chrome(app);
+}
+
+#[cfg(test)]
+mod tests {
+    use tauri::tray::{MouseButton, MouseButtonState, TrayIconEvent};
+
+    use super::*;
+
+    fn ctrl() -> Modifiers {
+        Modifiers {
+            ctrl: true,
+            ..Modifiers::default()
+        }
+    }
+
+    #[test]
+    fn menu_keys_map_to_their_items() {
+        assert_eq!(key_action(0xBC, ctrl()), Some(PREFERENCES));
+        assert_eq!(key_action(u32::from(b'N'), ctrl()), Some(NEW_CHAT));
+        assert_eq!(key_action(u32::from(b'W'), ctrl()), Some(CLOSE_WINDOW));
+        assert_eq!(key_action(u32::from(b'Q'), ctrl()), Some(QUIT));
+        assert_eq!(key_action(u32::from(b'R'), ctrl()), Some(RELOAD));
+        assert_eq!(key_action(0xBB, ctrl()), Some(ZOOM_IN));
+        assert_eq!(key_action(0x6B, ctrl()), Some(ZOOM_IN));
+        assert_eq!(key_action(0xBD, ctrl()), Some(ZOOM_OUT));
+        assert_eq!(key_action(0x30, ctrl()), Some(ZOOM_RESET));
+        assert_eq!(key_action(0x60, ctrl()), Some(ZOOM_RESET));
+        assert_eq!(key_action(0x7A, Modifiers::default()), Some(FULLSCREEN));
+        let alt = Modifiers {
+            alt: true,
+            ..Modifiers::default()
+        };
+        assert_eq!(key_action(0x25, alt), Some(BACK));
+        assert_eq!(key_action(0x27, alt), Some(FORWARD));
+    }
+
+    #[test]
+    fn other_keys_reach_the_page() {
+        // Ctrl+K and plain typing are the page's.
+        assert_eq!(key_action(u32::from(b'K'), ctrl()), None);
+        assert_eq!(key_action(u32::from(b'N'), Modifiers::default()), None);
+        assert_eq!(key_action(0x25, Modifiers::default()), None);
+        let ctrl_shift = Modifiers {
+            ctrl: true,
+            shift: true,
+            alt: false,
+        };
+        assert_eq!(key_action(u32::from(b'N'), ctrl_shift), None);
+    }
+
+    #[test]
+    fn every_menu_accelerator_has_a_key() {
+        for (id, accelerator) in WINDOW_ACCELERATORS {
+            let key = accelerator.rsplit('+').next().unwrap_or_default();
+            assert!(!virtual_keys(key).is_empty(), "{id}: {accelerator}");
+        }
+    }
+
+    #[test]
+    fn the_about_item_has_the_name_and_version() {
+        let metadata = about_metadata("1.2.3");
+        assert_eq!(metadata.name.as_deref(), Some("Onyx"));
+        assert_eq!(metadata.version.as_deref(), Some("1.2.3"));
+    }
+
+    fn click(button: MouseButton, button_state: MouseButtonState) -> TrayIconEvent {
+        TrayIconEvent::Click {
+            id: "onyx-tray".into(),
+            position: tauri::PhysicalPosition::new(0.0, 0.0),
+            rect: tauri::Rect::default(),
+            button,
+            button_state,
+        }
+    }
+
+    #[test]
+    fn a_left_click_on_the_tray_icon_opens_the_app() {
+        assert!(opens_app(&click(MouseButton::Left, MouseButtonState::Up)));
+        assert!(!opens_app(&click(
+            MouseButton::Left,
+            MouseButtonState::Down
+        )));
+        assert!(!opens_app(&click(MouseButton::Right, MouseButtonState::Up)));
+    }
 }
