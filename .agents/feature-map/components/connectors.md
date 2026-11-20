@@ -236,11 +236,10 @@ downloaded file with
 
 1. `slim-listing-raises-on-auth-failure` **A slim listing must raise on an auth
    or fetch failure, never return a short or empty list.** The prune diff in
-   `background/celery/tasks/pruning/tasks.py:connector_pruning_generator_task` has no ratio check,
-   because a user can delete most of a source. It only refuses a listing that
-   is empty while documents are indexed, unless the connector sets
-   `prune_trusts_empty_listing` (the file connector does). A partial listing
-   deletes the documents it omits, so only an exception aborts the prune.
+   `background/celery/tasks/pruning/tasks.py:connector_pruning_generator_task` has no minimum-count or
+   ratio check, because a user can delete most or all of a source. An empty
+   listing deletes every document of the pair. Only an exception or an
+   `EntityFailure` aborts the prune.
    [[google-drive]] raises when a requested target is visible to no user.
    SharePoint and Airtable pass `fail_on_error=True` on their prune listings,
    so a scope that perm sync or indexing skips aborts the prune instead.

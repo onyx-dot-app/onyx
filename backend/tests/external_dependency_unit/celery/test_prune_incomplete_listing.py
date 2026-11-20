@@ -1,7 +1,6 @@
-"""A prune deletes nothing when the source listing cannot show which indexed
-documents are gone: an empty listing while documents are indexed, or a listing
-that reports an entity it could not list. A short listing still prunes, and a
-connector whose listing is authoritative can prune to empty."""
+"""A prune deletes nothing when the listing reports an entity it could not
+list. A short or empty listing with no failure still prunes: the user may
+really have deleted that data."""
 
 from collections.abc import Generator
 from datetime import datetime, timezone
@@ -61,10 +60,6 @@ class _SlimListing(SlimConnector):
         callback: IndexingHeartbeatInterface | None = None,  # noqa: ARG002
     ) -> GenerateSlimDocumentOutput:
         yield [SlimDocument(id=doc_id) for doc_id in self.listed_ids]
-
-
-class _TrustedEmptyListing(_SlimListing):
-    prune_trusts_empty_listing = True
 
 
 class _ListingWithFailedEntity(CheckpointedConnector[ConnectorCheckpoint]):
@@ -175,21 +170,6 @@ def _assert_skipped(
     assert not RedisConnector(get_current_tenant_id(), pair.id).prune.fenced
 
 
-def test_empty_listing_deletes_nothing(
-    db_session: Session,
-    cc_pair: ConnectorCredentialPair,
-    monkeypatch: pytest.MonkeyPatch,
-    pruned_ids: list[set[str]],
-) -> None:
-    seed_cc_pair_documents(db_session, cc_pair, 3, prefix=_PREFIX, unique=True)
-    monkeypatch.setattr(_SlimListing, "listed_ids", [])
-
-    assert not _run_prune(db_session, cc_pair, _SlimListing(), monkeypatch)
-
-    assert pruned_ids == []
-    _assert_skipped(db_session, cc_pair, "no documents while 3 are indexed")
-
-
 def test_failed_entity_deletes_nothing(
     db_session: Session,
     cc_pair: ConnectorCredentialPair,
@@ -223,7 +203,7 @@ def test_short_listing_still_prunes(
     assert pruned_ids == [set(doc_ids[1:])]
 
 
-def test_trusted_empty_listing_prunes_everything(
+def test_empty_listing_prunes_everything(
     db_session: Session,
     cc_pair: ConnectorCredentialPair,
     monkeypatch: pytest.MonkeyPatch,
@@ -232,8 +212,8 @@ def test_trusted_empty_listing_prunes_everything(
     doc_ids = seed_cc_pair_documents(
         db_session, cc_pair, 3, prefix=_PREFIX, unique=True
     )
-    monkeypatch.setattr(_TrustedEmptyListing, "listed_ids", [])
+    monkeypatch.setattr(_SlimListing, "listed_ids", [])
 
-    assert _run_prune(db_session, cc_pair, _TrustedEmptyListing(), monkeypatch)
+    assert _run_prune(db_session, cc_pair, _SlimListing(), monkeypatch)
 
     assert pruned_ids == [set(doc_ids)]

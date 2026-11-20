@@ -314,9 +314,6 @@ class LocalFileConnector(LoadConnector):
     file_names are the names of the files
     """
 
-    # The listing is the stored file list, so removing every file empties it.
-    prune_trusts_empty_listing = True
-
     # Note: file_names is a required parameter, but should not break backwards compatibility.
     # If add_file_names migration is not run, old file connector configs will not have file_names.
     # file_names is only used for display purposes in the UI and file_locations is used as a fallback.

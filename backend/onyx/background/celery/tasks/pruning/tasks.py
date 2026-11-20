@@ -141,23 +141,15 @@ class PruneListingIncompleteError(RuntimeError):
 
 def _incomplete_listing_reason(
     extraction_result: SlimConnectorExtractionResult,
-    indexed_count: int,
-    trusts_empty_listing: bool,
 ) -> str | None:
-    """Why the listing cannot drive deletions, or None when it can. A short
-    listing is not a reason: the source may really have shrunk."""
+    """Why the listing cannot drive deletions, or None when it can. Only a
+    reported failure counts: a short or empty listing can be a real deletion."""
     failed_entity_ids = extraction_result.failed_entity_ids
     if failed_entity_ids:
         return (
             f"the connector could not list {len(failed_entity_ids)} "
             f"entities (first: {failed_entity_ids[0]})"
         )
-    if (
-        indexed_count
-        and not extraction_result.raw_id_to_parent
-        and not trusts_empty_listing
-    ):
-        return f"the listing returned no documents while {indexed_count} are indexed"
     return None
 
 
@@ -764,11 +756,7 @@ def connector_pruning_generator_task(
         )
         all_connector_doc_ids = extraction_result.raw_id_to_parent
 
-        incomplete_reason = _incomplete_listing_reason(
-            extraction_result,
-            indexed_count=len(all_indexed_document_ids),
-            trusts_empty_listing=type(runnable_connector).prune_trusts_empty_listing,
-        )
+        incomplete_reason = _incomplete_listing_reason(extraction_result)
         if incomplete_reason:
             task_logger.error(
                 f"Pruning skipped, nothing deleted: cc_pair={cc_pair_id} "

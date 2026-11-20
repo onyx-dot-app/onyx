@@ -131,8 +131,7 @@ timestamps use `clock_timestamp()`, because an open beat transaction can predate
 a new request. Scheduled pruning without a request keeps its retry behavior.
 
 **Incomplete listings.** The generator deletes nothing when the listing names
-an `EntityFailure`, or is empty while the pair has indexed documents and the
-connector does not set `prune_trusts_empty_listing`. It raises
+an `EntityFailure`. A short or empty listing still prunes. It raises
 `PruneListingIncompleteError` before any write, so the prune record fails with
 the reason and the failure backoff applies. It logs "Pruning skipped, nothing
 deleted".
