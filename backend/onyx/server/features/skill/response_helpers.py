@@ -18,9 +18,9 @@ from onyx.db.persona_sharing import (
 from onyx.db.plugin import get_version_manifest, list_version_skills
 from onyx.db.plugin_access import (
     PluginAccess,
-    get_visible_plugin_ids,
     load_plugin_access,
     plugin_ids_in_managed_scope,
+    plugin_ids_visible_to,
 )
 from onyx.db.scoped_permissions import fetch_managed_group_ids
 from onyx.db.skill import (
@@ -257,7 +257,7 @@ def skills_list_response_for_user(
         db_session,
     )
     member_visible_ids = (
-        get_visible_plugin_ids(user.id, db_session)
+        plugin_ids_visible_to(user.id, db_session)
         if has_global_permission(user, Permission.MANAGE_PLUGINS)
         else None
     )

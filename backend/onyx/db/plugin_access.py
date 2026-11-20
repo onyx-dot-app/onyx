@@ -1007,3 +1007,9 @@ def load_plugin_access(
         )
         for row in plugin_rows
     }
+
+
+def plugin_ids_visible_to(user_id: UUID, db_session: Session) -> set[UUID]:
+    """The plugins a member with this user's access sees, for the admin
+    lists that leave out what members cannot see."""
+    return set(db_session.scalars(visible_plugin_ids(user_id)))
