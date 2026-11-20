@@ -19,10 +19,11 @@ import {
   OutputImageThumbnail,
   OutputTileFrame,
 } from "@/sections/output-panel/OutputTile";
+import { useChatFilePreview } from "@/lib/filePreview/hooks";
 import {
-  ChatFilePreviewBody,
-  useChatFilePreview,
-} from "@/sections/modals/PreviewModal/ChatFilePreview";
+  FilePreviewBody,
+  FilePreviewScope,
+} from "@/sections/file-preview/FilePreview";
 
 const IMAGE_FILE = /\.(png|jpe?g|gif|webp|svg|avif)$/i;
 
@@ -53,7 +54,7 @@ export const PublishedFilesGrid = memo(function PublishedFilesGrid({
     <WorkspaceHome title={t("filesTab.description")} wide>
       {files.length === 0 && emptyLabel && (
         <div role="status" className="text-center">
-          <Text font="main-ui-muted" color="text-03">
+          <Text as="p" font="main-ui-muted" color="text-03">
             {emptyLabel}
           </Text>
         </div>
@@ -104,19 +105,9 @@ interface PublishedFilePreviewProps {
   file: PublishedFile;
 }
 
-/**
- * A published file's preview, the content of its tab. Memoized on the file,
- * so streamed packets that change nothing in the panel do not render it.
- */
-export const PublishedFilePreview = memo(function PublishedFilePreview({
-  file,
-}: PublishedFilePreviewProps) {
+function PublishedFilePreviewContent({ file }: PublishedFilePreviewProps) {
   const t = useTranslations("chat.publishedFiles");
-  const presentingDocument = useMemo(
-    () => ({ document_id: file.file_id, semantic_identifier: file.name }),
-    [file.file_id, file.name]
-  );
-  const preview = useChatFilePreview(presentingDocument);
+  const preview = useChatFilePreview(file.file_id, file.name);
 
   return (
     <Section
@@ -131,8 +122,22 @@ export const PublishedFilePreview = memo(function PublishedFilePreview({
       alignItems="stretch"
       className="outline-none"
     >
-      <ChatFilePreviewBody preview={preview} />
+      <FilePreviewBody preview={preview} fileName={file.name} />
     </Section>
+  );
+}
+
+/**
+ * A published file's preview, the content of its tab. Memoized on the file,
+ * so streamed packets that change nothing in the panel do not render it.
+ */
+export const PublishedFilePreview = memo(function PublishedFilePreview({
+  file,
+}: PublishedFilePreviewProps) {
+  return (
+    <FilePreviewScope>
+      <PublishedFilePreviewContent file={file} />
+    </FilePreviewScope>
   );
 });
 

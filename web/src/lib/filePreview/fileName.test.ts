@@ -1,7 +1,7 @@
 import {
   parseContentDispositionFileName,
   withMimeTypeExtension,
-} from "@/sections/modals/PreviewModal/downloadFileName";
+} from "@/lib/filePreview/fileName";
 
 const PPTX_MIME_TYPE =
   "application/vnd.openxmlformats-officedocument.presentationml.presentation";

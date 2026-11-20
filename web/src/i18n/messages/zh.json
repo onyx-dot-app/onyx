@@ -12744,61 +12744,8 @@
         }
       },
       "preview": {
-        "code": {
-          "headerDescription": "{language} - {lineCount, plural, one {# 行} other {# 行}} · {fileSize}"
-        },
-        "copyButton": {
-          "tooltip": "复制内容"
-        },
-        "csv": {
-          "footer": "{columnCount, plural, one {# 列} other {# 列}} • {rowCount, plural, one {# 行} other {# 行}}",
-          "headerDescription": "CSV - {rowCount, plural, one {# 行} other {# 行}} • {fileSize}",
-          "rowSeparator": "{count, plural, one {# 行} other {# 行}}"
-        },
-        "docx": {
-          "headerDescription": "{count, plural, one {Word 文档 • # 个字} other {Word 文档 • # 个字}}",
-          "headerDescriptionFallback": "Word 文档",
-          "legacyDocMessage": "无法预览旧版 .doc 格式。请下载文件后查看。",
-          "loadError": {
-            "message": "无法预览此文档。请下载文件后查看。"
-          }
-        },
-        "downloadButton": {
-          "label": "下载文件",
-          "tooltip": "下载"
-        },
         "exceptionTrace": {
           "defaultTitle": "完整异常跟踪"
-        },
-        "header": {
-          "fallbackTitle": "文档"
-        },
-        "lineCount": {
-          "label": "{count, plural, one {# 行} other {# 行}}"
-        },
-        "loadError": {
-          "message": "加载文档失败。"
-        },
-        "pdf": {
-          "iframeTitle": "PDF 查看器"
-        },
-        "text": {
-          "headerDescription": "{lineCount, plural, one {# 行} other {# 行}} · {fileSize}"
-        },
-        "unsupported": {
-          "message": "不支持预览此文件格式。"
-        },
-        "xlsx": {
-          "headerDescription": "电子表格 - {count, plural, one {# 个工作表} other {# 个工作表}}",
-          "parseError": {
-            "message": "无法预览此电子表格。"
-          },
-          "sheetCount": "{count, plural, one {# 个工作表} other {# 个工作表}}"
-        },
-        "zoomControls": {
-          "level": "{zoom}%",
-          "zoomInTooltip": "放大",
-          "zoomOutTooltip": "缩小"
         }
       },
       "share": {
@@ -12945,6 +12892,89 @@
         },
         "selectedCount": {
           "label": "{count, plural, one {已选择 # 个文件} other {已选择 # 个文件}}"
+        }
+      }
+    },
+    "filePreview": {
+      "header": {
+        "fallbackTitle": "文档"
+      },
+      "code": {
+        "headerDescription": "{language} - {lineCount, plural, one {# 行} other {# 行}} · {fileSize}"
+      },
+      "text": {
+        "headerDescription": "{lineCount, plural, one {# 行} other {# 行}} · {fileSize}"
+      },
+      "lineCount": {
+        "label": "{count, plural, one {# 行} other {# 行}}"
+      },
+      "wordCount": {
+        "label": "{count, plural, one {# 个字} other {# 个字}}"
+      },
+      "copyButton": {
+        "tooltip": "复制内容"
+      },
+      "downloadButton": {
+        "label": "下载文件",
+        "tooltip": "下载"
+      },
+      "retryButton": {
+        "label": "重试"
+      },
+      "error": {
+        "title": "无法加载预览",
+        "description": "未能加载预览。请重试或下载文件后打开。"
+      },
+      "renderError": {
+        "title": "无法预览此文件",
+        "description": "无法在此处显示该文件。请下载文件后打开。"
+      },
+      "unsupported": {
+        "title": "暂不支持预览此文件类型",
+        "description": "下载文件以查看其内容。"
+      },
+      "tooLarge": {
+        "title": "文件过大，无法预览",
+        "description": "此处支持预览最大 {size, number} MB 的文件。请下载文件后打开。"
+      },
+      "spreadsheet": {
+        "headerDescription": "电子表格 - {count, plural, one {# 个工作表} other {# 个工作表}}",
+        "truncated": "预览最多显示 {rows, number} 行、{columns, number} 列和 {cells, number} 个单元格。下载原文件可查看全部数据。",
+        "malformed": "此 CSV 包含一个无效的引号字段。请下载原文件进行检查。",
+        "empty": "无内容"
+      },
+      "image": {
+        "loading": {
+          "label": "正在加载图片..."
+        },
+        "actualSize": {
+          "label": "实际大小"
+        }
+      },
+      "pdf": {
+        "controls": {
+          "label": "PDF 控件"
+        },
+        "thumbnails": {
+          "toggle": "显示或隐藏页面缩略图",
+          "label": "页面缩略图"
+        },
+        "page": {
+          "previous": "上一页",
+          "next": "下一页",
+          "counter": "{current, number} / {total, number}",
+          "preview": "第 {page, number} 页预览",
+          "select": "转到第 {page, number} 页"
+        },
+        "zoom": {
+          "out": "缩小",
+          "in": "放大",
+          "label": "缩放",
+          "fitWidth": "适合宽度",
+          "fitPage": "适合页面"
+        },
+        "error": {
+          "description": "无法加载该 PDF 文件。"
         }
       }
     },

@@ -12744,61 +12744,8 @@
         }
       },
       "preview": {
-        "code": {
-          "headerDescription": "{language} - {lineCount, plural, one {# linha} other {# linhas}} · {fileSize}"
-        },
-        "copyButton": {
-          "tooltip": "Copiar conteúdo"
-        },
-        "csv": {
-          "footer": "{columnCount, plural, one {# coluna} other {# colunas}} • {rowCount, plural, one {# linha} other {# linhas}}",
-          "headerDescription": "CSV - {rowCount, plural, one {# linha} other {# linhas}} • {fileSize}",
-          "rowSeparator": "{count, plural, one {# linha} other {# linhas}}"
-        },
-        "docx": {
-          "headerDescription": "{count, plural, one {Documento do Word • # palavra} other {Documento do Word • # palavras}}",
-          "headerDescriptionFallback": "Documento do Word",
-          "legacyDocMessage": "Não é possível pré-visualizar o formato .doc antigo. Baixe o arquivo para vê-lo.",
-          "loadError": {
-            "message": "Não foi possível pré-visualizar este documento. Baixe o arquivo para vê-lo."
-          }
-        },
-        "downloadButton": {
-          "label": "Baixar arquivo",
-          "tooltip": "Baixar"
-        },
         "exceptionTrace": {
           "defaultTitle": "Rastreamento completo da exceção"
-        },
-        "header": {
-          "fallbackTitle": "Documento"
-        },
-        "lineCount": {
-          "label": "{count, plural, one {# linha} other {# linhas}}"
-        },
-        "loadError": {
-          "message": "Falha ao carregar o documento."
-        },
-        "pdf": {
-          "iframeTitle": "Visualizador de PDF"
-        },
-        "text": {
-          "headerDescription": "{lineCount, plural, one {# linha} other {# linhas}} · {fileSize}"
-        },
-        "unsupported": {
-          "message": "Este formato de arquivo não é compatível com a pré-visualização."
-        },
-        "xlsx": {
-          "headerDescription": "Planilha - {count, plural, one {# aba} other {# abas}}",
-          "parseError": {
-            "message": "Não foi possível pré-visualizar esta planilha."
-          },
-          "sheetCount": "{count, plural, one {# aba} other {# abas}}"
-        },
-        "zoomControls": {
-          "level": "{zoom}%",
-          "zoomInTooltip": "Ampliar",
-          "zoomOutTooltip": "Reduzir"
         }
       },
       "share": {
@@ -12945,6 +12892,89 @@
         },
         "selectedCount": {
           "label": "{count, plural, one {# arquivo selecionado} other {# arquivos selecionados}}"
+        }
+      }
+    },
+    "filePreview": {
+      "header": {
+        "fallbackTitle": "Documento"
+      },
+      "code": {
+        "headerDescription": "{language} - {lineCount, plural, one {# linha} other {# linhas}} · {fileSize}"
+      },
+      "text": {
+        "headerDescription": "{lineCount, plural, one {# linha} other {# linhas}} · {fileSize}"
+      },
+      "lineCount": {
+        "label": "{count, plural, one {# linha} other {# linhas}}"
+      },
+      "wordCount": {
+        "label": "{count, plural, one {# palavra} other {# palavras}}"
+      },
+      "copyButton": {
+        "tooltip": "Copiar conteúdo"
+      },
+      "downloadButton": {
+        "label": "Baixar arquivo",
+        "tooltip": "Baixar"
+      },
+      "retryButton": {
+        "label": "Tentar novamente"
+      },
+      "error": {
+        "title": "Não foi possível carregar a prévia",
+        "description": "Não foi possível carregar a prévia. Tente novamente ou baixe o arquivo para abri-lo."
+      },
+      "renderError": {
+        "title": "Não é possível visualizar este arquivo",
+        "description": "Não foi possível exibir o arquivo aqui. Baixe o arquivo para abri-lo."
+      },
+      "unsupported": {
+        "title": "A prévia deste tipo de arquivo não é compatível no momento",
+        "description": "Baixe o arquivo para visualizar seu conteúdo."
+      },
+      "tooLarge": {
+        "title": "Arquivo muito grande para prévia",
+        "description": "Arquivos de até {size, number} MB podem ser visualizados aqui. Baixe o arquivo para abri-lo."
+      },
+      "spreadsheet": {
+        "headerDescription": "Planilha - {count, plural, one {# aba} other {# abas}}",
+        "truncated": "Prévia limitada a {rows, number} linhas, {columns, number} colunas e {cells, number} células. Baixe o original para todos os dados.",
+        "malformed": "Este CSV contém um campo entre aspas inválido. Baixe o original para verificá-lo.",
+        "empty": "Sem conteúdo"
+      },
+      "image": {
+        "loading": {
+          "label": "Carregando imagem..."
+        },
+        "actualSize": {
+          "label": "Tamanho real"
+        }
+      },
+      "pdf": {
+        "controls": {
+          "label": "Controles de PDF"
+        },
+        "thumbnails": {
+          "toggle": "Mostrar ou ocultar miniaturas",
+          "label": "Miniaturas das páginas"
+        },
+        "page": {
+          "previous": "Página anterior",
+          "next": "Próxima página",
+          "counter": "{current, number} / {total, number}",
+          "preview": "Prévia da página {page, number}",
+          "select": "Ir para a página {page, number}"
+        },
+        "zoom": {
+          "out": "Diminuir zoom",
+          "in": "Aumentar zoom",
+          "label": "Zoom",
+          "fitWidth": "Ajustar à largura",
+          "fitPage": "Ajustar à página"
+        },
+        "error": {
+          "description": "Não foi possível carregar o arquivo PDF."
         }
       }
     },

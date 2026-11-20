@@ -221,7 +221,19 @@
   Sources cannot close or move, and a file tab cannot move before them. File
   tabs of one shown name show their paths, and an older publish of a path
   says "earlier version". The five most recent file viewers stay
-  mounted, so switching back does not load the file again. Closing the panel
+  mounted, so switching back does not load the file again; a hidden one
+  leaves layout (`content-visibility: hidden`). A drag of the panel's edge
+  keeps the tabs at their width until it ends, so no preview lays out or
+  draws again on each step. A file tab and
+  the preview modal show a file the same way: markdown as a document, a CSV
+  or workbook as a grid with a sheet bar, a PDF one page at a time with page
+  thumbnails and zoom, a Word file as pages scaled to fit the width, with
+  its word count, an image fit to the panel or at its own size, and code, data, SVG and text as
+  highlighted source. A file over its format's limit (5 MB of text, 20 MB
+  for Word, 100 MB for a PDF), a PowerPoint file and other types show one
+  card with a download instead. So does a failed load, with a retry, and a
+  PDF, Word file or image that does not render, such as a HEIC image.
+  Closing the panel
   keeps its tabs, so reopening it, or coming back to the chat, restores them.
   A closed panel cannot be focused, and closing it returns focus to the
   control that opened it, or that last switched it from outside the panel,
@@ -283,7 +295,8 @@ This component owns:
   of [[llm-providers]];
 - the development `/api` proxy route.
 
-It shares the file preview renderers with [[craft-frontend]].
+It owns the chat file previews; [[craft-frontend]] has its own previewers
+for sandbox files.
 
 Neighbours own the rest. [[streaming-protocol]] owns the packet vocabulary,
 the enum mirrors, line framing and heartbeats. [[citations]] owns marker
@@ -403,9 +416,27 @@ is built from the output-panel parts that it shares with Craft's panel
 the tab rules, and `sections/output-panel/PanelResize.tsx:useOutputPanelWorkspace`, which measures
 the workspace, resizes the panel, makes the covered page inert after it moves
 focus out, and restores a full panel on Escape. [[craft-frontend]] lists the
-parts, and a change to them changes Craft's panel too. Its previews use
-`sections/modals/PreviewModal/ChatFilePreview.tsx`, the chat file previewer
-that `PreviewModal` also uses; Craft's previewers read sandbox paths, not
+parts, and a change to them changes Craft's panel too. A file tab and
+`PreviewModal` show a file through `sections/file-preview/FilePreview.tsx:FilePreviewBody`,
+with one renderer per format in `sections/file-preview/`. Each loads the file
+with `lib/filePreview/hooks.ts:useChatFilePreview`, an SWR read that
+`FilePreviewScope` scopes to the preview, so the file's bytes go and its
+download stops when the preview closes, and that does not revalidate.
+`FilePreviewBody` owns the card for a file that cannot show; a renderer only
+reports that it failed. Its loader,
+`lib/filePreview/loadChatFilePreview.ts:loadChatFilePreview`, reads
+`/api/chat/file/{id}` once with the default cache mode. The response's name
+and type pick the format (`lib/filePreview/format.ts:resolveFilePreviewFormat`).
+A spreadsheet reads the server's parsed sheets (`?parsed=true`) instead of
+the workbook, and an image or an unsupported file reads no body: the image
+loads from the file URL in an `<img>`. SVG shows as XML source, because the
+server serves it as `application/octet-stream`. Other bodies
+are read up to the format's limit while they stream, because the server sends
+no length. Text over 200,000 characters shows without highlighting, and
+markdown over it shows as source. Nothing makes an object URL. PDF.js loads only for a PDF, from
+the build's `/pdfjs/` assets, with `isEvalSupported` off. A Word file renders
+through `lib/docx/renderDocx.ts`, which sanitizes it, into a shadow root.
+Markdown renders without raw HTML. Craft's previewers read sandbox paths, not
 chat files. Published files belong to the chat, not to a branch.
 `lib/chat/publishedFiles.ts:chatPublishedFiles` owns the Files list: the
 latest load's `published_files`, then the files that packets published after

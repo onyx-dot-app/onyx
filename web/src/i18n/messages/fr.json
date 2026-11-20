@@ -12744,61 +12744,8 @@
         }
       },
       "preview": {
-        "code": {
-          "headerDescription": "{language} - {lineCount, plural, one {# ligne} other {# lignes}} · {fileSize}"
-        },
-        "copyButton": {
-          "tooltip": "Copier le contenu"
-        },
-        "csv": {
-          "footer": "{columnCount, plural, one {# colonne} other {# colonnes}} • {rowCount, plural, one {# ligne} other {# lignes}}",
-          "headerDescription": "CSV - {rowCount, plural, one {# ligne} other {# lignes}} • {fileSize}",
-          "rowSeparator": "{count, plural, one {# ligne} other {# lignes}}"
-        },
-        "docx": {
-          "headerDescription": "{count, plural, one {Document Word • # mot} other {Document Word • # mots}}",
-          "headerDescriptionFallback": "Document Word",
-          "legacyDocMessage": "L'ancien format .doc ne peut pas être prévisualisé. Téléchargez le fichier pour le consulter.",
-          "loadError": {
-            "message": "Impossible de prévisualiser ce document. Téléchargez le fichier pour le consulter."
-          }
-        },
-        "downloadButton": {
-          "label": "Télécharger le fichier",
-          "tooltip": "Télécharger"
-        },
         "exceptionTrace": {
           "defaultTitle": "Trace complète de l'exception"
-        },
-        "header": {
-          "fallbackTitle": "Document"
-        },
-        "lineCount": {
-          "label": "{count, plural, one {# ligne} other {# lignes}}"
-        },
-        "loadError": {
-          "message": "Échec du chargement du document."
-        },
-        "pdf": {
-          "iframeTitle": "Lecteur PDF"
-        },
-        "text": {
-          "headerDescription": "{lineCount, plural, one {# ligne} other {# lignes}} · {fileSize}"
-        },
-        "unsupported": {
-          "message": "Ce format de fichier ne peut pas être prévisualisé."
-        },
-        "xlsx": {
-          "headerDescription": "Feuille de calcul - {count, plural, one {# feuille} other {# feuilles}}",
-          "parseError": {
-            "message": "Impossible de prévisualiser cette feuille de calcul."
-          },
-          "sheetCount": "{count, plural, one {# feuille} other {# feuilles}}"
-        },
-        "zoomControls": {
-          "level": "{zoom} %",
-          "zoomInTooltip": "Zoom avant",
-          "zoomOutTooltip": "Zoom arrière"
         }
       },
       "share": {
@@ -12945,6 +12892,89 @@
         },
         "selectedCount": {
           "label": "{count, plural, one {# fichier sélectionné} other {# fichiers sélectionnés}}"
+        }
+      }
+    },
+    "filePreview": {
+      "header": {
+        "fallbackTitle": "Document"
+      },
+      "code": {
+        "headerDescription": "{language} - {lineCount, plural, one {# ligne} other {# lignes}} · {fileSize}"
+      },
+      "text": {
+        "headerDescription": "{lineCount, plural, one {# ligne} other {# lignes}} · {fileSize}"
+      },
+      "lineCount": {
+        "label": "{count, plural, one {# ligne} other {# lignes}}"
+      },
+      "wordCount": {
+        "label": "{count, plural, one {# mot} other {# mots}}"
+      },
+      "copyButton": {
+        "tooltip": "Copier le contenu"
+      },
+      "downloadButton": {
+        "label": "Télécharger le fichier",
+        "tooltip": "Télécharger"
+      },
+      "retryButton": {
+        "label": "Réessayer"
+      },
+      "error": {
+        "title": "Impossible de charger l’aperçu",
+        "description": "L’aperçu n’a pas pu être chargé. Réessayez ou téléchargez le fichier pour l’ouvrir."
+      },
+      "renderError": {
+        "title": "Impossible de prévisualiser ce fichier",
+        "description": "Le fichier ne peut pas être affiché ici. Téléchargez le fichier pour l’ouvrir."
+      },
+      "unsupported": {
+        "title": "L’aperçu de ce type de fichier n’est pas disponible actuellement",
+        "description": "Téléchargez le fichier pour consulter son contenu."
+      },
+      "tooLarge": {
+        "title": "Fichier trop volumineux pour l’aperçu",
+        "description": "Les fichiers jusqu’à {size, number} Mo peuvent être prévisualisés ici. Téléchargez le fichier pour l’ouvrir."
+      },
+      "spreadsheet": {
+        "headerDescription": "Feuille de calcul - {count, plural, one {# feuille} other {# feuilles}}",
+        "truncated": "Aperçu limité à {rows, number} lignes, {columns, number} colonnes et {cells, number} cellules. Téléchargez le fichier original pour toutes les données.",
+        "malformed": "Ce CSV contient un champ entre guillemets non valide. Téléchargez le fichier original pour le vérifier.",
+        "empty": "Aucun contenu"
+      },
+      "image": {
+        "loading": {
+          "label": "Chargement de l'image..."
+        },
+        "actualSize": {
+          "label": "Taille réelle"
+        }
+      },
+      "pdf": {
+        "controls": {
+          "label": "Commandes PDF"
+        },
+        "thumbnails": {
+          "toggle": "Afficher ou masquer les miniatures",
+          "label": "Miniatures des pages"
+        },
+        "page": {
+          "previous": "Page précédente",
+          "next": "Page suivante",
+          "counter": "{current, number} / {total, number}",
+          "preview": "Aperçu de la page {page, number}",
+          "select": "Aller à la page {page, number}"
+        },
+        "zoom": {
+          "out": "Zoom arrière",
+          "in": "Zoom avant",
+          "label": "Zoom",
+          "fitWidth": "Ajuster à la largeur",
+          "fitPage": "Ajuster à la page"
+        },
+        "error": {
+          "description": "Le fichier PDF n'a pas pu être chargé."
         }
       }
     },

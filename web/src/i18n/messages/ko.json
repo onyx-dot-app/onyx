@@ -12744,61 +12744,8 @@
         }
       },
       "preview": {
-        "code": {
-          "headerDescription": "{language} - {lineCount, plural, one {#줄} other {#줄}} · {fileSize}"
-        },
-        "copyButton": {
-          "tooltip": "내용 복사"
-        },
-        "csv": {
-          "footer": "{columnCount, plural, one {#개 열} other {#개 열}} • {rowCount, plural, one {#개 행} other {#개 행}}",
-          "headerDescription": "CSV - {rowCount, plural, one {#개 행} other {#개 행}} • {fileSize}",
-          "rowSeparator": "{count, plural, one {#개 행} other {#개 행}}"
-        },
-        "docx": {
-          "headerDescription": "{count, plural, one {Word 문서 • 단어 #개} other {Word 문서 • 단어 #개}}",
-          "headerDescriptionFallback": "Word 문서",
-          "legacyDocMessage": "이전 .doc 형식은 미리 볼 수 없습니다. 파일을 다운로드하여 확인하세요.",
-          "loadError": {
-            "message": "이 문서를 미리 볼 수 없습니다. 파일을 다운로드하여 확인하세요."
-          }
-        },
-        "downloadButton": {
-          "label": "파일 다운로드",
-          "tooltip": "다운로드"
-        },
         "exceptionTrace": {
           "defaultTitle": "전체 예외 트레이스"
-        },
-        "header": {
-          "fallbackTitle": "문서"
-        },
-        "lineCount": {
-          "label": "{count, plural, one {#줄} other {#줄}}"
-        },
-        "loadError": {
-          "message": "문서를 불러오지 못했습니다."
-        },
-        "pdf": {
-          "iframeTitle": "PDF 뷰어"
-        },
-        "text": {
-          "headerDescription": "{lineCount, plural, one {#줄} other {#줄}} · {fileSize}"
-        },
-        "unsupported": {
-          "message": "이 파일 형식은 미리 보기를 지원하지 않습니다."
-        },
-        "xlsx": {
-          "headerDescription": "스프레드시트 - {count, plural, one {시트 #개} other {시트 #개}}",
-          "parseError": {
-            "message": "이 스프레드시트를 미리 볼 수 없습니다."
-          },
-          "sheetCount": "{count, plural, one {시트 #개} other {시트 #개}}"
-        },
-        "zoomControls": {
-          "level": "{zoom}%",
-          "zoomInTooltip": "확대",
-          "zoomOutTooltip": "축소"
         }
       },
       "share": {
@@ -12945,6 +12892,89 @@
         },
         "selectedCount": {
           "label": "{count, plural, one {파일 #개 선택됨} other {파일 #개 선택됨}}"
+        }
+      }
+    },
+    "filePreview": {
+      "header": {
+        "fallbackTitle": "문서"
+      },
+      "code": {
+        "headerDescription": "{language} - {lineCount, plural, one {#줄} other {#줄}} · {fileSize}"
+      },
+      "text": {
+        "headerDescription": "{lineCount, plural, one {#줄} other {#줄}} · {fileSize}"
+      },
+      "lineCount": {
+        "label": "{count, plural, one {#줄} other {#줄}}"
+      },
+      "wordCount": {
+        "label": "{count, plural, one {단어 #개} other {단어 #개}}"
+      },
+      "copyButton": {
+        "tooltip": "내용 복사"
+      },
+      "downloadButton": {
+        "label": "파일 다운로드",
+        "tooltip": "다운로드"
+      },
+      "retryButton": {
+        "label": "다시 시도"
+      },
+      "error": {
+        "title": "미리보기를 불러올 수 없음",
+        "description": "미리보기를 불러오지 못했습니다. 다시 시도하거나 파일을 다운로드하여 여세요."
+      },
+      "renderError": {
+        "title": "이 파일은 미리 볼 수 없습니다",
+        "description": "여기에서 파일을 표시할 수 없습니다. 파일을 다운로드하여 여세요."
+      },
+      "unsupported": {
+        "title": "이 파일 형식의 미리보기는 현재 지원되지 않습니다",
+        "description": "파일을 다운로드하여 내용을 확인하세요."
+      },
+      "tooLarge": {
+        "title": "파일이 너무 커서 미리볼 수 없음",
+        "description": "여기서는 최대 {size, number} MB의 파일을 미리볼 수 있습니다. 파일을 다운로드하여 여세요."
+      },
+      "spreadsheet": {
+        "headerDescription": "스프레드시트 - {count, plural, one {시트 #개} other {시트 #개}}",
+        "truncated": "미리보기는 {rows, number}행, {columns, number}열, {cells, number}셀로 제한됩니다. 모든 데이터를 보려면 원본을 다운로드하세요.",
+        "malformed": "이 CSV에는 따옴표로 묶인 잘못된 필드가 있습니다. 확인하려면 원본을 다운로드하세요.",
+        "empty": "내용 없음"
+      },
+      "image": {
+        "loading": {
+          "label": "이미지를 불러오는 중..."
+        },
+        "actualSize": {
+          "label": "실제 크기"
+        }
+      },
+      "pdf": {
+        "controls": {
+          "label": "PDF 컨트롤"
+        },
+        "thumbnails": {
+          "toggle": "페이지 썸네일 표시 전환",
+          "label": "페이지 썸네일"
+        },
+        "page": {
+          "previous": "이전 페이지",
+          "next": "다음 페이지",
+          "counter": "{current, number} / {total, number}",
+          "preview": "{page, number}페이지 미리보기",
+          "select": "{page, number}페이지로 이동"
+        },
+        "zoom": {
+          "out": "축소",
+          "in": "확대",
+          "label": "확대/축소",
+          "fitWidth": "너비에 맞추기",
+          "fitPage": "페이지에 맞추기"
+        },
+        "error": {
+          "description": "PDF 파일을 불러올 수 없습니다."
         }
       }
     },

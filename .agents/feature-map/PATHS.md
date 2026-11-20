@@ -276,7 +276,7 @@ covers new files that match it.
 | `web/src/sections/model-selector/` | chat-frontend, llm-providers |
 | `web/src/lib/search/streamingUtils.ts`, `web/src/app/app/services/streamingModels.ts` | streaming-protocol |
 | `web/src/app/app/components/files/`, `web/src/sections/modals/UserFilesModal.tsx`, `web/src/sections/cards/FileCard.tsx` | file-store-and-user-files |
-| `web/src/sections/modals/PreviewModal/` | chat-frontend |
+| `web/src/sections/modals/PreviewModal/`, `web/src/sections/file-preview/`, `web/src/lib/filePreview/` | chat-frontend |
 | `web/src/sections/Suggestions.tsx` | chat-frontend |
 | `web/src/lib/richInputTile.ts`, `web/src/lib/contentEditable.ts` | chat-frontend |
 | `web/src/app/app/agents/` | chat-frontend, agents-personas |

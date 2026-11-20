@@ -1,4 +1,5 @@
 import { act, render, screen, waitFor, within } from "@tests/setup/test-utils";
+import { fileResponse } from "@tests/setup/fileResponse";
 import type { PublishedFile } from "@/app/app/services/streamingModels";
 import {
   PublishedFilePreview,
@@ -12,33 +13,6 @@ jest.mock("@/lib/chat/svc", () => ({
 }));
 
 const HTML = "<h1>Quarterly report</h1>";
-
-function htmlResponse(): Response {
-  const headers: Record<string, string> = {
-    "Content-Type": "text/html",
-    "Content-Disposition": 'attachment; filename="report.html"',
-  };
-  const response: Pick<Response, "headers" | "blob" | "body"> = {
-    headers: { get: (name: string) => headers[name] ?? null } as Headers,
-    blob: async () =>
-      ({ text: async () => HTML, type: "text/html" }) as unknown as Blob,
-    body: null,
-  };
-  return response as unknown as Response;
-}
-
-const createObjectURL = jest.fn(() => "blob:report");
-
-beforeAll(() => {
-  Object.defineProperty(window.URL, "createObjectURL", {
-    configurable: true,
-    value: createObjectURL,
-  });
-  Object.defineProperty(window.URL, "revokeObjectURL", {
-    configurable: true,
-    value: () => undefined,
-  });
-});
 
 function file(
   fileId: string,
@@ -96,7 +70,9 @@ test("the Files list shows a tile for each file, with its title, else its name",
 });
 
 test("a file's preview shows HTML as source, with a download", async () => {
-  jest.mocked(fetchChatFile).mockResolvedValue(htmlResponse());
+  jest
+    .mocked(fetchChatFile)
+    .mockResolvedValue(fileResponse(HTML, "text/html", "report.html"));
   const view = render(
     <PublishedFilePreview file={file("file-2", "report.html", "Q3 report")} />
   );
@@ -105,25 +81,12 @@ test("a file's preview shows HTML as source, with a download", async () => {
   // HTML shows as source, never as a rendered page.
   await waitFor(() => expect(preview).toHaveTextContent(HTML));
   expect(view.container.querySelector("iframe")).toBeNull();
-  expect(fetchChatFile).toHaveBeenCalledWith("file-2");
+  expect(fetchChatFile).toHaveBeenCalledWith(
+    "file-2",
+    false,
+    expect.any(AbortSignal)
+  );
   expect(
     within(preview).getByRole("link", { name: "Download" })
   ).toHaveAttribute("download", "report.html");
-});
-
-test("a preview that closes while its file loads makes no object URL", async () => {
-  let respond: (response: Response) => void = () => undefined;
-  jest.mocked(fetchChatFile).mockReturnValue(
-    new Promise((resolve) => {
-      respond = resolve;
-    })
-  );
-  createObjectURL.mockClear();
-  const view = render(
-    <PublishedFilePreview file={file("file-2", "report.html", "Q3 report")} />
-  );
-  view.unmount();
-
-  await act(async () => respond(htmlResponse()));
-  expect(createObjectURL).not.toHaveBeenCalled();
 });

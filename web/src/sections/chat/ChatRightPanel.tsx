@@ -6,6 +6,7 @@ import {
   useCallback,
   useContext,
   useEffect,
+  useLayoutEffect,
   useMemo,
   useRef,
 } from "react";
@@ -217,6 +218,20 @@ export const ChatRightPanel = memo(function ChatRightPanel({
   const insideChangeRef = useRef(false);
   const returnFocusRef = useRef<string | null>(null);
   const shownRef = useRef({ open, shown });
+  // A drag keeps the tabs at their width, against the panel's end edge so
+  // their scrollbars stay, until it ends: no preview lays out or draws again
+  // on each step, and the panel clips them
+  const { dragging } = layout;
+  useLayoutEffect(() => {
+    const body = bodyRef.current;
+    if (!dragging || !body) return;
+    body.style.width = `${body.getBoundingClientRect().width}px`;
+    body.style.insetInlineStart = "auto";
+    return () => {
+      body.style.width = "";
+      body.style.insetInlineStart = "";
+    };
+  }, [dragging]);
   useEffect(() => {
     const previous = shownRef.current;
     shownRef.current = { open, shown };
@@ -375,9 +390,14 @@ export const ChatRightPanel = memo(function ChatRightPanel({
                     aria-labelledby={panelTabDomId(tabId)}
                     aria-hidden={!visible}
                     inert={!visible}
+                    // A hidden tab keeps its state and scroll but leaves
+                    // layout, so a change of width does not reach it.
+                    // `invisible` hides it where content-visibility is
+                    // unsupported.
                     className={cn(
                       "absolute inset-0",
-                      !visible && "invisible pointer-events-none"
+                      !visible &&
+                        "invisible pointer-events-none [content-visibility:hidden]"
                     )}
                   >
                     <PublishedFilePreview file={file} />
@@ -413,6 +433,10 @@ export const ChatRightPanel = memo(function ChatRightPanel({
             aria-label={t("closeButton.label")}
           />
         </Section>
+        {dragging && (
+          // Over the content, so the pointer hovers nothing in it
+          <div className="absolute inset-0 z-40 cursor-col-resize" />
+        )}
         {!layout.narrow && (
           // Inside the panel's first 8px, as Craft's, so no edge clips it
           <PanelResizeHandle

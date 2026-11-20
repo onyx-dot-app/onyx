@@ -279,7 +279,11 @@ test("an older reply's card opens that publish, not the newest copy", async () =
   });
 
   expect(await preview("Draft report")).toBeVisible();
-  expect(fetchChatFile).toHaveBeenLastCalledWith("file-old");
+  expect(fetchChatFile).toHaveBeenLastCalledWith(
+    "file-old",
+    false,
+    expect.any(AbortSignal)
+  );
 });
 
 test("several files open, switch and close like Craft's tabs", async () => {
@@ -799,7 +803,11 @@ test("a card opens its own file, also one that the Files list does not hold", as
   });
 
   expect(await preview("Pathless")).toBeVisible();
-  expect(fetchChatFile).toHaveBeenLastCalledWith("file-pathless");
+  expect(fetchChatFile).toHaveBeenLastCalledWith(
+    "file-pathless",
+    false,
+    expect.any(AbortSignal)
+  );
   expect(screen.getByRole("tab", { name: "Pathless" })).toHaveAttribute(
     "aria-selected",
     "true"

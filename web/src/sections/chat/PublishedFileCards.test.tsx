@@ -181,7 +181,11 @@ test("without a Files panel, a click previews the file in a modal", async () => 
   });
 
   expect(await screen.findByRole("dialog")).toBeInTheDocument();
-  expect(fetchChatFile).toHaveBeenCalledWith("file-md");
+  expect(fetchChatFile).toHaveBeenCalledWith(
+    "file-md",
+    false,
+    expect.any(AbortSignal)
+  );
 });
 
 test("a card and its preview show the name without its bidi controls", async () => {
