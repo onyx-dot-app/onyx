@@ -12,6 +12,10 @@ from onyx.utils.url import SSRFException, ssrf_safe_get
 GITHUB_COMMIT_SHA_PATTERN: Final[re.Pattern[str]] = re.compile(r"^[0-9a-fA-F]{40}$")
 
 _GITHUB_FETCH_TIMEOUT_SECONDS: Final[int] = 30
+GITHUB_REPOSITORY_NOT_FOUND: Final = (
+    "Repository or branch not found. Check the URL. If the repository is "
+    "private, connect GitHub and try again."
+)
 # Tests point these at a fake GitHub.
 GITHUB_API_BASE_URL = "https://api.github.com"
 GITHUB_ARCHIVE_BASE_URL = "https://codeload.github.com"
@@ -45,6 +49,8 @@ def parse_github_source(source: str) -> GitHubSource:
         )
 
     tree_tail: tuple[str, ...] = ()
+    if value.lower().startswith(("github.com/", "www.github.com/")):
+        value = f"https://{value}"
     if "://" not in value:
         source_parts = value.removesuffix(".git").split("/")
         if len(source_parts) != 2:
@@ -222,11 +228,21 @@ def resolve_github_revision(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "GitHub denied access to this repository. Confirm that your connected account has access and has authorized organization SSO if required.",
         )
+    if last_status == 404 and source.tree_tail:
+        repository_url = f"{GITHUB_API_BASE_URL}/repos/{encoded_owner}/{encoded_repo}"
+        with _github_get(
+            repository_url,
+            authorization=authorization_header if used_authorization else None,
+        ) as response:
+            repository_found = response.status_code == 200
+        if repository_found:
+            raise OnyxError(
+                OnyxErrorCode.NOT_FOUND,
+                f"The branch or folder '{'/'.join(source.tree_tail)}' is not in "
+                f"{source.owner}/{source.repo}.",
+            )
     if last_status in {403, 404}:
-        raise OnyxError(
-            OnyxErrorCode.NOT_FOUND,
-            "Repository or branch not found. Check the URL. If the repository is private, connect GitHub and try again.",
-        )
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, GITHUB_REPOSITORY_NOT_FOUND)
     raise OnyxError(
         OnyxErrorCode.BAD_GATEWAY,
         "Couldn't load the repository from GitHub. Try again in a few minutes.",

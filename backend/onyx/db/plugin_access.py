@@ -894,6 +894,8 @@ class PluginAccess(BaseModel):
     marketplace_kind: MarketplaceKind
     marketplace_name: str
     marketplace_repository: str | None
+    # Set for a personal GitHub marketplace.
+    marketplace_owner_user_id: UUID | None
     # The default of the plugin's marketplace.
     marketplace_default_policy: PluginInstallationPolicy
     # ``plugin_required_for_anyone``.
@@ -962,6 +964,7 @@ def load_plugin_access(
             Marketplace.kind,
             Marketplace.name,
             Marketplace.repository,
+            Marketplace.owner_user_id,
         )
         .join(Marketplace, Marketplace.id == Plugin.marketplace_id)
         .join(current, current.id == Plugin.current_version_id)
@@ -1032,6 +1035,7 @@ def load_plugin_access(
             marketplace_kind=row[18],
             marketplace_name=row[19],
             marketplace_repository=row[20],
+            marketplace_owner_user_id=row[21],
             user_shares=tuple(user_shares.get(row[0], ())),
             group_rows=tuple(group_rows.get(row[0], ())),
         )

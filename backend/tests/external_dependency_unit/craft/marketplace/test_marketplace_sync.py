@@ -313,7 +313,8 @@ def test_remote_entries_and_private_repository(
 
     assert sync.sync_marketplace(marketplace.id).status == MarketplaceSyncStatus.FAILED
     assert reload(db_session, marketplace).last_error == (
-        f"The GitHub connection of {owner.email} is gone. Replace the login."
+        f"GitHub did not find {OWNER}/{REPO}. If it is private, {owner.email} "
+        "must connect GitHub, or another user must replace the login."
     )
 
     connections.connected.add(owner.id)

@@ -99,10 +99,15 @@ class FakeGitHub:
             return self._response(200, repository.tarball(owner, repo, sha))
         if not url.startswith(API) or parts[0] != "repos":
             return self._response(404)
-        owner, repo, kind = parts[1], parts[2], parts[3]
+        owner, repo = parts[1], parts[2]
         repository = self.repositories.get((owner, repo))
         if repository is None or (repository.private and authorization is None):
             return self._response(404)
+        if len(parts) == 3:
+            return self._response(
+                200, json.dumps({"full_name": f"{owner}/{repo}"}).encode()
+            )
+        kind = parts[3]
         if kind == "commits":
             ref = unquote("/".join(parts[4:]))
             sha = repository.refs.get(ref) or (

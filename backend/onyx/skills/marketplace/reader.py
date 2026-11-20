@@ -53,7 +53,8 @@ _ENTRY_FIELDS: Final = (
     "mcpServers",
 )
 _BUILT_PLUGIN_JSON: Final = ".claude-plugin/plugin.json"
-NOT_SUPPORTED_REASON: Final = "Not supported in Onyx."
+_GITHUB_HOSTS: Final = frozenset({"github.com", "www.github.com"})
+_GIT_SOURCE_KINDS: Final = frozenset({"github", "url", "git-subdir"})
 
 
 class BundleBudget:
@@ -223,6 +224,7 @@ def build_entry_bundle(
     root: str,
     entry: Mapping[str, JsonValue],
     entry_key: str,
+    links: frozenset[str] = frozenset(),
 ) -> ReadyPlugin | BlockedPlugin:
     if len(entry_key) > SKILL_NAME_MAX_LENGTH or not SKILL_NAME_PATTERN.fullmatch(
         entry_key
@@ -233,6 +235,15 @@ def build_entry_bundle(
             reason=f"The entry name '{entry_key}' must use only lowercase letters, "
             f"numbers and single hyphens, and at most {SKILL_NAME_MAX_LENGTH} "
             "characters.",
+        )
+    prefix = f"{root}/" if root else ""
+    link = next((path for path in sorted(links) if path.startswith(prefix)), None)
+    if link is not None:
+        return BlockedPlugin(
+            entry_key=entry_key,
+            path=root,
+            reason=f"The plugin has a symbolic link at '{link}'. "
+            "Replace it with a regular file.",
         )
     folder_files = _folder_files(files, root)
     if not folder_files:
@@ -263,12 +274,9 @@ def _github_repository(value: JsonValue) -> tuple[str, str] | None:
     text = value.strip().removesuffix("/").removesuffix(".git")
     if "://" in text:
         parsed = urlparse(text)
-        if parsed.scheme != "https" or parsed.hostname not in {
-            "github.com",
-            "www.github.com",
-        }:
+        if parsed.scheme != "https" or parsed.hostname not in _GITHUB_HOSTS:
             return None
-        text = parsed.path.strip("/")
+        text = parsed.path.strip("/").removesuffix(".git")
     parts = text.split("/")
     if len(parts) != 2 or not all(
         part not in {".", ".."} and GITHUB_REPOSITORY_COMPONENT_PATTERN.fullmatch(part)
@@ -278,24 +286,30 @@ def _github_repository(value: JsonValue) -> tuple[str, str] | None:
     return parts[0], parts[1]
 
 
+def _unsupported_reason(kind: JsonValue, location: JsonValue) -> str:
+    if not isinstance(kind, str) or kind not in _GIT_SOURCE_KINDS:
+        name = kind if isinstance(kind, str) else "unknown"
+        return f"Onyx cannot install a plugin from a '{name}' source."
+    host = urlparse(location).hostname if isinstance(location, str) else None
+    if host is not None and host not in _GITHUB_HOSTS:
+        return f"Onyx gets plugins only from github.com, not from {host}."
+    return "The source does not name a GitHub repository as owner/repository."
+
+
 def _optional_text(source: Mapping[str, JsonValue], key: str) -> str | None:
     value = source.get(key)
     return value.strip() if isinstance(value, str) and value.strip() else None
 
 
-def _remote_source(source: Mapping[str, JsonValue]) -> GitHubRepoSource | None:
+def _remote_source(source: Mapping[str, JsonValue]) -> GitHubRepoSource | str:
+    """The GitHub repository of a remote entry, or why Onyx cannot get it."""
     kind = source.get("source")
-    if kind == "github":
-        repository = _github_repository(source.get("repo"))
-        path = None
-    elif kind == "git-subdir":
-        repository = _github_repository(source.get("url"))
-        raw_path = source.get("path")
-        path = _relative_path(raw_path) if isinstance(raw_path, str) else None
-    else:
-        return None
+    location = source.get("repo") if kind == "github" else source.get("url")
+    repository = _github_repository(location) if kind in _GIT_SOURCE_KINDS else None
     if repository is None:
-        return None
+        return _unsupported_reason(kind, location)
+    raw_path = source.get("path") if kind == "git-subdir" else None
+    path = _relative_path(raw_path) if isinstance(raw_path, str) else None
     return GitHubRepoSource(
         owner=repository[0],
         repo=repository[1],
@@ -307,6 +321,7 @@ def _remote_source(source: Mapping[str, JsonValue]) -> GitHubRepoSource | None:
 
 def _read_entry(
     files: Mapping[str, bytes],
+    links: frozenset[str],
     base: str,
     plugin_root: str,
     entry_key: str,
@@ -318,8 +333,8 @@ def _read_entry(
             remote = _remote_source(source)
         except ValueError as exc:
             return BlockedPlugin(entry_key=entry_key, path=None, reason=str(exc))
-        if remote is None:
-            return UnsupportedPlugin(entry_key=entry_key, reason=NOT_SUPPORTED_REASON)
+        if isinstance(remote, str):
+            return UnsupportedPlugin(entry_key=entry_key, reason=remote)
         return RemotePlugin(entry_key=entry_key, source=remote, entry=entry)
     if not isinstance(source, str):
         return BlockedPlugin(
@@ -335,7 +350,7 @@ def _read_entry(
     if source.strip() not in {"", ".", "./"} and "/" not in source:
         relative = _join(plugin_root, relative)
     root = _join(base, relative)
-    return build_entry_bundle(files, root, entry, entry_key)
+    return build_entry_bundle(files, root, entry, entry_key, links)
 
 
 def _plugin_entries(manifest: Mapping[str, JsonValue]) -> list[dict[str, JsonValue]]:
@@ -364,6 +379,7 @@ def _plugin_entries(manifest: Mapping[str, JsonValue]) -> list[dict[str, JsonVal
 def read_marketplace(
     files: Mapping[str, bytes],
     folder: str | None,
+    links: frozenset[str] = frozenset(),
 ) -> CompleteMarketplace | FailedMarketplace:
     base = folder or ""
     manifest_path = next(
@@ -395,7 +411,7 @@ def read_marketplace(
         budget = BundleBudget()
         for entry in _plugin_entries(manifest):
             key = str(entry["name"])
-            result = _read_entry(files, base, plugin_root, key, entry)
+            result = _read_entry(files, links, base, plugin_root, key, entry)
             if isinstance(result, ReadyPlugin):
                 budget.add(result)
             entries.append(result)

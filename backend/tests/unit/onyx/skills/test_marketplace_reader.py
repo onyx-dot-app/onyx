@@ -13,7 +13,7 @@ from onyx.skills.marketplace.models import (
     RemotePlugin,
     UnsupportedPlugin,
 )
-from onyx.skills.marketplace.reader import NOT_SUPPORTED_REASON, read_marketplace
+from onyx.skills.marketplace.reader import read_marketplace
 from tests.unit.onyx.skills.marketplace_fixtures import (
     CLAUDE,
     CODEX,
@@ -197,6 +197,14 @@ def test_remote_sources() -> None:
             },
             {"name": "npm", "source": {"source": "npm", "package": "@acme/x"}},
             {"name": "url", "source": {"source": "url", "url": "https://x.test/y.git"}},
+            {
+                "name": "github-url",
+                "source": {
+                    "source": "url",
+                    "url": "https://github.com/acme/url-plugin.git",
+                    "sha": "a" * 40,
+                },
+            },
         )
     }
     entries = {entry.entry_key: entry for entry in _complete(files).entries}
@@ -208,10 +216,41 @@ def test_remote_sources() -> None:
     assert subdir.source == GitHubRepoSource(
         owner="acme", repo="mono", ref="main", path="plugins/subdir"
     )
-    for key in ("gitlab", "npm", "url"):
-        assert entries[key] == UnsupportedPlugin(
-            entry_key=key, reason=NOT_SUPPORTED_REASON
-        )
+    github_url = entries["github-url"]
+    assert isinstance(github_url, RemotePlugin)
+    assert github_url.source == GitHubRepoSource(
+        owner="acme", repo="url-plugin", sha="a" * 40
+    )
+    assert entries["gitlab"] == UnsupportedPlugin(
+        entry_key="gitlab",
+        reason="Onyx gets plugins only from github.com, not from gitlab.com.",
+    )
+    assert entries["url"] == UnsupportedPlugin(
+        entry_key="url",
+        reason="Onyx gets plugins only from github.com, not from x.test.",
+    )
+    assert entries["npm"] == UnsupportedPlugin(
+        entry_key="npm", reason="Onyx cannot install a plugin from a 'npm' source."
+    )
+
+
+def test_symbolic_link_blocks_only_the_plugin_that_holds_it() -> None:
+    files = {
+        CLAUDE: catalog(
+            {"name": "alpha", "source": "./plugins/alpha"},
+            {"name": "beta", "source": "./plugins/beta"},
+        ),
+        "plugins/alpha/skills/alpha/SKILL.md": skill_md("alpha"),
+        "plugins/beta/skills/beta/SKILL.md": skill_md("beta"),
+    }
+    links = frozenset({"docs/CLAUDE.md", "plugins/beta/README.md"})
+    result = read_marketplace(files, None, links)
+    assert isinstance(result, CompleteMarketplace), result
+    entries = {entry.entry_key: entry for entry in result.entries}
+    assert isinstance(entries["alpha"], ReadyPlugin)
+    beta = entries["beta"]
+    assert isinstance(beta, BlockedPlugin)
+    assert "plugins/beta/README.md" in beta.reason
 
 
 def test_bad_entries_block_only_themselves() -> None:

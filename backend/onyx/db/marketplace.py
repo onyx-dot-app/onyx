@@ -54,6 +54,19 @@ def create_github_marketplace__no_commit(
     default_installation_policy: PluginInstallationPolicy,
     db_session: Session,
 ) -> Marketplace:
+    if owner_user_id is not None and db_session.scalar(
+        select(Marketplace.id).where(
+            Marketplace.kind == MarketplaceKind.GITHUB,
+            Marketplace.owner_user_id.is_(None),
+            Marketplace.repository == config.repository,
+            Marketplace.folder == (config.folder or ""),
+            Marketplace.ref == (config.ref or ""),
+        )
+    ):
+        raise OnyxError(
+            OnyxErrorCode.CONFLICT,
+            "Your organization already gets this marketplace.",
+        )
     marketplace = Marketplace(
         kind=MarketplaceKind.GITHUB,
         name=name,
@@ -103,17 +116,18 @@ def lock_github_marketplace(
 
 
 def list_github_marketplaces(
-    owner_user_id: UUID, include_company: bool, db_session: Session
+    owner_user_id: UUID, db_session: Session
 ) -> list[tuple[Marketplace, int]]:
+    """The company marketplaces and the user's personal ones."""
     plugin_count = (
         select(func.count(Plugin.id))
         .where(Plugin.marketplace_id == Marketplace.id)
         .correlate(Marketplace)
         .scalar_subquery()
     )
-    owner_filter = Marketplace.owner_user_id == owner_user_id
-    if include_company:
-        owner_filter = owner_filter | Marketplace.owner_user_id.is_(None)
+    owner_filter = (Marketplace.owner_user_id == owner_user_id) | (
+        Marketplace.owner_user_id.is_(None)
+    )
     return [
         (marketplace, count)
         for marketplace, count in db_session.execute(

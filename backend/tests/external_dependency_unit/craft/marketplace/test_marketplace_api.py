@@ -47,7 +47,7 @@ def enqueued(marketplace_ids: list[UUID]) -> Iterator[list[UUID]]:
             marketplace_ids.append(marketplace_id)
         sync.run_marketplace_sync(marketplace_id)
 
-    with patch.object(api, "enqueue_marketplace_sync", run_now):
+    with patch.object(sync, "enqueue_marketplace_sync", run_now):
         yield ids
 
 
@@ -130,6 +130,46 @@ def test_preview_reads_without_writing(
     assert failed.reason is not None
 
 
+def test_preview_reads_a_folder_url_and_a_schemeless_url(
+    db_session: Session,
+    users: tuple[User, User, User],
+    fake_github: FakeGitHub,
+    connections: Connections,  # noqa: ARG001
+) -> None:
+    files = {
+        f"market/{path}": content for path, content in plugin_files("alpha").items()
+    }
+    fake_github.push(OWNER, REPO, files, ref="release/1.0")
+    preview = api.preview_marketplace(
+        MarketplaceSourceRequest(
+            repository=f"https://github.com/{OWNER}/{REPO}/tree/release/1.0/market"
+        ),
+        _fresh(db_session, users[0]),
+        db_session,
+    )
+    assert (preview.status, preview.ref, preview.folder) == (
+        "complete",
+        "release/1.0",
+        "market",
+    )
+
+    fake_github.push(OWNER, REPO, plugin_files("alpha"))
+    schemeless = api.preview_marketplace(
+        MarketplaceSourceRequest(repository=f"github.com/{OWNER}/{REPO}.git"),
+        _fresh(db_session, users[0]),
+        db_session,
+    )
+    assert schemeless.status == "complete"
+
+    with pytest.raises(OnyxError) as exc:
+        api.preview_marketplace(
+            MarketplaceSourceRequest(repository=f"{OWNER}/{REPO}", ref="gone"),
+            _fresh(db_session, users[0]),
+            db_session,
+        )
+    assert exc.value.detail == f"The branch or folder 'gone' is not in {OWNER}/{REPO}."
+
+
 def test_scope_and_owner_rules(
     db_session: Session,
     users: tuple[User, User, User],
@@ -179,9 +219,34 @@ def test_scope_and_owner_rules(
     assert exc.value.error_code == OnyxErrorCode.INSUFFICIENT_PERMISSIONS
 
     owner_list = api.list_marketplaces(_fresh(db_session, owner), db_session)
-    assert [item.id for item in owner_list.marketplaces] == [personal_id]
+    assert [
+        (item.id, item.can_manage, item.default_installation_policy)
+        for item in owner_list.marketplaces
+    ] == [
+        (personal_id, True, None),
+        (company_id, False, PluginInstallationPolicy.DEFAULT),
+    ]
+    member_view = api.get_marketplace(company_id, _fresh(db_session, other), db_session)
+    assert not member_view.can_manage
     manager_list = api.list_marketplaces(_fresh(db_session, manager), db_session)
-    assert [item.id for item in manager_list.marketplaces] == [company_id]
+    assert [(item.id, item.can_manage) for item in manager_list.marketplaces] == [
+        (company_id, True)
+    ]
+
+    # The company already gets this source, in any letter case.
+    with pytest.raises(OnyxError) as exc:
+        api.create_marketplace(
+            MarketplaceCreateRequest(
+                repository=f"https://github.com/{OWNER.upper()}/{REPO.title()}.git",
+                scope=MarketplaceScope.PERSONAL,
+            ),
+            BackgroundTasks(),
+            _fresh(db_session, other),
+            db_session,
+        )
+    assert exc.value.error_code == OnyxErrorCode.CONFLICT
+    assert exc.value.detail == "Your organization already gets this marketplace."
+    db_session.rollback()
 
     with pytest.raises(OnyxError):
         api.set_marketplace_default_access(

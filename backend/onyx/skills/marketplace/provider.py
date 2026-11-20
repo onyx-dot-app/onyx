@@ -6,6 +6,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.ingest_from_github import (
     GITHUB_ARCHIVE_MAX_BYTES,
+    RepositoryArchive,
     read_repository_archive,
 )
 from onyx.skills.marketplace.models import (
@@ -47,7 +48,7 @@ class GitHubMarketplaceAdapter:
             max_size_bytes=GITHUB_ARCHIVE_MAX_BYTES,
         )
 
-    def fetch_remote(self, source: GitHubRepoSource) -> dict[str, bytes]:
+    def fetch_remote(self, source: GitHubRepoSource) -> RepositoryArchive:
         github_source = GitHubSource(
             owner=source.owner,
             repo=source.repo,

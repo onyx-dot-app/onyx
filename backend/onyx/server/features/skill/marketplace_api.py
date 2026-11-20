@@ -1,5 +1,6 @@
 """Every route authorizes before any GitHub call."""
 
+from collections.abc import Callable
 from uuid import UUID
 
 from fastapi import APIRouter, BackgroundTasks, Depends
@@ -46,11 +47,12 @@ from onyx.skills.marketplace.provider import (
     marketplace_config,
 )
 from onyx.skills.marketplace.sync import (
-    enqueue_marketplace_sync,
     marketplace_syncing,
     read_marketplace_repository,
+    request_marketplace_sync,
 )
 from onyx.skills.push import push_skills_and_commit
+from onyx.utils.github import GitHubRevision, GitHubSource, resolve_github_revision
 
 router = APIRouter(prefix="/marketplaces")
 
@@ -75,6 +77,7 @@ def _authorized_marketplace(
     db_session: Session,
     *,
     manager_may_remove: bool = False,
+    read_only: bool = False,
 ) -> Marketplace:
     marketplace = get_github_marketplace(marketplace_id, db_session)
     if marketplace is None or (
@@ -83,7 +86,7 @@ def _authorized_marketplace(
         and not (manager_may_remove and _is_manager(user))
     ):
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Marketplace not found.")
-    if marketplace.owner_user_id is None and not _is_manager(user):
+    if marketplace.owner_user_id is None and not read_only and not _is_manager(user):
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "Only an organization-wide plugin manager can manage a company marketplace.",
@@ -92,7 +95,7 @@ def _authorized_marketplace(
 
 
 def _summary(
-    marketplace: Marketplace, plugin_count: int, db_session: Session
+    marketplace: Marketplace, plugin_count: int, user: User, db_session: Session
 ) -> MarketplaceSummary:
     config = marketplace_config(marketplace)
     login = (
@@ -111,7 +114,12 @@ def _summary(
         repository=config.repository,
         folder=config.folder,
         ref=config.ref,
-        default_installation_policy=marketplace.default_installation_policy,
+        default_installation_policy=(
+            marketplace.default_installation_policy
+            if marketplace.owner_user_id is None
+            else None
+        ),
+        can_manage=marketplace.owner_user_id is not None or _is_manager(user),
         login_user=(
             MinimalUserSnapshot(id=login.id, email=login.email)
             if login is not None
@@ -126,7 +134,9 @@ def _summary(
     )
 
 
-def _detail(marketplace: Marketplace, db_session: Session) -> MarketplaceDetail:
+def _detail(
+    marketplace: Marketplace, user: User, db_session: Session
+) -> MarketplaceDetail:
     plugins = {
         plugin.name: plugin
         for plugin in list_marketplace_plugins(marketplace.id, db_session)
@@ -136,7 +146,7 @@ def _detail(marketplace: Marketplace, db_session: Session) -> MarketplaceDetail:
         for item in marketplace.last_sync_result or []
     ]
     return MarketplaceDetail(
-        **_summary(marketplace, len(plugins), db_session).model_dump(),
+        **_summary(marketplace, len(plugins), user, db_session).model_dump(),
         entries=[
             MarketplaceEntryView(
                 key=entry.key,
@@ -158,8 +168,16 @@ def _request_sync(
     marketplace_id: UUID, background_tasks: BackgroundTasks, db_session: Session
 ) -> None:
     db_session.commit()
-    if not marketplace_syncing(marketplace_id):
-        enqueue_marketplace_sync(marketplace_id, background_tasks)
+    request_marketplace_sync(marketplace_id, background_tasks)
+
+
+def _tree_resolver(
+    authorization: str | None,
+) -> Callable[[GitHubSource], GitHubRevision]:
+    def resolve(source: GitHubSource) -> GitHubRevision:
+        return resolve_github_revision(source, authorization)
+
+    return resolve
 
 
 @router.post("/preview")
@@ -168,10 +186,10 @@ def preview_marketplace(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> MarketplacePreviewResponse:
-    config = request.to_config()
     authorization = github_authorization_for(user.id, db_session)
     # End the read transaction before the GitHub calls.
     db_session.commit()
+    config = request.to_config(_tree_resolver(authorization))
     read = read_marketplace_repository(
         GitHubMarketplaceAdapter(config, authorization), config.folder
     )
@@ -229,7 +247,9 @@ def create_marketplace(
     db_session: Session = Depends(get_session),
 ) -> MarketplaceDetail:
     _authorize_scope(request.scope, user)
-    config = request.to_config()
+    config = request.to_config(
+        _tree_resolver(github_authorization_for(user.id, db_session))
+    )
     policy = request.default_installation_policy
     if request.scope == MarketplaceScope.PERSONAL and policy is not None:
         raise OnyxError(
@@ -241,7 +261,7 @@ def create_marketplace(
             OnyxErrorCode.INVALID_INPUT, "A marketplace default cannot be Required."
         )
     marketplace = create_github_marketplace__no_commit(
-        name=config.repository,
+        name=(request.name or "").strip() or config.repository,
         config=config,
         owner_user_id=user.id if request.scope == MarketplaceScope.PERSONAL else None,
         login_user_id=user.id,
@@ -251,7 +271,7 @@ def create_marketplace(
     marketplace_id = marketplace.id
     _request_sync(marketplace_id, background_tasks, db_session)
     return _detail(
-        _authorized_marketplace(marketplace_id, user, db_session), db_session
+        _authorized_marketplace(marketplace_id, user, db_session), user, db_session
     )
 
 
@@ -262,9 +282,9 @@ def list_marketplaces(
 ) -> MarketplaceList:
     return MarketplaceList(
         marketplaces=[
-            _summary(marketplace, plugin_count, db_session)
+            _summary(marketplace, plugin_count, user, db_session)
             for marketplace, plugin_count in list_github_marketplaces(
-                user.id, _is_manager(user), db_session
+                user.id, db_session
             )
         ]
     )
@@ -277,7 +297,9 @@ def get_marketplace(
     db_session: Session = Depends(get_session),
 ) -> MarketplaceDetail:
     return _detail(
-        _authorized_marketplace(marketplace_id, user, db_session), db_session
+        _authorized_marketplace(marketplace_id, user, db_session, read_only=True),
+        user,
+        db_session,
     )
 
 
@@ -291,7 +313,7 @@ def sync_marketplace_now(
     _authorized_marketplace(marketplace_id, user, db_session)
     _request_sync(marketplace_id, background_tasks, db_session)
     return _detail(
-        _authorized_marketplace(marketplace_id, user, db_session), db_session
+        _authorized_marketplace(marketplace_id, user, db_session), user, db_session
     )
 
 
@@ -314,7 +336,7 @@ def set_marketplace_default_access(
     db_session.commit()
     push_skills_and_commit(affected, db_session)
     return _detail(
-        _authorized_marketplace(marketplace_id, user, db_session), db_session
+        _authorized_marketplace(marketplace_id, user, db_session), user, db_session
     )
 
 
@@ -334,7 +356,7 @@ def replace_marketplace_login(
     replace_marketplace_login__no_commit(marketplace_id, user.id, db_session)
     _request_sync(marketplace_id, background_tasks, db_session)
     return _detail(
-        _authorized_marketplace(marketplace_id, user, db_session), db_session
+        _authorized_marketplace(marketplace_id, user, db_session), user, db_session
     )
 
 

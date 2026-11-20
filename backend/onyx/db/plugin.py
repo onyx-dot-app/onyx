@@ -203,6 +203,10 @@ def is_synced(plugin: Plugin) -> bool:
     return plugin.marketplace.kind == MarketplaceKind.GITHUB
 
 
+def is_personal_synced(plugin: Plugin) -> bool:
+    return is_synced(plugin) and plugin.marketplace.owner_user_id is not None
+
+
 def refuse_if_synced(plugin: Plugin) -> None:
     if is_synced(plugin):
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, SYNCED_PLUGIN_LOCKED)

@@ -4,6 +4,8 @@ import io
 import tarfile
 from typing import Final
 
+from pydantic import BaseModel, ConfigDict
+
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.bundle import DEFAULT_PER_FILE_MAX_BYTES
@@ -15,10 +17,20 @@ _ARCHIVE_MAX_MEMBERS: Final[int] = 10_000
 _ARCHIVE_UNPACKED_MAX_BYTES: Final[int] = 256 * 1024 * 1024
 
 
-def read_repository_archive(archive_bytes: bytes) -> dict[str, bytes]:
+class RepositoryArchive(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    files: dict[str, bytes]
+    # Paths of symbolic links. Onyx does not follow them; a plugin that holds
+    # one is refused, other plugins of the repository are not.
+    links: frozenset[str] = frozenset()
+
+
+def read_repository_archive(archive_bytes: bytes) -> RepositoryArchive:
     """The files of a GitHub tar.gz download by repository path, without the
     folder GitHub wraps the repository in."""
     files: dict[str, bytes] = {}
+    links: set[str] = set()
     total_size = 0
     try:
         # typeshed does not yet expose Python 3.13's stream parameter.
@@ -47,10 +59,13 @@ def read_repository_archive(archive_bytes: bytes) -> dict[str, bytes]:
                     )
                 if member.isdir():
                     continue
+                if member.issym() or member.islnk():
+                    links.add(member.name)
+                    continue
                 if not member.isfile():
                     raise OnyxError(
                         OnyxErrorCode.INVALID_INPUT,
-                        f"Repository contains a symbolic link at '{member.name}'. Replace it with a regular file.",
+                        f"Repository contains an unsupported file at '{member.name}'.",
                     )
                 if member.name in files:
                     raise OnyxError(
@@ -77,14 +92,19 @@ def read_repository_archive(archive_bytes: bytes) -> dict[str, bytes]:
             "GitHub returned an unreadable repository download. Try again.",
         ) from exc
 
-    root_directories = {path.split("/", maxsplit=1)[0] for path in files}
+    root_directories = {path.split("/", maxsplit=1)[0] for path in [*files, *links]}
     if len(root_directories) != 1:
         raise OnyxError(
             OnyxErrorCode.BAD_GATEWAY,
             "GitHub returned an unexpected repository download. Try again.",
         )
-    return {
-        path.split("/", maxsplit=1)[1]: content
-        for path, content in files.items()
-        if "/" in path
-    }
+    return RepositoryArchive(
+        files={
+            path.split("/", maxsplit=1)[1]: content
+            for path, content in files.items()
+            if "/" in path
+        },
+        links=frozenset(
+            path.split("/", maxsplit=1)[1] for path in links if "/" in path
+        ),
+    )

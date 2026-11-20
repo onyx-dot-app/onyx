@@ -14,20 +14,24 @@ def test_repository_archive_strips_the_wrapper() -> None:
     files = read_repository_archive(
         tar_archive({CLAUDE: b"{}", "a/b.txt": b"b"}, wrapper="acme-tools-123/")
     )
-    assert files == {CLAUDE: b"{}", "a/b.txt": b"b"}
+    assert files.files == {CLAUDE: b"{}", "a/b.txt": b"b"}
 
 
-def test_repository_archive_refuses_links_and_too_many_entries(
+def test_repository_archive_records_links_and_refuses_too_many_entries(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     out = io.BytesIO()
     with tarfile.open(fileobj=out, mode="w:gz") as archive:
-        link = tarfile.TarInfo("root/link")
+        link = tarfile.TarInfo("root/docs/link")
         link.type = tarfile.SYMTYPE
         link.linkname = "/etc/passwd"
         archive.addfile(link)
-    with pytest.raises(OnyxError, match="symbolic link"):
-        read_repository_archive(out.getvalue())
+        info = tarfile.TarInfo("root/a.txt")
+        info.size = 1
+        archive.addfile(info, io.BytesIO(b"a"))
+    read = read_repository_archive(out.getvalue())
+    assert read.files == {"a.txt": b"a"}
+    assert read.links == frozenset({"docs/link"})
 
     monkeypatch.setattr(ingest_from_github, "_ARCHIVE_MAX_MEMBERS", 1)
     with pytest.raises(OnyxError, match="more than 1 entries"):
@@ -37,7 +41,7 @@ def test_repository_archive_refuses_links_and_too_many_entries(
 def test_repository_archive_keeps_large_files_for_the_bundle_limits() -> None:
     big = b"x" * (DEFAULT_PER_FILE_MAX_BYTES + 10)
     files = read_repository_archive(tar_archive({"a/big.bin": big}))
-    assert len(files["a/big.bin"]) == DEFAULT_PER_FILE_MAX_BYTES + 1
+    assert len(files.files["a/big.bin"]) == DEFAULT_PER_FILE_MAX_BYTES + 1
 
 
 def test_repository_archive_total_limit(monkeypatch: pytest.MonkeyPatch) -> None:
