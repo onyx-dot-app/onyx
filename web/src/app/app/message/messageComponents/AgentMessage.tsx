@@ -43,6 +43,7 @@ import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import { Message } from "@/app/app/types";
 import { Text } from "@opal/components";
 import { AgentTimeline } from "@/lib/timeline/chat/AgentTimeline";
+import { ResponseCursor } from "@/lib/timeline/components/ResponseCursor";
 import {
   Response,
   type ResponseItem,
@@ -568,8 +569,8 @@ const AgentMessage = React.memo(function AgentMessage({
 
             <Response
               items={[
-                ...buildSectionSegments(section, toolTurnGroups, ended).map(
-                  (segment, index, segments): ResponseItem => {
+                ...buildSectionSegments(section, toolTurnGroups, ended)
+                  .map((segment, index, segments): ResponseItem | null => {
                     switch (segment.kind) {
                       case "text": {
                         const textIndex = nextAnswerRef++;
@@ -664,6 +665,29 @@ const AgentMessage = React.memo(function AgentMessage({
                           ),
                         };
                       case "run": {
+                        const awaitingUser = isLastSection
+                          ? toolRequests.awaiting
+                          : null;
+                        // Before its first step, a working response shows
+                        // the cursor, as in Craft. A wait for the user and a
+                        // running program keep their card.
+                        if (
+                          segment.turnGroups.length === 0 &&
+                          awaitingUser === null &&
+                          !(isLastSection && codeModeWorking)
+                        ) {
+                          const working =
+                            isLastSection &&
+                            !stopPacketSeen &&
+                            !segments.some((s) => s.kind === "text");
+                          return working
+                            ? {
+                                kind: "text",
+                                key: "cursor",
+                                node: <ResponseCursor />,
+                              }
+                            : null;
+                        }
                         const isLiveRun =
                           segments.findLastIndex((s) => s.kind === "run") ===
                           index;
@@ -710,16 +734,14 @@ const AgentMessage = React.memo(function AgentMessage({
                               }
                               toolProcessingDuration={toolProcessingDuration}
                               codeModeWorking={isLastSection && codeModeWorking}
-                              awaitingUser={
-                                isLastSection ? toolRequests.awaiting : null
-                              }
+                              awaitingUser={awaitingUser}
                             />
                           ),
                         };
                       }
                     }
-                  }
-                ),
+                  })
+                  .filter((item): item is ResponseItem => item !== null),
                 ...statusLines(isLastSection),
               ]}
             />
@@ -781,9 +803,10 @@ const LIVE_RUN_KEY = "live";
  * form one run. Text between steps shows once every earlier step of the
  * section is revealed, so it never appears ahead of the steps before it; an
  * earlier section's steps never gate it. The last run holds the live header;
- * a section with no run gets an empty one for the waiting state. The files
- * that the section published show last, once it `ended`: its response
- * stopped and its answer rendered, or a later section began.
+ * a section with no run gets an empty one, which shows the cursor while the
+ * response works, and a card while a program runs or it waits for the user.
+ * The files that the section published show last, once it `ended`: its
+ * response stopped and its answer rendered, or a later section began.
  */
 function buildSectionSegments(
   section: ResponseSection,
@@ -841,8 +864,9 @@ function buildSectionSegments(
       else
         segments.push({
           kind: "run",
-          // The first run keeps the waiting card's key, so "Thinking..."
-          // becomes that run's card instead of being replaced by a new one.
+          // The first run keeps the waiting card's key, so a wait for the
+          // user becomes that run's card instead of being replaced by a new
+          // one.
           key: segments.some((s) => s.kind === "run")
             ? (item.group.steps[0]?.key ?? String(item.turn))
             : LIVE_RUN_KEY,

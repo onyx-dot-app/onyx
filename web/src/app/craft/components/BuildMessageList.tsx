@@ -17,6 +17,7 @@ import {
   type ResponseItem,
 } from "@/lib/timeline/components/Response";
 import { BlinkingBar } from "@/app/app/message/BlinkingBar";
+import { ResponseCursor } from "@/lib/timeline/components/ResponseCursor";
 import { ErrorBanner } from "@/app/app/message/Resubmit";
 import { RATE_LIMITED_ERROR_CODE, RateLimitDetails } from "@/app/app/types";
 import { convertMarkdownTablesToTsv } from "@/app/app/message/copyingUtils";
@@ -499,16 +500,7 @@ export default function BuildMessageList({
                         {
                           kind: "text" as const,
                           key: "cursor",
-                          node: (
-                            <Section
-                              flexDirection="row"
-                              justifyContent="start"
-                              height={2.25}
-                              gap={0}
-                            >
-                              <BlinkingBar />
-                            </Section>
-                          ),
+                          node: <ResponseCursor />,
                         },
                       ]
                     : []),
