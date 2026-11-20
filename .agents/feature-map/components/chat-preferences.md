@@ -12,21 +12,28 @@ chat retention needs Enterprise. The settings API enforces these tiers.
 
 ## User experience
 
-- **A user**, in Settings, enters a name, a role and free-text preferences
-  ("I prefer short answers"). The next message in any chat, including the open
-  one, uses them. Nobody else sees them.
+- **A user** enters a name and a role in Settings > Account, and free-text
+  instructions ("I prefer short answers") in Settings > Chat Preferences. The next message in any chat,
+  including the open one, uses them. Nobody else sees them.
 - **A user** lets the assistant remember facts. With the memory tool on, the
   assistant saves or updates a memory during a chat when it decides to, and the
   user sees a memory event in the answer. The user can edit or delete memories
-  in Settings. When the tool adds a memory past the cap, it deletes the oldest.
+  in Settings > Chat Preferences. When the tool adds a memory past the cap, it deletes the
+  oldest.
 - **A user** can turn off "reference memories". Saved memories then stay out
   of the prompt, but the memory tool can still write them. To stop new
   memories, the user turns off the memory tool.
-- **A user** saves prompt shortcuts and inserts them into the message box. They
-  can hide a shared shortcut for themselves.
+- **A user** saves prompt shortcuts in Settings > Chat Preferences and inserts them into
+  the message box. They can hide a shared shortcut for themselves.
 - **A user** picks a UI and answer language, or follows the workspace default.
-- **A user** chooses whether Enter and the send arrow wait for the current step
-  or interrupt current work. Ctrl/Cmd+Enter always queues a follow-up.
+- **A user** chooses, in Settings > Chat Preferences, whether Enter and the send arrow wait
+  for the current step or interrupt current work. Ctrl/Cmd+Enter always queues
+  a follow-up.
+- **A user** sets the theme, language, chat background, transcript width,
+  auto-scroll and smooth streaming in Settings > Appearance. Transcript width
+  is stored per browser, not on the server. Wide widens only an open
+  conversation, not the new-session view. Mobile widths hide its control,
+  because chat is always full width there.
 - **An admin**, at Admin > Chat Preferences, sets workspace chat options. These
   include the team name and context that every prompt includes, the default
   language, the default assistant's system prompt and built-in tools, and the
@@ -170,8 +177,9 @@ paths read it; find them with `git grep -n load_settings backend`.
    whole memory set.** `PATCH /user/personalization` with a `memories` list
    deletes every row whose id is not in the list
    (`db/user_preferences.py:update_user_personalization`).
-   `web/src/hooks/useUserPersonalization.ts` sends the full list on every save,
-   even a toggle change.
+   A request without `memories` keeps them.
+   `web/src/hooks/useUserPersonalization.ts` sends only the fields that a save
+   changes, so only a memory edit sends the list.
 6. `prompt-section-explicit-position` **A new prompt section needs an explicit
    position.** Add it in `chat/prompt_utils.py:build_user_information_prompt` at
    a chosen place, not at the end, and run a prompt eval ([[context-assembly]]).

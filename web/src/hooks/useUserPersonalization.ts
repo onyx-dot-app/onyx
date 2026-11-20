@@ -31,7 +31,7 @@ function derivePersonalizationFromUser(user: User | null): UserPersonalization {
 }
 
 interface UseUserPersonalizationOptions {
-  onSuccess?: (personalization: UserPersonalization) => void;
+  onSuccess?: (saved: Partial<UserPersonalization>) => void;
   onError?: (error: unknown) => void;
 }
 
@@ -43,7 +43,7 @@ interface UseUserPersonalizationOptions {
  * optimistic updates and error handling.
  *
  * @param user - The current user object containing personalization data
- * @param persistPersonalization - Async function to persist personalization changes to the server
+ * @param persistPersonalization - Async function to persist a personalization patch to the server
  * @param options - Optional callbacks for success and error handling
  * @param options.onSuccess - Callback invoked when personalization is successfully saved
  * @param options.onError - Callback invoked when personalization save fails
@@ -54,7 +54,7 @@ interface UseUserPersonalizationOptions {
  * import useUserPersonalization from "@/hooks/useUserPersonalization";
  * import { useUser } from "@/providers/UserProvider";
  *
- * function PersonalizationSettings() {
+ * function ExampleForm() {
  *   const { user, updateUserPersonalization } = useUser();
  *   const {
  *     personalizationValues,
@@ -76,7 +76,9 @@ interface UseUserPersonalizationOptions {
  *         onChange={(e) => updatePersonalizationField("name", e.target.value)}
  *       />
  *       <button
- *         onClick={handleSavePersonalization}
+ *         onClick={() =>
+ *           handleSavePersonalization({ name: personalizationValues.name })
+ *         }
  *         disabled={isSavingPersonalization}
  *       >
  *         Save
@@ -89,13 +91,14 @@ interface UseUserPersonalizationOptions {
  * @remarks
  * - Changes are optimistic - UI updates immediately before server persistence
  * - On error, state reverts to the last known good value from the user object
+ * - A save sends only the fields it is given
  * - Memories are automatically trimmed and filtered (empty strings removed) on save
  * - The hook synchronizes with user prop changes to stay in sync with external updates
  */
 export default function useUserPersonalization(
   user: User | null,
   persistPersonalization: (
-    personalization: UserPersonalization
+    patch: Partial<UserPersonalization>
   ) => Promise<void>,
   options?: UseUserPersonalizationOptions
 ) {
@@ -174,27 +177,31 @@ export default function useUserPersonalization(
     }));
   }, []);
 
+  // Sends only `patch`, so a save never overwrites fields the caller does not
+  // show, e.g. memories the memory tool added in another tab.
   const handleSavePersonalization = useCallback(
-    async (overrides?: Partial<UserPersonalization>, silent?: boolean) => {
+    async (patch: Partial<UserPersonalization>, silent?: boolean) => {
       setIsSavingPersonalization(true);
 
-      const valuesToSave = { ...personalizationValues, ...overrides };
-      const trimmedMemories = valuesToSave.memories
-        .map((memory) => ({ ...memory, content: memory.content.trim() }))
-        .filter((memory) => memory.content.length > 0);
-
-      const updatedPersonalization: UserPersonalization = {
-        ...valuesToSave,
-        memories: trimmedMemories,
-      };
+      const patchToSave: Partial<UserPersonalization> = patch.memories
+        ? {
+            ...patch,
+            memories: patch.memories
+              .map((memory) => ({ ...memory, content: memory.content.trim() }))
+              .filter((memory) => memory.content.length > 0),
+          }
+        : patch;
 
       try {
-        await persistPersonalization(updatedPersonalization);
-        setPersonalizationValues(updatedPersonalization);
+        await persistPersonalization(patchToSave);
+        setPersonalizationValues((previous) => ({
+          ...previous,
+          ...patchToSave,
+        }));
         if (!silent) {
-          onSuccess?.(updatedPersonalization);
+          onSuccess?.(patchToSave);
         }
-        return updatedPersonalization;
+        return patchToSave;
       } catch (error) {
         setPersonalizationValues(basePersonalization);
         if (!silent) {
@@ -205,13 +212,7 @@ export default function useUserPersonalization(
         setIsSavingPersonalization(false);
       }
     },
-    [
-      basePersonalization,
-      onError,
-      onSuccess,
-      persistPersonalization,
-      personalizationValues,
-    ]
+    [basePersonalization, onError, onSuccess, persistPersonalization]
   );
 
   return {

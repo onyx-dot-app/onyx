@@ -131,7 +131,7 @@ func (m AuthModel) Update(msg tea.Msg) (AuthModel, tea.Cmd) {
 
 // View renders the auth prompt.
 func (m AuthModel) View() tea.View {
-	settingsURL := strings.TrimRight(m.serverURL, "/") + "/app/settings/accounts-access"
+	settingsURL := strings.TrimRight(m.serverURL, "/") + "/app/settings/third-party-access"
 
 	var b strings.Builder
 	b.WriteString("\n")

@@ -715,6 +715,46 @@ export class ChatPage {
     return html;
   }
 
+  /** The id of the open chat session, read from the URL. */
+  currentSessionId(): string {
+    const sessionId = new URL(this.page.url()).searchParams.get("chatId");
+    if (!sessionId) throw new Error("No chat session is open");
+    return sessionId;
+  }
+
+  /**
+   * The composer follows the chat column: 45rem (720px) at reading width, and
+   * the 80rem (1280px) wide cap less its 2rem (32px) gutter when wide,
+   * centered in the conversation. Needs a window wider than the wide cap.
+   */
+  async expectChatColumnWidth(width: "reading" | "wide"): Promise<void> {
+    // NaN (no box yet) fails every comparison, so the polls keep waiting.
+    const composerWidth = expect.poll(
+      async () =>
+        (await this.inputBar.container.boundingBox())?.width ?? Number.NaN
+    );
+    if (width === "reading") {
+      await composerWidth.toBeLessThanOrEqual(720);
+      return;
+    }
+    await composerWidth.toBeGreaterThan(1200);
+    await composerWidth.toBeLessThanOrEqual(1248);
+    // The composer's center is the conversation's center, up to the
+    // scrollbar's width.
+    await expect
+      .poll(async () => {
+        const composer = await this.inputBar.container.boundingBox();
+        const conversation = await this.scrollContainer.boundingBox();
+        if (!composer || !conversation) return Number.NaN;
+        return Math.abs(
+          composer.x +
+            composer.width / 2 -
+            (conversation.x + conversation.width / 2)
+        );
+      })
+      .toBeLessThanOrEqual(16);
+  }
+
   async expectCopyButton(): Promise<void> {
     await expect(
       this.aiMessage().getByTestId("AgentMessage/copy-button")

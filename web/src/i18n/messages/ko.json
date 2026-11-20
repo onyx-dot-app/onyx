@@ -9819,7 +9819,7 @@
       },
       "tierTooltip": "LLM 게이트웨이는 Business 또는 Enterprise 플랜이 필요합니다.",
       "scopeNote": {
-        "title": "각 사용자는 설정 → LLM 게이트웨이에서 자체 토큰과 연결 정보를 구성합니다."
+        "title": "각 사용자는 설정 → 타사 액세스 → LLM 게이트웨이에서 자체 토큰과 연결 정보를 구성합니다."
       },
       "toasts": {
         "settingsUpdateFailed": "설정을 업데이트하지 못했습니다"
@@ -11799,11 +11799,6 @@
       "exportPlaintext": {
         "label": "일반 텍스트"
       },
-      "fullWidth": {
-        "ariaLabel": "전체 너비 채팅 전환",
-        "fitTooltip": "너비 맞춤",
-        "fullTooltip": "전체 너비"
-      },
       "incognitoExit": {
         "ariaLabel": "시크릿 채팅 종료",
         "tooltip": "시크릿 채팅 종료"
@@ -13554,11 +13549,6 @@
       },
       "plant": {
         "label": "식물"
-      }
-    },
-    "colorSwatch": {
-      "sample": {
-        "text": "가"
       }
     },
     "commandMenu": {
@@ -15773,11 +15763,6 @@
   },
   "settings": {
     "accounts": {
-      "email": {
-        "anonymousFallback": "익명",
-        "description": "계정 이메일 주소입니다.",
-        "title": "이메일"
-      },
       "password": {
         "changeButton": "비밀번호 변경",
         "description": "계정 비밀번호를 변경합니다.",
@@ -15810,8 +15795,7 @@
           "mismatch": "비밀번호가 일치하지 않습니다",
           "newRequired": "새 비밀번호는 필수입니다"
         }
-      },
-      "title": "계정"
+      }
     },
     "apiKeys": {
       "createModal": {
@@ -15896,13 +15880,21 @@
         "title": "채팅 배경"
       },
       "colorMode": {
-        "auto": "자동",
+        "auto": "시스템",
         "dark": "다크",
-        "description": "UI에 사용할 색상 모드를 선택하세요.",
+        "description": "UI에 사용할 테마를 선택하세요.",
         "light": "라이트",
-        "title": "색상 모드"
+        "title": "테마"
       },
-      "title": "모양"
+      "general": {
+        "title": "일반"
+      },
+      "transcriptWidth": {
+        "title": "대화 너비",
+        "description": "이 기기에서 채팅 메시지와 입력창의 너비를 설정합니다.",
+        "standard": "표준",
+        "wide": "넓게"
+      }
     },
     "chats": {
       "autoScroll": {
@@ -15936,7 +15928,6 @@
         "description": "스트리밍 응답을 한 글자씩 애니메이션으로 표시합니다. 비활성화하면 도착한 청크를 그대로 표시합니다.",
         "title": "부드러운 스트리밍"
       },
-      "title": "채팅",
       "toasts": {
         "saveFailed": "환경설정을 저장하지 못했습니다"
       },
@@ -15949,6 +15940,7 @@
     },
     "connectors": {
       "connectButton": "연결",
+      "disconnectAriaLabel": "{name} 연결 해제",
       "disconnectModal": {
         "continueNote": "{name} 콘텐츠를 참조하는 기존 세션은 계속 사용할 수 있습니다.",
         "description": "{appName}는 더 이상 {name} 계정의 콘텐츠에 접근하거나 검색할 수 없습니다.",
@@ -15956,11 +15948,9 @@
         "submit": "연결 해제",
         "title": "*{name}* 연결 해제"
       },
-      "emptyMessage": "조직에 설정된 커넥터가 없습니다.",
       "status": {
         "connected": "연결됨",
-        "notConnected": "연결 안 됨",
-        "paused": "일시 중지됨"
+        "notConnected": "연결 안 됨"
       },
       "title": "커넥터",
       "toasts": {
@@ -16024,7 +16014,6 @@
         "description": "UI에 사용할 언어를 선택하세요.",
         "title": "표시 언어"
       },
-      "title": "언어",
       "toasts": {
         "updateFailed": "언어 설정을 변경하지 못했습니다"
       }
@@ -16037,23 +16026,20 @@
         "placeholder": "섹션 선택"
       },
       "tabs": {
-        "accountsAccess": {
-          "label": "계정 및 액세스"
+        "appearance": {
+          "label": "모양"
+        },
+        "usage": {
+          "label": "사용량"
+        },
+        "account": {
+          "label": "계정"
         },
         "chatPreferences": {
           "label": "채팅 환경설정"
         },
-        "connectors": {
-          "label": "커넥터"
-        },
-        "general": {
-          "label": "일반"
-        },
-        "llmGateway": {
-          "label": "LLM 게이트웨이"
-        },
-        "usage": {
-          "label": "사용량"
+        "thirdPartyAccess": {
+          "label": "타사 액세스"
         }
       }
     },
@@ -16102,9 +16088,9 @@
       }
     },
     "personalPreferences": {
-      "description": "원하는 설정을 자연어로 입력하세요.",
+      "description": "{appName}는 모든 채팅에서 이 내용을 기억합니다.",
       "placeholder": "시스템이 어떻게 동작하고 어떤 어조를 사용할지 설명하세요.",
-      "title": "개인 환경설정"
+      "title": "지침"
     },
     "profile": {
       "fullName": {
@@ -16129,7 +16115,6 @@
         "publicTooltip": "조직 전체 프롬프트 단축어는 삭제할 수 없습니다.",
         "removeAriaLabel": "단축어 제거"
       },
-      "title": "프롬프트 단축어",
       "toasts": {
         "bothRequired": "단축어와 확장 내용을 모두 입력해야 합니다",
         "deleteFailed": "단축어를 삭제하지 못했습니다",
@@ -16152,9 +16137,6 @@
       "empty": {
         "description": "채팅을 시작하면 모델 사용량과 비용이 여기에 표시됩니다.",
         "title": "아직 기록된 사용량이 없습니다"
-      },
-      "header": {
-        "title": "사용량"
       },
       "loadError": {
         "description": "사용량을 가져오는 중 문제가 발생했습니다. 잠시 후 다시 시도해 주세요.",
@@ -16215,9 +16197,16 @@
       },
       "playbackSpeed": {
         "description": "음성 재생 속도를 조정합니다.",
-        "title": "재생 속도"
+        "title": "재생 속도",
+        "value": "{speed}x"
       },
       "title": "음성"
+    },
+    "modelPreferences": {
+      "title": "모델 환경설정"
+    },
+    "interactions": {
+      "title": "상호작용"
     }
   },
   "sidebar": {

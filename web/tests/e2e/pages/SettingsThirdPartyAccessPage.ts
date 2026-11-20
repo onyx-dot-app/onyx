@@ -1,44 +1,71 @@
 /**
  * Page Object Model for the Personal Access Token (PAT) management UI on the
- * account settings page (/app/settings/accounts-access).
+ * 3rd Party Access settings tab (/app/settings/third-party-access).
  *
  * Encapsulates the "Create Access Token" modal (name, expiration, the Full /
- * Limited permissions selector and its scope checkboxes) and the token list
- * (viewing, copying, and revoking tokens) so specs stay declarative.
+ * Limited permissions selector and its scope checkboxes), the token list
+ * (viewing, copying, and revoking tokens) and the federated connectors so
+ * specs stay declarative.
  */
 
 import { type Page, type Locator, expect } from "@playwright/test";
 
 const TOKEN_PREFIX = "onyx_pat_";
+const THIRD_PARTY_ACCESS_PATH = "/app/settings/third-party-access";
 
-export class PATManagementPage {
+export class SettingsThirdPartyAccessPage {
   readonly page: Page;
   readonly newTokenButton: Locator;
   readonly nameInput: Locator;
   readonly createButton: Locator;
   readonly tokenDisplay: Locator;
+  readonly accessTokensTitle: Locator;
+  readonly connectorsTitle: Locator;
+  readonly connectButton: Locator;
 
   constructor(page: Page) {
     this.page = page;
-    this.newTokenButton = page.locator('button:has-text("New Access Token")');
+    this.newTokenButton = page.getByRole("button", {
+      name: "New Access Token",
+    });
     this.nameInput = page.locator('input[placeholder*="Name your token"]');
     this.createButton = page.locator('button:has-text("Create Token")');
     this.tokenDisplay = page.locator("code").filter({ hasText: TOKEN_PREFIX });
+    this.accessTokensTitle = page.getByText("Access Tokens", { exact: true });
+    this.connectorsTitle = page
+      .locator(".opal-content-title-row")
+      .getByText("Connectors", { exact: true });
+    this.connectButton = page.getByRole("button", {
+      name: "Connect",
+      exact: true,
+    });
   }
 
   // ---------------------------------------------------------------------------
   // Navigation
   // ---------------------------------------------------------------------------
 
-  /** Open Settings from the user dropdown and land on the access-tokens page. */
+  /** Open Settings from the user dropdown and switch to the 3rd Party Access tab. */
   async goto(): Promise<void> {
     await this.page.locator("#onyx-user-dropdown").click();
     await this.page.getByText("Settings").first().click();
     await expect(this.page.getByText("Full Name")).toBeVisible();
     await this.page
-      .locator('a[href="/app/settings/accounts-access"]')
+      .locator(`a[href="${THIRD_PARTY_ACCESS_PATH}"]`)
       .click({ force: true });
     await expect(this.newTokenButton).toBeVisible({ timeout: 10000 });
+  }
+
+  /**
+   * Load `path` with a page load and wait until it shows this tab with its
+   * Access Tokens section. Pass an old settings path to follow its redirect.
+   */
+  async load(path: string = THIRD_PARTY_ACCESS_PATH): Promise<void> {
+    await this.page.goto(path);
+    await expect(this.page).toHaveURL(
+      new RegExp(`${THIRD_PARTY_ACCESS_PATH}$`)
+    );
+    await expect(this.accessTokensTitle).toBeVisible({ timeout: 10000 });
   }
 
   // ---------------------------------------------------------------------------
@@ -114,6 +141,19 @@ export class PATManagementPage {
     await expect(this.page.getByText(pattern).first()).toBeVisible({
       timeout: 5000,
     });
+  }
+
+  // ---------------------------------------------------------------------------
+  // Federated connectors
+  // ---------------------------------------------------------------------------
+
+  async expectFederatedConnector(
+    name: string,
+    status: "Connected" | "Not connected"
+  ): Promise<void> {
+    await expect(this.connectorsTitle).toBeVisible();
+    await expect(this.page.getByText(name)).toBeVisible();
+    await expect(this.page.getByText(status, { exact: true })).toBeVisible();
   }
 
   async revokeToken(name: string): Promise<void> {
