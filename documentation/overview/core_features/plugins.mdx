@@ -45,12 +45,13 @@ Select **Customize** in the Chat sidebar or the Craft sidebar. Customize has thr
 Each skill that you add comes in its own plugin. You can also [upload a plugin](#upload-a-plugin)
 from Claude Code or Codex, or [add a marketplace](#add-a-marketplace) from GitHub.
 A plugin can name the integrations that it needs, but it does not hold them.
-Integrations are on the **Integrations** tab. The **Plugins** tab shows each plugin that you can use, in three groups:
+Integrations are on the **Integrations** tab. The **Plugins** tab shows each plugin that you can use, in these groups:
 
 | Group | Plugins |
 | --- | --- |
-| **Created by you** | The plugins that you added, also after you publish them, and the plugins of your personal marketplaces |
-| **From your organization** | The plugins that your admin published for the organization, and the plugins of company marketplaces |
+| **Created by you** | The plugins that you added, also after you publish them |
+| **From marketplaces** | The plugins of your personal marketplaces and of company marketplaces. Each row names its marketplace. |
+| **From your organization** | The plugins that your admin published for the organization |
 | **Shared with you** | The plugins that other people added and shared with you |
 
 Each row shows how many skills the plugin holds.
@@ -193,8 +194,10 @@ Each entry has one state:
 | State | What it means |
 | --- | --- |
 | **Ready** | Onyx adds the entry as a plugin. |
-| **Blocked** | Onyx cannot add the entry, for example because its folder is missing or its plugin is not valid. The entry shows the reason. |
-| **Not supported** | The entry comes from a source that Onyx does not read, such as npm or a Git host that is not GitHub. |
+| **Cannot install** | Onyx cannot add the entry, for example because its folder is missing or its plugin is not valid. The entry shows the reason. |
+| **Not supported** | The entry comes from a source that Onyx does not read, such as npm or a Git host that is not GitHub. The entry names the source or the host. |
+
+The confirm step shows the ready entries first. Click **Show N entries that Onyx cannot use** to see the others.
 
 An entry can point to a folder of the same repository, or to another repository on github.com.
 Onyx reads the same plugin parts as for an [upload](#upload-a-plugin).
@@ -206,7 +209,8 @@ Connect GitHub in **Customize → Integrations** before you add a private reposi
 
 A marketplace that you add is personal. Its plugins are yours, and Onyx turns each new plugin on for you.
 A user with the organization-wide manage plugins permission can also add a company marketplace.
-The dialog then shows **Marketplace Type** and **Default Access**.
+The confirm step then shows **Marketplace Type** and **Default Access** above the entries.
+You cannot add a source as personal when a company marketplace already has it.
 Each plugin of a company marketplace is available to the organization, as a published plugin is.
 **Default Access** sets its install setting: **Available**, **Installed** or **Not available**.
 A company marketplace cannot make its plugins **Required**. An admin can change the setting of one plugin later.
@@ -248,7 +252,9 @@ then click **Sync now**.
 The content of a plugin from a marketplace comes only from GitHub. To change a skill, change it in the repository,
 then sync the marketplace. Onyx refuses to edit, upload a version of, restore, publish or delete the plugin.
 The **Versions** tab shows **This plugin syncs from GitHub,
-so you change it in GitHub.** You can still turn the plugin on or off, share it, and change its install setting.
+so you change it in GitHub.** The **Overview** tab names the marketplace and links to **Marketplaces**.
+You can still turn the plugin on or off. You can share a plugin of a company marketplace and change its install setting.
+A plugin of a personal marketplace is only for you: you cannot share it or change its install setting.
 Remove the marketplace to delete its plugins.
 
 ## Turn an integration on or off

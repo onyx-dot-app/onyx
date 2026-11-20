@@ -38,8 +38,8 @@
   changes. A personal marketplace belongs to the user who adds it. A company
   marketplace needs organization-wide `MANAGE_PLUGINS`, and the organization
   sees its plugins as it sees published ones, under the marketplace default.
-  A synced plugin's content changes only in GitHub; its sharing and install
-  settings change in Onyx. On the web, the Plugins tab Add menu
+  A synced plugin's content changes only in GitHub. A company plugin's sharing
+  and install settings change in Onyx; a personal one has neither. On the web, the Plugins tab Add menu
   (`sections/customize/AddSkillMenu.tsx`) has Add marketplace
   (`sections/marketplaces/AddMarketplaceModal.tsx`: source, then a confirm
   step with the resolved source and each entry's Will install list) and
@@ -48,8 +48,15 @@
   (`views/SkillsPage.tsx`) shows the same table
   (`sections/marketplaces/MarketplacesTable.tsx`): failed syncs above it,
   a row menu (Sync now, Default Access, Replace login,
-  Remove, which names the plugins it deletes) and a detail modal. The plugin
-  page shows "Synced from owner/repo". For `content_locked` the web offers no
+  Remove, which names the plugins it deletes) and a detail modal. Members see
+  company marketplaces read-only (`can_manage` false: no row menu, no Sync
+  now). The confirm step asks for the type before the entries and lists ready
+  entries first; the others fold behind one button. On the Plugins tab
+  (`lib/plugins/directory.ts`, `lib/customize/plugins.ts`) a synced plugin is
+  in "From marketplaces" with "from <marketplace>", and a manager sees another
+  user's unshared plugin as "private to <email>", not shared. The plugin page
+  shows "Synced from owner/repo", the marketplace as its Location and a
+  "Managed by the <name> marketplace" note with a link to Marketplaces. For `content_locked` the web offers no
   content change: no Edit on the skill page, no restore or publish on the
   versions tab, and no organization access or ownership transfer in the share
   dialog (`lib/skills/sharing.ts:canChangeOrganizationAccess`); each says
@@ -917,16 +924,19 @@ the app from the same rule
     `repository`, `folder` and `ref` ('' for none; one unique index for
     personal and one for company sources), its login user and its last sync.
     `skills/marketplace/provider.py:marketplace_config` reads them as a
-    `GitHubMarketplaceConfig`. Skill responses add `marketplace` (id, name, kind and
-    repository) and `content_locked`. `skills/marketplace/reader.py:read_marketplace` reads
+    `GitHubMarketplaceConfig`. Skill responses add `marketplace` (id, name, kind,
+    repository and `personal`) and `content_locked`. `skills/marketplace/reader.py:read_marketplace` reads
     `.claude-plugin/marketplace.json` (then `.agents/plugins/marketplace.json`)
     and builds one bundle per entry through
     `skills/plugin_bundle.py:read_plugin_bundle`: the folder's plugin.json
     over the entry fields, or the entry fields alone; an entry `skills` list
     takes only those folders and the MCP files that the entry names. A bad entry is blocked and the rest go on;
-    `github` and `git-subdir` sources on github.com are fetched from their
-    repository (20 per sync, one repository in memory at a time); other
-    sources are "Not supported in Onyx". `skills/marketplace/reader.py:BundleBudget` holds the
+    `github`, `url` and `git-subdir` sources on github.com are fetched from
+    their repository (20 per sync, one repository in memory at a time); other
+    sources and hosts are not supported, with a reason that names the source
+    kind or the host. `skills/ingest_from_github.py:read_repository_archive`
+    records symbolic links, and only an entry whose folder holds one is
+    blocked. `skills/marketplace/reader.py:BundleBudget` holds the
     skill and size limits for local and remote plugins together.
     `skills/marketplace/compare.py:plan_marketplace_sync` decides the writes.
     A synced plugin has the name of its entry, and the plan matches plugins
@@ -940,15 +950,20 @@ the app from the same rule
     failed read or a GitHub error only sets `last_error`. A failure before the
     commit deletes the stored bundles. One sync runs at a time per
     marketplace (cache lock `marketplace_sync:{id}`); a sync that finds the
-    lock held does nothing. The cache key `marketplace_syncing:{id}`
-    (`skills/marketplace/sync.py:marketplace_syncing`) is set when a sync is
-    queued (task expiry TTL; a failed send deletes it) and while it runs
-    (lock TTL, 5 minutes), and the run deletes it only while it still holds
-    the lock, so the API's `syncing` needs no stale rule. A running sync
-    extends the lock and the key between steps (read, each other repository,
-    stage, apply), so a killed worker frees the marketplace within 5 minutes.
-    Sync now while it is set sends no task. A sync whose lock expired writes
-    nothing. `GitHubMarketplaceConfig` lowercases owner and repo, so the
+    lock held does nothing. `skills/marketplace/sync.py:marketplace_syncing`
+    is true while `marketplace_sync_queued:{id}` (task expiry TTL; a failed
+    send deletes it) or `marketplace_syncing:{id}` (lock TTL, 5 minutes) is
+    set. The run deletes the running key only while it still holds the lock.
+    A running sync extends the lock and the key between steps (read, each
+    other repository, each staged bundle, apply) and stops after 30 minutes,
+    so a killed worker frees the marketplace within 5 minutes.
+    `request_marketplace_sync` sends no task while one is queued; during a run
+    it sets `marketplace_sync_rerun:{id}`, and the run syncs once more before
+    it ends. A sync whose lock expired writes nothing. A folder URL
+    (`.../tree/<ref>/<folder>`) and `github.com/owner/repo` fill the ref and
+    the folder. A personal add of a source that a company marketplace has is
+    refused with CONFLICT. A missing branch and a missing repository give
+    their own `last_error`. `GitHubMarketplaceConfig` lowercases owner and repo, so the
     unique indexes catch a duplicate that differs only in case. Every JSON
     read in `skills/marketplace/reader.py` turns a `RecursionError` into a
     blocked entry or a failed read. Replace login needs no GitHub
@@ -961,8 +976,12 @@ the app from the same rule
     the owner unless the skill limit refuses it; the sync then turns on the
     owner's connected integrations that the plugin needs, as an upload does. `db/plugin.py:refuse_if_synced`
     refuses content edits, uploads, restores, publishing, ownership transfer
-    and delete of a synced plugin with "Change this plugin in GitHub."; shares
-    and install settings still change. `db/skill.py:may_delete_skill` takes
+    and delete of a synced plugin with "Change this plugin in GitHub.". A
+    company plugin's shares and install settings still change. A personal
+    plugin takes no user or group share and no install setting
+    (`db/skill.py:_check_skill_access_change`), and a global plugin manager
+    does not see or edit another user's personal plugins
+    (`db/skill.py:_not_others_personal_marketplace`). `db/skill.py:may_delete_skill` takes
     `synced`, so `SkillResponse.can_delete` is false for a synced plugin. A user delete removes the user's personal
     marketplaces and their plugins (`db/users.py:delete_user_from_db__no_commit`
     returns a `UserDeleteCleanup`; after the commit, `finish_user_delete`
