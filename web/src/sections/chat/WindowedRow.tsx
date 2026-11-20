@@ -4,7 +4,7 @@ import React, { useEffect, useRef, useState } from "react";
 import { useOptionalScrollContainer } from "@/sections/chat/ScrollContainerContext";
 
 /** Placeholder height of a row that has never been measured. */
-const ESTIMATED_ROW_HEIGHT_PX = 320;
+export const ESTIMATED_ROW_HEIGHT_PX = 320;
 
 export interface WindowedRowProps {
   /** DOM id. The placeholder keeps it, so anchors still resolve. */

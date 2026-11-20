@@ -724,13 +724,21 @@ up its own branding.
     auto-scroll disabled. Scrolling up ends that window. Content observers
     update visual state without treating layout growth as a user scroll. When
     the content shrinks, an upward scroll up to the shrinkage is layout, not
-    the user, so only movement beyond it stops following.
+    the user, so only movement beyond it stops following. Following measures
+    "at the bottom" from the real scroll end, spacer included.
     Every scroll baseline records the position and the content height
     together. `components/chat/DynamicBottomSpacer.tsx` adds space only for a
     turn sent from the page, which passes through `loading`. A run the page
-    resumes starts at `streaming` and gets no space. The scroll element is
+    resumes starts at `streaming` and gets no space. The space is fitted to
+    live layout for the whole turn. The scroll element is
     keyed by session, so a chat switch remounts the spacer. Its unmount clears
     its state and the shared spacer height.
+    Each chat's position (end, or a row and offset), its turn's space and its
+    row heights live in `lib/chat/scrollMemory.ts`; the opening layout effect
+    restores them from loaded rows only, so a switch never waits on the
+    network. Rows use `lib/chat/rowIds.ts:messageRowId`. Do not write
+    `scrollTop` while the user scrolls, and keep native scroll anchoring on:
+    a script write stops a trackpad fling.
 
 ---
 

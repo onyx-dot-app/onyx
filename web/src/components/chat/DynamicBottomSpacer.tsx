@@ -1,8 +1,9 @@
 "use client";
 
-import React, { useEffect, useRef, useCallback } from "react";
+import React, { useEffect, useLayoutEffect, useRef, useCallback } from "react";
 import { useCurrentChatState } from "@/app/app/stores/useChatSessionStore";
 import { useScrollContainer } from "@/sections/chat/ScrollContainerContext";
+import { getChatScrollMemory } from "@/lib/chat/scrollMemory";
 
 // Small offset from the top of the scroll viewport where the anchor should appear.
 // The header is outside the scroll container, so when scrolled to the bottom
@@ -12,14 +13,9 @@ const ANCHOR_TOP_OFFSET_PX = 16;
 // Duration of smooth scroll animation (browser default is ~400-500ms, we add buffer)
 const SMOOTH_SCROLL_DURATION_MS = 600;
 
-// How long to wait after content stops changing before deactivating
-const CONTENT_SETTLED_DEBOUNCE_MS = 500;
-
 export interface DynamicBottomSpacerProps {
-  /**
-   * Node ID of the anchor message (the new user message)
-   */
-  anchorNodeId?: number;
+  /** DOM id of the anchor message's row (the new user message). */
+  anchorRowId?: string;
 }
 
 /**
@@ -28,7 +24,7 @@ export interface DynamicBottomSpacerProps {
  * Uses ResizeObserver to efficiently detect content changes instead of polling.
  */
 const DynamicBottomSpacer = React.memo(
-  ({ anchorNodeId }: DynamicBottomSpacerProps) => {
+  ({ anchorRowId }: DynamicBottomSpacerProps) => {
     const spacerRef = useRef<HTMLDivElement>(null);
     const chatState = useCurrentChatState();
     const isStreaming = chatState === "streaming" || chatState === "loading";
@@ -38,20 +34,19 @@ const DynamicBottomSpacer = React.memo(
     const sentHereRef = useRef(false);
 
     // Get scroll container refs from context (provided by ChatScrollContainer)
-    const { scrollContainerRef, contentWrapperRef, spacerHeightRef } =
-      useScrollContainer();
+    const {
+      scrollContainerRef,
+      contentWrapperRef,
+      spacerHeightRef,
+      sessionId,
+      spaceRestoreRef,
+    } = useScrollContainer();
 
     // Track state with refs to avoid re-renders
     const isActiveRef = useRef(false);
-    const initialSpacerHeightRef = useRef(0);
-    const initialContentHeightRef = useRef(0);
-    const currentSpacerHeightRef = useRef(0);
-    const prevAnchorNodeIdRef = useRef<number | undefined>(undefined);
+    const prevAnchorRowIdRef = useRef<string | undefined>(undefined);
     const wasStreamingRef = useRef(false);
     const resizeObserverRef = useRef<ResizeObserver | null>(null);
-    const settledTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
-      null
-    );
 
     /**
      * Set spacer height directly on DOM (no re-renders)
@@ -59,7 +54,6 @@ const DynamicBottomSpacer = React.memo(
     const setHeight = useCallback(
       (height: number) => {
         const h = Math.max(0, Math.round(height));
-        currentSpacerHeightRef.current = h;
         spacerHeightRef.current = h;
         if (spacerRef.current) {
           spacerRef.current.style.height = `${h}px`;
@@ -76,34 +70,31 @@ const DynamicBottomSpacer = React.memo(
     }, [scrollContainerRef]);
 
     /**
-     * Get content height (total scrollHeight minus current spacer height)
+     * Spacer height that stops the scroll with the anchor at the top offset.
+     * Measured from the live layout, so content that changes size above or
+     * below the anchor keeps the anchor in place.
      */
-    const getContentHeight = useCallback(() => {
+    const measureSpacerHeight = useCallback((): number | null => {
+      if (!anchorRowId) return null;
+      const anchor = document.getElementById(anchorRowId);
       const scrollContainer = getScrollContainer();
-      if (!scrollContainer) return 0;
-      return scrollContainer.scrollHeight - currentSpacerHeightRef.current;
-    }, [getScrollContainer]);
+      const spacer = spacerRef.current;
+      if (!anchor || !scrollContainer || !spacer) return null;
 
-    /**
-     * Update spacer height based on content growth
-     */
-    const updateSpacerHeight = useCallback(() => {
-      if (!isActiveRef.current) return;
+      // The spacer is the last content, so its top is where the messages
+      // end. Unlike scrollHeight, it is exact when the chat is shorter than
+      // the viewport.
+      const containerTop = scrollContainer.getBoundingClientRect().top;
+      const anchorTop = anchor.getBoundingClientRect().top - containerTop;
+      const contentEnd = spacer.getBoundingClientRect().top - containerTop;
 
-      const currentContentHeight = getContentHeight();
-      const contentGrowth =
-        currentContentHeight - initialContentHeightRef.current;
-
-      // New spacer height = initial spacer - content growth
-      const newHeight = initialSpacerHeightRef.current - contentGrowth;
-
-      if (newHeight <= 0) {
-        setHeight(0);
-        isActiveRef.current = false;
-      } else {
-        setHeight(newHeight);
-      }
-    }, [setHeight, getContentHeight]);
+      return (
+        anchorTop -
+        ANCHOR_TOP_OFFSET_PX +
+        scrollContainer.clientHeight -
+        contentEnd
+      );
+    }, [anchorRowId, getScrollContainer]);
 
     /**
      * Stop observing and clean up
@@ -113,11 +104,19 @@ const DynamicBottomSpacer = React.memo(
         resizeObserverRef.current.disconnect();
         resizeObserverRef.current = null;
       }
-      if (settledTimeoutRef.current) {
-        clearTimeout(settledTimeoutRef.current);
-        settledTimeoutRef.current = null;
-      }
     }, []);
+
+    /**
+     * Re-fit the spacer to the current layout. It stays fitted for the whole
+     * turn: a taller viewport or a shorter reply can need it again after it
+     * reached 0.
+     */
+    const updateSpacerHeight = useCallback(() => {
+      if (!isActiveRef.current) return;
+
+      const height = measureSpacerHeight();
+      if (height !== null) setHeight(height);
+    }, [measureSpacerHeight, setHeight]);
 
     /**
      * Start observing content changes with ResizeObserver
@@ -126,98 +125,41 @@ const DynamicBottomSpacer = React.memo(
       const scrollContainer = getScrollContainer();
       if (!scrollContainer || resizeObserverRef.current) return;
 
-      resizeObserverRef.current = new ResizeObserver(() => {
-        // Content size changed - update spacer
-        updateSpacerHeight();
+      // Keep fitting after the stream ends: a reply's footer, late layout and
+      // window resizes still change the fit.
+      resizeObserverRef.current = new ResizeObserver(updateSpacerHeight);
 
-        // Reset the "settled" timeout - content is still changing
-        if (settledTimeoutRef.current) {
-          clearTimeout(settledTimeoutRef.current);
-        }
-
-        // After content stops changing for CONTENT_SETTLED_DEBOUNCE_MS, deactivate
-        settledTimeoutRef.current = setTimeout(() => {
-          // Only deactivate if streaming has ended
-          if (!wasStreamingRef.current) {
-            isActiveRef.current = false;
-            stopObserving();
-          }
-        }, CONTENT_SETTLED_DEBOUNCE_MS);
-      });
-
-      // Observe the content wrapper using context ref
+      // The viewport too: its height is part of the fit.
+      resizeObserverRef.current.observe(scrollContainer);
       if (contentWrapperRef.current) {
         resizeObserverRef.current.observe(contentWrapperRef.current);
       }
-    }, [
-      getScrollContainer,
-      updateSpacerHeight,
-      stopObserving,
-      contentWrapperRef,
-    ]);
+    }, [getScrollContainer, updateSpacerHeight, contentWrapperRef]);
 
     /**
      * Activate the spacer - calculate initial height and scroll to bottom
      */
     const activate = useCallback(() => {
-      if (!anchorNodeId) return;
-
-      // If already active, stop the current observation to restart fresh
-      if (isActiveRef.current) {
-        stopObserving();
-        isActiveRef.current = false;
-      }
-
-      const anchor = document.getElementById(`message-${anchorNodeId}`);
-      if (!anchor) return;
+      stopObserving();
+      isActiveRef.current = false;
 
       const scrollContainer = getScrollContainer();
-      if (!scrollContainer) return;
+      const spacerHeight = measureSpacerHeight();
+      if (!scrollContainer || spacerHeight === null) return;
 
-      // Get measurements first (before modifying spacer)
-      const viewportHeight = scrollContainer.clientHeight;
-      const currentSpacerHeight = currentSpacerHeightRef.current;
-
-      // Calculate content height (scrollHeight minus current spacer)
-      const contentHeight = scrollContainer.scrollHeight - currentSpacerHeight;
-
-      // Calculate anchor's position using getBoundingClientRect for accuracy
-      const containerRect = scrollContainer.getBoundingClientRect();
-      const anchorRect = anchor.getBoundingClientRect();
-
-      // Anchor's visual offset from the scroll container's top edge
-      const anchorVisualOffset = anchorRect.top - containerRect.top;
-
-      // Anchor's absolute position in the scrollable content
-      const anchorOffsetInContent =
-        anchorVisualOffset + scrollContainer.scrollTop;
-
-      // Calculate spacer height needed to position anchor just below the top offset
-      // when scrolled to the absolute bottom.
-      const spacerHeight =
-        anchorOffsetInContent -
-        contentHeight +
-        viewportHeight -
-        ANCHOR_TOP_OFFSET_PX;
-
-      // If spacer height is <= 0, no push-up effect is needed.
-      // This naturally handles new chats and short conversations where
-      // the anchor is already positioned appropriately.
-      if (spacerHeight <= 0) return;
-
-      // Store initial content height for tracking content growth during streaming
-      initialContentHeightRef.current = contentHeight;
-      initialSpacerHeightRef.current = spacerHeight;
       isActiveRef.current = true;
-
-      // Set the spacer height
       setHeight(spacerHeight);
+      startObserving();
+      if (sessionId && anchorRowId) {
+        getChatScrollMemory(sessionId).spaceAnchorRowId = anchorRowId;
+      }
+
+      // No room needed: the anchor already reaches the top (a tall message),
+      // and scrolling to the end would scroll past it.
+      if (spacerHeight <= 0) return;
 
       // Tell ChatScrollContainer to not do instant auto-scroll during smooth scroll
       scrollContainer.dataset.smoothScrollActive = "true";
-
-      // Start observing content changes
-      startObserving();
 
       // Scroll to bottom smoothly (after spacer height is applied)
       requestAnimationFrame(() => {
@@ -238,11 +180,45 @@ const DynamicBottomSpacer = React.memo(
         });
       });
     }, [
-      anchorNodeId,
+      sessionId,
+      anchorRowId,
+      measureSpacerHeight,
       setHeight,
       getScrollContainer,
       startObserving,
       stopObserving,
+    ]);
+
+    /**
+     * Reopening a chat whose latest turn had space: fit the space again, with
+     * no scroll. ChatScrollContainer runs the fit before it restores the
+     * saved position, once the scroll element's ref is attached; this child
+     * layout effect runs before that.
+     */
+    useLayoutEffect(() => {
+      if (!sessionId || !anchorRowId || isActiveRef.current) return;
+      if (getChatScrollMemory(sessionId).spaceAnchorRowId !== anchorRowId) {
+        return;
+      }
+      const restore = () => {
+        if (isActiveRef.current) return;
+        const spacerHeight = measureSpacerHeight();
+        if (spacerHeight === null) return;
+        isActiveRef.current = true;
+        setHeight(spacerHeight);
+        startObserving();
+      };
+      spaceRestoreRef.current = restore;
+      return () => {
+        if (spaceRestoreRef.current === restore) spaceRestoreRef.current = null;
+      };
+    }, [
+      sessionId,
+      anchorRowId,
+      measureSpacerHeight,
+      setHeight,
+      startObserving,
+      spaceRestoreRef,
     ]);
 
     /**
@@ -251,17 +227,17 @@ const DynamicBottomSpacer = React.memo(
     useEffect(() => {
       if (chatState === "loading") sentHereRef.current = true;
       else if (!isStreaming) sentHereRef.current = false;
-      const anchorChanged = prevAnchorNodeIdRef.current !== anchorNodeId;
+      const anchorChanged = prevAnchorRowIdRef.current !== anchorRowId;
       const streamingStarted = isStreaming && !wasStreamingRef.current;
 
-      prevAnchorNodeIdRef.current = anchorNodeId;
+      prevAnchorRowIdRef.current = anchorRowId;
       wasStreamingRef.current = isStreaming;
 
       // Activate when a turn sent from this page starts: a new anchor appears
       // while it streams, or streaming starts with an anchor.
       if (
         sentHereRef.current &&
-        anchorNodeId &&
+        anchorRowId &&
         ((anchorChanged && isStreaming) || streamingStarted)
       ) {
         requestAnimationFrame(() => {
@@ -273,20 +249,18 @@ const DynamicBottomSpacer = React.memo(
       // We intentionally do NOT clear it when streaming ends — for fast responses,
       // streaming can end before the smooth scroll animation completes, which would
       // remove the suppression too early and flash the scroll-to-bottom button.
-    }, [anchorNodeId, chatState, isStreaming, activate]);
+    }, [anchorRowId, chatState, isStreaming, activate]);
 
     /**
      * Reset when anchor is cleared
      */
     useEffect(() => {
-      if (!anchorNodeId) {
+      if (!anchorRowId) {
         setHeight(0);
         isActiveRef.current = false;
-        initialSpacerHeightRef.current = 0;
-        initialContentHeightRef.current = 0;
         stopObserving();
       }
-    }, [anchorNodeId, setHeight, stopObserving]);
+    }, [anchorRowId, setHeight, stopObserving]);
 
     // The scroll container outlives the spacer (a chat switch remounts only
     // the spacer), so the shared height must not outlive the spacer's element.

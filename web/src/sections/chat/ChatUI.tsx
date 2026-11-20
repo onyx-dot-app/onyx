@@ -30,13 +30,17 @@ import {
   useLoadingError,
   useUncaughtError,
 } from "@/app/app/stores/useChatSessionStore";
-import WindowedRow from "@/sections/chat/WindowedRow";
+import WindowedRow, {
+  ESTIMATED_ROW_HEIGHT_PX,
+} from "@/sections/chat/WindowedRow";
 import OlderMessagesLoader from "@/sections/chat/OlderMessagesLoader";
 import { useOptionalScrollContainer } from "@/sections/chat/ScrollContainerContext";
 import ToolApprovalsRegion from "@/sections/chat/ToolApprovalsRegion";
 import ToolQuestionsRegion from "@/sections/chat/ToolQuestionsRegion";
 import { cn } from "@opal/utils";
 import { CHAT_COLUMN_WIDTH } from "@/lib/chat/layout";
+import { messageRowId } from "@/lib/chat/rowIds";
+import { getChatScrollMemory } from "@/lib/chat/scrollMemory";
 
 /** Width constraint for normal (non-multi-model) messages. */
 
@@ -48,6 +52,12 @@ const INITIALLY_MOUNTED_ROWS = 6;
 
 /** Rows at the end of the chat that never unmount: the latest turn. */
 const PINNED_ROWS = 2;
+
+/**
+ * Rows above a saved position that mount on the first render. Below it, rows
+ * mount until their cached heights cover the viewport.
+ */
+const SAVED_ROW_NEIGHBORS = 4;
 
 export interface ChatUIProps {
   activeAgent: MinimalAgent;
@@ -116,9 +126,22 @@ const ChatUI = React.memo(
     // Stable fallbacks to avoid changing prop identities on each render
     const emptyDocs = useMemo<OnyxDocument[]>(() => [], []);
     const emptyChildrenIds = useMemo<number[]>(() => [], []);
-    const rowHeightCache = useRef(new Map<string, number>()).current;
     const hasOlderMessages = useHasOlderMessages();
-    const scrollContainerRef = useOptionalScrollContainer()?.scrollContainerRef;
+    const scrollContainer = useOptionalScrollContainer();
+    const scrollContainerRef = scrollContainer?.scrollContainerRef;
+    // Kept per chat, so a chat opened again lays out its windowed rows at
+    // their real heights and its saved position lands exactly. This component
+    // remounts per chat, so the first render's chat is the one shown.
+    const fallbackRowHeights = useRef(new Map<string, number>()).current;
+    const scrollMemory = scrollContainer?.sessionId
+      ? getChatScrollMemory(scrollContainer.sessionId)
+      : null;
+    const rowHeightCache = scrollMemory?.rowHeights ?? fallbackRowHeights;
+    // The rows around a saved position mount on the first render, so a chat
+    // opened there paints no blank placeholders.
+    const savedRowRef = useRef(
+      scrollMemory?.position?.kind === "row" ? scrollMemory.position : null
+    );
 
     // A page of older messages goes in above the first row. Keep the view
     // still: scroll by the distance the former first row moved. Native scroll
@@ -136,17 +159,20 @@ const ChatUI = React.memo(
       return () => root.removeEventListener("scroll", onScroll);
     }, [scrollContainerRef]);
 
-    const firstRowRef = useRef<{ nodeId: number; top: number } | null>(null);
-    const firstNodeId = messages[0]?.nodeId;
+    // Rows are found by their DOM id, which can be the id first shown
+    // (messageRowId), not `message-${nodeId}`.
+    const firstRowRef = useRef<{ rowId: string; top: number } | null>(null);
+    const firstMessage = messages[0];
+    const firstRowId = firstMessage ? messageRowId(firstMessage) : undefined;
     useLayoutEffect(() => {
       const root = scrollContainerRef?.current;
-      if (!root || firstNodeId === undefined) return;
+      if (firstRowId === undefined) return;
 
+      // Record the first row even before the scroll root attaches (they can
+      // mount in the same commit); only the correction needs the root.
       const previous = firstRowRef.current;
-      if (previous && previous.nodeId !== firstNodeId) {
-        const previousRow = document.getElementById(
-          `message-${previous.nodeId}`
-        );
+      if (root && previous && previous.rowId !== firstRowId) {
+        const previousRow = document.getElementById(previous.rowId);
         if (previousRow) {
           // A no-op where the browser's anchoring already moved it.
           const target =
@@ -155,11 +181,11 @@ const ChatUI = React.memo(
         }
       }
 
-      const firstRow = document.getElementById(`message-${firstNodeId}`);
+      const firstRow = document.getElementById(firstRowId);
       firstRowRef.current = firstRow
-        ? { nodeId: firstNodeId, top: firstRow.offsetTop }
+        ? { rowId: firstRowId, top: firstRow.offsetTop }
         : null;
-    }, [scrollContainerRef, firstNodeId]);
+    }, [scrollContainerRef, firstRowId]);
 
     // Reading-width cap on messages, from the page's chat column width.
     const msgWidth = CHAT_COLUMN_WIDTH;
@@ -230,6 +256,46 @@ const ChatUI = React.memo(
       [messageTree, modelProviderLookup]
     );
 
+    const savedRow = savedRowRef.current;
+    const savedRowIndex = savedRow
+      ? messages.findIndex(
+          (message) => messageRowId(message) === savedRow.rowId
+        )
+      : -1;
+    // The last row to mount below the saved row: the first one whose bottom
+    // reaches the viewport's bottom, by cached heights.
+    let savedRowMountEnd = savedRowIndex;
+    // Scroll memory is per page, so a saved row only exists in the browser.
+    if (savedRow && savedRowIndex >= 0 && typeof window !== "undefined") {
+      const viewportHeight = window.innerHeight;
+      let covered = savedRow.rowOffset;
+      while (
+        savedRowMountEnd < messages.length - 1 &&
+        covered < viewportHeight
+      ) {
+        const message = messages[savedRowMountEnd];
+        if (!message) break;
+        const previous = messages[savedRowMountEnd - 1];
+        // A multi-model reply renders in its user message's row, not its own.
+        const ownRow = !(
+          (message.type === "assistant" || message.type === "error") &&
+          previous?.type === "user" &&
+          getMultiModelResponsesForMessage(previous)
+        );
+        if (ownRow) {
+          covered +=
+            rowHeightCache.get(messageRowId(message)) ??
+            ESTIMATED_ROW_HEIGHT_PX;
+        }
+        savedRowMountEnd += 1;
+      }
+    }
+    const anchorMessage =
+      anchorNodeId === undefined
+        ? undefined
+        : messages.find((message) => message.nodeId === anchorNodeId);
+    const anchorRowId = anchorMessage ? messageRowId(anchorMessage) : undefined;
+
     return (
       <>
         {/* No max-width on container — individual messages control their own width.
@@ -243,13 +309,17 @@ const ChatUI = React.memo(
           {hasOlderMessages && <OlderMessagesLoader className={msgWidth} />}
 
           {messages.map((message, i) => {
-            const messageReactComponentKey = `message-${message.nodeId}`;
+            const messageReactComponentKey = messageRowId(message);
             const rowsFromEnd = messages.length - i;
             const pinned =
               rowsFromEnd <= PINNED_ROWS ||
               message.is_generating ||
               message.nodeId === anchorNodeId;
-            const initiallyMounted = rowsFromEnd <= INITIALLY_MOUNTED_ROWS;
+            const initiallyMounted =
+              rowsFromEnd <= INITIALLY_MOUNTED_ROWS ||
+              (savedRowIndex >= 0 &&
+                i >= savedRowIndex - SAVED_ROW_NEIGHBORS &&
+                i <= savedRowMountEnd);
             const parentMessage = message.parentNodeId
               ? messageTree?.get(message.parentNodeId)
               : null;
@@ -434,7 +504,7 @@ const ChatUI = React.memo(
           )}
         </div>
         {/* Dynamic spacer for "fresh chat" effect - pushes content up when new message is sent */}
-        <DynamicBottomSpacer anchorNodeId={anchorNodeId} />
+        <DynamicBottomSpacer anchorRowId={anchorRowId} />
       </>
     );
   }

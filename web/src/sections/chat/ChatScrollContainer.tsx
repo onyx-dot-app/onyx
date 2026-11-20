@@ -12,6 +12,7 @@ import React, {
 import { ScrollContainerProvider } from "@/sections/chat/ScrollContainerContext";
 import { cn } from "@opal/utils";
 import { CHAT_GUTTER } from "@/lib/chat/layout";
+import { getChatScrollMemory } from "@/lib/chat/scrollMemory";
 
 // Size constants
 const DEFAULT_ANCHOR_OFFSET_PX = 16; // 1rem
@@ -64,6 +65,31 @@ export interface ChatScrollContainerProps {
   fullWidth?: boolean;
 }
 
+// Following new content scrolls to the real end, spacer included. So only
+// that end counts as "at bottom" for following.
+function isAtScrollEnd(container: HTMLElement, thresholdPx: number): boolean {
+  return (
+    container.scrollHeight - container.clientHeight - container.scrollTop <=
+    thresholdPx
+  );
+}
+
+// The row at the top of the viewport, and its top relative to the viewport's.
+function findTopRow(
+  container: HTMLElement
+): { rowId: string; rowOffset: number } | null {
+  const viewportTop = container.getBoundingClientRect().top;
+  for (const row of Array.from(
+    container.querySelectorAll<HTMLElement>('[id^="message-"]')
+  )) {
+    const rect = row.getBoundingClientRect();
+    if (rect.bottom > viewportTop) {
+      return { rowId: row.id, rowOffset: rect.top - viewportTop };
+    }
+  }
+  return null;
+}
+
 // Build a CSS mask that fades content opacity at top/bottom edges
 function buildContentMask(): string {
   // Mask uses black = visible, transparent = hidden
@@ -92,6 +118,7 @@ const ChatScrollContainer = React.memo(
       const scrollContainerRef = useRef<HTMLDivElement>(null);
       const contentWrapperRef = useRef<HTMLDivElement>(null);
       const spacerHeightRef = useRef(0);
+      const spaceRestoreRef = useRef<(() => void) | null>(null);
       const endDivRef = useRef<HTMLDivElement>(null);
       const scrolledForSessionRef = useRef<string | null>(null);
       const prevAnchorSelectorRef = useRef<string | null>(null);
@@ -105,6 +132,8 @@ const ChatScrollContainer = React.memo(
       );
       const isAutoScrollingRef = useRef(false); // Prevent handleScroll from interfering during auto-scroll
       const followOpeningUntilRef = useRef(0);
+      const sessionIdRef = useRef(sessionId);
+      const saveFrameRef = useRef<number | null>(null);
       // Scroll position and content height that the next scroll event is
       // measured from. Record both together: shrinkage since the baseline
       // explains upward movement.
@@ -124,7 +153,33 @@ const ChatScrollContainer = React.memo(
         onScrollButtonVisibilityChangeRef.current =
           onScrollButtonVisibilityChange;
         autoScrollRef.current = autoScroll;
-      }, [onScrollButtonVisibilityChange, autoScroll]);
+        sessionIdRef.current = sessionId;
+      }, [onScrollButtonVisibilityChange, autoScroll, sessionId]);
+
+      // Remember where this chat is scrolled, once per frame. Only after the
+      // chat was scrolled into place: before that, the position is not the
+      // user's. It only reads: saving never moves the view.
+      const savePosition = useCallback(() => {
+        if (saveFrameRef.current !== null) return;
+        saveFrameRef.current = requestAnimationFrame(() => {
+          saveFrameRef.current = null;
+          const container = scrollContainerRef.current;
+          const id = sessionIdRef.current;
+          if (!container || !id || scrolledForSessionRef.current !== id) {
+            return;
+          }
+          const memory = getChatScrollMemory(id);
+          const atEnd =
+            (isAtBottomRef.current && autoScrollRef.current) ||
+            (isAtScrollEnd(container, 1) && spacerHeightRef.current === 0);
+          if (atEnd) {
+            memory.position = { kind: "end" };
+            return;
+          }
+          const topRow = findTopRow(container);
+          memory.position = topRow ? { kind: "row", ...topRow } : null;
+        });
+      }, []);
 
       // Get current scroll state
       const getScrollState = useCallback((): ScrollState => {
@@ -205,6 +260,8 @@ const ChatScrollContainer = React.memo(
             autoScrollTimeoutRef.current = setTimeout(() => {
               autoScrollTimeoutRef.current = null;
               isAutoScrollingRef.current = false;
+              // The chat changed during the glide: its element is detached.
+              if (container !== scrollContainerRef.current) return;
               if (container) {
                 // Rows that mounted on the way can move the end; settle on
                 // it, unless the user scrolled away during the glide.
@@ -220,19 +277,29 @@ const ChatScrollContainer = React.memo(
                 };
               }
               // A user can interrupt the glide before it reaches the bottom.
-              isAtBottomRef.current = updateScrollState().isAtBottom;
+              updateScrollState();
+              isAtBottomRef.current = isAtScrollEnd(
+                container,
+                buttonThresholdPx
+              );
+              // Its scroll events came while auto-scrolling, so none saved
+              // where it stopped.
+              savePosition();
             }, 600);
           } else {
             isAutoScrollingRef.current = false;
           }
         },
-        [updateScrollState]
+        [updateScrollState, buttonThresholdPx, savePosition]
       );
 
       useEffect(
         () => () => {
           if (autoScrollTimeoutRef.current !== null) {
             clearTimeout(autoScrollTimeoutRef.current);
+          }
+          if (saveFrameRef.current !== null) {
+            cancelAnimationFrame(saveFrameRef.current);
           }
         },
         []
@@ -276,25 +343,35 @@ const ChatScrollContainer = React.memo(
         const baseline = scrollBaselineRef.current;
         const shrinkage = Math.max(0, baseline.height - container.scrollHeight);
         const scrolledUp = currentScrollTop < baseline.top - shrinkage - 5; // 5px threshold to ignore micro-movements
-        scrollBaselineRef.current = {
-          top: currentScrollTop,
-          height: container.scrollHeight,
-        };
+        // A small upward step keeps the baseline, so slow upward scrolling
+        // (a trackpad's few pixels per event) adds up to the threshold.
+        const smallStepUp =
+          !scrolledUp && currentScrollTop < baseline.top - shrinkage;
+        if (!smallStepUp) {
+          scrollBaselineRef.current = {
+            top: currentScrollTop,
+            height: container.scrollHeight,
+          };
+        }
 
-        // Only upward movement can stop following new content.
+        // Only upward movement can stop following new content. Measure from
+        // the real end: the spacer below a new message hides no content, but
+        // following would still pull the user back down through it.
+        const atScrollEnd = isAtScrollEnd(container, buttonThresholdPx);
         if (scrolledUp) {
           followOpeningUntilRef.current = 0;
-          isAtBottomRef.current = updateScrollState().isAtBottom;
+          updateScrollState();
+          isAtBottomRef.current = atScrollEnd;
         } else {
           // Returning to the bottom resumes following.
           const state = getScrollState();
-          if (state.isAtBottom) isAtBottomRef.current = true;
+          if (atScrollEnd) isAtBottomRef.current = true;
           setHasContentAbove(state.hasContentAbove);
           setHasContentBelow(state.hasContentBelow);
           // Update button visibility based on actual position
           onScrollButtonVisibilityChangeRef.current?.(!state.isAtBottom);
         }
-      }, [updateScrollState, getScrollState]);
+      }, [updateScrollState, getScrollState, buttonThresholdPx]);
 
       // MutationObserver (structural) + ResizeObserver (height growth).
       // Re-attached per session: the scroll element remounts on a session
@@ -335,6 +412,7 @@ const ChatScrollContainer = React.memo(
             }
 
             updateScrollState();
+            savePosition();
           });
         };
 
@@ -357,7 +435,7 @@ const ChatScrollContainer = React.memo(
           resizeObserver.disconnect();
           if (rafId) cancelAnimationFrame(rafId);
         };
-      }, [updateScrollState, scrollToBottom, sessionId]);
+      }, [updateScrollState, scrollToBottom, savePosition, sessionId]);
 
       // Handle session changes and anchor changes. A layout effect: opening a
       // chat whose messages are already rendered scrolls it into place before
@@ -377,6 +455,12 @@ const ChatScrollContainer = React.memo(
           setIsScrollReady(false);
           scrollBaselineRef.current = { top: 0, height: 0 };
           isAtBottomRef.current = true;
+          // A glide in the previous chat must not settle into this one.
+          if (autoScrollTimeoutRef.current !== null) {
+            clearTimeout(autoScrollTimeoutRef.current);
+            autoScrollTimeoutRef.current = null;
+          }
+          isAutoScrollingRef.current = false;
         }
 
         const shouldScroll =
@@ -402,16 +486,55 @@ const ChatScrollContainer = React.memo(
         // New session with existing content = instant, new anchor = smooth
         const isLoadingExistingContent =
           isNewSession || scrolledForSessionRef.current === null;
+
+        // A new anchor while the user reads elsewhere, or with auto-scroll off
+        // (a refresh brought in a turn from another tab): keep their
+        // position. A send anchors through DynamicBottomSpacer, and a
+        // following view still moves.
+        if (
+          !isLoadingExistingContent &&
+          (!isAtBottomRef.current || !autoScrollRef.current)
+        ) {
+          prevAnchorSelectorRef.current = anchorSelector ?? null;
+          return;
+        }
         const behavior: ScrollBehavior = isLoadingExistingContent
           ? "instant"
           : "smooth";
+
+        // Refit the reopened chat's remembered space first: the saved
+        // position may sit inside it. The spacer cannot measure in its own
+        // layout effect, which runs before this element's ref attaches.
+        if (isLoadingExistingContent) {
+          spaceRestoreRef.current?.();
+          spaceRestoreRef.current = null;
+        }
+
+        // Reopening a chat: return to its saved row when that row is loaded.
+        // Only rows already loaded count, so opening never waits.
+        const saved =
+          isLoadingExistingContent && sessionId
+            ? getChatScrollMemory(sessionId).position
+            : null;
+        const savedRow =
+          saved?.kind === "row"
+            ? container.querySelector<HTMLElement>(
+                `#${CSS.escape(saved.rowId)}`
+              )
+            : null;
 
         const scrollIntoPlace = () => {
           let targetScrollTop: number;
 
           // When loading an existing conversation, scroll to bottom
           // Otherwise (e.g., anchor change during conversation), scroll to anchor
-          if (isLoadingExistingContent) {
+          if (savedRow && saved?.kind === "row") {
+            targetScrollTop =
+              container.scrollTop +
+              savedRow.getBoundingClientRect().top -
+              container.getBoundingClientRect().top -
+              saved.rowOffset;
+          } else if (isLoadingExistingContent) {
             targetScrollTop = container.scrollHeight - container.clientHeight;
           } else {
             targetScrollTop = Math.max(
@@ -431,7 +554,9 @@ const ChatScrollContainer = React.memo(
           isAtBottomRef.current = updateScrollState().isAtBottom;
 
           // Mark as "at bottom" after scrolling to bottom so auto-scroll continues
-          if (isLoadingExistingContent || autoScrollRef.current) {
+          if (savedRow) {
+            isAtBottomRef.current = isAtScrollEnd(container, buttonThresholdPx);
+          } else if (isLoadingExistingContent || autoScrollRef.current) {
             isAtBottomRef.current = true;
           }
 
@@ -443,7 +568,10 @@ const ChatScrollContainer = React.memo(
         // Opening a chat: its messages are laid out already, so scroll now,
         // before paint. The content is never painted hidden or out of place.
         if (isLoadingExistingContent) {
-          followOpeningUntilRef.current = performance.now() + OPENING_FOLLOW_MS;
+          if (!savedRow) {
+            followOpeningUntilRef.current =
+              performance.now() + OPENING_FOLLOW_MS;
+          }
           scrollIntoPlace();
           return;
         }
@@ -451,7 +579,13 @@ const ChatScrollContainer = React.memo(
         // A new anchor within the chat: defer a tick so layout can settle.
         const timeoutId = setTimeout(scrollIntoPlace, 0);
         return () => clearTimeout(timeoutId);
-      }, [sessionId, anchorSelector, anchorOffsetPx, updateScrollState]);
+      }, [
+        sessionId,
+        anchorSelector,
+        anchorOffsetPx,
+        buttonThresholdPx,
+        updateScrollState,
+      ]);
 
       // Build mask to fade content opacity at edges
       const contentMask = buildContentMask();
@@ -471,7 +605,10 @@ const ChatScrollContainer = React.memo(
               // mode keeps both-edges to avoid shift.
               !fullWidth && "md:[scrollbar-gutter:stable_both-edges]"
             )}
-            onScroll={handleScroll}
+            onScroll={() => {
+              handleScroll();
+              savePosition();
+            }}
             style={{
               // Apply mask to fade content opacity at edges
               maskImage: contentMask,
@@ -493,6 +630,8 @@ const ChatScrollContainer = React.memo(
                 scrollContainerRef={scrollContainerRef}
                 contentWrapperRef={contentWrapperRef}
                 spacerHeightRef={spacerHeightRef}
+                sessionId={sessionId}
+                spaceRestoreRef={spaceRestoreRef}
               >
                 {children}
               </ScrollContainerProvider>
