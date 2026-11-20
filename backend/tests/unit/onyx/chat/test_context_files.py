@@ -583,6 +583,21 @@ class TestExtractContextFiles:
         assert len(result.file_metadata_for_tool) == 1
         assert result.file_metadata_for_tool[0].filename == "data.xlsx"
 
+    def test_overflow_with_vector_db_lists_unindexed_code_files(self) -> None:
+        """Search cannot find code files, so overflow lists them for tools."""
+        text_uf = _make_user_file(token_count=7000, name="bigfile.txt")
+        code_uf = _make_user_file(token_count=50, name="analyze.py")
+
+        result = extract_context_files(
+            user_files=capture_user_file_metadata([text_uf, code_uf]),
+            llm_max_context_window=10000,
+            reserved_token_count=0,
+        )
+
+        assert result.use_as_search_filter is True
+        assert [m.filename for m in result.file_metadata_for_tool] == ["analyze.py"]
+        assert result.file_metadata_for_tool[0].staged_for_tools is True
+
     @patch("onyx.chat.files.DISABLE_VECTOR_DB", True)
     def test_overflow_no_vector_db_includes_all_files_in_tool_metadata(self) -> None:
         """When vector DB is disabled and files overflow, all files

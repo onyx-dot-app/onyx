@@ -20,6 +20,7 @@ from onyx.db.file_record import FileRecordNotFoundError
 from onyx.db.models import ChatMessage, Persona, UserFile
 from onyx.db.projects import get_user_files_from_project
 from onyx.file_processing.extract_file_text import extract_file_text
+from onyx.file_processing.file_types import is_sandbox_only_file
 from onyx.file_store.models import (
     ChatFileInput,
     ChatFileType,
@@ -41,7 +42,7 @@ from onyx.llm.constants import APPROX_CHARS_PER_TOKEN
 from onyx.llm.models import UserMessage
 from onyx.prompts.chat_prompts import CONTENT_PENDING_NOTICE, CONTENT_UNAVAILABLE_NOTICE
 from onyx.server.query_and_chat.chat_utils import (
-    is_code_interpreter_staged_mime_type,
+    is_code_interpreter_staged_file,
     mime_type_to_chat_file_type,
 )
 from onyx.tools.models import ChatFile, SearchToolUsage
@@ -112,7 +113,7 @@ def load_context_user_files_for_tools(
     user_files: list[UserFileMetadata],
     existing_filenames: set[str],
 ) -> list[ChatFile]:
-    """Stage tabular and Office project/persona files for code-interpreter as
+    """Stage tabular, Office and code project/persona files for code-interpreter as
     lazy ChatFile instances.
 
     Raw bytes are not read here; each ChatFile carries a loader closure that
@@ -131,7 +132,7 @@ def load_context_user_files_for_tools(
             continue
         seen_file_ids.add(user_file.file_id)
 
-        if not is_code_interpreter_staged_mime_type(user_file.file_type):
+        if not is_code_interpreter_staged_file(user_file.name, user_file.file_type):
             continue
 
         filename = _deduped_filename(
@@ -251,10 +252,12 @@ def extract_context_files(
         if DISABLE_VECTOR_DB:
             overflow_tool_metadata = [_build_tool_metadata(uf) for uf in user_files]
         else:
+            # Search cannot find unindexed sandbox-only files, so list them.
             overflow_tool_metadata = [
                 _build_tool_metadata(uf)
                 for uf in user_files
                 if mime_type_to_chat_file_type(uf.file_type).use_metadata_only()
+                or is_sandbox_only_file(uf.name)
             ]
         return ExtractedContextFiles(
             file_texts=[],
@@ -344,8 +347,8 @@ def _build_tool_metadata(user_file: UserFileMetadata) -> FileToolMetadata:
         approx_char_count=(user_file.token_count or 0) * APPROX_CHARS_PER_TOKEN,
     ).tool_metadata.model_copy(
         update={
-            "staged_for_tools": is_code_interpreter_staged_mime_type(
-                user_file.file_type
+            "staged_for_tools": is_code_interpreter_staged_file(
+                user_file.name, user_file.file_type
             )
         }
     )
