@@ -402,6 +402,29 @@ test("a full panel makes the page inert and takes focus out of it, until Escape 
   expect(screen.getByTestId("page").inert).toBe(false);
 });
 
+test("full and medium size keep the panel over the workspace's end at a pixel width, beside the page's same reserve", () => {
+  setReplies([[REPORT]]);
+  render(<Chat replies={[[REPORT]]} workspaceWidth={1200} />);
+  update({ type: "toggleFiles" });
+  const box = screen.getByRole("complementary", {
+    name: "Files",
+  }).parentElement!;
+  const reserve = box.parentElement!;
+  const geometry = () => ({
+    over: box.classList.contains("absolute") && box.classList.contains("end-0"),
+    width: box.style.width,
+    reserve: reserve.style.width,
+  });
+  const medium = { over: true, width: "600px", reserve: "600px" };
+  expect(geometry()).toEqual(medium);
+
+  update({ type: "setMode", mode: "full" });
+  expect(geometry()).toEqual({ ...medium, width: "1200px" });
+
+  fireEvent.keyDown(document.body, { key: "Escape" });
+  expect(geometry()).toEqual(medium);
+});
+
 test("closing a panel that covers a narrow chat returns focus to the card that opened it", async () => {
   setReplies([[REPORT]]);
   render(<Chat replies={[[REPORT]]} workspaceWidth={600} />);

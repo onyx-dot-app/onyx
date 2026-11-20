@@ -8,9 +8,13 @@ interface ChatSidePanelProps {
   open: boolean;
   // Escape in the panel: closes it, or steps back inside it
   onEscape: () => void;
-  // The open width: "default" is 25rem, a number is pixels, and "cover"
-  // covers the nearest positioned ancestor, such as the app's workspace row
-  width?: "default" | "cover" | number;
+  // The open width: "default" is 25rem, a number is pixels
+  width?: "default" | number;
+  // Pixels the page beside the panel gives up to it while it is open. With
+  // a reserve, the panel sits over the end of the nearest positioned
+  // ancestor, such as the app's workspace row: a width over the reserve
+  // covers the page, and a change of width never moves the panel.
+  reserve?: number;
   // Moves focus into the panel when it opens; a host that places focus
   // itself turns this off
   focusOnOpen?: boolean;
@@ -34,6 +38,7 @@ export function ChatSidePanel({
   open,
   onEscape,
   width = "default",
+  reserve,
   focusOnOpen = true,
   animate = true,
   shows,
@@ -91,7 +96,7 @@ export function ChatSidePanel({
     within: panelRef,
   });
 
-  return (
+  const panel = (
     <div
       ref={panelRef}
       tabIndex={-1}
@@ -99,12 +104,12 @@ export function ChatSidePanel({
       className={cn(
         "overflow-hidden ease-in-out h-full outline-none",
         animate && "duration-300",
-        width === "cover" && "absolute inset-y-0 end-0 z-20",
+        reserve !== undefined && "absolute inset-y-0 end-0 z-20",
         open
           ? cn(
               "visible",
               animate && "transition-[width]",
-              width === "cover" ? "w-full" : width === "default" && "w-100"
+              width === "default" && "w-100"
             )
           : cn("w-0 invisible", animate && "transition-[width,visibility]"),
         className
@@ -112,6 +117,18 @@ export function ChatSidePanel({
       style={open && typeof width === "number" ? { width } : undefined}
     >
       {children}
+    </div>
+  );
+  if (reserve === undefined) return panel;
+  return (
+    <div
+      className={cn(
+        "h-full ease-in-out",
+        animate && "transition-[width] duration-300"
+      )}
+      style={{ width: open ? reserve : 0 }}
+    >
+      {panel}
     </div>
   );
 }
