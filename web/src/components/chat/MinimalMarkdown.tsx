@@ -15,6 +15,7 @@ import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import { transformLinkUri } from "@/lib/utils";
 import { rehypeDirection } from "@/lib/rehypeDirection";
+import { rehypeStreamingCursor } from "@/lib/rehypeStreamingCursor";
 import { cn } from "@opal/utils";
 
 type MinimalMarkdownComponentOverrides = Partial<Components>;
@@ -30,6 +31,8 @@ interface MinimalMarkdownProps {
   components?: MinimalMarkdownComponentOverrides;
   /** Skip rehype-highlight while content is mid-stream. Flip false on completion. */
   streaming?: boolean;
+  /** Show the streaming cursor inline after the last character. */
+  cursor?: boolean;
 }
 
 export default function MinimalMarkdown({
@@ -38,19 +41,20 @@ export default function MinimalMarkdown({
   showHeader = true,
   components,
   streaming = false,
+  cursor = false,
 }: MinimalMarkdownProps) {
   const highlightLanguages = useHighlightLanguages(!streaming);
-  const rehypePlugins = useMemo<PluggableList>(
-    () =>
+  const rehypePlugins = useMemo<PluggableList>(() => {
+    const plugins: PluggableList =
       !streaming && highlightLanguages
         ? [
             [rehypeHighlight, { detect: true, languages: highlightLanguages }],
             rehypeKatex,
             rehypeDirection,
           ]
-        : [rehypeKatex, rehypeDirection],
-    [streaming, highlightLanguages]
-  );
+        : [rehypeKatex, rehypeDirection];
+    return cursor ? [...plugins, rehypeStreamingCursor] : plugins;
+  }, [streaming, highlightLanguages, cursor]);
   const markdownComponents = useMemo(() => {
     const defaults: Components = {
       a: MemoizedLink,
