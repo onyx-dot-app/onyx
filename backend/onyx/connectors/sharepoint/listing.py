@@ -7,8 +7,6 @@ page is listed with its metadata only: the listing does not read the page's
 canvas, which is the page's content.
 """
 
-from datetime import datetime
-from enum import Enum
 from typing import Any
 
 from onyx.connectors.microsoft_utils.drive_items import (
@@ -17,7 +15,11 @@ from onyx.connectors.microsoft_utils.drive_items import (
     DriveItemData,
     parse_graph_datetime,
 )
-from onyx.connectors.models import ListingPayload, SlimDocumentStub
+from onyx.connectors.models import SlimDocumentStub
+from onyx.connectors.sharepoint.models import (
+    SharepointListedKind,
+    SharepointListingPayload,
+)
 from onyx.file_processing.file_types import OnyxMimeTypes, is_indexable_file_type
 
 CANVAS_LAYOUT_PROPERTY = "canvasLayout"
@@ -28,47 +30,6 @@ LISTING_SELECT_FIELDS = ",".join(
     for field in DRIVE_ITEM_SELECT_FIELDS.split(",")
     if field != DRIVE_ITEM_DOWNLOAD_URL_SELECT
 )
-
-
-class SharepointListedKind(str, Enum):
-    DRIVE_ITEM = "drive_item"
-    SITE_PAGE = "site_page"
-
-
-class SharepointListingPayload(ListingPayload):
-    """What conversion needs to fetch one listed file or site page.
-
-    It never holds the file's ``downloadUrl``: that URL expires in about an
-    hour, and it is a credential for the file. Conversion downloads by drive
-    id and item id."""
-
-    kind: SharepointListedKind
-    site_url: str
-    name: str
-    web_url: str
-    parent_hierarchy_raw_node_id: str | None = None
-    created_datetime: datetime | None = None
-    last_modified_datetime: datetime | None = None
-
-    # A file in a document library.
-    drive_id: str | None = None
-    item_id: str | None = None
-    drive_name: str | None = None
-    # The SharePoint list behind the library and the file's item in it. The
-    # permission reads address them.
-    list_id: str | None = None
-    list_item_id: str | None = None
-    # The file's ``parentReference.path``.
-    parent_path: str | None = None
-    mime_type: str | None = None
-    size: int | None = None
-    last_modified_by_display_name: str | None = None
-    last_modified_by_email: str | None = None
-
-    # A site page: the site's Graph id, and the page as the listing returned
-    # it, with no canvas.
-    site_id: str | None = None
-    site_page: dict[str, Any] | None = None
 
 
 def is_listable_drive_item(item: DriveItemData, size_threshold: int) -> bool:
