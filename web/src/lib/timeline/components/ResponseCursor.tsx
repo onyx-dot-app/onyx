@@ -41,8 +41,8 @@ export function ResponseCursorAnchor({
 
 /**
  * The slot the cursor waits in while a turn works with nothing streaming:
- * after a send, before the first packet, and under a finished run until what
- * comes next. Chat and Craft both use it. It is one run header tall, so a run
+ * after a send, before the first packet, and under a run, also while its
+ * steps run. Chat and Craft both use it. It is one run header tall, so a run
  * card takes its place without a jump; text that takes its place carries the
  * cursor on.
  */

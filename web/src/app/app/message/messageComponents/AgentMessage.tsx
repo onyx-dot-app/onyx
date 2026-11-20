@@ -20,10 +20,7 @@ import { FullChatState } from "@/app/app/message/messageComponents/types";
 import { FeedbackType } from "@/app/app/types";
 import { Section } from "@opal/layouts";
 import { HumanMessageBubble } from "@/app/app/message/HumanMessage";
-import {
-  toChatTimelineEntry,
-  type TurnGroup,
-} from "@/lib/timeline/chat/transformers";
+import type { TurnGroup } from "@/lib/timeline/chat/transformers";
 import type {
   GroupedPacket,
   PlacedPublishedFile,
@@ -754,8 +751,7 @@ const AgentMessage = React.memo(function AgentMessage({
                   ...(isLastSection &&
                   !stopPacketSeen &&
                   toolRequests.awaiting === null &&
-                  !codeModeWorking &&
-                  endsWithFinishedRun(sectionSegments)
+                  endsWithRun(sectionSegments)
                     ? [responseCursorItem()]
                     : []),
                   ...statusLines(isLastSection),
@@ -796,15 +792,12 @@ const AgentMessage = React.memo(function AgentMessage({
 export default AgentMessage;
 
 /**
- * The section ends with a run whose last step has finished: the turn's cursor
- * waits under it for what comes next. While a step runs, the run's card shows
- * the work, so the cursor stays hidden.
+ * The section ends with a run: the turn's cursor waits under it, while its
+ * steps run and until what comes next.
  */
-function endsWithFinishedRun(segments: SectionSegment[]): boolean {
+function endsWithRun(segments: SectionSegment[]): boolean {
   const last = segments.at(-1);
-  if (last?.kind !== "run") return false;
-  const step = last.turnGroups.at(-1)?.steps.at(-1);
-  return step !== undefined && toChatTimelineEntry(step).status !== "streaming";
+  return last?.kind === "run" && last.turnGroups.length > 0;
 }
 
 type SectionSegment =
