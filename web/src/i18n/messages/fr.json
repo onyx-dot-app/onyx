@@ -11774,9 +11774,6 @@
       "sessionNotFound": {
         "description": "Cette session de discussion n'existe pas ou a été supprimée.",
         "title": "Discussion introuvable"
-      },
-      "sourcesModal": {
-        "title": "Sources"
       }
     },
     "appChrome": {
@@ -13394,12 +13391,53 @@
     },
     "publishedFiles": {
       "card": {
-        "updated": {
-          "description": "Version mise à jour · {details}"
-        },
         "preview": {
           "ariaLabel": "Aperçu de {name}"
         }
+      },
+      "panel": {
+        "preview": {
+          "ariaLabel": "Aperçu de {name}"
+        }
+      },
+      "viewAllButton": {
+        "label": "Voir les {count} fichiers"
+      }
+    },
+    "rightPanel": {
+      "filesTab": {
+        "label": "Fichiers",
+        "description": "Fichiers publiés par le modèle dans cette discussion",
+        "empty": "Cette discussion n'a pas encore de fichiers",
+        "tile": {
+          "ariaLabel": "Ouvrir {name}"
+        },
+        "search": {
+          "placeholder": "Rechercher des fichiers",
+          "empty": "Aucun fichier ne correspond à la recherche"
+        }
+      },
+      "fileTab": {
+        "olderVersion": "<isolate>{name}</isolate> (v{version} sur {latest})"
+      },
+      "sourcesTab": {
+        "label": "Sources"
+      },
+      "toggleButton": {
+        "label": "Afficher ou masquer le panneau"
+      },
+      "reloadButton": {
+        "label": "Actualiser les fichiers",
+        "error": "Impossible de recharger les fichiers. Réessayez."
+      },
+      "expandButton": {
+        "label": "Agrandir le panneau"
+      },
+      "restoreButton": {
+        "label": "Restaurer le panneau"
+      },
+      "resizeHandle": {
+        "label": "Redimensionner le panneau"
       }
     }
   },
@@ -15013,18 +15051,6 @@
       "browser": {
         "label": "Apps"
       },
-      "list": {
-        "label": "Onglets de résultats"
-      },
-      "close": {
-        "label": "Fermer {name}"
-      },
-      "reordered": {
-        "label": "Onglet déplacé à la position {position} sur {count}"
-      },
-      "open": {
-        "label": "Ouvrir un onglet"
-      },
       "outputs": {
         "label": "Résultats"
       }
@@ -15150,8 +15176,7 @@
       "scope": {
         "turn": "Résultats du tour {turn, number}",
         "all": "Toutes les sorties"
-      },
-      "unseen": "Nouveau ou mis à jour"
+      }
     },
     "turnOutputs": {
       "showAll": "Voir les {count} résultats",
@@ -15220,6 +15245,28 @@
       "description": "Cette session ne peut pas utiliser {names}. Vos skills doivent tenir dans {maxSize} et {maxFiles, number} fichiers. Désactivez les skills dont vous n’avez pas besoin pour libérer de la place.",
       "manage": "Gérer les skills",
       "dismiss": "Ignorer"
+    }
+  },
+  "outputPanel": {
+    "tabStrip": {
+      "list": {
+        "label": "Onglets de résultats"
+      },
+      "close": {
+        "label": "Fermer {name}"
+      },
+      "reordered": {
+        "label": "Onglet déplacé à la position {position} sur {count}"
+      },
+      "open": {
+        "label": "Ouvrir un onglet"
+      }
+    },
+    "tile": {
+      "download": {
+        "label": "Télécharger"
+      },
+      "unseen": "Nouveau ou mis à jour"
     }
   },
   "knowledge": {

@@ -11774,9 +11774,6 @@
       "sessionNotFound": {
         "description": "جلسة المحادثة هذه غير موجودة أو تم حذفها.",
         "title": "المحادثة غير موجودة"
-      },
-      "sourcesModal": {
-        "title": "المصادر"
       }
     },
     "appChrome": {
@@ -13394,12 +13391,53 @@
     },
     "publishedFiles": {
       "card": {
-        "updated": {
-          "description": "نسخة محدّثة · {details}"
-        },
         "preview": {
           "ariaLabel": "معاينة {name}"
         }
+      },
+      "panel": {
+        "preview": {
+          "ariaLabel": "معاينة {name}"
+        }
+      },
+      "viewAllButton": {
+        "label": "عرض كل الملفات ({count})"
+      }
+    },
+    "rightPanel": {
+      "filesTab": {
+        "label": "الملفات",
+        "description": "الملفات التي نشرها النموذج في هذه المحادثة",
+        "empty": "لا توجد ملفات في هذه المحادثة بعد",
+        "tile": {
+          "ariaLabel": "فتح {name}"
+        },
+        "search": {
+          "placeholder": "البحث في الملفات",
+          "empty": "لا توجد ملفات تطابق البحث"
+        }
+      },
+      "fileTab": {
+        "olderVersion": "<isolate>{name}</isolate> (الإصدار {version} من {latest})"
+      },
+      "sourcesTab": {
+        "label": "المصادر"
+      },
+      "toggleButton": {
+        "label": "تبديل اللوحة"
+      },
+      "reloadButton": {
+        "label": "تحديث الملفات",
+        "error": "تعذّرت إعادة تحميل الملفات. حاول مرة أخرى."
+      },
+      "expandButton": {
+        "label": "توسيع اللوحة"
+      },
+      "restoreButton": {
+        "label": "استعادة اللوحة"
+      },
+      "resizeHandle": {
+        "label": "تغيير حجم اللوحة"
       }
     }
   },
@@ -15013,18 +15051,6 @@
       "browser": {
         "label": "التطبيقات"
       },
-      "list": {
-        "label": "علامات تبويب المخرجات"
-      },
-      "close": {
-        "label": "إغلاق {name}"
-      },
-      "reordered": {
-        "label": "نُقلت علامة التبويب إلى الموضع {position} من {count}"
-      },
-      "open": {
-        "label": "فتح علامة تبويب"
-      },
       "outputs": {
         "label": "المخرجات"
       }
@@ -15150,8 +15176,7 @@
       "scope": {
         "turn": "مخرجات الجولة {turn, number}",
         "all": "جميع المخرجات"
-      },
-      "unseen": "جديد أو محدّث"
+      }
     },
     "turnOutputs": {
       "showAll": "عرض كل المخرجات ({count})",
@@ -15220,6 +15245,28 @@
       "description": "لا يمكن لهذه الجلسة استخدام {names}. يجب أن تتسع مهاراتك في {maxSize} و{maxFiles, number} ملف. أوقف تشغيل المهارات التي لا تحتاجها لإفساح المجال.",
       "manage": "إدارة المهارات",
       "dismiss": "تجاهل"
+    }
+  },
+  "outputPanel": {
+    "tabStrip": {
+      "list": {
+        "label": "علامات تبويب المخرجات"
+      },
+      "close": {
+        "label": "إغلاق {name}"
+      },
+      "reordered": {
+        "label": "نُقلت علامة التبويب إلى الموضع {position} من {count}"
+      },
+      "open": {
+        "label": "فتح علامة تبويب"
+      }
+    },
+    "tile": {
+      "download": {
+        "label": "تنزيل"
+      },
+      "unseen": "جديد أو محدّث"
     }
   },
   "knowledge": {

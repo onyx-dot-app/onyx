@@ -3,7 +3,7 @@ import type { HTMLAttributes } from "react";
 import type { Route } from "next";
 import { NavLink } from "@opal/navigation/components";
 import { Interactive, type InteractiveStatelessProps } from "@opal/core";
-import type { RichStr, WithoutStyles } from "@opal/types";
+import type { RichNodes, RichStr, WithoutStyles } from "@opal/types";
 import { Text, type TextFont } from "@opal/components";
 
 // ---------------------------------------------------------------------------
@@ -27,8 +27,8 @@ type TextButtonProps = Pick<InteractiveStatelessProps, "passive"> &
     /** Applies disabled styling and suppresses clicks/navigation. */
     disabled?: boolean;
 
-    /** Plain string or `markdown()` for inline markdown. */
-    children: string | RichStr;
+    /** Plain string, `markdown()` for inline markdown, or `richNodes()`. */
+    children: string | RichStr | RichNodes;
   };
 
 // ---------------------------------------------------------------------------

@@ -1,4 +1,4 @@
-import { act, render, screen, waitFor } from "@tests/setup/test-utils";
+import { act, render, screen, waitFor, within } from "@tests/setup/test-utils";
 import { Message } from "@/app/app/types";
 import { upsertMessages } from "@/app/app/services/messageTree";
 import {
@@ -1033,13 +1033,16 @@ test("published files show in the timeline and as download cards after the answe
   const first = at({ turn_index: 0, tab_index: 0 });
   const again = at({ turn_index: 1, tab_index: 0 });
   const failed = at({ turn_index: 2, tab_index: 0 });
-  const report = (file_id: string, title: string | null) => ({
+  const report = (file_id: string, title: string | null, version: number) => ({
     file_id,
     name: "report.csv",
     title,
     path: "/home/onyx/workspaces/abc/out/report.csv",
+    display_path: "out/report.csv",
     size: 2048,
     mime_type: "text/csv",
+    artifact_id: "artifact-report",
+    version,
   });
   const view = render(
     renderMessage([
@@ -1051,18 +1054,19 @@ test("published files show in the timeline and as download cards after the answe
       first({
         type: PacketType.PUBLISH_FILES_END,
         // The card shows the title without its bidi controls.
-        files: [report("file-1", "\u202EQ3 report")],
+        files: [report("file-1", "\u202EQ3 report", 1)],
         error: null,
       }),
       first(sectionEnd),
+      // A blank title shows the file's name
       again({
         type: PacketType.PUBLISH_FILES_START,
-        files: [{ path: "out/report.csv", title: null }],
+        files: [{ path: "out/report.csv", title: "  " }],
         description: null,
       }),
       again({
         type: PacketType.PUBLISH_FILES_END,
-        files: [report("file-2", null)],
+        files: [report("file-2", "  ", 2)],
         error: null,
       }),
       again(sectionEnd),
@@ -1085,8 +1089,9 @@ test("published files show in the timeline and as download cards after the answe
       name: "Preview report.csv",
     });
     expect(cards).toHaveLength(2);
-    expect(screen.getByText("Q3 report")).toBeInTheDocument();
-    expect(screen.getByText(/^Updated version · CSV/)).toBeInTheDocument();
+    expect(within(cards[0]!).getByText("Q3 report")).toBeInTheDocument();
+    expect(within(cards[1]!).getByText("report.csv")).toBeInTheDocument();
+    expect(screen.getAllByText(/^CSV · /)).toHaveLength(2);
     expect(
       screen
         .getAllByRole("link", { name: "Download" })
@@ -1096,6 +1101,8 @@ test("published files show in the timeline and as download cards after the answe
     await expandTimeline();
     expect(screen.getAllByText("Published 1 file")).toHaveLength(2);
     expect(screen.getByText("The quarterly numbers")).toBeInTheDocument();
+    // The second call's row and its card
+    expect(screen.getAllByText("report.csv")).toHaveLength(2);
     expect(
       screen.getAllByText("/home/onyx/workspaces/abc/out/report.csv")
     ).toHaveLength(2);

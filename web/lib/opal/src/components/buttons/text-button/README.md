@@ -41,14 +41,14 @@ Interactive.Stateless              <- always variant="default" / prominence="ter
 
 ## Props
 
-| Prop       | Type                | Default          | Description                                                                              |
-| ---------- | ------------------- | ---------------- | ---------------------------------------------------------------------------------------- |
-| `font`     | `TextFont`          | `"main-ui-body"` | Font preset, same as `Text`'s `font` prop                                                |
-| `nowrap`   | `boolean`           | `true`           | Prevent text wrapping (defaults `true`, unlike `Text`, since buttons don't usually wrap) |
-| `children` | `string \| RichStr` | —                | Label text (required)                                                                    |
-| `href`     | `string`            | —                | URL; renders as a link                                                                   |
-| `target`   | `string`            | —                | Anchor target (e.g. `"_blank"`). Only meaningful with `href`                             |
-| `disabled` | `boolean`           | `false`          | Applies disabled styling + suppresses clicks/navigation                                  |
+| Prop       | Type                             | Default          | Description                                                                              |
+| ---------- | -------------------------------- | ---------------- | ---------------------------------------------------------------------------------------- |
+| `font`     | `TextFont`                       | `"main-ui-body"` | Font preset, same as `Text`'s `font` prop                                                |
+| `nowrap`   | `boolean`                        | `true`           | Prevent text wrapping (defaults `true`, unlike `Text`, since buttons don't usually wrap) |
+| `children` | `string \| RichStr \| RichNodes` | —                | Label text (required); `richNodes()` for inline elements such as `<bdi>`                 |
+| `href`     | `string`                         | —                | URL; renders as a link                                                                   |
+| `target`   | `string`                         | —                | Anchor target (e.g. `"_blank"`). Only meaningful with `href`                             |
+| `disabled` | `boolean`                        | `false`          | Applies disabled styling + suppresses clicks/navigation                                  |
 
 `passive` keeps resting colors and removes hover and pressed styles. Click handlers remain enabled.
 

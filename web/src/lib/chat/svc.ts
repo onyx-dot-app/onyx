@@ -26,10 +26,9 @@ export async function fetchChatFile(
     `${CHAT_FILE_PREFIX}/${encodeURIComponent(fileId)}${
       parsed ? "?parsed=true" : ""
     }`,
-    {
-      method: "GET",
-      cache: "force-cache",
-    }
+    // The server marks a file immutable; the default cache mode reuses it
+    // and fetches a failed load again.
+    { method: "GET" }
   );
 
   if (!response.ok) {
