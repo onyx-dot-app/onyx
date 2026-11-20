@@ -15,12 +15,20 @@ import { CHAT_GUTTER } from "@/lib/chat/layout";
 import { getChatScrollMemory } from "@/lib/chatScroll/scrollMemory";
 
 // Size constants
-const DEFAULT_ANCHOR_OFFSET_PX = 16; // 1rem
 const DEFAULT_FADE_THRESHOLD_PX = 80; // 5rem
 const DEFAULT_BUTTON_THRESHOLD_PX = 32; // 2rem
-// After opening a chat, how long to follow content that settles below the end
-// (late layout, a reply's footer), whatever the auto-scroll setting.
-const OPENING_FOLLOW_MS = 1000;
+// Longest a glide to the end may take before it settles (browsers without
+// the scrollend event).
+const GLIDE_TIMEOUT_MS = 800;
+/** How far below the top a glide to a tall turn leaves its user message. */
+const TURN_TOP_OFFSET_PX = 16;
+
+/**
+ * following: keep to the end as content grows.
+ * reading: never move; native scroll anchoring keeps the content still.
+ * gliding: this view's own smooth scroll to the end runs.
+ */
+type ScrollMode = "following" | "reading" | "gliding";
 
 // Fade configuration
 const TOP_FADE_HEIGHT = "1rem";
@@ -34,6 +42,11 @@ export interface ScrollState {
 
 export interface ChatScrollContainerHandle {
   scrollToBottom: (behavior?: ScrollBehavior) => void;
+  /**
+   * Glide to a new turn: to the end, or, when the turn is taller than the
+   * view, to its user message (the anchor) so it is not passed.
+   */
+  scrollToNewTurn: () => void;
 }
 
 export interface ChatScrollContainerProps {
@@ -153,37 +166,44 @@ const ChatScrollContainer = React.memo(
       }: ChatScrollContainerProps,
       ref: ForwardedRef<ChatScrollContainerHandle>
     ) => {
-      const anchorOffsetPx = DEFAULT_ANCHOR_OFFSET_PX;
       const fadeThresholdPx = DEFAULT_FADE_THRESHOLD_PX;
       const buttonThresholdPx = DEFAULT_BUTTON_THRESHOLD_PX;
       const scrollContainerRef = useRef<HTMLDivElement>(null);
       const contentWrapperRef = useRef<HTMLDivElement>(null);
       const endDivRef = useRef<HTMLDivElement>(null);
       const scrolledForSessionRef = useRef<string | null>(null);
-      const prevAnchorSelectorRef = useRef<string | null>(null);
 
       const [hasContentAbove, setHasContentAbove] = useState(false);
       const [hasContentBelow, setHasContentBelow] = useState(false);
       const [isAtBottom, setIsAtBottom] = useState(true);
-      const isAtBottomRef = useRef(true); // Whether to follow new content
-      const autoScrollTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+      const [isScrollReady, setIsScrollReady] = useState(false);
+
+      // The view's mode. The user's scroll input, a glide and the opening
+      // set it. Layout keeps it, except growth with auto-scroll off, which
+      // leaves the end and makes a following view a reading one.
+      const modeRef = useRef<ScrollMode>("following");
+      const glideTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
         null
       );
-      const isAutoScrollingRef = useRef(false); // Prevent handleScroll from interfering during auto-scroll
-      const followOpeningUntilRef = useRef(0);
+      // The running glide's scrollend listener, removed when it ends or is
+      // cancelled.
+      const glideEndRef = useRef<{
+        container: HTMLElement;
+        finish: () => void;
+      } | null>(null);
+      // The chat this view was placed for. Unset until the first placement:
+      // a view with no chat yet (Craft's welcome) still needs one.
+      const placedForRef = useRef<{ key: string | undefined } | null>(null);
       // When the user last gave scroll input, and whether a pointer is held
       // on the view (a scrollbar drag). Only read, never acted on directly.
       const userInputAtRef = useRef(-Infinity);
       const pointerHeldRef = useRef(false);
-      // Until when this view's own smooth scroll to an anchor runs.
-      const anchorGlideUntilRef = useRef(0);
+      // A catch-up deferred until the user's scroll input settles.
+      const settleTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
+        null
+      );
       const sessionIdRef = useRef(sessionId);
       const saveFrameRef = useRef<number | null>(null);
-      // Scroll position and content height that the next scroll event is
-      // measured from. Record both together: shrinkage since the baseline
-      // explains upward movement.
-      const scrollBaselineRef = useRef({ top: 0, height: 0 });
-      const [isScrollReady, setIsScrollReady] = useState(false);
 
       // Use refs for values that change during streaming to prevent effect re-runs
       const onScrollButtonVisibilityChangeRef = useRef(
@@ -191,7 +211,10 @@ const ChatScrollContainer = React.memo(
       );
       const autoScrollRef = useRef(autoScroll);
       const pauseFollowingRef = useRef(pauseFollowing);
-      const previousFollowingRef = useRef(autoScroll && !pauseFollowing);
+      const anchorSelectorRef = useRef(anchorSelector);
+      // The distance from the end at the last scroll event: a move that
+      // keeps it is native anchoring, not the user.
+      const endDistanceRef = useRef(0);
 
       // Layout effect: queued rAF/observer callbacks fire after commit, so a
       // passive sync could let them scroll with a stale autoScroll flag.
@@ -201,12 +224,21 @@ const ChatScrollContainer = React.memo(
         autoScrollRef.current = autoScroll;
         pauseFollowingRef.current = pauseFollowing;
         sessionIdRef.current = sessionId;
+        anchorSelectorRef.current = anchorSelector;
       }, [
         onScrollButtonVisibilityChange,
         autoScroll,
         sessionId,
         pauseFollowing,
+        anchorSelector,
       ]);
+
+      const userIsScrolling = useCallback(
+        () =>
+          pointerHeldRef.current ||
+          performance.now() - userInputAtRef.current < USER_INPUT_WINDOW_MS,
+        []
+      );
 
       // Remember where this chat is scrolled, once per frame. Only after the
       // chat was scrolled into place: before that, the position is not the
@@ -221,12 +253,9 @@ const ChatScrollContainer = React.memo(
             return;
           }
           const memory = getChatScrollMemory(id);
-          const atEnd =
-            (isAtBottomRef.current && autoScrollRef.current) ||
-            // 2px: a fractional scrollTop (Firefox) can sit just short of
-            // the rounded end.
-            isAtScrollEnd(container, 2);
-          if (atEnd) {
+          // 2px: a fractional scrollTop (Firefox) can sit just short of the
+          // rounded end.
+          if (modeRef.current === "following" || isAtScrollEnd(container, 2)) {
             memory.position = { kind: "end" };
             return;
           }
@@ -295,188 +324,248 @@ const ChatScrollContainer = React.memo(
         return state;
       }, [getScrollState]);
 
-      // Scroll to bottom of content
+      const cancelGlide = useCallback(() => {
+        if (glideTimeoutRef.current !== null) {
+          clearTimeout(glideTimeoutRef.current);
+          glideTimeoutRef.current = null;
+        }
+        const glideEnd = glideEndRef.current;
+        if (glideEnd) {
+          glideEnd.container.removeEventListener("scrollend", glideEnd.finish);
+          glideEndRef.current = null;
+        }
+      }, []);
+
+      /** Keep to the end at once. Never called while the user scrolls. */
+      const stickToEnd = useCallback(() => {
+        const container = scrollContainerRef.current;
+        if (!container) return;
+        container.scrollTo({
+          top: container.scrollHeight - container.clientHeight,
+          behavior: "instant",
+        });
+      }, []);
+
+      // Return a following view to the end once the user's scroll input
+      // settles. A write during the input would stop it, and with no later
+      // content or scroll event nothing else would catch up.
+      const catchUpAfterInput = useCallback(() => {
+        if (settleTimeoutRef.current !== null) return;
+        const check = () => {
+          const remaining = pointerHeldRef.current
+            ? USER_INPUT_WINDOW_MS
+            : userInputAtRef.current + USER_INPUT_WINDOW_MS - performance.now();
+          if (remaining > 0) {
+            settleTimeoutRef.current = setTimeout(check, remaining);
+            return;
+          }
+          settleTimeoutRef.current = null;
+          if (
+            modeRef.current !== "following" ||
+            !autoScrollRef.current ||
+            pauseFollowingRef.current
+          ) {
+            return;
+          }
+          stickToEnd();
+          updateScrollState();
+          savePosition();
+        };
+        check();
+      }, [stickToEnd, updateScrollState, savePosition]);
+
+      const cancelCatchUp = useCallback(() => {
+        if (settleTimeoutRef.current !== null) {
+          clearTimeout(settleTimeoutRef.current);
+          settleTimeoutRef.current = null;
+        }
+      }, []);
+
+      // Glide to the end, or, for a send whose turn is taller than the view,
+      // to its user message. A glide that reaches the end follows from it.
+      const glide = useCallback(
+        (toTurn: boolean) => {
+          const container = scrollContainerRef.current;
+          if (!container) return;
+          cancelGlide();
+          modeRef.current = "gliding";
+          // Input before the glide (the click that asked for it) must not
+          // make its moves the user's. Input during it still cancels it.
+          userInputAtRef.current = -Infinity;
+          const end = container.scrollHeight - container.clientHeight;
+          const selector = toTurn ? anchorSelectorRef.current : undefined;
+          const anchor = selector
+            ? container.querySelector<HTMLElement>(selector)
+            : null;
+          const targetScrollTop = anchor
+            ? Math.min(
+                end,
+                container.scrollTop +
+                  anchor.getBoundingClientRect().top -
+                  container.getBoundingClientRect().top -
+                  TURN_TOP_OFFSET_PX
+              )
+            : end;
+          const toEnd = targetScrollTop >= end - 1;
+          // A long smooth scroll would mount every windowed row on the way.
+          // From farther than two viewports, jump to one viewport above the
+          // target and glide the rest. A send, about one viewport away,
+          // glides all the way.
+          const glideStart =
+            container.scrollTop < targetScrollTop - 2 * container.clientHeight
+              ? targetScrollTop - container.clientHeight
+              : container.scrollTop;
+          if (container.scrollTop < glideStart) {
+            container.scrollTop = glideStart;
+          }
+          container.scrollTo({ top: targetScrollTop, behavior: "smooth" });
+
+          // The glide ends on a scrollend at its target (the jump above can
+          // fire one early); the timeout covers browsers without it and a
+          // glide that goes nowhere. A glide the user did not interrupt
+          // follows from the current end: a streaming reply can have grown
+          // during it. With a pointer held, the write waits for its release.
+          const finish = (event?: Event) => {
+            if (event && container.scrollTop < targetScrollTop - 1) {
+              container.addEventListener("scrollend", finish, { once: true });
+              return;
+            }
+            cancelGlide();
+            if (container !== scrollContainerRef.current) return;
+            if (modeRef.current !== "gliding") return;
+            if (!toEnd) {
+              modeRef.current = "reading";
+            } else {
+              modeRef.current = "following";
+              if (userIsScrolling()) catchUpAfterInput();
+              else stickToEnd();
+            }
+            updateScrollState();
+            savePosition();
+          };
+          container.addEventListener("scrollend", finish, { once: true });
+          glideEndRef.current = { container, finish };
+          glideTimeoutRef.current = setTimeout(finish, GLIDE_TIMEOUT_MS);
+        },
+        [
+          cancelGlide,
+          userIsScrolling,
+          catchUpAfterInput,
+          stickToEnd,
+          updateScrollState,
+          savePosition,
+        ]
+      );
+
+      // Scroll to the end: a glide for "smooth" (the button), a jump
+      // otherwise. Either way the view follows afterwards.
       const scrollToBottom = useCallback(
         (behavior: ScrollBehavior = "smooth") => {
-          const container = scrollContainerRef.current;
-          if (!container || !endDivRef.current) return;
-
-          if (autoScrollTimeoutRef.current !== null) {
-            clearTimeout(autoScrollTimeoutRef.current);
-            autoScrollTimeoutRef.current = null;
-          }
-
-          // Mark as auto-scrolling to prevent handleScroll interference
-          isAutoScrollingRef.current = true;
-
-          // Use scrollTo instead of scrollIntoView for better cross-browser support
-          const targetScrollTop =
-            container.scrollHeight - container.clientHeight;
-
-          // A long smooth scroll would mount every windowed row on the way.
-          // Jump to one viewport above the end, then glide the rest.
           if (behavior === "smooth") {
-            const glideStart = targetScrollTop - container.clientHeight;
-            if (container.scrollTop < glideStart) {
-              container.scrollTop = glideStart;
-            }
+            glide(false);
+            return;
           }
-
-          container.scrollTo({ top: targetScrollTop, behavior });
-
-          // Update tracking refs
-          scrollBaselineRef.current = {
-            top: targetScrollTop,
-            height: container.scrollHeight,
-          };
-          isAtBottomRef.current = true;
-
-          // For smooth scrolling, keep isAutoScrollingRef true longer
-          if (behavior === "smooth") {
-            // Clear after animation likely completes (Safari smooth scroll is ~500ms)
-            autoScrollTimeoutRef.current = setTimeout(() => {
-              autoScrollTimeoutRef.current = null;
-              isAutoScrollingRef.current = false;
-              // The chat changed during the glide: its element is detached.
-              if (container !== scrollContainerRef.current) return;
-              if (container) {
-                // Rows that mounted on the way can move the end; settle on
-                // it, unless the user scrolled away during the glide.
-                if (container.scrollTop >= targetScrollTop - 1) {
-                  container.scrollTo({
-                    top: container.scrollHeight - container.clientHeight,
-                    behavior: "instant",
-                  });
-                }
-                scrollBaselineRef.current = {
-                  top: container.scrollTop,
-                  height: container.scrollHeight,
-                };
-              }
-              // A user can interrupt the glide before it reaches the bottom.
-              updateScrollState();
-              isAtBottomRef.current = isAtScrollEnd(
-                container,
-                buttonThresholdPx
-              );
-              // Its scroll events came while auto-scrolling, so none saved
-              // where it stopped.
-              savePosition();
-            }, 600);
-          } else {
-            isAutoScrollingRef.current = false;
-          }
+          cancelGlide();
+          stickToEnd();
+          modeRef.current = "following";
+          updateScrollState();
+          savePosition();
         },
-        [updateScrollState, buttonThresholdPx, savePosition]
+        [glide, cancelGlide, stickToEnd, updateScrollState, savePosition]
       );
+
+      const scrollToNewTurn = useCallback(() => glide(true), [glide]);
 
       useEffect(
         () => () => {
-          if (autoScrollTimeoutRef.current !== null) {
-            clearTimeout(autoScrollTimeoutRef.current);
-          }
+          cancelGlide();
+          cancelCatchUp();
           if (saveFrameRef.current !== null) {
             cancelAnimationFrame(saveFrameRef.current);
           }
         },
-        []
+        [cancelGlide, cancelCatchUp]
       );
 
-      // Catch up on content that arrived while the typewriter paused following.
-      const followingNow = autoScroll && !pauseFollowing;
+      // Catch up on content that arrived while following was paused (the
+      // typewriter's drain) or off.
+      const followingActive = autoScroll && !pauseFollowing;
+      const wasFollowingActiveRef = useRef(followingActive);
       useEffect(() => {
-        const resumed = followingNow && !previousFollowingRef.current;
-        previousFollowingRef.current = followingNow;
-        if (resumed && isAtBottomRef.current && !isAutoScrollingRef.current) {
-          scrollToBottom("instant");
+        const resumed = followingActive && !wasFollowingActiveRef.current;
+        wasFollowingActiveRef.current = followingActive;
+        if (!resumed || modeRef.current !== "following") return;
+        if (userIsScrolling()) {
+          catchUpAfterInput();
+          return;
         }
-      }, [followingNow, scrollToBottom]);
+        stickToEnd();
+        updateScrollState();
+      }, [
+        followingActive,
+        userIsScrolling,
+        catchUpAfterInput,
+        stickToEnd,
+        updateScrollState,
+      ]);
 
       // Expose scrollToBottom via ref
-      useImperativeHandle(ref, () => ({ scrollToBottom }), [scrollToBottom]);
+      useImperativeHandle(ref, () => ({ scrollToBottom, scrollToNewTurn }), [
+        scrollToBottom,
+        scrollToNewTurn,
+      ]);
 
       // Re-evaluate button visibility when at-bottom state changes
       useEffect(() => {
         onScrollButtonVisibilityChangeRef.current?.(!isAtBottom);
       }, [isAtBottom]);
 
-      // Handle scroll events (user scrolls)
+      // A scroll event. A move is the user's only right after their scroll
+      // input: then the position sets the mode. Any other move is layout
+      // (Firefox clamps the position while content briefly shrinks, a glide
+      // runs, anchoring adjusts), and only a following view reacts, by
+      // returning to the end.
       const handleScroll = useCallback(() => {
         const container = scrollContainerRef.current;
         if (!container) return;
 
-        // Skip if this scroll was triggered by auto-scroll
-        if (isAutoScrollingRef.current) return;
-
-        const currentScrollTop = container.scrollTop;
-        // Content that shrinks (rows settling to their measured height) makes
-        // the browser clamp or anchor the scroll position up by at most the
-        // shrinkage. That part is layout, not the user, so only movement
-        // beyond it stops following.
-        const baseline = scrollBaselineRef.current;
-        const shrinkage = Math.max(0, baseline.height - container.scrollHeight);
-        const scrolledUp = currentScrollTop < baseline.top - shrinkage - 5; // 5px threshold to ignore micro-movements
-        // A small upward step keeps the baseline, so slow upward scrolling
-        // (a trackpad's few pixels per event) adds up to the threshold.
-        const smallStepUp =
-          !scrolledUp && currentScrollTop < baseline.top - shrinkage;
-        if (!smallStepUp) {
-          scrollBaselineRef.current = {
-            top: currentScrollTop,
-            height: container.scrollHeight,
-          };
-        }
-
-        // Only upward movement can stop following new content. Measure from
-        // the real end: the latest turn's unfilled space hides no content, but
-        // following would still pull the user back down through it.
-        const atScrollEnd = isAtScrollEnd(container, buttonThresholdPx);
-        // An upward move counts as the user's only right after their scroll
-        // input. Firefox can clamp the position while content briefly
-        // shrinks, and that is not the user leaving the end.
-        const byUser =
-          pointerHeldRef.current ||
-          performance.now() - userInputAtRef.current < USER_INPUT_WINDOW_MS;
-        // This view's own smooth scrolls move without user input too.
-        const ownGlide = performance.now() < anchorGlideUntilRef.current;
-        if (scrolledUp && !byUser && ownGlide) {
-          // Neither the user nor layout: leave the glide alone.
-        } else if (scrolledUp && !byUser) {
-          // Layout moved a following view off the end: put it back. The
-          // user is not scrolling, so this write interrupts nothing.
-          if (
-            isAtBottomRef.current &&
-            autoScrollRef.current &&
-            !pauseFollowingRef.current
-          ) {
-            scrollToBottom("instant");
-          }
-        } else if (scrolledUp) {
+        const endDistance =
+          container.scrollHeight - container.clientHeight - container.scrollTop;
+        // Native anchoring moves the position with content above it, so the
+        // distance from the end holds: that move is layout even while a
+        // pointer is held.
+        const anchoring = Math.abs(endDistance - endDistanceRef.current) < 1;
+        endDistanceRef.current = endDistance;
+        if (userIsScrolling() && !anchoring) {
           // A fling keeps moving past its last input; each step stays the
-          // user's.
+          // user's. It also ends a glide.
           userInputAtRef.current = performance.now();
-          followOpeningUntilRef.current = 0;
-          updateScrollState();
-          isAtBottomRef.current = atScrollEnd;
-        } else {
-          // Returning to the bottom resumes following.
-          const state = getScrollState();
-          if (atScrollEnd) isAtBottomRef.current = true;
-          setHasContentAbove(state.hasContentAbove);
-          setHasContentBelow(state.hasContentBelow);
-          // Update button visibility based on actual position
-          onScrollButtonVisibilityChangeRef.current?.(!state.isAtBottom);
+          cancelGlide();
+          modeRef.current = isAtScrollEnd(container, buttonThresholdPx)
+            ? "following"
+            : "reading";
+        } else if (
+          modeRef.current === "following" &&
+          autoScrollRef.current &&
+          !pauseFollowingRef.current &&
+          !isAtScrollEnd(container, 2)
+        ) {
+          stickToEnd();
         }
+        updateScrollState();
+        savePosition();
       }, [
-        updateScrollState,
-        getScrollState,
+        userIsScrolling,
+        cancelGlide,
         buttonThresholdPx,
-        scrollToBottom,
+        stickToEnd,
+        updateScrollState,
+        savePosition,
       ]);
 
-      // Scroll input marks the next upward moves as the user's. A focus move
-      // counts: the browser scrolls the focused element into view. Re-attached
-      // per session: the scroll element remounts (it is keyed by sessionId).
+      // Scroll input marks the next moves as the user's. A focus move counts:
+      // the browser scrolls the focused element into view. Re-attached per
+      // session: the scroll element remounts (it is keyed by sessionId).
       useEffect(() => {
         const container = scrollContainerRef.current;
         if (!container) return;
@@ -518,9 +607,10 @@ const ChatScrollContainer = React.memo(
         };
       }, [sessionId]);
 
-      // MutationObserver (structural) + ResizeObserver (height growth).
-      // Re-attached per session: the scroll element remounts on a session
-      // change (it is keyed by `sessionId`).
+      // Content changes (structure or size), batched per frame. A following
+      // view keeps to the end; with following off (auto-scroll off while a
+      // reply runs), growth that leaves the end makes the view a reading one,
+      // so a later resume never jumps. Not while the user scrolls.
       // NOT characterData: firing per character thrashed auto-scroll. Text
       // that grows inside the latest turn's min-height changes no scroll
       // height, so the ResizeObserver also watches that turn's rows.
@@ -536,47 +626,26 @@ const ChatScrollContainer = React.memo(
           rafId = requestAnimationFrame(() => {
             rafId = null;
             observeLatestTurnRows();
-
-            // Capture whether we were at bottom BEFORE content changed
-            const wasAtBottom = isAtBottomRef.current;
-
-            // Auto-scroll: follow content if we were at bottom. Skip it during
-            // a smooth scroll to the bottom: an instant scroll would cut it
-            // short.
-            const following =
-              (autoScrollRef.current && !pauseFollowingRef.current) ||
-              performance.now() < followOpeningUntilRef.current;
-            if (following && wasAtBottom && !isAutoScrollingRef.current) {
-              // scrollToBottom handles isAutoScrollingRef and ref updates
-              scrollToBottom("instant");
-            } else if (
-              // Only following that is off, not a pause: a paused view at
-              // the bottom must catch up when the pause ends.
-              !autoScrollRef.current &&
-              !following &&
-              !isAutoScrollingRef.current
-            ) {
-              // Not following, so growth leaves the end behind: the view is
-              // no longer at the bottom, and a later resume must not jump.
-              isAtBottomRef.current = isAtScrollEnd(
-                container,
-                buttonThresholdPx
-              );
+            if (modeRef.current === "following") {
+              if (
+                !autoScrollRef.current &&
+                !isAtScrollEnd(container, buttonThresholdPx)
+              ) {
+                // Even during input: a later resume must not jump.
+                modeRef.current = "reading";
+              } else if (autoScrollRef.current && !pauseFollowingRef.current) {
+                // A write during scroll input waits for it to settle.
+                if (userIsScrolling()) catchUpAfterInput();
+                else stickToEnd();
+              }
             }
-
             updateScrollState();
             savePosition();
           });
         };
 
         const mutationObserver = new MutationObserver(onContentChange);
-        mutationObserver.observe(container, {
-          childList: true,
-          subtree: true,
-          attributes: true,
-          attributeFilter: ["data-smooth-scroll-active"],
-        });
-
+        mutationObserver.observe(container, { childList: true, subtree: true });
         const resizeObserver = new ResizeObserver(onContentChange);
         // The latest turn's rows: they change as turns arrive. Only rows
         // new to the set are observed: observing fires a callback.
@@ -618,157 +687,78 @@ const ChatScrollContainer = React.memo(
           if (rafId) cancelAnimationFrame(rafId);
         };
       }, [
+        userIsScrolling,
+        catchUpAfterInput,
+        stickToEnd,
         updateScrollState,
-        scrollToBottom,
         savePosition,
         buttonThresholdPx,
         sessionId,
       ]);
 
-      // Handle session changes and anchor changes. A layout effect: opening a
-      // chat whose messages are already rendered scrolls it into place before
-      // the browser paints, so switching to a cached chat shows no blank frame.
+      // Opening a chat: place it at its saved row (when that row is loaded)
+      // or at the end, before paint, then show it. A layout effect: a cached
+      // chat is never painted hidden or out of place. Only rows already
+      // loaded count, so opening never waits on the network.
       useLayoutEffect(() => {
         const container = scrollContainerRef.current;
         if (!container) return;
+        if (placedForRef.current && placedForRef.current.key === sessionId) {
+          return;
+        }
 
-        const isNewSession =
-          scrolledForSessionRef.current !== null &&
-          scrolledForSessionRef.current !== sessionId;
-        const isNewAnchor = prevAnchorSelectorRef.current !== anchorSelector;
-
-        // Reset on session change
-        if (isNewSession) {
-          scrolledForSessionRef.current = null;
+        // A new chat: reset before placing it.
+        if (placedForRef.current) {
           setIsScrollReady(false);
-          scrollBaselineRef.current = { top: 0, height: 0 };
-          isAtBottomRef.current = true;
-          // A glide in the previous chat must not settle into this one.
-          if (autoScrollTimeoutRef.current !== null) {
-            clearTimeout(autoScrollTimeoutRef.current);
-            autoScrollTimeoutRef.current = null;
-          }
-          isAutoScrollingRef.current = false;
+          cancelGlide();
+          cancelCatchUp();
+          modeRef.current = "following";
+          // A chat with no messages is never placed, so a return to the
+          // previous chat must not match its record.
+          placedForRef.current = null;
         }
-
-        const shouldScroll =
-          (scrolledForSessionRef.current !== sessionId || isNewAnchor) &&
-          anchorSelector;
-
-        if (!shouldScroll) {
-          prevAnchorSelectorRef.current = anchorSelector ?? null;
-          // No anchor (no messages yet): nothing to place, so show the view.
-          if (!anchorSelector) setIsScrollReady(true);
-          return;
-        }
-
-        const anchorElement = container.querySelector(
-          anchorSelector!
-        ) as HTMLElement;
-        if (!anchorElement || !endDivRef.current) {
+        // No messages yet: nothing to place, so show the view.
+        if (!anchorSelector) {
           setIsScrollReady(true);
-          scrolledForSessionRef.current = sessionId ?? null;
-          prevAnchorSelectorRef.current = anchorSelector ?? null;
           return;
         }
 
-        // Determine scroll behavior
-        // New session with existing content = instant, new anchor = smooth
-        const isLoadingExistingContent =
-          isNewSession || scrolledForSessionRef.current === null;
-
-        // A new anchor while the user reads elsewhere, with auto-scroll off,
-        // or during a pause (a refresh brought in a turn from another tab;
-        // the typewriter's drain): keep their
-        // position. A send scrolls through useScrollToNewTurn, and a
-        // following view still moves.
-        if (
-          !isLoadingExistingContent &&
-          (!isAtBottomRef.current ||
-            !autoScrollRef.current ||
-            pauseFollowingRef.current)
-        ) {
-          prevAnchorSelectorRef.current = anchorSelector ?? null;
-          return;
-        }
-        const behavior: ScrollBehavior = isLoadingExistingContent
-          ? "instant"
-          : "smooth";
-        const saved =
-          isLoadingExistingContent && sessionId
-            ? getChatScrollMemory(sessionId).position
-            : null;
+        const saved = sessionId
+          ? getChatScrollMemory(sessionId).position
+          : null;
         const savedRow =
           saved?.kind === "row"
             ? container.querySelector<HTMLElement>(
                 `#${CSS.escape(saved.rowId)}`
               )
             : null;
-
-        const scrollIntoPlace = () => {
-          let targetScrollTop: number;
-
-          // When loading an existing conversation, scroll to bottom
-          // Otherwise (e.g., anchor change during conversation), scroll to anchor
-          if (savedRow && saved?.kind === "row") {
-            targetScrollTop =
+        if (savedRow && saved?.kind === "row") {
+          container.scrollTo({
+            top:
               container.scrollTop +
               savedRow.getBoundingClientRect().top -
               container.getBoundingClientRect().top -
-              saved.rowOffset;
-          } else if (isLoadingExistingContent) {
-            targetScrollTop = container.scrollHeight - container.clientHeight;
-          } else {
-            targetScrollTop = Math.max(
-              0,
-              anchorElement.offsetTop - anchorOffsetPx
-            );
-          }
-
-          if (behavior === "smooth") {
-            anchorGlideUntilRef.current = performance.now() + 700;
-          }
-          container.scrollTo({ top: targetScrollTop, behavior });
-
-          // Measure the next scroll from the new position
-          scrollBaselineRef.current = {
-            top: targetScrollTop,
-            height: container.scrollHeight,
-          };
-
-          isAtBottomRef.current = updateScrollState().isAtBottom;
-
-          // Mark as "at bottom" after scrolling to bottom so auto-scroll continues
-          if (savedRow) {
-            isAtBottomRef.current = isAtScrollEnd(container, buttonThresholdPx);
-          } else if (isLoadingExistingContent || autoScrollRef.current) {
-            isAtBottomRef.current = true;
-          }
-
-          setIsScrollReady(true);
-          scrolledForSessionRef.current = sessionId ?? null;
-          prevAnchorSelectorRef.current = anchorSelector ?? null;
-        };
-
-        // Opening a chat: its messages are laid out already, so scroll now,
-        // before paint. The content is never painted hidden or out of place.
-        if (isLoadingExistingContent) {
-          if (!savedRow) {
-            followOpeningUntilRef.current =
-              performance.now() + OPENING_FOLLOW_MS;
-          }
-          scrollIntoPlace();
-          return;
+              saved.rowOffset,
+            behavior: "instant",
+          });
+          modeRef.current = isAtScrollEnd(container, buttonThresholdPx)
+            ? "following"
+            : "reading";
+        } else {
+          stickToEnd();
+          modeRef.current = "following";
         }
-
-        // A new anchor within the chat: defer a tick so layout can settle.
-        const timeoutId = setTimeout(scrollIntoPlace, 0);
-        return () => clearTimeout(timeoutId);
+        updateScrollState();
+        setIsScrollReady(true);
+        placedForRef.current = { key: sessionId };
+        scrolledForSessionRef.current = sessionId ?? null;
       }, [
         sessionId,
         anchorSelector,
-        anchorOffsetPx,
         buttonThresholdPx,
+        cancelGlide,
+        cancelCatchUp,
+        stickToEnd,
         updateScrollState,
       ]);
 

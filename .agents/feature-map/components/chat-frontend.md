@@ -716,21 +716,27 @@ up its own branding.
     production caller.** Grouping happens in `processPackets`
     ([[#packet-list-append-only]]).
 
-15. `scroll-follow-intent` **Content growth must not cancel following.**
-    `lib/chatScroll/components/ChatScrollContainer.tsx` keeps following intent
-    across the typewriter drain (`pauseFollowing`): when the pause ends, it
-    catches up if the user has not scrolled away. During the opening-follow
-    window, content observers can also catch up with auto-scroll disabled.
-    Scrolling up ends that window. When the content shrinks, an upward scroll up
-    to the shrinkage is layout, not the user, so only movement beyond it stops
-    following. An upward move counts as the user's only within 600ms of scroll
-    input (wheel, touch, scroll keys, a focus move into the view), or while a
-    pointer is held on the view. Each move counted as the user's restarts the
-    600ms, so a fling stays the user's while it moves. Firefox can clamp the
-    position while content briefly shrinks, and a following view is put back at
-    the end. Every scroll baseline records the position and the content height
-    together. Do not write `scrollTop` while the user scrolls, and keep native
-    scroll anchoring on: a script write stops a trackpad fling.
+15. `scroll-follow-intent` **The user's input sets the scroll mode; layout keeps it.**
+    `lib/chatScroll/components/ChatScrollContainer.tsx` is in one of three
+    modes: `following` keeps to the end as content grows; `reading` never moves
+    (native scroll anchoring keeps the content still); `gliding` is its own
+    smooth scroll to the end (a send, the button), which ends on `scrollend` or
+    a timeout. A scroll event is the user's only within 600ms of scroll input
+    (wheel, touch, scroll keys, a focus move into the view), or while a pointer
+    is held on the view; each such move restarts the 600ms, so a fling stays the
+    user's while it moves. Then the position sets the mode. A glide ignores
+    input from before it started, and a send's glide stops at the user message
+    of a turn taller than the view, which then reads. A move that keeps the
+    distance from the end is native anchoring, not the user, even with a
+    pointer held. Any other move is layout (Firefox clamps the
+    position while content briefly shrinks, anchoring adjusts, a glide runs),
+    and only a `following` view reacts, by returning to the end. The one
+    exception: with auto-scroll off while a reply runs, growth that leaves the
+    end makes the view `reading`, so a later resume never jumps. The
+    typewriter's drain is a pause (`pauseFollowing`), and the view catches up
+    when it ends. Do not write `scrollTop` while the user scrolls: a following
+    view catches up once the input settles. Keep native scroll anchoring on: a
+    script write stops a trackpad fling.
     **Turn anchoring is layout.** `sections/chat/ChatUI.tsx` groups each turn (a
     user message and its replies) in a `data-chat-turn` element. The latest turn
     has `min-height: calc(100cqh - 3rem)` (the scroll element is a size
