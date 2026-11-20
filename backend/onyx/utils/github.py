@@ -12,10 +12,10 @@ from onyx.utils.url import SSRFException, ssrf_safe_get
 GITHUB_COMMIT_SHA_PATTERN: Final[re.Pattern[str]] = re.compile(r"^[0-9a-fA-F]{40}$")
 
 _GITHUB_FETCH_TIMEOUT_SECONDS: Final[int] = 30
-_GITHUB_CODELOAD_ARCHIVE_URL_TEMPLATE: Final[str] = (
-    "https://codeload.github.com/{owner}/{repo}/tar.gz/{revision}"
-)
-_GITHUB_REPOSITORY_COMPONENT_PATTERN: Final[re.Pattern[str]] = re.compile(
+# Tests point these at a fake GitHub.
+GITHUB_API_BASE_URL = "https://api.github.com"
+GITHUB_ARCHIVE_BASE_URL = "https://codeload.github.com"
+GITHUB_REPOSITORY_COMPONENT_PATTERN: Final[re.Pattern[str]] = re.compile(
     r"[A-Za-z0-9_.-]+"
 )
 
@@ -80,7 +80,7 @@ def parse_github_source(source: str) -> GitHubSource:
                 )
 
     if not all(
-        _GITHUB_REPOSITORY_COMPONENT_PATTERN.fullmatch(part) for part in (owner, repo)
+        GITHUB_REPOSITORY_COMPONENT_PATTERN.fullmatch(part) for part in (owner, repo)
     ):
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
@@ -169,7 +169,7 @@ def resolve_github_revision(
     used_authorization = False
     for candidate_ref, candidate_subpath in candidates:
         commit_url = (
-            f"https://api.github.com/repos/{encoded_owner}/{encoded_repo}/"
+            f"{GITHUB_API_BASE_URL}/repos/{encoded_owner}/{encoded_repo}/"
             f"commits/{quote(candidate_ref, safe='')}"
         )
         response = _github_get(commit_url)
@@ -244,16 +244,15 @@ def download_github_archive(
     encoded_owner = quote(source.owner, safe="")
     encoded_repo = quote(source.repo, safe="")
     encoded_revision = quote(revision, safe="")
-    archive_url = _GITHUB_CODELOAD_ARCHIVE_URL_TEMPLATE.format(
-        owner=encoded_owner,
-        repo=encoded_repo,
-        revision=encoded_revision,
+    archive_url = (
+        f"{GITHUB_ARCHIVE_BASE_URL}/{encoded_owner}/{encoded_repo}/tar.gz/"
+        f"{encoded_revision}"
     )
     response = _github_get(archive_url, stream=True)
     if response.status_code != 200 and authorization_header is not None:
         response.close()
         redirect_response = _github_get(
-            f"https://api.github.com/repos/{encoded_owner}/{encoded_repo}"
+            f"{GITHUB_API_BASE_URL}/repos/{encoded_owner}/{encoded_repo}"
             f"/tarball/{encoded_revision}",
             authorization=authorization_header,
             follow_redirects=False,
@@ -336,3 +335,50 @@ def download_github_archive(
             ) from exc
 
     return b"".join(archive_chunks)
+
+
+def fetch_github_tree(
+    source: GitHubSource,
+    revision: str,
+    authorization_header: str | None = None,
+) -> dict[str, str] | None:
+    """The git tree of each folder at a commit, by repository path, with ""
+    for the root. None when GitHub cut the listing short."""
+    tree_url = (
+        f"{GITHUB_API_BASE_URL}/repos/{quote(source.owner, safe='')}/"
+        f"{quote(source.repo, safe='')}/git/trees/{quote(revision, safe='')}"
+        "?recursive=1"
+    )
+    response = _github_get(tree_url)
+    if response.status_code in {401, 403, 404, 429} and authorization_header:
+        response.close()
+        response = _github_get(tree_url, authorization=authorization_header)
+    with response:
+        if response.status_code != 200:
+            raise OnyxError(
+                OnyxErrorCode.BAD_GATEWAY,
+                "Couldn't read the repository tree from GitHub. Try again.",
+            )
+        try:
+            body = response.json()
+        except (requests.JSONDecodeError, ValueError) as exc:
+            raise OnyxError(
+                OnyxErrorCode.BAD_GATEWAY,
+                "GitHub returned an unreadable repository tree. Try again.",
+            ) from exc
+    if not isinstance(body, dict) or body.get("truncated") is True:
+        return None
+    root_sha = body.get("sha")
+    entries = body.get("tree")
+    if not isinstance(root_sha, str) or not isinstance(entries, list):
+        return None
+    trees = {"": root_sha}
+    for entry in entries:
+        if (
+            isinstance(entry, dict)
+            and entry.get("type") == "tree"
+            and isinstance(path := entry.get("path"), str)
+            and isinstance(sha := entry.get("sha"), str)
+        ):
+            trees[path] = sha
+    return trees

@@ -13,7 +13,6 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.bundle import (
     DEFAULT_PER_FILE_MAX_BYTES,
-    DEFAULT_TOTAL_MAX_BYTES,
     SKILL_MD_NAME,
     TEMPLATE_SUFFIX,
     check_skill_md_size,
@@ -31,33 +30,16 @@ from onyx.utils.github import (
     resolve_github_revision,
 )
 
-_ARCHIVE_MAX_BYTES: Final[int] = 25 * 1024 * 1024
+GITHUB_ARCHIVE_MAX_BYTES: Final[int] = 25 * 1024 * 1024
 _ARCHIVE_MAX_MEMBERS: Final[int] = 10_000
+# Each file is read up to the bundle file limit plus one byte, so a plugin
+# with a larger file is refused by the bundle limits, not by this read.
+_ARCHIVE_UNPACKED_MAX_BYTES: Final[int] = 256 * 1024 * 1024
 
 
-def fetch_github_skill_bundles(
-    source: str,
-    authorization_header: str | None = None,
-    *,
-    revision: str | None = None,
-    subpath: str | None = None,
-    selected_paths: set[str] | None = None,
-) -> tuple[GitHubRepository, list[GitHubSkillBundle]]:
-    """Fetch one immutable repository revision and discover its skills."""
-    github_source = parse_github_source(source)
-    resolved_source = resolve_github_revision(
-        github_source,
-        authorization_header,
-        revision=revision,
-        subpath=subpath,
-    )
-    archive_bytes = download_github_archive(
-        github_source,
-        resolved_source.revision,
-        authorization_header,
-        max_size_bytes=_ARCHIVE_MAX_BYTES,
-    )
-
+def read_repository_archive(archive_bytes: bytes) -> dict[str, bytes]:
+    """The files of a GitHub tar.gz download by repository path, without the
+    folder GitHub wraps the repository in."""
     files: dict[str, bytes] = {}
     total_size = 0
     try:
@@ -92,16 +74,10 @@ def fetch_github_skill_bundles(
                         OnyxErrorCode.INVALID_INPUT,
                         f"Repository contains a symbolic link at '{member.name}'. Replace it with a regular file.",
                     )
-                if member.size > DEFAULT_PER_FILE_MAX_BYTES:
+                if member.name in files:
                     raise OnyxError(
-                        OnyxErrorCode.PAYLOAD_TOO_LARGE,
-                        f"Repository file '{member.name}' exceeds the {DEFAULT_PER_FILE_MAX_BYTES // (1024 * 1024)} MiB limit.",
-                    )
-                total_size += member.size
-                if total_size > DEFAULT_TOTAL_MAX_BYTES:
-                    raise OnyxError(
-                        OnyxErrorCode.PAYLOAD_TOO_LARGE,
-                        f"Repository exceeds the {DEFAULT_TOTAL_MAX_BYTES // (1024 * 1024)} MiB uncompressed limit.",
+                        OnyxErrorCode.INVALID_INPUT,
+                        f"Repository contains duplicate path '{member.name}'.",
                     )
                 extracted = archive.extractfile(member)
                 if extracted is None:
@@ -109,12 +85,14 @@ def fetch_github_skill_bundles(
                         OnyxErrorCode.BAD_GATEWAY,
                         f"Could not read repository file '{member.name}'. Try again.",
                     )
-                if member.name in files:
+                content = extracted.read(DEFAULT_PER_FILE_MAX_BYTES + 1)
+                total_size += len(content)
+                if total_size > _ARCHIVE_UNPACKED_MAX_BYTES:
                     raise OnyxError(
-                        OnyxErrorCode.INVALID_INPUT,
-                        f"Repository contains duplicate path '{member.name}'.",
+                        OnyxErrorCode.PAYLOAD_TOO_LARGE,
+                        f"Repository exceeds the {_ARCHIVE_UNPACKED_MAX_BYTES // (1024 * 1024)} MiB uncompressed limit.",
                     )
-                files[member.name] = extracted.read(DEFAULT_PER_FILE_MAX_BYTES + 1)
+                files[member.name] = content
     except (tarfile.TarError, EOFError, OSError) as exc:
         raise OnyxError(
             OnyxErrorCode.BAD_GATEWAY,
@@ -127,11 +105,37 @@ def fetch_github_skill_bundles(
             OnyxErrorCode.BAD_GATEWAY,
             "GitHub returned an unexpected repository download. Try again.",
         )
-    files = {
+    return {
         path.split("/", maxsplit=1)[1]: content
         for path, content in files.items()
         if "/" in path
     }
+
+
+def fetch_github_skill_bundles(
+    source: str,
+    authorization_header: str | None = None,
+    *,
+    revision: str | None = None,
+    subpath: str | None = None,
+    selected_paths: set[str] | None = None,
+) -> tuple[GitHubRepository, list[GitHubSkillBundle]]:
+    """Fetch one immutable repository revision and discover its skills."""
+    github_source = parse_github_source(source)
+    resolved_source = resolve_github_revision(
+        github_source,
+        authorization_header,
+        revision=revision,
+        subpath=subpath,
+    )
+    archive_bytes = download_github_archive(
+        github_source,
+        resolved_source.revision,
+        authorization_header,
+        max_size_bytes=GITHUB_ARCHIVE_MAX_BYTES,
+    )
+
+    files = read_repository_archive(archive_bytes)
     search_prefix = resolved_source.subpath or ""
     if search_prefix and not any(
         path == search_prefix or path.startswith(f"{search_prefix}/") for path in files
