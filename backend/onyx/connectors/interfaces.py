@@ -96,6 +96,10 @@ class BaseConnector(abc.ABC, Generic[CT]):
     # so a prune can list only the documents from the indexing start.
     slim_listing_honors_indexing_start: ClassVar[bool] = False
 
+    # True when an empty prune listing means the source holds no documents.
+    # Otherwise a prune skips an empty listing while documents are indexed.
+    prune_trusts_empty_listing: ClassVar[bool] = False
+
     @abc.abstractmethod
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         raise NotImplementedError

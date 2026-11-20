@@ -130,6 +130,13 @@ record and resets the fence, so it is not an attempt. Request and record
 timestamps use `clock_timestamp()`, because an open beat transaction can predate
 a new request. Scheduled pruning without a request keeps its retry behavior.
 
+**Incomplete listings.** The generator deletes nothing when the listing names
+an `EntityFailure`, or is empty while the pair has indexed documents and the
+connector does not set `prune_trusts_empty_listing`. It raises
+`PruneListingIncompleteError` before any write, so the prune record fails with
+the reason and the failure backoff applies. It logs "Pruning skipped, nothing
+deleted".
+
 **Pruning without a slim listing.** A connector with no slim listing is
 pruned by a full load or poll
 (`background/celery/celery_utils.py:extract_ids_from_runnable_connector`). It

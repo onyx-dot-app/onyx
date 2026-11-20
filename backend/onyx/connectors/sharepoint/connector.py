@@ -1160,6 +1160,7 @@ class SharepointConnector(
         start: datetime | None = None,
         end: datetime | None = None,
         include_permissions: bool = True,
+        fail_on_error: bool = False,
     ) -> GenerateSlimDocumentOutput:
         site_descriptors = self._filter_excluded_sites(
             self.site_descriptors or self.fetch_sites()
@@ -1311,9 +1312,10 @@ class SharepointConnector(
                             yield doc_batch
                             doc_batch = []
                 except Exception as e:
-                    # Broadened from per-site Graph 4xx to any Exception.
-                    # Slim retrieval can't yield ConnectorFailure, so
-                    # log-and-skip to keep perm sync alive for other sites.
+                    # Prune deletes every page a listing omits, so it fails
+                    # instead. Perm sync skips the site and goes on.
+                    if fail_on_error:
+                        raise
                     if isinstance(e, MicrosoftGraphError):
                         logger.warning(
                             "Skipping slim site pages for %s: Graph returned %s (%s)",
@@ -2299,6 +2301,7 @@ class SharepointConnector(
             start=start_dt,
             end=end_dt,
             include_permissions=False,
+            fail_on_error=True,
         )
 
     @override

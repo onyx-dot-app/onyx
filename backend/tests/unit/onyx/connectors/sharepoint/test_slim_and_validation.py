@@ -4,6 +4,8 @@ from __future__ import annotations
 
 from unittest.mock import MagicMock, patch
 
+import pytest
+
 from onyx.connectors.microsoft_utils.drive_items import DriveItemData
 from onyx.connectors.microsoft_utils.graph_errors import MicrosoftGraphError
 from onyx.connectors.microsoft_utils.sharepoint_access import SharepointPermissionCache
@@ -257,9 +259,32 @@ def test_fetch_site_pages_runtime_error_does_not_crash_slim_run(
         if isinstance(doc, SlimDocument)
     ]
 
-    # Good site's page survives; bad site is silently skipped (slim retrieval
-    # can't yield ConnectorFailure).
+    # Good site's page survives; perm sync skips the bad site.
     assert [d.id for d in slim_results] == ["g1"]
+
+
+@patch("onyx.connectors.sharepoint.connector.SharepointConnector._fetch_site_pages")
+@patch("onyx.connectors.sharepoint.connector.SharepointConnector._fetch_driveitems")
+@patch("onyx.connectors.sharepoint.connector.SharepointConnector.fetch_sites")
+def test_prune_listing_raises_when_site_pages_fail(
+    mock_fetch_sites: MagicMock,
+    mock_fetch_driveitems: MagicMock,
+    mock_fetch_site_pages: MagicMock,
+) -> None:
+    """The prune listing must not omit a site's pages when their fetch
+    fails, or the prune deletes every page of that site."""
+    connector = _make_connector()
+    connector.include_site_documents = False
+    connector.include_site_pages = True
+
+    site = MagicMock()
+    site.url = SITE_URL
+    mock_fetch_sites.return_value = [site]
+    mock_fetch_driveitems.return_value = iter([])
+    mock_fetch_site_pages.side_effect = MicrosoftGraphError(503, "unavailable", "x")
+
+    with pytest.raises(MicrosoftGraphError):
+        list(connector.retrieve_all_slim_docs())
 
 
 # ---------------------------------------------------------------------------

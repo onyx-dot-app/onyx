@@ -118,7 +118,9 @@ window and config hash
 id that is not in the list. `extract_ids_from_runnable_connector` uses the slim
 listing when the connector has one. Otherwise it runs a full load, poll or
 checkpoint pass, which downloads every body. Ids from `ConnectorFailure` items
-are kept, so a document that failed to fetch is not pruned.
+are kept, so a document that failed to fetch is not pruned. A failure with an
+`EntityFailure` means the listing is incomplete, so the prune deletes nothing
+and fails (`background/celery/tasks/pruning/tasks.py:_incomplete_listing_reason`).
 
 **Typed config.** Each `ConnectorMapping` carries a `ConnectorConfig`
 subclass whose fields mirror the `__init__` kwargs, with `extra="forbid"`. A
@@ -233,11 +235,15 @@ downloaded file with
 ## Contracts and traps
 
 1. `slim-listing-raises-on-auth-failure` **A slim listing must raise on an auth
-   failure, never return empty.** The prune diff in
-   `background/celery/tasks/pruning/tasks.py:connector_pruning_generator_task` has no minimum-count or
-   ratio check, so an empty listing deletes every document of the pair. Only an
-   exception aborts the prune. [[google-drive]] raises when a requested target
-   is visible to no user, for the same reason.
+   or fetch failure, never return a short or empty list.** The prune diff in
+   `background/celery/tasks/pruning/tasks.py:connector_pruning_generator_task` has no ratio check,
+   because a user can delete most of a source. It only refuses a listing that
+   is empty while documents are indexed, unless the connector sets
+   `prune_trusts_empty_listing` (the file connector does). A partial listing
+   deletes the documents it omits, so only an exception aborts the prune.
+   [[google-drive]] raises when a requested target is visible to no user.
+   SharePoint and Airtable pass `fail_on_error=True` on their prune listings,
+   so a scope that perm sync or indexing skips aborts the prune instead.
 2. `slim-and-index-same-ids` **The slim listing must return the same id set as
    the indexing pass.** An id the slim pass omits is pruned. An id the main
    pass never indexes leaves a row with `chunk_count IS NULL`. This applies to

@@ -121,6 +121,10 @@ The **Schedule** section of the Connector form has optional indexing settings.
 Admins can change the default for new connectors in **Index Settings**.
 
 **Prune Every**: How often Onyx checks the source and deletes documents that no longer exist. The default is 7 days.
+A prune deletes nothing when the source lists no documents but the Connector has indexed documents.
+It also deletes nothing when the Connector cannot read a part of the source, such as a site or a table.
+The prune run then fails and shows the reason. To remove all documents of a Connector, delete the Connector.
+File Upload Connectors are different: when you remove all files, the prune deletes all their documents.
 
 **Index Documents After**: Documents with a last-updated date before this date are not indexed.
 By default there is no start date, so the first indexing attempt reads the source's entire history.

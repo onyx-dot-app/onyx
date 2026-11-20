@@ -135,6 +135,32 @@ PRUNE_DISPATCH_LOCK_TIMEOUT = 30  # seconds
 PRUNE_STARTUP_RESET_LOCK_TIMEOUT = 10 * 60  # seconds
 
 
+class PruneListingIncompleteError(RuntimeError):
+    """The source listing cannot show which indexed documents are gone."""
+
+
+def _incomplete_listing_reason(
+    extraction_result: SlimConnectorExtractionResult,
+    indexed_count: int,
+    trusts_empty_listing: bool,
+) -> str | None:
+    """Why the listing cannot drive deletions, or None when it can. A short
+    listing is not a reason: the source may really have shrunk."""
+    failed_entity_ids = extraction_result.failed_entity_ids
+    if failed_entity_ids:
+        return (
+            f"the connector could not list {len(failed_entity_ids)} "
+            f"entities (first: {failed_entity_ids[0]})"
+        )
+    if (
+        indexed_count
+        and not extraction_result.raw_id_to_parent
+        and not trusts_empty_listing
+    ):
+        return f"the listing returned no documents while {indexed_count} are indexed"
+    return None
+
+
 def _get_pruning_block_expiration() -> int:
     """
     Compute the expiration time for the pruning block signal.
@@ -737,6 +763,20 @@ def connector_pruning_generator_task(
             start=indexing_start,
         )
         all_connector_doc_ids = extraction_result.raw_id_to_parent
+
+        incomplete_reason = _incomplete_listing_reason(
+            extraction_result,
+            indexed_count=len(all_indexed_document_ids),
+            trusts_empty_listing=type(runnable_connector).prune_trusts_empty_listing,
+        )
+        if incomplete_reason:
+            task_logger.error(
+                f"Pruning skipped, nothing deleted: cc_pair={cc_pair_id} "
+                f"connector_source={connector_source} reason={incomplete_reason}"
+            )
+            raise PruneListingIncompleteError(
+                f"Pruning skipped, nothing deleted: {incomplete_reason}"
+            )
 
         # Session 2: post-enumeration — hierarchy upserts, diff computation, task dispatch.
         with get_session_with_current_tenant() as db_session:
