@@ -43,7 +43,7 @@ import { LlmDescriptor, LlmManager } from "@/lib/hooks";
 import { Message } from "@/app/app/types";
 import { Text } from "@opal/components";
 import { AgentTimeline } from "@/lib/timeline/chat/AgentTimeline";
-import { ResponseCursor } from "@/lib/timeline/components/ResponseCursor";
+import { responseCursorItem } from "@/lib/timeline/components/ResponseCursor";
 import {
   Response,
   type ResponseItem,
@@ -680,13 +680,7 @@ const AgentMessage = React.memo(function AgentMessage({
                             isLastSection &&
                             !stopPacketSeen &&
                             !segments.some((s) => s.kind === "text");
-                          return working
-                            ? {
-                                kind: "text",
-                                key: "cursor",
-                                node: <ResponseCursor />,
-                              }
-                            : null;
+                          return working ? responseCursorItem() : null;
                         }
                         const isLiveRun =
                           segments.findLastIndex((s) => s.kind === "run") ===

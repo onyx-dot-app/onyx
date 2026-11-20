@@ -14,6 +14,11 @@ export interface ResponseItem {
   kind: "run" | "text" | "card";
   key: React.Key;
   node: React.ReactNode;
+  /**
+   * Play the entry even when the item is present on the first render. Unset,
+   * only items that arrive later play it.
+   */
+  appear?: boolean;
 }
 
 export interface ResponseProps {
@@ -39,7 +44,11 @@ export function Response({ items }: ResponseProps) {
         item.kind === "run" ? (
           <React.Fragment key={item.key}>{item.node}</React.Fragment>
         ) : (
-          <Presence key={item.key} appear={!initialKeys.has(item.key)} grow>
+          <Presence
+            key={item.key}
+            appear={item.appear ?? !initialKeys.has(item.key)}
+            grow
+          >
             {item.kind === "text" ? (
               <AnswerText>{item.node}</AnswerText>
             ) : (

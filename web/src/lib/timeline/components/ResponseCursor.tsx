@@ -1,5 +1,6 @@
 import { Section } from "@opal/layouts";
 import { BlinkingBar } from "@/app/app/message/BlinkingBar";
+import type { ResponseItem } from "@/lib/timeline/components/Response";
 
 /**
  * The cursor a response shows while it works with nothing to show yet: after
@@ -12,6 +13,19 @@ export function ResponseCursor() {
       <BlinkingBar />
     </Section>
   );
+}
+
+/**
+ * The cursor as a response item. A send mounts the response with the cursor
+ * already in it, so it fades in rather than flashing.
+ */
+export function responseCursorItem(): ResponseItem {
+  return {
+    kind: "text",
+    key: "cursor",
+    node: <ResponseCursor />,
+    appear: true,
+  };
 }
 
 export default ResponseCursor;
