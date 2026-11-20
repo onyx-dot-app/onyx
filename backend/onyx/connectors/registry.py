@@ -17,6 +17,7 @@ from onyx.connectors.clickup.config import ClickupConnectorConfig
 from onyx.connectors.coda.config import CodaConnectorConfig
 from onyx.connectors.confluence.config import ConfluenceConnectorConfig
 from onyx.connectors.connector_config import ConnectorConfig
+from onyx.connectors.dealcloud.config import DealCloudConnectorConfig
 from onyx.connectors.discord.config import DiscordConnectorConfig
 from onyx.connectors.discourse.config import DiscourseConnectorConfig
 from onyx.connectors.document360.config import Document360ConnectorConfig
@@ -310,6 +311,11 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.zoom.connector",
         class_name="ZoomConnector",
         config_class=ZoomConnectorConfig,
+    ),
+    DocumentSource.DEALCLOUD: ConnectorMapping(
+        module_path="onyx.connectors.dealcloud.connector",
+        class_name="DealCloudConnector",
+        config_class=DealCloudConnectorConfig,
     ),
     DocumentSource.EGNYTE: ConnectorMapping(
         module_path="onyx.connectors.egnyte.connector",
