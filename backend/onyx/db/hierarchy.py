@@ -713,6 +713,21 @@ def filter_accessible_hierarchy_node_ids(
     )
 
 
+def get_accessible_hierarchy_node(
+    db_session: Session,
+    node_id: int,
+    user_email: str,
+    external_group_ids: list[str],
+    user_id: UUID | None = None,
+) -> HierarchyNode | None:
+    """The node, or None when it does not exist or the user cannot access it."""
+    if not filter_accessible_hierarchy_node_ids(
+        db_session, [node_id], user_email, external_group_ids, user_id=user_id
+    ):
+        return None
+    return get_hierarchy_node_by_id(db_session, node_id)
+
+
 def get_document_parent_hierarchy_node_ids(
     db_session: Session,
     document_ids: list[str],

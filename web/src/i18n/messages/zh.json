@@ -12505,7 +12505,7 @@
               "between": "{start} – {end} 发送"
             },
             "owner": "所有者：{owner}",
-            "folder": "在文件夹 {id} 中",
+            "folder": "在文件夹 {name} 中",
             "nodeType": "类型：{type}",
             "author": "发送者：{author}",
             "message": "消息 {id}",

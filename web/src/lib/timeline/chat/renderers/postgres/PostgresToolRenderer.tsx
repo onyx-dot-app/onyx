@@ -1,6 +1,7 @@
 "use client";
 
 import { useMemo } from "react";
+import useSWR from "swr";
 import { useLocale, useTranslations } from "next-intl";
 import {
   PacketType,
@@ -18,6 +19,9 @@ import { SvgFilter, SvgServer } from "@opal/icons";
 import { OnyxDocument } from "@/lib/search/types";
 import { ValidSources } from "@/lib/connectors/types/source";
 import { getSourceDisplayName } from "@/lib/connectors/utils";
+import { errorHandlingFetcher } from "@/lib/fetcher";
+import { HierarchyNodeSearchSummary } from "@/lib/hierarchy/types";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   SearchChipList,
   SourceInfo,
@@ -26,7 +30,11 @@ import {
   INITIAL_RESULTS_TO_SHOW,
   RESULTS_PER_EXPANSION,
 } from "@/lib/timeline/chat/renderers/search/searchStateUtils";
-import { PostgresQueryChip, postgresQueryChips } from "./postgresQueryChips";
+import {
+  PostgresQueryChip,
+  postgresQueryChips,
+  postgresQueryFolderId,
+} from "./postgresQueryChips";
 
 // A query has a handful of parts; show them all.
 const QUERY_CHIPS_TO_SHOW = 10;
@@ -73,15 +81,27 @@ export const PostgresToolRenderer: MessageRenderer<PostgresToolPacket, {}> = ({
   const start = packets.find(
     (packet) => packet.obj.type === PacketType.POSTGRES_TOOL_START
   )?.obj as PostgresToolStart | undefined;
+  const folderId = postgresQueryFolderId(start?.query ?? {});
+  // A folder the user cannot access returns 404, and the chip keeps its id.
+  const { data: folder } = useSWR<HierarchyNodeSearchSummary>(
+    folderId !== null ? SWR_KEYS.hierarchyNode(folderId) : null,
+    errorHandlingFetcher,
+    {
+      revalidateOnFocus: false,
+      revalidateIfStale: false,
+      shouldRetryOnError: false,
+    }
+  );
   const chips = useMemo(
     () =>
       postgresQueryChips(
         start?.query ?? {},
         (key, values) => t(`postgres.query.${key}`, values),
         locale,
-        sourceName
+        sourceName,
+        folder?.title
       ),
-    [start, t, locale]
+    [start, t, locale, folder?.title]
   );
   const documents = useMemo(
     () =>

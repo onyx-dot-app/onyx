@@ -12505,7 +12505,7 @@
               "between": "Gesendet {start} – {end}"
             },
             "owner": "Eigentümer: {owner}",
-            "folder": "Im Ordner {id}",
+            "folder": "Im Ordner {name}",
             "nodeType": "Typ: {type}",
             "author": "Von: {author}",
             "message": "Nachricht {id}",
