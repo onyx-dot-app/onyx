@@ -470,7 +470,16 @@ Linux needs some desktop services:
 
 - **Secret Service**, to keep you signed in: GNOME Keyring, KWallet or another provider must
   run and be unlocked in your session. Minimal window managers, VDI and SSH sessions often have
-  none. Then sign-in fails with a message that names the Secret Service.
+  none. Then sign-in fails with a message that names the problem: no provider, no default
+  keyring, no D-Bus session bus, or a locked keyring. If the keyring is locked at launch, Onyx
+  asks to unlock it one time. If you cancel, Onyx says that it could not read the session and
+  offers **Try Again** and **Sign In**.
+- **Answer notifications** need a notification server and a session bus that the app can find
+  through `DBUS_SESSION_BUS_ADDRESS` or `$XDG_RUNTIME_DIR/bus`. A bus that only X11 autolaunch
+  finds is not enough; the app then logs a warning and shows no notification.
+- **HiDPI**: GTK reads the scale from `GDK_SCALE` and `GDK_DPI_SCALE`, not from the KDE
+  display settings. On a KDE X11 session at 200% with neither set, the windows show at 1x and
+  look small. Start the app with `GDK_SCALE=2`.
 - **Global shortcut**: the launcher shortcut uses X11 key grabs. In a Wayland session (the
   default on Ubuntu 22.04+, Fedora and RHEL 9) the shortcut works only while an X11 (XWayland)
   app has focus, and with no XWayland it never works. Preferences shows a notice then. Open the
@@ -479,7 +488,10 @@ Linux needs some desktop services:
 - **Tray icon**: it needs a tray host (`libayatana-appindicator3-1`). Stock GNOME shows no
   tray icon without the AppIndicator extension (`gnome-shell-extension-appindicator`, on by
   default on Ubuntu).
-- The launcher's transparent corners need a compositing window manager.
+- The launcher's transparent corners need a compositing window manager. Without one, the
+  corners show black. With no compositor and software rendering, WebKitGTK can also leave a
+  stale rectangle on screen until the next repaint.
+- The title bar and the menu bar follow the desktop theme, not the color mode of the web UI.
 
 ## Auto-update
 
