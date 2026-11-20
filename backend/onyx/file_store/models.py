@@ -109,6 +109,8 @@ class ChatFileInput(BaseModel):
     descriptor: FileDescriptor
     token_count: int
     content_pending: bool
+    # False for SKIPPED user files, which search cannot find.
+    indexed: bool = True
 
 
 class InMemoryChatFile(BaseModel):
@@ -183,6 +185,8 @@ class ChatLoadedFile(InMemoryChatFile):
     # True while the user-file worker is still processing the file — its
     # canonical plaintext (e.g. including image captions) doesn't exist yet.
     content_pending: bool = False
+    # False for SKIPPED user files, which search cannot find.
+    indexed: bool = True
 
     @classmethod
     def lazy_loaded(
@@ -195,6 +199,7 @@ class ChatLoadedFile(InMemoryChatFile):
         token_count: int,
         loader: Callable[[], bytes],
         content_pending: bool = False,
+        indexed: bool = True,
     ) -> "ChatLoadedFile":
         """Keep supplied text and token counts; load bytes on first content access."""
         inst = cls(
@@ -205,6 +210,7 @@ class ChatLoadedFile(InMemoryChatFile):
             content_text=content_text,
             token_count=token_count,
             content_pending=content_pending,
+            indexed=indexed,
         )
         install_lazy_content_loader(inst, loader)
         return inst

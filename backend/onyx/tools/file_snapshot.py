@@ -42,6 +42,8 @@ class SavedLoadedFile(BaseModel):
     content_text: str | None
     token_count: int
     content_pending: bool
+    # Checkpoints saved before this field existed restore as indexed.
+    indexed: bool = True
 
     @classmethod
     def capture(cls, file: ChatLoadedFile) -> "SavedLoadedFile":
@@ -52,6 +54,7 @@ class SavedLoadedFile(BaseModel):
             content_text=file.content_text,
             token_count=file.token_count,
             content_pending=file.content_pending,
+            indexed=file.indexed,
         )
 
     def restore(self) -> ChatLoadedFile:
@@ -63,6 +66,7 @@ class SavedLoadedFile(BaseModel):
             content_text=self.content_text,
             token_count=self.token_count,
             content_pending=self.content_pending,
+            indexed=self.indexed,
         )
 
 

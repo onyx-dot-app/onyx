@@ -399,6 +399,7 @@ def build_file_context(
     token_count: int = 0,
     approx_char_count: int | None = None,
     content_pending: bool = False,
+    indexed: bool = True,
 ) -> FileContextResult:
     """Build file content and tool metadata with the same file ID."""
     if file_type.use_metadata_only():
@@ -450,6 +451,7 @@ def build_file_context(
             if approx_char_count is not None
             else len(content_text or "")
         ),
+        indexed=indexed,
     )
 
     return FileContextResult(message=message, tool_metadata=metadata)
@@ -491,6 +493,7 @@ def _load_chat_file(
     token_count: int,
     content_pending: bool,
     include_text: bool = True,
+    indexed: bool = True,
 ) -> ChatLoadedFile:
     """Build a ChatLoadedFile whose raw ``content`` bytes are loaded lazily.
 
@@ -580,6 +583,7 @@ def _load_chat_file(
         token_count=token_count,
         loader=_load_content,
         content_pending=content_pending,
+        indexed=indexed,
     )
 
 
@@ -593,7 +597,11 @@ def load_chat_files(
     if text_file_ids is not None and not text_file_ids:
         return [
             _load_chat_file(
-                item.descriptor, item.token_count, item.content_pending, False
+                item.descriptor,
+                item.token_count,
+                item.content_pending,
+                False,
+                item.indexed,
             )
             for item in inputs
         ]
@@ -611,6 +619,7 @@ def load_chat_files(
                         item.token_count,
                         item.content_pending,
                         text_file_ids is None or item.descriptor["id"] in text_file_ids,
+                        item.indexed,
                     ),
                 )
                 for item in inputs

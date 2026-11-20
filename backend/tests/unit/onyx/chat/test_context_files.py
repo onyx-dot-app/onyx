@@ -824,3 +824,43 @@ class TestGetOrExtractPlaintext:
         assert result == ""
         extract_fn.assert_called_once()
         store_plaintext.assert_called_once_with("file-3", "")
+
+
+def test_chat_history_attachment_keeps_its_indexed_state() -> None:
+    """A SKIPPED attachment from an earlier turn is not sent to search."""
+    from onyx.chat.chat_utils import convert_chat_history
+    from onyx.chat.models import ChatHistoryMessage
+    from onyx.configs.constants import MessageType
+    from onyx.file_store.models import ChatFileType, ChatLoadedFile
+
+    user_file_id = str(uuid4())
+    loaded = ChatLoadedFile.lazy_loaded(
+        file_id="store-id",
+        file_type=ChatFileType.PLAIN_TEXT,
+        filename="analyze.py",
+        content_text="print(1)",
+        token_count=3,
+        loader=lambda: b"print(1)",
+        indexed=False,
+    )
+    message = ChatHistoryMessage(
+        id=1,
+        message_type=MessageType.USER,
+        message="Run it",
+        token_count=2,
+        files=[
+            {
+                "id": "store-id",
+                "type": ChatFileType.PLAIN_TEXT,
+                "name": "analyze.py",
+                "user_file_id": user_file_id,
+            }
+        ],
+        is_clarification=False,
+        skill_messages=[],
+        response_messages=[],
+    )
+
+    result = convert_chat_history([message], [loaded])
+
+    assert result.all_injected_file_metadata[user_file_id].indexed is False

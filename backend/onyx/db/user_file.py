@@ -538,6 +538,7 @@ def prepare_chat_file_inputs(
                 token_count=tokens,
                 content_pending=status
                 in (UserFileStatus.PROCESSING, UserFileStatus.INDEXING),
+                indexed=status != UserFileStatus.SKIPPED,
             )
         )
     return inputs
