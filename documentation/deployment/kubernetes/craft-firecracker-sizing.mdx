@@ -1,0 +1,136 @@
+---
+title: "Firecracker Sizing and Images"
+description: "Size KVM nodes for Craft Firecracker sandboxes and mirror the images to a private registry"
+icon: "ruler"
+---
+
+This page helps you size the nodes for [Craft on Firecracker](/deployment/kubernetes/craft-firecracker)
+and pull its images from a private registry.
+
+## microVM size
+
+Each new microVM has 2 vCPUs, 8192 MiB of memory, and a working disk of 32 GiB by default.
+The host agent sets CPU and memory when it builds the node template.
+The working disk grows from the template size when Onyx creates a microVM.
+A template with a larger working disk keeps that size. Filesystem metadata uses part of the disk,
+so usable space is less than 32 GiB.
+
+The disk is sparse and shares unchanged blocks with the template. It does not reserve 32 GiB on the host.
+Keep the template disk small; the default is 1 GiB.
+Existing running microVMs keep their disk size until Onyx recreates them, including after idle eviction.
+Hosts must allow at least 32 GiB through `--max-scratch-gib`; its default is 100 GiB.
+
+The host agent admits a new microVM only when the node has enough memory:
+
+```text
+available memory >= 4096 MiB for each microVM that is starting + 4096 MiB + 2048 MiB reserve
+```
+
+A starting microVM counts at half of its 8192 MiB, because it does not use all of its memory soon after it starts.
+A running microVM counts only at the memory that it uses: idle guests give free memory back to the node.
+So memory limits how many microVMs start at the same time more than how many run.
+
+The available memory is also at most the room below the slice limit (see below).
+
+The node can run microVMs that together have more memory than the node.
+If many microVMs use most of their memory at the same time, the kernel stops one microVM,
+and the [CraftFcVMOOMKills](/deployment/kubernetes/craft-firecracker-operations#craftfcvmoomkills) alert fires.
+`craft.hostAgent.startingMemDivisor` (default `2`) sets the divisor for starting microVMs.
+Set it to `1` to count each starting microVM at its full memory, or raise it if your microVMs use little memory.
+
+Kubelet does not count microVM memory. Do not run other workloads on KVM nodes.
+
+All microVMs of a node run in one host cgroup slice.
+At start the host agent limits the slice to 85% of the node memory (`craft.hostAgent.sliceMemoryPercent`).
+The rest stays free for kubelet, the container runtime, the host agent, and the system.
+If the microVMs use more memory than the limit, the kernel stops one microVM. Set the value to `0` to remove the limit.
+The host agent removes it when it starts again.
+
+## Measured limits
+
+Onyx measured these numbers on Amazon EKS with `m8i.4xlarge` nodes (16 vCPUs, 64 GiB, nested virtualization)
+and a gp3 root volume with 6000 IOPS and 500 MiB/s, with 4096 MiB microVMs.
+Onyx has not measured them with 8192 MiB microVMs:
+
+| Limit | Value | Cause |
+| --- | --- | --- |
+| Running microVMs per node | 64. The chart default `craft.hostAgent.maxVms` is 60. | Nested virtualization. Above 64 microVMs, running microVMs fail. |
+| microVM starts at the same time, per node | 14 | The memory admission rule above |
+| Sustained start rate, per node | 3 to 3.5 microVMs per second | Disk reads: each start reads about 110 MB |
+| Time to a ready microVM | 0.9 seconds (median) at 2 starts per second | |
+| HTTPS calls through one sandbox proxy pod | About 46 per second at the default 1 CPU limit | Proxy CPU |
+
+Use these numbers as a start. Watch the host agent dashboard and add nodes before the alerts fire.
+
+### Plan the nodes
+
+| Platform | Start with | Notes |
+| --- | --- | --- |
+| Amazon EKS, nested | `m8i.4xlarge`, gp3 200 GiB with 6000 IOPS and 500 MiB/s | Keep `maxVms: 60`. A faster disk raises the start rate. |
+| Amazon EKS, bare metal | An Intel `.metal` type | Raise `maxVms` or set `0`. Memory and disk limit the node. |
+| Google GKE | `n2-standard-8`, 200 GB boot disk | Onyx has not measured density on GKE. Keep `maxVms: 60`. |
+| Azure AKS | `Standard_D8ds_v5`, 200 GB OS disk | Onyx has not measured density on AKS. Keep `maxVms: 60`. |
+| Bare metal | Intel hosts with fast local NVMe for the data directory | Raise `maxVms` or set `0`. |
+
+Size the sandbox proxy on the egress call rate, not on the number of sandboxes. Add proxy replicas,
+or raise its CPU limit under `sandboxProxy.resources`, when its pods reach their CPU limit.
+
+The host agent relays the egress of all microVMs on its node.
+It keeps at most 2048 relay connections open on a node (`craft.hostAgent.relayMaxConnsNode`)
+and 256 for one microVM (`craft.hostAgent.relayMaxConns`). It closes new connections over a cap.
+Each connection uses up to about 100 KiB of agent memory. If you raise `relayMaxConnsNode`,
+keep `craft.hostAgent.resources.limits.memory` above 256 MiB plus 100 KiB for each connection.
+
+Keep at least 50 GiB free in the data directory. The host agent refuses new microVMs below 10 GiB free.
+The 32 GiB disk size is a per-VM limit, not a reservation of host space.
+Size the node disk for actual writes across all VMs, plus templates, session saves, and free space. For example,
+60 VMs that each fill 32 GiB need 1920 GiB for working disks alone.
+
+Keep at least one spare KVM node in each zone. A node failure stops every microVM on the node.
+
+## Resource costs
+
+The runtime already reduces resource use in these ways:
+
+- **Disk:** Sparse working disks share unchanged template blocks.
+  Template and managed-image cleanup removes unused versions. On hosts that use the XFS loop store,
+  hourly trim returns deleted host files' blocks to the backing filesystem.
+- **Memory:** Free page reporting returns unused guest memory to the host.
+  After five idle minutes, the guest daemon also drops its page cache and compacts memory.
+- **CPU and memory:** Each VM has cgroup limits.
+  Idle eviction saves supported sessions and stops inactive VMs after 15 minutes by default.
+  `SANDBOX_FC_IDLE_TIMEOUT_SECONDS` controls this interval. A failed session save prevents eviction.
+
+Measure active workloads before reducing the default CPU or memory sizes.
+Shorter idle timeouts free resources sooner but require more VM starts and session restores.
+Freed resources reduce the number of hosts needed only when you consolidate workloads or remove unused hosts.
+
+## Mirror the images
+
+Clusters without access to Docker Hub must pull the images from a private registry.
+
+| Image | Tag | Notes |
+| --- | --- | --- |
+| `onyxdotapp/craft-fc-host-agent` | `<onyx version>`, for example `v5.2.0` | Includes Firecracker, the jailer, and the guest kernel |
+| `onyxdotapp/craft-fc-artifacts` | `rootfs-<onyx version>`, for example `rootfs-v5.2.0` | The root drive. About 4 GiB. |
+| The Onyx images | `<onyx version>` | Backend, web server, model server, and the pod sandbox image. See [Kubernetes](/deployment/local/kubernetes). |
+
+Copy each image with its digest, for example with `crane copy` or `skopeo copy --all`. Then set the repositories:
+
+```yaml
+craft:
+  hostAgent:
+    image:
+      repository: registry.example.com/onyxdotapp/craft-fc-host-agent
+    rootfs:
+      image:
+        repository: registry.example.com/onyxdotapp/craft-fc-artifacts
+    imagePullSecrets:
+      - name: regcred
+```
+
+The pull Secret must exist in the host agent namespace. The release `imagePullSecrets` do not apply there,
+because Secrets belong to one namespace.
+
+The init container copies the root drive to each node once for each version.
+Plan for about 4 GiB of registry traffic for each KVM node on each upgrade.
