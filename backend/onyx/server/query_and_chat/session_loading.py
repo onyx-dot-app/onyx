@@ -505,6 +505,8 @@ def translate_assistant_message_to_packets(
     tools_by_id: Mapping[int, Tool],
     db_session: Session,
     chat_approvals: ChatApprovals | None = None,
+    *,
+    child_responses: Mapping[int, list[ChatMessage]],
 ) -> list[Packet]:
     """
     Translates an assistant message and tool calls to packet format.
@@ -512,13 +514,17 @@ def translate_assistant_message_to_packets(
     The final answer and citations are also a "step".
 
     `tools_by_id` holds the tools of the message's tool calls (see
-    `load_session_tools`), and `chat_approvals` the approval requests and
-    questions of the page's responses (see `load_chat_approvals`), so a session replay does not query them per
-    message.
+    `load_session_tools`), `chat_approvals` the approval requests and
+    questions of the page's responses (see `load_chat_approvals`), and
+    `child_responses` their child responses (see `load_child_responses`), so a
+    session replay does not query them per message.
     """
-    execution = read_chat_execution(chat_message)
-    if execution is not None:
-        replay = read_response_replay_data(execution, db_session, chat_approvals)
+    read = read_chat_execution(chat_message, child_responses)
+    if read is not None:
+        execution, tool_calls = read
+        replay = read_response_replay_data(
+            execution, tool_calls, chat_message, db_session, chat_approvals
+        )
         return replay_response(
             execution.response,
             replay.tools,

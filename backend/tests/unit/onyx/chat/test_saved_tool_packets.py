@@ -412,7 +412,10 @@ def test_legacy_thinking_precedes_tool_groups_and_final_answer(
     )
     with Session() as session:
         packets = translate_assistant_message_to_packets(
-            response, {1: Tool(name="lookup", display_name="Lookup")}, session
+            response,
+            {1: Tool(name="lookup", display_name="Lookup")},
+            session,
+            child_responses={},
         )
 
     assert [
@@ -462,7 +465,9 @@ def test_legacy_deleted_tool_keeps_only_the_final_answer() -> None:
         ],
     )
     with Session() as session:
-        packets = translate_assistant_message_to_packets(response, {}, session)
+        packets = translate_assistant_message_to_packets(
+            response, {}, session, child_responses={}
+        )
     assert [
         p.obj.content for p in packets if isinstance(p.obj, AgentResponseDelta)
     ] == ["Saved answer"]
