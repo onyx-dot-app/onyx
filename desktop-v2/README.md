@@ -464,7 +464,11 @@ How the app differs from macOS:
     the signed-in Windows user, not when another administrator's credentials elevate it. A
     plain uninstall, and an MSI uninstall, keep the app's data and the token.
 - On Linux the app registers `onyx://` at launch (the `.deb` also registers it), so AppImage
-  builds get sign-in links too. This needs `xdg-mime`.
+  builds get sign-in links too. This needs `xdg-mime`. The AppImage entry points to the
+  AppImage's path at its last launch. If you move or rename the AppImage, launch it once from
+  its new path.
+- Linux builds need glibc 2.35 or newer (Ubuntu 22.04, Debian 12 and later). CI builds them on
+  Ubuntu 22.04 and fails if a file in the `.deb` or the AppImage needs a newer glibc.
 
 Linux needs some desktop services:
 
