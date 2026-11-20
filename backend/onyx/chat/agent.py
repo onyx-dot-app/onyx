@@ -487,8 +487,8 @@ class ChatAgent(Agent, RestorableFeature):
     def _suspended_cells(
         self, results: list[ToolResultMessage]
     ) -> list[ToolResultAmendment]:
-        """Stop the response's open cells when the run pauses, and save their final
-        records."""
+        """Close the response's cells when the run pauses, and save their final
+        records; see CodeCells.suspend."""
         if self.code_cells is None:
             return []
         return self._staged_release(partial(self.code_cells.suspend, results))

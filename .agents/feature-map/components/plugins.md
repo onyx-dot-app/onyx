@@ -229,10 +229,15 @@ only the configuration of a chat that does not exist yet.
    tools are `Persona__Tool` rows on the default assistant. The
    `/admin/tool/custom` aliases map `default_chat_enabled` to DEFAULT
    (`server/features/tool/api.py:_set_default_chat`).
-2. `default-chat-full-admin-only` **Only `FULL_ADMIN_PANEL_ACCESS` changes
-   Default Chat.** `server/features/tool/api.py:_check_default_chat_permission`
-   and the `/admin/default-assistant` routes enforce it. An omitted
-   `default_chat_enabled` leaves the selection unchanged.
+2. `default-chat-full-admin-only` **Only `FULL_ADMIN_PANEL_ACCESS` changes the
+   built-in tools of Default Chat.**
+   `server/features/tool/api.py:_check_default_chat_permission` and the
+   `/admin/default-assistant` routes enforce it. An omitted
+   `default_chat_enabled` leaves the selection unchanged. Integrations reach
+   Default Chat another way: an organization-wide action manager sets an
+   install setting of Installed or Required, for the company or a group
+   (`PUT /admin/integrations/{id}/installation-policy` and `.../group-settings`),
+   and each user's on/off choice applies.
 3. `default-assistant-lock` **Built-in tool writes follow the default-assistant
    lock rule.** [[agents-personas]] owns that rule. On the web,
    `web/src/lib/agents/hooks.ts:enqueueDefaultAssistantSave` orders saves from

@@ -444,22 +444,18 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     }
   }, [multiModel.selectedModels]);
 
-  const {
-    onSubmit,
-    stopGenerating,
-    handleMessageSpecificFileUpload,
-    availableContextTokens,
-  } = useChatController({
-    llmManager,
-    toolConfiguration,
-    availableAgents: agents,
-    activeAgent,
-    existingChatSessionId: currentChatSessionId,
-    selectedDocuments,
-    searchParams,
-    resetInputBar,
-    restoreInputBar,
-  });
+  const { onSubmit, stopGenerating, handleMessageSpecificFileUpload } =
+    useChatController({
+      llmManager,
+      toolConfiguration,
+      availableAgents: agents,
+      activeAgent,
+      existingChatSessionId: currentChatSessionId,
+      selectedDocuments,
+      searchParams,
+      resetInputBar,
+      restoreInputBar,
+    });
 
   const { onMessageSelection, sessionFetchError, queue } =
     useChatSessionController({
@@ -1001,7 +997,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     <div className="w-full max-h-[50vh] overflow-y-auto overscroll-y-none px-2 sm:px-4">
                       <ProjectContextPanel
                         projectTokenCount={projectContextTokenCount}
-                        availableContextTokens={availableContextTokens}
+                        agentId={activeAgent?.id}
+                        hasAnyProvider={llmManager.hasAnyProvider}
                         setPresentingDocument={setPresentingDocument}
                       />
                     </div>

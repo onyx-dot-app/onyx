@@ -2,6 +2,7 @@
 //! hands in the session cookie and decides where links, popups and downloads go.
 
 use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::{Mutex, MutexGuard};
 
 use tauri::webview::cookie::{Cookie, SameSite};
 use tauri::webview::{DownloadEvent, NewWindowFeatures, NewWindowResponse};
@@ -13,6 +14,13 @@ use crate::state::AppState;
 
 pub const LABEL: &str = "main";
 static POPUP_COUNTER: AtomicUsize = AtomicUsize::new(0);
+/// The token last handed to the main window's cookie store.
+static WINDOW_TOKEN: Mutex<Option<String>> = Mutex::new(None);
+
+fn window_token() -> MutexGuard<'static, Option<String>> {
+    WINDOW_TOKEN.lock().unwrap_or_else(|p| p.into_inner())
+}
+#[cfg(target_os = "macos")]
 const DESKTOP_CHROME_JS: &str = include_str!("desktop_chrome.js");
 const LINK_SHIM_JS: &str = include_str!("link_shim.js");
 
@@ -57,15 +65,41 @@ pub enum LinkAction {
     Block,
 }
 
+/// A `blob:` URL has the origin of the page that made it, so another site (in
+/// a popup) cannot show its own page in the main window. `data:` pages have no
+/// origin and are blocked.
 pub fn classify(url: &Url, server_origin: &str) -> LinkAction {
+    let same_origin = url.origin().ascii_serialization() == server_origin;
     match url.scheme() {
-        "about" | "blob" | "data" => LinkAction::Allow,
-        "http" | "https" if url.origin().ascii_serialization() == server_origin => {
-            LinkAction::Allow
-        }
+        // about:srcdoc is the document of an iframe with inline content.
+        "about" if matches!(url.path(), "blank" | "srcdoc") => LinkAction::Allow,
+        "blob" | "http" | "https" if same_origin => LinkAction::Allow,
         "http" | "https" | "mailto" | "tel" => LinkAction::External,
         _ => LinkAction::Block,
     }
+}
+
+/// Popups and the SSO window may also load other HTTPS sites (OAuth consent,
+/// identity providers). All other URLs follow the main window's rules.
+pub fn classify_popup(url: &Url, server_origin: &str) -> LinkAction {
+    match classify(url, server_origin) {
+        LinkAction::External if url.scheme() == "https" => LinkAction::Allow,
+        action => action,
+    }
+}
+
+/// Resolves `path` against the server. Fails if the result is on another
+/// origin: `//host/x` and `/\host/x` are paths that name another host.
+pub fn server_url_join(server_url: &Url, path: &str) -> Result<Url, String> {
+    // Only an absolute path; `//host` and `/\host` would name another host.
+    if !path.starts_with('/') || path[1..].starts_with(['/', '\\']) {
+        return Err("That link is not on your Onyx server.".into());
+    }
+    let target = server_url.join(path).map_err(|e| e.to_string())?;
+    if target.origin() != server_url.origin() {
+        return Err("That link is not on your Onyx server.".into());
+    }
+    Ok(target)
 }
 
 /// The web app opens popups for OAuth consent (connectors, MCP): it opens a
@@ -74,9 +108,8 @@ pub fn classify(url: &Url, server_origin: &str) -> LinkAction {
 /// the site's host so it is never mistaken for Onyx. Plain HTTP and other
 /// schemes follow the main window's rules.
 fn popup_navigation_allowed(app: &AppHandle, label: &str, url: &Url, server_origin: &str) -> bool {
-    match classify(url, server_origin) {
+    match classify_popup(url, server_origin) {
         LinkAction::Allow => true,
-        LinkAction::External if url.scheme() == "https" => true,
         LinkAction::External => {
             open_external(app, url.as_str());
             close_if_blank(app, label);
@@ -202,6 +235,7 @@ fn session_cookie(server: &Url, name: &str, token: &str) -> Result<Cookie<'stati
     Ok(cookie.build())
 }
 
+#[cfg(not(target_os = "linux"))]
 fn choose_download_path(destination: &mut std::path::PathBuf) -> bool {
     let suggested = destination
         .file_name()
@@ -220,6 +254,13 @@ fn choose_download_path(destination: &mut std::path::PathBuf) -> bool {
     }
 }
 
+/// wry asks on the GTK main thread, where rfd's blocking dialog would deadlock,
+/// so Linux keeps wry's unique path in the Downloads folder.
+#[cfg(target_os = "linux")]
+fn choose_download_path(_destination: &mut std::path::PathBuf) -> bool {
+    true
+}
+
 fn hand_over_session(
     window: &tauri::WebviewWindow,
     server_url: &Url,
@@ -228,20 +269,56 @@ fn hand_over_session(
 ) -> Result<(), String> {
     #[cfg(target_os = "macos")]
     let result = crate::macos_cookies::set_session_cookie(window, server_url, name, token);
+    // WebView2 and WebKitGTK: wry's cookie API. The cookie and the first page
+    // load are queued on the main thread in that order.
     #[cfg(not(target_os = "macos"))]
     let result = window
         .set_cookie(session_cookie(server_url, name, token)?)
         .map_err(|e| e.to_string());
-    result.map_err(|e| format!("Could not hand the session to the window: {e}"))
+    result.map_err(|e| format!("Could not hand the session to the window: {e}"))?;
+    *window_token() = Some(token.to_string());
+    Ok(())
 }
 
 /// Opens (or reuses) the main window logged in as `token`, at `path` on the server.
 pub async fn open(app: &AppHandle, server: &str, token: &str, path: &str) -> Result<(), String> {
+    let server_url = Url::parse(server).map_err(|e| e.to_string())?;
+    let target = server_url_join(&server_url, path)?;
+    open_url(app, server, token, target).await
+}
+
+/// Like `open`, for a URL that is already parsed. It must be on the server's origin.
+pub async fn open_url(
+    app: &AppHandle,
+    server: &str,
+    token: &str,
+    target: Url,
+) -> Result<(), String> {
     let epoch = app.state::<AppState>().epoch();
     let server_url = Url::parse(server).map_err(|e| e.to_string())?;
-    let target = server_url.join(path).map_err(|e| e.to_string())?;
+    if target.origin() != server_url.origin() {
+        return Err("That link is not on your Onyx server.".into());
+    }
+    if crate::offline::defer_open(app, &crate::offline::path_of(&target)) {
+        return Ok(());
+    }
 
     if let Some(window) = app.get_webview_window(LABEL) {
+        // A sign-in since the window got its cookie (for example after the
+        // session expired) must reach it; a stale caller token must not.
+        let state = app.state::<AppState>();
+        let changed = window_token().as_deref() != Some(token)
+            && state.token(server).as_deref() == Some(token);
+        if changed {
+            let cookie_name = state
+                .cookie_name(server)
+                .await
+                .map_err(|e| format!("Could not read the server's sign-in settings: {e}"))?;
+            if state.epoch() != epoch {
+                return Err("The session ended while Onyx was opening.".to_string());
+            }
+            hand_over_session(&window, &server_url, &cookie_name, token)?;
+        }
         window.navigate(target).map_err(|e| e.to_string())?;
         crate::windows::bring_forward(app, &window);
         return Ok(());
@@ -262,16 +339,24 @@ pub async fn open(app: &AppHandle, server: &str, token: &str, path: &str) -> Res
         .min_inner_size(800.0, 600.0)
         .center()
         .initialization_script(LINK_SHIM_JS)
-        .initialization_script(DESKTOP_CHROME_JS)
-        .on_page_load(|window, payload| {
-            if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
+        .on_page_load(|window, payload| match payload.event() {
+            tauri::webview::PageLoadEvent::Started => {
+                crate::offline::load_committed(window.app_handle());
+            }
+            tauri::webview::PageLoadEvent::Finished => {
+                crate::offline::load_finished(window.app_handle());
                 sync_chrome(window.app_handle());
             }
         })
         // Let the web page receive dropped files (chat attachments).
         .disable_drag_drop_handler()
         .on_navigation(move |url| match classify(url, &nav_origin) {
-            LinkAction::Allow => true,
+            LinkAction::Allow => {
+                if matches!(url.scheme(), "http" | "https") {
+                    crate::offline::watch_load(&nav_app, url);
+                }
+                true
+            }
             LinkAction::External => {
                 open_external(&nav_app, url.as_str());
                 false
@@ -284,10 +369,14 @@ pub async fn open(app: &AppHandle, server: &str, token: &str, path: &str) -> Res
         .on_download(|_webview, event| handle_download(event));
 
     // Overlay title bar: the traffic lights float over the web UI's sidebar.
+    // Other platforms keep the native title bar and the page's own layout.
     #[cfg(target_os = "macos")]
     let builder = builder
+        .initialization_script(DESKTOP_CHROME_JS)
         .title_bar_style(tauri::TitleBarStyle::Overlay)
         .hidden_title(true);
+    #[cfg(not(target_os = "macos"))]
+    let builder = builder.menu(crate::menu::build_window_menu(app).map_err(|e| e.to_string())?);
 
     let window = builder.build().map_err(|e| e.to_string())?;
     // Entering or leaving full screen resizes the window.
@@ -298,6 +387,7 @@ pub async fn open(app: &AppHandle, server: &str, token: &str, path: &str) -> Res
         }
     });
 
+    // WebView2 and WebKitGTK show alert(), confirm() and prompt() themselves.
     #[cfg(target_os = "macos")]
     crate::macos_dialogs::install(&window);
 
@@ -332,6 +422,7 @@ pub fn close(app: &AppHandle, server: &str) {
     let Some(window) = app.get_webview_window(LABEL) else {
         return;
     };
+    *window_token() = None;
     if let Ok(server_url) = Url::parse(server) {
         let name = app.state::<AppState>().cached_cookie_name(server);
         #[cfg(target_os = "macos")]
@@ -392,13 +483,42 @@ pub fn spawn_session_renewal(app: &AppHandle) {
 
 #[cfg(test)]
 mod tests {
-    use super::{classify, LinkAction};
+    use super::{classify, classify_popup, server_url_join, LinkAction};
     use url::Url;
 
     const ORIGIN: &str = "http://localhost:3000";
 
+    fn joined(path: &str) -> Option<String> {
+        let server = Url::parse("https://onyx.example").unwrap();
+        server_url_join(&server, path)
+            .ok()
+            .map(|url| url.to_string())
+    }
+
+    #[test]
+    fn joins_paths_on_the_server() {
+        assert_eq!(
+            joined("/app?chatId=1#end").as_deref(),
+            Some("https://onyx.example/app?chatId=1#end")
+        );
+        assert_eq!(joined("/").as_deref(), Some("https://onyx.example/"));
+    }
+
+    #[test]
+    fn rejects_paths_that_leave_the_server() {
+        assert_eq!(joined("//evil.example/login"), None);
+        assert_eq!(joined("/\\evil.example"), None);
+        assert_eq!(joined("https://evil.example/"), None);
+        assert_eq!(joined("app"), None);
+        assert_eq!(joined(""), None);
+    }
+
     fn action(url: &str) -> LinkAction {
         classify(&Url::parse(url).unwrap(), ORIGIN)
+    }
+
+    fn popup_action(url: &str) -> LinkAction {
+        classify_popup(&Url::parse(url).unwrap(), ORIGIN)
     }
 
     #[test]
@@ -408,7 +528,58 @@ mod tests {
             LinkAction::Allow
         );
         assert_eq!(action("about:blank"), LinkAction::Allow);
+        assert_eq!(action("about:srcdoc"), LinkAction::Allow);
         assert_eq!(action("blob:http://localhost:3000/abc"), LinkAction::Allow);
+    }
+
+    #[test]
+    fn other_sites_cannot_replace_the_page() {
+        // What a third-party page in a popup could send `window.opener` to.
+        for url in [
+            "blob:https://evil.example/abc",
+            "blob:null/abc",
+            "data:text/html,<title>Onyx</title>",
+            "about:evil",
+        ] {
+            assert_eq!(action(url), LinkAction::Block, "{url}");
+            assert_eq!(popup_action(url), LinkAction::Block, "{url}");
+        }
+        assert_eq!(action("https://evil.example/login"), LinkAction::External);
+    }
+
+    #[test]
+    fn popups_may_load_other_https_sites() {
+        assert_eq!(
+            popup_action("https://accounts.google.com/o/oauth2"),
+            LinkAction::Allow
+        );
+        assert_eq!(popup_action("http://evil.example/"), LinkAction::External);
+        assert_eq!(popup_action("javascript:alert(1)"), LinkAction::Block);
+    }
+
+    #[test]
+    fn joined_paths_stay_on_the_server() {
+        let server = Url::parse("https://onyx.corp").unwrap();
+        assert_eq!(
+            server_url_join(&server, "/app?chatId=1#top")
+                .unwrap()
+                .as_str(),
+            "https://onyx.corp/app?chatId=1#top"
+        );
+        assert_eq!(
+            server_url_join(&server, "/onyx.corp//x").unwrap().as_str(),
+            "https://onyx.corp/onyx.corp//x"
+        );
+        for path in [
+            "//evil.example/x",
+            "/\\evil.example/x",
+            "\\\\evil.example/x",
+            "https://evil.example/x",
+            "http://onyx.corp/x",
+            "javascript:alert(1)",
+        ] {
+            assert!(server_url_join(&server, path).is_err(), "{path}");
+        }
     }
 
     #[test]

@@ -1,4 +1,4 @@
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from datetime import datetime, timezone
 
 from ee.onyx.external_permissions.google_drive.models import (
@@ -32,6 +32,7 @@ from onyx.connectors.google_drive.source_operations import (
 from onyx.connectors.google_utils.shared_constants import GoogleDriveFileType
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.models import HierarchyNode
+from onyx.connectors.source_api_limiter import build_source_api_limiter
 from onyx.db.models import ConnectorCredentialPair
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
@@ -367,7 +368,11 @@ def get_external_access_for_folder(
     )
 
 
-def build_perm_sync_connector(cc_pair: ConnectorCredentialPair) -> GoogleDriveConnector:
+def build_perm_sync_connector(
+    cc_pair: ConnectorCredentialPair,
+    should_stop: Callable[[], bool] | None = None,
+) -> GoogleDriveConnector:
+    """``should_stop`` ends a wait for the shared API budget."""
     connector = GoogleDriveConnector(
         **build_connector_kwargs(
             cc_pair.connector.source, cc_pair.connector.connector_specific_config
@@ -375,6 +380,12 @@ def build_perm_sync_connector(cc_pair: ConnectorCredentialPair) -> GoogleDriveCo
     )
     # The slim listing must admit the image files that indexing admitted.
     connector.set_allow_images(get_image_extraction_and_analysis_enabled())
+    # Permission sync spends the indexing budget of the credential.
+    limiter = build_source_api_limiter(
+        DocumentSource.GOOGLE_DRIVE, cc_pair.credential_id, should_stop
+    )
+    if limiter is not None:
+        connector.set_source_api_limiter(limiter)
     connector.load_credentials(credential_json(cc_pair))
     return connector
 
@@ -392,7 +403,9 @@ def gdrive_doc_sync(
     it in postgres so that when it gets created later, the permissions are
     already populated. The crawl resumes where a stopped attempt left off.
     """
-    google_drive_connector = build_perm_sync_connector(cc_pair)
+    google_drive_connector = build_perm_sync_connector(
+        cc_pair, callback.should_stop if callback is not None else None
+    )
     slim_doc_generator = _get_slim_doc_generator(
         cc_pair, google_drive_connector, checkpointer, callback
     )

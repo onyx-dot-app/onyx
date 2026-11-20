@@ -2760,9 +2760,39 @@ class IndexAttempt(Base):
     total_batches: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # batches that are fully indexed (i.e. have completed docfetching and docprocessing)
     completed_batches: Mapped[int] = mapped_column(Integer, default=0)
-    # TODO: unused, remove this column
+    # Stub batches whose conversion failed as a whole (conversion stage only).
     total_failures_batch_level: Mapped[int] = mapped_column(Integer, default=0)
     total_chunks: Mapped[int] = mapped_column(Integer, default=0)
+
+    # True when docfetching lists stub batches for the conversion stage.
+    uses_conversion_stage: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    # Conversion stage counters. Stub batch numbers are dense from the
+    # attempt's first number (0, or above the batches a resumed attempt took
+    # over): numbers below `stored` exist, numbers below `sent` went to
+    # conversion, and `converted` counts those that became document batches.
+    stub_batches_stored: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0"
+    )
+    stub_batches_sent: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0"
+    )
+    stub_batches_converted: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0"
+    )
+
+    # Documents that the lister listed, and those it dropped because the
+    # stored document has the same modified time and size.
+    stubs_listed: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    stubs_skipped: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+
+    # The last task that sent stub batches to conversion, and when. The
+    # watchdog checks this task before it decides that the chain is broken.
+    last_dispatch_task_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    last_dispatch_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     # Progress tracking for stall detection
     last_progress_time: Mapped[datetime.datetime | None] = mapped_column(
@@ -4437,11 +4467,14 @@ class ModelConfiguration(Base):
         back_populates="model_configurations",
     )
 
+    # Views read llm_model_flow_types for every model, so flows load in one
+    # query per batch of models instead of one query per model.
     llm_model_flows: Mapped[list["LLMModelFlow"]] = relationship(
         "LLMModelFlow",
         back_populates="model_configuration",
         cascade="all, delete-orphan",
         passive_deletes=True,
+        lazy="selectin",
     )
 
     @property

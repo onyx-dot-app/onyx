@@ -5,15 +5,32 @@
 //! once. An unsigned dev build gets a new signature on every rebuild, and macOS
 //! would ask for the user's password each time, so debug builds keep the token
 //! in a file only the user can read (mode 600) in the app's support folder.
+//! Windows and Linux always use the OS store (Credential Manager, Secret
+//! Service), which does not depend on the code signature.
 
-#[cfg(not(all(debug_assertions, unix)))]
+#[cfg(not(all(debug_assertions, target_os = "macos")))]
 mod backend {
     use keyring::Entry;
 
     const SERVICE: &str = "app.onyx.desktop.v2";
+    #[cfg(target_os = "macos")]
+    const STORE: &str = "the macOS keychain";
+    #[cfg(target_os = "windows")]
+    const STORE: &str = "Windows Credential Manager";
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    const STORE: &str = "the Secret Service";
+
+    /// What the user can do when the store fails. On Linux the usual cause is
+    /// that no Secret Service runs (minimal desktops, VDI, SSH sessions).
+    #[cfg(not(any(target_os = "macos", target_os = "windows")))]
+    const HINT: &str = " Onyx keeps your session in the Secret Service. Start GNOME Keyring or \
+                        KWallet (or another Secret Service provider) and unlock it, then sign in \
+                        again.";
+    #[cfg(any(target_os = "macos", target_os = "windows"))]
+    const HINT: &str = "";
 
     fn entry(server: &str) -> Result<Entry, String> {
-        Entry::new(SERVICE, server).map_err(|e| format!("Keychain unavailable: {e}"))
+        Entry::new(SERVICE, server).map_err(|e| format!("Could not open {STORE} ({e}).{HINT}"))
     }
 
     pub fn load(server: &str) -> Option<String> {
@@ -23,18 +40,20 @@ mod backend {
     pub fn store(server: &str, token: &str) -> Result<(), String> {
         entry(server)?
             .set_password(token)
-            .map_err(|e| format!("Could not save the session to the keychain: {e}"))
+            .map_err(|e| format!("Could not save the session to {STORE} ({e}).{HINT}"))
     }
 
     pub fn clear(server: &str) -> Result<(), String> {
         match entry(server)?.delete_credential() {
             Ok(()) | Err(keyring::Error::NoEntry) => Ok(()),
-            Err(e) => Err(format!("Could not remove the keychain entry: {e}")),
+            Err(e) => Err(format!(
+                "Could not remove the session from {STORE} ({e}).{HINT}"
+            )),
         }
     }
 }
 
-#[cfg(all(debug_assertions, unix))]
+#[cfg(all(debug_assertions, target_os = "macos"))]
 mod backend {
     use std::collections::BTreeMap;
     use std::fs;

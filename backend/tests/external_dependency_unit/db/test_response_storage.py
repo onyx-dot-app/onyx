@@ -57,6 +57,7 @@ from onyx.chat.history_store import get_chat_history_store
 from onyx.chat.mention_models import PickedSkillMessage, RecordedSkillMention
 from onyx.chat.models import (
     ChatBranch,
+    ChatExecutionRecord,
     ChatInputMetadata,
     ChatMessageMetadata,
     ChatResponseSnapshot,
@@ -73,8 +74,9 @@ from onyx.chat.process_message import read_repaired_chat_inbox
 from onyx.chat.response import response_record, response_snapshot
 from onyx.chat.run_store import ChatRunStore
 from onyx.chat.tool_results import tool_result_sources
-from onyx.configs.constants import DocumentSource, MessageType
+from onyx.configs.constants import DEFAULT_PERSONA_ID, DocumentSource, MessageType
 from onyx.context.search.models import SavedSearchDoc, SearchDoc, SearchDocsResponse
+from onyx.db import chat_response as chat_response_module
 from onyx.db import chat_subagents
 from onyx.db.chat import (
     MAX_AGENT_DEPTH,
@@ -112,6 +114,7 @@ from onyx.db.chat_inputs import (
 )
 from onyx.db.chat_response import (
     load_chat_approvals,
+    load_child_responses,
     read_chat_execution,
     read_response__no_commit,
     read_response_replay_data,
@@ -165,6 +168,7 @@ from onyx.llm.models import (
     ToolResultMessage,
     UserMessage,
 )
+from onyx.server.query_and_chat import chat_backend
 from onyx.server.query_and_chat.session_loading import (
     load_session_tools,
     translate_assistant_message_to_packets,
@@ -204,6 +208,7 @@ from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.subagents.models import ChatConfiguration
 from onyx.utils.threadpool_concurrency import start_thread_future
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+from tests.external_dependency_unit.conftest import MakeTestUser
 
 
 def _steps(
@@ -274,22 +279,6 @@ def conversation(db_session: Session) -> Generator[ChatSession, None, None]:
                 delete(StoredSearchDoc).where(StoredSearchDoc.id.in_(document_ids))
             )
         db_session.commit()
-
-
-@pytest.fixture
-def executed_sql(db_session: Session) -> Generator[list[str], None, None]:
-    statements: list[str] = []
-
-    def capture_statement(statement: str, **_event: object) -> None:
-        # SQLAlchemy supplies the unused connection, cursor, and execution parameters.
-        statements.append(statement)
-
-    engine = db_session.get_bind()
-    event.listen(engine, "before_cursor_execute", capture_statement, named=True)
-    try:
-        yield statements
-    finally:
-        event.remove(engine, "before_cursor_execute", capture_statement)
 
 
 def _response(
@@ -413,6 +402,13 @@ def _child_record(
     )
     parent.child_runs.append(child)
     return child
+
+
+def _read_execution(
+    db_session: Session, response: ChatMessage
+) -> ChatExecutionRecord | None:
+    read = read_chat_execution(response, load_child_responses(db_session, [response]))
+    return read[0] if read is not None else None
 
 
 def _result_input(run_id: str) -> UserMessage:
@@ -863,7 +859,10 @@ def test_metadata_sources_survive_storage_without_search_results(
         {"1", "2"} if citation_only else {"1"}
     )
     replay = translate_assistant_message_to_packets(
-        response, load_session_tools([response], db_session), db_session
+        response,
+        load_session_tools([response], db_session),
+        db_session,
+        child_responses=load_child_responses(db_session, [response]),
     )
     assert {
         packet.obj.document_id
@@ -1472,7 +1471,7 @@ def test_resumed_tool_results_keep_row_identity_and_model_call_order(
     )
     second_tool_id = second_tool.id
     assert len(response.response_items) == 1
-    suspended = read_chat_execution(response)
+    suspended = _read_execution(db_session, response)
     assert suspended is not None and suspended.response is not None
     assert [step.model_dump() for step in suspended.response.steps] == [
         step.model_dump() for step in record.steps
@@ -1502,7 +1501,7 @@ def test_resumed_tool_results_keep_row_identity_and_model_call_order(
     save_response_record__no_commit(db_session, response.id, record)
     db_session.flush()
     db_session.expire(response)
-    restored = read_chat_execution(response)
+    restored = _read_execution(db_session, response)
     assert restored is not None and restored.response is not None
     assert [step.model_dump() for step in restored.response.steps] == [
         step.model_dump() for step in record.steps
@@ -1576,7 +1575,9 @@ def test_response_items_preserve_order_provider_metadata_and_tool_identity(
     # Storage row order must not change generation or tool-result order.
     response.response_items.reverse()
     restored = (
-        execution.response if (execution := read_chat_execution(response)) else None
+        execution.response
+        if (execution := _read_execution(db_session, response))
+        else None
     )
     assert restored is not None
     assert [message.text for message in restored.messages] == [
@@ -1657,7 +1658,9 @@ def test_empty_generation_retains_outcome_and_rendering(
     )
     db_session.expire(response)
     restored = (
-        execution.response if (execution := read_chat_execution(response)) else None
+        execution.response
+        if (execution := _read_execution(db_session, response))
+        else None
     )
     assert restored is not None
     assert restored.status == status
@@ -1667,7 +1670,7 @@ def test_empty_generation_retains_outcome_and_rendering(
     assert isinstance(restored_message, AssistantMessage)
     assert restored_message.stop_reason == record.steps[0].message.stop_reason
     assert restored.steps[0].generation_status == generation_status
-    execution = read_chat_execution(response)
+    execution = _read_execution(db_session, response)
     assert execution is not None
     assert execution.presentation["empty-generation"].mode == PresentationMode.RESEARCH
     saved_settings = response.response_items[0].rendering
@@ -1815,7 +1818,9 @@ def test_content_free_response_does_not_write_items(
     assert response.response_status == RunStatus.ERROR
     assert response.response_failure is None
     assert (
-        execution.response if (execution := read_chat_execution(response)) else None
+        execution.response
+        if (execution := _read_execution(db_session, response))
+        else None
     ) is None
     assert (
         db_session.scalar(
@@ -1871,7 +1876,12 @@ def test_unavailable_tool_result_keeps_the_outer_answer(
     )
     db_session.expire_all()
 
-    packets = translate_assistant_message_to_packets(response, {}, db_session)
+    packets = translate_assistant_message_to_packets(
+        response,
+        {},
+        db_session,
+        child_responses=load_child_responses(db_session, [response]),
+    )
     assert [
         p.obj.content for p in packets if isinstance(p.obj, AgentResponseDelta)
     ] == ["Saved answer"]
@@ -1912,7 +1922,9 @@ def test_old_rows_keep_the_legacy_reader(
     assert detail.request_params.model_name == "gpt-5-mini"
     assert "stream" not in detail.request_params.model_dump()
     assert (
-        execution.response if (execution := read_chat_execution(response)) else None
+        execution.response
+        if (execution := _read_execution(db_session, response))
+        else None
     ) is None
     history = convert_chat_history(
         chat_history=capture_chat_history([response], {}, len),
@@ -1962,7 +1974,7 @@ def test_child_reuse_follows_selected_branch_not_completion_order(
     child_id = uuid4()
     _child_record(db_session, parent, child_id, "Base")
     _save(db_session, base, parent)
-    base_execution = read_chat_execution(base)
+    base_execution = _read_execution(db_session, base)
     assert base_execution is not None
     previous = base_execution.response.child_runs[0].run_id
     branches = [_response(db_session, conversation, previous=base) for _ in range(2)]
@@ -2064,7 +2076,7 @@ def test_nested_child_visibility_and_reuse_follow_root_branch(
         db_session, child_record, grandchild_id, "Base", path="/root/research/facts"
     )
     _save(db_session, base, parent)
-    execution = read_chat_execution(base)
+    execution = _read_execution(db_session, base)
     assert execution is not None
     child_saved = execution.response.child_runs[0]
     grandchild_saved = child_saved.child_runs[0]
@@ -2240,7 +2252,7 @@ def test_multiple_child_requests_from_one_invocation_keep_distinct_predecessors(
     first = _child_record(db_session, parent, child_id, "First")
     _child_record(db_session, parent, child_id, "Second", first.run_id)
     _save(db_session, response, parent)
-    execution = read_chat_execution(response)
+    execution = _read_execution(db_session, response)
     assert execution is not None
     first_saved, second_saved = execution.response.child_runs
     generation = execution.response.messages[0]
@@ -2314,7 +2326,9 @@ def test_child_publication_rolls_back_with_parent(
     transaction.rollback()
     assert db_session.get(ChatSession, child_id) is None
     assert (
-        execution.response if (execution := read_chat_execution(response)) else None
+        execution.response
+        if (execution := _read_execution(db_session, response))
+        else None
     ) is None
 
 
@@ -2602,7 +2616,7 @@ def test_completed_tool_display_matches_reload_without_duplicate_streamed_output
         message_id=row.id, chat_session_id=conversation.id, persist_content=True
     ).save_response(projected)
     db_session.expire_all()
-    assert read_chat_execution(row) is not None
+    assert _read_execution(db_session, row) is not None
     assert (
         db_session.scalar(
             select(func.count())
@@ -2614,7 +2628,10 @@ def test_completed_tool_display_matches_reload_without_duplicate_streamed_output
     db_session.delete(tool)
     db_session.commit()
     saved = translate_assistant_message_to_packets(
-        row, load_session_tools([row], db_session), db_session
+        row,
+        load_session_tools([row], db_session),
+        db_session,
+        child_responses=load_child_responses(db_session, [row]),
     )
     if tool_kind == "python":
         live_stdout = "".join(
@@ -2741,7 +2758,7 @@ def test_session_delete_removes_reused_child_history_and_tool_items(
     grandchild_id = uuid4()
     _child_record(db_session, child, grandchild_id, "Nested")
     _save(db_session, base, record)
-    first = read_chat_execution(base)
+    first = _read_execution(db_session, base)
     assert first is not None
     next_response = _response(db_session, conversation, previous=base)
     record = _record(next_response)
@@ -2950,7 +2967,7 @@ def test_child_reload_batches_siblings(
         db_session.expire_all()
         executed_sql.clear()
 
-        execution = read_chat_execution(response)
+        execution = _read_execution(db_session, response)
 
         assert execution is not None
         assert len(execution.response.child_runs) == child_count
@@ -2959,6 +2976,34 @@ def test_child_reload_batches_siblings(
         ]
         query_counts.append(len(executed_sql))
     assert query_counts[0] == query_counts[1]
+
+
+def test_batched_child_reload_keeps_each_root_run_limit(
+    db_session: Session,
+    conversation: ChatSession,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    roots: list[ChatMessage] = []
+    previous = None
+    for child_count in (2, 2, 3):
+        response = _response(db_session, conversation, previous=previous)
+        record = _record(response)
+        for index in range(child_count):
+            _child_record(
+                db_session, record, uuid4(), "Child", path=f"/root/research_{index}"
+            )
+        _save(db_session, response, record)
+        roots.append(response)
+        previous = response
+    db_session.expire_all()
+    # The first two roots stay within the limit; together they exceed it.
+    monkeypatch.setattr(chat_response_module, "MAX_AGENT_HISTORY_RUNS", 3)
+
+    children = load_child_responses(db_session, roots[:2])
+
+    assert [len(children[root.id]) for root in roots[:2]] == [2, 2]
+    with pytest.raises(ValueError, match="exceeds its limit"):
+        load_child_responses(db_session, roots)
 
 
 def test_nested_reload_reuses_parent_identity(
@@ -2974,7 +3019,7 @@ def test_nested_reload_reuses_parent_identity(
     db_session.expire_all()
     executed_sql.clear()
 
-    execution = read_chat_execution(response)
+    execution = _read_execution(db_session, response)
 
     assert execution is not None
     saved_child = execution.response.child_runs[0]
@@ -3026,6 +3071,7 @@ def test_plain_history_reload_query_count_does_not_grow_per_turn(
         chat_approvals = load_chat_approvals(
             db_session, session_id, [message.id for message in responses]
         )
+        child_responses = load_child_responses(db_session, responses)
         replayed = [
             "".join(
                 packet.obj.content
@@ -3034,6 +3080,7 @@ def test_plain_history_reload_query_count_does_not_grow_per_turn(
                     load_session_tools([message], db_session),
                     db_session,
                     chat_approvals,
+                    child_responses=child_responses,
                 )
                 if isinstance(packet.obj, AgentResponseDelta)
             )
@@ -3041,6 +3088,57 @@ def test_plain_history_reload_query_count_does_not_grow_per_turn(
         ]
         assert replayed == answers
         query_counts.append(len(executed_sql))
+
+    assert query_counts[0] == query_counts[1]
+
+
+def test_session_replay_query_count_does_not_grow_with_tool_turns(
+    db_session: Session,
+    conversation: ChatSession,
+    make_test_user: MakeTestUser,
+    executed_sql: list[str],
+) -> None:
+    owner = make_test_user("replay-query-count")
+    conversation.user_id = owner.id
+    conversation.persona_id = DEFAULT_PERSONA_ID
+    previous = None
+    turns = 0
+    query_counts: list[int] = []
+    for turn_count in (1, 4):
+        while turns < turn_count:
+            response = _response(db_session, conversation, previous=previous)
+            record = _record(response)
+            child = _child_record(db_session, record, uuid4(), f"Child {turns}")
+            _child_record(
+                db_session,
+                child,
+                uuid4(),
+                f"Grandchild {turns}",
+                path="/root/research/facts",
+            )
+            _save(db_session, response, record)
+            previous = response
+            turns += 1
+        db_session.commit()
+        db_session.expire_all()
+        executed_sql.clear()
+
+        detail = chat_backend.get_chat_session(
+            conversation.id, user=owner, db_session=db_session
+        )
+
+        query_counts.append(len(executed_sql))
+        answers = [
+            "".join(
+                packet.obj.content
+                for packet in packets
+                if isinstance(packet.obj, AgentResponseDelta)
+            )
+            for packets in detail.packets
+        ]
+        assert len(answers) == turn_count
+        for index, answer in enumerate(answers):
+            assert f"Grandchild {index}" in answer
 
     assert query_counts[0] == query_counts[1]
 
@@ -3476,7 +3574,7 @@ def test_legacy_rows_keep_tool_results_and_display_text(
     assert saved.reasoning_tokens == "Existing thinking"
     assert saved.response_status is None
     assert saved.response_items == []
-    assert read_chat_execution(saved) is None
+    assert _read_execution(db_session, saved) is None
     tool = db_session.scalar(
         select(StoredToolCall).where(
             StoredToolCall.parent_chat_message_id == response.id
@@ -3546,13 +3644,14 @@ def test_projected_response_round_trip_replays_tool_and_answer(
     db_session.expire_all()
     stored = db_session.get(ChatMessage, message_id)
     assert stored is not None
-    execution = read_chat_execution(stored)
-    assert execution is not None
+    read = read_chat_execution(stored, load_child_responses(db_session, [stored]))
+    assert read is not None
+    execution, tool_calls = read
     assert [step.model_dump() for step in execution.response.steps] == [
         step.model_dump() for step in record.steps
     ]
     assert len(execution.tool_records) == 1
-    replay = read_response_replay_data(execution, db_session)
+    replay = read_response_replay_data(execution, tool_calls, stored, db_session)
     packets = replay_response(
         execution.response, replay.tools, execution.presentation, replay.documents
     )
@@ -3635,9 +3734,10 @@ def test_search_projection_restores_saved_source_cards(
     db_session.expire_all()
     stored = db_session.get(ChatMessage, message_id)
     assert stored is not None
-    execution = read_chat_execution(stored)
-    assert execution is not None
-    replay = read_response_replay_data(execution, db_session)
+    read = read_chat_execution(stored, load_child_responses(db_session, [stored]))
+    assert read is not None
+    execution, tool_calls = read
+    replay = read_response_replay_data(execution, tool_calls, stored, db_session)
     saved_document = replay.documents[document.document_id]
     assert isinstance(saved_document, SavedSearchDoc)
     assert saved_document.db_doc_id > 0
@@ -3688,7 +3788,7 @@ def test_search_projection_restores_saved_source_cards(
     invalid = execution.model_copy(deep=True)
     invalid.tool_records[0].message_id = "unrelated-message"
     with pytest.raises(ValueError, match="not part of this response"):
-        read_response_replay_data(invalid, db_session)
+        read_response_replay_data(invalid, tool_calls, stored, db_session)
 
 
 def test_child_usage_is_reported_with_root_attribution(
@@ -3838,9 +3938,10 @@ def test_replay_sources_include_tool_documents_and_preserve_root_versions(
     db_session.flush()
     db_session.expire_all()
 
-    execution = read_chat_execution(response)
-    assert execution is not None
-    replay = read_response_replay_data(execution, db_session)
+    read = read_chat_execution(response, load_child_responses(db_session, [response]))
+    assert read is not None
+    execution, tool_calls = read
+    replay = read_response_replay_data(execution, tool_calls, response, db_session)
     assert {key: doc.blurb for key, doc in replay.documents.items()} == {
         "shared": "root version",
         "tool-only": "tool-only source",

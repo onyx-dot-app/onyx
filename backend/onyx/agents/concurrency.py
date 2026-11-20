@@ -5,6 +5,7 @@ import time
 from collections import Counter, deque
 from collections.abc import Callable
 from concurrent.futures import Future
+from contextlib import nullcontext
 from contextvars import copy_context
 
 from onyx.agents.events import (
@@ -44,6 +45,11 @@ class WorkTracker:
                 listener()
             except Exception:
                 logger.exception("Agent idle callback failed")
+
+    @property
+    def idle(self) -> bool:
+        with self._lock:
+            return self._count == 0
 
     def on_idle(self, listener: Callable[[], None]) -> Callable[[], None]:
         """Notify once when current work drains; callers must stop admitting new work."""
@@ -90,28 +96,56 @@ def wait_operation[T](
 
 
 class ExecutionWork:
-    """Track a run's jobs independently of its terminal result."""
+    """Track a run's jobs independently of its terminal result.
 
-    def __init__(self) -> None:
+    `tracker` counts every job: the run drains after all of them end. `held`
+    counts the jobs that the tool phase also waits for before it suspends:
+    all but those of `track_detached`. When a held job ends, such as a
+    program driver that parked, `on_held_finished` runs in one step with the
+    `held` decrement, under `lock`: a reader that holds `lock` sees both or
+    neither, so the tool phase never reads it idle without its activity.
+    """
+
+    def __init__(
+        self,
+        lock: threading.Condition | None = None,
+        on_held_finished: Callable[[], None] | None = None,
+    ) -> None:
         self.tracker = WorkTracker()
+        self.held = WorkTracker()
+        self._lock = lock
+        self._on_held_finished = on_held_finished
 
     def start[T](self, operation: Callable[[], T]) -> Future[T]:
         self.tracker.started()
+        self.held.started()
         try:
             future = start_thread_future(operation, name="agent-operation")
         except BaseException:
+            self.held.finished()
             self.tracker.finished()
             raise
-        future.add_done_callback(lambda _future: self.tracker.finished())
+        future.add_done_callback(lambda _future: self._finished(held=True))
         return future
 
     def track_operation[T](self, future: Future[T]) -> None:
         self.tracker.started()
+        self.held.started()
+        future.add_done_callback(lambda _future: self._finished(held=True))
 
-        def finished(_future: Future[T]) -> None:
-            self.tracker.finished()
+    def track_detached[T](self, future: Future[T]) -> None:
+        """Work that the tool phase does not wait for, such as a tool call that
+        a program left running when it ended."""
+        self.tracker.started()
+        future.add_done_callback(lambda _future: self._finished(held=False))
 
-        future.add_done_callback(finished)
+    def _finished(self, *, held: bool) -> None:
+        if held:
+            with self._lock if self._lock is not None else nullcontext():
+                self.held.finished()
+                if self._on_held_finished is not None:
+                    self._on_held_finished()
+        self.tracker.finished()
 
 
 class EventDispatcher:

@@ -118,7 +118,7 @@ covers new files that match it.
 | `backend/onyx/indexing/` | indexing-pipeline |
 | `backend/onyx/indexing/adapters/user_file_indexing_adapter.py` | file-store-and-user-files, indexing-pipeline |
 | `backend/onyx/background/indexing/`, `backend/onyx/db/index_attempt*.py`, `backend/onyx/db/indexing_coordination.py` | indexing-pipeline |
-| `backend/onyx/background/celery/tasks/docfetching/`, `backend/onyx/background/celery/tasks/docprocessing/`, `backend/onyx/background/celery/tasks/tabular_rechunk/` | indexing-pipeline |
+| `backend/onyx/background/celery/tasks/docfetching/`, `backend/onyx/background/celery/tasks/docprocessing/`, `backend/onyx/background/celery/tasks/docconversion/`, `backend/onyx/background/celery/tasks/tabular_rechunk/` | indexing-pipeline |
 | `backend/onyx/file_store/document_batch_storage.py`, `backend/onyx/db/targeted_reindex.py`, `backend/onyx/redis/redis_docprocessing.py` | indexing-pipeline |
 | `backend/onyx/db/connector.py`, `backend/onyx/db/credentials.py`, `backend/onyx/db/connector_credential_pair.py`, `backend/onyx/db/credential_capability.py`, `backend/ee/onyx/db/connector.py`, `backend/ee/onyx/db/credentials.py` | cc-pairs-and-creds |
 | `backend/onyx/db/cc_pair_runs.py`, `backend/onyx/db/cc_pair_runs_models.py`, `backend/onyx/db/cc_pair_run_resolution.py`, `backend/onyx/db/deletion_attempt.py` | cc-pairs-and-creds |
@@ -381,6 +381,8 @@ the admin routes and check that each has a row above, run
 | `backend/onyx/db/dal.py`, `backend/onyx/db/utils.py`, `backend/onyx/db/constants.py`, `backend/onyx/db/pydantic_type.py`, `backend/onyx/db/README.md`, `backend/onyx/db/_deprecated/` | Database helpers that every component uses. |
 | `.devcontainer/` | Developer container image. No product surface reads it. |
 | `backend/alembic/` | Migrations. Read the component that owns the table being migrated. |
+| `backend/supervisord.conf` | The process list of the background container in Docker Compose. Read the component of the worker you change; [[background-jobs]] has the queue rules. |
+| `web/src/lib/types.ts` | Shared API types for many components. Look up the component that owns the type the diff touches. |
 | `documentation/` | Customer docs (Mintlify). `documentation/AGENTS.md` sets their rules, and `documentation/audit/` maps each page to the components it describes. A code change updates the page that covers it. |
 | `backend/onyx/db/seeding/`, `backend/onyx/seeding/`, `backend/ee/onyx/server/seeding.py` | Seed data for rows that several components own. The default agent and the built-in tool rows come from migrations. |
 | `backend/onyx/evals/`, `backend/onyx/server/evals/`, `backend/ee/onyx/server/evals/` | The eval harness. Read the component being evaluated. A prompt or retrieval change needs an eval, not only a unit test. |

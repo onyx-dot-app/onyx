@@ -263,6 +263,11 @@ importer = "onyx/background/celery/tasks/docprocessing/tasks.py"
 imports = "onyx.background.celery.tasks.docfetching.task_creation_utils"
 reason = "Fetch and processing are two stages of one indexing pipeline. The processing scheduler creates the next fetch attempt."
 
+[[contract.exception]]
+importer = "onyx/background/celery/tasks/docconversion/tasks.py"
+imports = "onyx.background.celery.tasks.docprocessing.heartbeat"
+reason = "Conversion is a stage of the same indexing pipeline as processing. Its tasks keep the attempt alive with the same heartbeat."
+
 [[contract]]
 name = "provider-sdk-boundary"
 rule = "Keep provider SDK imports in the adapters that own provider calls"

@@ -233,6 +233,45 @@ export class ChatPage {
     await expect(table.getByRole("row")).toHaveCount(rows);
   }
 
+  /**
+   * Where answer table `index` sits: whether its scroll container (the
+   * table's parent) overflows, whether that container stays inside the
+   * answer, and whether the table's last cell wraps onto several lines.
+   */
+  private answerTableLayout(index: number) {
+    return this.aiMessage()
+      .getByRole("table")
+      .nth(index)
+      .evaluate((table) => {
+        const scroller = table.parentElement!;
+        const answer = table.closest("[data-testid='onyx-ai-message']")!;
+        const cell = table.querySelector("tbody td:last-child")!;
+        return {
+          overflows: scroller.scrollWidth > scroller.clientWidth,
+          insideAnswer:
+            scroller.getBoundingClientRect().right <=
+            answer.getBoundingClientRect().right,
+          cellWraps:
+            cell.getBoundingClientRect().height >
+            parseFloat(getComputedStyle(cell).lineHeight) * 1.5,
+        };
+      });
+  }
+
+  /** The table fits the answer column, and its last cell wraps. */
+  async expectAnswerTableWraps(index: number): Promise<void> {
+    await expect
+      .poll(() => this.answerTableLayout(index))
+      .toEqual({ overflows: false, insideAnswer: true, cellWraps: true });
+  }
+
+  /** The table scrolls sideways inside the answer instead of widening it. */
+  async expectAnswerTableScrolls(index: number): Promise<void> {
+    await expect
+      .poll(() => this.answerTableLayout(index))
+      .toMatchObject({ overflows: true, insideAnswer: true });
+  }
+
   /** Hovers the answer table and clicks its copy button. */
   async copyAnswerTable(): Promise<void> {
     const message = this.aiMessage();

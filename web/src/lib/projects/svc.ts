@@ -213,18 +213,6 @@ export async function getUserFileStatuses(
   return response.json();
 }
 
-export async function getProjectFilesForSession(
-  chatSessionId: string
-): Promise<ProjectFile[]> {
-  const response = await fetch(
-    `/api/user/projects/session/${encodeURIComponent(chatSessionId)}/files`
-  );
-  if (!response.ok) {
-    return [];
-  }
-  return response.json();
-}
-
 export async function getProjectTokenCount(projectId: number): Promise<number> {
   const response = await fetch(
     `/api/user/projects/${encodeURIComponent(projectId)}/token-count`
@@ -234,20 +222,6 @@ export async function getProjectTokenCount(projectId: number): Promise<number> {
   }
   const data: { total_tokens: number } = await response.json();
   return data.total_tokens ?? 0;
-}
-
-export async function getMaxSelectedDocumentTokens(
-  personaId: number
-): Promise<number | null> {
-  const response = await fetch(
-    `/api/chat/max-selected-document-tokens?persona_id=${personaId}`
-  );
-  if (!response.ok) {
-    return null;
-  }
-  // Mirrors `MaxSelectedDocumentTokens` in chat_backend.py.
-  const json: { max_tokens: number } = await response.json();
-  return json?.max_tokens ?? null;
 }
 
 export async function moveChatSession(

@@ -70,11 +70,23 @@ pub fn open(app: &AppHandle, server: &str) -> Result<(), String> {
     }
     let server_url = Url::parse(server).map_err(|e| e.to_string())?;
     let login = server_url.join("/auth/login").map_err(|e| e.to_string())?;
+    let origin = server_url.origin().ascii_serialization();
+    let nav_app = app.clone();
+    // The identity provider can be any HTTPS site, as in an OAuth popup.
     let window = WebviewWindowBuilder::new(app, LABEL, WebviewUrl::External(login))
         .title("Sign in to Onyx")
         .inner_size(520.0, 720.0)
         .center()
         .user_agent(BROWSER_USER_AGENT)
+        .on_navigation(move |url| match main_window::classify_popup(url, &origin) {
+            main_window::LinkAction::Allow => true,
+            main_window::LinkAction::External => {
+                main_window::open_external(&nav_app, url.as_str());
+                false
+            }
+            main_window::LinkAction::Block => false,
+        })
+        .on_new_window(windows::local_new_window(app))
         .build()
         .map_err(|e| e.to_string())?;
     let _ = window.set_focus();

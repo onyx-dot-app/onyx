@@ -1,13 +1,16 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Button, Card, Text } from "@opal/components";
+import { Button, Card, InputSwitch, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { mount } from "@/lib/mount";
+import { IS_MAC } from "@/lib/platform";
 import { ErrorText, Field, WindowFrame } from "@/lib/WindowFrame";
 import {
   changeServer,
   errorMessage,
   getPrefs,
   setHotkey,
+  setLaunchAtLogin,
+  setNotifyAnswers,
   signOut,
   type Prefs,
 } from "@/lib/ipc";
@@ -27,6 +30,14 @@ function PrefSection({ title, children }: PrefSectionProps) {
         {children}
       </Section>
     </Card>
+  );
+}
+
+function ManagedNote() {
+  return (
+    <Text font="secondary-body" color="text-03">
+      Managed by your organization
+    </Text>
   );
 }
 
@@ -70,7 +81,8 @@ function acceleratorFor(event: KeyPress): string | null {
     (/^F([1-9]|1[0-9]|2[0-4])$/.test(code) ? code : null);
   if (!key || !(event.metaKey || event.ctrlKey || event.altKey)) return null;
   const parts: string[] = [];
-  if (event.metaKey) parts.push("CommandOrControl");
+  // CommandOrControl is Control on Windows and Linux; the Windows key is Super.
+  if (event.metaKey) parts.push(IS_MAC ? "CommandOrControl" : "Super");
   if (event.ctrlKey) parts.push("Control");
   if (event.altKey) parts.push("Alt");
   if (event.shiftKey) parts.push("Shift");
@@ -95,8 +107,21 @@ const SYMBOLS: Record<string, string> = {
   Right: "→",
 };
 
-// "CommandOrControl+Shift+Space" as macOS shows it: "⌘⇧Space".
+const OTHER_LABELS: Record<string, string> = {
+  CommandOrControl: "Ctrl",
+  CmdOrCtrl: "Ctrl",
+  Control: "Ctrl",
+};
+
+// "CommandOrControl+Shift+Space" as macOS shows it: "⌘⇧Space". Windows and
+// Linux show "Ctrl+Shift+Space".
 function displayShortcut(accelerator: string): string {
+  if (!IS_MAC) {
+    return accelerator
+      .split("+")
+      .map((part) => OTHER_LABELS[part] ?? part)
+      .join("+");
+  }
   return accelerator
     .split("+")
     .map((part) => SYMBOLS[part] ?? part)
@@ -105,11 +130,12 @@ function displayShortcut(accelerator: string): string {
 
 interface ShortcutRecorderProps {
   value: string | null;
+  disabled: boolean;
   onRecord: (accelerator: string) => void;
 }
 
 // Click, then press the new keys.
-function ShortcutRecorder({ value, onRecord }: ShortcutRecorderProps) {
+function ShortcutRecorder({ value, disabled, onRecord }: ShortcutRecorderProps) {
   const [recording, setRecording] = useState(false);
   const buttonRef = useRef<HTMLButtonElement>(null);
 
@@ -145,7 +171,8 @@ function ShortcutRecorder({ value, onRecord }: ShortcutRecorderProps) {
       type="button"
       id="hotkey"
       aria-label="Launcher shortcut"
-      className="h-9 rounded-08 border border-border-02 bg-background-neutral-00 px-3 text-start font-main-ui-body text-text-04 focus:border-border-05 focus:outline-none"
+      disabled={disabled}
+      className="h-9 rounded-08 border border-border-02 bg-background-neutral-00 px-3 text-start font-main-ui-body text-text-04 focus:border-border-05 focus:outline-none disabled:cursor-default disabled:text-text-03"
       onClick={() => {
         buttonRef.current?.focus();
         setRecording(true);
@@ -163,6 +190,7 @@ function Preferences() {
   const [saved, setSaved] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Each open reads managed policy again.
   useEffect(() => {
     void getPrefs().then(setPrefs);
   }, []);
@@ -184,38 +212,117 @@ function Preferences() {
     if (accelerator === prefs?.hotkey) return;
     await run(async () => {
       await setHotkey(accelerator);
-      setPrefs((p) => (p ? { ...p, hotkey: accelerator } : p));
+      // Also refreshes the shortcut notice.
+      setPrefs(await getPrefs());
       setSaved(true);
+    });
+  }
+
+  async function onLaunchAtLogin(enabled: boolean) {
+    await run(async () => {
+      await setLaunchAtLogin(enabled);
+      setPrefs((p) => (p ? { ...p, launchAtLogin: enabled } : p));
+    });
+  }
+
+  async function onNotifyAnswers(enabled: boolean) {
+    await run(async () => {
+      await setNotifyAnswers(enabled);
+      setPrefs((p) => (p ? { ...p, notifyAnswers: enabled } : p));
     });
   }
 
   return (
     <WindowFrame title="Preferences" subtitle="Settings for this device">
       <Section gap={4} alignItems="stretch" height="fit">
+        {prefs?.policyInvalid ? (
+          <ErrorText message="Your organization's Onyx policy is invalid. Some settings are locked. Contact your IT team." />
+        ) : null}
         <PrefSection title="Server">
           <Text font="main-ui-body" color="text-04">
             {prefs?.serverUrl ?? "Not connected"}
           </Text>
-          <Section flexDirection="row" justifyContent="start" height="fit">
-            <Button prominence="secondary" onClick={() => void run(changeServer)}>
-              Change server
-            </Button>
-          </Section>
+          {prefs?.serverManaged ? <ManagedNote /> : null}
+          {prefs?.serverLocked ? null : (
+            <Section flexDirection="row" justifyContent="start" height="fit">
+              <Button prominence="secondary" onClick={() => void run(changeServer)}>
+                Change server
+              </Button>
+            </Section>
+          )}
         </PrefSection>
         <PrefSection title="Launcher Shortcut">
-          <Field label="Shows the launcher from any app" inputId="hotkey">
-            <ShortcutRecorder value={prefs?.hotkey ?? null} onRecord={(a) => void onRecordHotkey(a)} />
-          </Field>
+          {prefs?.launcherDisabled ? (
+            <Text font="main-ui-body" color="text-04">
+              The launcher is turned off.
+            </Text>
+          ) : (
+            <Field label="Shows the launcher from any app" inputId="hotkey">
+              <ShortcutRecorder
+                value={prefs?.hotkey ?? null}
+                disabled={prefs?.hotkeyManaged ?? false}
+                onRecord={(a) => void onRecordHotkey(a)}
+              />
+            </Field>
+          )}
+          {prefs?.hotkeyManaged ? <ManagedNote /> : null}
+          {prefs?.shortcutNotice ? (
+            <Text font="secondary-body" color="text-03">
+              {prefs.shortcutNotice}
+            </Text>
+          ) : null}
           {saved ? (
             <Text font="secondary-body" color="text-03">
               Saved
             </Text>
           ) : null}
         </PrefSection>
+        <PrefSection title="Startup">
+          <Section
+            flexDirection="row"
+            justifyContent="between"
+            alignItems="center"
+            height="fit"
+          >
+            <label htmlFor="launch-at-login">
+              <Text font="main-ui-body" color="text-04">
+                Launch at login
+              </Text>
+            </label>
+            <InputSwitch
+              id="launch-at-login"
+              checked={prefs?.launchAtLogin ?? false}
+              disabled={!prefs || prefs.launchAtLoginManaged}
+              onCheckedChange={(enabled) => void onLaunchAtLogin(enabled)}
+            />
+          </Section>
+          {prefs?.launchAtLoginManaged ? <ManagedNote /> : null}
+          {prefs?.autoUpdateDisabled ? (
+            <Text font="secondary-body" color="text-03">
+              Automatic updates are turned off by your organization.
+            </Text>
+          ) : null}
+        </PrefSection>
+        <PrefSection title="Notifications">
+          <Section flexDirection="row" justifyContent="between" height="fit">
+            <label htmlFor="notify-answers">
+              <Text font="main-ui-body" color="text-04">
+                Notify me when an answer is ready
+              </Text>
+            </label>
+            <InputSwitch
+              id="notify-answers"
+              checked={prefs?.notifyAnswers ?? true}
+              disabled={!prefs || prefs.notificationsDisabled}
+              onCheckedChange={(enabled) => void onNotifyAnswers(enabled)}
+            />
+          </Section>
+          {prefs?.notificationsDisabled ? <ManagedNote /> : null}
+        </PrefSection>
         <PrefSection title="Account">
           <Text font="main-ui-body" color="text-04">
             {prefs?.signedIn
-              ? "Signed in. The session token is in the macOS keychain."
+              ? `Signed in. The session token is in the ${IS_MAC ? "macOS keychain" : "system credential store"}.`
               : "Signed out"}
           </Text>
           <Section flexDirection="row" justifyContent="start" height="fit">

@@ -94,7 +94,44 @@ that must run there goes before the exit.
 
 **Two batch stores.** `file_store/document_batch_storage.py:DocumentBatchStorage`
 holds raw batches in the file store; they cross the task boundary and survive a
-crash. `indexing/chunk_batch_store.py:ChunkBatchStore` spills embedded chunks to
+crash. `StubBatchStorage` in the same module holds the stub batches of the
+conversion stage (prefix `isb/`); the document batch cleanup also deletes them.
+`db/indexing_coordination.py:IndexingCoordination.claim_stub_batches` hands out
+stub batch numbers from the `stub_batches_*` counters on the attempt row. The
+`docconversion` worker (`background/celery/tasks/docconversion/tasks.py`) runs
+`background/indexing/run_docconversion.py:convert_stub_batch`: it loads one stub
+batch, calls the connector's `resolve_targets`, stores the document batch,
+deletes the stub batch, counts it converted and sends the docprocessing task.
+It deletes the stub batch before the send, so a redelivered task sends nothing
+twice. A batch that gives no document is stored empty and sent on too: the
+stored batch is the durable record until docprocessing counts it complete. The
+docprocessing priority follows docfetching's rule
+(`background/indexing/run_docfetching.py:select_docprocessing_priority`), and a
+FUTURE attempt checks it again for each batch. `dispatch_stub_batches` keeps at
+most `DOCCONVERSION_WINDOW_BATCHES` batches in flight. With
+`ENABLE_CONVERSION_STAGE` on,
+`background/indexing/run_docfetching.py:connector_document_extraction` only
+lists a connector that can do it (`connector_uses_conversion_stage`): it stores
+stub batches and dispatches them. The listing takes the attempt's choice to
+fetch permissions, so hierarchy nodes carry their permissions as on the
+fetching path. The attempt row keeps `uses_conversion_stage` and the last task
+that dispatched; a claim of no batch does not change it. An attempt that
+continues a failed one takes over its stub batches with new numbers; a change
+of the switch between attempts starts the listing again.
+The lister drops a listed document when this cc_pair indexed the same
+version (`backend/onyx/db/document.py:get_unchanged_document_ids`: same
+modified time and size, and a content hash), except in a run from the
+beginning and a run for a FUTURE index. The stored modified time marks the
+version in the index: `post_index` writes it only for a confirmed write. A
+reindex swap clears the hash, so the lister keeps such a document.
+`stubs_listed` and `stubs_skipped` on the attempt count both, and the failure
+ratio counts every listed document.
+`background/indexing/conversion_recovery.py:check_conversion_chain` runs in
+the watchdog: when stub batches wait, no conversion task exists and the last
+dispatcher is gone, it sends the lost batches again and counts that as a
+heartbeat. When every stub batch is converted but fewer batches are complete,
+it sends the stored document batches that have no docprocessing task. The watchdog fails the attempt only after two runs in a row in
+which a restart sent nothing. `indexing/chunk_batch_store.py:ChunkBatchStore` spills embedded chunks to
 local disk inside one docprocessing task, so a large batch is never in memory.
 
 **Dedup gate.** `indexing/indexing_pipeline.py:get_docs_to_update`
@@ -135,7 +172,8 @@ runs a thread in both phases that increments `IndexAttempt.heartbeat_counter`.
 `background/celery/tasks/docprocessing/tasks.py:validate_active_indexing_attempts`
 fails an attempt whose counter did not move for `HEARTBEAT_TIMEOUT_SECONDS`;
 after fetch ends, it waits instead while batches are only queued
-(`RedisDocprocessing`). It also fails a `NOT_STARTED` attempt older than
+(`RedisDocprocessing`, one counter pair per `BatchStage`: conversion and
+docprocessing). It also fails a `NOT_STARTED` attempt older than
 `NOT_STARTED_SCAN_THRESHOLD_HOURS` whose task Celery does not hold. An admin
 cancel sets `IndexAttempt.cancellation_requested`, which docfetching and the
 monitor poll. The watchdog kills the spawned process when its RSS passes

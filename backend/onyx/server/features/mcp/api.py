@@ -314,13 +314,15 @@ def _shares(
     )
 
 
-def _admin_view(integration: Integration, db_session: Session) -> MCPServerAdminView:
-    server = _server_row(integration, db_session)
-    is_public = not is_private(integration)
-    users, groups = ([], []) if is_public else _shares(integration, db_session)
-    # A group with its own setting above Not available also has access. The
-    # legacy view has no group settings, so it lists such a group too.
-    groups = sorted(
+def _private_access(
+    integration: Integration, db_session: Session
+) -> tuple[list[UUID], list[int]]:
+    """The users and groups of a private server in the legacy view. A group
+    with its own setting above Not available also has access, and the legacy
+    view has no group settings, so it lists such a group too. A public server
+    lists none: each user has access."""
+    users, groups = _shares(integration, db_session)
+    return users, sorted(
         set(groups)
         | {
             setting.group_id
@@ -328,6 +330,12 @@ def _admin_view(integration: Integration, db_session: Session) -> MCPServerAdmin
             if setting.installation_policy != PluginInstallationPolicy.NOT_AVAILABLE
         }
     )
+
+
+def _admin_view(integration: Integration, db_session: Session) -> MCPServerAdminView:
+    server = _server_row(integration, db_session)
+    is_public = not is_private(integration)
+    users, groups = ([], []) if is_public else _private_access(integration, db_session)
     auth_type, auth_performer = _legacy_auth(integration)
     template = masked_header_template(integration.header_template)
     return MCPServerAdminView(

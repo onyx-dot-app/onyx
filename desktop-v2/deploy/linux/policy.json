@@ -1,0 +1,9 @@
+{
+  "ServerURL": "https://onyx.example.com",
+  "LockServerURL": true,
+  "DisableAutoUpdate": false,
+  "LauncherShortcut": "CommandOrControl+Shift+Space",
+  "DisableLauncher": false,
+  "LaunchAtLogin": true,
+  "DisableNotifications": false
+}

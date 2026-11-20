@@ -1,6 +1,6 @@
 import abc
 import traceback
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from functools import cache, partial
 from typing import TYPE_CHECKING, final
 
@@ -182,6 +182,9 @@ ToolResultFromChildren = Callable[
 ToolResumeWithInput = Callable[
     [ToolInvocation, ToolContext, list[NestedInputAnswer]], ToolOutcome
 ]
+ToolContinueOpenInput = Callable[
+    [ToolInvocation, ToolContext, list[NestedInputAnswer]], Collection[str]
+]
 
 
 class Tool(abc.ABC):
@@ -190,6 +193,8 @@ class Tool(abc.ABC):
     result_from_children: ToolResultFromChildren | None = None
     # Continues a call that returned NestedInputWait; see AgentTool.
     resume_with_input: ToolResumeWithInput | None = None
+    # Continues calls whose open requests have answers; see AgentTool.
+    continue_open_input: ToolContinueOpenInput | None = None
     # Set by tools that must not run twice: the saved result of a call that
     # stopped before it finished. See AgentTool.
     interrupted_result: ToolResult | None = None
@@ -324,6 +329,15 @@ class Tool(abc.ABC):
                     lambda: continue_with_input(invocation, context, answers),
                 )
 
+        take_open_input = self.continue_open_input
+        continue_open_input = None
+        if take_open_input is not None:
+
+            def continue_open_input(
+                invocation: ToolInvocation, answers: list[NestedInputAnswer]
+            ) -> Collection[str]:
+                return take_open_input(invocation, get_context(), answers)
+
         return AgentTool(
             definition=self.tool_definition(),
             execute=lambda invocation: self.run(invocation, get_context()),
@@ -338,6 +352,7 @@ class Tool(abc.ABC):
             else None,
             result_from_children=result_from_children,
             resume_with_input=resume_with_input,
+            continue_open_input=continue_open_input,
             interrupted_result=self.interrupted_result,
             display_name=self.display_name,
             approval_required=[

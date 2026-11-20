@@ -2,7 +2,7 @@
   "name": "onyx-desktop-v2",
   "version": "0.0.0-dev",
   "private": true,
-  "description": "Onyx Desktop v2 (preview): native macOS app for Onyx",
+  "description": "Onyx Desktop v2 (preview): native desktop app for Onyx",
   "type": "module",
   "scripts": {
     "dev": "tauri dev",

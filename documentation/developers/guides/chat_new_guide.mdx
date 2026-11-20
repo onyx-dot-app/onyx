@@ -208,8 +208,8 @@ The packet has these fields:
 | `agent_name` | The name of the background agent that made the request, or `null` for the answer's own calls. |
 
 A request waits until the user decides. Other calls of the answer can continue while it waits.
-When only approval requests remain, Onyx saves the answer,
-and the stream ends with a `stop` packet whose `stop_reason` is `awaiting_user`. That stop does not end the requests.
+Onyx saves approval requests only when no other part of the answer runs.
+Then the stream ends with a `stop` packet whose `stop_reason` is `awaiting_user`. That stop does not end the requests.
 Keep them open for a decision. After the decisions, the answer continues in a new stream.
 See [Send a decision](#send-a-decision). In a turn that compares models,
 one answer can wait while the other answers continue in the same stream.
@@ -315,13 +315,16 @@ Onyx starts that stream before the decision call returns, and `continuation` in 
 | `continuation.stream_id` | The ID of the new stream. It is not a message ID. |
 | `continuation.response_ids` | The IDs of the assistant messages that the stream writes, in model order for a turn that compares models. |
 
+A decision made while another part of the answer runs applies in the stream you read.
+That stream can still stop with `awaiting_user` when another request has no decision.
+A request of a background program that the user decides while the model writes the final answer ends with the answer,
+and its call does not run.
+
 `continuation` names a stream when a continuation stream of the answer runs after the decision.
-That can be the stream that you already read: a continued answer that asks again,
-when the user decides while that stream still runs.
 Ignore a `continuation` whose `stream_id` is the stream that you read. It is `null` in these cases:
 
 - The decision leaves other requests of the answer open, and no continuation stream of the answer runs.
-- The answer's first stream still runs. For example, the decision came before that stream ended with `awaiting_user`. Keep reading the current stream.
+- The answer's first stream still runs.
 - Another stream of the chat runs, such as another answer of a turn that compares models.
   The continuation starts when that stream ends. Read the status, as described below.
 - The request is a background agent's request.

@@ -445,8 +445,11 @@ agents/tool_execution.py:ToolBatch.decide_call   (direct calls, and program call
      the runtime marks the request PendingToolInput.approval
   a direct call waits in the run; a program call parks its cell's program
   renderer sends tool_approval_request on the call's (or execute_code's) card
-the run suspends when only such waits remain
-ChatRunStore.poll_control   one park pass over every owned run, once a second
+the run suspends when only such waits remain and its work is idle (see
+  ToolInvocation.run_work)
+ChatRunStore.poll_control   one park pass over every owned run, once a second;
+  first it gives each owned run the decisions saved for its waiting requests
+  (_saved_answers -> Run.submit), so a decision applies while the run is live
   ChatRunStore.may_park: suspended, idle, every wait is an approval request,
     a question (a `RESULT` request that no `ToolApprovals` opened), or a
     waited-for run that is
@@ -870,7 +873,8 @@ default agent, is Blocked.
     call's ID. A stream that continues a suspended response replays its
     records, the resolutions of its waiting requests and its background
     agents' requests included, then `replay_end`; the run's live events send
-    a waiting request's resolution again (`ResponsePresenter.replay`). A
+    a waiting request's resolution again, and the later requests of a call,
+    an ended call's too, show in its replayed card (`ResponsePresenter.replay`). A
     root's `question_request` rows replay the same way:
     `tool_question_request`, then `tool_question_resolved` for an ended row,
     with the card's answers or the typed `message`, at the asking call

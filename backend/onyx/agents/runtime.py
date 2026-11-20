@@ -2,7 +2,7 @@
 
 import threading
 import time
-from collections.abc import Callable, Mapping, Sequence
+from collections.abc import Callable, Collection, Mapping, Sequence
 from concurrent.futures import Future
 from contextlib import ExitStack, closing
 from contextvars import copy_context
@@ -148,6 +148,10 @@ class RunNotTransferable(RuntimeError):
 
 class RunReleased(RuntimeError):
     """Local execution ended at a saved checkpoint; use its run ID to resume."""
+
+
+class InputNotWaiting(ValueError):
+    """The run no longer waits for the request that an answer names."""
 
 
 class AgentBusy(RuntimeError):
@@ -560,11 +564,9 @@ class Run:
         # Reserve execution through cleanup, even after output becomes terminal.
         self._execution_active = True
         self._execution_request = ExecutionRequest.NONE
+        # Set by `notify_tool_activity` until the tool phase's next cycle.
+        self._tool_activity = False
         self._watched_children: dict[str, Future[RunState]] = {}
-        # Open requests of calls that tools make for the model, by request ID,
-        # until a NestedInputWait saves them; see NestedCallGate. They are not
-        # saved, so the run withdraws those still open when it suspends or ends.
-        self._open_nested: dict[str, NestedInputRequest] = {}
         self._llm: LLM | None = None
         self._defaults = PreparedStep()
         self._configured_tools: tuple[AgentTool, ...] = ()
@@ -586,7 +588,7 @@ class Run:
         self._on_drained: Callable[[], None] | None = None
         self._restoration: RestorableFeature | None = None
         self._step_tools: list[AgentTool] | None = None
-        self.work = ExecutionWork()
+        self.work = ExecutionWork(self._execution_condition, self.notify_tool_activity)
         self.coordination: RunCoordination | None = None
         self._thread_context = copy_context()
         self._cancellation_link = ExitStack()
@@ -626,9 +628,13 @@ class Run:
         """Copy unanswered tool requests without copying execution history."""
         with self.execution_lock:
             progress = self._state.progress
-            saved = progress.input_requests if progress is not None else ()
-            opened = (nested.request for nested in self._open_nested.values())
-            return [request.model_copy(deep=True) for request in (*saved, *opened)]
+            if progress is None:
+                return []
+            return [
+                request.model_copy(deep=True)
+                for request in progress.input_requests
+                if request.request_id not in progress.human_tool_answers
+            ]
 
     @property
     def approvals(self) -> "ToolApprovals | None":
@@ -685,16 +691,13 @@ class Run:
             if progress is None:
                 raise ValueError("Run has no input state")
             existing = progress.human_tool_answers.get(answer.request_id)
-            if existing is not None and existing != answer:
-                raise ValueError("Conflicting answer for request")
             if self._state.status.is_terminal:
                 if existing is None:
-                    raise ValueError("Run is not accepting input")
+                    raise InputNotWaiting("Run is not accepting input")
+                if _conflicts(existing, answer):
+                    raise ValueError("Conflicting answer for request")
                 return
-            # A request that a tool opened takes its answer before a
-            # NestedInputWait saves it.
-            opened = (nested.request for nested in self._open_nested.values())
-            if _record_answer(progress, answer, [*progress.input_requests, *opened]):
+            if _record_answer(progress, answer, progress.input_requests):
                 self._state.revision += 1
             self._wake_execution(resume=True)
 
@@ -756,8 +759,18 @@ class Run:
         self.work.track_operation(child.idle)
 
     def notify_tool_activity(self) -> None:
+        """Wake the tool phase for another cycle: a call or held work ended,
+        or the run was cancelled."""
         with self._execution_condition:
+            self._tool_activity = True
             self._execution_condition.notify_all()
+
+    @property
+    def tool_phase_idle(self) -> bool:
+        """Whether no held work runs and none ended since the tool phase's
+        cycle began; read under the lock that `self.work` ends held jobs in."""
+        with self._execution_condition:
+            return self.work.held.idle and not self._tool_activity
 
     @property
     def suspension_requested(self) -> bool:
@@ -839,7 +852,10 @@ class Run:
                     raise ValueError("Input request IDs must be unique within a run")
                 for nested in pending.requests:
                     # A request that the gate opened is already shown.
-                    if self._open_nested.pop(nested.request.request_id, None) is None:
+                    if (
+                        self._progress.open_inputs.pop(nested.request.request_id, None)
+                        is None
+                    ):
                         self._check_new_request_id(nested.request.request_id)
                         shown.append(nested)
             self._progress.pending_tool_calls[call.id] = pending.model_copy(deep=True)
@@ -854,12 +870,8 @@ class Run:
         """Reject a request ID that an open, saved or answered request of this
         run already uses. Call under the execution lock."""
         progress = self._progress
-        if (
-            request_id in self._open_nested
-            or request_id in progress.human_tool_answers
-            or any(
-                request.request_id == request_id for request in progress.input_requests
-            )
+        if request_id in progress.human_tool_answers or any(
+            request.request_id == request_id for request in progress.input_requests
         ):
             raise ValueError("Input request IDs must be unique within a run")
 
@@ -869,9 +881,10 @@ class Run:
         with self.execution_lock:
             self.cancellation_signal.check()
             self._check_new_request_id(request.request.request_id)
-            self._open_nested[request.request.request_id] = request.model_copy(
+            self._progress.open_inputs[request.request.request_id] = request.model_copy(
                 deep=True
             )
+            self._state.revision += 1
             self.publish_event(
                 InputRequiredEvent(**self.event_context, **dict(request))
             )
@@ -879,12 +892,23 @@ class Run:
     def withdraw_nested_input(self, request: NestedInputRequest) -> None:
         """End an open request whose call stopped waiting, for example because
         its program ended, with the answer that the run recorded for it, if
-        any; no-op once a NestedInputWait saved it or it ended."""
+        any; no-op once a NestedInputWait saved it or it ended.
+
+        The end event goes out under the lock that removes the request, so
+        either this call or the run's end reports it, exactly once."""
         request_id = request.request.request_id
         with self.execution_lock:
-            if self._open_nested.pop(request_id, None) is None:
+            if self._progress.open_inputs.pop(request_id, None) is None:
                 return
-            answer = self._progress.human_tool_answers.get(request_id)
+            self._state.revision += 1
+            if self.event_delivery:
+                self.event_delivery.publish(
+                    InputEndedEvent(
+                        **self.event_context,
+                        **dict(request),
+                        answer=self._progress.human_tool_answers.get(request_id),
+                    )
+                )
         approvals = self.approvals
         if request.request.approval and approvals is not None:
             try:
@@ -895,9 +919,6 @@ class Run:
                 logger.exception(
                     "Run %s could not withdraw approval request %s", self.id, request_id
                 )
-        self.publish_event(
-            InputEndedEvent(**self.event_context, **dict(request), answer=answer)
-        )
 
     def _input_waits(
         self, call: ToolCall, pending: PendingToolInput | ChildRunWait | NestedInputWait
@@ -960,8 +981,9 @@ class Run:
                     if result.is_error
                     else ExecutionStatus.COMPLETE
                 )
-        ended.extend(self._open_nested.values())
-        self._open_nested.clear()
+        if progress is not None:
+            ended.extend(progress.open_inputs.values())
+            progress.open_inputs.clear()
         if self.event_delivery:
             for wait in ended:
                 self.event_delivery.publish(
@@ -984,6 +1006,24 @@ class Run:
                         **self.event_context,
                         **dict(wait),
                         answer=progress.human_tool_answers.get(wait.request.request_id),
+                    )
+                )
+
+    def resolve_open_inputs(self, request_ids: Collection[str]) -> None:
+        """End open requests whose tool took their answers
+        (`AgentTool.continue_open_input`)."""
+        with self.execution_lock:
+            progress = self._progress
+            for request_id in request_ids:
+                request = progress.open_inputs.pop(request_id, None)
+                if request is None:
+                    continue
+                self._state.revision += 1
+                self.publish_event(
+                    InputEndedEvent(
+                        **self.event_context,
+                        **dict(request),
+                        answer=progress.human_tool_answers.get(request_id),
                     )
                 )
 
@@ -1163,7 +1203,9 @@ class Run:
             if resuming:
                 self._idle = Future()
                 self._settled = Future()
-                self.work = ExecutionWork()
+                self.work = ExecutionWork(
+                    self._execution_condition, self.notify_tool_activity
+                )
             self._execution_active = True
             self._state.status = RunStatus.RUNNING
             if self.event_delivery is not None:
@@ -1206,18 +1248,20 @@ class Run:
         """Acknowledge pending wakeups and return whether new work may start."""
         with self.execution_lock:
             self.cancellation_signal.check()
+            self._tool_activity = False
             if self._execution_request == ExecutionRequest.SUSPEND:
                 return False
             self._execution_request = ExecutionRequest.NONE
             return True
 
-    def wait_for_tool_activity(self, completed: Callable[[], bool]) -> None:
+    def wait_for_tool_activity(self) -> None:
+        """Wait for `notify_tool_activity`, an accepted input, or cancellation."""
         with self._execution_condition:
             ready = self._execution_condition.wait_for(
                 lambda: (
                     self.cancellation_signal.cancelled
                     or self._execution_request == ExecutionRequest.WAKE
-                    or completed()
+                    or self._tool_activity
                 ),
                 OPERATION_TIMEOUT_SECONDS,
             )
@@ -1302,10 +1346,6 @@ class Run:
         if failure is not None:
             # The run fails instead of suspending.
             raise failure
-        with self.execution_lock:
-            unsaved = list(self._open_nested.values())
-        for request in unsaved:
-            self.withdraw_nested_input(request)
         if self._restoration is not None:
             feature_state = _FEATURE_STATE.validate_python(
                 self._restoration.capture_state().model_dump(mode="json")
@@ -2311,18 +2351,30 @@ def _record_answer(
     requests: Sequence[PendingToolInput],
 ) -> bool:
     """Record an answer to one of `requests`; False when it repeats the
-    recorded answer. Raises ValueError for a conflicting or unmatched answer."""
+    recorded answer. An answer that only makes the recorded one standing,
+    such as an approval that the user later approves for the chat, replaces
+    it; one that only drops `standing` repeats it. Raises ValueError for a
+    conflicting or unmatched answer."""
     existing = progress.human_tool_answers.get(answer.request_id)
     if existing is not None:
-        if existing != answer:
+        if _conflicts(existing, answer):
             raise ValueError("Conflicting answer for request")
-        return False
+        if existing.standing or not answer.standing:
+            return False
+        progress.human_tool_answers[answer.request_id] = answer.model_copy(deep=True)
+        return True
     request = next(
         (item for item in requests if item.request_id == answer.request_id), None
     )
     if request is None:
-        raise ValueError("Unknown input request")
+        raise InputNotWaiting("Unknown input request")
     if (request.mode == InputMode.RESULT) != (answer.decision == InputDecision.RESULT):
         raise ValueError("Answer does not match the request mode")
     progress.human_tool_answers[answer.request_id] = answer.model_copy(deep=True)
     return True
+
+
+def _conflicts(recorded: HumanToolAnswer, answer: HumanToolAnswer) -> bool:
+    """Whether `answer` differs from the recorded answer in more than
+    `standing`."""
+    return recorded.model_copy(update={"standing": answer.standing}) != answer

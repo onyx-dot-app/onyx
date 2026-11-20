@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-get-upload-limit"
+description = "Enables the get_upload_limit command without any pre-configured scope."
+commands.allow = ["get_upload_limit"]
+
+[[permission]]
+identifier = "deny-get-upload-limit"
+description = "Denies the get_upload_limit command without any pre-configured scope."
+commands.deny = ["get_upload_limit"]

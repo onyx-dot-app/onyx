@@ -4,8 +4,16 @@ import json
 import os
 import sys
 import time
+import zlib
 from collections import deque
-from collections.abc import Callable, Collection, Generator, Iterable, Iterator
+from collections.abc import (
+    Callable,
+    Collection,
+    Generator,
+    Iterable,
+    Iterator,
+    Sequence,
+)
 from contextlib import closing
 from typing import Any, NamedTuple, cast
 from urllib.parse import ParseResult, parse_qs, urlparse
@@ -23,13 +31,21 @@ from onyx.connectors.exceptions import (
     ConnectorValidationError,
     CredentialExpiredError,
     InsufficientPermissionsError,
+    UnexpectedValidationError,
 )
-from onyx.connectors.google_drive.constants import DRIVE_FOLDER_TYPE
+from onyx.connectors.google_drive.constants import (
+    DRIVE_FOLDER_TYPE,
+    DRIVE_RESOURCE_KEY_FIELD,
+)
 from onyx.connectors.google_drive.doc_conversion import (
     _FALLBACK_BINARY_WEB_VIEW_LINK_TEMPLATE,
     _FALLBACK_WEB_VIEW_LINK_TEMPLATES,
+    MAX_RETRIEVER_EMAILS,
     WEB_VIEW_LINK_KEY,
+    LazyEmails,
     PermissionSyncContext,
+    ReaderOrder,
+    build_folder_path,
     build_slim_document,
     build_slim_document_stub,
     convert_drive_item_to_document,
@@ -38,12 +54,15 @@ from onyx.connectors.google_drive.doc_conversion import (
     onyx_document_id_from_drive_file,
 )
 from onyx.connectors.google_drive.drive_access import (
+    DriveMember,
+    PrincipalType,
     internal_principals_of,
     list_drive_members,
     list_group_member_emails,
     select_drive_organizer,
 )
 from onyx.connectors.google_drive.file_retrieval import (
+    PERMISSION_FULL_DESCRIPTION,
     DriveFileFieldType,
     get_external_access_for_folder,
     get_files_by_web_view_links_batch,
@@ -52,6 +71,7 @@ from onyx.connectors.google_drive.file_retrieval import (
     owner_email,
 )
 from onyx.connectors.google_drive.models import (
+    DriveListingPayload,
     DriveListingState,
     GoogleDriveCheckpoint,
     ImpersonationError,
@@ -75,6 +95,7 @@ from onyx.connectors.google_drive.source_operations import (
     GoogleDriveHttpError,
     GoogleDriveRefreshError,
     GoogleDriveSourceOperations,
+    attach_source_api_limiter,
 )
 from onyx.connectors.google_utils.google_utils import (
     get_file_owners,
@@ -98,14 +119,18 @@ from onyx.connectors.interfaces import (
     SlimCheckpointOutput,
     SlimConnector,
     SlimConnectorWithPermSync,
+    SourceApiLimiter,
 )
 from onyx.connectors.models import (
     ConnectorFailure,
     ConnectorMissingCredentialError,
+    ConnectorStopSignal,
     Document,
     DocumentFailure,
     EntityFailure,
     HierarchyNode,
+    ListingCounts,
+    ResolveTarget,
     SlimDocument,
 )
 from onyx.db.enums import HierarchyNodeType
@@ -148,6 +173,15 @@ DRIVE_INTERLEAVE_LOOKAHEAD = 2000
 # deep_getsizeof, so this holds it near 95 MB, well under
 # CHECKPOINT_SIZE_LIMIT_BYTES.
 MAX_DEDUP_DRIVE_FILE_IDS = 800_000
+
+# `build_folder_path` walks at most this many folders up.
+_MAX_FOLDER_PATH_DEPTH = 50
+
+# Upper bound on the folder names a listing keeps in its checkpoint. An entry
+# measures about 100 bytes, so this holds the map near 40 MB beside the dedup
+# set, under CHECKPOINT_SIZE_LIMIT_BYTES. Past the cap, a file under a folder
+# that is not in the map gets no stored path, and conversion builds it.
+MAX_LISTED_FOLDER_NAMES = 400_000
 
 
 def extract_str_list_from_comma_str(string: str | None) -> list[str]:
@@ -238,6 +272,97 @@ def _take[T](pending: dict[str, T], count: int) -> dict[str, T]:
     return taken
 
 
+def _rotated_readers(
+    drive_file: GoogleDriveFileType, payload: DriveListingPayload
+) -> list[str]:
+    """The users who can read the file, starting at a place set by a hash of
+    the file id. This spreads reads over the users with no shared state. The
+    listing user stays in the list, so it is the fallback on 403/404."""
+    readers = list(dict.fromkeys([*payload.reader_emails, payload.retriever_email]))
+    start = zlib.crc32(str(drive_file.get("id", "")).encode()) % len(readers)
+    rotated = readers[start:] + readers[:start]
+    # Conversion tries at most MAX_RETRIEVER_EMAILS users. Keep the listing
+    # user (and a slot for the admin) inside that limit.
+    head = [r for r in rotated if r != payload.retriever_email]
+    return head[: MAX_RETRIEVER_EMAILS - 2] + [payload.retriever_email]
+
+
+# What `files.get` reads for a file that was listed with no permissions.
+_PERMISSION_FIELDS = f"id, {PERMISSION_FULL_DESCRIPTION}, permissionIds"
+
+
+def _has_permission_fields(drive_file: GoogleDriveFileType) -> bool:
+    return "permissions" in drive_file or "permissionIds" in drive_file
+
+
+# What permissions.list reads for a listed file whose fields lack some of its
+# permissions.
+_PERMISSION_LIST_FIELDS = f"nextPageToken, {PERMISSION_FULL_DESCRIPTION}"
+
+
+def _missing_permission_ids(
+    permissions: Iterable[dict[str, Any]], permission_ids: Iterable[str]
+) -> set[str]:
+    return set(permission_ids) - {str(p.get("id")) for p in permissions}
+
+
+def _has_every_permission(drive_file: GoogleDriveFileType) -> bool:
+    """Whether the file's fields hold its permissions, one for each id the
+    file lists. Drive can leave out `permissions`, or some of them, and give
+    only their ids."""
+    return _is_complete(drive_file, drive_file.get("permissions") or [])
+
+
+def _is_complete(
+    drive_file: GoogleDriveFileType, permissions: Iterable[dict[str, Any]]
+) -> bool:
+    """Whether ``permissions`` are all of the file's permissions: one for
+    each id the file lists. A shared drive file always has the drive's
+    members, so a read with no member permission is not complete. Converting
+    it would leave out the drive's members."""
+    permissions = list(permissions)
+    if not permissions or _missing_permission_ids(
+        permissions, drive_file.get("permissionIds") or []
+    ):
+        return False
+    return not drive_file.get("driveId") or any(
+        detail.get("permissionType") == "member"
+        for permission in permissions
+        for detail in permission.get("permissionDetails") or []
+    )
+
+
+def _permission_read_failure(
+    target: ResolveTarget, drive_file: GoogleDriveFileType, error: Exception | None
+) -> ConnectorFailure:
+    """The failure of a file whose permissions could not all be read. The file
+    is not indexed with less access than it has. A later attempt reads it
+    again."""
+    return ConnectorFailure(
+        failed_document=DocumentFailure(
+            document_id=target.document_id,
+            document_link=drive_file.get(WEB_VIEW_LINK_KEY) or target.document_link,
+        ),
+        failure_message=(
+            f"Could not read every permission of {drive_file.get('name')}"
+            + (f": {error}" if error is not None else "")
+        ),
+        exception=error,
+    )
+
+
+def _remember_folder_name(
+    listing: DriveListingState, folder_id: str, name: str, parent_id: str | None
+) -> None:
+    """Keeps a listed folder's name and parent for the stub folder paths, up
+    to MAX_LISTED_FOLDER_NAMES folders."""
+    if (
+        folder_id in listing.folder_names
+        or len(listing.folder_names) < MAX_LISTED_FOLDER_NAMES
+    ):
+        listing.folder_names[folder_id] = (name, parent_id)
+
+
 def _get_parent_id_from_file(drive_file: GoogleDriveFileType) -> str | None:
     """Extract the first parent ID from a drive file."""
     parents = drive_file.get("parents")
@@ -324,6 +449,7 @@ def _drop_listing_state(checkpoint: GoogleDriveCheckpoint) -> None:
     checkpoint.incomplete_drive_ids = set()
     checkpoint.failed_impersonation_emails = set()
     checkpoint.unreachable_target_ids = set()
+    checkpoint.denied_listing_emails = set()
 
 
 def _listing_done(checkpoint: GoogleDriveCheckpoint) -> bool:
@@ -390,6 +516,7 @@ class GoogleDriveConnector(
     Resolver,
 ):
     slim_listing_honors_indexing_start = True
+    listing_payload_type = DriveListingPayload
 
     def __init__(
         self,
@@ -482,10 +609,19 @@ class GoogleDriveConnector(
         # Used to verify if a folder with no parents is actually a My Drive root
         # Thread-safe because multiple impersonation threads access this concurrently
         self._my_drive_root_id_cache: ThreadSafeDict[str, str] = ThreadSafeDict()
+        # Shared drive id -> every in-domain user member, read only when the
+        # members the listing stored cannot read the drive. Not checkpointed.
+        self._all_drive_member_emails: ThreadSafeDict[str, list[str]] = ThreadSafeDict()
 
         self.allow_images = False
 
         self.size_threshold = GOOGLE_DRIVE_CONNECTOR_SIZE_THRESHOLD
+
+    @override
+    def set_source_api_limiter(self, limiter: SourceApiLimiter) -> None:
+        self.source_api_limiter = limiter
+        if self._ops is not None:
+            attach_source_api_limiter(self._ops, limiter)
 
     def set_allow_images(self, value: bool) -> None:
         self.allow_images = value
@@ -568,6 +704,8 @@ class GoogleDriveConnector(
                 None, DocumentSource.GOOGLE_DRIVE.value, credentials
             )
         )
+        if self.source_api_limiter is not None:
+            attach_source_api_limiter(self._ops, self.source_api_limiter)
         auth = self._ops.authenticate()
         self._is_service_account = auth.kind == GoogleCredentialKind.SERVICE_ACCOUNT
 
@@ -676,6 +814,39 @@ class GoogleDriveConnector(
             external_access=external_access,
         )
 
+    def _listed_folder_node(
+        self,
+        folder: RetrievedDriveFile,
+        permission_sync_context: PermissionSyncContext | None,
+    ) -> HierarchyNode:
+        """The node of a listed folder. Without a permission sync context, the
+        node has no access value, so the stored access stays. A listing
+        without permissions gives no permission ids: they are read as the
+        user who listed the folder. If that read fails, the node also has no
+        access value: an unread access is never written as no access."""
+        drive_file = folder.drive_file
+        if permission_sync_context is not None and "permissionIds" not in drive_file:
+            try:
+                fields = self.ops.get_file(
+                    user_email=folder.user_email,
+                    file_id=drive_file["id"],
+                    fields="id, permissionIds",
+                )
+            except Exception as e:
+                logger.warning(
+                    "Could not read the permissions of folder %s: %s",
+                    drive_file.get("id"),
+                    e,
+                )
+                fields = None
+            if fields is None:
+                return self._folder_node(drive_file, None)
+            drive_file = {
+                **drive_file,
+                "permissionIds": fields.get("permissionIds") or [],
+            }
+        return self._folder_node(drive_file, permission_sync_context)
+
     def _get_folder_metadata(
         self,
         folder_id: str,
@@ -753,13 +924,143 @@ class GoogleDriveConnector(
         )
         return None
 
-    def _get_shared_drive_name(self, drive_id: str, retriever_email: str) -> str | None:
-        """Fetch the name of a shared drive, trying both the retriever and admin."""
-        for email in {retriever_email, self.primary_admin_email}:
+    def _get_shared_drive_name(
+        self, drive_id: str, reader_emails: Iterable[str]
+    ) -> str | None:
+        """The name of a shared drive, read as each user in order and then as
+        the admin. None when no user can see the drive."""
+        for email in ReaderOrder(reader_emails, [self.primary_admin_email]):
             name = self.ops.get_shared_drive_name(user_email=email, drive_id=drive_id)
             if name:
                 return name
         return None
+
+    def _domain_user_emails(self, members: Iterable[DriveMember]) -> list[str]:
+        return [
+            member.email
+            for member in members
+            if member.principal_type is PrincipalType.USER
+            and member.email
+            and member.email.split("@")[-1].lower() == self.google_domain.lower()
+        ]
+
+    def _drive_member_emails(self, drive_id: str) -> list[str]:
+        """Every in-domain user member of a shared drive, read one time for
+        each connector. A failed read is not kept, so a later call reads
+        again."""
+        emails = self._all_drive_member_emails.get(drive_id)
+        if emails is not None:
+            return emails
+        try:
+            members = list_drive_members(self.ops, drive_id)
+        except GoogleDriveHttpError as error:
+            # Only a denial means "no members to try". A rate limit or a
+            # server error raises, or the files would go to weaker readers.
+            if not error.access_denied:
+                raise
+            logger.warning("Cannot read members of drive %s: %s", drive_id, error)
+            return []
+        emails = self._domain_user_emails(members)
+        self._all_drive_member_emails[drive_id] = emails
+        return emails
+
+    def _drive_readers(
+        self,
+        drive_id: str,
+        first: Sequence[str],
+        last: Sequence[str],
+        checkpoint: GoogleDriveCheckpoint | None,
+    ) -> ReaderOrder:
+        """Who reads a shared drive's name or folders, in order: ``first``,
+        then the drive's other members, then ``last`` and the admin. The
+        full member list is read from the API only when each user in
+        ``first`` fails, because the listing stores at most
+        MAX_RETRIEVER_EMAILS members."""
+        if not self.is_service_account:
+            return ReaderOrder(last, [self.primary_admin_email])
+
+        def more_members() -> list[str]:
+            return [
+                email
+                for email in self._drive_member_emails(drive_id)
+                if self._may_impersonate(email, checkpoint)
+            ]
+
+        return ReaderOrder(
+            first, LazyEmails(more_members), last, [self.primary_admin_email]
+        )
+
+    def _listing_drive_readers(
+        self,
+        checkpoint: GoogleDriveCheckpoint,
+        drive_id: str,
+        lister_emails: Sequence[str],
+    ) -> ReaderOrder:
+        """`_drive_readers` during a listing: the drive's organizer and the
+        members the listing stored come first, and the users who listed the
+        file last. Those users can have the file by a share and not see the
+        drive."""
+        first: list[str] = []
+        if self.is_service_account:
+            organizer = checkpoint.organizer_email_by_drive_id.get(drive_id)
+            if organizer is not None:
+                first.append(organizer)
+            if checkpoint.listing is not None:
+                first.extend(
+                    member
+                    for member in checkpoint.listing.drive_member_emails.get(
+                        drive_id, []
+                    )
+                    if self._may_impersonate(member, checkpoint)
+                )
+        return self._drive_readers(drive_id, first, lister_emails, checkpoint)
+
+    def _read_hidden_parent(
+        self, checkpoint: GoogleDriveCheckpoint, retrieved_file: RetrievedDriveFile
+    ) -> None:
+        """A shared drive file listed with no parent: the user who listed it
+        cannot see its folder, for example a user who got the file by a
+        share. Reads the parent as users who can see the drive and puts it
+        in the file, so the file's folder path does not change with the
+        listing that claimed the file first. The file keeps no parent when
+        no user can read one."""
+        drive_file = retrieved_file.drive_file
+        drive_id = drive_file.get("driveId")
+        file_id = drive_file.get("id")
+        if (
+            not drive_id
+            or not isinstance(file_id, str)
+            or _get_parent_id_from_file(drive_file)
+            or drive_file.get("mimeType") == DRIVE_FOLDER_TYPE
+        ):
+            return
+        lister = retrieved_file.user_email
+        for email in self._listing_drive_readers(checkpoint, drive_id, [lister]):
+            if email == lister:
+                continue
+            try:
+                read = self.ops.get_file(
+                    user_email=email,
+                    file_id=file_id,
+                    fields="parents",
+                    resource_key=drive_file.get(DRIVE_RESOURCE_KEY_FIELD),
+                )
+            except GoogleDriveHttpError as error:
+                # get_file answers None for a denial. A rate limit or a
+                # server error that outlasted the retries raises.
+                if not error.access_denied:
+                    raise
+                logger.warning(
+                    "Cannot read the parent of Drive file %s as %s: %s",
+                    file_id,
+                    email,
+                    error,
+                )
+                continue
+            parents = (read or {}).get("parents")
+            if parents:
+                drive_file["parents"] = parents
+                return
 
     def get_all_drive_ids(self) -> set[str]:
         return self._get_all_drives_for_user(self.primary_admin_email)
@@ -813,6 +1114,12 @@ class GoogleDriveConnector(
                 raise
             logger.warning("Cannot read members of drive %s: %s", drive_id, error)
             members = []
+        if checkpoint.listing is not None:
+            # Any member can read the drive's files. Conversion spreads its
+            # reads over them.
+            checkpoint.listing.drive_member_emails[drive_id] = self._domain_user_emails(
+                members
+            )[:MAX_RETRIEVER_EMAILS]
 
         def _can_list(email: str) -> bool:
             if not self._may_impersonate(email, checkpoint):
@@ -946,16 +1253,24 @@ class GoogleDriveConnector(
             error=ImpersonationError(email, error),
         )
 
-    def _may_impersonate(self, email: str, checkpoint: GoogleDriveCheckpoint) -> bool:
+    def _may_impersonate(
+        self, email: str, checkpoint: GoogleDriveCheckpoint | None
+    ) -> bool:
         """Whether a principal may be used this run. specific_user_emails
         limits the connector to acting as those users, so an organizer or
-        owner outside that list is not a candidate, the admin included."""
-        if email in checkpoint.failed_impersonation_emails:
+        owner outside that list is not a candidate, the admin included.
+        With no checkpoint (conversion from a stub), only that limit
+        applies."""
+        if checkpoint is not None and email in checkpoint.failed_impersonation_emails:
             return False
         if not self._specific_user_emails:
             return True
-        allowed = {user.lower() for user in checkpoint.user_emails or []}
-        return email.lower() in allowed
+        users = (
+            checkpoint.user_emails
+            if checkpoint is not None
+            else self._specific_user_emails
+        )
+        return email.lower() in {user.lower() for user in users or []}
 
     def _my_drive_partition_emails(
         self, checkpoint: GoogleDriveCheckpoint
@@ -1076,12 +1391,14 @@ class GoogleDriveConnector(
                 elif self._listing_skip_reason(retrieved_file.drive_file) is not None:
                     continue
                 else:
+                    self._read_hidden_parent(checkpoint, retrieved_file)
                     files_batch.append(retrieved_file)
                     yield from _converted(
                         runner.submit(
                             self._convert_retrieved_file_to_document,
                             retrieved_file,
                             permission_sync_context,
+                            self._file_path_readers(checkpoint, retrieved_file),
                         )
                     )
                 if len(folders_batch) + len(files_batch) >= DRIVE_CONVERSION_BATCH_SIZE:
@@ -1104,40 +1421,349 @@ class GoogleDriveConnector(
             )
             yield from _converted(runner.drain())
 
+    def _file_path_readers(
+        self, checkpoint: GoogleDriveCheckpoint, retrieved_file: RetrievedDriveFile
+    ) -> Iterable[str]:
+        drive_id = retrieved_file.drive_file.get("driveId")
+        if not drive_id:
+            return ()
+        return self._listing_drive_readers(
+            checkpoint, drive_id, [retrieved_file.user_email]
+        )
+
     def _convert_retrieved_file_to_document(
         self,
         retrieved_file: RetrievedDriveFile,
         permission_sync_context: PermissionSyncContext | None,
+        path_readers: Iterable[str] = (),
     ) -> Document | ConnectorFailure | None:
         """
         Converts a single retrieved file to a document.
         """
+        return self._convert_drive_file(
+            retrieved_file.drive_file,
+            [retrieved_file.user_email, self.primary_admin_email]
+            + get_file_owners(retrieved_file.drive_file, self.primary_admin_email),
+            permission_sync_context,
+            path_readers=path_readers,
+        )
+
+    def _convert_drive_file(
+        self,
+        drive_file: GoogleDriveFileType,
+        retriever_emails: list[str],
+        permission_sync_context: PermissionSyncContext | None,
+        folder_path: list[str] | None = None,
+        path_readers: Iterable[str] = (),
+    ) -> Document | ConnectorFailure | None:
         try:
             return convert_drive_item_to_document(
                 self.ops,
                 self.allow_images,
                 self.size_threshold,
                 permission_sync_context,
-                [retrieved_file.user_email, self.primary_admin_email]
-                + get_file_owners(retrieved_file.drive_file, self.primary_admin_email),
-                retrieved_file.drive_file,
+                retriever_emails,
+                drive_file,
                 self.raw_file_callback,
+                folder_path,
+                path_readers,
             )
         except Exception as e:
             logger.exception(
                 "Error extracting document: %s from Google Drive",
-                retrieved_file.drive_file.get("name"),
+                drive_file.get("name"),
             )
             return ConnectorFailure(
                 failed_entity=EntityFailure(
-                    entity_id=retrieved_file.drive_file.get("id", "unknown"),
+                    entity_id=drive_file.get("id", "unknown"),
                 ),
                 failure_message=(
-                    f"Error extracting document: "
-                    f"{retrieved_file.drive_file.get('name')}"
+                    f"Error extracting document: {drive_file.get('name')}"
                 ),
                 exception=e,
             )
+
+    def resolve_targets(
+        self,
+        targets: list[ResolveTarget],
+        include_permissions: bool = False,
+    ) -> Generator[Document | ConnectorFailure | HierarchyNode, None, None]:
+        """Converts each target from the file fields its listing stored, with
+        no metadata fetch and no ancestor walk. A target without them goes
+        through `reindex`."""
+        if self._ops is None or self._primary_admin_email is None:
+            raise RuntimeError(
+                "Credentials missing, should not call this method before calling load_credentials"
+            )
+        # Permission sync and the link-only filter read the file's
+        # permissions. The listing does not ask for them: with them a page
+        # holds 100 files, and without them several hundred. So they are read
+        # here, for the batch. A shared drive file skips the batch read:
+        # conversion reads its permissions with permissions.list.
+        need_permissions = include_permissions or self.exclude_domain_link_only
+        payloads: list[tuple[ResolveTarget, DriveListingPayload]] = []
+        unlisted: list[ResolveTarget] = []
+        for target in targets:
+            payload = target.listing_payload
+            if isinstance(payload, DriveListingPayload) and payload.drive_file:
+                permitted = self._permitted_payload(payload)
+                if permitted is None:
+                    # This run may not act as the listing user. `reindex`
+                    # reads the file as the admin.
+                    unlisted.append(target)
+                else:
+                    payloads.append((target, permitted))
+            else:
+                unlisted.append(target)
+
+        permission_fields = (
+            self._read_permission_fields([payload for _, payload in payloads])
+            if need_permissions
+            else {}
+        )
+        listed: list[
+            tuple[ResolveTarget, GoogleDriveFileType, list[str], DriveListingPayload]
+        ] = []
+        for target, payload in payloads:
+            drive_file = dict(cast(GoogleDriveFileType, payload.drive_file))
+            if (
+                need_permissions
+                and not _has_permission_fields(drive_file)
+                and not drive_file.get("driveId")
+            ):
+                fields = permission_fields.get(str(drive_file.get("id")))
+                if fields is None:
+                    # No user could read its permissions. `reindex` reads the
+                    # file as the admin.
+                    unlisted.append(target)
+                    continue
+                drive_file.update(fields)
+            readers = _rotated_readers(drive_file, payload)
+            if self.primary_admin_email not in readers:
+                readers.append(self.primary_admin_email)
+            listed.append((target, drive_file, readers, payload))
+        if unlisted:
+            yield from super().resolve_targets(unlisted, include_permissions)
+
+        permission_sync_context = (
+            PermissionSyncContext(
+                primary_admin_email=self.primary_admin_email,
+                google_domain=self.google_domain,
+            )
+            if include_permissions
+            else None
+        )
+        results = cast(
+            list[Document | ConnectorFailure | None],
+            run_functions_tuples_in_parallel(
+                [
+                    (
+                        self._convert_listed_file_or_fail,
+                        (target, drive_file, readers, permission_sync_context, payload),
+                    )
+                    for target, drive_file, readers, payload in listed
+                ],
+                max_workers=DRIVE_CONVERSION_WORKERS,
+            ),
+        )
+        for result in results:
+            if result is not None:
+                yield result
+
+    def _permitted_payload(
+        self, payload: DriveListingPayload
+    ) -> DriveListingPayload | None:
+        """The payload with only the readers this run may act as. An earlier
+        listing stored the readers, and the connector's user limit can have
+        changed since. None when the listing user is not one of them."""
+        if not self._may_impersonate(payload.retriever_email, None):
+            return None
+        return payload.model_copy(
+            update={
+                "reader_emails": [
+                    email
+                    for email in payload.reader_emails
+                    if self._may_impersonate(email, None)
+                ]
+            }
+        )
+
+    def _convert_listed_file_or_fail(
+        self,
+        target: ResolveTarget,
+        drive_file: GoogleDriveFileType,
+        readers: list[str],
+        permission_sync_context: PermissionSyncContext | None,
+        payload: DriveListingPayload,
+    ) -> Document | ConnectorFailure | None:
+        """`_convert_listed_file`, where an error fails only this target. The
+        other targets of the batch still convert."""
+        try:
+            return self._convert_listed_file(
+                target, drive_file, readers, permission_sync_context, payload
+            )
+        except Exception as e:
+            logger.exception(
+                "Error converting Drive file %s from its listing",
+                drive_file.get("name"),
+            )
+            return ConnectorFailure(
+                failed_document=DocumentFailure(
+                    document_id=target.document_id,
+                    document_link=drive_file.get(WEB_VIEW_LINK_KEY)
+                    or target.document_link,
+                ),
+                failure_message=(
+                    f"Error converting Drive file {drive_file.get('name')}: {e}"
+                ),
+                exception=e,
+            )
+
+    def _convert_listed_file(
+        self,
+        target: ResolveTarget,
+        drive_file: GoogleDriveFileType,
+        readers: list[str],
+        permission_sync_context: PermissionSyncContext | None,
+        payload: DriveListingPayload,
+    ) -> Document | ConnectorFailure | None:
+        # Permission sync and the link-only filter need every permission. Drive
+        # can give only some of them, or only their ids.
+        if (
+            permission_sync_context is not None or self.exclude_domain_link_only
+        ) and not _has_every_permission(drive_file):
+            try:
+                completed = self._read_file_permissions(
+                    drive_file, [payload.retriever_email, *readers]
+                )
+            except Exception as e:
+                return _permission_read_failure(target, drive_file, e)
+            if completed is None:
+                return _permission_read_failure(target, drive_file, None)
+            drive_file = completed
+        if self.exclude_domain_link_only and has_link_only_permission(drive_file):
+            return None
+        folder_path = payload.folder_path
+        if folder_path is None:
+            # The listing did not have every folder on the way. Build the
+            # path from the listing user's view: the user that reads the
+            # content can be another one. The folders and the drive name are
+            # read as the users who can read the file first, for example the
+            # drive's members, and then as the drive's other members.
+            drive_id = drive_file.get("driveId")
+            folder_path = build_folder_path(
+                drive_file,
+                self.ops,
+                payload.retriever_email,
+                path_readers=(
+                    self._drive_readers(
+                        drive_id,
+                        payload.reader_emails,
+                        [payload.retriever_email],
+                        None,
+                    )
+                    if drive_id
+                    else ()
+                ),
+            )
+        return self._convert_drive_file(
+            drive_file, readers, permission_sync_context, folder_path
+        )
+
+    def _read_file_permissions(
+        self, drive_file: GoogleDriveFileType, readers: Sequence[str]
+    ) -> GoogleDriveFileType | None:
+        """The file with every one of its permissions, read with
+        permissions.list as each reader in turn: the listing user first, as
+        on the inline path, since a drive member that only views the file
+        cannot read them. A reader that is denied passes to the next one.
+
+        None when the readers read only some of the permissions, or a shared
+        drive file's permissions could not be read at all. Conversion would
+        give such a document less access than it has: for a shared drive
+        file, it would leave out the drive's members. A My Drive file that no
+        reader can read the permissions of is returned as it is, so it is
+        converted as on the inline path (owned outside the domain).
+
+        A shared drive file has no permission ids here: one permissions.list
+        read that ends with no error and holds the drive's members gives all
+        of its permissions. A read with no member permission, an empty one
+        included, counts as a failed read."""
+        file_id = str(drive_file.get("id"))
+        found: dict[str, dict[str, Any]] = {
+            str(p.get("id")): p for p in drive_file.get("permissions") or []
+        }
+        for reader in dict.fromkeys(readers):
+            try:
+                permissions = list(
+                    self.ops.list_file_permissions(
+                        user_email=reader,
+                        file_id=file_id,
+                        fields=_PERMISSION_LIST_FIELDS,
+                    )
+                )
+            except GoogleDriveRefreshError:
+                continue
+            except GoogleDriveHttpError as error:
+                if not error.access_denied:
+                    raise
+                continue
+            # A later read wins: a stored permission can be out of date, for
+            # example its allowFileDiscovery.
+            for permission in permissions:
+                found[str(permission.get("id"))] = permission
+            if _is_complete(drive_file, found.values()):
+                return {**drive_file, "permissions": list(found.values())}
+        if found or drive_file.get("driveId"):
+            return None
+        return drive_file
+
+    def _read_permission_fields(
+        self, payloads: list[DriveListingPayload]
+    ) -> dict[str, GoogleDriveFileType]:
+        """The permission fields of the listed files that have none, by file
+        id. One batch request for each listing user. A file whose read failed
+        is not in the result.
+
+        Shared drive files are left out: Drive never gives their
+        `permissions`, so conversion reads them with permissions.list, and a
+        files.get here would only spend quota."""
+        ids_by_user: dict[str, list[str]] = {}
+        for payload in payloads:
+            drive_file = payload.drive_file or {}
+            file_id = drive_file.get("id")
+            if (
+                isinstance(file_id, str)
+                and not _has_permission_fields(drive_file)
+                and not drive_file.get("driveId")
+            ):
+                ids_by_user.setdefault(payload.retriever_email, []).append(file_id)
+        fields: dict[str, GoogleDriveFileType] = {}
+        for user_email, file_ids in ids_by_user.items():
+            try:
+                result = self.ops.batch_get_files(
+                    user_email=user_email,
+                    file_ids_by_key={file_id: file_id for file_id in file_ids},
+                    fields=_PERMISSION_FIELDS,
+                )
+            except GoogleDriveRefreshError as error:
+                # The listing user cannot be impersonated now. Its files go
+                # through `reindex`, which reads them as the admin.
+                logger.warning(
+                    "Could not read the permissions of %s Drive files as %s: %s",
+                    len(file_ids),
+                    user_email,
+                    error,
+                )
+                continue
+            fields.update(result.files)
+            if result.errors:
+                logger.warning(
+                    "Could not read the permissions of %s Drive files as %s",
+                    len(result.errors),
+                    user_email,
+                )
+        return fields
 
     def _load_from_checkpoint(
         self,
@@ -1311,12 +1937,18 @@ class GoogleDriveConnector(
         """Lists the files that indexing would index. With ``stub_failures``,
         the listing is for indexing: it yields ``SlimDocumentStub``s and adds a
         retrieval error to ``stub_failures``. Without it, a retrieval error is
-        raised."""
+        raised.
+
+        The stub listing reads no file permissions: conversion reads them.
+        With ``include_permissions`` it still gives the folder nodes their
+        permissions, so a private folder never becomes a public node."""
         for_indexing = stub_failures is not None
         listing = self._plan_listing(checkpoint, start, end)
         # The stream also holds folders, which become hierarchy nodes.
         drive_files = self._fetch_drive_items(
-            checkpoint, include_permissions=include_permissions
+            checkpoint,
+            include_permissions=include_permissions,
+            permissions_read_later=for_indexing,
         )
         permission_sync_context = (
             PermissionSyncContext(
@@ -1326,12 +1958,24 @@ class GoogleDriveConnector(
             if include_permissions
             else None
         )
+        file_permission_context = None if for_indexing else permission_sync_context
         files_batch: list[RetrievedDriveFile] = []
         folders_batch: list[RetrievedDriveFile] = []
 
         def _yield_slim_batch() -> list[SlimDocument | HierarchyNode]:
             """Process files batch and return items to yield (hierarchy nodes + slim docs)."""
             nonlocal files_batch, folders_batch
+
+            hidden_parents = [
+                (self._read_hidden_parent, (checkpoint, file))
+                for file in files_batch
+                if file.drive_file.get("driveId")
+                and not _get_parent_id_from_file(file.drive_file)
+            ]
+            if hidden_parents:
+                run_functions_tuples_in_parallel(
+                    hidden_parents, max_workers=DRIVE_FETCH_WORKERS
+                )
 
             # Hierarchy nodes of the new folders first
             new_ancestors = self._listed_folder_nodes(
@@ -1358,8 +2002,15 @@ class GoogleDriveConnector(
                                 (
                                     self.ops,
                                     file.drive_file,
-                                    permission_sync_context,
+                                    file_permission_context,
                                     file.user_email,
+                                    *(
+                                        self._stub_listing_facts(
+                                            checkpoint, listing, file
+                                        )
+                                        if for_indexing
+                                        else ()
+                                    ),
                                 ),
                             )
                             for file in files_batch
@@ -1412,6 +2063,74 @@ class GoogleDriveConnector(
                 parent_batch: list[SlimDocument | HierarchyNode] = list(parents)
                 yield parent_batch
 
+    def _stub_listing_facts(
+        self,
+        checkpoint: GoogleDriveCheckpoint,
+        listing: DriveListingState | None,
+        file: RetrievedDriveFile,
+    ) -> tuple[list[str] | None, list[str]]:
+        """What the listing knows about a file beyond its own fields: its
+        folder path, and the members of its shared drive."""
+        if listing is None:
+            return None, []
+        drive_id = file.drive_file.get("driveId")
+        members = listing.drive_member_emails.get(drive_id, []) if drive_id else []
+        return self._listed_folder_path(checkpoint, listing, file), members
+
+    def _listed_folder_path(
+        self,
+        checkpoint: GoogleDriveCheckpoint,
+        listing: DriveListingState,
+        file: RetrievedDriveFile,
+    ) -> list[str] | None:
+        """The folder names from the root to the file's parent, in the form of
+        `build_folder_path`, from the folders the listing returned. None when
+        a folder on the way is not listed yet. It reads each shared drive's
+        name until a user can see the drive, and each user's My Drive root id
+        once."""
+        drive_file = file.drive_file
+        drive_id = drive_file.get("driveId")
+        if drive_id:
+            root_name = listing.drive_names.get(drive_id)
+            if root_name is None:
+                root_name = self._get_shared_drive_name(
+                    drive_id,
+                    self._listing_drive_readers(
+                        checkpoint, drive_id, [file.user_email]
+                    ),
+                )
+                if root_name is not None:
+                    listing.drive_names[drive_id] = root_name
+                else:
+                    # Not cached: a later file's reader can see the drive.
+                    root_name = f"Shared Drive {drive_id}"
+            root_id: str | None = drive_id
+        else:
+            owned = owner_email(drive_file) == file.user_email.lower()
+            root_name = "My Drive" if owned else "Shared with me"
+            root_id = listing.my_drive_root_ids.get(file.user_email)
+            if root_id is None:
+                root_id = self._get_my_drive_root_id(file.user_email)
+                if root_id is not None:
+                    listing.my_drive_root_ids[file.user_email] = root_id
+
+        names: list[str] = []
+        folder_id = _get_parent_id_from_file(drive_file)
+        # Bounded, so folder metadata with a cycle cannot loop.
+        for _ in range(_MAX_FOLDER_PATH_DEPTH):
+            if folder_id is not None and folder_id == root_id:
+                return [root_name, *reversed(names)]
+            if folder_id is None:
+                # A shared drive folder chain ends at the drive. One that ends
+                # before it lacks a folder the listing user cannot see.
+                return None if drive_id else [root_name, *reversed(names)]
+            folder = listing.folder_names.get(folder_id)
+            if folder is None:
+                return None
+            names.append(folder[0])
+            folder_id = folder[1]
+        return None
+
     def _listed_folder_nodes(
         self,
         listing: DriveListingState,
@@ -1448,8 +2167,8 @@ class GoogleDriveConnector(
             run_functions_tuples_in_parallel(
                 [
                     (
-                        self._folder_node,
-                        (folder.drive_file, permission_sync_context),
+                        self._listed_folder_node,
+                        (folder, permission_sync_context),
                     )
                     for folder in yielded
                 ],
@@ -1458,6 +2177,12 @@ class GoogleDriveConnector(
         )
         for folder in yielded:
             listing.unresolved_parents.pop(folder.drive_file["id"], None)
+            _remember_folder_name(
+                listing,
+                folder.drive_file["id"],
+                folder.drive_file.get("name", "Unknown"),
+                _get_parent_id_from_file(folder.drive_file),
+            )
         for folder in new_folders:
             if not _get_parent_id_from_file(folder.drive_file):
                 parentless[folder.drive_file["id"]] = folder.user_email
@@ -1685,12 +2410,22 @@ class GoogleDriveConnector(
             # Documents under it keep their STUB parent.
             return _FolderRead(None, None, None, None)
         node = self._folder_node(folder, permission_sync_context, raw_id=folder_id)
+        if checkpoint.listing is not None:
+            _remember_folder_name(
+                checkpoint.listing,
+                folder_id,
+                folder.get("name", "Unknown"),
+                node.raw_parent_id,
+            )
         if checkpoint.seen_hierarchy_node_raw_ids.check_and_add(folder_id):
             # A listing yielded it while this read ran.
             return _FolderRead(None, None, None, None)
         drive_id = folder.get("driveId")
         if _is_shared_drive_root(folder):
-            drive_name = self._get_shared_drive_name(folder_id, email)
+            drive_name = self._get_shared_drive_name(
+                folder_id,
+                self._listing_drive_readers(checkpoint, folder_id, [email, *emails]),
+            )
             if drive_name:
                 node.display_name = drive_name
             node.node_type = HierarchyNodeType.SHARED_DRIVE
@@ -1916,12 +2651,15 @@ class GoogleDriveConnector(
         checkpoint: GoogleDriveCheckpoint,
         include_permissions: bool = False,
         inline: bool = False,
+        permissions_read_later: bool = False,
     ) -> Generator[RetrievedDriveFile, None, None]:
         """One call of the listing (``ParallelDriveLister``), for a service
         account and for OAuth. ``_plan_listing`` runs first. Counts the files
         that pass the metadata check. The engine asks for permissions only
-        when ``include_permissions`` or the link-only filter needs them. With
-        ``inline``, the caller converts each file in this call."""
+        when ``include_permissions`` or the link-only filter needs them, and
+        never with ``permissions_read_later`` (the stub listing: conversion
+        reads them). With ``inline``, the caller converts each file in this
+        call."""
 
         def choose_drive_principal(
             drive_id: str, busy: Collection[str]
@@ -1973,6 +2711,10 @@ class GoogleDriveConnector(
                 ListingPartitionKind.SHARED_DRIVE,
                 ListingPartitionKind.FOLDER_SUBTREE,
             )
+            if not keyed_by_parent:
+                # The lister marks a denied drive or folder. A denied user
+                # partition is marked here, so the counts are partial.
+                checkpoint.denied_listing_emails.add(email)
             return [
                 RetrievedDriveFile(
                     drive_file={},
@@ -2019,11 +2761,11 @@ class GoogleDriveConnector(
         lister = ParallelDriveLister(
             ops=self.ops,
             checkpoint=checkpoint,
-            # Without permission sync, pages carry no permissions, so Drive
-            # can serve 1000 files a page.
+            # Without permissions, Drive can serve 1000 files a page.
             field_type=(
                 DriveFileFieldType.WITH_PERMISSIONS
-                if include_permissions or self.exclude_domain_link_only
+                if (include_permissions or self.exclude_domain_link_only)
+                and not permissions_read_later
                 else DriveFileFieldType.STANDARD
             ),
             requested_shared_drive_ids=self._requested_shared_drive_ids,
@@ -2086,6 +2828,13 @@ class GoogleDriveConnector(
 
         except GoogleDriveHttpError as e:
             status_code = e.status_code
+            if e.rate_limited:
+                # Google refused the call for its rate, after the retries.
+                # The credential is fine, so the pair must not become
+                # invalid.
+                raise UnexpectedValidationError(
+                    f"Google Drive refused the validation call for its rate: {e}"
+                ) from e
             if status_code == 401:
                 raise CredentialExpiredError(
                     "Invalid or expired Google Drive credentials (401)."
@@ -2101,6 +2850,9 @@ class GoogleDriveConnector(
                     f"Unexpected Google Drive error (status={status_code}): {e}"
                 )
 
+        except ConnectorStopSignal:
+            # The attempt stopped while it waited for the API budget.
+            raise
         except Exception as e:
             # Check for scope-related hints from the error message
             if MISSING_SCOPES_ERROR_STR in str(e):
@@ -2124,6 +2876,11 @@ class GoogleDriveConnector(
             self.ops.get_admin_user()
         except GoogleDriveHttpError as e:
             status_code = e.status_code
+            if e.rate_limited:
+                raise UnexpectedValidationError(
+                    "The Google Workspace directory API refused the probe for "
+                    f"its rate: {e}"
+                ) from e
             if status_code == 403:
                 raise InsufficientPermissionsError(
                     f"Primary admin {self.primary_admin_email} is not authorized "
@@ -2137,6 +2894,8 @@ class GoogleDriveConnector(
             raise ConnectorValidationError(
                 f"Unexpected Google Workspace directory API error (status={status_code}): {e}"
             )
+        except ConnectorStopSignal:
+            raise
         except Exception as e:
             if MISSING_SCOPES_ERROR_STR in str(e):
                 raise InsufficientPermissionsError(
@@ -2145,6 +2904,33 @@ class GoogleDriveConnector(
             raise ConnectorValidationError(
                 f"Unexpected error during Google Workspace directory API probe: {e}"
             )
+
+    @override
+    def listing_counts(self, checkpoint: GoogleDriveCheckpoint) -> ListingCounts | None:
+        state = checkpoint.listing
+        if state is None:
+            return None
+        # A shared drive that was listed only in part, a requested drive or
+        # folder that no user could reach, a user whose My Drive could not
+        # be listed as them, or a user listing that Drive denied leaves files
+        # out of the count.
+        failed_users = {
+            email.lower() for email in checkpoint.failed_impersonation_emails
+        }
+        unlisted_my_drives = any(
+            email.lower() in failed_users
+            for email in self._my_drive_partition_emails(checkpoint)
+        )
+        return ListingCounts(
+            docs_by_type=state.docs_by_type,
+            bytes_by_type=state.bytes_by_type,
+            partial=bool(
+                checkpoint.incomplete_drive_ids
+                or checkpoint.unreachable_target_ids
+                or unlisted_my_drives
+                or checkpoint.denied_listing_emails
+            ),
+        )
 
     @override
     def build_dummy_checkpoint(self) -> GoogleDriveCheckpoint:
