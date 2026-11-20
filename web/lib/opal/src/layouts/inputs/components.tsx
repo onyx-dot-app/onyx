@@ -1,7 +1,7 @@
 "use client";
 
 import "@opal/layouts/inputs/styles.css";
-import { useContext } from "react";
+import { useContext, useState } from "react";
 import { useField, FormikContext } from "formik";
 import type {
   IconFunctionComponent,
@@ -13,6 +13,7 @@ import { Text, Divider, type BadgeProps } from "@opal/components";
 import { isRichStr } from "@opal/components/text/InlineMarkdown";
 import { SvgXOctagon, SvgAlertCircle } from "@opal/icons";
 import { Content, ContentAction, Section } from "@opal/layouts";
+import { InputRowProvider } from "@opal/components/inputs/disabled";
 
 // ---------------------------------------------------------------------------
 // Label
@@ -23,7 +24,7 @@ interface LabelProps extends WithoutStyles<
 > {
   /** Sets `htmlFor` on the `<label>` to associate it with a form element by id. */
   label?: string;
-  /** Dims the row and switches its cursor from `pointer` to `not-allowed`. */
+  /** Switches cursor from `pointer` to `not-allowed`. */
   disabled?: boolean;
   ref?: React.Ref<HTMLLabelElement>;
 }
@@ -37,6 +38,49 @@ function Label({ label, disabled, ref, ...props }: LabelProps) {
       data-disabled={disabled || undefined}
       {...props}
     />
+  );
+}
+
+// ---------------------------------------------------------------------------
+// InputRow
+// ---------------------------------------------------------------------------
+
+interface InputRowProps {
+  withLabel: boolean;
+  fieldName?: string;
+  disabled: boolean;
+  disabledTooltip?: string | RichStr;
+  hovered: boolean;
+  /** The layout's content `Section`. */
+  children: React.ReactElement;
+}
+
+/**
+ * A layout's outer frame: the row context for the input inside, and the
+ * `<label>` when `withLabel`.
+ */
+function InputRow({
+  withLabel,
+  fieldName,
+  disabled,
+  disabledTooltip,
+  hovered,
+  children,
+}: InputRowProps) {
+  return (
+    <InputRowProvider
+      disabled={disabled}
+      disabledTooltip={disabledTooltip}
+      hovered={hovered}
+    >
+      {withLabel ? (
+        <Label label={fieldName} disabled={disabled}>
+          {children}
+        </Label>
+      ) : (
+        children
+      )}
+    </InputRowProvider>
   );
 }
 
@@ -56,7 +100,16 @@ interface InputLayoutProps {
    */
   withLabel?: boolean | string;
 
+  /**
+   * Disables the row: the input inside it is disabled too, and the row's text
+   * dims.
+   */
   disabled?: boolean;
+  /**
+   * Why the row is disabled. While `disabled`, the input inside shows it as
+   * its tooltip, in place of its own `tooltip`.
+   */
+  disabledTooltip?: string | RichStr;
   /** Ref forwarded to the inner content `Section`. */
   ref?: React.Ref<HTMLDivElement>;
   children?: React.ReactNode;
@@ -102,7 +155,8 @@ interface VerticalProps extends InputLayoutProps {
 
 function Vertical({
   withLabel: withLabelProp = false,
-  disabled,
+  disabled = false,
+  disabledTooltip,
   ref,
   children,
   subDescription,
@@ -114,6 +168,7 @@ function Vertical({
   error,
   warning,
 }: VerticalProps) {
+  const [hovered, setHovered] = useState(false);
   const fieldName =
     typeof withLabelProp === "string" ? withLabelProp : undefined;
 
@@ -148,23 +203,39 @@ function Vertical({
   );
 
   const content = (
-    <Section ref={ref} gap={1} alignItems="start">
+    <Section
+      ref={ref}
+      gap={1}
+      alignItems="start"
+      className="opal-input-layout"
+      data-disabled={disabled || undefined}
+      // The row's hover opens the input's tooltip (`disabledTooltip`).
+      onPointerEnter={() => setHovered(true)}
+      onPointerLeave={() => setHovered(false)}
+    >
       {titleRow}
       {children}
       <InputMessage error={error} warning={warning} fieldName={fieldName} />
       {subDescription && (
-        <Text font="secondary-body" color="text-03">
-          {subDescription}
-        </Text>
+        <div className="opal-input-sub-description">
+          <Text font="secondary-body" color="text-03">
+            {subDescription}
+          </Text>
+        </div>
       )}
     </Section>
   );
 
-  if (!withLabelProp) return content;
   return (
-    <Label label={fieldName} disabled={disabled}>
+    <InputRow
+      withLabel={Boolean(withLabelProp)}
+      fieldName={fieldName}
+      disabled={disabled}
+      disabledTooltip={disabledTooltip}
+      hovered={hovered}
+    >
       {content}
-    </Label>
+    </InputRow>
   );
 }
 
@@ -194,7 +265,8 @@ interface HorizontalProps extends InputLayoutProps {
 
 function Horizontal({
   withLabel: withLabelProp = false,
-  disabled,
+  disabled = false,
+  disabledTooltip,
   ref,
   children,
   center,
@@ -208,11 +280,21 @@ function Horizontal({
   error,
   warning,
 }: HorizontalProps) {
+  const [hovered, setHovered] = useState(false);
   const fieldName =
     typeof withLabelProp === "string" ? withLabelProp : undefined;
 
   const content = (
-    <Section ref={ref} gap={1} alignItems="start">
+    <Section
+      ref={ref}
+      gap={1}
+      alignItems="start"
+      className="opal-input-layout"
+      data-disabled={disabled || undefined}
+      // The row's hover opens the input's tooltip (`disabledTooltip`).
+      onPointerEnter={() => setHovered(true)}
+      onPointerLeave={() => setHovered(false)}
+    >
       <ContentAction
         font="main-ui-action"
         icon={icon}
@@ -231,11 +313,16 @@ function Horizontal({
     </Section>
   );
 
-  if (!withLabelProp) return content;
   return (
-    <Label label={fieldName} disabled={disabled}>
+    <InputRow
+      withLabel={Boolean(withLabelProp)}
+      fieldName={fieldName}
+      disabled={disabled}
+      disabledTooltip={disabledTooltip}
+      hovered={hovered}
+    >
       {content}
-    </Label>
+    </InputRow>
   );
 }
 

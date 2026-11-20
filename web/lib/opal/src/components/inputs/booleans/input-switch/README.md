@@ -26,7 +26,8 @@ import { InputSwitch } from "@opal/components";
 | `checked`         | `boolean`                    | `undefined` | Controlled checked state.                                                         |
 | `defaultChecked`  | `boolean`                    | `false`     | Initial state for uncontrolled mode.                                              |
 | `onCheckedChange` | `(checked: boolean) => void` | `undefined` | Called with the new value when toggled.                                           |
-| `disabled`        | `boolean`                    | `false`     | Blocks toggling, applies muted styles, and takes the switch out of the Tab order. |
+| `disabled`        | `boolean`                    | `false`     | Blocks toggling, applies muted styles, and takes the switch out of the Tab order. A disabled row (`InputHorizontal`/`InputVertical`) sets it too. |
+| `tooltip`         | `string \| RichStr`          | `undefined` | Shown on hover, in any state. A disabled row's `disabledTooltip` replaces it.     |
 
 All other `<button>` attributes (except `style`, `className`, `onChange`, and `type` — the switch is always `type="button"`) are forwarded.
 

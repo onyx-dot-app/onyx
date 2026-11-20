@@ -29,7 +29,6 @@ import {
   InputSwitch,
   Text,
   Card,
-  Tooltip,
 } from "@opal/components";
 import { Hoverable, Disabled } from "@opal/core";
 import { SvgArrowExchange, SvgSettings, SvgTrash } from "@opal/icons";
@@ -705,28 +704,21 @@ export default function LanguageModelsPage() {
                 }
                 withLabel
                 disabled={autoModeLocked}
+                // Only once the list is known to be empty; while it loads the
+                // switch is locked without a reason to give.
+                disabledTooltip={
+                  noRouterModels
+                    ? t("modelRouting.autoMode.noRoutersTooltip")
+                    : undefined
+                }
               >
-                <Tooltip
-                  tooltip={
-                    // Only once the list is known to be empty; while it loads
-                    // the switch is locked without a reason to give.
-                    autoModeLocked && noRouterModels
-                      ? t("modelRouting.autoMode.noRoutersTooltip")
-                      : undefined
-                  }
-                >
-                  <div>
-                    <InputSwitch
-                      checked={routingEnabled}
-                      disabled={
-                        pendingRoutingEnabled !== null || autoModeLocked
-                      }
-                      onCheckedChange={(checked) => {
-                        void handleRoutingEnabledChange(checked);
-                      }}
-                    />
-                  </div>
-                </Tooltip>
+                <InputSwitch
+                  checked={routingEnabled}
+                  disabled={pendingRoutingEnabled !== null}
+                  onCheckedChange={(checked) => {
+                    void handleRoutingEnabledChange(checked);
+                  }}
+                />
               </InputHorizontal>
               {routingEnabled && !noRouterModels && (
                 <InputHorizontal

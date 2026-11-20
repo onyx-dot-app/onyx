@@ -23,11 +23,15 @@ Interaction model:
 | `placeholder`  | `string`                             | —              | Input placeholder                                                                 |
 | `variant`      | `"primary" \| "internal" \| "error"` | `"primary"`    | Wrapper chrome. `"internal"` is the borderless Figma `Style=Subtle` look          |
 | `disabled`     | `boolean`                            | `false`        | Dims the field, disables input, hides remove and clear buttons                    |
+| `tooltip`      | `string \| RichStr`                  | —              | Shown on hover, in any state                                                      |
 | `icon`         | `IconFunctionComponent`              | —              | Leading icon (20px icon container)                                                |
 | `onClear`      | `() => void`                         | —              | Renders the clear action button                                                   |
 | `minRows`      | `number`                             | `1`            | Tag rows the field is tall enough to show before it grows. Rows pack from the top |
 | `maxRows`      | `number`                             | `2`            | Tag rows the field grows to before the tags scroll inside it. A new tag scrolls the input row into view |
 | `focusOnMount` | `boolean`                            | `false`        | Focuses the text input on mount                                                   |
+
+Inside `InputHorizontal` or `InputVertical`, the row's `disabled` also disables
+the field, and its `disabledTooltip` replaces `tooltip` while disabled.
 
 ### `TagItem`
 

@@ -7,7 +7,6 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import { SettingsLayouts, toast, Section } from "@opal/layouts";
 import { Content, InputHorizontal } from "@opal/layouts";
 import { Card, InputSwitch, MessageCard } from "@opal/components";
-import { Disabled } from "@opal/core";
 import { usePlans, useTierAtLeast } from "@/lib/tiers/hooks";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { useSettings } from "@/lib/settings/hooks";
@@ -50,28 +49,22 @@ export default function LLMGatewayPage() {
             description={t("access.description")}
           />
           <Card border="solid" rounding={4}>
-            <Disabled
+            <InputHorizontal
+              title={t("access.toggle.title")}
+              tag={!businessTier ? plans[Tier.BUSINESS].tag : undefined}
+              description={t("access.toggle.description")}
               disabled={!businessTier}
-              allowClick={businessTier}
-              tooltip={!businessTier ? t("tierTooltip") : undefined}
+              disabledTooltip={t("tierTooltip")}
+              withLabel
             >
-              <InputHorizontal
-                title={t("access.toggle.title")}
-                tag={!businessTier ? plans[Tier.BUSINESS].tag : undefined}
-                description={t("access.toggle.description")}
-                disabled={!businessTier}
-                withLabel
-              >
-                <InputSwitch
-                  id="llm_gateway_enabled"
-                  checked={businessTier ? enabled : false}
-                  onCheckedChange={(checked) => {
-                    void save(checked);
-                  }}
-                  disabled={!businessTier}
-                />
-              </InputHorizontal>
-            </Disabled>
+              <InputSwitch
+                id="llm_gateway_enabled"
+                checked={businessTier ? enabled : false}
+                onCheckedChange={(checked) => {
+                  void save(checked);
+                }}
+              />
+            </InputHorizontal>
           </Card>
           <MessageCard variant="info" title={t("scopeNote.title")} />
         </Section>

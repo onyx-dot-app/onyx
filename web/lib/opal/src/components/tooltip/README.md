@@ -9,8 +9,8 @@ Hover is Radix's to track. There is no controlled `open` — use `suppressed` to
 off while keeping the trigger mounted.
 
 A press on a disabled control (`aria-disabled="true"`) inside the trigger does not close the
-tooltip. A click on the control's label also opens it. It closes on blur or when the pointer
-leaves. Put a disabled control's reason tooltip on the control itself.
+tooltip. It closes on blur or when the pointer leaves. For a labeled input, give the reason as its row's `disabledTooltip` (see the input
+layouts README); other inputs take a `tooltip` prop.
 
 ## Props
 

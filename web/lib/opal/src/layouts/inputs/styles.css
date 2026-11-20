@@ -12,9 +12,17 @@
   @apply cursor-not-allowed;
 }
 
-/* The whole row dims, like `Disabled`. Inside a `Disabled` region it is
-   already dimmed. */
-.opal-input-label[data-disabled]:not([data-opal-disabled] *) {
+/* A disabled row dims its text: title, tag, description. The input styles
+   itself as disabled, so it is not dimmed again. */
+.opal-input-layout[data-disabled] > .opal-content,
+.opal-input-layout[data-disabled]
+  > *
+  > :is(
+    .opal-content-action-content,
+    .opal-content-action-responsive-title,
+    .opal-content-action-responsive-description
+  ),
+.opal-input-layout[data-disabled] > .opal-input-sub-description {
   @apply opacity-50;
 }
 
