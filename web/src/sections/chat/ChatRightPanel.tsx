@@ -174,12 +174,13 @@ export const ChatRightPanel = memo(function ChatRightPanel({
   // Width: Craft's medium share of the workspace, its narrow rule, and full
   // size over the page
   const workspace = useContext(AppWorkspaceElementsContext);
-  const noElement = useRef<HTMLDivElement>(null);
+  if (!workspace)
+    throw new Error("The chat's right panel needs the app chrome's workspace");
   const closeButtonRef = useRef<HTMLElement>(null);
   const full = state.mode === "full";
   const layout = useOutputPanelWorkspace({
-    workspaceRef: workspace?.workspace ?? noElement,
-    pageRef: workspace?.page ?? noElement,
+    workspaceRef: workspace.workspace,
+    pageRef: workspace.page,
     coverFocusRef: closeButtonRef,
     // The host can hide a panel whose state is open, such as Sources
     // without retrieval
@@ -290,10 +291,9 @@ export const ChatRightPanel = memo(function ChatRightPanel({
       onEscape={escape}
       // The page keeps the medium reserve while the panel is full, so a
       // change of size moves only the panel's edge
-      width={layout.covers ? layout.workspaceWidth : layout.mediumWidth}
       reserve={layout.narrow ? 0 : layout.mediumWidth}
+      covers={layout.covers}
       focusOnOpen={false}
-      animate={!layout.dragging}
       shows={shown}
     >
       <aside
@@ -397,7 +397,7 @@ export const ChatRightPanel = memo(function ChatRightPanel({
           gap={0.25}
           className="absolute end-2 top-3"
         >
-          {!layout.narrow && layout.workspaceWidth > 0 && (
+          {!layout.narrow && (
             <PanelSizeButton
               full={full}
               expandLabel={t("expandButton.label")}
@@ -417,19 +417,18 @@ export const ChatRightPanel = memo(function ChatRightPanel({
             aria-label={t("closeButton.label")}
           />
         </Section>
-        {layout.workspaceWidth > 0 &&
-          !layout.narrow && (
-            // Inside the panel's first 8px, as Craft's, so no edge clips it
-            <PanelResizeHandle
-              label={t("resizeHandle.label")}
-              workspaceWidth={layout.workspaceWidth}
-              mediumWidth={layout.mediumWidth}
-              active={open && !full}
-              insetInlineEnd="calc(100% - 8px)"
-              transitions={false}
-              handleProps={layout.handleProps}
-            />
-          )}
+        {!layout.narrow && (
+          // Inside the panel's first 8px, as Craft's, so no edge clips it
+          <PanelResizeHandle
+            label={t("resizeHandle.label")}
+            workspaceWidth={layout.workspaceWidth}
+            mediumWidth={layout.mediumWidth}
+            active={open && !full}
+            insetInlineEnd="calc(100% - 8px)"
+            transitions={false}
+            handleProps={layout.handleProps}
+          />
+        )}
       </aside>
     </ChatSidePanel>
   );

@@ -14,12 +14,17 @@ interface SavedChatMessage {
   message: string;
 }
 
-/** The right panel's box and the page's width in one frame, in pixels. */
+/**
+ * The right panel's drawn box, the page column's width and the workspace
+ * row's box in one frame, in pixels.
+ */
 export interface PanelFrame {
   start: number;
   end: number;
   width: number;
   pageWidth: number;
+  rowStart: number;
+  rowEnd: number;
 }
 
 export class ChatPage {
@@ -184,7 +189,10 @@ export class ChatPage {
     await this.page.getByRole("button", { name: "Close panel" }).click();
   }
 
-  /** The right panel's width in pixels, as its resize handle reports it. */
+  /**
+   * The right panel's medium width in pixels, as its resize handle reports
+   * it: the width it goes to, not the width drawn now.
+   */
   async rightPanelWidth(): Promise<number> {
     return Number(
       await this.rightPanelResizeHandle().getAttribute("aria-valuenow")
@@ -225,32 +233,57 @@ export class ChatPage {
   }
 
   /**
-   * Runs `action`, then records the right panel's box and the page's width on
-   * each of the next 45 frames, while the panel settles.
+   * Waits until the right panel's drawn box is `width` pixels wide (within the
+   * handle's rounding), or as wide as the workspace row.
    */
-  async rightPanelFrames(action: () => Promise<void>): Promise<PanelFrame[]> {
-    await this.page.evaluate(() => {
+  async expectRightPanelSettled(width: number | "row"): Promise<void> {
+    await expect
+      .poll(async () => {
+        const [frame] = await this.rightPanelFrames(async () => {}, 1);
+        return Math.abs(
+          frame!.width -
+            (width === "row" ? frame!.rowEnd - frame!.rowStart : width)
+        );
+      })
+      .toBeLessThanOrEqual(1);
+  }
+
+  /**
+   * Records the right panel's box, the page's width and the row's box now,
+   * then runs `action` and records them on each frame, `count` in all, while
+   * the panel settles.
+   */
+  async rightPanelFrames(
+    action: () => Promise<void>,
+    count = 45
+  ): Promise<PanelFrame[]> {
+    await this.page.evaluate((count) => {
       const panel = document.querySelector(
         'aside[aria-label="Files"]'
       )?.parentElement;
       // The panel's reserve, the app chrome's right panel slot, its row
       const row = panel?.parentElement?.parentElement?.parentElement;
       const pageColumn = row?.firstElementChild;
-      if (!panel || !pageColumn) throw new Error("The panel is not mounted");
+      if (!panel || !row || !pageColumn)
+        throw new Error("The panel is not mounted");
       const recorder = window as unknown as { panelFrames: PanelFrame[] };
       recorder.panelFrames = [];
       const record = () => {
         const box = panel.getBoundingClientRect();
+        const rowBox = row.getBoundingClientRect();
         recorder.panelFrames.push({
           start: Math.round(box.left),
           end: Math.round(box.right),
           width: Math.round(box.width),
           pageWidth: Math.round(pageColumn.getBoundingClientRect().width),
+          rowStart: Math.round(rowBox.left),
+          rowEnd: Math.round(rowBox.right),
         });
-        if (recorder.panelFrames.length < 45) requestAnimationFrame(record);
+        if (recorder.panelFrames.length < count) requestAnimationFrame(record);
       };
-      requestAnimationFrame(record);
-    });
+      // The first frame is the box before the action
+      record();
+    }, count);
     await action();
     await expect
       .poll(() =>
@@ -260,7 +293,7 @@ export class ChatPage {
               .length
         )
       )
-      .toBe(45);
+      .toBe(count);
     return this.page.evaluate(
       () => (window as unknown as { panelFrames: PanelFrame[] }).panelFrames
     );

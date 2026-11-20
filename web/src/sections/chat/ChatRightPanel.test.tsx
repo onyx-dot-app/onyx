@@ -97,8 +97,8 @@ function markdownResponse(): Response {
 }
 
 /**
- * The replies' cards and the chat page's right panel, wired to the store. With
- * a `workspaceWidth`, they sit in an app chrome workspace of that width.
+ * The replies' cards and the chat page's right panel, wired to the store, in
+ * an app chrome workspace of `workspaceWidth`, or one not measured yet.
  */
 function Chat({
   replies,
@@ -113,9 +113,7 @@ function Chat({
   const page = useRef<HTMLDivElement>(null);
   const elements = useMemo(() => ({ workspace, page }), []);
   return (
-    <AppWorkspaceElementsContext.Provider
-      value={workspaceWidth ? elements : null}
-    >
+    <AppWorkspaceElementsContext.Provider value={elements}>
       <div ref={workspace} data-workspace-width={workspaceWidth}>
         <PublishedFileOpenerContext.Provider value={openPublishedFileInChat}>
           <div ref={page} data-testid="page">
@@ -402,7 +400,7 @@ test("a full panel makes the page inert and takes focus out of it, until Escape 
   expect(screen.getByTestId("page").inert).toBe(false);
 });
 
-test("full and medium size keep the panel over the workspace's end at a pixel width, beside the page's same reserve", () => {
+test("the panel sits over the workspace's end beside the page's reserve, and fills the workspace at full size", () => {
   setReplies([[REPORT]]);
   render(<Chat replies={[[REPORT]]} workspaceWidth={1200} />);
   update({ type: "toggleFiles" });
@@ -419,7 +417,7 @@ test("full and medium size keep the panel over the workspace's end at a pixel wi
   expect(geometry()).toEqual(medium);
 
   update({ type: "setMode", mode: "full" });
-  expect(geometry()).toEqual({ ...medium, width: "1200px" });
+  expect(geometry()).toEqual({ ...medium, width: "100%" });
 
   fireEvent.keyDown(document.body, { key: "Escape" });
   expect(geometry()).toEqual(medium);
@@ -601,9 +599,41 @@ function StreamingPage() {
   return <RootLayout.RightPanel>{rightPanel}</RootLayout.RightPanel>;
 }
 
+/**
+ * The app chrome: it shows the right panel slot that the page fills, in the
+ * workspace that the panel shares with the page.
+ */
+function Chrome({
+  children,
+  onRender,
+}: {
+  children: ReactNode;
+  onRender?: () => void;
+}) {
+  const [slot, setSlot] = useState<ReactNode>(null);
+  const workspace = useRef<HTMLDivElement>(null);
+  const page = useRef<HTMLDivElement>(null);
+  const elements = useMemo(() => ({ workspace, page }), []);
+  onRender?.();
+  return (
+    <RootLayoutRightPanelSlotContext.Provider value={setSlot}>
+      <AppWorkspaceElementsContext.Provider value={elements}>
+        <div ref={workspace} data-workspace-width={1000}>
+          <div ref={page}>{children}</div>
+          <div data-testid="slot">{slot}</div>
+        </div>
+      </AppWorkspaceElementsContext.Provider>
+    </RootLayoutRightPanelSlotContext.Provider>
+  );
+}
+
 test("a streamed packet that changes no file or tab does not render the panel", async () => {
   setReplies([[REPORT]]);
-  render(<StreamingPage />);
+  render(
+    <Chrome>
+      <StreamingPage />
+    </Chrome>
+  );
   act(() => openPublishedFileInChat(REPORT));
   await preview("Q3 report");
   const before = mockPanelRenders.mock.calls.length;
@@ -615,27 +645,8 @@ test("a streamed packet that changes no file or tab does not render the panel", 
 test("streamed packets, the Files search and a resize do not render the app chrome that holds the panel", async () => {
   setReplies([[REPORT]]);
   const chromeRenders = jest.fn();
-  // The app chrome: it shows the right panel slot that the page fills, in
-  // the workspace that the panel shares with the page
-  function Chrome({ children }: { children: ReactNode }) {
-    const [slot, setSlot] = useState<ReactNode>(null);
-    const workspace = useRef<HTMLDivElement>(null);
-    const page = useRef<HTMLDivElement>(null);
-    const elements = useMemo(() => ({ workspace, page }), []);
-    chromeRenders();
-    return (
-      <RootLayoutRightPanelSlotContext.Provider value={setSlot}>
-        <AppWorkspaceElementsContext.Provider value={elements}>
-          <div ref={workspace} data-workspace-width={1000}>
-            <div ref={page}>{children}</div>
-            <div data-testid="slot">{slot}</div>
-          </div>
-        </AppWorkspaceElementsContext.Provider>
-      </RootLayoutRightPanelSlotContext.Provider>
-    );
-  }
   render(
-    <Chrome>
+    <Chrome onRender={chromeRenders}>
       <StreamingPage />
     </Chrome>
   );
