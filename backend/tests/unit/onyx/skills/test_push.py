@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import gc
 import io
+import weakref
 import zipfile
 from types import SimpleNamespace
 from typing import cast
@@ -474,3 +476,39 @@ def test_a_payload_that_would_cross_the_batch_budget_starts_a_new_batch(
     push.push_skills_for_users(set(sandboxes), MagicMock())
 
     assert batches == [[sandboxes[0]], [sandboxes[1]], [sandboxes[2]]]
+
+
+def test_a_sent_payload_is_not_alive_while_the_next_one_builds(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    sandboxes = sorted([uuid4(), uuid4(), uuid4()])
+    payloads: list[weakref.ref[push.UserSkillsPayload]] = []
+    alive_at_each_build: list[int] = []
+
+    def build(sid: object, _s: object) -> push.UserSkillsPayload:  # noqa: ARG001
+        gc.collect()
+        alive_at_each_build.append(sum(1 for ref in payloads if ref() is not None))
+        payload = push.UserSkillsPayload(
+            connectable_apps_section="", files={"f": b"x"}, omissions=()
+        )
+        payloads.append(weakref.ref(payload))
+        return payload
+
+    monkeypatch.setattr(push, "_PUSH_BATCH_MAX_BYTES", 1)
+    monkeypatch.setattr(
+        push, "get_sandbox_user_map", lambda _ids, _s: {sid: sid for sid in sandboxes}
+    )
+    monkeypatch.setattr(push, "lock_sandbox_skills_states", lambda _s, _ids: {})
+    monkeypatch.setattr(push, "build_user_skills_payload", build)
+    monkeypatch.setattr(
+        push,
+        "get_sandbox_manager",
+        lambda: SimpleNamespace(
+            push_to_sandboxes=lambda **_kwargs: SimpleNamespace(failures=[])
+        ),
+    )
+    monkeypatch.setattr(push, "set_sandbox_skills_states__no_commit", MagicMock())
+
+    push.push_skills_for_users(set(sandboxes), MagicMock())
+
+    assert alive_at_each_build == [0, 0, 0]
