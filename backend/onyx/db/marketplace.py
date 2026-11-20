@@ -222,8 +222,12 @@ def apply_marketplace_sync__no_commit(
     entries: Sequence[ReadyPlugin | BlockedPlugin | UnsupportedPlugin],
     staged: Mapping[str, PluginVersionContent],
     created_by: User | None,
+    read_after: datetime | None,
     db_session: Session,
 ) -> MarketplaceSyncResult:
+    """``read_after`` is the last sync time when the caller started its read.
+    A sync that committed since then is newer, so this one changes nothing and
+    returns its staged bundles for cleanup."""
     marketplace = get_github_marketplace(marketplace_id, db_session)
     if marketplace is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Marketplace not found.")
@@ -231,6 +235,11 @@ def apply_marketplace_sync__no_commit(
     marketplace = lock_github_marketplace(marketplace_id, db_session)
     if marketplace is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Marketplace not found.")
+    if marketplace.last_synced_at != read_after:
+        return MarketplaceSyncResult(
+            status=MarketplaceSyncStatus.FAILED,
+            cleanup_file_ids=sorted(item.bundle_file_id for item in staged.values()),
+        )
     current = list_synced_plugins(marketplace_id, db_session)
     plan = plan_marketplace_sync(entries, current)
     blocked = [

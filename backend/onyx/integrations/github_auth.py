@@ -5,15 +5,15 @@ from sqlalchemy.orm import Session
 from onyx.db.enums import ExternalAppType
 from onyx.db.external_app import get_built_in_external_app
 from onyx.db.integration import get_integration_by_kind_row
-from onyx.db.models import Integration
+from onyx.db.models import Integration, User
 from onyx.db.users import fetch_user_by_id
 from onyx.integrations.call_credentials import resolve_call_credentials
-from onyx.integrations.connections import ConnectionProblem
+from onyx.integrations.connections import ConnectionProblem, resolve_connection
 
 
-def github_authorization_for(user_id: UUID, db_session: Session) -> str | None:
-    """The Authorization header of the user's connection to the built-in GitHub
-    integration, or None when the user has none that works."""
+def _github_integration_and_user(
+    user_id: UUID, db_session: Session
+) -> tuple[Integration, User] | None:
     github_app = get_built_in_external_app(db_session, ExternalAppType.GITHUB)
     if github_app is None:
         return None
@@ -23,6 +23,27 @@ def github_authorization_for(user_id: UUID, db_session: Session) -> str | None:
     user = fetch_user_by_id(db_session, user_id)
     if integration is None or not integration.enabled or user is None:
         return None
+    return integration, user
+
+
+def github_connected(user_id: UUID, db_session: Session) -> bool:
+    """Whether the user has a working GitHub connection. Only reads: it never
+    refreshes a token."""
+    found = _github_integration_and_user(user_id, db_session)
+    if found is None:
+        return False
+    integration, user = found
+    resolved = resolve_connection(integration, user, db_session, refresh=False)
+    return not isinstance(resolved, ConnectionProblem)
+
+
+def github_authorization_for(user_id: UUID, db_session: Session) -> str | None:
+    """The Authorization header of the user's connection to the built-in GitHub
+    integration, or None when the user has none that works."""
+    found = _github_integration_and_user(user_id, db_session)
+    if found is None:
+        return None
+    integration, user = found
     credentials = resolve_call_credentials(integration, user, db_session)
     if isinstance(credentials, ConnectionProblem):
         return None

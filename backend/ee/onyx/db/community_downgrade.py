@@ -245,10 +245,14 @@ def _make_group_shared_resources_public__no_commit(
             != PluginInstallationPolicy.NOT_AVAILABLE,
         ),
     )
-    # A synced plugin stays in its GitHub marketplace: the group's members get
-    # a user share instead.
+    # A synced plugin stays in its GitHub marketplace: the members of a group
+    # that shares it, or whose setting opens a company one, get a user share.
     github_marketplace_ids = select(Marketplace.id).where(
         Marketplace.kind == MarketplaceKind.GITHUB
+    )
+    company_marketplace_ids = select(Marketplace.id).where(
+        Marketplace.kind == MarketplaceKind.GITHUB,
+        Marketplace.owner_user_id.is_(None),
     )
     synced_shares = db_session.execute(
         pg_insert(Plugin__User)
@@ -262,11 +266,22 @@ def _make_group_shared_resources_public__no_commit(
             )
             .where(
                 Plugin__UserGroup.user_group_id.in_(group_ids),
-                Plugin__UserGroup.permission.is_not(None),
                 or_(
-                    Plugin__UserGroup.installation_policy.is_(None),
-                    Plugin__UserGroup.installation_policy
-                    != PluginInstallationPolicy.NOT_AVAILABLE,
+                    and_(
+                        Plugin__UserGroup.permission.is_not(None),
+                        or_(
+                            Plugin__UserGroup.installation_policy.is_(None),
+                            Plugin__UserGroup.installation_policy
+                            != PluginInstallationPolicy.NOT_AVAILABLE,
+                        ),
+                    ),
+                    and_(
+                        Plugin__UserGroup.permission.is_(None),
+                        Plugin__UserGroup.installation_policy.is_not(None),
+                        Plugin__UserGroup.installation_policy
+                        != PluginInstallationPolicy.NOT_AVAILABLE,
+                        Plugin.marketplace_id.in_(company_marketplace_ids),
+                    ),
                 ),
                 Plugin.marketplace_id.in_(github_marketplace_ids),
                 User__UserGroup.user_id.is_not(None),

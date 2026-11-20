@@ -22,6 +22,7 @@ from onyx.db.users import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.file_store.staging import delete_files_best_effort
 from onyx.server.features.build.sandbox.firecracker.purge import (
     purge_harness_sandboxes,
 )
@@ -67,7 +68,7 @@ async def leave_organization(
         # Validate and stage local cleanup before the irreversible remote call.
         # Keep it uncommitted so a remote failure preserves the local account.
         try:
-            delete_user_from_db__no_commit(user_to_delete, db_session)
+            cleanup = delete_user_from_db__no_commit(user_to_delete, db_session)
         except Exception:
             db_session.rollback()
             raise
@@ -87,6 +88,8 @@ async def leave_organization(
             )
 
         db_session.commit()
+        # The tenant goes, so its sandboxes get no skill push.
+        delete_files_best_effort(cleanup.file_ids, "personal marketplace cleanup")
         try:
             remove_user_from_invited_users(user_email.user_email)
             remove_all_users_from_tenant(tenant_id)

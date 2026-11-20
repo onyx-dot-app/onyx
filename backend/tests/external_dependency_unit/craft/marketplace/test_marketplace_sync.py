@@ -521,3 +521,42 @@ def test_personal_sync_leaves_new_plugins_and_integrations_off(
         )
     finally:
         delete_integrations(db_session, [integration_id])
+
+
+def test_a_sync_that_a_newer_sync_overtook_changes_nothing(
+    db_session: Session,
+    users: tuple[User, User, User],
+    fake_github: FakeGitHub,
+    connections: Connections,  # noqa: ARG001
+    marketplace_ids: list[Any],
+    staged_file_ids: list[str],
+) -> None:
+    owner = users[0]
+    fake_github.push(OWNER, REPO, plugin_files("alpha", "beta"))
+    marketplace = make_marketplace(
+        db_session, marketplace_ids, login=owner, owner=owner
+    )
+    real_stage = sync._stage
+    newer: list[MarketplaceSyncResult] = []
+    started = False
+
+    def stage_then_newer_sync(*args: Any, **kwargs: Any) -> Any:
+        nonlocal started
+        staged = real_stage(*args, **kwargs)
+        if not started:
+            started = True
+            fake_github.push(OWNER, REPO, plugin_files("alpha"))
+            newer.append(sync.sync_marketplace(marketplace.id))
+        return staged
+
+    with patch.object(sync, "_stage", stage_then_newer_sync):
+        stale = sync.sync_marketplace(marketplace.id)
+
+    assert newer[0].status == MarketplaceSyncStatus.APPLIED
+    assert stale.status == MarketplaceSyncStatus.FAILED
+    assert set(synced_plugins(db_session, marketplace.id)) == {"alpha"}
+    stale_files = set(staged_file_ids) - {
+        version.bundle_file_id for version in db_session.scalars(select(PluginVersion))
+    }
+    assert stale_files
+    assert existing_files(db_session, sorted(stale_files)) == set()

@@ -2,6 +2,7 @@
 
 import io
 import tarfile
+import zlib
 from typing import Final
 
 from pydantic import BaseModel, ConfigDict
@@ -87,7 +88,7 @@ def read_repository_archive(archive_bytes: bytes) -> RepositoryArchive:
                     )
                 content = extracted.read(DEFAULT_PER_FILE_MAX_BYTES + 1)
                 files[member.name] = content
-    except (tarfile.TarError, EOFError, OSError) as exc:
+    except (tarfile.TarError, EOFError, OSError, zlib.error) as exc:
         raise OnyxError(
             OnyxErrorCode.BAD_GATEWAY,
             "GitHub returned an unreadable repository download. Try again.",

@@ -134,6 +134,39 @@ def test_skills_list_entry_takes_only_the_listed_folders() -> None:
     ]
 
 
+def test_skills_list_entry_takes_a_skill_at_the_source_root() -> None:
+    files = {
+        CLAUDE: catalog(
+            {"name": "tool", "source": "./tool", "strict": False, "skills": ["./"]}
+        ),
+        "tool/SKILL.md": skill_md("tool"),
+        "tool/run.py": b"print(1)\n",
+    }
+    tool = _ready(_complete(files), "tool")
+    assert _bundle_paths(tool) == [
+        ".claude-plugin/plugin.json",
+        "skills/tool/SKILL.md",
+        "skills/tool/run.py",
+    ]
+
+
+def test_bundle_limits_block_an_entry_before_it_is_zipped(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def no_zip(_files: object) -> bytes:
+        raise AssertionError("zipped a bundle over the limits")
+
+    monkeypatch.setattr(reader, "_deterministic_zip", no_zip)
+    files = {
+        CLAUDE: catalog({"name": "many", "source": "./many"}),
+        "many/skills/many/SKILL.md": skill_md("many"),
+        **{f"many/skills/many/file-{index}.txt": b"x" for index in range(500)},
+    }
+    entry = _complete(files).entries[0]
+    assert isinstance(entry, BlockedPlugin), entry
+    assert "more than 500 files" in entry.reason
+
+
 def test_skills_list_entry_keeps_the_mcp_file_that_the_entry_names() -> None:
     files = {
         CLAUDE: catalog(
@@ -178,7 +211,7 @@ def test_mcp_entry_imports_with_a_need() -> None:
 def test_remote_sources() -> None:
     files = {
         CLAUDE: catalog(
-            {"name": "remote", "source": {"source": "github", "repo": "acme/remote"}},
+            {"name": "remote", "source": {"source": "github", "repo": "Acme/Remote"}},
             {
                 "name": "subdir",
                 "source": {
@@ -252,6 +285,16 @@ def test_symbolic_link_blocks_only_the_plugin_that_holds_it() -> None:
     beta = entries["beta"]
     assert isinstance(beta, BlockedPlugin)
     assert "plugins/beta/README.md" in beta.reason
+
+
+def test_a_linked_claude_manifest_fails_instead_of_reading_codex() -> None:
+    files = {
+        CODEX: catalog({"name": "alpha", "source": "./plugins/alpha"}),
+        "plugins/alpha/skills/alpha/SKILL.md": skill_md("alpha"),
+    }
+    result = read_marketplace(files, None, frozenset({CLAUDE}))
+    assert isinstance(result, FailedMarketplace), result
+    assert CLAUDE in result.reason
 
 
 def test_bad_entries_block_only_themselves() -> None:

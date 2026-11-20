@@ -8,7 +8,7 @@ import stat
 import sys
 import zipfile
 import zlib
-from collections.abc import Callable, Iterable
+from collections.abc import Callable, Iterable, Mapping
 from contextlib import ExitStack
 from copy import copy
 from itertools import pairwise
@@ -172,6 +172,34 @@ def _check_bundle_file_count(count: int, max_file_count: int | None) -> None:
             max_file_count,
             f"bundle contains more than {max_file_count} files",
         )
+
+
+def check_bundle_file_limits(files: Mapping[str, bytes]) -> None:
+    """The count and size limits of ``normalize_custom_bundle``, for files
+    before they are zipped."""
+    kept = {
+        path: content
+        for path, content in files.items()
+        if not _is_ignored_bundle_path(path)
+    }
+    _check_bundle_file_count(len(kept), DEFAULT_MAX_FILE_COUNT)
+    total = 0
+    for path, content in sorted(kept.items()):
+        if len(content) > DEFAULT_PER_FILE_MAX_BYTES:
+            raise _bundle_limit_error(
+                "file_bytes",
+                DEFAULT_PER_FILE_MAX_BYTES,
+                f"file '{path}' exceeds "
+                f"{DEFAULT_PER_FILE_MAX_BYTES // (1024 * 1024)} MiB",
+            )
+        total += len(content)
+        if total > DEFAULT_TOTAL_MAX_BYTES:
+            raise _bundle_limit_error(
+                "total_bytes",
+                DEFAULT_TOTAL_MAX_BYTES,
+                f"bundle exceeds {DEFAULT_TOTAL_MAX_BYTES // (1024 * 1024)} MiB "
+                "uncompressed",
+            )
 
 
 def strip_skill_md_frontmatter(content: str) -> str:

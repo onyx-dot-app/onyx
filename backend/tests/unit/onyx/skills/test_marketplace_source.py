@@ -15,3 +15,14 @@ def test_bad_folder_gives_a_plain_message() -> None:
     assert (
         exc.value.detail == "Use a folder path in the repository, with no '.' or '..'."
     )
+
+
+def test_folder_with_a_control_character_is_refused() -> None:
+    with pytest.raises(OnyxError):
+        MarketplaceSourceRequest(
+            repository="acme/tools", folder="plug\x00ins"
+        ).to_config()
+    config = MarketplaceSourceRequest(
+        repository="acme/tools", folder="plugins/catalog"
+    ).to_config()
+    assert config.folder == "plugins/catalog"

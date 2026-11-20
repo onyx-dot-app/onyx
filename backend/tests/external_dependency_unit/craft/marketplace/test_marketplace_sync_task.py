@@ -141,6 +141,45 @@ def test_sync_now_sends_one_task_until_it_runs(
     assert send_task.call_args.kwargs["kwargs"]["marketplace_id"] == str(marketplace.id)
 
 
+def test_two_sync_requests_at_once_send_one_task(
+    db_session: Session,
+    users: tuple[User, User, User],
+    marketplace_ids: list[Any],
+    send_task: MagicMock,
+) -> None:
+    owner = users[0]
+    marketplace = make_marketplace(
+        db_session, marketplace_ids, login=owner, owner=owner
+    )
+    cache = get_cache_backend()
+    raced = False
+
+    class RacingCache:
+        """Runs a second request right after the first one's first read."""
+
+        def __getattr__(self, name: str) -> Any:
+            # A proxy of every cache method.
+            attribute = getattr(cache, name)  # ods: ignore[getattr]
+            if name not in {"exists", "exists_many"}:
+                return attribute
+
+            def read(*args: Any, **kwargs: Any) -> Any:
+                nonlocal raced
+                result = attribute(*args, **kwargs)
+                if not raced:
+                    raced = True
+                    sync.request_marketplace_sync(marketplace.id, BackgroundTasks())
+                return result
+
+            return read
+
+    with patch.object(sync, "get_cache_backend", RacingCache):
+        sync.request_marketplace_sync(marketplace.id, BackgroundTasks())
+
+    assert raced
+    assert send_task.call_count == 1
+
+
 def test_sync_now_after_a_failed_send_sends_again(
     db_session: Session,
     users: tuple[User, User, User],
