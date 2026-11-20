@@ -98,6 +98,7 @@ export function previewFixture(
             supported: true,
             state: "not_added",
             integration_id: null,
+            url_problem: null,
           },
         ],
         warnings: [],
