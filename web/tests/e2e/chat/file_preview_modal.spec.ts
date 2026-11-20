@@ -1,5 +1,6 @@
 import { test, expect, Page } from "@playwright/test";
 import { loginAsRandomUser } from "../utils/auth";
+import { FilePreviewModalPage } from "@tests/e2e/pages/FilePreviewModalPage";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -199,15 +200,7 @@ test.describe("File preview modal from chat file links", () => {
     // Verify the code content is rendered
     await expect(modal.getByText("Hello, world!")).toBeVisible();
 
-    // Verify the download icon button exists (tooltip-only, no visible text)
-    const downloadButton = modal.locator("button").last();
-    await expect(downloadButton).toBeVisible();
-
-    // Hover to verify the download tooltip appears
-    await downloadButton.hover();
-    await expect(
-      page.getByText("Download", { exact: true }).first()
-    ).toBeVisible({ timeout: 3000 });
+    await new FilePreviewModalPage(page).expectDownloadLinkWithTooltip();
   });
 
   test("download button triggers file download", async ({ page }) => {

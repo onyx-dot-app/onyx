@@ -15,9 +15,9 @@ export const unsupportedVariant: PreviewVariant = {
       <Text as="p" font="main-ui-body" color="text-03">
         {ctx.t("unsupported.message")}
       </Text>
-      <a href={ctx.fileUrl} download={ctx.fileName}>
-        <Button>{ctx.t("downloadButton.label")}</Button>
-      </a>
+      <Button href={ctx.fileUrl} download={ctx.fileName}>
+        {ctx.t("downloadButton.label")}
+      </Button>
     </div>
   ),
 
