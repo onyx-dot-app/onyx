@@ -579,10 +579,13 @@ def test_downgrade_shares_a_synced_plugin_with_group_members(
     db_session: Session,
 ) -> None:
     """A synced plugin cannot move to the Organization library, so the members
-    of a removed group that shared it get a user share."""
+    of a removed group that shared it get a user share. A group with only an
+    install setting gives no share."""
     try:
         member = _make_user(db_session, in_basic=True)
+        outsider = _make_user(db_session, in_basic=True)
         group = _make_group(db_session, [member])
+        setting_group = _make_group(db_session, [outsider])
         marketplace = Marketplace(
             kind=MarketplaceKind.GITHUB,
             name=f"downgrade-{uuid4().hex[:8]}",
@@ -595,6 +598,15 @@ def test_downgrade_shares_a_synced_plugin_with_group_members(
         synced.marketplace_id = marketplace.id
         db_session.flush()
         _share_with_group(db_session, synced, group)
+        db_session.add(
+            Plugin__UserGroup(
+                plugin_id=synced.id,
+                user_group_id=setting_group.id,
+                permission=None,
+                installation_policy=PluginInstallationPolicy.NOT_AVAILABLE,
+            )
+        )
+        db_session.flush()
 
         remove_custom_user_groups__no_commit(db_session)
 

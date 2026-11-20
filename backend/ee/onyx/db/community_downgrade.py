@@ -261,8 +261,13 @@ def _make_group_shared_resources_public__no_commit(
                 User__UserGroup.user_group_id == Plugin__UserGroup.user_group_id,
             )
             .where(
-                Plugin.id.in_(shared_plugin_ids),
                 Plugin__UserGroup.user_group_id.in_(group_ids),
+                Plugin__UserGroup.permission.is_not(None),
+                or_(
+                    Plugin__UserGroup.installation_policy.is_(None),
+                    Plugin__UserGroup.installation_policy
+                    != PluginInstallationPolicy.NOT_AVAILABLE,
+                ),
                 Plugin.marketplace_id.in_(github_marketplace_ids),
                 User__UserGroup.user_id.is_not(None),
             )
