@@ -986,9 +986,8 @@ the app from the same rule
     in the API server after the response. Company plugins have no author and
     `published_version_id` follows each version;
     `db/plugin_access.py:seen_by_organization` makes the organization see
-    them. A personal plugin belongs to the marketplace owner and turns on for
-    the owner unless the skill limit refuses it; the sync then turns on the
-    owner's connected integrations that the plugin needs, as an upload does. `db/plugin.py:refuse_if_synced`
+    them. A personal plugin belongs to the marketplace owner and starts off, as
+    in Claude; the owner turns plugins on one at a time. `db/plugin.py:refuse_if_synced`
     refuses content edits, uploads, restores, publishing, ownership transfer
     and delete of a synced plugin with "Change this plugin in GitHub.". A
     company plugin's shares and install settings still change. A personal

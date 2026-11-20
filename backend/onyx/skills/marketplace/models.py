@@ -4,7 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, JsonValue, field_validator
 
-from onyx.skills.models import PluginBundle, PluginFileEntry, PluginNeed
+from onyx.skills.models import PluginBundle, PluginFileEntry
 from onyx.utils.github import GITHUB_REPOSITORY_COMPONENT_PATTERN
 
 
@@ -177,7 +177,6 @@ class MarketplaceSyncResult(BaseModel):
     cleanup_file_ids: list[str] = []
     affected_user_ids: set[UUID] = set()
     # Needs of the plugins that the sync turned on for a personal owner.
-    turned_on_needs: list[PluginNeed] = []
 
 
 class MarketplaceRead(BaseModel):

@@ -26,8 +26,6 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.staging import delete_files_best_effort
 from onyx.integrations.github_auth import github_authorization_for
-from onyx.integrations.plugin_needs import turn_on_needed_integrations__no_commit
-from onyx.integrations.service import reload_craft_sessions
 from onyx.skills.ingest import delete_bundle_blob, store_version_content
 from onyx.skills.ingest_from_github import RepositoryArchive, read_repository_archive
 from onyx.skills.marketplace.compare import plan_marketplace_sync
@@ -213,7 +211,6 @@ def sync_marketplace(
         config = marketplace_config(marketplace)
         adapter = GitHubMarketplaceAdapter(config, authorization)
         folder = config.folder
-        owner_user_id = marketplace.owner_user_id
         login_user_id = login_user.id
         login_email = login_user.email
         db_session.expunge(login_user)
@@ -267,17 +264,6 @@ def sync_marketplace(
                 created_by=login,
                 db_session=db_session,
             )
-            owner = (
-                fetch_user_by_id(db_session, owner_user_id)
-                if owner_user_id is not None and result.turned_on_needs
-                else None
-            )
-            integrations_changed = (
-                owner is not None
-                and turn_on_needed_integrations__no_commit(
-                    owner, result.turned_on_needs, db_session
-                )
-            )
             db_session.commit()
     except Exception:
         for content in staged.values():
@@ -287,9 +273,6 @@ def sync_marketplace(
     if result.affected_user_ids:
         with get_session_with_current_tenant() as db_session:
             push_skills_and_commit(result.affected_user_ids, db_session)
-    if integrations_changed and owner_user_id is not None:
-        with get_session_with_current_tenant() as db_session:
-            reload_craft_sessions({owner_user_id}, db_session)
     return result
 
 
