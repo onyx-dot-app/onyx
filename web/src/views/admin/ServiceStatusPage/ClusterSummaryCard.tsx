@@ -55,6 +55,10 @@ function ClusterSummary({ status }: ClusterSummaryProps) {
   const locale = useLocale();
   const now = useNow({ updateInterval: 15_000 });
   const health: ClusterHealth = status.health;
+  // On one data node replicas can never be placed, so yellow is the normal
+  // state there and the badge looks healthy; its tooltip says why.
+  const singleNodeYellow = health === "yellow" && status.data_node_count === 1;
+  const badgeHealth: ClusterHealth = singleNodeYellow ? "green" : health;
   const chunks = status.indexes
     .filter((index) => index.is_current)
     .reduce((sum, index) => sum + index.chunk_count, 0);
@@ -78,13 +82,11 @@ function ClusterSummary({ status }: ClusterSummaryProps) {
                 ? t("version", { version: status.version })
                 : t("health", { health })
             }
-            icon={HEALTH_ICONS[health]}
-            color={HEALTH_COLORS[health]}
+            icon={HEALTH_ICONS[badgeHealth]}
+            color={HEALTH_COLORS[badgeHealth]}
             size={6}
             tooltip={t(
-              // On one data node replicas can never be placed, so yellow is
-              // the normal state there.
-              health === "yellow" && status.data_node_count === 1
+              singleNodeYellow
                 ? "healthYellowSingleNode"
                 : HEALTH_TOOLTIP_KEYS[health]
             )}
