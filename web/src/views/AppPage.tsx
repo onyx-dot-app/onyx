@@ -381,6 +381,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   // A send glides to the new turn: its message at the top.
   useScrollToNewTurn(
     scrollContainerRef,
+    storeSessionId,
     anchorSelector,
     currentChatState === "loading"
   );

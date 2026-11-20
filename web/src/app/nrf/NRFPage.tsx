@@ -236,6 +236,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   // A send glides to the new turn: its message at the top.
   useScrollToNewTurn(
     scrollContainerRef,
+    "nrf-session",
     anchorSelector,
     currentChatState === "loading"
   );
