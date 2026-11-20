@@ -45,7 +45,14 @@ const connected: MemberIntegration = {
 afterEach(() => {
   jest.restoreAllMocks();
   mockIsAdmin = false;
+  window.sessionStorage.clear();
 });
+
+function progress(connected: number, total: number) {
+  return copy.progress
+    .replace("{connected}", String(connected))
+    .replace("{total}", String(total));
+}
 
 test("a member continues only after each required integration connects", async () => {
   const user = setupUser({ pointerEventsCheck: PointerEventsCheckLevel.Never });
@@ -63,8 +70,8 @@ test("a member continues only after each required integration connects", async (
   const gate = await screen.findByRole("dialog", { name: copy.title });
   const next = within(gate).getByRole("button", { name: copy.continue });
   expect(next).toBeDisabled();
-  expect(within(gate).getByText(copy.requiredNote)).toBeInTheDocument();
-  expect(within(gate).queryByText(copy.adminNote)).not.toBeInTheDocument();
+  expect(within(gate).getByText(copy.description)).toBeInTheDocument();
+  expect(within(gate).getByText(progress(0, 1))).toBeInTheDocument();
 
   await user.click(
     within(gate).getByRole("button", { name: "Connect Reports API" })
@@ -72,11 +79,14 @@ test("a member continues only after each required integration connects", async (
   const modal = await screen.findByRole("dialog", {
     name: /^Connect Reports API/,
   });
-  await user.type(within(modal).getByLabelText(/Token/), "secret");
-  await user.click(within(modal).getByRole("button", { name: "Connect" }));
+  const token = within(modal).getByLabelText(/Token/);
+  await waitFor(() => expect(token).toHaveFocus());
+  await user.keyboard("secret{Enter}");
 
   await waitFor(() => expect(next).toBeEnabled());
   expect(within(gate).getByText(copy.connected)).toBeInTheDocument();
+  expect(within(gate).getByText(progress(1, 1))).toBeInTheDocument();
+  await waitFor(() => expect(next).toHaveFocus());
   expect(within(gate).getByText("Reports API")).toBeInTheDocument();
 
   await user.click(next);
@@ -126,21 +136,85 @@ test("a row that stops being required without a connection leaves the gate", asy
   expect(within(gate).getAllByText(copy.connected)).toHaveLength(1);
 });
 
-test("an admin can continue without connecting", async () => {
+test("an admin continues without connecting, once per browser session", async () => {
   mockIsAdmin = true;
   const user = setupUser({ pointerEventsCheck: PointerEventsCheckLevel.Never });
-  mockFetch({ "/api/integrations": [required] });
+  const fetchMock = mockFetch({ "/api/integrations": [required] });
 
-  render(<RequiredIntegrationGate />);
+  const { unmount } = render(<RequiredIntegrationGate />);
 
   const gate = await screen.findByRole("dialog", { name: copy.title });
-  expect(within(gate).getByText(copy.adminNote)).toBeInTheDocument();
+  expect(within(gate).getByText(copy.adminDescription)).toBeInTheDocument();
+  expect(within(gate).queryByText(copy.description)).not.toBeInTheDocument();
   await user.click(within(gate).getByRole("button", { name: copy.continue }));
   await waitFor(() =>
     expect(
       screen.queryByRole("dialog", { name: copy.title })
     ).not.toBeInTheDocument()
   );
+
+  unmount();
+  const calls = fetchMock.mock.calls.length;
+  render(<RequiredIntegrationGate />);
+  await waitFor(() =>
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(calls)
+  );
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+});
+
+test("a failed refresh keeps the gate open", async () => {
+  const user = setupUser({ pointerEventsCheck: PointerEventsCheckLevel.Never });
+  const other = makeMemberIntegration({
+    id: 2,
+    name: "Billing API",
+    access: makeAccess({ installation_policy: "REQUIRED" }),
+  });
+  let failing = false;
+  const fetchMock = mockFetch({
+    "/api/integrations": () =>
+      failing ? new Response(null, { status: 503 }) : [required, other],
+    "PUT /api/integrations/1/connection": () => {
+      failing = true;
+      return { state: "connected", reason: null };
+    },
+  });
+
+  render(<RequiredIntegrationGate />);
+
+  const gate = await screen.findByRole("dialog", { name: copy.title });
+  await user.click(
+    within(gate).getByRole("button", { name: "Connect Reports API" })
+  );
+  const modal = await screen.findByRole("dialog", {
+    name: /^Connect Reports API/,
+  });
+  await user.type(within(modal).getByLabelText(/Token/), "secret");
+  await user.click(within(modal).getByRole("button", { name: "Connect" }));
+
+  await waitFor(() =>
+    expect(
+      fetchMock.mock.calls.filter(([url]) =>
+        String(url).endsWith("/api/integrations")
+      ).length
+    ).toBeGreaterThan(1)
+  );
+  expect(screen.getByRole("dialog", { name: copy.title })).toBeInTheDocument();
+});
+
+test("a row that needs a reconnect says why", async () => {
+  mockFetch({
+    "/api/integrations": [
+      {
+        ...required,
+        status: { state: "needs_reconnect", reason: "The key expired." },
+      },
+    ],
+  });
+
+  render(<RequiredIntegrationGate />);
+
+  const gate = await screen.findByRole("dialog", { name: copy.title });
+  expect(within(gate).getByText("The key expired.")).toBeInTheDocument();
 });
 
 test("nothing renders when no integration blocks the user", async () => {

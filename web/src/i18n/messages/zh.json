@@ -10673,7 +10673,8 @@
         "saveFailed": "无法保存安装设置。",
         "title": "安装设置",
         "description": "谁可以使用此集成。不可用会使其保持私有：只有所有者、共享对象以及拥有自身设置的群组可以使用。要将其限制为所有者和共享对象，请移除这些群组设置。",
-        "notAvailable": "私有。只有所有者、共享对象以及拥有自身设置的群组可以使用。"
+        "notAvailable": "私有。只有所有者、共享对象以及拥有自身设置的群组可以使用。",
+        "required": "成员必须先连接它，才能使用聊天和 Craft。"
       },
       "ownedBy": "所有者：{owner}",
       "groupAccess": {
@@ -17376,10 +17377,10 @@
     "requiredGate": {
       "title": "连接您的工作工具",
       "description": "您的管理员要求使用这些集成。请逐一连接后继续。",
-      "requiredNote": "管理员要求",
+      "adminDescription": "成员必须先连接这些集成才能使用 Onyx。您是管理员，因此可以不连接直接继续。",
       "connected": "已连接",
+      "progress": "已连接 {connected}/{total}",
       "continue": "继续",
-      "adminNote": "您是管理员，因此无需连接即可继续。",
       "signOut": "退出登录",
       "signOutFailed": "无法退出登录，请重试。"
     }

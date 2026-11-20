@@ -10673,7 +10673,8 @@
         "saveFailed": "Die Installationseinstellung konnte nicht gespeichert werden.",
         "title": "Installationseinstellung",
         "description": "Wer diese Integration erhält. Nicht verfügbar hält sie privat: Nur der Eigentümer, die Personen, mit denen sie geteilt ist, und die Gruppen mit eigener Einstellung nutzen sie. Entferne diese Gruppeneinstellungen, um sie auf den Eigentümer und die Freigaben zu beschränken.",
-        "notAvailable": "Privat. Nur der Eigentümer, die Personen, mit denen sie geteilt ist, und die Gruppen mit eigener Einstellung nutzen sie."
+        "notAvailable": "Privat. Nur der Eigentümer, die Personen, mit denen sie geteilt ist, und die Gruppen mit eigener Einstellung nutzen sie.",
+        "required": "Mitglieder müssen sie verbinden, bevor sie Chat und Craft nutzen können."
       },
       "ownedBy": "Eigentümer: {owner}",
       "groupAccess": {
@@ -17376,10 +17377,10 @@
     "requiredGate": {
       "title": "Verbinden Sie Ihre Arbeitstools",
       "description": "Ihr Administrator verlangt diese Integrationen. Verbinden Sie jede, um fortzufahren.",
-      "requiredNote": "Von Ihrem Administrator verlangt",
+      "adminDescription": "Mitglieder müssen diese Integrationen verbinden, bevor sie Onyx nutzen können. Als Admin können Sie ohne sie fortfahren.",
       "connected": "Verbunden",
+      "progress": "{connected} von {total} verbunden",
       "continue": "Weiter",
-      "adminNote": "Sie können ohne Verbindung fortfahren, da Sie Administrator sind.",
       "signOut": "Abmelden",
       "signOutFailed": "Abmelden fehlgeschlagen. Versuchen Sie es erneut."
     }

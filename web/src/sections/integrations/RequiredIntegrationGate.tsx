@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import * as Dialog from "@radix-ui/react-dialog";
 import { Button, Card, Divider, Text } from "@opal/components";
@@ -25,6 +25,21 @@ import { useUser } from "@/providers/UserProvider";
 import IntegrationConnectButton from "@/sections/plugins/IntegrationConnectButton";
 
 const LOGO_SIZE_PX = 44;
+const ADMIN_DISMISSED_KEY = "onyx:required-gate-dismissed";
+
+function readAdminDismissed(userId: string): boolean {
+  try {
+    return window.sessionStorage.getItem(ADMIN_DISMISSED_KEY) === userId;
+  } catch {
+    return false;
+  }
+}
+
+function storeAdminDismissed(userId: string): void {
+  try {
+    window.sessionStorage.setItem(ADMIN_DISMISSED_KEY, userId);
+  } catch {}
+}
 
 export default function RequiredIntegrationGate() {
   const { user } = useUser();
@@ -33,21 +48,25 @@ export default function RequiredIntegrationGate() {
     return null;
   // The OAuth callback must finish while the gate waits for it.
   if (isOAuthCallbackPath(pathname)) return null;
-  return <GateForUser />;
+  return <GateForUser userId={user.id} />;
 }
 
-function GateForUser() {
+function GateForUser({ userId }: { userId: string }) {
   const { isAdmin } = useUser();
-  const { data, error } = useMemberIntegrations();
+  // A failed read shows no gate until data arrives; a failed refresh keeps
+  // the last data.
+  const { data } = useMemberIntegrations();
   const [trackedIds, setTrackedIds] = useState<number[]>([]);
-  const [adminDismissed, setAdminDismissed] = useState(false);
+  const [adminDismissed, setAdminDismissed] = useState(() =>
+    readAdminDismissed(userId)
+  );
 
   const blockingIds = useMemo(
     () =>
-      data === undefined || error !== undefined
+      data === undefined
         ? []
         : requiredSignIns(data).map((integration) => integration.id),
-    [data, error]
+    [data]
   );
 
   useEffect(() => {
@@ -72,7 +91,7 @@ function GateForUser() {
     });
   }, [trackedIds, blockingIds, data]);
 
-  if (adminDismissed || rows.length === 0 || error !== undefined) return null;
+  if ((isAdmin && adminDismissed) || rows.length === 0) return null;
 
   return (
     <RequiredIntegrationGateView
@@ -80,8 +99,10 @@ function GateForUser() {
       canContinue={isAdmin || blockingIds.length === 0}
       isAdmin={isAdmin}
       onContinue={() => {
-        if (isAdmin) setAdminDismissed(true);
-        else setTrackedIds([]);
+        if (isAdmin) {
+          storeAdminDismissed(userId);
+          setAdminDismissed(true);
+        } else setTrackedIds([]);
       }}
     />
   );
@@ -105,6 +126,19 @@ function RequiredIntegrationGateView({
   const pathname = usePathname();
   const query = useSearchParams().toString();
   const returnPath = query ? `${pathname}?${query}` : pathname;
+  const containerRef = useRef<HTMLDivElement>(null);
+  const connectedCount = integrations.filter(
+    (integration) => integration.status.state === "connected"
+  ).length;
+
+  // A connected row loses its Connect button, so move focus to the next one.
+  useEffect(() => {
+    const active = document.activeElement;
+    if (active && active !== document.body) return;
+    containerRef.current
+      ?.querySelector<HTMLButtonElement>("button:not([disabled])")
+      ?.focus();
+  }, [connectedCount]);
 
   async function signOut() {
     try {
@@ -127,6 +161,7 @@ function RequiredIntegrationGateView({
           onEscapeKeyDown={(event) => event.preventDefault()}
           onPointerDownOutside={(event) => event.preventDefault()}
           onInteractOutside={(event) => event.preventDefault()}
+          ref={containerRef}
           className="fixed inset-0 z-(--z-modal-overlay) overflow-y-auto bg-background focus:outline-hidden"
         >
           <AuthLayouts.Root>
@@ -151,7 +186,7 @@ function RequiredIntegrationGateView({
                   color="text-03"
                   textPosition="text-center"
                 >
-                  {t("description")}
+                  {isAdmin ? t("adminDescription") : t("description")}
                 </Text>
               </Section>
               <Card padding={2} border="solid">
@@ -168,6 +203,17 @@ function RequiredIntegrationGateView({
                 </Section>
               </Card>
               <Section height="fit" gap={2} alignItems="stretch">
+                <Text
+                  as="p"
+                  font="secondary-body"
+                  color="text-03"
+                  textPosition="text-center"
+                >
+                  {t("progress", {
+                    connected: connectedCount,
+                    total: integrations.length,
+                  })}
+                </Text>
                 <Button
                   width="full"
                   disabled={!canContinue}
@@ -175,16 +221,6 @@ function RequiredIntegrationGateView({
                 >
                   {t("continue")}
                 </Button>
-                {isAdmin && (
-                  <Text
-                    as="p"
-                    font="secondary-body"
-                    color="text-03"
-                    textPosition="text-center"
-                  >
-                    {t("adminNote")}
-                  </Text>
-                )}
                 {!LOGOUT_DISABLED && (
                   <Button
                     width="full"
@@ -212,6 +248,11 @@ interface GateRowProps {
 function GateRow({ integration, returnPath }: GateRowProps) {
   const t = useTranslations("integrations.requiredGate");
   const connected = integration.status.state === "connected";
+  const note = connected
+    ? t("connected")
+    : integration.status.state === "needs_reconnect"
+      ? integration.status.reason
+      : null;
   return (
     <Section
       role="group"
@@ -231,15 +272,17 @@ function GateRow({ integration, returnPath }: GateRowProps) {
           title={integration.name}
           description={integration.description ?? undefined}
         />
-        <ContentIndent font="main-content-emphasis">
-          <Text
-            as="p"
-            font="secondary-body"
-            color={connected ? "status-success-05" : "text-03"}
-          >
-            {connected ? t("connected") : t("requiredNote")}
-          </Text>
-        </ContentIndent>
+        {note && (
+          <ContentIndent font="main-content-emphasis">
+            <Text
+              as="p"
+              font="secondary-body"
+              color={connected ? "status-success-05" : "text-03"}
+            >
+              {note}
+            </Text>
+          </ContentIndent>
+        )}
       </Section>
       {!connected && (
         <Section width="fit" height="fit" shrink={false}>

@@ -35,7 +35,9 @@ export default function IntegrationInstallSetting({
   const policyOptions = usePolicyOptions().map((option) =>
     option.value === "NOT_AVAILABLE"
       ? { ...option, description: t("notAvailable") }
-      : option
+      : option.value === "REQUIRED"
+        ? { ...option, description: t("required") }
+        : option
   );
   const [saving, setSaving] = useState(false);
   const policy = integration.installation_policy;

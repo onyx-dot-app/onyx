@@ -10673,7 +10673,8 @@
         "saveFailed": "Could not save the install setting.",
         "title": "Install Setting",
         "description": "Who gets this integration. Not available keeps it private: only its owner, the people it is shared with and the groups with their own setting use it. Remove those group settings to limit it to the owner and the shares.",
-        "notAvailable": "Private. Only the owner, the people it is shared with and the groups with their own setting use it."
+        "notAvailable": "Private. Only the owner, the people it is shared with and the groups with their own setting use it.",
+        "required": "Members must connect it before they can use chat and Craft."
       },
       "ownedBy": "Owned by {owner}",
       "groupAccess": {
@@ -17376,10 +17377,10 @@
     "requiredGate": {
       "title": "Connect your work tools",
       "description": "Your admin requires these integrations. Connect each one to continue.",
-      "requiredNote": "Required by your admin",
+      "adminDescription": "Members must connect these integrations before they can use Onyx. You can continue without them because you are an admin.",
       "connected": "Connected",
+      "progress": "{connected} of {total} connected",
       "continue": "Continue",
-      "adminNote": "You can continue without connecting because you are an admin.",
       "signOut": "Sign out",
       "signOutFailed": "Could not sign out. Try again."
     }

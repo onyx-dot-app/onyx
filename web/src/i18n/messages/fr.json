@@ -10673,7 +10673,8 @@
         "saveFailed": "Impossible d'enregistrer le paramètre d'installation.",
         "title": "Paramètre d'Installation",
         "description": "Qui reçoit cette intégration. Non disponible la garde privée : seuls son propriétaire, les personnes avec qui elle est partagée et les groupes qui ont leur propre paramètre l’utilisent. Supprimez ces paramètres de groupe pour la limiter au propriétaire et aux partages.",
-        "notAvailable": "Privée. Seuls le propriétaire, les personnes avec qui elle est partagée et les groupes qui ont leur propre paramètre l’utilisent."
+        "notAvailable": "Privée. Seuls le propriétaire, les personnes avec qui elle est partagée et les groupes qui ont leur propre paramètre l’utilisent.",
+        "required": "Les membres doivent la connecter avant d'utiliser le chat et Craft."
       },
       "ownedBy": "Propriété de {owner}",
       "groupAccess": {
@@ -17376,10 +17377,10 @@
     "requiredGate": {
       "title": "Connectez vos outils de travail",
       "description": "Votre administrateur exige ces intégrations. Connectez chacune d'elles pour continuer.",
-      "requiredNote": "Exigée par votre administrateur",
+      "adminDescription": "Les membres doivent connecter ces intégrations avant d'utiliser Onyx. Vous pouvez continuer sans elles, car vous êtes administrateur.",
       "connected": "Connectée",
+      "progress": "{connected} sur {total} connectées",
       "continue": "Continuer",
-      "adminNote": "Vous pouvez continuer sans vous connecter, car vous êtes administrateur.",
       "signOut": "Se déconnecter",
       "signOutFailed": "Impossible de se déconnecter. Réessayez."
     }

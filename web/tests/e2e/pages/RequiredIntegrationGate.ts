@@ -5,7 +5,7 @@ export class RequiredIntegrationGate {
   readonly page: Page;
   readonly gate: Locator;
   readonly continueButton: Locator;
-  readonly adminNote: Locator;
+  readonly adminDescription: Locator;
 
   constructor(page: Page) {
     this.page = page;
@@ -14,13 +14,17 @@ export class RequiredIntegrationGate {
       name: "Continue",
       exact: true,
     });
-    this.adminNote = this.gate.getByText(
-      "You can continue without connecting because you are an admin."
+    this.adminDescription = this.gate.getByText(
+      "Members must connect these integrations before they can use Onyx. You can continue without them because you are an admin."
     );
   }
 
   async gotoApp(): Promise<void> {
     await this.page.goto("/app");
+  }
+
+  async gotoNewTabPage(): Promise<void> {
+    await this.page.goto("/nrf");
   }
 
   async expectVisible(): Promise<void> {
@@ -37,7 +41,13 @@ export class RequiredIntegrationGate {
 
   async expectRequired(name: string): Promise<void> {
     await expect(
-      this.row(name).getByText("Required by your admin")
+      this.row(name).getByRole("button", { name: `Connect ${name}` })
+    ).toBeVisible();
+  }
+
+  async expectProgress(connected: number, total: number): Promise<void> {
+    await expect(
+      this.gate.getByText(`${connected} of ${total} connected`)
     ).toBeVisible();
   }
 
@@ -47,8 +57,8 @@ export class RequiredIntegrationGate {
     ).toBeVisible();
   }
 
-  async expectAdminNote(): Promise<void> {
-    await expect(this.adminNote).toBeVisible();
+  async expectAdminDescription(): Promise<void> {
+    await expect(this.adminDescription).toBeVisible();
   }
 
   async expectAppUsable(): Promise<void> {

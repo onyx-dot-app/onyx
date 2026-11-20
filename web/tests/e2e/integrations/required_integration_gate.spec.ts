@@ -84,9 +84,13 @@ test.describe("Required integration gate @exclusive", () => {
     await apiLogin(page, member.email, member.password);
     const gate = new RequiredIntegrationGate(page);
 
+    await gate.gotoNewTabPage();
+    await gate.expectVisible();
+
     await gate.gotoApp();
     await gate.expectVisible();
     await gate.expectRequired(integrationName);
+    await gate.expectProgress(0, 1);
     await gate.expectContinueDisabled();
     await gate.pressEscape();
     await gate.expectVisible();
@@ -95,6 +99,7 @@ test.describe("Required integration gate @exclusive", () => {
       "API Key": "pw-member-key",
     });
     await gate.expectConnected(integrationName);
+    await gate.expectProgress(1, 1);
     await gate.expectContinueEnabled();
     await gate.continue();
     await gate.expectHidden();
@@ -103,17 +108,19 @@ test.describe("Required integration gate @exclusive", () => {
     await gate.expectAppUsable();
   });
 
-  test("an admin can continue without connecting", async ({ page }) => {
+  test("an admin continues without connecting once per browser session", async ({
+    page,
+  }) => {
     const gate = new RequiredIntegrationGate(page);
 
     await gate.gotoApp();
     await gate.expectVisible();
     await gate.expectRequired(integrationName);
-    await gate.expectAdminNote();
+    await gate.expectAdminDescription();
     await gate.continue();
     await gate.expectAppUsable();
 
     await page.reload();
-    await gate.expectVisible();
+    await gate.expectAppUsable();
   });
 });
