@@ -206,11 +206,10 @@ fn on_window_event(app: &AppHandle, event: &WindowEvent) {
 
 /// Saves a position the pet was dragged to less than a moment ago (quit).
 pub fn save_pending_position(app: &AppHandle) {
-    let pending = PENDING_POSITION
-        .lock()
-        .unwrap_or_else(|p| p.into_inner())
-        .take();
-    if let Some(position) = pending {
+    // Held through the write: a quit waits for a save that is running, and
+    // an older position cannot overwrite a newer one.
+    let mut pending = PENDING_POSITION.lock().unwrap_or_else(|p| p.into_inner());
+    if let Some(position) = pending.take() {
         if let Err(e) = app
             .state::<AppState>()
             .config

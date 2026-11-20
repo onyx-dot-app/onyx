@@ -97,9 +97,30 @@ pub fn is_web_sign_in(url: &Url, server_url: &Url) -> bool {
         "redirect_uri" => Url::parse(&value).is_ok_and(|target| {
             target.origin() == server_url.origin() && is_auth_path(target.path())
         }),
-        "SAMLRequest" => true,
+        "SAMLRequest" => saml_return_url(&value).is_some_and(|target| {
+            target.origin() == server_url.origin() && is_auth_path(target.path())
+        }),
         _ => false,
     })
+}
+
+/// The `AssertionConsumerServiceURL` of a redirect-binding SAML request
+/// (base64 of raw-deflated XML).
+fn saml_return_url(request: &str) -> Option<Url> {
+    use base64::Engine;
+    use std::io::Read;
+    let compressed = base64::engine::general_purpose::STANDARD
+        .decode(request)
+        .ok()?;
+    let mut xml = String::new();
+    flate2::read::DeflateDecoder::new(compressed.as_slice())
+        .take(64 * 1024)
+        .read_to_string(&mut xml)
+        .ok()?;
+    let start =
+        xml.find("AssertionConsumerServiceURL=\"")? + "AssertionConsumerServiceURL=\"".len();
+    let end = xml[start..].find('"')? + start;
+    Url::parse(&xml[start..end].replace("&amp;", "&")).ok()
 }
 
 fn is_auth_path(path: &str) -> bool {
@@ -466,9 +487,9 @@ fn navigation_allowed(app: &AppHandle, url: &Url, origin: &str) -> bool {
 /// A recovery of the web session is running; sign-in navigations meanwhile
 /// are only blocked.
 static RECOVERING: AtomicBool = AtomicBool::new(false);
-/// When the cookie was last handed over again, so a web app that still asks
-/// for a sign-in does not loop.
-static LAST_HANDOVER_RETRY: Mutex<Option<Instant>> = Mutex::new(None);
+/// When the cookie was last handed over again, and in which session (epoch),
+/// so a web app that still asks for a sign-in does not loop.
+static LAST_HANDOVER_RETRY: Mutex<Option<(u64, Instant)>> = Mutex::new(None);
 const HANDOVER_RETRY_GAP: Duration = Duration::from_secs(60);
 
 /// Where to go once the web session is back: the login page's `next` path,
@@ -518,10 +539,18 @@ async fn recover(app: &AppHandle, url: &Url) {
         return;
     };
     let path = return_path(url, &server_url);
-    match state.api.session_valid(&server, &token).await {
-        Ok(true) if take_handover_retry() => {
-            if let Err(e) = hand_over_again(app, &server, &server_url, &token, &path, epoch).await {
+    let valid = state.api.session_valid(&server, &token).await;
+    // A sign-out or new sign-in meanwhile owns the window now.
+    if state.epoch() != epoch {
+        return;
+    }
+    match valid {
+        Ok(true) if take_handover_retry(epoch) => {
+            if let Err(e) = hand_over_again(app, &server, &server_url, &path, epoch).await {
                 log::warn!("could not give the session back to the window: {e}");
+                release_handover_retry();
+                // Open the main window again, which hands the session over.
+                crate::windows::route(app);
             }
         }
         Ok(true) => {
@@ -533,23 +562,29 @@ async fn recover(app: &AppHandle, url: &Url) {
     }
 }
 
-/// True, and starts a new gap, if no hand-over retry ran in the last gap.
-fn take_handover_retry() -> bool {
+/// True, and starts a new gap, if no hand-over retry ran in this session
+/// (epoch) in the last gap.
+fn take_handover_retry(epoch: u64) -> bool {
     let mut last = LAST_HANDOVER_RETRY
         .lock()
         .unwrap_or_else(|p| p.into_inner());
-    if last.is_some_and(|at| at.elapsed() < HANDOVER_RETRY_GAP) {
+    if last.is_some_and(|(at_epoch, at)| at_epoch == epoch && at.elapsed() < HANDOVER_RETRY_GAP) {
         return false;
     }
-    *last = Some(Instant::now());
+    *last = Some((epoch, Instant::now()));
     true
+}
+
+fn release_handover_retry() {
+    *LAST_HANDOVER_RETRY
+        .lock()
+        .unwrap_or_else(|p| p.into_inner()) = None;
 }
 
 async fn hand_over_again(
     app: &AppHandle,
     server: &str,
     server_url: &Url,
-    token: &str,
     path: &str,
     epoch: u64,
 ) -> Result<(), String> {
@@ -561,7 +596,15 @@ async fn hand_over_again(
     if state.epoch() != epoch {
         return Ok(());
     }
-    hand_over_session(&window, server_url, &name, token)?;
+    // The stored token, read now: a renewal during the waits replaced the
+    // one that was checked, and the older one must not overwrite it.
+    let Ok((current_server, token)) = state.session() else {
+        return Ok(());
+    };
+    if current_server != server {
+        return Ok(());
+    }
+    hand_over_session(&window, server_url, &name, &token)?;
     let target = server_url_join(server_url, path)?;
     window.navigate(target).map_err(|e| e.to_string())
 }
@@ -572,9 +615,7 @@ pub fn close(app: &AppHandle, server: &str) {
         return;
     };
     *window_token() = None;
-    *LAST_HANDOVER_RETRY
-        .lock()
-        .unwrap_or_else(|p| p.into_inner()) = None;
+    release_handover_retry();
     if let Ok(server_url) = Url::parse(server) {
         let name = app.state::<AppState>().cached_cookie_name(server);
         #[cfg(target_os = "macos")]
@@ -773,9 +814,33 @@ mod tests {
         assert!(web_sign_in(
             "https://login.okta.example/authorize?redirect_uri=https://onyx.corp/auth/oidc/callback"
         ));
-        assert!(web_sign_in(
-            "https://idp.example/sso?SAMLRequest=abc&RelayState=x"
-        ));
+        assert!(web_sign_in(&saml_sign_in(
+            "https://onyx.corp/auth/saml/callback"
+        )));
+    }
+
+    fn saml_sign_in(return_url: &str) -> String {
+        use base64::Engine;
+        use std::io::Write;
+        let xml =
+            format!(r#"<samlp:AuthnRequest ID="x" AssertionConsumerServiceURL="{return_url}"/>"#);
+        let mut encoder =
+            flate2::write::DeflateEncoder::new(Vec::new(), flate2::Compression::default());
+        encoder.write_all(xml.as_bytes()).unwrap();
+        let request = base64::engine::general_purpose::STANDARD.encode(encoder.finish().unwrap());
+        let mut url = Url::parse("https://idp.example/sso").unwrap();
+        url.query_pairs_mut()
+            .append_pair("SAMLRequest", &request)
+            .append_pair("RelayState", "x");
+        url.to_string()
+    }
+
+    #[test]
+    fn another_services_saml_sign_in_is_not_web_sign_in() {
+        assert!(!web_sign_in(&saml_sign_in(
+            "https://other.example/saml/acs"
+        )));
+        assert!(!web_sign_in("https://idp.example/sso?SAMLRequest=abc"));
     }
 
     #[test]
