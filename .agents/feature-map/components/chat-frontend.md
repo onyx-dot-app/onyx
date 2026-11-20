@@ -745,6 +745,9 @@ up its own branding.
     network. Rows use `lib/chat/rowIds.ts:messageRowId`. Do not write
     `scrollTop` while the user scrolls, and keep native scroll anchoring on:
     a script write stops a trackpad fling.
+    Craft's transcript (`app/craft/components/ChatPanel.tsx`) uses the same
+    `ChatScrollContainer`, with its composer in the `footer` slot. It has no
+    `DynamicBottomSpacer`, so a Craft send gets no space below it.
 
 ---
 
