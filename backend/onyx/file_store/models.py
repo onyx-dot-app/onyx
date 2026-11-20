@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict
 from typing_extensions import TypedDict  # noreorder
 
 from onyx.configs.constants import FileOrigin
+from onyx.db.enums import UserFileStatus
 
 
 class _LazyContent:
@@ -100,6 +101,8 @@ class UserFileMetadata(BaseModel):
     name: str
     file_type: str
     token_count: int | None
+    # SKIPPED files are kept but never indexed, so search cannot find them.
+    status: UserFileStatus | None = None
 
 
 class ChatFileInput(BaseModel):
@@ -231,6 +234,9 @@ class FileToolMetadata(BaseModel):
     # Summary-truncated attachments are listed for the LLM but never staged;
     # listing them must not promise Python access to bytes it does not have.
     staged_for_tools: bool = True
+
+    # Whether internal search can find the file's contents.
+    indexed: bool = True
 
 
 class ExtractedContextFiles(BaseModel):

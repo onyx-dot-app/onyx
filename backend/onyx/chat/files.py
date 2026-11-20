@@ -16,11 +16,11 @@ from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import DEFAULT_PERSONA_ID, FileOrigin
 from onyx.context.search.models import SearchDoc
 from onyx.context.search.utils import sandbox_filename_for_document
+from onyx.db.enums import UserFileStatus
 from onyx.db.file_record import FileRecordNotFoundError
 from onyx.db.models import ChatMessage, Persona, UserFile
 from onyx.db.projects import get_user_files_from_project
 from onyx.file_processing.extract_file_text import extract_file_text
-from onyx.file_processing.file_types import is_sandbox_only_file
 from onyx.file_store.models import (
     ChatFileInput,
     ChatFileType,
@@ -252,12 +252,12 @@ def extract_context_files(
         if DISABLE_VECTOR_DB:
             overflow_tool_metadata = [_build_tool_metadata(uf) for uf in user_files]
         else:
-            # Search cannot find unindexed sandbox-only files, so list them.
+            # Search cannot find files that skipped indexing, so list them.
             overflow_tool_metadata = [
                 _build_tool_metadata(uf)
                 for uf in user_files
                 if mime_type_to_chat_file_type(uf.file_type).use_metadata_only()
-                or is_sandbox_only_file(uf.name)
+                or uf.status == UserFileStatus.SKIPPED
             ]
         return ExtractedContextFiles(
             file_texts=[],
@@ -349,7 +349,8 @@ def _build_tool_metadata(user_file: UserFileMetadata) -> FileToolMetadata:
         update={
             "staged_for_tools": is_code_interpreter_staged_file(
                 user_file.name, user_file.file_type
-            )
+            ),
+            "indexed": user_file.status != UserFileStatus.SKIPPED,
         }
     )
 

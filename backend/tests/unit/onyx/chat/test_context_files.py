@@ -23,6 +23,7 @@ from onyx.chat.files import (
 )
 from onyx.chat.models import AvailableFiles, SearchParams
 from onyx.configs.constants import DEFAULT_PERSONA_ID
+from onyx.db.enums import UserFileStatus
 from onyx.db.models import ChatMessage, UserFile
 from onyx.db.user_file import capture_user_file_metadata
 from onyx.file_processing.file_types import (
@@ -584,9 +585,10 @@ class TestExtractContextFiles:
         assert result.file_metadata_for_tool[0].filename == "data.xlsx"
 
     def test_overflow_with_vector_db_lists_unindexed_code_files(self) -> None:
-        """Search cannot find code files, so overflow lists them for tools."""
+        """Search cannot find files that skipped indexing, so overflow lists them."""
         text_uf = _make_user_file(token_count=7000, name="bigfile.txt")
         code_uf = _make_user_file(token_count=50, name="analyze.py")
+        code_uf.status = UserFileStatus.SKIPPED
 
         result = extract_context_files(
             user_files=capture_user_file_metadata([text_uf, code_uf]),
@@ -597,6 +599,7 @@ class TestExtractContextFiles:
         assert result.use_as_search_filter is True
         assert [m.filename for m in result.file_metadata_for_tool] == ["analyze.py"]
         assert result.file_metadata_for_tool[0].staged_for_tools is True
+        assert result.file_metadata_for_tool[0].indexed is False
 
     @patch("onyx.chat.files.DISABLE_VECTOR_DB", True)
     def test_overflow_no_vector_db_includes_all_files_in_tool_metadata(self) -> None:
