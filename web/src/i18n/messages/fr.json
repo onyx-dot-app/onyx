@@ -16598,9 +16598,6 @@
           }
         }
       },
-      "placeholders": {
-        "githubRepository": "proprietaire/depot ou https://github.com/proprietaire/depot"
-      },
       "tabs": {
         "details": "Détails",
         "sharing": "Partage",

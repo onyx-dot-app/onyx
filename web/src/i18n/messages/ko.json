@@ -16598,9 +16598,6 @@
           }
         }
       },
-      "placeholders": {
-        "githubRepository": "soyuja/jeojangso 또는 https://github.com/soyuja/jeojangso"
-      },
       "tabs": {
         "details": "세부 정보",
         "sharing": "공유",

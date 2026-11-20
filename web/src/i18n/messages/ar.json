@@ -16598,9 +16598,6 @@
           }
         }
       },
-      "placeholders": {
-        "githubRepository": "almalik/almustawdae أو https://github.com/almalik/almustawdae"
-      },
       "tabs": {
         "details": "التفاصيل",
         "sharing": "المشاركة",
