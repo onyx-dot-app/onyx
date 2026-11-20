@@ -813,15 +813,17 @@ class SharepointConnector(
         site_descriptor: SiteDescriptor,
         start: datetime | None = None,
         end: datetime | None = None,
+        fail_on_error: bool = False,
     ) -> Generator[FetchedDriveItem, None, None]:
-        """Yield items and hierarchy context lazily for all drives in a site."""
+        """Yield items and hierarchy context lazily for all drives in a site.
+        ``fail_on_error`` raises where the walk would skip a site or drive."""
         try:
             drives = self._list_drives_for_site(site_descriptor.url)
         # The site read and its drive listing run together here, before any
         # item is yielded, so a refusal of either is the whole site, never a
         # partial one.
         except MicrosoftGraphError as e:
-            if not e.is_permanent_refusal:
+            if fail_on_error or not e.is_permanent_refusal:
                 raise
             logger.warning(
                 "Skipping site %s, Graph refused it for good: %s",
@@ -836,6 +838,11 @@ class SharepointConnector(
                 site_descriptor, site_descriptor.drive_name, drives
             )
             if resolved is None:
+                if fail_on_error:
+                    raise RuntimeError(
+                        f"Drive '{site_descriptor.drive_name}' not found in site "
+                        f"{site_descriptor.url}"
+                    )
                 return
             site_drives = [resolved]
         else:
@@ -1186,6 +1193,7 @@ class SharepointConnector(
                     site_descriptor=site_descriptor,
                     start=start,
                     end=end,
+                    fail_on_error=fail_on_error,
                 ):
                     driveitem = fetched_item.driveitem
                     drive = fetched_item.drive

@@ -242,7 +242,11 @@ downloaded file with
    `EntityFailure` aborts the prune.
    [[google-drive]] raises when a requested target is visible to no user.
    SharePoint and Airtable pass `fail_on_error=True` on their prune listings,
-   so a scope that perm sync or indexing skips aborts the prune instead.
+   so a site, drive, page set, base or table that perm sync or indexing skips
+   aborts the prune instead. The file connector's prune listing
+   (`connectors/file/connector.py:LocalFileConnector.retrieve_all_slim_docs`) keeps the id
+   of a file that failed to process, and raises when the zip metadata that
+   sets document ids is unreadable.
 2. `slim-and-index-same-ids` **The slim listing must return the same id set as
    the indexing pass.** An id the slim pass omits is pruned. An id the main
    pass never indexes leaves a row with `chunk_count IS NULL`. This applies to

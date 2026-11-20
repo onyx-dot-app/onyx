@@ -13,6 +13,7 @@ from onyx.connectors.models import ExternalAccess, SlimDocument
 from onyx.connectors.sharepoint.connector import (
     FetchedDriveItem,
     SharepointConnector,
+    SiteDescriptor,
     SiteDrive,
     _convert_sitepage_to_document,
     _convert_sitepage_to_slim_document,
@@ -285,6 +286,46 @@ def test_prune_listing_raises_when_site_pages_fail(
 
     with pytest.raises(MicrosoftGraphError):
         list(connector.retrieve_all_slim_docs())
+
+
+def _drive_listing_connector(drive_name: str | None) -> SharepointConnector:
+    connector = _make_connector()
+    connector.include_site_documents = True
+    connector.include_site_pages = False
+    connector.site_descriptors = [
+        SiteDescriptor(url=SITE_URL, drive_name=drive_name, folder_path=None)
+    ]
+    return connector
+
+
+@patch("onyx.connectors.sharepoint.connector.SharepointConnector._list_drives_for_site")
+def test_prune_listing_raises_when_graph_refuses_a_site(
+    mock_list_drives: MagicMock,
+) -> None:
+    """Perm sync skips a refused site. The prune listing must raise, or the
+    prune deletes every file of that site."""
+    mock_list_drives.side_effect = MicrosoftGraphError(403, "accessDenied", "x")
+
+    perm_sync_docs = [
+        doc
+        for batch in _drive_listing_connector(None).retrieve_all_slim_docs_perm_sync()
+        for doc in batch
+        if isinstance(doc, SlimDocument)
+    ]
+    assert perm_sync_docs == []
+
+    with pytest.raises(MicrosoftGraphError):
+        list(_drive_listing_connector(None).retrieve_all_slim_docs())
+
+
+@patch("onyx.connectors.sharepoint.connector.SharepointConnector._list_drives_for_site")
+def test_prune_listing_raises_when_the_configured_drive_is_missing(
+    mock_list_drives: MagicMock,
+) -> None:
+    mock_list_drives.return_value = []
+
+    with pytest.raises(RuntimeError, match="not found"):
+        list(_drive_listing_connector("Docs").retrieve_all_slim_docs())
 
 
 # ---------------------------------------------------------------------------
