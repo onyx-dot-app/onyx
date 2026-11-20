@@ -134,10 +134,14 @@ export function ChatSidePanel({
         open
           ? cn(
               "visible",
-              sliding && "transition-[width]",
+              sliding && "transition-[width] motion-reduce:transition-none",
               reserve === undefined && "w-100"
             )
-          : cn("w-0 invisible", sliding && "transition-[width,visibility]"),
+          : cn(
+              "w-0 invisible",
+              sliding &&
+                "transition-[width,visibility] motion-reduce:transition-none"
+            ),
         className
       )}
       style={
@@ -154,7 +158,7 @@ export function ChatSidePanel({
     <div
       className={cn(
         "h-full ease-in-out duration-300",
-        sliding && "transition-[width]"
+        sliding && "transition-[width] motion-reduce:transition-none"
       )}
       style={{ width: open ? reserve : 0 }}
     >
