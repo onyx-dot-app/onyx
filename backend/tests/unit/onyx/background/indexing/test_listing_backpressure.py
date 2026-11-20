@@ -15,6 +15,7 @@ from onyx.background.indexing.listing_backpressure import (
 )
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import ConnectorStopSignal
+from onyx.db.indexing_coordination import StubBatchProgress
 
 _MINUTE = 60.0
 _BATCH_SIZE = 16
@@ -34,14 +35,28 @@ class _FakeClock:
 
 
 class _FakeCounters:
-    """The attempt's stub batches stored and converted."""
+    """The attempt's stub batches stored and converted. Without
+    ``stored_documents``, each stored batch is full."""
 
     def __init__(self) -> None:
         self.stored = 0
         self.converted = 0
+        self.stored_documents: int | None = None
+        self.pauses_recorded = 0
 
-    def read(self, _index_attempt_id: int) -> tuple[int, int]:
-        return self.stored, self.converted
+    def read(self, _index_attempt_id: int) -> StubBatchProgress:
+        return StubBatchProgress(
+            stored=self.stored,
+            converted=self.converted,
+            stored_documents=(
+                self.stored * _BATCH_SIZE
+                if self.stored_documents is None
+                else self.stored_documents
+            ),
+        )
+
+    def record_pause(self, _source: str, _seconds: float) -> None:
+        self.pauses_recorded += 1
 
 
 @pytest.fixture
@@ -56,6 +71,8 @@ def counters(monkeypatch: pytest.MonkeyPatch) -> _FakeCounters:
     fake = _FakeCounters()
     monkeypatch.setattr(backpressure_module, "_read_stub_batch_progress", fake.read)
     monkeypatch.setattr(backpressure_module, "INDEX_BATCH_SIZE", _BATCH_SIZE)
+    # The process-wide pause counters stay unchanged.
+    monkeypatch.setattr(backpressure_module, "record_listing_pause", fake.record_pause)
     return fake
 
 
@@ -101,6 +118,22 @@ def test_no_pause_below_the_minimum_drain_rate(
     # 2 batches per minute: 32 documents per minute.
     counters.converted = 20
     assert 2 * _BATCH_SIZE < LISTING_BACKPRESSURE_MIN_DRAIN_DOCS_PER_MINUTE
+
+    assert _check_after(clock, backpressure, 10) == 0
+    assert clock.slept == 0
+
+
+def test_no_pause_below_the_minimum_rate_of_documents(
+    clock: _FakeClock, counters: _FakeCounters
+) -> None:
+    """The minimum rate counts the documents in the batches, not full
+    batches: an incremental listing stores small batches."""
+    backpressure = _started(counters, stored=0)
+    # 10 batches per minute and 400 waiting: 40 minutes to drain. One
+    # document in each batch: 10 documents per minute.
+    counters.converted = 100
+    counters.stored = 500
+    counters.stored_documents = 500
 
     assert _check_after(clock, backpressure, 10) == 0
     assert clock.slept == 0
@@ -175,3 +208,20 @@ def test_a_stop_during_a_pause_ends_it(
         backpressure.maybe_pause(stop_on_third_poll)
 
     assert clock.slept == 2 * LISTING_BACKPRESSURE_POLL_SECONDS
+
+
+def test_a_check_after_a_long_step_still_has_a_rate(
+    clock: _FakeClock, counters: _FakeCounters
+) -> None:
+    """A check more than one rate window after the last one measures the
+    rate from that check."""
+    backpressure = _started(counters, stored=0)
+    # 10 batches per minute over 15 minutes, and 450 waiting: 45 minutes
+    # to drain.
+    counters.converted = 150
+    counters.stored = 600
+
+    paused = _check_after(clock, backpressure, 15)
+
+    assert paused == pytest.approx(45 * _MINUTE - LISTING_BACKPRESSURE_TARGET_SECONDS)
+    assert counters.pauses_recorded == 1
