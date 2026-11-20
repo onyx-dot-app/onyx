@@ -16922,7 +16922,7 @@
           "homepage": "主页",
           "license": "许可证",
           "notUsed": "Onyx 不使用的部分",
-          "marketplace": "{name} 市场 ({repository})"
+          "marketplace": "{name} 市场，{scope, select, personal {个人} other {公司}}（{repository}）"
         },
         "skills": {
           "off": "已关闭",
@@ -17418,7 +17418,7 @@
         "sharedBy": "由 {email} 共享",
         "shared": "与你共享",
         "builtin": "内置",
-        "marketplace": "来自 {name}",
+        "marketplace": "来自 {name}（{scope, select, personal {个人} other {公司}}）",
         "privateTo": "{email} 私有"
       },
       "subtitle": "{source} · {description}",

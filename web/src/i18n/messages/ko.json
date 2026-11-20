@@ -16922,7 +16922,7 @@
           "homepage": "홈페이지",
           "license": "라이선스",
           "notUsed": "Onyx에서 사용하지 않음",
-          "marketplace": "{name} 마켓플레이스 ({repository})"
+          "marketplace": "{name} 마켓플레이스, {scope, select, personal {개인} other {회사}} ({repository})"
         },
         "skills": {
           "off": "꺼짐",
@@ -17418,7 +17418,7 @@
         "sharedBy": "{email}님이 공유함",
         "shared": "나와 공유됨",
         "builtin": "기본 제공",
-        "marketplace": "{name}에서",
+        "marketplace": "{name}에서 ({scope, select, personal {개인} other {회사}})",
         "privateTo": "{email} 전용"
       },
       "subtitle": "{source} · {description}",

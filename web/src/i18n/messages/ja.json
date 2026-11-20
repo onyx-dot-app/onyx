@@ -16922,7 +16922,7 @@
           "homepage": "ホームページ",
           "license": "ライセンス",
           "notUsed": "Onyx では使用しない部分",
-          "marketplace": "マーケットプレイス {name} ({repository})"
+          "marketplace": "{name} マーケットプレイス、{scope, select, personal {個人} other {会社}}（{repository}）"
         },
         "skills": {
           "off": "オフ",
@@ -17418,7 +17418,7 @@
         "sharedBy": "{email} が共有",
         "shared": "共有されたもの",
         "builtin": "組み込み",
-        "marketplace": "{name} から",
+        "marketplace": "{name} から（{scope, select, personal {個人} other {会社}}）",
         "privateTo": "{email} 専用"
       },
       "subtitle": "{source} · {description}",

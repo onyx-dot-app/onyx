@@ -82,3 +82,34 @@ test("the empty list offers to upload a plugin", async () => {
     await screen.findByRole("button", { name: "Upload Plugin" })
   ).toBeInTheDocument();
 });
+
+test("two copies of a plugin say which marketplace each comes from", async () => {
+  window.history.replaceState(null, "", "/app/customize/plugins");
+  const marketplace = {
+    name: "anthropic-agent-skills",
+    kind: "github" as const,
+    repository: "anthropics/skills",
+  };
+  mockFetch({
+    "/api/skills": {
+      builtins: [],
+      customs: [
+        plugin("company", "academy-guide", {
+          owner: null,
+          marketplace: { ...marketplace, id: "m-company", personal: false },
+        }),
+        plugin("personal", "academy-guide", {
+          marketplace: { ...marketplace, id: "m-personal", personal: true },
+        }),
+      ],
+    },
+  });
+  render(<CustomizePluginsPage />);
+
+  expect(
+    await screen.findByText(/^from anthropic-agent-skills \(company\)/)
+  ).toBeInTheDocument();
+  expect(
+    screen.getByText(/^from anthropic-agent-skills \(personal\)/)
+  ).toBeInTheDocument();
+});

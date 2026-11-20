@@ -16922,7 +16922,7 @@
           "homepage": "الصفحة الرئيسية",
           "license": "الترخيص",
           "notUsed": "غير مستخدم في Onyx",
-          "marketplace": "سوق {name} ({repository})"
+          "marketplace": "سوق {name}، {scope, select, personal {شخصي} other {الشركة}} ({repository})"
         },
         "skills": {
           "off": "متوقفة",
@@ -17418,7 +17418,7 @@
         "sharedBy": "شاركها {email}",
         "shared": "تمت مشاركتها معك",
         "builtin": "مدمجة",
-        "marketplace": "من {name}",
+        "marketplace": "من {name} ({scope, select, personal {شخصي} other {الشركة}})",
         "privateTo": "خاص بـ {email}"
       },
       "subtitle": "{source} · {description}",

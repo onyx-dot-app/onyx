@@ -16922,7 +16922,7 @@
           "homepage": "Homepage",
           "license": "Lizenz",
           "notUsed": "Nicht in Onyx verwendet",
-          "marketplace": "Marketplace {name} ({repository})"
+          "marketplace": "Marketplace {name}, {scope, select, personal {persönlich} other {Unternehmen}} ({repository})"
         },
         "skills": {
           "off": "Aus",
@@ -17418,7 +17418,7 @@
         "sharedBy": "geteilt von {email}",
         "shared": "mit Ihnen geteilt",
         "builtin": "integriert",
-        "marketplace": "aus {name}",
+        "marketplace": "aus {name} ({scope, select, personal {persönlich} other {Unternehmen}})",
         "privateTo": "privat für {email}"
       },
       "subtitle": "{source} · {description}",

@@ -433,7 +433,7 @@ test("a synced plugin names its marketplace and says that GitHub holds it", asyn
     await screen.findByText("Managed by the acme-tools marketplace")
   ).toBeInTheDocument();
   expect(
-    screen.getByText("acme-tools marketplace (acme/plugins)")
+    screen.getByText("acme-tools marketplace, personal (acme/plugins)")
   ).toBeInTheDocument();
   expect(screen.queryByText("My uploads")).not.toBeInTheDocument();
 });

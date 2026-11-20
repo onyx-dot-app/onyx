@@ -157,6 +157,7 @@ function OverviewTab({ entry, plugin, enablement }: OverviewTabProps) {
   const location = entry.marketplace
     ? t("marketplace", {
         name: entry.marketplace.name,
+        scope: entry.marketplace.personal ? "personal" : "company",
         repository: entry.marketplace.repository ?? "",
       })
     : sections(entry.section);

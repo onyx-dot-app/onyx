@@ -77,7 +77,10 @@ function PluginRow({
   const canShare = skill !== undefined && canShareSkill(skill);
   const source =
     entry.marketplace !== null
-      ? t("skills.source.marketplace", { name: entry.marketplace.name })
+      ? t("skills.source.marketplace", {
+          name: entry.marketplace.name,
+          scope: entry.marketplace.personal ? "personal" : "company",
+        })
       : group === "mine"
         ? t("skills.source.mine")
         : group === "organization"
