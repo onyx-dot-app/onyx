@@ -608,10 +608,11 @@ return math.max(0, current - now)
 """
 
 # Takes ``ARGV[1]`` units from a budget of ``ARGV[2]`` units for 24 hours and
-# returns 0, or takes nothing and returns the seconds until the oldest hour
-# leaves the day. The key is a hash of the units of each hour, so its size
-# does not grow with the number of requests. One request always fits an
-# empty day.
+# returns 0, or takes nothing and returns the seconds until the next hour.
+# The key is a hash of the units of each hour, so its size does not grow with
+# the number of requests. The day counts the current hour and the 24 hours
+# before it, so no unit leaves before it is 24 hours old. One request always
+# fits an empty day.
 _DAY_SCRIPT = """
 local t = redis.call('TIME')
 local now = tonumber(t[1])
@@ -621,7 +622,7 @@ local limit = tonumber(ARGV[2])
 local total = 0
 local hours = redis.call('HGETALL', KEYS[1])
 for i = 1, #hours, 2 do
-  if tonumber(hours[i]) <= hour - 24 then
+  if tonumber(hours[i]) < hour - 24 then
     redis.call('HDEL', KEYS[1], hours[i])
   else
     total = total + tonumber(hours[i + 1])
@@ -631,7 +632,7 @@ if total > 0 and total + cost > limit then
   return (hour + 1) * 3600 - now
 end
 redis.call('HINCRBY', KEYS[1], tostring(hour), cost)
-redis.call('EXPIRE', KEYS[1], 25 * 3600)
+redis.call('EXPIRE', KEYS[1], 26 * 3600)
 return 0
 """
 

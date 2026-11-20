@@ -698,12 +698,22 @@ def connector_pruning_generator_task(
                 f"Pruning generator running connector: cc_pair={cc_pair_id} connector_source={connector_source}"
             )
 
+            # Made before the connector, so that a wait for the source's API
+            # budget ends on a stop or the job timeout.
+            callback = PruneCallback(
+                0,
+                redis_connector,
+                lock,
+                r,
+                timeout_seconds=JOB_TIMEOUT,
+            )
             runnable_connector = instantiate_connector(
                 db_session,
                 connector_source,
                 InputType.SLIM_RETRIEVAL,
                 cc_pair.connector.connector_specific_config,
                 cc_pair.credential,
+                should_stop=callback.should_stop,
                 cc_pair_id=cc_pair.id,
             )
 
@@ -721,14 +731,6 @@ def connector_pruning_generator_task(
                 )
             }
         # Session 1 closed here — connection released before enumeration.
-
-        callback = PruneCallback(
-            0,
-            redis_connector,
-            lock,
-            r,
-            timeout_seconds=JOB_TIMEOUT,
-        )
 
         # Extract docs and hierarchy nodes from the source (no DB session held).
         extraction_result = extract_ids_from_runnable_connector(

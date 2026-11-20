@@ -405,7 +405,9 @@ class RedisSourceApiLimiter(SourceApiLimiter):
         if api not in self._budgets:
             return
         self._wait_for_pause(api)
-        self._wait_for_day_budget(api, self._units(api, cost, request_count))
+        if self._wait_for_day_budget(api, self._units(api, cost, request_count)):
+            # The source can ask for a pause while the call waits for the day.
+            self._wait_for_pause(api)
         is_bulk = bulk or self._bulk
         gate = _gate(self._tenant_id, f"{self._prefix}:{api}", is_bulk)
         ticket = _Ticket()
@@ -501,12 +503,12 @@ class RedisSourceApiLimiter(SourceApiLimiter):
         finally:
             record_limiter_paused_seconds(self._source, api, waited)
 
-    def _wait_for_day_budget(self, api: str, units: int) -> None:
+    def _wait_for_day_budget(self, api: str, units: int) -> bool:
         """Takes the call's units from the budget of the day, and waits for
-        room when the day is full."""
+        room when the day is full. True when it waited."""
         limit = self._budgets[api].per_credential_per_day
         if limit is None:
-            return
+            return False
         key = f"{self._prefix}:{api}:all:day"
         started = time.monotonic()
         warned = False
@@ -514,7 +516,7 @@ class RedisSourceApiLimiter(SourceApiLimiter):
             while True:
                 wait = self._windows.try_take_from_day(key, units, limit)
                 if wait <= 0:
-                    return
+                    return warned
                 if not warned:
                     warned = True
                     logger.warning(
