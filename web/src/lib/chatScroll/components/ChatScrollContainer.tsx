@@ -439,7 +439,8 @@ const ChatScrollContainer = React.memo(
         scrollToBottom,
       ]);
 
-      // Scroll input marks the next upward moves as the user's. Re-attached
+      // Scroll input marks the next upward moves as the user's. A focus move
+      // counts: the browser scrolls the focused element into view. Re-attached
       // per session: the scroll element remounts (it is keyed by sessionId).
       useEffect(() => {
         const container = scrollContainerRef.current;
@@ -467,6 +468,7 @@ const ChatScrollContainer = React.memo(
         container.addEventListener("wheel", markInput, { passive: true });
         container.addEventListener("touchmove", markInput, { passive: true });
         container.addEventListener("keydown", onKeyDown);
+        container.addEventListener("focusin", markInput);
         container.addEventListener("pointerdown", onPointerDown);
         window.addEventListener("pointerup", onPointerUp);
         window.addEventListener("pointercancel", onPointerUp);
@@ -474,6 +476,7 @@ const ChatScrollContainer = React.memo(
           container.removeEventListener("wheel", markInput);
           container.removeEventListener("touchmove", markInput);
           container.removeEventListener("keydown", onKeyDown);
+          container.removeEventListener("focusin", markInput);
           container.removeEventListener("pointerdown", onPointerDown);
           window.removeEventListener("pointerup", onPointerUp);
           window.removeEventListener("pointercancel", onPointerUp);
