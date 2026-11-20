@@ -330,16 +330,20 @@ To find your tier, count the licenses in the Microsoft 365 admin center under **
 Then read the row for that count.
 Microsoft publishes the current table in [Avoid getting throttled or blocked in SharePoint
 Online](https://learn.microsoft.com/sharepoint/dev/general-development/how-to-avoid-getting-throttled-or-blocked-in-sharepoint-online).
+This table is the SharePoint and OneDrive limit. Outlook and Teams have other limits of their own,
+which Microsoft sets for each mailbox or for each Teams service.
 
-Every SharePoint, OneDrive, Teams and Outlook connector that signs in as the same application shares this limit.
-When the shared rate limiter is on (`ENABLE_SOURCE_API_LIMITER=true`, for self-hosted deployments),
-Onyx keeps the connectors of one application under one budget:
+Every SharePoint, OneDrive, Teams and Outlook connector that signs in as the same application shares one Onyx budget,
+so set it from the SharePoint table. When the shared rate limiter is on (`ENABLE_SOURCE_API_LIMITER=true`,
+for self-hosted deployments):
 
 - With **RU per Minute** empty, the connectors share a budget that Onyx learns. Onyx starts low and
   adjusts when Microsoft answers that the application is over its limit.
 - With **RU per Minute** set, the connector uses up to that rate and no more. The connector form
   shows the values of the other connectors on the application and their sum.
   Keep the sum at or under the limit of your tier.
+- A connector with **RU per Minute** empty does not count in that sum, and it uses the learned budget
+  as well. To divide the limit exactly, set **RU per Minute** on every connector of the application.
 
 When Microsoft asks the application to wait, every connector on the application waits.
 A change to **RU per Minute** applies to the next indexing run and does not re-index.
