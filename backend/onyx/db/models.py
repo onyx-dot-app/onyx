@@ -4467,11 +4467,14 @@ class ModelConfiguration(Base):
         back_populates="model_configurations",
     )
 
+    # Views read llm_model_flow_types for every model, so flows load in one
+    # query per batch of models instead of one query per model.
     llm_model_flows: Mapped[list["LLMModelFlow"]] = relationship(
         "LLMModelFlow",
         back_populates="model_configuration",
         cascade="all, delete-orphan",
         passive_deletes=True,
+        lazy="selectin",
     )
 
     @property

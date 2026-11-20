@@ -276,22 +276,6 @@ def conversation(db_session: Session) -> Generator[ChatSession, None, None]:
         db_session.commit()
 
 
-@pytest.fixture
-def executed_sql(db_session: Session) -> Generator[list[str], None, None]:
-    statements: list[str] = []
-
-    def capture_statement(statement: str, **_event: object) -> None:
-        # SQLAlchemy supplies the unused connection, cursor, and execution parameters.
-        statements.append(statement)
-
-    engine = db_session.get_bind()
-    event.listen(engine, "before_cursor_execute", capture_statement, named=True)
-    try:
-        yield statements
-    finally:
-        event.remove(engine, "before_cursor_execute", capture_statement)
-
-
 def _response(
     db_session: Session,
     conversation: ChatSession,
