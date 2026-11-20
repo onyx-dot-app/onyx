@@ -81,7 +81,13 @@ function ClusterSummary({ status }: ClusterSummaryProps) {
             icon={HEALTH_ICONS[health]}
             color={HEALTH_COLORS[health]}
             size={6}
-            tooltip={t(HEALTH_TOOLTIP_KEYS[health])}
+            tooltip={t(
+              // On one data node replicas can never be placed, so yellow is
+              // the normal state there.
+              health === "yellow" && status.data_node_count === 1
+                ? "healthYellowSingleNode"
+                : HEALTH_TOOLTIP_KEYS[health]
+            )}
           />
           <Text as="p" font="secondary-body" color="text-03">
             {t("updated", {

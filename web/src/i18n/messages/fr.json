@@ -10703,6 +10703,7 @@
         "chunks": "Fragments",
         "healthGreen": "Vert : toutes les copies de shards sont attribuées.",
         "healthYellow": "Jaune : certains shards réplicas ne sont pas attribués. La recherche fonctionne, mais perdre un nœud de données peut perdre des données.",
+        "healthYellowSingleNode": "Jaune : les copies de réplique ont besoin d'un deuxième nœud de données. C'est normal pour un cluster à un seul nœud de données, et la recherche fonctionne.",
         "healthRed": "Rouge : certains shards primaires ne sont pas attribués, donc une partie de l'index ne peut pas être recherchée."
       },
       "searches": {

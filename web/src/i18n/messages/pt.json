@@ -10703,6 +10703,7 @@
         "chunks": "Trechos",
         "healthGreen": "Verde: todas as cópias de shards estão atribuídas.",
         "healthYellow": "Amarelo: alguns shards réplica não estão atribuídos. A busca funciona, mas perder um nó de dados pode perder dados.",
+        "healthYellowSingleNode": "Amarelo: as cópias de réplica precisam de um segundo nó de dados. Isso é normal em um cluster com um só nó de dados, e a busca funciona.",
         "healthRed": "Vermelho: alguns shards primários não estão atribuídos, então parte do índice não pode ser pesquisada."
       },
       "searches": {

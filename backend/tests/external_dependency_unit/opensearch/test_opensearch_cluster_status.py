@@ -355,6 +355,14 @@ def test_issues_group_nodes_and_put_critical_first() -> None:
     ]
 
 
+def test_unassigned_replicas_on_one_data_node_are_no_issue() -> None:
+    # A replica can never be placed on a single node; the default index has one.
+    assert evaluate_cluster_issues("yellow", 2, [_node("node-1")]) == []
+    # The cluster's count decides, not the nodes that answered.
+    [issue] = evaluate_cluster_issues("yellow", 2, [_node("node-1")], 2)
+    assert issue.kind == ClusterIssueKind.UNASSIGNED_SHARDS
+
+
 def test_red_cluster_is_critical() -> None:
     [issue] = evaluate_cluster_issues("red", 4, [_node("node-1")])
     assert issue.kind == ClusterIssueKind.CLUSTER_RED

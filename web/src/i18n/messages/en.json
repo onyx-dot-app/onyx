@@ -10703,6 +10703,7 @@
         "chunks": "Chunks",
         "healthGreen": "Green: every shard copy is assigned.",
         "healthYellow": "Yellow: some replica shards are not assigned. Search works, but losing a data node can lose data.",
+        "healthYellowSingleNode": "Yellow: replica copies need a second data node. This is normal for a cluster with one data node, and search works.",
         "healthRed": "Red: some primary shards are not assigned, so part of the index cannot be searched."
       },
       "searches": {

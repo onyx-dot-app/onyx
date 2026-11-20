@@ -10703,6 +10703,7 @@
         "chunks": "Chunks",
         "healthGreen": "Grün: Alle Shard-Kopien sind zugewiesen.",
         "healthYellow": "Gelb: Einige Replikat-Shards sind nicht zugewiesen. Die Suche funktioniert, aber der Ausfall eines Datenknotens kann Daten verlieren.",
+        "healthYellowSingleNode": "Gelb: Replikatkopien brauchen einen zweiten Datenknoten. Bei einem Cluster mit nur einem Datenknoten ist das normal, und die Suche funktioniert.",
         "healthRed": "Rot: Einige primäre Shards sind nicht zugewiesen, daher kann ein Teil des Index nicht durchsucht werden."
       },
       "searches": {

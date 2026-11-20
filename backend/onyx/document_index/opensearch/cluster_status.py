@@ -71,9 +71,17 @@ def _node_issue(
 
 
 def evaluate_cluster_issues(
-    health: str, unassigned_shards: int, nodes: list[ClusterNodeStatus]
+    health: str,
+    unassigned_shards: int,
+    nodes: list[ClusterNodeStatus],
+    data_node_count: int | None = None,
 ) -> list[ClusterIssue]:
-    """Returns the cluster's issues, critical ones first."""
+    """Returns the cluster's issues, critical ones first.
+
+    data_node_count is the cluster's count, which includes nodes that did not
+    answer the stats request; it defaults to the nodes listed.
+    """
+    data_nodes: int = data_node_count if data_node_count is not None else len(nodes)
     issues: list[ClusterIssue | None] = []
     if health == "red":
         issues.append(
@@ -83,7 +91,10 @@ def evaluate_cluster_issues(
                 value=unassigned_shards,
             )
         )
-    elif unassigned_shards > 0:
+    # On one data node a replica can never be placed, since OpenSearch keeps it
+    # off its primary's node. Yellow is then the normal state of a default
+    # self-hosted index (one replica), not something to fix.
+    elif unassigned_shards > 0 and data_nodes > 1:
         issues.append(
             ClusterIssue(
                 kind=ClusterIssueKind.UNASSIGNED_SHARDS,
@@ -191,7 +202,10 @@ def collect_cluster_status(indexes: list[OnyxIndexRef]) -> ClusterStatus:
     ]
     health: str = str(cluster.get("status", "red"))
     unassigned: int = int(cluster.get("unassigned_shards", 0))
-    issues: list[ClusterIssue] = evaluate_cluster_issues(health, unassigned, nodes)
+    data_node_count: int = int(cluster.get("number_of_data_nodes", len(nodes)))
+    issues: list[ClusterIssue] = evaluate_cluster_issues(
+        health, unassigned, nodes, data_node_count
+    )
     # Rows and warnings of a data node that did not answer are missing, so the
     # read is not shown as healthy.
     if memory_stats.failed:
@@ -217,7 +231,7 @@ def collect_cluster_status(indexes: list[OnyxIndexRef]) -> ClusterStatus:
         checked_at=datetime.now(timezone.utc),
         version=f"{version[0]}.{version[1]}" if version else None,
         health=health,
-        data_node_count=int(cluster.get("number_of_data_nodes", len(nodes))),
+        data_node_count=data_node_count,
         primary_shards=int(cluster.get("active_primary_shards", 0)),
         active_shards=int(cluster.get("active_shards", 0)),
         unassigned_shards=unassigned,
