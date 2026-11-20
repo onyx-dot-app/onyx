@@ -302,34 +302,8 @@ for (const theme of THEMES) {
         await mockChatEndpoint(page, buildMockStream(WIDE_TABLES_AI_RESPONSE));
 
         await sendMessage(page, "Show me wide tables");
-        const scrollers = chat.aiMessage().locator(".markdown-table-breakout");
-        await expect(scrollers).toHaveCount(2);
-
-        const measure = (index: number) =>
-          scrollers.nth(index).evaluate((el) => {
-            const answer = el.closest("[data-testid='onyx-ai-message']");
-            const cell = el.querySelector("tbody td:last-child");
-            return {
-              clientWidth: el.clientWidth,
-              scrollWidth: el.scrollWidth,
-              right: el.getBoundingClientRect().right,
-              answerRight: answer?.getBoundingClientRect().right ?? 0,
-              cellHeight: cell?.getBoundingClientRect().height ?? 0,
-              lineHeight: parseFloat(getComputedStyle(cell ?? el).lineHeight),
-            };
-          });
-
-        // The short table fits the column, and its long cell wraps.
-        const short = await measure(0);
-        expect(short.scrollWidth).toBeLessThanOrEqual(short.clientWidth);
-        expect(short.right).toBeLessThanOrEqual(short.answerRight);
-        expect(short.cellHeight).toBeGreaterThan(short.lineHeight * 1.5);
-
-        // The many-column table scrolls inside the column instead of
-        // widening the answer.
-        const wide = await measure(1);
-        expect(wide.scrollWidth).toBeGreaterThan(wide.clientWidth);
-        expect(wide.right).toBeLessThanOrEqual(wide.answerRight);
+        await chat.expectAnswerTableWraps(0);
+        await chat.expectAnswerTableScrolls(1);
       });
 
       test("AI response with LaTeX math renders correctly", async ({
