@@ -117,6 +117,14 @@ from onyx.secondary_llm_flows.query_expansion import (
 )
 from onyx.secondary_llm_flows.source_filter import decide_search_scope
 from onyx.secondary_llm_flows.time_filter import decide_time_filter
+from onyx.server.metrics.internal_search import (
+    QueryAdmission,
+    SearchLane,
+    UserMessageSize,
+    observe_internal_search,
+    observe_query_analyze,
+    record_query_admission,
+)
 from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.tools.constants import INTERNAL_SEARCH_TOOL_NAME
 from onyx.tools.interface import (
@@ -134,6 +142,7 @@ from onyx.tools.models import (
     ToolContext,
 )
 from onyx.tools.tool_implementations.search.constants import (
+    ANALYZED_QUERY_MAX_CHARS,
     DECISION_TIMEOUT_S,
     FULL_DOC_NUM_CHUNKS_AROUND,
     KEYWORD_QUERY_HYBRID_ALPHA,
@@ -144,10 +153,13 @@ from onyx.tools.tool_implementations.search.constants import (
     MAX_QUERIES_PER_CALL,
     MAX_SELECTED_SECTIONS,
     ORIGINAL_QUERY_WEIGHT,
+    QUERY_MAX_DISTINCT_TERMS,
+    QUERY_MAX_TERMS,
     RERANK_POOL_SIZE,
     RERANK_SPECULATIVE_EXPANSIONS,
     RERANK_TOKEN_BUDGET_MULTIPLIER,
     SELECTION_TOKEN_BUDGET_MULTIPLIER,
+    UNANALYZED_QUERY_MAX_CHARS,
 )
 from onyx.tools.tool_implementations.search.models import (
     QueryExpansionAndScope,
@@ -638,6 +650,7 @@ class SearchTool(Tool):
         embedding_model: EmbeddingModel,
         federated_retrieval_infos: list[FederatedRetrievalInfo],
         effective_filters: BaseFilters | None,
+        lane: SearchLane,
     ) -> list[InferenceChunk] | None:
         """Run search pipeline for a single query using pre-fetched data.
 
@@ -653,12 +666,41 @@ class SearchTool(Tool):
             federated_retrieval_infos: Pre-fetched federated retrieval functions
             effective_filters: Filters for THIS search, with the per-call source
                 scope already applied (computed once in run()).
+            lane: Whether the query is the user's message, for metrics.
 
         Returns:
-            List of InferenceChunk results, or None when the index rejects the
-            query for exceeding its clause limit, so the other queries of the
-            call can still answer.
+            List of InferenceChunk results, or None when the query is too large
+            for the index, so the other queries of the call can still answer.
         """
+        # Chat skips a query whose keyword text would exceed the index clause
+        # limit. Raw search keeps its single query and its error.
+        if not self.retrieval_only:
+            if query.isascii() and len(query) <= UNANALYZED_QUERY_MAX_CHARS:
+                admission = QueryAdmission.SHORT
+            elif len(query) > ANALYZED_QUERY_MAX_CHARS:
+                admission = QueryAdmission.TOO_LONG
+            else:
+                analyze_start = time.monotonic()
+                try:
+                    counts = self.document_index.count_keyword_terms(query)
+                    admission = (
+                        QueryAdmission.ANALYZED
+                        if counts.total <= QUERY_MAX_TERMS
+                        and counts.distinct <= QUERY_MAX_DISTINCT_TERMS
+                        else QueryAdmission.TOO_MANY_TERMS
+                    )
+                except Exception:
+                    # Search anyway: the clause-limit handling below still
+                    # drops an oversized query, and an index outage surfaces
+                    # as the search error.
+                    logger.warning(
+                        "Internal search - query analysis failed", exc_info=True
+                    )
+                    admission = QueryAdmission.ANALYZER_FAILED
+                observe_query_analyze(time.monotonic() - analyze_start)
+            record_query_admission(lane, admission)
+            if admission in (QueryAdmission.TOO_LONG, QueryAdmission.TOO_MANY_TERMS):
+                return None
         try:
             return search_pipeline(
                 chunk_search_request=ChunkSearchRequest(
@@ -847,16 +889,30 @@ class SearchTool(Tool):
             )
             llm_queries = llm_queries[:MAX_QUERIES_PER_CALL]
 
-        return self.search(
-            llm_queries,
-            original_query=original_query,
-            message_history=message_history,
-            context=context,
-            citation_start=context.next_citation_num
-            + CITATIONS_PER_TOOL_CALL * invocation.call_index,
-            update=invocation.update,
-            tool_call_id=invocation.call_id,
-        )
+        search_start = time.monotonic()
+        try:
+            return self.search(
+                llm_queries,
+                original_query=original_query,
+                message_history=message_history,
+                context=context,
+                citation_start=context.next_citation_num
+                + CITATIONS_PER_TOOL_CALL * invocation.call_index,
+                update=invocation.update,
+                tool_call_id=invocation.call_id,
+            )
+        finally:
+            observe_internal_search(
+                (
+                    UserMessageSize.SHORT
+                    if original_query.isascii()
+                    and len(original_query) <= UNANALYZED_QUERY_MAX_CHARS
+                    else UserMessageSize.MEDIUM
+                    if len(original_query) <= ANALYZED_QUERY_MAX_CHARS
+                    else UserMessageSize.LONG
+                ),
+                time.monotonic() - search_start,
+            )
 
     def _build_search_result(
         self,
@@ -1245,6 +1301,9 @@ class SearchTool(Tool):
                         embedding_model,
                         federated_retrieval_infos,
                         effective_filters,
+                        SearchLane.USER_MESSAGE
+                        if original_query and query.lower() == original_query.lower()
+                        else SearchLane.GENERATED,
                     ),
                 )
             )
@@ -1263,6 +1322,7 @@ class SearchTool(Tool):
                         embedding_model,
                         federated_retrieval_infos,
                         effective_filters,
+                        SearchLane.GENERATED,
                     ),
                 )
             )

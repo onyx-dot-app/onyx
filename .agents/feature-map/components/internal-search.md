@@ -104,6 +104,11 @@ own queries, the user's original message and the keyword queries each get a lane
 weight (`tools/tool_implementations/search/constants.py`). Keyword lanes use a
 low `hybrid_alpha`. A `hybrid_alpha` of exactly 0 skips embedding and runs pure
 keyword retrieval in `context/search/retrieval/search_runner.py:search_chunks`.
+In chat, each lane first passes a size check in `SearchTool._run_search_for_query`.
+ASCII text up to 512 characters runs at once. Text up to 8,192 characters runs
+only if the index analyzer (`DocumentIndex.count_keyword_terms`) finds at most
+1,000 terms and 500 distinct terms. Longer text is skipped, and other lanes do
+not wait for the check. Raw search skips the check.
 When the index rejects a lane for exceeding its clause limit
 (`document_index/opensearch/client.py:is_clause_limit_error`), fusion drops that
 lane and its weight. Other errors still fail the call, and a call whose every lane
