@@ -4,7 +4,8 @@ import type { ChatScrollContainerHandle } from "@/lib/chatScroll/components/Chat
 /**
  * After a send adds a new turn, glide to the end. The latest turn fills the
  * viewport (its min-height), so the end puts the new user message at the
- * top, whether or not the view was following. A resumed run is not a send
+ * top, whether or not the view was following. A turn taller than the view
+ * stops the glide at its user message. A resumed run is not a send
  * and never moves the view, and neither is a switch back to a chat that is
  * still running.
  */
@@ -24,7 +25,7 @@ export function useScrollToNewTurn(
       previous.sessionId != null && previous.sessionId !== sessionId;
     const changed = previous.anchorSelector !== anchorSelector;
     if (!switchedChat && changed && sending && anchorSelector) {
-      scrollRef.current?.scrollToBottom("smooth");
+      scrollRef.current?.scrollToNewTurn();
     }
   }, [sessionId, anchorSelector, sending, scrollRef]);
 }
