@@ -50,6 +50,17 @@ def test_repository_archive_total_limit(monkeypatch: pytest.MonkeyPatch) -> None
         read_repository_archive(tar_archive({"a": b"ab", "b": b"cd"}))
 
 
+def test_repository_archive_counts_the_full_size_of_a_cut_file(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    # Only the first bytes of a large file are kept, but the stream still
+    # decompresses all of it, so all of it counts toward the limit.
+    monkeypatch.setattr(ingest_from_github, "DEFAULT_PER_FILE_MAX_BYTES", 1)
+    monkeypatch.setattr(ingest_from_github, "_ARCHIVE_UNPACKED_MAX_BYTES", 10)
+    with pytest.raises(OnyxError, match="uncompressed limit"):
+        read_repository_archive(tar_archive({"a/big.bin": b"x" * 11}))
+
+
 @pytest.mark.parametrize("path", ["../escape", "a/./b", "/abs"])
 def test_repository_archive_refuses_unsafe_paths(path: str) -> None:
     out = io.BytesIO()

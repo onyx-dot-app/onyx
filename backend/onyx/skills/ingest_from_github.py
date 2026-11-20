@@ -13,7 +13,8 @@ from onyx.skills.bundle import DEFAULT_PER_FILE_MAX_BYTES
 GITHUB_ARCHIVE_MAX_BYTES: Final[int] = 25 * 1024 * 1024
 _ARCHIVE_MAX_MEMBERS: Final[int] = 10_000
 # Each file is read up to the bundle file limit plus one byte, so a plugin
-# with a larger file is refused by the bundle limits, not by this read.
+# with a larger file is refused by the bundle limits, not by this read. The
+# limit counts each file's full size: the stream decompresses all of it.
 _ARCHIVE_UNPACKED_MAX_BYTES: Final[int] = 256 * 1024 * 1024
 
 
@@ -72,6 +73,12 @@ def read_repository_archive(archive_bytes: bytes) -> RepositoryArchive:
                         OnyxErrorCode.INVALID_INPUT,
                         f"Repository contains duplicate path '{member.name}'.",
                     )
+                total_size += member.size
+                if total_size > _ARCHIVE_UNPACKED_MAX_BYTES:
+                    raise OnyxError(
+                        OnyxErrorCode.PAYLOAD_TOO_LARGE,
+                        f"Repository exceeds the {_ARCHIVE_UNPACKED_MAX_BYTES // (1024 * 1024)} MiB uncompressed limit.",
+                    )
                 extracted = archive.extractfile(member)
                 if extracted is None:
                     raise OnyxError(
@@ -79,12 +86,6 @@ def read_repository_archive(archive_bytes: bytes) -> RepositoryArchive:
                         f"Could not read repository file '{member.name}'. Try again.",
                     )
                 content = extracted.read(DEFAULT_PER_FILE_MAX_BYTES + 1)
-                total_size += len(content)
-                if total_size > _ARCHIVE_UNPACKED_MAX_BYTES:
-                    raise OnyxError(
-                        OnyxErrorCode.PAYLOAD_TOO_LARGE,
-                        f"Repository exceeds the {_ARCHIVE_UNPACKED_MAX_BYTES // (1024 * 1024)} MiB uncompressed limit.",
-                    )
                 files[member.name] = content
     except (tarfile.TarError, EOFError, OSError) as exc:
         raise OnyxError(
