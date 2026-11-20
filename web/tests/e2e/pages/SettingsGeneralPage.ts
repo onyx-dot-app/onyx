@@ -1,7 +1,7 @@
 /**
  * Page Object Model for the General settings page (/app/settings/general).
  *
- * Currently covers the language picker in the Appearance section. The picker
+ * Currently covers the language picker in the Language section. The picker
  * lists languages by endonym (English, Español, ...), so its trigger and
  * option locators are locale-independent and safe to use in any UI language.
  */

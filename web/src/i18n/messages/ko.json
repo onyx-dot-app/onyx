@@ -11694,11 +11694,6 @@
       "exportPlaintext": {
         "label": "일반 텍스트"
       },
-      "fullWidth": {
-        "ariaLabel": "전체 너비 채팅 전환",
-        "fitTooltip": "너비 맞춤",
-        "fullTooltip": "전체 너비"
-      },
       "incognitoExit": {
         "ariaLabel": "시크릿 채팅 종료",
         "tooltip": "시크릿 채팅 종료"
@@ -15700,6 +15695,10 @@
         "light": "라이트",
         "title": "색상 모드"
       },
+      "fullWidthChat": {
+        "description": "채팅 메시지와 입력창을 창의 전체 너비로 넓힙니다.",
+        "title": "전체 너비 채팅"
+      },
       "title": "모양"
     },
     "chats": {
@@ -15754,11 +15753,9 @@
         "submit": "연결 해제",
         "title": "*{name}* 연결 해제"
       },
-      "emptyMessage": "조직에 설정된 커넥터가 없습니다.",
       "status": {
         "connected": "연결됨",
-        "notConnected": "연결 안 됨",
-        "paused": "일시 중지됨"
+        "notConnected": "연결 안 됨"
       },
       "title": "커넥터",
       "toasts": {
@@ -15838,11 +15835,11 @@
         "accountsAccess": {
           "label": "계정 및 액세스"
         },
-        "chatPreferences": {
-          "label": "채팅 환경설정"
+        "appearance": {
+          "label": "모양"
         },
-        "connectors": {
-          "label": "커넥터"
+        "chat": {
+          "label": "채팅"
         },
         "general": {
           "label": "일반"

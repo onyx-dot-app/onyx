@@ -12,21 +12,27 @@ chat retention needs Enterprise. The settings API enforces these tiers.
 
 ## User experience
 
-- **A user**, in Settings, enters a name, a role and free-text preferences
-  ("I prefer short answers"). The next message in any chat, including the open
-  one, uses them. Nobody else sees them.
+- **A user**, in Settings > General, enters a name, a role and free-text
+  preferences ("I prefer short answers"). The next message in any chat,
+  including the open one, uses them. Nobody else sees them.
 - **A user** lets the assistant remember facts. With the memory tool on, the
   assistant saves or updates a memory during a chat when it decides to, and the
   user sees a memory event in the answer. The user can edit or delete memories
-  in Settings. When the tool adds a memory past the cap, it deletes the oldest.
+  in Settings > Chat. When the tool adds a memory past the cap, it deletes the
+  oldest.
 - **A user** can turn off "reference memories". Saved memories then stay out
   of the prompt, but the memory tool can still write them. To stop new
   memories, the user turns off the memory tool.
-- **A user** saves prompt shortcuts and inserts them into the message box. They
-  can hide a shared shortcut for themselves.
+- **A user** saves prompt shortcuts in Settings > Chat and inserts them into
+  the message box. They can hide a shared shortcut for themselves.
 - **A user** picks a UI and answer language, or follows the workspace default.
-- **A user** chooses whether Enter and the send arrow wait for the current step
-  or interrupt current work. Ctrl/Cmd+Enter always queues a follow-up.
+- **A user** chooses, in Settings > Chat, whether Enter and the send arrow wait
+  for the current step or interrupt current work. Ctrl/Cmd+Enter always queues
+  a follow-up.
+- **A user** sets the color mode, full-width chat and chat background in
+  Settings > Appearance. Full-width chat is stored per browser, not on the
+  server. Mobile widths hide its switch, because chat is always full width
+  there.
 - **An admin**, at Admin > Chat Preferences, sets workspace chat options. These
   include the team name and context that every prompt includes, the default
   language, the default assistant's system prompt and built-in tools, and the

@@ -13,10 +13,8 @@ async function setAutoScroll(page: Page, enabled: boolean) {
   // The settings page is up.
   await expect(page.getByText("Full Name")).toBeVisible();
 
-  // Navigate to Chat Preferences tab
-  await page
-    .locator('a[href="/app/settings/chat-preferences"]')
-    .click({ force: true });
+  // Navigate to the Chat tab
+  await page.locator('a[href="/app/settings/chat"]').click({ force: true });
 
   // Find the auto-scroll switch by locating the label text and then finding
   // the switch within the same container

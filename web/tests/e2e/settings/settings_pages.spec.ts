@@ -1,4 +1,7 @@
 import { expect, test } from "@playwright/test";
+import { ChatPage } from "@tests/e2e/chat/ChatPage";
+import { AppSidebarPage } from "@tests/e2e/pages/AppSidebarPage";
+import { SettingsAppearancePage } from "@tests/e2e/pages/SettingsAppearancePage";
 import { THEMES, setThemeBeforeNavigation } from "@tests/e2e/utils/theme";
 import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
 
@@ -7,9 +10,9 @@ test.use({ storageState: "admin_auth.json" });
 /** Maps each settings slug to the header title shown on that page. */
 const SLUG_TO_HEADER: Record<string, string> = {
   general: "Profile",
-  "chat-preferences": "Chats",
+  appearance: "Appearance",
+  chat: "Chats",
   "accounts-access": "Accounts",
-  connectors: "Connectors",
 };
 
 /**
@@ -81,3 +84,26 @@ for (const theme of THEMES) {
     });
   });
 }
+
+// Full width is stored per browser, so the fresh context of this test starts
+// with the reading-width default.
+test("full-width chat setting widens the chat column", async ({ page }) => {
+  const appearancePage = new SettingsAppearancePage(page);
+  const chatPage = new ChatPage(page);
+  const sidebar = new AppSidebarPage(page);
+
+  await appearancePage.goto();
+  await appearancePage.setFullWidthChat(true);
+  // A page load starts at reading width, so a wide column shows that the
+  // stored value was read.
+  await chatPage.goto();
+  await chatPage.expectFullWidthChat(true);
+
+  await appearancePage.goto();
+  await expect(appearancePage.fullWidthChatSwitch).toBeChecked();
+  await appearancePage.setFullWidthChat(false);
+  // Stay in the loaded app: after a page load, reading width shows before the
+  // stored value is read, so it would not prove that the switch applied.
+  await sidebar.newSession();
+  await chatPage.expectFullWidthChat(false);
+});

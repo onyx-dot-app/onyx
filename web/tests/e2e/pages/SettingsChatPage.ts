@@ -1,6 +1,6 @@
 import { expect, type Locator, type Page } from "@playwright/test";
 
-export class UserChatPreferencesPage {
+export class SettingsChatPage {
   readonly sendBehavior: Locator;
 
   constructor(readonly page: Page) {
@@ -10,7 +10,7 @@ export class UserChatPreferencesPage {
   }
 
   async goto(): Promise<void> {
-    await this.page.goto("/app/settings/chat-preferences");
+    await this.page.goto("/app/settings/chat");
     await expect(this.sendBehavior).toBeVisible();
   }
 

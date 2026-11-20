@@ -11,7 +11,7 @@ import {
 /**
  * Shared full-width chat state: when on, chat messages and the input bar drop
  * their reading-width cap and flow to the window width. Lives in context so the
- * top-bar toggle and the chat page stay in sync. Persists per-browser in
+ * Appearance setting and the chat page stay in sync. Persists per-browser in
  * localStorage; starts false and hydrates in an effect so SSR and the first
  * client render agree.
  */
@@ -19,7 +19,7 @@ const STORAGE_KEY = "onyx:fullWidthChat";
 
 interface FullWidthChatContextValue {
   fullWidthChat: boolean;
-  toggleFullWidthChat: () => void;
+  setFullWidthChat: (enabled: boolean) => void;
 }
 
 const FullWidthChatContext = createContext<FullWidthChatContextValue | null>(
@@ -33,30 +33,27 @@ interface FullWidthChatProviderProps {
 export function FullWidthChatProvider({
   children,
 }: FullWidthChatProviderProps) {
-  const [fullWidthChat, setFullWidthChat] = useState(false);
+  const [fullWidthChat, setFullWidthChatState] = useState(false);
 
   useEffect(() => {
     try {
-      setFullWidthChat(localStorage.getItem(STORAGE_KEY) === "true");
+      setFullWidthChatState(localStorage.getItem(STORAGE_KEY) === "true");
     } catch {
       // Storage may be unavailable (e.g. private browsing); keep the default.
     }
   }, []);
 
-  const toggleFullWidthChat = useCallback(() => {
-    const next = !fullWidthChat;
-    setFullWidthChat(next);
+  const setFullWidthChat = useCallback((enabled: boolean) => {
+    setFullWidthChatState(enabled);
     try {
-      localStorage.setItem(STORAGE_KEY, String(next));
+      localStorage.setItem(STORAGE_KEY, String(enabled));
     } catch {
-      // Persisting is best-effort. The toggle still flips for this session.
+      // Persisting is best-effort. The setting still applies for this session.
     }
-  }, [fullWidthChat]);
+  }, []);
 
   return (
-    <FullWidthChatContext.Provider
-      value={{ fullWidthChat, toggleFullWidthChat }}
-    >
+    <FullWidthChatContext.Provider value={{ fullWidthChat, setFullWidthChat }}>
       {children}
     </FullWidthChatContext.Provider>
   );

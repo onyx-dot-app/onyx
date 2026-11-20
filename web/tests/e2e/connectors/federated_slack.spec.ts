@@ -31,38 +31,6 @@ async function createFederatedSlackConnector(page: Page) {
   await page.waitForTimeout(2000);
 }
 
-async function navigateToUserSettings(page: Page) {
-  // Wait for any existing modals to close
-  await page.waitForTimeout(1000);
-
-  // Wait for potential modal backdrop to disappear
-  await page
-    .waitForSelector(".fixed.inset-0.bg-neutral-950\\/50", {
-      state: "detached",
-      timeout: 5000,
-    })
-    .catch(() => {});
-
-  // Click on user dropdown/settings button
-  await page.locator("#onyx-user-dropdown").click();
-
-  // Click on settings option
-  await page.getByText("Settings").click();
-
-  // Wait for settings modal to appear
-  await expect(page.locator("h2", { hasText: "Settings" })).toBeVisible();
-}
-
-async function openConnectorsTab(page: Page) {
-  // Click on the Connectors tab in user settings
-  await page.getByRole("button", { name: "Connectors" }).click();
-
-  // Wait for connectors section to be visible
-  // Allow multiple instances of "Connected Services" to be visible
-  const connectedServicesLocators = page.getByText("Connected Services");
-  await expect(connectedServicesLocators.first()).toBeVisible();
-}
-
 /**
  * Cleanup function to delete the federated Slack connector from the admin panel
  * This ensures test isolation by removing any test data created during the test
@@ -160,12 +128,13 @@ test.skip("Federated Slack Connector - Create, OAuth Modal, and User Settings Fl
       page.getByText(/improve answer quality by letting/i)
     ).not.toBeVisible();
 
-    // Go to user settings and verify the connector appears
-    await navigateToUserSettings(page);
-    await openConnectorsTab(page);
-
-    // Verify Slack connector appears in the federated connectors section
-    await expect(page.getByText("Federated Connectors")).toBeVisible();
+    // Federated connectors are listed under Settings > Accounts & Access
+    await page.goto("/app/settings/accounts-access");
+    await expect(
+      page.locator(".opal-content-title-row").getByText("Connectors", {
+        exact: true,
+      })
+    ).toBeVisible();
     await expect(page.getByText("Slack")).toBeVisible();
     await expect(page.getByText("Not connected")).toBeVisible();
 

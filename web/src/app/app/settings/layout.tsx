@@ -38,10 +38,8 @@ export default function Layout({ children }: LayoutProps) {
 
   const tabs: SettingsTab[] = [
     { href: "/app/settings/general", label: t("tabs.general.label") },
-    {
-      href: "/app/settings/chat-preferences",
-      label: t("tabs.chatPreferences.label"),
-    },
+    { href: "/app/settings/appearance", label: t("tabs.appearance.label") },
+    { href: "/app/settings/chat", label: t("tabs.chat.label") },
     ...(showAccountsAccessTab
       ? ([
           {
@@ -58,7 +56,6 @@ export default function Layout({ children }: LayoutProps) {
           },
         ] satisfies SettingsTab[])
       : []),
-    { href: "/app/settings/connectors", label: t("tabs.connectors.label") },
     { href: "/app/settings/usage", label: t("tabs.usage.label") },
   ];
 

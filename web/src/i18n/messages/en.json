@@ -11694,11 +11694,6 @@
       "exportPlaintext": {
         "label": "Plaintext"
       },
-      "fullWidth": {
-        "ariaLabel": "Toggle full width chat",
-        "fitTooltip": "Fit width",
-        "fullTooltip": "Full width"
-      },
       "incognitoExit": {
         "ariaLabel": "Exit incognito chat",
         "tooltip": "Exit Incognito Chat"
@@ -15700,6 +15695,10 @@
         "light": "Light",
         "title": "Color Mode"
       },
+      "fullWidthChat": {
+        "description": "Expand chat messages and the input bar to the full width of the window.",
+        "title": "Full-Width Chat"
+      },
       "title": "Appearance"
     },
     "chats": {
@@ -15754,11 +15753,9 @@
         "submit": "Disconnect",
         "title": "Disconnect *{name}*"
       },
-      "emptyMessage": "No connectors set up for your organization.",
       "status": {
         "connected": "Connected",
-        "notConnected": "Not connected",
-        "paused": "Paused"
+        "notConnected": "Not connected"
       },
       "title": "Connectors",
       "toasts": {
@@ -15838,11 +15835,11 @@
         "accountsAccess": {
           "label": "Accounts & Access"
         },
-        "chatPreferences": {
-          "label": "Chat Preferences"
+        "appearance": {
+          "label": "Appearance"
         },
-        "connectors": {
-          "label": "Connectors"
+        "chat": {
+          "label": "Chat"
         },
         "general": {
           "label": "General"

@@ -11694,11 +11694,6 @@
       "exportPlaintext": {
         "label": "Texte brut"
       },
-      "fullWidth": {
-        "ariaLabel": "Basculer le chat en pleine largeur",
-        "fitTooltip": "Largeur ajustée",
-        "fullTooltip": "Pleine largeur"
-      },
       "incognitoExit": {
         "ariaLabel": "Quitter le chat incognito",
         "tooltip": "Quitter le chat incognito"
@@ -15700,6 +15695,10 @@
         "light": "Clair",
         "title": "Mode de couleur"
       },
+      "fullWidthChat": {
+        "description": "Étend les messages du chat et la barre de saisie sur toute la largeur de la fenêtre.",
+        "title": "Chat en pleine largeur"
+      },
       "title": "Apparence"
     },
     "chats": {
@@ -15754,11 +15753,9 @@
         "submit": "Déconnecter",
         "title": "Déconnecter *{name}*"
       },
-      "emptyMessage": "Aucun connecteur configuré pour votre organisation.",
       "status": {
         "connected": "Connecté",
-        "notConnected": "Non connecté",
-        "paused": "En pause"
+        "notConnected": "Non connecté"
       },
       "title": "Connecteurs",
       "toasts": {
@@ -15838,11 +15835,11 @@
         "accountsAccess": {
           "label": "Comptes et accès"
         },
-        "chatPreferences": {
-          "label": "Préférences de chat"
+        "appearance": {
+          "label": "Apparence"
         },
-        "connectors": {
-          "label": "Connecteurs"
+        "chat": {
+          "label": "Chat"
         },
         "general": {
           "label": "Général"

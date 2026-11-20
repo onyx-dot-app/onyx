@@ -56,9 +56,8 @@ import {
   Text,
 } from "@opal/components";
 import useFederatedOAuthStatus from "@/hooks/useFederatedOAuthStatus";
-import useCCPairs from "@/hooks/useCCPairs";
+import useScreenSize from "@/hooks/useScreenSize";
 import { ValidSources } from "@/lib/connectors/types/source";
-import { ConnectorCredentialPairStatus } from "@/lib/connectors/types";
 import { ConfirmationModalLayout } from "@opal/layouts";
 import { BasicModalFooter, Modal, useCreateModal } from "@opal/components";
 import { Code, CopyButton } from "@opal/components";
@@ -66,7 +65,6 @@ import CharacterCount from "@/refresh-components/CharacterCount";
 import { InputPrompt } from "@/app/app/types";
 import usePromptShortcuts from "@/hooks/usePromptShortcuts";
 import ColorSwatch from "@/refresh-components/ColorSwatch";
-import { EmptyMessageCard } from "@opal/components";
 import Memories from "@/sections/settings/Memories";
 import { FederatedConnectorOAuthStatus } from "@/components/chat/FederatedOAuthModal";
 import {
@@ -101,6 +99,7 @@ import { DOCS_BASE_URL } from "@/lib/constants";
 import { Collapsible } from "@opal/components";
 import type { ErrorResponseBody } from "@/lib/fetcher";
 import OAuthProviderConnections from "@/sections/oauth-provider/OAuthProviderConnections";
+import { useFullWidthChat } from "@/providers/FullWidthChatProvider";
 
 interface PAT {
   id: number;
@@ -540,43 +539,8 @@ function usePATCreation({
 
 function GeneralSettings() {
   const t = useTranslations("settings");
-  const tInputSelect = useTranslations("common.inputSelect");
-  const {
-    user,
-    updateUserPersonalization,
-    updateUserThemePreference,
-    updateUserChatBackground,
-    updateUserLanguage,
-  } = useUser();
-  const { theme, setTheme, systemTheme } = useTheme();
+  const { user, updateUserPersonalization, updateUserLanguage } = useUser();
   const workspaceLanguage: Locale = useSettings().default_language;
-
-  const tBg = useTranslations("common.chatBackgrounds");
-  const bgLabels: Record<string, string> = {
-    none: tBg("none.label"),
-    clouds: tBg("clouds.label"),
-    hills: tBg("hills.label"),
-    plant: tBg("plant.label"),
-    mountains: tBg("mountains.label"),
-    night: tBg("night.label"),
-  };
-  const applyBackground = useCallback(
-    async (bg: (typeof CHAT_BACKGROUND_OPTIONS)[number]) => {
-      try {
-        await updateUserChatBackground(
-          bg.id === CHAT_BACKGROUND_NONE ? null : bg.id
-        );
-        if (bg.theme) {
-          setTheme(bg.theme);
-          await updateUserThemePreference(bg.theme);
-        }
-      } catch {
-        // errors are already logged and state is rolled back via refreshUser
-        // inside the update functions
-      }
-    },
-    [updateUserChatBackground, setTheme, updateUserThemePreference]
-  );
   const { refreshChatSessions } = useChatSessions();
   const [isDeleting, setIsDeleting] = useState(false);
   const deleteAllChatsModal = useCreateModal();
@@ -584,6 +548,7 @@ function GeneralSettings() {
   const {
     personalizationValues,
     updatePersonalizationField,
+    updateUserPreferences,
     handleSavePersonalization,
   } = useUserPersonalization(user, updateUserPersonalization, {
     onError: () => toast.error(t("profile.toasts.updateFailed")),
@@ -718,116 +683,26 @@ function GeneralSettings() {
         </Section>
 
         <Section gap={3}>
-          <Content
-            font="main-content-emphasis"
-            title={t("appearance.title")}
-            width="full"
-          />
-          <Card border="solid" rounding={4}>
-            <Section alignItems="start" height="fit">
-              <InputHorizontal
-                title={t("appearance.colorMode.title")}
-                description={t("appearance.colorMode.description")}
-                center
-                withLabel
-                fillInput
-              >
-                <InputSingleSelect
-                  value={theme ?? ""}
-                  onValueChange={(value) => {
-                    setTheme(value);
-                    updateUserThemePreference(value as ThemePreference);
-                  }}
-                  defaultOption={ThemePreference.SYSTEM}
-                  placeholder={tInputSelect("placeholder.fallback")}
-                  options={[
-                    {
-                      value: ThemePreference.SYSTEM,
-                      title: t("appearance.colorMode.auto"),
-                      description:
-                        systemTheme === "light"
-                          ? t("appearance.colorMode.light")
-                          : systemTheme === "dark"
-                            ? t("appearance.colorMode.dark")
-                            : undefined,
-                      icon: () => (
-                        <ColorSwatch
-                          light={systemTheme === "light"}
-                          dark={systemTheme === "dark"}
-                        />
-                      ),
-                    },
-                    {
-                      options: [
-                        {
-                          value: ThemePreference.LIGHT,
-                          title: t("appearance.colorMode.light"),
-                          icon: () => <ColorSwatch light />,
-                        },
-                        {
-                          value: ThemePreference.DARK,
-                          title: t("appearance.colorMode.dark"),
-                          icon: () => <ColorSwatch dark />,
-                        },
-                      ],
-                    },
-                  ]}
-                />
-              </InputHorizontal>
-              <InputVertical title={t("appearance.chatBackground.title")}>
-                <div className="flex flex-wrap gap-2">
-                  {CHAT_BACKGROUND_OPTIONS.map((bg) => {
-                    const currentBackgroundId =
-                      user?.preferences?.chat_background ?? "none";
-                    const isSelected = currentBackgroundId === bg.id;
-                    const isNone = bg.src === CHAT_BACKGROUND_NONE;
-
-                    return (
-                      <button
-                        key={bg.id}
-                        onClick={() => applyBackground(bg)}
-                        className="relative overflow-hidden rounded-lg transition-all w-[90px] h-[68px] cursor-pointer border-none p-0 bg-transparent group"
-                        title={bgLabels[bg.id] ?? bg.label}
-                        aria-label={t(
-                          "appearance.chatBackground.optionAriaLabel",
-                          {
-                            label: bgLabels[bg.id] ?? bg.label,
-                            selected: isSelected ? "true" : "false",
-                          }
-                        )}
-                      >
-                        {isNone ? (
-                          <div className="absolute inset-0 bg-background flex items-center justify-center">
-                            <span className="text-xs text-text-02">
-                              {t("appearance.chatBackground.none")}
-                            </span>
-                          </div>
-                        ) : (
-                          <div
-                            className="absolute inset-0 bg-cover bg-center transition-transform duration-300 group-hover:scale-105"
-                            style={{ backgroundImage: `url(${bg.thumbnail})` }}
-                          />
-                        )}
-                        <div
-                          className={cn(
-                            "absolute inset-0 transition-all rounded-lg",
-                            isSelected
-                              ? "ring-2 ring-inset ring-theme-primary-05"
-                              : "ring-1 ring-inset ring-border-02 group-hover:ring-border-03"
-                          )}
-                        />
-                        {isSelected && (
-                          <div className="absolute top-1.5 end-1.5 w-4 h-4 rounded-full bg-theme-primary-05 flex items-center justify-center">
-                            <SvgCheck className="w-2.5 h-2.5 stroke-text-inverted-05" />
-                          </div>
-                        )}
-                      </button>
-                    );
-                  })}
-                </div>
-              </InputVertical>
-            </Section>
-          </Card>
+          <InputVertical
+            title={t("personalPreferences.title")}
+            description={t("personalPreferences.description")}
+            withLabel
+          >
+            <InputTextArea
+              placeholder={t("personalPreferences.placeholder")}
+              value={personalizationValues.user_preferences}
+              onChange={(e) => updateUserPreferences(e.target.value)}
+              onBlur={() => void handleSavePersonalization()}
+              rows={4}
+              maxRows={10}
+              autoResize
+              maxLength={500}
+            />
+            <CharacterCount
+              value={personalizationValues.user_preferences || ""}
+              limit={500}
+            />
+          </InputVertical>
         </Section>
 
         <Section gap={3}>
@@ -889,6 +764,180 @@ function GeneralSettings() {
         </Section>
       </Section>
     </>
+  );
+}
+
+function AppearanceSettings() {
+  const t = useTranslations("settings");
+  const tInputSelect = useTranslations("common.inputSelect");
+  const { user, updateUserThemePreference, updateUserChatBackground } =
+    useUser();
+  const { theme, setTheme, systemTheme } = useTheme();
+  const { fullWidthChat, setFullWidthChat } = useFullWidthChat();
+  const { isMobile } = useScreenSize();
+
+  const tBg = useTranslations("common.chatBackgrounds");
+  const bgLabels: Record<string, string> = {
+    none: tBg("none.label"),
+    clouds: tBg("clouds.label"),
+    hills: tBg("hills.label"),
+    plant: tBg("plant.label"),
+    mountains: tBg("mountains.label"),
+    night: tBg("night.label"),
+  };
+  const applyBackground = useCallback(
+    async (bg: (typeof CHAT_BACKGROUND_OPTIONS)[number]) => {
+      try {
+        await updateUserChatBackground(
+          bg.id === CHAT_BACKGROUND_NONE ? null : bg.id
+        );
+        if (bg.theme) {
+          setTheme(bg.theme);
+          await updateUserThemePreference(bg.theme);
+        }
+      } catch {
+        // errors are already logged and state is rolled back via refreshUser
+        // inside the update functions
+      }
+    },
+    [updateUserChatBackground, setTheme, updateUserThemePreference]
+  );
+
+  return (
+    <Section gap={8}>
+      <Section gap={3}>
+        <Content
+          font="main-content-emphasis"
+          title={t("appearance.title")}
+          width="full"
+        />
+        <Card border="solid" rounding={4}>
+          <Section alignItems="start" height="fit">
+            <InputHorizontal
+              title={t("appearance.colorMode.title")}
+              description={t("appearance.colorMode.description")}
+              center
+              withLabel
+              fillInput
+            >
+              <InputSingleSelect
+                value={theme ?? ""}
+                onValueChange={(value) => {
+                  setTheme(value);
+                  updateUserThemePreference(value as ThemePreference);
+                }}
+                defaultOption={ThemePreference.SYSTEM}
+                placeholder={tInputSelect("placeholder.fallback")}
+                options={[
+                  {
+                    value: ThemePreference.SYSTEM,
+                    title: t("appearance.colorMode.auto"),
+                    description:
+                      systemTheme === "light"
+                        ? t("appearance.colorMode.light")
+                        : systemTheme === "dark"
+                          ? t("appearance.colorMode.dark")
+                          : undefined,
+                    icon: () => (
+                      <ColorSwatch
+                        light={systemTheme === "light"}
+                        dark={systemTheme === "dark"}
+                      />
+                    ),
+                  },
+                  {
+                    options: [
+                      {
+                        value: ThemePreference.LIGHT,
+                        title: t("appearance.colorMode.light"),
+                        icon: () => <ColorSwatch light />,
+                      },
+                      {
+                        value: ThemePreference.DARK,
+                        title: t("appearance.colorMode.dark"),
+                        icon: () => <ColorSwatch dark />,
+                      },
+                    ],
+                  },
+                ]}
+              />
+            </InputHorizontal>
+            {/* Chat is always full width on mobile widths. */}
+            {!isMobile && (
+              <InputHorizontal
+                title={t("appearance.fullWidthChat.title")}
+                description={t("appearance.fullWidthChat.description")}
+                withLabel
+              >
+                <InputSwitch
+                  checked={fullWidthChat}
+                  onCheckedChange={setFullWidthChat}
+                />
+              </InputHorizontal>
+            )}
+          </Section>
+        </Card>
+      </Section>
+
+      <Section gap={3}>
+        <Content
+          font="main-content-emphasis"
+          title={t("appearance.chatBackground.title")}
+          width="full"
+        />
+        <Card border="solid" rounding={4}>
+          <Section alignItems="start" height="fit">
+            <div className="flex flex-wrap gap-2">
+              {CHAT_BACKGROUND_OPTIONS.map((bg) => {
+                const currentBackgroundId =
+                  user?.preferences?.chat_background ?? "none";
+                const isSelected = currentBackgroundId === bg.id;
+                const isNone = bg.src === CHAT_BACKGROUND_NONE;
+
+                return (
+                  <button
+                    key={bg.id}
+                    onClick={() => applyBackground(bg)}
+                    className="relative overflow-hidden rounded-lg transition-all w-[90px] h-[68px] cursor-pointer border-none p-0 bg-transparent group"
+                    title={bgLabels[bg.id] ?? bg.label}
+                    aria-label={t("appearance.chatBackground.optionAriaLabel", {
+                      label: bgLabels[bg.id] ?? bg.label,
+                      selected: isSelected ? "true" : "false",
+                    })}
+                  >
+                    {isNone ? (
+                      <div className="absolute inset-0 bg-background flex items-center justify-center">
+                        <span className="text-xs text-text-02">
+                          {t("appearance.chatBackground.none")}
+                        </span>
+                      </div>
+                    ) : (
+                      <div
+                        className="absolute inset-0 bg-cover bg-center transition-transform duration-300 group-hover:scale-105"
+                        style={{ backgroundImage: `url(${bg.thumbnail})` }}
+                      />
+                    )}
+                    <div
+                      className={cn(
+                        "absolute inset-0 transition-all rounded-lg",
+                        isSelected
+                          ? "ring-2 ring-inset ring-theme-primary-05"
+                          : "ring-1 ring-inset ring-border-02 group-hover:ring-border-03"
+                      )}
+                    />
+                    {isSelected && (
+                      <div className="absolute top-1.5 end-1.5 w-4 h-4 rounded-full bg-theme-primary-05 flex items-center justify-center">
+                        <SvgCheck className="w-2.5 h-2.5 stroke-text-inverted-05" />
+                      </div>
+                    )}
+                  </button>
+                );
+              })}
+            </div>
+          </Section>
+        </Card>
+      </Section>
+    </Section>
   );
 }
 
@@ -1175,13 +1224,12 @@ function PromptShortcuts() {
   );
 }
 
-function ChatPreferencesSettings() {
+function ChatSettings() {
   const t = useTranslations("settings");
   const tInputSelect = useTranslations("common.inputSelect");
   const tModelSelector = useTranslations("chat.modelSelector");
   const {
     user,
-    updateUserPersonalization,
     updateUserAutoScroll,
     updateUserShortcuts,
     updateUserPasteAsTile,
@@ -1191,6 +1239,7 @@ function ChatPreferencesSettings() {
     updateUserVoiceSettings,
     updateUserTemperatureDefault,
     updateUserReasoningEffortDefault,
+    updateUserPersonalization,
   } = useUser();
   const businessTier = useTierAtLeast(Tier.BUSINESS);
   const searchUiEnabled = useIsSearchModeAvailable();
@@ -1199,16 +1248,26 @@ function ChatPreferencesSettings() {
     enabled: smoothStreamingEnabled,
     setEnabled: setSmoothStreamingEnabled,
   } = useSmoothStreaming();
-
   const {
     personalizationValues,
     toggleUseMemories,
     toggleEnableMemoryTool,
-    updateUserPreferences,
     handleSavePersonalization,
   } = useUserPersonalization(user, updateUserPersonalization, {
-    onError: () => toast.error(t("chats.toasts.saveFailed")),
+    onError: () => toast.error(t("memory.toasts.saveFailed")),
   });
+
+  const handleSaveMemories = useCallback(
+    async (newMemories: MemoryItem[]): Promise<boolean> => {
+      const result = await handleSavePersonalization(
+        { memories: newMemories },
+        true
+      );
+      return !!result;
+    },
+    [handleSavePersonalization]
+  );
+
   const [draftVoicePlaybackSpeed, setDraftVoicePlaybackSpeed] = useState(
     user?.preferences.voice_playback_speed ?? 1
   );
@@ -1301,18 +1360,6 @@ function ChatPreferencesSettings() {
     saveVoiceSettings,
     user?.preferences.voice_playback_speed,
   ]);
-
-  // Wrapper to save memories and return success/failure
-  const handleSaveMemories = useCallback(
-    async (newMemories: MemoryItem[]): Promise<boolean> => {
-      const result = await handleSavePersonalization(
-        { memories: newMemories },
-        true
-      );
-      return !!result;
-    },
-    [handleSavePersonalization]
-  );
 
   return (
     <Section gap={8}>
@@ -1556,26 +1603,6 @@ function ChatPreferencesSettings() {
       </Section>
 
       <Section gap={3}>
-        <InputVertical
-          title={t("personalPreferences.title")}
-          description={t("personalPreferences.description")}
-          withLabel
-        >
-          <InputTextArea
-            placeholder={t("personalPreferences.placeholder")}
-            value={personalizationValues.user_preferences}
-            onChange={(e) => updateUserPreferences(e.target.value)}
-            onBlur={() => void handleSavePersonalization()}
-            rows={4}
-            maxRows={10}
-            autoResize
-            maxLength={500}
-          />
-          <CharacterCount
-            value={personalizationValues.user_preferences || ""}
-            limit={500}
-          />
-        </InputVertical>
         <Content
           font="main-content-emphasis"
           title={t("memory.title")}
@@ -1978,6 +2005,10 @@ function AccountsAccessSettings() {
   const { user, authTypeMetadata, permissions } = useUser();
   const isMultiTenant = useIsMultiTenant();
   const passwordModal = useCreateModal();
+  const {
+    connectors: federatedConnectors,
+    refetch: refetchFederatedConnectors,
+  } = useFederatedOAuthStatus();
 
   // TODO(auth-refresh): only passwordMinLength is enforced here; the remaining
   // constraints (max length, uppercase, lowercase, digit, special char) will be
@@ -2495,36 +2526,25 @@ function AccountsAccessSettings() {
             )}
           </Section>
         )}
+        {federatedConnectors.length > 0 && (
+          <Section gap={3}>
+            <Content
+              font="main-content-emphasis"
+              title={t("connectors.title")}
+              width="full"
+            />
+            {federatedConnectors.map((connector) => (
+              <FederatedConnectorCard
+                key={connector.federated_connector_id}
+                connector={connector}
+                onDisconnectSuccess={() => void refetchFederatedConnectors()}
+              />
+            ))}
+          </Section>
+        )}
         <OAuthProviderConnections />
       </Section>
     </>
-  );
-}
-
-interface IndexedConnectorCardProps {
-  source: ValidSources;
-  isActive: boolean;
-}
-
-function IndexedConnectorCard({ source, isActive }: IndexedConnectorCardProps) {
-  const t = useTranslations("settings");
-  const sourceMetadata = getSourceMetadata(source);
-
-  return (
-    <Card border="solid" rounding={4}>
-      <Section alignItems="start" height="fit">
-        <Content
-          font="main-content-emphasis"
-          icon={sourceMetadata.icon}
-          title={sourceMetadata.displayName}
-          description={
-            isActive
-              ? t("connectors.status.connected")
-              : t("connectors.status.paused")
-          }
-        />
-      </Section>
-    </Card>
   );
 }
 
@@ -2647,82 +2667,10 @@ function FederatedConnectorCard({
   );
 }
 
-function ConnectorsSettings() {
-  const t = useTranslations("settings");
-  const {
-    connectors: federatedConnectors,
-    refetch: refetchFederatedConnectors,
-  } = useFederatedOAuthStatus();
-  const { ccPairs } = useCCPairs();
-
-  const ACTIVE_STATUSES: ConnectorCredentialPairStatus[] = [
-    ConnectorCredentialPairStatus.ACTIVE,
-    ConnectorCredentialPairStatus.SCHEDULED,
-    ConnectorCredentialPairStatus.INITIAL_INDEXING,
-  ];
-
-  // Group indexed connectors by source
-  const groupedConnectors = ccPairs.reduce<
-    Record<string, { source: ValidSources; hasActiveConnector: boolean }>
-  >((acc, ccPair) => {
-    if (!acc[ccPair.source]) {
-      acc[ccPair.source] = {
-        source: ccPair.source,
-        hasActiveConnector: false,
-      };
-    }
-    if (ACTIVE_STATUSES.includes(ccPair.status)) {
-      acc[ccPair.source]!.hasActiveConnector = true;
-    }
-    return acc;
-  }, {});
-
-  const hasConnectors =
-    Object.keys(groupedConnectors).length > 0 || federatedConnectors.length > 0;
-
-  return (
-    <Section gap={8}>
-      <Section gap={3} justifyContent="start">
-        <Content
-          font="main-content-emphasis"
-          title={t("connectors.title")}
-          width="full"
-        />
-        {hasConnectors ? (
-          <>
-            {/* Indexed Connectors */}
-            {Object.values(groupedConnectors).map((connector) => (
-              <IndexedConnectorCard
-                key={connector.source}
-                source={connector.source}
-                isActive={connector.hasActiveConnector}
-              />
-            ))}
-
-            {/* Federated Connectors */}
-            {federatedConnectors.map((connector) => (
-              <FederatedConnectorCard
-                key={connector.federated_connector_id}
-                connector={connector}
-                onDisconnectSuccess={() => refetchFederatedConnectors?.()}
-              />
-            ))}
-          </>
-        ) : (
-          <EmptyMessageCard
-            sizePreset="main-ui"
-            title={t("connectors.emptyMessage")}
-          />
-        )}
-      </Section>
-    </Section>
-  );
-}
-
 export {
   GeneralSettings,
-  ChatPreferencesSettings,
+  AppearanceSettings,
+  ChatSettings,
   AccountsAccessSettings,
   LLMGatewaySettings,
-  ConnectorsSettings,
 };

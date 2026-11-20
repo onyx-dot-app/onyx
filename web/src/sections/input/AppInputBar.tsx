@@ -825,7 +825,7 @@ const AppInputBar = React.memo(
         e.preventDefault();
         if (tabbingIconIndex === sortedFilteredPrompts.length) {
           // "Create a new prompt" is selected
-          window.open("/app/settings/chat-preferences", "_self");
+          window.open("/app/settings/chat", "_self");
         } else {
           const selectedPrompt = sortedFilteredPrompts[tabbingIconIndex];
           if (selectedPrompt) {
@@ -1458,7 +1458,7 @@ const AppInputBar = React.memo(
                         font="main-ui-action"
                         rounding={2}
                         key="create-new"
-                        {...navigation.linkTo("/app/settings/chat-preferences")}
+                        {...navigation.linkTo("/app/settings/chat")}
                         icon={SvgPlus}
                         state={
                           tabbingIconIndex === sortedFilteredPrompts.length

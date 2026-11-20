@@ -318,6 +318,21 @@ export class ChatPage {
     return html;
   }
 
+  /** Full width lets the composer grow past the 45rem (720px) reading width. */
+  async expectFullWidthChat(fullWidth: boolean): Promise<void> {
+    const readingWidthPx = 720;
+    // NaN (no box yet) fails both comparisons, so the poll keeps waiting.
+    const composerWidth = expect.poll(
+      async () =>
+        (await this.inputBar.container.boundingBox())?.width ?? Number.NaN
+    );
+    if (fullWidth) {
+      await composerWidth.toBeGreaterThan(readingWidthPx);
+    } else {
+      await composerWidth.toBeLessThanOrEqual(readingWidthPx);
+    }
+  }
+
   async expectCopyButton(): Promise<void> {
     await expect(
       this.aiMessage().getByTestId("AgentMessage/copy-button")

@@ -11694,11 +11694,6 @@
       "exportPlaintext": {
         "label": "纯文本"
       },
-      "fullWidth": {
-        "ariaLabel": "切换全宽聊天",
-        "fitTooltip": "适应宽度",
-        "fullTooltip": "全宽"
-      },
       "incognitoExit": {
         "ariaLabel": "退出无痕聊天",
         "tooltip": "退出无痕聊天"
@@ -15700,6 +15695,10 @@
         "light": "浅色",
         "title": "配色模式"
       },
+      "fullWidthChat": {
+        "description": "将对话消息和输入栏扩展到窗口的全部宽度。",
+        "title": "全宽对话"
+      },
       "title": "外观"
     },
     "chats": {
@@ -15754,11 +15753,9 @@
         "submit": "断开连接",
         "title": "断开 *{name}* 连接"
       },
-      "emptyMessage": "您的组织尚未设置任何连接器。",
       "status": {
         "connected": "已连接",
-        "notConnected": "未连接",
-        "paused": "已暂停"
+        "notConnected": "未连接"
       },
       "title": "连接器",
       "toasts": {
@@ -15838,11 +15835,11 @@
         "accountsAccess": {
           "label": "账户与访问"
         },
-        "chatPreferences": {
-          "label": "聊天偏好设置"
+        "appearance": {
+          "label": "外观"
         },
-        "connectors": {
-          "label": "连接器"
+        "chat": {
+          "label": "对话"
         },
         "general": {
           "label": "常规"

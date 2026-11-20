@@ -11694,11 +11694,6 @@
       "exportPlaintext": {
         "label": "نص عادي"
       },
-      "fullWidth": {
-        "ariaLabel": "تبديل عرض المحادثة الكامل",
-        "fitTooltip": "ملاءمة العرض",
-        "fullTooltip": "عرض كامل"
-      },
       "incognitoExit": {
         "ariaLabel": "الخروج من محادثة التخفي",
         "tooltip": "الخروج من محادثة التخفي"
@@ -15700,6 +15695,10 @@
         "light": "فاتح",
         "title": "وضع الألوان"
       },
+      "fullWidthChat": {
+        "description": "توسيع رسائل المحادثة وشريط الإدخال إلى العرض الكامل للنافذة.",
+        "title": "محادثة بعرض كامل"
+      },
       "title": "المظهر"
     },
     "chats": {
@@ -15754,11 +15753,9 @@
         "submit": "قطع الاتصال",
         "title": "قطع الاتصال بـ *{name}*"
       },
-      "emptyMessage": "لا توجد موصلات معدّة لمؤسستك.",
       "status": {
         "connected": "متصل",
-        "notConnected": "غير متصل",
-        "paused": "متوقف مؤقتًا"
+        "notConnected": "غير متصل"
       },
       "title": "الموصلات",
       "toasts": {
@@ -15838,11 +15835,11 @@
         "accountsAccess": {
           "label": "الحسابات والوصول"
         },
-        "chatPreferences": {
-          "label": "تفضيلات المحادثة"
+        "appearance": {
+          "label": "المظهر"
         },
-        "connectors": {
-          "label": "الموصلات"
+        "chat": {
+          "label": "محادثة"
         },
         "general": {
           "label": "عام"

@@ -11694,11 +11694,6 @@
       "exportPlaintext": {
         "label": "Nur Text"
       },
-      "fullWidth": {
-        "ariaLabel": "Chat in voller Breite umschalten",
-        "fitTooltip": "Breite anpassen",
-        "fullTooltip": "Volle Breite"
-      },
       "incognitoExit": {
         "ariaLabel": "Inkognito-Chat verlassen",
         "tooltip": "Inkognito-Chat verlassen"
@@ -15700,6 +15695,10 @@
         "light": "Hell",
         "title": "Farbmodus"
       },
+      "fullWidthChat": {
+        "description": "Chatnachrichten und Eingabeleiste auf die volle Fensterbreite erweitern.",
+        "title": "Chat in voller Breite"
+      },
       "title": "Erscheinungsbild"
     },
     "chats": {
@@ -15754,11 +15753,9 @@
         "submit": "Trennen",
         "title": "*{name}* trennen"
       },
-      "emptyMessage": "Für Ihre Organisation sind keine Konnektoren eingerichtet.",
       "status": {
         "connected": "Verbunden",
-        "notConnected": "Nicht verbunden",
-        "paused": "Pausiert"
+        "notConnected": "Nicht verbunden"
       },
       "title": "Konnektoren",
       "toasts": {
@@ -15838,11 +15835,11 @@
         "accountsAccess": {
           "label": "Konten & Zugriff"
         },
-        "chatPreferences": {
-          "label": "Chat-Einstellungen"
+        "appearance": {
+          "label": "Erscheinungsbild"
         },
-        "connectors": {
-          "label": "Konnektoren"
+        "chat": {
+          "label": "Chat"
         },
         "general": {
           "label": "Allgemein"
