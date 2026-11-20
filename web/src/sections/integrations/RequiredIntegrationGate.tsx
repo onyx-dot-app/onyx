@@ -26,6 +26,7 @@ import IntegrationConnectButton from "@/sections/plugins/IntegrationConnectButto
 
 const LOGO_SIZE_PX = 44;
 const DISMISSED_KEY = "onyx:required-gate-dismissed";
+const ATTEMPT_KEY = "onyx:required-gate-attempt";
 
 function readDismissed(userId: string): boolean {
   try {
@@ -38,6 +39,25 @@ function readDismissed(userId: string): boolean {
 function storeDismissed(userId: string): void {
   try {
     window.sessionStorage.setItem(DISMISSED_KEY, userId);
+  } catch {}
+}
+
+function readAttempt(userId: string): number | null {
+  try {
+    const [owner, id] = (
+      window.sessionStorage.getItem(ATTEMPT_KEY) ?? ""
+    ).split(":");
+    return owner === userId && id ? Number(id) : null;
+  } catch {
+    return null;
+  }
+}
+
+function storeAttempt(userId: string, integrationId: number | null): void {
+  try {
+    if (integrationId === null) window.sessionStorage.removeItem(ATTEMPT_KEY);
+    else
+      window.sessionStorage.setItem(ATTEMPT_KEY, `${userId}:${integrationId}`);
   } catch {}
 }
 
@@ -58,6 +78,8 @@ function GateForUser({ userId }: { userId: string }) {
   const { data } = useMemberIntegrations();
   const [trackedIds, setTrackedIds] = useState<number[]>([]);
   const [dismissed, setDismissed] = useState(() => readDismissed(userId));
+  // A sign-in that left this tab and did not connect counts as failed.
+  const [failedId, setFailedId] = useState(() => readAttempt(userId));
 
   const blockingIds = useMemo(
     () =>
@@ -66,6 +88,11 @@ function GateForUser({ userId }: { userId: string }) {
         : requiredSignIns(data).map((integration) => integration.id),
     [data]
   );
+
+  useEffect(() => {
+    if (data !== undefined && blockingIds.length === 0)
+      storeAttempt(userId, null);
+  }, [data, blockingIds, userId]);
 
   useEffect(() => {
     setTrackedIds((current) => {
@@ -93,6 +120,7 @@ function GateForUser({ userId }: { userId: string }) {
 
   function dismiss() {
     storeDismissed(userId);
+    storeAttempt(userId, null);
     setDismissed(true);
   }
 
@@ -105,6 +133,13 @@ function GateForUser({ userId }: { userId: string }) {
         if (isAdmin) dismiss();
         else setTrackedIds([]);
       }}
+      failedName={
+        failedId !== null && blockingIds.includes(failedId)
+          ? (rows.find((row) => row.id === failedId)?.name ?? null)
+          : null
+      }
+      onConnectFailed={setFailedId}
+      onRedirect={(id) => storeAttempt(userId, id)}
       onSkip={dismiss}
     />
   );
@@ -114,7 +149,10 @@ interface RequiredIntegrationGateViewProps {
   integrations: MemberIntegration[];
   canContinue: boolean;
   isAdmin: boolean;
+  failedName: string | null;
   onContinue: () => void;
+  onConnectFailed: (integrationId: number) => void;
+  onRedirect: (integrationId: number) => void;
   onSkip: () => void;
 }
 
@@ -122,7 +160,10 @@ function RequiredIntegrationGateView({
   integrations,
   canContinue,
   isAdmin,
+  failedName,
   onContinue,
+  onConnectFailed,
+  onRedirect,
   onSkip,
 }: RequiredIntegrationGateViewProps) {
   const t = useTranslations("integrations.requiredGate");
@@ -131,7 +172,6 @@ function RequiredIntegrationGateView({
   const query = useSearchParams().toString();
   const returnPath = query ? `${pathname}?${query}` : pathname;
   const containerRef = useRef<HTMLDivElement>(null);
-  const [failedName, setFailedName] = useState<string | null>(null);
   const connectedCount = integrations.filter(
     (integration) => integration.status.state === "connected"
   ).length;
@@ -202,7 +242,8 @@ function RequiredIntegrationGateView({
                       <GateRow
                         integration={integration}
                         returnPath={returnPath}
-                        onConnectFailed={() => setFailedName(integration.name)}
+                        onConnectFailed={() => onConnectFailed(integration.id)}
+                        onRedirect={() => onRedirect(integration.id)}
                       />
                     </Section>
                   ))}
@@ -269,9 +310,15 @@ interface GateRowProps {
   integration: MemberIntegration;
   returnPath: string;
   onConnectFailed: () => void;
+  onRedirect: () => void;
 }
 
-function GateRow({ integration, returnPath, onConnectFailed }: GateRowProps) {
+function GateRow({
+  integration,
+  returnPath,
+  onConnectFailed,
+  onRedirect,
+}: GateRowProps) {
   const t = useTranslations("integrations.requiredGate");
   const connected = integration.status.state === "connected";
   const note = connected
@@ -316,6 +363,7 @@ function GateRow({ integration, returnPath, onConnectFailed }: GateRowProps) {
             integration={integration}
             returnPath={returnPath}
             onConnectFailed={onConnectFailed}
+            onRedirect={onRedirect}
           />
         </Section>
       )}

@@ -6,6 +6,7 @@ import {
   within,
 } from "@tests/setup/test-utils";
 import { PointerEventsCheckLevel } from "@testing-library/user-event";
+import { loadPage } from "@opal/navigation";
 import RequiredIntegrationGate from "@/sections/integrations/RequiredIntegrationGate";
 import type { MemberIntegration } from "@/lib/integrations/types";
 import messages from "@/i18n/messages/en.json";
@@ -23,6 +24,10 @@ jest.mock("@/providers/UserProvider", () => ({
     user: { id: "user-1", is_anonymous_user: false },
     isAdmin: mockIsAdmin,
   }),
+}));
+jest.mock("@opal/navigation", () => ({
+  ...jest.requireActual<typeof import("@opal/navigation")>("@opal/navigation"),
+  loadPage: jest.fn(),
 }));
 jest.mock("@/lib/settings/hooks", () => ({
   useSettings: () => ({ logoUrl: null }),
@@ -286,4 +291,37 @@ test("a member who cannot connect can skip the gate for the browser session", as
   expect(
     screen.queryByRole("dialog", { name: copy.title })
   ).not.toBeInTheDocument();
+});
+
+test("a same-tab sign-in that does not connect offers skip on return", async () => {
+  const user = setupUser({ pointerEventsCheck: PointerEventsCheckLevel.Never });
+  const oauthRequired = makeMemberIntegration({
+    id: 2,
+    name: "Linear",
+    access: makeAccess({ installation_policy: "REQUIRED" }),
+  });
+  jest.spyOn(window, "open").mockReturnValue(null);
+  mockFetch({
+    "/api/integrations": () => [oauthRequired],
+    "POST /api/integrations/2/oauth/start": () => ({
+      authorization_url: "https://provider.example/authorize",
+    }),
+  });
+
+  const { unmount } = render(<RequiredIntegrationGate />);
+  const gate = await screen.findByRole("dialog", { name: copy.title });
+  await user.click(
+    within(gate).getByRole("button", { name: "Connect Linear" })
+  );
+  await waitFor(() => expect(loadPage).toHaveBeenCalled());
+  unmount();
+
+  render(<RequiredIntegrationGate />);
+  const returned = await screen.findByRole("dialog", { name: copy.title });
+  expect(
+    await within(returned).findByText(copy.askAdmin.replace("{name}", "Linear"))
+  ).toBeInTheDocument();
+  expect(
+    within(returned).getByRole("button", { name: copy.skip })
+  ).toBeInTheDocument();
 });

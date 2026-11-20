@@ -26,6 +26,8 @@ interface IntegrationConnectButtonProps {
   onConnected?: () => void;
   /** Called when a connect attempt fails or is abandoned. */
   onConnectFailed?: () => void;
+  /** Called before a blocked popup moves the sign-in to this tab. */
+  onRedirect?: () => void;
 }
 
 /** Connect, Reconnect, Disconnect or "Ask your admin" for one integration. */
@@ -35,6 +37,7 @@ export default function IntegrationConnectButton({
   allowDisconnect = false,
   onConnected,
   onConnectFailed,
+  onRedirect,
 }: IntegrationConnectButtonProps) {
   const t = useTranslations("plugins.member.connection");
   const { mutate } = useSWRConfig();
@@ -64,7 +67,8 @@ export default function IntegrationConnectButton({
     try {
       const result = await connectWithOAuth(
         (path) => startUserOAuth(integration.id, path),
-        returnPath
+        returnPath,
+        onRedirect
       );
       if (result === "connected") await connected();
     } catch (error) {
