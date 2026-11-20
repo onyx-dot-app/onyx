@@ -104,7 +104,7 @@ test("an uploaded plugin lists its needs and turning it on shows the ones not on
   render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
 
   expect(
-    await screen.findByRole("tab", { name: "Integrations · 2" })
+    await screen.findByRole("tab", { name: "Integrations · 1" })
   ).toBeInTheDocument();
   expect(screen.getByRole("tab", { name: "Skills · 2" })).toBeInTheDocument();
 
@@ -140,6 +140,7 @@ test("turning on a plugin whose skill name is taken asks to switch", async () =>
             JSON.stringify({
               error_code: "SKILL_NAME_CONFLICT",
               detail: "Another skill is named review.",
+              conflict_names: ["other-kit"],
             }),
             { status: 409 }
           ),
@@ -151,13 +152,12 @@ test("turning on a plugin whose skill name is taken asks to switch", async () =>
     await screen.findByRole("switch", { name: "Use review-kit" })
   );
   const dialog = await screen.findByRole("dialog");
+  expect(within(dialog).getByText("Turn on “review-kit”?")).toBeInTheDocument();
   expect(
-    within(dialog).getByText("Switch “review-kit” skill?")
+    within(dialog).getByText("Turning on “review-kit” turns off “other-kit”.")
   ).toBeInTheDocument();
 
-  await user.click(
-    within(dialog).getByRole("button", { name: "Switch skill" })
-  );
+  await user.click(within(dialog).getByRole("button", { name: "Switch" }));
   await waitFor(() =>
     expect(
       fetchMock.mock.calls.filter(
@@ -248,6 +248,96 @@ test("turning on a plugin refreshes the integration rows it turned on", async ()
   await user.click(screen.getByRole("switch", { name: "Use review-kit" }));
 
   await waitFor(() => expect(within(row).getByText("On")).toBeInTheDocument());
+});
+
+test("the owner shares, uploads a new version and deletes the plugin from its page", async () => {
+  window.history.replaceState(null, "", `/app/customize/plugins/${PLUGIN_ID}`);
+  const plugin = customFixture({
+    id: PLUGIN_ID,
+    name: "review-kit",
+    kind: "plugin",
+    user_permission: "OWNER",
+    can_delete: true,
+    enabled: false,
+    name_held_by: ["company-kit"],
+    plugin: {
+      manifest: null,
+      skills: [
+        { path: "skills/review", name: "review", description: "Review." },
+      ],
+      needs: [],
+    },
+  });
+  const fetchMock = mockFetch({
+    "/api/skills": { builtins: [], customs: [{ ...plugin, plugin: null }] },
+    [`/api/skills/${PLUGIN_ID}`]: plugin,
+    [`DELETE /api/skills/custom/${PLUGIN_ID}`]: new Response(null, {
+      status: 204,
+    }),
+  });
+  const user = setupUser();
+  render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
+
+  expect(
+    await screen.findByText(
+      "Off because company-kit uses the same skill name. Turn this plugin on to use it instead."
+    )
+  ).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Share" })).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "More actions" }));
+  expect(
+    await screen.findByRole("menuitem", { name: "Upload New Version" })
+  ).toBeInTheDocument();
+  await user.click(screen.getByRole("menuitem", { name: "Delete Plugin" }));
+  const dialog = await screen.findByRole("dialog");
+  await user.click(within(dialog).getByRole("button", { name: "Delete" }));
+
+  await waitFor(() =>
+    expect(window.location.pathname).toBe("/app/customize/plugins")
+  );
+  expect(
+    fetchMock.mock.calls.some(
+      ([url, init]) =>
+        String(url).endsWith(`/api/skills/custom/${PLUGIN_ID}`) &&
+        init?.method === "DELETE"
+    )
+  ).toBe(true);
+});
+
+test("the Skills tab opens the instructions of one skill", async () => {
+  window.history.replaceState(
+    null,
+    "",
+    `/app/customize/plugins/${PLUGIN_ID}?tab=skills`
+  );
+  const plugin = customFixture({
+    id: PLUGIN_ID,
+    name: "review-kit",
+    kind: "plugin",
+    plugin: {
+      manifest: null,
+      skills: [
+        { path: "skills/review", name: "review", description: "Review." },
+        { path: "skills/plan", name: "plan", description: "Plan." },
+      ],
+      needs: [],
+    },
+  });
+  mockFetch({
+    "/api/skills": { builtins: [], customs: [{ ...plugin, plugin: null }] },
+    [`/api/skills/${PLUGIN_ID}`]: plugin,
+    [`/api/skills/${PLUGIN_ID}/plugin-skill?path=skills%2Fplan`]: {
+      instructions_markdown: "Write the plan first.",
+    },
+  });
+  const user = setupUser();
+  render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
+
+  await user.click(
+    await screen.findByRole("button", { name: "Read the plan skill" })
+  );
+
+  expect(await screen.findByText("Write the plan first.")).toBeInTheDocument();
 });
 
 test("a synced plugin names its repository and hides restore and publish", async () => {

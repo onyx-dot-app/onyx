@@ -10418,7 +10418,8 @@
             "public": "{count, plural, one {# Tool gefunden} other {# Tools gefunden}}. Der Server benötigt keine Anmeldung.",
             "oauth": "Der Server verwendet die OAuth-Anmeldung.",
             "authUnknown": "Der Server benötigt eine Anmeldung. Fügen Sie einen API-Schlüssel-Header oder OAuth hinzu.",
-            "unreachable": "Onyx kann diesen Server nicht erreichen. Prüfen Sie die URL."
+            "unreachable": "Onyx kann diesen Server nicht erreichen. Prüfen Sie die URL.",
+            "forbidden": "Nur ein Admin kann diesen Server vor dem Hinzufügen prüfen. Sie können ihn trotzdem hinzufügen."
           },
           "transport": {
             "title": "Transport",
@@ -16454,15 +16455,15 @@
         }
       },
       "importGithub": {
-        "sharing": {
-          "configureButton": "Zugriff konfigurieren"
-        },
         "doneButton": {
           "label": "Fertig"
         },
         "submitButton": {
-          "importingLabel": "Wird importiert…",
-          "importLabel": "{count, plural, one {Skill importieren} other {# Skills importieren}}"
+          "importLabel": "{count, plural, one {Skill importieren} other {# Skills importieren}}",
+          "importingLabel": "Wird importiert…"
+        },
+        "sharing": {
+          "configureButton": "Zugriff konfigurieren"
         }
       },
       "nameConflict": {
@@ -16579,6 +16580,21 @@
           "remove": "{name} entfernen",
           "shared": "Mit dieser Gruppe geteilt",
           "settingOnly": "Nur Gruppeneinstellung"
+        },
+        "plugin": {
+          "installation": {
+            "description": "Wählen Sie, wie dieses Plugin für alle mit Zugriff installiert wird."
+          },
+          "published": {
+            "description": "Veröffentlicht. Alle in der Organisation können dieses Plugin verwenden."
+          },
+          "publishWarning": {
+            "description": "Nach dem Speichern können alle in der Organisation dieses Plugin verwenden. Sie können es nicht wieder privat machen. Nur ein Admin kann es löschen.",
+            "reviewDescription": "Das Plugin bleibt privat, bis ein Admin die Anfrage genehmigt. Nach der Genehmigung können Sie es nicht wieder privat machen."
+          },
+          "publishOff": {
+            "description": "Ein Admin hat das Veröffentlichen in der Organisation deaktiviert. Bitten Sie einen Admin, dieses Plugin zu veröffentlichen."
+          }
         }
       },
       "placeholders": {
@@ -16594,7 +16610,8 @@
         "columns": {
           "version": "Version",
           "madeBy": "Erstellt von",
-          "date": "Datum"
+          "date": "Datum",
+          "manifestVersion": "plugin.json"
         },
         "versionLabel": "Version {number}",
         "currentBadge": "Aktuell",
@@ -16617,7 +16634,9 @@
           "back": "Alle Versionen",
           "loadError": {
             "title": "Diese Version konnte nicht geladen werden"
-          }
+          },
+          "skills": "Skills · {count}",
+          "integrations": "Integrationen · {count}"
         },
         "status": {
           "pending": "Prüfung ausstehend",
@@ -16630,6 +16649,8 @@
           "sentForReviewToast": "Version {number} wurde einem Admin zur Prüfung gesendet.",
           "offNotice": "Die Veröffentlichung ist deaktiviert. Bitten Sie einen Admin, dieses Update zu veröffentlichen."
         },
+        "noManifestVersion": "Keine",
+        "manifestVersion": "plugin.json {version}",
         "locked": "Dieses Plugin wird aus GitHub synchronisiert. Änderungen nehmen Sie daher in GitHub vor."
       }
     },
@@ -16679,10 +16700,12 @@
         "body": "Wenn Sie fortfahren, wird der derzeit aktivierte Skill deaktiviert und dieser aktiviert.",
         "description": "Es kann jeweils nur ein Skill mit dem Namen „{name}“ aktiviert sein.",
         "submit": {
-          "label": "Skill wechseln",
+          "label": "Wechseln",
           "pendingLabel": "Wird gewechselt..."
         },
-        "title": "Skill „{name}“ wechseln?"
+        "title": "„{name}“ aktivieren?",
+        "descriptionNamed": "{names} verwendet bereits einen Skill-Namen, den auch „{name}“ verwendet. Es kann jeweils nur eines aktiv sein.",
+        "bodyNamed": "Wenn Sie „{name}“ aktivieren, wird {names} deaktiviert."
       },
       "toasts": {
         "disableFailed": "{name} konnte nicht deaktiviert werden",
@@ -16704,6 +16727,9 @@
         },
         "upload": {
           "label": "Ziehen Sie eine Datei hierher oder klicken Sie zum Hochladen"
+        },
+        "chooseFolder": {
+          "label": "Ordner auswählen"
         }
       },
       "filesPicker": {
@@ -16891,7 +16917,7 @@
           "owner": "Eigentümer",
           "skills": "Skills",
           "description": "Beschreibung",
-          "version": "Version",
+          "version": "Version in plugin.json",
           "author": "Autor",
           "homepage": "Homepage",
           "license": "Lizenz",
@@ -16900,15 +16926,35 @@
         },
         "skills": {
           "off": "Aus",
-          "invalid": "Ungültig"
+          "invalid": "Ungültig",
+          "read": "Lesen",
+          "readAriaLabel": "Den Skill {name} lesen",
+          "readFailed": "Dieser Skill konnte nicht gelesen werden.",
+          "noInstructions": "Dieser Skill hat keine Anweisungen."
         },
         "switch": {
           "title": "Dieses Plugin verwenden",
-          "description": "Wenn dies aktiviert ist, kann der Standardagent dieses Plugin verwenden.",
           "label": "{name} verwenden",
           "required": "Ihr Admin hat dieses Plugin als erforderlich festgelegt. Sie können es nicht deaktivieren.",
           "unavailable": "Sie können dieses Plugin nicht aktivieren oder deaktivieren.",
-          "failed": "Das Plugin konnte nicht geändert werden."
+          "failed": "Das Plugin konnte nicht geändert werden.",
+          "on": "An. Der Standard-Agent kann dieses Plugin verwenden.",
+          "off": "Aus. Aktivieren Sie es, damit der Standard-Agent dieses Plugin verwenden kann.",
+          "nameHeld": "Aus, weil {names} denselben Skill-Namen verwendet. Aktivieren Sie dieses Plugin, um es stattdessen zu verwenden."
+        },
+        "actions": {
+          "share": "Teilen",
+          "menu": "Weitere Aktionen",
+          "uploadVersion": "Neue Version hochladen",
+          "remove": "Plugin löschen"
+        },
+        "remove": {
+          "entityType": "Plugin",
+          "description": "Alle, die dieses Plugin verwenden, verlieren es. Dies kann nicht rückgängig gemacht werden.",
+          "submit": "Löschen",
+          "pending": "Wird gelöscht…",
+          "done": "{name} wurde gelöscht.",
+          "failed": "Das Plugin konnte nicht gelöscht werden."
         },
         "syncedFrom": "Synchronisiert aus {repository}",
         "managed": {
@@ -17062,7 +17108,7 @@
         "description": "Er hat keine plugin.json. Fahren Sie fort, um ihn als Skill hinzuzufügen.",
         "continue": "Weiter"
       },
-      "version": "v{version}",
+      "version": "plugin.json {version}",
       "target": {
         "newVersion": "Aktualisiert {name} auf Onyx-Version {version}",
         "newPlugin": "Neues Plugin: {name}"
@@ -17134,7 +17180,8 @@
         "willInstall": "Wird installiert",
         "skills": "{count, plural, one {Skill} other {Skills}}: {names}",
         "showUnusable": "{count, plural, one {# Eintrag anzeigen, den Onyx nicht verwenden kann} other {# Einträge anzeigen, die Onyx nicht verwenden kann}}",
-        "hideUnusable": "Einträge ausblenden, die Onyx nicht verwenden kann"
+        "hideUnusable": "Einträge ausblenden, die Onyx nicht verwenden kann",
+        "summary": "{ready} Bereit · {blocked} Nicht installierbar · {unsupported} Nicht unterstützt"
       },
       "add": {
         "menuItem": "Marketplace hinzufügen",
@@ -17175,7 +17222,11 @@
         "cancel": "Abbrechen",
         "previewFailed": "Das Repository konnte nicht gelesen werden.",
         "addFailed": "Das Marketplace konnte nicht hinzugefügt werden.",
-        "added": "{name} hinzugefügt. Die Plugins erscheinen nach der ersten Synchronisierung."
+        "added": "{name} hinzugefügt. Die Plugins erscheinen nach der ersten Synchronisierung.",
+        "duplicate": {
+          "personal": "Sie haben diesen Marketplace bereits hinzugefügt.",
+          "company": "Ihre Organisation erhält diesen Marketplace bereits."
+        }
       },
       "sync": {
         "now": "Jetzt synchronisieren",
@@ -17244,14 +17295,25 @@
         "description": "Die Quelle, die Synchronisierung und die Einträge dieses Marketplace.",
         "loadFailed": "Das Marketplace konnte nicht geladen werden.",
         "scope": "Typ",
-        "login": "GitHub-Anmeldung",
+        "login": "Synchronisiert als",
         "noLogin": "Keine. Ersetzen Sie die Anmeldung, um erneut zu synchronisieren.",
         "lastSync": "Letzte Synchronisierung",
         "entries": "Einträge ({count})",
         "noEntries": "Die letzte Synchronisierung hat keine Einträge gefunden.",
         "close": "Schließen"
       },
-      "readOnly": "Ihr Administrator verwaltet diesen Marketplace."
+      "readOnly": "Ihr Administrator verwaltet diesen Marketplace.",
+      "reason": {
+        "skills_and_mcp_only": "Onyx führt nur Skills und MCP-Server aus.",
+        "pastLimit": "Onyx hat dieses Repository nicht gelesen.",
+        "external_repository_limit": "Onyx synchronisiert höchstens {limit} externe Repositories pro Marketplace.",
+        "external_repository_limit_without_login": "Verbinden Sie GitHub, um mehr als {limit} externe Repositories zu synchronisieren.",
+        "limitTitle": "Einige Plugins stammen aus Repositories, die Onyx nicht gelesen hat"
+      },
+      "errors": {
+        "rateLimited": "Das API-Limit von GitHub ist erreicht. Versuchen Sie es in einigen Minuten erneut. Verbinden Sie GitHub, um das Limit zu erhöhen.",
+        "rateLimitedUntil": "Das API-Limit von GitHub ist erreicht. Es wird um {time} zurückgesetzt. Verbinden Sie GitHub, um das Limit zu erhöhen."
+      }
     }
   },
   "integrations": {
@@ -17419,14 +17481,16 @@
       },
       "empty": {
         "title": "Noch keine Plugins",
-        "description": "Laden Sie ein Plugin hoch, fügen Sie einen Marketplace aus GitHub hinzu oder erstellen Sie einen Skill. Jeder Skill ist ein Plugin."
+        "description": "Laden Sie ein Plugin hoch, fügen Sie einen Marketplace aus GitHub hinzu oder erstellen Sie einen Skill. Jeder Skill ist ein Plugin.",
+        "upload": "Plugin hochladen"
       },
       "noMatches": {
         "title": "Keine passenden Plugins",
         "clear": "Alle Plugins anzeigen"
       },
       "intro": "Ein Plugin bündelt Skills und die Integrationen, die sie benötigen. Laden Sie ein Claude-Code- oder Codex-Plugin hoch, fügen Sie einen Marketplace aus GitHub hinzu oder fügen Sie einen Skill hinzu. Jeder Skill, den Sie hinzufügen, kommt in einem eigenen Plugin.",
-      "integrations": "{available} von {needed} Integrationen verfügbar"
+      "integrations": "{available} von {needed} Integrationen verfügbar",
+      "nameHeld": "Aus: {names} verwendet denselben Skill-Namen"
     },
     "skillPage": {
       "title": "Skill",

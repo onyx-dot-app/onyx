@@ -167,15 +167,15 @@ def set_marketplace_default__no_commit(
     marketplace_id: UUID, policy: PluginInstallationPolicy, db_session: Session
 ) -> set[UUID]:
     """Set a marketplace default and return the users with a running sandbox
-    who could see a plugin that follows it, before or after. REQUIRED is
-    refused: one switch would force every plugin of the marketplace on every
-    user."""
-    if policy == PluginInstallationPolicy.REQUIRED:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "A marketplace default cannot be Required.",
-        )
+    who could see a plugin that follows it, before or after. A company GitHub
+    marketplace can be REQUIRED, as in Claude; the Organization library
+    cannot, because one switch would force every published plugin on."""
     if marketplace_id == ORGANIZATION_LIBRARY_ID:
+        if policy == PluginInstallationPolicy.REQUIRED:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "The Organization library default cannot be Required.",
+            )
         get_or_create_organization_library__no_commit(db_session)
     marketplace = db_session.scalars(
         select(Marketplace).where(Marketplace.id == marketplace_id).with_for_update()

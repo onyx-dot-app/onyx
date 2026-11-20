@@ -288,6 +288,8 @@ export const SWR_KEYS = {
   chatSkills: "/api/skills/chat",
   userSkill: (skillId: string) => `/api/skills/${skillId}`,
   userSkillPreview: (skillId: string) => `/api/skills/${skillId}/preview`,
+  pluginSkill: (pluginId: string, path: string) =>
+    `/api/skills/${pluginId}/plugin-skill?path=${encodeURIComponent(path)}`,
   skillSharing: (skillId: string) => `/api/skills/custom/${skillId}/share`,
   editableSkill: (skillId: string) => `/api/skills/custom/${skillId}/edit`,
   skillReviewRequests: "/api/skills/review-requests",

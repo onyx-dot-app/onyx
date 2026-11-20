@@ -7,7 +7,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from onyx.db.models import PluginVersion, User, UserIntegrationPreference
-from onyx.db.skill import list_chat_skills
+from onyx.db.skill import list_chat_skills, skill_user_states
 from onyx.skills.marketplace import sync
 from onyx.skills.marketplace.models import (
     MarketplaceSyncResult,
@@ -72,7 +72,8 @@ def test_personal_sync_creates_versions_and_deletes(
     assert [item["status"] for item in stored.last_sync_result or []] == ["ok", "ok"]
     owner_row = db_session.get(User, owner.id)
     assert owner_row is not None
-    assert {skill.name for skill in list_chat_skills(db_session, owner_row)} >= {
+    # New plugins start off; the owner turns them on one at a time.
+    assert not {skill.name for skill in list_chat_skills(db_session, owner_row)} & {
         "alpha",
         "beta",
     }
@@ -125,6 +126,7 @@ def test_blocked_entry_keeps_its_plugin(
             "path": "plugins/alpha",
             "status": "blocked",
             "reason": result_reason(reload(db_session, marketplace).last_sync_result),
+            "reason_code": None,
         }
     ]
 
@@ -356,6 +358,62 @@ def test_remote_entries_count_toward_the_marketplace_limits(
     assert synced_plugins(db_session, marketplace.id) == {}
 
 
+def test_external_repository_limit_depends_on_the_github_login(
+    db_session: Session,
+    users: tuple[User, User, User],
+    fake_github: FakeGitHub,
+    connections: Connections,
+    marketplace_ids: list[Any],
+) -> None:
+    owner = users[0]
+    for repo in ("one", "two"):
+        fake_github.push("acme", repo, {f"skills/{repo}/SKILL.md": skill_md(repo)})
+    fake_github.push(
+        OWNER,
+        REPO,
+        {
+            CLAUDE: catalog_with(
+                [
+                    {
+                        "name": repo,
+                        "source": {"source": "github", "repo": f"acme/{repo}"},
+                    }
+                    for repo in ("one", "two")
+                ]
+            )
+        },
+    )
+    marketplace = make_marketplace(
+        db_session, marketplace_ids, login=owner, owner=owner
+    )
+
+    with (
+        patch.object(sync, "REMOTE_REPOSITORY_MAX_COUNT", 1),
+        patch.object(sync, "REMOTE_REPOSITORY_MAX_COUNT_WITH_LOGIN", 2),
+    ):
+        assert sync.sync_marketplace(marketplace.id).blocked == ["two"]
+        assert reload(db_session, marketplace).last_sync_result == [
+            {
+                "key": "one",
+                "path": "",
+                "status": "ok",
+                "reason": None,
+                "reason_code": None,
+            },
+            {
+                "key": "two",
+                "path": None,
+                "status": "blocked",
+                "reason": "Connect GitHub to sync more than 1 external repositories.",
+                "reason_code": "external_repository_limit_without_login",
+            },
+        ]
+
+        connections.connected.add(owner.id)
+        assert sync.sync_marketplace(marketplace.id).blocked == []
+    assert set(synced_plugins(db_session, marketplace.id)) == {"one", "two"}
+
+
 def test_login_user_gone(
     db_session: Session,
     users: tuple[User, User, User],
@@ -415,7 +473,7 @@ def test_entry_with_mcp_server_has_a_need(
     assert json.loads(json.dumps(version.manifest))["name"] == "linear"
 
 
-def test_personal_sync_turns_on_the_integrations_of_a_plugin_it_turns_on(
+def test_personal_sync_leaves_new_plugins_and_integrations_off(
     db_session: Session,
     users: tuple[User, User, User],
     fake_github: FakeGitHub,
@@ -442,17 +500,24 @@ def test_personal_sync_turns_on_the_integrations_of_a_plugin_it_turns_on(
             db_session, marketplace_ids, login=owner, owner=owner
         )
 
-        with patch.object(sync, "reload_craft_sessions") as reload_sessions:
-            result = sync.sync_marketplace(marketplace.id)
+        result = sync.sync_marketplace(marketplace.id)
 
         assert result.status == MarketplaceSyncStatus.APPLIED
         db_session.expire_all()
-        assert db_session.scalar(
-            select(UserIntegrationPreference.enabled).where(
-                UserIntegrationPreference.user_id == owner.id,
-                UserIntegrationPreference.integration_id == integration_id,
+        plugin = synced_plugins(db_session, marketplace.id)["alpha"]
+        owner_row = db_session.get(User, owner.id)
+        assert owner_row is not None
+        assert not skill_user_states(owner_row, [plugin.id], db_session)[
+            plugin.id
+        ].enabled
+        assert (
+            db_session.scalar(
+                select(UserIntegrationPreference.enabled).where(
+                    UserIntegrationPreference.user_id == owner.id,
+                    UserIntegrationPreference.integration_id == integration_id,
+                )
             )
+            is None
         )
-        assert reload_sessions.call_args.args[0] == {owner.id}
     finally:
         delete_integrations(db_session, [integration_id])

@@ -10418,7 +10418,8 @@
             "public": "Found {count, plural, one {# tool} other {# tools}}. The server needs no sign-in.",
             "oauth": "The server uses OAuth sign-in.",
             "authUnknown": "The server needs sign-in. Add an API key header or OAuth.",
-            "unreachable": "Onyx cannot reach this server. Check the URL."
+            "unreachable": "Onyx cannot reach this server. Check the URL.",
+            "forbidden": "Only an admin can check this server before it is added. You can still add it."
           },
           "transport": {
             "title": "Transport",
@@ -16454,15 +16455,15 @@
         }
       },
       "importGithub": {
-        "sharing": {
-          "configureButton": "Configure access"
-        },
         "doneButton": {
           "label": "Done"
         },
         "submitButton": {
-          "importingLabel": "Importing…",
-          "importLabel": "{count, plural, one {Import skill} other {Import # skills}}"
+          "importLabel": "{count, plural, one {Import skill} other {Import # skills}}",
+          "importingLabel": "Importing…"
+        },
+        "sharing": {
+          "configureButton": "Configure access"
         }
       },
       "nameConflict": {
@@ -16579,6 +16580,21 @@
           "remove": "Remove {name}",
           "shared": "Shared with this group",
           "settingOnly": "Group setting only"
+        },
+        "plugin": {
+          "installation": {
+            "description": "Choose how this plugin is installed for everyone with access."
+          },
+          "published": {
+            "description": "Published. Everyone in the organization can use this plugin."
+          },
+          "publishWarning": {
+            "description": "After you save, everyone in the organization can use this plugin. You cannot make it private again. Only an admin can delete it.",
+            "reviewDescription": "The plugin stays private until an admin approves the request. After approval, you cannot make it private again."
+          },
+          "publishOff": {
+            "description": "An admin turned off publishing to the organization. Ask an admin to publish this plugin."
+          }
         }
       },
       "placeholders": {
@@ -16594,7 +16610,8 @@
         "columns": {
           "version": "Version",
           "madeBy": "Made by",
-          "date": "Date"
+          "date": "Date",
+          "manifestVersion": "plugin.json"
         },
         "versionLabel": "Version {number}",
         "currentBadge": "Current",
@@ -16617,7 +16634,9 @@
           "back": "All versions",
           "loadError": {
             "title": "Couldn't load this version"
-          }
+          },
+          "skills": "Skills · {count}",
+          "integrations": "Integrations · {count}"
         },
         "status": {
           "pending": "Pending review",
@@ -16630,6 +16649,8 @@
           "sentForReviewToast": "Version {number} went to an admin for review.",
           "offNotice": "Publishing is turned off. Ask an admin to publish this update."
         },
+        "noManifestVersion": "None",
+        "manifestVersion": "plugin.json {version}",
         "locked": "This plugin syncs from GitHub, so you change it in GitHub."
       }
     },
@@ -16679,10 +16700,12 @@
         "body": "Continuing will disable the currently enabled skill and enable this one.",
         "description": "Only one skill named “{name}” can be enabled at a time.",
         "submit": {
-          "label": "Switch skill",
+          "label": "Switch",
           "pendingLabel": "Switching..."
         },
-        "title": "Switch “{name}” skill?"
+        "title": "Turn on “{name}”?",
+        "descriptionNamed": "{names} already uses a skill name that “{name}” uses. Only one of them can be on at a time.",
+        "bodyNamed": "Turning on “{name}” turns off {names}."
       },
       "toasts": {
         "disableFailed": "Failed to disable {name}",
@@ -16704,6 +16727,9 @@
         },
         "upload": {
           "label": "Drag and drop or click to upload"
+        },
+        "chooseFolder": {
+          "label": "Choose a folder"
         }
       },
       "filesPicker": {
@@ -16891,7 +16917,7 @@
           "owner": "Owner",
           "skills": "Skills",
           "description": "Description",
-          "version": "Version",
+          "version": "Version in plugin.json",
           "author": "Author",
           "homepage": "Homepage",
           "license": "License",
@@ -16900,15 +16926,35 @@
         },
         "skills": {
           "off": "Off",
-          "invalid": "Not valid"
+          "invalid": "Not valid",
+          "read": "Read",
+          "readAriaLabel": "Read the {name} skill",
+          "readFailed": "Could not read this skill.",
+          "noInstructions": "This skill has no instructions."
         },
         "switch": {
           "title": "Use this plugin",
-          "description": "When this is on, the default agent can use this plugin.",
           "label": "Use {name}",
           "required": "Your admin made this plugin required. You cannot turn it off.",
           "unavailable": "You cannot turn this plugin on or off.",
-          "failed": "Could not change the plugin."
+          "failed": "Could not change the plugin.",
+          "on": "On. The default agent can use this plugin.",
+          "off": "Off. Turn it on to let the default agent use this plugin.",
+          "nameHeld": "Off because {names} uses the same skill name. Turn this plugin on to use it instead."
+        },
+        "actions": {
+          "share": "Share",
+          "menu": "More actions",
+          "uploadVersion": "Upload New Version",
+          "remove": "Delete Plugin"
+        },
+        "remove": {
+          "entityType": "plugin",
+          "description": "Everyone who uses this plugin loses it. You cannot undo this.",
+          "submit": "Delete",
+          "pending": "Deleting…",
+          "done": "Deleted {name}.",
+          "failed": "Could not delete the plugin."
         },
         "syncedFrom": "Synced from {repository}",
         "managed": {
@@ -17062,7 +17108,7 @@
         "description": "It has no plugin.json. Continue to add it as a skill.",
         "continue": "Continue"
       },
-      "version": "v{version}",
+      "version": "plugin.json {version}",
       "target": {
         "newVersion": "Updates {name} to Onyx version {version}",
         "newPlugin": "New plugin: {name}"
@@ -17134,7 +17180,8 @@
         "willInstall": "Will install",
         "skills": "{count, plural, one {Skill} other {Skills}}: {names}",
         "showUnusable": "{count, plural, one {Show # entry that Onyx cannot use} other {Show # entries that Onyx cannot use}}",
-        "hideUnusable": "Hide the entries that Onyx cannot use"
+        "hideUnusable": "Hide the entries that Onyx cannot use",
+        "summary": "{ready} Ready · {blocked} Cannot install · {unsupported} Not supported"
       },
       "add": {
         "menuItem": "Add marketplace",
@@ -17175,7 +17222,11 @@
         "cancel": "Cancel",
         "previewFailed": "Could not read the repository.",
         "addFailed": "Could not add the marketplace.",
-        "added": "Added {name}. Its plugins show after the first sync."
+        "added": "Added {name}. Its plugins show after the first sync.",
+        "duplicate": {
+          "personal": "You already added this marketplace.",
+          "company": "Your organization already gets this marketplace."
+        }
       },
       "sync": {
         "now": "Sync now",
@@ -17244,14 +17295,25 @@
         "description": "The source, the sync and the entries of this marketplace.",
         "loadFailed": "Could not load the marketplace.",
         "scope": "Type",
-        "login": "GitHub Login",
+        "login": "Syncs As",
         "noLogin": "None. Replace the login to sync again.",
         "lastSync": "Last Sync",
         "entries": "Entries ({count})",
         "noEntries": "The last sync found no entries.",
         "close": "Close"
       },
-      "readOnly": "Your admin manages this marketplace."
+      "readOnly": "Your admin manages this marketplace.",
+      "reason": {
+        "skills_and_mcp_only": "Onyx runs only skills and MCP servers.",
+        "pastLimit": "Onyx did not read this repository.",
+        "external_repository_limit": "Onyx syncs at most {limit} external repositories for one marketplace.",
+        "external_repository_limit_without_login": "Connect GitHub to sync more than {limit} external repositories.",
+        "limitTitle": "Some plugins come from repositories that Onyx did not read"
+      },
+      "errors": {
+        "rateLimited": "GitHub's API rate limit has been reached. Try again in a few minutes. Connect GitHub to raise the limit.",
+        "rateLimitedUntil": "GitHub's API rate limit has been reached. It resets at {time}. Connect GitHub to raise the limit."
+      }
     }
   },
   "integrations": {
@@ -17419,14 +17481,16 @@
       },
       "empty": {
         "title": "No plugins yet",
-        "description": "Upload a plugin, add a marketplace from GitHub, or create a skill. Each skill is a plugin."
+        "description": "Upload a plugin, add a marketplace from GitHub, or create a skill. Each skill is a plugin.",
+        "upload": "Upload Plugin"
       },
       "noMatches": {
         "title": "No matching plugins",
         "clear": "Show all plugins"
       },
       "intro": "A plugin packages skills and the integrations that they need. Upload a Claude Code or Codex plugin, add a marketplace from GitHub, or add a skill. Each skill that you add comes in its own plugin.",
-      "integrations": "{available} of {needed} integrations available"
+      "integrations": "{available} of {needed} integrations available",
+      "nameHeld": "Off: {names} uses the same skill name"
     },
     "skillPage": {
       "title": "Skill",

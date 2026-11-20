@@ -167,6 +167,9 @@ class SkillUserState(BaseModel):
     can_toggle: bool
     # The install setting for this user is REQUIRED (company or group).
     required: bool = False
+    # The user turned the skill on, but these skills hold one of its names,
+    # so it does not load and shows as off.
+    name_held_by: tuple[str, ...] = ()
 
 
 def is_published(plugin: Plugin, db_session: Session) -> bool:
@@ -766,10 +769,26 @@ def skill_user_states(
             or built_in_skill_id in selection.built_in_app_skills,
             can_toggle=False,
         )
+    built_in_names = {skill.name for skill in selection.built_ins}
     for skill_id in requested_ids - states.keys():
         state = selection.states.get(skill_id)
+        name_held_by: tuple[str, ...] = ()
+        if state is not None and state.can_run and skill_id in selection.hidden:
+            name_held_by = tuple(
+                sorted(
+                    {
+                        other.plugin_name
+                        for other in selection.other_skills_named(
+                            state.skill_names, skill_id
+                        )
+                        if other.plugin_id not in selection.hidden
+                    }
+                    | (built_in_names & set(state.skill_names))
+                )
+            )
         states[skill_id] = SkillUserState(
             enabled=selection.enabled(skill_id),
+            name_held_by=name_held_by,
             can_toggle=state is not None
             and state.version_is_valid is not False
             and state.installation_policy != PluginInstallationPolicy.REQUIRED,
@@ -824,6 +843,9 @@ def set_skill_enabled_for_user(
             raise OnyxError(
                 OnyxErrorCode.SKILL_NAME_CONFLICT,
                 f"Another skill named '{names[0]}' is already enabled.",
+                extra={
+                    "conflict_names": sorted({other.plugin_name for other in others})
+                },
             )
         return conflicts
 

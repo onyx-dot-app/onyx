@@ -2,7 +2,7 @@ from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
 from uuid import UUID
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -16,9 +16,7 @@ from onyx.db.plugin import (
 from onyx.db.plugin_access import affected_user_ids_for_plugins
 from onyx.db.skill import (
     delete_skill,
-    enable_new_skill_if_name_available__no_commit,
 )
-from onyx.db.skill_limit import lock_user_skill_preferences
 from onyx.db.utils import is_unique_violation
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -34,7 +32,7 @@ from onyx.skills.marketplace.models import (
     ReadyPlugin,
     UnsupportedPlugin,
 )
-from onyx.skills.models import PluginFileEntry, PluginNeed, PluginVersionContent
+from onyx.skills.models import PluginFileEntry, PluginVersionContent
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -88,6 +86,26 @@ def create_github_marketplace__no_commit(
             OnyxErrorCode.CONFLICT, "This marketplace is already added."
         ) from exc
     return marketplace
+
+
+def source_added_for(
+    config: GitHubMarketplaceConfig, user_id: UUID, db_session: Session
+) -> tuple[bool, bool]:
+    """Whether the user's personal marketplaces, and the company ones, already
+    have this source."""
+    owners = db_session.scalars(
+        select(Marketplace.owner_user_id).where(
+            Marketplace.kind == MarketplaceKind.GITHUB,
+            Marketplace.repository == config.repository,
+            Marketplace.folder == (config.folder or ""),
+            Marketplace.ref == (config.ref or ""),
+            or_(
+                Marketplace.owner_user_id == user_id,
+                Marketplace.owner_user_id.is_(None),
+            ),
+        )
+    ).all()
+    return user_id in owners, None in owners
 
 
 def get_github_marketplace(
@@ -196,21 +214,6 @@ def _write_sync_state(
     marketplace.last_error = None
 
 
-def _turn_on_for_owner__no_commit(
-    plugin: Plugin, owner_user_id: UUID, db_session: Session
-) -> bool:
-    try:
-        with db_session.begin_nested():
-            return enable_new_skill_if_name_available__no_commit(
-                plugin, owner_user_id, db_session
-            )
-    except OnyxError as exc:
-        if exc.error_code != OnyxErrorCode.SKILL_LIMIT_EXCEEDED:
-            raise
-        logger.info("Synced plugin %s stays off: skill limit", plugin.id)
-        return False
-
-
 def apply_marketplace_sync__no_commit(
     *,
     marketplace_id: UUID,
@@ -225,9 +228,6 @@ def apply_marketplace_sync__no_commit(
     if marketplace is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Marketplace not found.")
     owner_user_id = marketplace.owner_user_id
-    # The owner's lock first, the order of skill toggles and saves.
-    if owner_user_id is not None:
-        lock_user_skill_preferences(owner_user_id, db_session)
     marketplace = lock_github_marketplace(marketplace_id, db_session)
     if marketplace is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Marketplace not found.")
@@ -269,19 +269,15 @@ def apply_marketplace_sync__no_commit(
         if owner_user_id is None:
             plugin.published_version_id = plugin.current_version_id
         versioned.append(plugin.id)
-    created: list[Plugin] = []
-    turned_on_needs: list[PluginNeed] = []
-    affected = set(before)
-    for key in plan.create:
-        plugin = create_synced_plugin__no_commit(
+    # A new plugin starts off for everyone who has not chosen, as in Claude;
+    # the owner of a personal marketplace turns plugins on one at a time.
+    created = [
+        create_synced_plugin__no_commit(
             marketplace, key, staged[key], created_by, db_session
         )
-        created.append(plugin)
-        if owner_user_id is not None and _turn_on_for_owner__no_commit(
-            plugin, owner_user_id, db_session
-        ):
-            affected.add(owner_user_id)
-            turned_on_needs.extend(staged[key].needs or [])
+        for key in plan.create
+    ]
+    affected = set(before)
     _write_sync_state(
         marketplace,
         name=name,
@@ -300,7 +296,6 @@ def apply_marketplace_sync__no_commit(
         blocked=blocked,
         cleanup_file_ids=sorted(cleanup),
         affected_user_ids=affected,
-        turned_on_needs=turned_on_needs,
     )
 
 

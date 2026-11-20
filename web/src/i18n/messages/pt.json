@@ -10418,7 +10418,8 @@
             "public": "{count, plural, one {# ferramenta encontrada} other {# ferramentas encontradas}}. O servidor não exige login.",
             "oauth": "O servidor usa login com OAuth.",
             "authUnknown": "O servidor exige login. Adicione um cabeçalho de chave de API ou OAuth.",
-            "unreachable": "O Onyx não consegue acessar este servidor. Verifique a URL."
+            "unreachable": "O Onyx não consegue acessar este servidor. Verifique a URL.",
+            "forbidden": "Somente um administrador pode verificar este servidor antes de adicioná-lo. Você ainda pode adicioná-lo."
           },
           "transport": {
             "title": "Transporte",
@@ -16454,15 +16455,15 @@
         }
       },
       "importGithub": {
-        "sharing": {
-          "configureButton": "Configurar acesso"
-        },
         "doneButton": {
           "label": "Concluído"
         },
         "submitButton": {
-          "importingLabel": "Importando…",
-          "importLabel": "{count, plural, one {Importar habilidade} other {Importar # habilidades}}"
+          "importLabel": "{count, plural, one {Importar habilidade} other {Importar # habilidades}}",
+          "importingLabel": "Importando…"
+        },
+        "sharing": {
+          "configureButton": "Configurar acesso"
         }
       },
       "nameConflict": {
@@ -16579,6 +16580,21 @@
           "remove": "Remover {name}",
           "shared": "Compartilhado com este grupo",
           "settingOnly": "Somente configuração do grupo"
+        },
+        "plugin": {
+          "installation": {
+            "description": "Escolha como este plugin é instalado para todos com acesso."
+          },
+          "published": {
+            "description": "Publicado. Todos na organização podem usar este plugin."
+          },
+          "publishWarning": {
+            "description": "Depois de salvar, todos na organização podem usar este plugin. Não é possível torná-lo privado novamente. Somente um administrador pode excluí-lo.",
+            "reviewDescription": "O plugin permanece privado até que um administrador aprove a solicitação. Após a aprovação, não é possível torná-lo privado novamente."
+          },
+          "publishOff": {
+            "description": "Um administrador desativou a publicação na organização. Peça a um administrador para publicar este plugin."
+          }
         }
       },
       "placeholders": {
@@ -16594,7 +16610,8 @@
         "columns": {
           "version": "Versão",
           "madeBy": "Criada por",
-          "date": "Data"
+          "date": "Data",
+          "manifestVersion": "plugin.json"
         },
         "versionLabel": "Versão {number}",
         "currentBadge": "Atual",
@@ -16617,7 +16634,9 @@
           "back": "Todas as versões",
           "loadError": {
             "title": "Não foi possível carregar esta versão"
-          }
+          },
+          "skills": "Habilidades · {count}",
+          "integrations": "Integrações · {count}"
         },
         "status": {
           "pending": "Revisão pendente",
@@ -16630,6 +16649,8 @@
           "sentForReviewToast": "A versão {number} foi enviada a um administrador para revisão.",
           "offNotice": "A publicação está desativada. Peça a um administrador para publicar esta atualização."
         },
+        "noManifestVersion": "Nenhuma",
+        "manifestVersion": "plugin.json {version}",
         "locked": "Este plugin é sincronizado do GitHub, então você o altera no GitHub."
       }
     },
@@ -16679,10 +16700,12 @@
         "body": "Continuar desativará a habilidade atualmente ativada e ativará esta.",
         "description": "Apenas uma habilidade chamada “{name}” pode estar ativada por vez.",
         "submit": {
-          "label": "Trocar habilidade",
+          "label": "Trocar",
           "pendingLabel": "Trocando..."
         },
-        "title": "Trocar a habilidade “{name}”?"
+        "title": "Ativar “{name}”?",
+        "descriptionNamed": "{names} já usa um nome de habilidade que “{name}” também usa. Só um pode ficar ativado por vez.",
+        "bodyNamed": "Ativar “{name}” desativa {names}."
       },
       "toasts": {
         "disableFailed": "Falha ao desativar {name}",
@@ -16704,6 +16727,9 @@
         },
         "upload": {
           "label": "Arraste e solte ou clique para enviar"
+        },
+        "chooseFolder": {
+          "label": "Escolher uma pasta"
         }
       },
       "filesPicker": {
@@ -16891,7 +16917,7 @@
           "owner": "Proprietário",
           "skills": "Habilidades",
           "description": "Descrição",
-          "version": "Versão",
+          "version": "Versão no plugin.json",
           "author": "Autor",
           "homepage": "Página inicial",
           "license": "Licença",
@@ -16900,15 +16926,35 @@
         },
         "skills": {
           "off": "Desativada",
-          "invalid": "Inválida"
+          "invalid": "Inválida",
+          "read": "Ler",
+          "readAriaLabel": "Ler a habilidade {name}",
+          "readFailed": "Não foi possível ler esta habilidade.",
+          "noInstructions": "Esta habilidade não tem instruções."
         },
         "switch": {
           "title": "Usar este plugin",
-          "description": "Quando ativado, o agente padrão pode usar este plugin.",
           "label": "Usar {name}",
           "required": "Seu administrador tornou este plugin obrigatório. Você não pode desativá-lo.",
           "unavailable": "Você não pode ativar nem desativar este plugin.",
-          "failed": "Não foi possível alterar o plugin."
+          "failed": "Não foi possível alterar o plugin.",
+          "on": "Ativado. O agente padrão pode usar este plugin.",
+          "off": "Desativado. Ative-o para que o agente padrão possa usar este plugin.",
+          "nameHeld": "Desativado porque {names} usa o mesmo nome de habilidade. Ative este plugin para usá-lo no lugar."
+        },
+        "actions": {
+          "share": "Compartilhar",
+          "menu": "Mais ações",
+          "uploadVersion": "Enviar nova versão",
+          "remove": "Excluir plugin"
+        },
+        "remove": {
+          "entityType": "plugin",
+          "description": "Todos que usam este plugin o perdem. Não é possível desfazer.",
+          "submit": "Excluir",
+          "pending": "Excluindo…",
+          "done": "{name} foi excluído.",
+          "failed": "Não foi possível excluir o plugin."
         },
         "syncedFrom": "Sincronizado de {repository}",
         "managed": {
@@ -17062,7 +17108,7 @@
         "description": "Ele não tem plugin.json. Continue para adicioná-lo como skill.",
         "continue": "Continuar"
       },
-      "version": "v{version}",
+      "version": "plugin.json {version}",
       "target": {
         "newVersion": "Atualiza {name} para a versão {version} do Onyx",
         "newPlugin": "Novo plugin: {name}"
@@ -17134,7 +17180,8 @@
         "willInstall": "Será instalado",
         "skills": "{count, plural, one {Habilidade} other {Habilidades}}: {names}",
         "showUnusable": "{count, plural, one {Mostrar # entrada que o Onyx não pode usar} other {Mostrar # entradas que o Onyx não pode usar}}",
-        "hideUnusable": "Ocultar as entradas que o Onyx não pode usar"
+        "hideUnusable": "Ocultar as entradas que o Onyx não pode usar",
+        "summary": "{ready} Prontos · {blocked} Não é possível instalar · {unsupported} Não suportados"
       },
       "add": {
         "menuItem": "Adicionar marketplace",
@@ -17175,7 +17222,11 @@
         "cancel": "Cancelar",
         "previewFailed": "Não foi possível ler o repositório.",
         "addFailed": "Não foi possível adicionar o marketplace.",
-        "added": "{name} adicionado. Os plugins aparecem após a primeira sincronização."
+        "added": "{name} adicionado. Os plugins aparecem após a primeira sincronização.",
+        "duplicate": {
+          "personal": "Você já adicionou este marketplace.",
+          "company": "Sua organização já recebe este marketplace."
+        }
       },
       "sync": {
         "now": "Sincronizar agora",
@@ -17244,14 +17295,25 @@
         "description": "A fonte, a sincronização e as entradas deste marketplace.",
         "loadFailed": "Não foi possível carregar o marketplace.",
         "scope": "Tipo",
-        "login": "Login do GitHub",
+        "login": "Sincroniza como",
         "noLogin": "Nenhum. Substitua o login para sincronizar de novo.",
         "lastSync": "Última sincronização",
         "entries": "Entradas ({count})",
         "noEntries": "A última sincronização não encontrou entradas.",
         "close": "Fechar"
       },
-      "readOnly": "Seu administrador gerencia este marketplace."
+      "readOnly": "Seu administrador gerencia este marketplace.",
+      "reason": {
+        "skills_and_mcp_only": "O Onyx executa apenas skills e servidores MCP.",
+        "pastLimit": "O Onyx não leu este repositório.",
+        "external_repository_limit": "O Onyx sincroniza no máximo {limit} repositórios externos por marketplace.",
+        "external_repository_limit_without_login": "Conecte o GitHub para sincronizar mais de {limit} repositórios externos.",
+        "limitTitle": "Alguns plugins vêm de repositórios que o Onyx não leu"
+      },
+      "errors": {
+        "rateLimited": "O limite da API do GitHub foi atingido. Tente novamente em alguns minutos. Conecte o GitHub para aumentar o limite.",
+        "rateLimitedUntil": "O limite da API do GitHub foi atingido. Ele é redefinido às {time}. Conecte o GitHub para aumentar o limite."
+      }
     }
   },
   "integrations": {
@@ -17419,14 +17481,16 @@
       },
       "empty": {
         "title": "Nenhum plugin ainda",
-        "description": "Envie um plugin, adicione um marketplace do GitHub ou crie uma habilidade. Cada habilidade é um plugin."
+        "description": "Envie um plugin, adicione um marketplace do GitHub ou crie uma habilidade. Cada habilidade é um plugin.",
+        "upload": "Enviar plugin"
       },
       "noMatches": {
         "title": "Nenhum plugin correspondente",
         "clear": "Mostrar todos os plugins"
       },
       "intro": "Um plugin agrupa habilidades e as integrações de que elas precisam. Envie um plugin do Claude Code ou do Codex, adicione um marketplace do GitHub ou adicione uma habilidade. Cada habilidade que você adiciona vem em seu próprio plugin.",
-      "integrations": "{available} de {needed} integrações disponíveis"
+      "integrations": "{available} de {needed} integrações disponíveis",
+      "nameHeld": "Desativado: {names} usa o mesmo nome de habilidade"
     },
     "skillPage": {
       "title": "Habilidade",

@@ -4,7 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, JsonValue, field_validator
 
-from onyx.skills.models import PluginBundle, PluginFileEntry, PluginNeed
+from onyx.skills.models import PluginBundle, PluginFileEntry
 from onyx.utils.github import GITHUB_REPOSITORY_COMPONENT_PATTERN
 
 
@@ -85,6 +85,14 @@ class ReadyPlugin(BaseModel):
     file_manifest: list[PluginFileEntry]
 
 
+class MarketplaceReasonCode(str, Enum):
+    """A reason the web translates. ``reason`` keeps the English text."""
+
+    SKILLS_AND_MCP_ONLY = "skills_and_mcp_only"
+    EXTERNAL_REPOSITORY_LIMIT = "external_repository_limit"
+    EXTERNAL_REPOSITORY_LIMIT_WITHOUT_LOGIN = "external_repository_limit_without_login"
+
+
 class BlockedPlugin(BaseModel):
     model_config = ConfigDict(frozen=True)
 
@@ -92,6 +100,7 @@ class BlockedPlugin(BaseModel):
     entry_key: str
     path: str | None
     reason: str
+    reason_code: MarketplaceReasonCode | None = None
 
 
 class UnsupportedPlugin(BaseModel):
@@ -100,6 +109,7 @@ class UnsupportedPlugin(BaseModel):
     status: Literal["not_supported"] = "not_supported"
     entry_key: str
     reason: str
+    reason_code: MarketplaceReasonCode | None = None
 
 
 class RemotePlugin(BaseModel):
@@ -142,6 +152,7 @@ class MarketplaceEntryResult(BaseModel):
     path: str | None
     status: MarketplaceEntryStatus
     reason: str | None = None
+    reason_code: MarketplaceReasonCode | None = None
 
 
 class MarketplaceSyncStatus(str, Enum):
@@ -177,7 +188,6 @@ class MarketplaceSyncResult(BaseModel):
     cleanup_file_ids: list[str] = []
     affected_user_ids: set[UUID] = set()
     # Needs of the plugins that the sync turned on for a personal owner.
-    turned_on_needs: list[PluginNeed] = []
 
 
 class MarketplaceRead(BaseModel):

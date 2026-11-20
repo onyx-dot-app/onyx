@@ -1,11 +1,18 @@
 import type { PluginNeed } from "@/lib/plugins/types";
-import type { OrganizationLibraryDefaultPolicy } from "@/lib/skills/types";
+import type { SkillInstallationPolicy } from "@/lib/skills/types";
 
 export type MarketplaceScope = "personal" | "company";
 
 export type MarketplaceEntryStatus = "ok" | "blocked" | "not_supported";
 
-export type MarketplaceDefaultPolicy = OrganizationLibraryDefaultPolicy;
+/** A reason the web translates; `reason` keeps the English text. */
+export type MarketplaceReasonCode =
+  | "skills_and_mcp_only"
+  | "external_repository_limit"
+  | "external_repository_limit_without_login";
+
+/** A company marketplace default can be REQUIRED, as in Claude. */
+export type MarketplaceDefaultPolicy = SkillInstallationPolicy;
 
 export interface MarketplaceSource {
   repository: string;
@@ -30,7 +37,7 @@ export interface MarketplacePreviewEntry {
   path: string | null;
   status: MarketplaceEntryStatus;
   reason: string | null;
-  name: string | null;
+  reason_code: MarketplaceReasonCode | null;
   description: string | null;
   version: string | null;
   skills: MarketplacePreviewSkill[];
@@ -47,6 +54,10 @@ export interface MarketplacePreview {
   name: string | null;
   reason: string | null;
   entries: MarketplacePreviewEntry[];
+  /** The caller already has this source as a personal marketplace. */
+  added_personal: boolean;
+  /** The organization already has this source as a company marketplace. */
+  added_company: boolean;
 }
 
 export interface MarketplaceLoginUser {
@@ -79,6 +90,7 @@ export interface MarketplaceEntry {
   path: string | null;
   status: MarketplaceEntryStatus;
   reason: string | null;
+  reason_code: MarketplaceReasonCode | null;
   plugin_id: string | null;
 }
 

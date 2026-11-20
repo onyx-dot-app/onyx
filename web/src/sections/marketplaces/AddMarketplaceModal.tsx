@@ -1,20 +1,21 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import {
   Button,
   Card,
   InputSingleSelect,
   InputTypeIn,
+  MessageCard,
   Modal,
   Text,
 } from "@opal/components";
 import { InputVertical, Section } from "@opal/layouts";
 import { SvgArrowLeft } from "@opal/icons";
 import { SvgGitHub } from "@opal/logos";
-import { fetchErrorDetail } from "@/lib/fetcher";
 import { createMarketplace, previewMarketplace } from "@/lib/marketplaces/api";
+import { useMarketplaceCopy } from "@/lib/marketplaces/hooks";
 import type {
   MarketplaceDefaultPolicy,
   MarketplaceDetail,
@@ -70,6 +71,11 @@ function AddMarketplaceForm({
   const [preview, setPreview] = useState<Preview | null>(null);
   const [busy, setBusyState] = useState<"preview" | "add" | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const copy = useMarketplaceCopy();
+  const errorRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    errorRef.current?.scrollIntoView?.({ block: "nearest" });
+  }, [error]);
 
   function setBusy(next: "preview" | "add" | null) {
     setBusyState(next);
@@ -88,7 +94,7 @@ function AddMarketplaceForm({
         })
       );
     } catch (caught) {
-      setError(fetchErrorDetail(caught) ?? t("previewFailed"));
+      setError(copy.describeError(caught, t("previewFailed")));
     } finally {
       setBusy(null);
     }
@@ -110,13 +116,21 @@ function AddMarketplaceForm({
         })
       );
     } catch (caught) {
-      setError(fetchErrorDetail(caught) ?? t("addFailed"));
+      setError(copy.describeError(caught, t("addFailed")));
     } finally {
       setBusy(null);
     }
   }
 
   const disabled = busy !== null;
+  const chosenScope = isGlobalHolder ? scope : "personal";
+  const duplicate = !preview
+    ? null
+    : preview.added_company
+      ? t("duplicate.company")
+      : preview.added_personal && chosenScope === "personal"
+        ? t("duplicate.personal")
+        : null;
   const inputVariant = disabled ? "disabled" : "primary";
 
   return (
@@ -129,7 +143,7 @@ function AddMarketplaceForm({
       />
       <Modal.Body padding={2}>
         {error && (
-          <Section role="alert" height="auto" alignItems="start">
+          <Section ref={errorRef} role="alert" height="auto" alignItems="start">
             <Text as="p" font="secondary-body" color="status-error-05">
               {error}
             </Text>
@@ -182,6 +196,14 @@ function AddMarketplaceForm({
                   )}
                 </Section>
               </Card>
+            )}
+            {duplicate && (
+              <MessageCard
+                variant="info"
+                outerPadding={1}
+                innerPadding={1}
+                title={duplicate}
+              />
             )}
             <MarketplacePreview preview={preview} />
           </>
@@ -257,7 +279,9 @@ function AddMarketplaceForm({
               {t("back")}
             </Button>
             <Button
-              disabled={disabled || preview.status !== "complete"}
+              disabled={
+                disabled || preview.status !== "complete" || duplicate !== null
+              }
               onClick={() => void add(preview)}
             >
               {busy === "add" ? t("adding") : t("submit")}

@@ -9,6 +9,7 @@ from onyx.skills.marketplace.models import (
     CompleteMarketplace,
     FailedMarketplace,
     GitHubRepoSource,
+    MarketplaceReasonCode,
     ReadyPlugin,
     RemotePlugin,
     UnsupportedPlugin,
@@ -275,6 +276,20 @@ def test_bad_entries_block_only_themselves() -> None:
     blocked = entries["missing"]
     assert isinstance(blocked, BlockedPlugin)
     assert blocked.reason == "The plugin folder 'missing' is missing."
+
+
+def test_plugin_with_only_commands_is_not_supported() -> None:
+    files = {
+        CLAUDE: catalog({"name": "commands-only", "source": "./commands-only"}),
+        "commands-only/commands/review.md": b"Review the diff.\n",
+        "commands-only/hooks/hooks.json": b"{}",
+    }
+    (entry,) = _complete(files).entries
+    assert entry == UnsupportedPlugin(
+        entry_key="commands-only",
+        reason="Onyx runs only skills and MCP servers.",
+        reason_code=MarketplaceReasonCode.SKILLS_AND_MCP_ONLY,
+    )
 
 
 def test_size_limit_blocks_the_entry_not_the_read() -> None:

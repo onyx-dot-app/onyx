@@ -43,7 +43,7 @@ def send_task() -> Iterator[MagicMock]:
         yield sent
 
 
-def test_sync_now_during_a_sync_syncs_once_more(
+def test_sync_now_during_a_sync_does_nothing(
     db_session: Session,
     users: tuple[User, User, User],
     fake_github: FakeGitHub,
@@ -85,7 +85,7 @@ def test_sync_now_during_a_sync_syncs_once_more(
         sync_marketplace_task.run(**task_kwargs)
     assert during == [True]
     assert send_task.call_args_list == []
-    assert set(synced_plugins(db_session, marketplace.id)) == {"alpha", "beta"}
+    assert set(synced_plugins(db_session, marketplace.id)) == {"alpha"}
     assert not api.get_marketplace(marketplace.id, owner, db_session).syncing
 
 

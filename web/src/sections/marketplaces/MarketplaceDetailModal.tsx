@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { Button, Card, MessageCard, Modal, Text } from "@opal/components";
 import { Content, KeyValue, Section, toast } from "@opal/layouts";
 import { IconLoader } from "@opal/loaders";
@@ -9,7 +9,8 @@ import { SvgBlocks, SvgRefreshCw } from "@opal/icons";
 import { SvgGitHub } from "@opal/logos";
 import { fetchErrorDetail } from "@/lib/fetcher";
 import { syncMarketplace } from "@/lib/marketplaces/api";
-import { useMarketplace } from "@/lib/marketplaces/hooks";
+import { useMarketplace, useMarketplaceCopy } from "@/lib/marketplaces/hooks";
+import { sortMarketplaceEntries } from "@/lib/marketplaces/utils";
 import type { MarketplaceDetail } from "@/lib/marketplaces/types";
 import {
   useInstallationPolicyCopy,
@@ -26,8 +27,11 @@ interface DetailBodyProps {
 
 function DetailBody({ marketplace }: DetailBodyProps) {
   const t = useTranslations("plugins.marketplaces");
+  const locale = useLocale();
+  const copy = useMarketplaceCopy();
   const lastSync = useLastSyncCopy(false);
   const policyCopy = useInstallationPolicyCopy();
+  const limitNote = copy.limitNote(marketplace.entries);
   return (
     <Section gap={4} alignItems="stretch" height="auto">
       <MarketplaceSyncStatus marketplace={marketplace} />
@@ -93,19 +97,34 @@ function DetailBody({ marketplace }: DetailBodyProps) {
             {t("detail.noEntries")}
           </Text>
         ) : (
-          marketplace.entries.map((entry) => (
-            <Card key={entry.key} padding={2} border="solid">
-              <Content
-                icon={SvgBlocks}
-                title={entry.key}
-                description={entry.reason ?? entry.path ?? undefined}
-                badge={{
-                  title: t(`status.${entry.status}`),
-                  color: ENTRY_STATUS_COLOR[entry.status],
-                }}
+          <>
+            {limitNote && (
+              <MessageCard
+                variant="warning"
+                outerPadding={1}
+                innerPadding={1}
+                title={t("reason.limitTitle")}
+                description={limitNote}
               />
-            </Card>
-          ))
+            )}
+            {sortMarketplaceEntries(marketplace.entries, locale).map(
+              (entry) => (
+                <Card key={entry.key} padding={2} border="solid">
+                  <Content
+                    icon={SvgBlocks}
+                    title={entry.key}
+                    description={
+                      copy.entryReason(entry) ?? entry.path ?? undefined
+                    }
+                    badge={{
+                      title: t(`status.${entry.status}`),
+                      color: ENTRY_STATUS_COLOR[entry.status],
+                    }}
+                  />
+                </Card>
+              )
+            )}
+          </>
         )}
       </Section>
     </Section>
@@ -148,6 +167,7 @@ export default function MarketplaceDetailModal({
   }
 
   const name = marketplace?.name ?? "";
+  const syncing = marketplace?.syncing ?? false;
 
   return (
     <Modal open onOpenChange={(isOpen) => !isOpen && !busy && onClose()}>
@@ -182,7 +202,7 @@ export default function MarketplaceDetailModal({
           {marketplace?.can_manage && (
             <Button
               icon={SvgRefreshCw}
-              disabled={busy}
+              disabled={busy || syncing}
               onClick={() =>
                 void run(
                   () => syncMarketplace(marketplaceId),

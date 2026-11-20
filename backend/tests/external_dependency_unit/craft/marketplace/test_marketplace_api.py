@@ -11,6 +11,7 @@ from sqlalchemy.orm import Session
 from onyx.auth.permissions import has_global_permission
 from onyx.db.enums import Permission, PluginInstallationPolicy
 from onyx.db.models import Marketplace, User
+from onyx.db.skill import SkillUserState, set_skill_enabled_for_user, skill_user_states
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.skill import marketplace_api as api
@@ -22,7 +23,7 @@ from onyx.server.features.skill.marketplace_models import (
 )
 from onyx.skills.marketplace import sync
 from onyx.skills.marketplace.models import MarketplaceEntryStatus
-from tests.external_dependency_unit.craft.db_helpers import make_user
+from tests.external_dependency_unit.craft.db_helpers import make_skill, make_user
 from tests.external_dependency_unit.craft.fake_github import FakeGitHub
 from tests.external_dependency_unit.craft.marketplace.helpers import (
     OWNER,
@@ -167,6 +168,20 @@ def test_preview_reads_a_folder_url_and_a_schemeless_url(
         )
     assert exc.value.detail == f"The branch or folder 'gone' is not in {OWNER}/{REPO}."
 
+    fake_github.rate_limit_reset = 1_800_000_000
+    with pytest.raises(OnyxError) as exc:
+        api.preview_marketplace(
+            MarketplaceSourceRequest(repository=f"{OWNER}/{REPO}"),
+            _fresh(db_session, users[0]),
+            db_session,
+        )
+    assert exc.value.error_code == OnyxErrorCode.RATE_LIMITED
+    assert exc.value.detail == (
+        "GitHub's API rate limit has been reached. It resets at 08:00 UTC. "
+        "Connect GitHub to raise the limit."
+    )
+    assert exc.value.extra == {"reset_at": "2027-01-15T08:00:00+00:00"}
+
 
 def test_scope_and_owner_rules(
     db_session: Session,
@@ -185,6 +200,12 @@ def test_scope_and_owner_rules(
 
     personal_id = _create(db_session, owner, MarketplaceScope.PERSONAL)
     assert enqueued == [personal_id]
+    preview = api.preview_marketplace(
+        MarketplaceSourceRequest(repository=f"{OWNER}/{REPO}"),
+        _fresh(db_session, owner),
+        db_session,
+    )
+    assert (preview.added_personal, preview.added_company) == (True, False)
     with pytest.raises(OnyxError) as exc:
         _create(db_session, owner, MarketplaceScope.PERSONAL)
     assert exc.value.error_code == OnyxErrorCode.CONFLICT
@@ -255,16 +276,16 @@ def test_scope_and_owner_rules(
             _fresh(db_session, owner),
             db_session,
         )
-    with pytest.raises(OnyxError):
-        api.set_marketplace_default_access(
-            company_id,
-            MarketplaceDefaultAccessRequest(
-                installation_policy=PluginInstallationPolicy.REQUIRED
-            ),
-            _fresh(db_session, manager),
-            db_session,
-        )
     db_session.rollback()
+    required = api.set_marketplace_default_access(
+        company_id,
+        MarketplaceDefaultAccessRequest(
+            installation_policy=PluginInstallationPolicy.REQUIRED
+        ),
+        _fresh(db_session, manager),
+        db_session,
+    )
+    assert required.default_installation_policy == PluginInstallationPolicy.REQUIRED
     changed = api.set_marketplace_default_access(
         company_id,
         MarketplaceDefaultAccessRequest(
@@ -369,3 +390,45 @@ def test_replace_login_without_github_clears_a_gone_login(
     assert not detail.login_has_github
     assert detail.last_error is None
     assert set(synced_plugins(db_session, marketplace_id)) == {"alpha"}
+
+
+def test_required_default_wins_a_member_skill_name(
+    db_session: Session,
+    users: tuple[User, User, User],
+    manager: User,
+    fake_github: FakeGitHub,
+    connections: Connections,  # noqa: ARG001
+    enqueued: list[UUID],  # noqa: ARG001
+) -> None:
+    member = users[1]
+    own = make_skill(db_session, name="alpha", author_user_id=member.id)
+    db_session.commit()
+    set_skill_enabled_for_user(
+        skill_id=own.id,
+        enabled=True,
+        user=_fresh(db_session, member),
+        db_session=db_session,
+    )
+    db_session.commit()
+
+    fake_github.push(OWNER, REPO, plugin_files("alpha"))
+    company_id = _create(db_session, manager, MarketplaceScope.COMPANY)
+    synced = synced_plugins(db_session, company_id)["alpha"]
+    api.set_marketplace_default_access(
+        company_id,
+        MarketplaceDefaultAccessRequest(
+            installation_policy=PluginInstallationPolicy.REQUIRED
+        ),
+        _fresh(db_session, manager),
+        db_session,
+    )
+
+    states = skill_user_states(
+        _fresh(db_session, member), [synced.id, own.id], db_session
+    )
+    assert states[synced.id] == SkillUserState(
+        enabled=True, can_toggle=False, required=True
+    )
+    assert states[own.id] == SkillUserState(
+        enabled=False, can_toggle=True, name_held_by=("alpha",)
+    )

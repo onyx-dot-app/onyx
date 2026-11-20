@@ -25,12 +25,14 @@ def entry_result(
             path=entry.path,
             status=MarketplaceEntryStatus.BLOCKED,
             reason=entry.reason,
+            reason_code=entry.reason_code,
         )
     return MarketplaceEntryResult(
         key=entry.entry_key,
         path=None,
         status=MarketplaceEntryStatus.NOT_SUPPORTED,
         reason=entry.reason,
+        reason_code=entry.reason_code,
     )
 
 

@@ -58,6 +58,9 @@ Each row shows how many skills the plugin holds.
 The row of a plugin that needs integrations shows how many of them you can use,
 for example **3 of 5 integrations available**. Search by name,
 or use the filter to show only the plugins that are on or off.
+A plugin can be off because a plugin that is on has the same skill name. Its row then names that plugin.
+
+Admins see only the plugins that they can use here. The private plugins of other users are on the admin **Skills** page.
 
 The **Skills** tab lists each skill, and the **Integrations** tab lists each integration with its state.
 
@@ -68,10 +71,14 @@ A tab with nothing to show does not appear.
 
 | Tab | What it shows |
 | --- | --- |
-| **Overview** | The description, the group, the owner, and for an uploaded plugin the version, author, license and the parts that Onyx does not use |
-| **Skills** | The skills of the plugin |
-| **Integrations** | The integrations that an uploaded plugin needs, each with your state and one action |
-| **Versions** | The versions of a plugin that you own or can edit |
+| **Overview** | Whether the plugin is on and why, the description, the group, the owner, and for an uploaded plugin the version in `plugin.json`, the author, the license and the parts that Onyx does not use |
+| **Skills** | The skills of the plugin. Click **Read** to read the instructions of a skill. |
+| **Integrations** | The integrations that an uploaded plugin needs, each with your state and one action. The count in the tab counts only the integrations that Onyx supports. |
+| **Versions** | The versions of a plugin that you own or can edit, with the version in `plugin.json`. Click a version to see its skills and integrations. |
+
+If you own or can edit the plugin, the page header has **Share** and a **...** menu with **Upload New Version**.
+If you can delete the plugin, the menu also has **Delete Plugin**. You can delete a plugin that you added,
+until it is published. Only an admin can delete a published plugin.
 
 A plugin from a marketplace shows **Synced from *owner/repo*** below its title.
 
@@ -91,7 +98,8 @@ The upload shows these parts under **Not used in Onyx**. A plugin with no skill 
   </Step>
 
   <Step title="Choose the plugin">
-    Drop the `.zip` file or the plugin folder, or click to choose it. The plugin must have `.claude-plugin/plugin.json`,
+    Drop the `.zip` file or the plugin folder. You can also click the upload button to choose a `.zip` file,
+    or click **Choose a folder** to choose the plugin folder. The plugin must have `.claude-plugin/plugin.json`,
     `.codex-plugin/plugin.json` or `plugin.json` at the root or in one top-level folder.
   </Step>
 
@@ -114,8 +122,12 @@ The name in `plugin.json` decides where the upload goes. The preview shows the r
 
 | Preview | Result |
 | --- | --- |
-| **Updates *name* to v*n*** | You own or can edit a plugin with the same name. The upload becomes its next version. |
+| **Updates *name* to Onyx version *n*** | You own or can edit a plugin with the same name. The upload becomes its next version. Onyx numbers versions 1, 2, 3. The badge **plugin.json *x.y.z*** is the version that the plugin itself gives. |
 | **New plugin: *name*** | No plugin that you own or can edit has this name. Onyx adds a new plugin to your uploads and turns it on, unless another skill that is on has the name of one of its skills. |
+
+To add a version from the plugin page, click **...** → **Upload New Version**.
+An upload with the same files as the current version adds no version, and Onyx says **No changes**.
+If two uploads of a new plugin run at the same time, the second one becomes a version of the first.
 
 To keep the plugin that has this name as it is, select **Save as a New Plugin**.
 Onyx then saves the upload as a new plugin with the next free name, for example `eng-toolkit-2`.
@@ -137,7 +149,7 @@ The **Integrations** tab of the plugin page shows one state and one action for e
 | **Not signed in** | **Connect** opens the sign-in of the integration. |
 | **No access** | **Ask an admin**. The integration is not shared with you. |
 | **Turned off** | **Turned off by your admin**. |
-| **Not added** | No integration has this URL. If you can add integrations, **Add for your team** opens the **Add an Integration** page with the name and the URL filled in. Other users see **Ask an admin**. |
+| **Not added** | No integration has this URL. If you can add integrations, **Add integration** opens the **Add an Integration** page with the name and the URL filled in. For an admin, the page is the admin page and the owner is the organization. After you click **Add**, Onyx opens the plugin again. Other users see **Ask an admin**. |
 | **More than one match** | More than one integration has this URL, so Onyx cannot choose. Ask an admin. |
 | **Not supported** | **Not supported in Onyx**. The server runs a local command, has no type, has a `${...}` variable in its URL, or has a user name or password in its URL. |
 
@@ -147,8 +159,8 @@ a dialog lists the integrations with their states and actions.
 
 ### Turn a plugin on or off
 
-The plugin page has the **Use this plugin** switch in its header. In the **Plugins** tab,
-a plugin that is off shows **Turn on**, and the row menu has **Turn on** or **Turn off**.
+The plugin page has the **Use this plugin** switch in its header. The **Overview** tab shows whether the plugin is on.
+In the **Plugins** tab, a plugin that is off shows **Turn on**, and the row menu has **Turn on** or **Turn off**.
 The default agent uses only the plugins that you turn on.
 
 | Install setting | The switch |
@@ -158,6 +170,12 @@ The default agent uses only the plugins that you turn on.
 | **Available** | Off until you turn it on. |
 
 An admin sets the install setting of each plugin in the Organization library.
+
+Only one plugin that is on can have a given skill name.
+If you turn on a plugin with a skill name that another plugin uses, a dialog names the plugin that turns off.
+A published plugin keeps its skill name before your own plugins.
+So when an admin publishes a plugin with the name of a skill in your plugin, your plugin turns off,
+and its row and its page name the plugin that holds the skill name.
 
 ## Add a marketplace
 
@@ -195,25 +213,35 @@ Each entry has one state:
 | --- | --- |
 | **Ready** | Onyx adds the entry as a plugin. |
 | **Cannot install** | Onyx cannot add the entry, for example because its folder is missing or its plugin is not valid. The entry shows the reason. |
-| **Not supported** | The entry comes from a source that Onyx does not read, such as npm or a Git host that is not GitHub. The entry names the source or the host. |
+| **Not supported** | The entry comes from a source that Onyx does not read, such as npm or a Git host that is not GitHub, or the plugin has only commands, agents or hooks. The entry says why. |
 
-The confirm step shows the ready entries first. Click **Show N entries that Onyx cannot use** to see the others.
+The confirm step counts the entries in each state and shows the ready entries first.
+Click **Show N entries that Onyx cannot use** to see the others. If you already added the marketplace,
+or your organization already gets it, the confirm step says so and you cannot add it again.
 
 An entry can point to a folder of the same repository, or to another repository on github.com.
 Onyx reads the same plugin parts as for an [upload](#upload-a-plugin).
+A marketplace that syncs without a GitHub connection reads at most 20 other repositories. With a GitHub connection,
+it reads at most 200. Entries past the limit show **Cannot install**,
+and one note above the entries says how to raise the limit.
+
+Without a GitHub connection, GitHub also limits how often Onyx can read it. When GitHub refuses a read,
+Onyx shows when the limit resets. Connect GitHub to raise the limit.
 
 A public repository needs no sign-in. Onyx reads a private repository with your connection of the GitHub integration.
 Connect GitHub in **Customize → Integrations** before you add a private repository.
 
 ### Personal and company marketplaces
 
-A marketplace that you add is personal. Its plugins are yours, and Onyx turns each new plugin on for you.
+A marketplace that you add is personal. Its plugins are yours. Each new plugin starts off.
+Turn on the plugins that you want, one at a time.
 A user with the organization-wide manage plugins permission can also add a company marketplace.
 The confirm step then shows **Marketplace Type** and **Default Access** above the entries.
 You cannot add a source as personal when a company marketplace already has it.
 Each plugin of a company marketplace is available to the organization, as a published plugin is.
-**Default Access** sets its install setting: **Available**, **Installed** or **Not available**.
-A company marketplace cannot make its plugins **Required**. An admin can change the setting of one plugin later.
+**Default Access** sets its install setting: **Available**, **Installed**, **Required** or **Not available**.
+Members cannot turn off a **Required** plugin, and it keeps its skill names before your own plugins.
+An admin can change the setting of one plugin later.
 
 ### Manage your marketplaces
 
@@ -231,7 +259,7 @@ The **...** menu of a row has these actions:
 
 | Action | What it does |
 | --- | --- |
-| **Sync now** | Reads the repository again and applies the changes. If a sync is running, Onyx runs one more sync after it. |
+| **Sync now** | Reads the repository again and applies the changes. It is off while a sync runs. |
 | **Default Access** | Changes the install setting of the plugins of a company marketplace. |
 | **Replace login** | Makes you the login. Onyx reads the repository with your GitHub connection, or without one for a public repository. Use it when the login is gone. If you have not connected GitHub, Onyx warns you that it can read only a public repository. |
 | **Remove** | Deletes the marketplace and its plugins. The dialog names each plugin that it deletes before you confirm. |

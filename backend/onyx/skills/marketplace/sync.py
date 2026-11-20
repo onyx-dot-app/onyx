@@ -26,8 +26,6 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.staging import delete_files_best_effort
 from onyx.integrations.github_auth import github_authorization_for
-from onyx.integrations.plugin_needs import turn_on_needed_integrations__no_commit
-from onyx.integrations.service import reload_craft_sessions
 from onyx.skills.ingest import delete_bundle_blob, store_version_content
 from onyx.skills.ingest_from_github import RepositoryArchive, read_repository_archive
 from onyx.skills.marketplace.compare import plan_marketplace_sync
@@ -36,6 +34,7 @@ from onyx.skills.marketplace.models import (
     CompleteMarketplace,
     GitHubRepoSource,
     MarketplaceRead,
+    MarketplaceReasonCode,
     MarketplaceSyncResult,
     MarketplaceSyncStatus,
     ReadyPlugin,
@@ -44,6 +43,7 @@ from onyx.skills.marketplace.models import (
 )
 from onyx.skills.marketplace.provider import (
     REMOTE_REPOSITORY_MAX_COUNT,
+    REMOTE_REPOSITORY_MAX_COUNT_WITH_LOGIN,
     GitHubMarketplaceAdapter,
     marketplace_config,
 )
@@ -101,20 +101,40 @@ def _resolve_remote_entries(
         if isinstance(entry, ReadyPlugin):
             budget.add(entry)
         resolved[index] = entry
+    with_login = adapter.authorization is not None
+    limit = (
+        REMOTE_REPOSITORY_MAX_COUNT_WITH_LOGIN
+        if with_login
+        else REMOTE_REPOSITORY_MAX_COUNT
+    )
+    past_limit = BlockedPlugin(
+        entry_key="",
+        path=None,
+        reason=(
+            f"Onyx syncs at most {limit} external repositories for one marketplace."
+            if with_login
+            else f"Connect GitHub to sync more than {limit} external repositories."
+        ),
+        reason_code=(
+            MarketplaceReasonCode.EXTERNAL_REPOSITORY_LIMIT
+            if with_login
+            else MarketplaceReasonCode.EXTERNAL_REPOSITORY_LIMIT_WITHOUT_LOGIN
+        ),
+    )
     for count, remote_entries in enumerate(by_repository.values()):
+        if count >= limit:
+            for index, entry in remote_entries:
+                resolved[index] = past_limit.model_copy(
+                    update={"entry_key": entry.entry_key}
+                )
+            continue
         source = remote_entries[0][1].source
+        heartbeat()
         files: RepositoryArchive | str
-        if count >= REMOTE_REPOSITORY_MAX_COUNT:
-            files = (
-                f"Onyx reads at most {REMOTE_REPOSITORY_MAX_COUNT} other "
-                "repositories for one marketplace, and this plugin is past the limit."
-            )
-        else:
-            heartbeat()
-            try:
-                files = adapter.fetch_remote(source)
-            except OnyxError as exc:
-                files = f"{source.owner}/{source.repo}: {exc.detail}"
+        try:
+            files = adapter.fetch_remote(source)
+        except OnyxError as exc:
+            files = f"{source.owner}/{source.repo}: {exc.detail}"
         for index, entry in remote_entries:
             if isinstance(files, str):
                 resolved[index] = BlockedPlugin(
@@ -213,7 +233,6 @@ def sync_marketplace(
         config = marketplace_config(marketplace)
         adapter = GitHubMarketplaceAdapter(config, authorization)
         folder = config.folder
-        owner_user_id = marketplace.owner_user_id
         login_user_id = login_user.id
         login_email = login_user.email
         db_session.expunge(login_user)
@@ -267,17 +286,6 @@ def sync_marketplace(
                 created_by=login,
                 db_session=db_session,
             )
-            owner = (
-                fetch_user_by_id(db_session, owner_user_id)
-                if owner_user_id is not None and result.turned_on_needs
-                else None
-            )
-            integrations_changed = (
-                owner is not None
-                and turn_on_needed_integrations__no_commit(
-                    owner, result.turned_on_needs, db_session
-                )
-            )
             db_session.commit()
     except Exception:
         for content in staged.values():
@@ -287,9 +295,6 @@ def sync_marketplace(
     if result.affected_user_ids:
         with get_session_with_current_tenant() as db_session:
             push_skills_and_commit(result.affected_user_ids, db_session)
-    if integrations_changed and owner_user_id is not None:
-        with get_session_with_current_tenant() as db_session:
-            reload_craft_sessions({owner_user_id}, db_session)
     return result
 
 
@@ -303,10 +308,6 @@ def _queued_key(marketplace_id: UUID) -> str:
 
 def _running_key(marketplace_id: UUID) -> str:
     return f"marketplace_syncing:{marketplace_id}"
-
-
-def _rerun_key(marketplace_id: UUID) -> str:
-    return f"marketplace_sync_rerun:{marketplace_id}"
 
 
 def _lock_heartbeat(marketplace_id: UUID, lock: CacheLock | None) -> Heartbeat:
@@ -349,43 +350,27 @@ def _sync_once(marketplace_id: UUID, lock: CacheLock) -> None:
 
 
 def run_marketplace_sync(marketplace_id: UUID) -> None:
-    """Runs again while a Sync now came in during the run."""
     cache = get_cache_backend()
-    while True:
-        lock = cache.lock(_lock_name(marketplace_id), timeout=SYNC_LOCK_TIMEOUT_SECONDS)
-        if not lock.acquire(blocking=False):
-            return
-        try:
-            cache.delete(_queued_key(marketplace_id))
-            while True:
-                cache.delete(_rerun_key(marketplace_id))
-                cache.set(
-                    _running_key(marketplace_id), b"1", ex=SYNC_LOCK_TIMEOUT_SECONDS
-                )
-                _sync_once(marketplace_id, lock)
-                if not lock.owned() or not cache.exists(_rerun_key(marketplace_id)):
-                    break
-        finally:
-            # Only the lock owner clears the flag; a newer run may own it now.
-            if lock.owned():
-                cache.delete(_running_key(marketplace_id))
-                lock.release()
-        if not cache.exists(_rerun_key(marketplace_id)):
-            return
+    lock = cache.lock(_lock_name(marketplace_id), timeout=SYNC_LOCK_TIMEOUT_SECONDS)
+    if not lock.acquire(blocking=False):
+        return
+    try:
+        cache.delete(_queued_key(marketplace_id))
+        cache.set(_running_key(marketplace_id), b"1", ex=SYNC_LOCK_TIMEOUT_SECONDS)
+        _sync_once(marketplace_id, lock)
+    finally:
+        # Only the lock owner clears the flag; a newer run may own it now.
+        if lock.owned():
+            cache.delete(_running_key(marketplace_id))
+            lock.release()
 
 
 def request_marketplace_sync(
     marketplace_id: UUID, background_tasks: BackgroundTasks
 ) -> None:
-    """A request during a run makes the run sync once more when it ends."""
-    cache = get_cache_backend()
-    if cache.exists(_queued_key(marketplace_id)):
+    """A request while a sync is queued or running does nothing."""
+    if marketplace_syncing(marketplace_id):
         return
-    if cache.exists(_running_key(marketplace_id)):
-        cache.set(_rerun_key(marketplace_id), b"1", ex=SYNC_TASK_EXPIRES_SECONDS)
-        # The run may have ended before it saw the request.
-        if cache.exists(_running_key(marketplace_id)):
-            return
     enqueue_marketplace_sync(marketplace_id, background_tasks)
 
 

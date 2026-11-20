@@ -112,6 +112,11 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
   );
   const skill = props.mode === "create" ? props.draft : loadedSkill;
   const t = useTranslations("skills.modals");
+  // A plugin gets the same text with "plugin" for "skill".
+  const shareCopy =
+    loadedSkill?.kind === "plugin"
+      ? ("share.plugin" as const)
+      : ("share" as const);
   const skillCopy = useTranslations("skills");
   const permissionOptions = useSharePermissionOptions();
   const scopeOptions = useShareScopeOptions();
@@ -466,7 +471,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
             <ShareAccessRow
               icon={SvgOrganization}
               title={t("share.published.title")}
-              description={t("share.published.description")}
+              description={t(`${shareCopy}.published.description`)}
               rightChildren={
                 viewerLabel ? (
                   <StaticPermissionLabel
@@ -508,7 +513,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
               outerPadding={1}
               innerPadding={1}
               title={t("share.publishOff.title")}
-              description={t("share.publishOff.description")}
+              description={t(`${shareCopy}.publishOff.description`)}
             />
           )}
           {isPublishing && publishAction !== "off" && (
@@ -519,8 +524,8 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
               title={t("share.publishWarning.title")}
               description={
                 publishAction === "review"
-                  ? t("share.publishWarning.reviewDescription")
-                  : t("share.publishWarning.description")
+                  ? t(`${shareCopy}.publishWarning.reviewDescription`)
+                  : t(`${shareCopy}.publishWarning.description`)
               }
             />
           )}
@@ -531,7 +536,7 @@ export default function ShareSkillModal(props: ShareSkillModalProps) {
             <Content
               font="main-ui-action"
               title={t("share.installation.title")}
-              description={t("share.installation.description")}
+              description={t(`${shareCopy}.installation.description`)}
             />
             <InputSingleSelect
               placeholder={t("share.installation.title")}

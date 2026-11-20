@@ -10418,7 +10418,8 @@
             "public": "找到 {count, plural, one {# 个工具} other {# 个工具}}。该服务器无需登录。",
             "oauth": "该服务器使用 OAuth 登录。",
             "authUnknown": "该服务器需要登录。请添加 API 密钥请求头或 OAuth。",
-            "unreachable": "Onyx 无法访问此服务器。请检查 URL。"
+            "unreachable": "Onyx 无法访问此服务器。请检查 URL。",
+            "forbidden": "只有管理员可以在添加前检查此服务器。您仍然可以添加它。"
           },
           "transport": {
             "title": "传输方式",
@@ -16454,15 +16455,15 @@
         }
       },
       "importGithub": {
-        "sharing": {
-          "configureButton": "配置访问权限"
-        },
         "doneButton": {
           "label": "完成"
         },
         "submitButton": {
-          "importingLabel": "正在导入…",
-          "importLabel": "{count, plural, one {导入技能} other {导入 # 个技能}}"
+          "importLabel": "{count, plural, one {导入技能} other {导入 # 个技能}}",
+          "importingLabel": "正在导入…"
+        },
+        "sharing": {
+          "configureButton": "配置访问权限"
         }
       },
       "nameConflict": {
@@ -16579,6 +16580,21 @@
           "remove": "移除 {name}",
           "shared": "已与此群组共享",
           "settingOnly": "仅群组设置"
+        },
+        "plugin": {
+          "installation": {
+            "description": "选择如何为所有有权访问的人安装此插件。"
+          },
+          "published": {
+            "description": "已发布。组织中的所有人都可以使用此插件。"
+          },
+          "publishWarning": {
+            "description": "保存后，组织中的所有人都可以使用此插件。您无法再将其设为私有。只有管理员可以删除它。",
+            "reviewDescription": "在管理员批准请求之前，插件保持私有。批准后，您无法再将其设为私有。"
+          },
+          "publishOff": {
+            "description": "管理员已关闭向组织发布。请让管理员发布此插件。"
+          }
         }
       },
       "placeholders": {
@@ -16594,7 +16610,8 @@
         "columns": {
           "version": "版本",
           "madeBy": "创建者",
-          "date": "日期"
+          "date": "日期",
+          "manifestVersion": "plugin.json"
         },
         "versionLabel": "版本 {number}",
         "currentBadge": "当前",
@@ -16617,7 +16634,9 @@
           "back": "所有版本",
           "loadError": {
             "title": "无法加载此版本"
-          }
+          },
+          "skills": "技能 · {count}",
+          "integrations": "集成 · {count}"
         },
         "status": {
           "pending": "待审核",
@@ -16630,6 +16649,8 @@
           "sentForReviewToast": "版本 {number} 已提交给管理员审核。",
           "offNotice": "发布已关闭。请让管理员发布此更新。"
         },
+        "noManifestVersion": "无",
+        "manifestVersion": "plugin.json {version}",
         "locked": "此插件从 GitHub 同步，因此请在 GitHub 中更改。"
       }
     },
@@ -16679,10 +16700,12 @@
         "body": "继续操作将停用当前启用的技能并启用此技能。",
         "description": "同名技能“{name}”一次只能启用一个。",
         "submit": {
-          "label": "切换技能",
+          "label": "切换",
           "pendingLabel": "正在切换..."
         },
-        "title": "切换技能“{name}”？"
+        "title": "要开启“{name}”吗？",
+        "descriptionNamed": "{names} 已在使用“{name}”也使用的技能名称。同一时间只能开启其中一个。",
+        "bodyNamed": "开启“{name}”会关闭 {names}。"
       },
       "toasts": {
         "disableFailed": "停用 {name} 失败",
@@ -16704,6 +16727,9 @@
         },
         "upload": {
           "label": "拖放文件或点击上传"
+        },
+        "chooseFolder": {
+          "label": "选择文件夹"
         }
       },
       "filesPicker": {
@@ -16891,7 +16917,7 @@
           "owner": "所有者",
           "skills": "技能",
           "description": "描述",
-          "version": "版本",
+          "version": "plugin.json 中的版本",
           "author": "作者",
           "homepage": "主页",
           "license": "许可证",
@@ -16900,15 +16926,35 @@
         },
         "skills": {
           "off": "已关闭",
-          "invalid": "无效"
+          "invalid": "无效",
+          "read": "阅读",
+          "readAriaLabel": "阅读技能 {name}",
+          "readFailed": "无法读取此技能。",
+          "noInstructions": "此技能没有说明。"
         },
         "switch": {
           "title": "使用此插件",
-          "description": "开启后，默认智能体可以使用此插件。",
           "label": "使用 {name}",
           "required": "管理员已将此插件设为必需。你无法将其关闭。",
           "unavailable": "你无法开启或关闭此插件。",
-          "failed": "无法更改插件。"
+          "failed": "无法更改插件。",
+          "on": "已开启。默认智能体可以使用此插件。",
+          "off": "已关闭。开启后，默认智能体即可使用此插件。",
+          "nameHeld": "已关闭，因为 {names} 使用了相同的技能名称。开启此插件即可改用它。"
+        },
+        "actions": {
+          "share": "分享",
+          "menu": "更多操作",
+          "uploadVersion": "上传新版本",
+          "remove": "删除插件"
+        },
+        "remove": {
+          "entityType": "插件",
+          "description": "所有使用此插件的人都将失去它。此操作无法撤销。",
+          "submit": "删除",
+          "pending": "正在删除…",
+          "done": "已删除 {name}。",
+          "failed": "无法删除插件。"
         },
         "syncedFrom": "同步自 {repository}",
         "managed": {
@@ -17062,7 +17108,7 @@
         "description": "它没有 plugin.json。继续以将其添加为技能。",
         "continue": "继续"
       },
-      "version": "v{version}",
+      "version": "plugin.json {version}",
       "target": {
         "newVersion": "将 {name} 更新为 Onyx 版本 {version}",
         "newPlugin": "新插件：{name}"
@@ -17134,7 +17180,8 @@
         "willInstall": "将安装",
         "skills": "{count, plural, one {技能} other {技能}}：{names}",
         "showUnusable": "{count, plural, one {显示 # 个 Onyx 无法使用的条目} other {显示 # 个 Onyx 无法使用的条目}}",
-        "hideUnusable": "隐藏 Onyx 无法使用的条目"
+        "hideUnusable": "隐藏 Onyx 无法使用的条目",
+        "summary": "就绪 {ready} · 无法安装 {blocked} · 不支持 {unsupported}"
       },
       "add": {
         "menuItem": "添加市场",
@@ -17175,7 +17222,11 @@
         "cancel": "取消",
         "previewFailed": "无法读取仓库。",
         "addFailed": "无法添加市场。",
-        "added": "已添加 {name}。其插件会在首次同步后显示。"
+        "added": "已添加 {name}。其插件会在首次同步后显示。",
+        "duplicate": {
+          "personal": "你已添加此市场。",
+          "company": "你的组织已经在使用此市场。"
+        }
       },
       "sync": {
         "now": "立即同步",
@@ -17244,14 +17295,25 @@
         "description": "此市场的来源、同步和条目。",
         "loadFailed": "无法加载市场。",
         "scope": "类型",
-        "login": "GitHub 登录",
+        "login": "同步身份",
         "noLogin": "无。请替换登录以再次同步。",
         "lastSync": "上次同步",
         "entries": "条目（{count}）",
         "noEntries": "上次同步未发现条目。",
         "close": "关闭"
       },
-      "readOnly": "您的管理员管理此市场。"
+      "readOnly": "您的管理员管理此市场。",
+      "reason": {
+        "skills_and_mcp_only": "Onyx 只运行技能和 MCP 服务器。",
+        "pastLimit": "Onyx 没有读取此仓库。",
+        "external_repository_limit": "Onyx 每个市场最多同步 {limit} 个外部仓库。",
+        "external_repository_limit_without_login": "连接 GitHub 以同步超过 {limit} 个外部仓库。",
+        "limitTitle": "部分插件来自 Onyx 未读取的仓库"
+      },
+      "errors": {
+        "rateLimited": "已达到 GitHub API 速率限制。请几分钟后重试。连接 GitHub 可提高限制。",
+        "rateLimitedUntil": "已达到 GitHub API 速率限制。将在 {time} 重置。连接 GitHub 可提高限制。"
+      }
     }
   },
   "integrations": {
@@ -17419,14 +17481,16 @@
       },
       "empty": {
         "title": "还没有插件",
-        "description": "上传插件、从 GitHub 添加市场，或创建技能。每个技能都是一个插件。"
+        "description": "上传插件、从 GitHub 添加市场，或创建技能。每个技能都是一个插件。",
+        "upload": "上传插件"
       },
       "noMatches": {
         "title": "没有匹配的插件",
         "clear": "显示所有插件"
       },
       "intro": "插件打包了技能及其所需的集成。上传 Claude Code 或 Codex 插件、从 GitHub 添加市场，或添加技能。您添加的每个技能都在其自己的插件中。",
-      "integrations": "{needed} 个集成中有 {available} 个可用"
+      "integrations": "{needed} 个集成中有 {available} 个可用",
+      "nameHeld": "已关闭：{names} 使用了相同的技能名称"
     },
     "skillPage": {
       "title": "技能",

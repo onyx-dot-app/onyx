@@ -613,7 +613,10 @@ the app from the same rule
     (`skills/push.py:push_skills_and_commit`). A marketplace default (the
     Organization library or a company GitHub marketplace) is written by
     `db/plugin.py:set_marketplace_default__no_commit`, which refuses
-    `REQUIRED` and returns the users of the plugins that follow it. EDIT on a skill is not enough
+    `REQUIRED` only for the Organization library (a company marketplace can be
+    Required, as in Claude) and returns the users of the plugins that follow
+    it. A Required plugin keeps its skill names first; the plugin that loses
+    one shows `name_held_by` (see the name order above). EDIT on a skill is not enough
     to change its groups: any
     change to the group set or levels is a `MANAGE_PLUGINS` action within scope
     (`auth/scoped_permissions.py:assert_within_scope`, [[authorization]]).
@@ -806,8 +809,10 @@ the app from the same rule
     another skill gets 404. `review_status` is derived from the plugin
     pointers: `published`, `pending` or `draft`. Restore needs
     `base_version_id` (409 `PLUGIN_VERSION_STALE`) and saves through the
-    editor save path, so equal files add no version. UI:
-    `web/src/sections/modals/skills/SkillVersionsTab.tsx`.
+    editor save path, so equal files add no version. The list gives the
+    plugin.json version (`manifest_version`) of a plugin version. UI:
+    `web/src/sections/modals/skills/SkillVersionsTab.tsx`; a plugin version
+    preview shows its skills and needs.
 23. `publishing-review` **The Publishing setting governs every publish by
     authors.** Only the author or global `MANAGE_PLUGINS` publishes
     (`db/skill.py:ensure_can_edit_org_visibility`); an editor saves versions
@@ -875,11 +880,20 @@ the app from the same rule
     plugin with the same name that the user edits and that is not a skill:
     the user's uploads first, then another user's uploads shared as EDITOR,
     then the Organization library (`db/plugin.py:find_upload_target`);
-    `save_as_new` makes a new plugin with the next free name. A new version
+    `save_as_new` makes a new plugin with the next free name. The save stores
+    the bundle, then takes the user row lock and finds the target under it, so
+    two uploads of one new name make one plugin with two versions. A new version
     keeps shares, publishing and user choices. An upload with the files of
     the current version adds no version and returns `unchanged`. A new plugin
     with a skill name that another plugin the user runs holds is saved off;
-    the preview and the save name those plugins (`name_conflicts`). The description is the plugin.json description of the version
+    the preview and the save name those plugins (`name_conflicts`). A plugin
+    the user turned on that loses a skill name gets `name_held_by`, the
+    plugins that hold it (`db/skill.py:skill_user_states`); a 409
+    `SKILL_NAME_CONFLICT` on a turn-on has `conflict_names`.
+    `GET /skills/{id}/plugin-skill?path=` returns one skill's SKILL.md
+    instructions in the version the user runs. `GET /skills` marks each custom
+    skill `member_visible`: false for one a global `MANAGE_PLUGINS` user sees
+    only through that permission; the Customize lists leave those out. The description is the plugin.json description of the version
     the user runs (`db/plugin_access.py:load_plugin_access`), so a draft
     version does not show to the users who run the published one. Version
     preview and restore take a plugin version too: the preview adds `files`
@@ -967,13 +981,23 @@ the app from the same rule
     A running sync extends the lock and the key between steps (read, each
     other repository, each staged bundle, apply) and stops after 30 minutes,
     so a killed worker frees the marketplace within 5 minutes.
-    `request_marketplace_sync` sends no task while one is queued; during a run
-    it sets `marketplace_sync_rerun:{id}`, and the run syncs once more before
-    it ends. A sync whose lock expired writes nothing. A folder URL
+    `request_marketplace_sync` does nothing while `marketplace_syncing` is
+    true, and the web turns Sync now off then. A sync whose lock expired writes nothing. A folder URL
     (`.../tree/<ref>/<folder>`) and `github.com/owner/repo` fill the ref and
     the folder. A personal add of a source that a company marketplace has is
     refused with CONFLICT. A missing branch and a missing repository give
-    their own `last_error`. `GitHubMarketplaceConfig` lowercases owner and repo, so the
+    their own `last_error`. Remote entries read at most `REMOTE_REPOSITORY_MAX_COUNT` (20) other
+    repositories without a GitHub login and
+    `REMOTE_REPOSITORY_MAX_COUNT_WITH_LOGIN` (200) with one
+    (`skills/marketplace/provider.py`); entries past it are blocked with a
+    `MarketplaceReasonCode`, and the web shows one note for them. A plugin
+    with only commands, agents or hooks is not supported with
+    `SKILLS_AND_MCP_ONLY`. The web translates `reason_code` and keeps
+    `reason` as the fallback (`lib/marketplaces/hooks.ts:useMarketplaceCopy`).
+    `utils/github.py:github_rate_limited` puts GitHub's reset time in the
+    error (`reset_at`), and a 422 for a ref that names no commit counts as
+    not found. The preview says when the caller or the company already has
+    the source (`db/marketplace.py:source_added_for`). `GitHubMarketplaceConfig` lowercases owner and repo, so the
     unique indexes catch a duplicate that differs only in case. Every JSON
     read in `skills/marketplace/reader.py` turns a `RecursionError` into a
     blocked entry or a failed read. Replace login needs no GitHub
@@ -982,9 +1006,8 @@ the app from the same rule
     in the API server after the response. Company plugins have no author and
     `published_version_id` follows each version;
     `db/plugin_access.py:seen_by_organization` makes the organization see
-    them. A personal plugin belongs to the marketplace owner and turns on for
-    the owner unless the skill limit refuses it; the sync then turns on the
-    owner's connected integrations that the plugin needs, as an upload does. `db/plugin.py:refuse_if_synced`
+    them. A personal plugin belongs to the marketplace owner and starts off, as
+    in Claude; the owner turns plugins on one at a time. `db/plugin.py:refuse_if_synced`
     refuses content edits, uploads, restores, publishing, ownership transfer
     and delete of a synced plugin with "Change this plugin in GitHub.". A
     company plugin's shares and install settings still change. A personal

@@ -19,7 +19,9 @@ from onyx.utils.github import (
     resolve_github_revision,
 )
 
+# Without a GitHub login, each read counts against GitHub's anonymous limit.
 REMOTE_REPOSITORY_MAX_COUNT: Final = 20
+REMOTE_REPOSITORY_MAX_COUNT_WITH_LOGIN: Final = 200
 
 
 class GitHubMarketplaceAdapter:

@@ -6,18 +6,13 @@ import { Button, Dropdown, type DropdownMenuItem } from "@opal/components";
 import { SvgEdit, SvgPlus, SvgSettings, SvgUploadCloud } from "@opal/icons";
 import { SvgGitHub } from "@opal/logos";
 import { useNavigation } from "@opal/navigation";
-import { toast } from "@opal/layouts";
-import {
-  MARKETPLACES_PATH,
-  newSkillHref,
-  pluginHref,
-} from "@/lib/customize/paths";
+import { MARKETPLACES_PATH, newSkillHref } from "@/lib/customize/paths";
 import { useMarketplaceAdded } from "@/lib/marketplaces/hooks";
 import { stageSkillCreationDraft } from "@/lib/skills/creationDraft";
 import { useRefreshSkillLists } from "@/lib/skills/hooks";
 import CreateSkillModal from "@/sections/modals/skills/CreateSkillModal";
 import AddMarketplaceModal from "@/sections/marketplaces/AddMarketplaceModal";
-import UploadPluginModal from "@/sections/modals/plugins/UploadPluginModal";
+import UploadPluginFlow from "@/sections/modals/plugins/UploadPluginFlow";
 
 interface AddSkillMenuProps {
   upload?: "skill" | "plugin";
@@ -25,7 +20,6 @@ interface AddSkillMenuProps {
 
 export default function AddSkillMenu({ upload = "skill" }: AddSkillMenuProps) {
   const t = useTranslations("customize.skills.add");
-  const uploadCopy = useTranslations("plugins.upload");
   const navigation = useNavigation();
   const revalidate = useRefreshSkillLists();
   const [uploadOpen, setUploadOpen] = useState(false);
@@ -91,43 +85,9 @@ export default function AddSkillMenu({ upload = "skill" }: AddSkillMenuProps) {
           navigation.go(newSkillHref(stageSkillCreationDraft(draft)));
         }}
       />
-      <UploadPluginModal
+      <UploadPluginFlow
         open={pluginUploadOpen}
         onClose={() => setPluginUploadOpen(false)}
-        onContinueSkill={(draft) => {
-          setPluginUploadOpen(false);
-          navigation.go(newSkillHref(stageSkillCreationDraft(draft)));
-        }}
-        onSaved={(
-          { target, plugin, unchanged, name_conflicts },
-          needsAttention
-        ) => {
-          setPluginUploadOpen(false);
-          revalidate();
-          const values = {
-            name: target.plugin_name,
-            version: target.version_number,
-          };
-          if (unchanged) {
-            toast.info(uploadCopy("saved.unchanged", values));
-          } else if (name_conflicts.length > 0) {
-            toast.warning(
-              uploadCopy("saved.off", {
-                ...values,
-                names: name_conflicts.join(", "),
-              })
-            );
-          } else {
-            toast.success(
-              target.kind === "new_version"
-                ? uploadCopy("saved.newVersion", values)
-                : uploadCopy("saved.newPlugin", values)
-            );
-          }
-          navigation.go(
-            pluginHref(plugin.id, needsAttention ? "integrations" : undefined)
-          );
-        }}
       />
       <AddMarketplaceModal
         open={marketplaceOpen}
