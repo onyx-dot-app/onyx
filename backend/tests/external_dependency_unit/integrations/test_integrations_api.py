@@ -370,7 +370,10 @@ def test_create_preset_keeps_client_and_host_on_the_oauth_client(
     assert oauth_client.additional_params == {"subdomain": "acme"}
     app = get_external_app_for_integration(detail.id, db_session)
     assert app is not None
-    assert app.organization_credentials.get_value(apply_mask=False) == {}
+    stored = db_session.scalar(
+        select(ExternalApp.organization_credentials).where(ExternalApp.id == app.id)
+    )
+    assert stored is not None and stored.get_value(apply_mask=False) == {}
     assert any("acme" in pattern for pattern in app.upstream_url_patterns)
     assert len(list_integration_actions(detail.id, db_session)) > 0
 
