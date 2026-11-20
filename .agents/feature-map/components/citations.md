@@ -222,10 +222,11 @@ of only markers stays empty.
    digit runs and the `【】` and `［］` brackets. Do not nest unbounded
    quantifiers. The comment above `possible_citation_pattern` explains the
    exponential backtracking risk.
-10. `partial-link-hidden` **`processContent` hides a partial link at the end of
-    the text.**
-    `web/src/app/app/message/messageComponents/markdownUtils.tsx:processContent`
-    strips a trailing incomplete `[[n]](url`, so a broken link does not flash
+10. `partial-link-hidden` **`stripPartialCitations` hides a partial link at the
+    end of the text.**
+    `web/src/app/app/message/messageComponents/markdownUtils.tsx:stripPartialCitations`
+    (chat answers call it directly; `processContent` calls it for the other
+    renderers) strips a trailing incomplete `[[n]](url`, so a broken link does not flash
     during streaming. A citation that never completes because of a backend bug
     looks the same as one that is still streaming.
 11. `code-block-markers-skipped` **A marker inside a fenced code block is not a
