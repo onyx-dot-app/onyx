@@ -365,7 +365,20 @@ Harness sandboxes (the agent harness runs outside the sandbox):
   daemon confines to its onyx root with no session: the call wakes the VM but
   restores no session, and session saves never include the path. They refuse
   every other path outside the session directory. `publish_files` reads
-  through `read_file`.
+  through `read_file`. `render_first_page` draws a JPEG of the first page of a
+  `.pdf`, `.pptx` or `.docx` at a path that `read_file` accepts (a
+  session path or one under `ONYX_VM_FILES_ROOT`, through `_file_target`)
+  with the root drive's poppler and LibreOffice, as typed argv execs
+  (`daemon.run`, no shell) in a scratch directory under
+  `ONYX_VM_FILES_ROOT/renders` that it deletes, by the caller's deadline
+  (`publish_files` gives all renders of a call one 30 s budget, which starts
+  once the call has its sandbox). It returns
+  None on any failure; a cancel, or a step that ends without a result (a
+  broken stream), kills the running step before the delete. LibreOffice runs
+  without the AF_UNIX shim of
+  `backend/onyx/skills/builtin/pptx/scripts/office/soffice.py`: the guest
+  allows AF_UNIX sockets, and `deployment/craft-runtime/check-kvm.sh` runs
+  the runtime smoke test's `soffice` conversion in a real VM.
   Each chat session works in `SESSION_WORKSPACE_ROOT/<session_id>`
   (`/home/onyx/workspaces`); file calls take paths by
   `session_relative_path`. For a missing file, `read_file` raises

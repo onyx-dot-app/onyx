@@ -3,8 +3,9 @@ the chat file copies (file_copies.py). The saved-details unions import it,
 so it imports only models and constants."""
 
 from typing import Annotated, Literal
+from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, computed_field
 
 from onyx.server.features.build.sandbox.exec_output import (
     EXEC_DEFAULT_YIELD_MS,
@@ -15,7 +16,10 @@ from onyx.server.features.build.sandbox.exec_output import (
     WRITE_STDIN_DEFAULT_YIELD_MS,
     WRITE_STDIN_MAX_YIELD_MS,
 )
-from onyx.server.features.build.sandbox.models import ExecCompletionName
+from onyx.server.features.build.sandbox.models import (
+    SESSION_WORKSPACE_ROOT,
+    ExecCompletionName,
+)
 from onyx.tools.constants import DEFAULT_MAX_OUTPUT_CHARS, MAX_OUTPUT_CHARS_DESCRIPTION
 from onyx.utils.pydantic_util import OMITTED_WHEN_NONE
 
@@ -159,6 +163,8 @@ class ApplyPatchResult(BaseModel):
 PUBLISH_FILES_MAX_BYTES = 100 << 20
 # Most files that one publish_files call publishes.
 PUBLISH_FILES_MAX_FILES = 20
+# Longest title that publish_files keeps; it cuts a longer one.
+PUBLISH_FILES_MAX_TITLE_CHARS = 200
 
 
 class PublishFileArgument(BaseModel):
@@ -191,14 +197,39 @@ class PublishedFile(BaseModel):
     """A file that publish_files copied from the VM to the file store."""
 
     file_id: str
-    # The file name, which the download keeps. Publishes of one name are
-    # versions of one file.
+    # The chat's artifact at this path and this file's version of it, from 1.
+    # Details saved without them have neither; such a file is an artifact of
+    # its own.
+    artifact_id: UUID | None = None
+    version: int | None = None
+    # The file name, which the download keeps.
     name: str
     title: str | None = None
     # Absolute and normalized.
     path: str
     size: int
     mime_type: str
+    # A JPEG of the file's first page, for a PDF, PowerPoint or Word file
+    # that rendered; it downloads from /chat/file/{thumbnail_file_id}.
+    thumbnail_file_id: str | None = None
+
+
+class PublishedFileView(PublishedFile):
+    """A published file as clients get it, in packets and the session load:
+    with the path to show. Saved details keep the plain `PublishedFile`."""
+
+    @computed_field
+    @property
+    def display_path(self) -> str:
+        """The path to show: relative to the working directory of the chat
+        that published the file, or the whole path outside it. publish_files
+        accepts only that chat's working directory under
+        SESSION_WORKSPACE_ROOT."""
+        workspaces = f"{SESSION_WORKSPACE_ROOT}/"
+        if not self.path.startswith(workspaces):
+            return self.path
+        _, _, relative = self.path.removeprefix(workspaces).partition("/")
+        return relative or self.path
 
 
 class PublishedFiles(BaseModel):

@@ -93,6 +93,7 @@ from onyx.tools.tool_implementations.sandbox.models import (
     ApplyPatchResult,
     FileToolName,
     PublishedFiles,
+    PublishedFileView,
     SandboxExecResult,
     SpilledOutput,
     WriteStdinArguments,
@@ -1066,7 +1067,12 @@ class ToolRenderer:
             obj = packets.ApplyPatchEnd(files=details.files)
         elif isinstance(details, PublishedFiles):
             self._last_details = details
-            obj = packets.PublishFilesEnd(files=details.files)
+            obj = packets.PublishFilesEnd(
+                files=[
+                    PublishedFileView.model_validate(file.model_dump())
+                    for file in details.files
+                ]
+            )
         else:
             self._last_details = details
             obj = packets.ExecEnd(
