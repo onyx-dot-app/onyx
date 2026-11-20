@@ -24,11 +24,13 @@ from onyx.connectors.models import (
 )
 from onyx.connectors.sharepoint.connector import (
     DriveItemData,
+    FolderCursor,
     SharepointConnector,
     SharepointConnectorCheckpoint,
     SiteDescriptor,
     SiteDrive,
 )
+from onyx.connectors.sharepoint.models import DriveChildrenPage
 from onyx.connectors.sharepoint.source_operations import SharepointSourceOperations
 from tests.unit.onyx.connectors.sharepoint.sharepoint_gateway_fakes import (
     connector_with_gateway,
@@ -606,3 +608,50 @@ class TestSitePagesPerPageFailure:
             "p1",
             "p2",
         }
+
+
+def test_a_next_page_of_a_deleted_folder_is_skipped() -> None:
+    """A folder deleted between two pages of its children answers 404 on
+    the next page. The walk skips it and keeps the other folders."""
+    connector = _setup_connector()
+    drive = SiteDrive(
+        drive_id=DRIVE_ID,
+        list_id="fake-list-id",
+        display_name=DRIVE_NAME,
+        web_url=DRIVE_WEB_URL,
+    )
+    first_page = DriveChildrenPage(
+        files=[_make_item("f1")], folder_ids=[], next_link="next-of-gone"
+    )
+
+    def get_children_page(
+        *,
+        drive_id: str,  # noqa: ARG001
+        folder_id: str | None = None,
+        next_link: str | None = None,
+        start: datetime | None = None,  # noqa: ARG001
+        end: datetime | None = None,  # noqa: ARG001
+    ) -> DriveChildrenPage:
+        if next_link == "next-of-gone":
+            raise MicrosoftGraphError(404, "itemNotFound", "The item is gone.")
+        if folder_id == "gone":
+            return first_page
+        return DriveChildrenPage(files=[_make_item("f2")], folder_ids=[])
+
+    stub_operation(connector.ops, "get_children_page", get_children_page)
+    checkpoint = SharepointConnectorCheckpoint(has_more=True)
+    checkpoint.full_pass_folders = [FolderCursor(folder_id="gone")]
+    start = datetime.fromtimestamp(_EPOCH_START, tz=timezone.utc)
+    end = datetime.fromtimestamp(_END_TS, tz=timezone.utc)
+
+    files = connector._read_full_pass_folders(checkpoint, drive, start, end)
+    assert [f.id for f in files] == ["f1"]
+    assert checkpoint.full_pass_folders == [
+        FolderCursor(folder_id="gone", next_link="next-of-gone")
+    ]
+
+    checkpoint.full_pass_folders.append(FolderCursor(folder_id="other"))
+    files = connector._read_full_pass_folders(checkpoint, drive, start, end)
+    assert [f.id for f in files] == ["f2"]
+    assert checkpoint.full_pass_folders is None
+    assert checkpoint.full_pass_catching_up is True

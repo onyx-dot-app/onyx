@@ -239,7 +239,8 @@ def _drives_matching_url_name(
 class FolderCursor(BaseModel):
     """One children page that a full pass of a drive must still read: the
     first page of a folder (the drive root when ``folder_id`` is None), or
-    the page behind ``next_link``."""
+    the page behind ``next_link``. A next page keeps the id of its folder,
+    so a 404 for a folder deleted during the walk is skipped on any page."""
 
     folder_id: str | None = None
     next_link: str | None = None
@@ -1954,10 +1955,12 @@ class SharepointConnector(
         )
         remaining = folders[: len(folders) - len(batch)]
         files: list[DriveItemData] = []
-        for page in pages:
+        for cursor, page in zip(batch, pages, strict=True):
             files.extend(page.files)
             if page.next_link:
-                remaining.append(FolderCursor(next_link=page.next_link))
+                remaining.append(
+                    FolderCursor(folder_id=cursor.folder_id, next_link=page.next_link)
+                )
             remaining.extend(
                 FolderCursor(folder_id=folder_id) for folder_id in page.folder_ids
             )
