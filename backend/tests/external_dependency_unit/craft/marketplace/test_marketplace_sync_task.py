@@ -141,6 +141,25 @@ def test_sync_now_sends_one_task_until_it_runs(
     assert send_task.call_args.kwargs["kwargs"]["marketplace_id"] == str(marketplace.id)
 
 
+def test_a_task_that_finds_a_sync_running_clears_its_marker(
+    db_session: Session,
+    users: tuple[User, User, User],
+    marketplace_ids: list[Any],
+) -> None:
+    owner = users[0]
+    marketplace = make_marketplace(
+        db_session, marketplace_ids, login=owner, owner=owner
+    )
+    cache = get_cache_backend()
+    cache.set(f"marketplace_sync_queued:{marketplace.id}", b"1", ex=60)
+    lock = _hold_lock(marketplace.id)
+    try:
+        sync.run_marketplace_sync(marketplace.id)
+    finally:
+        lock.release()
+    assert not cache.exists(f"marketplace_sync_queued:{marketplace.id}")
+
+
 def test_two_sync_requests_at_once_send_one_task(
     db_session: Session,
     users: tuple[User, User, User],
