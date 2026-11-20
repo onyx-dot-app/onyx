@@ -139,6 +139,9 @@ def test_a_retry_after_pauses_a_second_connector_on_the_app(
             assert time.monotonic() < deadline, "no shared pause was set"
             time.sleep(0.05)  # test-flakes: allow the test polls the mock and Redis
         throttled_at = time.monotonic()
+        # Read after throttled_at, so it is never more than the pause that
+        # is left at that time.
+        pause_left = _shared_pause_left(limiter_tenant)
         # The first connector stops. The second one calls while the pause
         # is still on.
         first_stop.set()
@@ -153,9 +156,9 @@ def test_a_retry_after_pauses_a_second_connector_on_the_app(
 
     assert site_urls
     # The second connector's first call started in the pause and waited for
-    # its end.
+    # its end. 0.1 s covers the clock of Redis against the local clock.
     assert started - throttled_at < _RETRY_AFTER_SECONDS / 2
-    assert ended - throttled_at >= _RETRY_AFTER_SECONDS - 0.5
+    assert ended - throttled_at >= pause_left - 0.1
     stats = own_mock_sharepoint.stats()
     assert stats["throttled"] >= 1
     assert stats["calls_during_pause_total"] == 0
