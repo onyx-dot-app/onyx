@@ -15,7 +15,10 @@ STATUS_URL = f"{API_SERVER_URL}/admin/service-status/opensearch"
 )
 class TestServiceStatus:
     def test_admin_reads_the_cluster_status(self, admin_user: DATestUser) -> None:
-        response = client.get(STATUS_URL, headers=admin_user.headers)
+        # A fresh read, so the shared result cannot expire before the second read.
+        response = client.get(
+            STATUS_URL, params={"refresh": "true"}, headers=admin_user.headers
+        )
         assert response.status_code == 200
         status = response.json()
         assert status["health"] in {"green", "yellow", "red"}

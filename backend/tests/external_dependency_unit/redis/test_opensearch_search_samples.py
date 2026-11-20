@@ -19,10 +19,12 @@ from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.document_index.opensearch import search_samples
 from onyx.document_index.opensearch.constants import OpenSearchSearchType
-from onyx.document_index.opensearch.search_samples import (
+from onyx.document_index.opensearch.models import (
     SearchActivity,
     SearchResult,
     SearchSample,
+)
+from onyx.document_index.opensearch.search_samples import (
     flush_search_samples,
     read_search_activity,
     record_search_sample,
@@ -43,6 +45,8 @@ def cache(monkeypatch: pytest.MonkeyPatch) -> Generator[CacheBackend, None, None
     backend = RedisCacheBackend(redis)
     monkeypatch.setattr(search_samples, "get_shared_cache_backend", lambda: backend)
     monkeypatch.setattr(search_samples, "RECORDING_ENABLED", True)
+    # The tests flush by hand; a background flusher would outlive them.
+    monkeypatch.setattr(search_samples, "_start_flusher_locked", lambda: None)
     flush_search_samples()
     yield backend
     backend.delete_prefix(search_samples.SAMPLE_KEY_PREFIX)
@@ -189,6 +193,24 @@ def test_listed_searches_are_capped(
     assert typical == sorted(typical)
     again = read_search_activity(now_ms)
     assert [s.at_ms for s in again.samples if s.client_ms == 20] == typical
+
+
+def test_a_minute_over_the_batch_cap_is_marked_partial(
+    cache: CacheBackend,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    now_ms = 1_800_000_030_000
+    minute_ms = now_ms // MINUTE_MS * MINUTE_MS
+    _write(cache, [_sample(minute_ms + 1, 20)])
+    assert not read_search_activity(now_ms).partial
+    # Three batches in one minute, as three processes would write them.
+    _write(cache, [_sample(minute_ms + 2, 20)])
+    _write(cache, [_sample(minute_ms + 3, 20)])
+    monkeypatch.setattr(search_samples, "MAX_BATCHES_PER_MINUTE", 2)
+    activity = read_search_activity(now_ms)
+    # The counts cover only part of the minute, and the response says so.
+    assert activity.partial
+    assert activity.total_count == 2
 
 
 def test_searches_endpoint(

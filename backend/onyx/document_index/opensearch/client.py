@@ -90,9 +90,13 @@ def _file_size(sizes: dict[str, Any], ext: str) -> int:
 
 
 def vector_usage_percent(vector_bytes: int, file_cache_bytes: int) -> float:
-    """Vector bytes as a share of the file cache; 0 when there is no cache."""
+    """Vector bytes as a share of the file cache.
+
+    A node with vectors but no file cache (memory at or below the heap) reads
+    every vector from disk, so it counts as 100%.
+    """
     if file_cache_bytes <= 0:
-        return 0.0
+        return 100.0 if vector_bytes > 0 else 0.0
     return 100 * vector_bytes / file_cache_bytes
 
 
@@ -580,7 +584,7 @@ class OpenSearchClient(AbstractContextManager):
                 "include_segment_file_sizes": "true",
                 "request_timeout": RESOURCE_CHECK_TIMEOUT_SECONDS,
                 "filter_path": ",".join(
-                    ["indices.*.shards.*.routing.node"]
+                    ["_shards.failed", "indices.*.shards.*.routing.node"]
                     + [
                         f"indices.*.shards.*.segments.file_sizes.{ext}.size_in_bytes"
                         for ext in _VECTOR_FILE_EXTENSIONS
@@ -588,6 +592,10 @@ class OpenSearchClient(AbstractContextManager):
                 ),
             },
         )
+        failed: int = response.get("_shards", {}).get("failed", 0)
+        if failed:
+            # Partial totals would understate the vectors; fail like a timeout.
+            raise RuntimeError(f"{failed} shard copies did not return their stats")
         per_node: dict[str, NodeVectorBytes] = {}
         for index in response.get("indices", {}).values():
             for copies in index.get("shards", {}).values():

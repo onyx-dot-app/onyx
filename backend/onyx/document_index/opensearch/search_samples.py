@@ -14,15 +14,17 @@ import random
 import threading
 import time
 import uuid
-from enum import Enum
-from typing import Any
-
-from pydantic import BaseModel
 
 from onyx.cache.factory import get_shared_cache_backend
 from onyx.cache.interface import CacheBackend
 from onyx.configs.app_configs import CACHE_BACKEND, DISABLE_VECTOR_DB
 from onyx.configs.constants import CacheBackendType
+from onyx.document_index.opensearch.models import (
+    SearchActivity,
+    SearchRatePoint,
+    SearchResult,
+    SearchSample,
+)
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT
 
@@ -47,52 +49,10 @@ SLOW_P90_MS = 700
 _KEY_TTL_SECONDS = (SAMPLE_WINDOW_MINUTES + 5) * 60
 
 
-class SearchResult(str, Enum):
-    OK = "ok"
-    ERROR = "error"
-    TIMEOUT = "timeout"
-
-
-class SearchSample(BaseModel):
-    # Epoch milliseconds when the search finished.
-    at_ms: int
-    client_ms: float
-    server_ms: int | None
-    search_type: str
-    result: SearchResult
-
-
-class SearchRatePoint(BaseModel):
-    """The searches of one minute."""
-
-    # Epoch milliseconds at the start of the minute.
-    minute_ms: int
-    # 60, or the seconds elapsed so far for the current minute.
-    seconds: float
-    count: int
-    error_count: int = 0
-    # Percentiles of the minute's successful searches; None without any.
-    p10_ms: float | None = None
-    p90_ms: float | None = None
-
-
-class SearchActivity(BaseModel):
-    window_minutes: int
-    total_count: int
-    error_count: int
-    p90_ms: float | None
-    rate: list[SearchRatePoint]
-    slow_p90_ms: int = SLOW_P90_MS
-    # Every slow or failed search, and a random few of each minute's others.
-    samples: list[SearchSample]
-    # True when more slow or failed searches happened than samples lists.
-    sampled: bool
-
-
 class _Buffer:
     def __init__(self) -> None:
         self.lock = threading.Lock()
-        self.samples: list[dict[str, Any]] = []
+        self.samples: list[SearchSample] = []
         self.process_id: str = uuid.uuid4().hex
         self.sequence: int = 0
         self.flusher: threading.Thread | None = None
@@ -144,13 +104,13 @@ def record_search_sample(
     if not RECORDING_ENABLED:
         return
     try:
-        sample: dict[str, Any] = {
-            "at_ms": int(time.time() * 1000),
-            "client_ms": round(client_duration_s * 1000, 1),
-            "server_ms": server_took_ms,
-            "search_type": search_type,
-            "result": result.value,
-        }
+        sample = SearchSample(
+            at_ms=int(time.time() * 1000),
+            client_ms=round(client_duration_s * 1000, 1),
+            server_ms=server_took_ms,
+            search_type=search_type,
+            result=result,
+        )
         with _buffer.lock:
             _start_flusher_locked()
             if len(_buffer.samples) < MAX_BUFFERED_SAMPLES:
@@ -162,19 +122,22 @@ def record_search_sample(
 def flush_search_samples() -> None:
     """Writes the buffered samples to the shared cache, grouped by minute."""
     with _buffer.lock:
-        samples: list[dict[str, Any]] = _buffer.samples
+        samples: list[SearchSample] = _buffer.samples
         _buffer.samples = []
     if not samples:
         return
-    by_minute: dict[int, list[dict[str, Any]]] = {}
+    by_minute: dict[int, list[SearchSample]] = {}
     for sample in samples:
-        by_minute.setdefault(sample["at_ms"] // 60000, []).append(sample)
+        by_minute.setdefault(sample.at_ms // 60000, []).append(sample)
     cache: CacheBackend = get_shared_cache_backend()
     for minute, batch in by_minute.items():
         with _buffer.lock:
             _buffer.sequence += 1
             member: str = json.dumps(
-                {"id": f"{_buffer.process_id}:{_buffer.sequence}", "samples": batch},
+                {
+                    "id": f"{_buffer.process_id}:{_buffer.sequence}",
+                    "samples": [sample.model_dump(mode="json") for sample in batch],
+                },
                 separators=(",", ":"),
             )
         key: str = _minute_key(minute)
@@ -214,8 +177,14 @@ def read_search_activity(now_ms: int | None = None) -> SearchActivity:
     start_ms: int = (now_ms // 60000 - SAMPLE_WINDOW_MINUTES + 1) * 60000
     cache: CacheBackend = get_shared_cache_backend()
     samples: list[SearchSample] = []
+    partial = False
     for minute in range(start_ms // 60000, now_ms // 60000 + 1):
-        for raw in cache.set_members(_minute_key(minute), limit=MAX_BATCHES_PER_MINUTE):
+        batches: list[bytes] = cache.set_members(
+            _minute_key(minute), limit=MAX_BATCHES_PER_MINUTE
+        )
+        # A full read may have left batches out.
+        partial = partial or len(batches) >= MAX_BATCHES_PER_MINUTE
+        for raw in batches:
             for item in json.loads(raw)["samples"]:
                 sample = SearchSample.model_validate(item)
                 if start_ms <= sample.at_ms <= now_ms:
@@ -269,6 +238,8 @@ def read_search_activity(now_ms: int | None = None) -> SearchActivity:
         error_count=sum(1 for sample in samples if sample.result != SearchResult.OK),
         p90_ms=_percentile(durations, 0.9),
         rate=rate,
+        slow_p90_ms=SLOW_P90_MS,
         samples=listed,
         sampled=len(notable) > MAX_RETURNED_SAMPLES,
+        partial=partial,
     )

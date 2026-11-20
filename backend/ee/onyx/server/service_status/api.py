@@ -14,15 +14,13 @@ from onyx.db.search_settings import (
     get_current_search_settings,
     get_secondary_search_settings,
 )
-from onyx.document_index.opensearch.cluster_status import (
+from onyx.document_index.opensearch.cluster_status import collect_cluster_status
+from onyx.document_index.opensearch.models import (
+    ClusterStatus,
     OnyxIndexRef,
-    collect_cluster_status,
-)
-from onyx.document_index.opensearch.models import ClusterStatus
-from onyx.document_index.opensearch.search_samples import (
     SearchActivity,
-    read_search_activity,
 )
+from onyx.document_index.opensearch.search_samples import read_search_activity
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger

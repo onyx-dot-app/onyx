@@ -18,10 +18,8 @@ from contextlib import contextmanager
 from prometheus_client import Counter, Gauge, Histogram
 
 from onyx.document_index.opensearch.constants import OpenSearchSearchType
-from onyx.document_index.opensearch.search_samples import (
-    SearchResult,
-    record_search_sample,
-)
+from onyx.document_index.opensearch.models import SearchResult
+from onyx.document_index.opensearch.search_samples import record_search_sample
 
 logger = logging.getLogger(__name__)
 

@@ -97,6 +97,8 @@ class ClusterIssueKind(str, Enum):
     JVM_MEMORY = "jvm_memory"
     # The index that serves search is not in OpenSearch.
     INDEX_MISSING = "index_missing"
+    # Data nodes that did not answer the stats request; value is their count.
+    NODES_UNANSWERED = "nodes_unanswered"
 
 
 class ClusterIssueSeverity(str, Enum):
@@ -109,7 +111,8 @@ class ClusterIssue(BaseModel):
     severity: ClusterIssueSeverity
     # Data nodes the issue applies to; empty for cluster-wide issues.
     node_names: list[str] = Field(default_factory=list)
-    # The highest usage among node_names, or the unassigned shard count.
+    # The highest usage among node_names, or the count of unassigned shards or
+    # unanswered nodes.
     value: float
 
 
@@ -166,3 +169,59 @@ class ClusterStatus(BaseModel):
     indexes: list[ClusterIndexStatus]
     issues: list[ClusterIssue]
     thresholds: UsageThresholds
+
+
+class OnyxIndexRef(BaseModel):
+    """An Onyx index the status page reports on."""
+
+    index_name: str
+    is_current: bool
+    model_name: str
+    model_dim: int
+    vector_quantization: VectorQuantization
+
+
+class SearchResult(str, Enum):
+    OK = "ok"
+    ERROR = "error"
+    TIMEOUT = "timeout"
+
+
+class SearchSample(BaseModel):
+    # Epoch milliseconds when the search finished.
+    at_ms: int
+    client_ms: float
+    server_ms: int | None
+    search_type: str
+    result: SearchResult
+
+
+class SearchRatePoint(BaseModel):
+    """The searches of one minute."""
+
+    # Epoch milliseconds at the start of the minute.
+    minute_ms: int
+    # 60, or the seconds elapsed so far for the current minute.
+    seconds: float
+    count: int
+    error_count: int = 0
+    # Percentiles of the minute's successful searches; None without any.
+    p10_ms: float | None = None
+    p90_ms: float | None = None
+
+
+class SearchActivity(BaseModel):
+    window_minutes: int
+    total_count: int
+    error_count: int
+    p90_ms: float | None
+    rate: list[SearchRatePoint]
+    # A minute whose p90 is above this shows as slow.
+    slow_p90_ms: int
+    # Every slow or failed search, and a random few of each minute's others.
+    samples: list[SearchSample]
+    # True when more slow or failed searches happened than samples lists.
+    sampled: bool
+    # True when a minute had more batches than a read takes, so the counts and
+    # percentiles cover only part of it.
+    partial: bool

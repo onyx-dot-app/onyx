@@ -3,9 +3,6 @@
 from datetime import datetime, timezone
 from typing import Any
 
-from pydantic import BaseModel
-
-from onyx.db.enums import VectorQuantization
 from onyx.document_index.opensearch.client import (
     OpenSearchClient,
     vector_usage_percent,
@@ -18,8 +15,9 @@ from onyx.document_index.opensearch.models import (
     ClusterIssueSeverity,
     ClusterNodeStatus,
     ClusterStatus,
-    NodeMemoryStats,
+    NodesMemoryStats,
     NodeVectorBytes,
+    OnyxIndexRef,
     UsageThresholds,
 )
 from onyx.document_index.opensearch.resource_health import (
@@ -33,14 +31,6 @@ from onyx.document_index.opensearch.resource_health import (
 DISK_WARNING_PERCENT: int = 75
 # Above 100% the vectors that search reads no longer fit in the file cache.
 VECTOR_CRITICAL_PERCENT: int = 100
-
-
-class OnyxIndexRef(BaseModel):
-    index_name: str
-    is_current: bool
-    model_name: str
-    model_dim: int
-    vector_quantization: VectorQuantization
 
 
 def _int(row: dict[str, str], key: str) -> int:
@@ -64,14 +54,17 @@ def _node_issue(
     kind: ClusterIssueKind,
     severity: ClusterIssueSeverity,
     usage: dict[str, float],
+    names: dict[str, str],
 ) -> ClusterIssue | None:
+    """usage is keyed by node ID: OpenSearch does not require unique names."""
     if not usage:
         return None
     return ClusterIssue(
         kind=kind,
         severity=severity,
         node_names=[
-            name for name, _ in sorted(usage.items(), key=lambda item: -item[1])
+            names[node_id]
+            for node_id, _ in sorted(usage.items(), key=lambda item: -item[1])
         ],
         value=round(max(usage.values()), 1),
     )
@@ -99,12 +92,13 @@ def evaluate_cluster_issues(
             )
         )
 
-    disk: dict[str, float] = {node.name: _disk_used_percent(node) for node in nodes}
+    names: dict[str, str] = {node.node_id: node.name for node in nodes}
+    disk: dict[str, float] = {node.node_id: _disk_used_percent(node) for node in nodes}
     vector: dict[str, float] = {
-        node.name: vector_usage_percent(node.vector_bytes, node.file_cache_bytes)
+        node.node_id: vector_usage_percent(node.vector_bytes, node.file_cache_bytes)
         for node in nodes
     }
-    heap: dict[str, float] = {node.name: _heap_used_percent(node) for node in nodes}
+    heap: dict[str, float] = {node.node_id: _heap_used_percent(node) for node in nodes}
     for kind, usage, warning, critical in (
         (
             ClusterIssueKind.DISK,
@@ -121,17 +115,21 @@ def evaluate_cluster_issues(
         (ClusterIssueKind.JVM_MEMORY, heap, HEAP_USAGE_THRESHOLD_PERCENT, None),
     ):
         critical_usage: dict[str, float] = (
-            {name: value for name, value in usage.items() if value >= critical}
+            {node_id: value for node_id, value in usage.items() if value >= critical}
             if critical is not None
             else {}
         )
         warning_usage: dict[str, float] = {
-            name: value
-            for name, value in usage.items()
-            if warning <= value and name not in critical_usage
+            node_id: value
+            for node_id, value in usage.items()
+            if warning <= value and node_id not in critical_usage
         }
-        issues.append(_node_issue(kind, ClusterIssueSeverity.CRITICAL, critical_usage))
-        issues.append(_node_issue(kind, ClusterIssueSeverity.WARNING, warning_usage))
+        issues.append(
+            _node_issue(kind, ClusterIssueSeverity.CRITICAL, critical_usage, names)
+        )
+        issues.append(
+            _node_issue(kind, ClusterIssueSeverity.WARNING, warning_usage, names)
+        )
 
     found: list[ClusterIssue] = [issue for issue in issues if issue is not None]
     return sorted(
@@ -145,7 +143,7 @@ def collect_cluster_status(indexes: list[OnyxIndexRef]) -> ClusterStatus:
         timeout=RESOURCE_CHECK_TIMEOUT_SECONDS, max_retries=0
     ) as client:
         cluster: dict[str, Any] = client.cluster_health()
-        memory: dict[str, NodeMemoryStats] = client.get_node_memory_stats().nodes
+        memory_stats: NodesMemoryStats = client.get_node_memory_stats()
         vectors: dict[str, NodeVectorBytes] = client.get_node_vector_bytes()
         summaries: dict[str, dict[str, str]] = client.get_index_summaries(
             [index.index_name for index in indexes]
@@ -170,7 +168,7 @@ def collect_cluster_status(indexes: list[OnyxIndexRef]) -> ClusterStatus:
                 search_queue=node.search_queue,
                 search_rejected=node.search_rejected,
             )
-            for node_id, node in memory.items()
+            for node_id, node in memory_stats.nodes.items()
         ),
         key=lambda node: node.name,
     )
@@ -194,6 +192,17 @@ def collect_cluster_status(indexes: list[OnyxIndexRef]) -> ClusterStatus:
     health: str = str(cluster.get("status", "red"))
     unassigned: int = int(cluster.get("unassigned_shards", 0))
     issues: list[ClusterIssue] = evaluate_cluster_issues(health, unassigned, nodes)
+    # Rows and warnings of a data node that did not answer are missing, so the
+    # read is not shown as healthy.
+    if memory_stats.failed:
+        issues.insert(
+            0,
+            ClusterIssue(
+                kind=ClusterIssueKind.NODES_UNANSWERED,
+                severity=ClusterIssueSeverity.CRITICAL,
+                value=memory_stats.failed,
+            ),
+        )
     # A reindex creates its index after it starts, so only the current one counts.
     if any(index.is_current and index.index_name not in summaries for index in indexes):
         issues.insert(

@@ -22,13 +22,14 @@ from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission, VectorQuantization
 from onyx.db.models import SearchSettings, User
 from onyx.document_index.opensearch.client import (
+    OpenSearchClient,
     OpenSearchIndexClient,
+    vector_usage_percent,
     wait_for_opensearch_with_timeout,
 )
 from onyx.document_index.opensearch.cluster_status import (
     DISK_WARNING_PERCENT,
     VECTOR_CRITICAL_PERCENT,
-    OnyxIndexRef,
     collect_cluster_status,
     evaluate_cluster_issues,
 )
@@ -37,7 +38,9 @@ from onyx.document_index.opensearch.models import (
     ClusterIssueSeverity,
     ClusterNodeStatus,
     ClusterStatus,
+    NodesMemoryStats,
     NodeVectorBytes,
+    OnyxIndexRef,
     VectorResourceStats,
 )
 from onyx.document_index.opensearch.resource_health import (
@@ -86,22 +89,25 @@ def index_with_vectors(
                 "index": {"knn": True, "number_of_shards": 1, "number_of_replicas": 0}
             },
         )
-        bulk(
-            client._client,
-            (
-                {
-                    "_index": name,
-                    "_id": str(i),
-                    "content_vector": [rng.uniform(-1, 1) for _ in range(DIM)],
-                }
-                for i in range(CHUNKS)
-            ),
-        )
-        client._client.indices.forcemerge(index=name, max_num_segments=1)
-        client._client.indices.flush(index=name)
-    yield name
-    with OpenSearchIndexClient(index_name=name) as client:
-        client.delete_index()
+    try:
+        with OpenSearchIndexClient(index_name=name) as client:
+            bulk(
+                client._client,
+                (
+                    {
+                        "_index": name,
+                        "_id": str(i),
+                        "content_vector": [rng.uniform(-1, 1) for _ in range(DIM)],
+                    }
+                    for i in range(CHUNKS)
+                ),
+            )
+            client._client.indices.forcemerge(index=name, max_num_segments=1)
+            client._client.indices.flush(index=name)
+        yield name
+    finally:
+        with OpenSearchIndexClient(index_name=name) as client:
+            client.delete_index()
 
 
 def _index_vector_bytes(index_name: str) -> int:
@@ -215,6 +221,77 @@ def test_vector_check_fails_when_a_node_does_not_answer(
         stats: VectorResourceStats = client.get_vector_resource_stats()
     # The health check skips a run with a failed node and keeps its last result.
     assert stats.failed == 1
+
+
+@pytest.mark.parametrize("index_with_vectors", [None], indirect=True)
+def test_status_shows_nodes_that_did_not_answer(
+    index_with_vectors: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    real_stats = OpenSearchClient.get_node_memory_stats
+
+    def one_node_failed(self: OpenSearchClient) -> NodesMemoryStats:
+        stats: NodesMemoryStats = real_stats(self)
+        return NodesMemoryStats(failed=1, nodes=stats.nodes)
+
+    monkeypatch.setattr(OpenSearchClient, "get_node_memory_stats", one_node_failed)
+    status: ClusterStatus = collect_cluster_status(
+        [
+            OnyxIndexRef(
+                index_name=index_with_vectors,
+                is_current=True,
+                model_name="test-model",
+                model_dim=DIM,
+                vector_quantization=VectorQuantization.NONE,
+            )
+        ]
+    )
+    # Its rows and warnings are missing, so the read must not look healthy.
+    assert status.issues[0].kind == ClusterIssueKind.NODES_UNANSWERED
+    assert status.issues[0].severity == ClusterIssueSeverity.CRITICAL
+    assert status.issues[0].value == 1
+
+
+@pytest.mark.parametrize("index_with_vectors", [None], indirect=True)
+def test_failed_shard_stats_are_not_summed(
+    index_with_vectors: str,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    with OpenSearchIndexClient(index_name=index_with_vectors) as client:
+        real_stats = client._client.indices.stats
+
+        def one_shard_failed(*args: Any, **kwargs: Any) -> dict[str, Any]:
+            response: dict[str, Any] = real_stats(*args, **kwargs)
+            response["_shards"] = {"failed": 1}
+            return response
+
+        monkeypatch.setattr(client._client.indices, "stats", one_shard_failed)
+        # Partial totals would understate the vectors.
+        with pytest.raises(RuntimeError):
+            client.get_node_vector_bytes(index_with_vectors)
+
+
+def test_vectors_without_a_file_cache_are_full() -> None:
+    assert vector_usage_percent(GB, 0) == 100
+    assert vector_usage_percent(0, 0) == 0
+    node = _node("node-1")
+    node.file_cache_bytes = 0
+    [issue] = evaluate_cluster_issues("green", 0, [node])
+    assert (issue.kind, issue.severity) == (
+        ClusterIssueKind.VECTOR_MEMORY,
+        ClusterIssueSeverity.CRITICAL,
+    )
+
+
+def test_nodes_with_the_same_name_keep_their_own_issues() -> None:
+    # OpenSearch does not require unique node names.
+    full = _node("data", disk_percent=95)
+    empty = _node("data", disk_percent=10)
+    empty.node_id = "other"
+    [issue] = evaluate_cluster_issues("green", 0, [full, empty])
+    assert issue.kind == ClusterIssueKind.DISK
+    assert issue.node_names == ["data"]
+    assert issue.value == 95
 
 
 def _node(
