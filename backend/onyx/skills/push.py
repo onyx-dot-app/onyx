@@ -466,18 +466,20 @@ def push_skills_for_users(user_ids: set[UUID], db_session: Session) -> None:
         batch_states.clear()
         batch_bytes = 0
 
-    for sandbox_id in sorted(sandbox_map):
+    # A function, so the payload is not alive while the next one builds.
+    def add_to_batch(sandbox_id: UUID) -> None:
+        nonlocal batch_bytes
         try:
             payload = build_user_skills_payload(sandbox_map[sandbox_id], db_session)
         except Exception:
             logger.exception("Failed to build skills for sandbox %s", sandbox_id)
-            continue
+            return
         state = payload.state
         current = current_states.get(sandbox_id)
         if current is not None and current.skills_hash == state.skills_hash:
             if current.omissions != state.omissions:
                 delivered[sandbox_id] = state
-            continue
+            return
         payload_bytes = sum(len(content) for content in payload.files.values())
         if batch_bytes + payload_bytes > _PUSH_BATCH_MAX_BYTES:
             send_batch()
@@ -486,6 +488,9 @@ def push_skills_for_users(user_ids: set[UUID], db_session: Session) -> None:
         batch_bytes += payload_bytes
         if len(batch_files) >= PUSH_PARALLELISM or batch_bytes >= _PUSH_BATCH_MAX_BYTES:
             send_batch()
+
+    for sandbox_id in sorted(sandbox_map):
+        add_to_batch(sandbox_id)
     send_batch()
     if not delivered:
         return
