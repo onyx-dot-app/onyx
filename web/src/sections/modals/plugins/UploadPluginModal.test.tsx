@@ -42,9 +42,6 @@ function zip(name: string): File {
 
 function preview(over: Partial<PluginUploadPreview> = {}): PluginUploadPreview {
   return {
-    name: "review-kit",
-    version: "1.2.0",
-    description: "Review pull requests.",
     manifest: {
       name: "review-kit",
       version: "1.2.0",
@@ -75,7 +72,6 @@ function preview(over: Partial<PluginUploadPreview> = {}): PluginUploadPreview {
         integration_id: null,
       },
     ],
-    unused_parts: ["commands"],
     warnings: [],
     target: {
       kind: "new_version",

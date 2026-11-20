@@ -74,18 +74,18 @@ function PluginPreview({
   onSaveAsNewChange,
 }: PluginPreviewProps) {
   const t = useTranslations("plugins.upload");
-  const { target } = preview;
+  const { target, manifest } = preview;
   const showSaveAsNew = target.kind === "new_version" || saveAsNew || busy;
   return (
     <Section gap={4} alignItems="stretch" height="auto">
       <Content
         icon={SvgBlocks}
         font="main-content-emphasis"
-        title={preview.name}
-        description={preview.description ?? undefined}
+        title={manifest.name}
+        description={manifest.description ?? undefined}
         badge={
-          preview.version
-            ? { title: t("version", { version: preview.version }) }
+          manifest.version
+            ? { title: t("version", { version: manifest.version }) }
             : undefined
         }
       />
@@ -153,10 +153,10 @@ function PluginPreview({
           <PluginNeedList needs={preview.needs} interactive={false} />
         </PreviewSection>
       )}
-      {preview.unused_parts.length > 0 && (
+      {manifest.unused_parts.length > 0 && (
         <PreviewSection title={t("sections.unused")}>
           <Text as="p" font="secondary-body" color="text-03">
-            {preview.unused_parts
+            {manifest.unused_parts
               .map((part) => t(`unusedParts.${part}`))
               .join(", ")}
           </Text>

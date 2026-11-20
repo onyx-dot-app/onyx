@@ -246,7 +246,10 @@ def _add_version_rows(
             else None
         ),
         needs=(
-            [need.model_dump(mode="json") for need in content.needs]
+            [
+                need.model_dump(mode="json", exclude={"supported"})
+                for need in content.needs
+            ]
             if content.needs is not None
             else None
         ),

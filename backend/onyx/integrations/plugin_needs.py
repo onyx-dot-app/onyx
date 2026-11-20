@@ -42,7 +42,7 @@ def need_views(
             state = PluginNeedState(matches[0].access.state.value)
         views.append(
             PluginNeedView(
-                **need.model_dump(),
+                **need.model_dump(exclude={"supported"}),
                 state=state,
                 integration_id=(
                     matches[0].id if need.supported and len(matches) == 1 else None

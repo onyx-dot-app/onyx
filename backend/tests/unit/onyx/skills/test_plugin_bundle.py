@@ -9,7 +9,6 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.models import (
     PluginAuthor,
     PluginManifest,
-    PluginNeed,
     PluginUnusedPart,
 )
 from onyx.skills.plugin_bundle import read_plugin_bundle
@@ -95,21 +94,35 @@ def test_reads_a_wrapped_claude_plugin() -> None:
         ),
         ("skills/review", "review", []),
     ]
-    assert bundle.needs == [
-        PluginNeed(
-            name="linear",
-            url="https://mcp.linear.app/mcp",
-            transport="http",
-            supported=True,
-        ),
-        PluginNeed(name="local", url=None, transport="stdio", supported=False),
-        PluginNeed(name="secret", url=None, transport="sse", supported=False),
-        PluginNeed(
-            name="untyped",
-            url="https://untyped.test/mcp",
-            transport=None,
-            supported=False,
-        ),
+    assert [need.model_dump() for need in bundle.needs] == [
+        {
+            "kind": "mcp",
+            "name": "linear",
+            "url": "https://mcp.linear.app/mcp",
+            "transport": "http",
+            "supported": True,
+        },
+        {
+            "kind": "mcp",
+            "name": "local",
+            "url": None,
+            "transport": "stdio",
+            "supported": False,
+        },
+        {
+            "kind": "mcp",
+            "name": "secret",
+            "url": None,
+            "transport": "sse",
+            "supported": False,
+        },
+        {
+            "kind": "mcp",
+            "name": "untyped",
+            "url": "https://untyped.test/mcp",
+            "transport": None,
+            "supported": False,
+        },
     ]
     assert bundle.warnings == []
     assert _paths(bundle.content) == [
@@ -145,13 +158,14 @@ def test_reads_a_codex_plugin_with_inline_servers() -> None:
 
     assert bundle.manifest.author == PluginAuthor(name="Notion")
     assert bundle.skills == []
-    assert bundle.needs == [
-        PluginNeed(
-            name="notion",
-            url="https://mcp.notion.com/mcp",
-            transport="streamable-http",
-            supported=True,
-        )
+    assert [need.model_dump() for need in bundle.needs] == [
+        {
+            "kind": "mcp",
+            "name": "notion",
+            "url": "https://mcp.notion.com/mcp",
+            "transport": "streamable-http",
+            "supported": True,
+        },
     ]
     assert bundle.warnings == [
         "Onyx skips SKILL.md. A skill must be in skills/<name>/SKILL.md."

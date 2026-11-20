@@ -18,7 +18,6 @@ from onyx.skills.bundle import (
 )
 from onyx.skills.metadata import frontmatter_for_jsonb, parse_skill_document
 from onyx.skills.models import (
-    MCP_URL_TRANSPORTS,
     SKILL_NAME_MAX_LENGTH,
     SKILL_NAME_PATTERN,
     PluginAuthor,
@@ -174,18 +173,13 @@ def _skill(bundle_zip: zipfile.ZipFile, folder: str, path: str) -> PluginBundleS
 
 def mcp_need(name: str, entry: JsonValue) -> PluginNeed:
     if not isinstance(entry, dict):
-        return PluginNeed(name=name, url=None, transport=None, supported=False)
+        return PluginNeed(name=name, url=None, transport=None)
     transport = entry.get("type")
     raw_url = entry.get("url")
     if not isinstance(transport, str):
         transport = "stdio" if "command" in entry else None
     url = normalize_mcp_server_url(raw_url) if isinstance(raw_url, str) else None
-    return PluginNeed(
-        name=name,
-        url=url,
-        transport=transport,
-        supported=url is not None and transport in MCP_URL_TRANSPORTS,
-    )
+    return PluginNeed(name=name, url=url, transport=transport)
 
 
 def _servers(

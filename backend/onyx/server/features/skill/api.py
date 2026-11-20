@@ -675,12 +675,8 @@ def inspect_plugin_upload(
     db_session: Session = Depends(get_session),
 ) -> PluginUploadPreview:
     plugin_bundle = _read_plugin_upload(bundle)
-    manifest = plugin_bundle.manifest
     return PluginUploadPreview(
-        name=manifest.name,
-        version=manifest.version,
-        description=manifest.description,
-        manifest=manifest,
+        manifest=plugin_bundle.manifest,
         skills=[
             PluginUploadSkill(
                 path=skill.content.path,
@@ -691,7 +687,6 @@ def inspect_plugin_upload(
             for skill in plugin_bundle.skills
         ],
         needs=need_views(plugin_bundle.needs, integrations_for_needs(user, db_session)),
-        unused_parts=manifest.unused_parts,
         warnings=plugin_bundle.warnings,
         target=_upload_target(plugin_bundle, save_as_new, user, db_session),
     )
