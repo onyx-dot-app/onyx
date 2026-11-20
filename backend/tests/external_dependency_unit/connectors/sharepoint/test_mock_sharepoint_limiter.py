@@ -1,5 +1,6 @@
 """The shared Graph limiter against the mock server: Microsoft's Retry-After
-pauses every connector on the app registration."""
+pauses every connector on the app registration, and a stop signal during a
+wait for the limiter ends the walk."""
 
 import threading
 import time
@@ -10,8 +11,10 @@ import pytest
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors import source_api_limiter
+from onyx.connectors.interfaces import SourceApiLimiter
 from onyx.connectors.load_all import load_all_from_connector
 from onyx.connectors.microsoft_utils.request_pacer import MICROSOFT_USER_AGENT
+from onyx.connectors.models import ConnectorStopSignal
 from onyx.connectors.sharepoint.connector import SharepointConnector
 from onyx.connectors.source_api_limiter import build_source_api_limiter
 from onyx.redis.redis_pool import get_redis_client
@@ -21,6 +24,36 @@ from tests.external_dependency_unit.connectors.sharepoint.conftest import (
 )
 
 _RETRY_AFTER_SECONDS = 2
+
+
+class _StopAfterLimiter(SourceApiLimiter):
+    """Lets ``calls`` calls through, then raises the stop signal, as the
+    shared limiter does when the attempt stops during a wait."""
+
+    def __init__(self, calls: int) -> None:
+        self._left = calls
+
+    def acquire(
+        self,
+        api: str,  # noqa: ARG002
+        cost: int,  # noqa: ARG002
+        user: str | None = None,  # noqa: ARG002
+        request_count: int = 1,  # noqa: ARG002
+        *,
+        bulk: bool = False,  # noqa: ARG002
+    ) -> None:
+        self._left -= 1
+        if self._left < 0:
+            raise ConnectorStopSignal("Stop signal while waiting for the API budget")
+
+    def report_rate_limit(
+        self,
+        api: str,  # noqa: ARG002
+        user: str | None,  # noqa: ARG002
+        user_scope: bool,  # noqa: ARG002
+        count: int = 1,  # noqa: ARG002
+    ) -> None:
+        return None
 
 
 @pytest.fixture
@@ -106,3 +139,31 @@ def test_a_retry_after_pauses_a_second_connector_on_the_app(
     assert stats["calls_during_pause_total"] == 0
     # The Graph calls name the client. The sign-in calls of MSAL do not.
     assert stats["user_agents"][MICROSOFT_USER_AGENT] > 0
+
+
+@pytest.mark.parametrize("calls", [3, 12, 40])
+def test_a_stop_during_a_limiter_wait_ends_the_fetching_walk(
+    mock_sharepoint: MockSharepoint, calls: int
+) -> None:
+    """The stop is not a failure of one document, drive or site: the walk
+    raises it, and yields no failure for it."""
+    connector = mock_sharepoint.build_connector()
+    connector.set_source_api_limiter(_StopAfterLimiter(calls))
+
+    with pytest.raises(ConnectorStopSignal):
+        load_all_from_connector(connector, 0, time.time())
+
+
+@pytest.mark.usefixtures("ee_permission_sync")
+@pytest.mark.parametrize("calls", [3, 40, 150])
+def test_a_stop_during_a_limiter_wait_ends_the_slim_walk(
+    mock_sharepoint: MockSharepoint, calls: int
+) -> None:
+    """Permission sync marks a document that the slim walk does not list as
+    private, so a stop must end the walk and not skip the rest of it."""
+    connector = mock_sharepoint.build_connector(certificate=True)
+    connector.set_source_api_limiter(_StopAfterLimiter(calls))
+
+    with pytest.raises(ConnectorStopSignal):
+        for _ in connector.retrieve_all_slim_docs_perm_sync(0, time.time()):
+            pass

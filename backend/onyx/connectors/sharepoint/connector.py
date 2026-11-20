@@ -63,6 +63,7 @@ from onyx.connectors.models import (
     ConnectorCheckpoint,
     ConnectorFailure,
     ConnectorMissingCredentialError,
+    ConnectorStopSignal,
     Document,
     DocumentFailure,
     EntityFailure,
@@ -1257,6 +1258,8 @@ class SharepointConnector(
                                     doc_created_at=driveitem.created_datetime,
                                 )
                             )
+                    except ConnectorStopSignal:
+                        raise
                     except Exception as e:
                         logger.warning("Failed to process driveitem: %s", str(e))
 
@@ -1301,6 +1304,8 @@ class SharepointConnector(
                                         ),
                                     )
                                 )
+                        except ConnectorStopSignal:
+                            raise
                         except Exception as e:
                             logger.warning(
                                 "Failed to process site page %s: %s",
@@ -1312,6 +1317,8 @@ class SharepointConnector(
                         if len(doc_batch) >= SLIM_BATCH_SIZE:
                             yield doc_batch
                             doc_batch = []
+                except ConnectorStopSignal:
+                    raise
                 except Exception as e:
                     # Broadened from per-site Graph 4xx to any Exception.
                     # Slim retrieval can't yield ConnectorFailure, so
@@ -1508,6 +1515,8 @@ class SharepointConnector(
                         HierarchyNodeType.FOLDER,
                         folder_server_relative_path=folder_server_relative_path,
                     )
+                except ConnectorStopSignal:
+                    raise
                 except Exception as e:
                     logger.warning(
                         "Failed to get permissions for folder %s, skipping: %s",
@@ -1647,6 +1656,8 @@ class SharepointConnector(
                     driveitem,
                     "not indexable (excluded content type or over size limit)",
                 )
+        except ConnectorStopSignal:
+            raise
         except Exception as e:
             logger.warning(
                 "Failed to process driveitem %s: %s",
@@ -1743,6 +1754,8 @@ class SharepointConnector(
                         [drive.display_name for drive in checkpoint.cached_drives],
                     )
 
+            except ConnectorStopSignal:
+                raise
             except Exception as e:
                 _raise_if_throttled(e)
                 logger.error(
@@ -1809,6 +1822,8 @@ class SharepointConnector(
                     checkpoint,
                     include_permissions=include_permissions,
                 )
+            except ConnectorStopSignal:
+                raise
             except Exception as e:
                 _raise_if_throttled(e)
                 logger.error(
@@ -1852,6 +1867,8 @@ class SharepointConnector(
                             checkpoint.current_drive_delta_resync_attempted
                         ),
                     )
+                except ConnectorStopSignal:
+                    raise
                 except Exception as e:
                     _raise_if_throttled(e)
                     logger.error(
@@ -1899,6 +1916,8 @@ class SharepointConnector(
                         checkpoint,
                         include_permissions,
                     )
+            except ConnectorStopSignal:
+                raise
             except Exception as e:
                 _raise_if_throttled(e)
                 logger.exception(
@@ -1984,6 +2003,8 @@ class SharepointConnector(
                                 treat_sharing_link_as_public=self.treat_sharing_link_as_public,
                             )
                         )
+                    except ConnectorStopSignal:
+                        raise
                     except Exception as e:
                         logger.warning(
                             "Failed to process site page '%s' in site %s: %s",
@@ -2017,6 +2038,8 @@ class SharepointConnector(
                     "Finished processing site pages for site: %s",
                     site_descriptor.url,
                 )
+            except ConnectorStopSignal:
+                raise
             except Exception as e:
                 _raise_if_throttled(e)
                 # Broadened from per-site Graph 4xx to any Exception:
@@ -2269,6 +2292,8 @@ class SharepointConnector(
                         site_drives_cache,
                         include_permissions,
                     )
+            except ConnectorStopSignal:
+                raise
             except Exception as e:
                 logger.warning(
                     "Failed to resolve SharePoint target %s (%s): %s",

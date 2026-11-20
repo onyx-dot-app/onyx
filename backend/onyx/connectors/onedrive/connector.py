@@ -1,4 +1,4 @@
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from datetime import datetime, timezone
 from typing import Any
 from urllib.parse import urlsplit
@@ -50,6 +50,7 @@ from onyx.connectors.models import (
     BasicExpertInfo,
     ConnectorFailure,
     ConnectorMissingCredentialError,
+    ConnectorStopSignal,
     Document,
     DocumentFailure,
     EntityFailure,
@@ -537,6 +538,8 @@ class OneDriveConnector(
             content = self.ops.download_item(
                 item=drive_item, raw_file_callback=self.raw_file_callback
             )
+        except ConnectorStopSignal:
+            raise
         except Exception as error:
             return _document_failure(drive_item, error)
         if content is None:
@@ -556,6 +559,29 @@ class OneDriveConnector(
             and checkpoint.current_drive_delta_resync_attempted
         )
         return error.is_permanent_refusal or repeated_resync
+
+    def _read_item_access(
+        self,
+        user: OneDriveUser,
+        drive: OneDriveDrive,
+        item: DriveDeltaItem,
+        include_permissions: bool,
+        to_failure: Callable[[Exception], ConnectorFailure],
+    ) -> ExternalAccess | ConnectorFailure | None:
+        """The item's access, None without permission sync, or the failure
+        that ``to_failure`` makes when the read fails for this item only."""
+        if not include_permissions:
+            return None
+        try:
+            return self._item_access(user, drive, item)
+        except OneDriveGraphError as error:
+            if error.fails_the_attempt:
+                raise
+            return to_failure(error)
+        except ConnectorStopSignal:
+            raise
+        except Exception as error:
+            return to_failure(error)
 
     def _discover_delta_page(
         self,
@@ -622,41 +648,33 @@ class OneDriveConnector(
             if item.is_folder:
                 if not self._path_allowed(item):
                     continue
-                try:
-                    access = (
-                        self._item_access(user, drive, item)
-                        if include_permissions
-                        else None
-                    )
-                except OneDriveGraphError as error:
-                    if error.fails_the_attempt:
-                        raise
-                    yield _entity_failure(item.id, str(error), error)
+                folder_access = self._read_item_access(
+                    user,
+                    drive,
+                    item,
+                    include_permissions,
+                    lambda error, item_id=item.id: _entity_failure(
+                        item_id, str(error), error
+                    ),
+                )
+                if isinstance(folder_access, ConnectorFailure):
+                    yield folder_access
                     continue
-                except Exception as error:
-                    yield _entity_failure(item.id, str(error), error)
-                    continue
-                yield folder_node(drive, item, access)
+                yield folder_node(drive, item, folder_access)
                 continue
             if not item.is_file or not self._item_allowed(item, None, end_at):
                 continue
-            try:
-                access = (
-                    self._item_access(user, drive, item)
-                    if include_permissions
-                    else None
-                )
-            except OneDriveGraphError as error:
-                if error.fails_the_attempt:
-                    raise
-                yield _document_failure(
-                    DriveItemData.from_graph_json(item.to_graph_json()), error
-                )
-                continue
-            except Exception as error:
-                yield _document_failure(
-                    DriveItemData.from_graph_json(item.to_graph_json()), error
-                )
+            access = self._read_item_access(
+                user,
+                drive,
+                item,
+                include_permissions,
+                lambda error, file=item: _document_failure(
+                    DriveItemData.from_graph_json(file.to_graph_json()), error
+                ),
+            )
+            if isinstance(access, ConnectorFailure):
+                yield access
                 continue
             yield OneDriveDiscoveredFile(
                 drive=drive,
@@ -1004,6 +1022,8 @@ class OneDriveConnector(
                     if graph_error.fails_the_attempt:
                         raise
                     yield _reindex_failure(failed, str(graph_error), graph_error)
+                except ConnectorStopSignal:
+                    raise
                 except Exception as target_error:
                     yield _reindex_failure(failed, str(target_error), target_error)
         finally:

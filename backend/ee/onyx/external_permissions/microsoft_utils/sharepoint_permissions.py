@@ -35,6 +35,7 @@ from onyx.connectors.microsoft_utils.sharepoint_principals import (
 from onyx.connectors.microsoft_utils.sharepoint_rest import (
     SharepointPermissionReader,
 )
+from onyx.connectors.models import ConnectorStopSignal
 from onyx.db.enums import HierarchyNodeType
 from onyx.utils.logger import setup_logger
 
@@ -71,6 +72,8 @@ def _is_public_item(
 
     try:
         scopes = reader.list_sharing_link_scopes(item=drive_item)
+    except ConnectorStopSignal:
+        raise
     except Exception as e:
         logger.error("Failed to check if item %s is public: %s", drive_item.id, e)
         return False
