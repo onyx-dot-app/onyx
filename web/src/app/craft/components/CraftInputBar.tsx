@@ -148,7 +148,8 @@ const CraftInputBar = memo(
       } = useUploadFilesContext();
 
       const { data: skillsData } = useUserSkills();
-      const { entries: chatSkills } = useChatSkills();
+      const { entries: chatSkills, onInputFocus: onChatSkillsFocus } =
+        useChatSkills();
       const { data: appsData } = useUserExternalApps();
       const { data: craftMcpData } = useCraftMcpServers();
       const pickerSections = useMemo(
@@ -376,6 +377,7 @@ const CraftInputBar = memo(
             onPasteText={onPasteText}
             onPasteFiles={uploadFiles}
             onInputCallback={slashPicker.onInput}
+            onFocus={onChatSkillsFocus}
           />
           <EntryPickerPopover
             open={slashPicker.open}

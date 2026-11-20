@@ -9,6 +9,7 @@ import { cn } from "@opal/utils";
 import { useDropzone } from "react-dropzone";
 import {
   prepareSkillBundleUpload,
+  SkillFolderRootError,
   type PreparedSkillBundle,
   type SkillUploadFile,
 } from "@/lib/skills/bundleUpload";
@@ -62,7 +63,11 @@ export default function SkillBundlePicker({
       } catch (error) {
         console.error("Failed to prepare skill bundle", error);
         onError(
-          error instanceof Error ? error.message : t("upload.error.readFailed")
+          error instanceof SkillFolderRootError
+            ? t("upload.error.folderRoot", { upload: error.upload })
+            : error instanceof Error
+              ? error.message
+              : t("upload.error.readFailed")
         );
       } finally {
         setPreparing(false);

@@ -16795,7 +16795,8 @@
       },
       "upload": {
         "error": {
-          "readFailed": "Não foi possível ler o envio."
+          "readFailed": "Não foi possível ler o envio.",
+          "folderRoot": "{upload, select, plugin {A pasta selecionada deve conter SKILL.md ou um manifesto plugin.json no nível superior.} other {A pasta selecionada deve conter SKILL.md no nível superior.}}"
         }
       }
     },

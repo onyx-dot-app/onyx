@@ -16795,7 +16795,8 @@
       },
       "upload": {
         "error": {
-          "readFailed": "Der Upload konnte nicht gelesen werden."
+          "readFailed": "Der Upload konnte nicht gelesen werden.",
+          "folderRoot": "{upload, select, plugin {Der ausgewählte Ordner muss auf oberster Ebene SKILL.md oder ein plugin.json-Manifest enthalten.} other {Der ausgewählte Ordner muss auf oberster Ebene SKILL.md enthalten.}}"
         }
       }
     },

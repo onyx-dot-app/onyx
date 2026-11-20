@@ -16795,7 +16795,8 @@
       },
       "upload": {
         "error": {
-          "readFailed": "업로드한 파일을 읽지 못했습니다."
+          "readFailed": "업로드한 파일을 읽지 못했습니다.",
+          "folderRoot": "{upload, select, plugin {선택한 폴더의 최상위에 SKILL.md 또는 plugin.json 매니페스트가 있어야 합니다.} other {선택한 폴더의 최상위에 SKILL.md가 있어야 합니다.}}"
         }
       }
     },

@@ -1,9 +1,15 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { render } from "@tests/setup/test-utils";
-import { prepareSkillBundleUpload } from "@/lib/skills/bundleUpload";
+import {
+  prepareSkillBundleUpload,
+  SkillFolderRootError,
+} from "@/lib/skills/bundleUpload";
 import SkillBundlePicker from "./SkillBundlePicker";
 
 jest.mock("@/lib/skills/bundleUpload", () => ({
+  ...jest.requireActual<typeof import("@/lib/skills/bundleUpload")>(
+    "@/lib/skills/bundleUpload"
+  ),
   prepareSkillBundleUpload: jest.fn(),
 }));
 
@@ -188,6 +194,34 @@ describe("SkillBundlePicker", () => {
       expect.any(Error)
     );
   });
+
+  it.each([
+    ["skill", "The selected folder must contain SKILL.md at its top level."],
+    [
+      "plugin",
+      "The selected folder must contain SKILL.md or a plugin.json manifest at its top level.",
+    ],
+  ] as const)(
+    "words a %s folder without a top-level entry from the catalog",
+    async (upload, message) => {
+      jest.spyOn(console, "error").mockImplementation();
+      const error = new SkillFolderRootError(upload);
+      error.message = "untranslated";
+      mockedPrepareSkillBundleUpload.mockRejectedValue(error);
+      const onError = jest.fn();
+
+      render(
+        <SkillBundlePicker
+          value={null}
+          onChange={jest.fn()}
+          onError={onError}
+        />
+      );
+      dropFile(new File(["body"], "notes.md", { type: "text/markdown" }));
+
+      await waitFor(() => expect(onError).toHaveBeenCalledWith(message));
+    }
+  );
 
   it("passes recursively dropped directory files with their full paths", async () => {
     const skillMd = new File(["instructions"], "SKILL.md");

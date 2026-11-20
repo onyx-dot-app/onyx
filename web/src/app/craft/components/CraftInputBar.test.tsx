@@ -360,6 +360,15 @@ describe("Craft `/` picker", () => {
     expect(screen.queryByTestId("skill-picker-row-review-kit")).toBeNull();
     mockChatSkills.entries = { skills: [], apps: [], mcpServers: [] };
   });
+
+  it("fetches the chat skills again when the input gains focus", () => {
+    const onInputFocus = jest.fn();
+    mockChatSkills.onInputFocus = onInputFocus;
+    render(<CraftInputBar onSubmit={jest.fn()} isRunning={false} />);
+    act(() => screen.getByRole("textbox", { name: "Message input" }).focus());
+    expect(onInputFocus).toHaveBeenCalledTimes(1);
+    mockChatSkills.onInputFocus = () => undefined;
+  });
 });
 
 it("clears only the submitted draft when another session mounts during handoff", async () => {

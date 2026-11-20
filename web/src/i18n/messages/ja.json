@@ -16795,7 +16795,8 @@
       },
       "upload": {
         "error": {
-          "readFailed": "アップロードされたファイルを読み込めませんでした。"
+          "readFailed": "アップロードされたファイルを読み込めませんでした。",
+          "folderRoot": "{upload, select, plugin {選択したフォルダーの最上位に SKILL.md または plugin.json マニフェストが必要です。} other {選択したフォルダーの最上位に SKILL.md が必要です。}}"
         }
       }
     },

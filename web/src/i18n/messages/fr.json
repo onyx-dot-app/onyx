@@ -16795,7 +16795,8 @@
       },
       "upload": {
         "error": {
-          "readFailed": "Impossible de lire le fichier téléversé."
+          "readFailed": "Impossible de lire le fichier téléversé.",
+          "folderRoot": "{upload, select, plugin {Le dossier sélectionné doit contenir SKILL.md ou un manifeste plugin.json à sa racine.} other {Le dossier sélectionné doit contenir SKILL.md à sa racine.}}"
         }
       }
     },

@@ -149,6 +149,15 @@ describe("ScheduleTaskForm app picker", () => {
     expect(mockRouterReplace).not.toHaveBeenCalled();
   });
 
+  it("fetches the chat skills again when the prompt gains focus", () => {
+    const onInputFocus = jest.fn();
+    mockChatSkills.onInputFocus = onInputFocus;
+    renderForm();
+    fireEvent.focus(screen.getByTestId("task-prompt-input"));
+    expect(onInputFocus).toHaveBeenCalledTimes(1);
+    mockChatSkills.onInputFocus = () => undefined;
+  });
+
   it("routes an unauthenticated app to connection without inserting it", async () => {
     const user = setupUser();
     renderForm();
