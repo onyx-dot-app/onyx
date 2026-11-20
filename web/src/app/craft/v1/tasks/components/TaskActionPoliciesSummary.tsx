@@ -9,14 +9,16 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import type { TaskIntegrationView } from "@/app/craft/v1/tasks/types";
 import ActionPoliciesLoadError from "@/app/craft/v1/tasks/components/ActionPoliciesLoadError";
 
-export default function TaskActionPoliciesSummary({
-  taskId,
-  url,
-}: {
+interface TaskActionPoliciesSummaryProps {
   taskId: string;
   /** Reads the integrations from this URL instead of the Craft one. */
   url?: string;
-}) {
+}
+
+export default function TaskActionPoliciesSummary({
+  taskId,
+  url,
+}: TaskActionPoliciesSummaryProps) {
   const t = useTranslations("craft.actionPolicies");
   const { data, error, mutate } = useSWR<TaskIntegrationView[], Error>(
     url ?? SWR_KEYS.taskActionPolicies(taskId),

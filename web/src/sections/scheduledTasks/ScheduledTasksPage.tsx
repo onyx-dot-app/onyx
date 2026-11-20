@@ -65,7 +65,7 @@ export default function ScheduledTasksPage() {
       title: t("columns.schedule"),
       width: { weight: 22 },
       cell: (row) => (
-        <Text font="main-ui-body" color="text-03" maxLines={1}>
+        <Text as="p" font="main-ui-body" color="text-03" maxLines={1}>
           {timeFormat.schedule(
             row.editor_mode,
             row.cron_expression,
@@ -88,12 +88,12 @@ export default function ScheduledTasksPage() {
             gap={1}
           >
             <RunStatusBadge status={row.last_run.status} />
-            <Text font="secondary-body" color="text-03" maxLines={1}>
+            <Text as="p" font="secondary-body" color="text-03" maxLines={1}>
               {timeFormat.relative(row.last_run.started_at)}
             </Text>
           </Section>
         ) : (
-          <Text font="main-ui-body" color="text-03">
+          <Text as="p" font="main-ui-body" color="text-03">
             {t("never")}
           </Text>
         ),
@@ -106,12 +106,12 @@ export default function ScheduledTasksPage() {
       cell: (row) =>
         row.next_run_at && row.status === "ACTIVE" ? (
           <Tooltip tooltip={timeFormat.absolute(row.next_run_at)} side="top">
-            <Text font="main-ui-body" color="text-03" maxLines={1}>
+            <Text as="p" font="main-ui-body" color="text-03" maxLines={1}>
               {timeFormat.relative(row.next_run_at)}
             </Text>
           </Tooltip>
         ) : (
-          <Text font="main-ui-body" color="text-03">
+          <Text as="p" font="main-ui-body" color="text-03">
             {t("notScheduled")}
           </Text>
         ),
@@ -137,7 +137,7 @@ export default function ScheduledTasksPage() {
               className="shrink-0"
             />
           )}
-          <Text font="main-ui-action" color="text-04" maxLines={1}>
+          <Text as="p" font="main-ui-action" color="text-04" maxLines={1}>
             {name}
           </Text>
         </Section>

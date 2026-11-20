@@ -193,7 +193,7 @@ export default function ScheduledRunHistory({
               />
             )}
             <Tooltip tooltip={timeFormat.relative(startedAt)} side="top">
-              <Text font="main-ui-body" color="text-04" maxLines={1}>
+              <Text as="p" font="main-ui-body" color="text-04" maxLines={1}>
                 {timeFormat.absolute(startedAt)}
               </Text>
             </Tooltip>
@@ -221,7 +221,7 @@ export default function ScheduledRunHistory({
       width: { weight: 12 },
       cell: (row) => (
         <ClosedCell run={row}>
-          <Text font="main-ui-body" color="text-03" maxLines={1}>
+          <Text as="p" font="main-ui-body" color="text-03" maxLines={1}>
             {formatRunDuration(row.started_at, row.finished_at)}
           </Text>
         </ClosedCell>
@@ -234,7 +234,7 @@ export default function ScheduledRunHistory({
       width: { weight: 14 },
       cell: (row) => (
         <ClosedCell run={row}>
-          <Text font="main-ui-body" color="text-03" maxLines={1}>
+          <Text as="p" font="main-ui-body" color="text-03" maxLines={1}>
             {t("trigger", { source: row.trigger_source })}
           </Text>
         </ClosedCell>
@@ -248,6 +248,7 @@ export default function ScheduledRunHistory({
       cell: (row) => (
         <ClosedCell run={row}>
           <Text
+            as="p"
             font="main-ui-body"
             color="text-03"
             maxLines={1}

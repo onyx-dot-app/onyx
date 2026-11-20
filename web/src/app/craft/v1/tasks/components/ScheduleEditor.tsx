@@ -193,7 +193,7 @@ function AdvancedEditor({ payload, onChange }: AdvancedEditorProps) {
   const t = useTranslations("craft.tasks.scheduleEditor");
   return (
     <Section height="auto" alignItems="stretch" gap={3}>
-      <Text font="secondary-action" color="text-03">
+      <Text as="p" font="secondary-action" color="text-03">
         {t("advanced.cronLabel")}
       </Text>
       <InputTypeIn
@@ -203,7 +203,7 @@ function AdvancedEditor({ payload, onChange }: AdvancedEditorProps) {
         onChange={(e) => onChange({ cron: e.target.value })}
         data-testid="advanced-cron"
       />
-      <Text font="secondary-body" color="text-03">
+      <Text as="p" font="secondary-body" color="text-03">
         {t("advanced.hint")}
       </Text>
     </Section>
