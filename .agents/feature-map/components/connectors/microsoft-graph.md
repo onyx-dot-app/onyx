@@ -171,7 +171,9 @@ the group expansions of the permission reads in a
 `SharedSharepointPermissionCache` for that run
 (`connectors/microsoft_utils/sharepoint_access.py`): in the process and in
 Redis under `sharepoint_group_expansion:<run id>:<hash>`, so the threads of
-every worker expand a group one time in a run. A later run, or a connector on
+every worker share the expansion of a group in a run. The cache does not
+lock a key: threads that miss the same group at the same time each read it,
+and the last write wins. A later run, or a connector on
 another credential, never reads these keys. The fetching path, the slim walk
 and permission sync keep the expansions in the connector object only, for one
 run, as before. The checkpoint no longer holds them. The docconversion
