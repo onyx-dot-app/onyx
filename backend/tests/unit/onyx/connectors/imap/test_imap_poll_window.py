@@ -152,6 +152,7 @@ def test_parse_internaldate_line_handles_space_padded_day() -> None:
     [
         '7 (INTERNALDATE "31-Feb-2026 10:02:00 +0000")',
         '7 (INTERNALDATE "09-Oct-2026 10:02:00 +9900")',
+        '7 (INTERNALDATE "09-Oct-2026 10:02:00 +0099")',
     ],
 )
 def test_invalid_internaldate_is_unknown_and_message_is_kept(line: str) -> None:

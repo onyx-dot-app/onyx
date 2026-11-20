@@ -404,7 +404,7 @@ def _parse_internaldate_line(line: str) -> tuple[str, float] | None:
     seq, day, month, year, hour, minute, second, sign, tz_hour, tz_minute = (
         match.groups()
     )
-    if month not in _IMAP_MONTHS:
+    if month not in _IMAP_MONTHS or int(tz_minute) >= 60:
         return None
     offset = timedelta(hours=int(tz_hour), minutes=int(tz_minute))
     try:
