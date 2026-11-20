@@ -7,6 +7,7 @@ import { IconLoader } from "@opal/loaders";
 import {
   Badge,
   Button,
+  Card,
   MessageCard,
   Table,
   Text,
@@ -23,12 +24,14 @@ import {
 } from "@/lib/skills/api";
 import { hasUnpublishedChanges } from "@/lib/skills/sharing";
 import { usePublishAction, useSkillLimitCopy } from "@/lib/skills/hooks";
+import type { PluginDetail } from "@/lib/plugins/types";
 import type {
   CustomSkill,
   SkillVersion,
   SkillVersionPreview,
 } from "@/lib/skills/types";
 import { SkillInstructionsPanel } from "@/sections/modals/SkillPreviewModal";
+import PluginNeedList from "@/sections/plugins/PluginNeedList";
 
 interface SkillVersionsTabProps {
   skill: CustomSkill;
@@ -166,6 +169,9 @@ export default function SkillVersionsTab({
     );
   }
 
+  const showManifestVersion = versions.some(
+    (version) => version.manifest_version !== null
+  );
   const columns: TableColumn<SkillVersion>[] = [
     {
       kind: "data",
@@ -192,6 +198,21 @@ export default function SkillVersionsTab({
         </Section>
       ),
     },
+    ...(showManifestVersion
+      ? [
+          {
+            kind: "data" as const,
+            field: "manifest_version" as const,
+            title: t("columns.manifestVersion"),
+            weight: 16,
+            cell: (manifestVersion: string | null) => (
+              <Text font="main-ui-body" color="text-03" maxLines={1}>
+                {manifestVersion ?? t("noManifestVersion")}
+              </Text>
+            ),
+          },
+        ]
+      : []),
     {
       kind: "data",
       field: "created_by_email",
@@ -362,14 +383,64 @@ function SkillVersionPreviewView({
             font="main-ui-action"
             title={t("versionLabel", { number: version.version_number })}
             description={preview.description}
-          />
-          <SkillInstructionsPanel
-            instructionsMarkdown={
-              preview.instructions_markdown ||
-              modalCopy("preview.noInstructions.message")
+            badge={
+              version.manifest_version
+                ? {
+                    title: t("manifestVersion", {
+                      version: version.manifest_version,
+                    }),
+                  }
+                : undefined
             }
           />
+          {preview.plugin ? (
+            <PluginVersionDetail plugin={preview.plugin} />
+          ) : (
+            <SkillInstructionsPanel
+              instructionsMarkdown={
+                preview.instructions_markdown ||
+                modalCopy("preview.noInstructions.message")
+              }
+            />
+          )}
         </>
+      )}
+    </Section>
+  );
+}
+
+interface PluginVersionDetailProps {
+  plugin: PluginDetail;
+}
+
+/** The skills and integrations of one plugin version. */
+function PluginVersionDetail({ plugin }: PluginVersionDetailProps) {
+  const t = useTranslations("skills.modals.versions.preview");
+  return (
+    <Section gap={4} alignItems="stretch" height="auto">
+      {plugin.skills.length > 0 && (
+        <Section gap={2} alignItems="stretch" height="auto">
+          <Text as="p" font="main-ui-action" color="text-04">
+            {t("skills", { count: plugin.skills.length })}
+          </Text>
+          {plugin.skills.map((skill) => (
+            <Card key={skill.path} padding={2}>
+              <Content
+                font="main-ui-action"
+                title={skill.name}
+                description={skill.description}
+              />
+            </Card>
+          ))}
+        </Section>
+      )}
+      {plugin.needs.length > 0 && (
+        <Section gap={2} alignItems="stretch" height="auto">
+          <Text as="p" font="main-ui-action" color="text-04">
+            {t("integrations", { count: plugin.needs.length })}
+          </Text>
+          <PluginNeedList needs={plugin.needs} interactive={false} />
+        </Section>
       )}
     </Section>
   );

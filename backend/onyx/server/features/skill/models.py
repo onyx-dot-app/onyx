@@ -102,6 +102,11 @@ class SkillResponse(BaseModel):
     public_permission: SkillSharePermission | None = None
     is_personal: bool = False
     user_permission: SkillAccessLevel | None = None
+    # False for a skill that an organization-wide manager sees only through
+    # that permission. The member pages leave it out.
+    member_visible: bool = True
+    # The user turned the skill on, but these skills hold one of its names.
+    name_held_by: list[str] = Field(default_factory=list)
     # The plugin version of a custom skill whose files this response shows.
     # Edits send it back as base_version_id. None for built-ins.
     current_version_id: UUID | None = None
@@ -142,6 +147,7 @@ class SkillResponse(BaseModel):
         enabled: bool,
         can_toggle: bool = True,
         required_for_user: bool = False,
+        name_held_by: list[str] | None = None,
         user_permission: SkillAccessLevel | None = None,
         can_delete: bool = False,
         include_share_details: bool = False,
@@ -180,6 +186,7 @@ class SkillResponse(BaseModel):
             default_installation_policy=access.marketplace_default_policy,
             can_delete=can_delete,
             required_for_user=required_for_user,
+            name_held_by=name_held_by or [],
             enabled=enabled,
             can_toggle=can_toggle,
             author_user_id=access.author_user_id,
@@ -268,6 +275,8 @@ class SkillVersionResponse(BaseModel):
     created_by_email: str | None
     is_current: bool
     review_status: Literal["draft", "pending", "published"]
+    # The version in plugin.json, for a plugin version that has one.
+    manifest_version: str | None = None
 
 
 class SkillVersionPreviewResponse(BaseModel):
@@ -276,6 +285,10 @@ class SkillVersionPreviewResponse(BaseModel):
     instructions_markdown: str
     files: list[SkillBundleFile] = Field(default_factory=list)
     plugin: PluginDetail | None = None
+
+
+class PluginSkillInstructions(BaseModel):
+    instructions_markdown: str
 
 
 class SkillVersionRestoreRequest(BaseModel):

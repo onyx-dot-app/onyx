@@ -30,6 +30,7 @@ jest.mock("@/lib/integrations/connect", () => ({
 afterEach(() => {
   jest.restoreAllMocks();
   authority.isGlobalHolder = false;
+  authority.isScopedManager = false;
 });
 
 function need(
@@ -149,11 +150,25 @@ test("a user who manages integrations adds a missing one with its name and URL",
     await screen.findByRole("button", { name: "Add the linear integration" })
   );
   await waitFor(() =>
+    expect(window.location.pathname).toBe("/admin/integrations/new")
+  );
+  const params = new URLSearchParams(window.location.search);
+  expect(params.get("server_url")).toBe("https://example.com/linear");
+  expect(params.get("owner")).toBe("organization");
+});
+
+test("a group manager adds a missing integration on the member page", async () => {
+  authority.isScopedManager = true;
+  mockFetch({ "/api/integrations": [] });
+  const user = setupUser();
+  render(<PluginNeedList interactive needs={[need("linear", "not_added")]} />);
+  await user.click(
+    await screen.findByRole("button", { name: "Add the linear integration" })
+  );
+  await waitFor(() =>
     expect(window.location.pathname).toBe("/app/customize/integrations/new")
   );
-  expect(new URLSearchParams(window.location.search).get("server_url")).toBe(
-    "https://example.com/linear"
-  );
+  expect(new URLSearchParams(window.location.search).get("owner")).toBeNull();
 });
 
 test("Turn on switches the matching integration on and the row reads On", async () => {

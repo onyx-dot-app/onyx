@@ -54,7 +54,13 @@ Group or user restriction needs EE.
   `lib/plugins/directory.ts:memberPluginEntries` in the groups Created by you
   (the user's own, published or not), From your organization and Shared with you
   (`lib/customize/plugins.ts:groupPlugins`), with its skill count, Turn on and a
-  row menu (Turn on/off, Share). A plugin holds custom skills only; there is no
+  row menu (Turn on/off, Share). An admin's list leaves out the plugins that
+  are not `member_visible`. The plugin page
+  (`sections/plugins/MemberPluginDetailPage.tsx`) has Share, a "..." menu
+  (Upload New Version through `sections/modals/plugins/UploadPluginFlow.tsx`,
+  Delete Plugin) and the switch in its header. A needed integration that is
+  not added links an organization-wide manager to `/admin/integrations/new`
+  with the owner set to the organization and `return_to` the plugin page. A plugin holds custom skills only; there is no
   "Add integration" in its Add menu. Integrations
   (`sections/customize/CustomizeIntegrationsPage.tsx`) is a table: Integration,
   Type, Authorization and Status. Status shows the one row state of
@@ -76,9 +82,8 @@ Group or user restriction needs EE.
   Configuration (the user's connection, Disconnect)
   and Actions (each action with the admin's Allow, Ask or Blocked, and the
   user's Always allow switch when the admin allows it). The admin sets the
-  policy only on `/admin/integrations/[id]`. A plugin page (`/app/customize/plugins/[pluginId]`) only
-  opens the skill page of its one skill, or shows that the plugin is not
-  found. When the admin lets users save it, each action that asks offers
+  policy only on `/admin/integrations/[id]`. A plugin that holds one skill
+  opens that skill's page. When the admin lets users save it, each action that asks offers
   "Always allow". A member with manage:actions adds a private integration
   ("For me" only) from the Integrations Add menu.
 - **In chat**, the tools popover lists the current agent's integrations

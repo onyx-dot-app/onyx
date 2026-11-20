@@ -10418,7 +10418,8 @@
             "public": "{count, plural, one {# 個のツール} other {# 個のツール}}が見つかりました。このサーバーはログイン不要です。",
             "oauth": "このサーバーは OAuth ログインを使用します。",
             "authUnknown": "このサーバーにはログインが必要です。API キーのヘッダーまたは OAuth を追加してください。",
-            "unreachable": "Onyx はこのサーバーに接続できません。URL を確認してください。"
+            "unreachable": "Onyx はこのサーバーに接続できません。URL を確認してください。",
+            "forbidden": "追加する前にこのサーバーを確認できるのは管理者だけです。このまま追加することもできます。"
           },
           "transport": {
             "title": "トランスポート",
@@ -16648,6 +16649,21 @@
           "remove": "{name} を削除",
           "shared": "このグループと共有済み",
           "settingOnly": "グループ設定のみ"
+        },
+        "plugin": {
+          "installation": {
+            "description": "アクセス権を持つすべての人に対するこのプラグインのインストール方法を選択します。"
+          },
+          "published": {
+            "description": "公開済み。組織の全員がこのプラグインを使用できます。"
+          },
+          "publishWarning": {
+            "description": "保存すると、組織の全員がこのプラグインを使用できるようになります。非公開に戻すことはできません。削除できるのは管理者だけです。",
+            "reviewDescription": "管理者がリクエストを承認するまで、プラグインは非公開のままです。承認後は非公開に戻せません。"
+          },
+          "publishOff": {
+            "description": "管理者が組織への公開をオフにしました。このプラグインの公開を管理者に依頼してください。"
+          }
         }
       },
       "placeholders": {
@@ -16663,7 +16679,8 @@
         "columns": {
           "version": "バージョン",
           "madeBy": "作成者",
-          "date": "日付"
+          "date": "日付",
+          "manifestVersion": "plugin.json"
         },
         "versionLabel": "バージョン {number}",
         "currentBadge": "現在",
@@ -16686,7 +16703,9 @@
           "back": "すべてのバージョン",
           "loadError": {
             "title": "このバージョンを読み込めませんでした"
-          }
+          },
+          "skills": "スキル · {count}",
+          "integrations": "連携 · {count}"
         },
         "status": {
           "pending": "レビュー待ち",
@@ -16698,7 +16717,9 @@
           "failedToast": "この更新を公開できませんでした。",
           "sentForReviewToast": "バージョン {number} を管理者のレビューに送信しました。",
           "offNotice": "公開はオフになっています。このアップデートの公開を管理者に依頼してください。"
-        }
+        },
+        "noManifestVersion": "なし",
+        "manifestVersion": "plugin.json {version}"
       }
     },
     "page": {
@@ -16747,10 +16768,12 @@
         "body": "続行すると、現在有効なスキルが無効になり、このスキルが有効になります。",
         "description": "「{name}」という名前のスキルは一度に1つだけ有効にできます。",
         "submit": {
-          "label": "スキルを切り替え",
+          "label": "切り替え",
           "pendingLabel": "切り替え中..."
         },
-        "title": "スキル「{name}」を切り替えますか？"
+        "title": "「{name}」をオンにしますか？",
+        "descriptionNamed": "{names} は「{name}」と同じスキル名をすでに使用しています。一度にオンにできるのは1つだけです。",
+        "bodyNamed": "「{name}」をオンにすると、{names} がオフになります。"
       },
       "toasts": {
         "disableFailed": "{name}を無効にできませんでした",
@@ -16772,6 +16795,9 @@
         },
         "upload": {
           "label": "ドラッグ＆ドロップするか、クリックしてアップロード"
+        },
+        "chooseFolder": {
+          "label": "フォルダーを選択"
         }
       },
       "filesPicker": {
@@ -16957,7 +16983,7 @@
           "owner": "所有者",
           "skills": "スキル",
           "description": "説明",
-          "version": "バージョン",
+          "version": "plugin.json のバージョン",
           "author": "作成者",
           "homepage": "ホームページ",
           "license": "ライセンス",
@@ -16965,15 +16991,35 @@
         },
         "skills": {
           "off": "オフ",
-          "invalid": "無効"
+          "invalid": "無効",
+          "read": "読む",
+          "readAriaLabel": "スキル {name} を読む",
+          "readFailed": "このスキルを読み込めませんでした。",
+          "noInstructions": "このスキルには手順がありません。"
         },
         "switch": {
           "title": "このプラグインを使用",
-          "description": "オンにすると、デフォルトのエージェントがこのプラグインを使用できます。",
           "label": "{name} を使用",
           "required": "管理者がこのプラグインを必須にしました。オフにできません。",
           "unavailable": "このプラグインのオンとオフを切り替えることはできません。",
-          "failed": "プラグインを変更できませんでした。"
+          "failed": "プラグインを変更できませんでした。",
+          "on": "オン。デフォルトのエージェントはこのプラグインを使用できます。",
+          "off": "オフ。オンにすると、デフォルトのエージェントがこのプラグインを使用できます。",
+          "nameHeld": "{names} が同じスキル名を使用しているため、オフです。代わりにこのプラグインを使うにはオンにしてください。"
+        },
+        "actions": {
+          "share": "共有",
+          "menu": "その他の操作",
+          "uploadVersion": "新しいバージョンをアップロード",
+          "remove": "プラグインを削除"
+        },
+        "remove": {
+          "entityType": "プラグイン",
+          "description": "このプラグインを使用しているすべての人が利用できなくなります。元に戻すことはできません。",
+          "submit": "削除",
+          "pending": "削除中…",
+          "done": "{name} を削除しました。",
+          "failed": "プラグインを削除できませんでした。"
         }
       },
       "connection": {
@@ -17121,7 +17167,7 @@
         "description": "plugin.json がありません。続行してスキルとして追加します。",
         "continue": "続行"
       },
-      "version": "v{version}",
+      "version": "plugin.json {version}",
       "target": {
         "newVersion": "{name} を Onyx バージョン {version} に更新します",
         "newPlugin": "新しいプラグイン: {name}"
@@ -17328,14 +17374,16 @@
       },
       "empty": {
         "title": "プラグインはまだありません",
-        "description": "プラグインをアップロードするか、スキルを作成します。各スキルは 1 つのプラグインです。"
+        "description": "Claude Code または Codex のプラグインをアップロードすると、そのスキルと必要な連携が追加されます。",
+        "upload": "プラグインをアップロード"
       },
       "noMatches": {
         "title": "一致するプラグインはありません",
         "clear": "すべてのプラグインを表示"
       },
       "intro": "プラグインは、スキルとそれらが必要とする連携をまとめたものです。Claude Code または Codex のプラグインをアップロードするか、スキルを追加します。追加した各スキルは個別のプラグインに入ります。",
-      "integrations": "{needed} 件中 {available} 件の連携が利用可能"
+      "integrations": "{needed} 件中 {available} 件の連携が利用可能",
+      "nameHeld": "オフ: {names} が同じスキル名を使用しています"
     },
     "skillPage": {
       "title": "スキル",

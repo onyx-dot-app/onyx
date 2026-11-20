@@ -96,7 +96,9 @@ export default function AddIntegrationPage({ from }: AddIntegrationPageProps) {
   const [showErrors, setShowErrors] = useState(false);
   const [name, setName] = useState(prefill?.name ?? "");
   const [description, setDescription] = useState("");
-  const [forOrganization, setForOrganization] = useState(false);
+  const [forOrganization, setForOrganization] = useState(
+    canChooseOrganization && prefill?.forOrganization === true
+  );
   const [signIn, setSignIn] = useState<SignInDraft>(DEFAULT_SIGN_IN);
   const [signInTouched, setSignInTouched] = useState(false);
   const [serverUrl, setServerUrl] = useState(prefill?.serverUrl ?? "");
@@ -236,6 +238,14 @@ export default function AddIntegrationPage({ from }: AddIntegrationPageProps) {
         config: body,
       });
       toast.success(t("created", { name: created.name }));
+      if (prefill?.returnTo) {
+        await Promise.all([
+          mutate(SWR_KEYS.integrations),
+          mutate(SWR_KEYS.adminIntegrations),
+        ]);
+        navigation.go(prefill.returnTo);
+        return;
+      }
       // The detail page reads the new integration from the list.
       if (from === "admin") {
         await mutate(SWR_KEYS.adminIntegrations);

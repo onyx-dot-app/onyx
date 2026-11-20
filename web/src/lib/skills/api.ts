@@ -209,6 +209,18 @@ export function isSkillNameConflict(error: unknown): boolean {
   );
 }
 
+/** The skills that a turn-on would turn off, from a name-conflict error. */
+export function skillNameConflictNames(error: unknown): string[] {
+  if (!(error instanceof FetchError)) return [];
+  const names: unknown =
+    error.info && "conflict_names" in error.info
+      ? error.info.conflict_names
+      : undefined;
+  return Array.isArray(names)
+    ? names.filter((name): name is string => typeof name === "string")
+    : [];
+}
+
 export function isSkillVersionStale(error: unknown): boolean {
   return (
     error instanceof Error &&

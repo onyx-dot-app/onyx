@@ -1,7 +1,10 @@
+import contextvars
 import io
 import json
+import threading
 import zipfile
 from collections.abc import Iterator
+from concurrent.futures import ThreadPoolExecutor
 from unittest.mock import patch
 from uuid import UUID
 
@@ -579,7 +582,9 @@ def test_a_shown_version_gives_the_detail_and_counts_of_that_version(
     )
     _save(author, _plugin_zip("shown-kit", ["kept", "added"]), db_session)
     plugin = db_session.get_one(Plugin, first.plugin.id)
-    first_id = api.list_custom_skill_versions(plugin.id, author, db_session)[1].id
+    versions = api.list_custom_skill_versions(plugin.id, author, db_session)
+    assert [version.manifest_version for version in versions] == ["1.0.0", "1.0.0"]
+    first_id = versions[1].id
 
     shown = skill_response_for_user(
         plugin,
@@ -776,6 +781,98 @@ def test_an_unchanged_upload_adds_no_version(
     )
 
 
+def test_uploads_of_one_new_name_at_the_same_time_make_one_plugin(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    users: tuple[User, User, User],
+) -> None:
+    author, _, _ = users
+    uploads = 6
+    start = threading.Barrier(uploads)
+
+    def save(index: int) -> UUID:
+        with get_session_with_tenant(
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
+        ) as session:
+            user = session.get_one(User, author.id)
+            start.wait()
+            return _save(
+                user,
+                _plugin_zip("race-kit", ["one"], description=f"Kit {index}."),
+                session,
+            ).plugin.id
+
+    with ThreadPoolExecutor(max_workers=uploads) as pool:
+        plugin_ids = list(
+            pool.map(
+                lambda index: contextvars.copy_context().run(save, index),
+                range(uploads),
+            )
+        )
+
+    assert len(set(plugin_ids)) == 1
+    db_session.expire_all()
+    assert (
+        db_session.scalar(
+            select(func.count()).where(PluginVersion.plugin_id == plugin_ids[0])
+        )
+        == uploads
+    )
+
+
+def test_an_admin_list_marks_a_members_private_plugin_not_member_visible(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    users: tuple[User, User, User],
+    created_user_ids: list[UUID],
+) -> None:
+    author, _, _ = users
+    admin = make_user(db_session, is_admin=True)
+    db_session.commit()
+    created_user_ids.append(admin.id)
+    private = _save(author, _plugin_zip("private-kit", ["one"]), db_session)
+    own = _save(admin, _plugin_zip("admin-kit", ["two"]), db_session)
+
+    listed = {
+        skill.id: skill.member_visible
+        for skill in api.list_skills_for_current_user(admin, db_session).customs
+    }
+
+    assert (listed[private.plugin.id], listed[own.plugin.id]) == (False, True)
+
+
+def test_a_viewer_reads_the_instructions_of_one_skill_in_a_plugin(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    users: tuple[User, User, User],
+) -> None:
+    author, viewer, outsider = users
+    saved = _save(author, _plugin_zip("read-kit", ["one", "two"]), db_session)
+    apply_plugin_access_change__no_commit(
+        [saved.plugin.id],
+        PluginAccessChange(
+            user_grants=(
+                PluginUserGrant(
+                    user_id=viewer.id, permission=SkillSharePermission.VIEWER
+                ),
+            )
+        ),
+        None,
+        db_session,
+    ).raise_first_failure()
+    db_session.commit()
+
+    read = api.read_plugin_skill_for_current_user(
+        saved.plugin.id, "skills/two", viewer, db_session
+    )
+
+    assert read.instructions_markdown.strip() == "Steps."
+    with pytest.raises(OnyxError):
+        api.read_plugin_skill_for_current_user(
+            saved.plugin.id, "skills/two", outsider, db_session
+        )
+
+
 def test_a_skill_name_clash_is_shown_before_and_after_the_save(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001
@@ -794,6 +891,35 @@ def test_a_skill_name_clash_is_shown_before_and_after_the_save(
 
     assert (preview.will_enable, preview.name_conflicts) == (False, ["first-kit"])
     assert (saved.enabled, saved.name_conflicts) == (False, ["first-kit"])
+
+
+def test_a_plugin_that_loses_its_skill_name_says_which_plugin_holds_it(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    users: tuple[User, User, User],
+) -> None:
+    member, publisher, _ = users
+    own = _save(member, _plugin_zip("own-kit", ["shared-name"]), db_session)
+    company = _save(publisher, _plugin_zip("company-kit", ["shared-name"]), db_session)
+    apply_plugin_access_change__no_commit(
+        [company.plugin.id],
+        PluginAccessChange(
+            publish=True,
+            company_installation_policy=PluginInstallationPolicy.DEFAULT,
+        ),
+        None,
+        db_session,
+    ).raise_first_failure()
+    db_session.commit()
+
+    listed = {
+        skill.id: (skill.enabled, skill.name_held_by)
+        for skill in api.list_skills_for_current_user(member, db_session).customs
+    }
+
+    assert own.enabled is True
+    assert listed[own.plugin.id] == (False, ["company-kit"])
+    assert listed[company.plugin.id] == (True, [])
 
 
 def test_a_new_version_of_an_enabled_plugin_turns_on_its_new_integrations(

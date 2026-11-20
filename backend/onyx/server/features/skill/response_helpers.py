@@ -18,6 +18,7 @@ from onyx.db.persona_sharing import (
 from onyx.db.plugin import get_version_manifest, list_version_skills
 from onyx.db.plugin_access import (
     PluginAccess,
+    get_visible_plugin_ids,
     load_plugin_access,
     plugin_ids_in_managed_scope,
 )
@@ -194,6 +195,7 @@ def skill_response_for_user(
         enabled=state.enabled,
         can_toggle=state.can_toggle,
         required_for_user=state.required,
+        name_held_by=list(state.name_held_by),
         user_permission=user_permission,
         can_delete=user_permission in (SkillAccessLevel.OWNER, SkillAccessLevel.EDITOR)
         and may_delete_skill(
@@ -254,6 +256,11 @@ def skills_list_response_for_user(
         (access.version_user_runs for access in plugin_access.values()),
         db_session,
     )
+    member_visible_ids = (
+        get_visible_plugin_ids(user.id, db_session)
+        if has_global_permission(user, Permission.MANAGE_PLUGINS)
+        else None
+    )
     for skill in rows:
         if isinstance(skill, Skill):
             if skill.built_in_skill_id not in BUILT_IN_SKILLS:
@@ -278,6 +285,8 @@ def skills_list_response_for_user(
             plugin_access=plugin_access,
             needs=needs,
         )
+        if member_visible_ids is not None and isinstance(skill, Plugin):
+            response.member_visible = skill.id in member_visible_ids
         (customs if isinstance(skill, Plugin) else builtins).append(response)
 
     return SkillsList(builtins=builtins, customs=customs)

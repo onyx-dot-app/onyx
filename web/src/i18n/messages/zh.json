@@ -10418,7 +10418,8 @@
             "public": "找到 {count, plural, one {# 个工具} other {# 个工具}}。该服务器无需登录。",
             "oauth": "该服务器使用 OAuth 登录。",
             "authUnknown": "该服务器需要登录。请添加 API 密钥请求头或 OAuth。",
-            "unreachable": "Onyx 无法访问此服务器。请检查 URL。"
+            "unreachable": "Onyx 无法访问此服务器。请检查 URL。",
+            "forbidden": "只有管理员可以在添加前检查此服务器。您仍然可以添加它。"
           },
           "transport": {
             "title": "传输方式",
@@ -16648,6 +16649,21 @@
           "remove": "移除 {name}",
           "shared": "已与此群组共享",
           "settingOnly": "仅群组设置"
+        },
+        "plugin": {
+          "installation": {
+            "description": "选择如何为所有有权访问的人安装此插件。"
+          },
+          "published": {
+            "description": "已发布。组织中的所有人都可以使用此插件。"
+          },
+          "publishWarning": {
+            "description": "保存后，组织中的所有人都可以使用此插件。您无法再将其设为私有。只有管理员可以删除它。",
+            "reviewDescription": "在管理员批准请求之前，插件保持私有。批准后，您无法再将其设为私有。"
+          },
+          "publishOff": {
+            "description": "管理员已关闭向组织发布。请让管理员发布此插件。"
+          }
         }
       },
       "placeholders": {
@@ -16663,7 +16679,8 @@
         "columns": {
           "version": "版本",
           "madeBy": "创建者",
-          "date": "日期"
+          "date": "日期",
+          "manifestVersion": "plugin.json"
         },
         "versionLabel": "版本 {number}",
         "currentBadge": "当前",
@@ -16686,7 +16703,9 @@
           "back": "所有版本",
           "loadError": {
             "title": "无法加载此版本"
-          }
+          },
+          "skills": "技能 · {count}",
+          "integrations": "集成 · {count}"
         },
         "status": {
           "pending": "待审核",
@@ -16698,7 +16717,9 @@
           "failedToast": "无法发布此更新。",
           "sentForReviewToast": "版本 {number} 已提交给管理员审核。",
           "offNotice": "发布已关闭。请让管理员发布此更新。"
-        }
+        },
+        "noManifestVersion": "无",
+        "manifestVersion": "plugin.json {version}"
       }
     },
     "page": {
@@ -16747,10 +16768,12 @@
         "body": "继续操作将停用当前启用的技能并启用此技能。",
         "description": "同名技能“{name}”一次只能启用一个。",
         "submit": {
-          "label": "切换技能",
+          "label": "切换",
           "pendingLabel": "正在切换..."
         },
-        "title": "切换技能“{name}”？"
+        "title": "要开启“{name}”吗？",
+        "descriptionNamed": "{names} 已在使用“{name}”也使用的技能名称。同一时间只能开启其中一个。",
+        "bodyNamed": "开启“{name}”会关闭 {names}。"
       },
       "toasts": {
         "disableFailed": "停用 {name} 失败",
@@ -16772,6 +16795,9 @@
         },
         "upload": {
           "label": "拖放文件或点击上传"
+        },
+        "chooseFolder": {
+          "label": "选择文件夹"
         }
       },
       "filesPicker": {
@@ -16957,7 +16983,7 @@
           "owner": "所有者",
           "skills": "技能",
           "description": "描述",
-          "version": "版本",
+          "version": "plugin.json 中的版本",
           "author": "作者",
           "homepage": "主页",
           "license": "许可证",
@@ -16965,15 +16991,35 @@
         },
         "skills": {
           "off": "已关闭",
-          "invalid": "无效"
+          "invalid": "无效",
+          "read": "阅读",
+          "readAriaLabel": "阅读技能 {name}",
+          "readFailed": "无法读取此技能。",
+          "noInstructions": "此技能没有说明。"
         },
         "switch": {
           "title": "使用此插件",
-          "description": "开启后，默认智能体可以使用此插件。",
           "label": "使用 {name}",
           "required": "管理员已将此插件设为必需。你无法将其关闭。",
           "unavailable": "你无法开启或关闭此插件。",
-          "failed": "无法更改插件。"
+          "failed": "无法更改插件。",
+          "on": "已开启。默认智能体可以使用此插件。",
+          "off": "已关闭。开启后，默认智能体即可使用此插件。",
+          "nameHeld": "已关闭，因为 {names} 使用了相同的技能名称。开启此插件即可改用它。"
+        },
+        "actions": {
+          "share": "分享",
+          "menu": "更多操作",
+          "uploadVersion": "上传新版本",
+          "remove": "删除插件"
+        },
+        "remove": {
+          "entityType": "插件",
+          "description": "所有使用此插件的人都将失去它。此操作无法撤销。",
+          "submit": "删除",
+          "pending": "正在删除…",
+          "done": "已删除 {name}。",
+          "failed": "无法删除插件。"
         }
       },
       "connection": {
@@ -17121,7 +17167,7 @@
         "description": "它没有 plugin.json。继续以将其添加为技能。",
         "continue": "继续"
       },
-      "version": "v{version}",
+      "version": "plugin.json {version}",
       "target": {
         "newVersion": "将 {name} 更新为 Onyx 版本 {version}",
         "newPlugin": "新插件：{name}"
@@ -17328,14 +17374,16 @@
       },
       "empty": {
         "title": "还没有插件",
-        "description": "上传插件或创建技能。每个技能都是一个插件。"
+        "description": "上传 Claude Code 或 Codex 插件，以添加其技能及所需的集成。",
+        "upload": "上传插件"
       },
       "noMatches": {
         "title": "没有匹配的插件",
         "clear": "显示所有插件"
       },
       "intro": "插件将技能及其所需的集成打包在一起。上传 Claude Code 或 Codex 插件，或添加技能。您添加的每个技能都位于各自的插件中。",
-      "integrations": "{needed} 个集成中有 {available} 个可用"
+      "integrations": "{needed} 个集成中有 {available} 个可用",
+      "nameHeld": "已关闭：{names} 使用了相同的技能名称"
     },
     "skillPage": {
       "title": "技能",
