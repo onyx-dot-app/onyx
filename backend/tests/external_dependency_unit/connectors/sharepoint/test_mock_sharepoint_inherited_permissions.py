@@ -195,3 +195,57 @@ def test_a_change_of_a_folders_permissions_reaches_its_files(
     listing = list_stubs(connector, include_permissions=True)
 
     assert _convert(connector, listing.stubs) == _expected_access(mock)
+
+
+def test_a_delta_link_from_a_full_pass_marks_no_file(
+    own_mock_sharepoint: MockSharepoint,
+) -> None:
+    """A full pass with no permission sync takes a delta cursor that does not
+    ask for the `shared` facet. When its checkpoint continues with permission
+    sync, a file with no facet is not marked as one that inherits."""
+    mock = own_mock_sharepoint
+    mock.set_corpus(_CORPUS)
+    connector = mock.build_connector(certificate=True)
+    end = time.time()
+    checkpoint = connector.build_dummy_checkpoint()
+    # Without permission sync, until the walk of the first drive is over and
+    # the delta from its cursor is next.
+    for _ in range(1_000):
+        step = connector.retrieve_slim_docs_from_checkpoint(0, end, checkpoint, False)
+        while True:
+            try:
+                next(step)
+            except StopIteration as stop:
+                checkpoint = stop.value
+                break
+        if checkpoint.full_pass_catching_up:
+            break
+    assert checkpoint.full_pass_catching_up
+    # A file changes, so the delta from the cursor has an item.
+    changed = min(
+        file_id
+        for file_id in mock.supported_file_ids()
+        if mock.describe_file(file_id)["file"]["drive_id"]
+        == (checkpoint.current_drive.drive_id if checkpoint.current_drive else "")
+    )
+    mock.touch([changed])
+
+    step = connector.retrieve_slim_docs_from_checkpoint(0, end, checkpoint, True)
+    stubs = [item for item in step if isinstance(item, SlimDocumentStub)]
+
+    assert [stub.id for stub in stubs] == [changed]
+    assert not _file_payloads(stubs)[changed].inherits_permissions
+
+
+def test_a_resync_marks_no_file(own_mock_sharepoint: MockSharepoint) -> None:
+    """After a 410, Graph gives the URL of the new delta. The listing does
+    not know that it asks for the `shared` facet."""
+    mock = own_mock_sharepoint
+    mock.set_corpus(_CORPUS)
+    mock.patch_config({"faults": {"expire_delta_tokens": True}})
+
+    connector = mock.build_connector(certificate=True)
+    listing = list_stubs(connector, start=time.time() - 3600, include_permissions=True)
+
+    payloads = _file_payloads(listing.stubs)
+    assert not any(p.inherits_permissions for p in payloads.values())
