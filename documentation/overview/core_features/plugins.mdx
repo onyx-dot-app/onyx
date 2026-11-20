@@ -43,13 +43,14 @@ Integrations and [connectors](/overview/core_features/connectors) give agents di
 Select **Customize** in the Chat sidebar or the Craft sidebar. Customize has three tabs: **Skills**,
 **Integrations** and **Plugins**. It opens on **Skills**. A plugin packages skills that you turn on together.
 Each skill that you add comes in its own plugin. You can also [upload a plugin](#upload-a-plugin)
-from Claude Code or Codex. A plugin can name the integrations that it needs, but it does not hold them.
+from Claude Code or Codex, or [add a marketplace](#add-a-marketplace) from GitHub.
+A plugin can name the integrations that it needs, but it does not hold them.
 Integrations are on the **Integrations** tab. The **Plugins** tab shows each plugin that you can use, in three groups:
 
 | Group | Plugins |
 | --- | --- |
-| **Created by you** | The plugins that you added, also after you publish them |
-| **From your organization** | The plugins that your admin published for the organization |
+| **Created by you** | The plugins that you added, also after you publish them, and the plugins of your personal marketplaces |
+| **From your organization** | The plugins that your admin published for the organization, and the plugins of company marketplaces |
 | **Shared with you** | The plugins that other people added and shared with you |
 
 Each row shows how many skills the plugin holds.
@@ -70,6 +71,8 @@ A tab with nothing to show does not appear.
 | **Skills** | The skills of the plugin |
 | **Integrations** | The integrations that an uploaded plugin needs, each with your state and one action |
 | **Versions** | The versions of a plugin that you own or can edit |
+
+A plugin from a marketplace shows **Synced from *owner/repo*** below its title.
 
 ## Upload a plugin
 
@@ -154,6 +157,101 @@ The default agent uses only the plugins that you turn on.
 | **Available** | Off until you turn it on. |
 
 An admin sets the install setting of each plugin in the Organization library.
+
+## Add a marketplace
+
+A marketplace is a GitHub repository with a `.claude-plugin/marketplace.json` file, as Claude Code uses.
+Each entry of the file becomes one plugin. A sync gets the changes from GitHub.
+
+<Steps>
+  <Step title="Open the dialog">
+    Select **Customize → Plugins**, then click **Add → Add marketplace**.
+  </Step>
+
+  <Step title="Add from a repository">
+    Enter the repository as `owner/repo` or as its GitHub URL.
+    If `marketplace.json` is not at the root of the repository,
+    enter the **Folder** that holds `.claude-plugin/marketplace.json`. To use a branch,
+    tag or commit that is not the default branch, enter it in **Branch, Tag or Commit**. Click **Continue**.
+  </Step>
+
+  <Step title="Confirm the source and the plugins">
+    Onyx shows the source that it read: the repository, the folder, the branch, tag or commit, and the commit. Below it,
+    Onyx shows each entry with its name, description, version and state. For each entry that Onyx can add,
+    **Will install** lists its skills and the integrations that it needs. If Onyx cannot read the marketplace,
+    the dialog shows the reason. Click **Back** to change the source.
+  </Step>
+
+  <Step title="Add the marketplace">
+    Click **Add marketplace**. Onyx adds the marketplace and starts the first sync.
+    The plugins show on the **Plugins** tab when the sync is done.
+  </Step>
+</Steps>
+
+Each entry has one state:
+
+| State | What it means |
+| --- | --- |
+| **Ready** | Onyx adds the entry as a plugin. |
+| **Blocked** | Onyx cannot add the entry, for example because its folder is missing or its plugin is not valid. The entry shows the reason. |
+| **Not supported** | The entry comes from a source that Onyx does not read, such as npm or a Git host that is not GitHub. |
+
+An entry can point to a folder of the same repository, or to another repository on github.com.
+Onyx reads the same plugin parts as for an [upload](#upload-a-plugin).
+
+A public repository needs no sign-in. Onyx reads a private repository with your connection of the GitHub integration.
+Connect GitHub in **Customize → Integrations** before you add a private repository.
+
+### Personal and company marketplaces
+
+A marketplace that you add is personal. Its plugins are yours, and Onyx turns each new plugin on for you.
+A user with the organization-wide manage plugins permission can also add a company marketplace.
+The dialog then shows **Marketplace Type** and **Default Access**.
+Each plugin of a company marketplace is available to the organization, as a published plugin is.
+**Default Access** sets its install setting: **Available**, **Installed** or **Not available**.
+A company marketplace cannot make its plugins **Required**. An admin can change the setting of one plugin later.
+
+### Manage your marketplaces
+
+Select **Customize → Plugins**, then click **Add → Manage marketplaces**.
+The page lists each marketplace with its source, its plugins and its sync:
+
+| Column | What it shows |
+| --- | --- |
+| **Marketplace** | The name, the source as `owner/repo`, with the folder and `@ref` when you set them, and **Personal** or **Company** |
+| **Sync** | **Syncing**, **Synced**, **Sync failed** or **Confirm deletes**, with the time of the last sync or the reason of the failure |
+| **Items** | The number of plugins |
+
+Click a row to see the source, the GitHub login, the last commit and each entry with its state.
+The **...** menu of a row has these actions:
+
+| Action | What it does |
+| --- | --- |
+| **Sync now** | Reads the repository again and applies the changes. |
+| **Default Access** | Changes the install setting of the plugins of a company marketplace. |
+| **Replace login** | Makes Onyx read the repository with your GitHub connection. Use it when the GitHub connection of the login is gone. |
+| **Remove** | Deletes the marketplace and its plugins. The dialog names each plugin that it deletes before you confirm. |
+
+Onyx syncs a marketplace only when you add it, when you click **Sync now**,
+and after you confirm deletes or replace the login. A sync applies these changes:
+
+- A new entry adds a plugin.
+- A changed entry adds a version to its plugin. An entry with the same files adds nothing.
+- An entry that is gone deletes its plugin.
+- A blocked or not supported entry keeps its plugin and its versions.
+
+If a sync would delete more than 5 plugins and more than half of the marketplace, Onyx deletes nothing.
+The page shows **Review deletes** above the list. Click it to see the plugins,
+then click **Delete *n* plugins** to confirm. If a sync fails, the page shows the reason above the list.
+The plugins stay as they are. Fix the cause, then click **Sync now**.
+
+### Plugins from a marketplace
+
+The content of a plugin from a marketplace comes only from GitHub. To change a skill, change it in the repository,
+then sync the marketplace. Onyx refuses to edit, upload a version of, restore, publish or delete the plugin.
+The **Versions** tab shows **This plugin syncs from GitHub,
+so you change it in GitHub.** You can still turn the plugin on or off, share it, and change its install setting.
+Remove the marketplace to delete its plugins.
 
 ## Turn an integration on or off
 
