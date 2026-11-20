@@ -19,7 +19,9 @@ from typing import cast
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
+from onyx.agents.tools import CancellationSignal, ToolInvocation
 from onyx.auth.permissions import has_global_permission, require_permission
+from onyx.configs.chat_configs import DISABLE_POSTGRES_QUERY_TOOL
 from onyx.configs.constants import PUBLIC_API_TAGS, MessageType
 from onyx.context.search.models import BaseFilters, PersonaSearchInfo, TimeRange
 from onyx.db.engine.sql_engine import get_session
@@ -45,9 +47,12 @@ from onyx.llm.factory import (
     get_search_selection_llm,
     llm_from_provider,
 )
+from onyx.llm.models import ToolResult
 from onyx.server.api_key_usage import check_api_key_usage
 from onyx.server.features.search.models import (
     BaseSearchRequest,
+    PostgresQueryRequest,
+    PostgresQueryResponse,
     RawSearchRequest,
     SearchRequest,
     SearchResponse,
@@ -63,6 +68,8 @@ from onyx.server.usage_limits import check_llm_cost_limit_for_provider
 from onyx.server.utils_vector_db import require_vector_db
 from onyx.tools.constants import SEARCH_TOOL_ID
 from onyx.tools.models import ChatMinimalTextMessage, ToolContext
+from onyx.tools.tool_implementations.postgres.postgres_tool import PostgresTool
+from onyx.tools.tool_implementations.postgres.scope import build_document_scope
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tracing.framework.create import (
     SearchTraceMetadata,
@@ -233,6 +240,53 @@ def raw_search(
         message_history=None,
         context=ToolContext(),
     )
+
+
+@router.post(
+    "/postgres-query",
+    # Runs no LLM, so no token budget applies.
+    dependencies=[Depends(check_api_key_usage)],
+    tags=PUBLIC_API_TAGS,
+)
+def postgres_query(
+    request: PostgresQueryRequest,
+    user: User = Depends(require_permission(Permission.READ_SEARCH)),
+    db_session: Session = Depends(get_session),
+) -> PostgresQueryResponse:
+    """
+    Run one `postgres_query` call: exact counts and listings over the metadata
+    of the documents the caller can access, and over the caller's own chat
+    history. `arguments` are the chat tool's arguments, such as
+    `{"table": "document", "source_type": ["jira"], "count": true}`. With
+    `persona_id`, document queries stay inside that agent's knowledge, as for
+    search.
+    """
+    if DISABLE_POSTGRES_QUERY_TOOL:
+        raise OnyxError(OnyxErrorCode.FEATURE_DISABLED, "postgres_query is turned off.")
+    _, persona_search_info = _load_persona(request.persona_id, user, db_session)
+    tool = PostgresTool(
+        user=user,
+        current_chat_session_id=None,
+        scope=build_document_scope(
+            persona_search_info,
+            user_selected_filters=None,
+            project_id_filter=None,
+            persona_id_filter=None,
+        ),
+    )
+    outcome = tool.run(
+        ToolInvocation(
+            call_id="postgres-query-api",
+            arguments=request.arguments,
+            cancellation=CancellationSignal(),
+            update=lambda _: None,
+        ),
+        ToolContext(),
+    )
+    # The tool never pauses for input or child runs.
+    if not isinstance(outcome, ToolResult):
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, "postgres_query did not finish.")
+    return PostgresQueryResponse(result=outcome.content, is_error=outcome.is_error)
 
 
 def _load_persona(

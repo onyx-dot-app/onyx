@@ -421,3 +421,45 @@ def test_mcp_search_scopes_to_agent(
         in_scope_content in (doc.get("content") or "")
         for doc in scoped_pat_payload["results"]
     )
+
+
+def test_mcp_query_metadata_counts_and_lists_documents(
+    admin_user: DATestUser,
+) -> None:
+    """The metadata tool reaches the Postgres query layer through the API."""
+    api_key = APIKeyManager.create(user_performing_action=admin_user)
+    cc_pair = CCPairManager.create_from_scratch(user_performing_action=admin_user)
+    tag = os.urandom(4).hex()
+    doc = DocumentManager.seed_doc_with_content(
+        cc_pair, f"metadata query {tag}", api_key, document_id=f"mcp-meta-{tag}"
+    )
+    headers = _auth_headers(admin_user, name="mcp-query-metadata")
+
+    async def _action(session: ClientSession) -> list[CallToolResult]:
+        await session.initialize()
+        tools = await session.list_tools()
+        assert "query_metadata" in {tool.name for tool in tools.tools}
+        return [
+            await session.call_tool(
+                "query_metadata",
+                {"table": "document", "title_contains": [doc.id], "count": True},
+            ),
+            await session.call_tool(
+                "query_metadata", {"table": "document", "title_contains": [doc.id]}
+            ),
+            await session.call_tool(
+                "query_metadata",
+                {"table": "document", "count": True, "order_by": "title_asc"},
+            ),
+        ]
+
+    count_result, listing_result, rejected_result = _run_with_mcp_session(
+        headers, _action
+    )
+    assert _extract_tool_payload(count_result)["result"].startswith(
+        "1 matching documents"
+    )
+    assert f"Test Document {doc.id}" in _extract_tool_payload(listing_result)["result"]
+    assert (
+        "only to document listings" in _extract_tool_payload(rejected_result)["error"]
+    )

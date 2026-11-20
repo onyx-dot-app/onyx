@@ -62,8 +62,9 @@ An empty result can be valid. Try a document that you know you can open in Onyx.
 
 ## Permissions and data access
 
-A connected app gets the `read:search` scope. It can search documents that you can access, search the web,
-and open web pages. It cannot create API keys or use other Onyx APIs. Your document permissions still apply.
+A connected app gets the `read:search` scope. It can search documents that you can access,
+query their metadata and your own Onyx chat history, search the web, and open web pages.
+It cannot create API keys or use other Onyx APIs. Your document permissions still apply.
 
 Your AI client receives the content that Onyx returns. Use a client that your organization allows to receive it.
 
@@ -194,6 +195,42 @@ A result also includes `metadata` when its source supplies fields, such as a Jir
 Use these keys and values in `tags`. For a list value, such as `"labels": ["production", "urgent"]`,
 send one pair for each item. Results are ordered by relevance. `content` contains retrieved document text,
 which can be a selected chunk rather than the entire document. There is no `limit` parameter for this tool.
+
+### query_metadata
+
+Get exact counts and complete lists from the metadata of the documents that you can access,
+and from your own Onyx chat history. Use it for questions that a search cannot answer completely,
+such as "How many Jira tickets changed last week?" or "List every document with 'pricing' in the title".
+It reads titles, dates, owners, sources, and folders. It does not read document text.
+Use `search_indexed_documents` for questions about content.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `table` | string | Yes | `document`, `hierarchy_node` (folders, spaces, and channels), `chat_session`, `chat_message`, or `search_doc` (the documents that a past answer used). |
+| `count` | boolean | No | Defaults to `false`. Set `true` to get only the number of matches. |
+| `group_by` | string | No | With `count`: `source` or `owner` for documents, `month` for chat sessions and messages. |
+| `limit` | integer | No | Number of rows or page size. Defaults to 25. The maximum is 100. |
+| `order_by` | string | No | Document lists only: `updated_desc` (default), `updated_asc`, `created_desc`, `created_asc`, `title_asc`, or `title_desc`. |
+| `cursor` | string | No | The `next_cursor` value from the previous page of a document list. Use the same filters. |
+| `agent` | string | No | Name of an accessible Onyx agent. Document queries stay inside that agent's knowledge. |
+
+Each table has its own filters, such as `source_type`, `title_contains`, `owned_by`, and `updated_after` for documents.
+The tool description lists all of them. Filters that take a list match any of the values in the list.
+All filters in one call apply together. Dates use ISO 8601, such as `2026-06-01`.
+A `*_before` date is not included in the range.
+
+```json
+{
+  "table": "document",
+  "source_type": ["jira", "linear"],
+  "updated_after": "2026-11-01",
+  "count": true,
+  "group_by": "source"
+}
+```
+
+The response has a `result` string with the count or the rows. Listed documents include their links.
+When a document list has more pages, the result ends with a `next_cursor` value.
 
 ### search_web
 
