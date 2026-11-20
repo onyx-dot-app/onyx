@@ -6,11 +6,12 @@ import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTyp
 import { useTranslations } from "next-intl";
 import { Form, Formik } from "formik";
 import * as Yup from "yup";
-import { createSlackBot, updateSlackBot } from "./new/lib";
+import { createSlackBot, updateSlackBot } from "@/app/admin/bots/new/lib";
 import { Button, Divider } from "@opal/components";
 import { useEffect } from "react";
 import { DOCS_ADMINS_PATH } from "@/lib/constants";
 import { toast } from "@opal/layouts";
+import { parseErrorDetail } from "@/lib/fetcher";
 
 export const SlackTokensForm = ({
   isUpdate,
@@ -59,15 +60,18 @@ export const SlackTokensForm = ({
           if (refreshSlackBot) {
             refreshSlackBot();
           }
-          const responseJson: unknown = await response.json().catch(() => null);
-          const botId: number | undefined = isUpdate
-            ? existingSlackBotId
-            : typeof responseJson === "object" &&
-              responseJson !== null &&
-              "id" in responseJson &&
-              typeof (responseJson as { id: unknown }).id === "number"
-            ? (responseJson as { id: number }).id
-            : undefined;
+          let botId = existingSlackBotId;
+          if (!isUpdate) {
+            const body: unknown = await response.json().catch((): null => null);
+            if (
+              typeof body === "object" &&
+              body !== null &&
+              "id" in body &&
+              typeof body.id === "number"
+            ) {
+              botId = body.id;
+            }
+          }
 
           toast.success(
             isUpdate
@@ -78,17 +82,10 @@ export const SlackTokensForm = ({
             navigation.go(`/admin/bots/${encodeURIComponent(botId)}`);
           }
         } else {
-          const responseJson: unknown = await response.json().catch(() => null);
-          const errorData =
-            typeof responseJson === "object" && responseJson !== null
-              ? (responseJson as Record<string, unknown>)
-              : null;
-
-          let errorMsg =
-            (typeof errorData?.detail === "string" && errorData.detail) ||
-            (typeof errorData?.message === "string" && errorData.message) ||
-            response.statusText ||
-            t("error.unknownOccurred.message");
+          let errorMsg = await parseErrorDetail(
+            response,
+            response.statusText || t("error.unknownOccurred.message")
+          );
 
           if (errorMsg.includes("Invalid bot token:")) {
             errorMsg = t("tokensForm.invalidBotToken.message");
