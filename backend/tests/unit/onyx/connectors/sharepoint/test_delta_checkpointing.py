@@ -659,19 +659,13 @@ class TestDeltaPageFetchFailure:
 
 
 class TestDeltaDuplicateDocumentDedup:
-    """The Microsoft Graph delta API can return the same item on multiple
-    pages.  Documents already yielded should be skipped via
-    checkpoint.seen_document_ids."""
+    """The Microsoft Graph delta API can return the same item more than one
+    time. One call does not yield an item two times. The checkpoint keeps no
+    document ids, so that it does not grow with the drive."""
 
-    def test_duplicate_across_pages_is_skipped(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """Item 'dup' appears on both page 1 and page 2.  It should only be
-        yielded once."""
-        connector = _setup_connector()
-        _mock_convert(monkeypatch)
-
-        call_count = 0
+    @staticmethod
+    def _pages(connector: SharepointConnector, pages: list[list[str]]) -> None:
+        remaining = iter(enumerate(pages))
 
         def fake_fetch_page(
             client: Any,  # noqa: ARG001
@@ -681,157 +675,74 @@ class TestDeltaDuplicateDocumentDedup:
             end: datetime | None = None,  # noqa: ARG001
             page_size: int = 200,  # noqa: ARG001
         ) -> tuple[list[DriveItemData], str | None]:
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                return [_make_item("a"), _make_item("dup")], "https://next2"
-            return [_make_item("dup"), _make_item("b")], None
+            index, page = next(remaining)
+            return [_make_item(item_id) for item_id in page], (
+                "https://next" if index < len(pages) - 1 else None
+            )
 
         _patch_delta_fetch(connector, fake_fetch_page)
 
-        checkpoint = _build_ready_checkpoint()
-
-        # Page 1: yields a, dup
-        gen = connector._load_from_checkpoint(
-            _START_TS, _END_TS, checkpoint, include_permissions=False
-        )
-        yielded, checkpoint = _consume_generator(gen)
-        docs = _docs_from(yielded)
-        assert [d.id for d in docs] == ["a", "dup"]
-        assert "dup" in checkpoint.seen_document_ids
-
-        # Page 2: dup should be skipped, only b yielded
-        gen = connector._load_from_checkpoint(
-            _START_TS, _END_TS, checkpoint, include_permissions=False
-        )
-        yielded, checkpoint = _consume_generator(gen)
-        docs = _docs_from(yielded)
-        assert [d.id for d in docs] == ["b"]
-
-    def test_duplicate_within_same_page_is_skipped(
+    def test_duplicate_in_one_page_is_skipped(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """If the same item appears twice on a single delta page, only the
-        first occurrence should be yielded."""
         connector = _setup_connector()
         _mock_convert(monkeypatch)
+        self._pages(connector, [["a", "dup", "dup", "b"]])
 
-        def fake_fetch_page(
-            client: Any,  # noqa: ARG001
-            page_url: str,  # noqa: ARG001
-            drive_id: str,  # noqa: ARG001
-            start: datetime | None = None,  # noqa: ARG001
-            end: datetime | None = None,  # noqa: ARG001
-            page_size: int = 200,  # noqa: ARG001
-        ) -> tuple[list[DriveItemData], str | None]:
-            return [_make_item("x"), _make_item("x"), _make_item("y")], None
-
-        _patch_delta_fetch(connector, fake_fetch_page)
-
-        checkpoint = _build_ready_checkpoint()
         gen = connector._load_from_checkpoint(
-            _START_TS, _END_TS, checkpoint, include_permissions=False
+            _START_TS, _END_TS, _build_ready_checkpoint(), include_permissions=False
         )
-        yielded, checkpoint = _consume_generator(gen)
-        docs = _docs_from(yielded)
-        assert [d.id for d in docs] == ["x", "y"]
+        yielded, _ = _consume_generator(gen)
 
-    def test_seen_ids_survive_checkpoint_serialization(
+        assert [d.id for d in _docs_from(yielded)] == ["a", "dup", "b"]
+
+    def test_the_checkpoint_keeps_no_document_ids(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """seen_document_ids must survive JSON serialization so that
-        dedup works across crash + resume."""
+        """An item on two pages is converted two times. The later one is
+        stored, which is the newer state of the item."""
         connector = _setup_connector()
         _mock_convert(monkeypatch)
+        self._pages(connector, [["a", "dup"], ["dup", "b"]])
 
-        call_count = 0
+        gen = connector._load_from_checkpoint(
+            _START_TS, _END_TS, _build_ready_checkpoint(), include_permissions=False
+        )
+        yielded, checkpoint = _consume_generator(gen)
+        assert [d.id for d in _docs_from(yielded)] == ["a", "dup"]
+        assert "seen_document_ids" not in checkpoint.model_dump_json()
 
-        def fake_fetch_page(
-            client: Any,  # noqa: ARG001
-            page_url: str,  # noqa: ARG001
-            drive_id: str,  # noqa: ARG001
-            start: datetime | None = None,  # noqa: ARG001
-            end: datetime | None = None,  # noqa: ARG001
-            page_size: int = 200,  # noqa: ARG001
-        ) -> tuple[list[DriveItemData], str | None]:
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                return [_make_item("a")], "https://next2"
-            return [_make_item("a"), _make_item("b")], None
-
-        _patch_delta_fetch(connector, fake_fetch_page)
-
-        checkpoint = _build_ready_checkpoint()
-
-        # Page 1
         gen = connector._load_from_checkpoint(
             _START_TS, _END_TS, checkpoint, include_permissions=False
         )
-        _, checkpoint = _consume_generator(gen)
-        assert "a" in checkpoint.seen_document_ids
+        yielded, _ = _consume_generator(gen)
+        assert [d.id for d in _docs_from(yielded)] == ["dup", "b"]
 
-        # Simulate crash: round-trip through JSON
-        restored = SharepointConnectorCheckpoint.model_validate_json(
-            checkpoint.model_dump_json()
-        )
-        assert "a" in restored.seen_document_ids
-
-        # Page 2 with restored checkpoint: 'a' should be skipped
-        connector2 = _setup_connector()
+    def test_a_checkpoint_from_before_the_change_resumes(
+        self, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """An in-flight checkpoint that holds ``seen_document_ids`` loads, and
+        the drive it was in does not yield those documents again."""
+        connector = _setup_connector()
         _mock_convert(monkeypatch)
-        _patch_delta_fetch(connector2, fake_fetch_page)
+        self._pages(connector, [["a", "b"]])
+        old_json = json.loads(_build_ready_checkpoint().model_dump_json())
+        old_json["seen_document_ids"] = ["a"]
 
-        gen = connector2._load_from_checkpoint(
+        restored = connector.validate_checkpoint_json(json.dumps(old_json))
+        gen = connector._load_from_checkpoint(
             _START_TS, _END_TS, restored, include_permissions=False
         )
         yielded, final_cp = _consume_generator(gen)
-        docs = _docs_from(yielded)
-        assert [d.id for d in docs] == ["b"]
 
-    def test_no_dedup_across_separate_indexing_runs(
-        self, monkeypatch: pytest.MonkeyPatch
-    ) -> None:
-        """A fresh checkpoint (new indexing run) should have an empty
-        seen_document_ids, so previously-indexed docs are re-processed."""
-        connector = _setup_connector()
-        _mock_convert(monkeypatch)
-
-        def fake_fetch_page(
-            client: Any,  # noqa: ARG001
-            page_url: str,  # noqa: ARG001
-            drive_id: str,  # noqa: ARG001
-            start: datetime | None = None,  # noqa: ARG001
-            end: datetime | None = None,  # noqa: ARG001
-            page_size: int = 200,  # noqa: ARG001
-        ) -> tuple[list[DriveItemData], str | None]:
-            return [_make_item("a")], None
-
-        _patch_delta_fetch(connector, fake_fetch_page)
-
-        # First run
-        cp1 = _build_ready_checkpoint()
-        gen = connector._load_from_checkpoint(
-            _START_TS, _END_TS, cp1, include_permissions=False
-        )
-        yielded, _ = _consume_generator(gen)
-        assert len(_docs_from(yielded)) == 1
-
-        # Second run with a fresh checkpoint — same doc should appear again
-        cp2 = _build_ready_checkpoint()
-        assert len(cp2.seen_document_ids) == 0
-        gen = connector._load_from_checkpoint(
-            _START_TS, _END_TS, cp2, include_permissions=False
-        )
-        yielded, _ = _consume_generator(gen)
-        assert len(_docs_from(yielded)) == 1
+        assert [d.id for d in _docs_from(yielded)] == ["b"]
+        assert final_cp.legacy_seen_document_ids is None
 
     def test_same_id_across_drives_not_skipped(
         self, monkeypatch: pytest.MonkeyPatch
     ) -> None:
-        """Graph item IDs are only unique within a drive.  An item in drive B
-        that happens to share an ID with an item already seen in drive A must
-        NOT be skipped."""
+        """Graph item IDs are only unique within a drive. An item in drive B
+        with the id of an item in drive A must not be skipped."""
         connector = _setup_connector()
         _mock_convert(monkeypatch)
 
@@ -846,26 +757,11 @@ class TestDeltaDuplicateDocumentDedup:
             return [_make_item("shared-id")], None
 
         _patch_delta_fetch(connector, fake_fetch_page)
-
         checkpoint = _build_ready_checkpoint(drive_names=["DriveA", "DriveB"])
 
-        # Drive A: yields the item
-        gen = connector._load_from_checkpoint(
-            _START_TS, _END_TS, checkpoint, include_permissions=False
-        )
-        yielded, checkpoint = _consume_generator(gen)
-        docs = _docs_from(yielded)
-        assert len(docs) == 1
-        assert docs[0].id == "shared-id"
-
-        # seen_document_ids should have been cleared when drive A finished
-        assert len(checkpoint.seen_document_ids) == 0
-
-        # Drive B: same ID must be yielded again (different drive)
-        gen = connector._load_from_checkpoint(
-            _START_TS, _END_TS, checkpoint, include_permissions=False
-        )
-        yielded, checkpoint = _consume_generator(gen)
-        docs = _docs_from(yielded)
-        assert len(docs) == 1
-        assert docs[0].id == "shared-id"
+        for _ in ("DriveA", "DriveB"):
+            gen = connector._load_from_checkpoint(
+                _START_TS, _END_TS, checkpoint, include_permissions=False
+            )
+            yielded, checkpoint = _consume_generator(gen)
+            assert [d.id for d in _docs_from(yielded)] == ["shared-id"]

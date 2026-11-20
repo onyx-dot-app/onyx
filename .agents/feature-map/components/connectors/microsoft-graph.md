@@ -134,6 +134,22 @@ values and the sum, and no credential field. The connector form shows them
 under the field
 (`web/src/views/admin/connectors/AddConnectorPage/form/MicrosoftRateBudgetNote.tsx`).
 
+**SharePoint stub listing.** `SharepointConnector` is a
+`CheckpointedSlimConnector` with `listing_payload_type =
+SharepointListingPayload`, so with `ENABLE_CONVERSION_STAGE` on, docfetching
+lists it as stubs and the conversion stage fetches the documents
+([[indexing-pipeline]]). `retrieve_slim_docs_from_checkpoint` and
+`load_from_checkpoint` run one walk (`_walk_from_checkpoint`) over sites,
+drives, delta pages and site pages, with one checkpoint model. The listing
+yields a `SlimDocumentStub` for each file that the fetching path keeps
+(`connectors/sharepoint/listing.py:is_listable_drive_item`) and downloads
+nothing. The payload holds the drive id, the item id, the list ids, the site
+URL and the file fields, and never the `downloadUrl`. A site page is listed
+with no `canvasLayout`. The stub's time and size are those of the document, so
+`drop_unchanged_stubs` drops an unchanged file. The listing keeps the
+`@odata.deltaLink` of each drive in Redis (`store_drive_delta_link`); no code
+reads it yet, and a run still starts from a time token.
+
 ---
 
 ## Contracts and traps
@@ -157,16 +173,24 @@ under the field
    `AliasChoices` (`connectors/sharepoint/connector.py:SharepointConnectorCheckpoint`). In-flight attempts keep their saved checkpoints across a
    deploy, so keep that pattern, or they fail to resume
    ([[connectors#checkpoint-compatible]]).
-6. `site-urls-full` **Site URLs must be full.** The SharePoint `sites` field
+6. `checkpoint-bounded` **The SharePoint checkpoint holds no document ids.**
+   It is stored after each delta page, so a set that grows with the drive
+   makes the stored bytes grow with the square of the drive.
+   `seen_hierarchy_node_raw_ids` is cut when the walk leaves a drive and at
+   `MAX_SEEN_HIERARCHY_NODE_IDS`. Graph can return one item on two delta pages;
+   the item is then converted two times.
+7. `no-download-url-in-payload` **Do not put `downloadUrl` in a listing
+   payload.** It expires in about an hour and it is a credential for the file.
+8. `site-urls-full` **Site URLs must be full.** The SharePoint `sites` field
    accepts only `https` URLs with a `/sites/`, `/teams/` or `/personal/` path
    (`connectors/sharepoint/config.py:is_site_url_well_formed`).
 
-7. `sdk-client-prepared` **Build an office365 client through
+9. `sdk-client-prepared` **Build an office365 client through
    `prepare_sdk_client`.** A `GraphClient` or `ClientContext` built without it
    sends requests that take no cost from the limiter and carry no User-Agent.
    The pacer is read for each request, because the factory gives a connector
    its limiter after its credentials.
-8. `call-cost-from-url` **A new Graph call gets its cost from its URL.** Add a
+10. `call-cost-from-url` **A new Graph call gets its cost from its URL.** Add a
    pattern to `graph_call_type` when a new endpoint has a cost above 1 RU.
 
 ---
