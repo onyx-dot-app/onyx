@@ -47,6 +47,12 @@ instructions, a step needs a file or script you cannot open), state the issue, \
 pick the next-best approach, and continue.
 </skills_instructions>"""
 
+SKILLS_UNAVAILABLE_INTEGRATIONS_LINE = (
+    "Some skills come from plugins that need integrations the user cannot use "
+    "now: {names}. If a step needs one, tell the user to add it, turn it on or "
+    "sign in under Customize > Integrations."
+)
+
 SKILLS_OMITTED_LINE = (
     "- {count} additional {skills} omitted from this bounded skills list."
 )

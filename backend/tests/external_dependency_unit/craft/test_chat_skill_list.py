@@ -153,7 +153,7 @@ def test_chat_skills_use_the_version_each_user_runs(
     ) == ("Skill one", None)
     # The whole SKILL.md of each version, frontmatter included.
     skill_md = read_versions_skill_md(
-        [author_skills[name].version_id, org_skills[name].version_id],
+        [(author_skills[name].version_id, ""), (org_skills[name].version_id, "")],
         author.id,
         db_session,
     )
@@ -161,9 +161,10 @@ def test_chat_skills_use_the_version_each_user_runs(
         (author_skills[name].version_id, "two"),
         (org_skills[name].version_id, "one"),
     ):
-        assert skill_md[version_id].startswith(f"---\nname: {name}\n")
-        assert f"description: Skill {version}" in skill_md[version_id]
-        assert skill_md[version_id].rstrip().endswith(f"Instructions {version}")
+        text = skill_md[(version_id, "")]
+        assert text.startswith(f"---\nname: {name}\n")
+        assert f"description: Skill {version}" in text
+        assert text.rstrip().endswith(f"Instructions {version}")
     built_in_names = {
         runtime.name
         for runtime in list_runtime_skills_for_user(db_session=db_session, user=author)
@@ -258,8 +259,8 @@ def test_chat_skills_follow_install_settings_and_the_name_order(
     assert chat[name].version_id == published_plugin.current_version_id
     # A picked skill's SKILL.md is read only for a skill the user can see.
     assert not get_visible_versions_skill_md(
-        [hidden_plugin.current_version_id], user.id, db_session
+        [(hidden_plugin.current_version_id, "")], user.id, db_session
     )
     assert get_visible_versions_skill_md(
-        [hidden_plugin.current_version_id], other.id, db_session
+        [(hidden_plugin.current_version_id, "")], other.id, db_session
     )

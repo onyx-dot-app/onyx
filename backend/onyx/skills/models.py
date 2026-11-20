@@ -1,8 +1,18 @@
 import re
+from enum import Enum
 from typing import Annotated, Any, Final, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, JsonValue, field_validator
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    JsonValue,
+    computed_field,
+    field_validator,
+)
+
+from onyx.utils.url import McpUrlProblem
 
 SKILL_NAME_PATTERN: Final[re.Pattern[str]] = re.compile(r"^[a-z0-9]+(?:-[a-z0-9]+)*$")
 SKILL_NAME_MAX_LENGTH: Final = 64
@@ -10,6 +20,17 @@ SkillName = Annotated[
     str, Field(pattern=SKILL_NAME_PATTERN, max_length=SKILL_NAME_MAX_LENGTH)
 ]
 GITHUB_SKILL_MAX_COUNT: Final[int] = 500
+# Frontmatter fields Onyx does not read. A bad value is dropped, not refused.
+UNUSED_FRONTMATTER_FIELDS: Final = frozenset(
+    {"license", "compatibility", "metadata", "allowed-tools"}
+)
+_BIDI_CONTROLS: Final[re.Pattern[str]] = re.compile("[\u202a-\u202e\u2066-\u2069]")
+
+
+def strip_bidi_controls(value: str) -> str:
+    """Remove the bidi embedding, override and isolate characters, which can
+    make shown text read differently from what it holds."""
+    return _BIDI_CONTROLS.sub("", value)
 
 
 class SkillMetadata(BaseModel):
@@ -26,8 +47,10 @@ class SkillMetadata(BaseModel):
     description: str
     license: str | None = None
     compatibility: str | None = None
-    metadata: dict[str, str] | None = None
-    allowed_tools: str | None = Field(default=None, alias="allowed-tools")
+    # Onyx does not read these two. Claude Code accepts a list for
+    # allowed-tools and nested values in metadata.
+    metadata: dict[str, Any] | None = None
+    allowed_tools: str | list[str] | None = Field(default=None, alias="allowed-tools")
 
     @field_validator("name")
     @classmethod
@@ -43,10 +66,13 @@ class SkillMetadata(BaseModel):
     @field_validator("description")
     @classmethod
     def validate_description(cls, value: str) -> str:
+        value = strip_bidi_controls(value)
         if not value.strip():
             raise ValueError("must not be empty")
         if len(value) > 1024:
             raise ValueError("must be at most 1024 characters")
+        if "\x00" in value:
+            raise ValueError("must not contain a NUL character")
         return value
 
     @field_validator("compatibility")
@@ -123,6 +149,60 @@ class PluginSkillContent(BaseModel):
         return _frontmatter_string(self.frontmatter, "description")
 
 
+class PluginUnusedPart(str, Enum):
+    COMMANDS = "commands"
+    AGENTS = "agents"
+    HOOKS = "hooks"
+    LSP_SERVERS = "lsp_servers"
+    OUTPUT_STYLES = "output_styles"
+    BIN = "bin"
+    THEMES = "themes"
+    MONITORS = "monitors"
+
+
+class PluginAuthor(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    name: str | None = None
+    email: str | None = None
+    url: str | None = None
+
+
+class PluginManifest(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    name: str
+    version: str | None = None
+    description: str | None = None
+    author: PluginAuthor | None = None
+    homepage: str | None = None
+    repository: str | None = None
+    license: str | None = None
+    keywords: list[str] = Field(default_factory=list)
+    unused_parts: list[PluginUnusedPart] = Field(default_factory=list)
+
+
+MCP_URL_TRANSPORTS: Final = frozenset({"http", "streamable-http", "sse"})
+
+
+class PluginNeed(BaseModel):
+    """A need names a server by URL and never refers to an integration row."""
+
+    model_config = ConfigDict(frozen=True)
+
+    kind: Literal["mcp"] = "mcp"
+    name: str
+    url: str | None
+    transport: str | None
+    # Why the plugin's URL was dropped. None when it had no URL.
+    url_problem: McpUrlProblem | None = None
+
+    @computed_field
+    @property
+    def supported(self) -> bool:
+        return self.url is not None and self.transport in MCP_URL_TRANSPORTS
+
+
 class PluginVersionContent(BaseModel):
     """Everything one new plugin version stores, built from the normalized
     bundle bytes that the file store holds."""
@@ -140,6 +220,33 @@ class PluginVersionContent(BaseModel):
     unpacked_size_bytes: int | None
     file_count: int | None
     skills: list[PluginSkillContent]
+    manifest: PluginManifest | None = None
+    needs: list[PluginNeed] | None = None
+
+
+class PluginBundleSkill(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    content: PluginSkillContent
+    warnings: list[str]
+
+
+class PluginBundle(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    content: bytes
+    manifest: PluginManifest
+    skills: list[PluginBundleSkill]
+    needs: list[PluginNeed]
+    warnings: list[str]
+
+
+class BundleLayout(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    markers: tuple[str, ...]
+    missing_detail: str
+    outside_detail: str
 
 
 class CustomSkillBundleContents(BaseModel):
@@ -180,6 +287,7 @@ class ChatSkill(BaseModel):
     # prefers. None when it is missing or blank.
     short_description: str | None = None
     version_id: UUID
+    path: str = ""
 
     @field_validator("description")
     @classmethod

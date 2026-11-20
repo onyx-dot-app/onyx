@@ -10418,7 +10418,8 @@
             "public": "Found {count, plural, one {# tool} other {# tools}}. The server needs no sign-in.",
             "oauth": "The server uses OAuth sign-in.",
             "authUnknown": "The server needs sign-in. Add an API key header or OAuth.",
-            "unreachable": "Onyx cannot reach this server. Check the URL."
+            "unreachable": "Onyx cannot reach this server. Check the URL.",
+            "forbidden": "Only an admin can check this server before it is added. You can still add it."
           },
           "transport": {
             "title": "Transport",
@@ -16648,6 +16649,21 @@
           "remove": "Remove {name}",
           "shared": "Shared with this group",
           "settingOnly": "Group setting only"
+        },
+        "plugin": {
+          "installation": {
+            "description": "Choose how this plugin is installed for everyone with access."
+          },
+          "published": {
+            "description": "Published. Everyone in the organization can use this plugin."
+          },
+          "publishWarning": {
+            "description": "After you save, everyone in the organization can use this plugin. You cannot make it private again. Only an admin can delete it.",
+            "reviewDescription": "The plugin stays private until an admin approves the request. After approval, you cannot make it private again."
+          },
+          "publishOff": {
+            "description": "An admin turned off publishing to the organization. Ask an admin to publish this plugin."
+          }
         }
       },
       "placeholders": {
@@ -16663,7 +16679,8 @@
         "columns": {
           "version": "Version",
           "madeBy": "Made by",
-          "date": "Date"
+          "date": "Date",
+          "manifestVersion": "plugin.json"
         },
         "versionLabel": "Version {number}",
         "currentBadge": "Current",
@@ -16686,7 +16703,9 @@
           "back": "All versions",
           "loadError": {
             "title": "Couldn't load this version"
-          }
+          },
+          "skills": "Skills · {count}",
+          "integrations": "Integrations · {count}"
         },
         "status": {
           "pending": "Pending review",
@@ -16698,7 +16717,9 @@
           "failedToast": "Couldn't publish this update.",
           "sentForReviewToast": "Version {number} went to an admin for review.",
           "offNotice": "Publishing is turned off. Ask an admin to publish this update."
-        }
+        },
+        "noManifestVersion": "None",
+        "manifestVersion": "plugin.json {version}"
       }
     },
     "page": {
@@ -16747,10 +16768,12 @@
         "body": "Continuing will disable the currently enabled skill and enable this one.",
         "description": "Only one skill named “{name}” can be enabled at a time.",
         "submit": {
-          "label": "Switch skill",
+          "label": "Switch",
           "pendingLabel": "Switching..."
         },
-        "title": "Switch “{name}” skill?"
+        "title": "Turn on “{name}”?",
+        "descriptionNamed": "{names} already uses a skill name that “{name}” uses. Only one of them can be on at a time.",
+        "bodyNamed": "Turning on “{name}” turns off {names}."
       },
       "toasts": {
         "disableFailed": "Failed to disable {name}",
@@ -16772,6 +16795,9 @@
         },
         "upload": {
           "label": "Drag and drop or click to upload"
+        },
+        "chooseFolder": {
+          "label": "Choose a folder"
         }
       },
       "filesPicker": {
@@ -16795,7 +16821,8 @@
       },
       "upload": {
         "error": {
-          "readFailed": "Could not read the upload."
+          "readFailed": "Could not read the upload.",
+          "folderRoot": "{upload, select, plugin {The selected folder must contain SKILL.md or a plugin.json manifest at its top level.} other {The selected folder must contain SKILL.md at its top level.}}"
         }
       }
     },
@@ -16954,19 +16981,44 @@
           "location": "Location",
           "owner": "Owner",
           "skills": "Skills",
-          "description": "Description"
+          "description": "Description",
+          "version": "Version in plugin.json",
+          "author": "Author",
+          "homepage": "Homepage",
+          "license": "License",
+          "notUsed": "Not used in Onyx"
         },
         "skills": {
           "off": "Off",
-          "invalid": "Not valid"
+          "invalid": "Not valid",
+          "read": "Read",
+          "readAriaLabel": "Read the {name} skill",
+          "readFailed": "Could not read this skill.",
+          "noInstructions": "This skill has no instructions."
         },
         "switch": {
           "title": "Use this plugin",
-          "description": "When this is on, the default agent can use this plugin.",
           "label": "Use {name}",
           "required": "Your admin made this plugin required. You cannot turn it off.",
           "unavailable": "You cannot turn this plugin on or off.",
-          "failed": "Could not change the plugin."
+          "failed": "Could not change the plugin.",
+          "on": "On. The default agent can use this plugin.",
+          "off": "Off. Turn it on to let the default agent use this plugin.",
+          "nameHeld": "Off because {names} uses the same skill name. Turn this plugin on to use it instead."
+        },
+        "actions": {
+          "share": "Share",
+          "menu": "More actions",
+          "uploadVersion": "Upload New Version",
+          "remove": "Delete Plugin"
+        },
+        "remove": {
+          "entityType": "plugin",
+          "description": "Everyone who uses this plugin loses it. You cannot undo this.",
+          "submit": "Delete",
+          "pending": "Deleting…",
+          "done": "Deleted {name}.",
+          "failed": "Could not delete the plugin."
         }
       },
       "connection": {
@@ -17063,6 +17115,102 @@
           "label": "Done"
         }
       }
+    },
+    "needs": {
+      "intro": "A plugin never gives access to an integration. Each row shows your own state of the integration. The plugin works without the integrations that are not on.",
+      "state": {
+        "on": "On",
+        "turn_on": "Off",
+        "sign_in": "Not signed in",
+        "no_access": "No access",
+        "turned_off": "Turned off",
+        "not_added": "Not added",
+        "more_than_one": "More than one match",
+        "not_supported": "Not supported"
+      },
+      "note": {
+        "askAdmin": "Ask an admin",
+        "turnedOff": "Turned off by your admin",
+        "moreThanOne": "More than one integration matches",
+        "notSupported": "Not supported in Onyx"
+      },
+      "localServer": "Local server",
+      "noUrl": "No server URL",
+      "turnOn": {
+        "label": "Turn on",
+        "ariaLabel": "Turn on {name}",
+        "failed": "Could not turn on {name}."
+      },
+      "add": {
+        "label": "Add integration",
+        "ariaLabel": "Add the {name} integration"
+      },
+      "urlProblem": {
+        "variable": "The URL uses a variable. Onyx does not fill in variables.",
+        "credential": "The URL has a credential in it. Onyx does not keep it.",
+        "invalid": "The URL is not a valid http or https URL."
+      }
+    },
+    "upload": {
+      "title": "Upload Plugin",
+      "description": "Upload a Claude Code or Codex plugin. Choose a .zip file, or drag the plugin folder here.",
+      "reading": "Reading…",
+      "requirements": {
+        "title": "Onyx uses these parts of a plugin:",
+        "skills": "Skills in skills/'<name>'/SKILL.md",
+        "mcp": "MCP servers in .mcp.json or plugin.json",
+        "other": "Onyx does not use commands, agents, hooks or the other parts."
+      },
+      "skillOnly": {
+        "title": "This upload is a skill",
+        "description": "It has no plugin.json. Continue to add it as a skill.",
+        "continue": "Continue"
+      },
+      "version": "plugin.json {version}",
+      "target": {
+        "newVersion": "Updates {name} to Onyx version {version}",
+        "newPlugin": "New plugin: {name}"
+      },
+      "willBeOff": "The plugin is saved off. {names} already has a skill with the same name.",
+      "saveAsNew": {
+        "label": "Save as a New Plugin",
+        "description": "Keep the plugin that has this name as it is."
+      },
+      "sections": {
+        "skills": "Skills · {count}",
+        "integrations": "Integrations · {count}",
+        "unused": "Not used in Onyx",
+        "warnings": "Warnings"
+      },
+      "integrationsNote": "Saving turns on the integrations that you can already use. A plugin never gives access to an integration.",
+      "integrationsNoteOff": "The plugin is off after the save, so the save turns on no integrations.",
+      "unusedParts": {
+        "commands": "Commands",
+        "agents": "Agents",
+        "hooks": "Hooks",
+        "lsp_servers": "LSP servers",
+        "output_styles": "Output styles",
+        "bin": "Executables (bin)",
+        "themes": "Themes",
+        "monitors": "Monitors"
+      },
+      "cancel": "Cancel",
+      "save": "Save",
+      "saving": "Saving…",
+      "readFailed": "Could not read the plugin.",
+      "saveFailed": "Could not save the plugin.",
+      "saved": {
+        "newPlugin": "Added {name}.",
+        "newVersion": "Updated {name} to Onyx version {version}.",
+        "unchanged": "No changes. {name} is already at Onyx version {version}.",
+        "off": "Added {name}. It is off because {names} already has a skill with the same name."
+      }
+    },
+    "turnOn": {
+      "title": "{name} is on",
+      "description": "Some integrations that this plugin needs are not available to you.",
+      "note": "The plugin works without them. A plugin never gives access to an integration.",
+      "done": "Done"
     }
   },
   "integrations": {
@@ -17149,7 +17297,8 @@
         "label": "Add",
         "upload": "Upload skill",
         "create": "Create a skill",
-        "github": "Import from GitHub"
+        "github": "Import from GitHub",
+        "uploadPlugin": "Upload plugin"
       },
       "groups": {
         "mine": "Created by you",
@@ -17224,13 +17373,16 @@
       },
       "empty": {
         "title": "No plugins yet",
-        "description": "Create a skill. Each skill is a plugin."
+        "description": "Upload a Claude Code or Codex plugin to add its skills and the integrations that they need.",
+        "upload": "Upload Plugin"
       },
       "noMatches": {
         "title": "No matching plugins",
         "clear": "Show all plugins"
       },
-      "intro": "A plugin packages skills that you turn on together. Each skill you add comes in its own plugin. Integrations are on the Integrations tab."
+      "intro": "A plugin packages skills and the integrations that they need. Upload a Claude Code or Codex plugin, or add a skill. Each skill that you add comes in its own plugin.",
+      "integrations": "{available} of {needed} integrations available",
+      "nameHeld": "Off: {names} uses the same skill name"
     },
     "skillPage": {
       "title": "Skill",
@@ -17320,7 +17472,8 @@
     },
     "pluginPage": {
       "tabs": {
-        "skills": "Skills · {count}"
+        "skills": "Skills · {count}",
+        "integrations": "Integrations · {count}"
       }
     },
     "search": "Search"

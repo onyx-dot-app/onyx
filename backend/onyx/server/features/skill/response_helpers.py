@@ -15,10 +15,12 @@ from onyx.db.models import Plugin, Skill, User
 from onyx.db.persona_sharing import (
     get_user_group_ids_for_user,
 )
+from onyx.db.plugin import get_version_manifest, list_version_skills
 from onyx.db.plugin_access import (
     PluginAccess,
     load_plugin_access,
     plugin_ids_in_managed_scope,
+    plugin_ids_visible_to,
 )
 from onyx.db.scoped_permissions import fetch_managed_group_ids
 from onyx.db.skill import (
@@ -29,7 +31,14 @@ from onyx.db.skill import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.integrations.plugin_needs import (
+    PluginNeedView,
+    need_counts,
+    needs_of_versions,
+)
 from onyx.server.features.skill.models import (
+    PluginDetail,
+    PluginSkillSummary,
     SkillGroupSummary,
     SkillPreviewResponse,
     SkillResponse,
@@ -139,9 +148,15 @@ def skill_response_for_user(
     include_share_details: bool = False,
     plugin_access: dict[UUID, PluginAccess] | None = None,
     shown_version_id: UUID | None = None,
+    needs: dict[UUID, list[PluginNeedView]] | None = None,
+    include_plugin_detail: bool = False,
 ) -> SkillResponse:
     """``shown_version_id`` is the version whose files the response shows, and
-    so the edit base; by default the plugin's current version."""
+    so the edit base; by default the plugin's current version. When given, the
+    counts and plugin detail also describe it, else the version the user
+    runs. ``needs`` are the need views by version (``needs_of_versions``);
+    read when not given. ``include_plugin_detail`` adds the skills, needs and
+    plugin.json fields."""
     if state is None:
         state = skill_user_states(user, [skill.id], db_session)[skill.id]
     if isinstance(skill, Skill):
@@ -165,17 +180,22 @@ def skill_response_for_user(
     if plugin_access is None:
         plugin_access = load_plugin_access([skill.id], user.id, db_session)
     access = _access_of(skill, plugin_access)
+    described = shown_version_id or access.version_user_runs
     if shown_version_id is None:
         shown_version_id = access.current_version_id
     user_permission = user_permission_for_skill(
         access, user, user_group_ids, skill.id in managed_scope_ids
     )
+    if needs is None:
+        needs = needs_of_versions(user, [described], db_session)
+    version_needs = needs.get(described, [])
     return SkillResponse.from_custom(
         skill,
         access,
         enabled=state.enabled,
         can_toggle=state.can_toggle,
         required_for_user=state.required,
+        name_held_by=list(state.name_held_by),
         user_permission=user_permission,
         can_delete=user_permission in (SkillAccessLevel.OWNER, SkillAccessLevel.EDITOR)
         and may_delete_skill(
@@ -191,6 +211,29 @@ def skill_response_for_user(
             managed_user_group_ids,
         ),
         current_version_id=shown_version_id,
+        counts=need_counts(version_needs),
+        plugin_detail=(
+            plugin_version_detail(described, version_needs, db_session)
+            if include_plugin_detail
+            else None
+        ),
+    )
+
+
+def plugin_version_detail(
+    version_id: UUID, needs: list[PluginNeedView], db_session: Session
+) -> PluginDetail:
+    return PluginDetail(
+        manifest=get_version_manifest(version_id, db_session),
+        skills=[
+            PluginSkillSummary(
+                path=skill_row.path,
+                name=skill_row.name,
+                description=skill_row.description,
+            )
+            for skill_row in list_version_skills(version_id, db_session)
+        ],
+        needs=needs,
     )
 
 
@@ -208,6 +251,16 @@ def skills_list_response_for_user(
     )
     states = skill_user_states(user, (skill.id for skill in rows), db_session)
     plugin_access = load_plugin_access(custom_ids, user.id, db_session)
+    needs = needs_of_versions(
+        user,
+        (access.version_user_runs for access in plugin_access.values()),
+        db_session,
+    )
+    member_visible_ids = (
+        plugin_ids_visible_to(user.id, db_session)
+        if has_global_permission(user, Permission.MANAGE_PLUGINS)
+        else None
+    )
     for skill in rows:
         if isinstance(skill, Skill):
             if skill.built_in_skill_id not in BUILT_IN_SKILLS:
@@ -230,7 +283,10 @@ def skills_list_response_for_user(
             managed_user_group_ids=managed_user_group_ids,
             managed_scope_ids=managed_scope_ids,
             plugin_access=plugin_access,
+            needs=needs,
         )
+        if member_visible_ids is not None and isinstance(skill, Plugin):
+            response.member_visible = skill.id in member_visible_ids
         (customs if isinstance(skill, Plugin) else builtins).append(response)
 
     return SkillsList(builtins=builtins, customs=customs)
@@ -262,6 +318,11 @@ def skill_preview_response(
         )
 
     access = _access_of(skill, load_plugin_access([skill.id], user.id, db_session))
+    if not access.is_skill:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "This is a plugin, not one skill. Open the plugin to read its skills.",
+        )
     contents = read_version_contents(access.version_user_runs, db_session)
     return SkillPreviewResponse.from_custom(
         skill,

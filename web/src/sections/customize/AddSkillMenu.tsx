@@ -11,12 +11,18 @@ import { stageSkillCreationDraft } from "@/lib/skills/creationDraft";
 import { useRefreshSkillLists } from "@/lib/skills/hooks";
 import CreateSkillModal from "@/sections/modals/skills/CreateSkillModal";
 import ImportSkillsFromGitHubModal from "@/sections/modals/skills/ImportSkillsFromGitHubModal";
+import UploadPluginFlow from "@/sections/modals/plugins/UploadPluginFlow";
 
-export default function AddSkillMenu() {
+interface AddSkillMenuProps {
+  upload?: "skill" | "plugin";
+}
+
+export default function AddSkillMenu({ upload = "skill" }: AddSkillMenuProps) {
   const t = useTranslations("customize.skills.add");
   const navigation = useNavigation();
   const revalidate = useRefreshSkillLists();
   const [uploadOpen, setUploadOpen] = useState(false);
+  const [pluginUploadOpen, setPluginUploadOpen] = useState(false);
   const githubModal = useCreateModal();
 
   return (
@@ -32,8 +38,11 @@ export default function AddSkillMenu() {
               kind: "action",
               id: "upload",
               icon: SvgUploadCloud,
-              title: t("upload"),
-              onSelect: () => setUploadOpen(true),
+              title: upload === "plugin" ? t("uploadPlugin") : t("upload"),
+              onSelect: () =>
+                upload === "plugin"
+                  ? setPluginUploadOpen(true)
+                  : setUploadOpen(true),
             },
             {
               kind: "action",
@@ -60,6 +69,10 @@ export default function AddSkillMenu() {
           setUploadOpen(false);
           navigation.go(newSkillHref(stageSkillCreationDraft(draft)));
         }}
+      />
+      <UploadPluginFlow
+        open={pluginUploadOpen}
+        onClose={() => setPluginUploadOpen(false)}
       />
       <githubModal.Provider>
         <ImportSkillsFromGitHubModal

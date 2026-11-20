@@ -10418,7 +10418,8 @@
             "public": "Se {count, plural, one {encontró # herramienta} other {encontraron # herramientas}}. El servidor no requiere inicio de sesión.",
             "oauth": "El servidor usa inicio de sesión con OAuth.",
             "authUnknown": "El servidor requiere inicio de sesión. Agrega un encabezado de clave de API u OAuth.",
-            "unreachable": "Onyx no puede acceder a este servidor. Comprueba la URL."
+            "unreachable": "Onyx no puede acceder a este servidor. Comprueba la URL.",
+            "forbidden": "Solo un administrador puede comprobar este servidor antes de añadirlo. Aun así, puedes añadirlo."
           },
           "transport": {
             "title": "Transporte",
@@ -16648,6 +16649,21 @@
           "remove": "Quitar {name}",
           "shared": "Compartido con este grupo",
           "settingOnly": "Solo configuración del grupo"
+        },
+        "plugin": {
+          "installation": {
+            "description": "Elige cómo se instala este plugin para todos los que tienen acceso."
+          },
+          "published": {
+            "description": "Publicado. Todos en la organización pueden usar este plugin."
+          },
+          "publishWarning": {
+            "description": "Después de guardar, todos en la organización pueden usar este plugin. No puedes volver a hacerlo privado. Solo un administrador puede eliminarlo.",
+            "reviewDescription": "El plugin sigue siendo privado hasta que un administrador apruebe la solicitud. Después de la aprobación, no puedes volver a hacerlo privado."
+          },
+          "publishOff": {
+            "description": "Un administrador desactivó la publicación en la organización. Pide a un administrador que publique este plugin."
+          }
         }
       },
       "placeholders": {
@@ -16663,7 +16679,8 @@
         "columns": {
           "version": "Versión",
           "madeBy": "Creada por",
-          "date": "Fecha"
+          "date": "Fecha",
+          "manifestVersion": "plugin.json"
         },
         "versionLabel": "Versión {number}",
         "currentBadge": "Actual",
@@ -16686,7 +16703,9 @@
           "back": "Todas las versiones",
           "loadError": {
             "title": "No se pudo cargar esta versión"
-          }
+          },
+          "skills": "Habilidades · {count}",
+          "integrations": "Integraciones · {count}"
         },
         "status": {
           "pending": "Revisión pendiente",
@@ -16698,7 +16717,9 @@
           "failedToast": "No se pudo publicar esta actualización.",
           "sentForReviewToast": "La versión {number} se envió a un administrador para revisión.",
           "offNotice": "La publicación está desactivada. Pide a un administrador que publique esta actualización."
-        }
+        },
+        "noManifestVersion": "Ninguna",
+        "manifestVersion": "plugin.json {version}"
       }
     },
     "page": {
@@ -16747,10 +16768,12 @@
         "body": "Al continuar se desactivará la habilidad actualmente activada y se activará esta.",
         "description": "Solo se puede activar una habilidad llamada “{name}” a la vez.",
         "submit": {
-          "label": "Cambiar habilidad",
+          "label": "Cambiar",
           "pendingLabel": "Cambiando..."
         },
-        "title": "¿Cambiar la habilidad “{name}”?"
+        "title": "¿Activar «{name}»?",
+        "descriptionNamed": "{names} ya usa un nombre de habilidad que también usa «{name}». Solo uno puede estar activado a la vez.",
+        "bodyNamed": "Al activar «{name}» se desactiva {names}."
       },
       "toasts": {
         "disableFailed": "No se pudo desactivar {name}",
@@ -16772,6 +16795,9 @@
         },
         "upload": {
           "label": "Arrastra y suelta o haz clic para subir"
+        },
+        "chooseFolder": {
+          "label": "Elegir una carpeta"
         }
       },
       "filesPicker": {
@@ -16795,7 +16821,8 @@
       },
       "upload": {
         "error": {
-          "readFailed": "No se pudo leer el archivo subido."
+          "readFailed": "No se pudo leer el archivo subido.",
+          "folderRoot": "{upload, select, plugin {La carpeta seleccionada debe contener SKILL.md o un manifiesto plugin.json en su nivel superior.} other {La carpeta seleccionada debe contener SKILL.md en su nivel superior.}}"
         }
       }
     },
@@ -16954,19 +16981,44 @@
           "location": "Ubicación",
           "owner": "Propietario",
           "skills": "Habilidades",
-          "description": "Descripción"
+          "description": "Descripción",
+          "version": "Versión en plugin.json",
+          "author": "Autor",
+          "homepage": "Página web",
+          "license": "Licencia",
+          "notUsed": "No se usa en Onyx"
         },
         "skills": {
           "off": "Desactivada",
-          "invalid": "No válida"
+          "invalid": "No válida",
+          "read": "Leer",
+          "readAriaLabel": "Leer la habilidad {name}",
+          "readFailed": "No se pudo leer esta habilidad.",
+          "noInstructions": "Esta habilidad no tiene instrucciones."
         },
         "switch": {
           "title": "Usar este plugin",
-          "description": "Cuando está activado, el agente predeterminado puede usar este plugin.",
           "label": "Usar {name}",
           "required": "Tu administrador hizo obligatorio este plugin. No puedes desactivarlo.",
           "unavailable": "No puedes activar ni desactivar este plugin.",
-          "failed": "No se pudo cambiar el plugin."
+          "failed": "No se pudo cambiar el plugin.",
+          "on": "Activado. El agente predeterminado puede usar este plugin.",
+          "off": "Desactivado. Actívalo para que el agente predeterminado pueda usar este plugin.",
+          "nameHeld": "Desactivado porque {names} usa el mismo nombre de habilidad. Activa este plugin para usarlo en su lugar."
+        },
+        "actions": {
+          "share": "Compartir",
+          "menu": "Más acciones",
+          "uploadVersion": "Subir nueva versión",
+          "remove": "Eliminar plugin"
+        },
+        "remove": {
+          "entityType": "plugin",
+          "description": "Todos los que usan este plugin lo pierden. No se puede deshacer.",
+          "submit": "Eliminar",
+          "pending": "Eliminando…",
+          "done": "Se eliminó {name}.",
+          "failed": "No se pudo eliminar el plugin."
         }
       },
       "connection": {
@@ -17063,6 +17115,102 @@
           "label": "Listo"
         }
       }
+    },
+    "needs": {
+      "intro": "Un plugin nunca da acceso a una integración. Cada fila muestra tu propio estado de la integración. El plugin funciona sin las integraciones que no están activadas.",
+      "state": {
+        "on": "Activado",
+        "turn_on": "Desactivado",
+        "sign_in": "Sin iniciar sesión",
+        "no_access": "Sin acceso",
+        "turned_off": "Desactivado por admin",
+        "not_added": "No añadido",
+        "more_than_one": "Más de una coincidencia",
+        "not_supported": "No compatible"
+      },
+      "note": {
+        "askAdmin": "Pregunta a un admin",
+        "turnedOff": "Desactivado por tu admin",
+        "moreThanOne": "Coincide más de una integración",
+        "notSupported": "No compatible con Onyx"
+      },
+      "localServer": "Servidor local",
+      "noUrl": "Sin URL de servidor",
+      "turnOn": {
+        "label": "Activar",
+        "ariaLabel": "Activar {name}",
+        "failed": "No se pudo activar {name}."
+      },
+      "add": {
+        "label": "Añadir integración",
+        "ariaLabel": "Añadir la integración {name}"
+      },
+      "urlProblem": {
+        "variable": "La URL usa una variable. Onyx no rellena variables.",
+        "credential": "La URL contiene una credencial. Onyx no la guarda.",
+        "invalid": "La URL no es una URL http o https válida."
+      }
+    },
+    "upload": {
+      "title": "Subir Plugin",
+      "description": "Sube un plugin de Claude Code o Codex. Elige un archivo .zip o arrastra aquí la carpeta del plugin.",
+      "reading": "Leyendo…",
+      "requirements": {
+        "title": "Onyx usa estas partes de un plugin:",
+        "skills": "Skills en skills/'<name>'/SKILL.md",
+        "mcp": "Servidores MCP en .mcp.json o plugin.json",
+        "other": "Onyx no usa comandos, agentes, hooks ni las demás partes."
+      },
+      "skillOnly": {
+        "title": "Esta subida es un skill",
+        "description": "No tiene plugin.json. Continúa para añadirlo como skill.",
+        "continue": "Continuar"
+      },
+      "version": "plugin.json {version}",
+      "target": {
+        "newVersion": "Actualiza {name} a la versión {version} de Onyx",
+        "newPlugin": "Nuevo plugin: {name}"
+      },
+      "willBeOff": "El plugin se guarda desactivado. {names} ya tiene una habilidad con el mismo nombre.",
+      "saveAsNew": {
+        "label": "Guardar como Plugin Nuevo",
+        "description": "Mantén sin cambios el plugin que tiene este nombre."
+      },
+      "sections": {
+        "skills": "Skills · {count}",
+        "integrations": "Integraciones · {count}",
+        "unused": "No se usa en Onyx",
+        "warnings": "Advertencias"
+      },
+      "integrationsNote": "Al guardar se activan las integraciones que ya puedes usar. Un plugin nunca da acceso a una integración.",
+      "integrationsNoteOff": "El plugin queda desactivado tras guardar, así que no se activa ninguna integración.",
+      "unusedParts": {
+        "commands": "Comandos",
+        "agents": "Agentes",
+        "hooks": "Hooks",
+        "lsp_servers": "Servidores LSP",
+        "output_styles": "Estilos de salida",
+        "bin": "Ejecutables (bin)",
+        "themes": "Temas",
+        "monitors": "Monitores"
+      },
+      "cancel": "Cancelar",
+      "save": "Guardar",
+      "saving": "Guardando…",
+      "readFailed": "No se pudo leer el plugin.",
+      "saveFailed": "No se pudo guardar el plugin.",
+      "saved": {
+        "newPlugin": "Se añadió {name}.",
+        "newVersion": "{name} actualizado a la versión {version} de Onyx.",
+        "unchanged": "Sin cambios. {name} ya está en la versión {version} de Onyx.",
+        "off": "Se añadió {name}. Está desactivado porque {names} ya tiene una habilidad con el mismo nombre."
+      }
+    },
+    "turnOn": {
+      "title": "{name} está activado",
+      "description": "Algunas integraciones que necesita este plugin no están disponibles para ti.",
+      "note": "El plugin funciona sin ellas. Un plugin nunca da acceso a una integración.",
+      "done": "Listo"
     }
   },
   "integrations": {
@@ -17149,7 +17297,8 @@
         "label": "Añadir",
         "upload": "Subir habilidad",
         "create": "Crear una habilidad",
-        "github": "Importar desde GitHub"
+        "github": "Importar desde GitHub",
+        "uploadPlugin": "Subir plugin"
       },
       "groups": {
         "mine": "Creadas por ti",
@@ -17224,13 +17373,16 @@
       },
       "empty": {
         "title": "Aún no hay plugins",
-        "description": "Crea una habilidad. Cada habilidad es un plugin."
+        "description": "Sube un plugin de Claude Code o Codex para añadir sus habilidades y las integraciones que necesitan.",
+        "upload": "Subir plugin"
       },
       "noMatches": {
         "title": "No hay plugins que coincidan",
         "clear": "Mostrar todos los plugins"
       },
-      "intro": "Un plugin agrupa habilidades que activas juntas. Cada habilidad que agregas viene en su propio plugin. Las integraciones están en la pestaña Integraciones."
+      "intro": "Un plugin agrupa skills y las integraciones que necesitan. Sube un plugin de Claude Code o Codex, o añade un skill. Cada skill que añades va en su propio plugin.",
+      "integrations": "{available} de {needed} integraciones disponibles",
+      "nameHeld": "Desactivado: {names} usa el mismo nombre de habilidad"
     },
     "skillPage": {
       "title": "Habilidad",
@@ -17320,7 +17472,8 @@
     },
     "pluginPage": {
       "tabs": {
-        "skills": "Habilidades · {count}"
+        "skills": "Habilidades · {count}",
+        "integrations": "Integraciones · {count}"
       }
     },
     "search": "Buscar"

@@ -11,13 +11,18 @@ from typing import Any, Final
 
 import yaml
 from pydantic import JsonValue, ValidationError
+from pydantic_core import ErrorDetails
 from yaml.constructor import ConstructorError
 from yaml.events import AliasEvent
 from yaml.nodes import MappingNode, Node, ScalarNode
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.skills.models import SkillDocument, SkillMetadata
+from onyx.skills.models import (
+    UNUSED_FRONTMATTER_FIELDS,
+    SkillDocument,
+    SkillMetadata,
+)
 
 _FRONTMATTER_REGEX: Final[re.Pattern[str]] = re.compile(
     r"\A---[ \t]*\r?\n(?P<frontmatter>.*?)(?:\r?\n)---[ \t]*(?:\r?\n|\Z)",
@@ -155,6 +160,37 @@ def parse_skill_md_frontmatter(raw: bytes) -> tuple[dict[Any, Any], str]:
     return parsed, instructions_markdown
 
 
+_PLAIN_ERRORS: Final[Mapping[str, str]] = {
+    "missing": "is required",
+    "string_type": "must be text",
+    "string_too_long": "is too long",
+}
+
+
+def _plain_error(error: ErrorDetails) -> str:
+    plain = _PLAIN_ERRORS.get(error["type"])
+    if plain is not None:
+        return plain
+    if error["type"] == "value_error":
+        return error["msg"].removeprefix("Value error, ")
+    return "has a value Onyx cannot read"
+
+
+def _validate_metadata(frontmatter: dict[str, Any]) -> SkillMetadata:
+    """Validate, and drop a field Onyx does not read when its value is bad.
+    The stored frontmatter keeps that field as written."""
+    try:
+        return SkillMetadata.model_validate(frontmatter)
+    except ValidationError as exc:
+        bad = {str(error["loc"][0]) for error in exc.errors() if error["loc"]}
+        unused = bad & UNUSED_FRONTMATTER_FIELDS
+        if not unused or unused != bad:
+            raise
+    return SkillMetadata.model_validate(
+        {key: value for key, value in frontmatter.items() if key not in unused}
+    )
+
+
 def parse_skill_document(
     raw: bytes,
     *,
@@ -167,16 +203,14 @@ def parse_skill_document(
             "SKILL.md frontmatter keys must be strings",
         )
     try:
-        metadata = SkillMetadata.model_validate(frontmatter)
+        metadata = _validate_metadata(frontmatter)
     except ValidationError as exc:
         first_error = exc.errors(include_url=False)[0]
         location = first_error.get("loc", ())
         field = str(location[0]) if location else "frontmatter"
-        message = str(first_error.get("msg", "is invalid"))
-        message = message.removeprefix("Value error, ")
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT,
-            f"SKILL.md frontmatter field '{field}' {message}",
+            f"SKILL.md frontmatter field '{field}' {_plain_error(first_error)}",
         ) from exc
     if directory_name is not None and metadata.name != directory_name:
         raise OnyxError(

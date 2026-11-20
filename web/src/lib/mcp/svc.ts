@@ -3,6 +3,7 @@
  */
 
 import * as yup from "yup";
+import { FetchError } from "@/lib/fetcher";
 import type { MCPProbeProgress } from "@/lib/mcp/types";
 import {
   MCPOAuthDiscovery,
@@ -95,7 +96,8 @@ export async function streamMCPServerProbe(
     body: JSON.stringify({ server_url: serverUrl }),
     signal,
   });
-  if (!response.ok || !response.body) throw new Error("MCP probe failed");
+  if (!response.ok || !response.body)
+    throw new FetchError("MCP probe failed", response.status, null);
   const reader = response.body.getReader();
   const decoder = new TextDecoder();
   let buffer = "";

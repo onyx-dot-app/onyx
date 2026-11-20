@@ -34,7 +34,11 @@ import {
   type SelectOption,
 } from "@opal/components";
 import { toast } from "@opal/layouts";
-import { isSkillNameConflict, setSkillEnabled } from "@/lib/skills/api";
+import {
+  isSkillNameConflict,
+  setSkillEnabled,
+  skillNameConflictNames,
+} from "@/lib/skills/api";
 import { refreshSkillListsChecked } from "@/lib/skills/cache";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { useUser } from "@/providers/UserProvider";
@@ -438,14 +442,18 @@ export interface SkillEnablement {
   enabledOf: (item: SkillToggleTarget) => boolean;
   /** A skill whose name another enabled skill holds, waiting for a confirm. */
   switchTarget: SkillToggleTarget | null;
+  /** The skills that the switch turns off. */
+  switchConflicts: string[];
   switchModal: ModalCreationInterface;
 }
 
 /** Turns skills on and off. Only one enabled skill holds a name, so turning
- * on a skill whose name is taken asks first, then replaces the other one. */
+ * on a skill whose name is taken asks first, then replaces the other one.
+ * `onEnabled` gets the skill as the server returns it after a turn on. */
 export function useSkillEnablement(
   items: readonly SkillToggleTarget[],
-  refresh: KeyedMutator<SkillsList>
+  refresh: KeyedMutator<SkillsList>,
+  onEnabled?: (skill: Skill) => void
 ): SkillEnablement {
   const t = useTranslations("skills");
   const { describeError } = useSkillLimitCopy();
@@ -458,9 +466,11 @@ export function useSkillEnablement(
   const [switchTarget, setSwitchTarget] = useState<SkillToggleTarget | null>(
     null
   );
+  const [switchConflicts, setSwitchConflicts] = useState<string[]>([]);
 
-  function askToSwitch(item: SkillToggleTarget) {
+  function askToSwitch(item: SkillToggleTarget, conflicts: string[]) {
     setSwitchTarget(item);
+    setSwitchConflicts(conflicts);
     switchModal.toggle(true);
   }
 
@@ -469,17 +479,15 @@ export function useSkillEnablement(
     enabled: boolean,
     replaceConflict = false
   ): Promise<void> {
-    if (
-      enabled &&
-      !replaceConflict &&
-      items.some(
-        (candidate) =>
-          candidate.id !== item.id &&
-          candidate.name === item.name &&
-          candidate.enabled
-      )
-    ) {
-      askToSwitch(item);
+    const holders = items.filter(
+      (candidate) =>
+        candidate.id !== item.id &&
+        candidate.name === item.name &&
+        candidate.enabled
+    );
+    if (enabled && !replaceConflict && holders.length > 0) {
+      // A holder found here has the same name, so the dialog names nothing.
+      askToSwitch(item, []);
       return;
     }
     const affected =
@@ -504,6 +512,7 @@ export function useSkillEnablement(
     try {
       const updated = await setSkillEnabled(item.id, enabled, replaceConflict);
       if (replaceConflict) switchModal.toggle(false);
+      if (enabled) onEnabled?.(updated);
       await refresh(
         (current) => {
           if (!current) return current;
@@ -526,7 +535,7 @@ export function useSkillEnablement(
       });
     } catch (error) {
       if (enabled && !replaceConflict && isSkillNameConflict(error)) {
-        askToSwitch(item);
+        askToSwitch(item, skillNameConflictNames(error));
         return;
       }
       toast.error(
@@ -557,6 +566,7 @@ export function useSkillEnablement(
     isPending: (id) => pending.has(id),
     enabledOf: (item) => optimistic.get(item.id) ?? item.enabled,
     switchTarget,
+    switchConflicts,
     switchModal,
   };
 }

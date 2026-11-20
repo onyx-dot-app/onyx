@@ -16,10 +16,12 @@ from onyx.db.models import Plugin, Skill
 from onyx.db.plugin_access import PluginAccess
 from onyx.db.skill import SkillSharingChange
 from onyx.db.utils import UNSET
+from onyx.integrations.models import NeedCounts, PluginNeedView
 from onyx.server.models import MinimalUserSnapshot
 from onyx.skills.built_in import BuiltInSkillDefinition
 from onyx.skills.models import (
     GITHUB_SKILL_MAX_COUNT,
+    PluginManifest,
     SkillBundleFile,
     UserPastWriteLimit,
 )
@@ -48,11 +50,27 @@ class SkillGroupSummary(BaseModel):
     installation_policy: PluginInstallationPolicy | None
 
 
+class PluginSkillSummary(BaseModel):
+    path: str
+    name: str
+    description: str
+
+
+class PluginDetail(BaseModel):
+    manifest: PluginManifest | None
+    skills: list[PluginSkillSummary]
+    needs: list[PluginNeedView]
+
+
 class SkillResponse(BaseModel):
     source: Literal["builtin", "custom"]
     id: UUID
     name: str
     description: str
+    kind: Literal["skill", "plugin"] = "skill"
+    available_count: int = 0
+    needed_count: int = 0
+    plugin: PluginDetail | None = None
 
     is_available: bool | None = None
     unavailable_reason: str | None = None
@@ -84,6 +102,11 @@ class SkillResponse(BaseModel):
     public_permission: SkillSharePermission | None = None
     is_personal: bool = False
     user_permission: SkillAccessLevel | None = None
+    # False for a skill that an organization-wide manager sees only through
+    # that permission. The member pages leave it out.
+    member_visible: bool = True
+    # The user turned the skill on, but these skills hold one of its names.
+    name_held_by: list[str] = Field(default_factory=list)
     # The plugin version of a custom skill whose files this response shows.
     # Edits send it back as base_version_id. None for built-ins.
     current_version_id: UUID | None = None
@@ -124,11 +147,14 @@ class SkillResponse(BaseModel):
         enabled: bool,
         can_toggle: bool = True,
         required_for_user: bool = False,
+        name_held_by: list[str] | None = None,
         user_permission: SkillAccessLevel | None = None,
         can_delete: bool = False,
         include_share_details: bool = False,
         group_summaries: list[SkillGroupSummary] | None = None,
         current_version_id: UUID | None = None,
+        counts: NeedCounts | None = None,
+        plugin_detail: PluginDetail | None = None,
     ) -> "SkillResponse":
         """Every field comes from the skill's plugin."""
         user_shares = [
@@ -151,11 +177,16 @@ class SkillResponse(BaseModel):
             id=plugin.id,
             name=access.name or plugin.name,
             description=access.description,
+            kind="skill" if access.is_skill else "plugin",
+            available_count=counts.available_count if counts is not None else 0,
+            needed_count=counts.needed_count if counts is not None else 0,
+            plugin=plugin_detail,
             is_valid=access.is_valid,
             installation_policy=access.installation_policy,
             default_installation_policy=access.marketplace_default_policy,
             can_delete=can_delete,
             required_for_user=required_for_user,
+            name_held_by=name_held_by or [],
             enabled=enabled,
             can_toggle=can_toggle,
             author_user_id=access.author_user_id,
@@ -244,10 +275,19 @@ class SkillVersionResponse(BaseModel):
     created_by_email: str | None
     is_current: bool
     review_status: Literal["draft", "pending", "published"]
+    # The version in plugin.json, for a plugin version that has one.
+    manifest_version: str | None = None
 
 
 class SkillVersionPreviewResponse(BaseModel):
     description: str
+    # Empty for a plugin version, which has no root SKILL.md.
+    instructions_markdown: str
+    files: list[SkillBundleFile] = Field(default_factory=list)
+    plugin: PluginDetail | None = None
+
+
+class PluginSkillInstructions(BaseModel):
     instructions_markdown: str
 
 
@@ -275,6 +315,42 @@ class SkillReviewRequestResponse(BaseModel):
     # The skill's author: only the author or a manager publishes.
     author_email: str | None
     version_created_at: datetime.datetime
+
+
+class PluginUploadSkill(BaseModel):
+    path: str
+    name: str
+    description: str
+    warnings: list[str]
+
+
+class PluginUploadTarget(BaseModel):
+    kind: Literal["new_version", "new_plugin"]
+    plugin_id: UUID | None
+    plugin_name: str
+    version_number: int
+
+
+class PluginUploadPreview(BaseModel):
+    manifest: PluginManifest
+    skills: list[PluginUploadSkill]
+    needs: list[PluginNeedView]
+    warnings: list[str]
+    target: PluginUploadTarget
+    # The plugin is on for the user after a save.
+    will_enable: bool
+    # The skills and plugins that keep a new plugin off: they hold one of
+    # its skill names.
+    name_conflicts: list[str]
+
+
+class PluginUploadResponse(BaseModel):
+    target: PluginUploadTarget
+    plugin: SkillResponse
+    enabled: bool
+    # The files equal the current version's files, so no version was added.
+    unchanged: bool
+    name_conflicts: list[str]
 
 
 class SkillBundleInspectResponse(BaseModel):

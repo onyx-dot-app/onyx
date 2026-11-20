@@ -64,7 +64,11 @@ import {
 import { useSettings } from "@/lib/settings/hooks";
 import { useSkillEnablement } from "@/lib/skills/hooks";
 import SkillSwitchModal from "@/sections/modals/skills/SkillSwitchModal";
-import { adminSkillHref, newSkillHref } from "@/lib/customize/paths";
+import {
+  adminSkillHref,
+  newSkillHref,
+  pluginHref,
+} from "@/lib/customize/paths";
 
 export default function AdminSkillsPage() {
   const t = useTranslations("skills");
@@ -493,7 +497,11 @@ export default function AdminSkillsPage() {
                         void enablement.setEnabled(skill, enabled)
                       }
                       onOpen={(skill) =>
-                        navigation.go(adminSkillHref(skill.id))
+                        navigation.go(
+                          skill.kind === "plugin"
+                            ? pluginHref(skill.id)
+                            : adminSkillHref(skill.id)
+                        )
                       }
                       onShare={setShareTarget}
                       onDelete={(skill) => {

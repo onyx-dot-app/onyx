@@ -587,3 +587,25 @@ test("an owner restores a version from the Versions tab", async () => {
     )
   ).toEqual({ base_version_id: "version-2" });
 });
+
+test("an uploaded plugin opens its plugin page without skill-only requests", async () => {
+  window.history.replaceState(null, "", "/admin/skills/custom-1");
+  const plugin = customFixture({
+    id: "custom-1",
+    name: "review-kit",
+    kind: "plugin",
+    user_permission: "OWNER",
+  });
+  const fetchMock = mockFetch({
+    "/api/skills": { builtins: [], customs: [plugin] },
+  });
+  render(<CustomizeSkillPage skillId="custom-1" from="admin" />);
+  await waitFor(() =>
+    expect(window.location.pathname).toBe("/app/customize/plugins/custom-1")
+  );
+  expect(
+    fetchMock.mock.calls
+      .map(([input]) => String(input))
+      .filter((url) => url.startsWith("/api/skills/"))
+  ).toEqual([]);
+});

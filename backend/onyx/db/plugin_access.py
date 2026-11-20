@@ -276,6 +276,14 @@ def version_user_runs(plugin: type[Plugin], user_id: UserIdExpr) -> ColumnElemen
     )
 
 
+def get_version_user_runs(
+    plugin_id: UUID, user_id: UUID, db_session: Session
+) -> UUID | None:
+    return db_session.scalar(
+        select(version_user_runs(Plugin, user_id)).where(Plugin.id == plugin_id)
+    )
+
+
 def frontmatter_in_version(
     key: str | tuple[str, ...], version_id: ColumnElement[UUID]
 ) -> ColumnElement[str]:
@@ -303,6 +311,26 @@ def holds_one_root_skill(version_id: ColumnElement[UUID]) -> ColumnElement[bool]
     return and_(
         skills.where(PluginSkill.path == "").exists(),
         ~skills.where(PluginSkill.path != "").exists(),
+    )
+
+
+def manifest_description_in_version(
+    version_id: ColumnElement[UUID],
+) -> ColumnElement[str | None]:
+    """The plugin.json description of a version, "" when it has none. NULL for
+    a version with no plugin.json."""
+    return (
+        select(
+            case(
+                (
+                    PluginVersion.manifest.has_key("name"),
+                    func.coalesce(PluginVersion.manifest["description"].astext, ""),
+                )
+            )
+        )
+        .where(PluginVersion.id == version_id)
+        .correlate_except(PluginVersion)
+        .scalar_subquery()
     )
 
 
@@ -362,8 +390,9 @@ class UserPluginState(BaseModel):
     # skill limits.
     can_run: bool
     created_at: datetime
-    # Names from the plugin_skill rows of the version the user runs, by path.
+    plugin_name: str
     skill_names: tuple[str, ...]
+    skill_paths: tuple[str, ...]
     # Recorded size of the version the user runs; a NULL size or file count
     # is 0. None when both are NULL: a backfilled version before the repair
     # task measures it, or a version with no bundle.
@@ -604,18 +633,17 @@ def load_user_plugin_states(
         return []
     pairs = _user_plugin_pairs(user_filter, plugins)
     enabled = _enabled_in_pairs(pairs)
-    skill_names = (
-        select(
-            func.array_agg(
-                aggregate_order_by(
-                    PluginSkill.frontmatter["name"].astext, PluginSkill.path
-                )
-            )
+
+    def version_skills(
+        column: ColumnElement[str] | InstrumentedAttribute[str],
+    ) -> ColumnElement[list[str]]:
+        return (
+            select(func.array_agg(aggregate_order_by(column, PluginSkill.path)))
+            .where(PluginSkill.plugin_version_id == pairs.c.version_id)
+            .correlate(pairs)
+            .scalar_subquery()
         )
-        .where(PluginSkill.plugin_version_id == pairs.c.version_id)
-        .correlate(pairs)
-        .scalar_subquery()
-    )
+
     stmt = (
         select(
             pairs.c.user_id,
@@ -628,7 +656,9 @@ def load_user_plugin_states(
             PluginVersion.is_valid,
             enabled.label("enabled"),
             pairs.c.created_at,
-            skill_names.label("skill_names"),
+            Plugin.name.label("plugin_name"),
+            version_skills(PluginSkill.frontmatter["name"].astext).label("skill_names"),
+            version_skills(PluginSkill.path).label("skill_paths"),
             PluginVersion.unpacked_size_bytes,
             PluginVersion.file_count,
             UserPluginPreference.enabled.label("choice"),
@@ -636,6 +666,7 @@ def load_user_plugin_states(
             _shared_at(pairs).label("shared_at"),
         )
         .join(PluginVersion, PluginVersion.id == pairs.c.version_id)
+        .join(Plugin, Plugin.id == pairs.c.plugin_id)
         .outerjoin(
             UserPluginPreference,
             and_(
@@ -663,7 +694,9 @@ def load_user_plugin_states(
                 enabled=bool(row.enabled),
                 can_run=can_run,
                 created_at=row.created_at,
+                plugin_name=row.plugin_name,
                 skill_names=tuple(row.skill_names or ()),
+                skill_paths=tuple(row.skill_paths or ()),
                 usage=(
                     None
                     if row.unpacked_size_bytes is None and row.file_count is None
@@ -835,11 +868,11 @@ class PluginAccess(BaseModel):
     # The version waiting for review, if any.
     pending_version_number: int | None
     version_user_runs: UUID
-    # From the frontmatter of the version the user runs.
     name: str | None
     description: str
     # Lazy validity of the version the user runs.
     is_valid: bool | None
+    is_skill: bool
     user_shares: tuple[PluginUserShare, ...]
     group_rows: tuple[PluginGroupRowAccess, ...]
 
@@ -889,12 +922,20 @@ def load_plugin_access(
             published.version_number,
             pending.version_number,
             runs,
-            frontmatter_in_version("name", runs),
+            case((holds_one_root_skill(runs), frontmatter_in_version("name", runs))),
             func.coalesce(
-                frontmatter_in_version("description", runs), Plugin.description
+                case(
+                    (
+                        holds_one_root_skill(runs),
+                        frontmatter_in_version("description", runs),
+                    ),
+                    else_=manifest_description_in_version(runs),
+                ),
+                Plugin.description,
             ),
             version_is_valid(runs),
             plugin_required_for_anyone(Plugin, Marketplace),
+            holds_one_root_skill(runs),
         )
         .join(Marketplace, Marketplace.id == Plugin.marketplace_id)
         .join(current, current.id == Plugin.current_version_id)
@@ -960,8 +1001,15 @@ def load_plugin_access(
             description=row[13],
             is_valid=row[14],
             required_for_anyone=bool(row[15]),
+            is_skill=bool(row[16]),
             user_shares=tuple(user_shares.get(row[0], ())),
             group_rows=tuple(group_rows.get(row[0], ())),
         )
         for row in plugin_rows
     }
+
+
+def plugin_ids_visible_to(user_id: UUID, db_session: Session) -> set[UUID]:
+    """The plugins a member with this user's access sees, for the admin
+    lists that leave out what members cannot see."""
+    return set(db_session.scalars(visible_plugin_ids(user_id)))

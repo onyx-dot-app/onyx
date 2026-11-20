@@ -61,6 +61,7 @@ class _Case:
             name=self.skill.name,
             description=self.skill.description,
             is_valid=True,
+            is_skill=True,
             user_shares=tuple(self.user_shares),
             group_rows=tuple(
                 PluginGroupRowAccess(

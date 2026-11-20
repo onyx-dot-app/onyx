@@ -54,7 +54,13 @@ Group or user restriction needs EE.
   `lib/plugins/directory.ts:memberPluginEntries` in the groups Created by you
   (the user's own, published or not), From your organization and Shared with you
   (`lib/customize/plugins.ts:groupPlugins`), with its skill count, Turn on and a
-  row menu (Turn on/off, Share). A plugin holds custom skills only; there is no
+  row menu (Turn on/off, Share). An admin's list leaves out the plugins that
+  are not `member_visible`. The plugin page
+  (`sections/plugins/MemberPluginDetailPage.tsx`) has Share, a "..." menu
+  (Upload New Version through `sections/modals/plugins/UploadPluginFlow.tsx`,
+  Delete Plugin) and the switch in its header. A needed integration that is
+  not added links an organization-wide manager to `/admin/integrations/new`
+  with the owner set to the organization and `return_to` the plugin page. A plugin holds custom skills only; there is no
   "Add integration" in its Add menu. Integrations
   (`sections/customize/CustomizeIntegrationsPage.tsx`) is a table: Integration,
   Type, Authorization and Status. Status shows the one row state of
@@ -76,9 +82,8 @@ Group or user restriction needs EE.
   Configuration (the user's connection, Disconnect)
   and Actions (each action with the admin's Allow, Ask or Blocked, and the
   user's Always allow switch when the admin allows it). The admin sets the
-  policy only on `/admin/integrations/[id]`. A plugin page (`/app/customize/plugins/[pluginId]`) only
-  opens the skill page of its one skill, or shows that the plugin is not
-  found. When the admin lets users save it, each action that asks offers
+  policy only on `/admin/integrations/[id]`. A plugin that holds one skill
+  opens that skill's page. When the admin lets users save it, each action that asks offers
   "Always allow". A member with manage:actions adds a private integration
   ("For me" only) from the Integrations Add menu.
 - **In chat**, the tools popover lists the current agent's integrations
@@ -130,9 +135,24 @@ through `POST /admin/mcp/probe` to suggest the sign-in, and opens
 read only member endpoints: the user's skills
 (`GET /skills`, as the Skills page) and `GET /integrations`.
 `lib/plugins/directory.ts:memberPluginEntries` makes one plugin of each custom
-skill (a custom skill's id is its plugin id), and
-`lib/plugins/directory.ts:pluginSwitch` gives its switch
-(`PUT /skills/{id}/enabled`). Each integration row carries `access`; its
+skill (a custom skill's id is its plugin id). `GET /skills` also lists
+uploaded plugins: each row has `kind` (`skill` or `plugin`) and
+`available_count` of `needed_count` integrations. `GET /skills/{id}` adds
+`plugin`: the skills, the plugin.json fields and the needs with their state
+for the user ([[skills#plugin-upload]]). A plugin row shows "N of M
+integrations available"; a `kind: plugin` page reads `GET /skills/{id}`
+(`lib/plugins/hooks.ts:usePluginDetail`) for its Skills and Integrations tabs
+and does not redirect to the skill page. A `kind: plugin` row opens this page
+from the admin skills table too, and the skill page redirects a `kind: plugin`
+id here. `sections/plugins/PluginNeedList.tsx`
+shows each need: `lib/plugins/needs.ts:liveNeedState` reads the state of the
+matched integration from `GET /integrations`, so a row follows a switch or a
+sign-in at once, and `needAction` maps the state to one action (Turn on,
+Connect, Add for your team with `newIntegrationHref` filling the Add page, or a
+note). `lib/plugins/directory.ts:pluginSwitch` gives its switch
+(`PUT /skills/{id}/enabled` through `lib/skills/hooks.ts:useSkillEnablement`,
+so a skill name conflict asks to switch in `SkillSwitchModal`); when the response leaves a supported need not
+on, `sections/modals/plugins/PluginTurnOnModal.tsx` lists the needs. Each integration row carries `access`; its
 `installation_policy` is the user's own setting (group settings and shares
 included). `sections/plugins/ShareIntegrationModal.tsx` reads and replaces the
 shares through `/integrations/{id}/access`; it reuses `AddPeoplePicker` with

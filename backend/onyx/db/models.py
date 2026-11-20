@@ -5789,6 +5789,8 @@ class PluginVersion(Base):
     )
     unpacked_size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     file_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    manifest: Mapped[dict[str, Any] | None] = mapped_column(PGJSONB(), nullable=True)
+    needs: Mapped[list[dict[str, Any]] | None] = mapped_column(PGJSONB(), nullable=True)
     created_by_user_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("user.id", ondelete="SET NULL"),

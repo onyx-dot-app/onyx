@@ -29,10 +29,16 @@ export function builtinFixture(over: Partial<BuiltinSkill> = {}): BuiltinSkill {
     group_summaries: [],
     public_permission: null,
     user_permission: "VIEWER",
+    member_visible: true,
+    name_held_by: [],
     current_version_id: null,
     current_version_number: null,
     published_version_number: null,
     pending_version_number: null,
+    kind: "skill",
+    available_count: 0,
+    needed_count: 0,
+    plugin: null,
     ...over,
   };
 }
@@ -64,10 +70,16 @@ export function customFixture(over: Partial<CustomSkill> = {}): CustomSkill {
     group_summaries: [],
     public_permission: "VIEWER",
     user_permission: "VIEWER",
+    member_visible: true,
+    name_held_by: [],
     current_version_id: null,
     current_version_number: null,
     published_version_number: null,
     pending_version_number: null,
+    kind: "skill",
+    available_count: 0,
+    needed_count: 0,
+    plugin: null,
     ...over,
   };
 }

@@ -10418,7 +10418,8 @@
             "public": "{count, plural, one {# ferramenta encontrada} other {# ferramentas encontradas}}. O servidor não exige login.",
             "oauth": "O servidor usa login com OAuth.",
             "authUnknown": "O servidor exige login. Adicione um cabeçalho de chave de API ou OAuth.",
-            "unreachable": "O Onyx não consegue acessar este servidor. Verifique a URL."
+            "unreachable": "O Onyx não consegue acessar este servidor. Verifique a URL.",
+            "forbidden": "Somente um administrador pode verificar este servidor antes de adicioná-lo. Você ainda pode adicioná-lo."
           },
           "transport": {
             "title": "Transporte",
@@ -16648,6 +16649,21 @@
           "remove": "Remover {name}",
           "shared": "Compartilhado com este grupo",
           "settingOnly": "Somente configuração do grupo"
+        },
+        "plugin": {
+          "installation": {
+            "description": "Escolha como este plugin é instalado para todos com acesso."
+          },
+          "published": {
+            "description": "Publicado. Todos na organização podem usar este plugin."
+          },
+          "publishWarning": {
+            "description": "Depois de salvar, todos na organização podem usar este plugin. Não é possível torná-lo privado novamente. Somente um administrador pode excluí-lo.",
+            "reviewDescription": "O plugin permanece privado até que um administrador aprove a solicitação. Após a aprovação, não é possível torná-lo privado novamente."
+          },
+          "publishOff": {
+            "description": "Um administrador desativou a publicação na organização. Peça a um administrador para publicar este plugin."
+          }
         }
       },
       "placeholders": {
@@ -16663,7 +16679,8 @@
         "columns": {
           "version": "Versão",
           "madeBy": "Criada por",
-          "date": "Data"
+          "date": "Data",
+          "manifestVersion": "plugin.json"
         },
         "versionLabel": "Versão {number}",
         "currentBadge": "Atual",
@@ -16686,7 +16703,9 @@
           "back": "Todas as versões",
           "loadError": {
             "title": "Não foi possível carregar esta versão"
-          }
+          },
+          "skills": "Habilidades · {count}",
+          "integrations": "Integrações · {count}"
         },
         "status": {
           "pending": "Revisão pendente",
@@ -16698,7 +16717,9 @@
           "failedToast": "Não foi possível publicar esta atualização.",
           "sentForReviewToast": "A versão {number} foi enviada a um administrador para revisão.",
           "offNotice": "A publicação está desativada. Peça a um administrador para publicar esta atualização."
-        }
+        },
+        "noManifestVersion": "Nenhuma",
+        "manifestVersion": "plugin.json {version}"
       }
     },
     "page": {
@@ -16747,10 +16768,12 @@
         "body": "Continuar desativará a habilidade atualmente ativada e ativará esta.",
         "description": "Apenas uma habilidade chamada “{name}” pode estar ativada por vez.",
         "submit": {
-          "label": "Trocar habilidade",
+          "label": "Trocar",
           "pendingLabel": "Trocando..."
         },
-        "title": "Trocar a habilidade “{name}”?"
+        "title": "Ativar “{name}”?",
+        "descriptionNamed": "{names} já usa um nome de habilidade que “{name}” também usa. Só um pode ficar ativado por vez.",
+        "bodyNamed": "Ativar “{name}” desativa {names}."
       },
       "toasts": {
         "disableFailed": "Falha ao desativar {name}",
@@ -16772,6 +16795,9 @@
         },
         "upload": {
           "label": "Arraste e solte ou clique para enviar"
+        },
+        "chooseFolder": {
+          "label": "Escolher uma pasta"
         }
       },
       "filesPicker": {
@@ -16795,7 +16821,8 @@
       },
       "upload": {
         "error": {
-          "readFailed": "Não foi possível ler o envio."
+          "readFailed": "Não foi possível ler o envio.",
+          "folderRoot": "{upload, select, plugin {A pasta selecionada deve conter SKILL.md ou um manifesto plugin.json no nível superior.} other {A pasta selecionada deve conter SKILL.md no nível superior.}}"
         }
       }
     },
@@ -16954,19 +16981,44 @@
           "location": "Local",
           "owner": "Proprietário",
           "skills": "Habilidades",
-          "description": "Descrição"
+          "description": "Descrição",
+          "version": "Versão no plugin.json",
+          "author": "Autor",
+          "homepage": "Página inicial",
+          "license": "Licença",
+          "notUsed": "Não usado no Onyx"
         },
         "skills": {
           "off": "Desativada",
-          "invalid": "Inválida"
+          "invalid": "Inválida",
+          "read": "Ler",
+          "readAriaLabel": "Ler a habilidade {name}",
+          "readFailed": "Não foi possível ler esta habilidade.",
+          "noInstructions": "Esta habilidade não tem instruções."
         },
         "switch": {
           "title": "Usar este plugin",
-          "description": "Quando ativado, o agente padrão pode usar este plugin.",
           "label": "Usar {name}",
           "required": "Seu administrador tornou este plugin obrigatório. Você não pode desativá-lo.",
           "unavailable": "Você não pode ativar nem desativar este plugin.",
-          "failed": "Não foi possível alterar o plugin."
+          "failed": "Não foi possível alterar o plugin.",
+          "on": "Ativado. O agente padrão pode usar este plugin.",
+          "off": "Desativado. Ative-o para que o agente padrão possa usar este plugin.",
+          "nameHeld": "Desativado porque {names} usa o mesmo nome de habilidade. Ative este plugin para usá-lo no lugar."
+        },
+        "actions": {
+          "share": "Compartilhar",
+          "menu": "Mais ações",
+          "uploadVersion": "Enviar nova versão",
+          "remove": "Excluir plugin"
+        },
+        "remove": {
+          "entityType": "plugin",
+          "description": "Todos que usam este plugin o perdem. Não é possível desfazer.",
+          "submit": "Excluir",
+          "pending": "Excluindo…",
+          "done": "{name} foi excluído.",
+          "failed": "Não foi possível excluir o plugin."
         }
       },
       "connection": {
@@ -17063,6 +17115,102 @@
           "label": "Concluído"
         }
       }
+    },
+    "needs": {
+      "intro": "Um plugin nunca dá acesso a uma integração. Cada linha mostra o seu próprio estado da integração. O plugin funciona sem as integrações que não estão ativadas.",
+      "state": {
+        "on": "Ativado",
+        "turn_on": "Desativado",
+        "sign_in": "Sem login",
+        "no_access": "Sem acesso",
+        "turned_off": "Desativado pelo admin",
+        "not_added": "Não adicionado",
+        "more_than_one": "Mais de uma correspondência",
+        "not_supported": "Não compatível"
+      },
+      "note": {
+        "askAdmin": "Peça a um admin",
+        "turnedOff": "Desativado pelo seu admin",
+        "moreThanOne": "Mais de uma integração corresponde",
+        "notSupported": "Não compatível com o Onyx"
+      },
+      "localServer": "Servidor local",
+      "noUrl": "Sem URL de servidor",
+      "turnOn": {
+        "label": "Ativar",
+        "ariaLabel": "Ativar {name}",
+        "failed": "Não foi possível ativar {name}."
+      },
+      "add": {
+        "label": "Adicionar integração",
+        "ariaLabel": "Adicionar a integração {name}"
+      },
+      "urlProblem": {
+        "variable": "A URL usa uma variável. O Onyx não preenche variáveis.",
+        "credential": "A URL contém uma credencial. O Onyx não a guarda.",
+        "invalid": "A URL não é uma URL http ou https válida."
+      }
+    },
+    "upload": {
+      "title": "Enviar Plugin",
+      "description": "Envie um plugin do Claude Code ou Codex. Escolha um arquivo .zip ou arraste a pasta do plugin para cá.",
+      "reading": "Lendo…",
+      "requirements": {
+        "title": "O Onyx usa estas partes de um plugin:",
+        "skills": "Skills em skills/'<name>'/SKILL.md",
+        "mcp": "Servidores MCP em .mcp.json ou plugin.json",
+        "other": "O Onyx não usa comandos, agentes, hooks nem as outras partes."
+      },
+      "skillOnly": {
+        "title": "Este envio é um skill",
+        "description": "Ele não tem plugin.json. Continue para adicioná-lo como skill.",
+        "continue": "Continuar"
+      },
+      "version": "plugin.json {version}",
+      "target": {
+        "newVersion": "Atualiza {name} para a versão {version} do Onyx",
+        "newPlugin": "Novo plugin: {name}"
+      },
+      "willBeOff": "O plugin é salvo desativado. {names} já tem uma habilidade com o mesmo nome.",
+      "saveAsNew": {
+        "label": "Salvar como Novo Plugin",
+        "description": "Mantém sem alterações o plugin que tem este nome."
+      },
+      "sections": {
+        "skills": "Skills · {count}",
+        "integrations": "Integrações · {count}",
+        "unused": "Não usado no Onyx",
+        "warnings": "Avisos"
+      },
+      "integrationsNote": "Salvar ativa as integrações que você já pode usar. Um plugin nunca dá acesso a uma integração.",
+      "integrationsNoteOff": "O plugin fica desativado após salvar, então nenhuma integração é ativada.",
+      "unusedParts": {
+        "commands": "Comandos",
+        "agents": "Agentes",
+        "hooks": "Hooks",
+        "lsp_servers": "Servidores LSP",
+        "output_styles": "Estilos de saída",
+        "bin": "Executáveis (bin)",
+        "themes": "Temas",
+        "monitors": "Monitores"
+      },
+      "cancel": "Cancelar",
+      "save": "Salvar",
+      "saving": "Salvando…",
+      "readFailed": "Não foi possível ler o plugin.",
+      "saveFailed": "Não foi possível salvar o plugin.",
+      "saved": {
+        "newPlugin": "{name} adicionado.",
+        "newVersion": "{name} atualizado para a versão {version} do Onyx.",
+        "unchanged": "Nenhuma alteração. {name} já está na versão {version} do Onyx.",
+        "off": "{name} adicionado. Está desativado porque {names} já tem uma habilidade com o mesmo nome."
+      }
+    },
+    "turnOn": {
+      "title": "{name} está ativado",
+      "description": "Algumas integrações de que este plugin precisa não estão disponíveis para você.",
+      "note": "O plugin funciona sem elas. Um plugin nunca dá acesso a uma integração.",
+      "done": "Concluído"
     }
   },
   "integrations": {
@@ -17149,7 +17297,8 @@
         "label": "Adicionar",
         "upload": "Enviar habilidade",
         "create": "Criar uma habilidade",
-        "github": "Importar do GitHub"
+        "github": "Importar do GitHub",
+        "uploadPlugin": "Enviar plugin"
       },
       "groups": {
         "mine": "Criadas por você",
@@ -17224,13 +17373,16 @@
       },
       "empty": {
         "title": "Nenhum plugin ainda",
-        "description": "Crie uma habilidade. Cada habilidade é um plugin."
+        "description": "Envie um plugin do Claude Code ou Codex para adicionar suas habilidades e as integrações de que elas precisam.",
+        "upload": "Enviar plugin"
       },
       "noMatches": {
         "title": "Nenhum plugin correspondente",
         "clear": "Mostrar todos os plugins"
       },
-      "intro": "Um plugin agrupa habilidades que você ativa juntas. Cada habilidade adicionada vem em seu próprio plugin. As integrações ficam na guia Integrações."
+      "intro": "Um plugin agrupa skills e as integrações de que eles precisam. Envie um plugin do Claude Code ou do Codex, ou adicione um skill. Cada skill que você adiciona vem no próprio plugin.",
+      "integrations": "{available} de {needed} integrações disponíveis",
+      "nameHeld": "Desativado: {names} usa o mesmo nome de habilidade"
     },
     "skillPage": {
       "title": "Habilidade",
@@ -17320,7 +17472,8 @@
     },
     "pluginPage": {
       "tabs": {
-        "skills": "Habilidades · {count}"
+        "skills": "Habilidades · {count}",
+        "integrations": "Integrações · {count}"
       }
     },
     "search": "Pesquisar"

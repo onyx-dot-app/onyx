@@ -10418,7 +10418,8 @@
             "public": "{count, plural, one {도구 #개} other {도구 #개}}를 찾았습니다. 이 서버는 로그인이 필요 없습니다.",
             "oauth": "이 서버는 OAuth 로그인을 사용합니다.",
             "authUnknown": "이 서버는 로그인이 필요합니다. API 키 헤더 또는 OAuth를 추가하세요.",
-            "unreachable": "Onyx가 이 서버에 연결할 수 없습니다. URL을 확인하세요."
+            "unreachable": "Onyx가 이 서버에 연결할 수 없습니다. URL을 확인하세요.",
+            "forbidden": "추가하기 전에 이 서버를 확인할 수 있는 사람은 관리자뿐입니다. 그래도 추가할 수 있습니다."
           },
           "transport": {
             "title": "전송 방식",
@@ -16648,6 +16649,21 @@
           "remove": "{name} 제거",
           "shared": "이 그룹과 공유됨",
           "settingOnly": "그룹 설정만"
+        },
+        "plugin": {
+          "installation": {
+            "description": "액세스 권한이 있는 모든 사용자에게 이 플러그인을 설치하는 방식을 선택하세요."
+          },
+          "published": {
+            "description": "게시됨. 조직의 모든 사용자가 이 플러그인을 사용할 수 있습니다."
+          },
+          "publishWarning": {
+            "description": "저장하면 조직의 모든 사용자가 이 플러그인을 사용할 수 있습니다. 다시 비공개로 만들 수 없습니다. 관리자만 삭제할 수 있습니다.",
+            "reviewDescription": "관리자가 요청을 승인할 때까지 플러그인은 비공개로 유지됩니다. 승인 후에는 다시 비공개로 만들 수 없습니다."
+          },
+          "publishOff": {
+            "description": "관리자가 조직 게시를 껐습니다. 관리자에게 이 플러그인 게시를 요청하세요."
+          }
         }
       },
       "placeholders": {
@@ -16663,7 +16679,8 @@
         "columns": {
           "version": "버전",
           "madeBy": "만든 사람",
-          "date": "날짜"
+          "date": "날짜",
+          "manifestVersion": "plugin.json"
         },
         "versionLabel": "버전 {number}",
         "currentBadge": "현재",
@@ -16686,7 +16703,9 @@
           "back": "모든 버전",
           "loadError": {
             "title": "이 버전을 불러올 수 없습니다"
-          }
+          },
+          "skills": "스킬 · {count}",
+          "integrations": "통합 · {count}"
         },
         "status": {
           "pending": "검토 대기",
@@ -16698,7 +16717,9 @@
           "failedToast": "이 업데이트를 게시할 수 없습니다.",
           "sentForReviewToast": "버전 {number}을(를) 관리자에게 검토 요청했습니다.",
           "offNotice": "게시가 꺼져 있습니다. 관리자에게 이 업데이트 게시를 요청하세요."
-        }
+        },
+        "noManifestVersion": "없음",
+        "manifestVersion": "plugin.json {version}"
       }
     },
     "page": {
@@ -16747,10 +16768,12 @@
         "body": "계속하면 현재 활성화된 스킬이 비활성화되고 이 스킬이 활성화됩니다.",
         "description": "“{name}” 이름의 스킬은 한 번에 하나만 활성화할 수 있습니다.",
         "submit": {
-          "label": "스킬 전환",
+          "label": "전환",
           "pendingLabel": "전환 중..."
         },
-        "title": "“{name}” 스킬을 전환할까요?"
+        "title": "“{name}”을(를) 켜시겠습니까?",
+        "descriptionNamed": "{names}이(가) “{name}”과(와) 같은 스킬 이름을 이미 사용하고 있습니다. 한 번에 하나만 켤 수 있습니다.",
+        "bodyNamed": "“{name}”을(를) 켜면 {names}이(가) 꺼집니다."
       },
       "toasts": {
         "disableFailed": "{name}을(를) 비활성화하지 못했습니다",
@@ -16772,6 +16795,9 @@
         },
         "upload": {
           "label": "끌어다 놓거나 클릭하여 업로드"
+        },
+        "chooseFolder": {
+          "label": "폴더 선택"
         }
       },
       "filesPicker": {
@@ -16795,7 +16821,8 @@
       },
       "upload": {
         "error": {
-          "readFailed": "업로드한 파일을 읽지 못했습니다."
+          "readFailed": "업로드한 파일을 읽지 못했습니다.",
+          "folderRoot": "{upload, select, plugin {선택한 폴더의 최상위에 SKILL.md 또는 plugin.json 매니페스트가 있어야 합니다.} other {선택한 폴더의 최상위에 SKILL.md가 있어야 합니다.}}"
         }
       }
     },
@@ -16954,19 +16981,44 @@
           "location": "위치",
           "owner": "소유자",
           "skills": "스킬",
-          "description": "설명"
+          "description": "설명",
+          "version": "plugin.json의 버전",
+          "author": "작성자",
+          "homepage": "홈페이지",
+          "license": "라이선스",
+          "notUsed": "Onyx에서 사용하지 않음"
         },
         "skills": {
           "off": "꺼짐",
-          "invalid": "유효하지 않음"
+          "invalid": "유효하지 않음",
+          "read": "읽기",
+          "readAriaLabel": "{name} 스킬 읽기",
+          "readFailed": "이 스킬을 읽을 수 없습니다.",
+          "noInstructions": "이 스킬에는 지침이 없습니다."
         },
         "switch": {
           "title": "이 플러그인 사용",
-          "description": "켜면 기본 에이전트가 이 플러그인을 사용할 수 있습니다.",
           "label": "{name} 사용",
           "required": "관리자가 이 플러그인을 필수로 지정했습니다. 끌 수 없습니다.",
           "unavailable": "이 플러그인을 켜거나 끌 수 없습니다.",
-          "failed": "플러그인을 변경할 수 없습니다."
+          "failed": "플러그인을 변경할 수 없습니다.",
+          "on": "켜짐. 기본 에이전트가 이 플러그인을 사용할 수 있습니다.",
+          "off": "꺼짐. 켜면 기본 에이전트가 이 플러그인을 사용할 수 있습니다.",
+          "nameHeld": "{names}이(가) 같은 스킬 이름을 사용하므로 꺼져 있습니다. 대신 이 플러그인을 사용하려면 켜세요."
+        },
+        "actions": {
+          "share": "공유",
+          "menu": "추가 작업",
+          "uploadVersion": "새 버전 업로드",
+          "remove": "플러그인 삭제"
+        },
+        "remove": {
+          "entityType": "플러그인",
+          "description": "이 플러그인을 사용하는 모든 사람이 이 플러그인을 잃게 됩니다. 되돌릴 수 없습니다.",
+          "submit": "삭제",
+          "pending": "삭제 중…",
+          "done": "{name}을(를) 삭제했습니다.",
+          "failed": "플러그인을 삭제할 수 없습니다."
         }
       },
       "connection": {
@@ -17063,6 +17115,102 @@
           "label": "완료"
         }
       }
+    },
+    "needs": {
+      "intro": "플러그인은 통합에 대한 액세스 권한을 주지 않습니다. 각 행은 통합에 대한 내 상태를 보여 줍니다. 켜져 있지 않은 통합이 없어도 플러그인은 작동합니다.",
+      "state": {
+        "on": "켜짐",
+        "turn_on": "꺼짐",
+        "sign_in": "로그인 안 됨",
+        "no_access": "액세스 권한 없음",
+        "turned_off": "관리자가 끔",
+        "not_added": "추가되지 않음",
+        "more_than_one": "여러 개 일치",
+        "not_supported": "지원되지 않음"
+      },
+      "note": {
+        "askAdmin": "관리자에게 문의하세요",
+        "turnedOff": "관리자가 껐습니다",
+        "moreThanOne": "두 개 이상의 통합이 일치합니다",
+        "notSupported": "Onyx에서 지원되지 않음"
+      },
+      "localServer": "로컬 서버",
+      "noUrl": "서버 URL 없음",
+      "turnOn": {
+        "label": "켜기",
+        "ariaLabel": "{name} 켜기",
+        "failed": "{name}을(를) 켤 수 없습니다."
+      },
+      "add": {
+        "label": "통합 추가",
+        "ariaLabel": "{name} 통합 추가"
+      },
+      "urlProblem": {
+        "variable": "URL에 변수가 있습니다. Onyx는 변수를 채우지 않습니다.",
+        "credential": "URL에 자격 증명이 있습니다. Onyx는 이를 저장하지 않습니다.",
+        "invalid": "URL이 유효한 http 또는 https URL이 아닙니다."
+      }
+    },
+    "upload": {
+      "title": "플러그인 업로드",
+      "description": "Claude Code 또는 Codex 플러그인을 업로드하세요. .zip 파일을 선택하거나 플러그인 폴더를 여기로 끌어오세요.",
+      "reading": "읽는 중…",
+      "requirements": {
+        "title": "Onyx는 플러그인의 다음 부분을 사용합니다:",
+        "skills": "skills/'<name>'/SKILL.md의 스킬",
+        "mcp": ".mcp.json 또는 plugin.json의 MCP 서버",
+        "other": "Onyx는 명령, 에이전트, 훅 및 기타 부분을 사용하지 않습니다."
+      },
+      "skillOnly": {
+        "title": "이 업로드는 스킬입니다",
+        "description": "plugin.json이 없습니다. 계속하여 스킬로 추가하세요.",
+        "continue": "계속"
+      },
+      "version": "plugin.json {version}",
+      "target": {
+        "newVersion": "{name}을(를) Onyx 버전 {version}(으)로 업데이트합니다",
+        "newPlugin": "새 플러그인: {name}"
+      },
+      "willBeOff": "플러그인이 꺼진 상태로 저장됩니다. {names}에 같은 이름의 스킬이 이미 있습니다.",
+      "saveAsNew": {
+        "label": "새 플러그인으로 저장",
+        "description": "이 이름의 플러그인은 그대로 둡니다."
+      },
+      "sections": {
+        "skills": "스킬 · {count}",
+        "integrations": "통합 · {count}",
+        "unused": "Onyx에서 사용하지 않음",
+        "warnings": "경고"
+      },
+      "integrationsNote": "저장하면 이미 사용할 수 있는 통합이 켜집니다. 플러그인은 통합에 대한 액세스 권한을 주지 않습니다.",
+      "integrationsNoteOff": "저장 후에도 플러그인이 꺼져 있으므로 통합이 켜지지 않습니다.",
+      "unusedParts": {
+        "commands": "명령",
+        "agents": "에이전트",
+        "hooks": "훅",
+        "lsp_servers": "LSP 서버",
+        "output_styles": "출력 스타일",
+        "bin": "실행 파일 (bin)",
+        "themes": "테마",
+        "monitors": "모니터"
+      },
+      "cancel": "취소",
+      "save": "저장",
+      "saving": "저장 중…",
+      "readFailed": "플러그인을 읽을 수 없습니다.",
+      "saveFailed": "플러그인을 저장할 수 없습니다.",
+      "saved": {
+        "newPlugin": "{name}을(를) 추가했습니다.",
+        "newVersion": "{name}을(를) Onyx 버전 {version}(으)로 업데이트했습니다.",
+        "unchanged": "변경 사항이 없습니다. {name}은(는) 이미 Onyx 버전 {version}입니다.",
+        "off": "{name}을(를) 추가했습니다. {names}에 같은 이름의 스킬이 있어 꺼져 있습니다."
+      }
+    },
+    "turnOn": {
+      "title": "{name}이(가) 켜졌습니다",
+      "description": "이 플러그인에 필요한 일부 통합을 사용할 수 없습니다.",
+      "note": "플러그인은 이 통합 없이도 작동합니다. 플러그인은 통합에 대한 액세스 권한을 주지 않습니다.",
+      "done": "완료"
     }
   },
   "integrations": {
@@ -17149,7 +17297,8 @@
         "label": "추가",
         "upload": "스킬 업로드",
         "create": "스킬 만들기",
-        "github": "GitHub에서 가져오기"
+        "github": "GitHub에서 가져오기",
+        "uploadPlugin": "플러그인 업로드"
       },
       "groups": {
         "mine": "내가 만든 항목",
@@ -17224,13 +17373,16 @@
       },
       "empty": {
         "title": "아직 플러그인이 없습니다",
-        "description": "스킬을 만드세요. 각 스킬이 하나의 플러그인입니다."
+        "description": "Claude Code 또는 Codex 플러그인을 업로드하여 스킬과 필요한 통합을 추가하세요.",
+        "upload": "플러그인 업로드"
       },
       "noMatches": {
         "title": "일치하는 플러그인이 없습니다",
         "clear": "모든 플러그인 보기"
       },
-      "intro": "플러그인은 함께 켜는 스킬을 묶은 것입니다. 추가한 각 스킬은 자체 플러그인으로 제공됩니다. 통합은 통합 탭에 있습니다."
+      "intro": "플러그인은 스킬과 스킬에 필요한 통합을 묶습니다. Claude Code 또는 Codex 플러그인을 업로드하거나 스킬을 추가하세요. 추가한 각 스킬은 자체 플러그인에 들어갑니다.",
+      "integrations": "{needed}개 중 {available}개 통합 사용 가능",
+      "nameHeld": "꺼짐: {names}이(가) 같은 스킬 이름을 사용합니다"
     },
     "skillPage": {
       "title": "스킬",
@@ -17320,7 +17472,8 @@
     },
     "pluginPage": {
       "tabs": {
-        "skills": "스킬 · {count}"
+        "skills": "스킬 · {count}",
+        "integrations": "통합 · {count}"
       }
     },
     "search": "검색"

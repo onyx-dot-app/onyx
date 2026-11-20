@@ -35,6 +35,7 @@ from sqlalchemy import (
     ColumnElement,
     Row,
     Select,
+    case,
     delete,
     exists,
     or_,
@@ -60,6 +61,7 @@ from onyx.db.models import (
     Marketplace,
     Plugin,
     Plugin__UserGroup,
+    PluginSkill,
     PluginVersion,
     Skill,
     User,
@@ -74,8 +76,9 @@ from onyx.db.plugin import (
     add_plugin_version__no_commit,
     apply_plugin_access_change__no_commit,
     check_base_version,
-    create_skill_plugin__no_commit,
+    create_plugin__no_commit,
     get_plugin_version,
+    is_skill_version,
     private_plugins_blocking_user_delete,
     publish_or_request_review__no_commit,
     set_plugin_preferences__no_commit,
@@ -102,7 +105,12 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.skills.built_in import BUILT_IN_SKILLS, EXTERNAL_APP_SKILL_ID_TO_APP_TYPE
 from onyx.skills.ingest import IngestedBundle
-from onyx.skills.models import ChatSkill, PluginFileEntry, SkillUsage
+from onyx.skills.models import (
+    ChatSkill,
+    PluginFileEntry,
+    PluginVersionContent,
+    SkillUsage,
+)
 
 # A built-in skill row, or the plugin of a custom skill.
 type StoredSkill = Skill | Plugin
@@ -126,13 +134,20 @@ class RuntimeSkillVersion(BaseModel):
     is_valid: bool | None
 
 
+class RuntimeSkillFolder(BaseModel):
+    model_config = ConfigDict(strict=True, frozen=True)
+
+    path: str
+    name: str
+
+
 class RuntimeSkill(BaseModel):
     model_config = ConfigDict(strict=True, frozen=True, arbitrary_types_allowed=True)
 
     id: UUID
     built_in_skill_id: str | None = None
-    # The name in the version the user runs; the row name for a built-in.
     name: str
+    plugin_skills: tuple[RuntimeSkillFolder, ...] = ()
     # None for a built-in skill.
     version: RuntimeSkillVersion | None = None
     # Recorded size of the version; None for a built-in or a version with no
@@ -149,6 +164,9 @@ class SkillUserState(BaseModel):
     can_toggle: bool
     # The install setting for this user is REQUIRED (company or group).
     required: bool = False
+    # The user turned the skill on, but these skills hold one of its names,
+    # so it does not load and shows as off.
+    name_held_by: tuple[str, ...] = ()
 
 
 def is_published(plugin: Plugin, db_session: Session) -> bool:
@@ -209,7 +227,7 @@ class _UserSkillSelection(BaseModel):
         ]
 
     def other_skills_named(
-        self, names: Collection[str], skill_id: UUID
+        self, names: Collection[str], skill_id: UUID | None
     ) -> list[UserPluginState]:
         """Skills other than ``skill_id`` that can run and hold one of the
         names: the ones that take part in the name order."""
@@ -273,13 +291,17 @@ def _built_in_skill_select(
 
 
 def _visible_custom_skill_select(user: User) -> Select[tuple[Plugin]]:
-    """Plugins whose version the user runs is a skill: every one for an
-    organization-wide skill manager, else the ones the user can see."""
     runs = version_user_runs(Plugin, user.id)
-    stmt = select(Plugin).where(holds_one_root_skill(runs))
+    stmt = select(Plugin)
     if not has_global_permission(user, Permission.MANAGE_PLUGINS):
         stmt = stmt.where(Plugin.id.in_(visible_plugin_ids(user.id)))
-    return stmt.order_by(frontmatter_in_version("name", runs), Plugin.id)
+    return stmt.order_by(
+        case(
+            (holds_one_root_skill(runs), frontmatter_in_version("name", runs)),
+            else_=Plugin.name,
+        ),
+        Plugin.id,
+    )
 
 
 def get_group_ids_for_skill(skill_id: UUID, db_session: Session) -> list[int]:
@@ -348,7 +370,21 @@ def list_runtime_skills_for_user(
     return selection.built_ins + [
         RuntimeSkill(
             id=state.plugin_id,
-            name=state.skill_names[0],
+            name=(
+                state.skill_names[0]
+                if is_skill_version(state.skill_paths)
+                else state.plugin_name
+            ),
+            plugin_skills=(
+                ()
+                if is_skill_version(state.skill_paths)
+                else tuple(
+                    RuntimeSkillFolder(path=path, name=name)
+                    for path, name in zip(
+                        state.skill_paths, state.skill_names, strict=True
+                    )
+                )
+            ),
             version=RuntimeSkillVersion(
                 id=state.version_id,
                 bundle_file_id=state.bundle_file_id,
@@ -361,36 +397,32 @@ def list_runtime_skills_for_user(
 
 
 def list_chat_skills(db_session: Session, user: User) -> list[ChatSkill]:
-    """The custom skills the user's sandbox loads, by name, with the name,
-    description, `metadata.short-description` and id of the version the user
-    runs. Built-in skills need the Craft sandbox, so chat leaves them out;
-    their names stay reserved. Anonymous users have none."""
     if user.is_anonymous:
         return []
-    names = {
-        state.version_id: state.skill_names[0]
-        for state in _user_skill_selection(user, db_session).loaded()
-    }
-    if not names:
+    version_ids = [
+        state.version_id for state in _user_skill_selection(user, db_session).loaded()
+    ]
+    if not version_ids:
         return []
     rows = db_session.execute(
         select(
-            PluginVersion.id,
-            frontmatter_in_version("description", PluginVersion.id.expression),
-            frontmatter_in_version(
-                ("metadata", "short-description"), PluginVersion.id.expression
-            ),
-        ).where(PluginVersion.id.in_(names))
+            PluginSkill.plugin_version_id,
+            PluginSkill.path,
+            PluginSkill.frontmatter["name"].astext,
+            PluginSkill.frontmatter["description"].astext,
+            PluginSkill.frontmatter[("metadata", "short-description")].astext,
+        ).where(PluginSkill.plugin_version_id.in_(version_ids))
     )
     return sorted(
         (
             ChatSkill(
-                name=names[version_id],
+                name=name,
                 description=description,
                 short_description=short_description,
                 version_id=version_id,
+                path=path,
             )
-            for version_id, description, short_description in rows
+            for version_id, path, name, description, short_description in rows
         ),
         key=lambda skill: (skill.name, skill.version_id),
     )
@@ -427,13 +459,15 @@ def fetch_editable_skill(
     db_session: Session,
     user: User,
     lock_for_update: bool = False,
+    any_plugin: bool = False,
 ) -> Plugin | None:
     """The plugin of a custom skill the user may edit. Built-in skills are
-    never editable."""
-    stmt = select(Plugin).where(
-        Plugin.id == skill_id,
-        holds_one_root_skill(Plugin.current_version_id.expression),
-    )
+    never editable. ``any_plugin`` also returns a plugin whose current
+    version is not a skill, for a change that does not edit the files:
+    sharing, publishing, versions and delete."""
+    stmt = select(Plugin).where(Plugin.id == skill_id)
+    if not any_plugin:
+        stmt = stmt.where(holds_one_root_skill(Plugin.current_version_id.expression))
     if not has_global_permission(user, Permission.MANAGE_PLUGINS):
         stmt = stmt.where(_editable_by_user(user))
     if lock_for_update:
@@ -485,8 +519,8 @@ def create_custom_skill__no_commit(
     Returns the plugin and the users the access change affects."""
     plugin_id = uuid4()
     with check_skill_limit(db_session, [plugin_id], user.id):
-        plugin = create_skill_plugin__no_commit(
-            plugin_id, ingested.content, user, db_session
+        plugin = create_plugin__no_commit(
+            plugin_id, ingested.canonical_name, ingested.content, user, db_session
         )
         affected: set[UUID] = set()
         # Inside the check: publishing can turn the skill on for its author.
@@ -496,6 +530,113 @@ def create_custom_skill__no_commit(
                 plugin, change, user, db_session, on_name_clash="rename"
             )
     return plugin, affected
+
+
+def create_uploaded_plugin__no_commit(
+    content: PluginVersionContent,
+    auto_enable: bool,
+    user: User,
+    db_session: Session,
+) -> tuple[Plugin, bool]:
+    if content.manifest is None:
+        raise RuntimeError("Bug: an uploaded plugin has a manifest.")
+    plugin_id = uuid4()
+    with check_skill_limit(db_session, [plugin_id], user.id):
+        plugin = create_plugin__no_commit(
+            plugin_id, content.manifest.name, content, user, db_session
+        )
+    enabled = auto_enable and enable_new_skill_if_name_available__no_commit(
+        plugin, user.id, db_session
+    )
+    return plugin, enabled
+
+
+def _add_plugin_version_for_user__no_commit(
+    plugin_id: UUID,
+    content: PluginVersionContent,
+    base_version_id: UUID | None,
+    skip_if_unchanged: bool,
+    user: User,
+    db_session: Session,
+) -> tuple[Plugin, PluginVersion | None]:
+    lock_user_skill_preferences(user.id, db_session)
+    plugin = fetch_editable_skill(
+        plugin_id,
+        user=user,
+        db_session=db_session,
+        lock_for_update=True,
+        any_plugin=True,
+    )
+    if plugin is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Plugin not found.")
+    with check_skill_limit(db_session, [plugin.id], user.id):
+        version = add_plugin_version__no_commit(
+            plugin=plugin,
+            content=content,
+            base_version_id=base_version_id,
+            created_by=user,
+            skip_if_unchanged=skip_if_unchanged,
+            db_session=db_session,
+        )
+    return plugin, version
+
+
+def add_uploaded_plugin_version__no_commit(
+    plugin_id: UUID,
+    content: PluginVersionContent,
+    user: User,
+    db_session: Session,
+) -> tuple[Plugin, PluginVersion, bool]:
+    """The plugin, its current version, and False when the files equal the
+    current version's files and no version was added."""
+    plugin, version = _add_plugin_version_for_user__no_commit(
+        plugin_id, content, None, True, user, db_session
+    )
+    if version is not None:
+        return plugin, version, True
+    if plugin.current_version_id is None:
+        raise RuntimeError("Bug: a plugin with a version has a current version.")
+    return (
+        plugin,
+        get_plugin_version(plugin.id, plugin.current_version_id, db_session),
+        False,
+    )
+
+
+def skill_enabled_for_user(plugin_id: UUID, user: User, db_session: Session) -> bool:
+    """The user turned the skill on and it loses no name."""
+    return _user_skill_selection(user, db_session).enabled(plugin_id)
+
+
+def skill_name_conflicts(
+    skill_names: Collection[str],
+    plugin_id: UUID | None,
+    user: User,
+    db_session: Session,
+) -> list[str]:
+    """The names of the other skills and plugins the user runs that hold one
+    of ``skill_names``. Each one keeps a new plugin with these names off
+    (``enable_new_skill_if_name_available__no_commit``)."""
+    selection = _user_skill_selection(user, db_session)
+    return sorted(
+        {
+            state.plugin_name
+            for state in selection.other_skills_named(skill_names, plugin_id)
+        }
+    )
+
+
+def restore_plugin_version__no_commit(
+    plugin_id: UUID,
+    content: PluginVersionContent,
+    base_version_id: UUID,
+    user: User,
+    db_session: Session,
+) -> PluginVersion | None:
+    """None, and no write, when the content equals the current version."""
+    return _add_plugin_version_for_user__no_commit(
+        plugin_id, content, base_version_id, True, user, db_session
+    )[1]
 
 
 def lock_skill_for_save(plugin: Plugin, user: User, db_session: Session) -> None:
@@ -607,10 +748,26 @@ def skill_user_states(
             or built_in_skill_id in selection.built_in_app_skills,
             can_toggle=False,
         )
+    built_in_names = {skill.name for skill in selection.built_ins}
     for skill_id in requested_ids - states.keys():
         state = selection.states.get(skill_id)
+        name_held_by: tuple[str, ...] = ()
+        if state is not None and state.can_run and skill_id in selection.hidden:
+            name_held_by = tuple(
+                sorted(
+                    {
+                        other.plugin_name
+                        for other in selection.other_skills_named(
+                            state.skill_names, skill_id
+                        )
+                        if other.plugin_id not in selection.hidden
+                    }
+                    | (built_in_names & set(state.skill_names))
+                )
+            )
         states[skill_id] = SkillUserState(
             enabled=selection.enabled(skill_id),
+            name_held_by=name_held_by,
             can_toggle=state is not None
             and state.version_is_valid is not False
             and state.installation_policy != PluginInstallationPolicy.REQUIRED,
@@ -648,7 +805,7 @@ def set_skill_enabled_for_user(
         if not enabled:
             return []
         target = selection.states.get(skill.id)
-        names = target.skill_names if target and target.skill_names else (skill.name,)
+        names = target.skill_names if target is not None else (skill.name,)
         # Only skills the user can see conflict. A hidden plugin's kept choice
         # neither blocks the switch nor changes.
         others = selection.other_skills_named(names, skill.id)
@@ -665,6 +822,9 @@ def set_skill_enabled_for_user(
             raise OnyxError(
                 OnyxErrorCode.SKILL_NAME_CONFLICT,
                 f"Another skill named '{names[0]}' is already enabled.",
+                extra={
+                    "conflict_names": sorted({other.plugin_name for other in others})
+                },
             )
         return conflicts
 
@@ -1098,7 +1258,11 @@ def bulk_share_skills__no_commit(
     candidates: list[UUID] = []
     for skill_id in sorted(set(skill_ids)):
         plugin = fetch_editable_skill(
-            skill_id, user=user, db_session=db_session, lock_for_update=True
+            skill_id,
+            user=user,
+            db_session=db_session,
+            lock_for_update=True,
+            any_plugin=True,
         )
         if plugin is None:
             failed[skill_id] = "Skill not found"
@@ -1216,7 +1380,11 @@ def bulk_update_skill__no_commit(
             )
             return {user.id}, []
         plugin = fetch_editable_skill(
-            skill_id, user=user, db_session=db_session, lock_for_update=True
+            skill_id,
+            user=user,
+            db_session=db_session,
+            lock_for_update=True,
+            any_plugin=True,
         )
         if plugin is None:
             raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
