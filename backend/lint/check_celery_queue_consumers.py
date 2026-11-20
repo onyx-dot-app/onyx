@@ -35,8 +35,8 @@ _CONSTANTS = _REPO_ROOT / "backend/onyx/configs/constants.py"
 _SUPERVISORD = _REPO_ROOT / "backend/supervisord.conf"
 _HELM_TEMPLATES = _REPO_ROOT / "deployment/helm/charts/onyx/templates"
 _SEND_METHODS = {"send_task", "apply_async", "signature"}
-_SUPERVISORD_QUEUES = re.compile(r"-Q\s+([\w,]+)")
-_HELM_QUEUES = re.compile(r'"-Q",\s*"([\w,]+)"')
+_SUPERVISORD_QUEUES = re.compile(r"-Q\s+([\w,-]+)")
+_HELM_QUEUES = re.compile(r'"-Q",\s*"([\w,-]+)"')
 
 
 def queue_constants(source: str) -> dict[str, str]:

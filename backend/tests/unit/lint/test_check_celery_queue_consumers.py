@@ -52,3 +52,11 @@ def test_consumed_queues_from_supervisord_and_helm() -> None:
         "c",
     }
     assert check.consumed_queues(helm, check._HELM_QUEUES) == {"d", "e"}
+
+
+def test_hyphenated_queue_names_are_read_whole() -> None:
+    assert check.consumed_queues("    -Q a-b,c\n", check._SUPERVISORD_QUEUES) == {
+        "a-b",
+        "c",
+    }
+    assert check.consumed_queues('"-Q",\n  "d-e",\n', check._HELM_QUEUES) == {"d-e"}
