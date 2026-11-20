@@ -362,3 +362,29 @@ def test_limits_fail_the_whole_read(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(reader, "GITHUB_SKILL_MAX_COUNT", 2)
     monkeypatch.setattr(reader, "PLUGIN_ENTRY_MAX_COUNT", 1)
     assert isinstance(read_marketplace(files, None), FailedMarketplace)
+
+
+_DEEP = b'{"a": ' * 100_000 + b"1" + b"}" * 100_000
+
+
+def test_deeply_nested_plugin_json_blocks_only_its_entry() -> None:
+    files = {
+        CLAUDE: catalog(
+            {"name": "good", "source": "./good"},
+            {"name": "deep", "source": "./deep"},
+        ),
+        "good/skills/good/SKILL.md": skill_md("good"),
+        "deep/.claude-plugin/plugin.json": _DEEP,
+        "deep/skills/deep/SKILL.md": skill_md("deep"),
+    }
+    entries = {entry.entry_key: entry for entry in _complete(files).entries}
+    assert isinstance(entries["good"], ReadyPlugin)
+    deep = entries["deep"]
+    assert isinstance(deep, BlockedPlugin)
+    assert "nested too deeply" in deep.reason
+
+
+def test_deeply_nested_marketplace_json_fails_cleanly() -> None:
+    result = read_marketplace({CLAUDE: _DEEP}, None)
+    assert isinstance(result, FailedMarketplace)
+    assert "nested too deeply" in result.reason

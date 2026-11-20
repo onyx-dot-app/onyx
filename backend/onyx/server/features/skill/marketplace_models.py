@@ -4,7 +4,7 @@ from enum import Enum
 from typing import Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from onyx.db.enums import PluginInstallationPolicy
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -31,7 +31,7 @@ class MarketplaceSourceRequest(BaseModel):
     ref: str | None = Field(default=None, max_length=255)
 
     def to_config(
-        self, resolve_tree: Callable[[GitHubSource], GitHubRevision]
+        self, resolve_tree: Callable[[GitHubSource], GitHubRevision] | None = None
     ) -> GitHubMarketplaceConfig:
         """A folder URL (.../tree/<ref>/<folder>) fills the empty ref and
         folder; ``resolve_tree`` splits a ref with '/' from the folder."""
@@ -44,15 +44,21 @@ class MarketplaceSourceRequest(BaseModel):
                     "Enter the repository URL. Give the folder and the branch in "
                     "their own fields.",
                 )
-            folder = resolve_tree(source).subpath if len(source.tree_tail) > 1 else None
+            if len(source.tree_tail) == 1:
+                folder = None
+            elif resolve_tree is None:
+                raise RuntimeError("Bug: a folder URL needs a tree resolver.")
+            else:
+                folder = resolve_tree(source).subpath
             folder_parts = len(folder.split("/")) if folder else 0
             ref = "/".join(source.tree_tail[: len(source.tree_tail) - folder_parts])
         try:
             return GitHubMarketplaceConfig(
                 owner=source.owner, repo=source.repo, folder=folder, ref=ref
             )
-        except ValueError as exc:
-            raise OnyxError(OnyxErrorCode.INVALID_INPUT, str(exc)) from exc
+        except ValidationError as exc:
+            message = str(exc.errors()[0]["msg"]).removeprefix("Value error, ")
+            raise OnyxError(OnyxErrorCode.INVALID_INPUT, message) from exc
 
 
 class MarketplaceCreateRequest(MarketplaceSourceRequest):

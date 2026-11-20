@@ -175,7 +175,8 @@ Only a user with the organization-wide `manage:plugins` permission sees and mana
 
 Onyx reads the repository with the GitHub connection of the login, the user who added the marketplace.
 A public repository needs no connection. If the login loses access or leaves, the sync fails with the reason.
-Another manager can click **Replace login** to read the repository with their own GitHub connection. The plugins,
+Another manager can click **Replace login** to become the login.
+Onyx then reads the repository with their GitHub connection, or without one for a public repository. The plugins,
 their versions and their shares stay.
 
 A sync runs when a user adds the marketplace or clicks **Sync now**. Onyx does not sync on a schedule.
@@ -187,8 +188,7 @@ Blocked and not supported entries keep their plugins. A sync that cannot read th
 The content of a synced plugin changes only in GitHub. Onyx refuses edits, uploaded versions, restores, publishes,
 transfers and deletes of a synced plugin with **Change this plugin in GitHub**.
 Sharing and installation policies still change in Onyx. **Remove** deletes the marketplace and all its plugins.
-When you delete a user who owns a personal marketplace, the dialog lists those marketplaces.
-**Remove and Delete** removes them and their plugins, then deletes the user.
+When you delete a user, Onyx also removes the user's personal marketplaces and their plugins.
 See [Add a marketplace](/overview/core_features/plugins#add-a-marketplace).
 
 ## Review a Skill before publishing

@@ -942,10 +942,17 @@ the app from the same rule
     marketplace (cache lock `marketplace_sync:{id}`); a sync that finds the
     lock held does nothing. The cache key `marketplace_syncing:{id}`
     (`skills/marketplace/sync.py:marketplace_syncing`) is set when a sync is
-    queued (task expiry TTL) and while it runs (lock timeout TTL), and is
-    deleted when the run ends, so the API's `syncing` needs no stale rule. Sync
-    now while it is set sends no task. A sync whose lock expired during a
-    long read writes nothing. The Celery task
+    queued (task expiry TTL; a failed send deletes it) and while it runs
+    (lock TTL, 5 minutes), and the run deletes it only while it still holds
+    the lock, so the API's `syncing` needs no stale rule. A running sync
+    extends the lock and the key between steps (read, each other repository,
+    stage, apply), so a killed worker frees the marketplace within 5 minutes.
+    Sync now while it is set sends no task. A sync whose lock expired writes
+    nothing. `GitHubMarketplaceConfig` lowercases owner and repo, so the
+    unique indexes catch a duplicate that differs only in case. Every JSON
+    read in `skills/marketplace/reader.py` turns a `RecursionError` into a
+    blocked entry or a failed read. Replace login needs no GitHub
+    connection: the new login reads a public repository without one. The Celery task
     `sync_marketplace` runs on the `sandbox` queue; Onyx Lite runs the sync
     in the API server after the response. Company plugins have no author and
     `published_version_id` follows each version;
@@ -956,11 +963,10 @@ the app from the same rule
     refuses content edits, uploads, restores, publishing, ownership transfer
     and delete of a synced plugin with "Change this plugin in GitHub."; shares
     and install settings still change. `db/skill.py:may_delete_skill` takes
-    `synced`, so `SkillResponse.can_delete` is false for a synced plugin. A personal marketplace blocks the delete
-    of its owner (`personal_marketplaces` in the 409); an organization-wide
-    plugin manager may remove another user's personal marketplace (only
-    `DELETE`), and the Users page delete dialog removes them, then deletes
-    the user. A failed task send clears the syncing key. The routes are in
+    `synced`, so `SkillResponse.can_delete` is false for a synced plugin. A user delete removes the user's personal
+    marketplaces and their plugins (`db/users.py:delete_user_from_db__no_commit`
+    returns their bundle files, which the caller deletes after the commit).
+    The routes are in
     `server/features/skill/marketplace_api.py`, under `/marketplaces`;
     they authorize before any GitHub call. The web client is
     `web/src/lib/marketplaces/` (`web/src/lib/marketplaces/hooks.ts` reads the list again every 3 s

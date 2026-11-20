@@ -117,39 +117,6 @@ def test_syncing_flag_lives_as_long_as_the_lock_lease(
     assert 0 < ttls[0] <= 5 * 60
 
 
-def test_run_that_lost_its_lock_keeps_the_newer_runs_flag(
-    db_session: Session,
-    users: tuple[User, User, User],
-    fake_github: FakeGitHub,
-    connections: Connections,  # noqa: ARG001
-    marketplace_ids: list[Any],
-) -> None:
-    owner = users[0]
-    fake_github.push(OWNER, REPO, plugin_files("alpha"))
-    marketplace = make_marketplace(
-        db_session, marketplace_ids, login=owner, owner=owner
-    )
-    cache = get_cache_backend()
-    newer: list[CacheLock] = []
-
-    def lose_the_lock(
-        marketplace_id: Any, lock: CacheLock | None = None
-    ) -> MarketplaceSyncResult:
-        assert lock is not None
-        lock.release()
-        newer.append(_hold_lock(marketplace_id))
-        cache.set(f"marketplace_syncing:{marketplace_id}", b"1", ex=60)
-        return MarketplaceSyncResult(status=MarketplaceSyncStatus.FAILED)
-
-    with patch.object(sync, "sync_marketplace", lose_the_lock):
-        sync.run_marketplace_sync(marketplace.id)
-    try:
-        assert sync.marketplace_syncing(marketplace.id)
-    finally:
-        newer[0].release()
-        cache.delete(f"marketplace_syncing:{marketplace.id}")
-
-
 def test_sync_now_sends_one_task_until_it_runs(
     db_session: Session,
     users: tuple[User, User, User],
@@ -214,6 +181,58 @@ def test_sync_that_lost_its_lock_writes_nothing(
     assert synced_plugins(db_session, marketplace.id) == {}
     assert reload(db_session, marketplace).last_synced_at is None
     assert existing_files(db_session, staged_file_ids) == set()
+
+
+def test_a_running_sync_extends_its_lock_between_steps(
+    db_session: Session,
+    users: tuple[User, User, User],
+    fake_github: FakeGitHub,
+    connections: Connections,  # noqa: ARG001
+    marketplace_ids: list[Any],
+) -> None:
+    owner = users[0]
+    fake_github.push(OWNER, REPO, plugin_files("alpha"))
+    marketplace = make_marketplace(
+        db_session, marketplace_ids, login=owner, owner=owner
+    )
+    lock = _hold_lock(marketplace.id)
+    try:
+        with patch.object(lock, "extend", wraps=lock.extend) as extend:
+            sync.sync_marketplace(marketplace.id, lock)
+    finally:
+        lock.release()
+    assert set(synced_plugins(db_session, marketplace.id)) == {"alpha"}
+    assert extend.call_count >= 3
+    assert {call.args for call in extend.call_args_list} == {
+        (sync.SYNC_LOCK_TIMEOUT_SECONDS,)
+    }
+
+
+def test_a_sync_that_lost_its_lock_keeps_the_newer_syncing_key(
+    db_session: Session,
+    users: tuple[User, User, User],
+    marketplace_ids: list[Any],
+) -> None:
+    owner = users[0]
+    marketplace = make_marketplace(
+        db_session, marketplace_ids, login=owner, owner=owner
+    )
+    newer: list[CacheLock] = []
+
+    def lose_the_lock(marketplace_id: Any, lock: CacheLock | None = None) -> None:
+        assert lock is not None
+        lock.release()
+        newer.append(_hold_lock(marketplace_id))
+        get_cache_backend().set(f"marketplace_syncing:{marketplace_id}", b"1", ex=60)
+
+    with patch.object(sync, "sync_marketplace", lose_the_lock):
+        sync.run_marketplace_sync(marketplace.id)
+    try:
+        assert sync.marketplace_syncing(marketplace.id)
+        assert newer[0].owned()
+    finally:
+        newer[0].release()
+        get_cache_backend().delete(f"marketplace_syncing:{marketplace.id}")
 
 
 def test_deleted_marketplace_ends_the_task(

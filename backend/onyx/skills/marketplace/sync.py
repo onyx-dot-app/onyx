@@ -64,7 +64,7 @@ from shared_configs.contextvars import (
 logger = setup_logger()
 
 # A short lease that each sync step renews, so a dead worker frees it soon.
-SYNC_LOCK_TIMEOUT_SECONDS: Final = 2 * 60
+SYNC_LOCK_TIMEOUT_SECONDS: Final = 5 * 60
 # Celery thread pools do not enforce time limits; the sync stops itself.
 SYNC_MAX_SECONDS: Final = 30 * 60
 SYNC_TASK_EXPIRES_SECONDS: Final = 60 * 60

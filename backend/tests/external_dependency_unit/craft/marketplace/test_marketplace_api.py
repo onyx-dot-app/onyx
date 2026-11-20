@@ -10,9 +10,7 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import has_global_permission
 from onyx.db.enums import Permission, PluginInstallationPolicy
-from onyx.db.marketplace import get_github_marketplace
-from onyx.db.models import User
-from onyx.db.users import delete_user_from_db__no_commit
+from onyx.db.models import Marketplace, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.skill import marketplace_api as api
@@ -304,11 +302,6 @@ def test_sync_replace_login_and_delete(
     assert [plugin.name for plugin in detail.plugins] == ["tool-0"]
     assert set(synced_plugins(db_session, marketplace_id)) == {"tool-0"}
 
-    with pytest.raises(OnyxError):
-        api.replace_marketplace_login(
-            marketplace_id, BackgroundTasks(), _fresh(db_session, manager), db_session
-        )
-    db_session.rollback()
     connections.connected.add(manager.id)
     detail = api.replace_marketplace_login(
         marketplace_id, BackgroundTasks(), _fresh(db_session, manager), db_session
@@ -341,25 +334,36 @@ def test_delete_removes_bundle_files(
     assert existing_files(db_session, staged_file_ids) == set()
 
 
-def test_manager_removes_personal_marketplace_to_delete_its_owner(
+def test_replace_login_without_github_clears_a_gone_login(
     db_session: Session,
     users: tuple[User, User, User],
     manager: User,
     fake_github: FakeGitHub,
-    connections: Connections,  # noqa: ARG001
     enqueued: list[UUID],  # noqa: ARG001
 ) -> None:
-    owner, other, _ = users
+    gone = users[2]
     fake_github.push(OWNER, REPO, plugin_files("alpha"))
-    personal_id = _create(db_session, owner, MarketplaceScope.PERSONAL)
-
-    with pytest.raises(OnyxError) as exc:
-        api.delete_marketplace(personal_id, _fresh(db_session, other), db_session)
-    assert exc.value.error_code == OnyxErrorCode.NOT_FOUND
-    db_session.rollback()
-
-    api.delete_marketplace(personal_id, _fresh(db_session, manager), db_session)
-    assert get_github_marketplace(personal_id, db_session) is None
-    delete_user_from_db__no_commit(_fresh(db_session, owner), db_session)
+    marketplace_id = _create(db_session, manager, MarketplaceScope.COMPANY)
+    gone_row = _fresh(db_session, gone)
+    gone_row.is_active = False
+    row = db_session.get(Marketplace, marketplace_id)
+    assert row is not None
+    row.login_user_id = gone.id
     db_session.commit()
-    assert db_session.get(User, owner.id) is None
+    api.sync_marketplace_now(
+        marketplace_id, BackgroundTasks(), _fresh(db_session, manager), db_session
+    )
+    detail = api.get_marketplace(
+        marketplace_id, _fresh(db_session, manager), db_session
+    )
+    assert detail.last_error is not None
+
+    api.replace_marketplace_login(
+        marketplace_id, BackgroundTasks(), _fresh(db_session, manager), db_session
+    )
+    detail = api.get_marketplace(
+        marketplace_id, _fresh(db_session, manager), db_session
+    )
+    assert detail.login_user is not None and detail.login_user.id == manager.id
+    assert detail.last_error is None
+    assert set(synced_plugins(db_session, marketplace_id)) == {"alpha"}
