@@ -8,6 +8,7 @@
     "core:window:allow-start-dragging",
     "core:window:allow-set-size",
     "allow-check-server",
-    "allow-save-server"
+    "allow-save-server",
+    "allow-get-server-lock"
   ]
 }

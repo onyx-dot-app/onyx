@@ -1,3 +1,6 @@
+use std::collections::BTreeMap;
+use std::sync::Mutex;
+
 use tauri::image::Image;
 use tauri::menu::{Menu, MenuItem, PredefinedMenuItem, Submenu};
 use tauri::tray::TrayIconBuilder;
@@ -55,7 +58,7 @@ pub fn build(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
         true,
         &[
             &MenuItem::with_id(app, NEW_CHAT, "New Chat", true, Some("CmdOrCtrl+N"))?,
-            &MenuItem::with_id(app, LAUNCHER, "Open Launcher", true, None::<&str>)?,
+            &launcher_item(app, "app")?,
             &separator()?,
             &PredefinedMenuItem::close_window(app, None)?,
         ],
@@ -114,7 +117,7 @@ pub fn build_window_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
         true,
         &[
             &MenuItem::with_id(app, NEW_CHAT, "New Chat", true, Some("Ctrl+N"))?,
-            &MenuItem::with_id(app, LAUNCHER, "Open Launcher", true, None::<&str>)?,
+            &launcher_item(app, "window")?,
             &separator()?,
             &MenuItem::with_id(app, PREFERENCES, "Preferences…", true, Some("Ctrl+,"))?,
             &separator()?,
@@ -147,6 +150,34 @@ pub fn build_window_menu(app: &AppHandle) -> tauri::Result<Menu<Wry>> {
     Menu::with_items(app, &[&file, &view, &help])
 }
 
+/// The newest "Open Launcher" item of each menu, so policy can turn them off.
+static LAUNCHER_ITEMS: Mutex<BTreeMap<&str, MenuItem<Wry>>> = Mutex::new(BTreeMap::new());
+
+fn launcher_item(app: &AppHandle, menu: &'static str) -> tauri::Result<MenuItem<Wry>> {
+    let enabled = !app.state::<AppState>().policy().disable_launcher;
+    let item = MenuItem::with_id(app, LAUNCHER, "Open Launcher", enabled, None::<&str>)?;
+    LAUNCHER_ITEMS
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .insert(menu, item.clone());
+    Ok(item)
+}
+
+/// Queued on the main thread without waiting, like `updater::set_menu_label`.
+pub fn set_launcher_enabled(app: &AppHandle, enabled: bool) {
+    let items: Vec<MenuItem<Wry>> = LAUNCHER_ITEMS
+        .lock()
+        .unwrap_or_else(|p| p.into_inner())
+        .values()
+        .cloned()
+        .collect();
+    let _ = app.run_on_main_thread(move || {
+        for item in &items {
+            let _ = item.set_enabled(enabled);
+        }
+    });
+}
+
 fn updates_item(app: &AppHandle) -> tauri::Result<MenuItem<Wry>> {
     let item = MenuItem::with_id(
         app,
@@ -164,7 +195,7 @@ pub fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         app,
         &[
             &MenuItem::with_id(app, OPEN, "Open Onyx", true, None::<&str>)?,
-            &MenuItem::with_id(app, LAUNCHER, "Open Launcher", true, None::<&str>)?,
+            &launcher_item(app, "tray")?,
             &MenuItem::with_id(app, PREFERENCES, "Preferences…", true, None::<&str>)?,
         ],
     )?;
