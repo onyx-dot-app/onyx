@@ -7,6 +7,7 @@ objects stand in for separate worker pods: they share only Redis."""
 import threading
 import time
 from collections.abc import Iterator
+from typing import Any
 from uuid import uuid4
 
 import pytest
@@ -150,6 +151,40 @@ def test_a_retry_after_pauses_every_caller_on_the_app(tenant_id: str) -> None:  
         )
         or 0
     ) >= 1
+
+
+class _RecordingLogger:
+    """Keeps the text of each log line."""
+
+    def __init__(self) -> None:
+        self.lines: list[str] = []
+
+    def _record(self, message: str, *args: Any, **_kwargs: Any) -> None:
+        self.lines.append(message % args if args else message)
+
+    debug = info = warning = error = exception = _record
+
+
+def test_log_lines_hold_no_app_ids(
+    tenant_id: str,  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The limiter key of a Microsoft app holds its directory id and client
+    id. The log lines show a hash of the key instead."""
+    recorder = _RecordingLogger()
+    monkeypatch.setattr(source_api_limiter, "logger", recorder)
+    limiter = _build(DocumentSource.SHAREPOINT, "sp")
+
+    limiter.acquire(_API, 1)
+    limiter.report_retry_after(_API, 0.1)
+    for _ in range(20):
+        limiter.report_rate_limit(_API, None, user_scope=False)
+
+    assert any("starts at" in line for line in recorder.lines)
+    assert any("Retry-After" in line for line in recorder.lines)
+    for line in recorder.lines:
+        assert _DIRECTORY.lower() not in line.lower(), line
+        assert _CLIENT.lower() not in line.lower(), line
 
 
 def test_a_stop_signal_ends_the_wait_for_a_pause(tenant_id: str) -> None:  # noqa: ARG001

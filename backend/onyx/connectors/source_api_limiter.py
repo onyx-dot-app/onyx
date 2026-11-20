@@ -46,6 +46,7 @@ window's share could pass the budget of the period. A second window of the
 whole period, with the full budget, stops that.
 """
 
+import hashlib
 import math
 import threading
 import time
@@ -115,6 +116,15 @@ MAX_WAIT_SECONDS = 300.0
 # A head that waits tries again at least this often, so that its place in the
 # Redis queue does not go stale.
 _REFRESH_SECONDS = WAITER_STALE_SECONDS / 2
+
+
+def _key_for_log(source: str, key: str) -> str:
+    """A limiter key in a form that is safe to log. A Microsoft key holds the
+    directory id and the client id of the app, so a log line shows the
+    source and a short hash of the key. The hash is the same for one key,
+    so the lines of one budget can be found together."""
+    digest = hashlib.sha256(key.encode()).hexdigest()[:12]
+    return f"{source}#{digest}"
 
 
 class _Ticket:
@@ -319,7 +329,7 @@ class RedisSourceApiLimiter(SourceApiLimiter):
             if start != WindowStart.NONE:
                 logger.info(
                     "The shared budget %s starts at %.0f%% of its limit (%s).",
-                    window.key,
+                    _key_for_log(self._source, window.key),
                     share * 100,
                     "stored" if start == WindowStart.STORED else "cold start",
                 )
@@ -482,7 +492,7 @@ class RedisSourceApiLimiter(SourceApiLimiter):
             "the shared pause %s waits %.1fs.",
             api,
             seconds,
-            self._pause_key,
+            _key_for_log(self._source, self._pause_key),
             left,
         )
 
@@ -522,7 +532,7 @@ class RedisSourceApiLimiter(SourceApiLimiter):
             api,
             result.refused_share * 100,
             "user" if user_scope else "credential",
-            window.key,
+            _key_for_log(self._source, window.key),
             " hard" if result.hard else "",
             result.share * 100,
             result.accepted_share * 100,
