@@ -295,9 +295,11 @@ counts what is sent, not the stored token counts.
    every attached file whose message is not in the working history.
 7. `file-notice-names-offered-tools` **A file notice names only tools the model
    has this step.** `chat/prompt_utils.py:_create_file_tool_metadata_message`
-   prefers `read_file`, then internal search, then the Python tool (only when
-   every file was staged for it). A notice that names a missing tool makes the
-   model guess or search the web.
+   prefers `read_file`, then internal search (only for files with
+   `FileToolMetadata.indexed`; `SKIPPED` uploads such as code files are not),
+   then the Python tool (only for files staged for it). A notice that names a
+   missing tool, or search for an unindexed file, makes the model guess or
+   search the web.
 8. `history-builder-callers` **`chat/prompt_utils.py:prepare_prompt` has
    several callers.** `ChatAgent`, `DeepResearchAgent` and `ResearchAgent`
    call it with their own arguments, such as no custom agent
