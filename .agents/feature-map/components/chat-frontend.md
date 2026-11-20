@@ -738,12 +738,14 @@ up its own branding.
     latest user message sits 1rem below the top, with space below it. Nothing
     measures it. A send glides to the end through
     `lib/chatScroll/hooks.ts:useScrollToNewTurn` (only while the chat is
-    `loading`, so a resumed run never moves the view). The scroll-to-bottom
-    button ignores the latest turn's unfilled space. Each chat's position (end,
-    or a row and offset) and its row heights live in
-    `lib/chatScroll/scrollMemory.ts`; the opening layout effect restores them
-    from loaded rows only, so a switch never waits on the network. Rows use
-    `lib/chat/rowIds.ts:messageRowId`.
+    `loading`, and not on a switch back to a running chat, so a resumed run
+    never moves the view). The scroll-to-bottom button ignores the latest
+    turn's unfilled space. Text that grows inside that space changes no scroll
+    height, so a ResizeObserver watches the latest turn's rows.
+    Each chat's position (end, or a row and offset) and its row heights live
+    in `lib/chatScroll/scrollMemory.ts`; the opening layout effect restores
+    them from loaded rows only, so a switch never waits on the network. Rows
+    use `lib/chat/rowIds.ts:messageRowId`.
     Craft's transcript (`app/craft/components/ChatPanel.tsx`) uses the same
     `ChatScrollContainer`, with its composer in the `footer` slot. Its rows are
     not turn groups, so Craft has no space below its latest turn.
