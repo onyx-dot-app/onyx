@@ -275,6 +275,8 @@ class OneDriveConnector(
         treat_organization_link_as_public: bool = False,
         authority_host: str = DEFAULT_AUTHORITY_HOST,
         graph_api_host: str = DEFAULT_GRAPH_API_HOST,
+        # Read by the limiter factory from the stored config, not here.
+        ru_per_minute: int | None = None,  # noqa: ARG002
     ) -> None:
         normalized_users = normalize_configured_users(users)
         self.settings = OneDriveSettings(

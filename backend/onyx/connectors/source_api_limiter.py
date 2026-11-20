@@ -67,10 +67,16 @@ from onyx.configs.app_configs import (
     GOOGLE_DRIVE_QUOTA_PER_USER,
 )
 from onyx.configs.constants import DocumentSource
-from onyx.connectors.credential_families import FAMILY_CREDENTIAL_CODECS
+from onyx.connectors.credential_families import (
+    MICROSOFT_GRAPH_SOURCES,
+    microsoft_app_identity,
+)
 from onyx.connectors.google_drive.quota import DriveQuotaApi
 from onyx.connectors.interfaces import SourceApiLimiter
-from onyx.connectors.microsoft_credential import MicrosoftCredential
+from onyx.connectors.microsoft_utils.config import (
+    RU_PER_DAY_FACTOR,
+    configured_ru_per_minute,
+)
 from onyx.connectors.microsoft_utils.request_pacer import (
     DOWNLOAD_LIMITER_API,
     GRAPH_LIMITER_API,
@@ -119,6 +125,8 @@ MAX_WAIT_SECONDS = 300.0
 # A head that waits tries again at least this often, so that its place in the
 # Redis queue does not go stale.
 _REFRESH_SECONDS = WAITER_STALE_SECONDS / 2
+# A call that waits for the budget of the day tries again this often.
+_DAY_RETRY_SECONDS = 60.0
 
 
 def _key_for_log(source: str, key: str) -> str:
@@ -200,6 +208,8 @@ class SourceApiBudget(BaseModel):
     # accepted share is stored. None starts at the full budget and stores
     # nothing.
     start_share: float | None = None
+    # The credential limit for any 24 hours, in units. None is no limit.
+    per_credential_per_day: int | None = None
 
 
 class RedisSourceApiLimiter(SourceApiLimiter):
@@ -395,6 +405,7 @@ class RedisSourceApiLimiter(SourceApiLimiter):
         if api not in self._budgets:
             return
         self._wait_for_pause(api)
+        self._wait_for_day_budget(api, self._units(api, cost, request_count))
         is_bulk = bulk or self._bulk
         gate = _gate(self._tenant_id, f"{self._prefix}:{api}", is_bulk)
         ticket = _Ticket()
@@ -489,6 +500,35 @@ class RedisSourceApiLimiter(SourceApiLimiter):
                 waited += time.monotonic() - started
         finally:
             record_limiter_paused_seconds(self._source, api, waited)
+
+    def _wait_for_day_budget(self, api: str, units: int) -> None:
+        """Takes the call's units from the budget of the day, and waits for
+        room when the day is full."""
+        limit = self._budgets[api].per_credential_per_day
+        if limit is None:
+            return
+        key = f"{self._prefix}:{api}:all:day"
+        started = time.monotonic()
+        warned = False
+        try:
+            while True:
+                wait = self._windows.try_take_from_day(key, units, limit)
+                if wait <= 0:
+                    return
+                if not warned:
+                    warned = True
+                    logger.warning(
+                        "The %s budget %s for 24 hours (%d units) is used; the "
+                        "calls wait for it.",
+                        api,
+                        key,
+                        limit,
+                    )
+                self._check_stop()
+                self._sleep(min(wait, _DAY_RETRY_SECONDS))
+        finally:
+            if warned:
+                record_limiter_wait(self._source, api, time.monotonic() - started)
 
     @override
     def report_retry_after(self, api: str, seconds: float) -> None:
@@ -625,6 +665,8 @@ MICROSOFT_DOWNLOAD_BUDGET = SourceApiBudget(
     window_seconds=_MICROSOFT_WINDOW_SECONDS,
     start_share=MICROSOFT_START_SHARE,
 )
+# The learned budget that the connectors on one app share when they set no
+# budget of their own.
 MICROSOFT_GRAPH_BUDGETS: dict[str, SourceApiBudget] = {
     GRAPH_LIMITER_API: SourceApiBudget(
         per_credential=MICROSOFT_GRAPH_RU_PER_MINUTE,
@@ -635,43 +677,38 @@ MICROSOFT_GRAPH_BUDGETS: dict[str, SourceApiBudget] = {
 }
 
 
-MICROSOFT_GRAPH_SOURCES: frozenset[DocumentSource] = frozenset(
-    {
-        DocumentSource.SHAREPOINT,
-        DocumentSource.ONEDRIVE,
-        DocumentSource.OUTLOOK,
-        DocumentSource.TEAMS,
-    }
-)
-
-
 def microsoft_app_key(
     source: DocumentSource, credential_json: dict[str, Any]
 ) -> str | None:
-    """The key of the app registration that a Microsoft credential uses: its
-    directory (tenant) id and client id. Microsoft limits each app in a
-    tenant, so every connector on the app shares this key. None when the
-    source is not a Microsoft Graph source or the credential has no app.
-    ``credential_json`` has the source's own keys. Only the two ids are read."""
-    codec = FAMILY_CREDENTIAL_CODECS.get(source)
-    if source not in MICROSOFT_GRAPH_SOURCES or codec is None:
+    """The limiter key of the app registration that a Microsoft credential
+    uses: its directory (tenant) id and client id. Microsoft limits each app
+    in a tenant, so every connector on the app shares this key. None when
+    the source is not a Microsoft Graph source or the credential has no app.
+    ``credential_json`` has the source's own keys."""
+    identity = microsoft_app_identity(source, credential_json)
+    if identity is None:
+        if source in MICROSOFT_GRAPH_SOURCES:
+            logger.warning(
+                "The %s credential has no app registration ids; its calls are "
+                "not limited.",
+                source.value,
+            )
         return None
-    try:
-        credential = codec.to_family(credential_json)
-    except ValueError:
-        # A validation error can quote the credential's values.
-        logger.warning(
-            "The %s credential has no app registration ids; its calls are not limited.",
-            source.value,
-        )
-        return None
-    if not isinstance(credential, MicrosoftCredential):
-        return None
-    directory_id = credential.directory_id.strip().lower()
-    client_id = credential.client_id.strip().lower()
-    if not directory_id or not client_id:
-        return None
+    directory_id, client_id = identity
     return f"microsoft:{directory_id}:{client_id}"
+
+
+def microsoft_connector_budgets(ru_per_minute: int) -> dict[str, SourceApiBudget]:
+    """The budgets of a connector whose admin set its RU per minute: the
+    full value from the start, and Microsoft's limit for 24 hours at the
+    same tier. A 429 answer still cuts the window."""
+    return {
+        GRAPH_LIMITER_API: SourceApiBudget(
+            per_credential=ru_per_minute,
+            window_seconds=_MICROSOFT_WINDOW_SECONDS,
+            per_credential_per_day=ru_per_minute * RU_PER_DAY_FACTOR,
+        )
+    }
 
 
 def build_source_api_limiter(
@@ -680,6 +717,8 @@ def build_source_api_limiter(
     should_stop: Callable[[], bool] | None = None,
     bulk: bool = False,
     load_credential_json: Callable[[], dict[str, Any]] | None = None,
+    cc_pair_id: int | None = None,
+    connector_specific_config: dict[str, Any] | None = None,
 ) -> SourceApiLimiter | None:
     """The shared limiter for a connector of ``source`` that uses the
     credential, or None when the source has no budgets or the limiter is off.
@@ -690,7 +729,8 @@ def build_source_api_limiter(
     A Microsoft Graph source needs ``load_credential_json``, which returns
     the credential in the source's own keys. Its connectors share one budget
     and one pause for each app registration in a tenant, whatever credential
-    row holds the app."""
+    row holds the app. A connector whose config sets ``ru_per_minute`` has a
+    budget of its own, keyed by ``cc_pair_id``, and still shares the pause."""
     if not ENABLE_SOURCE_API_LIMITER:
         return None
     if source in MICROSOFT_GRAPH_SOURCES:
@@ -699,6 +739,17 @@ def build_source_api_limiter(
         app_key = microsoft_app_key(source, load_credential_json())
         if app_key is None:
             return None
+        ru_per_minute = configured_ru_per_minute(connector_specific_config or {})
+        if ru_per_minute is not None and cc_pair_id is not None:
+            return RedisSourceApiLimiter(
+                tenant_id=get_current_tenant_id(),
+                credential_key=f"microsoft:cc_pair:{cc_pair_id}",
+                budgets=microsoft_connector_budgets(ru_per_minute),
+                should_stop=should_stop,
+                source=source,
+                bulk=bulk,
+                pause_key=app_key,
+            )
         return RedisSourceApiLimiter(
             tenant_id=get_current_tenant_id(),
             credential_key=app_key,

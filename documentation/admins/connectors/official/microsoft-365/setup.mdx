@@ -313,6 +313,37 @@ The role you grant depends on what the connector does:
   Repeat the last three steps for every site the connector indexes.
 </Accordion>
 
+## Rate limits
+
+Microsoft limits how fast one application can call Microsoft Graph and SharePoint in a tenant.
+It counts the calls in resource units (RU). The limit depends on the number of licenses in the tenant:
+
+| Licenses in the tenant | RU per minute |
+| ---------------------- | ------------- |
+| 0 to 1,000             | 1,250         |
+| 1,001 to 5,000         | 2,500         |
+| 5,001 to 15,000        | 3,750         |
+| 15,001 to 50,000       | 5,000         |
+| More than 50,000       | 6,250         |
+
+To find your tier, count the licenses in the Microsoft 365 admin center under **Billing** > **Licenses**.
+Then read the row for that count.
+Microsoft publishes the current table in [Avoid getting throttled or blocked in SharePoint
+Online](https://learn.microsoft.com/sharepoint/dev/general-development/how-to-avoid-getting-throttled-or-blocked-in-sharepoint-online).
+
+Every SharePoint, OneDrive, Teams and Outlook connector that signs in as the same application shares this limit.
+When the shared rate limiter is on (`ENABLE_SOURCE_API_LIMITER=true`, for self-hosted deployments),
+Onyx keeps the connectors of one application under one budget:
+
+- With **RU per Minute** empty, the connectors share a budget that Onyx learns. Onyx starts low and
+  adjusts when Microsoft answers that the application is over its limit.
+- With **RU per Minute** set, the connector uses up to that rate and no more. The connector form
+  shows the values of the other connectors on the application and their sum.
+  Keep the sum at or under the limit of your tier.
+
+When Microsoft asks the application to wait, every connector on the application waits.
+A change to **RU per Minute** applies to the next indexing run and does not re-index.
+
 ## National clouds
 
 Each connector has **Authority Host** and **Graph API Host** under its advanced settings,

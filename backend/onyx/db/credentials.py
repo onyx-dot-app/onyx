@@ -11,13 +11,16 @@ from sqlalchemy.sql.expression import and_, or_
 from onyx.auth.permissions import has_permission
 from onyx.configs.constants import DocumentSource, NotificationType
 from onyx.connectors.credential_families import (
+    MICROSOFT_GRAPH_SOURCES,
     credential_family_for_source,
     family_sources,
     is_credential_usable_for_source,
     stored_credential_family,
+    stored_microsoft_app_identity,
     to_source_credential_json,
     to_stored_credential_json,
 )
+from onyx.connectors.credential_family_base import CredentialFamily
 from onyx.db.connector_alerts import clear_connector_alerts__no_commit
 from onyx.db.enums import (
     ConnectorCredentialPairStatus,
@@ -25,6 +28,7 @@ from onyx.db.enums import (
     PermissionAuthority,
 )
 from onyx.db.models import (
+    Connector,
     ConnectorCredentialPair,
     Credential,
     Credential__UserGroup,
@@ -280,6 +284,43 @@ def fetch_credentials_by_source(
     base_query = select(Credential).where(Credential.source == document_source)
     credentials = db_session.execute(base_query).scalars().all()
     return list(credentials)
+
+
+def fetch_microsoft_app_cc_pairs(
+    db_session: Session, credential: Credential
+) -> list[ConnectorCredentialPair]:
+    """The pairs of every Microsoft Graph connector that uses the same app
+    registration as ``credential``: the same directory (tenant) id and client
+    id, on any credential row. Microsoft limits the calls of the app, so
+    these connectors share its rate limit. Empty when the credential names no
+    app. No user filter: only an admin reads this."""
+    identity = stored_microsoft_app_identity(
+        credential.source, _stored_json(credential)
+    )
+    if identity is None:
+        return []
+    candidates = db_session.scalars(
+        select(Credential).where(
+            Credential.source.in_(family_sources(CredentialFamily.MICROSOFT))
+        )
+    ).all()
+    same_app_ids = [
+        candidate.id
+        for candidate in candidates
+        if stored_microsoft_app_identity(candidate.source, _stored_json(candidate))
+        == identity
+    ]
+    if not same_app_ids:
+        return []
+    return list(
+        db_session.scalars(
+            select(ConnectorCredentialPair)
+            .join(Connector, ConnectorCredentialPair.connector_id == Connector.id)
+            .where(ConnectorCredentialPair.credential_id.in_(same_app_ids))
+            .where(Connector.source.in_(MICROSOFT_GRAPH_SOURCES))
+            .order_by(Connector.id)
+        ).all()
+    )
 
 
 def credential_usable_for_source(

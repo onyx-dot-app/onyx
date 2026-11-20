@@ -9,13 +9,18 @@ from onyx.connectors.field_policy import (
     ScopeExclude,
     ScopeInclude,
 )
-from onyx.connectors.microsoft_utils.config import MicrosoftCloudBinding
+from onyx.connectors.microsoft_utils.config import (
+    MicrosoftCloudBinding,
+    MicrosoftRateBudget,
+)
 from onyx.connectors.onedrive.scope import normalized_user_email
 
 USER_EMAIL_FORMAT_ERROR = "Enter email addresses, e.g. jane@acme.com."
 
 
-class OneDriveConnectorConfig(MicrosoftCloudBinding, ConnectorConfig):
+class OneDriveConnectorConfig(
+    MicrosoftCloudBinding, MicrosoftRateBudget, ConnectorConfig
+):
     users: Annotated[
         list[str] | None,
         FieldPolicy(FieldClass.SCOPE, scope=ScopeInclude(empty_means_all=True)),

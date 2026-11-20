@@ -161,6 +161,27 @@ def test_cosmetic_change_has_no_steps() -> None:
     ]
 
 
+@pytest.mark.parametrize(
+    "source",
+    [
+        DocumentSource.SHAREPOINT,
+        DocumentSource.ONEDRIVE,
+        DocumentSource.OUTLOOK,
+        DocumentSource.TEAMS,
+    ],
+)
+def test_a_microsoft_ru_per_minute_change_needs_no_reindex(
+    source: DocumentSource,
+) -> None:
+    current = _current(source, {})
+    plan = _plan(current, connector_specific_config={"ru_per_minute": 1250})
+
+    assert plan.steps == []
+    assert [
+        (change.field_name, change.field_class) for change in plan.field_changes
+    ] == [("ru_per_minute", FieldClass.COSMETIC)]
+
+
 # Scope directions
 
 
