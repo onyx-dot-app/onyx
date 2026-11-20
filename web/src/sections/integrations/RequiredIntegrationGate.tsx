@@ -211,6 +211,8 @@ function GateRow({ integration, returnPath }: GateRowProps) {
   const connected = requiredSignIns([integration]).length === 0;
   return (
     <Section
+      role="group"
+      aria-label={integration.name}
       flexDirection="row"
       justifyContent="between"
       alignItems="center"

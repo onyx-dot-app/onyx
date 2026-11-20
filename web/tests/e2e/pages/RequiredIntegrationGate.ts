@@ -32,18 +32,18 @@ export class RequiredIntegrationGate {
   }
 
   row(name: string): Locator {
-    return this.gate.getByText(name, { exact: true });
+    return this.gate.getByRole("group", { name, exact: true });
   }
 
   async expectRequired(name: string): Promise<void> {
-    await expect(this.row(name)).toBeVisible();
-    await expect(this.gate.getByText("Required by your admin")).toBeVisible();
+    await expect(
+      this.row(name).getByText("Required by your admin")
+    ).toBeVisible();
   }
 
   async expectConnected(name: string): Promise<void> {
-    await expect(this.row(name)).toBeVisible();
     await expect(
-      this.gate.getByText("Connected", { exact: true })
+      this.row(name).getByText("Connected", { exact: true })
     ).toBeVisible();
   }
 
@@ -75,9 +75,7 @@ export class RequiredIntegrationGate {
     name: string,
     fields: Record<string, string>
   ): Promise<void> {
-    await this.gate
-      .getByRole("button", { name: `Connect ${name}`, exact: true })
-      .click();
+    await this.row(name).getByRole("button").click();
     await new IntegrationCredentialsDialog(this.page).submit(fields);
   }
 
