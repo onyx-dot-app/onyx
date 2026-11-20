@@ -1,3 +1,5 @@
+import { PLUGIN_MANIFEST_PATHS } from "@/lib/plugins/upload";
+
 const ZIP_MIME_TYPE = "application/zip";
 const IGNORED_FILE_NAMES = new Set([".DS_Store", "Thumbs.db"]);
 
@@ -85,8 +87,14 @@ async function packageFiles(
   return new File([zipBlob], archiveName, { type: ZIP_MIME_TYPE });
 }
 
+export interface PrepareSkillBundleOptions {
+  /** Also take a folder with a plugin manifest at its top level. */
+  allowPlugin?: boolean;
+}
+
 export async function prepareSkillBundleUpload(
-  files: readonly SkillUploadFile[]
+  files: readonly SkillUploadFile[],
+  { allowPlugin = false }: PrepareSkillBundleOptions = {}
 ): Promise<PreparedSkillBundle> {
   if (files.length === 1) {
     const [file] = files;
@@ -126,9 +134,13 @@ export async function prepareSkillBundleUpload(
     }
     entryPaths.add(entry.path);
   }
-  if (!entryPaths.has("SKILL.md")) {
+  const isPlugin =
+    allowPlugin && PLUGIN_MANIFEST_PATHS.some((path) => entryPaths.has(path));
+  if (!entryPaths.has("SKILL.md") && !isPlugin) {
     throw new Error(
-      "The selected folder must contain SKILL.md at its top level."
+      allowPlugin
+        ? "The selected folder must contain SKILL.md or a plugin.json manifest at its top level."
+        : "The selected folder must contain SKILL.md at its top level."
     );
   }
 

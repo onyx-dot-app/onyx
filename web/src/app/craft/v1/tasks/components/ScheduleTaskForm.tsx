@@ -24,7 +24,7 @@ import EntryPickerPopover from "@/sections/input/EntryPickerPopover";
 import useUserSkills from "@/hooks/useUserSkills";
 import useUserExternalApps from "@/hooks/useUserExternalApps";
 import { useCraftMcpServers } from "@/lib/mcp/hooks";
-import { useEntryPicker } from "@/lib/skills/hooks";
+import { useChatSkills, useEntryPicker } from "@/lib/skills/hooks";
 import type { CaretText } from "@/lib/contentEditable";
 import {
   CRAFT_PICKER_TRIGGER,
@@ -94,11 +94,17 @@ export default function ScheduleTaskForm({
 
   const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
   const { data: skillsData } = useUserSkills();
+  const { entries: chatSkills } = useChatSkills();
   const { data: externalAppsData } = useUserExternalApps();
   const { data: craftMcpData } = useCraftMcpServers();
   const pickerSections = useMemo(
-    () => toPickerSections(skillsData, externalAppsData, craftMcpData),
-    [skillsData, externalAppsData, craftMcpData]
+    () =>
+      toPickerSections(
+        { builtins: skillsData?.builtins, customs: chatSkills.skills },
+        externalAppsData,
+        craftMcpData
+      ),
+    [skillsData, chatSkills, externalAppsData, craftMcpData]
   );
   const pickPromptEntry = useCallback(
     (entry: PickerEntry, token: CaretText) => {

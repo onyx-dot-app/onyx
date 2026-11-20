@@ -127,7 +127,9 @@ describe("SkillBundlePicker", () => {
     dropFile(zip);
 
     await waitFor(() => {
-      expect(mockedPrepareSkillBundleUpload).toHaveBeenCalledWith([zip]);
+      expect(mockedPrepareSkillBundleUpload).toHaveBeenCalledWith([zip], {
+        allowPlugin: false,
+      });
       expect(onChange).toHaveBeenCalledWith(prepared);
     });
     expect(onPreparingChange).toHaveBeenCalledWith(true);

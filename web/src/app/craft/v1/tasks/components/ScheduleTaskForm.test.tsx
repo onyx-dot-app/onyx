@@ -48,6 +48,17 @@ jest.mock("@/hooks/useUserSkills", () => ({
   default: () => ({ data: mockSkills }),
 }));
 
+const mockChatSkills = {
+  entries: { skills: [], apps: [], mcpServers: [] },
+  onInputFocus: () => undefined,
+};
+jest.mock("@/lib/skills/hooks", () => ({
+  ...jest.requireActual<typeof import("@/lib/skills/hooks")>(
+    "@/lib/skills/hooks"
+  ),
+  useChatSkills: () => mockChatSkills,
+}));
+
 const mockExternalApps = [
   { id: 1, name: "Slack", app_type: "SLACK", authenticated: true },
   { id: 2, name: "Gmail", app_type: "GMAIL", authenticated: false },

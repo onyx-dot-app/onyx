@@ -218,11 +218,6 @@ test.describe("Plugin upload", () => {
     await plugins.expectNeed("pw-off", "On");
 
     await plugins.addNeedForTeam("pw-missing");
-    await expect(
-      page.getByRole("textbox", { name: "Name", exact: true })
-    ).toHaveValue("pw-missing");
-    await expect(
-      page.getByRole("textbox", { name: "Server URL", exact: true })
-    ).toHaveValue(`${base}/missing`);
+    await plugins.expectIntegrationPrefill("pw-missing", `${base}/missing`);
   });
 });

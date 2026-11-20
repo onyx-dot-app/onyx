@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { Card, InputSwitch, Text } from "@opal/components";
-import { Content, Section, toast } from "@opal/layouts";
+import { Content, Section } from "@opal/layouts";
 import { SvgBlocks } from "@opal/icons";
 import { useNavigation, useSearchParams } from "@opal/navigation";
 import useUserSkills from "@/hooks/useUserSkills";
@@ -23,13 +23,17 @@ import {
 import { usePluginDetail } from "@/lib/plugins/hooks";
 import { needsAttention } from "@/lib/plugins/needs";
 import type { PluginDetail } from "@/lib/plugins/types";
-import { setSkillEnabled } from "@/lib/skills/api";
-import { useRefreshSkillLists } from "@/lib/skills/hooks";
+import {
+  useRefreshSkillLists,
+  useSkillEnablement,
+  type SkillEnablement,
+} from "@/lib/skills/hooks";
 import type { Skill } from "@/lib/skills/types";
 import { canChangeOrganizationAccess } from "@/lib/skills/sharing";
 import { Permission } from "@/lib/types";
 import { useUser } from "@/providers/UserProvider";
 import SkillVersionsTab from "@/sections/modals/skills/SkillVersionsTab";
+import SkillSwitchModal from "@/sections/modals/skills/SkillSwitchModal";
 import PluginTurnOnModal from "@/sections/modals/plugins/PluginTurnOnModal";
 import PluginNeedList from "@/sections/plugins/PluginNeedList";
 import CustomizeDetailLayout, {
@@ -43,42 +47,23 @@ interface PluginTabProps {
 }
 
 interface PluginSwitchProps extends PluginTabProps {
-  onChanged: () => Promise<void>;
-  onNeedsAttention: (plugin: Skill) => void;
+  enablement: SkillEnablement;
 }
 
-function PluginSwitch({
-  entry,
-  onChanged,
-  onNeedsAttention,
-}: PluginSwitchProps) {
+function PluginSwitch({ entry, enablement }: PluginSwitchProps) {
   const t = useTranslations("plugins.member.detail.switch");
-  const [busy, setBusy] = useState(false);
-  const { enabled, blocked } = pluginSwitch(entry);
+  const { blocked } = pluginSwitch(entry);
   const skill = entry.skills[0];
-
-  async function change(next: boolean) {
-    setBusy(true);
-    if (!skill) return;
-    try {
-      const updated = await setSkillEnabled(skill.id, next);
-      await onChanged();
-      if (next && needsAttention(updated.plugin?.needs ?? []))
-        onNeedsAttention(updated);
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : t("failed"));
-    } finally {
-      setBusy(false);
-    }
-  }
 
   return (
     <Section width="auto" height="auto" padding={1}>
       <InputSwitch
         aria-label={t("label", { name: entry.name })}
-        checked={enabled}
-        disabled={busy || blocked !== null}
-        onCheckedChange={(checked) => void change(checked)}
+        checked={skill ? enablement.enabledOf(skill) : false}
+        disabled={!skill || enablement.isPending(skill.id) || blocked !== null}
+        onCheckedChange={(checked) => {
+          if (skill) void enablement.setEnabled(skill, checked);
+        }}
       />
     </Section>
   );
@@ -215,6 +200,14 @@ export default function MemberPluginDetailPage({
   const plugin = isPlugin ? (detail.data?.plugin ?? null) : null;
   const refreshLists = useRefreshSkillLists();
   const [turnedOn, setTurnedOn] = useState<Skill | null>(null);
+  const enablement = useSkillEnablement(
+    skills.data?.customs ?? [],
+    skills.refresh,
+    (updated) => {
+      if (isPlugin) void detail.refresh();
+      if (needsAttention(updated.plugin?.needs ?? [])) setTurnedOn(updated);
+    }
+  );
   const loading =
     skills.isLoading || (isPlugin && plugin === null && !detail.error);
   const skillOnlyId =
@@ -331,13 +324,13 @@ export default function MemberPluginDetailPage({
               <PluginSwitch
                 key="switch"
                 entry={entry}
-                onChanged={refresh}
-                onNeedsAttention={setTurnedOn}
+                enablement={enablement}
               />,
             ]
           : undefined
       }
     >
+      <SkillSwitchModal enablement={enablement} />
       {turnedOn && (
         <PluginTurnOnModal
           plugin={turnedOn}

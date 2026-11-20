@@ -41,7 +41,9 @@
   web, Add > Upload plugin on the Plugins tab of Customize opens
   `web/src/sections/modals/plugins/UploadPluginModal.tsx`; a zip with no
   plugin.json (`lib/plugins/upload.ts:pluginUploadKind`) goes on to the skill
-  flow.
+  flow. A dropped folder is zipped in the browser when it has SKILL.md or a
+  plugin.json at its top level (`lib/skills/bundleUpload.ts:prepareSkillBundleUpload`
+  with `allowPlugin`).
 - **Admins** set the installation policy of a custom skill: available (the user
   opts in), installed by default (on until the user opts out), required (on,
   and the user cannot turn it off), or not available (hidden). With no own
@@ -164,7 +166,9 @@
   `@`. A pick replaces the whole word with a mention tile that reads `@name`.
   Craft's `/` pickers, in the input bar and in the scheduled task prompt,
   follow the same rules and match a substring
-  (`lib/skills/hooks.ts:useEntryPicker`). The tiles are the mentions: only a pick
+  (`lib/skills/hooks.ts:useEntryPicker`). They offer the built-ins from
+  `GET /skills` and the custom skills from `GET /skills/chat`, one per skill of
+  a plugin by its own name (`lib/skills/picker.ts:toPickerSections`). The tiles are the mentions: only a pick
   mentions a skill, so typed or pasted `@name` text does not. Removing a tile
   by delete or cut removes its mention, and undo brings it back. A draft,
   a failed send's restore and voice input keep each tile where it was, also
@@ -828,17 +832,27 @@ the app from the same rule
     with only a SKILL.md stays a skill upload. A need stores the normalized
     URL (`utils/url.py:normalize_mcp_server_url`) and no integration id.
     `integrations/plugin_needs.py:need_views` matches it at read time against
-    the integrations of `list_member_integrations`, so a private integration
-    the user cannot see is `not_added`. One match gives that integration's
-    member state; two give `more_than_one`. The save
+    the integrations of `integrations_for_needs`, so a private integration
+    the user cannot see is `not_added`. `integrations_for_needs` adds the
+    server URL of each no-access integration for the match only, so a
+    group-limited integration is `no_access`; the member list never shows that
+    URL. One match gives that integration's member state; two give
+    `more_than_one`. The save
     (`server/features/skill/api.py:save_plugin_upload`) adds a version to a
     plugin with the same name that the user owns or edits, in "My uploads" or
     the Organization library and not a skill
     (`db/plugin.py:find_upload_target`); `save_as_new` makes a new plugin
     with the next free name. A new version keeps shares, publishing and user
-    choices. Turning a plugin on (`PUT /skills/{id}/enabled`, and a new
-    upload) turns on each needed integration in `turn_on` with a connected
-    status, through `integrations/access.py:set_integration_enabled__no_commit`.
+    choices. The description is the plugin.json description of the version
+    the user runs (`db/plugin_access.py:load_plugin_access`), so a draft
+    version does not show to the users who run the published one. Version
+    preview and restore take a plugin version too: the preview adds `files`
+    and `plugin` (manifest, skills, needs), and a restore adds a version from
+    the old bundle (`db/skill.py:restore_plugin_version__no_commit`). Turning a
+    plugin on (`PUT /skills/{id}/enabled`, bulk enable and a new upload) turns
+    on each needed integration in `turn_on` with a connected status, through
+    `integrations/access.py:set_integration_enabled__no_commit`, and reloads
+    the user's Craft sessions when one changed.
     The on/off switch and the name order stay per plugin: a plugin that
     loses any skill name does not load.
 26. `write-skill-limit` **A user's own write never moves that user past 500

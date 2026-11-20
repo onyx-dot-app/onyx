@@ -1,6 +1,6 @@
 import type { PreparedSkillBundle } from "@/lib/skills/bundleUpload";
 
-const PLUGIN_MANIFEST_PATHS: readonly string[] = [
+export const PLUGIN_MANIFEST_PATHS: readonly string[] = [
   ".claude-plugin/plugin.json",
   ".codex-plugin/plugin.json",
   "plugin.json",

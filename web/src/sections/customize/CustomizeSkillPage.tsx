@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 import useSWR, { useSWRConfig } from "swr";
 import {
@@ -21,6 +21,7 @@ import useUserSkills from "@/hooks/useUserSkills";
 import {
   adminSkillHref,
   customizeTabHref,
+  pluginHref,
   skillHref,
 } from "@/lib/customize/paths";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -79,16 +80,22 @@ export default function CustomizeSkillPage({
   const enablement = useSkillEnablement(list.data?.customs ?? [], list.refresh);
   const refreshLists = useRefreshSkillLists();
   const listed = list.data?.customs.find((item) => item.id === skillId);
+  const isPlugin = listed?.kind === "plugin";
   const canEdit =
-    listed?.user_permission === "OWNER" || listed?.user_permission === "EDITOR";
+    !isPlugin &&
+    (listed?.user_permission === "OWNER" ||
+      listed?.user_permission === "EDITOR");
   const detail = useSWR<SkillEditableDetail>(
     canEdit ? SWR_KEYS.editableSkill(skillId) : null,
     errorHandlingFetcher
   );
   const preview = useSWR<SkillPreview>(
-    listed && !canEdit ? SWR_KEYS.userSkillPreview(skillId) : null,
+    listed && !isPlugin && !canEdit ? SWR_KEYS.userSkillPreview(skillId) : null,
     errorHandlingFetcher
   );
+  useEffect(() => {
+    if (isPlugin) navigation.go(pluginHref(skillId), { replace: true });
+  }, [isPlugin, navigation, skillId]);
   const [sharing, setSharing] = useState(false);
   const [contentsDirty, setContentsDirty] = useState(false);
   const removeModal = useCreateModal();
@@ -327,6 +334,7 @@ export default function CustomizeSkillPage({
         ) : undefined
       }
       loading={
+        isPlugin ||
         list.isLoading ||
         (canEdit && detail.isLoading) ||
         // A skill made a moment ago can be missing from a stale list.

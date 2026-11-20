@@ -17,6 +17,7 @@ interface SkillBundlePickerProps {
   value: PreparedSkillBundle | null;
   compact?: boolean;
   disabled?: boolean;
+  allowPlugin?: boolean;
   busyLabel?: string;
   onChange: (bundle: PreparedSkillBundle) => void;
   onBatchChange?: (files: File[]) => void;
@@ -28,6 +29,7 @@ export default function SkillBundlePicker({
   value,
   compact = false,
   disabled = false,
+  allowPlugin = false,
   busyLabel,
   onChange,
   onBatchChange,
@@ -55,7 +57,7 @@ export default function SkillBundlePicker({
       setPreparing(true);
       onPreparingChange?.(true);
       try {
-        const bundle = await prepareSkillBundleUpload(files);
+        const bundle = await prepareSkillBundleUpload(files, { allowPlugin });
         onChange(bundle);
       } catch (error) {
         console.error("Failed to prepare skill bundle", error);
@@ -67,7 +69,7 @@ export default function SkillBundlePicker({
         onPreparingChange?.(false);
       }
     },
-    [onBatchChange, onChange, onError, onPreparingChange, t]
+    [allowPlugin, onBatchChange, onChange, onError, onPreparingChange, t]
   );
 
   const { getRootProps, getInputProps, isDragActive, open } = useDropzone({

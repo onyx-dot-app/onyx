@@ -111,3 +111,57 @@ test("an uploaded plugin lists its needs and turning it on shows the ones not on
   expect(within(dialog).getByText("Not added")).toBeInTheDocument();
   expect(within(dialog).getByText("Not supported in Onyx")).toBeInTheDocument();
 });
+
+test("turning on a plugin whose skill name is taken asks to switch", async () => {
+  window.history.replaceState(null, "", `/app/customize/plugins/${PLUGIN_ID}`);
+  const plugin = customFixture({
+    id: PLUGIN_ID,
+    name: "review-kit",
+    enabled: false,
+    kind: "plugin",
+    plugin: {
+      manifest: null,
+      skills: [
+        { path: "skills/review", name: "review", description: "Review." },
+      ],
+      needs: [],
+    },
+  });
+  const fetchMock = mockFetch({
+    "/api/skills": { builtins: [], customs: [{ ...plugin, plugin: null }] },
+    [`/api/skills/${PLUGIN_ID}`]: plugin,
+    [`PUT /api/skills/${PLUGIN_ID}/enabled`]: (init?: RequestInit) =>
+      typeof init?.body === "string" && JSON.parse(init.body).replace_conflict
+        ? { ...plugin, enabled: true }
+        : new Response(
+            JSON.stringify({
+              error_code: "SKILL_NAME_CONFLICT",
+              detail: "Another skill is named review.",
+            }),
+            { status: 409 }
+          ),
+  });
+  const user = setupUser();
+  render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
+
+  await user.click(
+    await screen.findByRole("switch", { name: "Use review-kit" })
+  );
+  const dialog = await screen.findByRole("dialog");
+  expect(
+    within(dialog).getByText("Switch “review-kit” skill?")
+  ).toBeInTheDocument();
+
+  await user.click(
+    within(dialog).getByRole("button", { name: "Switch skill" })
+  );
+  await waitFor(() =>
+    expect(
+      fetchMock.mock.calls.filter(
+        ([, init]) =>
+          typeof init?.body === "string" &&
+          JSON.parse(init.body).replace_conflict === true
+      )
+    ).toHaveLength(1)
+  );
+});

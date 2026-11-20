@@ -137,13 +137,16 @@ uploaded plugins: each row has `kind` (`skill` or `plugin`) and
 for the user ([[skills#plugin-upload]]). A plugin row shows "N of M
 integrations available"; a `kind: plugin` page reads `GET /skills/{id}`
 (`lib/plugins/hooks.ts:usePluginDetail`) for its Skills and Integrations tabs
-and does not redirect to the skill page. `sections/plugins/PluginNeedList.tsx`
+and does not redirect to the skill page. A `kind: plugin` row opens this page
+from the admin skills table too, and the skill page redirects a `kind: plugin`
+id here. `sections/plugins/PluginNeedList.tsx`
 shows each need: `lib/plugins/needs.ts:liveNeedState` reads the state of the
 matched integration from `GET /integrations`, so a row follows a switch or a
 sign-in at once, and `needAction` maps the state to one action (Turn on,
 Connect, Add for your team with `newIntegrationHref` filling the Add page, or a
 note). `lib/plugins/directory.ts:pluginSwitch` gives its switch
-(`PUT /skills/{id}/enabled`); when the response leaves a supported need not
+(`PUT /skills/{id}/enabled` through `lib/skills/hooks.ts:useSkillEnablement`,
+so a skill name conflict asks to switch in `SkillSwitchModal`); when the response leaves a supported need not
 on, `sections/modals/plugins/PluginTurnOnModal.tsx` lists the needs. Each integration row carries `access`; its
 `installation_policy` is the user's own setting (group settings and shares
 included). `sections/plugins/ShareIntegrationModal.tsx` reads and replaces the

@@ -125,4 +125,16 @@ export class CustomizePluginPage {
       .click();
     await expect(this.page).toHaveURL(/\/app\/customize\/integrations\/new\?/);
   }
+
+  async expectIntegrationPrefill(
+    name: string,
+    serverUrl: string
+  ): Promise<void> {
+    await expect(
+      this.page.getByRole("textbox", { name: "Name", exact: true })
+    ).toHaveValue(name);
+    await expect(
+      this.page.getByRole("textbox", { name: "Server URL", exact: true })
+    ).toHaveValue(serverUrl);
+  }
 }

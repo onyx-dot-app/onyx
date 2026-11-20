@@ -12,6 +12,7 @@ import {
 } from "@opal/components";
 import { Content, InputHorizontal, Section } from "@opal/layouts";
 import { SvgBlocks, SvgUploadCloud } from "@opal/icons";
+import type { RichStr } from "@opal/types";
 import { needsAttention } from "@/lib/plugins/needs";
 import type { PluginUploadPreview } from "@/lib/plugins/types";
 import { pluginUploadKind } from "@/lib/plugins/upload";
@@ -44,7 +45,7 @@ interface UploadPluginModalProps {
 }
 
 interface PreviewSectionProps {
-  title: string;
+  title: string | RichStr;
   children: ReactNode;
 }
 
@@ -285,6 +286,7 @@ function UploadPluginModalContent({
           value={bundle}
           compact={state.step !== "pick"}
           disabled={disabled}
+          allowPlugin
           busyLabel={busy === "read" ? t("reading") : undefined}
           onPreparingChange={setPreparing}
           onChange={(next) => void read(next, false)}

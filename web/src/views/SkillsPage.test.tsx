@@ -212,6 +212,18 @@ describe("SkillsPage preference toggles", () => {
     );
   });
 
+  it("opens an uploaded plugin on its plugin page", async () => {
+    skillsData.customs = [
+      { ...customSkill("plugin-id", "review-kit"), kind: "plugin" },
+    ];
+    render(<SkillsPage />);
+    const user = setupUser();
+    await user.click(screen.getByRole("row", { name: "Open review-kit" }));
+    await waitFor(() =>
+      expect(window.location.pathname).toBe("/app/customize/plugins/plugin-id")
+    );
+  });
+
   it("shows publish requests in the library to a non-admin skill manager", () => {
     mockIsManager = true;
     render(<SkillsPage />);
