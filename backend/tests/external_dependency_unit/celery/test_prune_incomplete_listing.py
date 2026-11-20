@@ -103,7 +103,9 @@ def cc_pair(
 ) -> Generator[ConnectorCredentialPair, None, None]:
     pair = make_cc_pair(db_session)
     yield pair
-    RedisConnector(get_current_tenant_id(), pair.id).prune.reset()
+    prune = RedisConnector(get_current_tenant_id(), pair.id).prune
+    prune.reset()
+    prune.clear_failure_backoff()
     db_session.rollback()
     db_session.execute(delete(SyncRecord).where(SyncRecord.entity_id == pair.id))
     db_session.commit()
