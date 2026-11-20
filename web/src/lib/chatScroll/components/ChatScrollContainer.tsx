@@ -48,6 +48,11 @@ export interface ChatScrollContainerProps {
   /** Enable auto-scroll behavior (follow new content) */
   autoScroll?: boolean;
 
+  /** Pause following for a moment (the typewriter's post-finish drain)
+   *  without turning it off: a view at the bottom stays there, and
+   *  catches up when the pause ends. */
+  pauseFollowing?: boolean;
+
   /** Whether content is currently streaming (affects scroll button visibility) */
   isStreaming?: boolean;
 
@@ -64,6 +69,20 @@ export interface ChatScrollContainerProps {
    *  reading layout (drops the reserved scrollbar gutter). */
   fullWidth?: boolean;
 }
+
+// A scroll this long after the user's last scroll input is still theirs
+// (keyboard and momentum scrolls run on after the input).
+const USER_INPUT_WINDOW_MS = 600;
+// Keys that scroll the view.
+const SCROLL_KEYS = new Set([
+  "ArrowUp",
+  "ArrowDown",
+  "PageUp",
+  "PageDown",
+  "Home",
+  "End",
+  " ",
+]);
 
 // Following new content scrolls to the real end, spacer included. So only
 // that end counts as "at bottom" for following.
@@ -105,6 +124,7 @@ const ChatScrollContainer = React.memo(
         children,
         anchorSelector,
         autoScroll = true,
+        pauseFollowing = false,
         onScrollButtonVisibilityChange,
         sessionId,
         hideScrollbar = false,
@@ -132,6 +152,12 @@ const ChatScrollContainer = React.memo(
       );
       const isAutoScrollingRef = useRef(false); // Prevent handleScroll from interfering during auto-scroll
       const followOpeningUntilRef = useRef(0);
+      // When the user last gave scroll input, and whether a pointer is held
+      // on the view (a scrollbar drag). Only read, never acted on directly.
+      const userInputAtRef = useRef(-Infinity);
+      const pointerHeldRef = useRef(false);
+      // Until when this view's own smooth scroll to an anchor runs.
+      const anchorGlideUntilRef = useRef(0);
       const sessionIdRef = useRef(sessionId);
       const saveFrameRef = useRef<number | null>(null);
       // Scroll position and content height that the next scroll event is
@@ -145,7 +171,8 @@ const ChatScrollContainer = React.memo(
         onScrollButtonVisibilityChange
       );
       const autoScrollRef = useRef(autoScroll);
-      const previousAutoScrollRef = useRef(autoScroll);
+      const pauseFollowingRef = useRef(pauseFollowing);
+      const previousFollowingRef = useRef(autoScroll && !pauseFollowing);
 
       // Layout effect: queued rAF/observer callbacks fire after commit, so a
       // passive sync could let them scroll with a stale autoScroll flag.
@@ -153,8 +180,14 @@ const ChatScrollContainer = React.memo(
         onScrollButtonVisibilityChangeRef.current =
           onScrollButtonVisibilityChange;
         autoScrollRef.current = autoScroll;
+        pauseFollowingRef.current = pauseFollowing;
         sessionIdRef.current = sessionId;
-      }, [onScrollButtonVisibilityChange, autoScroll, sessionId]);
+      }, [
+        onScrollButtonVisibilityChange,
+        autoScroll,
+        sessionId,
+        pauseFollowing,
+      ]);
 
       // Remember where this chat is scrolled, once per frame. Only after the
       // chat was scrolled into place: before that, the position is not the
@@ -171,7 +204,9 @@ const ChatScrollContainer = React.memo(
           const memory = getChatScrollMemory(id);
           const atEnd =
             (isAtBottomRef.current && autoScrollRef.current) ||
-            (isAtScrollEnd(container, 1) && spacerHeightRef.current === 0);
+            // 2px: a fractional scrollTop (Firefox) can sit just short of
+            // the rounded end.
+            (isAtScrollEnd(container, 2) && spacerHeightRef.current === 0);
           if (atEnd) {
             memory.position = { kind: "end" };
             return;
@@ -306,9 +341,10 @@ const ChatScrollContainer = React.memo(
       );
 
       // Catch up on content that arrived while the typewriter paused following.
+      const followingNow = autoScroll && !pauseFollowing;
       useEffect(() => {
-        const resumed = autoScroll && !previousAutoScrollRef.current;
-        previousAutoScrollRef.current = autoScroll;
+        const resumed = followingNow && !previousFollowingRef.current;
+        previousFollowingRef.current = followingNow;
         if (
           resumed &&
           isAtBottomRef.current &&
@@ -317,7 +353,7 @@ const ChatScrollContainer = React.memo(
         ) {
           scrollToBottom("instant");
         }
-      }, [autoScroll, scrollToBottom]);
+      }, [followingNow, scrollToBottom]);
 
       // Expose scrollToBottom via ref
       useImperativeHandle(ref, () => ({ scrollToBottom }), [scrollToBottom]);
@@ -358,7 +394,32 @@ const ChatScrollContainer = React.memo(
         // the real end: the spacer below a new message hides no content, but
         // following would still pull the user back down through it.
         const atScrollEnd = isAtScrollEnd(container, buttonThresholdPx);
-        if (scrolledUp) {
+        // An upward move counts as the user's only right after their scroll
+        // input. Firefox can clamp the position while content briefly
+        // shrinks, and that is not the user leaving the end.
+        const byUser =
+          pointerHeldRef.current ||
+          performance.now() - userInputAtRef.current < USER_INPUT_WINDOW_MS;
+        // This view's own smooth scrolls move without user input too.
+        const ownGlide =
+          performance.now() < anchorGlideUntilRef.current ||
+          container.dataset.smoothScrollActive === "true";
+        if (scrolledUp && !byUser && ownGlide) {
+          // Neither the user nor layout: leave the glide alone.
+        } else if (scrolledUp && !byUser) {
+          // Layout moved a following view off the end: put it back. The
+          // user is not scrolling, so this write interrupts nothing.
+          if (
+            isAtBottomRef.current &&
+            autoScrollRef.current &&
+            !pauseFollowingRef.current
+          ) {
+            scrollToBottom("instant");
+          }
+        } else if (scrolledUp) {
+          // A fling keeps moving past its last input; each step stays the
+          // user's.
+          userInputAtRef.current = performance.now();
           followOpeningUntilRef.current = 0;
           updateScrollState();
           isAtBottomRef.current = atScrollEnd;
@@ -371,7 +432,56 @@ const ChatScrollContainer = React.memo(
           // Update button visibility based on actual position
           onScrollButtonVisibilityChangeRef.current?.(!state.isAtBottom);
         }
-      }, [updateScrollState, getScrollState, buttonThresholdPx]);
+      }, [
+        updateScrollState,
+        getScrollState,
+        buttonThresholdPx,
+        scrollToBottom,
+      ]);
+
+      // Scroll input marks the next upward moves as the user's. A focus move
+      // counts: the browser scrolls the focused element into view. Re-attached
+      // per session: the scroll element remounts (it is keyed by sessionId).
+      useEffect(() => {
+        const container = scrollContainerRef.current;
+        if (!container) return;
+        const markInput = () => {
+          userInputAtRef.current = performance.now();
+        };
+        const onKeyDown = (event: KeyboardEvent) => {
+          // Keys typed into a field inside the view do not scroll it.
+          const target = event.target;
+          const typing =
+            target instanceof HTMLElement &&
+            (target.isContentEditable || target.closest("input, textarea"));
+          if (!typing && SCROLL_KEYS.has(event.key)) markInput();
+        };
+        const onPointerDown = () => {
+          pointerHeldRef.current = true;
+          markInput();
+        };
+        const onPointerUp = () => {
+          if (!pointerHeldRef.current) return;
+          pointerHeldRef.current = false;
+          markInput();
+        };
+        container.addEventListener("wheel", markInput, { passive: true });
+        container.addEventListener("touchmove", markInput, { passive: true });
+        container.addEventListener("keydown", onKeyDown);
+        container.addEventListener("focusin", markInput);
+        container.addEventListener("pointerdown", onPointerDown);
+        window.addEventListener("pointerup", onPointerUp);
+        window.addEventListener("pointercancel", onPointerUp);
+        return () => {
+          container.removeEventListener("wheel", markInput);
+          container.removeEventListener("touchmove", markInput);
+          container.removeEventListener("keydown", onKeyDown);
+          container.removeEventListener("focusin", markInput);
+          container.removeEventListener("pointerdown", onPointerDown);
+          window.removeEventListener("pointerup", onPointerUp);
+          window.removeEventListener("pointercancel", onPointerUp);
+        };
+      }, [sessionId]);
 
       // MutationObserver (structural) + ResizeObserver (height growth).
       // Re-attached per session: the scroll element remounts on a session
@@ -399,7 +509,7 @@ const ChatScrollContainer = React.memo(
             // Skip it during a smooth scroll to the bottom too: an instant
             // scroll would cut it short.
             const following =
-              autoScrollRef.current ||
+              (autoScrollRef.current && !pauseFollowingRef.current) ||
               performance.now() < followOpeningUntilRef.current;
             if (
               following &&
@@ -409,6 +519,20 @@ const ChatScrollContainer = React.memo(
             ) {
               // scrollToBottom handles isAutoScrollingRef and ref updates
               scrollToBottom("instant");
+            } else if (
+              // Only following that is off, not a pause: a paused view at
+              // the bottom must catch up when the pause ends.
+              !autoScrollRef.current &&
+              !following &&
+              !isAutoScrollingRef.current &&
+              container.dataset.smoothScrollActive !== "true"
+            ) {
+              // Not following, so growth leaves the end behind: the view is
+              // no longer at the bottom, and a later resume must not jump.
+              isAtBottomRef.current = isAtScrollEnd(
+                container,
+                buttonThresholdPx
+              );
             }
 
             updateScrollState();
@@ -435,7 +559,13 @@ const ChatScrollContainer = React.memo(
           resizeObserver.disconnect();
           if (rafId) cancelAnimationFrame(rafId);
         };
-      }, [updateScrollState, scrollToBottom, savePosition, sessionId]);
+      }, [
+        updateScrollState,
+        scrollToBottom,
+        savePosition,
+        buttonThresholdPx,
+        sessionId,
+      ]);
 
       // Handle session changes and anchor changes. A layout effect: opening a
       // chat whose messages are already rendered scrolls it into place before
@@ -487,13 +617,16 @@ const ChatScrollContainer = React.memo(
         const isLoadingExistingContent =
           isNewSession || scrolledForSessionRef.current === null;
 
-        // A new anchor while the user reads elsewhere, or with auto-scroll off
-        // (a refresh brought in a turn from another tab): keep their
+        // A new anchor while the user reads elsewhere, with auto-scroll off,
+        // or during a pause (a refresh brought in a turn from another tab;
+        // the typewriter's drain): keep their
         // position. A send anchors through DynamicBottomSpacer, and a
         // following view still moves.
         if (
           !isLoadingExistingContent &&
-          (!isAtBottomRef.current || !autoScrollRef.current)
+          (!isAtBottomRef.current ||
+            !autoScrollRef.current ||
+            pauseFollowingRef.current)
         ) {
           prevAnchorSelectorRef.current = anchorSelector ?? null;
           return;
@@ -543,6 +676,9 @@ const ChatScrollContainer = React.memo(
             );
           }
 
+          if (behavior === "smooth") {
+            anchorGlideUntilRef.current = performance.now() + 700;
+          }
           container.scrollTo({ top: targetScrollTop, behavior });
 
           // Measure the next scroll from the new position

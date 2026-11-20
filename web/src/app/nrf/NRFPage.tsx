@@ -28,6 +28,7 @@ import useChatSessionController from "@/hooks/useChatSessionController";
 import { useActiveAgent } from "@/lib/agents/hooks";
 import {
   useCurrentChatState,
+  useCurrentIsStreamDraining,
   useCurrentMessageHistory,
   useChatSessionStore,
   useDocumentSidebarVisible,
@@ -205,7 +206,13 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   const resolvedAgent = activeAgent ?? undefined;
 
   // Auto-scroll preference from user settings (matches ChatPage pattern)
-  const autoScrollEnabled = user?.preferences?.auto_scroll !== false;
+  // The setting decides whether a running reply is followed. With nothing
+  // running, a view at the end keeps to it (matches AppPage).
+  const autoScrollEnabled =
+    user?.preferences?.auto_scroll !== false || currentChatState === "input";
+  // Pause following while the typewriter drains a finished reply (matches
+  // AppPage).
+  const isStreamDraining = useCurrentIsStreamDraining();
   const isStreaming = currentChatState === "streaming";
 
   // Query controller for search/chat classification (EE feature)
@@ -503,6 +510,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                   sessionId="nrf-session"
                   anchorSelector={anchorSelector}
                   autoScroll={autoScrollEnabled}
+                  pauseFollowing={isStreamDraining}
                   isStreaming={isStreaming}
                   hideScrollbar={isSidePanel}
                 >

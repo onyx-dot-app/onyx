@@ -83,12 +83,13 @@ describe.each([0, 200])("with spacer height %i", (spacerHeight) => {
             frames.push(callback);
             return frames.length;
           });
-        const message = (enabled: boolean) => (
-          <ChatScrollContainer autoScroll={enabled}>
+        const message = (enabled: boolean, paused = false) => (
+          <ChatScrollContainer autoScroll={enabled} pauseFollowing={paused}>
             <Spacer height={spacerHeight} />
           </ChatScrollContainer>
         );
-        const view = render(message(pause === "smooth" ? autoScroll : false));
+        // The typewriter's drain pauses following without turning it off.
+        const view = render(message(autoScroll, pause !== "smooth"));
         const container = screen.getByTestId("chat-scroll-container");
         const end = container.firstElementChild?.lastElementChild;
         if (!(end instanceof HTMLElement))
@@ -120,6 +121,8 @@ describe.each([0, 200])("with spacer height %i", (spacerHeight) => {
           container.scrollTop = 600;
           fireEvent.scroll(container);
           if (scrollUp) {
+            // An upward move is the user's only after their scroll input.
+            fireEvent.wheel(container);
             container.scrollTop = 100;
             fireEvent.scroll(container);
           }
@@ -190,6 +193,7 @@ test("an interrupted smooth scroll does not resume following later content", asy
   container.scrollTo = scrollTo;
   try {
     act(() => ref.current?.scrollToBottom("smooth"));
+    fireEvent.wheel(container);
     container.scrollTop = 100;
     fireEvent.scroll(container);
     act(() => jest.advanceTimersByTime(600));
@@ -256,6 +260,8 @@ test.each([
       expect(container.scrollTop).toBe(600);
 
       contentHeight = 900;
+      // The user's scroll comes with scroll input; a clamp does not.
+      if (!follows) fireEvent.wheel(container);
       container.scrollTop = scrollTopAfterShrink;
       fireEvent.scroll(container);
 
