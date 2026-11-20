@@ -217,7 +217,7 @@ test.describe("Plugin upload", () => {
     await plugins.turnOnNeed("pw-off");
     await plugins.expectNeed("pw-off", "On");
 
-    await plugins.addNeedForTeam("pw-missing");
+    await plugins.addNeedIntegration("pw-missing");
     await plugins.expectIntegrationPrefill("pw-missing", `${base}/missing`);
   });
 });
