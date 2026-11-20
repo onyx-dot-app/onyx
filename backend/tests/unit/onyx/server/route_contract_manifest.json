@@ -221,6 +221,7 @@
   "GET /health/ready": "none",
   "GET /hierarchy-nodes": "basic",
   "GET /hierarchy-nodes/search": "basic",
+  "GET /hierarchy-nodes/{node_id}": "basic",
   "GET /input_prompt": "basic",
   "GET /input_prompt/{input_prompt_id}": "basic",
   "GET /integrations": "basic",
