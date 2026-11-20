@@ -259,6 +259,7 @@
   "GET /manage/admin/credential": "manage:connectors +scope",
   "GET /manage/admin/credential/capability-reports": "manage:connectors +scope",
   "GET /manage/admin/credential/{credential_id}/capability-report": "manage:connectors +scope",
+  "GET /manage/admin/credential/{credential_id}/microsoft-rate-budgets": "manage:connectors",
   "GET /manage/admin/discord-bot/config": "manage:bots",
   "GET /manage/admin/discord-bot/guilds": "manage:bots",
   "GET /manage/admin/discord-bot/guilds/{config_id}": "manage:bots",
