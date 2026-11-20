@@ -717,37 +717,40 @@ up its own branding.
     ([[#packet-list-append-only]]).
 
 15. `scroll-follow-intent` **Content growth must not cancel following.**
-    `lib/chatScroll/components/ChatScrollContainer.tsx` keeps following intent across the
-    typewriter drain and spacer smooth-scroll pauses. When either pause ends,
-    catch up if auto-scroll is enabled and the user has not scrolled away.
-    During the opening-follow window, content observers can also catch up with
-    auto-scroll disabled. Scrolling up ends that window. Content observers
-    update visual state without treating layout growth as a user scroll. When
-    the content shrinks, an upward scroll up to the shrinkage is layout, not
-    the user, so only movement beyond it stops following. An upward move
-    counts as the user's only within 600ms of scroll input (wheel, touch,
-    scroll keys, a focus move into the view), or while a pointer is held on
-    the view. Each move counted as the user's restarts the 600ms, so a fling
-    stays the user's while it moves. Firefox can clamp the position while
-    content briefly shrinks, and a following view is put back at the end.
-    Following measures "at the bottom" from the real scroll end, spacer
-    included.
-    Every scroll baseline records the position and the content height
-    together. `lib/chatScroll/components/DynamicBottomSpacer.tsx` adds space only for a
-    turn sent from the page, which passes through `loading`. A run the page
-    resumes starts at `streaming` and gets no space. The space is fitted to
-    live layout for the whole turn. The scroll element is
-    keyed by session, so a chat switch remounts the spacer. Its unmount clears
-    its state and the shared spacer height.
-    Each chat's position (end, or a row and offset), its turn's space and its
-    row heights live in `lib/chatScroll/scrollMemory.ts`; the opening layout effect
-    restores them from loaded rows only, so a switch never waits on the
-    network. Rows use `lib/chat/rowIds.ts:messageRowId`. Do not write
-    `scrollTop` while the user scrolls, and keep native scroll anchoring on:
-    a script write stops a trackpad fling.
+    `lib/chatScroll/components/ChatScrollContainer.tsx` keeps following intent
+    across the typewriter drain (`pauseFollowing`): when the pause ends, it
+    catches up if the user has not scrolled away. During the opening-follow
+    window, content observers can also catch up with auto-scroll disabled.
+    Scrolling up ends that window. When the content shrinks, an upward scroll up
+    to the shrinkage is layout, not the user, so only movement beyond it stops
+    following. An upward move counts as the user's only within 600ms of scroll
+    input (wheel, touch, scroll keys, a focus move into the view), or while a
+    pointer is held on the view. Each move counted as the user's restarts the
+    600ms, so a fling stays the user's while it moves. Firefox can clamp the
+    position while content briefly shrinks, and a following view is put back at
+    the end. Every scroll baseline records the position and the content height
+    together. Do not write `scrollTop` while the user scrolls, and keep native
+    scroll anchoring on: a script write stops a trackpad fling.
+    **Turn anchoring is layout.** `sections/chat/ChatUI.tsx` groups each turn (a
+    user message and its replies) in a `data-chat-turn` element. The latest turn
+    has `min-height: calc(100cqh - 3rem)` (the scroll element is a size
+    container): at the end of every chat, in every tab and after a reload, the
+    latest user message sits 1rem below the top, with space below it, while the
+    turn fits in that height. A taller turn ends at the bottom, and its user
+    message is above the viewport. Nothing
+    measures it. A send glides to the end through
+    `lib/chatScroll/hooks.ts:useScrollToNewTurn` (only while the chat is
+    `loading`, and not on a switch back to a running chat, so a resumed run
+    never moves the view). The scroll-to-bottom button ignores the latest
+    turn's unfilled space. Text that grows inside that space changes no scroll
+    height, so a ResizeObserver watches the latest turn's rows.
+    Each chat's position (end, or a row and offset) and its row heights live
+    in `lib/chatScroll/scrollMemory.ts`; the opening layout effect restores
+    them from loaded rows only, so a switch never waits on the network. Rows
+    use `lib/chat/rowIds.ts:messageRowId`.
     Craft's transcript (`app/craft/components/ChatPanel.tsx`) uses the same
-    `ChatScrollContainer`, with its composer in the `footer` slot. It has no
-    `DynamicBottomSpacer`, so a Craft send gets no space below it.
+    `ChatScrollContainer`, with its composer in the `footer` slot. Its rows are
+    not turn groups, so Craft has no space below its latest turn.
 
 ---
 

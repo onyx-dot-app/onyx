@@ -1,21 +1,8 @@
-import { createRef, useLayoutEffect } from "react";
+import { createRef } from "react";
 import { act, fireEvent, render, screen } from "@testing-library/react";
 import ChatScrollContainer, {
   ChatScrollContainerHandle,
 } from "@/lib/chatScroll/components/ChatScrollContainer";
-import { useScrollContainer } from "@/lib/chatScroll/components/ScrollContainerContext";
-
-interface SpacerProps {
-  height: number;
-}
-
-function Spacer({ height }: SpacerProps) {
-  const { spacerHeightRef } = useScrollContainer();
-  useLayoutEffect(() => {
-    spacerHeightRef.current = height;
-  }, [height, spacerHeightRef]);
-  return null;
-}
 
 const originalScrollTo = Object.getOwnPropertyDescriptor(
   HTMLElement.prototype,
@@ -42,8 +29,8 @@ test("mounting with auto-scroll enabled does not start an unrelated scroll", () 
   view.unmount();
 });
 
-describe.each([0, 200])("with spacer height %i", (spacerHeight) => {
-  describe.each(["drain", "smooth", "both"])("%s pause", (pause) => {
+describe("following", () => {
+  describe("drain pause", () => {
     test.each([
       {
         scenario: "follows new content",
@@ -85,11 +72,11 @@ describe.each([0, 200])("with spacer height %i", (spacerHeight) => {
           });
         const message = (enabled: boolean, paused = false) => (
           <ChatScrollContainer autoScroll={enabled} pauseFollowing={paused}>
-            <Spacer height={spacerHeight} />
+            <div />
           </ChatScrollContainer>
         );
         // The typewriter's drain pauses following without turning it off.
-        const view = render(message(autoScroll, pause !== "smooth"));
+        const view = render(message(autoScroll, true));
         const container = screen.getByTestId("chat-scroll-container");
         const end = container.firstElementChild?.lastElementChild;
         if (!(end instanceof HTMLElement))
@@ -132,11 +119,6 @@ describe.each([0, 200])("with spacer height %i", (spacerHeight) => {
             fireEvent.scroll(container);
           }
 
-          if (pause !== "drain") {
-            await flushChanges(() => {
-              container.dataset.smoothScrollActive = "true";
-            });
-          }
           scrollTo.mockClear();
           await flushChanges(() => {
             // The answer footer appears while instant following is suppressed.
@@ -148,12 +130,6 @@ describe.each([0, 200])("with spacer height %i", (spacerHeight) => {
           await flushChanges(() => {
             view.rerender(message(autoScroll));
           });
-          if (pause !== "drain") {
-            expect(scrollTo).not.toHaveBeenCalled();
-            await flushChanges(() => {
-              container.dataset.smoothScrollActive = "false";
-            });
-          }
           if (follows) {
             expect(scrollTo).toHaveBeenCalledWith({
               top: 648,

@@ -35,7 +35,10 @@ import {
 } from "@/app/app/stores/useChatSessionStore";
 import ChatUI from "@/sections/chat/ChatUI";
 import { messageRowId } from "@/lib/chat/rowIds";
-import ChatScrollContainer from "@/lib/chatScroll/components/ChatScrollContainer";
+import { useScrollToNewTurn } from "@/lib/chatScroll/hooks";
+import ChatScrollContainer, {
+  type ChatScrollContainerHandle,
+} from "@/lib/chatScroll/components/ChatScrollContainer";
 import WelcomeMessage from "@/app/app/components/WelcomeMessage";
 import useChatSessions from "@/hooks/useChatSessions";
 import { cn } from "@opal/utils";
@@ -229,6 +232,14 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   const anchorSelector = anchorMessage
     ? `#${messageRowId(anchorMessage)}`
     : undefined;
+  const scrollContainerRef = useRef<ChatScrollContainerHandle>(null);
+  // A send glides to the new turn: its message at the top.
+  useScrollToNewTurn(
+    scrollContainerRef,
+    "nrf-session",
+    anchorSelector,
+    currentChatState === "loading"
+  );
 
   useSendMessageToParent();
 
@@ -507,6 +518,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                 {/* Fake header - pushes content below absolute settings button (non-side-panel only) */}
                 {!isSidePanel && <Spacer rem={2} />}
                 <ChatScrollContainer
+                  ref={scrollContainerRef}
                   sessionId="nrf-session"
                   anchorSelector={anchorSelector}
                   autoScroll={autoScrollEnabled}

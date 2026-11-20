@@ -64,13 +64,10 @@ afterEach(() => {
 function Chat({ root }: { root: HTMLDivElement }) {
   const scrollContainerRef = useRef(root);
   const contentWrapperRef = useRef<HTMLDivElement>(null);
-  const spacerHeightRef = useRef(0);
   return (
     <ScrollContainerProvider
       scrollContainerRef={scrollContainerRef}
       contentWrapperRef={contentWrapperRef}
-      spacerHeightRef={spacerHeightRef}
-      spaceRestoreRef={{ current: null }}
     >
       <WindowedRow id="message-1" initiallyMounted heightCache={new Map()}>
         First message
