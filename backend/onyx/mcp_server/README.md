@@ -124,7 +124,7 @@ Most MCP clients support HTTP transport with custom headers. Refer to your clien
 
 ### Tools
 
-The server provides three tools for searching and retrieving information:
+The server provides four tools for searching and retrieving information:
 
 1. `search_indexed_documents`
 Search the user's private knowledge base indexed in Onyx. Returns ranked documents with content and, when the source supplies it, `metadata` such as a Jira reporter or assignee. The result is one JSON text block, with no `structuredContent` copy.
@@ -142,7 +142,10 @@ Filter values resolve on the search call, so clients do not need a lookup call f
 2. `search_web`
 Search the public internet for current events and general knowledge. Returns web search results with titles, URLs, and snippets.
 
-3. `open_urls`
+3. `query_metadata`
+Exact counts and listings over the metadata of the user's accessible documents and over the user's own Onyx chat history (the chat `postgres_query` tool, through `POST /search/postgres-query`). Takes the same filters as that tool, plus `agent` to stay inside an agent's knowledge scope.
+
+4. `open_urls`
 Retrieve the complete text content from specific web URLs. Useful for fetching full page content after finding relevant URLs via `search_web`.
 
 ### Resources
