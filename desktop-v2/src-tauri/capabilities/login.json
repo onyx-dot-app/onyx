@@ -9,6 +9,7 @@
     "core:event:allow-unlisten",
     "core:window:allow-start-dragging",
     "core:window:allow-set-size",
+    "allow-fit-window",
     "allow-get-prefs",
     "allow-get-auth-methods",
     "allow-login",
