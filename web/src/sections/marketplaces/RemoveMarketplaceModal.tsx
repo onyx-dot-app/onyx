@@ -33,17 +33,7 @@ export default function RemoveMarketplaceModal({
   const { marketplace: detail, isLoading } = useMarketplace(marketplace.id);
   const refreshSkillLists = useRefreshSkillLists();
   const [busy, setBusy] = useState(false);
-  const plugins = [
-    ...(detail?.entries ?? []).flatMap((entry) =>
-      entry.plugin_id && entry.plugin_name
-        ? [{ id: entry.plugin_id, name: entry.plugin_name }]
-        : []
-    ),
-    ...(detail?.pending_deletes ?? []).map((plugin) => ({
-      id: plugin.plugin_id,
-      name: plugin.name,
-    })),
-  ];
+  const plugins = detail?.plugins ?? [];
 
   async function remove() {
     setBusy(true);

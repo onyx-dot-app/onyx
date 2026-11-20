@@ -219,7 +219,7 @@ The page lists each marketplace with its source, its plugins and its sync:
 | Column | What it shows |
 | --- | --- |
 | **Marketplace** | The name, the source as `owner/repo`, with the folder and `@ref` when you set them, and **Personal** or **Company** |
-| **Sync** | **Syncing**, **Synced**, **Sync failed** or **Confirm deletes**, with the time of the last sync or the reason of the failure |
+| **Sync** | **Syncing**, **Synced**, **Sync failed** or **Not synced**, with the time of the last sync or the reason of the failure |
 | **Items** | The number of plugins |
 
 Click a row to see the source, the GitHub login, the last commit and each entry with its state.
@@ -227,23 +227,21 @@ The **...** menu of a row has these actions:
 
 | Action | What it does |
 | --- | --- |
-| **Sync now** | Reads the repository again and applies the changes. |
+| **Sync now** | Reads the repository again and applies the changes. It is off while a sync runs. |
 | **Default Access** | Changes the install setting of the plugins of a company marketplace. |
 | **Replace login** | Makes Onyx read the repository with your GitHub connection. Use it when the GitHub connection of the login is gone. |
 | **Remove** | Deletes the marketplace and its plugins. The dialog names each plugin that it deletes before you confirm. |
 
-Onyx syncs a marketplace only when you add it, when you click **Sync now**,
-and after you confirm deletes or replace the login. A sync applies these changes:
+Onyx syncs a marketplace only when you add it, when you click **Sync now**, and after you replace the login.
+One sync of a marketplace runs at a time. A sync applies these changes:
 
-- A new entry adds a plugin.
+- A new entry adds a plugin. The plugin has the name of the entry in `marketplace.json`.
 - A changed entry adds a version to its plugin. An entry with the same files adds nothing.
-- An entry that is gone deletes its plugin.
+- An entry that is gone deletes its plugin, with its shares and settings.
 - A blocked or not supported entry keeps its plugin and its versions.
 
-If a sync would delete more than 5 plugins and more than half of the marketplace, Onyx deletes nothing.
-The page shows **Review deletes** above the list. Click it to see the plugins,
-then click **Delete *n* plugins** to confirm. If a sync fails, the page shows the reason above the list.
-The plugins stay as they are. Fix the cause, then click **Sync now**.
+If a sync fails, the page shows the reason above the list. The plugins stay as they are. Fix the cause,
+then click **Sync now**.
 
 ### Plugins from a marketplace
 

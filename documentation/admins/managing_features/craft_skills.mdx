@@ -179,10 +179,10 @@ Another manager can click **Replace login** to read the repository with their ow
 their versions and their shares stay.
 
 A sync runs when a user adds the marketplace or clicks **Sync now**. Onyx does not sync on a schedule.
+One sync of a marketplace runs at a time, and **Sync now** is off while it runs.
 A sync adds a plugin for each new entry, adds a version when the files of an entry change,
-and deletes the plugin of an entry that is gone.
-If the deletes are more than 5 plugins and more than half of the marketplace, Onyx waits until a user confirms them.
-Blocked and not supported entries keep their plugins.
+and deletes the plugin of an entry that is gone. Each plugin has the name of its entry in `marketplace.json`.
+Blocked and not supported entries keep their plugins. A sync that cannot read the marketplace changes nothing.
 
 The content of a synced plugin changes only in GitHub. Onyx refuses edits, uploaded versions, restores, publishes,
 transfers and deletes of a synced plugin with **Change this plugin in GitHub**.

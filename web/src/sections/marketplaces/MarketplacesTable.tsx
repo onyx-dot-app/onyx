@@ -46,55 +46,34 @@ interface AttentionProps {
   marketplaces: MarketplaceSummary[];
   busy: ReadonlySet<string>;
   onSync: (marketplace: MarketplaceSummary) => void;
-  onReview: (marketplace: MarketplaceSummary) => void;
 }
 
-function Attention({ marketplaces, busy, onSync, onReview }: AttentionProps) {
+function Attention({ marketplaces, busy, onSync }: AttentionProps) {
   const t = useTranslations("plugins.marketplaces.attention");
   const syncCopy = useTranslations("plugins.marketplaces.sync");
   return (
     <>
-      {marketplaces.map((row) =>
-        row.needs_confirmation ? (
-          <MessageCard
-            key={row.id}
-            variant="warning"
-            outerPadding={1}
-            innerPadding={1}
-            title={t("deletesTitle", { name: row.name })}
-            description={t("deletesDescription")}
-            rightChildren={
-              <Button
-                prominence="secondary"
-                size="sm"
-                onClick={() => onReview(row)}
-              >
-                {t("review")}
-              </Button>
-            }
-          />
-        ) : (
-          <MessageCard
-            key={row.id}
-            variant="error"
-            outerPadding={1}
-            innerPadding={1}
-            title={t("failedTitle", { name: row.name })}
-            description={row.last_error ?? undefined}
-            rightChildren={
-              <Button
-                prominence="secondary"
-                size="sm"
-                icon={SvgRefreshCw}
-                disabled={busy.has(row.id)}
-                onClick={() => onSync(row)}
-              >
-                {syncCopy("now")}
-              </Button>
-            }
-          />
-        )
-      )}
+      {marketplaces.map((row) => (
+        <MessageCard
+          key={row.id}
+          variant="error"
+          outerPadding={1}
+          innerPadding={1}
+          title={t("failedTitle", { name: row.name })}
+          description={row.last_error ?? undefined}
+          rightChildren={
+            <Button
+              prominence="secondary"
+              size="sm"
+              icon={SvgRefreshCw}
+              disabled={busy.has(row.id)}
+              onClick={() => onSync(row)}
+            >
+              {syncCopy("now")}
+            </Button>
+          }
+        />
+      ))}
     </>
   );
 }
@@ -154,7 +133,7 @@ export default function MarketplacesTable() {
             id: "sync",
             icon: SvgRefreshCw,
             title: t("sync.now"),
-            disabled: disabled || marketplaceSyncState(row) === "syncing",
+            disabled: disabled || row.syncing,
             onSelect: () => syncNow(row),
           },
           ...(row.scope === "company"
@@ -282,18 +261,12 @@ export default function MarketplacesTable() {
       />
     );
   const rows = marketplaces ?? [];
-  const attention = rows.filter((row) => {
-    const state = marketplaceSyncState(row);
-    return state === "failed" || state === "needs_confirmation";
-  });
+  const attention = rows.filter(
+    (row) => marketplaceSyncState(row) === "failed"
+  );
   return (
     <Section gap={2} alignItems="stretch" height="auto">
-      <Attention
-        marketplaces={attention}
-        busy={busy}
-        onSync={syncNow}
-        onReview={(row) => setOpenId(row.id)}
-      />
+      <Attention marketplaces={attention} busy={busy} onSync={syncNow} />
       {rows.length > 0 ? (
         <Table
           label={t("tableLabel")}

@@ -651,7 +651,6 @@
   "POST /manage/users/test-upsert-user": "admin",
   "POST /marketplaces": "basic",
   "POST /marketplaces/preview": "basic",
-  "POST /marketplaces/{marketplace_id}/confirm-deletes": "basic",
   "POST /marketplaces/{marketplace_id}/replace-login": "basic",
   "POST /marketplaces/{marketplace_id}/sync": "basic",
   "POST /notifications/dismiss-all": "basic",

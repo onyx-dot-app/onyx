@@ -8,13 +8,9 @@ import { IconLoader } from "@opal/loaders";
 import { SvgBlocks, SvgRefreshCw } from "@opal/icons";
 import { SvgGitHub } from "@opal/logos";
 import { fetchErrorDetail } from "@/lib/fetcher";
-import {
-  confirmMarketplaceDeletes,
-  syncMarketplace,
-} from "@/lib/marketplaces/api";
+import { syncMarketplace } from "@/lib/marketplaces/api";
 import { useMarketplace } from "@/lib/marketplaces/hooks";
 import type { MarketplaceDetail } from "@/lib/marketplaces/types";
-import { marketplaceSyncState } from "@/lib/marketplaces/utils";
 import {
   useInstallationPolicyCopy,
   useRefreshSkillLists,
@@ -26,67 +22,15 @@ import MarketplaceSyncStatus, {
 
 interface DetailBodyProps {
   marketplace: MarketplaceDetail;
-  busy: boolean;
-  onConfirmDeletes: (revision: string) => void;
 }
 
-function DetailBody({ marketplace, busy, onConfirmDeletes }: DetailBodyProps) {
+function DetailBody({ marketplace }: DetailBodyProps) {
   const t = useTranslations("plugins.marketplaces");
   const lastSync = useLastSyncCopy(false);
   const policyCopy = useInstallationPolicyCopy();
-  const revision = marketplace.pending_delete_revision;
   return (
     <Section gap={4} alignItems="stretch" height="auto">
       <MarketplaceSyncStatus marketplace={marketplace} />
-      {revision && marketplace.pending_deletes.length > 0 && (
-        <MessageCard
-          variant="warning"
-          outerPadding={1}
-          innerPadding={1}
-          title={t("pendingDeletes.title", {
-            count: marketplace.pending_deletes.length,
-          })}
-          description={t("pendingDeletes.description")}
-          bottomChildren={
-            <Section gap={2} alignItems="stretch" height="auto">
-              <Section
-                role="list"
-                aria-label={t("pendingDeletes.listLabel")}
-                gap={1}
-                alignItems="stretch"
-                height="auto"
-              >
-                {marketplace.pending_deletes.map((plugin) => (
-                  <Section
-                    key={plugin.plugin_id}
-                    role="listitem"
-                    alignItems="stretch"
-                    height="auto"
-                  >
-                    <Content
-                      font="main-ui-body"
-                      icon={SvgBlocks}
-                      title={plugin.name}
-                    />
-                  </Section>
-                ))}
-              </Section>
-              <Section flexDirection="row" justifyContent="end" height="auto">
-                <Button
-                  variant="danger"
-                  size="sm"
-                  disabled={busy}
-                  onClick={() => onConfirmDeletes(revision)}
-                >
-                  {t("pendingDeletes.confirm", {
-                    count: marketplace.pending_deletes.length,
-                  })}
-                </Button>
-              </Section>
-            </Section>
-          }
-        />
-      )}
       {marketplace.last_error && (
         <MessageCard
           variant="error"
@@ -153,7 +97,7 @@ function DetailBody({ marketplace, busy, onConfirmDeletes }: DetailBodyProps) {
             <Card key={entry.key} padding={2} border="solid">
               <Content
                 icon={SvgBlocks}
-                title={entry.plugin_name ?? entry.key}
+                title={entry.key}
                 description={entry.reason ?? entry.path ?? undefined}
                 badge={{
                   title: t(`status.${entry.status}`),
@@ -204,9 +148,7 @@ export default function MarketplaceDetailModal({
   }
 
   const name = marketplace?.name ?? "";
-  const syncing =
-    marketplace !== undefined &&
-    marketplaceSyncState(marketplace) === "syncing";
+  const syncing = marketplace?.syncing ?? false;
 
   return (
     <Modal open onOpenChange={(isOpen) => !isOpen && !busy && onClose()}>
@@ -231,17 +173,7 @@ export default function MarketplaceDetailModal({
               <IconLoader />
             </Section>
           ) : (
-            <DetailBody
-              marketplace={marketplace}
-              busy={busy}
-              onConfirmDeletes={(revision) =>
-                void run(
-                  () => confirmMarketplaceDeletes(marketplaceId, revision),
-                  t("pendingDeletes.done"),
-                  t("pendingDeletes.failed")
-                )
-              }
-            />
+            <DetailBody marketplace={marketplace} />
           )}
         </Modal.Body>
         <Modal.Footer>

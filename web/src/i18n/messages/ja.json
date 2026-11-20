@@ -17166,8 +17166,8 @@
         "never": "未同期",
         "state": {
           "syncing": "同期中",
-          "needs_confirmation": "削除の確認が必要",
           "failed": "同期に失敗",
+          "not_synced": "未同期",
           "synced": "同期済み"
         }
       },
@@ -17190,18 +17190,7 @@
         "description": "プラグインの取得元の GitHub リポジトリとそのソースです。マーケットプレイスを同期すると、GitHub の変更を取得します。"
       },
       "attention": {
-        "failedTitle": "{name} の前回の同期に失敗しました",
-        "deletesTitle": "{name} は削除の確認を待っています",
-        "deletesDescription": "リポジトリから一部のエントリがなくなりました。Onyx は、確認後にのみ該当のプラグインを削除します。",
-        "review": "削除を確認"
-      },
-      "pendingDeletes": {
-        "title": "{count, plural, one {# 件のプラグインが} other {# 件のプラグインが}}削除を待っています",
-        "description": "リポジトリからこれらのエントリがなくなりました。確認すると該当のプラグインを削除します。",
-        "listLabel": "削除するプラグイン",
-        "confirm": "{count, plural, one {# 件のプラグイン} other {# 件のプラグイン}}を削除",
-        "done": "プラグインを削除しました。新しい同期を開始しました。",
-        "failed": "プラグインを削除できませんでした。"
+        "failedTitle": "{name} の前回の同期に失敗しました"
       },
       "defaultAccess": {
         "title": "デフォルトのアクセス",

@@ -50,12 +50,6 @@ class MarketplaceCreateRequest(MarketplaceSourceRequest):
     default_installation_policy: PluginInstallationPolicy | None = None
 
 
-class MarketplaceConfirmDeletesRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    revision: str = Field(min_length=1, max_length=40)
-
-
 class MarketplaceDefaultAccessRequest(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
@@ -104,8 +98,7 @@ class MarketplaceSummary(BaseModel):
     last_synced_at: datetime.datetime | None
     last_synced_revision: str | None
     last_error: str | None
-    sync_requested: bool
-    needs_confirmation: bool
+    syncing: bool
     created_at: datetime.datetime
 
 
@@ -115,19 +108,16 @@ class MarketplaceEntryView(BaseModel):
     status: MarketplaceEntryStatus
     reason: str | None
     plugin_id: UUID | None
-    plugin_name: str | None
 
 
-class MarketplacePendingDelete(BaseModel):
-    plugin_id: UUID
-    entry_key: str
+class MarketplacePluginView(BaseModel):
+    id: UUID
     name: str
 
 
 class MarketplaceDetail(MarketplaceSummary):
     entries: list[MarketplaceEntryView]
-    pending_delete_revision: str | None
-    pending_deletes: list[MarketplacePendingDelete]
+    plugins: list[MarketplacePluginView]
 
 
 class MarketplaceList(BaseModel):

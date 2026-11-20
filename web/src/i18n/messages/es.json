@@ -17166,8 +17166,8 @@
         "never": "Aún no sincronizado",
         "state": {
           "syncing": "Sincronizando",
-          "needs_confirmation": "Confirmar eliminaciones",
           "failed": "Falló la sincronización",
+          "not_synced": "Sin sincronizar",
           "synced": "Sincronizado"
         }
       },
@@ -17190,18 +17190,7 @@
         "description": "Los repositorios de GitHub de los que obtiene plugins, con su fuente. Sincronice un marketplace para obtener los cambios de GitHub."
       },
       "attention": {
-        "failedTitle": "Falló la última sincronización de {name}",
-        "deletesTitle": "{name} espera que confirme las eliminaciones",
-        "deletesDescription": "El repositorio ya no tiene algunas entradas. Onyx elimina sus plugins solo después de que usted lo confirme.",
-        "review": "Revisar eliminaciones"
-      },
-      "pendingDeletes": {
-        "title": "{count, plural, one {# plugin espera} other {# plugins esperan}} una eliminación",
-        "description": "El repositorio ya no tiene estas entradas. Confirme para eliminar sus plugins.",
-        "listLabel": "Plugins por eliminar",
-        "confirm": "Eliminar {count, plural, one {# plugin} other {# plugins}}",
-        "done": "Se eliminaron los plugins. Se inició una nueva sincronización.",
-        "failed": "No se pudieron eliminar los plugins."
+        "failedTitle": "Falló la última sincronización de {name}"
       },
       "defaultAccess": {
         "title": "Acceso predeterminado",

@@ -5681,9 +5681,10 @@ class Marketplace(Base):
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
-    provider_config: Mapped[dict[str, Any] | None] = mapped_column(
-        PGJSONB(), nullable=True
-    )
+    # GitHub source: owner/repo, plus '' for no folder or ref.
+    repository: Mapped[str | None] = mapped_column(String, nullable=True)
+    folder: Mapped[str] = mapped_column(String, nullable=False, server_default="")
+    ref: Mapped[str] = mapped_column(String, nullable=False, server_default="")
     login_user_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey(
@@ -5692,17 +5693,10 @@ class Marketplace(Base):
         nullable=True,
     )
     last_synced_revision: Mapped[str | None] = mapped_column(String(40), nullable=True)
-    last_synced_tree_sha: Mapped[str | None] = mapped_column(String(40), nullable=True)
     last_synced_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
-    sync_requested_at: Mapped[datetime.datetime | None] = mapped_column(
-        DateTime(timezone=True), nullable=True
-    )
-    pending_delete_revision: Mapped[str | None] = mapped_column(
-        String(40), nullable=True
-    )
     last_sync_result: Mapped[list[dict[str, Any]] | None] = mapped_column(
         PGJSONB(), nullable=True
     )
@@ -5711,8 +5705,25 @@ class Marketplace(Base):
         CheckConstraint(
             "(kind = 'user_uploads' AND owner_user_id IS NOT NULL) "
             "OR (kind = 'organization_library' AND owner_user_id IS NULL) "
-            "OR kind = 'github'",
+            "OR (kind = 'github' AND repository IS NOT NULL)",
             name="ck_plugin_marketplace_owner_by_kind",
+        ),
+        Index(
+            "uq_plugin_marketplace_personal_source",
+            "owner_user_id",
+            "repository",
+            "folder",
+            "ref",
+            unique=True,
+            postgresql_where=text("kind = 'github' AND owner_user_id IS NOT NULL"),
+        ),
+        Index(
+            "uq_plugin_marketplace_company_source",
+            "repository",
+            "folder",
+            "ref",
+            unique=True,
+            postgresql_where=text("kind = 'github' AND owner_user_id IS NULL"),
         ),
         Index(
             "uq_plugin_marketplace_organization_library",
@@ -5781,19 +5792,10 @@ class Plugin(Base):
         nullable=False,
     )
 
-    marketplace_entry_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
-
     marketplace: Mapped[Marketplace] = relationship("Marketplace")
 
     __table_args__ = (
         UniqueConstraint("marketplace_id", "name", name="uq_plugin_marketplace_name"),
-        Index(
-            "uq_plugin_marketplace_entry_key",
-            "marketplace_id",
-            "marketplace_entry_key",
-            unique=True,
-            postgresql_where=text("marketplace_entry_key IS NOT NULL"),
-        ),
         CheckConstraint(
             "published_version_id IS NOT NULL OR author_user_id IS NOT NULL",
             name="ck_private_plugin_has_owner",
@@ -5838,7 +5840,6 @@ class PluginVersion(Base):
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
-    source_tree_sha: Mapped[str | None] = mapped_column(String(40), nullable=True)
 
     __table_args__ = (
         UniqueConstraint(

@@ -35,7 +35,6 @@ can compute access for many users or many plugins.
 from collections.abc import Collection, Iterable
 from datetime import datetime
 from enum import IntEnum
-from typing import Any
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
@@ -894,12 +893,15 @@ class PluginAccess(BaseModel):
     marketplace_id: UUID
     marketplace_kind: MarketplaceKind
     marketplace_name: str
-    marketplace_provider_config: dict[str, Any] | None
-    synced: bool
+    marketplace_repository: str | None
     # The default of the plugin's marketplace.
     marketplace_default_policy: PluginInstallationPolicy
     # ``plugin_required_for_anyone``.
     required_for_anyone: bool
+
+    @property
+    def synced(self) -> bool:
+        return self.marketplace_kind == MarketplaceKind.GITHUB
 
     @property
     def group_shares(self) -> tuple[PluginGroupShare, ...]:
@@ -959,8 +961,7 @@ def load_plugin_access(
             Marketplace.id,
             Marketplace.kind,
             Marketplace.name,
-            Marketplace.provider_config,
-            Plugin.marketplace_entry_key.is_not(None),
+            Marketplace.repository,
         )
         .join(Marketplace, Marketplace.id == Plugin.marketplace_id)
         .join(current, current.id == Plugin.current_version_id)
@@ -1030,8 +1031,7 @@ def load_plugin_access(
             marketplace_id=row[17],
             marketplace_kind=row[18],
             marketplace_name=row[19],
-            marketplace_provider_config=row[20],
-            synced=bool(row[21]),
+            marketplace_repository=row[20],
             user_shares=tuple(user_shares.get(row[0], ())),
             group_rows=tuple(group_rows.get(row[0], ())),
         )

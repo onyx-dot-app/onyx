@@ -8,10 +8,7 @@ import type {
 } from "@/lib/marketplaces/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
-type MarketplacePostBody =
-  | MarketplaceSource
-  | MarketplaceCreateRequest
-  | { revision: string };
+type MarketplacePostBody = MarketplaceSource | MarketplaceCreateRequest;
 
 function post<T>(url: string, body?: MarketplacePostBody): Promise<T> {
   return errorHandlingFetchWith<T>(
@@ -42,15 +39,6 @@ export function syncMarketplace(
   marketplaceId: string
 ): Promise<MarketplaceDetail> {
   return post(`${SWR_KEYS.marketplace(marketplaceId)}/sync`);
-}
-
-export function confirmMarketplaceDeletes(
-  marketplaceId: string,
-  revision: string
-): Promise<MarketplaceDetail> {
-  return post(`${SWR_KEYS.marketplace(marketplaceId)}/confirm-deletes`, {
-    revision,
-  });
 }
 
 export function replaceMarketplaceLogin(

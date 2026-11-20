@@ -65,8 +65,7 @@ export interface MarketplaceSummary {
   last_synced_at: string | null;
   last_synced_revision: string | null;
   last_error: string | null;
-  sync_requested: boolean;
-  needs_confirmation: boolean;
+  syncing: boolean;
   created_at: string;
 }
 
@@ -76,19 +75,16 @@ export interface MarketplaceEntry {
   status: MarketplaceEntryStatus;
   reason: string | null;
   plugin_id: string | null;
-  plugin_name: string | null;
 }
 
-export interface MarketplacePendingDelete {
-  plugin_id: string;
-  entry_key: string;
+export interface MarketplacePlugin {
+  id: string;
   name: string;
 }
 
 export interface MarketplaceDetail extends MarketplaceSummary {
   entries: MarketplaceEntry[];
-  pending_delete_revision: string | null;
-  pending_deletes: MarketplacePendingDelete[];
+  plugins: MarketplacePlugin[];
 }
 
 export interface MarketplaceList {
@@ -109,6 +105,6 @@ export interface SkillMarketplace {
 
 export type MarketplaceSyncState =
   | "syncing"
-  | "needs_confirmation"
   | "failed"
+  | "not_synced"
   | "synced";

@@ -17166,8 +17166,8 @@
         "never": "Not synced yet",
         "state": {
           "syncing": "Syncing",
-          "needs_confirmation": "Confirm deletes",
           "failed": "Sync failed",
+          "not_synced": "Not synced",
           "synced": "Synced"
         }
       },
@@ -17190,18 +17190,7 @@
         "description": "The GitHub repositories that you get plugins from, with their source. Sync a marketplace to get the changes from GitHub."
       },
       "attention": {
-        "failedTitle": "The last sync of {name} failed",
-        "deletesTitle": "{name} waits for you to confirm deletes",
-        "deletesDescription": "The repository does not have some entries now. Onyx deletes their plugins only after you confirm.",
-        "review": "Review deletes"
-      },
-      "pendingDeletes": {
-        "title": "{count, plural, one {# plugin waits} other {# plugins wait}} for a delete",
-        "description": "The repository does not have these entries now. Confirm to delete their plugins.",
-        "listLabel": "Plugins to delete",
-        "confirm": "Delete {count, plural, one {# plugin} other {# plugins}}",
-        "done": "Deleted the plugins. A new sync started.",
-        "failed": "Could not delete the plugins."
+        "failedTitle": "The last sync of {name} failed"
       },
       "defaultAccess": {
         "title": "Default Access",

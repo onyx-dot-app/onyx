@@ -10,7 +10,7 @@ from onyx.db.enums import (
     SkillAccessLevel,
     SkillSharePermission,
 )
-from onyx.db.models import Plugin, User
+from onyx.db.models import Marketplace, Plugin, User
 from onyx.db.plugin_access import (
     PluginAccess,
     PluginGroupRowAccess,
@@ -60,8 +60,7 @@ class _Case:
                 else MarketplaceKind.USER_UPLOADS
             ),
             marketplace_name="Marketplace",
-            marketplace_provider_config=None,
-            synced=False,
+            marketplace_repository=None,
             required_for_anyone=False,
             current_version_id=self.skill.id,
             current_version_number=1,
@@ -91,6 +90,7 @@ def _skill(author: User, *, is_public: bool = False) -> _Case:
         name=f"skill-{uuid4().hex}",
         description="Description",
         author_user_id=author.id,
+        marketplace=Marketplace(kind=MarketplaceKind.USER_UPLOADS, name="My uploads"),
     )
     return _Case(skill=skill, published=is_public)
 

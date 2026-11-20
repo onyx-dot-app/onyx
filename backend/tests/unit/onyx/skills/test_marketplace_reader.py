@@ -252,7 +252,7 @@ def test_size_limit_blocks_the_entry_not_the_read() -> None:
     assert isinstance(entries["small"], ReadyPlugin)
 
 
-def test_plugin_root_folder_and_tree_sha() -> None:
+def test_plugin_root_folder() -> None:
     files = {
         f"market/{CLAUDE}": catalog(
             {"name": "tool", "source": "tool"},
@@ -260,11 +260,10 @@ def test_plugin_root_folder_and_tree_sha() -> None:
         ),
         "market/plugins/tool/skills/tool/SKILL.md": skill_md("tool"),
     }
-    result = read_marketplace(files, "market", {"market/plugins/tool": "f" * 40})
+    result = read_marketplace(files, "market")
     assert isinstance(result, CompleteMarketplace)
     entry = _ready(result, "tool")
     assert entry.path == "market/plugins/tool"
-    assert entry.tree_sha == "f" * 40
     assert isinstance(read_marketplace(files, None), FailedMarketplace)
 
 

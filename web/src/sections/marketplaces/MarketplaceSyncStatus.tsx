@@ -12,8 +12,8 @@ import type {
 
 const STATE_COLOR = {
   syncing: "pending",
-  needs_confirmation: "warning",
   failed: "error",
+  not_synced: "default",
   synced: "success",
 } as const satisfies Record<MarketplaceSyncState, StatusColor>;
 

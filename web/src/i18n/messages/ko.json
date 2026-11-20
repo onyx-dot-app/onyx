@@ -17166,8 +17166,8 @@
         "never": "아직 동기화되지 않음",
         "state": {
           "syncing": "동기화 중",
-          "needs_confirmation": "삭제 확인 필요",
           "failed": "동기화 실패",
+          "not_synced": "동기화 안 됨",
           "synced": "동기화됨"
         }
       },
@@ -17190,18 +17190,7 @@
         "description": "플러그인을 받는 GitHub 저장소와 소스입니다. 마켓플레이스를 동기화하면 GitHub의 변경 사항을 받습니다."
       },
       "attention": {
-        "failedTitle": "{name}의 마지막 동기화에 실패했습니다",
-        "deletesTitle": "{name}이(가) 삭제 확인을 기다리고 있습니다",
-        "deletesDescription": "저장소에서 일부 항목이 사라졌습니다. Onyx는 확인한 후에만 해당 플러그인을 삭제합니다.",
-        "review": "삭제 검토"
-      },
-      "pendingDeletes": {
-        "title": "{count, plural, one {플러그인 #개가} other {플러그인 #개가}} 삭제를 기다리고 있습니다",
-        "description": "저장소에서 이 항목들이 사라졌습니다. 확인하면 해당 플러그인을 삭제합니다.",
-        "listLabel": "삭제할 플러그인",
-        "confirm": "{count, plural, one {플러그인 #개} other {플러그인 #개}} 삭제",
-        "done": "플러그인을 삭제했습니다. 새 동기화를 시작했습니다.",
-        "failed": "플러그인을 삭제할 수 없습니다."
+        "failedTitle": "{name}의 마지막 동기화에 실패했습니다"
       },
       "defaultAccess": {
         "title": "기본 액세스",

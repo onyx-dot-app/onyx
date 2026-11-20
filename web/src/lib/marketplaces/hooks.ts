@@ -21,7 +21,6 @@ function syncKey(marketplace: MarketplaceSummary): string {
     marketplace.last_synced_at,
     marketplace.last_synced_revision,
     marketplace.plugin_count,
-    marketplace.needs_confirmation,
   ].join("|");
 }
 

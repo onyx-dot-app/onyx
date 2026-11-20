@@ -17166,8 +17166,8 @@
         "never": "Ainda não sincronizado",
         "state": {
           "syncing": "Sincronizando",
-          "needs_confirmation": "Confirmar exclusões",
           "failed": "Falha na sincronização",
+          "not_synced": "Não sincronizado",
           "synced": "Sincronizado"
         }
       },
@@ -17190,18 +17190,7 @@
         "description": "Os repositórios do GitHub de onde você obtém plugins, com a fonte de cada um. Sincronize um marketplace para obter as alterações do GitHub."
       },
       "attention": {
-        "failedTitle": "A última sincronização de {name} falhou",
-        "deletesTitle": "{name} aguarda sua confirmação de exclusões",
-        "deletesDescription": "O repositório não tem mais algumas entradas. O Onyx exclui os plugins delas somente depois que você confirmar.",
-        "review": "Revisar exclusões"
-      },
-      "pendingDeletes": {
-        "title": "{count, plural, one {# plugin aguarda} other {# plugins aguardam}} uma exclusão",
-        "description": "O repositório não tem mais estas entradas. Confirme para excluir os plugins delas.",
-        "listLabel": "Plugins a excluir",
-        "confirm": "Excluir {count, plural, one {# plugin} other {# plugins}}",
-        "done": "Plugins excluídos. Uma nova sincronização foi iniciada.",
-        "failed": "Não foi possível excluir os plugins."
+        "failedTitle": "A última sincronização de {name} falhou"
       },
       "defaultAccess": {
         "title": "Acesso padrão",

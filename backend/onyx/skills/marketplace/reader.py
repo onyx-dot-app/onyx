@@ -223,7 +223,6 @@ def build_entry_bundle(
     root: str,
     entry: Mapping[str, JsonValue],
     entry_key: str,
-    tree_sha: str | None = None,
 ) -> ReadyPlugin | BlockedPlugin:
     if len(entry_key) > SKILL_NAME_MAX_LENGTH or not SKILL_NAME_PATTERN.fullmatch(
         entry_key
@@ -255,7 +254,6 @@ def build_entry_bundle(
         path=root,
         bundle=bundle,
         file_manifest=compute_bundle_manifest(bundle.content),
-        tree_sha=tree_sha,
     )
 
 
@@ -313,7 +311,6 @@ def _read_entry(
     plugin_root: str,
     entry_key: str,
     entry: dict[str, JsonValue],
-    tree_shas: Mapping[str, str] | None,
 ) -> MarketplaceEntry:
     source = entry.get("source")
     if isinstance(source, dict):
@@ -338,13 +335,7 @@ def _read_entry(
     if source.strip() not in {"", ".", "./"} and "/" not in source:
         relative = _join(plugin_root, relative)
     root = _join(base, relative)
-    return build_entry_bundle(
-        files,
-        root,
-        entry,
-        entry_key,
-        tree_shas.get(root) if tree_shas is not None else None,
-    )
+    return build_entry_bundle(files, root, entry, entry_key)
 
 
 def _plugin_entries(manifest: Mapping[str, JsonValue]) -> list[dict[str, JsonValue]]:
@@ -373,7 +364,6 @@ def _plugin_entries(manifest: Mapping[str, JsonValue]) -> list[dict[str, JsonVal
 def read_marketplace(
     files: Mapping[str, bytes],
     folder: str | None,
-    tree_shas: Mapping[str, str] | None = None,
 ) -> CompleteMarketplace | FailedMarketplace:
     base = folder or ""
     manifest_path = next(
@@ -405,7 +395,7 @@ def read_marketplace(
         budget = BundleBudget()
         for entry in _plugin_entries(manifest):
             key = str(entry["name"])
-            result = _read_entry(files, base, plugin_root, key, entry, tree_shas)
+            result = _read_entry(files, base, plugin_root, key, entry)
             if isinstance(result, ReadyPlugin):
                 budget.add(result)
             entries.append(result)

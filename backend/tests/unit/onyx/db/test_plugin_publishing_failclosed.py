@@ -7,6 +7,7 @@ from uuid import uuid4
 import pytest
 
 import onyx.db.plugin as plugin_db
+from onyx.db.enums import MarketplaceKind
 from onyx.server.settings.models import Settings
 
 
@@ -28,7 +29,7 @@ def test_publish_fails_closed_when_settings_read_fails(
 
     with pytest.raises(RuntimeError):
         plugin_db.publish_or_request_review__no_commit(
-            MagicMock(marketplace_entry_key=None),
+            MagicMock(marketplace=MagicMock(kind=MarketplaceKind.USER_UPLOADS)),
             uuid4(),
             MagicMock(),
             "raise",

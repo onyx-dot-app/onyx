@@ -48,7 +48,7 @@ test("a failed sync shows its reason and offers Sync now", async () => {
     "/api/marketplaces": {
       marketplaces: [summaryFixture({ last_error: error })],
     },
-    [`POST ${DETAIL_URL}/sync`]: detailFixture({ sync_requested: true }),
+    [`POST ${DETAIL_URL}/sync`]: detailFixture({ syncing: true }),
   });
   render(<MarketplacesTable />);
 
@@ -68,59 +68,46 @@ test("a failed sync shows its reason and offers Sync now", async () => {
   );
 });
 
-test("held deletes ask the user to review and confirm them", async () => {
-  const revision = "c".repeat(40);
-  const fetchMock = mockFetch({
-    "/api/marketplaces": {
-      marketplaces: [summaryFixture({ needs_confirmation: true })],
-    },
-    [DETAIL_URL]: detailFixture({
-      needs_confirmation: true,
-      pending_delete_revision: revision,
-      pending_deletes: [
-        {
-          plugin_id: "33333333-3333-4333-8333-333333333333",
-          entry_key: "review-kit",
-          name: "review-kit",
-        },
-      ],
-    }),
-    [`POST ${DETAIL_URL}/confirm-deletes`]: detailFixture(),
+test("a running sync disables Sync now", async () => {
+  mockFetch({
+    "/api/marketplaces": { marketplaces: [summaryFixture({ syncing: true })] },
   });
   render(<MarketplacesTable />);
+  const actor = user();
 
-  await user().click(
-    await screen.findByRole("button", { name: "Review deletes" })
+  expect(await screen.findByText("Syncing")).toBeInTheDocument();
+  await actor.click(
+    screen.getByRole("button", { name: "Actions for acme/plugins" })
   );
-  const dialog = await screen.findByRole("dialog");
-  const list = await within(dialog).findByRole("list", {
-    name: "Plugins to delete",
+  expect(
+    await screen.findByRole("menuitem", { name: /Sync now/ })
+  ).toHaveAttribute("aria-disabled", "true");
+});
+
+test("a marketplace that never synced offers Sync now", async () => {
+  mockFetch({
+    "/api/marketplaces": {
+      marketplaces: [
+        summaryFixture({ last_synced_at: null, last_synced_revision: null }),
+      ],
+    },
   });
-  expect(within(list).getByText("review-kit")).toBeInTheDocument();
+  render(<MarketplacesTable />);
+  const actor = user();
 
-  await user().click(
-    within(dialog).getByRole("button", { name: "Delete 1 plugin" })
+  expect(await screen.findByText("Not synced")).toBeInTheDocument();
+  await actor.click(
+    screen.getByRole("button", { name: "Actions for acme/plugins" })
   );
-  await waitFor(() =>
-    expect(
-      requestBody(fetchMock, "POST", `${DETAIL_URL}/confirm-deletes`)
-    ).toEqual({ revision })
-  );
+  expect(
+    await screen.findByRole("menuitem", { name: /Sync now/ })
+  ).not.toHaveAttribute("aria-disabled", "true");
 });
 
 test("Remove names the plugins that it deletes before it asks to confirm", async () => {
   const fetchMock = mockFetch({
     "/api/marketplaces": { marketplaces: [summaryFixture()] },
-    [DETAIL_URL]: detailFixture({
-      pending_delete_revision: "c".repeat(40),
-      pending_deletes: [
-        {
-          plugin_id: "55555555-5555-4555-8555-555555555555",
-          entry_key: "old-kit",
-          name: "old-kit",
-        },
-      ],
-    }),
+    [DETAIL_URL]: detailFixture(),
     [`DELETE ${DETAIL_URL}`]: new Response("null"),
   });
   render(<MarketplacesTable />);
@@ -133,7 +120,6 @@ test("Remove names the plugins that it deletes before it asks to confirm", async
   const list = await screen.findByRole("list", { name: "Plugins to delete" });
   expect(within(list).getByText("review-kit")).toBeInTheDocument();
   expect(within(list).getByText("plan-kit")).toBeInTheDocument();
-  expect(within(list).getByText("old-kit")).toBeInTheDocument();
   expect(within(list).queryByText("npm-kit")).not.toBeInTheDocument();
 
   await user().click(screen.getByRole("button", { name: "Remove" }));

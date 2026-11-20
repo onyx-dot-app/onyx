@@ -72,9 +72,7 @@ def make_marketplace(
 ) -> Marketplace:
     marketplace = create_github_marketplace__no_commit(
         name=f"{OWNER}/{REPO}",
-        provider_config=GitHubMarketplaceConfig(
-            owner=OWNER, repo=REPO, folder=folder, ref=ref
-        ).model_dump(mode="json"),
+        config=GitHubMarketplaceConfig(owner=OWNER, repo=REPO, folder=folder, ref=ref),
         owner_user_id=owner.id if owner is not None else None,
         login_user_id=login.id,
         default_installation_policy=default,
@@ -88,7 +86,7 @@ def make_marketplace(
 def synced_plugins(db_session: Session, marketplace_id: UUID) -> dict[str, Plugin]:
     db_session.expire_all()
     return {
-        plugin.marketplace_entry_key or "": plugin
+        plugin.name: plugin
         for plugin in db_session.scalars(
             select(Plugin).where(Plugin.marketplace_id == marketplace_id)
         )

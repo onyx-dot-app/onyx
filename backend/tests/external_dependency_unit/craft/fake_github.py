@@ -23,37 +23,6 @@ class FakeRepository:
         self.private = private
         self.refs: dict[str, str] = {}
         self.commits: dict[str, dict[str, bytes]] = {}
-        self.truncated_tree = False
-
-    def tree(self, sha: str) -> dict[str, object]:
-        files = self.commits[sha]
-        folders: dict[str, list[str]] = {}
-        for path in files:
-            parts = path.split("/")
-            for depth in range(1, len(parts)):
-                folders.setdefault("/".join(parts[:depth]), []).append(path)
-
-        def folder_sha(paths: list[str]) -> str:
-            return _sha(
-                *(
-                    part
-                    for path in sorted(paths)
-                    for part in (path.encode(), files[path])
-                )
-            )
-
-        return {
-            "sha": folder_sha(list(files)),
-            "truncated": self.truncated_tree,
-            "tree": [
-                {"path": folder, "type": "tree", "sha": folder_sha(paths)}
-                for folder, paths in sorted(folders.items())
-            ]
-            + [
-                {"path": path, "type": "blob", "sha": _sha(content)}
-                for path, content in sorted(files.items())
-            ],
-        }
 
     def tarball(self, owner: str, repo: str, sha: str) -> bytes:
         out = io.BytesIO()
@@ -142,11 +111,6 @@ class FakeGitHub:
             if sha is None:
                 return self._response(404)
             return self._response(200, json.dumps({"sha": sha}).encode())
-        if kind == "git" and parts[4] == "trees":
-            sha = parts[5]
-            if sha not in repository.commits:
-                return self._response(404)
-            return self._response(200, json.dumps(repository.tree(sha)).encode())
         if kind == "tarball":
             sha = parts[4]
             return self._response(

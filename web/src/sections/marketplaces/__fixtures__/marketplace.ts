@@ -22,8 +22,7 @@ export function summaryFixture(
     last_synced_at: "2026-11-01T10:00:00Z",
     last_synced_revision: "a".repeat(40),
     last_error: null,
-    sync_requested: false,
-    needs_confirmation: false,
+    syncing: false,
     created_at: "2026-10-01T10:00:00Z",
     ...over,
   };
@@ -41,7 +40,6 @@ export function detailFixture(
         status: "ok",
         reason: null,
         plugin_id: "33333333-3333-4333-8333-333333333333",
-        plugin_name: "review-kit",
       },
       {
         key: "plan-kit",
@@ -49,7 +47,6 @@ export function detailFixture(
         status: "ok",
         reason: null,
         plugin_id: "44444444-4444-4444-8444-444444444444",
-        plugin_name: "plan-kit",
       },
       {
         key: "npm-kit",
@@ -57,11 +54,12 @@ export function detailFixture(
         status: "not_supported",
         reason: "Not supported in Onyx",
         plugin_id: null,
-        plugin_name: null,
       },
     ],
-    pending_delete_revision: null,
-    pending_deletes: [],
+    plugins: [
+      { id: "44444444-4444-4444-8444-444444444444", name: "plan-kit" },
+      { id: "33333333-3333-4333-8333-333333333333", name: "review-kit" },
+    ],
     ...over,
   };
 }

@@ -15,7 +15,6 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.skill import marketplace_api as api
 from onyx.server.features.skill.marketplace_models import (
-    MarketplaceConfirmDeletesRequest,
     MarketplaceCreateRequest,
     MarketplaceDefaultAccessRequest,
     MarketplaceScope,
@@ -212,7 +211,7 @@ def test_scope_and_owner_rules(
     assert changed.default_installation_policy == PluginInstallationPolicy.NOT_AVAILABLE
 
 
-def test_sync_confirm_deletes_replace_login_and_delete(
+def test_sync_replace_login_and_delete(
     db_session: Session,
     manager: User,
     fake_github: FakeGitHub,
@@ -228,32 +227,14 @@ def test_sync_confirm_deletes_replace_login_and_delete(
     }
     assert set(plugin_ids) == set(names)
 
-    revision = fake_github.push(OWNER, REPO, plugin_files("tool-0"))
-    detail = api.sync_marketplace_now(
+    fake_github.push(OWNER, REPO, plugin_files("tool-0"))
+    api.sync_marketplace_now(
         marketplace_id, BackgroundTasks(), _fresh(db_session, manager), db_session
     )
-    assert detail.needs_confirmation
-    assert detail.pending_delete_revision == revision
-    assert sorted(item.entry_key for item in detail.pending_deletes) == names[1:]
-
-    with pytest.raises(OnyxError) as exc:
-        api.confirm_marketplace_deletes(
-            marketplace_id,
-            MarketplaceConfirmDeletesRequest(revision="f" * 40),
-            BackgroundTasks(),
-            _fresh(db_session, manager),
-            db_session,
-        )
-    assert exc.value.error_code == OnyxErrorCode.CONFLICT
-    db_session.rollback()
-    detail = api.confirm_marketplace_deletes(
-        marketplace_id,
-        MarketplaceConfirmDeletesRequest(revision=revision),
-        BackgroundTasks(),
-        _fresh(db_session, manager),
-        db_session,
+    detail = api.get_marketplace(
+        marketplace_id, _fresh(db_session, manager), db_session
     )
-    assert not detail.needs_confirmation
+    assert [plugin.name for plugin in detail.plugins] == ["tool-0"]
     assert set(synced_plugins(db_session, marketplace_id)) == {"tool-0"}
 
     with pytest.raises(OnyxError):

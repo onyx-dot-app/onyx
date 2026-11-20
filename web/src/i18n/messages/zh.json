@@ -17166,8 +17166,8 @@
         "never": "尚未同步",
         "state": {
           "syncing": "同步中",
-          "needs_confirmation": "确认删除",
           "failed": "同步失败",
+          "not_synced": "未同步",
           "synced": "已同步"
         }
       },
@@ -17190,18 +17190,7 @@
         "description": "你获取插件的 GitHub 仓库及其来源。同步市场可获取 GitHub 中的更改。"
       },
       "attention": {
-        "failedTitle": "{name} 上次同步失败",
-        "deletesTitle": "{name} 正在等你确认删除",
-        "deletesDescription": "仓库现在没有某些条目。只有在你确认后，Onyx 才会删除它们的插件。",
-        "review": "查看删除项"
-      },
-      "pendingDeletes": {
-        "title": "{count, plural, one {# 个插件正在等待} other {# 个插件正在等待}}删除",
-        "description": "仓库现在没有这些条目。确认后将删除它们的插件。",
-        "listLabel": "要删除的插件",
-        "confirm": "删除 {count, plural, one {# 个插件} other {# 个插件}}",
-        "done": "已删除插件。已开始新的同步。",
-        "failed": "无法删除插件。"
+        "failedTitle": "{name} 上次同步失败"
       },
       "defaultAccess": {
         "title": "默认访问权限",

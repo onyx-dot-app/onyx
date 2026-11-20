@@ -9,16 +9,12 @@ from onyx.auth.permissions import has_global_permission, require_permission
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission, PluginInstallationPolicy
 from onyx.db.marketplace import (
-    confirm_marketplace_deletes__no_commit,
     create_github_marketplace__no_commit,
     delete_github_marketplace__no_commit,
-    find_github_marketplace,
     get_github_marketplace,
     list_github_marketplaces,
     list_marketplace_plugins,
-    pending_delete_plugins,
     replace_marketplace_login__no_commit,
-    request_marketplace_sync__no_commit,
 )
 from onyx.db.models import Marketplace, User
 from onyx.db.plugin import set_marketplace_default__no_commit
@@ -29,13 +25,12 @@ from onyx.file_store.staging import delete_files_best_effort
 from onyx.integrations.github_auth import github_authorization_for
 from onyx.integrations.plugin_needs import integrations_for_needs, need_views
 from onyx.server.features.skill.marketplace_models import (
-    MarketplaceConfirmDeletesRequest,
     MarketplaceCreateRequest,
     MarketplaceDefaultAccessRequest,
     MarketplaceDetail,
     MarketplaceEntryView,
     MarketplaceList,
-    MarketplacePendingDelete,
+    MarketplacePluginView,
     MarketplacePreviewEntry,
     MarketplacePreviewResponse,
     MarketplacePreviewSkill,
@@ -51,10 +46,9 @@ from onyx.skills.marketplace.provider import (
     marketplace_config,
 )
 from onyx.skills.marketplace.sync import (
-    SYNC_FAILED_ERROR,
     enqueue_marketplace_sync,
+    marketplace_syncing,
     read_marketplace_repository,
-    sync_request_is_live,
 )
 from onyx.skills.push import push_skills_and_commit
 
@@ -100,12 +94,6 @@ def _summary(
         if marketplace.login_user_id is not None
         else None
     )
-    sync_requested = sync_request_is_live(marketplace.sync_requested_at)
-    first_sync_died = (
-        marketplace.last_synced_at is None
-        and not sync_requested
-        and not sync_request_is_live(marketplace.created_at)
-    )
     return MarketplaceSummary(
         id=marketplace.id,
         name=marketplace.name,
@@ -126,20 +114,15 @@ def _summary(
         plugin_count=plugin_count,
         last_synced_at=marketplace.last_synced_at,
         last_synced_revision=marketplace.last_synced_revision,
-        last_error=(
-            SYNC_FAILED_ERROR
-            if first_sync_died and marketplace.last_error is None
-            else marketplace.last_error
-        ),
-        sync_requested=sync_requested,
-        needs_confirmation=marketplace.pending_delete_revision is not None,
+        last_error=marketplace.last_error,
+        syncing=marketplace_syncing(marketplace.id),
         created_at=marketplace.created_at,
     )
 
 
 def _detail(marketplace: Marketplace, db_session: Session) -> MarketplaceDetail:
     plugins = {
-        plugin.marketplace_entry_key: plugin
+        plugin.name: plugin
         for plugin in list_marketplace_plugins(marketplace.id, db_session)
     }
     entries = [
@@ -155,16 +138,12 @@ def _detail(marketplace: Marketplace, db_session: Session) -> MarketplaceDetail:
                 status=entry.status,
                 reason=entry.reason,
                 plugin_id=plugins[entry.key].id if entry.key in plugins else None,
-                plugin_name=plugins[entry.key].name if entry.key in plugins else None,
             )
             for entry in entries
         ],
-        pending_delete_revision=marketplace.pending_delete_revision,
-        pending_deletes=[
-            MarketplacePendingDelete(
-                plugin_id=plugin.plugin_id, entry_key=plugin.entry_key, name=plugin.name
-            )
-            for plugin in pending_delete_plugins(marketplace, db_session)
+        plugins=[
+            MarketplacePluginView(id=plugin.id, name=plugin.name)
+            for plugin in sorted(plugins.values(), key=lambda plugin: plugin.name)
         ],
     )
 
@@ -172,9 +151,9 @@ def _detail(marketplace: Marketplace, db_session: Session) -> MarketplaceDetail:
 def _request_sync(
     marketplace_id: UUID, background_tasks: BackgroundTasks, db_session: Session
 ) -> None:
-    request_marketplace_sync__no_commit(marketplace_id, db_session)
     db_session.commit()
-    enqueue_marketplace_sync(marketplace_id, background_tasks)
+    if not marketplace_syncing(marketplace_id):
+        enqueue_marketplace_sync(marketplace_id, background_tasks)
 
 
 @router.post("/preview")
@@ -255,17 +234,10 @@ def create_marketplace(
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT, "A marketplace default cannot be Required."
         )
-    owner_user_id = user.id if request.scope == MarketplaceScope.PERSONAL else None
-    provider_config = config.model_dump(mode="json")
-    if find_github_marketplace(owner_user_id, provider_config, db_session) is not None:
-        raise OnyxError(
-            OnyxErrorCode.CONFLICT,
-            "This marketplace is already added. Sync it to get the newest plugins.",
-        )
     marketplace = create_github_marketplace__no_commit(
         name=config.repository,
-        provider_config=provider_config,
-        owner_user_id=owner_user_id,
+        config=config,
+        owner_user_id=user.id if request.scope == MarketplaceScope.PERSONAL else None,
         login_user_id=user.id,
         default_installation_policy=policy or PluginInstallationPolicy.AVAILABLE,
         db_session=db_session,
@@ -312,26 +284,6 @@ def sync_marketplace_now(
 ) -> MarketplaceDetail:
     _authorized_marketplace(marketplace_id, user, db_session)
     _request_sync(marketplace_id, background_tasks, db_session)
-    return _detail(
-        _authorized_marketplace(marketplace_id, user, db_session), db_session
-    )
-
-
-@router.post("/{marketplace_id}/confirm-deletes")
-def confirm_marketplace_deletes(
-    marketplace_id: UUID,
-    request: MarketplaceConfirmDeletesRequest,
-    background_tasks: BackgroundTasks,
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
-    db_session: Session = Depends(get_session),
-) -> MarketplaceDetail:
-    _authorized_marketplace(marketplace_id, user, db_session)
-    affected, file_ids = confirm_marketplace_deletes__no_commit(
-        marketplace_id, request.revision, db_session
-    )
-    _request_sync(marketplace_id, background_tasks, db_session)
-    push_skills_and_commit(affected, db_session)
-    delete_files_best_effort(file_ids, _MARKETPLACE_CLEANUP)
     return _detail(
         _authorized_marketplace(marketplace_id, user, db_session), db_session
     )

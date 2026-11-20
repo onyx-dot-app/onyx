@@ -200,7 +200,7 @@ SYNCED_PLUGIN_LOCKED = "Change this plugin in GitHub."
 
 
 def is_synced(plugin: Plugin) -> bool:
-    return plugin.marketplace_entry_key is not None
+    return plugin.marketplace.kind == MarketplaceKind.GITHUB
 
 
 def refuse_if_synced(plugin: Plugin) -> None:
@@ -271,7 +271,6 @@ def _add_version_rows(
         ),
         created_by_user_id=created_by.id if created_by is not None else None,
         created_by_email=created_by.email if created_by is not None else None,
-        source_tree_sha=content.source_tree_sha,
     )
     db_session.add(version)
     db_session.flush()
@@ -628,7 +627,7 @@ def create_plugin__no_commit(
 
 def create_synced_plugin__no_commit(
     marketplace: Marketplace,
-    entry_key: str,
+    name: str,
     content: PluginVersionContent,
     created_by: User | None,
     db_session: Session,
@@ -639,13 +638,12 @@ def create_synced_plugin__no_commit(
     version_id = uuid4()
     plugin = Plugin(
         id=plugin_id,
-        name=free_plugin_name(marketplace.id, content.manifest.name, db_session),
+        name=name,
         description=version_description(content) or "",
         marketplace_id=marketplace.id,
         author_user_id=marketplace.owner_user_id,
         current_version_id=version_id,
         published_version_id=version_id if marketplace.owner_user_id is None else None,
-        marketplace_entry_key=entry_key,
     )
     db_session.add(plugin)
     db_session.flush()

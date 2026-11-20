@@ -82,7 +82,6 @@ class ReadyPlugin(BaseModel):
     path: str
     bundle: PluginBundle
     file_manifest: list[PluginFileEntry]
-    tree_sha: str | None
 
 
 class BlockedPlugin(BaseModel):
@@ -129,14 +128,6 @@ class FailedMarketplace(BaseModel):
     reason: str
 
 
-class MarketplaceArchive(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    revision: str
-    archive_bytes: bytes
-    tree_shas: dict[str, str] | None
-
-
 class MarketplaceEntryStatus(str, Enum):
     OK = "ok"
     BLOCKED = "blocked"
@@ -154,7 +145,6 @@ class MarketplaceEntryResult(BaseModel):
 
 class MarketplaceSyncStatus(str, Enum):
     APPLIED = "applied"
-    NEEDS_CONFIRMATION = "needs_confirmation"
     FAILED = "failed"
 
 
@@ -162,7 +152,6 @@ class CurrentSyncedPlugin(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     plugin_id: UUID
-    entry_key: str
     name: str
     file_manifest: list[PluginFileEntry] | None
 
@@ -174,7 +163,6 @@ class SyncPlan(BaseModel):
     add_version: dict[str, UUID]
     delete_plugin_ids: list[UUID]
     results: list[MarketplaceEntryResult]
-    needs_confirmation: bool
 
 
 class MarketplaceSyncResult(BaseModel):
@@ -195,7 +183,6 @@ class MarketplaceRead(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     revision: str
-    tree_shas: dict[str, str] | None
     name: str | None
     failure: str | None
     entries: list[ReadyPlugin | BlockedPlugin | UnsupportedPlugin]

@@ -17166,8 +17166,8 @@
         "never": "Noch nicht synchronisiert",
         "state": {
           "syncing": "Wird synchronisiert",
-          "needs_confirmation": "Löschungen bestätigen",
           "failed": "Synchronisierung fehlgeschlagen",
+          "not_synced": "Nicht synchronisiert",
           "synced": "Synchronisiert"
         }
       },
@@ -17190,18 +17190,7 @@
         "description": "Die GitHub-Repositorys, aus denen Sie Plugins erhalten, mit ihrer Quelle. Synchronisieren Sie ein Marketplace, um die Änderungen aus GitHub zu übernehmen."
       },
       "attention": {
-        "failedTitle": "Die letzte Synchronisierung von {name} ist fehlgeschlagen",
-        "deletesTitle": "{name} wartet auf Ihre Bestätigung von Löschungen",
-        "deletesDescription": "Das Repository enthält einige Einträge nicht mehr. Onyx löscht deren Plugins erst nach Ihrer Bestätigung.",
-        "review": "Löschungen prüfen"
-      },
-      "pendingDeletes": {
-        "title": "{count, plural, one {# Plugin wartet} other {# Plugins warten}} auf eine Löschung",
-        "description": "Das Repository enthält diese Einträge nicht mehr. Bestätigen Sie, um deren Plugins zu löschen.",
-        "listLabel": "Zu löschende Plugins",
-        "confirm": "{count, plural, one {# Plugin} other {# Plugins}} löschen",
-        "done": "Die Plugins wurden gelöscht. Eine neue Synchronisierung wurde gestartet.",
-        "failed": "Die Plugins konnten nicht gelöscht werden."
+        "failedTitle": "Die letzte Synchronisierung von {name} ist fehlgeschlagen"
       },
       "defaultAccess": {
         "title": "Standardzugriff",

@@ -6,8 +6,6 @@ import pytest
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from onyx.db import marketplace as marketplace_db
-from onyx.db.marketplace import confirm_marketplace_deletes__no_commit
 from onyx.db.models import PluginVersion, User, UserIntegrationPreference
 from onyx.db.skill import list_chat_skills
 from onyx.skills.marketplace import sync
@@ -95,7 +93,6 @@ def test_personal_sync_creates_versions_and_deletes(
     version = db_session.get(PluginVersion, after["alpha"].current_version_id)
     assert version is not None
     assert version.created_by_user_id == owner.id
-    assert version.source_tree_sha is not None
 
 
 def test_blocked_entry_keeps_its_plugin(
@@ -163,7 +160,7 @@ def test_failed_read_changes_nothing(
     assert set(synced_plugins(db_session, marketplace.id)) == {"alpha"}
 
 
-def test_delete_guard_waits_for_confirmation(
+def test_sync_deletes_every_removed_entry(
     db_session: Session,
     users: tuple[User, User, User],
     fake_github: FakeGitHub,
@@ -171,28 +168,45 @@ def test_delete_guard_waits_for_confirmation(
     marketplace_ids: list[Any],
 ) -> None:
     owner = users[0]
-    names = [f"tool-{index}" for index in range(8)]
-    fake_github.push(OWNER, REPO, plugin_files(*names))
+    fake_github.push(
+        OWNER, REPO, plugin_files(*[f"tool-{index}" for index in range(8)])
+    )
     marketplace = make_marketplace(
         db_session, marketplace_ids, login=owner, owner=owner
     )
     sync.sync_marketplace(marketplace.id)
 
-    revision = fake_github.push(OWNER, REPO, plugin_files("tool-0", "new-tool"))
-    result = sync.sync_marketplace(marketplace.id)
-    assert result.status == MarketplaceSyncStatus.NEEDS_CONFIRMATION
-    stored = reload(db_session, marketplace)
-    assert stored.pending_delete_revision == revision
-    assert len(synced_plugins(db_session, marketplace.id)) == 8
-    pending = marketplace_db.pending_delete_plugins(stored, db_session)
-    assert sorted(plugin.entry_key for plugin in pending) == names[1:]
-
-    confirm_marketplace_deletes__no_commit(marketplace.id, revision, db_session)
-    db_session.commit()
-    assert set(synced_plugins(db_session, marketplace.id)) == {"tool-0"}
+    fake_github.push(OWNER, REPO, plugin_files("tool-0", "new-tool"))
     result = sync.sync_marketplace(marketplace.id)
     assert result.status == MarketplaceSyncStatus.APPLIED
+    assert len(result.deleted) == 7
     assert set(synced_plugins(db_session, marketplace.id)) == {"tool-0", "new-tool"}
+
+
+def test_the_entry_name_names_the_plugin(
+    db_session: Session,
+    users: tuple[User, User, User],
+    fake_github: FakeGitHub,
+    connections: Connections,  # noqa: ARG001
+    marketplace_ids: list[Any],
+) -> None:
+    owner = users[0]
+    files = plugin_files("alpha")
+    files["plugins/alpha/.claude-plugin/plugin.json"] = json.dumps(
+        {"name": "other-name"}
+    ).encode()
+    fake_github.push(OWNER, REPO, files)
+    marketplace = make_marketplace(
+        db_session, marketplace_ids, login=owner, owner=owner
+    )
+    sync.sync_marketplace(marketplace.id)
+    plugin_id = synced_plugins(db_session, marketplace.id)["alpha"].id
+
+    files["plugins/alpha/skills/alpha/SKILL.md"] += b"More steps.\n"
+    fake_github.push(OWNER, REPO, files)
+    result = sync.sync_marketplace(marketplace.id)
+    assert result.versioned == [plugin_id]
+    assert set(synced_plugins(db_session, marketplace.id)) == {"alpha"}
 
 
 def test_failed_upload_leaves_no_rows_and_no_files(
@@ -259,28 +273,6 @@ def test_failed_commit_leaves_no_rows_and_no_files(
     assert len(staged_file_ids) == 2
     assert existing_files(db_session, staged_file_ids) == set()
     assert reload(db_session, marketplace).last_synced_revision is None
-
-
-def test_truncated_tree_adds_no_extra_version(
-    db_session: Session,
-    users: tuple[User, User, User],
-    fake_github: FakeGitHub,
-    connections: Connections,  # noqa: ARG001
-    marketplace_ids: list[Any],
-) -> None:
-    owner = users[0]
-    fake_github.push(OWNER, REPO, plugin_files("alpha"))
-    marketplace = make_marketplace(
-        db_session, marketplace_ids, login=owner, owner=owner
-    )
-    sync.sync_marketplace(marketplace.id)
-    plugin = synced_plugins(db_session, marketplace.id)["alpha"]
-
-    fake_github.repositories[(OWNER, REPO)].truncated_tree = True
-    fake_github.push(OWNER, REPO, plugin_files("alpha") | {"other.txt": b"x"})
-    sync.sync_marketplace(marketplace.id)
-    assert _versions(db_session, plugin.id) == [1]
-    assert reload(db_session, marketplace).last_synced_tree_sha is None
 
 
 def test_remote_entries_and_private_repository(

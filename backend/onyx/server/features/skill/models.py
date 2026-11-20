@@ -20,7 +20,6 @@ from onyx.db.utils import UNSET
 from onyx.integrations.models import NeedCounts, PluginNeedView
 from onyx.server.models import MinimalUserSnapshot
 from onyx.skills.built_in import BuiltInSkillDefinition
-from onyx.skills.marketplace.models import GitHubMarketplaceConfig
 from onyx.skills.models import (
     GITHUB_SKILL_MAX_COUNT,
     PluginManifest,
@@ -216,13 +215,7 @@ class SkillResponse(BaseModel):
                 id=access.marketplace_id,
                 name=access.marketplace_name,
                 kind=access.marketplace_kind,
-                repository=(
-                    GitHubMarketplaceConfig.model_validate(
-                        access.marketplace_provider_config
-                    ).repository
-                    if access.marketplace_provider_config is not None
-                    else None
-                ),
+                repository=access.marketplace_repository,
             ),
             content_locked=access.synced,
         )

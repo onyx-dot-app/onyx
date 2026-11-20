@@ -19,10 +19,9 @@ export function isMarketplaceDefaultPolicy(
 export function marketplaceSyncState(
   marketplace: MarketplaceSummary
 ): MarketplaceSyncState {
-  if (marketplace.sync_requested) return "syncing";
-  if (marketplace.needs_confirmation) return "needs_confirmation";
+  if (marketplace.syncing) return "syncing";
   if (marketplace.last_error) return "failed";
-  if (marketplace.last_synced_at === null) return "syncing";
+  if (marketplace.last_synced_at === null) return "not_synced";
   return "synced";
 }
 

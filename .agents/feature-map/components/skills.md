@@ -46,8 +46,8 @@
   Manage marketplaces (`/app/customize/plugins/marketplaces`,
   `sections/marketplaces/MarketplacesPage.tsx`). The admin skills page
   (`views/SkillsPage.tsx`) shows the same table
-  (`sections/marketplaces/MarketplacesTable.tsx`): failed syncs and held
-  deletes above it, a row menu (Sync now, Default Access, Replace login,
+  (`sections/marketplaces/MarketplacesTable.tsx`): failed syncs above it,
+  a row menu (Sync now, Default Access, Replace login,
   Remove, which names the plugins it deletes) and a detail modal. The plugin
   page shows "Synced from owner/repo". For `content_locked` the web offers no
   content change: no Edit on the skill page, no restore or publish on the
@@ -914,9 +914,10 @@ the app from the same rule
     the per-user read then runs for those users only.
 28. `github-marketplaces` **A GitHub marketplace sync writes one read or
     nothing.** A `plugin_marketplace` row of kind `github` keeps its
-    repository in `provider_config`
-    (`skills/marketplace/models.py:GitHubMarketplaceConfig`), its login user
-    and its last sync. Skill responses add `marketplace` (id, name, kind and
+    `repository`, `folder` and `ref` ('' for none; one unique index for
+    personal and one for company sources), its login user and its last sync.
+    `skills/marketplace/provider.py:marketplace_config` reads them as a
+    `GitHubMarketplaceConfig`. Skill responses add `marketplace` (id, name, kind and
     repository) and `content_locked`. `skills/marketplace/reader.py:read_marketplace` reads
     `.claude-plugin/marketplace.json` (then `.agents/plugins/marketplace.json`)
     and builds one bundle per entry through
@@ -927,27 +928,24 @@ the app from the same rule
     repository (20 per sync, one repository in memory at a time); other
     sources are "Not supported in Onyx". `skills/marketplace/reader.py:BundleBudget` holds the
     skill and size limits for local and remote plugins together.
-    `skills/marketplace/compare.py:plan_marketplace_sync` decides the writes:
-    an entry gets a version only when its file list changed; a gone entry
-    deletes its plugin, but more than five deletes that are also more than
-    half of the marketplace wait for `POST /marketplaces/{id}/confirm-deletes`
-    with `pending_delete_revision`; a blocked entry keeps its plugin.
+    `skills/marketplace/compare.py:plan_marketplace_sync` decides the writes.
+    A synced plugin has the name of its entry, and the plan matches plugins
+    to entries by that name (unique per marketplace); the plugin.json name
+    does not name it. An entry gets a version only when its file list
+    changed; every gone entry deletes its plugin; a blocked entry keeps its
+    plugin. "Is synced" is the marketplace kind (`db/plugin.py:is_synced`).
     `skills/marketplace/sync.py:sync_marketplace` stores only the bundles to
     write, then `db/marketplace.py:apply_marketplace_sync__no_commit` compares
     again under the marketplace row lock and writes all in one transaction. A
     failed read or a GitHub error only sets `last_error`. A failure before the
     commit deletes the stored bundles. One sync runs at a time per
-    marketplace (cache lock `marketplace_sync:{id}`). The holder restamps
-    `sync_requested_at` when it starts and clears it at the end only if the
-    stamp did not change, so the API shows the sync while it runs. A request
-    during a sync changes the stamp, and the holder syncs again. A sync whose
-    lock expired during a long read writes nothing. A holder that stops
-    for its time budget or an error with the mark set starts one follow-up
-    sync. The API reports a mark older than the lock timeout plus 5 minutes
-    as not syncing (`sync_request_is_live`), so Sync now recovers a mark that
-    a dead worker left. A marketplace with no finished sync that is older
-    than that limit reports the sync failed message, so a first sync that
-    died does not show as syncing. The Celery task
+    marketplace (cache lock `marketplace_sync:{id}`); a sync that finds the
+    lock held does nothing. The cache key `marketplace_syncing:{id}`
+    (`skills/marketplace/sync.py:marketplace_syncing`) is set when a sync is
+    queued (task expiry TTL) and while it runs (lock timeout TTL), and is
+    deleted when the run ends, so the API's `syncing` needs no stale rule. Sync
+    now while it is set sends no task. A sync whose lock expired during a
+    long read writes nothing. The Celery task
     `sync_marketplace` runs on the `sandbox` queue; Onyx Lite runs the sync
     in the API server after the response. Company plugins have no author and
     `published_version_id` follows each version;

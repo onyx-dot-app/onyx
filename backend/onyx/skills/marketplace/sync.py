@@ -1,5 +1,3 @@
-import time
-from datetime import datetime, timedelta, timezone
 from typing import Final
 from uuid import UUID
 
@@ -16,12 +14,9 @@ from onyx.configs.constants import (
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.marketplace import (
     apply_marketplace_sync__no_commit,
-    claim_marketplace_sync_request__no_commit,
-    finish_marketplace_sync_request__no_commit,
     get_github_marketplace,
     list_synced_plugins,
     record_marketplace_error__no_commit,
-    request_marketplace_sync__no_commit,
 )
 from onyx.db.users import fetch_user_by_id
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -47,8 +42,7 @@ from onyx.skills.marketplace.models import (
 )
 from onyx.skills.marketplace.provider import (
     REMOTE_REPOSITORY_MAX_COUNT,
-    MarketplaceProviderAdapter,
-    marketplace_adapter,
+    GitHubMarketplaceAdapter,
     marketplace_config,
 )
 from onyx.skills.marketplace.reader import (
@@ -59,7 +53,6 @@ from onyx.skills.marketplace.reader import (
 from onyx.skills.models import PluginVersionContent
 from onyx.skills.push import push_skills_and_commit
 from onyx.utils.logger import setup_logger
-from onyx.utils.threadpool_concurrency import run_in_background
 from shared_configs.contextvars import (
     CURRENT_TENANT_ID_CONTEXTVAR,
     get_current_tenant_id,
@@ -68,9 +61,7 @@ from shared_configs.contextvars import (
 logger = setup_logger()
 
 SYNC_LOCK_TIMEOUT_SECONDS: Final = 30 * 60
-SYNC_TIME_BUDGET_SECONDS: Final = 20 * 60
 SYNC_TASK_EXPIRES_SECONDS: Final = 60 * 60
-SYNC_REQUEST_STALE_SECONDS: Final = SYNC_LOCK_TIMEOUT_SECONDS + 5 * 60
 LOGIN_GONE_ERROR: Final = (
     "The login user of this marketplace is gone. Replace the login."
 )
@@ -78,13 +69,9 @@ SYNC_FAILED_ERROR: Final = "The sync failed. Try again."
 _BUNDLE_CLEANUP = "marketplace bundle cleanup"
 
 
-def _sync_lock_name(marketplace_id: UUID) -> str:
-    return f"marketplace_sync:{marketplace_id}"
-
-
 def _resolve_remote_entries(
     entries: tuple[ReadyPlugin | BlockedPlugin | UnsupportedPlugin | RemotePlugin, ...],
-    adapter: MarketplaceProviderAdapter,
+    adapter: GitHubMarketplaceAdapter,
 ) -> list[ReadyPlugin | BlockedPlugin | UnsupportedPlugin]:
     """Holds the files of one remote repository at a time. Raises ValueError
     when all ready plugins together pass the marketplace limits."""
@@ -129,37 +116,22 @@ def _resolve_remote_entries(
 
 
 def read_marketplace_repository(
-    adapter: MarketplaceProviderAdapter, folder: str | None
+    adapter: GitHubMarketplaceAdapter, folder: str | None
 ) -> MarketplaceRead:
     revision = adapter.resolve_revision()
-    archive = adapter.fetch(revision)
-    read = read_marketplace(
-        read_repository_archive(archive.archive_bytes), folder, archive.tree_shas
-    )
+    read = read_marketplace(read_repository_archive(adapter.fetch(revision)), folder)
     if not isinstance(read, CompleteMarketplace):
         return MarketplaceRead(
-            revision=revision,
-            tree_shas=archive.tree_shas,
-            name=None,
-            failure=read.reason,
-            entries=[],
+            revision=revision, name=None, failure=read.reason, entries=[]
         )
     try:
         entries = _resolve_remote_entries(read.entries, adapter)
     except ValueError as exc:
         return MarketplaceRead(
-            revision=revision,
-            tree_shas=archive.tree_shas,
-            name=None,
-            failure=str(exc),
-            entries=[],
+            revision=revision, name=None, failure=str(exc), entries=[]
         )
     return MarketplaceRead(
-        revision=revision,
-        tree_shas=archive.tree_shas,
-        name=read.name,
-        failure=None,
-        entries=entries,
+        revision=revision, name=read.name, failure=None, entries=entries
     )
 
 
@@ -181,7 +153,7 @@ def _stage(
                 file_store=file_store,
                 manifest=bundle.manifest,
                 needs=bundle.needs,
-            ).model_copy(update={"source_tree_sha": entry.tree_sha})
+            )
     except Exception:
         for content in staged.values():
             delete_bundle_blob(file_store, content.bundle_file_id)
@@ -211,8 +183,9 @@ def sync_marketplace(
         if login_user is None or not login_user.is_active:
             return _record_failure(marketplace_id, LOGIN_GONE_ERROR)
         authorization = github_authorization_for(login_user.id, db_session)
-        adapter = marketplace_adapter(marketplace, authorization)
-        folder = marketplace_config(marketplace).folder
+        config = marketplace_config(marketplace)
+        adapter = GitHubMarketplaceAdapter(config, authorization)
+        folder = config.folder
         owner_user_id = marketplace.owner_user_id
         login_user_id = login_user.id
         login_email = login_user.email
@@ -235,20 +208,13 @@ def sync_marketplace(
         plan = plan_marketplace_sync(
             entries, list_synced_plugins(marketplace_id, db_session)
         )
-    staged = (
-        {}
-        if plan.needs_confirmation
-        else _stage(entries, set(plan.create) | set(plan.add_version))
-    )
+    staged = _stage(entries, set(plan.create) | set(plan.add_version))
     file_store = get_default_file_store()
     if lock is not None and not lock.owned():
         # The lock expired during a long read; a newer sync may have written.
         logger.warning("Marketplace sync %s lost its lock", marketplace_id)
         for content in staged.values():
             delete_bundle_blob(file_store, content.bundle_file_id)
-        with get_session_with_current_tenant() as db_session:
-            request_marketplace_sync__no_commit(marketplace_id, db_session)
-            db_session.commit()
         return MarketplaceSyncResult(status=MarketplaceSyncStatus.FAILED)
     try:
         with get_session_with_current_tenant() as db_session:
@@ -257,7 +223,6 @@ def sync_marketplace(
                 marketplace_id=marketplace_id,
                 name=read.name,
                 revision=read.revision,
-                tree_sha=(read.tree_shas or {}).get(folder or ""),
                 entries=entries,
                 staged=staged,
                 created_by=login,
@@ -289,80 +254,36 @@ def sync_marketplace(
     return result
 
 
-def sync_request_is_live(sync_requested_at: datetime | None) -> bool:
-    return sync_requested_at is not None and datetime.now(
-        timezone.utc
-    ) - sync_requested_at < timedelta(seconds=SYNC_REQUEST_STALE_SECONDS)
+def _syncing_key(marketplace_id: UUID) -> str:
+    return f"marketplace_syncing:{marketplace_id}"
 
 
-def _sync_once(marketplace_id: UUID, lock: CacheLock) -> bool:
-    with get_session_with_current_tenant() as db_session:
-        claimed_at = claim_marketplace_sync_request__no_commit(
-            marketplace_id, db_session
-        )
-        db_session.commit()
+def marketplace_syncing(marketplace_id: UUID) -> bool:
+    """The key expires, so a dead worker cannot leave a marketplace syncing."""
+    return get_cache_backend().exists(_syncing_key(marketplace_id))
+
+
+def run_marketplace_sync(marketplace_id: UUID) -> None:
+    cache = get_cache_backend()
+    lock = cache.lock(
+        f"marketplace_sync:{marketplace_id}", timeout=SYNC_LOCK_TIMEOUT_SECONDS
+    )
+    if not lock.acquire(blocking=False):
+        return
+    cache.set(_syncing_key(marketplace_id), b"1", ex=SYNC_LOCK_TIMEOUT_SECONDS)
     try:
         sync_marketplace(marketplace_id, lock)
     except OnyxError as exc:
-        if exc.error_code == OnyxErrorCode.NOT_FOUND:
-            return False
-        _record_failure(marketplace_id, exc.detail)
-        raise
+        if exc.error_code != OnyxErrorCode.NOT_FOUND:
+            _record_failure(marketplace_id, exc.detail)
+            raise
     except Exception:
         _record_failure(marketplace_id, SYNC_FAILED_ERROR)
         raise
     finally:
-        if claimed_at is not None:
-            with get_session_with_current_tenant() as db_session:
-                finish_marketplace_sync_request__no_commit(
-                    marketplace_id, claimed_at, db_session
-                )
-                db_session.commit()
-    return True
-
-
-def _sync_requested(marketplace_id: UUID) -> bool:
-    with get_session_with_current_tenant() as db_session:
-        marketplace = get_github_marketplace(marketplace_id, db_session)
-        return marketplace is not None and marketplace.sync_requested_at is not None
-
-
-def _start_follow_up_sync(marketplace_id: UUID) -> None:
-    if not _sync_requested(marketplace_id):
-        return
-    tenant_id = get_current_tenant_id()
-    if DISABLE_VECTOR_DB:
-        run_in_background(_run_in_tenant, marketplace_id, tenant_id)
-        return
-    _send_sync_task(marketplace_id, tenant_id)
-
-
-def run_marketplace_sync(marketplace_id: UUID) -> None:
-    lock = get_cache_backend().lock(
-        _sync_lock_name(marketplace_id), timeout=SYNC_LOCK_TIMEOUT_SECONDS
-    )
-    deadline = time.monotonic() + SYNC_TIME_BUDGET_SECONDS
-    while True:
-        if not lock.acquire(blocking=False):
-            with get_session_with_current_tenant() as db_session:
-                request_marketplace_sync__no_commit(marketplace_id, db_session)
-                db_session.commit()
-            return
-        try:
-            exists = _sync_once(marketplace_id, lock)
-        except Exception:
-            if lock.owned():
-                lock.release()
-            _start_follow_up_sync(marketplace_id)
-            raise
-        finally:
-            if lock.owned():
-                lock.release()
-        if not exists or not _sync_requested(marketplace_id):
-            return
-        if time.monotonic() > deadline:
-            _start_follow_up_sync(marketplace_id)
-            return
+        cache.delete(_syncing_key(marketplace_id))
+        if lock.owned():
+            lock.release()
 
 
 def _run_in_tenant(marketplace_id: UUID, tenant_id: str) -> None:
@@ -379,6 +300,9 @@ def enqueue_marketplace_sync(
     marketplace_id: UUID, background_tasks: BackgroundTasks
 ) -> None:
     """Onyx Lite runs no Celery workers, so the API server runs the sync."""
+    get_cache_backend().set(
+        _syncing_key(marketplace_id), b"1", ex=SYNC_TASK_EXPIRES_SECONDS
+    )
     tenant_id = get_current_tenant_id()
     if DISABLE_VECTOR_DB:
         background_tasks.add_task(_run_in_tenant, marketplace_id, tenant_id)

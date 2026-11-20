@@ -204,7 +204,6 @@ class PluginVersionContent(BaseModel):
     skills: list[PluginSkillContent]
     manifest: PluginManifest | None = None
     needs: list[PluginNeed] | None = None
-    source_tree_sha: str | None = None
 
 
 class PluginBundleSkill(BaseModel):

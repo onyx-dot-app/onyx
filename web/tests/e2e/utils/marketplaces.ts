@@ -64,6 +64,7 @@ export class FakeMarketplacesApi {
 
   private created(request: MarketplaceCreateRequest): MarketplaceDetail {
     const now = new Date().toISOString();
+    const plugin_id = crypto.randomUUID();
     return {
       id: crypto.randomUUID(),
       name: request.repository,
@@ -78,8 +79,7 @@ export class FakeMarketplacesApi {
       last_synced_at: now,
       last_synced_revision: this.sha(),
       last_error: null,
-      sync_requested: false,
-      needs_confirmation: false,
+      syncing: false,
       created_at: now,
       entries: [
         {
@@ -87,12 +87,10 @@ export class FakeMarketplacesApi {
           path: "plugins/review-kit",
           status: "ok",
           reason: null,
-          plugin_id: crypto.randomUUID(),
-          plugin_name: "review-kit",
+          plugin_id,
         },
       ],
-      pending_delete_revision: null,
-      pending_deletes: [],
+      plugins: [{ id: plugin_id, name: "review-kit" }],
     };
   }
 
@@ -131,7 +129,7 @@ export class FakeMarketplacesApi {
         plugin_count: detail.plugin_count + 1,
       };
       this.marketplaces.set(detail.id, synced);
-      return route.fulfill({ json: { ...synced, sync_requested: true } });
+      return route.fulfill({ json: { ...synced, syncing: true } });
     }
     return route.fulfill({ json: detail });
   }
