@@ -30,7 +30,9 @@ import {
   useLoadingError,
   useUncaughtError,
 } from "@/app/app/stores/useChatSessionStore";
-import WindowedRow from "@/sections/chat/WindowedRow";
+import WindowedRow, {
+  ESTIMATED_ROW_HEIGHT_PX,
+} from "@/sections/chat/WindowedRow";
 import OlderMessagesLoader from "@/sections/chat/OlderMessagesLoader";
 import { useOptionalScrollContainer } from "@/sections/chat/ScrollContainerContext";
 import ToolApprovalsRegion from "@/sections/chat/ToolApprovalsRegion";
@@ -51,7 +53,10 @@ const INITIALLY_MOUNTED_ROWS = 6;
 /** Rows at the end of the chat that never unmount: the latest turn. */
 const PINNED_ROWS = 2;
 
-/** Rows on each side of a saved position that mount on the first render. */
+/**
+ * Rows above a saved position that mount on the first render. Below it, rows
+ * mount until their cached heights cover the viewport.
+ */
 const SAVED_ROW_NEIGHBORS = 4;
 
 export interface ChatUIProps {
@@ -134,10 +139,8 @@ const ChatUI = React.memo(
     const rowHeightCache = scrollMemory?.rowHeights ?? fallbackRowHeights;
     // The rows around a saved position mount on the first render, so a chat
     // opened there paints no blank placeholders.
-    const savedRowIdRef = useRef(
-      scrollMemory?.position?.kind === "row"
-        ? scrollMemory.position.rowId
-        : null
+    const savedRowRef = useRef(
+      scrollMemory?.position?.kind === "row" ? scrollMemory.position : null
     );
 
     // A page of older messages goes in above the first row. Keep the view
@@ -253,11 +256,30 @@ const ChatUI = React.memo(
       [messageTree, modelProviderLookup]
     );
 
-    const savedRowIndex = savedRowIdRef.current
+    const savedRow = savedRowRef.current;
+    const savedRowIndex = savedRow
       ? messages.findIndex(
-          (message) => messageRowId(message) === savedRowIdRef.current
+          (message) => messageRowId(message) === savedRow.rowId
         )
       : -1;
+    // The last row to mount below the saved row: the first one whose bottom
+    // reaches the viewport's bottom, by cached heights.
+    let savedRowMountEnd = savedRowIndex;
+    // Scroll memory is per page, so a saved row only exists in the browser.
+    if (savedRow && savedRowIndex >= 0 && typeof window !== "undefined") {
+      const viewportHeight = window.innerHeight;
+      let covered = savedRow.rowOffset;
+      while (
+        savedRowMountEnd < messages.length - 1 &&
+        covered < viewportHeight
+      ) {
+        const message = messages[savedRowMountEnd];
+        if (!message) break;
+        covered +=
+          rowHeightCache.get(messageRowId(message)) ?? ESTIMATED_ROW_HEIGHT_PX;
+        savedRowMountEnd += 1;
+      }
+    }
     const anchorMessage =
       anchorNodeId === undefined
         ? undefined
@@ -286,7 +308,8 @@ const ChatUI = React.memo(
             const initiallyMounted =
               rowsFromEnd <= INITIALLY_MOUNTED_ROWS ||
               (savedRowIndex >= 0 &&
-                Math.abs(i - savedRowIndex) <= SAVED_ROW_NEIGHBORS);
+                i >= savedRowIndex - SAVED_ROW_NEIGHBORS &&
+                i <= savedRowMountEnd);
             const parentMessage = message.parentNodeId
               ? messageTree?.get(message.parentNodeId)
               : null;
