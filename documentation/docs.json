@@ -139,6 +139,8 @@
             "group": "Onyx Anywhere",
             "pages": [
               "deployment/local/desktop_app",
+              "deployment/local/desktop_app_v2",
+              "deployment/local/desktop_app_v2_policy",
               "deployment/configuration/chrome_extension",
               "deployment/configuration/website_widget",
               "deployment/configuration/mcp_server"

@@ -1,0 +1,159 @@
+---
+title: "Desktop App v2"
+description: "Install, deploy, and troubleshoot the Onyx desktop app v2 on macOS, Windows, and Linux"
+icon: "desktop"
+---
+
+Onyx Desktop App v2 is a native app for macOS, Windows, and Linux.
+It shows the web app of your Onyx server in a native window.
+It also has a launcher that opens on a global shortcut from any app, and native sign-in.
+
+This page is for IT admins who install the app on company devices.
+To set up the app in advance with your device management tool,
+see [Desktop App v2 Managed Policy](/deployment/local/desktop_app_v2_policy).
+
+<Note>
+  Desktop App v2 is a different app from the [Onyx Desktop App](/deployment/local/desktop_app).
+  Its name is **Onyx v2** and its app ID is `app.onyx.desktop.v2`, so both apps can be installed on one device.
+  The two apps keep their own settings. The `config.json` keys of the Onyx Desktop App do not apply to v2.
+</Note>
+
+## Requirements
+
+- An Onyx server that the device can reach over `https://`. The app checks the server with `GET /api/version`.
+- **Windows**: administrator rights to install. The installers include the WebView2 runtime, so they also install on
+  a device with no internet access.
+- **Linux**: an x64 system, and these desktop services:
+  - A **Secret Service** provider, such as GNOME Keyring or KWallet, that runs and is unlocked in the user's session.
+    The app keeps the session token there. Without it, sign-in fails with a message that names the Secret Service.
+    Minimal window managers, VDI sessions, and SSH sessions often have no provider.
+  - A tray host for the tray icon (`libayatana-appindicator3-1`). Stock GNOME needs the AppIndicator extension
+    (`gnome-shell-extension-appindicator`). Ubuntu turns it on by default.
+  - `xdg-mime`, so the app can register `onyx://` sign-in links.
+
+## Install
+
+Download the installer for your platform from the Onyx Desktop App v2 release on the [GitHub Releases
+page](https://github.com/onyx-dot-app/onyx/releases). Desktop App v2 releases have tags that start with `desktop-v2-v`.
+
+<Tabs>
+  <Tab title="macOS">
+    Open the `.dmg` file and drag **Onyx v2** to the **Applications** folder.
+    The app is a universal app for Apple silicon and Intel Macs.
+  </Tab>
+
+  <Tab title="Windows">
+    Run the NSIS installer (`.exe`) or the MSI installer (`.msi`). Use one installer type on a device, not both.
+    Both installers install the app for all users in `Program Files`,
+    and register `onyx://` sign-in links for all users.
+
+    For a silent install with Intune or another deployment tool, run the MSI with administrator rights:
+
+    ```powershell
+    msiexec /i "<path to the .msi file>" /qn
+    ```
+  </Tab>
+
+  <Tab title="Linux">
+    Install the `.deb` package, or run the AppImage:
+
+    ```bash
+    sudo apt install ./<name of the .deb file>
+    ```
+
+    The `.deb` package registers `onyx://` sign-in links. The AppImage registers them each time it starts.
+  </Tab>
+</Tabs>
+
+## First launch and sign-in
+
+<Steps>
+  <Step title="Enter the server URL">
+    On first launch, the app asks for the URL of your Onyx server, for example `https://onyx.example.com`.
+    A URL without a scheme gets `https://`. The app accepts `http://` only for a server on the same device.
+
+    If a managed policy sets `ServerURL`, the app skips this step.
+    See [Desktop App v2 Managed Policy](/deployment/local/desktop_app_v2_policy).
+  </Step>
+
+  <Step title="Sign in">
+    Sign in with email and password in the **Sign in to Onyx** window,
+    or select one of the SSO buttons that the server offers.
+
+    - Google and OIDC sign-in can continue in the system browser, where the user is often signed in to the
+    identity provider already. When the browser sign-in is complete,
+    the browser opens an `onyx://` link and the app opens Onyx. The identity provider needs no new redirect URI.
+    - SAML, Onyx Cloud, and servers without browser sign-in use the server's login page in an app window.
+    - If the browser sign-in does not return to the app, select **Not working? Sign in in an Onyx window instead**.
+  </Step>
+</Steps>
+
+The app keeps the session token in the credential store of the operating system: the macOS keychain,
+the Windows Credential Manager, or the Linux Secret Service. The app renews the session at launch and every 12 hours.
+
+To change the server or sign out, open **Preferences**.
+**Change server** and **Sign out** remove the session from the device.
+
+## Where the app keeps its files
+
+| Item | macOS | Windows | Linux |
+| --- | --- | --- | --- |
+| User settings (`config.json`) | `~/Library/Application Support/app.onyx.desktop.v2/` | `%APPDATA%\app.onyx.desktop.v2\` | `~/.config/app.onyx.desktop.v2/` |
+| Log files | `~/Library/Logs/app.onyx.desktop.v2/` | `%LOCALAPPDATA%\app.onyx.desktop.v2\logs\` | `~/.local/share/app.onyx.desktop.v2/logs/` |
+| Session token | Keychain, service `app.onyx.desktop.v2`, one item per server | Credential Manager, **Windows Credentials**, one entry per server | Secret Service, service `app.onyx.desktop.v2`, one item per server |
+| Launch at login item | LaunchAgent for the current user | `HKCU\Software\Microsoft\Windows\CurrentVersion\Run` | `~/.config/autostart/app.onyx.desktop.v2.desktop` |
+
+The app writes `config.json` itself. To set up devices in advance,
+use a [managed policy](/deployment/local/desktop_app_v2_policy), not `config.json`.
+
+## Troubleshooting
+
+### Collect the log
+
+The app writes its log to `onyx.log` in the log folder in the table above. On Linux,
+the log folder is in `$XDG_DATA_HOME` if that variable is set. Send this file to your Onyx support contact.
+
+- Times in the log are UTC.
+- At 1 MB, the app renames the file to `onyx_<date>.log` and starts a new `onyx.log`. It keeps the four newest
+  renamed files.
+- The log does not contain passwords, session tokens, cookies, or sign-in codes. URLs in the log have no query or
+  fragment.
+
+### The app says "Can't reach" the server
+
+The app shows this window when the server does not answer at launch,
+or when a page does not load and the server then fails two health checks. The window shows the reason: no network, DNS,
+TLS certificate, timeout, connection refused, or a server error.
+The app checks again on a schedule and when you select **Retry**. When the server answers, the app loads the page again.
+
+For a TLS certificate error, a company proxy that inspects secure traffic,
+or a company root certificate that the device does not trust, is a common cause.
+
+### The app cannot reach the server through a proxy
+
+The main window follows the proxy settings of the operating system. The app's own requests (health check, sign-in,
+launcher) read the `HTTPS_PROXY`, `HTTP_PROXY`, `ALL_PROXY`, and `NO_PROXY` environment variables,
+and the fixed proxy settings of macOS and Windows. They do not read PAC files, WPAD,
+or the Linux desktop proxy settings. Behind such a proxy, set `HTTPS_PROXY` for the app.
+
+### Sign-in fails on Linux with a Secret Service message
+
+Start GNOME Keyring or KWallet (or another Secret Service provider) in the user's session, unlock it, and sign in again.
+
+### The launcher shortcut does not work on Linux
+
+The launcher shortcut uses X11 key grabs. In a Wayland session, the shortcut works only while an X11 (XWayland)
+app has focus. **Preferences** shows a notice when the shortcut cannot work, or when another app holds it.
+Open the launcher from the tray icon instead.
+
+### Preferences says the policy is invalid
+
+The app found a managed policy that it cannot read, or a value that is not valid. Some settings are then locked.
+See [Invalid policy](/deployment/local/desktop_app_v2_policy#invalid-policy)
+and the log file for the key that is not valid.
+
+## Updates
+
+On macOS, the app checks for updates and downloads them in the background.
+**Check for Updates…** changes to **Restart to Update** when an update is ready. On Windows and Linux,
+the app does not check for updates. Install a new version with the installer.
