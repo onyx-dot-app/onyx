@@ -357,6 +357,7 @@ class DocumentSource(str, Enum):
     LUMAPPS = "lumapps"
     YOUTRACK = "youtrack"
     AZURE_DATALAKE = "azure_datalake"
+    DEALCLOUD = "dealcloud"
 
     # Special case just for integration tests
     MOCK_CONNECTOR = "mock_connector"
@@ -929,6 +930,7 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.LUMAPPS: "Intranet pages, news, and content",
     DocumentSource.YOUTRACK: "Issues and project tracking",
     DocumentSource.AZURE_DATALAKE: "Files in Azure Data Lake Storage containers",
+    DocumentSource.DEALCLOUD: "Deals, companies, contacts, and CRM records",
 }
 
 # Prefix of the file id of a query-history report in the file store.
