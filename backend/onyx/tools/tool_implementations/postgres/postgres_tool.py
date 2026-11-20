@@ -38,6 +38,7 @@ from onyx.db.postgres_tool import (
     POSTGRES_TOOL_MAX_LIMIT,
     DocumentGroupBy,
     PostgresToolQueryTimeoutError,
+    begin_tool_transaction,
     count_chat_messages_by_month_for_tool,
     count_chat_messages_for_tool,
     count_chat_sessions_by_month_for_tool,
@@ -646,6 +647,7 @@ class PostgresTool(Tool):
 
         try:
             with get_session_with_current_tenant() as db_session:
+                begin_tool_transaction(db_session)
                 return self._execute(db_session, args, context, invocation.call_index)
         except PostgresToolQueryTimeoutError as e:
             raise ToolCallException(

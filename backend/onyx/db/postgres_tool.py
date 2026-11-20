@@ -11,6 +11,8 @@ own access-control mechanism (document ACL, hierarchy versioned filter,
 chat ownership).
 """
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from uuid import UUID
@@ -86,6 +88,31 @@ class DocumentGroupBy(str, Enum):
 
 def _clamp_limit(limit: int) -> int:
     return max(1, min(limit, POSTGRES_TOOL_MAX_LIMIT))
+
+
+@contextmanager
+def _timeouts_as_tool_errors() -> Iterator[None]:
+    try:
+        yield
+    except OperationalError as e:
+        if isinstance(e.orig, QueryCanceled):
+            raise PostgresToolQueryTimeoutError(
+                "Query exceeded the statement timeout"
+            ) from e
+        raise
+
+
+def begin_tool_transaction(db_session: Session) -> None:
+    """Start a tool call's read. One snapshot covers the access pairs that a
+    document query resolves first and the rows they then filter, so a pair
+    revoked in between cannot grant. The statement timeout covers every
+    statement, the pair lookups included."""
+    db_session.connection(execution_options={"isolation_level": "REPEATABLE READ"})
+    db_session.execute(
+        select(
+            func.set_config("statement_timeout", _POSTGRES_TOOL_STATEMENT_TIMEOUT, True)
+        )
+    )
 
 
 def _execute_with_timeout(db_session: Session, stmt: Select) -> Result:
@@ -337,9 +364,10 @@ def _apply_document_filters(
     for a doc id shared across cc_pairs of *different* sources — practically
     nonexistent, since doc ids embed source-specific URLs/ids.
     """
-    pairs = resolve_document_access_pairs(
-        db_session, user_id, _document_source_types(source_type, scope)
-    )
+    with _timeouts_as_tool_errors():
+        pairs = resolve_document_access_pairs(
+            db_session, user_id, _document_source_types(source_type, scope)
+        )
     stmt = apply_resolved_document_access_filter(
         db_session,
         stmt,
