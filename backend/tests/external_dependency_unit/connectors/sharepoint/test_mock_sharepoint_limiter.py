@@ -18,6 +18,7 @@ from onyx.connectors.models import ConnectorStopSignal
 from onyx.connectors.sharepoint.connector import SharepointConnector
 from onyx.connectors.source_api_limiter import build_source_api_limiter
 from onyx.redis.redis_pool import get_redis_client
+from onyx.redis.redis_rate_window import RedisRateWindows
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.external_dependency_unit.connectors.sharepoint.conftest import (
     MockSharepoint,
@@ -69,6 +70,19 @@ def limiter_tenant(monkeypatch: pytest.MonkeyPatch) -> Iterator[str]:
         client.delete(key)
 
 
+def _shared_pause_left(tenant: str) -> float:
+    """The seconds left of the longest shared pause in the tenant."""
+    client = get_redis_client(tenant_id=tenant)
+    windows = RedisRateWindows(client)
+    return max(
+        (
+            windows.pause_left(key.decode())
+            for key in client.scan_iter("*:blocked_until")
+        ),
+        default=0.0,
+    )
+
+
 def _limited_connector(
     mock_sharepoint: MockSharepoint, stop: threading.Event
 ) -> SharepointConnector:
@@ -88,7 +102,7 @@ def _limited_connector(
 
 def test_a_retry_after_pauses_a_second_connector_on_the_app(
     own_mock_sharepoint: MockSharepoint,
-    limiter_tenant: str,  # noqa: ARG001
+    limiter_tenant: str,
 ) -> None:
     # 5 RU in each 2 s, and a wait of 2 s when the app passes it. A full run
     # of the corpus needs more.
@@ -117,9 +131,13 @@ def test_a_retry_after_pauses_a_second_connector_on_the_app(
     runner.start()
     try:
         deadline = time.monotonic() + 30
-        while own_mock_sharepoint.stats()["throttled"] == 0:
-            assert time.monotonic() < deadline, "the mock refused no call"
-            time.sleep(0.05)  # test-flakes: allow the test polls the mock's stats
+        # The first connector got a 429 and set the shared pause.
+        while (
+            own_mock_sharepoint.stats()["throttled"] == 0
+            or _shared_pause_left(limiter_tenant) <= 0
+        ):
+            assert time.monotonic() < deadline, "no shared pause was set"
+            time.sleep(0.05)  # test-flakes: allow the test polls the mock and Redis
         throttled_at = time.monotonic()
         # The first connector stops. The second one calls while the pause
         # is still on.
