@@ -8,14 +8,15 @@ from __future__ import annotations
 
 import email
 import logging
-from datetime import datetime
-from datetime import timezone
+from datetime import datetime, timezone
 
 import pytest
 
-from onyx.connectors.imap.connector import _convert_email_headers_and_body_into_document
-from onyx.connectors.imap.connector import _parse_addrs
-from onyx.connectors.imap.connector import _parse_singular_addr
+from onyx.connectors.imap.connector import (
+    _convert_email_headers_and_body_into_document,
+    _parse_addrs,
+    _parse_singular_addr,
+)
 from onyx.connectors.imap.models import EmailHeaders
 
 

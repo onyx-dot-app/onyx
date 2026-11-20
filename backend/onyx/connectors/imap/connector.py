@@ -4,7 +4,7 @@ import imaplib
 import os
 import re
 import ssl
-from datetime import datetime, timedelta, timezone
+from datetime import date, datetime, timedelta, timezone
 from email.message import Message
 from email.utils import getaddresses
 from enum import Enum
@@ -16,7 +16,7 @@ from pydantic import BaseModel
 from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.imap.config import DEFAULT_IMAP_PORT_NUMBER
-from onyx.connectors.imap.models import EmailHeaders
+from onyx.connectors.imap.models import EmailHeaders, message_document_id
 from onyx.connectors.interfaces import (
     CheckpointedConnectorWithPermSync,
     CheckpointOutput,
@@ -27,7 +27,9 @@ from onyx.connectors.interfaces import (
 from onyx.connectors.models import (
     BasicExpertInfo,
     ConnectorCheckpoint,
+    ConnectorFailure,
     Document,
+    DocumentFailure,
     TextSection,
 )
 from onyx.utils.logger import setup_logger
@@ -39,6 +41,15 @@ _IMAP_OKAY_STATUS = "OK"
 _PAGE_SIZE = 100
 _USERNAME_KEY = "imap_username"
 _PASSWORD_KEY = "imap_password"
+_INTERNALDATE_FETCH_BATCH_SIZE = 500
+_IMAP_MONTHS = [
+    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
+    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
+]  # fmt: skip
+_INTERNALDATE_RE = re.compile(
+    r'^(\d+) \(.*INTERNALDATE "\s?(\d{1,2})-(\w{3})-(\d{4}) '
+    r'(\d{2}):(\d{2}):(\d{2}) ([+-])(\d{2})(\d{2})"'
+)
 
 
 class CurrentMailbox(BaseModel):
@@ -202,13 +213,25 @@ class ImapConnector(
                 )
                 continue
 
-            email_headers = EmailHeaders.from_email_msg(email_msg=email_msg)
+            try:
+                email_headers = EmailHeaders.from_email_msg(email_msg=email_msg)
+                document = _convert_email_headers_and_body_into_document(
+                    email_msg=email_msg,
+                    email_headers=email_headers,
+                    include_perm_sync=include_perm_sync,
+                )
+            except Exception as e:
+                logger.exception("Failed to convert email_id=%r", email_id)
+                yield ConnectorFailure(
+                    failed_document=DocumentFailure(
+                        document_id=message_document_id(email_msg)
+                    ),
+                    failure_message=f"Failed to convert email: {e}",
+                    exception=e,
+                )
+                continue
 
-            yield _convert_email_headers_and_body_into_document(
-                email_msg=email_msg,
-                email_headers=email_headers,
-                include_perm_sync=include_perm_sync,
-            )
+            yield document
 
         return checkpoint
 
@@ -311,16 +334,21 @@ def _fetch_email_ids_in_mailbox(
     start: SecondsSinceUnixEpoch,
     end: SecondsSinceUnixEpoch,
 ) -> list[str]:
+    """Return the ids of messages whose INTERNALDATE is in `[start, end)`.
+
+    SEARCH compares only the calendar date of INTERNALDATE, in the server's own
+    timezone. So search a day wider on each side, then filter on exact time.
+    """
     _select_mailbox(mail_client=mail_client, mailbox=mailbox)
 
-    start_str = datetime.fromtimestamp(start, tz=timezone.utc).strftime("%d-%b-%Y")
-    end_datetime = datetime.fromtimestamp(end, tz=timezone.utc)
-    end_day = end_datetime.replace(hour=0, minute=0, second=0, microsecond=0)
-    # BEFORE is exclusive and IMAP searches have only day-level precision.
-    if end_datetime > end_day:
-        end_day += timedelta(days=1)
-    end_str = end_day.strftime("%d-%b-%Y")
-    search_criteria = f'(SINCE "{start_str}" BEFORE "{end_str}")'
+    since_day = datetime.fromtimestamp(start, tz=timezone.utc).date() - timedelta(
+        days=1
+    )
+    before_day = datetime.fromtimestamp(end, tz=timezone.utc).date() + timedelta(days=2)
+    search_criteria = (
+        f'(SINCE "{_format_imap_date(since_day)}" '
+        f'BEFORE "{_format_imap_date(before_day)}")'
+    )
 
     status, email_ids_byte_array = mail_client.search(None, search_criteria)
 
@@ -328,8 +356,67 @@ def _fetch_email_ids_in_mailbox(
         raise RuntimeError(f"Failed to fetch email ids; {status=}")
 
     email_ids: bytes = email_ids_byte_array[0]
+    candidate_ids = [email_id.decode() for email_id in email_ids.split()]
 
-    return [email_id.decode() for email_id in email_ids.split()]
+    internal_dates = _fetch_internal_dates(
+        mail_client=mail_client, email_ids=candidate_ids
+    )
+    # Keep a message whose INTERNALDATE is unknown; the document id dedups it.
+    return [
+        email_id
+        for email_id in candidate_ids
+        if (internal_date := internal_dates.get(email_id)) is None
+        or start <= internal_date < end
+    ]
+
+
+def _format_imap_date(day: date) -> str:
+    # strftime("%b") depends on the locale; IMAP needs English month names.
+    return f"{day.day:02d}-{_IMAP_MONTHS[day.month - 1]}-{day.year}"
+
+
+def _fetch_internal_dates(
+    mail_client: imaplib.IMAP4_SSL, email_ids: list[str]
+) -> dict[str, float]:
+    internal_dates: dict[str, float] = {}
+    for i in range(0, len(email_ids), _INTERNALDATE_FETCH_BATCH_SIZE):
+        message_set = ",".join(email_ids[i : i + _INTERNALDATE_FETCH_BATCH_SIZE])
+        status, fetch_data = mail_client.fetch(
+            message_set=message_set, message_parts="(INTERNALDATE)"
+        )
+        if status != _IMAP_OKAY_STATUS:
+            raise RuntimeError(f"Failed to fetch INTERNALDATE; {status=}")
+
+        for item in fetch_data:
+            line = item[0] if isinstance(item, tuple) else item
+            if not isinstance(line, bytes):
+                continue
+            parsed = _parse_internaldate_line(line.decode(errors="replace"))
+            if parsed:
+                internal_dates[parsed[0]] = parsed[1]
+    return internal_dates
+
+
+def _parse_internaldate_line(line: str) -> tuple[str, float] | None:
+    match = _INTERNALDATE_RE.match(line)
+    if not match:
+        return None
+    seq, day, month, year, hour, minute, second, sign, tz_hour, tz_minute = (
+        match.groups()
+    )
+    if month not in _IMAP_MONTHS:
+        return None
+    offset = timedelta(hours=int(tz_hour), minutes=int(tz_minute))
+    internal_date = datetime(
+        int(year),
+        _IMAP_MONTHS.index(month) + 1,
+        int(day),
+        int(hour),
+        int(minute),
+        int(second),
+        tzinfo=timezone(offset if sign == "+" else -offset),
+    )
+    return seq, internal_date.timestamp()
 
 
 def _fetch_email(mail_client: imaplib.IMAP4_SSL, email_id: str) -> Message | None:
@@ -352,7 +439,11 @@ def _convert_email_headers_and_body_into_document(
     email_headers: EmailHeaders,
     include_perm_sync: bool,
 ) -> Document:
-    sender_parsed = _parse_singular_addr(raw_header=email_headers.sender)
+    sender_parsed = (
+        _parse_singular_addr(raw_header=email_headers.sender)
+        if email_headers.sender
+        else None
+    )
     parsed_recipients = (
         _parse_addrs(raw_header=email_headers.recipients)
         if email_headers.recipients
