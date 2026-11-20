@@ -73,7 +73,9 @@ function message(
   } as unknown as BackendMessage;
 }
 
-function sharedChat(): BackendChatSession {
+function sharedChat(
+  publishedFiles: PublishedFile[] = [REPORT]
+): BackendChatSession {
   return {
     chat_session_id: "shared",
     description: "Shared chat",
@@ -98,7 +100,7 @@ function sharedChat(): BackendChatSession {
         },
       ],
     ],
-    published_files: [REPORT],
+    published_files: publishedFiles,
   };
 }
 
@@ -138,4 +140,26 @@ test("a shared chat's card opens its file in the Files panel, read-only", async 
 
   act(() => filesButton.click());
   expect(filesButton).toHaveAttribute("aria-pressed", "false");
+});
+
+test("a shared chat's card opens its file when the chat lists no files", async () => {
+  jest.mocked(fetchChatFile).mockResolvedValue(
+    new Response("Revenue grew.", {
+      headers: { "Content-Type": "text/markdown" },
+    })
+  );
+  // A published file without a path: its card shows, but the load lists no
+  // files
+  render(
+    <SharedChatDisplay chatSession={sharedChat([])} persona={{} as Agent} />
+  );
+  await screen.findByRole("button", { name: "Preview report.md" });
+  expect(screen.queryByRole("button", { name: "Files" })).toBeNull();
+
+  await act(async () => {
+    screen.getByRole("button", { name: "Preview report.md" }).click();
+  });
+  expect(
+    await screen.findByRole("region", { name: "Preview of Q3 report" })
+  ).toBeVisible();
 });

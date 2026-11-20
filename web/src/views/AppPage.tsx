@@ -20,10 +20,7 @@ import {
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
 import { useLlmManager } from "@/lib/hooks";
 import { useFederatedConnectors } from "@/lib/connectors/hooks";
-import {
-  useCurrentPublishedFiles,
-  useSendChatMessageFromURL,
-} from "@/lib/chat/hooks";
+import { useSendChatMessageFromURL } from "@/lib/chat/hooks";
 import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/types";
 import { useToolConfiguration } from "@/lib/tools/hooks";
@@ -326,7 +323,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     (state) => state.updateCurrentRightPanel
   );
   const selectedNodeForDocDisplay = useSelectedNodeForDocDisplay();
-  const publishedFiles = useCurrentPublishedFiles();
   const publishedFilesPanelOpen = useFilesShown();
   const messageHistory = useCurrentMessageHistory();
   const messageTree = useCurrentMessageTree();
@@ -821,9 +817,10 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
       <FederatedOAuthModal />
 
-      {(retrievalEnabled || publishedFiles.length > 0) && (
-        <RootLayout.RightPanel>{rightPanel}</RootLayout.RightPanel>
-      )}
+      {/* Always mounted, so a reply card opens its file whatever the Files
+          list holds. Closed, the panel takes no room and renders only when
+          its state or files change. */}
+      <RootLayout.RightPanel>{rightPanel}</RootLayout.RightPanel>
 
       <div className="w-full h-full overflow-hidden">
         {/* noPaste: the input bar already uploads pasted files itself. Without
