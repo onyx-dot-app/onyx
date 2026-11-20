@@ -16770,7 +16770,6 @@
       "enable": "自分用に有効化",
       "disable": "自分用に無効化",
       "delete": "削除",
-      "selectSkill": "{name} を選択",
       "updated": "{count, plural, one {# 件のスキルを更新しました} other {# 件のスキルを更新しました}}",
       "failed": "スキルを更新できませんでした。もう一度お試しください。",
       "partialFailure": "{count, plural, one {# 件のスキルを更新できませんでした} other {# 件のスキルを更新できませんでした}}",

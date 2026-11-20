@@ -403,6 +403,7 @@ def convert_chat_history(
                     content_text=text_file.content_text,
                     token_count=text_file.token_count,
                     content_pending=text_file.content_pending,
+                    indexed=text_file.indexed,
                 )
                 ctx.message.id = f"chat:{chat_message.id}:file:{fd['id']}"
                 messages.append(ctx.message)
