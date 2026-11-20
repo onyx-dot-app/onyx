@@ -16455,84 +16455,15 @@
         }
       },
       "importGithub": {
-        "cancelButton": {
-          "label": "取消"
-        },
         "doneButton": {
           "label": "完成"
         },
-        "header": {
-          "chooseDescription": "从 {repository} 中选择技能。",
-          "completeDescription": "查看已添加到您技能中的内容。",
-          "completeTitle": "GitHub 导入完成",
-          "description": "从 GitHub 仓库导入一个或多个技能。",
-          "title": "从 GitHub 导入"
-        },
-        "importError": {
-          "message": "无法导入技能。",
-          "title": "无法导入技能"
-        },
-        "loadError": {
-          "message": "无法加载仓库。",
-          "title": "无法加载仓库"
-        },
-        "privateRepos": {
-          "askAdmin": "公开仓库可直接导入。导入私有仓库前，请联系管理员设置 GitHub。",
-          "connect": "公开仓库可直接导入。连接 GitHub 即可导入私有仓库。",
-          "connectButton": {
-            "label": "连接 GitHub"
-          },
-          "connected": "公开仓库可直接导入。私有仓库将使用您的 GitHub 连接。",
-          "needsConnection": "公开仓库可直接导入。私有仓库需要 GitHub 连接。",
-          "setUp": "公开仓库可直接导入。导入私有仓库前，请先设置 GitHub。",
-          "setUpButton": {
-            "label": "设置 GitHub"
-          }
-        },
-        "repositoryInput": {
-          "label": "仓库"
-        },
-        "result": {
-          "disabledCount": "{count} 个导入后处于禁用状态，因为已有同名技能处于启用状态。",
-          "enabledCount": "{count} 个已自动启用。",
-          "failedCount": "{count} 个无法导入。",
-          "importedSection": {
-            "title": "已导入"
-          },
-          "importedTitle": "{count, plural, one {已导入 # 个技能} other {已导入 # 个技能}}",
-          "noneTitle": "未导入任何技能",
-          "notImportedSection": {
-            "title": "未导入"
-          },
-          "notSelectedCount": "{count} 个未选择。"
-        },
-        "selectAll": {
-          "ariaLabel": "选择全部可导入技能"
-        },
-        "selection": {
-          "label": "已选择 {selected} / {total, plural, one {# 个可导入技能} other {# 个可导入技能}}"
-        },
-        "skillCheckbox": {
-          "ariaLabel": "选择 {name}"
-        },
-        "skillTag": {
-          "disabled": "已禁用",
-          "enabled": "已启用"
-        },
         "submitButton": {
           "importLabel": "{count, plural, one {导入技能} other {导入 # 个技能}}",
-          "importingLabel": "正在导入…",
-          "searchLabel": "搜索仓库",
-          "searchingLabel": "正在搜索…"
-        },
-        "unavailableFallback": "无法导入此技能。",
-        "unavailableTag": {
-          "label": "无法导入"
+          "importingLabel": "正在导入…"
         },
         "sharing": {
-          "title": "导入技能的访问权限",
-          "configureButton": "配置访问权限",
-          "description": "这些访问设置适用于全部 {count, plural, one {# 个所选技能} other {# 个所选技能}}。"
+          "configureButton": "配置访问权限"
         }
       },
       "nameConflict": {
@@ -16719,15 +16650,12 @@
           "offNotice": "发布已关闭。请让管理员发布此更新。"
         },
         "noManifestVersion": "无",
-        "manifestVersion": "plugin.json {version}"
+        "manifestVersion": "plugin.json {version}",
+        "locked": "此插件从 GitHub 同步，因此请在 GitHub 中更改。"
       }
     },
     "page": {
       "createMenu": {
-        "github": {
-          "description": "从仓库导入一个或多个技能。",
-          "title": "从 GitHub 导入"
-        },
         "scratch": {
           "description": "在 {appName} 中编写说明并添加支持文件。",
           "title": "从头开始"
@@ -16738,6 +16666,10 @@
         "upload": {
           "description": "导入 SKILL.md 文件、ZIP 文件或技能文件夹。",
           "title": "上传技能"
+        },
+        "marketplace": {
+          "title": "添加市场",
+          "description": "从仓库添加并同步其插件。"
         }
       },
       "empty": {
@@ -16965,7 +16897,9 @@
       "sections": {
         "organization": "组织库",
         "mine": "我的上传",
-        "shared": "与你共享"
+        "shared": "与你共享",
+        "marketplace": "来自市场",
+        "private": "其他用户私有"
       },
       "detail": {
         "title": "插件",
@@ -16986,7 +16920,8 @@
           "author": "作者",
           "homepage": "主页",
           "license": "许可证",
-          "notUsed": "Onyx 不使用的部分"
+          "notUsed": "Onyx 不使用的部分",
+          "marketplace": "{name} 市场，{scope, select, personal {个人} other {公司}}（{repository}）"
         },
         "skills": {
           "off": "已关闭",
@@ -17019,6 +16954,12 @@
           "pending": "正在删除…",
           "done": "已删除 {name}。",
           "failed": "无法删除插件。"
+        },
+        "syncedFrom": "同步自 {repository}",
+        "managed": {
+          "title": "由 {name} 市场管理",
+          "description": "Onyx 从 {repository} 同步此插件。请在 GitHub 中更改，然后同步市场。",
+          "open": "打开市场"
         }
       },
       "connection": {
@@ -17211,6 +17152,167 @@
       "description": "此插件所需的部分集成对您不可用。",
       "note": "没有它们插件也能工作。插件从不授予集成的访问权限。",
       "done": "完成"
+    },
+    "marketplaces": {
+      "status": {
+        "ok": "就绪",
+        "blocked": "无法安装",
+        "not_supported": "不支持"
+      },
+      "scope": {
+        "personal": "个人",
+        "company": "公司"
+      },
+      "source": {
+        "repository": "仓库",
+        "folder": "文件夹",
+        "root": "仓库根目录",
+        "ref": "分支、标签或提交",
+        "defaultBranch": "默认分支",
+        "commit": "提交"
+      },
+      "preview": {
+        "title": "{name}：{count, plural, one {# 个待添加的插件} other {# 个待添加的插件}}",
+        "empty": "此市场没有条目。",
+        "failedTitle": "Onyx 无法读取此市场",
+        "version": "v{version}",
+        "willInstall": "将安装",
+        "skills": "{count, plural, one {技能} other {技能}}：{names}",
+        "showUnusable": "{count, plural, one {显示 # 个 Onyx 无法使用的条目} other {显示 # 个 Onyx 无法使用的条目}}",
+        "hideUnusable": "隐藏 Onyx 无法使用的条目",
+        "summary": "就绪 {ready} · 无法安装 {blocked} · 不支持 {unsupported}"
+      },
+      "add": {
+        "menuItem": "添加市场",
+        "title": "添加市场",
+        "description": "从仓库添加。Onyx 会读取其 .claude-plugin/marketplace.json 文件，每个条目都会成为一个插件。",
+        "confirmTitle": "确认市场",
+        "confirmDescription": "请确认这是你想要的来源和插件，然后添加市场。",
+        "repository": {
+          "title": "仓库",
+          "description": "输入 owner/repo 或仓库的 URL。",
+          "placeholder": "例如 anthropics/claude-plugins-official"
+        },
+        "folder": {
+          "title": "文件夹",
+          "description": "包含 .claude-plugin/marketplace.json 的文件夹。留空则使用仓库根目录。",
+          "placeholder": "例如 plugins"
+        },
+        "ref": {
+          "title": "分支、标签或提交",
+          "description": "留空则使用默认分支。",
+          "placeholder": "例如 main"
+        },
+        "scope": {
+          "title": "市场类型",
+          "personalDescription": "只有你能获得此市场的插件。",
+          "companyDescription": "你的组织会获得此市场的插件，与获得已发布插件的方式相同。"
+        },
+        "defaultAccess": {
+          "title": "默认访问权限",
+          "description": "此市场中每个插件的安装设置。你之后可以为单个插件更改。"
+        },
+        "privateNote": "Onyx 使用你的 GitHub 连接读取私有仓库。添加私有仓库之前，请先在集成中连接 GitHub。",
+        "continue": "继续",
+        "previewing": "正在读取…",
+        "back": "返回",
+        "submit": "添加市场",
+        "adding": "正在添加…",
+        "cancel": "取消",
+        "previewFailed": "无法读取仓库。",
+        "addFailed": "无法添加市场。",
+        "added": "已添加 {name}。其插件会在首次同步后显示。",
+        "duplicate": {
+          "personal": "你已添加此市场。",
+          "company": "你的组织已经在使用此市场。"
+        }
+      },
+      "sync": {
+        "now": "立即同步",
+        "requested": "已开始同步 {name}。",
+        "failed": "无法开始同步。",
+        "lastSync": "上次同步 {date}",
+        "never": "尚未同步",
+        "state": {
+          "syncing": "同步中",
+          "failed": "同步失败",
+          "not_synced": "未同步",
+          "synced": "已同步"
+        }
+      },
+      "columns": {
+        "marketplace": "市场",
+        "sync": "同步",
+        "items": "插件"
+      },
+      "items": "{count, plural, one {# 个插件} other {# 个插件}}",
+      "tableLabel": "市场",
+      "open": "打开 {name}",
+      "menu": "{name} 的操作",
+      "loadFailed": "无法加载市场。",
+      "empty": {
+        "title": "还没有市场",
+        "description": "添加 GitHub 仓库以获取其插件。"
+      },
+      "page": {
+        "title": "市场",
+        "description": "你获取插件的 GitHub 仓库及其来源。同步市场可获取 GitHub 中的更改。"
+      },
+      "attention": {
+        "failedTitle": "{name} 上次同步失败"
+      },
+      "defaultAccess": {
+        "title": "默认访问权限",
+        "description": "{name} 中没有自身设置的每个插件的安装设置。",
+        "save": "保存",
+        "cancel": "取消",
+        "saved": "已保存默认访问权限。",
+        "failed": "无法保存默认访问权限。"
+      },
+      "replaceLogin": {
+        "label": "替换登录",
+        "description": "以你的身份同步该仓库。如果你有 GitHub 连接，Onyx 会使用它。",
+        "done": "Onyx 现在以你的身份同步 {name}。",
+        "doneWithoutGithub": "Onyx 现在以你的身份同步 {name}，但你尚未连接 GitHub。Onyx 只能读取公开仓库。请在集成中连接 GitHub。",
+        "failed": "无法替换登录。"
+      },
+      "remove": {
+        "label": "移除",
+        "title": "移除 {name}？",
+        "description": "这将删除市场及{count, plural, one {其插件} other {其 # 个插件}}。成员将失去这些插件。",
+        "listLabel": "要删除的插件",
+        "noPlugins": "此市场没有插件。",
+        "confirm": "移除",
+        "done": "已移除 {name}。",
+        "failed": "无法移除市场。",
+        "loadFailed": "无法加载此插件市场的插件。",
+        "retry": "重试",
+        "personalDescription": "这将删除市场及{count, plural, one {其插件} other {其 # 个插件}}。您将失去这些插件。"
+      },
+      "detail": {
+        "title": "市场",
+        "description": "此市场的来源、同步和条目。",
+        "loadFailed": "无法加载市场。",
+        "scope": "类型",
+        "login": "同步身份",
+        "noLogin": "无。请替换登录以再次同步。",
+        "lastSync": "上次同步",
+        "entries": "条目（{count}）",
+        "noEntries": "上次同步未发现条目。",
+        "close": "关闭"
+      },
+      "readOnly": "您的管理员管理此市场。",
+      "reason": {
+        "skills_and_mcp_only": "Onyx 只运行技能和 MCP 服务器。",
+        "pastLimit": "Onyx 没有读取此仓库。",
+        "external_repository_limit": "Onyx 每个市场最多同步 {limit} 个外部仓库。",
+        "external_repository_limit_without_login": "连接 GitHub 以同步超过 {limit} 个外部仓库。",
+        "limitTitle": "部分插件来自 Onyx 未读取的仓库"
+      },
+      "errors": {
+        "rateLimited": "已达到 GitHub API 速率限制。请几分钟后重试。连接 GitHub 可提高限制。",
+        "rateLimitedUntil": "已达到 GitHub API 速率限制。将在 {time} 重置。连接 GitHub 可提高限制。"
+      }
     }
   },
   "integrations": {
@@ -17297,21 +17399,26 @@
         "label": "添加",
         "upload": "上传技能",
         "create": "创建技能",
-        "github": "从 GitHub 导入",
-        "uploadPlugin": "上传插件"
+        "uploadPlugin": "上传插件",
+        "marketplace": "添加市场",
+        "manageMarketplaces": "管理市场"
       },
       "groups": {
         "mine": "由你创建",
         "organization": "来自你的组织",
         "shared": "与你共享",
-        "builtin": "内置"
+        "builtin": "内置",
+        "marketplace": "来自市场",
+        "private": "其他用户私有"
       },
       "source": {
         "mine": "由你",
         "organization": "来自你的组织",
         "sharedBy": "由 {email} 共享",
         "shared": "与你共享",
-        "builtin": "内置"
+        "builtin": "内置",
+        "marketplace": "来自 {name}（{scope, select, personal {个人} other {公司}}）",
+        "privateTo": "{email} 私有"
       },
       "subtitle": "{source} · {description}",
       "tag": {
@@ -17373,14 +17480,14 @@
       },
       "empty": {
         "title": "还没有插件",
-        "description": "上传 Claude Code 或 Codex 插件，以添加其技能及所需的集成。",
+        "description": "上传插件、从 GitHub 添加市场，或创建技能。每个技能都是一个插件。",
         "upload": "上传插件"
       },
       "noMatches": {
         "title": "没有匹配的插件",
         "clear": "显示所有插件"
       },
-      "intro": "插件将技能及其所需的集成打包在一起。上传 Claude Code 或 Codex 插件，或添加技能。您添加的每个技能都位于各自的插件中。",
+      "intro": "插件打包了技能及其所需的集成。上传 Claude Code 或 Codex 插件、从 GitHub 添加市场，或添加技能。您添加的每个技能都在其自己的插件中。",
       "integrations": "{needed} 个集成中有 {available} 个可用",
       "nameHeld": "已关闭：{names} 使用了相同的技能名称"
     },

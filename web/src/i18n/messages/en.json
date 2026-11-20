@@ -16455,84 +16455,15 @@
         }
       },
       "importGithub": {
-        "cancelButton": {
-          "label": "Cancel"
-        },
         "doneButton": {
           "label": "Done"
         },
-        "header": {
-          "chooseDescription": "Choose skills from {repository}.",
-          "completeDescription": "Review what was added to your skills.",
-          "completeTitle": "GitHub import complete",
-          "description": "Import one or more skills from a GitHub repository.",
-          "title": "Import from GitHub"
-        },
-        "importError": {
-          "message": "Couldn't import skills.",
-          "title": "Couldn't import skills"
-        },
-        "loadError": {
-          "message": "Couldn't load repository.",
-          "title": "Couldn't load repository"
-        },
-        "privateRepos": {
-          "askAdmin": "Public repositories import directly. Ask an admin to set up GitHub before importing private repositories.",
-          "connect": "Public repositories import directly. Connect GitHub to import private repositories.",
-          "connectButton": {
-            "label": "Connect GitHub"
-          },
-          "connected": "Public repositories import directly. Private repositories use your GitHub connection.",
-          "needsConnection": "Public repositories import directly. Private repositories require a GitHub connection.",
-          "setUp": "Public repositories import directly. Set up GitHub before importing private repositories.",
-          "setUpButton": {
-            "label": "Set up GitHub"
-          }
-        },
-        "repositoryInput": {
-          "label": "Repository"
-        },
-        "result": {
-          "disabledCount": "{count} imported disabled because another skill with the same name is enabled.",
-          "enabledCount": "{count} enabled automatically.",
-          "failedCount": "{count} could not be imported.",
-          "importedSection": {
-            "title": "Imported"
-          },
-          "importedTitle": "{count, plural, one {# skill imported} other {# skills imported}}",
-          "noneTitle": "No skills were imported",
-          "notImportedSection": {
-            "title": "Not imported"
-          },
-          "notSelectedCount": "{count} not selected."
-        },
-        "selectAll": {
-          "ariaLabel": "Select all importable skills"
-        },
-        "selection": {
-          "label": "{selected} of {total, plural, one {# importable skill} other {# importable skills}} selected"
-        },
-        "skillCheckbox": {
-          "ariaLabel": "Select {name}"
-        },
-        "skillTag": {
-          "disabled": "Disabled",
-          "enabled": "Enabled"
-        },
         "submitButton": {
           "importLabel": "{count, plural, one {Import skill} other {Import # skills}}",
-          "importingLabel": "Importing…",
-          "searchLabel": "Search repository",
-          "searchingLabel": "Searching…"
-        },
-        "unavailableFallback": "This skill cannot be imported.",
-        "unavailableTag": {
-          "label": "Can't import"
+          "importingLabel": "Importing…"
         },
         "sharing": {
-          "title": "Access for Imported Skills",
-          "configureButton": "Configure access",
-          "description": "These access settings apply to all {count, plural, one {# selected skill} other {# selected skills}}."
+          "configureButton": "Configure access"
         }
       },
       "nameConflict": {
@@ -16719,15 +16650,12 @@
           "offNotice": "Publishing is turned off. Ask an admin to publish this update."
         },
         "noManifestVersion": "None",
-        "manifestVersion": "plugin.json {version}"
+        "manifestVersion": "plugin.json {version}",
+        "locked": "This plugin syncs from GitHub, so you change it in GitHub."
       }
     },
     "page": {
       "createMenu": {
-        "github": {
-          "description": "Import one or more skills from a repository.",
-          "title": "Import from GitHub"
-        },
         "scratch": {
           "description": "Write the instructions and add supporting files in {appName}.",
           "title": "Start from scratch"
@@ -16738,6 +16666,10 @@
         "upload": {
           "description": "Import a SKILL.md file, ZIP file, or skill folder.",
           "title": "Upload a skill"
+        },
+        "marketplace": {
+          "title": "Add marketplace",
+          "description": "Add from a repository and sync its plugins."
         }
       },
       "empty": {
@@ -16965,7 +16897,9 @@
       "sections": {
         "organization": "Organization library",
         "mine": "My uploads",
-        "shared": "Shared with you"
+        "shared": "Shared with you",
+        "marketplace": "From a marketplace",
+        "private": "Private to another user"
       },
       "detail": {
         "title": "Plugin",
@@ -16986,7 +16920,8 @@
           "author": "Author",
           "homepage": "Homepage",
           "license": "License",
-          "notUsed": "Not used in Onyx"
+          "notUsed": "Not used in Onyx",
+          "marketplace": "{name} marketplace, {scope, select, personal {personal} other {company}} ({repository})"
         },
         "skills": {
           "off": "Off",
@@ -17019,6 +16954,12 @@
           "pending": "Deleting…",
           "done": "Deleted {name}.",
           "failed": "Could not delete the plugin."
+        },
+        "syncedFrom": "Synced from {repository}",
+        "managed": {
+          "title": "Managed by the {name} marketplace",
+          "description": "Onyx syncs this plugin from {repository}. Change it in GitHub, then sync the marketplace.",
+          "open": "Open Marketplaces"
         }
       },
       "connection": {
@@ -17211,6 +17152,167 @@
       "description": "Some integrations that this plugin needs are not available to you.",
       "note": "The plugin works without them. A plugin never gives access to an integration.",
       "done": "Done"
+    },
+    "marketplaces": {
+      "status": {
+        "ok": "Ready",
+        "blocked": "Cannot install",
+        "not_supported": "Not supported"
+      },
+      "scope": {
+        "personal": "Personal",
+        "company": "Company"
+      },
+      "source": {
+        "repository": "Repository",
+        "folder": "Folder",
+        "root": "Root of the repository",
+        "ref": "Branch, Tag or Commit",
+        "defaultBranch": "Default branch",
+        "commit": "Commit"
+      },
+      "preview": {
+        "title": "{name}: {count, plural, one {# plugin to add} other {# plugins to add}}",
+        "empty": "This marketplace has no entries.",
+        "failedTitle": "Onyx cannot read this marketplace",
+        "version": "v{version}",
+        "willInstall": "Will install",
+        "skills": "{count, plural, one {Skill} other {Skills}}: {names}",
+        "showUnusable": "{count, plural, one {Show # entry that Onyx cannot use} other {Show # entries that Onyx cannot use}}",
+        "hideUnusable": "Hide the entries that Onyx cannot use",
+        "summary": "{ready} Ready · {blocked} Cannot install · {unsupported} Not supported"
+      },
+      "add": {
+        "menuItem": "Add marketplace",
+        "title": "Add Marketplace",
+        "description": "Add from a repository. Onyx reads its .claude-plugin/marketplace.json file, and each entry becomes a plugin.",
+        "confirmTitle": "Confirm Marketplace",
+        "confirmDescription": "Make sure that this is the source and the plugins that you want, then add the marketplace.",
+        "repository": {
+          "title": "Repository",
+          "description": "Type owner/repo or the URL of the repository.",
+          "placeholder": "For example, anthropics/claude-plugins-official"
+        },
+        "folder": {
+          "title": "Folder",
+          "description": "The folder that holds .claude-plugin/marketplace.json. Leave it empty for the root of the repository.",
+          "placeholder": "For example, plugins"
+        },
+        "ref": {
+          "title": "Branch, Tag or Commit",
+          "description": "Leave it empty to use the default branch.",
+          "placeholder": "For example, main"
+        },
+        "scope": {
+          "title": "Marketplace Type",
+          "personalDescription": "Only you get the plugins of this marketplace.",
+          "companyDescription": "Your organization gets the plugins of this marketplace, as it gets published plugins."
+        },
+        "defaultAccess": {
+          "title": "Default Access",
+          "description": "The install setting of each plugin of this marketplace. You can change it for one plugin later."
+        },
+        "privateNote": "Onyx reads a private repository with your GitHub connection. Connect GitHub in Integrations before you add a private repository.",
+        "continue": "Continue",
+        "previewing": "Reading…",
+        "back": "Back",
+        "submit": "Add marketplace",
+        "adding": "Adding…",
+        "cancel": "Cancel",
+        "previewFailed": "Could not read the repository.",
+        "addFailed": "Could not add the marketplace.",
+        "added": "Added {name}. Its plugins show after the first sync.",
+        "duplicate": {
+          "personal": "You already added this marketplace.",
+          "company": "Your organization already gets this marketplace."
+        }
+      },
+      "sync": {
+        "now": "Sync now",
+        "requested": "Started a sync of {name}.",
+        "failed": "Could not start the sync.",
+        "lastSync": "Last sync {date}",
+        "never": "Not synced yet",
+        "state": {
+          "syncing": "Syncing",
+          "failed": "Sync failed",
+          "not_synced": "Not synced",
+          "synced": "Synced"
+        }
+      },
+      "columns": {
+        "marketplace": "Marketplace",
+        "sync": "Sync",
+        "items": "Plugins"
+      },
+      "items": "{count, plural, one {# plugin} other {# plugins}}",
+      "tableLabel": "Marketplaces",
+      "open": "Open {name}",
+      "menu": "Actions for {name}",
+      "loadFailed": "Could not load the marketplaces.",
+      "empty": {
+        "title": "No marketplaces yet",
+        "description": "Add a GitHub repository to get its plugins."
+      },
+      "page": {
+        "title": "Marketplaces",
+        "description": "The GitHub repositories that you get plugins from, with their source. Sync a marketplace to get the changes from GitHub."
+      },
+      "attention": {
+        "failedTitle": "The last sync of {name} failed"
+      },
+      "defaultAccess": {
+        "title": "Default Access",
+        "description": "The install setting of each plugin of {name} that has no setting of its own.",
+        "save": "Save",
+        "cancel": "Cancel",
+        "saved": "Saved the default access.",
+        "failed": "Could not save the default access."
+      },
+      "replaceLogin": {
+        "label": "Replace login",
+        "description": "Sync the repository as you. Onyx uses your GitHub connection if you have one.",
+        "done": "Onyx now syncs {name} as you.",
+        "doneWithoutGithub": "Onyx now syncs {name} as you, but you have not connected GitHub. Onyx can read only a public repository. Connect GitHub in Integrations.",
+        "failed": "Could not replace the login."
+      },
+      "remove": {
+        "label": "Remove",
+        "title": "Remove {name}?",
+        "description": "This deletes the marketplace and {count, plural, one {its plugin} other {its # plugins}}. Members lose these plugins.",
+        "listLabel": "Plugins to delete",
+        "noPlugins": "This marketplace has no plugins.",
+        "confirm": "Remove",
+        "done": "Removed {name}.",
+        "failed": "Could not remove the marketplace.",
+        "loadFailed": "Could not load the plugins of this marketplace.",
+        "retry": "Retry",
+        "personalDescription": "This deletes the marketplace and {count, plural, one {its plugin} other {its # plugins}}. You lose these plugins."
+      },
+      "detail": {
+        "title": "Marketplace",
+        "description": "The source, the sync and the entries of this marketplace.",
+        "loadFailed": "Could not load the marketplace.",
+        "scope": "Type",
+        "login": "Syncs As",
+        "noLogin": "None. Replace the login to sync again.",
+        "lastSync": "Last Sync",
+        "entries": "Entries ({count})",
+        "noEntries": "The last sync found no entries.",
+        "close": "Close"
+      },
+      "readOnly": "Your admin manages this marketplace.",
+      "reason": {
+        "skills_and_mcp_only": "Onyx runs only skills and MCP servers.",
+        "pastLimit": "Onyx did not read this repository.",
+        "external_repository_limit": "Onyx syncs at most {limit} external repositories for one marketplace.",
+        "external_repository_limit_without_login": "Connect GitHub to sync more than {limit} external repositories.",
+        "limitTitle": "Some plugins come from repositories that Onyx did not read"
+      },
+      "errors": {
+        "rateLimited": "GitHub's API rate limit has been reached. Try again in a few minutes. Connect GitHub to raise the limit.",
+        "rateLimitedUntil": "GitHub's API rate limit has been reached. It resets at {time}. Connect GitHub to raise the limit."
+      }
     }
   },
   "integrations": {
@@ -17297,21 +17399,26 @@
         "label": "Add",
         "upload": "Upload skill",
         "create": "Create a skill",
-        "github": "Import from GitHub",
-        "uploadPlugin": "Upload plugin"
+        "uploadPlugin": "Upload plugin",
+        "marketplace": "Add marketplace",
+        "manageMarketplaces": "Manage marketplaces"
       },
       "groups": {
         "mine": "Created by you",
         "organization": "From your organization",
         "shared": "Shared with you",
-        "builtin": "Built-in"
+        "builtin": "Built-in",
+        "marketplace": "From marketplaces",
+        "private": "Private to other users"
       },
       "source": {
         "mine": "by you",
         "organization": "from your organization",
         "sharedBy": "shared by {email}",
         "shared": "shared with you",
-        "builtin": "built-in"
+        "builtin": "built-in",
+        "marketplace": "from {name} ({scope, select, personal {personal} other {company}})",
+        "privateTo": "private to {email}"
       },
       "subtitle": "{source} · {description}",
       "tag": {
@@ -17373,14 +17480,14 @@
       },
       "empty": {
         "title": "No plugins yet",
-        "description": "Upload a Claude Code or Codex plugin to add its skills and the integrations that they need.",
+        "description": "Upload a plugin, add a marketplace from GitHub, or create a skill. Each skill is a plugin.",
         "upload": "Upload Plugin"
       },
       "noMatches": {
         "title": "No matching plugins",
         "clear": "Show all plugins"
       },
-      "intro": "A plugin packages skills and the integrations that they need. Upload a Claude Code or Codex plugin, or add a skill. Each skill that you add comes in its own plugin.",
+      "intro": "A plugin packages skills and the integrations that they need. Upload a Claude Code or Codex plugin, add a marketplace from GitHub, or add a skill. Each skill that you add comes in its own plugin.",
       "integrations": "{available} of {needed} integrations available",
       "nameHeld": "Off: {names} uses the same skill name"
     },

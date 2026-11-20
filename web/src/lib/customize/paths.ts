@@ -37,6 +37,8 @@ export function pluginHref(
     : `/app/customize/plugins/${pluginId}`;
 }
 
+export const MARKETPLACES_PATH = "/app/customize/plugins/marketplaces";
+
 export function parsePluginPageTab(value: string | null): PluginPageTab {
   return value === "skills" || value === "integrations" || value === "versions"
     ? value

@@ -159,6 +159,8 @@ one commit (`backend/ee/onyx/db/community_downgrade.py`):
   providers, MCP servers and plugins public. A plugin is published when it has a `plugin__user_group` row with a permission
   for a removed group and no `NOT_AVAILABLE` setting; a name clash takes the
   next free name, and the log names each published plugin ([[skills]]). A
+  synced plugin (GitHub marketplace) is not moved: the group's members get a
+  `plugin__user` share instead. A
   plugin already in the Organization library as `NOT_AVAILABLE` stays so: its
   group members lose it. An integration keeps its company setting: each member
   of a removed group that had access (a share, or a group setting above

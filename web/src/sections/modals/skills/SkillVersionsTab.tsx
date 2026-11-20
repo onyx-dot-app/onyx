@@ -153,8 +153,10 @@ export default function SkillVersionsTab({
     (version) => version.is_current && version.review_status === "pending"
   );
 
+  const locked = skill.content_locked;
+
   function restoreButton(version: SkillVersion) {
-    if (version.is_current) return null;
+    if (version.is_current || locked) return null;
     return (
       <Button
         prominence="secondary"
@@ -285,7 +287,12 @@ export default function SkillVersionsTab({
           }
         />
       )}
-      {canPublish && unpublishedChanges && !isPending && (
+      {locked && (
+        <Text as="p" font="secondary-body" color="text-03">
+          {t("locked")}
+        </Text>
+      )}
+      {canPublish && unpublishedChanges && !isPending && !locked && (
         <Section flexDirection="row" justifyContent="end" height="auto">
           {publishAction === "off" ? (
             <Text font="secondary-body" color="text-03">

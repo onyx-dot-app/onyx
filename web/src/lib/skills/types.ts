@@ -3,6 +3,7 @@
  * `backend/onyx/server/features/skill/models.py`.
  */
 
+import type { SkillMarketplace } from "@/lib/marketplaces/types";
 import type { PluginDetail } from "@/lib/plugins/types";
 
 export type SkillInstallationPolicy =
@@ -11,7 +12,7 @@ export type SkillInstallationPolicy =
   | "REQUIRED"
   | "NOT_AVAILABLE";
 
-/** A marketplace default cannot be REQUIRED. */
+/** The Organization library default cannot be REQUIRED. */
 export type OrganizationLibraryDefaultPolicy = Exclude<
   SkillInstallationPolicy,
   "REQUIRED"
@@ -106,6 +107,8 @@ export interface Skill {
   available_count: number;
   needed_count: number;
   plugin: PluginDetail | null;
+  marketplace: SkillMarketplace | null;
+  content_locked: boolean;
 }
 
 export type BuiltinSkill = Skill & {
@@ -189,20 +192,6 @@ export interface SkillBundleContents {
   description: string;
   instructions_markdown: string;
   files: SkillBundleFile[];
-}
-
-export interface GitHubSkillPreview {
-  path: string;
-  name: string;
-  description: string | null;
-  unavailable_reason: string | null;
-}
-
-export interface GitHubSkillsPreview {
-  repository: string;
-  revision: string;
-  subpath: string | null;
-  skills: GitHubSkillPreview[];
 }
 
 export interface GitHubImportedSkill {

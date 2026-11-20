@@ -16,8 +16,9 @@
   and Built-in, which shows only with Craft on, as `list_chat_skills` leaves
   built-ins out of chat (`lib/customize/skills.ts:groupSkills`). A row has the
   tag Disabled, Required, Pending review or Unpublished changes, the date, Turn
-  on, and a menu (Turn on/off, Share, Remove). Add has Upload skill, Create a
-  skill (`/app/customize/skills/new`) and Import from GitHub. A custom skill
+  on, and a menu (Turn on/off, Share, Remove). Add has Upload skill and Create a
+  skill (`/app/customize/skills/new`); GitHub skills come in through a
+  marketplace ([[#github-marketplaces]]). A custom skill
   opens at `/app/customize/skills/[id]`; a built-in opens a preview. A custom
   skill's icon is a themed glyph picked from its name and description
   (`sections/customize/skillIcon.tsx`). The Admin Panel lists custom skills
@@ -28,12 +29,39 @@
   as Slack or Linear, shows and loads only for a user who runs a plugin that
   holds that app ([[#built-in-app-skill-rule]]). A custom skill written for an
   app is an ordinary custom skill: it loads before the user connects the app.
-- **Authoring.** A user writes a skill in the browser editor, uploads a `.zip`
-  or a single SKILL.md, or imports skills from a GitHub repository after a
-  preview of every SKILL.md found. A private repository needs the user's
-  GitHub connection in Craft; without it the import is anonymous. The owner
-  shares with users or groups as viewer or editor, publishes to the
-  organization, or transfers ownership.
+- **Authoring.** A user writes a skill in the browser editor, or uploads a
+  `.zip` or a single SKILL.md. The owner shares with users or groups as
+  viewer or editor, publishes to the organization, or transfers ownership.
+- **GitHub marketplaces.** A user adds a GitHub repository with a
+  `.claude-plugin/marketplace.json` as a marketplace ([[#github-marketplaces]]).
+  Each entry becomes one plugin, and "Sync now" brings the repository's
+  changes. A personal marketplace belongs to the user who adds it. A company
+  marketplace needs organization-wide `MANAGE_PLUGINS` on the user and on the
+  token (`server/features/skill/marketplace_api.py:_is_manager`), and the organization
+  sees its plugins as it sees published ones, under the marketplace default.
+  A synced plugin's content changes only in GitHub. A company plugin's sharing
+  and install settings change in Onyx; a personal one has neither. On the web, the Plugins tab Add menu
+  (`sections/customize/AddSkillMenu.tsx`) has Add marketplace
+  (`sections/marketplaces/AddMarketplaceModal.tsx`: source, then a confirm
+  step with the resolved source and each entry's Will install list) and
+  Manage marketplaces (`/app/customize/plugins/marketplaces`,
+  `sections/marketplaces/MarketplacesPage.tsx`). The admin skills page
+  (`views/SkillsPage.tsx`) shows the same table
+  (`sections/marketplaces/MarketplacesTable.tsx`): failed syncs above it,
+  a row menu (Sync now, Default Access, Replace login,
+  Remove, which names the plugins it deletes) and a detail modal. Members see
+  company marketplaces read-only (`can_manage` false: no row menu, no Sync
+  now). The confirm step asks for the type before the entries and lists ready
+  entries first; the others fold behind one button. On the Plugins tab
+  (`lib/plugins/directory.ts`, `lib/customize/plugins.ts`) a synced plugin is
+  in "From marketplaces" with "from <marketplace>", and a manager sees another
+  user's unshared plugin as "private to <email>", not shared. The plugin page
+  shows "Synced from owner/repo", the marketplace as its Location and a
+  "Managed by the <name> marketplace" note with a link to Marketplaces. For `content_locked` the web offers no
+  content change: no Edit on the skill page, no restore or publish on the
+  versions tab, and no organization access or ownership transfer in the share
+  dialog (`lib/skills/sharing.ts:canChangeOrganizationAccess`); each says
+  why. `can_delete` is false for a synced plugin.
 - **Plugin upload.** A user uploads a Claude Code or Codex plugin zip
   ([[#plugin-upload]]). `POST /skills/plugins/inspect` shows the skills, the
   MCP servers the plugin needs with their state for the user, the parts Onyx
@@ -132,7 +160,7 @@
   `sections/customize/CustomizeDetailLayout.tsx` (back link, header, underline
   tabs, and `DetailOverview`: the description beside a card of `KeyValue`
   facts). Built-in skills keep a preview-only dialog.
-- **Access at import.** GitHub import and multiple-ZIP upload accept one set
+- **Access at import.** Multiple-ZIP upload accepts one set
   of sharing settings for the selection. The single-skill editor accepts
   sharing before creation. These use the same sharing checks as later edits.
 - **In chat**, the agent sees the names and descriptions of the user's
@@ -191,7 +219,7 @@ When it fails:
 - A bundle with bad frontmatter, an unsafe path, a reserved name, or a
   `.template` file is rejected with a message. A direct upload over a size or
   file count limit is rejected with a 413 that names the limit. Batch uploads
-  list the Skill in `not_imported`, and a GitHub preview marks it unavailable.
+  list the Skill in `not_imported`.
   A frontmatter field that Onyx does not read (`license`, `compatibility`,
   `metadata`, `allowed-tools`) with a value it cannot read is kept as written
   and does not block the skill. Messages name the field in plain words.
@@ -212,7 +240,7 @@ When it fails:
 ## Scope
 
 This component owns the built-in skill rows; the plugin tables ([[#plugin-tables]]); bundle parsing and validation; built-in skill definitions;
-per-user rendering of templates; GitHub import; the push of a user's skill
+per-user rendering of templates; GitHub marketplaces and their sync; the push of a user's skill
 files into a sandbox; and the skills library UI.
 
 Neighbours own the rest:
@@ -583,10 +611,13 @@ the app from the same rule
     or left in the background (`skills/push.py:enqueue_skill_push`, task
     `push_skills_to_users` on the `sandbox` queue), so a large sync does not
     wait for the pushes. Other routes push in the request, after their commit
-    (`skills/push.py:push_skills_and_commit`). The Organization library
-    default is written by
-    `db/plugin.py:set_organization_library_default__no_commit`, which refuses
-    `REQUIRED` and returns the users of the plugins that follow it. EDIT on a skill is not enough
+    (`skills/push.py:push_skills_and_commit`). A marketplace default (the
+    Organization library or a company GitHub marketplace) is written by
+    `db/plugin.py:set_marketplace_default__no_commit`, which refuses
+    `REQUIRED` only for the Organization library (a company marketplace can be
+    Required, as in Claude) and returns the users of the plugins that follow
+    it. A Required plugin keeps its skill names first; the plugin that loses
+    one shows `name_held_by` (see the name order above). EDIT on a skill is not enough
     to change its groups: any
     change to the group set or levels is a `MANAGE_PLUGINS` action within scope
     (`auth/scoped_permissions.py:assert_within_scope`, [[authorization]]).
@@ -913,6 +944,89 @@ the app from the same rule
     SQL sum of enabled, not invalid plugins
     (`db/plugin_access.py:users_with_usage_past`) picks the candidates, and
     the per-user read then runs for those users only.
+28. `github-marketplaces` **A GitHub marketplace sync writes one read or
+    nothing.** A `plugin_marketplace` row of kind `github` keeps its
+    `repository`, `folder` and `ref` ('' for none; one unique index for
+    personal and one for company sources), its login user and its last sync.
+    `skills/marketplace/provider.py:marketplace_config` reads them as a
+    `GitHubMarketplaceConfig`. Skill responses add `marketplace` (id, name, kind,
+    repository and `personal`) and `content_locked`. `skills/marketplace/reader.py:read_marketplace` reads
+    `.claude-plugin/marketplace.json` (then `.agents/plugins/marketplace.json`)
+    and builds one bundle per entry through
+    `skills/plugin_bundle.py:read_plugin_bundle`: the folder's plugin.json
+    over the entry fields, or the entry fields alone; an entry `skills` list
+    takes only those folders and the MCP files that the entry names. A bad entry is blocked and the rest go on;
+    `github`, `url` and `git-subdir` sources on github.com are fetched from
+    their repository (20 per sync, one repository in memory at a time); other
+    sources and hosts are not supported, with a reason that names the source
+    kind or the host. `skills/ingest_from_github.py:read_repository_archive`
+    records symbolic links, and only an entry whose folder holds one is
+    blocked. `skills/marketplace/reader.py:BundleBudget` holds the
+    skill and size limits for local and remote plugins together.
+    `skills/marketplace/compare.py:plan_marketplace_sync` decides the writes.
+    A synced plugin has the name of its entry, and the plan matches plugins
+    to entries by that name (unique per marketplace); the plugin.json name
+    does not name it. An entry gets a version only when its file list
+    changed; every gone entry deletes its plugin; a blocked entry keeps its
+    plugin. "Is synced" is the marketplace kind (`db/plugin.py:is_synced`).
+    `skills/marketplace/sync.py:sync_marketplace` stores only the bundles to
+    write, then `db/marketplace.py:apply_marketplace_sync__no_commit` compares
+    again under the marketplace row lock and writes all in one transaction. A
+    failed read or a GitHub error only sets `last_error`. A failure before the
+    commit deletes the stored bundles. One sync runs at a time per
+    marketplace (cache lock `marketplace_sync:{id}`); a sync that finds the
+    lock held does nothing. `skills/marketplace/sync.py:marketplace_syncing`
+    is true while `marketplace_sync_queued:{id}` (task expiry TTL; a failed
+    send deletes it) or `marketplace_syncing:{id}` (lock TTL, 5 minutes) is
+    set. The run deletes the running key only while it still holds the lock.
+    A running sync extends the lock and the key between steps (read, each
+    other repository, each staged bundle, apply) and stops after 30 minutes,
+    so a killed worker frees the marketplace within 5 minutes.
+    `request_marketplace_sync` does nothing while `marketplace_syncing` is
+    true, and the web turns Sync now off then. A sync whose lock expired writes nothing. A folder URL
+    (`.../tree/<ref>/<folder>`) and `github.com/owner/repo` fill the ref and
+    the folder. A personal add of a source that a company marketplace has is
+    refused with CONFLICT. A missing branch and a missing repository give
+    their own `last_error`. Remote entries read at most `REMOTE_REPOSITORY_MAX_COUNT` (20) other
+    repositories without a GitHub login and
+    `REMOTE_REPOSITORY_MAX_COUNT_WITH_LOGIN` (200) with one
+    (`skills/marketplace/provider.py`); entries past it are blocked with a
+    `MarketplaceReasonCode`, and the web shows one note for them. A plugin
+    with only commands, agents or hooks is not supported with
+    `SKILLS_AND_MCP_ONLY`. The web translates `reason_code` and keeps
+    `reason` as the fallback (`lib/marketplaces/hooks.ts:useMarketplaceCopy`).
+    `utils/github.py:github_rate_limited` puts GitHub's reset time in the
+    error (`reset_at`), and a 422 for a ref that names no commit counts as
+    not found. The preview says when the caller or the company already has
+    the source (`db/marketplace.py:source_added_for`). `GitHubMarketplaceConfig` lowercases owner and repo, so the
+    unique indexes catch a duplicate that differs only in case. Every JSON
+    read in `skills/marketplace/reader.py` turns a `RecursionError` into a
+    blocked entry or a failed read. Replace login needs no GitHub
+    connection: the new login reads a public repository without one. The Celery task
+    `sync_marketplace` runs on the `sandbox` queue; Onyx Lite runs the sync
+    in the API server after the response. Company plugins have no author and
+    `published_version_id` follows each version;
+    `db/plugin_access.py:seen_by_organization` makes the organization see
+    them. A personal plugin belongs to the marketplace owner and starts off, as
+    in Claude; the owner turns plugins on one at a time. `db/plugin.py:refuse_if_synced`
+    refuses content edits, uploads, restores, publishing, ownership transfer
+    and delete of a synced plugin with "Change this plugin in GitHub.". A
+    company plugin's shares and install settings still change. A personal
+    plugin takes no user or group share and no install setting
+    (`db/skill.py:_check_skill_access_change`), and a global plugin manager
+    does not see or edit another user's personal plugins
+    (`db/skill.py:_not_others_personal_marketplace`). `db/skill.py:may_delete_skill` takes
+    `synced`, so `SkillResponse.can_delete` is false for a synced plugin. A user delete removes the user's personal
+    marketplaces and their plugins (`db/users.py:delete_user_from_db__no_commit`
+    returns a `UserDeleteCleanup`; after the commit, `finish_user_delete`
+    deletes their bundle files and pushes skills to the users who could see
+    them).
+    The routes are in
+    `server/features/skill/marketplace_api.py`, under `/marketplaces`;
+    they authorize before any GitHub call. The web client is
+    `web/src/lib/marketplaces/` (`web/src/lib/marketplaces/hooks.ts` reads the list again every 3 s
+    while a marketplace syncs, and refreshes the skill lists when a sync
+    changes plugins).
 
 ---
 
@@ -939,8 +1053,9 @@ the app from the same rule
 
 ## Known issues
 
-- **GitHub import checks a skill's shape, not its content.** Import enforces
-  archive size and member limits, path safety and frontmatter rules. Nothing
+- **A marketplace sync checks a plugin's shape, not its content.** The sync
+  enforces archive size and member limits, path safety, the bundle limits
+  and frontmatter rules. Nothing
   inspects the instructions or bundled scripts. A harmful skill is contained
   only by the sandbox and its egress proxy ([[craft-sandboxes]],
   [[craft-external-apps]]).
@@ -968,9 +1083,9 @@ the app from the same rule
 - [[craft-sessions]]: the stale check and the reload that apply a push to a
   live runtime.
 - [[craft-external-apps]]: the app rows behind built-in app skills, the
-  connectable-apps list and action policy views. GitHub
-  import and preview authenticate with the user's connection of the GitHub
-  integration (`server/features/skill/api.py:_github_authorization_header`,
+  connectable-apps list and action policy views. A marketplace preview uses
+  the caller's connection of the GitHub integration, and a sync uses the
+  login user's (`integrations/github_auth.py:github_authorization_for`,
   through `resolve_call_credentials`).
 - [[authorization]]: `MANAGE_PLUGINS` and the scoped-manager group check
   (`assert_within_scope`).
@@ -1018,8 +1133,11 @@ the app from the same rule
 
 ## Verification
 
-- `backend/tests/unit/onyx/skills/` covers bundles, validation, rendering and
-  GitHub import.
+- `backend/tests/unit/onyx/skills/` covers bundles, validation, rendering,
+  the repository archive read and the marketplace reader and compare.
+- `backend/tests/external_dependency_unit/craft/marketplace/` covers the
+  marketplace sync, the task lock, the API, access and the content lock with
+  a fake GitHub (`backend/tests/external_dependency_unit/craft/fake_github.py`).
 - `backend/tests/external_dependency_unit/craft/` (the `test_skill*` files)
   covers visibility, the fileset, affected users, ownership and push faults.
   `backend/tests/external_dependency_unit/craft/test_skill_version_reads.py` covers the version each user runs (an

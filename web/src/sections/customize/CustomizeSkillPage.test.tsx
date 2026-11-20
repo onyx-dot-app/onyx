@@ -588,6 +588,50 @@ test("an owner restores a version from the Versions tab", async () => {
   ).toEqual({ base_version_id: "version-2" });
 });
 
+test("a skill synced from GitHub offers no content changes, and says why", async () => {
+  open(
+    detail({
+      user_permission: "OWNER",
+      owner: { id: "user-me", email: "me@example.com" },
+      can_delete: false,
+      content_locked: true,
+      marketplace: {
+        id: "market-1",
+        name: "acme/plugins",
+        kind: "github",
+        repository: "acme/plugins",
+        personal: false,
+      },
+    }),
+    "/app/customize/skills/custom-1?edit=1"
+  );
+  const user = setupUser();
+  const lockedCopy = messages.skills.modals.versions.locked;
+
+  expect(
+    await screen.findByRole("tab", { name: copy.tabs.overview })
+  ).toHaveAttribute("aria-selected", "true");
+  await user.click(screen.getByRole("tab", { name: "Contents · 2" }));
+  expect(await screen.findByText(lockedCopy)).toBeVisible();
+  expect(
+    screen.queryByRole("button", { name: copy.contents.edit })
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: copy.contents.saveVersion })
+  ).not.toBeInTheDocument();
+
+  expect(screen.getByRole("button", { name: copy.share })).toBeVisible();
+  expect(
+    screen.queryByRole("button", { name: copy.menu })
+  ).not.toBeInTheDocument();
+
+  await user.click(screen.getByRole("tab", { name: copy.tabs.versions }));
+  expect(await screen.findByText("Version 1")).toBeVisible();
+  expect(
+    screen.queryByRole("button", { name: "Restore version 1" })
+  ).not.toBeInTheDocument();
+});
+
 test("an uploaded plugin opens its plugin page without skill-only requests", async () => {
   window.history.replaceState(null, "", "/admin/skills/custom-1");
   const plugin = customFixture({

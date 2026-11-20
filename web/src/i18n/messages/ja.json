@@ -16455,84 +16455,15 @@
         }
       },
       "importGithub": {
-        "cancelButton": {
-          "label": "キャンセル"
-        },
         "doneButton": {
           "label": "完了"
         },
-        "header": {
-          "chooseDescription": "{repository} からスキルを選択してください。",
-          "completeDescription": "スキルに追加された内容を確認してください。",
-          "completeTitle": "GitHub からのインポートが完了しました",
-          "description": "GitHub リポジトリから 1 つ以上のスキルをインポートします。",
-          "title": "GitHub からインポート"
-        },
-        "importError": {
-          "message": "スキルをインポートできませんでした。",
-          "title": "スキルをインポートできませんでした"
-        },
-        "loadError": {
-          "message": "リポジトリを読み込めませんでした。",
-          "title": "リポジトリを読み込めませんでした"
-        },
-        "privateRepos": {
-          "askAdmin": "パブリックリポジトリはそのままインポートできます。プライベートリポジトリをインポートする前に、管理者に GitHub の設定を依頼してください。",
-          "connect": "パブリックリポジトリはそのままインポートできます。プライベートリポジトリをインポートするには GitHub を接続してください。",
-          "connectButton": {
-            "label": "GitHub を接続"
-          },
-          "connected": "パブリックリポジトリはそのままインポートできます。プライベートリポジトリでは、お使いの GitHub 接続を使用します。",
-          "needsConnection": "パブリックリポジトリはそのままインポートできます。プライベートリポジトリには GitHub 接続が必要です。",
-          "setUp": "パブリックリポジトリはそのままインポートできます。プライベートリポジトリをインポートする前に GitHub を設定してください。",
-          "setUpButton": {
-            "label": "GitHub を設定"
-          }
-        },
-        "repositoryInput": {
-          "label": "リポジトリ"
-        },
-        "result": {
-          "disabledCount": "同じ名前のスキルが有効になっているため、{count} 件は無効の状態でインポートしました。",
-          "enabledCount": "{count} 件を自動的に有効にしました。",
-          "failedCount": "{count} 件をインポートできませんでした。",
-          "importedSection": {
-            "title": "インポート済み"
-          },
-          "importedTitle": "{count, plural, one {# 件のスキルをインポートしました} other {# 件のスキルをインポートしました}}",
-          "noneTitle": "インポートされたスキルはありません",
-          "notImportedSection": {
-            "title": "インポートなし"
-          },
-          "notSelectedCount": "{count} 件は選択されていません。"
-        },
-        "selectAll": {
-          "ariaLabel": "インポート可能なすべてのスキルを選択"
-        },
-        "selection": {
-          "label": "インポート可能な{total, plural, one {# 件のスキル} other {# 件のスキル}}のうち {selected} 件を選択中"
-        },
-        "skillCheckbox": {
-          "ariaLabel": "{name} を選択"
-        },
-        "skillTag": {
-          "disabled": "無効",
-          "enabled": "有効"
-        },
         "submitButton": {
           "importLabel": "{count, plural, one {スキルをインポート} other {# 件のスキルをインポート}}",
-          "importingLabel": "インポート中…",
-          "searchLabel": "リポジトリを検索",
-          "searchingLabel": "検索中…"
-        },
-        "unavailableFallback": "このスキルはインポートできません。",
-        "unavailableTag": {
-          "label": "インポート不可"
+          "importingLabel": "インポート中…"
         },
         "sharing": {
-          "title": "インポートするスキルのアクセス権",
-          "configureButton": "アクセス権を設定",
-          "description": "これらのアクセス設定は、選択した{count, plural, one {# 件のスキル} other {# 件のスキル}}すべてに適用されます。"
+          "configureButton": "アクセス権を設定"
         }
       },
       "nameConflict": {
@@ -16719,15 +16650,12 @@
           "offNotice": "公開はオフになっています。このアップデートの公開を管理者に依頼してください。"
         },
         "noManifestVersion": "なし",
-        "manifestVersion": "plugin.json {version}"
+        "manifestVersion": "plugin.json {version}",
+        "locked": "このプラグインは GitHub から同期されるため、変更は GitHub で行います。"
       }
     },
     "page": {
       "createMenu": {
-        "github": {
-          "description": "リポジトリから1つ以上のスキルをインポートします。",
-          "title": "GitHubからインポート"
-        },
         "scratch": {
           "description": "{appName}で指示を書き、サポートファイルを追加します。",
           "title": "最初から作成"
@@ -16738,6 +16666,10 @@
         "upload": {
           "description": "SKILL.mdファイル、ZIPファイル、またはスキルフォルダをインポートします。",
           "title": "スキルをアップロード"
+        },
+        "marketplace": {
+          "title": "マーケットプレイスを追加",
+          "description": "リポジトリから追加して、そのプラグインを同期します。"
         }
       },
       "empty": {
@@ -16965,7 +16897,9 @@
       "sections": {
         "organization": "組織ライブラリ",
         "mine": "マイアップロード",
-        "shared": "あなたと共有"
+        "shared": "あなたと共有",
+        "marketplace": "マーケットプレイスから",
+        "private": "別のユーザー専用"
       },
       "detail": {
         "title": "プラグイン",
@@ -16986,7 +16920,8 @@
           "author": "作成者",
           "homepage": "ホームページ",
           "license": "ライセンス",
-          "notUsed": "Onyx では使用しない部分"
+          "notUsed": "Onyx では使用しない部分",
+          "marketplace": "{name} マーケットプレイス、{scope, select, personal {個人} other {会社}}（{repository}）"
         },
         "skills": {
           "off": "オフ",
@@ -17019,6 +16954,12 @@
           "pending": "削除中…",
           "done": "{name} を削除しました。",
           "failed": "プラグインを削除できませんでした。"
+        },
+        "syncedFrom": "{repository} から同期",
+        "managed": {
+          "title": "マーケットプレイス {name} が管理しています",
+          "description": "Onyx はこのプラグインを {repository} から同期します。GitHub で変更してから、マーケットプレイスを同期してください。",
+          "open": "マーケットプレイスを開く"
         }
       },
       "connection": {
@@ -17211,6 +17152,167 @@
       "description": "このプラグインが必要とする連携の一部は、あなたには利用できません。",
       "note": "それらがなくてもプラグインは動作します。プラグインが連携へのアクセス権を与えることはありません。",
       "done": "完了"
+    },
+    "marketplaces": {
+      "status": {
+        "ok": "準備完了",
+        "blocked": "インストール不可",
+        "not_supported": "未対応"
+      },
+      "scope": {
+        "personal": "個人",
+        "company": "会社"
+      },
+      "source": {
+        "repository": "リポジトリ",
+        "folder": "フォルダ",
+        "root": "リポジトリのルート",
+        "ref": "ブランチ、タグ、またはコミット",
+        "defaultBranch": "デフォルトブランチ",
+        "commit": "コミット"
+      },
+      "preview": {
+        "title": "{name}: {count, plural, one {追加するプラグイン # 件} other {追加するプラグイン # 件}}",
+        "empty": "このマーケットプレイスにはエントリがありません。",
+        "failedTitle": "Onyx はこのマーケットプレイスを読み取れません",
+        "version": "v{version}",
+        "willInstall": "インストールされるもの",
+        "skills": "{count, plural, one {スキル} other {スキル}}: {names}",
+        "showUnusable": "{count, plural, one {Onyx が使えない # 件のエントリを表示} other {Onyx が使えない # 件のエントリを表示}}",
+        "hideUnusable": "Onyx が使えないエントリを非表示",
+        "summary": "準備完了 {ready} · インストール不可 {blocked} · 非対応 {unsupported}"
+      },
+      "add": {
+        "menuItem": "マーケットプレイスを追加",
+        "title": "マーケットプレイスを追加",
+        "description": "リポジトリから追加します。Onyx は .claude-plugin/marketplace.json ファイルを読み取り、各エントリがプラグインになります。",
+        "confirmTitle": "マーケットプレイスを確認",
+        "confirmDescription": "ソースとプラグインが意図したものか確認してから、マーケットプレイスを追加してください。",
+        "repository": {
+          "title": "リポジトリ",
+          "description": "owner/repo またはリポジトリの URL を入力してください。",
+          "placeholder": "例: anthropics/claude-plugins-official"
+        },
+        "folder": {
+          "title": "フォルダ",
+          "description": ".claude-plugin/marketplace.json があるフォルダ。リポジトリのルートを使う場合は空のままにします。",
+          "placeholder": "例: plugins"
+        },
+        "ref": {
+          "title": "ブランチ、タグ、またはコミット",
+          "description": "空のままにすると、デフォルトブランチを使用します。",
+          "placeholder": "例: main"
+        },
+        "scope": {
+          "title": "マーケットプレイスの種類",
+          "personalDescription": "このマーケットプレイスのプラグインはあなただけが利用できます。",
+          "companyDescription": "このマーケットプレイスのプラグインは、公開済みプラグインと同様に組織が利用できます。"
+        },
+        "defaultAccess": {
+          "title": "デフォルトのアクセス",
+          "description": "このマーケットプレイスの各プラグインのインストール設定。後で個別のプラグインについて変更できます。"
+        },
+        "privateNote": "Onyx は GitHub 接続を使ってプライベートリポジトリを読み取ります。プライベートリポジトリを追加する前に、連携で GitHub を接続してください。",
+        "continue": "続行",
+        "previewing": "読み取り中…",
+        "back": "戻る",
+        "submit": "マーケットプレイスを追加",
+        "adding": "追加中…",
+        "cancel": "キャンセル",
+        "previewFailed": "リポジトリを読み取れませんでした。",
+        "addFailed": "マーケットプレイスを追加できませんでした。",
+        "added": "{name} を追加しました。プラグインは最初の同期後に表示されます。",
+        "duplicate": {
+          "personal": "このマーケットプレイスはすでに追加されています。",
+          "company": "組織はすでにこのマーケットプレイスを利用しています。"
+        }
+      },
+      "sync": {
+        "now": "今すぐ同期",
+        "requested": "{name} の同期を開始しました。",
+        "failed": "同期を開始できませんでした。",
+        "lastSync": "最終同期 {date}",
+        "never": "未同期",
+        "state": {
+          "syncing": "同期中",
+          "failed": "同期に失敗",
+          "not_synced": "未同期",
+          "synced": "同期済み"
+        }
+      },
+      "columns": {
+        "marketplace": "マーケットプレイス",
+        "sync": "同期",
+        "items": "プラグイン"
+      },
+      "items": "{count, plural, one {# 件のプラグイン} other {# 件のプラグイン}}",
+      "tableLabel": "マーケットプレイス",
+      "open": "{name} を開く",
+      "menu": "{name} の操作",
+      "loadFailed": "マーケットプレイスを読み込めませんでした。",
+      "empty": {
+        "title": "マーケットプレイスはまだありません",
+        "description": "GitHub リポジトリを追加して、そのプラグインを取得します。"
+      },
+      "page": {
+        "title": "マーケットプレイス",
+        "description": "プラグインの取得元の GitHub リポジトリとそのソースです。マーケットプレイスを同期すると、GitHub の変更を取得します。"
+      },
+      "attention": {
+        "failedTitle": "{name} の前回の同期に失敗しました"
+      },
+      "defaultAccess": {
+        "title": "デフォルトのアクセス",
+        "description": "{name} のうち、独自の設定がない各プラグインのインストール設定。",
+        "save": "保存",
+        "cancel": "キャンセル",
+        "saved": "デフォルトのアクセスを保存しました。",
+        "failed": "デフォルトのアクセスを保存できませんでした。"
+      },
+      "replaceLogin": {
+        "label": "ログインを置き換え",
+        "description": "あなたとしてリポジトリを同期します。GitHub 接続がある場合は、それを使います。",
+        "done": "Onyx は {name} をあなたとして同期します。",
+        "doneWithoutGithub": "Onyx は {name} をあなたとして同期するようになりましたが、GitHub が接続されていません。Onyx は公開リポジトリのみ読み取れます。連携で GitHub を接続してください。",
+        "failed": "ログインを置き換えられませんでした。"
+      },
+      "remove": {
+        "label": "削除",
+        "title": "{name} を削除しますか？",
+        "description": "マーケットプレイスと{count, plural, one {そのプラグイン} other {その # 件のプラグイン}}を削除します。メンバーはこれらのプラグインを使えなくなります。",
+        "listLabel": "削除するプラグイン",
+        "noPlugins": "このマーケットプレイスにはプラグインがありません。",
+        "confirm": "削除",
+        "done": "{name} を削除しました。",
+        "failed": "マーケットプレイスを削除できませんでした。",
+        "loadFailed": "このマーケットプレイスのプラグインを読み込めませんでした。",
+        "retry": "再試行",
+        "personalDescription": "マーケットプレイスと{count, plural, one {そのプラグイン} other {その # 件のプラグイン}}を削除します。あなたはこれらのプラグインを使えなくなります。"
+      },
+      "detail": {
+        "title": "マーケットプレイス",
+        "description": "このマーケットプレイスのソース、同期、エントリ。",
+        "loadFailed": "マーケットプレイスを読み込めませんでした。",
+        "scope": "種類",
+        "login": "同期ユーザー",
+        "noLogin": "なし。再度同期するにはログインを置き換えてください。",
+        "lastSync": "最終同期",
+        "entries": "エントリ（{count}）",
+        "noEntries": "前回の同期ではエントリが見つかりませんでした。",
+        "close": "閉じる"
+      },
+      "readOnly": "このマーケットプレイスは管理者が管理しています。",
+      "reason": {
+        "skills_and_mcp_only": "Onyx はスキルと MCP サーバーのみを実行します。",
+        "pastLimit": "Onyx はこのリポジトリを読み込みませんでした。",
+        "external_repository_limit": "Onyx が 1 つのマーケットプレイスで同期する外部リポジトリは最大 {limit} 件です。",
+        "external_repository_limit_without_login": "{limit} 件を超える外部リポジトリを同期するには GitHub を接続してください。",
+        "limitTitle": "一部のプラグインは Onyx が読み込まなかったリポジトリから提供されています"
+      },
+      "errors": {
+        "rateLimited": "GitHub の API レート制限に達しました。数分後にもう一度お試しください。制限を引き上げるには GitHub を接続してください。",
+        "rateLimitedUntil": "GitHub の API レート制限に達しました。{time} にリセットされます。制限を引き上げるには GitHub を接続してください。"
+      }
     }
   },
   "integrations": {
@@ -17297,21 +17399,26 @@
         "label": "追加",
         "upload": "スキルをアップロード",
         "create": "スキルを作成",
-        "github": "GitHub からインポート",
-        "uploadPlugin": "プラグインをアップロード"
+        "uploadPlugin": "プラグインをアップロード",
+        "marketplace": "マーケットプレイスを追加",
+        "manageMarketplaces": "マーケットプレイスを管理"
       },
       "groups": {
         "mine": "自分が作成",
         "organization": "組織から",
         "shared": "共有されたもの",
-        "builtin": "組み込み"
+        "builtin": "組み込み",
+        "marketplace": "マーケットプレイスから",
+        "private": "他のユーザー専用"
       },
       "source": {
         "mine": "自分",
         "organization": "組織から",
         "sharedBy": "{email} が共有",
         "shared": "共有されたもの",
-        "builtin": "組み込み"
+        "builtin": "組み込み",
+        "marketplace": "{name} から（{scope, select, personal {個人} other {会社}}）",
+        "privateTo": "{email} 専用"
       },
       "subtitle": "{source} · {description}",
       "tag": {
@@ -17373,14 +17480,14 @@
       },
       "empty": {
         "title": "プラグインはまだありません",
-        "description": "Claude Code または Codex のプラグインをアップロードすると、そのスキルと必要な連携が追加されます。",
+        "description": "プラグインをアップロードするか、GitHub からマーケットプレイスを追加するか、スキルを作成します。各スキルは 1 つのプラグインです。",
         "upload": "プラグインをアップロード"
       },
       "noMatches": {
         "title": "一致するプラグインはありません",
         "clear": "すべてのプラグインを表示"
       },
-      "intro": "プラグインは、スキルとそれらが必要とする連携をまとめたものです。Claude Code または Codex のプラグインをアップロードするか、スキルを追加します。追加した各スキルは個別のプラグインに入ります。",
+      "intro": "プラグインはスキルと、そのスキルに必要な連携をまとめたものです。Claude Code または Codex のプラグインをアップロードするか、GitHub からマーケットプレイスを追加するか、スキルを追加します。追加した各スキルは個別のプラグインになります。",
       "integrations": "{needed} 件中 {available} 件の連携が利用可能",
       "nameHeld": "オフ: {names} が同じスキル名を使用しています"
     },

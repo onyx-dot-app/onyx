@@ -6,6 +6,7 @@ from typing import Any
 from uuid import UUID
 
 from fastapi_users.password import PasswordHelper
+from pydantic import BaseModel
 from sqlalchemy import Select, case, delete, func, literal, select, text, update
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.exc import IntegrityError
@@ -22,12 +23,13 @@ from onyx.configs.constants import (
     NO_AUTH_PLACEHOLDER_USER_EMAIL,
     SLACK_SERVICE_ACCOUNT_EMAIL,
 )
-from onyx.db.enums import AccountType, Permission
+from onyx.db.enums import AccountType, MarketplaceKind, Permission
 from onyx.db.models import (
     ChatMessage,
     ChatSession,
     DocumentSet,
     DocumentSet__User,
+    Marketplace,
     MCPServer,
     OAuthAccount,
     PermissionGrant,
@@ -48,6 +50,7 @@ from onyx.db.sandbox import (
 from onyx.db.utils import is_check_violation, is_fk_violation
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.file_store.staging import delete_files_best_effort
 from onyx.server.features.build.sandbox.firecracker.purge import (
     purge_harness_sandboxes_in_background,
 )
@@ -974,11 +977,30 @@ _PRIVATE_SKILLS_BLOCK_DELETE = (
 )
 
 
+class UserDeleteCleanup(BaseModel):
+    """What the caller does after the user delete commits."""
+
+    file_ids: list[str] = []
+    affected_user_ids: set[UUID] = set()
+
+
+def finish_user_delete(cleanup: UserDeleteCleanup, db_session: Session) -> None:
+    # onyx.skills.push imports this module.
+    from onyx.skills.push import push_skills_and_commit
+
+    delete_files_best_effort(cleanup.file_ids, "personal marketplace cleanup")
+    if cleanup.affected_user_ids:
+        push_skills_and_commit(cleanup.affected_user_ids, db_session)
+
+
 def delete_user_from_db__no_commit(
     user_to_delete: User,
     db_session: Session,
-) -> None:
+) -> UserDeleteCleanup:
+    """Removes the user's personal marketplaces too. The caller runs
+    `finish_user_delete` after the commit."""
     # onyx.db.plugin imports this module through onyx.db.user_group.
+    from onyx.db.marketplace import delete_github_marketplace__no_commit
     from onyx.db.plugin import private_plugins_blocking_user_delete
 
     # A private plugin lives in its owner's "My uploads". Published plugins stay
@@ -995,9 +1017,24 @@ def delete_user_from_db__no_commit(
             extra={
                 "private_plugins": [
                     {"id": str(plugin.id), "name": plugin.name} for plugin in blocking
-                ]
+                ],
             },
         )
+    # A personal marketplace holds only copies of its repository.
+    cleanup = UserDeleteCleanup()
+    for marketplace_id in db_session.scalars(
+        select(Marketplace.id)
+        .where(
+            Marketplace.kind == MarketplaceKind.GITHUB,
+            Marketplace.owner_user_id == user_to_delete.id,
+        )
+        .order_by(Marketplace.id)
+    ).all():
+        affected, file_ids = delete_github_marketplace__no_commit(
+            marketplace_id, db_session
+        )
+        cleanup.file_ids.extend(file_ids)
+        cleanup.affected_user_ids |= affected - {user_to_delete.id}
     for oauth_account in user_to_delete.oauth_accounts:
         db_session.delete(oauth_account)
 
@@ -1038,6 +1075,7 @@ def delete_user_from_db__no_commit(
         ):
             raise
         raise OnyxError(OnyxErrorCode.CONFLICT, _PRIVATE_SKILLS_BLOCK_DELETE) from exc
+    return cleanup
 
 
 def delete_user_from_db(
@@ -1047,8 +1085,9 @@ def delete_user_from_db(
     # Collect before the cascade removes the rows; delete only after commit.
     sandbox_blob_paths = get_user_sandbox_blob_paths(db_session, user_to_delete.id)
     purge_targets = get_sandbox_purge_targets(db_session, user_to_delete.id)
-    delete_user_from_db__no_commit(user_to_delete, db_session)
+    cleanup = delete_user_from_db__no_commit(user_to_delete, db_session)
     db_session.commit()
+    finish_user_delete(cleanup, db_session)
     delete_sandbox_blobs_best_effort(sandbox_blob_paths)
     purge_harness_sandboxes_in_background(purge_targets)
 

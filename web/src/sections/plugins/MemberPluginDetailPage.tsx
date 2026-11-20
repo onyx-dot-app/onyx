@@ -4,6 +4,7 @@ import { useEffect, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import useSWR, { useSWRConfig } from "swr";
 import {
+  Badge,
   Button,
   Card,
   Dropdown,
@@ -24,6 +25,7 @@ import {
   SvgTrash,
   SvgUploadCloud,
 } from "@opal/icons";
+import { SvgGitHub } from "@opal/logos";
 import { useNavigation, useSearchParams } from "@opal/navigation";
 import useUserSkills from "@/hooks/useUserSkills";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
@@ -33,6 +35,7 @@ import {
   type MemberPluginEntry,
 } from "@/lib/plugins/directory";
 import {
+  MARKETPLACES_PATH,
   customizeTabHref,
   parsePluginPageTab,
   pluginHref,
@@ -51,7 +54,10 @@ import {
 } from "@/lib/skills/hooks";
 import type { Skill } from "@/lib/skills/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
-import { canChangeOrganizationAccess } from "@/lib/skills/sharing";
+import {
+  canChangeOrganizationAccess,
+  canShareSkill,
+} from "@/lib/skills/sharing";
 import { Permission } from "@/lib/types";
 import { useUser } from "@/providers/UserProvider";
 import SkillVersionsTab from "@/sections/modals/skills/SkillVersionsTab";
@@ -103,6 +109,36 @@ interface OverviewTabProps extends PluginTabProps {
   enablement: SkillEnablement;
 }
 
+interface ManagedNoteProps {
+  marketplace: NonNullable<MemberPluginEntry["marketplace"]>;
+}
+
+/** Why a synced plugin has no edit, upload or delete: GitHub holds its files. */
+function ManagedNote({ marketplace }: ManagedNoteProps) {
+  const t = useTranslations("plugins.member.detail.managed");
+  const navigation = useNavigation();
+  return (
+    <MessageCard
+      variant="info"
+      outerPadding={1}
+      innerPadding={1}
+      title={t("title", { name: marketplace.name })}
+      description={t("description", {
+        repository: marketplace.repository ?? marketplace.name,
+      })}
+      rightChildren={
+        <Button
+          prominence="secondary"
+          size="sm"
+          {...navigation.linkTo(MARKETPLACES_PATH)}
+        >
+          {t("open")}
+        </Button>
+      }
+    />
+  );
+}
+
 function OverviewTab({ entry, plugin, enablement }: OverviewTabProps) {
   const t = useTranslations("plugins.member.detail.overview");
   const switchCopy = useTranslations("plugins.member.detail.switch");
@@ -118,48 +154,58 @@ function OverviewTab({ entry, plugin, enablement }: OverviewTabProps) {
     : entry.skills.map((item) => item.name);
   const author = manifest?.author?.name ?? manifest?.author?.email ?? null;
   const link = manifest?.homepage ?? manifest?.repository ?? null;
+  const location = entry.marketplace
+    ? t("marketplace", {
+        name: entry.marketplace.name,
+        scope: entry.marketplace.personal ? "personal" : "company",
+        repository: entry.marketplace.repository ?? "",
+      })
+    : sections(entry.section);
   return (
-    <DetailOverview
-      descriptionLabel={t("description")}
-      description={entry.description ?? t("noDescription")}
-      facts={[
-        {
-          label: switchCopy("title"),
-          value: blocked
-            ? switchCopy(blocked)
-            : heldBy.length > 0
-              ? switchCopy("nameHeld", { names: heldBy.join(", ") })
-              : enabled
-                ? switchCopy("on")
-                : switchCopy("off"),
-        },
-        { label: t("location"), value: sections(entry.section) },
-        ...(entry.ownerEmail
-          ? [{ label: t("owner"), value: entry.ownerEmail }]
-          : []),
-        ...(manifest?.version
-          ? [{ label: t("version"), value: manifest.version }]
-          : []),
-        ...(author ? [{ label: t("author"), value: author }] : []),
-        ...(link ? [{ label: t("homepage"), value: link, mono: true }] : []),
-        ...(manifest?.license
-          ? [{ label: t("license"), value: manifest.license }]
-          : []),
-        ...(skillNames.length > 0
-          ? [{ label: t("skills"), value: skillNames.join(", ") }]
-          : []),
-        ...(manifest && manifest.unused_parts.length > 0
-          ? [
-              {
-                label: t("notUsed"),
-                value: manifest.unused_parts
-                  .map((part) => unusedCopy(part))
-                  .join(", "),
-              },
-            ]
-          : []),
-      ]}
-    />
+    <Section gap={2} alignItems="stretch" height="auto">
+      {entry.marketplace && <ManagedNote marketplace={entry.marketplace} />}
+      <DetailOverview
+        descriptionLabel={t("description")}
+        description={entry.description ?? t("noDescription")}
+        facts={[
+          {
+            label: switchCopy("title"),
+            value: blocked
+              ? switchCopy(blocked)
+              : heldBy.length > 0
+                ? switchCopy("nameHeld", { names: heldBy.join(", ") })
+                : enabled
+                  ? switchCopy("on")
+                  : switchCopy("off"),
+          },
+          { label: t("location"), value: location },
+          ...(entry.ownerEmail
+            ? [{ label: t("owner"), value: entry.ownerEmail }]
+            : []),
+          ...(manifest?.version
+            ? [{ label: t("version"), value: manifest.version }]
+            : []),
+          ...(author ? [{ label: t("author"), value: author }] : []),
+          ...(link ? [{ label: t("homepage"), value: link, mono: true }] : []),
+          ...(manifest?.license
+            ? [{ label: t("license"), value: manifest.license }]
+            : []),
+          ...(skillNames.length > 0
+            ? [{ label: t("skills"), value: skillNames.join(", ") }]
+            : []),
+          ...(manifest && manifest.unused_parts.length > 0
+            ? [
+                {
+                  label: t("notUsed"),
+                  value: manifest.unused_parts
+                    .map((part) => unusedCopy(part))
+                    .join(", "),
+                },
+              ]
+            : []),
+        ]}
+      />
+    </Section>
   );
 }
 
@@ -329,6 +375,8 @@ export default function MemberPluginDetailPage({
     if (skillOnlyId) navigation.go(skillHref(skillOnlyId), { replace: true });
   }, [navigation, skillOnlyId]);
   const skill = entry?.skills.length === 1 ? entry.skills[0] : undefined;
+  const syncedFrom =
+    skill?.marketplace?.kind === "github" ? skill.marketplace.repository : null;
   const showVersions =
     skill !== undefined &&
     (skill.user_permission === "OWNER" || skill.user_permission === "EDITOR");
@@ -427,7 +475,8 @@ export default function MemberPluginDetailPage({
   }
 
   const menu: DropdownMenuItem[] = [
-    ...(canEdit && isPlugin
+    // GitHub holds a synced plugin's files: an upload would make another plugin.
+    ...(canEdit && isPlugin && !skill.content_locked
       ? [
           {
             kind: "action" as const,
@@ -470,6 +519,14 @@ export default function MemberPluginDetailPage({
       icon={SvgBlocks}
       title={entry?.name ?? t("title")}
       description={entry?.description ?? undefined}
+      tags={
+        syncedFrom ? (
+          <Badge
+            icon={SvgGitHub}
+            title={t("syncedFrom", { repository: syncedFrom })}
+          />
+        ) : undefined
+      }
       loading={loading || skillOnlyId !== undefined}
       error={
         loading
@@ -491,7 +548,7 @@ export default function MemberPluginDetailPage({
       actions={
         entry
           ? [
-              ...(canEdit
+              ...(skill && canShareSkill(skill)
                 ? [
                     <Button
                       key="share"

@@ -50,6 +50,7 @@ from onyx.db.plugin_access import (
     affected_user_ids_for_plugins,
     holds_one_root_skill,
     plugin_editable_by_user,
+    seen_by_organization,
     visible_plugin_ids,
 )
 from onyx.db.user_group import assert_not_shared_with_default_group
@@ -162,34 +163,53 @@ def get_organization_library_default(db_session: Session) -> PluginInstallationP
     return policy or PluginInstallationPolicy.AVAILABLE
 
 
-def set_organization_library_default__no_commit(
-    policy: PluginInstallationPolicy, db_session: Session
+def set_marketplace_default__no_commit(
+    marketplace_id: UUID, policy: PluginInstallationPolicy, db_session: Session
 ) -> set[UUID]:
-    """Set the Organization library default and return the users with a
-    running sandbox who could see a plugin that follows it, before or after.
-    REQUIRED is refused: one switch would force every published plugin on
-    every user."""
-    if policy == PluginInstallationPolicy.REQUIRED:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "The Organization library default cannot be Required.",
-        )
-    library_id = get_or_create_organization_library__no_commit(db_session)
-    library = db_session.scalars(
-        select(Marketplace).where(Marketplace.id == library_id).with_for_update()
-    ).one()
+    """Set a marketplace default and return the users with a running sandbox
+    who could see a plugin that follows it, before or after. A company GitHub
+    marketplace can be REQUIRED, as in Claude; the Organization library
+    cannot, because one switch would force every published plugin on."""
+    if marketplace_id == ORGANIZATION_LIBRARY_ID:
+        if policy == PluginInstallationPolicy.REQUIRED:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "The Organization library default cannot be Required.",
+            )
+        get_or_create_organization_library__no_commit(db_session)
+    marketplace = db_session.scalars(
+        select(Marketplace).where(Marketplace.id == marketplace_id).with_for_update()
+    ).one_or_none()
+    if marketplace is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Marketplace not found.")
     affected_ids = list(
         db_session.scalars(
             select(Plugin.id).where(
-                Plugin.marketplace_id == library_id,
+                Plugin.marketplace_id == marketplace_id,
                 Plugin.installation_policy.is_(None),
             )
         )
     )
     before = affected_user_ids_for_plugins(affected_ids, db_session)
-    library.default_installation_policy = policy
+    marketplace.default_installation_policy = policy
     db_session.flush()
     return before | affected_user_ids_for_plugins(affected_ids, db_session)
+
+
+SYNCED_PLUGIN_LOCKED = "Change this plugin in GitHub."
+
+
+def is_synced(plugin: Plugin) -> bool:
+    return plugin.marketplace.kind == MarketplaceKind.GITHUB
+
+
+def is_personal_synced(plugin: Plugin) -> bool:
+    return is_synced(plugin) and plugin.marketplace.owner_user_id is not None
+
+
+def refuse_if_synced(plugin: Plugin) -> None:
+    if is_synced(plugin):
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, SYNCED_PLUGIN_LOCKED)
 
 
 def free_plugin_name(
@@ -609,6 +629,39 @@ def create_plugin__no_commit(
     return plugin
 
 
+def create_synced_plugin__no_commit(
+    marketplace: Marketplace,
+    name: str,
+    content: PluginVersionContent,
+    created_by: User | None,
+    db_session: Session,
+) -> Plugin:
+    if content.manifest is None:
+        raise RuntimeError("Bug: a synced plugin has a manifest.")
+    plugin_id = uuid4()
+    version_id = uuid4()
+    plugin = Plugin(
+        id=plugin_id,
+        name=name,
+        description=version_description(content) or "",
+        marketplace_id=marketplace.id,
+        author_user_id=marketplace.owner_user_id,
+        current_version_id=version_id,
+        published_version_id=version_id if marketplace.owner_user_id is None else None,
+    )
+    db_session.add(plugin)
+    db_session.flush()
+    _add_version_rows(
+        version_id=version_id,
+        plugin_id=plugin_id,
+        version_number=1,
+        content=content,
+        created_by=created_by,
+        db_session=db_session,
+    )
+    return plugin
+
+
 def find_upload_target(name: str, user_id: UUID, db_session: Session) -> Plugin | None:
     """The plugin an upload of ``name`` adds a version to: one the user can
     edit, in the user's uploads, then in another user's uploads (an EDITOR
@@ -716,6 +769,7 @@ def publish_plugin__no_commit(
     plugin = lock_plugin(plugin_id, db_session)
     if plugin is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Plugin not found.")
+    refuse_if_synced(plugin)
     library_id = get_or_create_organization_library__no_commit(db_session)
     if plugin.marketplace_id == library_id:
         return
@@ -746,6 +800,7 @@ def publish_or_request_review__no_commit(
     ``actor``; OFF raises. The one place the setting applies. ``actor`` None
     is a system or approved publish and always publishes. An organization-wide
     plugin manager always publishes. A publish clears the pending request."""
+    refuse_if_synced(plugin)
     if actor is not None and not has_global_permission(
         actor, Permission.MANAGE_PLUGINS
     ):
@@ -959,10 +1014,7 @@ def _lock_for_access_change(
         db_session.scalars(
             select(Plugin.id)
             .join(Marketplace, Marketplace.id == Plugin.marketplace_id)
-            .where(
-                Plugin.id.in_(found),
-                Marketplace.kind == MarketplaceKind.ORGANIZATION_LIBRARY,
-            )
+            .where(Plugin.id.in_(found), seen_by_organization(Marketplace))
         )
     )
     user_grants: dict[UUID, dict[UUID, SkillSharePermission]] = {}

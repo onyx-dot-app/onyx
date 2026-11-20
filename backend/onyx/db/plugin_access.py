@@ -2,8 +2,10 @@
 
 The rule, once:
 
-- Visible: the plugin is in the Organization library and the install setting
-  for the user is not NOT_AVAILABLE; or the user is its author; or a
+- Seen by the organization: the plugin is in the Organization library or in
+  a company GitHub marketplace (``seen_by_organization``).
+- Visible: the organization sees the plugin and the install setting for the
+  user is not NOT_AVAILABLE; or the user is its author; or a
   plugin__user row; or a plugin__user_group row with a permission for one of
   the user's groups. A group row with no permission holds only a group install
   setting and grants nothing. A row with a permission cannot be NOT_AVAILABLE.
@@ -106,6 +108,16 @@ def rank_of(
     | InstrumentedAttribute[PluginInstallationPolicy | None],
 ) -> ColumnElement[int]:
     return case(_POLICY_RANK, value=policy)
+
+
+def seen_by_organization(marketplace: type[Marketplace]) -> ColumnElement[bool]:
+    return or_(
+        marketplace.kind == MarketplaceKind.ORGANIZATION_LIBRARY,
+        and_(
+            marketplace.kind == MarketplaceKind.GITHUB,
+            marketplace.owner_user_id.is_(None),
+        ),
+    )
 
 
 def company_installation_policy(
@@ -214,7 +226,7 @@ def plugin_in_managed_scope(
         Plugin__User.user_id.not_in(managed_group_member_ids_subquery(manager)),
     )
     return and_(
-        marketplace.kind != MarketplaceKind.ORGANIZATION_LIBRARY,
+        ~seen_by_organization(marketplace),
         group_share.where(Plugin__UserGroup.user_group_id.in_(managed)).exists(),
         ~group_share.where(Plugin__UserGroup.user_group_id.not_in(managed)).exists(),
         ~user_share_outside.exists(),
@@ -238,7 +250,7 @@ def plugin_required_for_anyone(
             group_row.installation_policy == required,
             _visible(
                 _granted(plugin, membership.user_id),
-                marketplace.kind == MarketplaceKind.ORGANIZATION_LIBRARY,
+                seen_by_organization(marketplace),
                 literal(policy_rank(required)),
             ),
         )
@@ -548,9 +560,7 @@ def _user_plugin_pairs(
             user_id.label("user_id"),
             Plugin.id.label("plugin_id"),
             Plugin.created_at.label("created_at"),
-            (Marketplace.kind == MarketplaceKind.ORGANIZATION_LIBRARY).label(
-                "published"
-            ),
+            seen_by_organization(Marketplace).label("published"),
             func.coalesce(Plugin.author_user_id == user_id, False).label("is_author"),
             or_(
                 Plugin__User.plugin_id.is_not(None),
@@ -876,10 +886,20 @@ class PluginAccess(BaseModel):
     user_shares: tuple[PluginUserShare, ...]
     group_rows: tuple[PluginGroupRowAccess, ...]
 
+    marketplace_id: UUID
+    marketplace_kind: MarketplaceKind
+    marketplace_name: str
+    marketplace_repository: str | None
+    # Set for a personal GitHub marketplace.
+    marketplace_owner_user_id: UUID | None
     # The default of the plugin's marketplace.
     marketplace_default_policy: PluginInstallationPolicy
     # ``plugin_required_for_anyone``.
     required_for_anyone: bool
+
+    @property
+    def synced(self) -> bool:
+        return self.marketplace_kind == MarketplaceKind.GITHUB
 
     @property
     def group_shares(self) -> tuple[PluginGroupShare, ...]:
@@ -914,7 +934,7 @@ def load_plugin_access(
             Plugin.author_user_id,
             author.c.email,
             author.c.is_active,
-            Marketplace.kind == MarketplaceKind.ORGANIZATION_LIBRARY,
+            seen_by_organization(Marketplace),
             Plugin.installation_policy,
             Marketplace.default_installation_policy,
             Plugin.current_version_id,
@@ -936,6 +956,11 @@ def load_plugin_access(
             version_is_valid(runs),
             plugin_required_for_anyone(Plugin, Marketplace),
             holds_one_root_skill(runs),
+            Marketplace.id,
+            Marketplace.kind,
+            Marketplace.name,
+            Marketplace.repository,
+            Marketplace.owner_user_id,
         )
         .join(Marketplace, Marketplace.id == Plugin.marketplace_id)
         .join(current, current.id == Plugin.current_version_id)
@@ -1002,6 +1027,11 @@ def load_plugin_access(
             is_valid=row[14],
             required_for_anyone=bool(row[15]),
             is_skill=bool(row[16]),
+            marketplace_id=row[17],
+            marketplace_kind=row[18],
+            marketplace_name=row[19],
+            marketplace_repository=row[20],
+            marketplace_owner_user_id=row[21],
             user_shares=tuple(user_shares.get(row[0], ())),
             group_rows=tuple(group_rows.get(row[0], ())),
         )

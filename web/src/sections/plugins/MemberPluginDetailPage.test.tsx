@@ -339,3 +339,132 @@ test("the Skills tab opens the instructions of one skill", async () => {
 
   expect(await screen.findByText("Write the plan first.")).toBeInTheDocument();
 });
+
+test("a synced plugin names its repository and hides restore and publish", async () => {
+  window.history.replaceState(
+    null,
+    "",
+    `/app/customize/plugins/${PLUGIN_ID}?tab=versions`
+  );
+  const plugin = customFixture({
+    id: PLUGIN_ID,
+    name: "review-kit",
+    kind: "plugin",
+    user_permission: "OWNER",
+    current_version_id: "version-2",
+    current_version_number: 2,
+    published_version_number: 1,
+    content_locked: true,
+    marketplace: {
+      id: "22222222-2222-4222-8222-222222222222",
+      name: "acme/plugins",
+      kind: "github",
+      repository: "acme/plugins",
+      personal: true,
+    },
+    plugin: { manifest: null, skills: [], needs: [] },
+  });
+  mockFetch({
+    "/api/skills": { builtins: [], customs: [plugin] },
+    [`/api/skills/${PLUGIN_ID}`]: plugin,
+    [`/api/skills/custom/${PLUGIN_ID}/versions`]: [
+      {
+        id: "version-2",
+        version_number: 2,
+        created_at: "2026-11-02T10:00:00Z",
+        created_by_email: "me@example.com",
+        is_current: true,
+        review_status: "draft",
+      },
+      {
+        id: "version-1",
+        version_number: 1,
+        created_at: "2026-11-01T10:00:00Z",
+        created_by_email: "me@example.com",
+        is_current: false,
+        review_status: "published",
+      },
+    ],
+  });
+  render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
+
+  expect(
+    await screen.findByText("Synced from acme/plugins")
+  ).toBeInTheDocument();
+  expect(
+    await screen.findByText(
+      "This plugin syncs from GitHub, so you change it in GitHub."
+    )
+  ).toBeInTheDocument();
+  expect(await screen.findByText("Version 1")).toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Restore version 1" })
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Publish update" })
+  ).not.toBeInTheDocument();
+});
+
+test("a synced plugin names its marketplace and says that GitHub holds it", async () => {
+  window.history.replaceState(null, "", `/app/customize/plugins/${PLUGIN_ID}`);
+  const plugin = customFixture({
+    id: PLUGIN_ID,
+    name: "review-kit",
+    kind: "plugin",
+    user_permission: "OWNER",
+    owner: { id: "me", email: "me@example.com" },
+    content_locked: true,
+    marketplace: {
+      id: "22222222-2222-4222-8222-222222222222",
+      name: "acme-tools",
+      kind: "github",
+      repository: "acme/plugins",
+      personal: true,
+    },
+    plugin: { manifest: null, skills: [], needs: [] },
+  });
+  mockFetch({
+    "/api/skills": { builtins: [], customs: [plugin] },
+    [`/api/skills/${PLUGIN_ID}`]: plugin,
+  });
+  render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
+
+  expect(
+    await screen.findByText("Managed by the acme-tools marketplace")
+  ).toBeInTheDocument();
+  expect(
+    screen.getByText("acme-tools marketplace, personal (acme/plugins)")
+  ).toBeInTheDocument();
+  expect(screen.queryByText("My uploads")).not.toBeInTheDocument();
+});
+
+test("a personal synced plugin offers neither Share nor Upload New Version", async () => {
+  window.history.replaceState(null, "", `/app/customize/plugins/${PLUGIN_ID}`);
+  const plugin = customFixture({
+    id: PLUGIN_ID,
+    name: "review-kit",
+    kind: "plugin",
+    user_permission: "OWNER",
+    can_delete: false,
+    content_locked: true,
+    marketplace: {
+      id: "22222222-2222-4222-8222-222222222222",
+      name: "acme-tools",
+      kind: "github",
+      repository: "acme/plugins",
+      personal: true,
+    },
+    plugin: { manifest: null, skills: [], needs: [] },
+  });
+  mockFetch({
+    "/api/skills": { builtins: [], customs: [{ ...plugin, plugin: null }] },
+    [`/api/skills/${PLUGIN_ID}`]: plugin,
+  });
+  render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
+
+  expect(
+    await screen.findByText("Managed by the acme-tools marketplace")
+  ).toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Share" })).toBeNull();
+  expect(screen.queryByRole("button", { name: "More actions" })).toBeNull();
+});

@@ -256,25 +256,6 @@ class CustomSkillBundleContents(BaseModel):
     files: list[SkillBundleFile]
 
 
-class GitHubRepository(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    owner: str
-    repo: str
-    revision: str
-    subpath: str | None = None
-
-
-class GitHubSkillBundle(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    path: str
-    name: str
-    description: str | None
-    bundle_bytes: bytes | None
-    unavailable_reason: str | None = None
-
-
 class ChatSkill(BaseModel):
     """A custom skill the user runs, at the version the user runs. Each
     description is one line: runs of whitespace become one space."""

@@ -78,9 +78,12 @@ from onyx.db.plugin import (
     check_base_version,
     create_plugin__no_commit,
     get_plugin_version,
+    is_personal_synced,
     is_skill_version,
+    is_synced,
     private_plugins_blocking_user_delete,
     publish_or_request_review__no_commit,
+    refuse_if_synced,
     set_plugin_preferences__no_commit,
     transfer_plugin__no_commit,
 )
@@ -290,10 +293,24 @@ def _built_in_skill_select(
     return stmt.where(Skill.built_in_skill_id.notin_(unavailable))
 
 
+def _not_others_personal_marketplace(user: User) -> ColumnElement[bool]:
+    """A manager reaches every plugin except those of another user's personal
+    GitHub marketplace: only its owner gets them."""
+    return Plugin.marketplace_id.not_in(
+        select(Marketplace.id).where(
+            Marketplace.kind == MarketplaceKind.GITHUB,
+            Marketplace.owner_user_id.is_not(None),
+            Marketplace.owner_user_id != user.id,
+        )
+    )
+
+
 def _visible_custom_skill_select(user: User) -> Select[tuple[Plugin]]:
     runs = version_user_runs(Plugin, user.id)
     stmt = select(Plugin)
-    if not has_global_permission(user, Permission.MANAGE_PLUGINS):
+    if has_global_permission(user, Permission.MANAGE_PLUGINS):
+        stmt = stmt.where(_not_others_personal_marketplace(user))
+    else:
         stmt = stmt.where(Plugin.id.in_(visible_plugin_ids(user.id)))
     return stmt.order_by(
         case(
@@ -468,7 +485,9 @@ def fetch_editable_skill(
     stmt = select(Plugin).where(Plugin.id == skill_id)
     if not any_plugin:
         stmt = stmt.where(holds_one_root_skill(Plugin.current_version_id.expression))
-    if not has_global_permission(user, Permission.MANAGE_PLUGINS):
+    if has_global_permission(user, Permission.MANAGE_PLUGINS):
+        stmt = stmt.where(_not_others_personal_marketplace(user))
+    else:
         stmt = stmt.where(_editable_by_user(user))
     if lock_for_update:
         stmt = stmt.with_for_update(of=Plugin).execution_options(populate_existing=True)
@@ -569,6 +588,7 @@ def _add_plugin_version_for_user__no_commit(
     )
     if plugin is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Plugin not found.")
+    refuse_if_synced(plugin)
     with check_skill_limit(db_session, [plugin.id], user.id):
         version = add_plugin_version__no_commit(
             plugin=plugin,
@@ -643,6 +663,7 @@ def lock_skill_for_save(plugin: Plugin, user: User, db_session: Session) -> None
     """Take the save locks in the toggle's order, the user's lock and then the
     plugin row, and check that the user may still edit the skill: the edit
     check before the locks can be stale by now. 404 otherwise."""
+    refuse_if_synced(plugin)
     lock_user_skill_preferences(user.id, db_session)
     if (
         fetch_editable_skill(
@@ -922,6 +943,7 @@ def transfer_skill_ownership(
     skill moves to the new owner's "My uploads". On a name clash there,
     "raise" refuses with CONFLICT and "rename" takes the next free name. A
     published skill stays published."""
+    refuse_if_synced(skill)
     previous_owner_user_id = skill.author_user_id
     if new_owner_user_id == previous_owner_user_id:
         return
@@ -1072,6 +1094,7 @@ SkillBulkAction = Literal["enable", "disable", "delete"]
 
 
 def ensure_can_edit_org_visibility(plugin: Plugin, user: User) -> None:
+    refuse_if_synced(plugin)
     if plugin.author_user_id == user.id:
         return
     if has_global_permission(user, Permission.MANAGE_PLUGINS):
@@ -1130,9 +1153,22 @@ def _plugin_access_change(
     )
 
 
+PERSONAL_SYNCED_PLUGIN_UNSHARED = (
+    "Only the owner of a personal marketplace gets its plugins. "
+    "Add the marketplace for the company to share them."
+)
+
+
 def _check_skill_access_change(
     plugin: Plugin, change: SkillSharingChange, user: User, db_session: Session
 ) -> None:
+    if is_personal_synced(plugin) and (
+        change.user_shares
+        or change.group_shares
+        or change.group_settings
+        or not isinstance(change.installation_policy, UnsetType)
+    ):
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, PERSONAL_SYNCED_PLUGIN_UNSHARED)
     if change.set_public_permission:
         ensure_can_edit_org_visibility(plugin, user)
         _publish_requested(plugin, change.public_permission, db_session)
@@ -1298,10 +1334,16 @@ def bulk_share_skills__no_commit(
     )
 
 
-def may_delete_skill(*, published: bool, required_for_anyone: bool, user: User) -> bool:
+def may_delete_skill(
+    *, synced: bool, published: bool, required_for_anyone: bool, user: User
+) -> bool:
     """A user who can edit a skill deletes it, except a published skill or one
-    REQUIRED for anyone, which needs organization-wide MANAGE_PLUGINS. The
-    delete route and ``SkillResponse.can_delete`` use this one rule."""
+    REQUIRED for anyone, which needs organization-wide MANAGE_PLUGINS. A
+    plugin synced from GitHub is not deleted here; removing its marketplace
+    deletes it. The delete route and ``SkillResponse.can_delete`` use this one
+    rule."""
+    if synced:
+        return False
     return not (published or required_for_anyone) or has_global_permission(
         user, Permission.MANAGE_PLUGINS
     )
@@ -1313,6 +1355,7 @@ def delete_skill_for_user__no_commit(
     """Delete a skill the user may edit. Only a user with organization-wide
     MANAGE_PLUGINS can delete a published skill. Returns the affected users and
     the bundle file ids for caller cleanup."""
+    refuse_if_synced(plugin)
     published = is_published(plugin, db_session)
     required_for_anyone = bool(
         db_session.scalar(
@@ -1326,7 +1369,10 @@ def delete_skill_for_user__no_commit(
         )
     )
     if not may_delete_skill(
-        published=published, required_for_anyone=required_for_anyone, user=user
+        synced=is_synced(plugin),
+        published=published,
+        required_for_anyone=required_for_anyone,
+        user=user,
     ):
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,

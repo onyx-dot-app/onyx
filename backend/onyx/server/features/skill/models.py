@@ -8,6 +8,7 @@ from pydantic import BaseModel, ConfigDict, Field, model_validator
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import (
+    MarketplaceKind,
     PluginInstallationPolicy,
     SkillAccessLevel,
     SkillSharePermission,
@@ -25,7 +26,6 @@ from onyx.skills.models import (
     SkillBundleFile,
     UserPastWriteLimit,
 )
-from onyx.utils.github import GITHUB_COMMIT_SHA_PATTERN
 
 
 class SkillUserShare(BaseModel):
@@ -60,6 +60,15 @@ class PluginDetail(BaseModel):
     manifest: PluginManifest | None
     skills: list[PluginSkillSummary]
     needs: list[PluginNeedView]
+
+
+class SkillMarketplace(BaseModel):
+    id: UUID
+    name: str
+    kind: MarketplaceKind
+    repository: str | None
+    # A personal GitHub marketplace: only its owner gets the plugin.
+    personal: bool
 
 
 class SkillResponse(BaseModel):
@@ -115,6 +124,8 @@ class SkillResponse(BaseModel):
     published_version_number: int | None = None
     # The version that waits for an admin's review, if any.
     pending_version_number: int | None = None
+    marketplace: SkillMarketplace | None = None
+    content_locked: bool = False
 
     @classmethod
     def from_builtin(
@@ -209,6 +220,14 @@ class SkillResponse(BaseModel):
             current_version_number=access.current_version_number,
             published_version_number=access.published_version_number,
             pending_version_number=access.pending_version_number,
+            marketplace=SkillMarketplace(
+                id=access.marketplace_id,
+                name=access.marketplace_name,
+                kind=access.marketplace_kind,
+                repository=access.marketplace_repository,
+                personal=access.synced and access.marketplace_owner_user_id is not None,
+            ),
+            content_locked=access.synced,
         )
 
 
@@ -358,33 +377,6 @@ class SkillBundleInspectResponse(BaseModel):
     description: str
     instructions_markdown: str
     files: list[SkillBundleFile]
-
-
-class GitHubSkillPreview(BaseModel):
-    path: str
-    name: str
-    description: str | None
-    unavailable_reason: str | None
-
-
-class GitHubSkillsPreviewRequest(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-
-    repository: str
-
-
-class GitHubSkillsPreviewResponse(BaseModel):
-    repository: str
-    revision: str
-    subpath: str | None
-    skills: list[GitHubSkillPreview]
-
-
-class GitHubSkillsImportRequest(GitHubSkillsPreviewRequest):
-    revision: str = Field(pattern=GITHUB_COMMIT_SHA_PATTERN)
-    subpath: str | None = None
-    paths: list[str] = Field(min_length=1, max_length=GITHUB_SKILL_MAX_COUNT)
-    sharing: "SkillShareRequest | None" = None
 
 
 class GitHubImportedSkill(BaseModel):

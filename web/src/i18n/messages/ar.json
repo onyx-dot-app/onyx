@@ -16455,84 +16455,15 @@
         }
       },
       "importGithub": {
-        "cancelButton": {
-          "label": "إلغاء"
-        },
         "doneButton": {
           "label": "تم"
         },
-        "header": {
-          "chooseDescription": "اختر مهارات من {repository}.",
-          "completeDescription": "راجع ما تمت إضافته إلى مهاراتك.",
-          "completeTitle": "اكتمل الاستيراد من GitHub",
-          "description": "استورد مهارة أو أكثر من مستودع GitHub.",
-          "title": "استيراد من GitHub"
-        },
-        "importError": {
-          "message": "تعذّر استيراد المهارات.",
-          "title": "تعذّر استيراد المهارات"
-        },
-        "loadError": {
-          "message": "تعذّر تحميل المستودع.",
-          "title": "تعذّر تحميل المستودع"
-        },
-        "privateRepos": {
-          "askAdmin": "المستودعات العامة تُستورد مباشرة. اطلب من المسؤول إعداد GitHub قبل استيراد المستودعات الخاصة.",
-          "connect": "المستودعات العامة تُستورد مباشرة. اربط GitHub لاستيراد المستودعات الخاصة.",
-          "connectButton": {
-            "label": "ربط GitHub"
-          },
-          "connected": "المستودعات العامة تُستورد مباشرة. المستودعات الخاصة تستخدم اتصالك بـ GitHub.",
-          "needsConnection": "المستودعات العامة تُستورد مباشرة. المستودعات الخاصة تتطلب اتصالًا بـ GitHub.",
-          "setUp": "المستودعات العامة تُستورد مباشرة. قم بإعداد GitHub قبل استيراد المستودعات الخاصة.",
-          "setUpButton": {
-            "label": "إعداد GitHub"
-          }
-        },
-        "repositoryInput": {
-          "label": "المستودع"
-        },
-        "result": {
-          "disabledCount": "{count} استُوردت معطّلة لأن مهارة أخرى بنفس الاسم مفعّلة.",
-          "enabledCount": "{count} فُعّلت تلقائيًا.",
-          "failedCount": "{count} تعذّر استيرادها.",
-          "importedSection": {
-            "title": "المستوردة"
-          },
-          "importedTitle": "{count, plural, one {# مهارة مستوردة} other {# مهارات مستوردة}}",
-          "noneTitle": "لم يتم استيراد أي مهارات",
-          "notImportedSection": {
-            "title": "غير مستوردة"
-          },
-          "notSelectedCount": "{count} غير محددة."
-        },
-        "selectAll": {
-          "ariaLabel": "تحديد جميع المهارات القابلة للاستيراد"
-        },
-        "selection": {
-          "label": "تم تحديد {selected} من {total, plural, one {# مهارة قابلة للاستيراد} other {# مهارات قابلة للاستيراد}}"
-        },
-        "skillCheckbox": {
-          "ariaLabel": "تحديد {name}"
-        },
-        "skillTag": {
-          "disabled": "معطّلة",
-          "enabled": "مفعّلة"
-        },
         "submitButton": {
           "importLabel": "{count, plural, one {استيراد مهارة} other {استيراد # مهارات}}",
-          "importingLabel": "جارٍ الاستيراد…",
-          "searchLabel": "البحث في المستودع",
-          "searchingLabel": "جارٍ البحث…"
-        },
-        "unavailableFallback": "لا يمكن استيراد هذه المهارة.",
-        "unavailableTag": {
-          "label": "يتعذّر الاستيراد"
+          "importingLabel": "جارٍ الاستيراد…"
         },
         "sharing": {
-          "title": "الوصول إلى المهارات المستوردة",
-          "configureButton": "إعداد الوصول",
-          "description": "تنطبق إعدادات الوصول هذه على {count, plural, zero {المهارات المحددة} one {المهارة المحددة} two {المهارتين المحددتين} few {جميع المهارات المحددة وعددها #} many {جميع المهارات المحددة وعددها #} other {جميع المهارات المحددة وعددها #}}."
+          "configureButton": "إعداد الوصول"
         }
       },
       "nameConflict": {
@@ -16719,15 +16650,12 @@
           "offNotice": "النشر متوقف. اطلب من مسؤول نشر هذا التحديث."
         },
         "noManifestVersion": "لا يوجد",
-        "manifestVersion": "plugin.json {version}"
+        "manifestVersion": "plugin.json {version}",
+        "locked": "تتم مزامنة هذه الإضافة من GitHub، لذلك تغيّرها في GitHub."
       }
     },
     "page": {
       "createMenu": {
-        "github": {
-          "description": "استورد مهارة واحدة أو أكثر من مستودع.",
-          "title": "استيراد من GitHub"
-        },
         "scratch": {
           "description": "اكتب التعليمات وأضف الملفات الداعمة في {appName}.",
           "title": "البدء من الصفر"
@@ -16738,6 +16666,10 @@
         "upload": {
           "description": "استورد ملف SKILL.md أو ملف ZIP أو مجلد مهارة.",
           "title": "رفع مهارة"
+        },
+        "marketplace": {
+          "title": "إضافة سوق",
+          "description": "أضف من مستودع وزامن إضافاته."
         }
       },
       "empty": {
@@ -16965,7 +16897,9 @@
       "sections": {
         "organization": "مكتبة المؤسسة",
         "mine": "ملفاتي المرفوعة",
-        "shared": "تمت مشاركتها معك"
+        "shared": "تمت مشاركتها معك",
+        "marketplace": "من سوق",
+        "private": "خاص بمستخدم آخر"
       },
       "detail": {
         "title": "إضافة",
@@ -16986,7 +16920,8 @@
           "author": "المؤلف",
           "homepage": "الصفحة الرئيسية",
           "license": "الترخيص",
-          "notUsed": "غير مستخدم في Onyx"
+          "notUsed": "غير مستخدم في Onyx",
+          "marketplace": "سوق {name}، {scope, select, personal {شخصي} other {الشركة}} ({repository})"
         },
         "skills": {
           "off": "متوقفة",
@@ -17019,6 +16954,12 @@
           "pending": "جارٍ الحذف…",
           "done": "تم حذف {name}.",
           "failed": "تعذّر حذف المكوّن الإضافي."
+        },
+        "syncedFrom": "تمت المزامنة من {repository}",
+        "managed": {
+          "title": "يديره سوق {name}",
+          "description": "يزامن Onyx هذه الإضافة من {repository}. غيّرها في GitHub، ثم زامن السوق.",
+          "open": "فتح الأسواق"
         }
       },
       "connection": {
@@ -17211,6 +17152,167 @@
       "description": "بعض التكاملات التي تحتاجها هذه الإضافة غير متاحة لك.",
       "note": "تعمل الإضافة بدونها. لا تمنح الإضافة أبدًا وصولًا إلى أي تكامل.",
       "done": "تم"
+    },
+    "marketplaces": {
+      "status": {
+        "ok": "جاهز",
+        "blocked": "لا يمكن التثبيت",
+        "not_supported": "غير مدعوم"
+      },
+      "scope": {
+        "personal": "شخصي",
+        "company": "الشركة"
+      },
+      "source": {
+        "repository": "المستودع",
+        "folder": "المجلد",
+        "root": "جذر المستودع",
+        "ref": "فرع أو وسم أو إيداع",
+        "defaultBranch": "الفرع الافتراضي",
+        "commit": "الإيداع"
+      },
+      "preview": {
+        "title": "{name}: {count, plural, one {# إضافة ستتم إضافتها} other {# إضافات ستتم إضافتها}}",
+        "empty": "لا توجد إدخالات في هذا السوق.",
+        "failedTitle": "لا يستطيع Onyx قراءة هذا السوق",
+        "version": "v{version}",
+        "willInstall": "سيتم تثبيتها",
+        "skills": "{count, plural, one {المهارة} other {المهارات}}: {names}",
+        "showUnusable": "{count, plural, one {إظهار # إدخال لا يمكن لـ Onyx استخدامه} other {إظهار # إدخالات لا يمكن لـ Onyx استخدامها}}",
+        "hideUnusable": "إخفاء الإدخالات التي لا يمكن لـ Onyx استخدامها",
+        "summary": "{ready} جاهز · {blocked} لا يمكن تثبيته · {unsupported} غير مدعوم"
+      },
+      "add": {
+        "menuItem": "إضافة سوق",
+        "title": "إضافة سوق",
+        "description": "أضف من مستودع. يقرأ Onyx ملف .claude-plugin/marketplace.json الخاص به، ويصبح كل إدخال إضافة.",
+        "confirmTitle": "تأكيد السوق",
+        "confirmDescription": "تأكد من أن هذا هو المصدر والإضافات التي تريدها، ثم أضف السوق.",
+        "repository": {
+          "title": "المستودع",
+          "description": "اكتب owner/repo أو عنوان URL للمستودع.",
+          "placeholder": "على سبيل المثال: anthropics/claude-plugins-official"
+        },
+        "folder": {
+          "title": "المجلد",
+          "description": "المجلد الذي يحتوي على .claude-plugin/marketplace.json. اتركه فارغًا لاستخدام جذر المستودع.",
+          "placeholder": "على سبيل المثال: plugins"
+        },
+        "ref": {
+          "title": "فرع أو وسم أو إيداع",
+          "description": "اتركه فارغًا لاستخدام الفرع الافتراضي.",
+          "placeholder": "على سبيل المثال: main"
+        },
+        "scope": {
+          "title": "نوع السوق",
+          "personalDescription": "أنت وحدك تحصل على إضافات هذا السوق.",
+          "companyDescription": "تحصل مؤسستك على إضافات هذا السوق، كما تحصل على الإضافات المنشورة."
+        },
+        "defaultAccess": {
+          "title": "الوصول الافتراضي",
+          "description": "إعداد التثبيت لكل إضافة في هذا السوق. يمكنك تغييره لاحقًا لإضافة واحدة."
+        },
+        "privateNote": "يقرأ Onyx المستودع الخاص باستخدام اتصال GitHub الخاص بك. اربط GitHub في التكاملات قبل إضافة مستودع خاص.",
+        "continue": "متابعة",
+        "previewing": "جارٍ القراءة…",
+        "back": "رجوع",
+        "submit": "إضافة سوق",
+        "adding": "جارٍ الإضافة…",
+        "cancel": "إلغاء",
+        "previewFailed": "تعذرت قراءة المستودع.",
+        "addFailed": "تعذرت إضافة السوق.",
+        "added": "تمت إضافة {name}. تظهر إضافاته بعد أول مزامنة.",
+        "duplicate": {
+          "personal": "لقد أضفت هذا السوق بالفعل.",
+          "company": "مؤسستك تحصل على هذا السوق بالفعل."
+        }
+      },
+      "sync": {
+        "now": "مزامنة الآن",
+        "requested": "بدأت مزامنة {name}.",
+        "failed": "تعذر بدء المزامنة.",
+        "lastSync": "آخر مزامنة {date}",
+        "never": "لم تتم المزامنة بعد",
+        "state": {
+          "syncing": "جارٍ المزامنة",
+          "failed": "فشلت المزامنة",
+          "not_synced": "غير متزامن",
+          "synced": "تمت المزامنة"
+        }
+      },
+      "columns": {
+        "marketplace": "السوق",
+        "sync": "المزامنة",
+        "items": "الإضافات"
+      },
+      "items": "{count, plural, one {# إضافة} other {# إضافات}}",
+      "tableLabel": "الأسواق",
+      "open": "فتح {name}",
+      "menu": "إجراءات {name}",
+      "loadFailed": "تعذر تحميل الأسواق.",
+      "empty": {
+        "title": "لا توجد أسواق بعد",
+        "description": "أضف مستودع GitHub للحصول على إضافاته."
+      },
+      "page": {
+        "title": "الأسواق",
+        "description": "مستودعات GitHub التي تحصل منها على الإضافات، مع مصدرها. زامن سوقًا للحصول على التغييرات من GitHub."
+      },
+      "attention": {
+        "failedTitle": "فشلت آخر مزامنة لـ {name}"
+      },
+      "defaultAccess": {
+        "title": "الوصول الافتراضي",
+        "description": "إعداد التثبيت لكل إضافة في {name} ليس لها إعداد خاص بها.",
+        "save": "حفظ",
+        "cancel": "إلغاء",
+        "saved": "تم حفظ الوصول الافتراضي.",
+        "failed": "تعذر حفظ الوصول الافتراضي."
+      },
+      "replaceLogin": {
+        "label": "استبدال تسجيل الدخول",
+        "description": "زامِن المستودع باسمك. يستخدم Onyx اتصال GitHub الخاص بك إن وُجد.",
+        "done": "يزامن Onyx الآن {name} باسمك.",
+        "doneWithoutGithub": "يزامن Onyx الآن {name} باسمك، لكنك لم تربط GitHub. يمكن لـ Onyx قراءة المستودعات العامة فقط. اربط GitHub في التكاملات.",
+        "failed": "تعذر استبدال تسجيل الدخول."
+      },
+      "remove": {
+        "label": "إزالة",
+        "title": "هل تريد إزالة {name}؟",
+        "description": "يؤدي هذا إلى حذف السوق و{count, plural, one {إضافته} other {إضافاته (#)}}. يفقد الأعضاء هذه الإضافات.",
+        "listLabel": "الإضافات المراد حذفها",
+        "noPlugins": "لا توجد إضافات في هذا السوق.",
+        "confirm": "إزالة",
+        "done": "تمت إزالة {name}.",
+        "failed": "تعذرت إزالة السوق.",
+        "loadFailed": "تعذّر تحميل إضافات هذا السوق.",
+        "retry": "إعادة المحاولة",
+        "personalDescription": "يؤدي هذا إلى حذف السوق و{count, plural, one {إضافته} other {إضافاته (#)}}. تفقد هذه الإضافات."
+      },
+      "detail": {
+        "title": "السوق",
+        "description": "مصدر هذا السوق ومزامنته وإدخالاته.",
+        "loadFailed": "تعذر تحميل السوق.",
+        "scope": "النوع",
+        "login": "المزامنة باسم",
+        "noLogin": "لا يوجد. استبدل تسجيل الدخول للمزامنة مرة أخرى.",
+        "lastSync": "آخر مزامنة",
+        "entries": "الإدخالات ({count})",
+        "noEntries": "لم تجد آخر مزامنة أي إدخالات.",
+        "close": "إغلاق"
+      },
+      "readOnly": "يدير المسؤول هذا السوق.",
+      "reason": {
+        "skills_and_mcp_only": "يشغّل Onyx المهارات وخوادم MCP فقط.",
+        "pastLimit": "لم يقرأ Onyx هذا المستودع.",
+        "external_repository_limit": "يزامن Onyx ما لا يزيد عن {limit} مستودعًا خارجيًا لكل سوق.",
+        "external_repository_limit_without_login": "اربط GitHub لمزامنة أكثر من {limit} مستودعًا خارجيًا.",
+        "limitTitle": "بعض المكونات الإضافية تأتي من مستودعات لم يقرأها Onyx"
+      },
+      "errors": {
+        "rateLimited": "تم بلوغ حد واجهة GitHub البرمجية. حاول مرة أخرى بعد بضع دقائق. اربط GitHub لرفع الحد.",
+        "rateLimitedUntil": "تم بلوغ حد واجهة GitHub البرمجية. تتم إعادة التعيين في {time}. اربط GitHub لرفع الحد."
+      }
     }
   },
   "integrations": {
@@ -17297,21 +17399,26 @@
         "label": "إضافة",
         "upload": "رفع مهارة",
         "create": "إنشاء مهارة",
-        "github": "استيراد من GitHub",
-        "uploadPlugin": "رفع إضافة"
+        "uploadPlugin": "رفع إضافة",
+        "marketplace": "إضافة سوق",
+        "manageMarketplaces": "إدارة الأسواق"
       },
       "groups": {
         "mine": "أنشأتها أنت",
         "organization": "من مؤسستك",
         "shared": "تمت مشاركتها معك",
-        "builtin": "مدمجة"
+        "builtin": "مدمجة",
+        "marketplace": "من الأسواق",
+        "private": "خاصة بمستخدمين آخرين"
       },
       "source": {
         "mine": "بواسطتك",
         "organization": "من مؤسستك",
         "sharedBy": "شاركها {email}",
         "shared": "تمت مشاركتها معك",
-        "builtin": "مدمجة"
+        "builtin": "مدمجة",
+        "marketplace": "من {name} ({scope, select, personal {شخصي} other {الشركة}})",
+        "privateTo": "خاص بـ {email}"
       },
       "subtitle": "{source} · {description}",
       "tag": {
@@ -17373,14 +17480,14 @@
       },
       "empty": {
         "title": "لا توجد إضافات بعد",
-        "description": "حمّل مكوّنًا إضافيًا من Claude Code أو Codex لإضافة مهاراته وعمليات التكامل التي تحتاجها.",
+        "description": "ارفع إضافة، أو أضف سوقًا من GitHub، أو أنشئ مهارة. كل مهارة هي إضافة.",
         "upload": "تحميل مكوّن إضافي"
       },
       "noMatches": {
         "title": "لا توجد إضافات مطابقة",
         "clear": "عرض كل الإضافات"
       },
-      "intro": "تجمع الإضافة المهارات والتكاملات التي تحتاجها. ارفع إضافة Claude Code أو Codex، أو أضف مهارة. كل مهارة تضيفها تأتي في إضافة خاصة بها.",
+      "intro": "تجمع الإضافة المهارات والتكاملات التي تحتاجها. ارفع إضافة Claude Code أو Codex، أو أضف سوقًا من GitHub، أو أضف مهارة. تأتي كل مهارة تضيفها في إضافة خاصة بها.",
       "integrations": "{available} من {needed} من التكاملات متاحة",
       "nameHeld": "متوقف: يستخدم {names} اسم المهارة نفسه"
     },

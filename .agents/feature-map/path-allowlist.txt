@@ -40,3 +40,7 @@ components/desktop-widget-extensions.md: dist/onyx-widget.js
 components/skills.md: .claude-plugin/plugin.json
 components/skills.md: .codex-plugin/plugin.json
 components/skills.md: plugin.json
+
+# Files inside a GitHub marketplace repository.
+components/skills.md: .claude-plugin/marketplace.json
+components/skills.md: .agents/plugins/marketplace.json

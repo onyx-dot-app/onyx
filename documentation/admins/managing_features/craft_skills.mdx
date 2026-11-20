@@ -46,7 +46,7 @@ Configure the missing dependency rather than uploading a custom Skill with the s
 
 ## Prepare a custom Skill
 
-You can write a Skill in Onyx, upload a Skill, or import Skills from a GitHub repository.
+You can write a Skill in Onyx, upload a Skill, or add a GitHub marketplace. See [Marketplaces](#marketplaces).
 Upload `SKILL.md` directly when the Skill does not need supporting files. For a Skill with scripts, examples,
 or other supporting files, create a folder with `SKILL.md` at its top level. Drag the folder into Onyx,
 or upload it as a ZIP.
@@ -114,11 +114,11 @@ Onyx checks each limit separately and counts the bytes that it extracts.
 The file count includes metadata that Onyx removes: `__MACOSX/`, `.DS_Store`, `Thumbs.db`, and `._*` files.
 The ZIP limit applies to both the uploaded ZIP and the ZIP that Onyx stores after normalization.
 Standalone files use the per-file limit before compression.
-Each Skill from a GitHub repository must also pass these limits.
+Each plugin of a marketplace sync must also pass these limits. A marketplace entry over a limit is blocked.
 The `SKILL.md` limit also applies to each edit of a saved Skill.
 Single-bundle uploads over a limit return HTTP 413 with `limit` and `limit_value`.
-Batch uploads and GitHub imports can return HTTP 200 with rejected Skills in `not_imported`,
-with a `reason` for each refusal. The ZIP file list (the names and metadata of all entries) must fit in 1 MiB.
+Batch uploads can return HTTP 200 with rejected Skills in `not_imported`, with a `reason` for each refusal.
+The ZIP file list (the names and metadata of all entries) must fit in 1 MiB.
 Skills saved before the ZIP-size and file-count limits keep working if their file list fits in 4 MiB.
 You can edit their description and instructions and remove their files.
 Adding files or replacing the bundle applies the limits.
@@ -155,6 +155,47 @@ which opens the **Add an Integration** page with the name and the URL filled in.
 the plugin shows **More than one match** until only one has it.
 See [Upload a plugin](/overview/core_features/plugins#upload-a-plugin).
 
+### Marketplaces
+
+A marketplace is a GitHub repository with a `.claude-plugin/marketplace.json` file. Each entry becomes one plugin.
+Users add one on **Customize → Plugins** with **Add → Add marketplace**.
+Admins can also open **Admin Panel → Skills** and click **Create skill → Add marketplace**,
+or click **Add marketplace** in the **Marketplaces** section of that page.
+The section lists the personal marketplaces that you added and each company marketplace, with **Sync now**,
+**Default Access**, **Replace login** and **Remove** in the row menu. Members see each company marketplace read-only,
+with no row menu.
+
+| Type | Who can add it | Who gets its plugins |
+| --- | --- | --- |
+| **Personal** | Any user | Only the user who adds it. Each new plugin starts off until that user turns it on. Nobody can share these plugins, and plugin managers do not see them. |
+| **Company** | A user with the organization-wide `manage:plugins` permission | The organization, as with a published plugin, under the **Default Access** of the marketplace |
+
+The **Default Access** of a company marketplace is **Available**, **Installed**, **Required** or **Not available**.
+With **Required**, every member gets each plugin of the marketplace and cannot turn it off.
+A **Required** plugin keeps its skill names. A member's own plugin with the same skill name turns off,
+and its row says which plugin holds the name. Set the installation policy of one plugin to override the default.
+Only a user with the organization-wide `manage:plugins` permission manages a company marketplace.
+Members see it read-only.
+
+Onyx reads the repository with the GitHub connection of the login, the user who added the marketplace.
+A public repository needs no connection. If the login loses access or leaves, the sync fails with the reason.
+Another manager can click **Replace login** to become the login.
+Onyx then reads the repository with their GitHub connection, or without one for a public repository. The plugins,
+their versions and their shares stay.
+
+A sync runs when a user adds the marketplace or clicks **Sync now**. Onyx does not sync on a schedule.
+One sync of a marketplace runs at a time. **Sync now** is off while a sync runs.
+A sync adds a plugin for each new entry, adds a version when the files of an entry change,
+and deletes the plugin of an entry that is gone. Each plugin has the name of its entry in `marketplace.json`.
+Blocked and not supported entries keep their plugins. A sync that cannot read the marketplace changes nothing.
+
+The content of a synced plugin changes only in GitHub. Onyx refuses edits, uploaded versions, restores, publishes,
+transfers and deletes of a synced plugin with **Change this plugin in GitHub**.
+The sharing and installation policy of a company plugin still change in Onyx. A personal plugin has neither.
+**Remove** deletes the marketplace and all its plugins. When you delete a user,
+Onyx also removes the user's personal marketplaces and their plugins.
+See [Add a marketplace](/overview/core_features/plugins#add-a-marketplace).
+
 ## Review a Skill before publishing
 
 Treat a Skill bundle as code and policy, not only as prompt text.
@@ -189,8 +230,7 @@ Publishing means reviewing that Skill and then sharing it with the intended audi
 <Steps>
   <Step title="Create the personal Skill">
     Open **Craft → Skills** and select **Create skill**. Choose **Start from scratch** to write the Skill in Onyx,
-    **Upload a skill** to import `SKILL.md`, a ZIP, or a Skill folder,
-    or **Import from GitHub** to import one or more Skills from a repository. You can set sharing in the same editor.
+    or **Upload a skill** to import `SKILL.md`, a ZIP, or a Skill folder. You can set sharing in the same editor.
   </Step>
 
   <Step title="Review the Skill">
@@ -224,8 +264,8 @@ Open **Admin Panel → Skills** and choose a value under **Skill Publishing**:
 | **Requires review** | A publish or a **Publish update** makes a request. The Skill stays private, or the organization keeps the published version, until an Admin approves the request. |
 | **Off** | Authors cannot publish. Onyx shows an error when they try. |
 
-The setting applies to every way to publish: the sharing dialog, **Publish update**, bulk sharing, uploads, the editor,
-and GitHub import. Users with the organization-wide `manage:plugins` permission always publish at once.
+The setting applies to every way to publish: the sharing dialog, **Publish update**, bulk sharing, uploads,
+and the editor. Users with the organization-wide `manage:plugins` permission always publish at once.
 
 ### Set the default access
 
@@ -376,8 +416,8 @@ The admin banner lists those users and how many of their Skills did not load. Th
 See [Skills in a session](#skills-in-a-session).
 
 The API returns HTTP 413 with the code `SKILL_LIMIT_EXCEEDED`. Its `skill_limit` field gives `usage`,
-your size and file count after the change, and `max_bytes` and `max_files`.
-In an upload of many Skills or a GitHub import, each refused Skill shows the reason as text.
+your size and file count after the change, and `max_bytes` and `max_files`. In an upload of many Skills,
+each refused Skill shows the reason as text.
 
 A user who is already past a limit is not refused. That user can still upload, turn on, or enlarge Skills,
 and can turn off Skills.
@@ -467,14 +507,11 @@ Only an admin can delete a Skill that is published to the organization.
 This needs the organization-wide `manage:plugins` permission.
 The confirmation lists each selected Skill before deletion.
 
-### Set access during import
+### Set access during upload
 
-In the GitHub import dialog, select **Configure access** before importing the selected Skills.
-The access settings apply to the full selection. For example,
-select 80 Skills and configure organization access to share all 80 during import.
-
-You can also select several ZIP files in **Upload a skill**. Each ZIP must contain one Skill.
-Configure access once before importing the batch. Onyx reports invalid bundles separately.
+You can select several ZIP files in **Upload a skill**. Each ZIP must contain one Skill.
+Select **Configure access** once before you import the batch. The access settings apply to every Skill in the batch.
+Onyx reports invalid bundles separately.
 
 ## Troubleshooting
 
