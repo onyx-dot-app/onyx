@@ -17274,6 +17274,7 @@
         "label": "Reemplazar el inicio de sesión",
         "description": "Sincroniza el repositorio como tú. Onyx usa tu conexión de GitHub si tienes una.",
         "done": "Onyx ahora sincroniza {name} como tú.",
+        "doneWithoutGithub": "Onyx ahora sincroniza {name} como tú, pero no has conectado GitHub. Onyx solo puede leer un repositorio público. Conecta GitHub en Integraciones.",
         "failed": "No se pudo reemplazar el inicio de sesión."
       },
       "remove": {

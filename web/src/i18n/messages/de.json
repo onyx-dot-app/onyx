@@ -17274,6 +17274,7 @@
         "label": "Anmeldung ersetzen",
         "description": "Das Repository als Sie synchronisieren. Onyx nutzt Ihre GitHub-Verbindung, falls vorhanden.",
         "done": "Onyx synchronisiert {name} jetzt als Sie.",
+        "doneWithoutGithub": "Onyx synchronisiert {name} jetzt als Sie, aber Sie haben GitHub nicht verbunden. Onyx kann nur ein öffentliches Repository lesen. Verbinden Sie GitHub unter Integrationen.",
         "failed": "Die Anmeldung konnte nicht ersetzt werden."
       },
       "remove": {

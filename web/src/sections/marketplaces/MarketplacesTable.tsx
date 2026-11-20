@@ -99,13 +99,16 @@ export default function MarketplacesTable() {
     row: MarketplaceSummary,
     call: (id: string) => Promise<MarketplaceDetail>,
     success: string,
-    failure: string
+    failure: string,
+    warning?: (detail: MarketplaceDetail) => string | null
   ) {
     setBusy((current) => new Set(current).add(row.id));
     try {
-      await call(row.id);
+      const detail = await call(row.id);
       await refresh();
-      toast.success(success);
+      const caution = warning?.(detail) ?? null;
+      if (caution) toast.warning(caution);
+      else toast.success(success);
     } catch (caught) {
       toast.error(fetchErrorDetail(caught) ?? failure);
     } finally {
@@ -164,7 +167,11 @@ export default function MarketplacesTable() {
                 row,
                 replaceMarketplaceLogin,
                 t("replaceLogin.done", { name: row.name }),
-                t("replaceLogin.failed")
+                t("replaceLogin.failed"),
+                (detail) =>
+                  detail.login_has_github
+                    ? null
+                    : t("replaceLogin.doneWithoutGithub", { name: row.name })
               ),
           },
         ],

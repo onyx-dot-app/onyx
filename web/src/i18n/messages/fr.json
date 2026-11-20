@@ -17274,6 +17274,7 @@
         "label": "Remplacer la connexion",
         "description": "Synchroniser le dépôt en votre nom. Onyx utilise votre connexion GitHub si vous en avez une.",
         "done": "Onyx synchronise maintenant {name} en votre nom.",
+        "doneWithoutGithub": "Onyx synchronise maintenant {name} en votre nom, mais vous n'avez pas connecté GitHub. Onyx ne peut lire qu'un dépôt public. Connectez GitHub dans Intégrations.",
         "failed": "Impossible de remplacer la connexion."
       },
       "remove": {

@@ -100,6 +100,8 @@ export interface MarketplacePlugin {
 }
 
 export interface MarketplaceDetail extends MarketplaceSummary {
+  /** False when the login user has no GitHub connection: only public repositories sync. */
+  login_has_github: boolean;
   entries: MarketplaceEntry[];
   plugins: MarketplacePlugin[];
 }
