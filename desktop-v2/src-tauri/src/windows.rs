@@ -174,6 +174,7 @@ fn open_failed(app: &AppHandle, title: &str, error: &str) {
         ));
     crate::dialog::show(app, dialog, |app, choice| {
         if choice == rfd::MessageDialogResult::Custom("Try Again".into()) {
+            app.state::<AppState>().forget_read_failure();
             route(app);
         } else {
             let _ = open_login(app);
@@ -206,7 +207,12 @@ pub fn route_to(app: &AppHandle, path: &str) {
         return;
     };
     let Some(token) = state.token(&server) else {
-        show_sign_in(app);
+        // A keyring that could not be read (locked, cancelled unlock) is
+        // not signed out: say so, and let the user try again.
+        match state.read_failure(&server) {
+            Some(error) => open_failed(app, "Could not read your session", &error),
+            None => show_sign_in(app),
+        }
         return;
     };
     let app = app.clone();
