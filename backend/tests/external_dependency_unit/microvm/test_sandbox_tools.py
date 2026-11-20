@@ -2468,81 +2468,91 @@ def test_a_paged_chat_load_lists_the_newest_file_of_each_path(
     mode program publishes the report's path again. A load of only the latest
     message lists the chart and the newer report, oldest first, each with its
     path and title."""
-    ref = chat.ref(db_session)
-    sandbox.write_file(ref, "report.md", b"# Draft\n")
-    sandbox.write_file(ref, "chart.svg", b"<svg/>")
-    chat.send(
-        ChatLLM(
-            [
-                tool_step(
-                    PublishFilesTool.NAME,
-                    "publish",
-                    {
-                        "files": [
-                            {"path": "report.md", "title": "Report"},
-                            {"path": "chart.svg"},
-                        ]
-                    },
-                ),
-                Delta(content="Done."),
-            ]
+    try:
+        ref = chat.ref(db_session)
+        sandbox.write_file(ref, "report.md", b"# Draft\n")
+        sandbox.write_file(ref, "chart.svg", b"<svg/>")
+        chat.send(
+            ChatLLM(
+                [
+                    tool_step(
+                        PublishFilesTool.NAME,
+                        "publish",
+                        {
+                            "files": [
+                                {"path": "report.md", "title": "Report"},
+                                {"path": "chart.svg"},
+                            ]
+                        },
+                    ),
+                    Delta(content="Done."),
+                ]
+            )
         )
-    )
-    sandbox.write_file(ref, "report.md", b"# Final report\n")
-    parts = chat.send(
-        ChatLLM(
-            [
-                code_step(
-                    "code",
-                    "print(await tools.publish_files(files=[{'path': 'report.md'}]))\n",
-                ),
-                Delta(content="Done."),
-            ]
-        ),
-        code_mode=True,
-    )
-    [live_end] = [
-        obj
-        for obj in _sandbox_packets(parts)
-        if isinstance(obj, packets.PublishFilesEnd)
-    ]
-    # The path to show is relative to the chat's working directory.
-    assert [file.display_path for file in live_end.files] == ["report.md"]
-
-    db_session.expire_all()
-    first_answer, last_answer = db_session.scalars(
-        select(ChatMessage)
-        .where(
-            ChatMessage.chat_session_id == chat.chat_session_id,
-            ChatMessage.message_type == MessageType.ASSISTANT,
+        sandbox.write_file(ref, "report.md", b"# Final report\n")
+        parts = chat.send(
+            ChatLLM(
+                [
+                    code_step(
+                        "code",
+                        "print(await tools.publish_files(files=[{'path': 'report.md'}]))\n",
+                    ),
+                    Delta(content="Done."),
+                ]
+            ),
+            code_mode=True,
         )
-        .order_by(ChatMessage.id)
-    ).all()
-    detail = get_chat_session(
-        session_id=chat.chat_session_id, limit=1, user=chat.user, db_session=db_session
-    )
+        [live_end] = [
+            obj
+            for obj in _sandbox_packets(parts)
+            if isinstance(obj, packets.PublishFilesEnd)
+        ]
+        # The path to show is relative to the chat's working directory.
+        assert [file.display_path for file in live_end.files] == ["report.md"]
 
-    assert first_answer.id not in {message.message_id for message in detail.messages}
-    workspace = session_workspace(chat.chat_session_id)
-    assert detail.published_files is not None
-    assert [
-        (file.name, file.title, file.path, file.size, file.mime_type)
-        for file in detail.published_files
-    ] == [
-        ("chart.svg", None, f"{workspace}/chart.svg", 6, "image/svg+xml"),
-        ("report.md", None, f"{workspace}/report.md", 15, "text/markdown"),
-    ]
-    assert [file.display_path for file in detail.published_files] == [
-        "chart.svg",
-        "report.md",
-    ]
-    assert [file.file_id for file in detail.published_files] == [
-        (first_answer.files or [])[1]["id"],
-        (last_answer.files or [])[0]["id"],
-    ]
-    delete_chat_session_by_id(
-        chat.chat_session_id, hard_delete=True, user=chat.user, db_session=db_session
-    )
+        db_session.expire_all()
+        first_answer, last_answer = db_session.scalars(
+            select(ChatMessage)
+            .where(
+                ChatMessage.chat_session_id == chat.chat_session_id,
+                ChatMessage.message_type == MessageType.ASSISTANT,
+            )
+            .order_by(ChatMessage.id)
+        ).all()
+        detail = get_chat_session(
+            session_id=chat.chat_session_id,
+            limit=1,
+            user=chat.user,
+            db_session=db_session,
+        )
+
+        assert first_answer.id not in {
+            message.message_id for message in detail.messages
+        }
+        workspace = session_workspace(chat.chat_session_id)
+        assert detail.published_files is not None
+        assert [
+            (file.name, file.title, file.path, file.size, file.mime_type)
+            for file in detail.published_files
+        ] == [
+            ("chart.svg", None, f"{workspace}/chart.svg", 6, "image/svg+xml"),
+            ("report.md", None, f"{workspace}/report.md", 15, "text/markdown"),
+        ]
+        assert [file.display_path for file in detail.published_files] == [
+            "chart.svg",
+            "report.md",
+        ]
+        assert [file.file_id for file in detail.published_files] == [
+            (first_answer.files or [])[1]["id"],
+            (last_answer.files or [])[0]["id"],
+        ]
+    finally:
+        delete_chat_session_by_id(
+            chat.chat_session_id,
+            hard_delete=True,
+            user=chat.user,
+            db_session=db_session,
+        )
 
 
 @pytest.mark.usefixtures("node", "initialize_file_store")
