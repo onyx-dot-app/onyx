@@ -3,6 +3,7 @@ server: every entry point makes the same documents with the same access, and
 conversion makes only the calls it needs."""
 
 import time
+from datetime import timedelta
 from typing import Any
 
 import pytest
@@ -20,6 +21,11 @@ from onyx.connectors.models import (
 )
 from onyx.connectors.sharepoint import connector as sharepoint_connector
 from onyx.connectors.sharepoint.connector import SharepointConnector
+from onyx.connectors.sharepoint.listing import (
+    DOWNLOAD_URL_MAX_AGE,
+    SharepointListedKind,
+    SharepointListingPayload,
+)
 from tests.external_dependency_unit.connectors.sharepoint.conftest import (
     MockSharepoint,
     list_stubs,
@@ -72,20 +78,88 @@ def test_conversion_makes_the_documents_of_the_fetching_path(
     for document_id, document in converted.items():
         assert _comparable(document) == _comparable(fetched[document_id])
 
-    # One download for each file by its ids, one read for each page, and no
-    # metadata call, listing call or permission read.
+    # One download for each file from its fresh listed link, which is no
+    # Graph call, one read for each page, and no metadata call, listing call
+    # or permission read.
     stats = mock_sharepoint.stats()
     files = mock_sharepoint.supported_file_ids()
     assert stats["item_downloads"] == dict.fromkeys(files, 1)
-    assert stats["ops"]["graph.item.content"]["count"] == len(files)
+    assert stats["ops"]["download_url.get"]["count"] == len(files)
     assert stats["ops"]["graph.site.page.get"]["count"] == len(
         mock_sharepoint.page_ids()
     )
-    allowed = {"graph.item.content", "graph.site.page.get", "download_url.get"}
+    allowed = {"graph.site.page.get", "download_url.get"}
     assert {op for op in stats["ops"] if not op.startswith("login.")} <= allowed, stats[
         "ops"
     ].keys()
     assert stats["unmatched_requests"] == []
+
+
+def _file_stubs(stubs: list[SlimDocumentStub]) -> list[SlimDocumentStub]:
+    return [
+        stub
+        for stub in stubs
+        if stub.listing_payload is not None
+        and stub.listing_payload.as_type(SharepointListingPayload).kind
+        == SharepointListedKind.DRIVE_ITEM
+    ]
+
+
+def test_an_old_listed_link_downloads_by_item_id(
+    mock_sharepoint: MockSharepoint,
+) -> None:
+    """A link older than DOWNLOAD_URL_MAX_AGE is not tried: conversion
+    downloads by Graph /content, as for a stub with no link."""
+    connector = mock_sharepoint.build_connector()
+    stubs = _file_stubs(list_stubs(connector).stubs)
+    for stub in stubs:
+        payload = stub.listing_payload
+        assert isinstance(payload, SharepointListingPayload)
+        assert payload.encrypted_download_url
+        assert payload.download_url_listed_at is not None
+        payload.download_url_listed_at -= DOWNLOAD_URL_MAX_AGE + timedelta(minutes=1)
+    mock_sharepoint.reset_stats()
+
+    converted = _convert(connector, stubs)
+
+    files = mock_sharepoint.supported_file_ids()
+    assert set(converted) == files
+    stats = mock_sharepoint.stats()
+    assert stats["item_downloads"] == dict.fromkeys(files, 1)
+    assert stats["ops"]["graph.item.content"]["count"] == len(files)
+    # Only the redirects of /content, and none of them refused.
+    assert stats["ops"]["download_url.get"]["count"] == len(files)
+    assert stats["ops"]["download_url.get"].get("errors", 0) == 0
+
+
+@pytest.mark.parametrize("refused_status", [401, 403])
+def test_a_refused_listed_link_falls_back_to_content(
+    own_mock_sharepoint: MockSharepoint, refused_status: int
+) -> None:
+    """A fresh link that SharePoint refuses (here: it expired early) costs one
+    try, then conversion downloads by Graph /content."""
+    own_mock_sharepoint.patch_config(
+        {
+            "faults": {
+                "download_url_ttl_seconds": 0,
+                "download_url_expired_status": refused_status,
+            }
+        }
+    )
+    connector = own_mock_sharepoint.build_connector(include_site_pages=False)
+    stubs = list_stubs(connector).stubs
+    own_mock_sharepoint.reset_stats()
+
+    converted = _convert(connector, stubs)
+
+    files = own_mock_sharepoint.supported_file_ids()
+    assert set(converted) == files
+    stats = own_mock_sharepoint.stats()
+    assert stats["item_downloads"] == dict.fromkeys(files, 1)
+    assert stats["ops"]["graph.item.content"]["count"] == len(files)
+    # Each file: one refused listed link, then the redirect of /content.
+    assert stats["ops"]["download_url.get"]["errors"] == len(files)
+    assert stats["ops"]["download_url.get"]["count"] == 2 * len(files)
 
 
 @pytest.mark.usefixtures("ee_permission_sync")

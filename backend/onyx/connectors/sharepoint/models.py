@@ -74,9 +74,9 @@ class SharepointListedKind(str, Enum):
 class SharepointListingPayload(ListingPayload):
     """What conversion needs to fetch one listed file or site page.
 
-    It never holds the file's ``downloadUrl``: that URL expires in about an
-    hour, and it is a credential for the file. Conversion downloads by drive
-    id and item id."""
+    The file's download link is a credential for the file, so the payload
+    holds it only encrypted (``encrypted_download_url``). Conversion uses it
+    while it is fresh, and else downloads by drive id and item id."""
 
     kind: SharepointListedKind
     site_url: str
@@ -100,6 +100,10 @@ class SharepointListingPayload(ListingPayload):
     size: int | None = None
     last_modified_by_display_name: str | None = None
     last_modified_by_email: str | None = None
+    # The listing's download link, encrypted with the deployment's key and in
+    # base64, and when the listing read it. Never log the decrypted link.
+    encrypted_download_url: str | None = None
+    download_url_listed_at: datetime | None = None
     # The listing run that listed the document. Conversion keys the shared
     # permission cache by it, so that a run never reads access that another
     # run or another credential cached. None: conversion keeps the cache in
