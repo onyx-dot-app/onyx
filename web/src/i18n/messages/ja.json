@@ -10681,6 +10681,107 @@
         "saved": "{name} のグループ設定を保存しました。",
         "saveFailed": "グループ設定を保存できませんでした。"
       }
+    },
+    "serviceStatus": {
+      "page": {
+        "description": "Onyx インスタンスの現在のリソース使用量と検索クラスターの状態",
+        "refresh": "更新",
+        "refreshFailed": "クラスターの状態を更新できませんでした。ページには前回の結果が表示されています。",
+        "loadFailed": "検索クラスターの状態を読み取れませんでした。OpenSearch に接続できるか確認してください。"
+      },
+      "cluster": {
+        "title": "検索クラスター - OpenSearch",
+        "status": "クラスターの状態",
+        "version": "OpenSearch {version}",
+        "health": "状態 {health}",
+        "updated": "{time}に更新",
+        "dataNodes": "データノード",
+        "shards": "シャード",
+        "shardLayout": "{primaries} × {copies}",
+        "copies": "コピー",
+        "indexSize": "インデックスサイズ",
+        "chunks": "チャンク",
+        "healthGreen": "緑: すべてのシャードコピーが割り当てられています。",
+        "healthYellow": "黄: 一部のレプリカシャードが割り当てられていません。検索は機能しますが、データノードを失うとデータが失われる可能性があります。",
+        "healthRed": "赤: 一部のプライマリシャードが割り当てられていないため、インデックスの一部を検索できません。"
+      },
+      "searches": {
+        "loadTitle": "検索負荷",
+        "loadUnit": "回/秒",
+        "timeTitle": "検索レイテンシ",
+        "seconds": "{value} 秒",
+        "milliseconds": "{value} ミリ秒",
+        "loadFailed": "最近の検索を読み取れませんでした。",
+        "p90Note": "(90パーセンタイル)",
+        "p90Row": "p90 {value}",
+        "p10Row": "p10 {value}",
+        "rateTooltip": "{rate} 回/秒",
+        "millisecondsUnit": "ミリ秒",
+        "secondsUnit": "秒",
+        "failedInMinute": "{count, plural, other {# 件失敗}}"
+      },
+      "nodes": {
+        "title": "データノード",
+        "disk": "ディスク使用量",
+        "vector": "ベクトルメモリ",
+        "percent": "{value}%",
+        "usedOfTotal": "{used} / {total} {unit}",
+        "shards": "{count, plural, other {# シャード}}",
+        "unnamed": "ノード {number}",
+        "copyName": "OpenSearch のノード名をコピー ({name})"
+      },
+      "indexes": {
+        "title": "インデックス",
+        "chunks": "チャンク",
+        "shards": "シャード",
+        "reindex": "再インデックス",
+        "detail": "埋め込みモデル · {dim} 次元",
+        "deleted": "削除済みチャンク {percent}%",
+        "detailQuantized": "埋め込みモデル · {dim} 次元 · {quantization} ベクトル",
+        "reindexProgress": "現在の {percent}%"
+      },
+      "issues": {
+        "title": "問題と推奨事項",
+        "none": "問題は見つかりませんでした。",
+        "criticalCount": "重大 {count} 件",
+        "warningCount": "{count, plural, other {警告 # 件}}",
+        "nodeCount": "{count} 個のデータノード",
+        "indexSettings": "インデックス設定",
+        "sizingGuide": "サイジングガイド",
+        "clusterRed": {
+          "title": "クラスターの状態が赤です",
+          "description": "一部のプライマリシャードが割り当てられていないため、インデックスの一部を検索できません。OpenSearch のログを確認してください。"
+        },
+        "unassignedShards": {
+          "title": "{value, plural, other {# 個のシャードコピーが割り当てられていません}}",
+          "description": "OpenSearch にはそれらを配置するデータノードがありません。データノードを追加するか、レプリカ数を減らしてください。"
+        },
+        "diskCritical": {
+          "title": "{nodes} のディスクが {value}%",
+          "description": "OpenSearch は 85% でデータノードへのシャード配置を停止します。ストレージまたはデータノードを追加してください。"
+        },
+        "diskWarning": {
+          "title": "{nodes} のディスクが {value}%",
+          "description": "再インデックスには 2 つ目のインデックス用の空き容量が必要です。ストレージまたはデータノードを追加してください。"
+        },
+        "vectorCritical": {
+          "title": "{nodes} のベクトルメモリが {value}%",
+          "description": "ベクトルがメモリに収まらないため、検索はディスクから読み取ります。メモリまたはデータノードを追加するか、より小さいベクトル量子化を使用してください。"
+        },
+        "vectorWarning": {
+          "title": "{nodes} のベクトルメモリが {value}%",
+          "description": "ベクトルがメモリに収まらないと検索が遅くなります。メモリまたはデータノードを追加するか、より小さいベクトル量子化を使用してください。"
+        },
+        "heap": {
+          "title": "{nodes} の JVM ヒープが {value}%",
+          "description": "ヒープがいっぱいになると、OpenSearch はリクエストを拒否することがあります。メモリまたはデータノードを追加してください。"
+        },
+        "indexMissing": {
+          "title": "検索インデックスがありません",
+          "description": "現在の検索設定のインデックスが OpenSearch にないため、検索結果が返りません。OpenSearch のログを確認してから、インデックス設定で再インデックスを開始してください。"
+        },
+        "dismiss": "閉じる"
+      }
     }
   },
   "agents": {
@@ -16150,6 +16251,9 @@
         },
         "discordBot": {
           "label": "Discord ボット"
+        },
+        "serviceStatus": {
+          "label": "サービスステータス"
         }
       },
       "sections": {

@@ -10681,6 +10681,107 @@
         "saved": "Configurações de grupo de {name} salvas.",
         "saveFailed": "Não foi possível salvar a configuração de grupo."
       }
+    },
+    "serviceStatus": {
+      "page": {
+        "description": "Uso atual de recursos e integridade do cluster de busca da sua instância do Onyx",
+        "refresh": "Atualizar",
+        "refreshFailed": "Não foi possível atualizar o status do cluster. A página mostra o último resultado.",
+        "loadFailed": "Não foi possível ler o status do cluster de busca. Verifique se o OpenSearch está acessível."
+      },
+      "cluster": {
+        "title": "Cluster de busca - OpenSearch",
+        "status": "Status do cluster",
+        "version": "OpenSearch {version}",
+        "health": "Status {health}",
+        "updated": "Atualizado {time}",
+        "dataNodes": "Nós de dados",
+        "shards": "Shards",
+        "shardLayout": "{primaries} × {copies}",
+        "copies": "Cópias",
+        "indexSize": "Tamanho do índice",
+        "chunks": "Trechos",
+        "healthGreen": "Verde: todas as cópias de shards estão atribuídas.",
+        "healthYellow": "Amarelo: alguns shards réplica não estão atribuídos. A busca funciona, mas perder um nó de dados pode perder dados.",
+        "healthRed": "Vermelho: alguns shards primários não estão atribuídos, então parte do índice não pode ser pesquisada."
+      },
+      "searches": {
+        "loadTitle": "Carga de busca",
+        "loadUnit": "chamadas/s",
+        "timeTitle": "Latência de busca",
+        "seconds": "{value} s",
+        "milliseconds": "{value} ms",
+        "loadFailed": "Não foi possível ler as buscas recentes.",
+        "p90Note": "(percentil 90)",
+        "p90Row": "p90 {value}",
+        "p10Row": "p10 {value}",
+        "rateTooltip": "{rate} chamadas/s",
+        "millisecondsUnit": "ms",
+        "secondsUnit": "s",
+        "failedInMinute": "{count, plural, one {# com falha} other {# com falha}}"
+      },
+      "nodes": {
+        "title": "Nós de dados",
+        "disk": "Uso de disco",
+        "vector": "Memória de vetores",
+        "percent": "{value}%",
+        "usedOfTotal": "{used} / {total} {unit}",
+        "shards": "{count, plural, one {# shard} other {# shards}}",
+        "unnamed": "Nó {number}",
+        "copyName": "Copiar o nome do nó do OpenSearch ({name})"
+      },
+      "indexes": {
+        "title": "Índices",
+        "chunks": "Trechos",
+        "shards": "Shards",
+        "reindex": "Reindexação",
+        "detail": "Modelo de embeddings · {dim} dimensões",
+        "deleted": "{percent}% de trechos excluídos",
+        "detailQuantized": "Modelo de embeddings · {dim} dimensões · vetores de {quantization}",
+        "reindexProgress": "{percent}% do atual"
+      },
+      "issues": {
+        "title": "Problemas e recomendações",
+        "none": "Nenhum problema encontrado.",
+        "criticalCount": "{count} críticos",
+        "warningCount": "{count, plural, one {# aviso} other {# avisos}}",
+        "nodeCount": "{count} nós de dados",
+        "indexSettings": "Configurações do índice",
+        "sizingGuide": "Guia de dimensionamento",
+        "clusterRed": {
+          "title": "O status do cluster está vermelho",
+          "description": "Alguns shards primários não estão atribuídos, então parte do índice não pode ser pesquisada. Verifique os logs do OpenSearch."
+        },
+        "unassignedShards": {
+          "title": "{value, plural, one {# cópia de shard não está atribuída} other {# cópias de shards não estão atribuídas}}",
+          "description": "O OpenSearch não tem um nó de dados para colocá-las. Adicione nós de dados ou reduza o número de réplicas."
+        },
+        "diskCritical": {
+          "title": "Disco em {value}% em {nodes}",
+          "description": "O OpenSearch para de colocar shards em um nó de dados a 85%. Adicione armazenamento ou nós de dados."
+        },
+        "diskWarning": {
+          "title": "Disco em {value}% em {nodes}",
+          "description": "Uma reindexação precisa de espaço para um segundo índice. Adicione armazenamento ou nós de dados."
+        },
+        "vectorCritical": {
+          "title": "Memória de vetores em {value}% em {nodes}",
+          "description": "Os vetores não cabem na memória, então a busca os lê do disco. Adicione memória ou nós de dados, ou use uma quantização de vetores menor."
+        },
+        "vectorWarning": {
+          "title": "Memória de vetores em {value}% em {nodes}",
+          "description": "A busca fica mais lenta quando os vetores não cabem na memória. Adicione memória ou nós de dados, ou use uma quantização de vetores menor."
+        },
+        "heap": {
+          "title": "Heap da JVM em {value}% em {nodes}",
+          "description": "O OpenSearch pode recusar solicitações quando o heap está cheio. Adicione memória ou nós de dados."
+        },
+        "indexMissing": {
+          "title": "O índice de busca está ausente",
+          "description": "O OpenSearch não tem um índice para as configurações de busca atuais, então a busca não retorna nada. Verifique os logs do OpenSearch e inicie uma reindexação nas configurações do índice."
+        },
+        "dismiss": "Dispensar"
+      }
     }
   },
   "agents": {
@@ -16150,6 +16251,9 @@
         },
         "discordBot": {
           "label": "Bot do Discord"
+        },
+        "serviceStatus": {
+          "label": "Status do serviço"
         }
       },
       "sections": {

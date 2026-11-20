@@ -10681,6 +10681,107 @@
         "saved": "{name}의 그룹 설정을 저장했습니다.",
         "saveFailed": "그룹 설정을 저장할 수 없습니다."
       }
+    },
+    "serviceStatus": {
+      "page": {
+        "description": "Onyx 인스턴스의 현재 리소스 사용량과 검색 클러스터 상태",
+        "refresh": "새로 고침",
+        "refreshFailed": "클러스터 상태를 새로 고칠 수 없습니다. 페이지에는 마지막 결과가 표시됩니다.",
+        "loadFailed": "검색 클러스터 상태를 읽을 수 없습니다. OpenSearch에 연결할 수 있는지 확인하세요."
+      },
+      "cluster": {
+        "title": "검색 클러스터 - OpenSearch",
+        "status": "클러스터 상태",
+        "version": "OpenSearch {version}",
+        "health": "상태 {health}",
+        "updated": "{time} 업데이트됨",
+        "dataNodes": "데이터 노드",
+        "shards": "샤드",
+        "shardLayout": "{primaries} × {copies}",
+        "copies": "복사본",
+        "indexSize": "인덱스 크기",
+        "chunks": "청크",
+        "healthGreen": "초록: 모든 샤드 복사본이 할당되었습니다.",
+        "healthYellow": "노랑: 일부 복제본 샤드가 할당되지 않았습니다. 검색은 동작하지만 데이터 노드를 잃으면 데이터가 손실될 수 있습니다.",
+        "healthRed": "빨강: 일부 기본 샤드가 할당되지 않아 인덱스 일부를 검색할 수 없습니다."
+      },
+      "searches": {
+        "loadTitle": "검색 부하",
+        "loadUnit": "회/초",
+        "timeTitle": "검색 지연 시간",
+        "seconds": "{value}초",
+        "milliseconds": "{value}ms",
+        "loadFailed": "최근 검색을 읽을 수 없습니다.",
+        "p90Note": "(90번째 백분위수)",
+        "p90Row": "p90 {value}",
+        "p10Row": "p10 {value}",
+        "rateTooltip": "{rate}회/초",
+        "millisecondsUnit": "ms",
+        "secondsUnit": "초",
+        "failedInMinute": "{count, plural, other {#건 실패}}"
+      },
+      "nodes": {
+        "title": "데이터 노드",
+        "disk": "디스크 사용량",
+        "vector": "벡터 메모리",
+        "percent": "{value}%",
+        "usedOfTotal": "{used} / {total} {unit}",
+        "shards": "{count, plural, other {샤드 #개}}",
+        "unnamed": "노드 {number}",
+        "copyName": "OpenSearch 노드 이름 복사 ({name})"
+      },
+      "indexes": {
+        "title": "인덱스",
+        "chunks": "청크",
+        "shards": "샤드",
+        "reindex": "재인덱싱",
+        "detail": "임베딩 모델 · {dim}차원",
+        "deleted": "삭제된 청크 {percent}%",
+        "detailQuantized": "임베딩 모델 · {dim}차원 · {quantization} 벡터",
+        "reindexProgress": "현재의 {percent}%"
+      },
+      "issues": {
+        "title": "문제 및 권장 사항",
+        "none": "발견된 문제가 없습니다.",
+        "criticalCount": "심각 {count}건",
+        "warningCount": "{count, plural, other {경고 #건}}",
+        "nodeCount": "데이터 노드 {count}개",
+        "indexSettings": "인덱스 설정",
+        "sizingGuide": "용량 산정 가이드",
+        "clusterRed": {
+          "title": "클러스터 상태가 빨간색입니다",
+          "description": "일부 기본 샤드가 할당되지 않아 인덱스 일부를 검색할 수 없습니다. OpenSearch 로그를 확인하세요."
+        },
+        "unassignedShards": {
+          "title": "{value, plural, other {샤드 복사본 #개가 할당되지 않았습니다}}",
+          "description": "OpenSearch에 이를 배치할 데이터 노드가 없습니다. 데이터 노드를 추가하거나 복제본 수를 줄이세요."
+        },
+        "diskCritical": {
+          "title": "{nodes}의 디스크 {value}%",
+          "description": "OpenSearch는 85%에서 데이터 노드에 샤드 배치를 중지합니다. 스토리지 또는 데이터 노드를 추가하세요."
+        },
+        "diskWarning": {
+          "title": "{nodes}의 디스크 {value}%",
+          "description": "재인덱싱에는 두 번째 인덱스를 위한 공간이 필요합니다. 스토리지 또는 데이터 노드를 추가하세요."
+        },
+        "vectorCritical": {
+          "title": "{nodes}의 벡터 메모리 {value}%",
+          "description": "벡터가 메모리에 들어가지 않아 검색이 디스크에서 읽습니다. 메모리 또는 데이터 노드를 추가하거나 더 작은 벡터 양자화를 사용하세요."
+        },
+        "vectorWarning": {
+          "title": "{nodes}의 벡터 메모리 {value}%",
+          "description": "벡터가 메모리에 들어가지 않으면 검색이 느려집니다. 메모리 또는 데이터 노드를 추가하거나 더 작은 벡터 양자화를 사용하세요."
+        },
+        "heap": {
+          "title": "{nodes}의 JVM 힙 {value}%",
+          "description": "힙이 가득 차면 OpenSearch가 요청을 거부할 수 있습니다. 메모리 또는 데이터 노드를 추가하세요."
+        },
+        "indexMissing": {
+          "title": "검색 인덱스가 없습니다",
+          "description": "현재 검색 설정에 대한 인덱스가 OpenSearch에 없어 검색 결과가 없습니다. OpenSearch 로그를 확인한 다음 인덱스 설정에서 재인덱싱을 시작하세요."
+        },
+        "dismiss": "닫기"
+      }
     }
   },
   "agents": {
@@ -16150,6 +16251,9 @@
         },
         "discordBot": {
           "label": "Discord 봇"
+        },
+        "serviceStatus": {
+          "label": "서비스 상태"
         }
       },
       "sections": {

@@ -43,6 +43,14 @@ different shard settings on AWS-managed OpenSearch.
   successful searches, the window's p90, the slow p90 threshold (700 ms), each
   slow or failed search, and up to 20 random other searches per minute. The
   current minute reports its elapsed seconds, so its rate is not understated.
+  The admin **Service Status** page (Usage section, hidden on Cloud) shows
+  both: a cluster card, the search rate with failed searches, the search
+  latency (one faint dot per listed search in its minute's column, the p10 to
+  p90 band, and the p90 line, green until both ends of a segment pass the
+  threshold; hovering a minute shows its p90 and p10),
+  each data node's disk and vector memory, the indexes, and an issues panel.
+  An admin can dismiss a warning in their browser until it changes; critical
+  issues stay.
 - **An operator** sees the old index deleted about a day after a switch, once
   the new index is healthy. A reclaim that fails repeatedly stops and needs a
   person.

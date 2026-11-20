@@ -10681,6 +10681,107 @@
         "saved": "تم حفظ إعدادات المجموعة لـ {name}.",
         "saveFailed": "تعذّر حفظ إعداد المجموعة."
       }
+    },
+    "serviceStatus": {
+      "page": {
+        "description": "استخدام الموارد الحالي وحالة مجموعة البحث في مثيل Onyx الخاص بك",
+        "refresh": "تحديث",
+        "refreshFailed": "تعذر تحديث حالة المجموعة. تعرض الصفحة آخر نتيجة.",
+        "loadFailed": "تعذّرت قراءة حالة مجموعة البحث. تحقّق من إمكانية الوصول إلى OpenSearch."
+      },
+      "cluster": {
+        "title": "مجموعة البحث - OpenSearch",
+        "status": "حالة المجموعة",
+        "version": "OpenSearch {version}",
+        "health": "الحالة {health}",
+        "updated": "تم التحديث {time}",
+        "dataNodes": "عُقد البيانات",
+        "shards": "الأجزاء",
+        "shardLayout": "{primaries} × {copies}",
+        "copies": "نُسخ",
+        "indexSize": "حجم الفهرس",
+        "chunks": "المقاطع",
+        "healthGreen": "أخضر: جميع نُسخ الأجزاء مُعيّنة.",
+        "healthYellow": "أصفر: بعض أجزاء النُسخ المتماثلة غير مُعيّنة. يعمل البحث، لكن فقدان عقدة بيانات قد يفقد البيانات.",
+        "healthRed": "أحمر: بعض الأجزاء الأساسية غير مُعيّنة، لذلك لا يمكن البحث في جزء من الفهرس."
+      },
+      "searches": {
+        "loadTitle": "حمل البحث",
+        "loadUnit": "طلب/ث",
+        "timeTitle": "زمن استجابة البحث",
+        "seconds": "{value} ث",
+        "milliseconds": "{value} مللي ث",
+        "loadFailed": "تعذّرت قراءة عمليات البحث الأخيرة.",
+        "p90Note": "(المئين التسعون)",
+        "p90Row": "p90 {value}",
+        "p10Row": "p10 {value}",
+        "rateTooltip": "{rate} طلب/ث",
+        "millisecondsUnit": "مللي ث",
+        "secondsUnit": "ث",
+        "failedInMinute": "{count, plural, one {فشلت واحدة} other {فشلت #}}"
+      },
+      "nodes": {
+        "title": "عُقد البيانات",
+        "disk": "استخدام القرص",
+        "vector": "ذاكرة المتجهات",
+        "percent": "{value}%",
+        "usedOfTotal": "{used} / {total} {unit}",
+        "shards": "{count, plural, one {جزء واحد} other {# أجزاء}}",
+        "unnamed": "العقدة {number}",
+        "copyName": "نسخ اسم عقدة OpenSearch ({name})"
+      },
+      "indexes": {
+        "title": "الفهارس",
+        "chunks": "المقاطع",
+        "shards": "الأجزاء",
+        "reindex": "إعادة الفهرسة",
+        "detail": "نموذج التضمين · {dim} بُعدًا",
+        "deleted": "{percent}% مقاطع محذوفة",
+        "detailQuantized": "نموذج التضمين · {dim} بُعدًا · متجهات {quantization}",
+        "reindexProgress": "{percent}% من الحالي"
+      },
+      "issues": {
+        "title": "المشكلات والتوصيات",
+        "none": "لم يتم العثور على مشكلات.",
+        "criticalCount": "{count} حرجة",
+        "warningCount": "{count, plural, one {تحذير واحد} other {# تحذيرات}}",
+        "nodeCount": "{count} عُقد بيانات",
+        "indexSettings": "إعدادات الفهرس",
+        "sizingGuide": "دليل تحديد الحجم",
+        "clusterRed": {
+          "title": "حالة المجموعة حمراء",
+          "description": "بعض الأجزاء الأساسية غير مُعيّنة، لذلك لا يمكن البحث في جزء من الفهرس. راجع سجلات OpenSearch."
+        },
+        "unassignedShards": {
+          "title": "{value, plural, one {نسخة جزء واحدة غير مُعيّنة} other {# من نُسخ الأجزاء غير مُعيّنة}}",
+          "description": "لا توجد لدى OpenSearch عقدة بيانات لوضعها عليها. أضف عُقد بيانات أو قلّل عدد النُسخ المتماثلة."
+        },
+        "diskCritical": {
+          "title": "القرص عند {value}% على {nodes}",
+          "description": "يتوقف OpenSearch عن وضع الأجزاء على عقدة بيانات عند 85%. أضف مساحة تخزين أو عُقد بيانات."
+        },
+        "diskWarning": {
+          "title": "القرص عند {value}% على {nodes}",
+          "description": "تحتاج إعادة الفهرسة إلى مساحة لفهرس ثانٍ. أضف مساحة تخزين أو عُقد بيانات."
+        },
+        "vectorCritical": {
+          "title": "ذاكرة المتجهات عند {value}% على {nodes}",
+          "description": "لا تتسع المتجهات في الذاكرة، لذلك يقرأها البحث من القرص. أضف ذاكرة أو عُقد بيانات، أو استخدم تكميمًا أصغر للمتجهات."
+        },
+        "vectorWarning": {
+          "title": "ذاكرة المتجهات عند {value}% على {nodes}",
+          "description": "يتباطأ البحث عندما لا تتسع المتجهات في الذاكرة. أضف ذاكرة أو عُقد بيانات، أو استخدم تكميمًا أصغر للمتجهات."
+        },
+        "heap": {
+          "title": "ذاكرة JVM عند {value}% على {nodes}",
+          "description": "قد يرفض OpenSearch الطلبات عندما تمتلئ ذاكرة heap. أضف ذاكرة أو عُقد بيانات."
+        },
+        "indexMissing": {
+          "title": "فهرس البحث مفقود",
+          "description": "لا يحتوي OpenSearch على فهرس لإعدادات البحث الحالية، لذلك لا يعيد البحث أي نتائج. تحقق من سجلات OpenSearch، ثم ابدأ إعادة الفهرسة من إعدادات الفهرس."
+        },
+        "dismiss": "تجاهل"
+      }
     }
   },
   "agents": {
@@ -16150,6 +16251,9 @@
         },
         "discordBot": {
           "label": "بوت Discord"
+        },
+        "serviceStatus": {
+          "label": "حالة الخدمة"
         }
       },
       "sections": {

@@ -10681,6 +10681,107 @@
         "saved": "Paramètres de groupe de {name} enregistrés.",
         "saveFailed": "Impossible d’enregistrer le paramètre de groupe."
       }
+    },
+    "serviceStatus": {
+      "page": {
+        "description": "Utilisation actuelle des ressources et santé du cluster de recherche de votre instance Onyx",
+        "refresh": "Actualiser",
+        "refreshFailed": "Impossible d'actualiser l'état du cluster. La page affiche le dernier résultat.",
+        "loadFailed": "Impossible de lire l'état du cluster de recherche. Vérifiez qu'OpenSearch est accessible."
+      },
+      "cluster": {
+        "title": "Cluster de recherche - OpenSearch",
+        "status": "État du cluster",
+        "version": "OpenSearch {version}",
+        "health": "État {health}",
+        "updated": "Mis à jour {time}",
+        "dataNodes": "Nœuds de données",
+        "shards": "Shards",
+        "shardLayout": "{primaries} × {copies}",
+        "copies": "Copies",
+        "indexSize": "Taille de l'index",
+        "chunks": "Fragments",
+        "healthGreen": "Vert : toutes les copies de shards sont attribuées.",
+        "healthYellow": "Jaune : certains shards réplicas ne sont pas attribués. La recherche fonctionne, mais perdre un nœud de données peut perdre des données.",
+        "healthRed": "Rouge : certains shards primaires ne sont pas attribués, donc une partie de l'index ne peut pas être recherchée."
+      },
+      "searches": {
+        "loadTitle": "Charge de recherche",
+        "loadUnit": "appels/s",
+        "timeTitle": "Latence de recherche",
+        "seconds": "{value} s",
+        "milliseconds": "{value} ms",
+        "loadFailed": "Impossible de lire les recherches récentes.",
+        "p90Note": "(90e centile)",
+        "p90Row": "p90 {value}",
+        "p10Row": "p10 {value}",
+        "rateTooltip": "{rate} appels/s",
+        "millisecondsUnit": "ms",
+        "secondsUnit": "s",
+        "failedInMinute": "{count, plural, one {# en échec} other {# en échec}}"
+      },
+      "nodes": {
+        "title": "Nœuds de données",
+        "disk": "Utilisation du disque",
+        "vector": "Mémoire des vecteurs",
+        "percent": "{value} %",
+        "usedOfTotal": "{used} / {total} {unit}",
+        "shards": "{count, plural, one {# shard} other {# shards}}",
+        "unnamed": "Nœud {number}",
+        "copyName": "Copier le nom du nœud OpenSearch ({name})"
+      },
+      "indexes": {
+        "title": "Index",
+        "chunks": "Fragments",
+        "shards": "Shards",
+        "reindex": "Réindexation",
+        "detail": "Modèle d'embedding · {dim} dimensions",
+        "deleted": "{percent} % de fragments supprimés",
+        "detailQuantized": "Modèle d'embedding · {dim} dimensions · vecteurs {quantization}",
+        "reindexProgress": "{percent} % de l'actuel"
+      },
+      "issues": {
+        "title": "Problèmes et recommandations",
+        "none": "Aucun problème détecté.",
+        "criticalCount": "{count} critiques",
+        "warningCount": "{count, plural, one {# avertissement} other {# avertissements}}",
+        "nodeCount": "{count} nœuds de données",
+        "indexSettings": "Paramètres de l'index",
+        "sizingGuide": "Guide de dimensionnement",
+        "clusterRed": {
+          "title": "L'état du cluster est rouge",
+          "description": "Certains shards primaires ne sont pas attribués, donc une partie de l'index ne peut pas être recherchée. Consultez les journaux d'OpenSearch."
+        },
+        "unassignedShards": {
+          "title": "{value, plural, one {# copie de shard n'est pas attribuée} other {# copies de shards ne sont pas attribuées}}",
+          "description": "OpenSearch n'a aucun nœud de données où les placer. Ajoutez des nœuds de données ou réduisez le nombre de réplicas."
+        },
+        "diskCritical": {
+          "title": "Disque à {value} % sur {nodes}",
+          "description": "OpenSearch cesse de placer des shards sur un nœud de données à 85 %. Ajoutez du stockage ou des nœuds de données."
+        },
+        "diskWarning": {
+          "title": "Disque à {value} % sur {nodes}",
+          "description": "Une réindexation a besoin de place pour un second index. Ajoutez du stockage ou des nœuds de données."
+        },
+        "vectorCritical": {
+          "title": "Mémoire des vecteurs à {value} % sur {nodes}",
+          "description": "Les vecteurs ne tiennent pas en mémoire, donc la recherche les lit sur le disque. Ajoutez de la mémoire ou des nœuds de données, ou utilisez une quantification de vecteurs plus petite."
+        },
+        "vectorWarning": {
+          "title": "Mémoire des vecteurs à {value} % sur {nodes}",
+          "description": "La recherche ralentit quand les vecteurs ne tiennent pas en mémoire. Ajoutez de la mémoire ou des nœuds de données, ou utilisez une quantification de vecteurs plus petite."
+        },
+        "heap": {
+          "title": "Heap JVM à {value} % sur {nodes}",
+          "description": "OpenSearch peut refuser des requêtes quand le heap est plein. Ajoutez de la mémoire ou des nœuds de données."
+        },
+        "indexMissing": {
+          "title": "L'index de recherche est absent",
+          "description": "OpenSearch n'a pas d'index pour les paramètres de recherche actuels, la recherche ne renvoie donc rien. Consultez les journaux d'OpenSearch, puis lancez une réindexation depuis les paramètres d'index."
+        },
+        "dismiss": "Ignorer"
+      }
     }
   },
   "agents": {
@@ -16150,6 +16251,9 @@
         },
         "discordBot": {
           "label": "Bot Discord"
+        },
+        "serviceStatus": {
+          "label": "État du service"
         }
       },
       "sections": {

@@ -191,6 +191,12 @@ GET _cat/indices/danswer_chunk*?v&h=index,docs.count,pri.store.size,store.size
 You can add data nodes, storage, memory, and replicas later without a reindex.
 The number of primary shards is fixed when Onyx creates the index. To change it, Onyx must build a new index.
 
+On a self-hosted Business or Enterprise deployment,
+**Admin Panel → Service Status** shows these signals for your cluster. For each data node,
+it shows the disk use and the vector memory against the file cache. It also shows the search rate
+and the 90th percentile search time for each minute of the last 30 minutes, and the issues that
+need action.
+
 ### Example
 
 500 GB of storage with the default storage mix holds about 35 GB of text, or 18.6 million chunks. With 30% growth,
