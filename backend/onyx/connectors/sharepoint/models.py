@@ -1,8 +1,10 @@
+from datetime import datetime
+from enum import Enum
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict
 
-from onyx.connectors.models import CheckRowText
+from onyx.connectors.models import CheckRowText, ListingPayload
 
 
 class SharepointCredentials(BaseModel):
@@ -62,3 +64,44 @@ class LibraryProblem(BaseModel):
     row: CheckRowText
     message: str
     name: str
+
+
+class SharepointListedKind(str, Enum):
+    DRIVE_ITEM = "drive_item"
+    SITE_PAGE = "site_page"
+
+
+class SharepointListingPayload(ListingPayload):
+    """What conversion needs to fetch one listed file or site page.
+
+    It never holds the file's ``downloadUrl``: that URL expires in about an
+    hour, and it is a credential for the file. Conversion downloads by drive
+    id and item id."""
+
+    kind: SharepointListedKind
+    site_url: str
+    name: str
+    web_url: str
+    parent_hierarchy_raw_node_id: str | None = None
+    created_datetime: datetime | None = None
+    last_modified_datetime: datetime | None = None
+
+    # A file in a document library.
+    drive_id: str | None = None
+    item_id: str | None = None
+    drive_name: str | None = None
+    # The SharePoint list behind the library and the file's item in it. The
+    # permission reads address them.
+    list_id: str | None = None
+    list_item_id: str | None = None
+    # The file's ``parentReference.path``.
+    parent_path: str | None = None
+    mime_type: str | None = None
+    size: int | None = None
+    last_modified_by_display_name: str | None = None
+    last_modified_by_email: str | None = None
+
+    # A site page: the site's Graph id, and the page as the listing returned
+    # it, with no canvas.
+    site_id: str | None = None
+    site_page: dict[str, Any] | None = None
