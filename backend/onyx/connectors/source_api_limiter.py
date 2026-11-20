@@ -523,7 +523,7 @@ class RedisSourceApiLimiter(SourceApiLimiter):
                         "The %s budget %s for 24 hours (%d units) is used; the "
                         "calls wait for it.",
                         api,
-                        key,
+                        _key_for_log(self._source, key),
                         limit,
                     )
                 self._check_stop()
