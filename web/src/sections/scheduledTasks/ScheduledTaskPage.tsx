@@ -2,12 +2,12 @@
 
 import useSWR from "swr";
 import { useTranslations } from "next-intl";
-import { Button } from "@opal/components";
+import { Button, Dropdown, InputSwitch, Text } from "@opal/components";
+import { Section } from "@opal/layouts";
 import {
   SvgClock,
   SvgEdit,
-  SvgPauseCircle,
-  SvgPlayCircle,
+  SvgMoreHorizontal,
   SvgTrash,
   SvgZap,
 } from "@opal/icons";
@@ -33,7 +33,6 @@ import CustomizeDetailLayout, {
 } from "@/sections/customize/CustomizeDetailLayout";
 import ScheduledRunHistory from "@/sections/scheduledTasks/ScheduledRunHistory";
 import { useScheduledTaskActions } from "@/sections/scheduledTasks/ScheduledTaskMenu";
-import { TaskStatusBadge } from "@/sections/scheduledTasks/StatusBadges";
 
 function parseTab(value: string | null): ScheduledTaskPageTab {
   return value === "overview" ? value : "runs";
@@ -118,7 +117,6 @@ export default function ScheduledTaskPage({ taskId }: ScheduledTaskPageProps) {
       icon={SvgClock}
       title={task?.name ?? t("title")}
       description={schedule}
-      tags={task && <TaskStatusBadge status={task.status} />}
       loading={isLoading}
       error={error ? t("loadFailed") : false}
       tabs={tabs}
@@ -143,31 +141,55 @@ export default function ScheduledTaskPage({ taskId }: ScheduledTaskPageProps) {
                 {tActions("runNow")}
               </Button>,
               <Button
-                key="toggle"
-                icon={task.status === "ACTIVE" ? SvgPauseCircle : SvgPlayCircle}
-                prominence="secondary"
-                disabled={actions.busy}
-                onClick={actions.toggleStatus}
-              >
-                {tActions(task.status === "ACTIVE" ? "pause" : "resume")}
-              </Button>,
-              <Button
                 key="edit"
                 icon={SvgEdit}
-                prominence="tertiary"
+                prominence="secondary"
                 {...navigation.linkTo(editScheduledTaskHref(task.id))}
               >
                 {tActions("edit")}
               </Button>,
-              <Button
-                key="delete"
-                icon={SvgTrash}
-                prominence="tertiary"
-                disabled={actions.busy}
-                onClick={actions.requestDelete}
-                aria-label={tActions("delete")}
-                tooltip={tActions("delete")}
-              />,
+              <Dropdown key="menu" align="end">
+                <Dropdown.Trigger asChild>
+                  <Button
+                    prominence="tertiary"
+                    icon={SvgMoreHorizontal}
+                    aria-label={t("menu")}
+                    tooltip={t("menu")}
+                  />
+                </Dropdown.Trigger>
+                <Dropdown.Data
+                  label={t("menu")}
+                  items={[
+                    {
+                      kind: "action",
+                      id: "delete",
+                      icon: SvgTrash,
+                      title: tActions("delete"),
+                      danger: true,
+                      disabled: actions.busy,
+                      onSelect: actions.requestDelete,
+                    },
+                  ]}
+                />
+              </Dropdown>,
+              <Section
+                key="switch"
+                flexDirection="row"
+                width="auto"
+                height="auto"
+                gap={1}
+                padding={1}
+              >
+                <Text font="main-ui-body" color="text-03">
+                  {t("switch.title")}
+                </Text>
+                <InputSwitch
+                  aria-label={t("switch.label", { name: task.name })}
+                  checked={task.status === "ACTIVE"}
+                  disabled={actions.busy}
+                  onCheckedChange={actions.toggleStatus}
+                />
+              </Section>,
             ]
           : undefined
       }

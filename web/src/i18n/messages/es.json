@@ -17629,7 +17629,12 @@
       },
       "noMatches": {
         "title": "No hay tareas que coincidan",
-        "description": "Prueba con otra búsqueda."
+        "description": "Prueba con otra búsqueda u otro filtro."
+      },
+      "filter": {
+        "label": "Filtrar tareas",
+        "all": "Todas las tareas",
+        "unviewed": "Resultados nuevos"
       }
     },
     "actions": {
@@ -17696,7 +17701,12 @@
         "notScheduled": "Sin programar",
         "lastRun": "Última ejecución",
         "never": "Nunca"
-      }
+      },
+      "switch": {
+        "title": "Ejecutar según la programación",
+        "label": "Ejecutar {name} según la programación"
+      },
+      "menu": "Más acciones"
     },
     "editor": {
       "newTitle": "Nueva tarea programada",

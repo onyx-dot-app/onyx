@@ -17629,7 +17629,12 @@
       },
       "noMatches": {
         "title": "No matching tasks",
-        "description": "Try a different search."
+        "description": "Try a different search or filter."
+      },
+      "filter": {
+        "label": "Filter tasks",
+        "all": "All tasks",
+        "unviewed": "New results"
       }
     },
     "actions": {
@@ -17696,7 +17701,12 @@
         "notScheduled": "Not scheduled",
         "lastRun": "Last Run",
         "never": "Never"
-      }
+      },
+      "switch": {
+        "title": "Run on schedule",
+        "label": "Run {name} on schedule"
+      },
+      "menu": "More actions"
     },
     "editor": {
       "newTitle": "New Scheduled Task",

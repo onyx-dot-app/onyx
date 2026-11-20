@@ -17629,7 +17629,12 @@
       },
       "noMatches": {
         "title": "일치하는 작업이 없습니다",
-        "description": "다른 검색어를 시도하세요."
+        "description": "다른 검색어나 필터를 사용해 보세요."
+      },
+      "filter": {
+        "label": "작업 필터",
+        "all": "모든 작업",
+        "unviewed": "새 결과"
       }
     },
     "actions": {
@@ -17696,7 +17701,12 @@
         "notScheduled": "예약되지 않음",
         "lastRun": "마지막 실행",
         "never": "없음"
-      }
+      },
+      "switch": {
+        "title": "일정에 따라 실행",
+        "label": "일정에 따라 {name} 실행"
+      },
+      "menu": "추가 작업"
     },
     "editor": {
       "newTitle": "새 예약된 작업",

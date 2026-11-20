@@ -16,9 +16,12 @@ schedule (an interval, a daily or weekly time, or a cron expression), and
 chooses which integrations the task may use. New tasks start with every
 integration off. For each enabled integration the user can set Allow, Ask,
 Blocked or Inherit per action, within the limits the admin set. "Run once"
-fires the task at once, even when it is paused. Pause stops the fires; Resume
-schedules the next fire from the time of resume, so missed fires do not run.
-Delete hides the task but keeps its runs, and a run already queued still runs.
+fires the task at once, even when it is paused. The "Run on schedule" switch
+on the task page (Pause or Resume in the list row menu) stops and starts the
+fires; Resume schedules the next fire from the time of resume, so missed fires
+do not run. Delete hides the task but keeps its runs, and a run already queued
+still runs. The task list has a name search and a filter: all, Active, Paused,
+or tasks with new results.
 
 Each fire adds a row to the task's run history. A run opens at
 `/app?chatId=<chat_session_id>`, with a banner that names the task. A running

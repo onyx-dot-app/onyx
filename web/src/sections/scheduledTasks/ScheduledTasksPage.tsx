@@ -5,6 +5,7 @@ import useSWR from "swr";
 import { useLocale, useTranslations } from "next-intl";
 import {
   Button,
+  Dropdown,
   InputTypeIn,
   Table,
   Text,
@@ -12,7 +13,7 @@ import {
   type TableColumn,
 } from "@opal/components";
 import { IllustrationContent, Section, SettingsLayouts } from "@opal/layouts";
-import { SvgPlus } from "@opal/icons";
+import { SvgFilter, SvgPlus } from "@opal/icons";
 import { SvgLongWait, SvgNoResult } from "@opal/illustrations";
 import { useScreenSize } from "@opal/hooks";
 import { useNavigation } from "@opal/navigation";
@@ -38,6 +39,23 @@ import {
   TaskStatusBadge,
 } from "@/sections/scheduledTasks/StatusBadges";
 
+type TaskFilter = "all" | "ACTIVE" | "PAUSED" | "unviewed";
+
+function isTaskFilter(value: string): value is TaskFilter {
+  return (
+    value === "all" ||
+    value === "ACTIVE" ||
+    value === "PAUSED" ||
+    value === "unviewed"
+  );
+}
+
+function matchesFilter(task: ScheduledTaskListItem, filter: TaskFilter) {
+  if (filter === "all") return true;
+  if (filter === "unviewed") return task.unviewed_run_count > 0;
+  return task.status === filter;
+}
+
 export default function ScheduledTasksPage() {
   const t = useTranslations("scheduledTasks.list");
   const tTasks = useTranslations("scheduledTasks");
@@ -46,6 +64,7 @@ export default function ScheduledTasksPage() {
   const { isMobile } = useScreenSize();
   const timeFormat = useScheduledTaskFormat();
   const [query, setQuery] = useState("");
+  const [filter, setFilter] = useState<TaskFilter>("all");
   const { data, error, isLoading } = useSWR<ScheduledTaskListResponse>(
     SWR_KEYS.chatScheduledTasks,
     errorHandlingFetcher,
@@ -54,8 +73,10 @@ export default function ScheduledTasksPage() {
   );
   const tasks = data?.items ?? [];
   const search = query.trim().toLocaleLowerCase(locale);
-  const shown = tasks.filter((task) =>
-    task.name.toLocaleLowerCase(locale).includes(search)
+  const shown = tasks.filter(
+    (task) =>
+      matchesFilter(task, filter) &&
+      task.name.toLocaleLowerCase(locale).includes(search)
   );
 
   const detailColumns: TableColumn<ScheduledTaskListItem>[] = [
@@ -173,19 +194,64 @@ export default function ScheduledTasksPage() {
       <SettingsLayouts.Header title={t("title")} description={t("description")}>
         <Section
           flexDirection="row"
-          justifyContent="end"
+          justifyContent="between"
           alignItems="center"
           height="auto"
           gap={0.5}
         >
-          <Section height="auto" basis={16}>
-            <InputTypeIn
-              icon="search"
-              value={query}
-              placeholder={t("search")}
-              aria-label={t("search")}
-              onChange={(event) => setQuery(event.target.value)}
-            />
+          <Section
+            flexDirection="row"
+            justifyContent="start"
+            alignItems="center"
+            width="auto"
+            height="auto"
+            gap={0.5}
+          >
+            <Section height="auto" basis={16}>
+              <InputTypeIn
+                icon="search"
+                value={query}
+                placeholder={t("search")}
+                aria-label={t("search")}
+                onChange={(event) => setQuery(event.target.value)}
+              />
+            </Section>
+            <Dropdown align="end" width={60}>
+              <Dropdown.Trigger asChild>
+                <Button
+                  prominence="tertiary"
+                  icon={SvgFilter}
+                  interaction={filter === "all" ? "rest" : "hover"}
+                  aria-label={t("filter.label")}
+                  tooltip={t("filter.label")}
+                />
+              </Dropdown.Trigger>
+              <Dropdown.Data
+                label={t("filter.label")}
+                items={[
+                  { kind: "option", value: "all", title: t("filter.all") },
+                  {
+                    kind: "option",
+                    value: "ACTIVE",
+                    title: tTasks("taskStatus", { status: "ACTIVE" }),
+                  },
+                  {
+                    kind: "option",
+                    value: "PAUSED",
+                    title: tTasks("taskStatus", { status: "PAUSED" }),
+                  },
+                  {
+                    kind: "option",
+                    value: "unviewed",
+                    title: t("filter.unviewed"),
+                  },
+                ]}
+                value={filter}
+                onSelect={(option) => {
+                  if (isTaskFilter(option.value)) setFilter(option.value);
+                }}
+              />
+            </Dropdown>
           </Section>
           <Button
             icon={SvgPlus}

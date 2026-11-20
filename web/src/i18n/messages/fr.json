@@ -17629,7 +17629,12 @@
       },
       "noMatches": {
         "title": "Aucune tâche correspondante",
-        "description": "Essayez une autre recherche."
+        "description": "Essayez une autre recherche ou un autre filtre."
+      },
+      "filter": {
+        "label": "Filtrer les tâches",
+        "all": "Toutes les tâches",
+        "unviewed": "Nouveaux résultats"
       }
     },
     "actions": {
@@ -17696,7 +17701,12 @@
         "notScheduled": "Non planifiée",
         "lastRun": "Dernière exécution",
         "never": "Jamais"
-      }
+      },
+      "switch": {
+        "title": "Exécuter selon la planification",
+        "label": "Exécuter {name} selon la planification"
+      },
+      "menu": "Plus d’actions"
     },
     "editor": {
       "newTitle": "Nouvelle tâche planifiée",

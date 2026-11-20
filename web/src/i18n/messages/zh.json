@@ -17629,7 +17629,12 @@
       },
       "noMatches": {
         "title": "没有匹配的任务",
-        "description": "请尝试其他搜索。"
+        "description": "请尝试其他搜索词或筛选条件。"
+      },
+      "filter": {
+        "label": "筛选任务",
+        "all": "所有任务",
+        "unviewed": "新结果"
       }
     },
     "actions": {
@@ -17696,7 +17701,12 @@
         "notScheduled": "未计划",
         "lastRun": "上次运行",
         "never": "从未"
-      }
+      },
+      "switch": {
+        "title": "按计划运行",
+        "label": "按计划运行 {name}"
+      },
+      "menu": "更多操作"
     },
     "editor": {
       "newTitle": "新建计划任务",

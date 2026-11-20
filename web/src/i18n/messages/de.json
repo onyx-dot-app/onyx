@@ -17629,7 +17629,12 @@
       },
       "noMatches": {
         "title": "Keine passenden Aufgaben",
-        "description": "Versuchen Sie eine andere Suche."
+        "description": "Versuchen Sie eine andere Suche oder einen anderen Filter."
+      },
+      "filter": {
+        "label": "Aufgaben filtern",
+        "all": "Alle Aufgaben",
+        "unviewed": "Neue Ergebnisse"
       }
     },
     "actions": {
@@ -17696,7 +17701,12 @@
         "notScheduled": "Nicht geplant",
         "lastRun": "Letzte Ausführung",
         "never": "Nie"
-      }
+      },
+      "switch": {
+        "title": "Nach Zeitplan ausführen",
+        "label": "{name} nach Zeitplan ausführen"
+      },
+      "menu": "Weitere Aktionen"
     },
     "editor": {
       "newTitle": "Neue geplante Aufgabe",

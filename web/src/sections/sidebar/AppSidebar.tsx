@@ -689,13 +689,6 @@ export default function AppSidebar() {
               </Disabled>
             </div>
           )}
-          <SidebarTab
-            icon={SvgSliders}
-            {...navigation.linkTo(CUSTOMIZE_PATH, { scroll: false })}
-            selected={activeSidebarTab.isCustomize()}
-          >
-            {t("appSidebar.customize.label")}
-          </SidebarTab>
           <div data-testid="AppSidebar/scheduled-tasks">
             <SidebarTab
               icon={SvgClock}
@@ -710,6 +703,13 @@ export default function AppSidebar() {
               {t("appSidebar.scheduledTasks.label")}
             </SidebarTab>
           </div>
+          <SidebarTab
+            icon={SvgSliders}
+            {...navigation.linkTo(CUSTOMIZE_PATH, { scroll: false })}
+            selected={activeSidebarTab.isCustomize()}
+          >
+            {t("appSidebar.customize.label")}
+          </SidebarTab>
           {/* Folded, the body's sections collapse into the header, in the
               unfolded order: Agents, then Projects. */}
           {folded && moreAgentsButton}

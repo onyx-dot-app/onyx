@@ -17629,7 +17629,12 @@
       },
       "noMatches": {
         "title": "一致するタスクはありません",
-        "description": "別の検索を試してください。"
+        "description": "別の検索語句またはフィルターをお試しください。"
+      },
+      "filter": {
+        "label": "タスクを絞り込む",
+        "all": "すべてのタスク",
+        "unviewed": "新しい結果"
       }
     },
     "actions": {
@@ -17696,7 +17701,12 @@
         "notScheduled": "未スケジュール",
         "lastRun": "前回の実行",
         "never": "なし"
-      }
+      },
+      "switch": {
+        "title": "スケジュールどおりに実行",
+        "label": "{name} をスケジュールどおりに実行"
+      },
+      "menu": "その他の操作"
     },
     "editor": {
       "newTitle": "新しいスケジュールされたタスク",

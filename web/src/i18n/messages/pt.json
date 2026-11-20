@@ -17629,7 +17629,12 @@
       },
       "noMatches": {
         "title": "Nenhuma tarefa correspondente",
-        "description": "Tente outra pesquisa."
+        "description": "Tente outra pesquisa ou outro filtro."
+      },
+      "filter": {
+        "label": "Filtrar tarefas",
+        "all": "Todas as tarefas",
+        "unviewed": "Novos resultados"
       }
     },
     "actions": {
@@ -17696,7 +17701,12 @@
         "notScheduled": "Não agendada",
         "lastRun": "Última execução",
         "never": "Nunca"
-      }
+      },
+      "switch": {
+        "title": "Executar conforme o agendamento",
+        "label": "Executar {name} conforme o agendamento"
+      },
+      "menu": "Mais ações"
     },
     "editor": {
       "newTitle": "Nova tarefa agendada",
