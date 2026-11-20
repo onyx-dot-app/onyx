@@ -206,6 +206,22 @@ def render_file(
     return _rng_for(seed, key).randbytes(content_bytes)
 
 
+def render_text_file(name: str, text: str) -> bytes:
+    """The bytes of a file whose text a test set, in the file's format."""
+    stem, _, extension = name.rpartition(".")
+    extension = extension.lower()
+    body = DocBody(
+        title=stem or name, sections=[DocSection(heading="", paragraphs=[text])]
+    )
+    if extension == "pdf":
+        return render_pdf(body)
+    if extension == "docx":
+        return render_docx(body)
+    if extension == "pptx":
+        return render_pptx(body)
+    return text.encode()
+
+
 def page_paragraphs(seed: int, page_id: str, count: int) -> list[str]:
     rng = _rng_for(seed, f"page:{page_id}")
     return [_paragraph(rng) for _ in range(count)]

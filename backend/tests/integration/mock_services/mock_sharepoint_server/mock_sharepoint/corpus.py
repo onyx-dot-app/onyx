@@ -15,6 +15,7 @@ from urllib.parse import quote, unquote
 
 from pydantic import BaseModel, Field
 
+from . import content as content_mod
 from .settings import SUPPORTED_MIMES, UNSUPPORTED_MIMES, CorpusSettings
 
 # SharePoint RoleTypeKind values.
@@ -598,7 +599,9 @@ class Corpus:
                                 rng.choice([ROLE_KINDS["read"], ROLE_KINDS["edit"]])
                             ],
                         )
-                        for principal in rng.sample(candidates, k=rng.randint(1, 2))
+                        for principal in rng.sample(
+                            candidates, k=min(len(candidates), rng.randint(1, 2))
+                        )
                     ]
                     if rng.random() < s.public_fraction:
                         grants.append(
@@ -978,7 +981,7 @@ class Corpus:
         item.version += 1
         if text is not None:
             item.text = text
-            item.size = len(text.encode())
+            item.size = len(content_mod.render_text_file(item.name, text))
         self._changed(item, now)
         return item
 
@@ -1012,7 +1015,11 @@ class Corpus:
                 is_folder=False,
                 mime_type=mime or "application/octet-stream",
                 supported=supported,
-                size=len(text.encode()) if text is not None else 800,
+                size=(
+                    len(content_mod.render_text_file(request.name, text))
+                    if text is not None
+                    else 800
+                ),
                 text=text,
                 created=now,
                 modified=now,
@@ -1081,25 +1088,28 @@ class Corpus:
             target = self.drives[request.drive_id]
             site = self.site_of(target)
 
-        if request.inherit:
-            target.unique_assignments = None
-        else:
-            target.unique_assignments = None
+        # Resolve every grant first, so that a refused request changes nothing.
+        grants = [
+            RoleAssignment(
+                principal=self._resolve_principal(site, grant.principal),
+                role_kinds=[ROLE_KINDS[grant.role]],
+            )
+            for grant in request.grants
+        ]
+        target.unique_assignments = None
+        if not request.inherit:
             inherited = self.assignments_of(target)
             assignments = (
                 [a.model_copy(deep=True) for a in inherited]
                 if request.copy_parent
                 else []
             )
-            grants = [
-                RoleAssignment(
-                    principal=self._resolve_principal(site, grant.principal),
-                    role_kinds=[ROLE_KINDS[grant.role]],
-                )
-                for grant in request.grants
-            ]
             target.unique_assignments = assignments + grants
             self._add_limited_access(site, grants)
+        if isinstance(target, MockItem):
+            # The item's own assignments, with the grants of its sharing
+            # links, are gone, so its links are gone too.
+            target.sharing_links = []
 
         now = datetime.now(timezone.utc)
         if isinstance(target, MockDrive):
