@@ -137,21 +137,20 @@ export default function SharedChatDisplay({
         )}
       </previewModal.Provider>
 
-      {publishedFiles.length > 0 && (
-        <RootLayout.RightPanel>
-          {/* A shared chat has no Sources view */}
-          <ChatRightPanel
-            sessionId={chatSession.chat_session_id}
-            open={showsFiles(rightPanel)}
-            state={rightPanel}
-            dispatch={dispatchRightPanel}
-            files={publishedFiles}
-            publishIndex={publishOrder(loadedPublishedFiles, messageTree)}
-            sources={null}
-            hasSources={false}
-          />
-        </RootLayout.RightPanel>
-      )}
+      {/* Always mounted, so a reply card opens its file whatever the Files
+          list holds. A shared chat has no Sources view. */}
+      <RootLayout.RightPanel>
+        <ChatRightPanel
+          sessionId={chatSession.chat_session_id}
+          open={showsFiles(rightPanel)}
+          state={rightPanel}
+          dispatch={dispatchRightPanel}
+          files={publishedFiles}
+          publishIndex={publishOrder(loadedPublishedFiles, messageTree)}
+          sources={null}
+          hasSources={false}
+        />
+      </RootLayout.RightPanel>
 
       <div className="flex flex-col h-full w-full overflow-hidden">
         <div className="flex-1 flex flex-col items-center overflow-y-auto">

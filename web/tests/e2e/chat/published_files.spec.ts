@@ -1,6 +1,7 @@
 import type { Page } from "@playwright/test";
 import { test, expect } from "@tests/e2e/chat/fixtures";
 import { sendMessage } from "@tests/e2e/utils/chatActions";
+import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 import {
   buildMockPublishFilesStream,
   MockPublishedFile,
@@ -243,6 +244,39 @@ test.describe("Published files", () => {
       });
     } finally {
       await api.deleteChatSession(sessionId);
+    }
+  });
+
+  test("a card opens its file for an agent without search when the chat lists no files", async ({
+    browser,
+    page,
+    chatPage,
+    api,
+  }) => {
+    // A file that the chat's list leaves out: its card shows, but the load
+    // lists no files
+    const file = report("published-file-9", "Q3 report");
+    const adminContext = await browser.newContext({
+      storageState: "admin_auth.json",
+    });
+    const admin = new OnyxApiClient(adminContext.request);
+    const agentId = await admin.createAgent("Published files without search");
+    const sessionId = await api.createChatSession("Unlisted file", agentId);
+    try {
+      await mockFile(page, file);
+      await routeSavedChat(page, sessionId, publishFilesPackets(0, [file]), []);
+      await chatPage.goto(sessionId);
+      await expect(chatPage.answerText(MESSAGE)).toBeVisible();
+      await expect(chatPage.publishedFilesButton).toBeHidden();
+
+      await chatPage.publishedFileCard("Q3 report").click();
+      await expect(chatPage.publishedFilePreview("Q3 report")).toContainText(
+        REPORT_TEXT
+      );
+    } finally {
+      await api.deleteChatSession(sessionId);
+      await admin.deleteAgent(agentId);
+      await adminContext.close();
     }
   });
 
