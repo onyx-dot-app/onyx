@@ -480,24 +480,6 @@ export async function deleteAllChatSessions() {
   return response;
 }
 
-export async function getAvailableContextTokens(
-  chatSessionId: string,
-  modelConfigurationId?: number | null
-): Promise<number | null> {
-  const params =
-    modelConfigurationId != null
-      ? `?model_configuration_id=${modelConfigurationId}`
-      : "";
-  const response = await fetch(
-    `/api/chat/available-context-tokens/${chatSessionId}${params}`
-  );
-  if (!response.ok) {
-    return null;
-  }
-  const data: { available_tokens: number } = await response.json();
-  return data?.available_tokens ?? null;
-}
-
 export function processRawChatHistory(
   rawMessages: BackendMessage[],
   packets: Packet[][]
