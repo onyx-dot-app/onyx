@@ -238,7 +238,7 @@ pub async fn start_in_browser(
     let verifier = random_token();
     let app_state = random_token();
     let challenge = URL_SAFE_NO_PAD.encode(Sha256::digest(verifier.as_bytes()));
-    // Appended, not joined: a server under a path prefix keeps it.
+    // `server` is an origin (see api::normalize), so the path is appended.
     let mut authorize = Url::parse(&format!("{server}{path}")).map_err(|e| e.to_string())?;
     authorize
         .query_pairs_mut()

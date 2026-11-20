@@ -99,9 +99,10 @@ fn main() {
             let config_path = app.path().app_config_dir()?.join("config.json");
             app.manage(offline::Offline::default());
             let handle = app.handle();
-            let policy = policy::read(handle);
+            let config = ConfigStore::load(config_path);
+            let policy = policy::with_remembered_server(policy::read(handle), &config);
             policy::apply_launch_at_login(handle, &policy);
-            app.manage(AppState::new(ConfigStore::load(config_path), policy, api));
+            app.manage(AppState::new(config, policy, api));
 
             // Windows and Linux: the main window gets its own menu (main_window.rs).
             #[cfg(target_os = "macos")]
@@ -143,6 +144,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             commands::check_server,
             commands::save_server,
+            commands::get_server_lock,
             commands::login,
             commands::get_auth_methods,
             commands::sign_in_with_sso,

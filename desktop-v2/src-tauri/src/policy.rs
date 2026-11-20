@@ -5,7 +5,7 @@
 //! - Windows: `HKLM\SOFTWARE\Policies\Onyx\Desktop`, then the same key in HKCU.
 //! - Linux: `/etc/onyx-desktop/policy.json`.
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::str::FromStr;
 use std::sync::Mutex;
 use std::time::Duration;
@@ -14,6 +14,7 @@ use tauri::{AppHandle, Manager};
 use tauri_plugin_global_shortcut::Shortcut;
 
 use crate::api::normalize_managed_server_url;
+use crate::config::ConfigStore;
 use crate::state::AppState;
 
 const SERVER_URL: &str = "ServerURL";
@@ -23,6 +24,9 @@ const LAUNCHER_SHORTCUT: &str = "LauncherShortcut";
 const DISABLE_LAUNCHER: &str = "DisableLauncher";
 const LAUNCH_AT_LOGIN: &str = "LaunchAtLogin";
 const DISABLE_NOTIFICATIONS: &str = "DisableNotifications";
+
+pub const POLICY_INVALID: &str =
+    "Your organization's Onyx policy is invalid. Some settings are locked. Contact your IT team.";
 
 /// How often the app reads the policy again while it runs.
 const REFRESH_INTERVAL: Duration = Duration::from_secs(5 * 60);
@@ -47,8 +51,11 @@ pub struct Policy {
     pub disable_launcher: bool,
     pub launch_at_login: Option<bool>,
     pub disable_notifications: bool,
-    /// A policy exists but holds a value that is not valid.
-    pub invalid: bool,
+    /// The policy cannot be read, or a value that is not valid took its
+    /// restrictive value.
+    pub fail_closed: bool,
+    /// Keys whose value is not valid and was ignored.
+    pub ignored: Vec<&'static str>,
 }
 
 impl Policy {
@@ -58,9 +65,41 @@ impl Policy {
         Self {
             lock_server_url: true,
             disable_auto_update: true,
-            invalid: true,
+            fail_closed: true,
             ..Self::default()
         }
+    }
+
+    /// A policy exists but holds a value that is not valid.
+    pub fn invalid(&self) -> bool {
+        self.fail_closed || !self.ignored.is_empty()
+    }
+
+    /// Uses the last valid managed server when an invalid policy has none, so
+    /// one bad policy push does not leave users without a server.
+    pub fn with_last_managed_server(self, last: Option<String>) -> Self {
+        if !self.invalid() || self.server_url.is_some() {
+            return self;
+        }
+        Self {
+            server_url: last,
+            ..self
+        }
+    }
+
+    /// What the app tells the user about a policy that is not valid.
+    pub fn notice(&self) -> Option<String> {
+        if self.fail_closed {
+            return Some(POLICY_INVALID.into());
+        }
+        if self.ignored.is_empty() {
+            return None;
+        }
+        let names: Vec<&str> = self.ignored.iter().map(|key| key_label(key)).collect();
+        Some(format!(
+            "Onyx ignored a setting in your organization's policy that is not valid: {}. Contact your IT team.",
+            names.join(", ")
+        ))
     }
 
     /// The server to use: a locked managed server, else the saved one, else
@@ -89,6 +128,15 @@ impl Policy {
     }
 }
 
+fn key_label(key: &str) -> &str {
+    match key {
+        SERVER_URL => "server URL",
+        LAUNCHER_SHORTCUT => "launcher shortcut",
+        LAUNCH_AT_LOGIN => "launch at login",
+        other => other,
+    }
+}
+
 fn as_bool(value: &RawValue) -> Option<bool> {
     match value {
         RawValue::Bool(b) => Some(*b),
@@ -103,20 +151,21 @@ fn as_bool(value: &RawValue) -> Option<bool> {
     }
 }
 
-/// Builds the policy from a key lookup. An invalid value is logged and marks
-/// the policy invalid. A lock or `Disable*` key with an invalid value takes
-/// its restrictive value; any other invalid key is ignored.
+/// Builds the policy from a key lookup. An invalid value is logged. A lock or
+/// `Disable*` key with an invalid value takes its restrictive value; any
+/// other invalid key is ignored.
 pub fn parse(lookup: impl Fn(&str) -> Option<RawValue>) -> Policy {
-    let invalid = Cell::new(false);
-    let reject = |key: &str, value: &RawValue, why: &str| {
+    let fail_closed = Cell::new(false);
+    let ignored: RefCell<Vec<&'static str>> = RefCell::new(Vec::new());
+    let ignore = |key: &'static str, value: &RawValue, why: &str| {
         log::error!("managed setting {key} is not valid ({why}): {value:?}");
-        invalid.set(true);
+        ignored.borrow_mut().push(key);
     };
-    let flag = |key: &str| -> Option<bool> {
+    let flag = |key: &'static str| -> Option<bool> {
         let value = lookup(key)?;
         let parsed = as_bool(&value);
         if parsed.is_none() {
-            reject(key, &value, "not a boolean; ignored");
+            ignore(key, &value, "not a boolean; ignored");
         }
         parsed
     };
@@ -124,24 +173,32 @@ pub fn parse(lookup: impl Fn(&str) -> Option<RawValue>) -> Policy {
         match lookup(key) {
             None => false,
             Some(value) => as_bool(&value).unwrap_or_else(|| {
-                reject(key, &value, "not a boolean; treated as true");
+                log::error!(
+                    "managed setting {key} is not valid (not a boolean; treated as true): {value:?}"
+                );
+                fail_closed.set(true);
                 true
             }),
         }
     };
-    let string = |key: &str| -> Option<String> {
+    let string = |key: &'static str| -> Option<String> {
         match lookup(key)? {
             RawValue::Str(s) => Some(s),
             other => {
-                reject(key, &other, "not a string; ignored");
+                ignore(key, &other, "not a string; ignored");
                 None
             }
         }
     };
     let server_url = string(SERVER_URL).and_then(|raw| match normalize_managed_server_url(&raw) {
-        Ok(url) => Some(url),
+        Ok(url) => {
+            if !raw.trim().trim_end_matches('/').eq_ignore_ascii_case(&url) {
+                log::warn!("managed setting {SERVER_URL} {raw:?} is used as {url}: Onyx keeps only the scheme, host and port");
+            }
+            Some(url)
+        }
         Err(e) => {
-            reject(SERVER_URL, &RawValue::Str(raw), &e);
+            ignore(SERVER_URL, &RawValue::Str(raw), &e);
             None
         }
     });
@@ -150,12 +207,12 @@ pub fn parse(lookup: impl Fn(&str) -> Option<RawValue>) -> Policy {
         log::error!(
             "managed setting {LOCK_SERVER_URL} needs a valid {SERVER_URL}; the saved server stays and cannot change"
         );
-        invalid.set(true);
+        fail_closed.set(true);
     }
     let launcher_shortcut = string(LAUNCHER_SHORTCUT).filter(|raw| {
         let valid = Shortcut::from_str(raw).is_ok();
         if !valid {
-            reject(
+            ignore(
                 LAUNCHER_SHORTCUT,
                 &RawValue::Str(raw.clone()),
                 "not a shortcut; ignored",
@@ -171,10 +228,12 @@ pub fn parse(lookup: impl Fn(&str) -> Option<RawValue>) -> Policy {
         disable_launcher: restrictive(DISABLE_LAUNCHER),
         launch_at_login: flag(LAUNCH_AT_LOGIN),
         disable_notifications: restrictive(DISABLE_NOTIFICATIONS),
-        invalid: false,
+        fail_closed: false,
+        ignored: Vec::new(),
     };
     Policy {
-        invalid: invalid.get(),
+        fail_closed: fail_closed.get(),
+        ignored: ignored.into_inner(),
         ..policy
     }
 }
@@ -295,6 +354,78 @@ fn read_windows() -> Policy {
     })
 }
 
+/// Reads a policy file only if no untrusted user can have written it. The
+/// file, every directory above it and above each symlink on the way must
+/// belong to a trusted owner and not be writable by group or others. A sticky
+/// directory (such as /tmp) may be writable: its users cannot replace a
+/// trusted owner's file.
+#[cfg(unix)]
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn read_trusted(path: &std::path::Path, trusted: impl Fn(u32) -> bool) -> std::io::Result<String> {
+    use std::io::{Error, ErrorKind, Read};
+    use std::os::unix::fs::MetadataExt;
+    use std::path::Path;
+    const MAX_LINKS: usize = 16;
+    const GROUP_OR_OTHER_WRITE: u32 = 0o022;
+    const STICKY: u32 = 0o1000;
+    let untrusted = |what: &Path, why: &str| {
+        Error::new(
+            ErrorKind::PermissionDenied,
+            format!("{} {why}; the policy is not trusted", what.display()),
+        )
+    };
+    let check = |what: &Path, meta: &std::fs::Metadata, sticky_ok: bool| {
+        if !trusted(meta.uid()) {
+            return Err(untrusted(what, "is not owned by root"));
+        }
+        let writable = meta.mode() & GROUP_OR_OTHER_WRITE != 0;
+        if writable && !(sticky_ok && meta.mode() & STICKY != 0) {
+            return Err(untrusted(what, "is writable by other users"));
+        }
+        Ok(())
+    };
+    let check_dirs_above = |file: &Path| -> std::io::Result<()> {
+        let parent = match file.parent() {
+            Some(p) if !p.as_os_str().is_empty() => p,
+            _ => Path::new("."),
+        };
+        for dir in std::fs::canonicalize(parent)?.ancestors() {
+            check(dir, &std::fs::metadata(dir)?, true)?;
+        }
+        Ok(())
+    };
+    let mut current = path.to_path_buf();
+    let mut hops = 0;
+    loop {
+        check_dirs_above(&current)?;
+        if !std::fs::symlink_metadata(&current)?
+            .file_type()
+            .is_symlink()
+        {
+            break;
+        }
+        hops += 1;
+        if hops > MAX_LINKS {
+            return Err(untrusted(path, "has too many symlinks"));
+        }
+        let target = std::fs::read_link(&current)?;
+        current = match current.parent() {
+            Some(parent) => parent.join(target),
+            None => target,
+        };
+    }
+    // The owner and mode come from the open file, not from the path.
+    let mut file = std::fs::File::open(&current)?;
+    let meta = file.metadata()?;
+    if !meta.is_file() {
+        return Err(untrusted(&current, "is not a file"));
+    }
+    check(&current, &meta, false)?;
+    let mut raw = String::new();
+    file.read_to_string(&mut raw)?;
+    Ok(raw)
+}
+
 /// Reads the managed policy from the platform store.
 pub fn read(app: &AppHandle) -> Policy {
     #[cfg(target_os = "macos")]
@@ -309,7 +440,8 @@ pub fn read(app: &AppHandle) -> Policy {
     #[cfg(target_os = "linux")]
     {
         let _ = app;
-        match std::fs::read_to_string("/etc/onyx-desktop/policy.json") {
+        let root = |uid: u32| uid == 0;
+        match read_trusted(std::path::Path::new("/etc/onyx-desktop/policy.json"), root) {
             Ok(raw) => parse_json(&raw),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Policy::default(),
             Err(e) => {
@@ -323,6 +455,21 @@ pub fn read(app: &AppHandle) -> Policy {
         let _ = app;
         Policy::default()
     }
+}
+
+/// Saves a valid policy's server as the last valid managed server. An invalid
+/// policy without a server uses that saved one instead.
+pub fn with_remembered_server(policy: Policy, config: &ConfigStore) -> Policy {
+    let last = config.get().managed_server_url;
+    if policy.invalid() {
+        return policy.with_last_managed_server(last);
+    }
+    if last != policy.server_url {
+        if let Err(e) = config.update(|c| c.managed_server_url = policy.server_url.clone()) {
+            log::warn!("could not save the managed server: {e}");
+        }
+    }
+    policy
 }
 
 /// Sets the login item to match a managed `LaunchAtLogin`. Best effort: the
@@ -366,7 +513,7 @@ pub fn refresh(app: &AppHandle) {
     }
     new.lock_server_url = old.lock_server_url || new.lock_server_url;
     // A policy that cannot be read keeps the restrictions it had.
-    if new.invalid {
+    if new.invalid() {
         new.disable_auto_update |= old.disable_auto_update;
         new.disable_launcher |= old.disable_launcher;
         new.disable_notifications |= old.disable_notifications;
@@ -380,6 +527,9 @@ pub fn refresh(app: &AppHandle) {
         }
         if new.disable_launcher && !old.disable_launcher {
             crate::windows::hide_launcher(app);
+        }
+        if new.disable_launcher != old.disable_launcher {
+            crate::menu::set_launcher_enabled(app, !new.disable_launcher);
         }
     }
     // Every refresh: a managed value that failed to apply is tried again. It
@@ -454,7 +604,8 @@ mod tests {
                 disable_launcher: false,
                 launch_at_login: Some(false),
                 disable_notifications: true,
-                invalid: false,
+                fail_closed: false,
+                ignored: vec![],
             }
         );
     }
@@ -492,7 +643,7 @@ mod tests {
         ]);
         assert_eq!(p.server_url.as_deref(), Some("http://onyx.corp.internal"));
         assert!(p.lock_server_url);
-        assert!(!p.invalid);
+        assert!(!p.invalid());
     }
 
     #[test]
@@ -529,19 +680,20 @@ mod tests {
                 disable_launcher: true,
                 launch_at_login: None,
                 disable_notifications: true,
-                invalid: true,
+                fail_closed: true,
+                ignored: vec![SERVER_URL, LAUNCHER_SHORTCUT, LAUNCH_AT_LOGIN],
             }
         );
         let wrong_type = policy(&[(SERVER_URL, RawValue::Bool(true))]);
         assert_eq!(wrong_type.server_url, None);
-        assert!(wrong_type.invalid);
+        assert!(wrong_type.invalid());
     }
 
     #[test]
     fn lock_without_a_server_keeps_the_saved_one() {
         let p = policy(&[(LOCK_SERVER_URL, RawValue::Bool(true))]);
         assert!(p.lock_server_url);
-        assert!(p.invalid);
+        assert!(p.invalid());
         assert_eq!(
             p.server(Some("https://mine.example".into())).as_deref(),
             Some("https://mine.example")
@@ -558,14 +710,14 @@ mod tests {
         assert!(p.lock_server_url);
         assert_eq!(p.launch_at_login, Some(true));
         assert!(p.disable_launcher);
-        assert!(!p.invalid);
+        assert!(!p.invalid());
     }
 
     #[test]
     fn a_byte_order_mark_is_allowed() {
         let p = parse_json("\u{feff}{\"DisableAutoUpdate\": true}");
         assert!(p.disable_auto_update);
-        assert!(!p.invalid);
+        assert!(!p.invalid());
     }
 
     #[test]
@@ -579,7 +731,7 @@ mod tests {
         }
         let float = parse_json(r#"{"DisableAutoUpdate": 1.0}"#);
         assert!(float.disable_auto_update);
-        assert!(float.invalid);
+        assert!(float.invalid());
     }
 
     #[test]
@@ -600,7 +752,184 @@ mod tests {
         assert!(p.lock_server_url);
         assert!(p.disable_launcher);
         assert_eq!(p.launch_at_login, None);
-        assert!(p.invalid);
+        assert!(p.invalid());
+    }
+
+    #[test]
+    fn an_ignored_value_is_named_and_locks_nothing() {
+        let p = policy(&[
+            (SERVER_URL, s("https://onyx.example.com")),
+            (LAUNCHER_SHORTCUT, s("Foo+Bar")),
+        ]);
+        assert!(p.invalid());
+        assert!(!p.fail_closed);
+        assert!(!p.lock_server_url);
+        let notice = p.notice().expect("a notice");
+        assert!(notice.contains("ignored"), "{notice}");
+        assert!(notice.contains("launcher shortcut"), "{notice}");
+        assert!(!notice.contains("locked"), "{notice}");
+
+        let empty = policy(&[(LAUNCHER_SHORTCUT, s(""))]);
+        assert!(empty.notice().unwrap().contains("launcher shortcut"));
+
+        let locked = policy(&[(LOCK_SERVER_URL, RawValue::Bool(true))]);
+        assert_eq!(locked.notice().as_deref(), Some(POLICY_INVALID));
+        assert_eq!(
+            Policy::unreadable().notice().as_deref(),
+            Some(POLICY_INVALID)
+        );
+        assert_eq!(Policy::default().notice(), None);
+    }
+
+    fn scratch_dir(name: &str) -> std::path::PathBuf {
+        let dir = std::env::temp_dir().join(format!("onyx-policy-{name}-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        std::fs::create_dir_all(&dir).unwrap();
+        dir
+    }
+
+    #[test]
+    fn an_invalid_policy_keeps_the_last_valid_managed_server() {
+        let dir = scratch_dir("remember");
+        let config = ConfigStore::load(dir.join("config.json"));
+        let good = policy(&[
+            (SERVER_URL, s("https://onyx.example.com")),
+            (LOCK_SERVER_URL, RawValue::Bool(true)),
+        ]);
+        assert_eq!(with_remembered_server(good.clone(), &config), good);
+        assert_eq!(
+            config.get().managed_server_url.as_deref(),
+            Some("https://onyx.example.com")
+        );
+
+        // A broken push: the last valid managed server stays locked in.
+        let broken = with_remembered_server(Policy::unreadable(), &config);
+        assert_eq!(
+            broken.server(None).as_deref(),
+            Some("https://onyx.example.com")
+        );
+        let bad_value = with_remembered_server(
+            policy(&[
+                (SERVER_URL, s("not a url")),
+                (LOCK_SERVER_URL, RawValue::Int(1)),
+            ]),
+            &config,
+        );
+        assert_eq!(
+            bad_value
+                .server(Some("https://mine.example".into()))
+                .as_deref(),
+            Some("https://onyx.example.com")
+        );
+        assert_eq!(
+            config.get().managed_server_url.as_deref(),
+            Some("https://onyx.example.com")
+        );
+
+        // A valid policy without a server forgets it.
+        assert_eq!(
+            with_remembered_server(Policy::default(), &config),
+            Policy::default()
+        );
+        assert_eq!(config.get().managed_server_url, None);
+        assert_eq!(
+            with_remembered_server(Policy::unreadable(), &config).server(None),
+            None
+        );
+        let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_policy_file_other_users_can_write_is_not_trusted() {
+        use std::os::unix::fs::{symlink, MetadataExt, PermissionsExt};
+        let set_mode = |path: &std::path::Path, mode: u32| {
+            std::fs::set_permissions(path, std::fs::Permissions::from_mode(mode)).unwrap();
+        };
+        let dir = scratch_dir("trust");
+        let me = std::fs::metadata(&dir).unwrap().uid();
+        // Root stands in for the test's own user, who owns the scratch files.
+        let trusted = |uid: u32| uid == 0 || uid == me;
+        let read = |path: &std::path::Path| read_trusted(path, trusted);
+        let denied = |path: &std::path::Path| {
+            let result = read(path);
+            assert_eq!(
+                result.as_ref().map_err(std::io::Error::kind).err(),
+                Some(std::io::ErrorKind::PermissionDenied),
+                "{}: {result:?}",
+                path.display()
+            );
+        };
+
+        let etc = dir.join("etc");
+        std::fs::create_dir(&etc).unwrap();
+        set_mode(&etc, 0o755);
+        let file = etc.join("policy.json");
+        std::fs::write(&file, "{}").unwrap();
+        set_mode(&file, 0o644);
+        assert_eq!(read(&file).unwrap(), "{}");
+        assert_eq!(
+            read(&etc.join("missing.json")).unwrap_err().kind(),
+            std::io::ErrorKind::NotFound
+        );
+
+        // Not owned by a trusted user.
+        if me != 0 {
+            let root_only = read_trusted(&file, |uid| uid == 0);
+            assert_eq!(
+                root_only.unwrap_err().kind(),
+                std::io::ErrorKind::PermissionDenied
+            );
+        }
+
+        for mode in [0o666, 0o664, 0o646] {
+            set_mode(&file, mode);
+            denied(&file);
+        }
+        set_mode(&file, 0o644);
+
+        // A directory is not a policy file.
+        let not_a_file = etc.join("dir.json");
+        std::fs::create_dir(&not_a_file).unwrap();
+        set_mode(&not_a_file, 0o755);
+        denied(&not_a_file);
+
+        // A symlink to a trusted file is fine.
+        let link = etc.join("link.json");
+        symlink(&file, &link).unwrap();
+        assert_eq!(read(&link).unwrap(), "{}");
+
+        // A symlink to a file in a directory other users can write.
+        let shared = dir.join("shared");
+        std::fs::create_dir(&shared).unwrap();
+        set_mode(&shared, 0o777);
+        let planted = shared.join("policy.json");
+        std::fs::write(&planted, "{}").unwrap();
+        set_mode(&planted, 0o644);
+        let to_shared = etc.join("to-shared.json");
+        symlink(&planted, &to_shared).unwrap();
+        denied(&to_shared);
+        // A relative symlink through that directory.
+        let relative = etc.join("relative.json");
+        symlink("../shared/policy.json", &relative).unwrap();
+        denied(&relative);
+        // With the sticky bit (like /tmp), other users cannot replace the file.
+        set_mode(&shared, 0o1777);
+        assert_eq!(read(&to_shared).unwrap(), "{}");
+        set_mode(&shared, 0o755);
+
+        // The policy directory itself is writable by others.
+        set_mode(&etc, 0o777);
+        denied(&file);
+        set_mode(&etc, 0o755);
+
+        // A symlink loop.
+        let loop_a = etc.join("a.json");
+        symlink(etc.join("b.json"), &loop_a).unwrap();
+        symlink(&loop_a, etc.join("b.json")).unwrap();
+        denied(&loop_a);
+
+        let _ = std::fs::remove_dir_all(&dir);
     }
 
     /// Reads real preferences through CFPreferences, from a scratch domain

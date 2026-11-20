@@ -33,10 +33,14 @@ function PrefSection({ title, children }: PrefSectionProps) {
   );
 }
 
-function ManagedNote() {
+interface ManagedNoteProps {
+  text?: string;
+}
+
+function ManagedNote({ text = "Managed by your organization" }: ManagedNoteProps) {
   return (
     <Text font="secondary-body" color="text-03">
-      Managed by your organization
+      {text}
     </Text>
   );
 }
@@ -235,14 +239,20 @@ function Preferences() {
   return (
     <WindowFrame title="Preferences" subtitle="Settings for this device">
       <Section gap={4} alignItems="stretch" height="fit">
-        {prefs?.policyInvalid ? (
-          <ErrorText message="Your organization's Onyx policy is invalid. Some settings are locked. Contact your IT team." />
-        ) : null}
+        <ErrorText message={prefs?.policyNotice ?? null} />
         <PrefSection title="Server">
           <Text font="main-ui-body" color="text-04">
             {prefs?.serverUrl ?? "Not connected"}
           </Text>
-          {prefs?.serverManaged ? <ManagedNote /> : null}
+          {prefs?.serverManaged ? (
+            <ManagedNote
+              text={
+                prefs.serverLocked
+                  ? "Managed by your organization"
+                  : "Default set by your organization"
+              }
+            />
+          ) : null}
           {prefs?.serverLocked ? null : (
             <Section flexDirection="row" justifyContent="start" height="fit">
               <Button prominence="secondary" onClick={() => void run(changeServer)}>
