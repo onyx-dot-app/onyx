@@ -1,0 +1,261 @@
+---
+title: "Onyx MCP server"
+sidebarTitle: "Overview"
+description: "Search Onyx from Claude, ChatGPT, Codex, and Claude Code using OAuth."
+icon: "plug"
+---
+
+Connect your AI client to Onyx so it can search your Onyx documents, search the web, and read web pages.
+
+<Note>
+  This page covers Onyx as an MCP **server**. To give Onyx Agents tools from another MCP server,
+  see [MCP plugins](/admins/plugins/mcp).
+</Note>
+
+## Before you connect
+
+- Get your Onyx MCP URL from your administrator, such as `https://onyx.example.com/mcp/`.
+- Your Onyx account needs the **Search** and **Create User Access Token** permissions.
+- Self-hosted Onyx needs HTTPS for OAuth. The MCP server is in all editions and is on by default.
+
+## Connect your AI tools
+
+<CardGroup cols={2}>
+  <Card title="Claude" icon="message" href="/overview/onyx_anywhere/mcp_server/claude">
+    Claude Desktop and claude.ai.
+  </Card>
+
+  <Card title="ChatGPT" icon="comments" href="/overview/onyx_anywhere/mcp_server/chatgpt">
+    ChatGPT on the web and desktop.
+  </Card>
+
+  <Card title="Codex" icon="terminal" href="/overview/onyx_anywhere/mcp_server/codex">
+    CLI, desktop app, and IDE extension.
+  </Card>
+
+  <Card title="Claude Code" icon="square-terminal" href="/overview/onyx_anywhere/mcp_server/claude_code">
+    User or project configuration.
+  </Card>
+</CardGroup>
+
+For another client, add your Onyx MCP URL as a remote Streamable HTTP server with OAuth.
+
+## Sign in and approve access
+
+Your client opens Onyx in your browser. Sign in with your own user account, check the app name and account,
+and select **Allow access**. API keys and service accounts cannot approve access.
+
+<img src="/assets/overview/onyx_anywhere/mcp/oauth_consent.webp" alt="Onyx OAuth consent page showing the app name, requested search access, Allow access, and Deny. Account details are hidden." width="320" />
+
+### Test the connection
+
+Send this prompt from your client:
+
+```text
+Use the Onyx MCP server to search for our onboarding guide.
+Return the matching document titles and source links.
+If you cannot access Onyx or find a relevant document, say so explicitly.
+```
+
+The client should call `search_indexed_documents` and return document titles and source links.
+An empty result can be valid. Try a document that you know you can open in Onyx.
+
+## Permissions and data access
+
+A connected app gets the `read:search` scope. It can search documents that you can access, search the web,
+and open web pages. It cannot create API keys or use other Onyx APIs. Your document permissions still apply.
+
+Your AI client receives the content that Onyx returns. Use a client that your organization allows to receive it.
+
+## Connection expiry
+
+| Credential | Lifetime |
+| --- | --- |
+| Access token | 15 minutes. The client refreshes it automatically. |
+| Authorization | 30 days from approval. Refreshing does not extend it. |
+
+After 30 days, sign in and approve access again. If a client reuses an old refresh token,
+Onyx revokes the authorization and you must connect again.
+
+## Manage connected apps
+
+<img src="/assets/overview/onyx_anywhere/mcp/connected_apps.webp" alt="Connected apps in Onyx settings with app names, expiry dates, and Disconnect controls." width="640" />
+
+To revoke an app, open **Settings > Accounts & Access > Connected apps** in Onyx and select **Disconnect**.
+Removing Onyx from your client or signing out of Onyx does not revoke access. For a personal access token connection,
+revoke the token instead.
+
+To change accounts, sign out of Onyx in your client and connect again with the other account.
+
+## Use a personal access token instead
+
+If your client cannot use OAuth, create a [personal access token](/developers/overview#personal-access-tokens)
+with `read:search` under **Settings > Accounts & Access > Access Tokens**. On Onyx Cloud,
+tokens need a paid subscription.
+
+Export the token without saving it in your shell history:
+
+```bash
+read -r -s -p "Onyx personal access token: " ONYX_TOKEN
+printf '\n'
+export ONYX_TOKEN
+```
+
+Then configure [Codex](/overview/onyx_anywhere/mcp_server/codex#personal-access-token)
+or [Claude Code](/overview/onyx_anywhere/mcp_server/claude_code#personal-access-token).
+
+## Prompts you can use
+
+Replace names and dates with values from your workspace.
+
+### Find a procedure
+
+```text
+Search Onyx for our deployment rollback procedure.
+Summarize the steps from the documents you find and cite a source link for each step.
+Flag missing or conflicting instructions instead of filling in gaps.
+```
+
+### Search a document set
+
+```text
+Use Onyx to search only the document set named "Engineering guides" for the release checklist.
+Pass that name through the document_set_names filter.
+If the name is not available, show me the suggested names and ask which one to use.
+Do not retry without the document-set filter.
+```
+
+### Use an Onyx agent's knowledge scope
+
+```text
+Search Onyx for the deployment checklist using the agent named "Engineering support".
+Pass the agent name through the agent parameter so the search uses that agent's knowledge scope.
+Cite the source documents. If the agent cannot be found, ask me to choose an available agent.
+```
+
+This runs a search with the agent's knowledge scope and configured model. It does not start a chat with that agent.
+Do not combine `agent` with `document_set_names` in the same search.
+
+### Find recently updated documents
+
+```text
+Search Onyx for release notes in GitHub documents updated on or after October 1, 2026 UTC.
+Use source_types ["github"] and time_cutoff "2026-10-01T00:00:00Z".
+Return document titles, update dates, and source links.
+```
+
+The date filter applies to document update times, not dates mentioned in the text.
+
+### Compare workspace guidance with public documentation
+
+```text
+Search Onyx for our Python dependency upgrade procedure.
+Then use Onyx web search to find the relevant public package documentation,
+and open the relevant public pages if their snippets do not answer the question.
+Keep our procedure and the public recommendations separate, with links for each.
+```
+
+## Tool reference
+
+### search_indexed_documents
+
+Search the knowledge indexed in Onyx. By default the search includes query expansion, retrieval, document selection,
+and context expansion.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `query` | string | Yes | The question or search query. |
+| `source_types` | string array | No | Connector identifiers, such as `github` or `google_drive`. |
+| `document_set_names` | string array | No | Names of accessible document sets. |
+| `tags` | object array | No | Metadata pairs, such as `{"tag_key": "assignee", "tag_value": "Jane Doe"}`. Keeps documents that match at least one pair. Federated sources, such as Slack search, are not searched when you set tags. |
+| `time_cutoff` | string | No | ISO 8601 timestamp. Keeps documents updated on or after this time. Include a timezone. |
+| `skip_query_expansion` | boolean | No | Defaults to `false`. Set `true` to bypass query expansion. |
+| `agent` | string | No | Name of an accessible Onyx agent whose knowledge scope and model the search should use. |
+| `retrieval_only` | boolean | No | Defaults to `false`. Set `true` to make no LLM calls. Results are up to 10 sections in retrieval order, each with up to 5 chunks of surrounding context on each side. The search runs no query expansion, filter detection, federated Slack search or document selection. An administrator can turn it on for every search with [`MCP_SERVER_SEARCH_RETRIEVAL_ONLY`](/deployment/configuration/mcp_server#service-settings). |
+
+```json
+{
+  "query": "How do I roll back a deployment?",
+  "source_types": ["github"],
+  "document_set_names": ["Engineering guides"],
+  "time_cutoff": "2026-10-01T00:00:00Z",
+  "skip_query_expansion": false
+}
+```
+
+Document-set and agent names must exist in your workspace. Unknown source types, document sets,
+or agents return an error with suggested or available values. Correct the filter before retrying.
+Empty filter arrays do not restrict the search. Use a valid timestamp:
+an invalid `time_cutoff` can result in a search without a date restriction.
+
+The response is one JSON text block with a `results` array. It has no separate structured copy.
+Each result includes `title`, `url`, `source_type`, `content`, and `updated_at`.
+A result also includes `metadata` when its source supplies fields, such as a Jira reporter or assignee.
+Use these keys and values in `tags`. For a list value, such as `"labels": ["production", "urgent"]`,
+send one pair for each item. Results are ordered by relevance. `content` contains retrieved document text,
+which can be a selected chunk rather than the entire document. There is no `limit` parameter for this tool.
+
+### search_web
+
+Search public web content. Availability depends on your Onyx web-search configuration.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `query` | string | Yes | Public web search query. |
+| `limit` | integer | No | Maximum results to request. Defaults to `5`. |
+
+```json
+{
+  "query": "Python packaging dependency constraints documentation",
+  "limit": 5
+}
+```
+
+The response contains `results` and `query`. Results include page titles, URLs, and snippets.
+Use `open_urls` for page text when a snippet is insufficient.
+
+### open_urls
+
+Retrieve text from web pages. This tool does not provide a way to bypass a site's sign-in or Onyx document permissions.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `urls` | string array | Yes | URLs to retrieve. The default maximum is 20 per call. |
+
+```json
+{
+  "urls": ["https://docs.python.org/3/library/venv.html"]
+}
+```
+
+The response contains a `results` array with fetched page text and metadata.
+
+## Resource reference
+
+Clients that support MCP resources can read these JSON resources to discover search filters:
+
+| Resource | Response | Use |
+| --- | --- | --- |
+| `resource://indexed_sources` | Array of source identifiers. It includes `ingestion_api` after documents are sent through the Ingestion API. An ingested document that sets its own `source` is indexed under that source, and this list can leave that source out. | Use identifiers in `source_types`. |
+| `resource://document_sets` | Array of accessible document sets with `name` and `description`. | Use names in `document_set_names`. |
+| `resource://agents` | Array of accessible agents with `id`, `name`, and `description`. | Use names in `agent`. |
+
+Resource support varies by client. A resource lookup is not required before searching:
+named filters are resolved on the search call and return an error when they cannot be resolved.
+
+## Troubleshooting
+
+| Problem | What to check |
+| --- | --- |
+| Sign-in does not open or the server is unavailable | Check the MCP URL. Ask your administrator to check [discovery and routing](/deployment/configuration/mcp_server#verify-the-deployment). |
+| Approval is forbidden | Sign in as a regular user in the correct workspace, with the **Search** and **Create User Access Token** permissions. |
+| A request returns `401` | Sign in again. The 30-day authorization expired, or someone disconnected the app. |
+| A request returns `403` | Check your permissions and workspace membership. Signing in again does not restore a removed permission. |
+| A request returns `402` | Ask your administrator to check billing or the license. |
+| A request returns `503` | A required service is unavailable. Retry, then ask your administrator to check service health. |
+| ChatGPT sign-in returns `Client ID 'https://chatgpt.com/oauth/client.json' not found` | Create the plugin again with **Registration method** set to **Dynamic Client Registration (DCR)**. See [ChatGPT](/overview/onyx_anywhere/mcp_server/chatgpt#chatgpt-on-the-web). |
+| Sign-in returns `503` | Onyx could not get the client's metadata document. Retry. If it continues, ask your administrator to check that the client's metadata URL is public. |
+| An expected document is missing | Check that you can find it in Onyx and that your filters match its source, document set, and update time. |
+| A named filter fails | Use the names that the error suggests. |
+| Claude or ChatGPT cannot reach a self-hosted Onyx | These clients connect from the cloud. Your Onyx MCP URL must be reachable from the internet. |
+| Connected apps is missing | Ask your administrator to check that OAuth is set up. Personal access token connections do not show in **Connected apps**. |
