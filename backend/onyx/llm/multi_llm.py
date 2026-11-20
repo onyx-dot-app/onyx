@@ -119,7 +119,11 @@ from onyx.llm.prompt_cache.providers.openai import (
     without_cache_breakpoint_flags,
 )
 from onyx.llm.utils import build_litellm_passthrough_kwargs, collect_credential_values
-from onyx.llm.well_known_providers.constants import VERTEX_LOCATION_KWARG
+from onyx.llm.well_known_providers.constants import (
+    VENICE_INCLUDE_SYSTEM_PROMPT_KEY,
+    VENICE_PARAMETERS_KWARG,
+    VERTEX_LOCATION_KWARG,
+)
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.llm_utils import (
     llm_generation_span,
@@ -925,6 +929,17 @@ class LitellmLLM(LLM):
         if extra_body:
             model_kwargs["extra_body"] = _merge_under(
                 extra_body, model_kwargs.get("extra_body") or {}
+            )
+
+        # Venice prepends its own system prompts to the caller's by default.
+        # Onyx composes system prompts precisely for personas, RAG grounding and
+        # tool use, and an upstream prefix is drift an admin cannot see. Sits
+        # underneath everything else, so a deployment that deliberately asks for
+        # Venice's prompts still gets them.
+        if model_provider == LlmProviderNames.VENICE:
+            model_kwargs["extra_body"] = _merge_under(
+                {VENICE_PARAMETERS_KWARG: {VENICE_INCLUDE_SYSTEM_PROMPT_KEY: False}},
+                model_kwargs.get("extra_body") or {},
             )
 
         self._model_kwargs = copy.deepcopy(model_kwargs)
