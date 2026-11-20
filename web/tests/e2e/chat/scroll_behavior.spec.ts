@@ -4,6 +4,11 @@ import { loginAsRandomUser } from "@tests/e2e/utils/auth";
 import { sendMessage, startNewChat } from "@tests/e2e/utils/chatActions";
 import { ChatPage } from "@tests/e2e/chat/ChatPage";
 
+/** A message offset below the container's top edge, within ~150px of it. */
+function nearTop(offset: number): boolean {
+  return offset >= 0 && offset < 150;
+}
+
 /**
  * Helper to toggle auto-scroll setting via the settings panel
  */
@@ -160,29 +165,6 @@ test.describe("Turn anchoring - Fresh Chat Effect", () => {
     ]);
   });
 
-  /**
-   * Helper to get the position of an element relative to scroll container
-   */
-  async function getElementPositionInContainer(
-    page: Page,
-    elementLocator: ReturnType<Page["locator"]>
-  ) {
-    return elementLocator.evaluate((el: HTMLElement) => {
-      const scrollContainer = el.closest(".overflow-y-auto");
-      if (!scrollContainer) return null;
-
-      const containerRect = scrollContainer.getBoundingClientRect();
-      const elementRect = el.getBoundingClientRect();
-
-      return {
-        topOffset: elementRect.top - containerRect.top,
-        containerHeight: containerRect.height,
-        elementTop: elementRect.top,
-        containerTop: containerRect.top,
-      };
-    });
-  }
-
   test("Follow-up message appears near top of viewport (fresh chat effect)", async ({
     page,
   }) => {
@@ -198,27 +180,14 @@ test.describe("Turn anchoring - Fresh Chat Effect", () => {
       "This follow-up message should appear near the top of the viewport"
     );
 
-    // Get the last user message (the follow-up)
-    const lastUserMessage = page.locator("#onyx-human-message").last();
-    await lastUserMessage.waitFor({ state: "visible" });
-
-    // Check that the follow-up message is positioned near the top of the container
-    // (within ~150px to account for sticky header and some padding)
+    // The follow-up sits near the top of the container: below its top edge
+    // (above it is not near the top), within ~150px for padding.
+    const chat = new ChatPage(page);
     await expect
-      .poll(
-        async () => {
-          const position = await getElementPositionInContainer(
-            page,
-            lastUserMessage
-          );
-          return position?.topOffset ?? Number.POSITIVE_INFINITY;
-        },
-        { timeout: 5000 }
-      )
-      .toBeLessThan(150);
-    // Above the viewport is not near its top.
-    const position = await getElementPositionInContainer(page, lastUserMessage);
-    expect(position?.topOffset).toBeGreaterThanOrEqual(0);
+      .poll(async () => nearTop(await chat.latestHumanMessageOffset()), {
+        timeout: 5000,
+      })
+      .toBe(true);
   });
 
   test("A reloaded chat keeps the space below its latest turn", async ({
@@ -229,14 +198,24 @@ test.describe("Turn anchoring - Fresh Chat Effect", () => {
     const chat = new ChatPage(page);
     await sendMessage(page, "Test message to initialize chat");
     await sendMessage(page, "Follow-up message");
+    await expect
+      .poll(async () => nearTop(await chat.latestHumanMessageOffset()), {
+        timeout: 5000,
+      })
+      .toBe(true);
+    const sentOffset = await chat.latestHumanMessageOffset();
+
+    // The mock reply is short, so without the space the message would sit
+    // far lower after the reload than where the send put it.
     await chat.reload();
     await chat.waitForScrollReady();
-
     await expect
-      .poll(() => chat.latestHumanMessageOffset(), { timeout: 5000 })
-      .toBeLessThan(150);
-    // Above the viewport is not near its top.
-    expect(await chat.latestHumanMessageOffset()).toBeGreaterThanOrEqual(0);
+      .poll(
+        async () =>
+          Math.abs((await chat.latestHumanMessageOffset()) - sentOffset),
+        { timeout: 5000 }
+      )
+      .toBeLessThanOrEqual(2);
   });
 
   test("User can scroll up to see previous messages after fresh chat effect", async ({
