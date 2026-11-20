@@ -491,6 +491,7 @@ export default function LanguageModelsPage() {
           LLMProviderName.LITELLM_PROXY,
           LLMProviderName.PORTKEY,
           LLMProviderName.VERCEL_AI_GATEWAY,
+          LLMProviderName.ATLASCLOUD,
           LLMProviderName.NEBIUS_TOKENFACTORY,
           LLMProviderName.BIFROST,
         ],
