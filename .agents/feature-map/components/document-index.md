@@ -33,6 +33,11 @@ different shard settings on AWS-managed OpenSearch.
 - **A full admin sees resource warnings** when the OpenSearch cluster is short
   of disk, JVM heap or vector memory: one popup per 24 hours, and a banner on
   admin pages.
+- **A full admin on a self-hosted Business or Enterprise deployment** reads the
+  cluster status (`GET /admin/service-status/opensearch`, EE): cluster health,
+  each data node's disk, heap and vector memory against its file cache, the
+  current and reindex indexes, and the issues with their severity. The result is
+  shared for 60 seconds. Multi-tenant Cloud refuses it.
 - **An operator** sees the old index deleted about a day after a switch, once
   the new index is healthy. A reclaim that fails repeatedly stops and needs a
   person.
@@ -46,7 +51,8 @@ swap and the reclaim of old indices. It owns the metadata sync: the `needs_sync`
 predicate and `document_index_metadata_sync_task`. Their module keeps the name
 `vespa`; the backend AGENTS file explains why. It owns the embedding model registry,
 how the model server loads a self-hosted model, the cluster resource health
-check and the `cc_pair_ids` backfill.
+check, the cluster status for the admin Service Status page and
+the `cc_pair_ids` backfill.
 
 Its neighbours own:
 - [[indexing-pipeline]]: building the chunks that cross `index()`.
@@ -260,6 +266,13 @@ it deletes the old one.
 
 ## Decisions
 
+- **Vector memory is estimated from the vector files, not k-NN memory.**
+  Lucene reads vectors through the OS file cache, so k-NN graph memory stays 0
+  for Onyx indexes. `document_index/opensearch/client.py:get_node_vector_bytes` sums each shard copy's
+  graph (`vex`) plus the vectors the graph walk reads: the quantized copy
+  (`veq`, `veb`) when there is one, else the float32 `vec`. The file cache is
+  the smaller of host RAM and the cgroup limit, minus the heap. The resource
+  warning and the status page share this estimate.
 - **Reindex copies stored chunks instead of fetching sources again.** A full
   refetch is slow and fails when a connector is broken. The port re-embeds what
   PRESENT holds, and the reindex endpoint creates every FUTURE row with

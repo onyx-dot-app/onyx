@@ -41,7 +41,11 @@ from onyx.document_index.opensearch.constants import (
     OpenSearchSearchType,
 )
 from onyx.document_index.opensearch.models import (
+    NodeMemoryStats,
+    NodesMemoryStats,
     NodesResourceStats,
+    NodeVectorBytes,
+    VectorNodeStats,
     VectorResourceStats,
 )
 from onyx.document_index.opensearch.schema import (
@@ -76,6 +80,21 @@ _RETRYABLE_UPDATE_ERROR_TYPES = (
 
 
 logger = setup_logger(__name__)
+
+# Lucene vector files: float32 vectors, HNSW graph, scalar and binary quantized vectors.
+_VECTOR_FILE_EXTENSIONS: tuple[str, ...] = ("vec", "vex", "veq", "veb")
+
+
+def _file_size(sizes: dict[str, Any], ext: str) -> int:
+    return int(sizes.get(ext, {}).get("size_in_bytes", 0))
+
+
+def vector_usage_percent(vector_bytes: int, file_cache_bytes: int) -> float:
+    """Vector bytes as a share of the file cache; 0 when there is no cache."""
+    if file_cache_bytes <= 0:
+        return 0.0
+    return 100 * vector_bytes / file_cache_bytes
+
 
 # One update-by-query can touch thousands of chunks, so it gets longer than the
 # client's default request timeout.
@@ -450,15 +469,157 @@ class OpenSearchClient(AbstractContextManager):
         return NodesResourceStats.model_validate(response)
 
     def get_vector_resource_stats(self) -> VectorResourceStats:
-        response: dict[str, Any] = self._client.transport.perform_request(
+        """Estimates each data node's vector memory use against its file cache.
+
+        Lucene reads vectors through the OS file cache, so k-NN native graph
+        memory stays 0 for Onyx indexes and cannot show the pressure.
+        """
+        memory: NodesMemoryStats = self.get_node_memory_stats()
+        vectors: dict[str, NodeVectorBytes] = self.get_node_vector_bytes()
+        breaker: dict[str, Any] = self._client.transport.perform_request(
             "GET",
-            "/_plugins/_knn/stats/circuit_breaker_triggered,graph_memory_usage_percentage",
+            "/_plugins/_knn/stats/circuit_breaker_triggered",
             params={
                 "request_timeout": RESOURCE_CHECK_TIMEOUT_SECONDS,
                 "timeout": f"{RESOURCE_CHECK_TIMEOUT_SECONDS}s",
             },
         )
-        return VectorResourceStats.model_validate(response)
+        return VectorResourceStats.model_validate(
+            {
+                # A node that did not answer fails the check, as k-NN stats did.
+                "_nodes": {"failed": memory.failed},
+                "circuit_breaker_triggered": bool(
+                    breaker.get("circuit_breaker_triggered")
+                ),
+                "nodes": {
+                    node_id: VectorNodeStats(
+                        usage_percent=vector_usage_percent(
+                            vectors.get(node_id, NodeVectorBytes()).vector_bytes,
+                            node.file_cache_bytes,
+                        )
+                    )
+                    for node_id, node in memory.nodes.items()
+                },
+            }
+        )
+
+    def get_node_memory_stats(self) -> NodesMemoryStats:
+        """Returns memory, disk, CPU and search queue stats per data node."""
+        response: dict[str, Any] = self._client.nodes.stats(
+            node_id="data:true",
+            metric="os,jvm,fs,thread_pool",
+            params={
+                "request_timeout": RESOURCE_CHECK_TIMEOUT_SECONDS,
+                "timeout": f"{RESOURCE_CHECK_TIMEOUT_SECONDS}s",
+                "filter_path": ",".join(
+                    ["_nodes.failed"]
+                    + [
+                        f"nodes.*.{path}"
+                        for path in (
+                            "name",
+                            "os.mem.total_in_bytes",
+                            "os.cgroup.memory.limit_in_bytes",
+                            "os.cpu.percent",
+                            "os.cpu.load_average.1m",
+                            "jvm.mem.heap_used_in_bytes",
+                            "jvm.mem.heap_max_in_bytes",
+                            "fs.total.total_in_bytes",
+                            "fs.total.available_in_bytes",
+                            "thread_pool.search.queue",
+                            "thread_pool.search.rejected",
+                        )
+                    ]
+                ),
+            },
+        )
+        stats: dict[str, NodeMemoryStats] = {}
+        for node_id, node in response.get("nodes", {}).items():
+            os_stats: dict[str, Any] = node.get("os", {})
+            memory_bytes: int = os_stats["mem"]["total_in_bytes"]
+            # The cgroup limit is a string: "max", or a huge number when unset.
+            limit: str = str(
+                os_stats.get("cgroup", {}).get("memory", {}).get("limit_in_bytes", "")
+            )
+            if limit.isdigit() and 0 < int(limit) < memory_bytes:
+                memory_bytes = int(limit)
+            cpu: dict[str, Any] = os_stats.get("cpu", {})
+            search_pool: dict[str, Any] = node.get("thread_pool", {}).get("search", {})
+            stats[node_id] = NodeMemoryStats(
+                name=node.get("name", node_id),
+                memory_bytes=memory_bytes,
+                heap_max_bytes=node["jvm"]["mem"]["heap_max_in_bytes"],
+                heap_used_bytes=node["jvm"]["mem"]["heap_used_in_bytes"],
+                disk_total_bytes=node["fs"]["total"]["total_in_bytes"],
+                disk_available_bytes=node["fs"]["total"]["available_in_bytes"],
+                cpu_percent=cpu.get("percent", 0),
+                load_average_1m=cpu.get("load_average", {}).get("1m"),
+                search_queue=search_pool.get("queue", 0),
+                search_rejected=search_pool.get("rejected", 0),
+            )
+        return NodesMemoryStats(
+            failed=response.get("_nodes", {}).get("failed", 0), nodes=stats
+        )
+
+    def get_node_vector_bytes(
+        self, index_name: str | None = None
+    ) -> dict[str, NodeVectorBytes]:
+        """Sums the vector files that search reads per node, over all shards.
+
+        index_name limits the sum to one index; None counts every index.
+
+        A shard copy needs its HNSW graph (vex) and the vectors the graph walk
+        compares: the quantized copy (veq, veb) when the field is quantized,
+        else the float32 vectors (vec). A quantized field keeps its float32
+        copy on disk for rescoring a few results, which reads little of it.
+        """
+        response: dict[str, Any] = self._client.indices.stats(
+            index=index_name,
+            metric="segments",
+            params={
+                "level": "shards",
+                "include_segment_file_sizes": "true",
+                "request_timeout": RESOURCE_CHECK_TIMEOUT_SECONDS,
+                "filter_path": ",".join(
+                    ["indices.*.shards.*.routing.node"]
+                    + [
+                        f"indices.*.shards.*.segments.file_sizes.{ext}.size_in_bytes"
+                        for ext in _VECTOR_FILE_EXTENSIONS
+                    ]
+                ),
+            },
+        )
+        per_node: dict[str, NodeVectorBytes] = {}
+        for index in response.get("indices", {}).values():
+            for copies in index.get("shards", {}).values():
+                for copy in copies:
+                    node_id: str | None = copy.get("routing", {}).get("node")
+                    if node_id is None:
+                        continue
+                    sizes: dict[str, Any] = copy.get("segments", {}).get(
+                        "file_sizes", {}
+                    )
+                    quantized: int = _file_size(sizes, "veq") + _file_size(sizes, "veb")
+                    node: NodeVectorBytes = per_node.setdefault(
+                        node_id, NodeVectorBytes()
+                    )
+                    node.vector_bytes += _file_size(sizes, "vex") + (
+                        quantized or _file_size(sizes, "vec")
+                    )
+                    node.shard_count += 1
+        return per_node
+
+    def get_index_summaries(self, index_names: list[str]) -> dict[str, dict[str, str]]:
+        """Returns the _cat/indices row of each named index that exists."""
+        rows: list[dict[str, str]] = self._client.cat.indices(
+            format="json",
+            params={
+                "bytes": "b",
+                "h": "index,health,pri,rep,docs.count,docs.deleted,store.size",
+                "request_timeout": RESOURCE_CHECK_TIMEOUT_SECONDS,
+            },
+        )
+        wanted: set[str] = set(index_names)
+        return {row["index"]: row for row in rows if row.get("index") in wanted}
 
     def __exit__(self, *_: Any) -> None:
         self.close()

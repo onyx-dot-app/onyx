@@ -80,7 +80,7 @@ covers new files that match it.
 | `backend/onyx/server/features/search/`, `backend/onyx/server/query_and_chat/query_backend.py`, `backend/ee/onyx/server/query_and_chat/`, `backend/ee/onyx/search/` | internal-search |
 | `web/src/ee/sections/SearchUI.tsx`, `web/src/ee/sections/SearchCard.tsx`, `web/src/ee/lib/search/`, `web/src/ee/providers/QueryControllerProvider.tsx`, `web/src/providers/QueryControllerProvider.tsx` | internal-search |
 | `backend/onyx/document_index/` | document-index |
-| `backend/onyx/server/manage/opensearch_health/`, `web/src/lib/opensearch-health/`, `web/src/sections/banners/OpenSearchResourceWarning.tsx` | document-index |
+| `backend/onyx/server/manage/opensearch_health/`, `backend/ee/onyx/server/service_status/`, `web/src/lib/opensearch-health/`, `web/src/sections/banners/OpenSearchResourceWarning.tsx` | document-index |
 | `backend/onyx/natural_language_processing/` | document-index, internal-search |
 | `backend/onyx/db/search_settings.py`, `backend/onyx/db/swap_index.py`, `backend/onyx/db/port_attempt.py`, `backend/onyx/db/port_orphan_candidate.py` | document-index |
 | `backend/onyx/redis/redis_document_set.py`, `backend/onyx/redis/redis_usergroup.py`, `backend/ee/onyx/background/celery/tasks/vespa/` | document-index |
