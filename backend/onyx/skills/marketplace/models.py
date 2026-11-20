@@ -32,7 +32,11 @@ class GitHubMarketplaceConfig(BaseModel):
         folder = (value or "").strip().strip("/")
         if not folder:
             return None
-        if "\\" in folder or any(part in {"", ".", ".."} for part in folder.split("/")):
+        if (
+            "\\" in folder
+            or any(ord(char) < 32 or ord(char) == 127 for char in folder)
+            or any(part in {"", ".", ".."} for part in folder.split("/"))
+        ):
             raise ValueError(
                 "Use a folder path in the repository, with no '.' or '..'."
             )
@@ -73,6 +77,12 @@ class GitHubRepoSource(BaseModel):
     ref: str | None = None
     sha: str | None = None
     path: str | None = None
+
+    @field_validator("owner", "repo")
+    @classmethod
+    def _lower(cls, value: str) -> str:
+        # GitHub names ignore case, so one form groups the same repository.
+        return value.lower()
 
 
 class ReadyPlugin(BaseModel):

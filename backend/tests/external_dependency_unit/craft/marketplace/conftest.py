@@ -37,6 +37,7 @@ def connections(monkeypatch: pytest.MonkeyPatch) -> Connections:
         monkeypatch.setattr(
             module, "github_authorization_for", connections.authorization_for
         )
+    monkeypatch.setattr(marketplace_api, "github_connected", connections.is_connected)
     return connections
 
 

@@ -75,3 +75,15 @@ def test_repository_archive_refuses_unsafe_paths(path: str) -> None:
 def test_repository_archive_needs_one_wrapper_folder() -> None:
     with pytest.raises(OnyxError, match="unexpected repository download"):
         read_repository_archive(tar_archive({"a": b"a", "b": b"b"}, wrapper=""))
+
+
+def test_repository_archive_maps_corrupt_compressed_data_to_onyx_error() -> None:
+    text = b"".join(f"line {i} some text\n".encode() for i in range(20000))
+    archive = tar_archive({"README.md": b"x" * 100, "big.txt": text})
+    for position in range(40, 1500):
+        corrupt = bytearray(archive)
+        corrupt[position] ^= 0x55
+        try:
+            read_repository_archive(bytes(corrupt))
+        except OnyxError:
+            pass

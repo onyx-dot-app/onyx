@@ -24,7 +24,7 @@ from onyx.db.skill import (
     set_skill_public_permission,
     transfer_skill_ownership,
 )
-from onyx.db.users import delete_user_from_db__no_commit
+from onyx.db.users import UserDeleteCleanup, delete_user_from_db__no_commit
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.manage.models import UserByEmail
@@ -208,6 +208,36 @@ async def test_last_admin_guard_runs_before_remote_deletion(
             )
         assert exc.value.error_code == OnyxErrorCode.CONFLICT
         remote.assert_not_called()
+
+
+@pytest.mark.asyncio(loop_scope="module")
+async def test_last_admin_leave_deletes_personal_marketplace_files(
+    db_session: Session,
+) -> None:
+    owner = make_user(db_session, is_admin=True)
+    module = "ee.onyx.server.tenants.team_membership_api"
+    try:
+        with (
+            patch(f"{module}.get_user_count", AsyncMock(return_value=1)),
+            patch(f"{module}.delete_user_from_control_plane", AsyncMock()),
+            patch(
+                f"{module}.delete_user_from_db__no_commit",
+                return_value=UserDeleteCleanup(file_ids=["marketplace-bundle"]),
+            ),
+            patch(f"{module}.remove_user_from_invited_users"),
+            patch(f"{module}.remove_all_users_from_tenant"),
+            patch(f"{module}.purge_harness_sandboxes"),
+            patch(f"{module}.delete_files_best_effort") as delete_files,
+        ):
+            await leave_organization(
+                UserByEmail(user_email=owner.email), owner, db_session
+            )
+        delete_files.assert_called_once_with(
+            ["marketplace-bundle"], "personal marketplace cleanup"
+        )
+    finally:
+        delete_user_from_db__no_commit(owner, db_session)
+        db_session.commit()
 
 
 @pytest.mark.asyncio(loop_scope="module")

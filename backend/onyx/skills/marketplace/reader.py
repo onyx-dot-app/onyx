@@ -12,6 +12,7 @@ from onyx.skills.bundle import (
     PLUGIN_MANIFEST_PATHS,
     SKILL_MD_NAME,
     TEMPLATE_SUFFIX,
+    check_bundle_file_limits,
     compute_bundle_manifest,
 )
 from onyx.skills.marketplace.models import (
@@ -203,15 +204,16 @@ def _plugin_files(
         bundle_files = {}
         names: dict[str, str] = {}
         for folder in _declared_skill_folders(folder_files, declared):
-            name = folder.rsplit("/", 1)[-1]
+            # A skill at the plugin root takes the entry name.
+            name = folder.rsplit("/", 1)[-1] if folder else str(entry["name"])
             other = names.setdefault(name, folder)
             if other != folder:
                 raise ValueError(
                     f"The skill folders {other} and {folder} share a name."
                 )
-            prefix = f"{folder}/"
+            prefix = f"{folder}/" if folder else ""
             for path, content in folder_files.items():
-                if path.startswith(prefix):
+                if path.startswith(prefix) and path not in PLUGIN_MANIFEST_PATHS:
                     relative = path.removeprefix(prefix)
                     bundle_files[f"{SKILLS_DIR}/{name}/{relative}"] = content
         declared_servers = manifest.get("mcpServers")
@@ -266,9 +268,9 @@ def build_entry_bundle(
             reason=f"The plugin folder '{root or '.'}' is missing.",
         )
     try:
-        bundle = read_plugin_bundle(
-            _deterministic_zip(_plugin_files(folder_files, entry))
-        )
+        bundle_files = _plugin_files(folder_files, entry)
+        check_bundle_file_limits(bundle_files)
+        bundle = read_plugin_bundle(_deterministic_zip(bundle_files))
     except OnyxError as exc:
         if exc.detail == NO_SKILL_OR_MCP_SERVER and has_unused_part(folder_files):
             return UnsupportedPlugin(
@@ -411,10 +413,14 @@ def read_marketplace(
         (
             _join(base, path)
             for path in MARKETPLACE_MANIFEST_PATHS
-            if _join(base, path) in files
+            if _join(base, path) in files or _join(base, path) in links
         ),
         None,
     )
+    if manifest_path in links:
+        return FailedMarketplace(
+            reason=f"{manifest_path} is a link. Onyx reads only regular files."
+        )
     if manifest_path is None:
         return FailedMarketplace(
             reason=f"No {MARKETPLACE_MANIFEST_PATHS[0]} in "

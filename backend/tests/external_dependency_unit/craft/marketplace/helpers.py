@@ -51,6 +51,9 @@ class Connections:
     def authorization_for(self, user_id: UUID, _db_session: Session) -> str | None:
         return GOOD_TOKEN if user_id in self.connected else None
 
+    def is_connected(self, user_id: UUID, _db_session: Session) -> bool:
+        return user_id in self.connected
+
 
 def existing_files(db_session: Session, file_ids: list[str]) -> set[str]:
     db_session.expire_all()

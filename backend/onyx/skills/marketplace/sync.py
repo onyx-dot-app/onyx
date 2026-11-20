@@ -235,6 +235,7 @@ def sync_marketplace(
         folder = config.folder
         login_user_id = login_user.id
         login_email = login_user.email
+        read_after = marketplace.last_synced_at
         db_session.expunge(login_user)
 
     heartbeat = _lock_heartbeat(marketplace_id, lock)
@@ -284,9 +285,12 @@ def sync_marketplace(
                 entries=entries,
                 staged=staged,
                 created_by=login,
+                read_after=read_after,
                 db_session=db_session,
             )
             db_session.commit()
+        if result.status == MarketplaceSyncStatus.FAILED:
+            logger.warning("Marketplace sync %s lost to a newer sync", marketplace_id)
     except Exception:
         for content in staged.values():
             delete_bundle_blob(file_store, content.bundle_file_id)
@@ -370,7 +374,15 @@ def request_marketplace_sync(
     marketplace_id: UUID, background_tasks: BackgroundTasks
 ) -> None:
     """A request while a sync is queued or running does nothing."""
-    if marketplace_syncing(marketplace_id):
+    cache = get_cache_backend()
+    if not cache.set_if_absent(
+        _queued_key(marketplace_id), b"1", ex=SYNC_TASK_EXPIRES_SECONDS
+    ):
+        return
+    # A worker sets the running key before it clears the queued one, so a
+    # sync that took an earlier request shows here.
+    if cache.exists(_running_key(marketplace_id)):
+        cache.delete(_queued_key(marketplace_id))
         return
     enqueue_marketplace_sync(marketplace_id, background_tasks)
 

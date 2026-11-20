@@ -28,7 +28,7 @@ from onyx.db.users import fetch_user_by_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.staging import delete_files_best_effort
-from onyx.integrations.github_auth import github_authorization_for
+from onyx.integrations.github_auth import github_authorization_for, github_connected
 from onyx.integrations.plugin_needs import integrations_for_needs, need_views
 from onyx.server.features.skill.marketplace_models import (
     MarketplaceCreateRequest,
@@ -154,7 +154,7 @@ def _detail(
     return MarketplaceDetail(
         **_summary(marketplace, len(plugins), manager, db_session).model_dump(),
         login_has_github=marketplace.login_user_id is not None
-        and github_authorization_for(marketplace.login_user_id, db_session) is not None,
+        and github_connected(marketplace.login_user_id, db_session),
         entries=[
             MarketplaceEntryView(
                 key=entry.key,
@@ -398,5 +398,5 @@ def delete_marketplace(
         marketplace_id, db_session
     )
     db_session.commit()
-    push_skills_and_commit(affected, db_session)
     delete_files_best_effort(file_ids, _MARKETPLACE_CLEANUP)
+    push_skills_and_commit(affected, db_session)
