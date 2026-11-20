@@ -15887,11 +15887,31 @@
       "general": {
         "title": "Geral"
       },
+      "fonts": {
+        "title": "Fontes"
+      },
       "transcriptWidth": {
         "title": "Largura da conversa",
         "description": "Defina a largura das mensagens do chat e da barra de entrada neste dispositivo.",
         "standard": "Padrão",
-        "wide": "Largo"
+        "wide": "Largo",
+        "placeholder": "Selecione uma largura"
+      },
+      "responseFont": {
+        "default": "Padrão",
+        "match": "Igual à interface",
+        "title": "Fonte das respostas",
+        "description": "Selecione a fonte para as respostas do chat.",
+        "placeholder": "Selecione uma fonte"
+      },
+      "interfaceFont": {
+        "title": "Fonte da interface",
+        "description": "Selecione a fonte para o texto do aplicativo.",
+        "default": "Padrão",
+        "opendyslexic": "OpenDyslexic",
+        "atkinson": "Atkinson Hyperlegible Next",
+        "system": "Sistema",
+        "placeholder": "Selecione uma fonte"
       }
     },
     "chats": {

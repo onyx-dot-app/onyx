@@ -62,8 +62,8 @@
     align-items: start;
   }
 
-  /* CJK system-font tail for the app font variables (composed into
-     --font-hanken-grotesk / --font-dm-mono in src/app/layout.tsx). Font
+  /* CJK system-font tail for the app font variables (composed into the
+     --font-* variables in src/app/layout.tsx). Font
      selection is per-character and first-match-wins, and macOS/Windows
      preinstall the fonts for every CJK language — so the active locale's
      fonts must come first or shared Han codepoints render with another
@@ -101,6 +101,68 @@
   :lang(ko) {
     word-break: keep-all;
   }
+}
+
+/* Font preferences. src/lib/appearance/preferences.ts owns the attribute values on <html>;
+   src/app/layout.tsx defines the webfont variables. Unlayered so they
+   override the --font-interface default in the unlayered tokens.css. */
+:root[data-interface-font="system"] {
+  --font-interface: var(--font-system);
+}
+
+:root[data-interface-font="opendyslexic"] {
+  --font-interface: var(--font-opendyslexic);
+}
+
+/* OpenDyslexic spaces letters and words widely; tighten both so text width
+   stays close to the default font. Set on each element so the em follows its
+   font size, and unlayered so it overrides the letter-spacing of the
+   typography presets. */
+:root[data-interface-font="opendyslexic"] * {
+  letter-spacing: -0.06em;
+  word-spacing: -0.2em;
+}
+
+/* Code keeps its monospace spacing, including inline code drawn as a
+   .font-mono span. */
+:root[data-interface-font="opendyslexic"]
+  :is(code, pre, kbd, samp, .font-mono) {
+  letter-spacing: normal;
+  word-spacing: normal;
+}
+
+/* Answers in the default font start from normal word spacing, which they
+   would otherwise inherit from the OpenDyslexic text around them. */
+:root[data-interface-font="opendyslexic"][data-response-font="default"]
+  .response-text {
+  word-spacing: normal;
+}
+
+/* Text in other fonts keeps the spacing it has without OpenDyslexic. */
+:root[data-interface-font="opendyslexic"]
+  :is(code, pre, kbd, samp, .font-mono)
+  *,
+:root[data-interface-font="opendyslexic"][data-response-font="default"]
+  :is(.response-text, .response-text *) {
+  letter-spacing: revert-layer;
+}
+:root[data-interface-font="opendyslexic"]
+  :is(code, pre, kbd, samp, .font-mono)
+  *,
+:root[data-interface-font="opendyslexic"][data-response-font="default"]
+  .response-text
+  * {
+  word-spacing: revert-layer;
+}
+
+:root[data-interface-font="atkinson"] {
+  --font-interface: var(--font-atkinson-hyperlegible-next);
+}
+
+/* The response font applies only inside chat responses: elsewhere the
+   main-content presets follow the interface font. */
+:root[data-response-font="default"] .response-text {
+  --font-content: var(--font-hanken-grotesk);
 }
 
 /* Markdown chat overrides — placed in `utilities` so they sit in the same

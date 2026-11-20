@@ -2,6 +2,7 @@ import csv
 import io
 from datetime import datetime, timedelta, timezone
 from typing import Any, cast
+from urllib.parse import quote, urlencode
 from uuid import UUID
 
 import jwt
@@ -33,6 +34,7 @@ from onyx.auth.session_tokens import (
 from onyx.auth.users import (
     anonymous_user_enabled,
     enforce_seat_limit_locked,
+    get_anonymous_user,
     optional_user,
     scope_exempt,
 )
@@ -51,6 +53,7 @@ from onyx.configs.app_configs import (
     AuthBackend,
 )
 from onyx.configs.constants import (
+    APPEARANCE_COOKIE_NAME,
     FASTAPI_USERS_AUTH_COOKIE_NAME,
     NEXT_LOCALE_COOKIE_NAME,
     PUBLIC_API_TAGS,
@@ -62,6 +65,7 @@ from onyx.db.engine.sql_engine import get_session, get_session_with_shared_schem
 from onyx.db.enums import AccountType, Permission
 from onyx.db.file_record import get_filerecord_by_file_id_optional
 from onyx.db.models import User
+from onyx.db.models import UserPreferences as UserPreferencesModel
 from onyx.db.pinned_personas import set_pinned_personas
 from onyx.db.skill import transfer_private_plugins__no_commit
 from onyx.db.tenant_invite_counter import release_trial_invites, reserve_trial_invites
@@ -117,6 +121,7 @@ from onyx.server.manage.invite_rate_limit import (
 )
 from onyx.server.manage.models import (
     AllUsersResponse,
+    AppearanceRequest,
     AutoScrollRequest,
     BulkInviteResponse,
     ChatBackgroundRequest,
@@ -135,7 +140,6 @@ from onyx.server.manage.models import (
     UserCraftAccessUpdateRequest,
     UserInfo,
     UserPermissionsResponse,
-    UserPreferences,
     UserProfileImageResponse,
     UserSpecificAssistantPreference,
     UserSpecificAssistantPreferences,
@@ -1129,9 +1133,18 @@ def verify_user_logged_in(
             store = get_kv_store()
             # A browser that still carries a signed-out user's cookie follows
             # the workspace default like any other anonymous visitor.
-            reconcile_locale_cookie(request, response, stored_language=None)
+            set_preference_cookie(
+                request,
+                response,
+                NEXT_LOCALE_COOKIE_NAME,
+                resolve_user_language(None),
+            )
+            anonymous_preferences = fetch_user_preferences(
+                get_anonymous_user(), db_session
+            )
+            set_appearance_cookie(request, response, anonymous_preferences)
             clear_unrecognized_session_cookie(response)
-            return fetch_anonymous_user_info(store)
+            return fetch_anonymous_user_info(store, anonymous_preferences)
         session_rejection_error = build_session_rejection_error()
         if session_rejection_error is not None:
             raise session_rejection_error
@@ -1210,7 +1223,13 @@ def verify_user_logged_in(
         effective_permissions=sorted(p.value for p in get_effective_permissions(user)),
     )
 
-    reconcile_locale_cookie(request, response, stored_language=preferences.language)
+    set_preference_cookie(
+        request,
+        response,
+        NEXT_LOCALE_COOKIE_NAME,
+        resolve_user_language(preferences.language),
+    )
+    set_appearance_cookie(request, response, preferences)
 
     return user_info
 
@@ -1351,17 +1370,21 @@ def update_user_theme_preference_api(
     db_session.commit()
 
 
-LOCALE_COOKIE_MAX_AGE_SECONDS = 365 * 24 * 60 * 60
+PREFERENCE_COOKIE_MAX_AGE_SECONDS = 365 * 24 * 60 * 60
 
 
-def set_locale_cookie(response: Response, language: str) -> None:
-    """The backend owns the locale cookie: PATCH /user/language and GET /me
-    set it to the effective language, so the client never writes it. The
-    Next.js server layout is the only reader."""
+def set_preference_cookie(
+    request: Request, response: Response, key: str, value: str
+) -> None:
+    """Set a cookie that the Next.js server layout reads to render a saved
+    preference on first paint. The backend owns these cookies and the client
+    never writes them. A cookie the browser already holds is not re-sent."""
+    if request.cookies.get(key) == value:
+        return
     response.set_cookie(
-        key=NEXT_LOCALE_COOKIE_NAME,
-        value=language,
-        max_age=LOCALE_COOKIE_MAX_AGE_SECONDS,
+        key=key,
+        value=value,
+        max_age=PREFERENCE_COOKIE_MAX_AGE_SECONDS,
         path="/",
         secure=WEB_DOMAIN.startswith("https"),
         httponly=True,
@@ -1369,28 +1392,51 @@ def set_locale_cookie(response: Response, language: str) -> None:
     )
 
 
-def reconcile_locale_cookie(
-    request: Request, response: Response, stored_language: str | None
-) -> None:
-    """Re-issue the locale cookie when it disagrees with the effective
-    language, so a fresh browser, an identity switch or a changed workspace
-    default renders the right language."""
-    language: str = resolve_user_language(stored_language)
-    if request.cookies.get(NEXT_LOCALE_COOKIE_NAME) != language:
-        set_locale_cookie(response, language)
-
-
 @router.patch("/user/language")
 def update_user_language_api(
-    request: LanguageRequest,
+    body: LanguageRequest,
+    request: Request,
     response: Response,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    language: str | None = request.language.value if request.language else None
+    language: str | None = body.language.value if body.language else None
     upsert_user_preferences__no_commit(db_session, user.id, language=language)
     db_session.commit()
-    set_locale_cookie(response, resolve_user_language(language))
+    set_preference_cookie(
+        request, response, NEXT_LOCALE_COOKIE_NAME, resolve_user_language(language)
+    )
+
+
+def set_appearance_cookie(
+    request: Request, response: Response, preferences: UserPreferencesModel
+) -> None:
+    """The value is a form-encoded query string, percent-encoded once more so
+    it stays a plain cookie value (web/src/lib/appearance/preferences.ts reads it)."""
+    value = quote(
+        urlencode(
+            {
+                "interface_font": preferences.interface_font.value,
+                "response_font": preferences.response_font.value,
+            }
+        )
+    )
+    set_preference_cookie(request, response, APPEARANCE_COOKIE_NAME, value)
+
+
+@router.patch("/user/appearance")
+def update_user_appearance_api(
+    body: AppearanceRequest,
+    request: Request,
+    response: Response,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> None:
+    upsert_user_preferences__no_commit(
+        db_session, user.id, **body.model_dump(exclude_none=True)
+    )
+    db_session.commit()
+    set_appearance_cookie(request, response, fetch_user_preferences(user, db_session))
 
 
 @router.patch("/user/chat-background")
@@ -1556,28 +1602,6 @@ class ChosenAssistantsRequest(BaseModel):
     chosen_assistants: list[int]
 
 
-def update_assistant_visibility(
-    preferences: UserPreferences, assistant_id: int, show: bool
-) -> UserPreferences:
-    visible_assistants = preferences.visible_assistants or []
-    hidden_assistants = preferences.hidden_assistants or []
-
-    if show:
-        if assistant_id not in visible_assistants:
-            visible_assistants.append(assistant_id)
-        if assistant_id in hidden_assistants:
-            hidden_assistants.remove(assistant_id)
-    else:
-        if assistant_id in visible_assistants:
-            visible_assistants.remove(assistant_id)
-        if assistant_id not in hidden_assistants:
-            hidden_assistants.append(assistant_id)
-
-    preferences.visible_assistants = visible_assistants
-    preferences.hidden_assistants = hidden_assistants
-    return preferences
-
-
 @router.patch("/user/assistant-list/update/{assistant_id}")
 def update_user_assistant_visibility_api(
     assistant_id: int,
@@ -1586,23 +1610,29 @@ def update_user_assistant_visibility_api(
     db_session: Session = Depends(get_session),
 ) -> None:
     preferences = fetch_user_preferences(user, db_session)
-    updated_preferences = update_assistant_visibility(
-        UserPreferences(
-            chosen_assistants=preferences.chosen_assistants,
-            hidden_assistants=preferences.hidden_assistants,
-            visible_assistants=preferences.visible_assistants,
-        ),
-        assistant_id,
-        show,
+    # Copies, so the loaded row is never changed in place.
+    visible_assistants = list(preferences.visible_assistants)
+    hidden_assistants = list(preferences.hidden_assistants)
+    added_to, removed_from = (
+        (visible_assistants, hidden_assistants)
+        if show
+        else (hidden_assistants, visible_assistants)
     )
-    if updated_preferences.chosen_assistants is not None:
-        updated_preferences.chosen_assistants.append(assistant_id)
+    if assistant_id not in added_to:
+        added_to.append(assistant_id)
+    if assistant_id in removed_from:
+        removed_from.remove(assistant_id)
+    chosen_assistants = (
+        None
+        if preferences.chosen_assistants is None
+        else [*preferences.chosen_assistants, assistant_id]
+    )
     upsert_user_preferences__no_commit(
         db_session,
         user.id,
-        hidden_assistants=updated_preferences.hidden_assistants,
-        visible_assistants=updated_preferences.visible_assistants,
-        chosen_assistants=updated_preferences.chosen_assistants,
+        hidden_assistants=hidden_assistants,
+        visible_assistants=visible_assistants,
+        chosen_assistants=chosen_assistants,
     )
     db_session.commit()
 

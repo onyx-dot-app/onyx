@@ -15887,11 +15887,31 @@
       "general": {
         "title": "常规"
       },
+      "fonts": {
+        "title": "字体"
+      },
       "transcriptWidth": {
         "title": "对话宽度",
         "description": "设置此设备上聊天消息和输入栏的宽度。",
         "standard": "标准",
-        "wide": "宽"
+        "wide": "宽",
+        "placeholder": "选择宽度"
+      },
+      "responseFont": {
+        "default": "默认",
+        "match": "与界面一致",
+        "title": "回复字体",
+        "description": "选择对话回复使用的字体。",
+        "placeholder": "选择字体"
+      },
+      "interfaceFont": {
+        "title": "界面字体",
+        "description": "选择应用中文本使用的字体。",
+        "default": "默认",
+        "opendyslexic": "OpenDyslexic",
+        "atkinson": "Atkinson Hyperlegible Next",
+        "system": "系统",
+        "placeholder": "选择字体"
       }
     },
     "chats": {

@@ -15887,11 +15887,31 @@
       "general": {
         "title": "General"
       },
+      "fonts": {
+        "title": "Fonts"
+      },
       "transcriptWidth": {
         "title": "Transcript Width",
         "description": "Set how wide chat messages and the input bar are on this device.",
         "standard": "Standard",
-        "wide": "Wide"
+        "wide": "Wide",
+        "placeholder": "Select a width"
+      },
+      "responseFont": {
+        "default": "Default",
+        "match": "Match interface",
+        "title": "Response Font",
+        "description": "Select the font for chat responses.",
+        "placeholder": "Select a font"
+      },
+      "interfaceFont": {
+        "title": "Interface Font",
+        "description": "Select the font for text across the app.",
+        "default": "Default",
+        "opendyslexic": "OpenDyslexic",
+        "atkinson": "Atkinson Hyperlegible Next",
+        "system": "System",
+        "placeholder": "Select a font"
       }
     },
     "chats": {

@@ -115,6 +115,7 @@ from onyx.db.enums import (
     IntegrationConnectionStatus,
     IntegrationKind,
     IntegrationOAuthProviderMode,
+    InterfaceFont,
     LLMModelFlowType,
     MarketplaceKind,
     MCPAuthenticationPerformer,
@@ -133,6 +134,7 @@ from onyx.db.enums import (
     QuestionAnsweredVia,
     QuestionOutcome,
     ReceiptStatus,
+    ResponseFont,
     SandboxStatus,
     ScheduledTaskRunStatus,
     ScheduledTaskStatus,
@@ -622,6 +624,26 @@ class UserPreferences(Base):
         nullable=False,
         default=DefaultAppMode.CHAT,
         server_default=DefaultAppMode.CHAT.value,
+    )
+    interface_font: Mapped[InterfaceFont] = mapped_column(
+        Enum(
+            InterfaceFont,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=False,
+        default=InterfaceFont.DEFAULT,
+        server_default=InterfaceFont.DEFAULT.value,
+    )
+    response_font: Mapped[ResponseFont] = mapped_column(
+        Enum(
+            ResponseFont,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=False,
+        default=ResponseFont.MATCH,
+        server_default=ResponseFont.MATCH.value,
     )
 
     # Memory settings and instructions are in Settings > Chat Preferences.

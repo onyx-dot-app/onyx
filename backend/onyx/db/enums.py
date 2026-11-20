@@ -421,6 +421,22 @@ class ThemePreference(str, PyEnum):
     SYSTEM = "system"
 
 
+class InterfaceFont(str, PyEnum):
+    """Font for interface text. Values match web/src/lib/appearance/preferences.ts."""
+
+    DEFAULT = "default"
+    SYSTEM = "system"
+    OPENDYSLEXIC = "opendyslexic"
+    ATKINSON = "atkinson"
+
+
+class ResponseFont(str, PyEnum):
+    """Font for chat response text: the interface font, or the default font."""
+
+    MATCH = "match"
+    DEFAULT = "default"
+
+
 class SupportedLanguage(str, PyEnum):
     EN = "en"
     ES = "es"
