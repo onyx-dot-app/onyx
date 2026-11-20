@@ -167,6 +167,8 @@ class SkillUserState(BaseModel):
     can_toggle: bool
     # The install setting for this user is REQUIRED (company or group).
     required: bool = False
+    # Turned on, but this plugin or built-in skill holds one of its names.
+    name_taken_by: str | None = None
 
 
 def is_published(plugin: Plugin, db_session: Session) -> bool:
@@ -214,6 +216,21 @@ class _UserSkillSelection(BaseModel):
     def enabled(self, skill_id: UUID) -> bool:
         state = self.states.get(skill_id)
         return state is not None and state.enabled and skill_id not in self.hidden
+
+    def name_taken_by(self, skill_id: UUID) -> str | None:
+        """The plugin or built-in skill that keeps a name of a skill the user
+        turned on, when the name order leaves the skill out."""
+        state = self.states.get(skill_id)
+        if state is None or not state.enabled or skill_id not in self.hidden:
+            return None
+        built_in_names = {skill.name for skill in self.built_ins}
+        for name in state.skill_names:
+            if name in built_in_names:
+                return name
+            for other in self.other_skills_named([name], skill_id):
+                if other.plugin_id not in self.hidden:
+                    return other.plugin_name
+        return None
 
     def loaded(self) -> list[UserPluginState]:
         """The plugins the sandbox gets: they can run, have a skill and lose
@@ -775,6 +792,7 @@ def skill_user_states(
             and state.installation_policy != PluginInstallationPolicy.REQUIRED,
             required=state is not None
             and state.installation_policy == PluginInstallationPolicy.REQUIRED,
+            name_taken_by=selection.name_taken_by(skill_id),
         )
     return states
 

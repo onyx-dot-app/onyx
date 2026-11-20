@@ -1,11 +1,12 @@
 import type { PluginNeed } from "@/lib/plugins/types";
-import type { OrganizationLibraryDefaultPolicy } from "@/lib/skills/types";
+import type { SkillInstallationPolicy } from "@/lib/skills/types";
 
 export type MarketplaceScope = "personal" | "company";
 
 export type MarketplaceEntryStatus = "ok" | "blocked" | "not_supported";
 
-export type MarketplaceDefaultPolicy = OrganizationLibraryDefaultPolicy;
+/** A company marketplace default can be REQUIRED, as in Claude. */
+export type MarketplaceDefaultPolicy = SkillInstallationPolicy;
 
 export interface MarketplaceSource {
   repository: string;

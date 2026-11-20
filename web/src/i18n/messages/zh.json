@@ -16908,7 +16908,8 @@
           "label": "使用 {name}",
           "required": "管理员已将此插件设为必需。你无法将其关闭。",
           "unavailable": "你无法开启或关闭此插件。",
-          "failed": "无法更改插件。"
+          "failed": "无法更改插件。",
+          "nameTaken": "已关闭。{name} 使用了相同的技能名称并且优先，因此不会加载此插件。"
         },
         "syncedFrom": "同步自 {repository}",
         "managed": {
@@ -17381,7 +17382,8 @@
         "title": "没有匹配的技能",
         "description": "请尝试其他搜索或筛选条件。",
         "clear": "显示所有技能"
-      }
+      },
+      "nameTaken": "已关闭：{name} 使用了相同的技能名称"
     },
     "integrations": {
       "title": "集成",

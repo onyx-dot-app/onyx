@@ -347,3 +347,28 @@ test("a synced plugin names its marketplace and says that GitHub holds it", asyn
   ).toBeInTheDocument();
   expect(screen.queryByText("My uploads")).not.toBeInTheDocument();
 });
+
+test("a plugin whose skill name another plugin holds says which one", async () => {
+  window.history.replaceState(null, "", `/app/customize/plugins/${PLUGIN_ID}`);
+  const plugin = customFixture({
+    id: PLUGIN_ID,
+    name: "team-helper",
+    kind: "plugin",
+    user_permission: "OWNER",
+    owner: { id: "me", email: "me@example.com" },
+    enabled: false,
+    name_taken_by: "claude-plugins-official-helper",
+    plugin: { manifest: null, skills: [], needs: [] },
+  });
+  mockFetch({
+    "/api/skills": { builtins: [], customs: [plugin] },
+    [`/api/skills/${PLUGIN_ID}`]: plugin,
+  });
+  render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
+
+  expect(
+    await screen.findByText(
+      "Off. claude-plugins-official-helper uses the same skill name and comes first, so this plugin does not load."
+    )
+  ).toBeInTheDocument();
+});

@@ -194,6 +194,7 @@ def skill_response_for_user(
         enabled=state.enabled,
         can_toggle=state.can_toggle,
         required_for_user=state.required,
+        name_taken_by=state.name_taken_by,
         user_permission=user_permission,
         can_delete=user_permission in (SkillAccessLevel.OWNER, SkillAccessLevel.EDITOR)
         and may_delete_skill(

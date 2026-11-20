@@ -7,6 +7,7 @@ import type {
 export const MARKETPLACE_DEFAULT_POLICIES = [
   "AVAILABLE",
   "DEFAULT",
+  "REQUIRED",
   "NOT_AVAILABLE",
 ] as const satisfies readonly MarketplaceDefaultPolicy[];
 

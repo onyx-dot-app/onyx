@@ -253,10 +253,6 @@ def create_marketplace(
             OnyxErrorCode.INVALID_INPUT,
             "A personal marketplace has no default install setting.",
         )
-    if policy == PluginInstallationPolicy.REQUIRED:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT, "A marketplace default cannot be Required."
-        )
     marketplace = create_github_marketplace__no_commit(
         name=(request.name or "").strip() or config.repository,
         config=config,

@@ -613,7 +613,12 @@ the app from the same rule
     (`skills/push.py:push_skills_and_commit`). A marketplace default (the
     Organization library or a company GitHub marketplace) is written by
     `db/plugin.py:set_marketplace_default__no_commit`, which refuses
-    `REQUIRED` and returns the users of the plugins that follow it. EDIT on a skill is not enough
+    `REQUIRED` only for the Organization library (a company marketplace can be
+    Required, as in Claude) and returns the users of the plugins that follow
+    it. `db/skill.py:_UserSkillSelection.name_taken_by` names the plugin or
+    built-in skill that keeps a skill name of a plugin the user turned on;
+    `SkillResponse.name_taken_by` carries it, and the plugin row and page say
+    why the plugin is off. EDIT on a skill is not enough
     to change its groups: any
     change to the group set or levels is a `MANAGE_PLUGINS` action within scope
     (`auth/scoped_permissions.py:assert_within_scope`, [[authorization]]).

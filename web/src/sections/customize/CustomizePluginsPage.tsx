@@ -121,9 +121,14 @@ function PluginRow({
       title={entry.name}
       titleMaxLines={1}
       description={
-        contents
-          ? t("skills.subtitle", { source, description: contents })
-          : source
+        skill?.name_taken_by
+          ? t("skills.subtitle", {
+              source,
+              description: t("skills.nameTaken", { name: skill.name_taken_by }),
+            })
+          : contents
+            ? t("skills.subtitle", { source, description: contents })
+            : source
       }
       descriptionMaxLines={1}
       badge={

@@ -131,6 +131,7 @@ function customSkill(id: string, name: string): CustomSkill {
     can_delete: true,
     group_summaries: [],
     required_for_user: false,
+    name_taken_by: null,
     author_user_id: "owner-id",
     author_email: "owner@example.com",
     owner: { id: "owner-id", email: "owner@example.com" },

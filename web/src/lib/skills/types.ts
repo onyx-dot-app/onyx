@@ -12,7 +12,7 @@ export type SkillInstallationPolicy =
   | "REQUIRED"
   | "NOT_AVAILABLE";
 
-/** A marketplace default cannot be REQUIRED. */
+/** The Organization library default cannot be REQUIRED. */
 export type OrganizationLibraryDefaultPolicy = Exclude<
   SkillInstallationPolicy,
   "REQUIRED"
@@ -74,6 +74,9 @@ export interface Skill {
   /** The setting for the current user is REQUIRED, from the company setting
    * or one of their groups. */
   required_for_user: boolean;
+  /** The user turned the skill on, but this plugin or built-in skill holds
+   * one of its skill names, so it does not load. */
+  name_taken_by: string | null;
   author_user_id: string | null;
   author_email: string | null;
   owner: {

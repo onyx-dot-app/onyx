@@ -141,7 +141,13 @@ function OverviewTab({ entry, plugin }: OverviewTabProps) {
         facts={[
           {
             label: switchCopy("title"),
-            value: blocked ? switchCopy(blocked) : switchCopy("description"),
+            value: blocked
+              ? switchCopy(blocked)
+              : entry.skills[0]?.name_taken_by
+                ? switchCopy("nameTaken", {
+                    name: entry.skills[0].name_taken_by,
+                  })
+                : switchCopy("description"),
           },
           { label: t("location"), value: location },
           ...(entry.ownerEmail

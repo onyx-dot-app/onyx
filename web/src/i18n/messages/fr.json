@@ -16908,7 +16908,8 @@
           "label": "Utiliser {name}",
           "required": "Votre administrateur a rendu ce plugin obligatoire. Vous ne pouvez pas le désactiver.",
           "unavailable": "Vous ne pouvez pas activer ou désactiver ce plugin.",
-          "failed": "Impossible de modifier le plugin."
+          "failed": "Impossible de modifier le plugin.",
+          "nameTaken": "Désactivé. {name} utilise le même nom de skill et passe en premier, donc ce plugin ne se charge pas."
         },
         "syncedFrom": "Synchronisé depuis {repository}",
         "managed": {
@@ -17381,7 +17382,8 @@
         "title": "Aucune compétence correspondante",
         "description": "Essayez une autre recherche ou un autre filtre.",
         "clear": "Afficher toutes les compétences"
-      }
+      },
+      "nameTaken": "Désactivé : {name} utilise le même nom de skill"
     },
     "integrations": {
       "title": "Intégrations",

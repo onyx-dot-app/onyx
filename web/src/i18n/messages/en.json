@@ -16908,7 +16908,8 @@
           "label": "Use {name}",
           "required": "Your admin made this plugin required. You cannot turn it off.",
           "unavailable": "You cannot turn this plugin on or off.",
-          "failed": "Could not change the plugin."
+          "failed": "Could not change the plugin.",
+          "nameTaken": "Off. {name} uses the same skill name and comes first, so this plugin does not load."
         },
         "syncedFrom": "Synced from {repository}",
         "managed": {
@@ -17381,7 +17382,8 @@
         "title": "No matching skills",
         "description": "Try another search or filter.",
         "clear": "Show all skills"
-      }
+      },
+      "nameTaken": "Off: {name} uses the same skill name"
     },
     "integrations": {
       "title": "Integrations",

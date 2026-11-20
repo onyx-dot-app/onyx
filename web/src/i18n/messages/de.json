@@ -16908,7 +16908,8 @@
           "label": "{name} verwenden",
           "required": "Ihr Admin hat dieses Plugin als erforderlich festgelegt. Sie können es nicht deaktivieren.",
           "unavailable": "Sie können dieses Plugin nicht aktivieren oder deaktivieren.",
-          "failed": "Das Plugin konnte nicht geändert werden."
+          "failed": "Das Plugin konnte nicht geändert werden.",
+          "nameTaken": "Aus. {name} verwendet denselben Skill-Namen und hat Vorrang, daher wird dieses Plugin nicht geladen."
         },
         "syncedFrom": "Synchronisiert aus {repository}",
         "managed": {
@@ -17381,7 +17382,8 @@
         "title": "Keine passenden Skills",
         "description": "Versuchen Sie eine andere Suche oder einen anderen Filter.",
         "clear": "Alle Skills anzeigen"
-      }
+      },
+      "nameTaken": "Aus: {name} verwendet denselben Skill-Namen"
     },
     "integrations": {
       "title": "Integrationen",

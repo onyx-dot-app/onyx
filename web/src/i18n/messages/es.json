@@ -16908,7 +16908,8 @@
           "label": "Usar {name}",
           "required": "Tu administrador hizo obligatorio este plugin. No puedes desactivarlo.",
           "unavailable": "No puedes activar ni desactivar este plugin.",
-          "failed": "No se pudo cambiar el plugin."
+          "failed": "No se pudo cambiar el plugin.",
+          "nameTaken": "Desactivado. {name} usa el mismo nombre de skill y tiene prioridad, así que este plugin no se carga."
         },
         "syncedFrom": "Sincronizado desde {repository}",
         "managed": {
@@ -17381,7 +17382,8 @@
         "title": "No hay habilidades que coincidan",
         "description": "Prueba con otra búsqueda o filtro.",
         "clear": "Mostrar todas las habilidades"
-      }
+      },
+      "nameTaken": "Desactivado: {name} usa el mismo nombre de skill"
     },
     "integrations": {
       "title": "Integraciones",

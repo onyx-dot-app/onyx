@@ -98,6 +98,9 @@ class SkillResponse(BaseModel):
     # The setting for the current user is REQUIRED, from the company setting
     # or one of their groups.
     required_for_user: bool = False
+    # The user turned the skill on, but this other plugin or built-in skill
+    # holds one of its skill names, so it does not load.
+    name_taken_by: str | None = None
     author_user_id: UUID | None = None
     author_email: str | None = None
     owner: MinimalUserSnapshot | None = None
@@ -153,6 +156,7 @@ class SkillResponse(BaseModel):
         enabled: bool,
         can_toggle: bool = True,
         required_for_user: bool = False,
+        name_taken_by: str | None = None,
         user_permission: SkillAccessLevel | None = None,
         can_delete: bool = False,
         include_share_details: bool = False,
@@ -191,6 +195,7 @@ class SkillResponse(BaseModel):
             default_installation_policy=access.marketplace_default_policy,
             can_delete=can_delete,
             required_for_user=required_for_user,
+            name_taken_by=name_taken_by,
             enabled=enabled,
             can_toggle=can_toggle,
             author_user_id=access.author_user_id,
