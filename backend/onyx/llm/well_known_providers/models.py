@@ -38,3 +38,15 @@ class TypeSafeModel(BaseModel):
 
 class TypeSafeModelsResponse(BaseModel):
     models: list[TypeSafeModel]
+
+
+class NaceModel(BaseModel):
+    name: str = Field(min_length=1)
+    description: str | None = None
+    # The model this catalog entry points at, for aliases such as
+    # ``drex-latest`` and retired names; ``None`` for a real model.
+    alias_for: str | None = None
+
+
+class NaceModelsResponse(BaseModel):
+    models: list[NaceModel]

@@ -9,6 +9,7 @@ import { Button, Card, InputCheckbox, Modal, Text } from "@opal/components";
 import { InputDivider, InputHorizontal, Section, toast } from "@opal/layouts";
 import { useWellKnownLLMProvider } from "@/lib/languageModels/hooks";
 import {
+  fetchNaceModels,
   fetchOpenRouterModels,
   fetchTypeSafeModels,
   fetchVercelAIGatewayModels,
@@ -97,8 +98,10 @@ function DecisionProviderFields({
       provider_id: existingLlmProvider?.id,
       signal,
     };
-    if (providerName === "typesafe") {
-      setFetchedModels(await fetchTypeSafeModels(params));
+    if (providerName === "typesafe" || providerName === "nace") {
+      const fetchModels =
+        providerName === "nace" ? fetchNaceModels : fetchTypeSafeModels;
+      setFetchedModels(await fetchModels(params));
     } else {
       const fetchModels =
         providerName === "vercel_ai_gateway"
@@ -163,6 +166,7 @@ function DecisionProviderFields({
                       )}
                     </Button>
                     {(providerName === "typesafe" ||
+                      providerName === "nace" ||
                       providerName === "openrouter" ||
                       providerName === "vercel_ai_gateway") &&
                       (values.api_key || existingLlmProvider) && (

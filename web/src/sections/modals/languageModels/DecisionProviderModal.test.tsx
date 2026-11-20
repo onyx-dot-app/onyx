@@ -59,7 +59,7 @@ beforeEach(() => {
 });
 afterEach(() => jest.restoreAllMocks());
 
-it.each(["openai", "vercel_ai_gateway"])(
+it.each(["openai", "vercel_ai_gateway", "nace"])(
   "%s edits only decision models and never assigns a chat default",
   async (providerName) => {
     const fetchSpy = jest
@@ -82,7 +82,7 @@ it.each(["openai", "vercel_ai_gateway"])(
     expect(screen.queryByText("Chat Model")).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Refresh models" }) !== null
-    ).toBe(providerName === "vercel_ai_gateway");
+    ).toBe(providerName !== "openai");
     expect(screen.queryByText("Auto-update models")).not.toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Rename" })

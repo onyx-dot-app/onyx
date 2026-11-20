@@ -20,7 +20,6 @@ from concurrent.futures import ThreadPoolExecutor
 from concurrent.futures import TimeoutError as FutureTimeoutError
 from contextlib import contextmanager
 from typing import NotRequired, TypedDict, cast
-from urllib.parse import urlsplit
 
 import psutil
 from playwright.sync_api import (
@@ -43,7 +42,7 @@ from onyx.configs.app_configs import (
     WEB_CONNECTOR_OAUTH_TOKEN_URL,
 )
 from onyx.utils.logger import setup_logger
-from onyx.utils.url import SSRFException, validate_outbound_http_url
+from onyx.utils.url import SSRFException, url_origin, validate_outbound_http_url
 
 logger = setup_logger()
 
@@ -373,16 +372,6 @@ class _PausedRequest(TypedDict):
     responseHeaders: NotRequired[list[_Header]]
 
 
-def _url_origin(url: str) -> tuple[str, str | None, int | None]:
-    parsed = urlsplit(url)
-    port = parsed.port
-    return (
-        parsed.scheme,
-        parsed.hostname,
-        port if port is not None else {"https": 443, "http": 80}.get(parsed.scheme),
-    )
-
-
 def install_ssrf_guard(
     page: Page,
     *,
@@ -468,7 +457,7 @@ def install_ssrf_guard(
                     name.lower() == "authorization" and value == authorization_header
                 )
             ]
-            if authorization_url is not None and _url_origin(url) == _url_origin(
+            if authorization_url is not None and url_origin(url) == url_origin(
                 authorization_url
             ):
                 headers = [
