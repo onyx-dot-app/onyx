@@ -1035,6 +1035,9 @@ class MarketplaceKind(str, PyEnum):
     USER_UPLOADS = "user_uploads"
     # One for each tenant. A plugin here is published to the organization.
     ORGANIZATION_LIBRARY = "organization_library"
+    # A GitHub repository with a marketplace.json. With no owner, its
+    # plugins are seen by the organization like published ones.
+    GITHUB = "github"
 
 
 class PluginPublishingPolicy(str, PyEnum):

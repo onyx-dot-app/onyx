@@ -5648,8 +5648,9 @@ class Skill(Base):
 
 
 class Marketplace(Base):
-    """Where a plugin comes from: a user's "My uploads" or the tenant's
-    Organization library. A marketplace grants no access."""
+    """Where a plugin comes from: a user's "My uploads", the tenant's
+    Organization library, or a GitHub repository (personal with an owner,
+    company without). A marketplace grants no access."""
 
     __tablename__ = "plugin_marketplace"
 
@@ -5680,11 +5681,43 @@ class Marketplace(Base):
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+    # GitHub only. GitHubMarketplaceConfig: owner, repo, folder and ref.
+    provider_config: Mapped[dict[str, Any] | None] = mapped_column(
+        PGJSONB(), nullable=True
+    )
+    # GitHub only. The user whose GitHub connection reads the repository.
+    login_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey(
+            "user.id", ondelete="SET NULL", name="fk_plugin_marketplace_login_user"
+        ),
+        nullable=True,
+    )
+    last_synced_revision: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    last_synced_tree_sha: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    last_synced_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # Set when a sync is asked for while another sync runs.
+    sync_requested_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    # The revision whose deletes wait for confirmation.
+    pending_delete_revision: Mapped[str | None] = mapped_column(
+        String(40), nullable=True
+    )
+    # One MarketplaceEntryResult for each entry of the last read.
+    last_sync_result: Mapped[list[dict[str, Any]] | None] = mapped_column(
+        PGJSONB(), nullable=True
+    )
 
     __table_args__ = (
         CheckConstraint(
-            "(kind = 'user_uploads') = (owner_user_id IS NOT NULL)",
-            name="ck_plugin_marketplace_owner_iff_user_uploads",
+            "(kind = 'user_uploads' AND owner_user_id IS NOT NULL) "
+            "OR (kind = 'organization_library' AND owner_user_id IS NULL) "
+            "OR kind = 'github'",
+            name="ck_plugin_marketplace_owner_by_kind",
         ),
         Index(
             "uq_plugin_marketplace_organization_library",
@@ -5753,10 +5786,20 @@ class Plugin(Base):
         nullable=False,
     )
 
+    # The marketplace.json entry name of a synced plugin; NULL otherwise.
+    marketplace_entry_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
+
     marketplace: Mapped[Marketplace] = relationship("Marketplace")
 
     __table_args__ = (
         UniqueConstraint("marketplace_id", "name", name="uq_plugin_marketplace_name"),
+        Index(
+            "uq_plugin_marketplace_entry_key",
+            "marketplace_id",
+            "marketplace_entry_key",
+            unique=True,
+            postgresql_where=text("marketplace_entry_key IS NOT NULL"),
+        ),
         CheckConstraint(
             "published_version_id IS NOT NULL OR author_user_id IS NOT NULL",
             name="ck_private_plugin_has_owner",
@@ -5801,6 +5844,8 @@ class PluginVersion(Base):
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+    # The git tree of the plugin folder a synced version came from.
+    source_tree_sha: Mapped[str | None] = mapped_column(String(40), nullable=True)
 
     __table_args__ = (
         UniqueConstraint(
