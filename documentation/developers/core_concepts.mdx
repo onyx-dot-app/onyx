@@ -138,8 +138,9 @@ import AgentsPersonasAssistantsNote from '/snippets/agents-personas-assistants-n
     - `publish_files_start` (with `files` and `description`) and `publish_files_end` show the files that the model
     gave the user. Each file in `publish_files_end` has `file_id`, `name`, `title`, `path`, `display_path`,
     `size` and `mime_type`. Download it from `/chat/file/{file_id}`. `path` (absolute in the VM) identifies a file:
-    a later publish of the same `path` is a newer copy of it. `display_path` is the path to show,
-    relative to the chat's working directory. `error` is set when the call failed; then it published no file
+    a later publish of the same `path` is a newer copy of it. `display_path` is the path to show:
+    relative to the chat's working directory, or absolute for a file outside it. `error` is set when the call failed;
+    then it published no file
     - A call that the user stopped, or that stopped with its code mode program, has no end packet. Stopping a
     command call also stops the command. A command that a Ctrl-C (`write_stdin` with `\u0003`)
     ended gets an `exec_end` whose `completion` is `canceled`
