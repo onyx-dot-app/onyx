@@ -23,6 +23,15 @@ jest.mock("@/app/app/message/BlinkingBar", () => ({
   BlinkingBar: () => <span data-testid="blinking-bar" />,
 }));
 
+// The response's cursor slot, as one countable element.
+jest.mock("@/lib/timeline/components/ResponseCursor", () => ({
+  responseCursorItem: () => ({
+    kind: "text",
+    key: "cursor",
+    node: <span data-testid="blinking-bar" />,
+  }),
+}));
+
 jest.mock("motion/react", () => ({
   AnimatePresence: ({ children }: { children: React.ReactNode }) => (
     <>{children}</>

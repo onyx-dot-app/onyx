@@ -16,7 +16,6 @@ import {
   Response,
   type ResponseItem,
 } from "@/lib/timeline/components/Response";
-import { BlinkingBar } from "@/app/app/message/BlinkingBar";
 import { responseCursorItem } from "@/lib/timeline/components/ResponseCursor";
 import { ErrorBanner } from "@/app/app/message/Resubmit";
 import { RATE_LIMITED_ERROR_CODE, RateLimitDetails } from "@/app/app/types";
@@ -351,15 +350,7 @@ export default function BuildMessageList({
                       ),
                     },
                   ]),
-              ...(finalizing
-                ? [
-                    {
-                      kind: "text" as const,
-                      key: "cursor",
-                      node: <BlinkingBar />,
-                    },
-                  ]
-                : []),
+              ...(finalizing ? [responseCursorItem()] : []),
               ...(message.content.trim()
                 ? [
                     {
