@@ -4,6 +4,7 @@ import html
 import os
 import re
 import threading
+import zlib
 from collections import deque
 from collections.abc import Generator, Iterable
 from datetime import datetime, timezone
@@ -116,6 +117,9 @@ from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
 logger = setup_logger()
+
+# Locks for the parents whose access conversion reads (see _inherited_access).
+_CONTAINER_LOCK_COUNT = 64
 SLIM_BATCH_SIZE = 1000
 
 
@@ -863,9 +867,9 @@ class SharepointConnector(
         self._permission_cache = SharepointPermissionCache()
         self._run_permission_caches: dict[str, SharedSharepointPermissionCache] = {}
         self._run_permission_caches_lock = threading.Lock()
-        # One lock for each folder or library whose access conversion reads.
-        self._container_locks: dict[str, threading.Lock] = {}
-        self._container_locks_guard = threading.Lock()
+        # A fixed set of locks for the folders and libraries whose access
+        # conversion reads, so that memory does not grow with the folders.
+        self._container_locks = [threading.Lock() for _ in range(_CONTAINER_LOCK_COUNT)]
 
         resolved_env = resolve_microsoft_environment(graph_api_host, authority_host)
         self.authority_host = resolved_env.authority_host
@@ -1953,9 +1957,13 @@ class SharepointConnector(
             or self.treat_sharing_link_as_public
             or not payload.list_id
             or not payload.drive_web_url
+            or not payload.parent_path
         ):
             return None
         folder_path = extract_folder_path_from_parent_reference(payload.parent_path)
+        # The library's access only when the parent is known to be its root.
+        if not folder_path and not payload.parent_path.rstrip("/").endswith("root:"):
+            return None
         server_relative_path = (
             build_folder_server_relative_path(payload.drive_web_url, folder_path)
             if folder_path
@@ -1964,8 +1972,7 @@ class SharepointConnector(
         key = f"{payload.site_url}|{payload.list_id}|{server_relative_path or ''}"
         # One thread reads a parent. The other threads of the batch wait for
         # it and take its answer.
-        with self._container_locks_guard:
-            lock = self._container_locks.setdefault(key, threading.Lock())
+        lock = self._container_locks[zlib.crc32(key.encode()) % _CONTAINER_LOCK_COUNT]
         with lock:
             cached = permission_cache.get_container_access(key)
             if cached is not None:
