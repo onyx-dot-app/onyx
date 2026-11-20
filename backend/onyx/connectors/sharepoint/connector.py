@@ -2197,6 +2197,8 @@ class SharepointConnector(
                     driveitems = self._read_full_pass_folders(
                         checkpoint, current_drive, start_dt, end_dt
                     )
+                except ConnectorStopSignal:
+                    raise
                 except Exception as e:
                     _raise_if_throttled(e)
                     logger.error(

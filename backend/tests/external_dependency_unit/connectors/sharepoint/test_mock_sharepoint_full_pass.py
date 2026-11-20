@@ -6,10 +6,14 @@ import time
 
 import pytest
 
+from onyx.connectors.models import ConnectorStopSignal
 from onyx.connectors.sharepoint import connector as sharepoint_connector
 from tests.external_dependency_unit.connectors.sharepoint.conftest import (
     MockSharepoint,
     list_stubs,
+)
+from tests.external_dependency_unit.connectors.sharepoint.test_mock_sharepoint_limiter import (
+    StopAfterLimiter,
 )
 
 
@@ -103,3 +107,42 @@ def test_the_walk_reads_several_folders_at_one_time(
 
     assert {stub.id for stub in listing.stubs} == own_mock_sharepoint.document_ids()
     assert 2 <= own_mock_sharepoint.stats()["max_inflight"] <= 4
+
+
+class _StopOnceLimiter(StopAfterLimiter):
+    """Raises the stop signal on one call only. A walk that caught it as a
+    failure would then go on to its end."""
+
+    def __init__(self, call: int) -> None:
+        super().__init__(call)
+        self._raised = False
+
+    def acquire(
+        self,
+        api: str,
+        cost: int,
+        user: str | None = None,
+        request_count: int = 1,
+        *,
+        bulk: bool = False,
+    ) -> None:
+        if self._raised:
+            return
+        try:
+            super().acquire(api, cost, user, request_count, bulk=bulk)
+        except ConnectorStopSignal:
+            self._raised = True
+            raise
+
+
+@pytest.mark.parametrize("call", [3, 8, 12, 20, 30])
+def test_a_stop_during_a_limiter_wait_ends_the_listing(
+    mock_sharepoint: MockSharepoint, call: int
+) -> None:
+    """A stop while a folder read waits for the limiter ends the listing. It
+    is not a failure of the drive, after which the walk would go on."""
+    connector = mock_sharepoint.build_connector()
+    connector.set_source_api_limiter(_StopOnceLimiter(call))
+
+    with pytest.raises(ConnectorStopSignal):
+        list_stubs(connector)

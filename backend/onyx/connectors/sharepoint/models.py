@@ -38,8 +38,6 @@ class DriveChildrenPage(BaseModel):
     """One page of a folder's children: its files, the ids of its
     subfolders, and the link of the next page."""
 
-    model_config = ConfigDict(arbitrary_types_allowed=True)
-
     files: list[DriveItemData]
     folder_ids: list[str]
     next_link: str | None = None
