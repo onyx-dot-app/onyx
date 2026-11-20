@@ -41,6 +41,7 @@ from onyx.external_apps.matching.engine import (
     GatedTarget,
     MatchedAction,
 )
+from onyx.integrations.craft import TaskIntegrations
 from onyx.integrations.models import ActionSettings
 from onyx.sandbox_proxy import destination_policy
 from onyx.sandbox_proxy.addons import gate
@@ -1990,9 +1991,13 @@ async def test_mcp_protocol_checks_task_app_without_requesting_approval(
     monkeypatch.setattr(
         gate, "get_active_scheduled_task_context", lambda *_args: (_RUN_ID, uuid4())
     )
-    monkeypatch.setattr(
-        gate, "task_link_settings", lambda *_args: [ActionSettings()] if enabled else []
+    task = TaskIntegrations(
+        accessible=[],
+        settings=(
+            {_MATCH_MCP.target.integration_id: ActionSettings()} if enabled else {}
+        ),
     )
+    monkeypatch.setattr(gate, "load_task_integrations", lambda *_args: task)
     addon = _build(
         resolver=StubResolver(
             sandbox=make_resolved_sandbox(), session_by_id=UUID(_TAG_UUID)

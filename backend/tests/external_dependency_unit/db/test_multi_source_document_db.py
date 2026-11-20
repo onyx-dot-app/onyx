@@ -579,7 +579,9 @@ def test_sharepoint_indexing_writes_acls_without_owned_onedrive_permissions(
         document = db_session.get(Document, document_id)
         assert document is not None
         assert document.external_user_emails == ["sharepoint@example.com"]
-        assert document.external_user_group_ids == ["sharepoint"]
+        assert document.external_user_group_ids == [
+            build_ext_group_name_for_onyx("sharepoint", DocumentSource.SHAREPOINT)
+        ]
         assert document.is_public is True
     finally:
         _delete_test_data(db_session, [document_id], [sharepoint, onedrive])
@@ -634,7 +636,9 @@ def test_onedrive_owned_document_does_not_suppress_other_sharepoint_documents(
         db_session.expire_all()
         document = db_session.get(Document, sharepoint_document_id)
         assert document is not None
-        assert document.external_user_group_ids == ["sharepoint-later"]
+        assert document.external_user_group_ids == [
+            build_ext_group_name_for_onyx("sharepoint-later", DocumentSource.SHAREPOINT)
+        ]
     finally:
         _delete_test_data(
             db_session,

@@ -267,7 +267,11 @@ them as `tool_options`. An OpenAPI or MCP tool is on or off through its plugins
 (`plugin_ids` from `GET /tool`), which the agent preferences save in
 `disabled_plugin_ids`; a built-in tool stays in `disabled_tool_ids`. The
 allow-list names every plugin of the agent (`api/plugins.ts:useAgentPluginIds`,
-`GET /plugins/agents/{id}`, the list the web reads), because `GET /tool` lists no MCP plugins. Sources
+`GET /plugins/agents/{id}`), because `GET /tool` lists no MCP plugins. Each
+"plugin id" that the app holds is an integration id as text: the backend
+keeps `plugin_ids`, `GET /plugins/agents/{id}`, `disabled_plugin_ids` and the
+`plugin` tool option as aliases for this app
+(`backend/onyx/tools/models.py:ToolOptions._read_plugin_entries`). Sources
 are tied to the search tool: turning a source on prefers search, and turning
 search off clears the sources.
 

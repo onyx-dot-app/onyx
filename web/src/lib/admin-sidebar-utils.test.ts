@@ -45,7 +45,7 @@ test("hides Plans & Billing and Upgrade Plan on the playground", () => {
   expect(links).not.toContain(ADMIN_ROUTES.BILLING.path);
 });
 
-test("shows Plugins and Integrations to an action manager", () => {
+test("shows Integrations to an action manager", () => {
   expect(
     buildItems([Permission.MANAGE_ACTIONS], flags, null).map((item) => ({
       nameId: item.nameId,
@@ -54,11 +54,6 @@ test("shows Plugins and Integrations to an action manager", () => {
     }))
   ).toEqual([
     {
-      nameId: "plugins",
-      link: "/admin/plugins",
-      sectionId: "agentsAndPlugins",
-    },
-    {
       nameId: "integrations",
       link: "/admin/integrations",
       sectionId: "agentsAndPlugins",
@@ -66,7 +61,7 @@ test("shows Plugins and Integrations to an action manager", () => {
   ]);
 });
 
-test("omits Plugins and Integrations without action management access", () => {
+test("omits Integrations without action management access", () => {
   const links = buildItems([Permission.MANAGE_AGENTS], flags, null).map(
     (item) => item.link
   );
@@ -91,19 +86,18 @@ test("marks only Decision Models as a beta entry", () => {
   expect(betaLinks).toEqual(["/admin/decision-models"]);
 });
 
-test("Agents & Plugins holds Agents, Plugins, Integrations and Skills", () => {
+test("Agents & Plugins holds Agents, Skills and Integrations, with Craft off too", () => {
   const links = buildItems(
     [Permission.FULL_ADMIN_PANEL_ACCESS],
-    { ...flags, craftAvailable: true },
+    { ...flags, craftAvailable: false },
     null
   )
     .filter((item) => item.sectionId === "agentsAndPlugins")
     .map((item) => item.link);
   expect(links).toEqual([
     "/admin/agents",
-    "/admin/plugins",
-    "/admin/integrations",
     "/admin/skills",
+    "/admin/integrations",
   ]);
 });
 
@@ -135,7 +129,7 @@ test("Channels holds the Slack and Discord bots", () => {
   expect(section("/admin/hooks")).toBe("organization");
 });
 
-test.each(["/admin/plugins", "/admin/integrations", "/admin/integrations/7"])(
+test.each(["/admin/integrations", "/admin/integrations/7"])(
   "gates %s with action management permission",
   (pathname) => {
     expect(matchAdminRoute(pathname)?.requiredPermission).toBe(

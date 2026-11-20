@@ -1,0 +1,15 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "offline-window",
+  "description": "The bundled offline window: it reads the connection status, retries, and changes the server.",
+  "local": true,
+  "windows": ["offline"],
+  "permissions": [
+    "core:event:default",
+    "core:window:allow-start-dragging",
+    "core:window:allow-set-size",
+    "allow-get-offline-status",
+    "allow-retry-connection",
+    "allow-change-server"
+  ]
+}

@@ -5,13 +5,20 @@ import { useLocale, useTranslations } from "next-intl";
 import {
   Badge,
   Button,
+  InputSingleSelect,
   InputTypeIn,
   Table,
   Text,
   type TableColumn,
 } from "@opal/components";
-import { IllustrationContent, Section, SettingsLayouts } from "@opal/layouts";
-import { SvgPlus } from "@opal/icons";
+import {
+  Content,
+  IllustrationContent,
+  Section,
+  SettingsLayouts,
+  Toolbar,
+} from "@opal/layouts";
+import { SvgLink, SvgPlus } from "@opal/icons";
 import { SvgUnPlugged } from "@opal/illustrations";
 import { useNavigation } from "@opal/navigation";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
@@ -25,8 +32,13 @@ import {
   integrationDetailHref,
   sortIntegrations,
 } from "@/lib/integrations/utils";
-import { useIntegrationLabels } from "@/sections/integrations/integrationLabels";
-import AddIntegrationModal from "@/sections/integrations/AddIntegrationModal";
+import {
+  INTEGRATION_SHAPE_ICONS,
+  useIntegrationLabels,
+} from "@/sections/integrations/integrationLabels";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
+import IntegrationInstallSetting from "@/sections/integrations/IntegrationInstallSetting";
+import { useIntegrationStateCopy } from "@/sections/customize/IntegrationAccessControls";
 
 type KindFilter = "all" | IntegrationKind;
 const KIND_FILTERS: readonly KindFilter[] = ["all", "mcp", "api"];
@@ -36,14 +48,14 @@ export default function IntegrationsPage() {
   const locale = useLocale();
   const navigation = useNavigation();
   const labels = useIntegrationLabels();
+  const accessCopy = useIntegrationStateCopy();
   const { isGlobalHolder, isScopedManager } = usePermissionAuthority(
     Permission.MANAGE_ACTIONS
   );
   const canCreate = isGlobalHolder || isScopedManager;
-  const { data, error, isLoading, mutate } = useAdminIntegrations();
+  const { data, error, isLoading } = useAdminIntegrations();
   const [query, setQuery] = useState("");
   const [kind, setKind] = useState<KindFilter>("all");
-  const [adding, setAdding] = useState(false);
 
   const search = query.trim().toLocaleLowerCase();
   const integrations = sortIntegrations(data ?? [], locale).filter(
@@ -62,26 +74,18 @@ export default function IntegrationsPage() {
       weight: 28,
       truncate: true,
       cell: (name, row) => (
-        <Section alignItems="stretch" gap={0} height="auto">
-          <Text
-            font="main-ui-action"
-            color="text-04"
-            maxLines={1}
-            overflowTooltip
-          >
-            {name}
-          </Text>
-          {row.description && (
-            <Text
-              font="secondary-body"
-              color="text-03"
-              maxLines={1}
-              overflowTooltip
-            >
-              {row.description}
-            </Text>
-          )}
-        </Section>
+        <Content
+          icon={INTEGRATION_SHAPE_ICONS[row.shape]}
+          title={name}
+          description={
+            accessCopy.reason(row) ??
+            (row.access.owner_email
+              ? t("ownedBy", { owner: row.access.owner_email })
+              : (row.description ?? undefined))
+          }
+          titleMaxLines={1}
+          descriptionMaxLines={1}
+        />
       ),
     },
     {
@@ -90,7 +94,7 @@ export default function IntegrationsPage() {
       title: t("columns.type"),
       width: { weight: 14 },
       cell: (row) => (
-        <Text font="main-ui-body" color="text-03" maxLines={1}>
+        <Text as="p" font="main-ui-body" color="text-03" maxLines={1}>
           {labels.shape(row)}
         </Text>
       ),
@@ -101,20 +105,24 @@ export default function IntegrationsPage() {
       title: t("columns.signIn"),
       width: { weight: 18 },
       cell: (row) => (
-        <Text font="main-ui-body" color="text-03" maxLines={1}>
+        <Text as="p" font="main-ui-body" color="text-03" maxLines={1}>
           {labels.signIn(row)}
         </Text>
       ),
     },
     {
       kind: "display",
-      id: "access",
-      title: t("columns.access"),
+      id: "installation",
+      title: t("columns.installation"),
       width: { weight: 22 },
       cell: (row) => (
-        <Text font="main-ui-body" color="text-03" maxLines={1}>
-          {labels.access(row)}
-        </Text>
+        <Section
+          height="auto"
+          alignItems="stretch"
+          onClick={(event) => event.stopPropagation()}
+        >
+          <IntegrationInstallSetting integration={row} />
+        </Section>
       ),
     },
     {
@@ -133,6 +141,7 @@ export default function IntegrationsPage() {
       error={error ? t("loadFailed") : false}
     >
       <SettingsLayouts.Header
+        icon={SvgLink}
         title={t("title")}
         description={t("description")}
         stackActionsOnMobile
@@ -142,22 +151,19 @@ export default function IntegrationsPage() {
                 <Button
                   key="add"
                   icon={SvgPlus}
-                  onClick={() => setAdding(true)}
+                  {...navigation.linkTo(
+                    `${ADMIN_ROUTES.INTEGRATIONS.path}/new`
+                  )}
                 >
                   {t("add.label")}
                 </Button>,
               ]
             : []
         }
-      >
-        <Section
-          flexDirection="row"
-          justifyContent="between"
-          gap={2}
-          wrap
-          height="auto"
-        >
-          <Section width="auto" height="auto">
+      />
+      <SettingsLayouts.Body>
+        <Toolbar
+          search={
             <InputTypeIn
               icon="search"
               aria-label={t("search")}
@@ -165,30 +171,25 @@ export default function IntegrationsPage() {
               value={query}
               onChange={(event) => setQuery(event.target.value)}
             />
-          </Section>
-          <Section
-            flexDirection="row"
-            width="auto"
-            height="auto"
-            gap={1}
-            role="group"
-            aria-label={t("filters.label")}
-          >
-            {KIND_FILTERS.map((value) => (
-              <Button
-                key={value}
-                size="sm"
-                prominence={kind === value ? "primary" : "tertiary"}
-                aria-pressed={kind === value}
-                onClick={() => setKind(value)}
-              >
-                {t(`filters.${value}`)}
-              </Button>
-            ))}
-          </Section>
-        </Section>
-      </SettingsLayouts.Header>
-      <SettingsLayouts.Body>
+          }
+          filters={[
+            <InputSingleSelect
+              key="filter"
+              placeholder={t("filters.label")}
+              value={kind}
+              defaultOption="all"
+              options={KIND_FILTERS.map((value) => ({
+                value,
+                title: t(`filters.${value}`),
+              }))}
+              onValueChange={(value) =>
+                setKind(
+                  KIND_FILTERS.find((option) => option === value) ?? "all"
+                )
+              }
+            />,
+          ]}
+        />
         <Table
           label={t("title")}
           items={integrations}
@@ -214,22 +215,6 @@ export default function IntegrationsPage() {
           }
         />
       </SettingsLayouts.Body>
-      {adding && (
-        <AddIntegrationModal
-          canChooseOrganization={isGlobalHolder}
-          onClose={() => setAdding(false)}
-          onCreated={(created) => {
-            setAdding(false);
-            void mutate();
-            navigation.go(
-              integrationDetailHref(
-                created.id,
-                created.needs_setup ? "configuration" : "actions"
-              )
-            );
-          }}
-        />
-      )}
     </SettingsLayouts.Root>
   );
 }

@@ -83,7 +83,6 @@ from onyx.server.query_and_chat.streaming_models import (
 from onyx.server.settings.store import load_settings
 from onyx.tools.constants import (
     ASK_USER_QUESTION_TOOL_NAME,
-    CODING_AGENT_TOOL_ID,
     REQUEST_USER_INPUT_TOOL_NAME,
 )
 from onyx.tools.interface import Tool
@@ -949,23 +948,11 @@ def create_chat_agent(
     llm = setup.responses[response_index].llm
     with cancellation_scope(cancellation):
         cancellation.check()
-        tool_configuration = setup.tool_configuration
-        if setup.incognito_record_mode is not None:
-            # Incognito chats have no child agents, and these features run as children.
-            tool_configuration = tool_configuration.model_copy(
-                update={
-                    "tools": [
-                        tool
-                        for tool in tool_configuration.tools
-                        if tool.in_code_tool_id != CODING_AGENT_TOOL_ID
-                    ]
-                }
-            )
         filters = setup.new_msg_req.internal_search_filters
         source_types = filters.source_type if filters else None
         # Tools open DB sessions on demand, so model I/O cannot retain a connection.
         tools = construct_tools(
-            configuration=tool_configuration,
+            configuration=setup.tool_configuration,
             user=user,
             llm=llm,
             selection_llm_factory=partial(

@@ -71,6 +71,9 @@ celery_worker_docprocessing:
           threshold: "20"  # Target queued tasks for each replica
 ```
 
+The `celery_worker_docconversion` worker scales in the same way, on `onyx_queue_depth{queue="docconversion"}`.
+See [Conversion Stage for Large Indexing Jobs](/deployment/production/conversion_stage).
+
 ## Probes
 
 | Component | Default readiness probe | Liveness and startup probes |

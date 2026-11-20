@@ -515,28 +515,21 @@ class JiraConnector(
             raise ConnectorMissingCredentialError("Jira")
         return self._source_operations
 
-    def _get_project_permissions(
-        self, project_key: str, add_prefix: bool = False
-    ) -> Any:
+    def _get_project_permissions(self, project_key: str) -> Any:
         """Get project permissions with caching.
 
         Args:
             project_key: The Jira project key
-            add_prefix: When True, prefix group IDs with source type (for indexing path).
-                       When False (default), leave unprefixed (for permission sync path).
 
         Returns:
             The external access permissions for the project
         """
-        # Use different cache keys for prefixed vs unprefixed to avoid mixing
-        cache_key = f"{project_key}:{'prefixed' if add_prefix else 'unprefixed'}"
-        if cache_key not in self._project_permissions_cache:
-            self._project_permissions_cache[cache_key] = get_project_permissions(
+        if project_key not in self._project_permissions_cache:
+            self._project_permissions_cache[project_key] = get_project_permissions(
                 source_operations=self.source_operations,
                 jira_project=project_key,
-                add_prefix=add_prefix,
             )
-        return self._project_permissions_cache[cache_key]
+        return self._project_permissions_cache[project_key]
 
     def _is_epic(self, issue: JiraIssue) -> bool:
         """Check if issue is an Epic. A parent reference has the same shape
@@ -815,7 +808,6 @@ class JiraConnector(
             if include_permissions:
                 document.external_access = self._get_project_permissions(
                     project_key,  # ty: ignore[invalid-argument-type]
-                    add_prefix=True,  # Indexing path - prefix here
                 )
             yield document
 
@@ -1079,9 +1071,8 @@ class JiraConnector(
                 slim_doc_batch.append(
                     SlimDocument(
                         id=doc_id,
-                        # Permission sync path - don't prefix, upsert_document_external_perms handles it
                         external_access=(
-                            self._get_project_permissions(project_key, add_prefix=False)
+                            self._get_project_permissions(project_key)
                             if include_permissions
                             else None
                         ),

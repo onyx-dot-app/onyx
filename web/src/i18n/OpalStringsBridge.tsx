@@ -98,6 +98,8 @@ export default function OpalStringsBridge({
       dragToReorder: t("table.dragToReorder"),
       viewSelected: t("table.viewSelected"),
       deselectAll: t("table.deselectAll"),
+      selectAll: t("table.selectAll"),
+      selectRow: t("table.selectRow"),
       selectItemsToContinue: t("table.selectItemsToContinue"),
       selectAnItemToContinue: t("table.selectAnItemToContinue"),
       singleItemSelected: t("table.singleItemSelected"),

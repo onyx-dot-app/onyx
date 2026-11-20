@@ -32,7 +32,6 @@ export type AdminNavItemId =
   | "skills"
   | "customAnalytics"
   | "agents"
-  | "plugins"
   | "integrations"
   | "indexingStatus"
   | "connectors"
@@ -92,7 +91,6 @@ export const NAV_ITEM_IDS: Record<
   SKILLS: "skills",
   CUSTOM_ANALYTICS: "customAnalytics",
   AGENTS: "agents",
-  PLUGINS: "plugins",
   INTEGRATIONS: "integrations",
   INDEXING_STATUS: "indexingStatus",
   CONNECTORS: "connectors",

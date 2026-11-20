@@ -48,7 +48,7 @@ def test_hierarchy_helpers_fetch_permissions_when_requested(
 ) -> None:
     access = ExternalAccess(
         external_user_emails={"user@contoso.com"},
-        external_user_group_ids={"sharepoint_group"},
+        external_user_group_ids={"site-group"},
         is_public=False,
     )
     mock_get_access.return_value = access

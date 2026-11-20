@@ -50,13 +50,11 @@ class TaskIntegrationView(BaseModel):
     app_type: ExternalAppType | None
     status: IntegrationStatus
     actions: list[TaskActionView]
-
-
-class TaskPluginView(BaseModel):
-    plugin_id: UUID
-    plugin_name: str
-    # The task uses the plugin.
+    # The task uses the integration.
     enabled: bool
-    # The stored settings of the task for the plugin; None when not enabled.
+    # The stored settings of the task for the integration; None when not
+    # enabled.
     action_settings: ActionSettings | None
-    integrations: list[TaskIntegrationView]
+    # False: a run does not use the integration now (an admin turned it off,
+    # or Craft cannot run it). The task keeps its settings.
+    runnable: bool

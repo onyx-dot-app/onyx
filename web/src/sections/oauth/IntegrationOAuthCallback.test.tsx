@@ -37,13 +37,13 @@ test("posts the code to the integration API and goes to the return path", async 
   const fetchMock = mockFetch({
     [`POST ${CALLBACK}`]: {
       integration_id: 4,
-      return_path: "/app/plugins/abc?tab=integrations",
+      return_path: "/app/customize/plugins/abc?tab=integrations",
     },
   });
   render(<IntegrationOAuthCallback />);
   await waitFor(() =>
     expect(mockLoadPage).toHaveBeenCalledWith(
-      "/app/plugins/abc?tab=integrations",
+      "/app/customize/plugins/abc?tab=integrations",
       { replace: true }
     )
   );
@@ -63,7 +63,7 @@ test("goes to the Plugins page when the return path is not a page of the app", a
   });
   render(<IntegrationOAuthCallback />);
   await waitFor(() =>
-    expect(mockLoadPage).toHaveBeenCalledWith("/app/plugins", {
+    expect(mockLoadPage).toHaveBeenCalledWith("/app/customize/integrations", {
       replace: true,
     })
   );

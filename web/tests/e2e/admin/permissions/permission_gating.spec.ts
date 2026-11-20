@@ -523,7 +523,7 @@ test.describe("Permission gating: MANAGE_DOCUMENT_SETS", () => {
 });
 
 test.describe("Permission gating: MANAGE_ACTIONS", () => {
-  test("Admin panel /admin/plugins is gated behind MANAGE_ACTIONS", async ({
+  test("Admin panel /admin/integrations is gated behind MANAGE_ACTIONS", async ({
     page,
     adminClient,
     testUserContext,
@@ -561,7 +561,7 @@ test.describe("Permission gating: MANAGE_ACTIONS", () => {
     try {
       await page.context().clearCookies();
       await apiLogin(page, email, password);
-      await page.goto(ADMIN_ROUTES.PLUGINS.path);
+      await page.goto(ADMIN_ROUTES.INTEGRATIONS.path);
       await page.waitForLoadState("networkidle");
       await expect(page).toHaveURL(/\/app(?:\?.*)?$/);
 
@@ -580,7 +580,7 @@ test.describe("Permission gating: MANAGE_ACTIONS", () => {
       await integrations.expectIntegrationVisible(mcpName);
       await integrations.openAdd("MCP server");
       await expect(integrations.serverUrlInput).toBeVisible();
-      await integrations.closeAddDialog();
+      await integrations.cancelAdd();
 
       await page.context().clearCookies();
       await loginAs(page, "admin");
@@ -588,7 +588,7 @@ test.describe("Permission gating: MANAGE_ACTIONS", () => {
 
       await page.context().clearCookies();
       await apiLogin(page, email, password);
-      await page.goto(ADMIN_ROUTES.PLUGINS.path);
+      await page.goto(ADMIN_ROUTES.INTEGRATIONS.path);
       await page.waitForLoadState("networkidle");
       await expect(page).toHaveURL(/\/app(?:\?.*)?$/);
     } finally {

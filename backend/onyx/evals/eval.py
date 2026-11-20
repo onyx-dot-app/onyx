@@ -29,7 +29,7 @@ from onyx.evals.models import (
 )
 from onyx.evals.provider import get_provider
 from onyx.integrations.models import ApprovalMode
-from onyx.integrations.policy import agent_plugin_settings
+from onyx.integrations.policy import agent_integration_ids
 from onyx.llm.override_models import LLMOverride
 from onyx.server.query_and_chat.models import (
     AUTO_PLACE_AFTER_LATEST_MESSAGE,
@@ -37,7 +37,7 @@ from onyx.server.query_and_chat.models import (
     SendMessageRequest,
 )
 from onyx.tools.built_in_tools import BUILT_IN_TOOL_MAP
-from onyx.tools.models import CapabilityEntry, PluginEntry, ToolOptions
+from onyx.tools.models import CapabilityEntry, IntegrationEntry, ToolOptions
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -50,14 +50,14 @@ def _tool_options(
     allowed_tool_ids: list[int],
     preferred_tool: str | None,
 ) -> ToolOptions:
-    """Limits the built-in tools to the configured ones and keeps each plugin
-    that the default agent uses for the user."""
-    allowed: list[CapabilityEntry | PluginEntry] = [
+    """Limits the built-in tools to the configured ones and keeps each
+    integration that the default agent uses for the user."""
+    allowed: list[CapabilityEntry | IntegrationEntry] = [
         CapabilityEntry(tool_id=tool_id) for tool_id in allowed_tool_ids
     ]
     allowed.extend(
-        PluginEntry(plugin_id=plugin_id)
-        for plugin_id in agent_plugin_settings(
+        IntegrationEntry(integration_id=integration_id)
+        for integration_id in agent_integration_ids(
             db_session, user_id, DEFAULT_PERSONA_ID, {}
         )
     )

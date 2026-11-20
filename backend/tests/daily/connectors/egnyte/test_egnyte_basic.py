@@ -20,8 +20,6 @@ from ee.onyx.external_permissions.egnyte.access import (
 )
 from ee.onyx.external_permissions.egnyte.group_sync import egnyte_groups
 from onyx.access.models import ExternalAccess
-from onyx.access.utils import build_ext_group_name_for_onyx
-from onyx.configs.constants import DocumentSource
 from onyx.connectors.egnyte import connector as egnyte_connector_module
 from onyx.connectors.egnyte.connector import OAUTH_SCOPES, EgnyteConnector
 from onyx.connectors.egnyte.models import EgnyteUserType
@@ -172,10 +170,7 @@ def test_index_with_permissions(
         access = document.external_access
         assert access is not None
         assert access.external_user_group_ids == {
-            build_ext_group_name_for_onyx(
-                default_group_id(DOMAIN, ADMINISTRATORS_GROUP_NAME),
-                DocumentSource.EGNYTE,
-            )
+            default_group_id(DOMAIN, ADMINISTRATORS_GROUP_NAME)
         }
         expected_user = STANDARD_USER_2 if "Deep." in _text(document) else POWER_USER
         assert emails[expected_user] in access.external_user_emails
@@ -223,14 +218,9 @@ def test_folder_permissions_match_egnyte(
     folder_names = {node.raw_node_id: node.display_name for node in nodes}
     assert set(folder_names.values()) == set(EXPECTED_READERS)
     for node in nodes:
-        users, groups = expected_access(node.display_name)
-        prefixed = {
-            build_ext_group_name_for_onyx(group, DocumentSource.EGNYTE)
-            for group in groups
-        }
-        assert actual_access(node.external_access) == (users, prefixed), (
+        assert actual_access(node.external_access) == expected_access(
             node.display_name
-        )
+        ), node.display_name
 
     assert len({document.id for document in documents}) == len(documents)
     big_file_count = 0

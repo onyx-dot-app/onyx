@@ -13,6 +13,8 @@ tauri-build = { version = "2.6", features = [] }
 tauri = { version = "2.12", features = ["macos-private-api", "tray-icon", "image-png"] }
 tauri-plugin-global-shortcut = "2"
 tauri-plugin-opener = "2"
+# 2.8 reports notification clicks on desktop.
+tauri-plugin-notification = "2.8"
 tauri-plugin-single-instance = { version = "2", features = ["deep-link"] }
 tauri-plugin-deep-link = "2"
 tauri-plugin-updater = "2"
@@ -23,21 +25,33 @@ tauri-plugin-window-state = "2"
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 # native-tls: trust what the OS trusts (keychain roots, corporate TLS proxies).
-reqwest = { version = "0.12", default-features = false, features = ["json", "native-tls", "stream"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "native-tls", "stream", "system-proxy"] }
 futures-util = "0.3"
-tokio = { version = "1", features = ["time"] }
+# Only to tell TLS failures apart (reachability.rs); the same crate reqwest uses.
+native-tls = "0.2"
+tokio = { version = "1", features = ["time", "sync"] }
 url = "2.5"
-keyring = { version = "3", features = ["apple-native"] }
-rfd = "0.15"
+# The OS's own store: macOS keychain, Windows Credential Manager, Linux
+# Secret Service (GNOME Keyring, KWallet).
+keyring = { version = "3", features = ["apple-native", "windows-native", "sync-secret-service", "crypto-rust"] }
+# gtk3: native GTK dialogs on Linux (the default portal backend needs zenity
+# for message boxes). common-controls-v6: custom button labels on Windows
+# (tauri-build's manifest already loads Common Controls v6).
+rfd = { version = "0.15", default-features = false, features = ["gtk3", "common-controls-v6"] }
 log = "0.4"
 libc = "0.2" # QA harness: checks its directory's owner (geteuid)
 
 [target.'cfg(target_os = "macos")'.dependencies]
+tauri-plugin-autostart = "2"
 tauri-nspanel = "2.1.1"
 block2 = "0.6"
 objc2 = "0.6"
+objc2-core-foundation = { version = "0.3", default-features = false, features = ["std", "CFPreferences", "CFNumber", "CFString"] }
 objc2-foundation = { version = "0.3", default-features = false, features = ["std", "NSString", "NSGeometry", "NSDictionary"] }
 objc2-app-kit = { version = "0.3", default-features = false, features = ["std", "NSAlert", "NSApplication", "NSButton", "NSControl", "NSResponder", "NSTextField", "NSView", "NSWindow"] }
+
+[target.'cfg(windows)'.dependencies]
+winreg = "0.56"
 
 [features]
 default = ["custom-protocol"]

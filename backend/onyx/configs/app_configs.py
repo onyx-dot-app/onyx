@@ -19,6 +19,20 @@ from shared_configs.configs import MULTI_TENANT
 logger = setup_logger()
 
 
+def _int_env(name: str, default: int) -> int | None:
+    """Parse an int env var: ``default`` when unset, None when the value is
+    not an integer. A bad value is logged and turns off what depends on it,
+    so it does not stop the import of this module."""
+    raw = os.environ.get(name)
+    if not raw:
+        return default
+    try:
+        return int(raw)
+    except ValueError:
+        logger.error("%s=%r is not an integer", name, raw)
+        return None
+
+
 def _non_negative_int_env(name: str, default: int) -> int:
     """Parse an int env var, falling back to ``default`` when unset or negative."""
     value = int(os.environ.get(name) or default)
@@ -1142,6 +1156,33 @@ except ValueError:
         _CELERY_WORKER_DOCFETCHING_CONCURRENCY_DEFAULT
     )
 
+# Threads of one docconversion worker. Each thread converts one stub batch,
+# and a conversion parses on one core, so scale with pods, not with threads.
+# A value that is not an integer gives the default.
+_docconversion_concurrency = _int_env("CELERY_WORKER_DOCCONVERSION_CONCURRENCY", 2)
+CELERY_WORKER_DOCCONVERSION_CONCURRENCY = max(
+    1, 2 if _docconversion_concurrency is None else _docconversion_concurrency
+)
+# The most stub batches of one index attempt that are sent to conversion and
+# not converted yet. It bounds the conversion queue for each attempt.
+_docconversion_window_batches = _int_env("DOCCONVERSION_WINDOW_BATCHES", 32)
+DOCCONVERSION_WINDOW_BATCHES = max(
+    1, 32 if _docconversion_window_batches is None else _docconversion_window_batches
+)
+
+# The kill switch of the conversion stage. When true, docfetching lists a
+# source that supports it and stores stub batches, and the docconversion
+# worker fetches and parses the documents. Deploy that worker before you set it.
+ENABLE_CONVERSION_STAGE = (
+    os.environ.get("ENABLE_CONVERSION_STAGE", "").lower() == "true"
+)
+# The watchdog checks the conversion chain of an attempt when no task has
+# dispatched stub batches for this long.
+_docconversion_stall_seconds = _int_env("DOCCONVERSION_STALL_SECONDS", 300)
+DOCCONVERSION_STALL_SECONDS = max(
+    1, 300 if _docconversion_stall_seconds is None else _docconversion_stall_seconds
+)
+
 CELERY_WORKER_PRIMARY_CONCURRENCY = int(
     os.environ.get("CELERY_WORKER_PRIMARY_CONCURRENCY") or 4
 )
@@ -1391,6 +1432,42 @@ except ValueError:
 # metadata; larger Docs are indexed via the basic text export.
 GOOGLE_DRIVE_ADVANCED_PARSE_MAX_BYTES = int(
     os.environ.get("GOOGLE_DRIVE_ADVANCED_PARSE_MAX_BYTES") or 50 * 1024 * 1024
+)
+
+# Google's quota model for the Drive API of the customer's GCP project: "units"
+# (each call has a cost in quota units) or "requests" (each call counts as one).
+GOOGLE_DRIVE_QUOTA_MODEL = (
+    os.environ.get("GOOGLE_DRIVE_QUOTA_MODEL") or "units"
+).lower()
+# The budgets for one minute. Set them to the quotas of the GCP project.
+_drive_quota_per_project = _int_env(
+    "GOOGLE_DRIVE_QUOTA_PER_PROJECT",
+    12_000 if GOOGLE_DRIVE_QUOTA_MODEL == "requests" else 1_000_000,
+)
+_drive_quota_per_user = _int_env(
+    "GOOGLE_DRIVE_QUOTA_PER_USER",
+    12_000 if GOOGLE_DRIVE_QUOTA_MODEL == "requests" else 325_000,
+)
+_docs_reads_per_project = _int_env("GOOGLE_DOCS_READS_PER_PROJECT", 3_000)
+_docs_reads_per_user = _int_env("GOOGLE_DOCS_READS_PER_USER", 300)
+_limiter_budgets_valid = None not in (
+    _drive_quota_per_project,
+    _drive_quota_per_user,
+    _docs_reads_per_project,
+    _docs_reads_per_user,
+)
+GOOGLE_DRIVE_QUOTA_PER_PROJECT = _drive_quota_per_project or 0
+GOOGLE_DRIVE_QUOTA_PER_USER = _drive_quota_per_user or 0
+GOOGLE_DOCS_READS_PER_PROJECT = _docs_reads_per_project or 0
+GOOGLE_DOCS_READS_PER_USER = _docs_reads_per_user or 0
+
+# Off by default. When on, the workers that index Google Drive share one budget
+# of Google API calls for each credential, kept in Redis, so that many workers
+# do not each find Google's quota through 429 answers. A budget that is not an
+# integer turns it off.
+ENABLE_SOURCE_API_LIMITER = (
+    os.environ.get("ENABLE_SOURCE_API_LIMITER", "").lower() == "true"
+    and _limiter_budgets_valid
 )
 
 # Cap the total text retained per file across a connector's extracted sections,

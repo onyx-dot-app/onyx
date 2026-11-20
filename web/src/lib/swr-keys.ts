@@ -104,6 +104,8 @@ export const SWR_KEYS = {
     `/api/chat/chat-session/${sessionId}/status`,
   pendingChatMessages: (sessionId: string) =>
     `/api/chat/chat-session/${sessionId}/pending-messages`,
+  maxSelectedDocumentTokens: (personaId: number) =>
+    `/api/chat/max-selected-document-tokens?persona_id=${personaId}`,
   adminSsoProviders: "/api/admin/sso/provider",
   adminSsoProviderHandoff: (providerId: number) =>
     `/api/admin/sso/provider/${providerId}/handoff`,
@@ -260,19 +262,23 @@ export const SWR_KEYS = {
   // ── MCP Servers ───────────────────────────────────────────────────────────
 
   // ── Integrations ──────────────────────────────────────────────────────────
-  agentPluginCatalog: "/api/integrations/agent-catalog",
+  agentIntegrationCatalog: "/api/integrations/agent-catalog",
   adminIntegrations: "/api/admin/integrations",
   adminIntegrationPresets: "/api/admin/integrations/presets",
   adminIntegration: (integrationId: number) =>
     `/api/admin/integrations/${integrationId}`,
   adminIntegrationActions: (integrationId: number) =>
     `/api/admin/integrations/${integrationId}/actions`,
-  adminPluginInstallationPolicy: (pluginId: string) =>
-    `/api/admin/plugins/${pluginId}/installation-policy`,
-  plugin: (pluginId: string) => `/api/plugins/${pluginId}`,
-  agentPluginIds: (agentId: number) => `/api/plugins/agents/${agentId}`,
-  pluginAccess: (pluginId: string) => `/api/plugins/${pluginId}/access`,
+  adminIntegrationInstallationPolicy: (integrationId: number) =>
+    `/api/admin/integrations/${integrationId}/installation-policy`,
+  adminIntegrationGroupSettings: (integrationId: number) =>
+    `/api/admin/integrations/${integrationId}/group-settings`,
   integrations: "/api/integrations",
+  integration: (integrationId: number) => `/api/integrations/${integrationId}`,
+  agentIntegrationIds: (agentId: number) =>
+    `/api/integrations/agents/${agentId}`,
+  integrationAccess: (integrationId: number) =>
+    `/api/integrations/${integrationId}/access`,
   integrationActionPolicies: (integrationId: number) =>
     `/api/action-policies/integration/${integrationId}`,
   assistantPreferences: "/api/user/assistant/preferences",

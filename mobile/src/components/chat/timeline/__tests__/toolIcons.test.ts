@@ -5,7 +5,6 @@ import { PacketType, type ObjTypes } from "@/chat/streamingModels";
 import { getToolIcon } from "@/components/chat/timeline/toolIcons";
 import SvgBookOpen from "@/icons/book-open";
 import SvgCircle from "@/icons/circle";
-import SvgCode from "@/icons/code";
 import SvgCpu from "@/icons/cpu";
 import SvgGlobe from "@/icons/globe";
 import SvgImage from "@/icons/image";
@@ -42,7 +41,6 @@ describe("getToolIcon", () => {
     [PacketType.IMAGE_GENERATION_TOOL_START, SvgImage],
     [PacketType.DEEP_RESEARCH_PLAN_START, SvgTextLinesSmall],
     [PacketType.RESEARCH_AGENT_START, SvgUser],
-    [PacketType.CODING_AGENT_START, SvgCode],
     [PacketType.REASONING_START, SvgSlowTime],
     [PacketType.MEMORY_TOOL_START, SvgBookOpen],
     [PacketType.MEMORY_TOOL_NO_ACCESS, SvgBookOpen],

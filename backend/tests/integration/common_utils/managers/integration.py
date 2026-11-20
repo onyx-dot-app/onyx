@@ -9,7 +9,7 @@ from onyx.server.features.integrations.models import (
     ActionGrantsResponse,
     AdminIntegration,
     AdminIntegrationDetail,
-    AgentPluginOption,
+    AgentIntegrationOption,
     IntegrationActionsResponse,
     MemberIntegration,
     MemberIntegrationDetail,
@@ -181,7 +181,7 @@ class IntegrationManager:
         )
 
     @staticmethod
-    def agent_catalog(user: DATestUser) -> list[AgentPluginOption]:
+    def agent_catalog(user: DATestUser) -> list[AgentIntegrationOption]:
         response = client.get(f"{MEMBER_URL}/agent-catalog", headers=user.headers)
         response.raise_for_status()
-        return [AgentPluginOption.model_validate(item) for item in response.json()]
+        return [AgentIntegrationOption.model_validate(item) for item in response.json()]

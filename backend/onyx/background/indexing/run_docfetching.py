@@ -1,7 +1,7 @@
 import sys
 import time
 import traceback
-from collections.abc import Generator, Iterable
+from collections.abc import Callable, Generator, Iterable
 from datetime import datetime, timedelta, timezone
 from typing import Any, TypeVar
 
@@ -18,6 +18,7 @@ from onyx.background.indexing.checkpointing_utils import (
 )
 from onyx.background.indexing.memory_tracer import MemoryTracer
 from onyx.configs.app_configs import (
+    ENABLE_CONVERSION_STAGE,
     INDEX_BATCH_SIZE,
     INDEXING_SIZE_WARNING_THRESHOLD,
     INDEXING_TRACER_INTERVAL,
@@ -45,12 +46,19 @@ from onyx.connectors.exceptions import (
     UnexpectedValidationError,
 )
 from onyx.connectors.factory import instantiate_connector
-from onyx.connectors.interfaces import CheckpointedConnector
+from onyx.connectors.interfaces import (
+    BaseConnector,
+    CheckpointedConnector,
+    CheckpointedSlimConnector,
+    Resolver,
+)
 from onyx.connectors.models import (
+    ConnectorCheckpoint,
     ConnectorFailure,
     ConnectorStopSignal,
     Document,
     HierarchyNode,
+    SlimDocumentStub,
     TextSection,
 )
 from onyx.db.connector import mark_ccpair_with_indexing_trigger
@@ -61,6 +69,7 @@ from onyx.db.connector_credential_pair import (
     update_connector_credential_pair,
 )
 from onyx.db.constants import CONNECTOR_VALIDATION_ERROR_MESSAGE_PREFIX
+from onyx.db.document import get_unchanged_document_ids
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import (
     AccessType,
@@ -91,6 +100,7 @@ from onyx.db.search_settings import get_search_settings_by_id
 from onyx.file_store.document_batch_storage import (
     DocumentBatchStorage,
     get_document_batch_storage,
+    get_stub_batch_storage,
 )
 from onyx.file_store.staging import (
     RawFileCallback,
@@ -107,7 +117,8 @@ from onyx.redis.redis_hierarchy import (
     resolve_parent_node_ids,
 )
 from onyx.redis.redis_pool import get_redis_client
-from onyx.utils.fleet_telemetry import emit_stage_counter
+from onyx.redis.tenant_redis_client import TenantRedisClient
+from onyx.utils.fleet_telemetry import emit_corpus_count, emit_stage_counter
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import (
     sanitize_document_for_postgres,
@@ -123,6 +134,23 @@ logger = setup_logger(propagate=False)
 _FINALIZING_RECHECK_INTERVAL_S = 60
 
 INDEXING_TRACER_NUM_PRINT_ENTRIES = 5
+
+
+def select_docprocessing_priority(
+    db_session: Session,
+    *,
+    is_primary: bool,
+    has_successful_attempt: bool,
+    search_settings: SearchSettings | None,
+) -> OnyxCeleryPriority:
+    """First-time indexing goes before refreshes of indexed connectors. While a
+    port-flow reindex finalizes, FUTURE batches go first: the swap waits on
+    them."""
+    if not has_successful_attempt or (
+        not is_primary and reindex_finalizing(db_session, search_settings)
+    ):
+        return OnyxCeleryPriority.HIGH
+    return OnyxCeleryPriority.MEDIUM
 
 
 def _get_run_config(attempt: IndexAttempt) -> dict[str, Any]:
@@ -175,6 +203,7 @@ def _get_connector_runner(
     include_permissions: bool,
     leave_connector_active: bool = LEAVE_CONNECTOR_ACTIVE_ON_INITIALIZATION_FAILURE,
     raw_file_callback: RawFileCallback | None = None,
+    should_stop: Callable[[], bool] | None = None,
 ) -> ConnectorRunner:
     """
     NOTE: `start_time` and `end_time` are only used for poll and checkpointed
@@ -225,6 +254,7 @@ def _get_connector_runner(
                 connector_specific_config=connector_specific_config,
                 credential=attempt.connector_credential_pair.credential,
                 raw_file_callback=raw_file_callback,
+                should_stop=should_stop,
             )
 
             # The drain needs the pair and the attempt, which are the run's,
@@ -255,6 +285,10 @@ def _get_connector_runner(
         )
         _record_outcome(e, perm_sync_validated=False)
         raise e
+    except ConnectorStopSignal:
+        # The attempt stopped while it waited for the source's API budget. The
+        # connector is fine, so the pair stays active.
+        raise
     except Exception as e:
         logger.exception("Unable to instantiate connector. Pausing until fixed.")
         _record_outcome(e, perm_sync_validated=False)
@@ -378,6 +412,100 @@ def _timed_connector_runs(
             yield item
     finally:
         buffer.flush()
+
+
+def connector_uses_conversion_stage(connector: BaseConnector) -> bool:
+    """True when docfetching lists this connector's documents as stubs and the
+    conversion stage fetches them. The connector must list with a checkpoint
+    and convert from its own listing payload."""
+    return (
+        ENABLE_CONVERSION_STAGE
+        and isinstance(connector, CheckpointedSlimConnector)
+        and isinstance(connector, Resolver)
+        and connector.listing_payload_type is not None
+    )
+
+
+def drop_unchanged_stubs(
+    stubs: list[SlimDocumentStub], connector_id: int, credential_id: int
+) -> list[SlimDocumentStub]:
+    """Drops the stubs whose document is in the index with the same modified
+    time and size, so the conversion stage does not fetch it again. A stub
+    with no modified time is kept."""
+    listed = {
+        stub.id: (stub.doc_updated_at, stub.size_bytes)
+        for stub in stubs
+        if stub.doc_updated_at is not None
+    }
+    with get_session_with_current_tenant() as db_session:
+        unchanged = get_unchanged_document_ids(
+            db_session, connector_id, credential_id, listed
+        )
+    return [stub for stub in stubs if stub.id not in unchanged]
+
+
+_ListerYield = tuple[
+    list[SlimDocumentStub] | None,
+    list[HierarchyNode] | None,
+    ConnectorFailure | None,
+    ConnectorCheckpoint | None,
+]
+
+
+def list_stub_batches(
+    connector: CheckpointedSlimConnector,
+    checkpoint: ConnectorCheckpoint,
+    start: datetime,
+    end: datetime,
+    batch_size: int,
+    *,
+    include_permissions: bool,
+) -> Generator[_ListerYield, None, None]:
+    """One call of the connector's slim listing, in the shape of
+    ``ConnectorRunner.run``: stub batches, hierarchy node batches and failures,
+    then the next checkpoint. A hierarchy batch goes out before the stub batch
+    that follows it, so a parent is stored before its documents.
+
+    ``include_permissions`` is the choice the attempt makes for fetching: the
+    hierarchy nodes then carry their permissions, as on the fetching path.
+    The conversion reads the documents' permissions.
+
+    A plain ``SlimDocument`` is a document that the indexing filters drop. The
+    listing yields it for pruning, and indexing does not use it."""
+    listing = connector.retrieve_slim_docs_from_checkpoint(
+        start=start.timestamp(),
+        end=end.timestamp(),
+        checkpoint=checkpoint,
+        include_permissions=include_permissions,
+    )
+    stubs: list[SlimDocumentStub] = []
+    nodes: list[HierarchyNode] = []
+    while True:
+        try:
+            item = next(listing)
+        except StopIteration as stop:
+            next_checkpoint: ConnectorCheckpoint = stop.value
+            break
+        if isinstance(item, ConnectorFailure):
+            yield None, None, item, None
+        elif isinstance(item, HierarchyNode):
+            nodes.append(item)
+            if len(nodes) >= batch_size:
+                yield None, nodes, None, None
+                nodes = []
+        elif isinstance(item, SlimDocumentStub):
+            stubs.append(item)
+            if len(stubs) >= batch_size:
+                if nodes:
+                    yield None, nodes, None, None
+                    nodes = []
+                yield stubs, None, None, None
+                stubs = []
+    if nodes:
+        yield None, nodes, None, None
+    if stubs:
+        yield stubs, None, None, None
+    yield None, None, None, next_checkpoint
 
 
 def strip_null_characters(doc_batch: list[Document]) -> list[Document]:
@@ -652,15 +780,12 @@ def connector_document_extraction(
             index_attempt.connector_credential_pair.last_successful_index_time
             is not None
         )
-        # First-time indexing goes before refreshes of indexed connectors. While a
-        # port-flow reindex finalizes, FUTURE batches go first: the swap waits on them.
-        if not has_successful_attempt or (
-            not is_primary
-            and reindex_finalizing(db_session, index_attempt.search_settings)
-        ):
-            docprocessing_priority = OnyxCeleryPriority.HIGH
-        else:
-            docprocessing_priority = OnyxCeleryPriority.MEDIUM
+        docprocessing_priority = select_docprocessing_priority(
+            db_session,
+            is_primary=is_primary,
+            has_successful_attempt=has_successful_attempt,
+            search_settings=index_attempt.search_settings,
+        )
         # A FUTURE attempt that started before the last port finished re-checks
         # while it runs, so its later batches get the finalizing boost too.
         recheck_finalizing = (
@@ -752,15 +877,27 @@ def connector_document_extraction(
         # TODO: maybe memory tracer here
 
         # Set up connector runner
-        connector_runner = _get_connector_runner(
-            db_session=db_session,
-            attempt=index_attempt,
-            batch_size=INDEX_BATCH_SIZE,
-            start_time=window_start,
-            end_time=window_end,
-            include_permissions=should_fetch_permissions_during_indexing,
-            raw_file_callback=raw_file_callback,
-        )
+        try:
+            connector_runner = _get_connector_runner(
+                db_session=db_session,
+                attempt=index_attempt,
+                batch_size=INDEX_BATCH_SIZE,
+                start_time=window_start,
+                end_time=window_end,
+                include_permissions=should_fetch_permissions_during_indexing,
+                raw_file_callback=raw_file_callback,
+                should_stop=callback.should_stop if callback is not None else None,
+            )
+        except ConnectorStopSignal as e:
+            # A stop while validation waits for the source's API budget cancels
+            # the attempt, as a stop during extraction does.
+            logger.info(
+                "Marking attempt %s as canceled due to a stop signal during validation.",
+                index_attempt_id,
+            )
+            mark_attempt_canceled(index_attempt_id, db_session, reason=str(e))
+            memory_tracer.stop()
+            return
 
         # don't use a checkpoint if we're explicitly indexing from
         # the beginning in order to avoid weird interactions between
@@ -772,12 +909,31 @@ def connector_document_extraction(
         # OR
         # if this is a backfill, which never resumes. Its batch storage is
         # separate, so the cleanup leaves normal attempts' batches alone.
+        # With the conversion stage, docfetching only lists: it stores stub
+        # batches and the docconversion worker fetches the documents.
+        lister_mode = connector_uses_conversion_stage(connector_runner.connector)
+        lister_task_id = index_attempt.celery_task_id
+        # The lister drops a listed document when the index has that version.
+        # A run from the beginning and a run for a new index need every
+        # document, so they drop none.
+        skip_unchanged_stubs = lister_mode and is_primary and not from_beginning
+        stub_storage = get_stub_batch_storage(
+            cc_pair_id, index_attempt_id, is_backfill=is_backfill
+        )
+        # The listing and the fetch share one checkpoint model, and a
+        # checkpoint of one cannot continue the other.
+        stage_changed_since_last_attempt = (
+            most_recent_attempt is not None
+            and most_recent_attempt.uses_conversion_stage != lister_mode
+        )
+        stub_batches_taken_over = 0
         with time_stage(IndexAttemptStage.CHECKPOINT_LOAD, index_attempt_id):
             if (
                 index_attempt.from_beginning
                 or index_attempt.is_backfill
                 or (most_recent_attempt and most_recent_attempt.status.is_successful())
                 or config_changed_since_last_attempt
+                or stage_changed_since_last_attempt
             ):
                 logger.info(
                     "Cleaning up all old batches for index attempt %s before starting new run",
@@ -798,6 +954,7 @@ def connector_document_extraction(
                     window_end=window_end,
                     connector=connector_runner.connector,
                     connector_config_hash=connector_config_hash,
+                    uses_conversion_stage=lister_mode,
                 )
 
                 # checkpoint resumption OR the connector already finished.
@@ -819,6 +976,12 @@ def connector_document_extraction(
                         most_recent_attempt.id if most_recent_attempt else None,
                         docprocessing_priority,
                     )
+                    if lister_mode:
+                        # The stub batches that the last attempt listed and
+                        # did not convert get this attempt's next numbers.
+                        stub_batches_taken_over = stub_storage.renumber_old_batches(
+                            last_batch_num
+                        )
                 else:
                     logger.info(
                         "Cleaning up all batches for index attempt %s before starting new run",
@@ -833,6 +996,22 @@ def connector_document_extraction(
             db_session=db_session,
             index_attempt_id=index_attempt_id,
             checkpoint=checkpoint,
+        )
+
+        if lister_mode:
+            IndexingCoordination.start_stub_batches(
+                db_session, index_attempt_id, last_batch_num, stub_batches_taken_over
+            )
+            last_batch_num += stub_batches_taken_over
+
+    if stub_batches_taken_over:
+        _dispatch_stub_batches(
+            app,
+            index_attempt_id=index_attempt_id,
+            cc_pair_id=cc_pair_id,
+            tenant_id=tenant_id,
+            is_backfill=is_backfill,
+            task_id=lister_task_id,
         )
 
     batch_num = last_batch_num  # starts at 0 if no last batch
@@ -857,11 +1036,17 @@ def connector_document_extraction(
             )
             for (
                 document_batch,
+                stub_batch,
                 hierarchy_node_batch,
                 failure,
                 next_checkpoint,
-            ) in _timed_connector_runs(
-                connector_runner.run(checkpoint), index_attempt_id
+            ) in _fetch_or_list_runs(
+                connector_runner,
+                checkpoint,
+                window_start,
+                window_end,
+                index_attempt_id,
+                lister_mode,
             ):
                 # Check if connector is disabled mid run and stop if so unless it's the secondary
                 # index being built. We want to populate it even for paused connectors
@@ -950,6 +1135,54 @@ def connector_document_extraction(
                         index_attempt_id,
                     )
 
+                if stub_batch:
+                    listed_count = len(stub_batch)
+                    # The failure ratio counts every listed document, also
+                    # the ones dropped as unchanged.
+                    document_count += listed_count
+                    if skip_unchanged_stubs:
+                        stub_batch = drop_unchanged_stubs(
+                            stub_batch, db_connector.id, db_credential.id
+                        )
+                    with get_session_with_current_tenant() as db_session:
+                        IndexingCoordination.record_stubs_listed(
+                            db_session,
+                            index_attempt_id,
+                            listed_count,
+                            listed_count - len(stub_batch),
+                        )
+
+                if stub_batch:
+                    with time_stage(
+                        IndexAttemptStage.DOC_BATCH_STORE, index_attempt_id
+                    ):
+                        stub_storage.store_batch(batch_num, stub_batch)
+                        with get_session_with_current_tenant() as db_session:
+                            IndexingCoordination.record_stub_batch_stored(
+                                db_session, index_attempt_id, batch_num
+                            )
+                    with time_stage(
+                        IndexAttemptStage.DOC_BATCH_ENQUEUE, index_attempt_id
+                    ):
+                        _dispatch_stub_batches(
+                            app,
+                            index_attempt_id=index_attempt_id,
+                            cc_pair_id=cc_pair_id,
+                            tenant_id=tenant_id,
+                            is_backfill=is_backfill,
+                            task_id=lister_task_id,
+                        )
+                    batch_num += 1
+                    total_doc_batches_queued += 1
+                    memory_tracer.increment_and_maybe_trace()
+                    logger.info(
+                        "Stored stub batch: batch_num=%s stubs=%s attempt=%s",
+                        batch_num,
+                        len(stub_batch),
+                        index_attempt_id,
+                    )
+                    continue
+
                 # below is all document processing task, so if no batch we can just continue
                 if not document_batch:
                     continue
@@ -960,33 +1193,13 @@ def connector_document_extraction(
                 # Resolve parent_hierarchy_raw_node_id to parent_hierarchy_node_id
                 # using the Redis cache (just populated from hierarchy nodes
                 # batch). A parent not stored yet gets a STUB node.
-                raw_parent_ids = [
-                    doc.parent_hierarchy_raw_node_id
-                    for doc in doc_batch_cleaned
-                    if doc.parent_hierarchy_raw_node_id is not None
-                ]
-                parent_node_ids: dict[str, int] = {}
-                with get_session_with_current_tenant() as db_session_tmp:
-                    source_node_id = get_source_node_id_from_cache(
-                        redis_client, db_session_tmp, db_connector.source
-                    )
-                    if source_node_id is not None and raw_parent_ids:
-                        parent_node_ids = resolve_parent_node_ids(
-                            redis_client=redis_client,
-                            db_session=db_session_tmp,
-                            source=db_connector.source,
-                            source_node_id=source_node_id,
-                            raw_parent_ids=raw_parent_ids,
-                            connector_id=db_connector.id,
-                            credential_id=db_credential.id,
-                        )
-                for doc in doc_batch_cleaned:
-                    raw_parent_id = doc.parent_hierarchy_raw_node_id
-                    doc.parent_hierarchy_node_id = (
-                        parent_node_ids.get(raw_parent_id, source_node_id)
-                        if raw_parent_id is not None
-                        else source_node_id
-                    )
+                set_document_parent_node_ids(
+                    redis_client,
+                    doc_batch_cleaned,
+                    source=db_connector.source,
+                    connector_id=db_connector.id,
+                    credential_id=db_credential.id,
+                )
 
                 batch_description = []
 
@@ -1019,39 +1232,18 @@ def connector_document_extraction(
                 # Create processing task data. ``enqueue_time_ms`` is captured
                 # right before send so QUEUE_WAIT measures the broker latency
                 # and any docprocessing scheduling delay (not our own bookkeeping).
-                processing_batch_data = {
-                    "index_attempt_id": index_attempt_id,
-                    "cc_pair_id": cc_pair_id,
-                    "tenant_id": tenant_id,
-                    "batch_num": batch_num,  # 0-indexed
-                    "enqueue_time_ms": int(time.time() * 1000),
-                }
-                # Sent only when set, so a worker from before backfills still
-                # accepts normal batches during a rolling upgrade.
-                if is_backfill:
-                    processing_batch_data["is_backfill"] = True
-
                 # Queue document processing task
                 with time_stage(IndexAttemptStage.DOC_BATCH_ENQUEUE, index_attempt_id):
-                    try:
-                        RedisDocprocessing(
-                            index_attempt_id,
-                            get_redis_client(tenant_id=tenant_id),
-                        ).incr_pending()
-                    except Exception:
-                        logger.debug(
-                            "Failed to increment pending counter for attempt %s",
-                            index_attempt_id,
-                            exc_info=True,
-                        )
-                    # No expires=: the task carries a fetched batch, and a
-                    # big run can wait hours for a docprocessing worker. An
-                    # expired task would leave its batch unprocessed.
-                    app.send_task(  # celery-expires: allow (a dropped batch stalls its attempt)
-                        OnyxCeleryTask.DOCPROCESSING_TASK,
-                        kwargs=processing_batch_data,
-                        queue=OnyxCeleryQueues.DOCPROCESSING,
+                    send_docprocessing_batch(
+                        app,
+                        index_attempt_id=index_attempt_id,
+                        cc_pair_id=cc_pair_id,
+                        tenant_id=tenant_id,
+                        batch_num=batch_num,
                         priority=docprocessing_priority,
+                        is_backfill=is_backfill,
+                        # See send_docprocessing_batch: no resend path.
+                        expires=None,
                     )
 
                 batch_num += 1
@@ -1082,6 +1274,18 @@ def connector_document_extraction(
                 )
 
         elapsed_time = time.monotonic() - start_time
+
+        if lister_mode:
+            _emit_listing_corpus_count(
+                connector_runner.connector,
+                checkpoint,
+                index_attempt_id=index_attempt_id,
+                cc_pair_id=cc_pair_id,
+                source=db_connector.source,
+                window_start=window_start,
+                window_end=window_end,
+                duration_ms=int(elapsed_time * 1000),
+            )
 
         logger.info(
             "Document extraction completed: attempt=%s batches_queued=%s elapsed=%ss",
@@ -1194,6 +1398,194 @@ def connector_document_extraction(
 
     finally:
         memory_tracer.stop()
+
+
+def _emit_listing_corpus_count(
+    connector: BaseConnector,
+    checkpoint: ConnectorCheckpoint,
+    *,
+    index_attempt_id: int,
+    cc_pair_id: int,
+    source: DocumentSource,
+    window_start: datetime,
+    window_end: datetime,
+    duration_ms: int,
+) -> None:
+    """Sends the fleet's corpus event when a listing ends, if the connector
+    counts what it lists. Telemetry never fails the attempt."""
+    if not isinstance(connector, CheckpointedSlimConnector):
+        return
+    try:
+        counts = connector.listing_counts(
+            checkpoint  # ty: ignore[invalid-argument-type]
+        )
+        if counts is None:
+            return
+        emit_corpus_count(
+            index_attempt_id,
+            cc_pair_id,
+            source.value,
+            window_start=window_start.timestamp(),
+            window_end=window_end.timestamp(),
+            duration_ms=duration_ms,
+            docs_by_type=counts.docs_by_type,
+            bytes_by_type=counts.bytes_by_type,
+            partial=counts.partial,
+        )
+    except Exception:
+        logger.exception(
+            "Failed to send the corpus count of attempt %s", index_attempt_id
+        )
+
+
+def _fetch_or_list_runs(
+    connector_runner: ConnectorRunner,
+    checkpoint: ConnectorCheckpoint,
+    window_start: datetime,
+    window_end: datetime,
+    index_attempt_id: int,
+    lister_mode: bool,
+) -> Generator[
+    tuple[
+        list[Document] | None,
+        list[SlimDocumentStub] | None,
+        list[HierarchyNode] | None,
+        ConnectorFailure | None,
+        ConnectorCheckpoint | None,
+    ],
+    None,
+    None,
+]:
+    """One connector call. It yields document batches when docfetching
+    fetches, and stub batches when it only lists."""
+    connector = connector_runner.connector
+    if lister_mode and isinstance(connector, CheckpointedSlimConnector):
+        for stubs, nodes, failure, next_checkpoint in _timed_connector_runs(
+            list_stub_batches(
+                connector,
+                checkpoint,
+                window_start,
+                window_end,
+                INDEX_BATCH_SIZE,
+                include_permissions=connector_runner.include_permissions,
+            ),
+            index_attempt_id,
+        ):
+            yield None, stubs, nodes, failure, next_checkpoint
+        return
+    for documents, nodes, failure, next_checkpoint in _timed_connector_runs(
+        connector_runner.run(checkpoint), index_attempt_id
+    ):
+        yield documents, None, nodes, failure, next_checkpoint
+
+
+def _dispatch_stub_batches(
+    app: Celery,
+    *,
+    index_attempt_id: int,
+    cc_pair_id: int,
+    tenant_id: str,
+    is_backfill: bool,
+    task_id: str | None,
+) -> None:
+    # Imported here: run_docconversion imports this module.
+    from onyx.background.indexing.run_docconversion import dispatch_stub_batches
+
+    dispatch_stub_batches(
+        app,
+        index_attempt_id=index_attempt_id,
+        cc_pair_id=cc_pair_id,
+        tenant_id=tenant_id,
+        is_backfill=is_backfill,
+        task_id=task_id,
+    )
+
+
+def set_document_parent_node_ids(
+    redis_client: TenantRedisClient,
+    documents: list[Document],
+    *,
+    source: DocumentSource,
+    connector_id: int,
+    credential_id: int,
+) -> None:
+    """Sets each document's parent hierarchy node id from its raw parent id,
+    with the hierarchy cache. A parent that is not stored yet gets a STUB
+    node. A document with no parent goes under the source root."""
+    raw_parent_ids = [
+        doc.parent_hierarchy_raw_node_id
+        for doc in documents
+        if doc.parent_hierarchy_raw_node_id is not None
+    ]
+    parent_node_ids: dict[str, int] = {}
+    with get_session_with_current_tenant() as db_session:
+        source_node_id = get_source_node_id_from_cache(redis_client, db_session, source)
+        if source_node_id is not None and raw_parent_ids:
+            parent_node_ids = resolve_parent_node_ids(
+                redis_client=redis_client,
+                db_session=db_session,
+                source=source,
+                source_node_id=source_node_id,
+                raw_parent_ids=raw_parent_ids,
+                connector_id=connector_id,
+                credential_id=credential_id,
+            )
+    for doc in documents:
+        raw_parent_id = doc.parent_hierarchy_raw_node_id
+        doc.parent_hierarchy_node_id = (
+            parent_node_ids.get(raw_parent_id, source_node_id)
+            if raw_parent_id is not None
+            else source_node_id
+        )
+
+
+def send_docprocessing_batch(
+    app: Celery,
+    *,
+    index_attempt_id: int,
+    cc_pair_id: int,
+    tenant_id: str,
+    batch_num: int,
+    priority: OnyxCeleryPriority,
+    is_backfill: bool,
+    expires: int | None,
+) -> None:
+    """Counts a stored document batch as pending and sends its docprocessing
+    task. Each caller chooses ``expires``: None only when nothing sends an
+    expired batch again. ``enqueue_time_ms`` is taken right before the send, so QUEUE_WAIT
+    measures the broker and the wait for a docprocessing slot."""
+    processing_batch_data: dict[str, Any] = {
+        "index_attempt_id": index_attempt_id,
+        "cc_pair_id": cc_pair_id,
+        "tenant_id": tenant_id,
+        "batch_num": batch_num,  # 0-indexed
+        "enqueue_time_ms": int(time.time() * 1000),
+    }
+    # Sent only when set, so a worker from before backfills still accepts
+    # normal batches during a rolling upgrade.
+    if is_backfill:
+        processing_batch_data["is_backfill"] = True
+    try:
+        RedisDocprocessing(
+            index_attempt_id, get_redis_client(tenant_id=tenant_id)
+        ).incr_pending()
+    except Exception:
+        logger.debug(
+            "Failed to increment pending counter for attempt %s",
+            index_attempt_id,
+            exc_info=True,
+        )
+    # Docfetching sends no expiry: the task carries a fetched batch, and a big
+    # run can wait hours for a docprocessing worker. An expired task would
+    # leave its batch unprocessed. Docconversion sends an expiry, because its
+    # stalled-chain check sends a dropped batch again.
+    app.send_task(
+        OnyxCeleryTask.DOCPROCESSING_TASK,
+        kwargs=processing_batch_data,
+        queue=OnyxCeleryQueues.DOCPROCESSING,
+        priority=priority,
+        expires=expires,
+    )
 
 
 def cache_and_upsert_hierarchy_nodes(

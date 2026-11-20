@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from collections.abc import Generator
+from uuid import UUID
 
 import pytest
 from sqlalchemy.orm import Session
@@ -11,17 +12,22 @@ from onyx.db.enums import (
     IntegrationAuthMode,
     PluginInstallationPolicy,
 )
-from onyx.db.models import Integration, UserPluginPreference
+from onyx.db.integration_access import set_integration_preferences__no_commit
+from onyx.db.models import (
+    Integration,
+    Integration__User,
+)
 from onyx.integrations.connection_models import ConnectionSecret
-from onyx.integrations.craft import list_connectable_apps
+from onyx.integrations.craft import list_connectable_apps, list_runnable_integrations
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     build_connectable_apps_list,
 )
 from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.external_dependency_unit.integration_helpers import (
     delete_integrations,
-    hold_in_plugin,
+    give_access,
     make_app_integration,
+    turn_off_integrations,
 )
 from tests.external_dependency_unit.integrations.conftest import add_connection
 
@@ -65,7 +71,7 @@ def _app(
     return integration
 
 
-def test_lists_the_apps_of_run_plugins_that_need_a_connection(
+def test_lists_the_apps_that_are_on_and_need_a_connection(
     db_session: Session, created: list[int], make_test_user: MakeTestUser
 ) -> None:
     user = make_test_user("connectable")
@@ -73,22 +79,19 @@ def test_lists_the_apps_of_run_plugins_that_need_a_connection(
     connected = _app(db_session, created, "already-connected")
     no_sign_in = _app(db_session, created, "no-sign-in", IntegrationAuthMode.NONE)
     turned_off = _app(db_session, created, "turned-off")
-    hold_in_plugin(
+    give_access(
         db_session,
         [needs_setup, connected, no_sign_in],
         published=True,
         installation_policy=PluginInstallationPolicy.DEFAULT,
     )
-    off_plugin = hold_in_plugin(
+    give_access(
         db_session,
         [turned_off],
         published=True,
         installation_policy=PluginInstallationPolicy.DEFAULT,
     )
-    db_session.add(
-        UserPluginPreference(user_id=user.id, plugin_id=off_plugin.id, enabled=False)
-    )
-    db_session.commit()
+    turn_off_integrations(db_session, user.id, [turned_off])
     add_connection(
         db_session, connected, user.id, ConnectionSecret(fields={"api_key": "k"})
     )
@@ -103,3 +106,32 @@ def test_lists_the_apps_of_run_plugins_that_need_a_connection(
     apps_list = build_connectable_apps_list(list_connectable_apps(db_session, user))
     assert "**needs-setup**" in apps_list
     assert "turned-off" not in apps_list
+
+
+def test_a_share_makes_an_integration_runnable_when_the_user_turns_it_on(
+    db_session: Session,
+    make_test_user: MakeTestUser,
+    created: list[int],
+) -> None:
+    """Craft runs a private integration for a user with a share who turned
+    it on."""
+    owner = make_test_user("runnable_owner")
+    shared = make_test_user("runnable_shared")
+    private = _app(db_session, created, "shared-app", IntegrationAuthMode.NONE)
+    give_access(db_session, [private], published=False, owner_user_id=owner.id)
+    db_session.add(Integration__User(integration_id=private.id, user_id=shared.id))
+    db_session.commit()
+
+    def runnable(user_id: UUID) -> list[int]:
+        return [
+            integration.id
+            for integration in list_runnable_integrations(db_session, user_id)
+            if integration.id == private.id
+        ]
+
+    assert runnable(shared.id) == []
+
+    set_integration_preferences__no_commit(shared.id, [private.id], True, db_session)
+    db_session.commit()
+
+    assert runnable(shared.id) == [private.id]

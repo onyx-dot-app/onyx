@@ -1,7 +1,6 @@
 from typing import Any
-from uuid import UUID
 
-from pydantic import BaseModel, Field, field_validator
+from pydantic import BaseModel, Field, computed_field, field_validator
 
 from onyx.db.enums import ActionPolicy, IntegrationAuthMethod, IntegrationAuthMode
 from onyx.db.models import Tool
@@ -58,9 +57,15 @@ class ToolSnapshot(BaseModel):
     agent_creation_selectable: bool = True
     default_enabled: bool = False
     default_action_policy: ActionPolicy | None = None
-    # The plugins that hold the integration of an OpenAPI or MCP tool; chat
-    # tool options name them. Only the tool list sets it.
-    plugin_ids: list[UUID] = Field(default_factory=list)
+    # The integration of an OpenAPI or MCP tool; chat tool options name it.
+    integration_id: int | None = None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def plugin_ids(self) -> list[str]:
+        """The integration id under the old name, for the released mobile
+        app. It sends each value back in a ``plugin`` tool option."""
+        return [] if self.integration_id is None else [str(self.integration_id)]
 
     @classmethod
     def from_model(
@@ -69,7 +74,7 @@ class ToolSnapshot(BaseModel):
         *,
         permissions: dict[str, bool] | None = None,
         default_action_policy: ActionPolicy | None = None,
-        plugin_ids: list[UUID] | None = None,
+        integration_id: int | None = None,
     ) -> "ToolSnapshot":
         # Get visibility config for this tool
         config = get_tool_visibility_config(tool)
@@ -96,7 +101,7 @@ class ToolSnapshot(BaseModel):
             ),
             default_enabled=config.default_enabled if config else False,
             default_action_policy=default_action_policy,
-            plugin_ids=plugin_ids or [],
+            integration_id=integration_id,
         )
 
 

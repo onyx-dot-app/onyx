@@ -59,6 +59,7 @@ from onyx.db.enums import (
     SkillSharePermission,
 )
 from onyx.db.models import (
+    Integration__UserGroup,
     Marketplace,
     Plugin,
     Plugin__User,
@@ -98,9 +99,10 @@ def policy_rank(policy: PluginInstallationPolicy) -> int:
     return _POLICY_RANK[policy]
 
 
-def _rank_of(
+def rank_of(
     policy: ColumnElement[PluginInstallationPolicy]
     | ColumnElement[PluginInstallationPolicy | None]
+    | InstrumentedAttribute[PluginInstallationPolicy]
     | InstrumentedAttribute[PluginInstallationPolicy | None],
 ) -> ColumnElement[int]:
     return case(_POLICY_RANK, value=policy)
@@ -151,10 +153,10 @@ def _granted(plugin: type[Plugin], user_id: UserIdExpr) -> ColumnElement[bool]:
     )
 
 
-def _with_share_floor(
+def with_share_floor(
     rank: ColumnElement[int], granted: ColumnElement[bool]
 ) -> ColumnElement[int]:
-    """The author and a share (``granted``) get at least AVAILABLE."""
+    """The owner and a share (``granted``) get at least AVAILABLE."""
     return case(
         (granted, func.greatest(rank, policy_rank(PluginInstallationPolicy.AVAILABLE))),
         else_=rank,
@@ -316,7 +318,7 @@ def version_is_valid(version_id: ColumnElement[UUID]) -> ColumnElement[bool | No
 
 # --- Install settings and choices of many users -----------------------------
 
-_POLICY_OF_RANK: dict[int, PluginInstallationPolicy] = {
+POLICY_OF_RANK: dict[int, PluginInstallationPolicy] = {
     rank: policy for policy, rank in _POLICY_RANK.items()
 }
 
@@ -398,53 +400,51 @@ class UserPluginState(BaseModel):
         return (group, -order_time.timestamp(), self.plugin_id)
 
 
-def _user_plugin_pairs(
-    user_filter: ColumnElement[bool], plugin_ids: list[UUID] | None
+def group_rows_of_users(
+    group_row: type[Plugin__UserGroup] | type[Integration__UserGroup],
+    resource_id: InstrumentedAttribute[UUID] | InstrumentedAttribute[int],
+    filtered_users: Select[tuple[UUID]],
 ) -> Subquery:
-    """Each user (``user_filter`` on the user table) with each plugin the user
-    can see, or only those of ``plugin_ids``. The one place that applies the
-    install setting rule to users.
+    """The group rows of a plugin or an integration, for each user and each
+    resource (``resource_id``) that a group of the user has a row for:
+    whether a row shares it, and the most open setting of the non-default
+    groups that give their own.
 
-    Reads the share rows and group settings once for each pair, through joins.
-    Correlated subqueries repeat for each column that uses them; on tables with
-    no statistics, that plan costs more than ``jit_above_cost``, and each
-    backend that JIT-compiles it keeps about 30 MB."""
-    user_id: KeyedColumnElement[UUID] = User.__table__.c.id
-    company = company_installation_policy(Plugin, Marketplace)
-    company_rank = _rank_of(company)
-    # Group rows are aggregated once for the filtered users and joined to each
-    # pair by hash, so a call for many users stays under jit_above_cost on
-    # tables with no statistics.
-    filtered_users = select(user_id).where(user_filter).correlate(None)
+    The rows are aggregated once for the filtered users and joined to each
+    pair by hash, so a call for many users stays under ``jit_above_cost`` on
+    tables with no statistics."""
     group_policy_rank = case(
         (
             and_(
                 UserGroup.is_default.is_(False),
-                Plugin__UserGroup.installation_policy.is_not(None),
+                group_row.installation_policy.is_not(None),
             ),
-            _rank_of(Plugin__UserGroup.installation_policy),
+            rank_of(group_row.installation_policy),
         )
     )
-    group_rows = (
+    return (
         select(
             User__UserGroup.user_id.label("user_id"),
-            Plugin__UserGroup.plugin_id.label("plugin_id"),
-            func.bool_or(Plugin__UserGroup.permission.is_not(None)).label("shared"),
-            # Most open setting of the non-default groups that give their own.
+            resource_id.label("resource_id"),
+            func.bool_or(group_row.permission.is_not(None)).label("shared"),
             func.max(group_policy_rank).label("max_rank"),
             func.count(group_policy_rank).label("setting_groups"),
-            func.max(Plugin__UserGroup.created_at).label("shared_at"),
+            func.max(group_row.created_at).label("shared_at"),
         )
         .join(
             User__UserGroup,
-            User__UserGroup.user_group_id == Plugin__UserGroup.user_group_id,
+            User__UserGroup.user_group_id == group_row.user_group_id,
         )
         .join(UserGroup, UserGroup.id == User__UserGroup.user_group_id)
         .where(User__UserGroup.user_id.in_(filtered_users))
-        .group_by(User__UserGroup.user_id, Plugin__UserGroup.plugin_id)
+        .group_by(User__UserGroup.user_id, resource_id)
         .subquery("group_rows")
     )
-    user_groups = (
+
+
+def non_default_group_counts(filtered_users: Select[tuple[UUID]]) -> Subquery:
+    """The number of non-default groups of each user that has one."""
+    return (
         select(
             User__UserGroup.user_id.label("user_id"),
             func.count().label("groups"),
@@ -457,8 +457,15 @@ def _user_plugin_pairs(
         .group_by(User__UserGroup.user_id)
         .subquery("user_groups")
     )
-    # A non-default group with no setting of its own gives the company one.
-    setting_rank = case(
+
+
+def setting_rank_for_user(
+    company_rank: ColumnElement[int], group_rows: Subquery, user_groups: Subquery
+) -> ColumnElement[int]:
+    """The install setting rule, before the share floor. Needs an outer join
+    of ``group_rows_of_users`` and ``non_default_group_counts`` on the pair.
+    A non-default group with no setting of its own gives the company one."""
+    return case(
         (func.coalesce(user_groups.c.groups, 0) == 0, company_rank),
         (
             func.coalesce(group_rows.c.setting_groups, 0) < user_groups.c.groups,
@@ -466,6 +473,47 @@ def _user_plugin_pairs(
         ),
         else_=group_rows.c.max_rank,
     )
+
+
+def enabled_under_setting(
+    rank: ColumnElement[int],
+    choice: ColumnElement[bool | None] | InstrumentedAttribute[bool],
+) -> ColumnElement[bool]:
+    """The user's choice under the setting. ``choice`` is the saved choice,
+    from an outer join of the preference row on the pair."""
+    return case(
+        (rank == policy_rank(PluginInstallationPolicy.REQUIRED), True),
+        (
+            rank == policy_rank(PluginInstallationPolicy.DEFAULT),
+            func.coalesce(choice, True),
+        ),
+        (
+            rank == policy_rank(PluginInstallationPolicy.AVAILABLE),
+            func.coalesce(choice, False),
+        ),
+        else_=False,
+    )
+
+
+def _user_plugin_pairs(
+    user_filter: ColumnElement[bool], plugin_ids: list[UUID] | None
+) -> Subquery:
+    """Each user (``user_filter`` on the user table) with each plugin the user
+    can see, or only those of ``plugin_ids``. The one place that applies the
+    install setting rule to the plugins of users.
+
+    Reads the share rows and group settings once for each pair, through joins.
+    Correlated subqueries repeat for each column that uses them; on tables with
+    no statistics, that plan costs more than ``jit_above_cost``, and each
+    backend that JIT-compiles it keeps about 30 MB."""
+    user_id: KeyedColumnElement[UUID] = User.__table__.c.id
+    company = company_installation_policy(Plugin, Marketplace)
+    filtered_users = select(user_id).where(user_filter).correlate(None)
+    group_rows = group_rows_of_users(
+        Plugin__UserGroup, Plugin__UserGroup.plugin_id, filtered_users
+    )
+    user_groups = non_default_group_counts(filtered_users)
+    setting_rank = setting_rank_for_user(rank_of(company), group_rows, user_groups)
     grants = (
         select(
             user_id.label("user_id"),
@@ -494,7 +542,10 @@ def _user_plugin_pairs(
         )
         .outerjoin(
             group_rows,
-            and_(group_rows.c.user_id == user_id, group_rows.c.plugin_id == Plugin.id),
+            and_(
+                group_rows.c.user_id == user_id,
+                group_rows.c.resource_id == Plugin.id,
+            ),
         )
         .outerjoin(user_groups, user_groups.c.user_id == user_id)
         .where(user_filter)
@@ -510,7 +561,7 @@ def _user_plugin_pairs(
             g.c.created_at,
             g.c.published,
             g.c.is_author,
-            _with_share_floor(g.c.setting_rank, granted).label("rank"),
+            with_share_floor(g.c.setting_rank, granted).label("rank"),
             _version_for(
                 granted, g.c.current_version_id, g.c.published_version_id
             ).label("version_id"),
@@ -523,22 +574,8 @@ def _user_plugin_pairs(
 
 
 def _enabled_in_pairs(pairs: Subquery) -> ColumnElement[bool]:
-    """The user's choice under the setting. Needs an outer join of
-    user_plugin_preference on the pair."""
-    choice = UserPluginPreference.enabled
-    rank = pairs.c.rank
-    return case(
-        (rank == policy_rank(PluginInstallationPolicy.REQUIRED), True),
-        (
-            rank == policy_rank(PluginInstallationPolicy.DEFAULT),
-            func.coalesce(choice, True),
-        ),
-        (
-            rank == policy_rank(PluginInstallationPolicy.AVAILABLE),
-            func.coalesce(choice, False),
-        ),
-        else_=False,
-    )
+    """Needs an outer join of user_plugin_preference on the pair."""
+    return enabled_under_setting(pairs.c.rank, UserPluginPreference.enabled)
 
 
 def _shared_at(pairs: Subquery) -> ColumnElement[datetime]:
@@ -617,7 +654,7 @@ def load_user_plugin_states(
             UserPluginState(
                 user_id=row.user_id,
                 plugin_id=row.plugin_id,
-                installation_policy=_POLICY_OF_RANK[row.rank],
+                installation_policy=POLICY_OF_RANK[row.rank],
                 published=bool(row.published),
                 is_author=bool(row.is_author),
                 version_id=row.version_id,

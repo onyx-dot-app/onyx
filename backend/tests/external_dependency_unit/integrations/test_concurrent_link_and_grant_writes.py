@@ -1,4 +1,4 @@
-"""Two requests that write the same user grant, or the same plugin link of an
+"""Two requests that write the same user grant, or the same integration link of an
 agent, at the same time. The second one must wait for the first, not fail on
 the unique key. A write that waited for a delete of the integration gets
 NOT_FOUND."""
@@ -16,12 +16,12 @@ from onyx.db.integration import (
     delete_integration__no_commit,
     list_integration_actions,
 )
-from onyx.db.integration_policy import list_persona_plugin_links
+from onyx.db.integration_policy import list_persona_integration_links
 from onyx.db.models import Integration, Persona, User
 from onyx.db.persona import upsert_persona
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.integrations.models import ActionSettings, LinkValue, PersonaPluginLink
+from onyx.integrations.models import ActionSettings, LinkValue, PersonaIntegrationLink
 from onyx.integrations.service import member_actions, set_action_grants__no_commit
 from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.external_dependency_unit.db.agent_sharing_helpers import (
@@ -29,7 +29,7 @@ from tests.external_dependency_unit.db.agent_sharing_helpers import (
 )
 from tests.external_dependency_unit.integration_helpers import (
     delete_integrations,
-    hold_in_plugin,
+    give_access,
     make_openapi_integration,
 )
 
@@ -115,14 +115,15 @@ def test_concurrent_saves_of_one_user_grant_both_succeed(
     assert [action.user_policy for action in actions] == ["allow"]
 
 
-def test_concurrent_saves_of_one_agent_plugin_link_both_succeed(
+def test_concurrent_saves_of_one_agent_integration_link_both_succeed(
     db_session: Session, integration: Integration, make_test_user: MakeTestUser
 ) -> None:
     owner = make_test_user("link_race")
     persona_id = create_test_persona(db_session, owner).id
-    plugin_id = hold_in_plugin(db_session, [integration]).id
-    link = PersonaPluginLink(
-        plugin_id=plugin_id, action_settings=ActionSettings(default=LinkValue.ASK)
+    give_access(db_session, [integration])
+    link = PersonaIntegrationLink(
+        integration_id=integration.id,
+        action_settings=ActionSettings(default=LinkValue.ASK),
     )
 
     def save(session: Session) -> None:
@@ -138,7 +139,7 @@ def test_concurrent_saves_of_one_agent_plugin_link_both_succeed(
             datetime_aware=None,
             is_public=None,
             db_session=session,
-            plugin_links=[link],
+            integration_links=[link],
             persona_id=persona_id,
             commit=False,
         )
@@ -146,9 +147,9 @@ def test_concurrent_saves_of_one_agent_plugin_link_both_succeed(
     _run_second_while_first_is_open(db_session, save, save)
 
     db_session.expire_all()
-    links = list_persona_plugin_links(db_session, persona_id)
-    assert [(row.plugin_id, row.action_settings) for row in links] == [
-        (plugin_id, {"default": "ask"})
+    links = list_persona_integration_links(db_session, persona_id)
+    assert [(row.integration_id, row.action_settings) for row in links] == [
+        (integration.id, {"default": "ask"})
     ]
 
 

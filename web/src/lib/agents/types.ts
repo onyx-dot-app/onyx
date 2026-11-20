@@ -57,19 +57,19 @@ export interface PersonaOwnerGroup {
   name: string;
 }
 
-/** `persona__plugin.action_settings`. A missing key inherits. */
+/** `persona__integration.action_settings`. A missing key inherits. */
 export interface AgentActionSettings {
   default?: LinkValue;
   actions?: Record<string, LinkValue>;
 }
 
-export interface AgentPluginInput {
-  plugin_id: string;
+export interface AgentIntegrationInput {
+  integration_id: number;
   action_settings: AgentActionSettings;
 }
 
-export interface AgentPluginLink extends AgentPluginInput {
-  plugin_name: string;
+export interface AgentIntegrationLink extends AgentIntegrationInput {
+  integration_name: string;
 }
 
 export interface MinimalAgent {
@@ -121,7 +121,7 @@ export interface FullAgent extends Agent {
   sharing_status: PersonaSharingStatus;
   admin_count: number;
   ownership_vacant: boolean;
-  plugins: AgentPluginLink[];
+  integrations: AgentIntegrationLink[];
 }
 
 // ── Upsert / API parameter types ──────────────────────────────────────────────
@@ -142,7 +142,7 @@ export interface AgentUpsertParameters {
   users?: string[];
   groups?: number[];
   tool_ids: number[];
-  plugins: AgentPluginInput[];
+  integrations: AgentIntegrationInput[];
   remove_image?: boolean;
   search_start_date: Date | null;
   uploaded_image_id: string | null;
@@ -167,7 +167,7 @@ export interface AgentUpsertRequest {
   users?: string[];
   groups?: number[];
   tool_ids: number[];
-  plugins: AgentPluginInput[];
+  integrations: AgentIntegrationInput[];
   remove_image?: boolean;
   uploaded_image_id: string | null;
   icon_name: string | null;

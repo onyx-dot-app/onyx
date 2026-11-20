@@ -90,7 +90,7 @@ class MemoryUpdated(BaseModel):
 
 class ToolConfiguration(BaseModel):
     """A built-in tool of the agent. Integration actions come from
-    ``plugin_links``."""
+    ``integration_links``."""
 
     model_config = ConfigDict(frozen=True, from_attributes=True)
 
@@ -102,12 +102,13 @@ class ToolConfiguration(BaseModel):
     enabled: bool
 
 
-class PluginLinkConfiguration(BaseModel):
-    """A plugin that the agent attaches, with its action settings."""
+class IntegrationLinkConfiguration(BaseModel):
+    """An integration that an agent or a task attaches, with its action
+    settings."""
 
     model_config = ConfigDict(frozen=True)
 
-    plugin_id: UUID
+    integration_id: int
     action_settings: ActionSettings
 
 
@@ -117,15 +118,15 @@ class IntegrationChatRequest(BaseModel):
     model_config = ConfigDict(frozen=True)
 
     persona_id: int
-    plugin_links: list[PluginLinkConfiguration]
+    integration_links: list[IntegrationLinkConfiguration]
     approval_mode: ApprovalMode
     chat_session_id: UUID | None = None
     message_id: int | None = None
     additional_headers: dict[str, str] = {}
     mcp_headers: dict[str, str] | None = None
-    # From the tool options: the plugins to use, each with the action keys to
-    # keep (None keeps each). None uses each plugin.
-    allowed_plugins: dict[UUID, frozenset[str] | None] | None = None
+    # From the tool options: the integrations to use, each with the action
+    # keys to keep (None keeps each). None uses each integration.
+    allowed_integrations: dict[int, frozenset[str] | None] | None = None
 
 
 class PersonaToolConfiguration(BaseModel):
@@ -135,9 +136,10 @@ class PersonaToolConfiguration(BaseModel):
     persona_name: str
     tools: list[ToolConfiguration]
     search: PersonaSearchInfo
-    # The persona__plugin rows of the agent. For the default agent they only
-    # give settings, such as the bot freeze, to the plugins the user runs.
-    plugin_links: list[PluginLinkConfiguration] = []
+    # The persona__integration rows of the agent. For the default agent they
+    # only give settings, such as the bot freeze, to the integrations that
+    # are on for the user.
+    integration_links: list[IntegrationLinkConfiguration] = []
 
 
 class CapabilityEntry(BaseModel):
@@ -152,31 +154,33 @@ class CapabilityEntry(BaseModel):
         return f"tool {self.tool_id}"
 
 
-class PluginEntry(BaseModel):
-    """A plugin of the agent. ``actions`` names the action keys to keep;
-    None keeps each action."""
+class IntegrationEntry(BaseModel):
+    """An integration of the agent. ``actions`` names the action keys to
+    keep; None keeps each action."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
-    type: Literal["plugin"] = "plugin"
-    plugin_id: UUID
+    type: Literal["integration"] = "integration"
+    integration_id: int
     actions: list[str] | None = None
 
 
 class ActionPreference(BaseModel):
-    """One action of a plugin, by its action key."""
+    """One action of an integration, by its action key."""
 
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     type: Literal["action"] = "action"
-    plugin_id: UUID
+    integration_id: int
     action: str
 
     def __str__(self) -> str:
-        return f"action {self.action} of plugin {self.plugin_id}"
+        return f"action {self.action} of integration {self.integration_id}"
 
 
-ToolOptionsEntry = Annotated[CapabilityEntry | PluginEntry, Field(discriminator="type")]
+ToolOptionsEntry = Annotated[
+    CapabilityEntry | IntegrationEntry, Field(discriminator="type")
+]
 ToolPreference = Annotated[
     CapabilityEntry | ActionPreference, Field(discriminator="type")
 ]
@@ -184,7 +188,7 @@ ToolPreference = Annotated[
 
 class ToolOptions(BaseModel):
     """What a user or a caller picked for a turn. ``allowed`` None means
-    each tool and each plugin of the agent. The options only narrow: a
+    each tool and each integration of the agent. The options only narrow: a
     Blocked action and the settings of the agent still win. ``preferred`` is
     a preference that the model can ignore."""
 
@@ -194,37 +198,61 @@ class ToolOptions(BaseModel):
     preferred: ToolPreference | None = None
     internal_search_filters: BaseFilters | None = None
 
+    @model_validator(mode="before")
+    @classmethod
+    def _read_plugin_entries(cls, data: Any) -> Any:
+        """The released mobile app names an integration by a ``plugin``
+        entry, with the integration id as text (``plugin_ids`` of the tool
+        list). Read it as the integration entry. An entry with another id
+        names no integration, so it goes."""
+        if not isinstance(data, dict) or not isinstance(data.get("allowed"), list):
+            return data
+        allowed: list[Any] = []
+        for entry in data["allowed"]:
+            if not isinstance(entry, dict) or entry.get("type") != "plugin":
+                allowed.append(entry)
+                continue
+            plugin_id = str(entry.get("plugin_id"))
+            if plugin_id.isdecimal():
+                allowed.append(
+                    {
+                        **{k: v for k, v in entry.items() if k != "plugin_id"},
+                        "type": "integration",
+                        "integration_id": int(plugin_id),
+                    }
+                )
+        return {**data, "allowed": allowed}
+
     def allows_tool(self, tool_id: int) -> bool:
         return self.allowed is None or any(
             isinstance(entry, CapabilityEntry) and entry.tool_id == tool_id
             for entry in self.allowed
         )
 
-    def allowed_plugins(self) -> dict[UUID, frozenset[str] | None] | None:
-        """The allowed plugins, each with the action keys to keep (None
-        keeps each); None allows each plugin."""
+    def allowed_integrations(self) -> dict[int, frozenset[str] | None] | None:
+        """The allowed integrations, each with the action keys to keep (None
+        keeps each); None allows each integration."""
         if self.allowed is None:
             return None
-        plugins: dict[UUID, frozenset[str] | None] = {}
+        integrations: dict[int, frozenset[str] | None] = {}
         for entry in self.allowed:
-            if not isinstance(entry, PluginEntry):
+            if not isinstance(entry, IntegrationEntry):
                 continue
-            kept = plugins.get(entry.plugin_id, frozenset())
-            plugins[entry.plugin_id] = (
+            kept = integrations.get(entry.integration_id, frozenset())
+            integrations[entry.integration_id] = (
                 None
                 if entry.actions is None or kept is None
                 else kept | frozenset(entry.actions)
             )
-        return plugins
+        return integrations
 
 
-class PluginAction(BaseModel):
-    """The integration action that a chat tool calls, with the plugins of
-    the turn that hold its integration."""
+class IntegrationActionRef(BaseModel):
+    """The integration action that a chat tool calls."""
 
     model_config = ConfigDict(frozen=True)
 
-    plugin_ids: frozenset[UUID]
+    integration_id: int
     action: str
 
 
@@ -469,19 +497,6 @@ class LlmPythonExecutionResult(BaseModel):
     error: str | None = None
     # Set when some session files are absent
     staging_notice: str | None = None
-
-
-class BashArguments(BaseModel):
-    cmd: str = Field(description="Bash command to execute in the session.")
-
-
-class LlmBashExecutionResult(BaseModel):
-    type: Literal["bash_execution"] = "bash_execution"
-    stdout: str
-    stderr: str
-    exit_code: int | None
-    timed_out: bool
-    error: str | None = None
 
 
 class SearchResult(BaseModel):

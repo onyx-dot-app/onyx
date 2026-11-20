@@ -13,15 +13,15 @@ from sqlalchemy.orm import Session
 from onyx.db.enums import IntegrationKind
 from onyx.db.integration import (
     get_mcp_server_for_integration,
-    list_integration_actions,
 )
 from onyx.db.models import Integration, User
+from onyx.integrations.actions import integration_actions
 from onyx.integrations.connection_models import ConnectionState
 from onyx.integrations.connections import integration_status
 from onyx.integrations.craft import (
-    TaskPlugins,
+    TaskIntegrations,
     list_runnable_integrations,
-    load_task_plugins,
+    load_task_integrations,
     resolve_craft_action_policies,
 )
 from onyx.integrations.models import EffectivePolicy
@@ -41,9 +41,12 @@ def _server_key(integration: Integration) -> str:
 
 
 def _blocked_actions(
-    db_session: Session, integration: Integration, user: User, task: TaskPlugins | None
+    db_session: Session,
+    integration: Integration,
+    user: User,
+    task: TaskIntegrations | None,
 ) -> tuple[str, ...]:
-    actions = list_integration_actions(integration.id, db_session)
+    actions = integration_actions(integration.id, db_session)
     policies = resolve_craft_action_policies(
         db_session,
         integration=integration,
@@ -62,15 +65,17 @@ def _blocked_actions(
 def resolve_craft_mcp_servers(
     db_session: Session, user: User, task_id: UUID | None = None
 ) -> list[CraftMCPServerConfig]:
-    """The MCP integrations of the plugins ``user`` runs, as opencode config
+    """The MCP integrations that are on for ``user``, as opencode config
     input. A session of a scheduled run (``task_id``) gets only the task
-    plugins that the owner can see, also one the owner turned off, and the
+    integrations that the owner has access to, also one the owner turned off, and the
     task settings decide its disabled tools, as in the proxy. Only a connected integration (or one with
     no sign-in) is listed: injection blocks the tool discovery of an
     unauthenticated server, so emitting it only buys a permanently failed MCP
     client. A Blocked action is a disabled tool."""
     task = (
-        load_task_plugins(db_session, task_id, user.id) if task_id is not None else None
+        load_task_integrations(db_session, task_id, user.id)
+        if task_id is not None
+        else None
     )
     integrations = (
         list_runnable_integrations(db_session, user.id)

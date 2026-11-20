@@ -22,13 +22,14 @@ from onyx.db.enums import (
     PersonaSharePermission,
 )
 from onyx.db.hierarchy import filter_accessible_hierarchy_node_ids
+from onyx.db.integration_access import load_user_integration_states
 from onyx.db.integration_policy import (
-    legacy_tool_plugin_links,
+    legacy_tool_integration_links,
+    list_persona_integration_links,
+    list_persona_integration_snapshots,
     list_persona_mcp_tools,
     list_persona_openapi_tools,
-    list_persona_plugin_links,
-    list_persona_plugin_snapshots,
-    write_persona_plugin_links__no_commit,
+    write_persona_integration_links__no_commit,
 )
 from onyx.db.models import (
     ConnectorCredentialPair,
@@ -36,12 +37,12 @@ from onyx.db.models import (
     DocumentSet,
     FederatedConnector__DocumentSet,
     HierarchyNode,
+    Integration,
     Persona,
     Persona__Tool,
     Persona__User,
     Persona__UserGroup,
     PersonaLabel,
-    Plugin,
     StarterMessage,
     Tool,
     User,
@@ -55,7 +56,6 @@ from onyx.db.persona_sharing import (
     get_user_group_ids_for_user,
     persona_ownership_is_vacant,
 )
-from onyx.db.plugin_access import visible_plugin_ids
 from onyx.db.scoped_permissions import (
     fetch_managed_group_ids,
     scoped_group_ids_subquery,
@@ -63,7 +63,7 @@ from onyx.db.scoped_permissions import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.integrations.models import ActionSettings, LinkValue, PersonaPluginLink
+from onyx.integrations.models import ActionSettings, LinkValue, PersonaIntegrationLink
 from onyx.server.features.persona.models import (
     FullPersonaSnapshot,
     MinimalPersonaSnapshot,
@@ -651,7 +651,7 @@ def create_update_persona(
             name=create_persona_request.name,
             document_set_ids=create_persona_request.document_set_ids,
             tool_ids=create_persona_request.tool_ids,
-            plugin_links=create_persona_request.plugins,
+            integration_links=create_persona_request.integrations,
             is_public=create_persona_request.is_public,
             default_model_configuration_id=create_persona_request.default_model_configuration_id,
             starter_messages=create_persona_request.starter_messages,
@@ -706,7 +706,7 @@ def create_update_persona(
     ).one()
 
     snapshot = FullPersonaSnapshot.from_model(persona)
-    snapshot.plugins = list_persona_plugin_snapshots(persona.id, db_session)
+    snapshot.integrations = list_persona_integration_snapshots(persona.id, db_session)
     return snapshot
 
 
@@ -1569,7 +1569,7 @@ def upsert_persona(
     default_model_configuration_id: int | None = None,
     document_set_ids: list[int] | None = None,
     tool_ids: list[int] | None = None,
-    plugin_links: list[PersonaPluginLink] | None = None,
+    integration_links: list[PersonaIntegrationLink] | None = None,
     persona_id: int | None = None,
     commit: bool = True,
     uploaded_image_id: str | None = None,
@@ -1624,9 +1624,9 @@ def upsert_persona(
         )
 
     if existing_persona is not None and (
-        plugin_links is not None or tool_ids is not None
+        integration_links is not None or tool_ids is not None
     ):
-        # Serializes the writes of persona__plugin rows of one agent.
+        # Serializes the writes of persona__integration rows of one agent.
         db_session.execute(
             select(Persona.id)
             .where(Persona.id == existing_persona.id)
@@ -1634,29 +1634,15 @@ def upsert_persona(
         )
 
     # Built-in tools stay on persona__tool. An old custom or MCP tool id adds
-    # the plugin of its integration; old rows of those tools stay as they are.
+    # its integration; old rows of those tools stay as they are.
     tools = None
-    legacy_links: list[PersonaPluginLink] = []
+    legacy_links: list[PersonaIntegrationLink] = []
     if tool_ids is not None:
         requested = db_session.query(Tool).filter(Tool.id.in_(tool_ids)).all()
         if not requested and tool_ids:
             raise ValueError("Tools not found")
-        legacy_links = legacy_tool_plugin_links(
-            [tool for tool in requested if tool.in_code_tool_id is None],
-            user.id if user is not None else None,
-            db_session,
-            attached=(
-                {link.plugin_id for link in plugin_links}
-                if plugin_links is not None
-                else {
-                    row.plugin_id
-                    for row in list_persona_plugin_links(
-                        db_session, existing_persona.id
-                    )
-                }
-                if existing_persona is not None
-                else set()
-            ),
+        legacy_links = legacy_tool_integration_links(
+            [tool for tool in requested if tool.in_code_tool_id is None], db_session
         )
         tools = [tool for tool in requested if tool.in_code_tool_id is not None]
         if existing_persona is not None:
@@ -1893,88 +1879,92 @@ def upsert_persona(
         persona = new_persona
     # flush the session so that the persona has an ID
     db_session.flush()
-    if plugin_links is not None or tool_ids is not None:
-        _write_persona_plugins(persona.id, user, plugin_links, legacy_links, db_session)
+    if integration_links is not None or tool_ids is not None:
+        _write_persona_integrations(
+            persona.id, user, integration_links, legacy_links, db_session
+        )
     if commit:
         db_session.commit()
 
     return persona
 
 
-def _write_persona_plugins(
+def _write_persona_integrations(
     persona_id: int,
     user: User | None,
-    plugin_links: list[PersonaPluginLink] | None,
-    legacy_links: list[PersonaPluginLink],
+    integration_links: list[PersonaIntegrationLink] | None,
+    legacy_links: list[PersonaIntegrationLink],
     db_session: Session,
 ) -> None:
-    """Write the plugin links of an agent. A plugin that is new on the
-    agent must be one the user can see. With no ``plugin_links``, the old
-    tool ids replace the links of the plugins that hold a custom tool or an
-    old MCP tool. A link whose MCP tool selection did not change keeps its
-    settings."""
-    rows = list_persona_plugin_links(db_session, persona_id)
-    existing = {row.plugin_id for row in rows}
-    if plugin_links is not None:
-        links = list(plugin_links)
+    """Write the integration links of an agent. An integration that is new
+    on the agent must be one the user has access to. With no
+    ``integration_links``, the old tool ids replace the links of the
+    integrations that have a custom tool or an old MCP tool. A link whose MCP
+    tool selection did not change keeps its settings."""
+    rows = list_persona_integration_links(db_session, persona_id)
+    existing = {row.integration_id for row in rows}
+    if integration_links is not None:
+        links = list(integration_links)
     else:
-        legacy_ids = {link.plugin_id for link in legacy_links}
-        mcp_tools = list_persona_mcp_tools(persona_id, db_session)
-        selected: dict[UUID, set[str]] = {}
-        for plugin_id, tool, is_selected in mcp_tools:
-            names = selected.setdefault(plugin_id, set())
+        legacy_ids = {link.integration_id for link in legacy_links}
+        selected: dict[int, set[str]] = {}
+        for integration_id, tool, is_selected in list_persona_mcp_tools(
+            persona_id, db_session
+        ):
+            names = selected.setdefault(integration_id, set())
             if is_selected:
                 names.add(tool.name)
         requested = {
-            link.plugin_id: {
+            link.integration_id: {
                 key
                 for key, value in link.action_settings.actions.items()
                 if value is not LinkValue.BLOCKED
             }
             for link in legacy_links
         }
-        openapi_plugins = {
-            plugin_id
-            for plugin_id, _, _ in list_persona_openapi_tools(persona_id, db_session)
+        openapi_integrations = {
+            integration.id
+            for _, integration in list_persona_openapi_tools(persona_id, db_session)
         }
         changed_mcp = {
-            plugin_id
-            for plugin_id, names in selected.items()
-            if plugin_id in requested
-            and plugin_id not in openapi_plugins
-            and requested[plugin_id] != names
+            integration_id
+            for integration_id, names in selected.items()
+            if integration_id in requested and requested[integration_id] != names
         }
-        dropped = (openapi_plugins | selected.keys()) - legacy_ids
+        dropped = (openapi_integrations | selected.keys()) - legacy_ids
         links = [
-            PersonaPluginLink(
-                plugin_id=row.plugin_id,
+            PersonaIntegrationLink(
+                integration_id=row.integration_id,
                 action_settings=ActionSettings.model_validate(
                     row.action_settings or {}
                 ),
             )
             for row in rows
-            if row.plugin_id not in dropped | changed_mcp
+            if row.integration_id not in dropped | changed_mcp
         ]
-    linked = {link.plugin_id for link in links}
-    links += [link for link in legacy_links if link.plugin_id not in linked]
-    added = {link.plugin_id for link in links} - existing
+    linked = {link.integration_id for link in links}
+    links += [link for link in legacy_links if link.integration_id not in linked]
+    added = {link.integration_id for link in links} - existing
+    no_access = "You do not have access to one or more of the integrations."
     if added and user is not None:
-        visible = set(db_session.scalars(visible_plugin_ids(user.id)).all())
-        if not added <= visible:
-            raise ValueError("You do not have access to one or more of the plugins.")
+        accessible = {
+            state.integration_id
+            for state in load_user_integration_states([user.id], db_session, added)
+        }
+        if not added <= accessible:
+            raise ValueError(no_access)
     if added:
-        # Holds the new plugins until commit, so a concurrent delete waits.
+        # Holds the new integrations until commit, so a concurrent delete
+        # waits.
         locked = db_session.scalars(
-            select(Plugin.id)
-            .where(Plugin.id.in_(added))
-            .order_by(Plugin.id)
+            select(Integration.id)
+            .where(Integration.id.in_(added))
+            .order_by(Integration.id)
             .with_for_update(read=True, key_share=True)
         ).all()
         if len(locked) != len(added):
-            raise ValueError("You do not have access to one or more of the plugins.")
-    write_persona_plugin_links__no_commit(
-        persona_id, links, replace=True, db_session=db_session
-    )
+            raise ValueError(no_access)
+    write_persona_integration_links__no_commit(persona_id, links, db_session)
 
 
 def delete_old_default_personas(
@@ -2224,7 +2214,7 @@ def _get_selectable_tools(db_session: Session, tool_ids: Sequence[int]) -> list[
         if tool is None:
             raise ValueError(f"Tool with ID {tool_id} not found")
         # MCP servers and OpenAPI apps reach the default agent through the
-        # install setting of their plugin.
+        # install setting of their integration.
         if tool.in_code_tool_id is None or not should_expose_tool_to_fe(tool):
             raise ValueError(f"Tool with ID {tool_id} cannot be assigned")
         tools.append(tool)

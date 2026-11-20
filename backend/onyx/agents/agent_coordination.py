@@ -3,7 +3,7 @@
 import math
 import threading
 import time
-from collections.abc import Callable, Collection, Sequence
+from collections.abc import Collection, Sequence
 from concurrent.futures import Future
 from contextlib import ExitStack
 from datetime import datetime, timedelta, timezone
@@ -160,9 +160,7 @@ class _TrackedRun:
         self.coordination: RunCoordination | None = None
         self.completion: Future[RunState] = Future()
         self.completion.set_running_or_notify_cancel()
-        self.cleanup: list[Future[None]] = []
         self.observer_stop: threading.Event | None = None
-        self.restored_from_history = False
 
 
 class _CoordinatorState:
@@ -411,7 +409,6 @@ class AgentCoordinator:
                     if observer is not None:
                         observer.set()
                     tracked.execution = restored
-                    tracked.restored_from_history = True
                     latest = self._state.latest.get(restored.agent_id)
                     if latest is not None and latest.run_id == restored.id:
                         self._state.latest[restored.agent_id] = saved.model_copy(
@@ -507,45 +504,8 @@ class AgentCoordinator:
             self.observe_completion(run_id, agent_id=snapshot.agent_id)
         return future
 
-    def add_completion_cleanup(
-        self, run_id: str, callback: Callable[[], None]
-    ) -> Future[None]:
-        """Clean up local resources after completion or release, once workers drain."""
-        completion: Future[None] = Future()
-        completion.set_running_or_notify_cancel()
-        with self._state.lock:
-            tracked = self._state.tracked_runs.get(run_id)
-            if tracked is None or tracked.execution is None:
-                raise ValueError("Run is not owned by this coordinator")
-            if tracked.restored_from_history:
-                raise ValueError("Physical cleanup requires a locally owned execution")
-            run = tracked.execution
-            tracked.cleanup.append(completion)
-
-        def start() -> None:
-            def clean() -> None:
-                try:
-                    callback()
-                except BaseException as error:
-                    logger.error("Agent completion cleanup failed", exc_info=error)
-                    completion.set_exception(error)
-                else:
-                    completion.set_result(None)
-
-            try:
-                self._state.work.start(clean)
-            except Exception:
-                logger.exception(
-                    "Cleanup worker could not start; running cleanup on completion"
-                )
-                clean()
-
-        run.add_done_callback(lambda: run.add_idle_callback(start))
-        return completion
-
     def _local_child_work(self, run_ids: Sequence[str]) -> list[Future[None]]:
-        """The workers and cleanup of these child runs on this process;
-        remote children have none here."""
+        """Return the local workers for the given child runs."""
         work: list[Future[None]] = []
         with self._state.lock:
             for run_id in run_ids:
@@ -554,17 +514,15 @@ class AgentCoordinator:
                     continue
                 if tracked.execution is not None:
                     work.append(tracked.execution.idle)
-                work.extend(tracked.cleanup)
         return work
 
     def track_child_work(self, parent: Run, run_ids: Sequence[str]) -> None:
-        """Retain local child workers and cleanup without reading remote state."""
+        """Retain local child workers without reading remote state."""
         for work in self._local_child_work(run_ids):
             parent.work.track_operation(work)
 
     def children_idle(self, run_ids: Sequence[str]) -> bool:
-        """Whether the local workers and cleanup of these child runs have
-        drained. Reads only."""
+        """Whether all local workers for these child runs have drained."""
         return all(work.done() for work in self._local_child_work(run_ids))
 
     def complete(self, run: Run) -> None:
@@ -817,12 +775,6 @@ class AgentCoordinator:
                 for run_id, tracked in self._state.tracked_runs.items()
                 if run_id not in released_ids
             ]
-            cleanup = [
-                future
-                for run_id, tracked in self._state.tracked_runs.items()
-                if run_id not in released_ids
-                for future in tracked.cleanup
-            ]
         for completion in completions:
             try:
                 completion.result(timeout=max(0, deadline - time.monotonic()))
@@ -830,13 +782,6 @@ class AgentCoordinator:
                 return False
             except Exception:
                 logger.warning("Agent completion failed during shutdown", exc_info=True)
-        for future in cleanup:
-            try:
-                future.result(timeout=max(0, deadline - time.monotonic()))
-            except TimeoutError:
-                return False
-            except Exception:
-                logger.warning("Agent cleanup failed during shutdown", exc_info=True)
         if not self._state.work.tracker.wait_idle(max(0, deadline - time.monotonic())):
             return False
         with self._state.lock:
@@ -1149,11 +1094,6 @@ class RunCoordination:
             if not active.is_set() or self._finished or not self.run.is_accepting:
                 raise RuntimeError("Coordination requires an active tool invocation")
         self.coordinator.check_open()
-
-    def track_cleanup(self, run_id: str, future: Future[None]) -> None:
-        with self._lock:
-            if self._finished and run_id in self.children:
-                self.run.work.track_operation(future)
 
     def for_tool(
         self, call_id: str, parent_message_id: str, active: threading.Event
@@ -1472,18 +1412,3 @@ class _ToolControl(AgentControl):
             coordinator.unregister_child(agent.id)
             raise
         return SpawnResult(agent_id=agent.id, agent_path=info.path, run_id=run.id)
-
-    def add_completion_cleanup(
-        self, run_id: str, callback: Callable[[], None]
-    ) -> Future[None]:
-        """Retain resource cleanup across child suspension, including cancellation."""
-        if not self.active.is_set():
-            raise RuntimeError(
-                "Cleanup registration requires an active tool invocation"
-            )
-        run = self.owner.coordinator.child_run(run_id, self.owner.run.agent_id)
-        if run is None:
-            raise ValueError("Cleanup requires an owned child run")
-        future = self.owner.coordinator.add_completion_cleanup(run_id, callback)
-        self.owner.track_cleanup(run_id, future)
-        return future

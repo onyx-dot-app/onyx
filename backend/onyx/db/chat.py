@@ -40,8 +40,8 @@ from onyx.chat.models import (
     PresentationMode,
     ResponseAncestry,
     SessionAncestor,
+    read_message_rendering,
 )
-from onyx.chat.response import message_thinking
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
 from onyx.configs.constants import ANONYMOUS_USER_UUID, MessageType
 from onyx.context.search.models import InferenceSection, SavedSearchDoc
@@ -72,14 +72,14 @@ from onyx.file_store.constants import (
 )
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import FileDescriptor
-from onyx.llm.models import GenerationRequestParams
+from onyx.llm.models import GenerationRequestParams, TextContent, ThinkingContent
 from onyx.llm.override_models import LLMOverride, PromptOverride
 from onyx.server.query_and_chat.models import (
     AUTO_PLACE_AFTER_LATEST_MESSAGE,
     ChatMessageDetail,
 )
 from onyx.server.query_and_chat.streaming_models import StreamingError
-from onyx.tools.models import PluginEntry, ToolOptions
+from onyx.tools.models import IntegrationEntry, ToolOptions
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_string
 
@@ -1074,7 +1074,7 @@ def set_chat_session_tool_options__no_commit(
         *(
             entry.actions
             for entry in tool_options.allowed or []
-            if isinstance(entry, PluginEntry)
+            if isinstance(entry, IntegrationEntry)
         ),
         filters.source_type if filters else None,
         filters.document_set if filters else None,
@@ -1349,17 +1349,20 @@ def get_chat_message_reasoning(chat_message: ChatMessage) -> str | None:
         if chat_message.response_status == RunStatus.COMPLETE and not item.is_answer:
             continue
         rendering = (
-            MessageRendering.model_validate(item.rendering)
+            read_message_rendering(item.rendering)
             if item.rendering is not None
             else MessageRendering()
         )
-        if rendering.mode != PresentationMode.ANSWER:
+        if rendering.mode not in (PresentationMode.ANSWER, PresentationMode.RESEARCH):
             continue
-        return message_thinking(
-            item.message,
-            rendering.think_tool,
-            text_as_thinking=rendering.text_as_thinking,
-        )
+        message = item.message
+        if rendering.mode == PresentationMode.RESEARCH:
+            return "".join(
+                block.text
+                for block in message.content
+                if isinstance(block, (TextContent, ThinkingContent))
+            )
+        return message.thinking
     return None
 
 

@@ -20,9 +20,9 @@ import SourcesView from "@/lib/tools/components/SourcesView";
 import ToolLineItem from "@/lib/tools/components/ToolLineItem";
 import { Permission } from "@/lib/types";
 import { useUser } from "@/providers/UserProvider";
-import ChatPluginsPopover from "@/sections/plugins/ChatPluginsPopover";
+import ChatIntegrationsPopover from "@/sections/plugins/ChatIntegrationsPopover";
 import IntegrationConnectModal from "@/sections/plugins/IntegrationConnectModal";
-import { useAgentChatPlugins } from "@/lib/plugins/hooks";
+import { useAgentChatIntegrations } from "@/lib/integrations/hooks";
 import { usePathname, useSearchParams } from "@opal/navigation";
 import { locationKey } from "@/app/app/services/submitLocation";
 
@@ -42,10 +42,8 @@ export default function ToolsPopover({
   const [open, setOpen] = useState(false);
   const [showSources, setShowSources] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const catalog = useAgentChatPlugins(agent.id);
-  const [connectingPluginId, setConnectingPluginId] = useState<string | null>(
-    null
-  );
+  const catalog = useAgentChatIntegrations(agent.id);
+  const [connectingId, setConnectingId] = useState<number | null>(null);
   const pathname = usePathname();
   const searchParams = useSearchParams();
   const focusOnMount = useFocusOnMount<HTMLInputElement>();
@@ -61,11 +59,11 @@ export default function ToolsPopover({
     setOpen(false);
     setShowSources(false);
     setSearchTerm("");
-    setConnectingPluginId(null);
+    setConnectingId(null);
   }, [agent.id]);
 
-  const connectingPlugin = catalog.plugins.find(
-    (plugin) => plugin.pluginId === connectingPluginId
+  const connecting = catalog.integrations.find(
+    (integration) => integration.id === connectingId
   );
 
   const displayTools = agent.tools.filter((tool) => {
@@ -155,14 +153,14 @@ export default function ToolsPopover({
                   ...filteredTools.map((tool) => (
                     <ToolLineItem key={tool.id} tool={tool} />
                   )),
-                  <ChatPluginsPopover
-                    key="plugins"
+                  <ChatIntegrationsPopover
+                    key="integrations"
                     agentId={agent.id}
                     toolConfiguration={toolConfiguration}
                     catalog={catalog}
                     disabled={disabled}
-                    onConnect={(plugin) => {
-                      setConnectingPluginId(plugin.pluginId);
+                    onConnect={(integration) => {
+                      setConnectingId(integration.id);
                       close();
                     }}
                     onBrowse={close}
@@ -173,11 +171,11 @@ export default function ToolsPopover({
           </div>
         </Popover.Content>
       </Popover>
-      {connectingPlugin && (
+      {connecting && (
         <IntegrationConnectModal
-          integrations={connectingPlugin.integrations}
+          integrations={[connecting]}
           returnPath={locationKey(pathname, searchParams.toString())}
-          onClose={() => setConnectingPluginId(null)}
+          onClose={() => setConnectingId(null)}
         />
       )}
     </ToolsPopoverProvider>

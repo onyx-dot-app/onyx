@@ -113,7 +113,6 @@ jest.mock("next/navigation", () => ({
   ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
     "@tests/setup/mocks/nextNavigation"
   ).nextNavigationMock,
-  useRouter: () => ({}),
 }));
 jest.mock("@/lib/navigation/hooks", () => ({
   useAppPosition: () => ({
@@ -123,27 +122,27 @@ jest.mock("@/lib/navigation/hooks", () => ({
     project: () => null,
   }),
 }));
-jest.mock("@/lib/plugins/hooks", () => ({
-  ...jest.requireActual<typeof import("@/lib/plugins/hooks")>(
-    "@/lib/plugins/hooks"
+jest.mock("@/lib/integrations/hooks", () => ({
+  ...jest.requireActual<typeof import("@/lib/integrations/hooks")>(
+    "@/lib/integrations/hooks"
   ),
-  useAgentPluginIds: () => ({
-    pluginIds: [],
+  useAgentIntegrationIds: () => ({
+    integrationIds: [],
     isLoading: false,
     error: undefined,
   }),
-  useAgentChatPlugins: () => ({
-    pluginIds: [],
-    plugins: [],
+  useAgentChatIntegrations: () => ({
+    integrationIds: [],
+    integrations: [],
     isLoading: false,
     error: undefined,
     refresh: jest.fn(),
   }),
-  useAgentPluginPreferences: () => ({
+  useAgentIntegrationPreferences: () => ({
     loaded: true,
     error: undefined,
-    disabledPluginIds: () => [],
-    setPluginsDisabled: jest.fn(),
+    disabledIntegrationIds: () => [],
+    setIntegrationsDisabled: jest.fn(),
     retry: jest.fn(),
   }),
 }));
@@ -687,6 +686,17 @@ describe("`@` skill mentions", () => {
       message: "use @code-review now",
       mentions: [{ type: "skill", name: "code-review", index: 4 }],
     });
+  });
+
+  test("the arrow keys reach Manage skills, and Enter opens the Skills tab", async () => {
+    render(<Composer />);
+    const user = setupUser();
+    await user.type(screen.getByRole("textbox"), "use @co");
+    expect(await screen.findByTestId("skill-picker-popover")).toBeVisible();
+
+    await user.keyboard("{ArrowUp}{Enter}");
+    expect(window.location.pathname).toBe("/app/customize/skills");
+    expect(skillTiles()).toHaveLength(0);
   });
 
   test("hides the `/` prompt shortcuts while it is open", async () => {

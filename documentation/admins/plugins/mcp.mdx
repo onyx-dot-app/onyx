@@ -18,10 +18,10 @@ or when no built-in [Craft App](/admins/plugins/craft_apps) exists for the appli
 ## Add an MCP server
 
 <Steps>
-  <Step title="Open the Add dialog">
-    Go to **Admin Panel → Integrations**, click **Add**, then select **MCP server**.
+  <Step title="Open the add page">
+    Go to **Admin Panel → Integrations** and click **Add**. **MCP Server** is the default type.
 
-    <img className="rounded-image" src="/assets/admins/plugins/integrations_add_type.webp" alt="The Add an Integration dialog with MCP server, OpenAPI app, App, and Custom app"/>
+    <img className="rounded-image" src="/assets/admins/plugins/integrations_add_type.webp" alt="The Add an Integration page with the MCP Server, OpenAPI App, and App types"/>
   </Step>
 
   <Step title="Enter the server details">
@@ -29,7 +29,7 @@ or when no built-in [Craft App](/admins/plugins/craft_apps) exists for the appli
     Notion, Sentry, or Atlassian. Onyx checks the server and tells you what it found:
     the number of tools of a public server, OAuth sign-in, or a server that needs a sign-in.
 
-    <img className="rounded-image" src="/assets/admins/plugins/integrations_add_mcp.webp" alt="The Add an MCP Server dialog after Onyx found 3 tools on a server with no sign-in"/>
+    <img className="rounded-image" src="/assets/admins/plugins/integrations_add_mcp.webp" alt="The MCP server fields after Onyx found 3 tools on a server with no sign-in"/>
 
     The Onyx API server must be able to reach the URL.
     Setup checks follow the [SSRF Protection](/admins/advanced_configs/security_hardening#ssrf-protection) level:
@@ -44,8 +44,8 @@ or when no built-in [Craft App](/admins/plugins/craft_apps) exists for the appli
 
   <Step title="Select the owner">
     If you can manage actions for the whole organization, select **For the organization** or **For me** under **Owner**.
-    Onyx puts the integration in a plugin in the Organization library, or in your **My uploads**.
-    Other admins always add to their **My uploads**.
+    **For the organization** makes the server available to the organization.
+    **For me** makes a private server that only you can use until you share it. Other admins always add **For me**.
   </Step>
 
   <Step title="Add the server">
@@ -53,9 +53,11 @@ or when no built-in [Craft App](/admins/plugins/craft_apps) exists for the appli
   </Step>
 </Steps>
 
-People get the server through the plugin that holds it.
-Set the install setting of an Organization library plugin on **Admin Panel → Plugins**: **Required**, **Default**,
-**Available**, or **Not available**. **Default** and **Required** add the plugin to default Chat.
+The server owns its access. Set its install setting in the **Install Setting** column of **Admin Panel → Integrations**:
+**Required**, **Installed**, **Available**, or **Not available**.
+**Installed** and **Required** turn the server on for each user, so default Chat uses it.
+The owner of a private server shares it from **Customize → Integrations**.
+See [Access and install setting](/admins/plugins/overview#access-and-install-setting).
 
 ## Sign-in
 
@@ -63,7 +65,7 @@ Set the install setting of an Organization library plugin on **Admin Panel → P
 | --- | --- | --- |
 | **No sign-in** | None | Nobody. Use it when the server is public, or a network control protects it. |
 | **One account for the organization** | **API key** or **OAuth** | An admin connects one account on the **Configuration** tab. All users act with that account. |
-| **Each user signs in** | **API key** or **OAuth** | Each user connects their own account from the [Plugins page](/overview/core_features/plugins). The server returns only data that the user's account can access. |
+| **Each user signs in** | **API key** or **OAuth** | Each user connects their own account in [Customize → Integrations](/overview/core_features/plugins). The server returns only data that the user's account can access. |
 | **Each user signs in** | **Onyx login** | Onyx sends the user's Onyx sign-in token to the server. Only an admin who manages actions for the whole organization can select it. |
 
 ### API key
@@ -100,7 +102,7 @@ The **Actions** tab lists the tools of the server, in **Read-Only Actions** and 
 A tool that does not tell whether it changes data is in **Other Actions**. Click **Refresh** after the server adds,
 removes, or changes tools. Save or discard pending changes first. For a server where each user signs in,
 Onyx lists the tools with your own connection.
-Connect your account on the [Plugins page](/overview/core_features/plugins) first.
+Connect your account in [Customize → Integrations](/overview/core_features/plugins) first.
 
 The **Actions** tab also sets the approval policy for each tool. The policy applies in Chat, in custom agents,
 and in Craft.
@@ -160,10 +162,11 @@ After the decision, the card becomes a one-line record: **Approved**, **Approved
 **Disabled**, or **No longer waiting**. The record shows in the answer, at the tool call.
 It stays after the answer finishes and when the user opens the chat again.
 
-A request has no time limit. It waits until the user decides. When only approval requests remain,
-Onyx saves the answer and stops it. No API server holds the answer while it waits, so a closed tab, a reload,
-or an API server restart does not end the request. After the user decides every request of the answer,
-the answer continues on any API server, and the web app shows it in the same message.
+A request has no time limit. It waits until the user decides.
+When only approval requests remain and no other part of the answer runs, Onyx saves the answer and stops it. After that,
+no API server holds the answer, so a closed tab, a reload, or an API server restart does not end the request.
+After the user decides every request of the answer, the answer continues on any API server,
+and the web app shows it in the same message.
 
 After the answer stops to wait for approval, the user can type a message but cannot send it.
 Onyx keeps the draft and shows the card that waits. If the user reloads the page or opens the chat again,
@@ -183,8 +186,10 @@ The agent is told that the tool is no longer available, and the answer continues
 When `CODE_MODE_ENABLED` is `true`, the agent calls MCP tools from a Python program.
 A call to a tool with the **Ask** policy pauses the program. After the decision, the record shows on the program's card.
 Onyx saves the paused program with the answer. After the decision, the program continues from the call.
-The rules above apply in the same way. If the program holds too much data to pause, the call does not run,
-and the record shows **No longer waiting**. The agent is told to make the call from a program that keeps less data.
+Other programs of the answer keep running while the card waits, and Onyx keeps their results.
+If the user decides before they finish, the answer continues at once. The rules above apply in the same way.
+If the program holds too much data to pause, the call does not run, and the record shows **No longer waiting**.
+The agent is told to make the call from a program that keeps less data.
 
 A subagent that works in the background can also call a tool with the **Ask** policy. Its card names the subagent.
 The request waits on its own: it stays open after the answer that started the subagent finishes or stops,

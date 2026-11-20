@@ -141,7 +141,7 @@ those pointers from the root gives the active conversation
 (`db/chat.py:set_as_latest_chat_message`). A multi-model pick sets
 `preferred_response_id` and moves the same pointer (`db/chat.py:set_preferred_response`).
 
-**Child sessions.** When a research, coding or background sub-agent runs in a
+**Child sessions.** When a research or background subagent runs in a
 content-persisting chat, `reserve_child_response__no_commit` creates a
 `ChatSession` with `spawned_by_message_id` set to the parent response. It
 copies the root's user, agent, Slack flag and record mode. A child session has
@@ -298,11 +298,15 @@ legacy response replays through the builders in
 `server/query_and_chat/session_loading.py:translate_assistant_message_to_packets`:
 tool steps grouped by `turn_number`, the answer as one delta, citations in
 order of first use, and a stop packet. It picks a builder per tool by
-`in_code_tool_id`, with a custom-tool fallback. A runtime answer with tool
-calls adds a child-response query and a tool-replay query to session load.
+`in_code_tool_id`, with a custom-tool fallback.
 `get_chat_session` prefetches the tool calls' search docs and loads their tools
-in one query (`server/query_and_chat/session_loading.py:load_session_tools`);
-do not add per-message or per-call queries. A reload shows a `RUNNING` row as it is, with the steps saved so far.
+in one query (`server/query_and_chat/session_loading.py:load_session_tools`).
+It loads the child responses of the whole page together, with a fixed set of
+queries per hierarchy level: the child rows and their eager loads
+(`db/chat_response.py:load_child_responses`). Each response tree keeps its own
+`MAX_AGENT_HISTORY_RUNS` limit. `read_chat_execution` reads those rows and
+returns the tool calls that `read_response_replay_data` replays.
+Do not add per-message or per-call queries. A reload shows a `RUNNING` row as it is, with the steps saved so far.
 A failed answer's error comes from `ChatMessage.response_failure` through
 `chat/errors.py:chat_error` (code, retryable flag, model and provider), and
 falls back to `ChatMessage.error` on legacy rows
@@ -326,7 +330,7 @@ Content-persisting sessions retain PostgreSQL evidence for replay and citations.
 `USAGE_ONLY` sessions store no conversation content there. Their temporary history
 can lose evidence before model compaction under the retention limits below.
 
-**Incognito.** Chat does not start subagents, deep research, or coding agents in
+**Incognito.** Chat does not start subagents or deep research in
 incognito. Temporary history retains root messages and response receipts for
 idempotent saves. It does not index child conversations. A session pins `incognito_record_mode` when it is created
 (`chat/incognito.py:resolve_incognito_record_mode`, read past the settings
@@ -525,9 +529,9 @@ Community downgrade clears it ([[billing]]).
    `run_python` builder parses the saved result JSON
    ([[code-execution#run-python-result-json]]).
 9. `tool-id-not-foreign-key` **`ToolCall.tool_id` is not a foreign key.**
-   After a tool is deleted, runtime replay still shows its calls from the
-   typed result, but legacy replay skips them, and the steps vanish from a
-   reloaded chat silently. Code mode has no tool row: `persistence.tool_ids`
+   Runtime replay skips a call and its child steps when the stored result type
+   is unknown. Legacy replay skips a call when its catalog row is missing.
+   Both keep the separately saved assistant answer. Code mode has no tool row: `persistence.tool_ids`
    maps `execute_code` and `wait_code` to None, and their calls save with a
    NULL `tool_id`.
 10. `shared-read-hides-deleted` **A shared read never returns a deleted
@@ -695,8 +699,9 @@ Community downgrade clears it ([[billing]]).
 - `investigate-reload-differs` **Investigate "the reload looks different from
   the live answer".** Fetch
   `/api/chat/get-chat-session/{id}` through the frontend and compare its
-  `packets` for the answer with the live stream. On a legacy row, missing tool
-  steps point at a deleted tool ([[#tool-id-not-foreign-key]]). On any row they
+  `packets` for the answer with the live stream. If a legacy tool step is missing,
+  check whether its tool row still exists
+  ([[#tool-id-not-foreign-key]]). Missing steps on any row
   can point at a missing replay branch ([[#replay-matches-live-stream]]). A tab
   that shows its start but no result has no saved result: query
   `tool_call.operation_status` and `result` for the response (`turn_number` is

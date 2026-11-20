@@ -7,7 +7,7 @@ import {
   InputSingleSelect,
   type SelectOption,
 } from "@opal/components";
-import { Content, InputPadder, Section } from "@opal/layouts";
+import { Content, Section } from "@opal/layouts";
 import { SvgMinusCircle, SvgUsers } from "@opal/icons";
 import type { MinimalUserGroupSnapshot } from "@/hooks/useShareableGroups";
 import type { SkillInstallationPolicy } from "@/lib/skills/types";
@@ -52,6 +52,7 @@ export default function SkillGroupAccess({
   );
   const present = new Set(rows.map((row) => row.group_id));
   const candidates = groups.filter((group) => !present.has(group.id));
+  if (rows.length === 0 && candidates.length === 0) return null;
 
   return (
     <Section gap={3} height="auto" alignItems="stretch">
@@ -61,49 +62,45 @@ export default function SkillGroupAccess({
         description={t("description")}
       />
       {rows.length > 0 && (
-        <Card border="solid" padding={2}>
-          <Section gap={1} height="auto" alignItems="stretch">
-            {rows.map((row) => (
-              <GroupPolicyRow
-                key={row.group_id}
-                name={row.group_name}
-                description={
-                  row.permission === null ? t("settingOnly") : t("shared")
-                }
-                value={row.choice}
-                options={row.permission === null ? options : sharedOptions}
-                disabled={disabled}
-                onChange={(choice) => onChoice(row.group_id, choice)}
-                onRemove={
-                  row.permission === null
-                    ? () => onRemove(row.group_id)
-                    : undefined
-                }
-              />
-            ))}
-          </Section>
-        </Card>
+        <Section gap={1} height="auto" alignItems="stretch">
+          {rows.map((row) => (
+            <GroupPolicyRow
+              key={row.group_id}
+              name={row.group_name}
+              description={
+                row.permission === null ? t("settingOnly") : t("shared")
+              }
+              value={row.choice}
+              options={row.permission === null ? options : sharedOptions}
+              disabled={disabled}
+              onChange={(choice) => onChoice(row.group_id, choice)}
+              onRemove={
+                row.permission === null
+                  ? () => onRemove(row.group_id)
+                  : undefined
+              }
+            />
+          ))}
+        </Section>
       )}
       {candidates.length > 0 && (
-        <InputPadder>
-          <InputSingleSelect
-            placeholder={t("add")}
-            value=""
-            search
-            disabled={disabled}
-            options={candidates.map((group) => ({
-              value: String(group.id),
-              title: group.name,
-              icon: SvgUsers,
-            }))}
-            onValueChange={(value) => {
-              const group = candidates.find(
-                (candidate) => String(candidate.id) === value
-              );
-              if (group) onAdd(group);
-            }}
-          />
-        </InputPadder>
+        <InputSingleSelect
+          placeholder={t("add")}
+          value=""
+          search
+          disabled={disabled}
+          options={candidates.map((group) => ({
+            value: String(group.id),
+            title: group.name,
+            icon: SvgUsers,
+          }))}
+          onValueChange={(value) => {
+            const group = candidates.find(
+              (candidate) => String(candidate.id) === value
+            );
+            if (group) onAdd(group);
+          }}
+        />
       )}
     </Section>
   );
@@ -132,59 +129,56 @@ function GroupPolicyRow({
 }: GroupPolicyRowProps) {
   const t = useTranslations("skills.modals.share.groupAccess");
   return (
-    <Section
-      role="group"
-      aria-label={name}
-      flexDirection="row"
-      justifyContent="between"
-      wrap
-      gap={2}
-      height="auto"
-      padding={1}
-    >
+    <Card color="background-tint-01" rounding={3} padding={1}>
       <Section
-        width="auto"
-        height="auto"
-        alignItems="start"
-        className="min-w-0 grow basis-40"
-      >
-        <Content
-          icon={SvgUsers}
-          font="main-ui-body"
-          title={name}
-          description={description}
-        />
-      </Section>
-      <Section
+        role="group"
+        aria-label={name}
         flexDirection="row"
-        width="auto"
+        justifyContent="between"
+        wrap
+        gap={2}
         height="auto"
-        gap={1}
-        className="min-w-0 grow basis-56"
       >
-        <Section width="full" height="auto" alignItems="stretch">
-          <InputSingleSelect
-            placeholder={t("select", { name })}
-            value={value}
-            defaultOption={INHERIT}
-            options={options}
-            disabled={disabled}
-            onValueChange={(next) => {
-              if (isPolicyChoice(next)) onChange(next);
-            }}
+        <Section height="auto" alignItems="start" grow={1} basis={10}>
+          <Content
+            icon={SvgUsers}
+            font="main-ui-body"
+            title={name}
+            description={description}
           />
         </Section>
-        {onRemove && (
-          <Button
-            icon={SvgMinusCircle}
-            prominence="tertiary"
-            tooltip={t("remove", { name })}
-            aria-label={t("remove", { name })}
-            disabled={disabled}
-            onClick={onRemove}
-          />
-        )}
+        <Section
+          flexDirection="row"
+          width="auto"
+          height="auto"
+          gap={1}
+          grow={1}
+          basis={14}
+        >
+          <Section width="full" height="auto" alignItems="stretch">
+            <InputSingleSelect
+              placeholder={t("select", { name })}
+              value={value}
+              defaultOption={INHERIT}
+              options={options}
+              disabled={disabled}
+              onValueChange={(next) => {
+                if (isPolicyChoice(next)) onChange(next);
+              }}
+            />
+          </Section>
+          {onRemove && (
+            <Button
+              icon={SvgMinusCircle}
+              prominence="tertiary"
+              tooltip={t("remove", { name })}
+              aria-label={t("remove", { name })}
+              disabled={disabled}
+              onClick={onRemove}
+            />
+          )}
+        </Section>
       </Section>
-    </Section>
+    </Card>
   );
 }

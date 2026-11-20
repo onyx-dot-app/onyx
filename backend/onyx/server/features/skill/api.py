@@ -274,8 +274,13 @@ def _editable_skill_response(
     skill: Plugin,
     user: User,
     db_session: Session,
+    version_id: UUID | None = None,
 ) -> SkillEditableDetailResponse:
-    version_id = get_plugin_current_version_id(skill.id, db_session)
+    """The skill at ``version_id``, by default its current version. A write
+    passes the version it made, so a caller that chains writes bases the next
+    one on that version and not on a newer save by someone else."""
+    if version_id is None:
+        version_id = get_plugin_current_version_id(skill.id, db_session)
     if version_id is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill has no plugin version.")
     bundle_contents = read_version_contents(version_id, db_session)
@@ -323,15 +328,16 @@ def _replace_skill_bundle_from_editor(
             ),
             db_session=db_session,
         )
+        created_version_id = version.id if version is not None else None
         db_session.commit()
 
-    if version is None:
+    if created_version_id is None:
         delete_bundle_blob(file_store, ingested.bundle_file_id)
-        return _editable_skill_response(skill, user, db_session)
+        return _editable_skill_response(skill, user, db_session, base_version_id)
     db_session.expire(skill)
     push_skill_to_affected_sandboxes(skill, db_session)
     db_session.commit()
-    return _editable_skill_response(skill, user, db_session)
+    return _editable_skill_response(skill, user, db_session, created_version_id)
 
 
 @user_router.get("")
@@ -875,7 +881,7 @@ def approve_skill_review(
     db_session: Session = Depends(get_session),
 ) -> SkillResponse:
     skill = _editable_skill(skill_id, user, db_session, lock_for_update=True)
-    affected = approve_skill_review__no_commit(skill, version_id, user, db_session)
+    affected = approve_skill_review__no_commit(skill, version_id, db_session)
     db_session.commit()
     db_session.expire(skill)
     push_skills_and_commit(affected, db_session)
@@ -998,6 +1004,7 @@ def patch_current_user_skill(
     file_store = get_default_file_store() if patch_req.has_details_update else None
     new_bundle_file_id: str | None = None
     files_changed = False
+    shown_version_id: UUID | None = None
 
     try:
         if file_store is not None:
@@ -1030,17 +1037,20 @@ def patch_current_user_skill(
                 upload_limits=False,
             )
             new_bundle_file_id = ingested.bundle_file_id
-            files_changed = (
-                replace_skill_bundle(
-                    skill=skill,
-                    ingested=ingested,
-                    base_version_id=patch_req.base_version_id,
-                    user=user,
-                    skip_if_unchanged=True,
-                    previous_manifest=lambda: compute_bundle_manifest(old_bundle_bytes),
-                    db_session=db_session,
-                )
-                is not None
+            created = replace_skill_bundle(
+                skill=skill,
+                ingested=ingested,
+                base_version_id=patch_req.base_version_id,
+                user=user,
+                skip_if_unchanged=True,
+                previous_manifest=lambda: compute_bundle_manifest(old_bundle_bytes),
+                db_session=db_session,
+            )
+            files_changed = created is not None
+            # The response names the version this save made, so a chained
+            # edit cannot adopt a newer save by someone else.
+            shown_version_id = (
+                created.id if created is not None else patch_req.base_version_id
             )
 
         if patch_req.has_db_field_update:
@@ -1075,6 +1085,7 @@ def patch_current_user_skill(
         user,
         db_session,
         include_share_details=True,
+        shown_version_id=shown_version_id,
     )
 
 

@@ -37,7 +37,7 @@ from onyx.tools.models import (
     CodeModeResultKind,
     CodeModeResultSpec,
     CustomToolCallSummary,
-    PluginAction,
+    IntegrationActionRef,
     ToolApprovalScope,
     ToolContext,
 )
@@ -116,10 +116,11 @@ class MCPTool(Tool):
         output_schema: dict[str, JsonValue] | None = None,
         additional_headers: dict[str, str] | None = None,
         approval: ToolApprovalScope | None = None,
-        plugin_ids: frozenset[UUID] = frozenset(),
     ) -> None:
         self.approval = approval
-        self.plugin_action = PluginAction(plugin_ids=plugin_ids, action=tool_name)
+        self.integration_action = IntegrationActionRef(
+            integration_id=integration_id, action=tool_name
+        )
         self._integration_id = integration_id
         self._integration_name = integration_name
         self._server_url = server_url

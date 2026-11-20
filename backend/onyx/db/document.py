@@ -37,6 +37,8 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.sql.expression import null
 
+from onyx.access.models import ExternalAccess
+from onyx.access.utils import build_ext_group_names_for_storage
 from onyx.configs.app_configs import DB_YIELD_PER_DEFAULT
 from onyx.configs.constants import DEFAULT_BOOST, DocumentSource
 from onyx.db.chunk import delete_chunk_stats_by_connector_credential_pair__no_commit
@@ -1316,6 +1318,13 @@ def upsert_documents(
 
     includes_permissions = any(doc.external_access for doc in seen_documents.values())
 
+    def stored_group_ids(access: ExternalAccess) -> list[str]:
+        if source is None:
+            raise ValueError("Cannot store external access without a source.")
+        return list(
+            build_ext_group_names_for_storage(access.external_user_group_ids, source)
+        )
+
     insert_stmt = insert(DbDocument).values(
         [
             model_to_dict(
@@ -1340,8 +1349,8 @@ def upsert_documents(
                             "external_user_emails": list(
                                 doc.external_access.external_user_emails
                             ),
-                            "external_user_group_ids": list(
-                                doc.external_access.external_user_group_ids
+                            "external_user_group_ids": stored_group_ids(
+                                doc.external_access
                             ),
                             "is_public": doc.external_access.is_public,
                         }
@@ -1483,6 +1492,45 @@ def mark_document_as_indexed_for_cc_pair__no_commit(
         )
         .values(has_been_indexed=True)
     )
+
+
+def get_unchanged_document_ids(
+    db_session: Session,
+    connector_id: int,
+    credential_id: int,
+    listed: dict[str, tuple[datetime, int | None]],
+) -> set[str]:
+    """Returns the ids in `listed` (document id to source modified time and
+    size) whose stored document is the same version: this cc_pair indexed it,
+    with the same modified time and the same size. `doc_updated_at` is written
+    only after a document is written to the index, so a match means that
+    version is in the index. A document with no stored size matches only a
+    listing with no size. A document with no content hash never matches: a
+    reindex swap clears the hash of what the new index may lack, so the next
+    run writes it again.
+    """
+    if not listed:
+        return set()
+    rows = db_session.execute(
+        select(DbDocument.id, DbDocument.doc_updated_at, DbDocument.source_size_bytes)
+        .join(
+            DocumentByConnectorCredentialPair,
+            DocumentByConnectorCredentialPair.id == DbDocument.id,
+        )
+        .where(
+            DbDocument.id.in_(list(listed)),
+            DbDocument.doc_updated_at.is_not(None),
+            DbDocument.content_hash.is_not(None),
+            DocumentByConnectorCredentialPair.connector_id == connector_id,
+            DocumentByConnectorCredentialPair.credential_id == credential_id,
+            DocumentByConnectorCredentialPair.has_been_indexed.is_(True),
+        )
+    ).all()
+    return {
+        doc_id
+        for doc_id, stored_updated_at, stored_size in rows
+        if (stored_updated_at, stored_size) == listed[doc_id]
+    }
 
 
 def update_docs_updated_at__no_commit(

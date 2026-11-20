@@ -9,14 +9,13 @@ from typing import Annotated, Literal, Self, get_args
 from pydantic import BaseModel, ConfigDict, Field, JsonValue, SerializeAsAny
 from pydantic_monty import FunctionSnapshot, FutureSnapshot
 
-from onyx.agents.tools import ToolInvocation
+from onyx.agents.tools import NestedInputRequest, ToolInvocation
 from onyx.context.search.models import SearchDocsResponse
 from onyx.llm.models import Message, ToolResultMessage
 from onyx.tools.file_snapshot import SavedChatFile
 from onyx.tools.models import (
     CustomToolCallSummary,
     FileReadResult,
-    LlmBashExecutionResult,
     LlmPythonExecutionResult,
     MemoryUpdated,
     ToolExecutionError,
@@ -35,7 +34,6 @@ CodeModeCallDetails = Annotated[
     | CustomToolCallSummary
     | FinalImageGenerationResponse
     | FileReadResult
-    | LlmBashExecutionResult
     | LlmPythonExecutionResult
     | MemoryUpdated
     | ToolExecutionError
@@ -619,9 +617,18 @@ class ObservationCut(BaseModel):
     elided_chars: int
 
 
+class SavedObserver(BaseModel):
+    """The observation of a saved cell that waits for the user's input: its
+    call, number and output budget."""
+
+    call_id: str
+    number: int
+    max_tokens: int
+
+
 class SavedCodeCell(BaseModel):
-    """A cell whose program parked while an observation of it waits for the
-    user's input, saved with the suspended run (`CodeCells.saved`)."""
+    """A cell whose program parked for the user's input, saved with the
+    suspended run (`CodeCells.saved`)."""
 
     cell_id: int
     # The execute_code call that started the cell; nested call ids use it.
@@ -630,13 +637,12 @@ class SavedCodeCell(BaseModel):
     limits: SandboxLimits
     observations: int
     window: int
-    # The observation that waits: its call, number and output budget.
-    observer_call_id: str
-    observer_number: int
-    observer_max_tokens: int
+    # None for a program that waits in the background, which no observation
+    # waits for.
+    observer: SavedObserver | None
     calls: list[CellCallRecord]
     # The input request that each waiting call waits for, by call index.
-    requests: dict[int, str]
+    requests: dict[int, NestedInputRequest]
     saved_chars: int
     # The printed text of the current window.
     stdout: str

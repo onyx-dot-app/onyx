@@ -45,6 +45,7 @@ function resolveQualifier<TData>(
     getContent: col.icon,
     getImageSrc: col.imageSrc,
     getImageAlt: col.imageAlt,
+    getSelectLabel: col.selectLabel,
     background: col.background,
     avatar: col.avatar,
   };

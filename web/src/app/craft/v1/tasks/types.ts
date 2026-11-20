@@ -88,7 +88,7 @@ export interface ScheduledTaskDetail {
   next_run_at: string | null;
   next_runs: string[];
   last_run: ScheduledRunSummary | null;
-  plugins: TaskPluginLink[];
+  integrations: TaskIntegrationLink[];
   created_at: string;
   updated_at: string;
 }
@@ -100,7 +100,7 @@ export interface ScheduledTaskCreateBody {
   editor_payload: EditorPayload;
   status?: ScheduledTaskStatus;
   run_immediately?: boolean;
-  plugins?: TaskPluginLink[];
+  integrations?: TaskIntegrationLink[];
 }
 
 export interface ScheduledTaskPatchBody {
@@ -109,7 +109,7 @@ export interface ScheduledTaskPatchBody {
   editor_mode?: EditorMode;
   editor_payload?: EditorPayload;
   status?: ScheduledTaskStatus;
-  plugins?: TaskPluginLink[];
+  integrations?: TaskIntegrationLink[];
 }
 
 export interface ScheduledTaskListResponse {
@@ -146,9 +146,9 @@ export interface TaskActionSettings {
   actions: Record<string, LinkValue>;
 }
 
-/** A plugin the task uses, with its action settings. */
-export interface TaskPluginLink {
-  plugin_id: string;
+/** An integration the task uses, with its action settings. */
+export interface TaskIntegrationLink {
+  integration_id: number;
   action_settings: TaskActionSettings;
 }
 
@@ -161,6 +161,8 @@ export interface TaskActionView {
   locked: boolean;
 }
 
+/** An integration a task can use; mirrors ``TaskIntegrationView`` in the
+ * backend. */
 export interface TaskIntegrationView {
   id: number;
   name: string;
@@ -171,13 +173,11 @@ export interface TaskIntegrationView {
     reason: string | null;
   };
   actions: TaskActionView[];
-}
-
-/** A plugin a task can use; mirrors ``TaskPluginView`` in the backend. */
-export interface TaskPluginView {
-  plugin_id: string;
-  plugin_name: string;
+  /** The task uses the integration. */
   enabled: boolean;
+  /** The stored settings of the task; null when not enabled. */
   action_settings: TaskActionSettings | null;
-  integrations: TaskIntegrationView[];
+  /** False: a run does not use the integration now. The task keeps its
+   * settings. */
+  runnable: boolean;
 }

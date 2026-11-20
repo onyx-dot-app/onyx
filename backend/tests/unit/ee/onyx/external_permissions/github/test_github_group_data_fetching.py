@@ -93,24 +93,15 @@ def test_private_repository_without_emails_has_no_group() -> None:
 
 
 def test_private_repository_documents_reference_only_collaborator_group() -> None:
-    external_access = get_external_access_permission(
-        _repo(1, "private"), add_prefix=False
-    )
+    external_access = get_external_access_permission(_repo(1, "private"))
 
     assert external_access.external_user_group_ids == {form_collaborators_group_id(1)}
 
 
 def test_internal_repository_documents_reference_the_organization_group() -> None:
-    external_access = get_external_access_permission(
-        _repo(1, "internal"), add_prefix=True
-    )
+    external_access = get_external_access_permission(_repo(1, "internal"))
 
-    assert external_access.external_user_group_ids == {
-        build_ext_group_name_for_onyx(
-            source=DocumentSource.GITHUB,
-            ext_group_name=form_organization_group_id(42),
-        )
-    }
+    assert external_access.external_user_group_ids == {form_organization_group_id(42)}
 
 
 def test_public_repository_documents_are_public() -> None:

@@ -2,6 +2,7 @@
 other tools, run as cells of the response (code_mode/cells.py)."""
 
 from collections.abc import Callable
+from functools import partial
 
 from pydantic import BaseModel, Field
 
@@ -143,6 +144,7 @@ class CodeModeTool(Tool):
             if tool.execution_mode == ToolExecutionMode.SEQUENTIAL
         }
         self.resume_with_input = self._resume_with_input
+        self.continue_open_input = partial(cells.continue_open, programs=self.program)
 
     def program(self, code: str, limits: SandboxLimits) -> Program:
         """A program that calls this tool's functions."""
@@ -281,6 +283,7 @@ class WaitCodeTool(Tool):
         # Builds a saved cell's program with the current tools.
         self._programs = programs
         self.resume_with_input = self._resume_with_input
+        self.continue_open_input = partial(cells.continue_open, programs=programs)
 
     @property
     def id(self) -> None:
@@ -317,6 +320,7 @@ class WaitCodeTool(Tool):
             arguments.cell_id,
             invocation,
             context,
+            programs=self._programs,
             yield_seconds=yield_seconds(arguments.yield_time_ms, MAX_WAIT_YIELD_MS),
             max_tokens=output_tokens(arguments.max_output_tokens),
             terminate=arguments.terminate,

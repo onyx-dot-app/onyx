@@ -14,7 +14,7 @@
 
 - **An end user** sends a message. The assistant can think, run tools (search,
   web, code, images, custom tools) for several steps, and then streams an answer
-  with citations. On the last allowed step (`MAX_LLM_CYCLES`, default 6; when
+  with citations. On the last allowed step (`MAX_LLM_CYCLES`, default 30; when
   code mode applies, `CODE_MODE_MAX_LLM_CYCLES`, a safety cap of 100 or
   `MAX_LLM_CYCLES` when higher) the model must answer without tools.
 - **One message at a time.** While a turn runs, the session is busy. The client
@@ -150,7 +150,7 @@ message, and only when the incognito mode allows hooks
 ([[hooks]]). A rejection raises `QUERY_REJECTED`. A regeneration reuses the saved
 user message. A send never changes the chat's saved tool options:
 `chat_session.tool_options` (`tools/models.py:ToolOptions`: `allowed`
-capability and plugin entries, `preferred`, `internal_search_filters`; NULL
+capability and integration entries, `preferred`, `internal_search_filters`; NULL
 means the agent's tools) has one writer, the
 `PATCH /chat/chat-session/{session_id}/tool-options` route
 (`db/chat.py:set_chat_session_tool_options__no_commit`). It checks
@@ -190,9 +190,8 @@ suspended root resumes later on a runtime thread, so the control loop waits for
 a terminal, idle run, not for the response thread. Child agents and
 parallel tools use more threads ([[agent-runtime]]). Deep research
 (`deep_research/agent.py:DeepResearchAgent`) replaces `ChatAgent` for a
-single-model deep research request. The research step and the coding agent tool
-start child agents (`deep_research/research_agent.py:ResearchAgent`,
-`coding_agent/agent.py:CodingAgent`) through the runtime's child API.
+single-model deep research request. The research step starts a child agent
+(`deep_research/research_agent.py:ResearchAgent`) through the runtime's child API.
 
 **Delivery.** All responses share one `chat/stream_buffer.py:ChatDelivery`. One
 event-dispatch thread renders runtime events into packets
@@ -404,8 +403,8 @@ termination grace period is much shorter, so it ends running turns first
     (`chat/execution.py:host_agent_work`) when no running child remains.
 13. `shared-loop-pieces` **Shared runtime pieces have several callers.** A change
     to `agents/runtime.py`, to `chat/prompt_utils.py:prepare_prompt` or to
-    `Placement` handling also reaches deep research, the research agent and the
-    coding agent ([[context-assembly#history-builder-callers]]).
+    `Placement` handling also reaches deep research and its research agents
+    ([[context-assembly#history-builder-callers]]).
 14. `three-message-types` **Three message types exist.** `ChatMessage` is the DB
     row; `ChatResponseItem` holds the steps of a saved response.
     `llm/models.py:Message` is the SDK conversation type that agents and
@@ -425,8 +424,8 @@ termination grace period is much shorter, so it ends running turns first
     takes one extra step for the answer; the full rule is in "Preparing and
     completing steps" in `backend/onyx/agents/README.md`.
     Image generation does not remove tools, even when the image call fails.
-    The default cap is six cycles, including the final answer cycle, and the
-    extra step can make it seven; code mode uses `CODE_MODE_MAX_LLM_CYCLES`
+    The default cap is 30 cycles, including the final answer cycle, and the
+    extra step can make it 31; code mode uses `CODE_MODE_MAX_LLM_CYCLES`
     instead.
 
 

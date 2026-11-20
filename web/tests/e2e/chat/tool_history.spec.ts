@@ -52,17 +52,15 @@ test("custom tool output and answer survive a history reload @code-mode", async 
       },
     },
   });
-  const plugin = created.plugins[0];
-  if (!plugin) throw new Error("The integration has no plugin");
   let agentId: number | undefined;
   let sessionId: string | undefined;
   try {
     const me = await page.request.get("/api/me");
     expect(me.ok()).toBe(true);
     const user: { id: string } = await me.json();
-    agentId = await adminApi.createAgentWithPlugins(
+    agentId = await adminApi.createAgentWithIntegrations(
       `Tool history ${nonce}`,
-      [plugin.plugin_id],
+      [created.id],
       { userIds: [user.id] }
     );
     sessionId = await api.createChatSession("Tool history", agentId);

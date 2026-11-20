@@ -29,7 +29,6 @@ export const WEB_SEARCH_TOOL_ID = "WebSearchTool";
 export const IMAGE_GENERATION_TOOL_ID = "ImageGenerationTool";
 export const PYTHON_TOOL_ID = "PythonTool";
 export const OPEN_URL_TOOL_ID = "OpenURLTool";
-export const CODING_AGENT_TOOL_ID = "CodingAgentTool";
 export const KNOWLEDGE_GRAPH_TOOL_ID = "KnowledgeGraphTool";
 // Always hidden from the actions list (it isn't a user-selectable action).
 export const FILE_READER_TOOL_ID = "FileReaderTool";
@@ -40,7 +39,6 @@ const TOOL_ICONS: Record<string, IconFunctionComponent> = {
   [IMAGE_GENERATION_TOOL_ID]: SvgImage,
   [PYTHON_TOOL_ID]: SvgTerminalSmall,
   [OPEN_URL_TOOL_ID]: SvgLink,
-  [CODING_AGENT_TOOL_ID]: SvgCpu,
   [KNOWLEDGE_GRAPH_TOOL_ID]: SvgServer,
 };
 

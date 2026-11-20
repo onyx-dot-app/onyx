@@ -67,15 +67,6 @@ export enum PacketType {
   INTERMEDIATE_REPORT_DELTA = "intermediate_report_delta",
   INTERMEDIATE_REPORT_CITED_DOCS = "intermediate_report_cited_docs",
 
-  // Coding Agent packets
-  CODING_AGENT_START = "coding_agent_start",
-  CODING_AGENT_THINKING_DELTA = "coding_agent_thinking_delta",
-  CODING_AGENT_FINAL = "coding_agent_final",
-
-  // Bash Tool packets
-  BASH_TOOL_START = "bash_tool_start",
-  BASH_TOOL_DELTA = "bash_tool_delta",
-
   // Sandbox tool packets: exec_command and write_stdin share the output and
   // end packets
   EXEC_COMMAND_START = "exec_command_start",
@@ -407,37 +398,6 @@ export interface IntermediateReportCitedDocs extends BaseObj {
   cited_docs: OnyxDocument[] | null;
 }
 
-// Coding Agent Packets
-export interface CodingAgentStart extends BaseObj {
-  type: "coding_agent_start";
-  query: string;
-  repo: string | null;
-}
-
-export interface CodingAgentThinkingDelta extends BaseObj {
-  type: "coding_agent_thinking_delta";
-  content: string;
-}
-
-export interface CodingAgentFinal extends BaseObj {
-  type: "coding_agent_final";
-  answer: string;
-}
-
-// Bash Tool Packets
-export interface BashToolStart extends BaseObj {
-  type: "bash_tool_start";
-  cmd: string;
-}
-
-export interface BashToolDelta extends BaseObj {
-  type: "bash_tool_delta";
-  stdout: string;
-  stderr: string;
-  exit_code: number | null;
-  timed_out: boolean;
-}
-
 // Sandbox Tool Packets
 export interface ExecCommandStart extends BaseObj {
   type: "exec_command_start";
@@ -698,15 +658,6 @@ export type ResearchAgentObj =
   | IntermediateReportCitedDocs
   | SectionEnd;
 
-export type CodingAgentObj =
-  | CodingAgentStart
-  | CodingAgentThinkingDelta
-  | CodingAgentFinal
-  | BashToolStart
-  | BashToolDelta
-  | SectionEnd
-  | PacketError;
-
 // Nested tool packets of a code mode group are in NewToolObj
 export type CodeModeObj =
   | CodeModeStart
@@ -811,7 +762,6 @@ export type ObjTypes =
   | CitationObj
   | DeepResearchPlanObj
   | ResearchAgentObj
-  | CodingAgentObj
   | CodeModeObj
   | ToolApprovalObj
   | ToolQuestionObj
@@ -920,11 +870,6 @@ export interface DeepResearchPlanPacket {
 export interface ResearchAgentPacket {
   placement: Placement;
   obj: ResearchAgentObj;
-}
-
-export interface CodingAgentPacket {
-  placement: Placement;
-  obj: CodingAgentObj;
 }
 
 /** Transport cursor for the complete packet prefix preceding this record. */

@@ -57,10 +57,11 @@ Open **Scheduled Tasks** from the Craft sidebar, then select **New Scheduled Tas
     optionally, specific days of the week.
   </Step>
 
-  <Step title="Choose plugins">
-    Under **Plugins**, turn on only the plugins that the task must use without you present.
-    The list shows the plugins that you have turned on and that hold an integration.
-    Open **Manage actions** on a plugin to set a value for each action of its integrations.
+  <Step title="Choose integrations">
+    Under **Integrations**, turn on only the integrations that the task must use without you present. For a new task,
+    the list shows the integrations that you have turned on. When you edit a task,
+    the list also shows each integration that the task uses, also one that is off or that Craft cannot run,
+    so a save keeps its settings. Open **Manage actions** on an integration to set a value for each of its actions.
     Connect required integrations before creating the task.
   </Step>
 
@@ -109,7 +110,7 @@ Interval schedules run on repeating clock boundaries rather than a fixed delay a
 ## Set task action settings carefully
 
 A Scheduled Task runs without you present, so nobody can answer an approval card during the run.
-Each task has its own **Plugins** section. A run can use only the integrations of the plugins that you turn on there.
+Each task has its own **Integrations** section. A run can use only the integrations that you turn on there.
 Other integrations are blocked. Each action starts with **Use integration setting**. Changes apply only to that task.
 
 | Task value                  | During a Scheduled Task                                                         |
@@ -124,14 +125,14 @@ If your admin does not let users save **Always allow** on an integration,
 **Allow** in a task does not change the admin setting.
 
 <Warning>
-  Keep the prompt and the list of plugins that you turn on as narrow as possible.
+  Keep the prompt and the list of integrations that you turn on as narrow as possible.
   Allow only the actions that the task must perform. Be especially cautious with integrations that can send messages,
   modify customer data, delete content, or publish externally.
 </Warning>
 
 ## Review run history
 
-Open a task to see its plugins and **Run history**.
+Open a task to see its integrations and **Run history**.
 
 Select a run after it creates a session to inspect its messages, files, previews, and artifacts.
 Queued runs do not have a session yet, and skipped runs never create one, so those rows cannot be opened.

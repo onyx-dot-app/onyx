@@ -1,4 +1,4 @@
-"""A chat calls the MCP and OpenAPI actions of its agent's plugins through the
+"""A chat calls the MCP and OpenAPI actions of its agent's integrations through the
 integration tables, with code mode on and off. An Ask action waits for the
 user's approval, keyed by its integration."""
 
@@ -35,7 +35,7 @@ from tests.external_dependency_unit.code_mode_helpers import (
 from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.external_dependency_unit.integration_helpers import (
     delete_integrations,
-    hold_in_plugin,
+    give_access,
     link_persona,
     make_mcp_integration,
     make_openapi_integration,
@@ -96,10 +96,10 @@ def agent(
     )
     api, _ = make_openapi_integration(db_session, openapi_schema=ORDERS_SPEC)
     ids = [mcp.id, api.id]
-    plugin = hold_in_plugin(db_session, [mcp, api])
+    give_access(db_session, [mcp, api])
     persona = Persona(
         name=f"Integration agent {uuid4().hex[:8]}",
-        description="Agent with a plugin",
+        description="Agent with integrations",
         system_prompt="You are a helpful assistant",
         task_prompt="",
         tools=[],
@@ -114,7 +114,8 @@ def agent(
     )
     db_session.add(persona)
     db_session.commit()
-    link_persona(db_session, persona.id, plugin.id)
+    link_persona(db_session, persona.id, mcp.id)
+    link_persona(db_session, persona.id, api.id)
     try:
         yield Agent(persona, mcp.id, api.id), user
     finally:

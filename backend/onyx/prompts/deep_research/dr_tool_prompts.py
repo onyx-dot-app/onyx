@@ -7,10 +7,6 @@ GENERATE_REPORT_TOOL_NAME = "generate_report"
 RESEARCH_AGENT_TOOL_NAME = "research_agent"
 
 
-# This is to ensure that even the non-reasoning models can have an ok time with this more complex flow.
-THINK_TOOL_NAME = "think_tool"
-
-
 # ruff: noqa: E501, W605 start
 
 # Hard for the open_url tool to be called for a ton of search results all at once so limit to 3
@@ -23,15 +19,7 @@ If you use multiple queries, ensure that the queries are related in topic but no
 """
 
 # This one is mostly similar to the one for the main flow but there won't be any user specified URLs to open.
-OPEN_URLS_TOOL_DESCRIPTION = f"""
-
-## open_urls
-Use the `open_urls` tool to read the content of one or more URLs. Use this tool to access the contents of the most promising web pages from your searches. \
-You can open many URLs at once by passing multiple URLs in the array if multiple pages seem promising. Prioritize the most promising pages and reputable sources. \
-You should almost always use open_urls after a web_search call and sometimes after reasoning with the {THINK_TOOL_NAME} tool.
-"""
-
-OPEN_URLS_TOOL_DESCRIPTION_REASONING = """
+OPEN_URLS_TOOL_DESCRIPTION = """
 
 ## open_urls
 Use the `open_urls` tool to read the content of one or more URLs. Use this tool to access the contents of the most promising web pages from your searches. \

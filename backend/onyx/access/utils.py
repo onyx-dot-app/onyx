@@ -1,3 +1,5 @@
+from collections.abc import Iterable
+
 from onyx.configs.constants import DocumentSource
 
 USER_EMAIL_ACL_PREFIX = "user_email:"
@@ -28,6 +30,14 @@ def build_ext_group_name_for_onyx(ext_group_name: str, source: DocumentSource) -
     NOTE: the name is lowercased to handle case sensitivity for group names
     """
     return f"{source.value}_{ext_group_name}".lower()
+
+
+def build_ext_group_names_for_storage(
+    group_ids: Iterable[str], source: DocumentSource
+) -> set[str]:
+    """The stored form of the group ids a connector yielded for `source`.
+    Connectors yield bare ids on every path, and every storage write calls this."""
+    return {build_ext_group_name_for_onyx(group_id, source) for group_id in group_ids}
 
 
 def build_domain_group_id(domain: str) -> str:

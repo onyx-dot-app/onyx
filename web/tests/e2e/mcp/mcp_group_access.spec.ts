@@ -2,15 +2,15 @@ import { test, expect } from "@tests/e2e/fixtures/eeFeatures";
 import { apiLogin } from "@tests/e2e/utils/auth";
 import { ensureOnboardingComplete } from "@tests/e2e/utils/chatActions";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
-import { MemberPluginsPage } from "@tests/e2e/pages/MemberPluginsPage";
+import { CustomizePage } from "@tests/e2e/pages/CustomizePage";
 import type { IntegrationCreate } from "@/lib/integrations/types";
 
 /**
- * Access to an MCP server comes from the plugin that holds it: a plugin in
- * the Organization library reaches each member, and a plugin in "My uploads"
- * reaches only its owner until the owner shares it.
+ * An MCP server owns its access: a server for the organization reaches each
+ * member, and a personal server reaches only its owner until the owner
+ * shares it.
  */
-test.describe("MCP server access through plugins", () => {
+test.describe("MCP server access", () => {
   test.describe.configure({ mode: "serial" });
 
   const suffix = Date.now().toString();
@@ -67,7 +67,7 @@ test.describe("MCP server access through plugins", () => {
     await adminContext.close();
   });
 
-  test("a member sees the Organization library server and not a personal one", async ({
+  test("a member sees the organization server and not a personal one", async ({
     page,
   }) => {
     await page.context().clearCookies();
@@ -83,11 +83,11 @@ test.describe("MCP server access through plugins", () => {
     expect(names).toContain(organizationName);
     expect(names).not.toContain(personalName);
 
-    const plugins = new MemberPluginsPage(page);
-    await plugins.goto();
-    await plugins.search(suffix);
-    await plugins.expectPluginVisible(organizationName);
-    await plugins.expectPluginAbsent(personalName);
+    const customize = new CustomizePage(page);
+    await customize.goto("Integrations");
+    await customize.search(suffix);
+    await customize.expectIntegrationVisible(organizationName);
+    await customize.expectIntegrationAbsent(personalName);
   });
 
   test("a member without manage:actions cannot add an integration", async ({

@@ -24,7 +24,7 @@ You can receive a streaming response or one complete response.
 | `message` | The user message to send to the Agent. |
 | `llm_override` | Pass an object to override the default LLM settings for this request. If `None`, you will get the default Onyx behavior. <br/><br/>You can pass or exclude any of the following fields: <br/>• `model_configuration_id` – the exact model configuration to use. Preferred over the name-based fields, since provider display names are not unique <br/>• `model_provider` <br/>• `model_version` – must match a model configured on the resolved provider. If it does not, the request is rejected with `INVALID_INPUT`: an HTTP `400` when `stream=false`, or an error packet with `"error_code": "INVALID_INPUT"` when streaming (the default). If no provider resolves, or you cannot use that provider, Onyx uses the default LLM instead. Onyx does not check `model_version` when you pass `model_configuration_id` <br/>• `temperature` <br/>• `display_name` – label shown for the model in the UI; falls back to `model_version` |
 | `llm_overrides` | Two or three `llm_override` objects to run in parallel (multi-model mode), one per model. <br/><br/>**Requires `stream=true`.** Sending more than one entry with `stream=false` fails with `400 {"error_code": "INVALID_INPUT"}`. A list with a single entry is ignored — use `llm_override` for an ordinary single-model request. |
-| `tool_options` | Narrows the built-in tools and the Plugins that the Agent can use for this request, and sets an optional preference. See [Tool options](#tool-options). Omit the field or pass `null` to allow every tool and Plugin of the Agent. |
+| `tool_options` | Narrows the built-in tools and the Integrations that the Agent can use for this request, and sets an optional preference. See [Tool options](#tool-options). Omit the field or pass `null` to allow every tool and Integration of the Agent. |
 | `file_descriptors` | A list of files to include with your request. Each entry is `{"id": ..., "type": ..., "name": ...}`. Upload files with [POST /user/projects/file/upload](/developers/api_reference/projects/upload_user_files) and read them back with [GET /user/projects/file/{file_id}](/developers/api_reference/projects/get_user_file). |
 | `internal_search_filters` | Send the filters as `tool_options.internal_search_filters`. The top-level field is still accepted; do not send both. Filters narrow down the internal search results used by the Agent. All filter arguments are optional and can be combined: <br/><br/>• `source_type` – Source types like `web`, `slack`, `google_drive`, `confluence` <br/>• `document_set` – The name of the document sets to search within <br/>• `created_at_range` / `updated_at_range` – An inclusive window, `{"start": ..., "end": ...}`, in ISO 8601 format: `YYYY-MM-DDTHH:MM:SSZ`. Either bound may be omitted to leave that side open; naive timestamps are treated as UTC <br/>• `tags` – A list of `{"tag_key": ..., "tag_value": ...}` objects <br/><br/>**Note:** `time_cutoff` is still accepted as a deprecated alias for the start of `updated_at_range`. |
 | `deep_research` | Enables Deep Research mode for this request. <br/><br/>**Note:** This mode uses many more tokens than a normal request. |
@@ -43,12 +43,12 @@ You can receive a streaming response or one complete response.
 
 | Field | Description |
 |-------|-------------|
-| `allowed` | A list of entries. Each entry keeps one built-in tool or one Plugin of the Agent, and the Agent cannot use what the list leaves out. Pass an empty list to disable all tools and Plugins. Omit the field or pass `null` to allow everything. <br/><br/>• `{"type": "capability", "tool_id": 3}` – a built-in tool, by its ID <br/>• `{"type": "plugin", "plugin_id": "...", "actions": ["..."]}` – a Plugin. `actions` is optional and keeps only the Actions it names. Omit it to keep each Action of the Plugin |
-| `preferred` | One tool to prefer when it helps answer this request. The Agent can use other tools or answer without one. <br/><br/>• `{"type": "capability", "tool_id": 3}` – a built-in tool <br/>• `{"type": "action", "plugin_id": "...", "action": "..."}` – one Action of a Plugin |
+| `allowed` | A list of entries. Each entry keeps one built-in tool or one Integration of the Agent, and the Agent cannot use what the list leaves out. Pass an empty list to disable all tools and Integrations. Omit the field or pass `null` to allow everything. <br/><br/>• `{"type": "capability", "tool_id": 3}` – a built-in tool, by its ID <br/>• `{"type": "integration", "integration_id": 12, "actions": ["..."]}` – an Integration, by its ID. `actions` is optional and keeps only the Actions it names. Omit it to keep each Action of the Integration |
+| `preferred` | One tool to prefer when it helps answer this request. The Agent can use other tools or answer without one. <br/><br/>• `{"type": "capability", "tool_id": 3}` – a built-in tool <br/>• `{"type": "action", "integration_id": 12, "action": "..."}` – one Action of an Integration |
 | `internal_search_filters` | The internal search filters, as in the table above. |
 
 List the built-in tools and their IDs with the [GET /tool](/developers/api_reference/actions/list_tools) endpoint.
-In the same list, each MCP or OpenAPI Action has `plugin_ids`, the Plugins that hold it.
+In the same list, each MCP or OpenAPI Action has `integration_id`, the ID of its Integration.
 The Action key is the MCP tool name or the OpenAPI `operationId`.
 
 The options only narrow what the Agent can use. An Action that an admin or the Agent blocks stays blocked.
@@ -57,7 +57,7 @@ To save options on a chat, send them to `PATCH /chat/chat-session/{chat_session_
 Messages that Onyx starts in that chat, such as queued messages and background agents, use the saved options.
 A field that the body does not set keeps its saved value.
 
-This request allows only web search and the `listOrders` Action of one Plugin, and prefers that Action:
+This request allows only web search and the `listOrders` Action of one Integration, and prefers that Action:
 
 ```json
 {
@@ -65,9 +65,9 @@ This request allows only web search and the `listOrders` Action of one Plugin, a
   "tool_options": {
     "allowed": [
       {"type": "capability", "tool_id": 3},
-      {"type": "plugin", "plugin_id": "6f1c2b9e-1d4a-4f7e-9a51-2b8c0d3e4f5a", "actions": ["listOrders"]}
+      {"type": "integration", "integration_id": 12, "actions": ["listOrders"]}
     ],
-    "preferred": {"type": "action", "plugin_id": "6f1c2b9e-1d4a-4f7e-9a51-2b8c0d3e4f5a", "action": "listOrders"}
+    "preferred": {"type": "action", "integration_id": 12, "action": "listOrders"}
   }
 }
 ```
@@ -140,13 +140,6 @@ class StreamingType(Enum):
     INTERMEDIATE_REPORT_DELTA = "intermediate_report_delta"
     INTERMEDIATE_REPORT_CITED_DOCS = "intermediate_report_cited_docs"
 
-    CODING_AGENT_START = "coding_agent_start"
-    CODING_AGENT_THINKING_DELTA = "coding_agent_thinking_delta"
-    CODING_AGENT_FINAL = "coding_agent_final"
-
-    BASH_TOOL_START = "bash_tool_start"
-    BASH_TOOL_DELTA = "bash_tool_delta"
-
     CODE_MODE_START = "code_mode_start"
     CODE_MODE_DELTA = "code_mode_delta"
 
@@ -215,8 +208,8 @@ The packet has these fields:
 | `agent_name` | The name of the background agent that made the request, or `null` for the answer's own calls. |
 
 A request waits until the user decides. Other calls of the answer can continue while it waits.
-When only approval requests remain, Onyx saves the answer,
-and the stream ends with a `stop` packet whose `stop_reason` is `awaiting_user`. That stop does not end the requests.
+Onyx saves approval requests only when no other part of the answer runs.
+Then the stream ends with a `stop` packet whose `stop_reason` is `awaiting_user`. That stop does not end the requests.
 Keep them open for a decision. After the decisions, the answer continues in a new stream.
 See [Send a decision](#send-a-decision). In a turn that compares models,
 one answer can wait while the other answers continue in the same stream.
@@ -322,13 +315,16 @@ Onyx starts that stream before the decision call returns, and `continuation` in 
 | `continuation.stream_id` | The ID of the new stream. It is not a message ID. |
 | `continuation.response_ids` | The IDs of the assistant messages that the stream writes, in model order for a turn that compares models. |
 
+A decision made while another part of the answer runs applies in the stream you read.
+That stream can still stop with `awaiting_user` when another request has no decision.
+A request of a background program that the user decides while the model writes the final answer ends with the answer,
+and its call does not run.
+
 `continuation` names a stream when a continuation stream of the answer runs after the decision.
-That can be the stream that you already read: a continued answer that asks again,
-when the user decides while that stream still runs.
 Ignore a `continuation` whose `stream_id` is the stream that you read. It is `null` in these cases:
 
 - The decision leaves other requests of the answer open, and no continuation stream of the answer runs.
-- The answer's first stream still runs. For example, the decision came before that stream ended with `awaiting_user`. Keep reading the current stream.
+- The answer's first stream still runs.
 - Another stream of the chat runs, such as another answer of a turn that compares models.
   The continuation starts when that stream ends. Read the status, as described below.
 - The request is a background agent's request.

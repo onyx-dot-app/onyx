@@ -21,8 +21,6 @@ from ee.onyx.external_permissions.youtrack.models import (
     VisibilityEntries,
 )
 from onyx.access.models import ExternalAccess
-from onyx.access.utils import build_ext_group_name_for_onyx
-from onyx.configs.constants import DocumentSource
 from onyx.connectors.youtrack.models import (
     USER_HOLDER_TYPE,
     ScopeType,
@@ -81,18 +79,7 @@ def project_access(instance: str, project_id: str) -> ExternalAccess:
 
 
 def project_node_access(base_url: str, project_id: str) -> ExternalAccess:
-    """Node permissions are stored as given, unlike document permissions, so
-    the group id carries the source prefix its members are stored under."""
-    return ExternalAccess(
-        external_user_emails=set(),
-        external_user_group_ids={
-            build_ext_group_name_for_onyx(
-                project_group_id(instance_key(base_url), project_id),
-                DocumentSource.YOUTRACK,
-            )
-        },
-        is_public=False,
-    )
+    return project_access(instance_key(base_url), project_id)
 
 
 def visibility_entries(issue: YouTrackIssueAccess) -> VisibilityEntries | None:

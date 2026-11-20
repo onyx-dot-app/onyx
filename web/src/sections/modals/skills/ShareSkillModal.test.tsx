@@ -78,49 +78,6 @@ describe("ShareSkillModal", () => {
     mockUpdateSkillShares.mockReset().mockResolvedValue({});
   });
 
-  it("keeps sharing edits while switching between the details and sharing tabs", async () => {
-    mockLoadSkill.mockImplementation(async (url: string) => ({
-      ...customFixture({ user_permission: "OWNER" }),
-      ...(url.endsWith("/preview")
-        ? { instructions_markdown: "Use the team workflow." }
-        : {}),
-    }));
-    const user = setupUser();
-    const onClose = jest.fn();
-    render(
-      <ShareSkillModal
-        mode="edit"
-        skillId="custom-1"
-        initialTab="details"
-        open
-        onClose={onClose}
-        onSaved={jest.fn()}
-      />
-    );
-    await screen.findByText("Use the team workflow.");
-    expect(screen.getAllByRole("dialog")).toHaveLength(1);
-    expect(screen.getByRole("tab", { name: "Details" })).toHaveAttribute(
-      "aria-selected",
-      "true"
-    );
-    await user.click(screen.getByRole("tab", { name: "Sharing" }));
-    await pickCompanySetting(/^Required/);
-    await user.click(screen.getByRole("tab", { name: "Details" }));
-    expect(screen.getByText("Use the team workflow.")).toBeVisible();
-    await user.click(screen.getByRole("tab", { name: "Sharing" }));
-    expect(screen.getByRole("combobox", { name: "Installation" })).toHaveValue(
-      "Required"
-    );
-    await user.click(screen.getByRole("button", { name: "Save" }));
-    await waitFor(() =>
-      expect(mockUpdateSkillShares).toHaveBeenCalledWith(
-        "custom-1",
-        expect.objectContaining({ installation_policy: "REQUIRED" })
-      )
-    );
-    expect(onClose).toHaveBeenCalledTimes(1);
-  });
-
   it("saves an admin's installation policy without changing sharing", async () => {
     const user = setupUser();
     render(
@@ -138,7 +95,7 @@ describe("ShareSkillModal", () => {
       screen.queryByPlaceholderText("Add users, groups, and accounts")
     ).not.toBeInTheDocument();
     expect(screen.getByText("Ownership")).toBeInTheDocument();
-    await pickCompanySetting(/^Installed by default/);
+    await pickCompanySetting(/^Installed/);
     await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() =>
       expect(mockUpdateSkillShares).toHaveBeenCalledWith("custom-1", {
@@ -326,57 +283,6 @@ describe("ShareSkillModal", () => {
     ).not.toBeInTheDocument();
     expect(
       screen.queryByText("Publishing cannot be undone")
-    ).not.toBeInTheDocument();
-  });
-
-  it("shows the version history to an owner in the Versions tab", async () => {
-    mockLoadSkill.mockImplementation(async (url: string) =>
-      url.endsWith("/versions")
-        ? [
-            {
-              id: "version-2",
-              version_number: 2,
-              created_at: "2026-11-01T10:00:00Z",
-              created_by_email: "owner@example.com",
-              is_current: true,
-              review_status: "draft",
-            },
-          ]
-        : customFixture({ user_permission: "OWNER" })
-    );
-    const user = setupUser();
-    render(
-      <ShareSkillModal
-        mode="edit"
-        skillId="custom-1"
-        open
-        onClose={jest.fn()}
-        onSaved={jest.fn()}
-      />
-    );
-    await user.click(await screen.findByRole("tab", { name: "Versions" }));
-    expect(await screen.findByText("Version 2")).toBeVisible();
-    expect(mockLoadSkill).toHaveBeenCalledWith(
-      "/api/skills/custom/custom-1/versions"
-    );
-  });
-
-  it("hides the Versions tab from a viewer", async () => {
-    mockLoadSkill.mockResolvedValue(
-      customFixture({ user_permission: "VIEWER" })
-    );
-    render(
-      <ShareSkillModal
-        mode="edit"
-        skillId="custom-1"
-        open
-        onClose={jest.fn()}
-        onSaved={jest.fn()}
-      />
-    );
-    expect(await screen.findByRole("tab", { name: "Sharing" })).toBeVisible();
-    expect(
-      screen.queryByRole("tab", { name: "Versions" })
     ).not.toBeInTheDocument();
   });
 
@@ -612,7 +518,7 @@ describe("ShareSkillModal", () => {
     expect(
       await screen.findByRole("combobox", { name: "Installation" })
     ).toHaveValue("Default access (Not available)");
-    await pickCompanySetting(/^Available to install/);
+    await pickCompanySetting(/^Available/);
     await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() =>
       expect(mockUpdateSkillShares).toHaveBeenCalledWith(
@@ -686,7 +592,7 @@ describe("ShareSkillModal", () => {
     const design = await screen.findByRole("combobox", {
       name: "Setting for Design",
     });
-    expect(design).toHaveValue("Organization setting (Available to install)");
+    expect(design).toHaveValue("Organization setting (Available)");
     expect(
       screen.getByRole("combobox", { name: "Setting for Ops" })
     ).toHaveValue("Required");
@@ -707,9 +613,7 @@ describe("ShareSkillModal", () => {
     fireEvent.click(
       screen.getByRole("combobox", { name: "Setting for Sales" })
     );
-    fireEvent.click(
-      screen.getByRole("option", { name: /^Installed by default/ })
-    );
+    fireEvent.click(screen.getByRole("option", { name: /^Installed/ }));
 
     await user.click(screen.getByRole("button", { name: "Save" }));
     await waitFor(() => expect(mockUpdateSkillShares).toHaveBeenCalled());

@@ -1,6 +1,6 @@
 """Rows for tests of integrations: an integration with its kind row, an
-optional OAuth client and actions, a plugin that holds it, an agent link, and
-policy rows."""
+optional OAuth client and actions, its access, an agent link, and policy
+rows."""
 
 from collections.abc import Mapping, Sequence
 from typing import Any
@@ -19,24 +19,25 @@ from onyx.db.enums import (
     IntegrationKind,
     MCPTransport,
     PluginInstallationPolicy,
+    SkillSharePermission,
 )
 from onyx.db.external_app import delete_external_app__no_commit
 from onyx.db.integration import replace_integration_actions__no_commit
 from onyx.db.models import (
     ExternalApp,
     Integration,
+    Integration__User,
+    Integration__UserGroup,
     IntegrationActionPolicy,
     IntegrationOAuthClient,
     MCPServer,
-    Persona__Plugin,
-    Plugin,
-    Plugin__Integration,
+    Persona__Integration,
     Tool,
+    UserIntegrationPreference,
 )
+from onyx.integrations.kinds.api import sync_integration_actions__no_commit
 from onyx.integrations.kinds.mcp_server import mcp_action_default_policy
 from onyx.integrations.models import IntegrationActionSpec
-from onyx.integrations.sync import sync_integration_actions__no_commit
-from tests.external_dependency_unit.craft.db_helpers import make_skillless_plugin
 
 DEFAULT_INPUT_SCHEMA: dict[str, JsonValue] = {
     "type": "object",
@@ -215,41 +216,83 @@ def make_openapi_integration(
     return integration, tool
 
 
-def hold_in_plugin(
+def set_integration_access(
+    db_session: Session,
+    integration: Integration,
+    *,
+    installation_policy: PluginInstallationPolicy = (
+        PluginInstallationPolicy.NOT_AVAILABLE
+    ),
+    owner_user_id: UUID | None = None,
+    shared_user_ids: Sequence[UUID] = (),
+    shared_group_ids: Sequence[int] = (),
+) -> None:
+    """Set the owner and the company install setting of the integration, and
+    add a share for each user and group."""
+    integration.owner_user_id = owner_user_id
+    integration.installation_policy = installation_policy
+    db_session.add_all(
+        Integration__User(integration_id=integration.id, user_id=user_id)
+        for user_id in shared_user_ids
+    )
+    db_session.add_all(
+        Integration__UserGroup(
+            integration_id=integration.id,
+            user_group_id=group_id,
+            permission=SkillSharePermission.VIEWER,
+        )
+        for group_id in shared_group_ids
+    )
+    db_session.commit()
+
+
+def give_access(
     db_session: Session,
     integrations: Sequence[Integration],
     *,
     published: bool = True,
     installation_policy: PluginInstallationPolicy | None = None,
-    author_user_id: UUID | None = None,
-) -> Plugin:
-    """A plugin with no skills that holds the integrations."""
-    plugin = make_skillless_plugin(
-        db_session,
-        author_user_id=author_user_id,
-        published=published,
-        installation_policy=installation_policy,
-    )
+    owner_user_id: UUID | None = None,
+) -> None:
+    """``published``: each user has access, with ``installation_policy``
+    (Available when None). Else the integrations are private and only the
+    owner has access."""
+    for integration in integrations:
+        set_integration_access(
+            db_session,
+            integration,
+            installation_policy=(
+                installation_policy or PluginInstallationPolicy.AVAILABLE
+                if published
+                else PluginInstallationPolicy.NOT_AVAILABLE
+            ),
+            owner_user_id=owner_user_id,
+        )
+
+
+def turn_off_integrations(
+    db_session: Session, user_id: UUID, integrations: Sequence[Integration]
+) -> None:
+    """Save the choice of the user to turn each integration off."""
     db_session.add_all(
-        [
-            Plugin__Integration(plugin_id=plugin.id, integration_id=integration.id)
-            for integration in integrations
-        ]
+        UserIntegrationPreference(
+            user_id=user_id, integration_id=integration.id, enabled=False
+        )
+        for integration in integrations
     )
     db_session.commit()
-    return plugin
 
 
 def link_persona(
     db_session: Session,
     persona_id: int,
-    plugin_id: UUID,
+    integration_id: int,
     action_settings: dict[str, Any] | None = None,
 ) -> None:
     db_session.add(
-        Persona__Plugin(
+        Persona__Integration(
             persona_id=persona_id,
-            plugin_id=plugin_id,
+            integration_id=integration_id,
             action_settings=action_settings or {},
         )
     )
@@ -278,18 +321,11 @@ def set_policy(
 
 
 def delete_integrations(db_session: Session, integration_ids: Sequence[int]) -> None:
-    """Delete the integrations with their kind rows and plugins. The other
-    rows of an integration go by cascade."""
+    """Delete the integrations with their kind rows. The other rows of an
+    integration go by cascade."""
     db_session.rollback()
     if not integration_ids:
         return
-    plugin_ids = list(
-        db_session.scalars(
-            select(Plugin__Integration.plugin_id).where(
-                Plugin__Integration.integration_id.in_(integration_ids)
-            )
-        )
-    )
     integrations = db_session.scalars(
         select(Integration).where(Integration.id.in_(integration_ids))
     ).all()
@@ -302,6 +338,4 @@ def delete_integrations(db_session: Session, integration_ids: Sequence[int]) -> 
     db_session.execute(delete(Tool).where(Tool.id.in_(tool_ids)))
     db_session.execute(delete(MCPServer).where(MCPServer.id.in_(server_ids)))
     db_session.execute(delete(ExternalApp).where(ExternalApp.id.in_(app_ids)))
-    if plugin_ids:
-        db_session.execute(delete(Plugin).where(Plugin.id.in_(plugin_ids)))
     db_session.commit()

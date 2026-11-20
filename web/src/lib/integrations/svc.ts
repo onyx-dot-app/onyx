@@ -6,14 +6,14 @@ import type {
   IntegrationActionsResponse,
   IntegrationActionsUpdate,
   IntegrationCreate,
+  IntegrationGroupSettingChange,
   IntegrationOAuthCallbackResult,
   IntegrationStatus,
   IntegrationUpdate,
+  IntegrationSharesUpdate,
+  IntegrationSharesView,
   MemberActionPolicies,
-  MemberPluginState,
-  PluginAccessUpdate,
-  PluginAccessView,
-  PluginPublishResponse,
+  MemberIntegration,
 } from "@/lib/integrations/types";
 
 type RequestBody =
@@ -23,8 +23,9 @@ type RequestBody =
   | { fields: Record<string, string> }
   | { organization: boolean; return_path: string }
   | { installation_policy: InstallationPolicy }
+  | { group_settings: IntegrationGroupSettingChange[] }
   | { enabled: boolean }
-  | PluginAccessUpdate
+  | IntegrationSharesUpdate
   | { code: string; state: string }
   | { actions: Record<string, "allow" | null> };
 
@@ -119,13 +120,26 @@ async function startOAuth(
   return body.authorization_url;
 }
 
-export async function setPluginInstallationPolicy(
-  pluginId: string,
+/** Sets the company install setting of an integration. */
+export async function setIntegrationInstallationPolicy(
+  id: number,
   installationPolicy: InstallationPolicy
 ): Promise<void> {
-  await request(SWR_KEYS.adminPluginInstallationPolicy(pluginId), "PUT", {
+  await request(SWR_KEYS.adminIntegrationInstallationPolicy(id), "PUT", {
     installation_policy: installationPolicy,
   });
+}
+
+/** Set the install setting of some groups. A group left out keeps its
+ * setting. */
+export async function setIntegrationGroupSettings(
+  id: number,
+  groupSettings: IntegrationGroupSettingChange[]
+): Promise<AdminIntegrationDetail> {
+  const res = await request(SWR_KEYS.adminIntegrationGroupSettings(id), "PUT", {
+    group_settings: groupSettings,
+  });
+  return res.json();
 }
 
 export function startOrganizationOAuth(
@@ -189,30 +203,26 @@ export async function saveAlwaysAllow(
   return res.json();
 }
 
-/** The user's on/off switch of a plugin that holds only integrations. */
-export async function setPluginEnabled(
-  pluginId: string,
+/** The user's on/off switch of an integration. */
+export async function setIntegrationEnabled(
+  id: number,
   enabled: boolean
-): Promise<MemberPluginState> {
-  const res = await request(`${SWR_KEYS.plugin(pluginId)}/enabled`, "PUT", {
+): Promise<MemberIntegration> {
+  const res = await request(`${SWR_KEYS.integration(id)}/enabled`, "PUT", {
     enabled,
   });
   return res.json();
 }
 
-export async function updatePluginAccess(
-  pluginId: string,
-  body: PluginAccessUpdate
-): Promise<PluginAccessView> {
-  const res = await request(SWR_KEYS.pluginAccess(pluginId), "PUT", body);
+export async function updateIntegrationShares(
+  id: number,
+  body: IntegrationSharesUpdate
+): Promise<IntegrationSharesView> {
+  const res = await request(SWR_KEYS.integrationAccess(id), "PUT", body);
   return res.json();
 }
 
-/** Moves a private plugin to the Organization library. An older backend
- * answers 204 with no body, so the result is then null. */
-export async function publishPlugin(
-  pluginId: string
-): Promise<PluginPublishResponse | null> {
-  const res = await request(`${SWR_KEYS.plugin(pluginId)}/publish`, "POST");
-  return res.status === 204 ? null : res.json();
+/** Makes a private integration Available to the organization. */
+export async function publishIntegration(id: number): Promise<void> {
+  await request(`${SWR_KEYS.integration(id)}/publish`, "POST");
 }

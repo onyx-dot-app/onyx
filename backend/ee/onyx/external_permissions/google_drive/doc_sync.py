@@ -1,4 +1,4 @@
-from collections.abc import Generator
+from collections.abc import Callable, Generator
 from datetime import datetime, timezone
 
 from ee.onyx.external_permissions.google_drive.models import (
@@ -20,7 +20,7 @@ from onyx.access.models import (
     ExternalAccess,
     NodeExternalAccess,
 )
-from onyx.access.utils import build_domain_group_id, build_ext_group_name_for_onyx
+from onyx.access.utils import build_domain_group_id
 from onyx.configs.constants import DocumentSource
 from onyx.configs.llm_configs import get_image_extraction_and_analysis_enabled
 from onyx.connectors.factory import build_connector_kwargs
@@ -32,6 +32,7 @@ from onyx.connectors.google_drive.source_operations import (
 from onyx.connectors.google_utils.shared_constants import GoogleDriveFileType
 from onyx.connectors.interfaces import GenerateSlimDocumentOutput
 from onyx.connectors.models import HierarchyNode
+from onyx.connectors.source_api_limiter import build_source_api_limiter
 from onyx.db.models import ConnectorCredentialPair
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
@@ -125,7 +126,6 @@ def get_external_access_for_raw_gdrive_file(
     retriever_email: str | None,
     admin_email: str,
     fallback_user_email: str,
-    add_prefix: bool = False,
     fallback_retriever_email: str | None = None,
 ) -> ExternalAccess:
     """
@@ -135,10 +135,6 @@ def get_external_access_for_raw_gdrive_file(
     Permissions listed by id are read as `retriever_email`, then as
     `fallback_retriever_email`, then as `admin_email`, until all are found.
 
-    add_prefix: When this method is called during the initial indexing via the connector,
-                set add_prefix to True so group IDs are prefixed with the source type.
-                When invoked from doc_sync (permission sync), use the default (False)
-                since upsert_document_external_perms handles prefixing.
     fallback_user_email: When we cannot retrieve any permission info for a file
                 (e.g. externally-owned files where the API returns no permissions
                 and permissions.list returns 403), fall back to granting access
@@ -278,13 +274,6 @@ def get_external_access_for_raw_gdrive_file(
         | ({drive_id} if drive_id is not None else set())
     )
 
-    # Prefix group IDs with source type if requested (for indexing path)
-    if add_prefix:
-        group_ids = {
-            build_ext_group_name_for_onyx(group_id, DocumentSource.GOOGLE_DRIVE)
-            for group_id in group_ids
-        }
-
     return ExternalAccess(
         external_user_emails=user_emails,
         external_user_group_ids=group_ids,
@@ -297,7 +286,6 @@ def get_external_access_for_folder(
     google_domain: str,
     ops: GoogleDriveSourceOperations,
     user_email: str,
-    add_prefix: bool = False,
 ) -> ExternalAccess:
     """
     Extract ExternalAccess from a folder's permissions.
@@ -310,8 +298,6 @@ def get_external_access_for_folder(
         google_domain: The company's Google Workspace domain (e.g., "company.com")
         ops: The gateway that fetches the permission details
         user_email: The user to read the permissions as
-        add_prefix: When True, prefix group IDs with source type (for indexing path).
-                   When False (default), leave unprefixed (for permission sync path).
 
     Returns:
         ExternalAccess with extracted permission info
@@ -373,13 +359,7 @@ def get_external_access_for_folder(
             # If allowFileDiscovery is False, it's "link only" access
             is_public = permission.allow_file_discovery is not False
 
-    # Prefix group IDs with source type if requested (for indexing path)
     group_ids: set[str] = group_emails | domain_groups
-    if add_prefix:
-        group_ids = {
-            build_ext_group_name_for_onyx(group_id, DocumentSource.GOOGLE_DRIVE)
-            for group_id in group_ids
-        }
 
     return ExternalAccess(
         external_user_emails=user_emails,
@@ -388,7 +368,11 @@ def get_external_access_for_folder(
     )
 
 
-def build_perm_sync_connector(cc_pair: ConnectorCredentialPair) -> GoogleDriveConnector:
+def build_perm_sync_connector(
+    cc_pair: ConnectorCredentialPair,
+    should_stop: Callable[[], bool] | None = None,
+) -> GoogleDriveConnector:
+    """``should_stop`` ends a wait for the shared API budget."""
     connector = GoogleDriveConnector(
         **build_connector_kwargs(
             cc_pair.connector.source, cc_pair.connector.connector_specific_config
@@ -396,6 +380,12 @@ def build_perm_sync_connector(cc_pair: ConnectorCredentialPair) -> GoogleDriveCo
     )
     # The slim listing must admit the image files that indexing admitted.
     connector.set_allow_images(get_image_extraction_and_analysis_enabled())
+    # Permission sync spends the indexing budget of the credential.
+    limiter = build_source_api_limiter(
+        DocumentSource.GOOGLE_DRIVE, cc_pair.credential_id, should_stop
+    )
+    if limiter is not None:
+        connector.set_source_api_limiter(limiter)
     connector.load_credentials(credential_json(cc_pair))
     return connector
 
@@ -413,7 +403,9 @@ def gdrive_doc_sync(
     it in postgres so that when it gets created later, the permissions are
     already populated. The crawl resumes where a stopped attempt left off.
     """
-    google_drive_connector = build_perm_sync_connector(cc_pair)
+    google_drive_connector = build_perm_sync_connector(
+        cc_pair, callback.should_stop if callback is not None else None
+    )
     slim_doc_generator = _get_slim_doc_generator(
         cc_pair, google_drive_connector, checkpointer, callback
     )

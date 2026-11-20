@@ -36,7 +36,7 @@ owns the rules.
   `openapi_schema` or `mcp_server_id`. See [[tools-framework]].
 - `backend/onyx/agents/tools.py:AgentTool` is the tool the shared runtime runs.
   A chat `Tool` becomes one through `Tool.bind`. The control tools of the
-  research and coding agents, such as `think_tool` and `generate_report`, are
+  research agents, such as `generate_report`, are
   `AgentTool` objects only, with no `Tool` class and no table row. See
   [[tools-framework]].
 
@@ -59,8 +59,8 @@ owns the rules.
   See [[chat-persistence]].
 
 **"Agent"** means three things: a `Persona`; an `agents/runtime.py:Agent` of
-the shared runtime, such as `ChatAgent`, the deep research agent, the research
-agent or the coding agent ([[agent-runtime]]); or the AI assistant in general.
+the shared runtime, such as `ChatAgent`, `DeepResearchAgent` or `ResearchAgent`
+([[agent-runtime]]); or the AI assistant in general.
 
 **"Flow"** means two things.
 - `LLMModelFlowType` (`backend/onyx/db/enums.py`) and the `LLMModelFlow`
@@ -194,7 +194,7 @@ mobile code checks for it. See [[streaming-protocol]].
 | Term | Meaning |
 |---|---|
 | Timeline entry | One item on the shared timeline rail (`web/src/lib/timeline/types.ts:TimelineEntry`): a chat packet group or a Craft tool call or thinking block. It is not a step or a section. See [[chat-frontend]] and [[craft-frontend]]. |
-| Step / cycle | One model generation and the tool calls it requests. A chat response has up to `MAX_LLM_CYCLES` of them (default 6; when code mode applies, `CODE_MODE_MAX_LLM_CYCLES`, a safety cap of 100 or `MAX_LLM_CYCLES` when higher); the last one offers no tools, so the model must answer. See [[agent-runtime]] and [[core-chat-loop]]. |
+| Step / cycle | One model generation and the tool calls it requests. A chat response has up to `MAX_LLM_CYCLES` of them (default 30; when code mode applies, `CODE_MODE_MAX_LLM_CYCLES`, a safety cap of 100 or `MAX_LLM_CYCLES` when higher); the last one offers no tools, so the model must answer. See [[agent-runtime]] and [[core-chat-loop]]. |
 | Cell / observation (code mode) | A cell is one running code mode program; it can outlive the tool call that started it, but not its response. An observation is one `execute_code` or `wait_code` call on a cell: it reports what the cell did in one time window and saves one `CodeModeExecutionResult` (`cell_id`, `observation` 0, 1, ...). See [[code-execution]]. |
 | Run | One execution of an agent on the shared runtime (`agents/runtime.py:Run`). Its `RunState` records the input, steps, outcome and child runs. In a session that keeps content, a chat response's root run ID is its assistant `ChatMessage` ID. A content-free incognito run uses generated IDs. See [[agent-runtime#run-id-is-message-id]]. |
 | Stream ID | The key that the processing fence, the stop fence and the stream buffer share. See [[core-chat-loop]]. |
@@ -204,12 +204,11 @@ mobile code checks for it. See [[streaming-protocol]].
 | Custom agent prompt | The agent's instructions, normally sent as a fixed user message before conversation history. With an empty base prompt and no base-prompt replacement, they become the system message. See [[context-assembly]]. |
 | Fence (chat) | A per-session cache flag. The stop fence (`chat/stop_signal_checker.py`, keyed by session and stream ID) means the user pressed Stop. The processing fence holds 0 after admission, and the live stream ID with the response IDs it writes after `ChatTurnAdmission.publish` (`chat/chat_processing_checker.py:get_processing_stream`). The admission owner key, not a fence, marks a busy session. The per-response keys in `chat/run_store.py:ChatRunStore` are not fences: `chat_response_owner` is the execution lease, and `chat_response_stop` is the flag that `cancel_run` sets when a parent cancels a child agent. See [[core-chat-loop#session-admission]]. |
 | Last cycle | The final allowed chat step offers no tools and must answer. Image generation does not end tool use early. See [[core-chat-loop#stopping-tools]]. |
-| `BASH_TOOL_SENTINEL_ID` | The id that the coding agent gives its in-memory `BashTool`. See [[code-execution#bash-tool-sentinel]]. |
 | Message types | `ChatMessage` (the row), `ChatResponseItem` (the saved steps of a response), `llm/models.py:Message` (the conversation type the runtime uses) and `llm/model_request.py:ChatCompletionMessage` (the provider wire form). See [[core-chat-loop#three-message-types]]. |
 | Active branch | The chain of `latest_child_message_id` pointers from a session's root message. See [[chat-persistence]]. |
 | Reserved message | An assistant `ChatMessage` row created with placeholder text before streaming starts. See [[chat-persistence]]. |
 | Incognito and record mode | `IncognitoRecordMode` is fixed on a session and decides what the database keeps. See [[chat-persistence]]. |
-| Child session | A `ChatSession` with `spawned_by_message_id` set. Research and coding child agents get one in a session that keeps content. See [[chat-persistence]]. |
+| Child session | A `ChatSession` with `spawned_by_message_id` set. Research and background subagents get one in a session that keeps content. See [[chat-persistence]]. |
 | Not wired | A part of the shared runtime that no product path reaches: explicit suspension (`Run.suspend`). Suspension on `ChildRunWait`, on chat tool approvals and on tool questions is live, and so are checkpoint handoff and resume: a run whose waits are all on people parks and resumes on any pod ([[mcp-and-custom-tools#chat-approval-durable-wait]]). See [[agent-runtime#wire-module]]. |
 | Tool question | A question that the root chat agent's question tool asks the user (`QuestionRequest`, `question_request`), not the user's chat message, which code also calls a question. Its run waits like an approval. See [[tools-framework]]. |
 | `use_memories` vs `enable_memory_tool` | `use_memories` controls whether memories reach the prompt. `enable_memory_tool` controls whether the memory tool can write them. See [[chat-preferences]]. |

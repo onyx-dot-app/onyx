@@ -22,20 +22,20 @@ const tool: ToolSnapshot = {
   chat_selectable: true,
   agent_creation_selectable: true,
   default_enabled: false,
-  plugin_ids: ["plugin-1"],
+  integration_id: 4,
 };
 
-test("links the sign-in to the plugin that the tool list gives", () => {
+test("links the sign-in to the integration that the tool list gives", () => {
   mockTools.current = [tool];
   render(<CustomToolAuthCard toolName="Example" toolId={1} />);
   expect(screen.getByRole("link", { name: /connect/i })).toHaveAttribute(
     "href",
-    "/app/plugins/plugin-1?tab=integrations"
+    "/app/customize/integrations/4?tab=configuration"
   );
 });
 
-test("shows nothing for a tool with no plugin", () => {
-  mockTools.current = [{ ...tool, plugin_ids: [] }];
+test("shows nothing for a tool with no integration", () => {
+  mockTools.current = [{ ...tool, integration_id: null }];
   const { container } = render(
     <CustomToolAuthCard toolName="Example" toolId={1} />
   );

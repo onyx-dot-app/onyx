@@ -5,8 +5,9 @@ import sys
 import time
 from collections.abc import Generator
 from pathlib import Path
-from uuid import UUID, uuid4
+from uuid import uuid4
 
+import httpx
 import pytest
 from pydantic import BaseModel
 
@@ -30,11 +31,17 @@ NO_AUTH_MCP_SERVER_SCRIPT = (
 )
 
 
+def release_hold(key: str) -> None:
+    """Let the no-auth mock server's `hold` calls for `key` answer."""
+    httpx.post(
+        f"http://{NO_AUTH_MCP_SERVER_HOST}:{NO_AUTH_MCP_SERVER_PORT}/release/{key}"
+    ).raise_for_status()
+
+
 class ConnectedMCPServer(BaseModel):
     name: str
-    # The integration of the server and the plugin that holds it.
+    # The integration of the server.
     integration_id: int
-    plugin_id: UUID
 
     def callable_name(self, tool_name: str) -> str:
         """The name the LLM sees for one of the server's tools."""
@@ -118,7 +125,6 @@ def connected_mcp_server(
         yield ConnectedMCPServer(
             name=name,
             integration_id=integration_id,
-            plugin_id=UUID(detail["plugins"][0]["plugin_id"]),
         )
     finally:
         client.delete(

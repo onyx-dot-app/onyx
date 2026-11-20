@@ -213,6 +213,35 @@ def closing_heading(cell_id: int, closing: CellClosing) -> str:
     return f"Cell {cell_id} stopped when {event}."
 
 
+def closed_cell_text(
+    cell_id: int, closing: CellClosing | None, *, returned_end: bool
+) -> str:
+    """What `wait_code` returns for a closed cell: how the cell's saved results
+    report its end. `closing` is the cell's closing record; `returned_end` says
+    that an observation reported the end."""
+    if closing is not None and closing.reason == "interrupted":
+        return (
+            f"Cell {cell_id} was interrupted when the server stopped. Start a new "
+            "execute_code call."
+        )
+    if closing is not None:
+        event = (
+            "the run paused" if closing.reason == "suspended" else "the response ended"
+        )
+        if closing.status in _ENDED:
+            return (
+                f"Cell {cell_id} {_STATUS_TEXT[closing.status]} before {event}; its "
+                "output and result are in its earlier result."
+            )
+        return f"Cell {cell_id} stopped when {event}. Start a new execute_code call."
+    if returned_end:
+        return f"Cell {cell_id} already returned its final result."
+    return (
+        f"Cell {cell_id} stopped when its response ended or its run paused. Start "
+        "a new execute_code call."
+    )
+
+
 def continues_note(cell_id: int) -> str:
     return (
         f"Cell {cell_id} continues. Call wait_code(cell_id={cell_id}) for more output, "

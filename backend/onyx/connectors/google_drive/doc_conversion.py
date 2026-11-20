@@ -1,5 +1,5 @@
 import io
-from collections.abc import Callable
+from collections.abc import Callable, Iterable, Iterator, Sequence
 from datetime import datetime
 from typing import NamedTuple, cast
 from urllib.parse import urlparse, urlunparse
@@ -33,6 +33,7 @@ from onyx.connectors.google_drive.section_extraction import (
 from onyx.connectors.google_drive.source_operations import (
     ExportSizeThresholdExceeded,
     GoogleDriveHttpError,
+    GoogleDriveRefreshError,
     GoogleDriveSourceOperations,
     is_transient_google_error,
 )
@@ -80,51 +81,96 @@ class FileExtractionResult(BaseModel):
     skip_reason: str | None = None
 
 
-# Cache for folder path lookups to avoid redundant API calls
+class ReaderOrder:
+    """Users to read as, in order, each one time. Each iteration starts
+    again at the first user, and reads a group only when it gets to it. A
+    `LazyEmails` group thus runs its lookup only when each user before it
+    fails."""
+
+    def __init__(self, *groups: Iterable[str]) -> None:
+        self._groups = groups
+
+    def __iter__(self) -> Iterator[str]:
+        seen: set[str] = set()
+        for group in self._groups:
+            for email in group:
+                if email.lower() not in seen:
+                    seen.add(email.lower())
+                    yield email
+
+
+class LazyEmails:
+    """Emails from a lookup that runs each time an iteration starts."""
+
+    def __init__(self, lookup: Callable[[], Iterable[str]]) -> None:
+        self._lookup = lookup
+
+    def __iter__(self) -> Iterator[str]:
+        yield from self._lookup()
+
+
+# Cache for folder path lookups to avoid redundant API calls. Only a full
+# read goes in: a user who cannot see a folder or its parent must not set
+# the path for the users after it.
 # Maps folder_id -> (folder_name, parent_id)
 _folder_cache: dict[str, tuple[str, str | None]] = {}
 
 
 def _get_folder_info(
-    ops: GoogleDriveSourceOperations, user_email: str, folder_id: str
+    ops: GoogleDriveSourceOperations,
+    reader_emails: Iterable[str],
+    folder_id: str,
+    drive_id: str | None = None,
 ) -> tuple[str, str | None]:
-    """Fetch folder name and parent ID, with caching."""
+    """The name and parent id of a folder, read as each user in order until
+    a read is full. A folder of a shared drive (not its root) that comes
+    back with no parent is not a full read: the user cannot see the parent.
+    ("Unknown", None) when no user can read the folder."""
     if folder_id in _folder_cache:
         return _folder_cache[folder_id]
 
-    try:
-        folder = ops.get_file(
-            user_email=user_email, file_id=folder_id, fields="name, parents"
-        )
-    except GoogleDriveHttpError as e:
-        logger.warning("Failed to get folder info for %s: %s", folder_id, e)
-        folder = None
-    if folder is None:
-        _folder_cache[folder_id] = ("Unknown", None)
-        return "Unknown", None
-    folder_name = folder.get("name", "Unknown")
-    parents = folder.get("parents", [])
-    parent_id = parents[0] if parents else None
-    _folder_cache[folder_id] = (folder_name, parent_id)
-    return folder_name, parent_id
+    partial: tuple[str, str | None] | None = None
+    for email in reader_emails:
+        try:
+            folder = ops.get_file(
+                user_email=email, file_id=folder_id, fields="name, parents"
+            )
+        except GoogleDriveHttpError as e:
+            logger.warning("Failed to get folder info for %s: %s", folder_id, e)
+            continue
+        if folder is None:
+            continue
+        folder_name = folder.get("name", "Unknown")
+        parents = folder.get("parents") or []
+        if parents or not drive_id or folder_id == drive_id:
+            info = (folder_name, parents[0] if parents else None)
+            _folder_cache[folder_id] = info
+            return info
+        if partial is None:
+            partial = (folder_name, None)
+    return partial or ("Unknown", None)
 
 
 def _get_drive_name(
-    ops: GoogleDriveSourceOperations, user_email: str, drive_id: str
+    ops: GoogleDriveSourceOperations, reader_emails: Iterable[str], drive_id: str
 ) -> str:
-    """Fetch shared drive name."""
+    """The name of a shared drive, read as each user in order until one can
+    see the drive. Only a real name goes in the cache: a user who cannot see
+    the drive must not set the name for the users after it."""
     cache_key = f"drive_{drive_id}"
     if cache_key in _folder_cache:
         return _folder_cache[cache_key][0]
 
-    try:
-        drive_name = ops.get_shared_drive_name(user_email=user_email, drive_id=drive_id)
-    except GoogleDriveHttpError as e:
-        logger.warning("Failed to get drive name for %s: %s", drive_id, e)
-        drive_name = None
-    drive_name = drive_name or f"Shared Drive {drive_id}"
-    _folder_cache[cache_key] = (drive_name, None)
-    return drive_name
+    for email in reader_emails:
+        try:
+            drive_name = ops.get_shared_drive_name(user_email=email, drive_id=drive_id)
+        except GoogleDriveHttpError as e:
+            logger.warning("Failed to get drive name for %s: %s", drive_id, e)
+            continue
+        if drive_name:
+            _folder_cache[cache_key] = (drive_name, None)
+            return drive_name
+    return f"Shared Drive {drive_id}"
 
 
 def build_folder_path(
@@ -132,6 +178,7 @@ def build_folder_path(
     ops: GoogleDriveSourceOperations,
     user_email: str,
     drive_id: str | None = None,
+    path_readers: Iterable[str] = (),
 ) -> list[str]:
     """
     Build the full folder path for a file by walking up the parent chain.
@@ -143,12 +190,21 @@ def build_folder_path(
         user_email: The user to read the folders as. Also decides "My Drive"
             vs "Shared with me" by ownership.
         drive_id: Optional drive ID (will be extracted from file if not provided)
+        path_readers: Users who can see the file's shared drive, in order,
+            for example its organizer and members. The folders and the
+            drive name of a shared drive file are read as them first, then
+            as `user_email`. Iterated again for each read.
     """
     path_parts: list[str] = []
 
     # Get drive_id from file if not provided
     if drive_id is None:
         drive_id = file.get("driveId")
+    readers = (
+        ReaderOrder(path_readers, [user_email])
+        if drive_id
+        else ReaderOrder([user_email])
+    )
 
     # Check if file is owned by the user (for distinguishing "My Drive" vs "Shared with me")
     owners = file.get("owners", [])
@@ -161,7 +217,7 @@ def build_folder_path(
     if not parents:
         # File is at root level
         if drive_id:
-            return [_get_drive_name(ops, user_email, drive_id)]
+            return [_get_drive_name(ops, readers, drive_id)]
         # If not in a shared drive, check if it's owned by the user
         if is_owned_by_user:
             return ["My Drive"]
@@ -177,13 +233,13 @@ def build_folder_path(
             break
         visited.add(parent_id)
 
-        folder_name, next_parent = _get_folder_info(ops, user_email, parent_id)
+        folder_name, next_parent = _get_folder_info(ops, readers, parent_id, drive_id)
 
         # Check if we've reached the root (parent is the drive itself or no parent)
         if next_parent is None:
             # This folder's name is either the drive root, My Drive, or Shared with me
             if drive_id:
-                path_parts.insert(0, _get_drive_name(ops, user_email, drive_id))
+                path_parts.insert(0, _get_drive_name(ops, readers, drive_id))
             else:
                 # Not in a shared drive - determine if it's "My Drive" or "Shared with me"
                 if is_owned_by_user:
@@ -198,7 +254,7 @@ def build_folder_path(
     # If we didn't find a root, determine the root based on ownership and drive
     if not path_parts:
         if drive_id:
-            return [_get_drive_name(ops, user_email, drive_id)]
+            return [_get_drive_name(ops, readers, drive_id)]
         elif is_owned_by_user:
             return ["My Drive"]
         else:
@@ -225,6 +281,10 @@ MAX_RETRIEVER_EMAILS = 20
 # Above this many advanced sections, skip align_basic_advanced (its heading
 # matching is ~O(headings x doc length)) and index the unaligned sections.
 ADVANCED_PARSE_MAX_SECTIONS = 2000
+# A Google Doc whose Docs API text is above 1/this of the size threshold is
+# also exported, so the export decides the size skip as before. The export
+# can hold some text the Docs API sections leave out, such as list bullets.
+_DOC_EXPORT_SIZE_MARGIN = 2
 
 # Mapping of Google Drive mime types to export formats
 GOOGLE_MIME_TYPES_TO_EXPORT = {
@@ -622,7 +682,6 @@ def _get_external_access_for_raw_gdrive_file(
     retriever_email: str | None,
     admin_email: str,
     fallback_user_email: str,
-    add_prefix: bool = False,
     fallback_retriever_email: str | None = None,
 ) -> ExternalAccess:
     """
@@ -631,9 +690,6 @@ def _get_external_access_for_raw_gdrive_file(
     Permissions are read as ``retriever_email``, then as
     ``fallback_retriever_email``, then as ``admin_email``, until all are found.
 
-    add_prefix: When True, prefix group IDs with source type (for indexing path).
-               When False (default), leave unprefixed (for permission sync path
-               where upsert_document_external_perms handles prefixing).
     fallback_user_email: When permission info can't be retrieved (e.g. externally-owned
                files), fall back to granting access to this user.
     """
@@ -646,7 +702,6 @@ def _get_external_access_for_raw_gdrive_file(
                 str | None,
                 str,
                 str,
-                bool,
                 str | None,
             ],
             ExternalAccess,
@@ -664,7 +719,6 @@ def _get_external_access_for_raw_gdrive_file(
         retriever_email,
         admin_email,
         fallback_user_email,
-        add_prefix,
         fallback_retriever_email,
     )
 
@@ -679,10 +733,17 @@ def convert_drive_item_to_document(
     retriever_emails: list[str],
     file: GoogleDriveFileType,
     raw_file_callback: RawFileCallback | None = None,
+    folder_path: list[str] | None = None,
+    path_readers: Iterable[str] = (),
 ) -> Document | ConnectorFailure | None:
     """
     Attempt to convert a drive item to a document with each retriever email
     in order. returns upon a successful retrieval or a non-403 error.
+
+    `folder_path` is the path the listing built. Without it, the path is
+    built here from the file's parents. `path_readers` are users who can
+    see the file's shared drive: its folders and name are read as them
+    first.
 
     We used to always get the user email from the file owners when available,
     but this was causing issues with shared folders where the owner was not included in the service account
@@ -706,19 +767,25 @@ def convert_drive_item_to_document(
             file,
             permission_sync_context,
             raw_file_callback,
+            folder_path,
+            path_readers,
         )
 
         # There are a variety of permissions-based errors that occasionally occur
         # when retrieving files. Often when these occur, there is another user
-        # that can successfully retrieve the file, so we try the next user.
+        # that can successfully retrieve the file, so we try the next user. A
+        # user that cannot be impersonated passes to the next user too.
         if (
             doc_or_failure is None
             or isinstance(doc_or_failure, Document)
             or not (
-                isinstance(doc_or_failure.exception, GoogleDriveHttpError)
-                and doc_or_failure.exception.status_code in [401, 403, 404]
-                # Google also reports a rate limit as a 403.
-                and not doc_or_failure.exception.rate_limited
+                isinstance(doc_or_failure.exception, GoogleDriveRefreshError)
+                or (
+                    isinstance(doc_or_failure.exception, GoogleDriveHttpError)
+                    and doc_or_failure.exception.status_code in [401, 403, 404]
+                    # Google also reports a rate limit as a 403.
+                    and not doc_or_failure.exception.rate_limited
+                )
             )
         ):
             return doc_or_failure
@@ -758,16 +825,16 @@ def drive_file_size(file: GoogleDriveFileType) -> int | None:
         return None
 
 
-def _with_advanced_doc_sections(
+def _advanced_doc_sections(
     ops: GoogleDriveSourceOperations,
     retriever_email: str,
     file: GoogleDriveFileType,
-    basic_sections: list[TextSection | ImageSection | TabularSection],
-) -> list[TextSection | ImageSection | TabularSection]:
-    """Heading-aware sections of a Google Doc. The basic export is within the
-    size cap, so this parse is bounded. Falls back to the basic sections on
-    any failure."""
-    sections = basic_sections
+) -> list[TextSection] | None:
+    """Heading-aware sections of a Google Doc from the Docs API. None when
+    the read fails, passes GOOGLE_DRIVE_ADVANCED_PARSE_MAX_BYTES or gives no
+    section: the caller then uses the Drive export. A rate limit that outlasts
+    the retries raises, so the document fails and the next run reads it
+    again."""
     try:
         logger.debug("starting advanced parsing for %s", file.get("name"))
         google_doc = ops.fetch_google_doc(
@@ -775,40 +842,77 @@ def _with_advanced_doc_sections(
             doc_id=file.get("id", ""),
             max_response_bytes=GOOGLE_DRIVE_ADVANCED_PARSE_MAX_BYTES,
         )
-        doc_sections = (
-            None
-            if google_doc is None
-            else get_document_sections(google_doc, file.get("id", ""))
-        )
-        if doc_sections is None:
-            logger.info(
-                "Advanced parse of %s exceeds %s bytes; keeping basic text.",
-                file.get("name"),
-                GOOGLE_DRIVE_ADVANCED_PARSE_MAX_BYTES,
-            )
-        elif doc_sections:
-            has_smart_chips = any(
-                SMART_CHIP_CHAR in section.text for section in doc_sections
-            )
-            if has_smart_chips and len(doc_sections) <= ADVANCED_PARSE_MAX_SECTIONS:
-                logger.debug(
-                    "found smart chips in %s, aligning with basic sections",
-                    file.get("name"),
-                )
-                sections = align_basic_advanced(basic_sections, doc_sections)
-            else:
-                sections = cast(
-                    list[TextSection | ImageSection | TabularSection],
-                    doc_sections,
-                )
     except Exception as e:
-        # A rate limit that outlasted the retries fails the document, so the
-        # next run fetches it again. Basic text would stay indexed until the
-        # file changes.
         if is_transient_google_error(e):
             raise
         logger.warning("Error in advanced parsing: %s. Using basic extraction.", e)
-    return sections
+        return None
+    if google_doc is None:
+        logger.info(
+            "Advanced parse of %s exceeds %s bytes; keeping basic text.",
+            file.get("name"),
+            GOOGLE_DRIVE_ADVANCED_PARSE_MAX_BYTES,
+        )
+        return None
+    try:
+        return get_document_sections(google_doc, file.get("id", "")) or None
+    except Exception as e:
+        logger.warning("Error in advanced parsing: %s. Using basic extraction.", e)
+        return None
+
+
+def _needs_doc_export(doc_sections: list[TextSection], size_threshold: int) -> bool:
+    """Whether a Google Doc's Drive export is still needed after its Docs API
+    read. The export has the text of smart chips, which the Docs API gives
+    only as SMART_CHIP_CHAR. The export also decides the size skip, so a doc
+    whose text is near the size threshold is exported too, whatever its
+    number of sections."""
+    text_bytes = sum(len(section.text.encode("utf-8")) for section in doc_sections)
+    if text_bytes * _DOC_EXPORT_SIZE_MARGIN > size_threshold:
+        return True
+    if len(doc_sections) > ADVANCED_PARSE_MAX_SECTIONS:
+        # Too many sections to align: the Docs API sections are used alone.
+        return False
+    return any(SMART_CHIP_CHAR in section.text for section in doc_sections)
+
+
+def _read_google_doc(
+    file: GoogleDriveFileType,
+    ops: GoogleDriveSourceOperations,
+    retriever_email: str,
+    allow_images: bool,
+    size_threshold: int,
+    raw_file_callback: RawFileCallback | None,
+) -> FileExtractionResult:
+    """A Google Doc: the Docs API sections first, and the Drive export only
+    when they cannot stand alone. For a doc with no smart chips, the export
+    would be read and then dropped for the Docs API sections: one Drive
+    request for nothing."""
+    doc_sections = _advanced_doc_sections(ops, retriever_email, file)
+    if doc_sections is not None and not _needs_doc_export(doc_sections, size_threshold):
+        return FileExtractionResult(
+            sections=cast(
+                list[TextSection | ImageSection | TabularSection], doc_sections
+            )
+        )
+    basic = _download_and_extract_sections_basic(
+        file, ops, retriever_email, allow_images, size_threshold, raw_file_callback
+    )
+    if basic.skip_reason is not None or doc_sections is None:
+        return basic
+    if (
+        any(SMART_CHIP_CHAR in section.text for section in doc_sections)
+        and len(doc_sections) <= ADVANCED_PARSE_MAX_SECTIONS
+    ):
+        logger.debug(
+            "found smart chips in %s, aligning with basic sections", file.get("name")
+        )
+        basic.sections = align_basic_advanced(basic.sections, doc_sections)
+    else:
+        basic.sections = cast(
+            list[TextSection | ImageSection | TabularSection], doc_sections
+        )
+    return basic
 
 
 def _post_download_skip_reason(
@@ -836,6 +940,8 @@ def _convert_drive_item_to_document(
     # will also be a no-op if EE is not enabled
     permission_sync_context: PermissionSyncContext | None,
     raw_file_callback: RawFileCallback | None = None,
+    folder_path: list[str] | None = None,
+    path_readers: Iterable[str] = (),
 ) -> Document | ConnectorFailure | None:
     """
     Main entry point for converting a Google Drive file => Document object.
@@ -856,7 +962,12 @@ def _convert_drive_item_to_document(
             logger.info("Skipping %s: %s", file.get("name"), skip_reason)
             return None
 
-        extraction = _download_and_extract_sections_basic(
+        # A Google Doc gets heading-aware sections from the Docs API.
+        extraction = (
+            _read_google_doc
+            if file.get("mimeType") == GDriveMimeType.DOC.value
+            else _download_and_extract_sections_basic
+        )(
             file,
             ops,
             retriever_email,
@@ -865,14 +976,6 @@ def _convert_drive_item_to_document(
             raw_file_callback,
         )
         sections = extraction.sections
-        # A Google Doc within the size cap also gets heading-aware sections.
-        if (
-            file.get("mimeType") == GDriveMimeType.DOC.value
-            and extraction.skip_reason is None
-        ):
-            extraction.sections = _with_advanced_doc_sections(
-                ops, retriever_email, file, extraction.sections
-            )
 
         skip_reason = _post_download_skip_reason(file, extraction)
         if skip_reason is not None:
@@ -891,7 +994,6 @@ def _convert_drive_item_to_document(
                 # try both retriever_email and primary_admin_email if necessary
                 retriever_email=retriever_email,
                 admin_email=permission_sync_context.primary_admin_email,
-                add_prefix=True,  # Indexing path - prefix here
                 fallback_user_email=retriever_email,
             )
             if permission_sync_context
@@ -905,7 +1007,11 @@ def _convert_drive_item_to_document(
 
         # Build full folder path by walking up the parent chain
         # Pass retriever_email to determine if file is in "My Drive" vs "Shared with me"
-        source_path = build_folder_path(file, ops, retriever_email, drive_id)
+        source_path = (
+            folder_path
+            if folder_path is not None
+            else build_folder_path(file, ops, retriever_email, drive_id, path_readers)
+        )
 
         doc_metadata = {
             "hierarchy": {
@@ -1046,11 +1152,39 @@ def drive_file_skip_reason(
     return None
 
 
+def _domain_readers(file: GoogleDriveFileType, retriever_email: str) -> list[str]:
+    """Users in the listing user's domain who can read the file: its owners
+    and the users its permissions name. Only domain users can be
+    impersonated. Permissions are present only when the listing asked for
+    them."""
+    domain = retriever_email.split("@")[-1].lower()
+    emails = [owner.get("emailAddress") for owner in file.get("owners") or []] + [
+        permission.get("emailAddress")
+        for permission in file.get("permissions") or []
+        if permission.get("type") == "user"
+    ]
+    readers: list[str] = []
+    for email in emails:
+        if (
+            email
+            and email.split("@")[-1].lower() == domain
+            and email.lower() != retriever_email.lower()
+            and email not in readers
+        ):
+            readers.append(email)
+    return readers
+
+
 def build_slim_document_stub(
     ops: GoogleDriveSourceOperations,
     file: GoogleDriveFileType,
     permission_sync_context: PermissionSyncContext | None,
     retriever_email: str,
+    # The path from the folders the listing returned. None when a parent is
+    # not listed yet: conversion then builds the path itself.
+    folder_path: list[str] | None = None,
+    # More users who can read the file, for example the shared drive's members.
+    other_reader_emails: Sequence[str] = (),
 ) -> SlimDocumentStub | None:
     """`build_slim_document`, plus what a later conversion needs."""
     slim = build_slim_document(ops, file, permission_sync_context, retriever_email)
@@ -1068,5 +1202,21 @@ def build_slim_document_stub(
         ),
         mime_type=file.get("mimeType") or None,
         size_bytes=drive_file_size(file),
-        listing_payload=DriveListingPayload(retriever_email=retriever_email),
+        listing_payload=DriveListingPayload(
+            retriever_email=retriever_email,
+            drive_file=dict(file),
+            folder_path=folder_path,
+            reader_emails=list(
+                dict.fromkeys(
+                    [
+                        *_domain_readers(file, retriever_email),
+                        *(
+                            email
+                            for email in other_reader_emails
+                            if email.lower() != retriever_email.lower()
+                        ),
+                    ]
+                )
+            ),
+        ),
     )

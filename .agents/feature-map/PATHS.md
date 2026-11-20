@@ -62,13 +62,12 @@ covers new files that match it.
 | `backend/onyx/tools/tool_implementations/search/`, `backend/onyx/tools/tool_implementations/search_like_tool_utils.py` | internal-search |
 | `backend/onyx/tools/tool_implementations/web_search/`, `backend/onyx/tools/tool_implementations/open_url/` | web-search |
 | `backend/onyx/tools/tool_implementations/images/` | image-generation |
-| `backend/onyx/tools/tool_implementations/bash/`, `backend/onyx/tools/tool_implementations/python/`, `backend/onyx/tools/tool_implementations/code_mode/` | code-execution |
+| `backend/onyx/tools/tool_implementations/python/`, `backend/onyx/tools/tool_implementations/code_mode/` | code-execution |
 | `backend/onyx/tools/tool_implementations/sandbox/`, `backend/onyx/prompts/sandbox_tools.py` | code-execution |
 | `backend/onyx/tools/tool_implementations/mcp/`, `backend/onyx/tools/tool_implementations/custom/` | mcp-and-custom-tools |
 | `backend/onyx/tools/tool_implementations/memory/`, `backend/onyx/db/memory.py`, `backend/onyx/context/models.py` | chat-preferences |
 | `backend/onyx/tools/tool_implementations/file_reader/` | file-store-and-user-files |
 | `backend/onyx/tools/file_snapshot.py` | file-store-and-user-files, chat-persistence |
-| `backend/onyx/tools/tool_implementations/coding_agent/`, `backend/onyx/coding_agent/` | tools-framework |
 
 ## Backend: search and index
 
@@ -119,7 +118,7 @@ covers new files that match it.
 | `backend/onyx/indexing/` | indexing-pipeline |
 | `backend/onyx/indexing/adapters/user_file_indexing_adapter.py` | file-store-and-user-files, indexing-pipeline |
 | `backend/onyx/background/indexing/`, `backend/onyx/db/index_attempt*.py`, `backend/onyx/db/indexing_coordination.py` | indexing-pipeline |
-| `backend/onyx/background/celery/tasks/docfetching/`, `backend/onyx/background/celery/tasks/docprocessing/`, `backend/onyx/background/celery/tasks/tabular_rechunk/` | indexing-pipeline |
+| `backend/onyx/background/celery/tasks/docfetching/`, `backend/onyx/background/celery/tasks/docprocessing/`, `backend/onyx/background/celery/tasks/docconversion/`, `backend/onyx/background/celery/tasks/tabular_rechunk/` | indexing-pipeline |
 | `backend/onyx/file_store/document_batch_storage.py`, `backend/onyx/db/targeted_reindex.py`, `backend/onyx/redis/redis_docprocessing.py` | indexing-pipeline |
 | `backend/onyx/db/connector.py`, `backend/onyx/db/credentials.py`, `backend/onyx/db/connector_credential_pair.py`, `backend/onyx/db/credential_capability.py`, `backend/ee/onyx/db/connector.py`, `backend/ee/onyx/db/credentials.py` | cc-pairs-and-creds |
 | `backend/onyx/db/cc_pair_runs.py`, `backend/onyx/db/cc_pair_runs_models.py`, `backend/onyx/db/cc_pair_run_resolution.py`, `backend/onyx/db/deletion_attempt.py` | cc-pairs-and-creds |
@@ -143,7 +142,7 @@ covers new files that match it.
 | `backend/onyx/server/features/action_policies/` | craft-external-apps, plugins |
 | `backend/onyx/db/mcp.py`, `backend/onyx/server/features/mcp/`, `backend/onyx/server/features/tool/`, `backend/onyx/db/tools.py` | mcp-and-custom-tools |
 | `backend/onyx/server/features/tool/tool_visibility.py` | mcp-and-custom-tools, plugins |
-| `backend/onyx/integrations/`, `backend/onyx/db/integration.py`, `backend/onyx/db/integration_connection.py`, `backend/onyx/db/integration_policy.py`, `backend/onyx/server/features/integrations/` | mcp-and-custom-tools, craft-external-apps |
+| `backend/onyx/integrations/`, `backend/onyx/db/integration.py`, `backend/onyx/db/integration_access.py`, `backend/onyx/db/integration_connection.py`, `backend/onyx/db/integration_policy.py`, `backend/onyx/server/features/integrations/` | mcp-and-custom-tools, craft-external-apps |
 | `terraform-provider-onyx/internal/client/custom_tool.go`, `terraform-provider-onyx/internal/client/custom_tool_test.go`, `terraform-provider-onyx/internal/provider/custom_tool_resource.go`, `terraform-provider-onyx/internal/provider/custom_tool_resource_test.go`, `terraform-provider-onyx/internal/provider/custom_tool_availability_test.go`, `terraform-provider-onyx/docs/resources/custom_tool.md` | mcp-and-custom-tools |
 | `backend/onyx/db/input_prompt.py`, `backend/onyx/db/user_preferences.py`, `backend/onyx/server/features/input_prompt/` | chat-preferences |
 | `backend/onyx/server/settings/api.py`, `backend/onyx/server/settings/models.py`, `backend/onyx/server/settings/store.py`, `backend/onyx/server/settings/build_info.py` | chat-preferences |
@@ -280,7 +279,7 @@ covers new files that match it.
 | `web/src/sections/Suggestions.tsx` | chat-frontend |
 | `web/src/lib/richInputTile.ts`, `web/src/lib/contentEditable.ts` | chat-frontend |
 | `web/src/app/app/agents/` | chat-frontend, agents-personas |
-| `web/src/app/app/plugins/` | plugins, chat-frontend |
+| `web/src/app/app/customize/`, `web/src/sections/customize/`, `web/src/lib/customize/` | plugins, skills, chat-frontend |
 | `web/src/app/app/settings/llm-gateway/` | llm-gateway |
 | `web/src/app/app/settings/usage/` | observability |
 | `web/src/views/SettingsPage.tsx` | chat-preferences |
@@ -310,10 +309,9 @@ covers new files that match it.
 | `web/src/lib/docx/`, `web/src/lib/csv.ts` | chat-frontend, craft-frontend |
 | `web/src/app/craft/v1/tasks/` | craft-scheduled-tasks |
 | `web/src/app/craft/v1/apps/`, `web/src/hooks/useUserExternalApps.ts` | craft-external-apps |
-| `web/src/app/craft/v1/plugins/` | craft-external-apps, plugins |
-| `web/src/app/craft/v1/skills/`, `web/src/app/craft/components/SkillsStaleNotice.tsx`, `web/src/app/craft/components/SkillRuntimeNotice.tsx` | skills |
+| `web/src/app/craft/components/SkillsStaleNotice.tsx`, `web/src/app/craft/components/SkillRuntimeNotice.tsx` | skills |
 | `web/src/app/admin/skills/` | skills |
-| `web/src/views/SkillsPage.tsx`, `web/src/views/SkillEditorPage.tsx`, `web/src/sections/skills/`, `web/src/sections/modals/skills/`, `web/src/sections/cards/SkillCard.tsx`, `web/src/hooks/useUserSkills.ts`, `web/src/lib/skills/`, `web/src/sections/modals/SkillPreviewModal.tsx` | skills |
+| `web/src/views/SkillsPage.tsx`, `web/src/views/SkillEditorPage.tsx`, `web/src/sections/skills/`, `web/src/sections/modals/skills/`, `web/src/hooks/useUserSkills.ts`, `web/src/lib/skills/`, `web/src/sections/modals/SkillPreviewModal.tsx` | skills |
 
 ## Frontend: admin and platform
 
@@ -348,8 +346,8 @@ covers new files that match it.
 | `web/src/app/admin/decision-models/`, `web/src/views/admin/DecisionModelsPage.tsx`, `web/src/views/admin/DecisionModelSetting.tsx`, `backend/onyx/llm/decisions/` | llm-providers |
 | `web/src/app/admin/llm-gateway/`, `web/src/views/admin/LLMGatewayPage/` | llm-gateway |
 | `web/src/app/admin/voice/`, `web/src/views/admin/VoicePage/`, `web/src/lib/voice/` | voice |
-| `web/src/app/admin/plugins/`, `web/src/app/admin/integrations/` | plugins |
-| `web/src/sections/integrations/`, `web/src/lib/integrations/`, `web/src/sections/oauth/IntegrationOAuthCallback.tsx`, `web/src/app/app/plugins/` | plugins |
+| `web/src/app/admin/integrations/` | plugins |
+| `web/src/sections/integrations/`, `web/src/lib/integrations/`, `web/src/sections/oauth/IntegrationOAuthCallback.tsx` | plugins |
 | `web/src/sections/plugins/`, `web/src/lib/plugins/` | plugins |
 | `web/src/sections/actions/`, `web/src/lib/mcp/`, `web/src/app/mcp/oauth/` | plugins, mcp-and-custom-tools |
 | `web/src/app/mcp/[[...path]]/` | mcp-server |
@@ -383,6 +381,8 @@ the admin routes and check that each has a row above, run
 | `backend/onyx/db/dal.py`, `backend/onyx/db/utils.py`, `backend/onyx/db/constants.py`, `backend/onyx/db/pydantic_type.py`, `backend/onyx/db/README.md`, `backend/onyx/db/_deprecated/` | Database helpers that every component uses. |
 | `.devcontainer/` | Developer container image. No product surface reads it. |
 | `backend/alembic/` | Migrations. Read the component that owns the table being migrated. |
+| `backend/supervisord.conf` | The process list of the background container in Docker Compose. Read the component of the worker you change; [[background-jobs]] has the queue rules. |
+| `web/src/lib/types.ts` | Shared API types for many components. Look up the component that owns the type the diff touches. |
 | `documentation/` | Customer docs (Mintlify). `documentation/AGENTS.md` sets their rules, and `documentation/audit/` maps each page to the components it describes. A code change updates the page that covers it. |
 | `backend/onyx/db/seeding/`, `backend/onyx/seeding/`, `backend/ee/onyx/server/seeding.py` | Seed data for rows that several components own. The default agent and the built-in tool rows come from migrations. |
 | `backend/onyx/evals/`, `backend/onyx/server/evals/`, `backend/ee/onyx/server/evals/` | The eval harness. Read the component being evaluated. A prompt or retrieval change needs an eval, not only a unit test. |

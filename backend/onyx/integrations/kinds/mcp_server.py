@@ -256,7 +256,6 @@ class McpServerKindHandler(IntegrationKindHandler):
                 oauth_server=oauth_server,
                 additional_headers=ctx.mcp_headers,
                 approval=ctx.approval_for(action.key),
-                plugin_ids=ctx.plugin_ids,
             )
             for action in actions
         ]

@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import json
 import threading
 import time
@@ -1183,6 +1184,7 @@ class EmbeddingModel:
         reduced_dimension: int | None = None,
         auth: CloudEmbeddingAuth | None = None,
     ) -> None:
+        self.query_embedding_cache_key: str | None = None
         self.api_key = api_key
         self.provider_type = provider_type
         self.query_prefix = query_prefix
@@ -1617,7 +1619,7 @@ class EmbeddingModel:
         retrim_content: bool = False,
         callback: IndexingHeartbeatInterface | None = None,
     ) -> "EmbeddingModel":
-        return cls(
+        model = cls(
             server_host=server_host,
             server_port=server_port,
             model_name=search_settings.model_name,
@@ -1644,6 +1646,26 @@ class EmbeddingModel:
                 else None
             ),
         )
+        if search_settings.id is not None:
+            # Provider edits can change the effective deployment without a new settings ID.
+            provider = search_settings.cloud_provider
+            identity = (
+                search_settings.id,
+                model.model_name,
+                model.provider_type,
+                model.query_prefix,
+                model.normalize,
+                model.reduced_dimension,
+                model.api_url,
+                model.api_version,
+                model.deployment_name,
+                model.api_key,
+                provider.vertex_config if provider else None,
+            )
+            model.query_embedding_cache_key = hashlib.sha256(
+                json.dumps(identity, sort_keys=True).encode()
+            ).hexdigest()
+        return model
 
 
 class RerankingModel:
