@@ -1,13 +1,6 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import ReactMarkdown, { Components } from "react-markdown";
-import type { PluggableList } from "unified";
-import remarkGfm from "remark-gfm";
-import remarkMath from "remark-math";
-import rehypeHighlight from "rehype-highlight";
-import { useHighlightLanguages } from "@/hooks/useHighlightLanguages";
-import rehypeKatex from "rehype-katex";
-import "katex/dist/katex.min.css";
+import type { Components } from "react-markdown";
 
 import { useTypewriter } from "@/hooks/useTypewriter";
 import { Text } from "@opal/components";
@@ -21,27 +14,19 @@ import {
   FullChatState,
 } from "@/app/app/message/messageComponents/types";
 import { isFinalAnswerComplete } from "../../../services/packetUtils";
-import { processContent, ScrollableTable } from "../markdownUtils";
+import { stripPartialCitations, ScrollableTable } from "../markdownUtils";
 import { BlinkingBar } from "../../BlinkingBar";
 import { useVoiceMode } from "@/providers/VoiceModeProvider";
-import {
-  MemoizedAnchor,
-  MemoizedParagraph,
-} from "@/app/app/message/MemoizedTextComponents";
-import { extractCodeText } from "@/app/app/message/codeUtils";
+import { MemoizedAnchor } from "@/app/app/message/MemoizedTextComponents";
 import {
   createCitationResolver,
   tableToCopyContent,
 } from "@/app/app/message/tableCopyUtils";
-import { CodeBlock } from "@/app/app/message/CodeBlock";
 import { InMessageImage } from "@/app/app/components/files/images/InMessageImage";
 import { extractChatImageFileId } from "@/app/app/components/files/images/utils";
-import { transformLinkUri } from "@/lib/utils";
-import { rehypeDirection } from "@/lib/rehypeDirection";
-import { rehypeStreamingCursor } from "@/lib/rehypeStreamingCursor";
 import { useInResponse } from "@/lib/timeline/components/Response";
 import { ResponseCursorAnchor } from "@/lib/timeline/components/ResponseCursor";
-import { cn } from "@opal/utils";
+import { AnswerMarkdown } from "@/lib/answerText/components";
 import { useSmoothStreaming } from "@/hooks/useSmoothStreaming";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 
@@ -86,16 +71,6 @@ function getRevealPosition(markdown: string, cleanChars: number): number {
 
   return mdIndex;
 }
-
-// Streaming pipeline runs gfm + math so LaTeX renders live.
-// Syntax highlighting is the heavier of the two and stays deferred —
-// rehype-highlight only flips in once the stream is fully displayed.
-const STREAMING_REMARK_PLUGINS: PluggableList = [
-  remarkGfm,
-  [remarkMath, { singleDollarTextMath: true }],
-];
-const STREAMING_REHYPE_PLUGINS: PluggableList = [rehypeKatex, rehypeDirection];
-const FULL_REMARK_PLUGINS: PluggableList = STREAMING_REMARK_PLUGINS;
 
 export const MessageTextRenderer: MessageRenderer<
   ChatPacket,
@@ -288,22 +263,6 @@ export const MessageTextRenderer: MessageRenderer<
   const streamFullyDisplayed =
     isStreamFinished && displayedContent.length >= content.length;
 
-  // Syntax-highlighting grammars load dynamically, and only once the stream is
-  // fully displayed — keeps the ~170 KB corpus off the critical path. Until
-  // they resolve we fall back to the streaming (katex-only) plugin set.
-  const highlightLanguages = useHighlightLanguages(streamFullyDisplayed);
-  const fullRehypePlugins = useMemo<PluggableList>(
-    () =>
-      highlightLanguages
-        ? [
-            [rehypeHighlight, { languages: highlightLanguages }],
-            rehypeKatex,
-            rehypeDirection,
-          ]
-        : STREAMING_REHYPE_PLUGINS,
-    [highlightLanguages]
-  );
-
   // Capture `animate` at mount. `animate = !stopPacketSeen`, which only
   // ever goes true→false during a renderer's lifetime, so its mount-time
   // value distinguishes "actively-streaming renderer" (animate=true) from
@@ -328,20 +287,17 @@ export const MessageTextRenderer: MessageRenderer<
   }, [isDraining, setIsStreamDraining]);
 
   const processedContent = useMemo(
-    () => processContent(displayedContent),
+    () => stripPartialCitations(displayedContent),
     [displayedContent]
   );
 
-  // Stable-identity components for ReactMarkdown. Dynamic data (`state`,
-  // `processedContent`) flows through refs so the callback identities
-  // never change — otherwise every typewriter tick would invalidate
-  // React reconciliation on the markdown subtree.
+  // Stable-identity components for ReactMarkdown. Dynamic data (`state`)
+  // flows through a ref so the callback identities never change —
+  // otherwise every typewriter tick would invalidate React reconciliation
+  // on the markdown subtree.
   const stateRef = useRef(state);
   // oxlint-disable-next-line react-doctor/no-ref-current-in-render -- render-phase mirror keeps markdownComponents identities stable (see block comment above)
   stateRef.current = state;
-  const processedContentRef = useRef(processedContent);
-  // oxlint-disable-next-line react-doctor/no-ref-current-in-render -- render-phase mirror keeps markdownComponents identities stable (see block comment above)
-  processedContentRef.current = processedContent;
 
   const markdownComponents = useMemo<Components>(
     () => ({
@@ -371,10 +327,6 @@ export const MessageTextRenderer: MessageRenderer<
           </MemoizedAnchor>
         );
       },
-      p: ({ children, dir }) => (
-        <MemoizedParagraph dir={dir}>{children}</MemoizedParagraph>
-      ),
-      pre: ({ children }) => <>{children}</>,
       b: ({ className, children }) => (
         <span className={className}>{children}</span>
       ),
@@ -413,18 +365,6 @@ export const MessageTextRenderer: MessageRenderer<
           {children}
         </ScrollableTable>
       ),
-      code: ({ node, className, children }) => {
-        const codeText = extractCodeText(
-          node,
-          processedContentRef.current,
-          children
-        );
-        return (
-          <CodeBlock className={className} codeText={codeText}>
-            {children}
-          </CodeBlock>
-        );
-      },
     }),
     []
   );
@@ -449,22 +389,8 @@ export const MessageTextRenderer: MessageRenderer<
       (!isStreamingAnimationEnabled && !stopPacketSeen) ||
       (shouldUseAutoPlaybackSync && content.length < fullContent.length));
 
-  const baseRehypePlugins = streamFullyDisplayed
-    ? fullRehypePlugins
-    : STREAMING_REHYPE_PLUGINS;
-  // The cursor sits inline after the last character of the parsed tree. In
-  // a response, it is a marker for the response's one cursor.
+  // In a response, an empty answer marks the response's one cursor.
   const inResponse = useInResponse();
-  const rehypePlugins = useMemo<PluggableList>(
-    () =>
-      shouldShowCursor
-        ? [
-            ...baseRehypePlugins,
-            [rehypeStreamingCursor, { anchor: inResponse }],
-          ]
-        : baseRehypePlugins,
-    [shouldShowCursor, baseRehypePlugins, inResponse]
-  );
 
   return children([
     {
@@ -478,24 +404,12 @@ export const MessageTextRenderer: MessageRenderer<
             </Text>
           </span>
         ) : displayedContent.length > 0 ? (
-          <div
-            dir="auto"
-            className={cn(!streamFullyDisplayed && "streaming-katex")}
-          >
-            <ReactMarkdown
-              className="response-text prose prose-onyx font-main-content-body max-w-full"
-              components={markdownComponents}
-              remarkPlugins={
-                streamFullyDisplayed
-                  ? FULL_REMARK_PLUGINS
-                  : STREAMING_REMARK_PLUGINS
-              }
-              rehypePlugins={rehypePlugins}
-              urlTransform={transformLinkUri}
-            >
-              {processedContent}
-            </ReactMarkdown>
-          </div>
+          <AnswerMarkdown
+            content={processedContent}
+            streaming={!streamFullyDisplayed}
+            cursor={shouldShowCursor}
+            components={markdownComponents}
+          />
         ) : inResponse ? (
           <ResponseCursorAnchor addMargin />
         ) : (

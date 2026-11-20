@@ -15,8 +15,6 @@ import rehypeKatex from "rehype-katex";
 import "katex/dist/katex.min.css";
 import { transformLinkUri } from "@/lib/utils";
 import { rehypeDirection } from "@/lib/rehypeDirection";
-import { rehypeStreamingCursor } from "@/lib/rehypeStreamingCursor";
-import { useInResponse } from "@/lib/timeline/components/Response";
 import { cn } from "@opal/utils";
 
 type MinimalMarkdownComponentOverrides = Partial<Components>;
@@ -32,8 +30,6 @@ interface MinimalMarkdownProps {
   components?: MinimalMarkdownComponentOverrides;
   /** Skip rehype-highlight while content is mid-stream. Flip false on completion. */
   streaming?: boolean;
-  /** Show the streaming cursor inline after the last character. */
-  cursor?: boolean;
 }
 
 export default function MinimalMarkdown({
@@ -42,24 +38,19 @@ export default function MinimalMarkdown({
   showHeader = true,
   components,
   streaming = false,
-  cursor = false,
 }: MinimalMarkdownProps) {
   const highlightLanguages = useHighlightLanguages(!streaming);
-  // In a response, the cursor is a marker for the response's one cursor.
-  const inResponse = useInResponse();
-  const rehypePlugins = useMemo<PluggableList>(() => {
-    const plugins: PluggableList =
+  const rehypePlugins = useMemo<PluggableList>(
+    () =>
       !streaming && highlightLanguages
         ? [
             [rehypeHighlight, { detect: true, languages: highlightLanguages }],
             rehypeKatex,
             rehypeDirection,
           ]
-        : [rehypeKatex, rehypeDirection];
-    return cursor
-      ? [...plugins, [rehypeStreamingCursor, { anchor: inResponse }]]
-      : plugins;
-  }, [streaming, highlightLanguages, cursor, inResponse]);
+        : [rehypeKatex, rehypeDirection],
+    [streaming, highlightLanguages]
+  );
   const markdownComponents = useMemo(() => {
     const defaults: Components = {
       a: MemoizedLink,

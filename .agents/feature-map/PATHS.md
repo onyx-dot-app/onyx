@@ -275,6 +275,7 @@ covers new files that match it.
 | `web/src/lib/timeline/` | chat-frontend, craft-frontend |
 | `web/src/lib/outputPanel/`, `web/src/sections/output-panel/` | chat-frontend, craft-frontend |
 | `web/src/lib/rehypeStreamingCursor.ts` | chat-frontend, craft-frontend |
+| `web/src/lib/answerText/`, `web/src/lib/codeHighlight/` | chat-frontend, craft-frontend |
 | `web/src/lib/app/hooks.ts` | chat-frontend, whitelabelling-and-theme |
 | `web/src/providers/IncognitoProvider.tsx` | chat-frontend, chat-persistence |
 | `web/src/sections/model-selector/` | chat-frontend, llm-providers |
