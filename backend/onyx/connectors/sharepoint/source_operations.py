@@ -599,7 +599,7 @@ class SharepointSourceOperations(SourceOperations):
             item,
             SHAREPOINT_CONNECTOR_SIZE_THRESHOLD,
             self._base(),
-            self._gateway().access_token(),
+            self._gateway().access_token,
             raw_file_callback,
             self.request_pacer,
         )

@@ -24,6 +24,7 @@ from onyx.connectors.microsoft_utils.graph_client import (
     backoff_seconds,
     sleep_and_retry,
 )
+from onyx.connectors.microsoft_utils.request_pacer import sdk_client_pacer
 from onyx.connectors.teams.models import (
     ChannelLibrary,
     ChannelMember,
@@ -144,6 +145,12 @@ def request_with_retry(
         # Transient Graph errors (rate limits + 5xx gateway/server hiccups) are
         # retried with backoff; any other status is surfaced immediately.
         if response.status_code in GRAPH_API_RETRYABLE_STATUSES:
+            # Other callers on the app learn of the refusal through the pacer.
+            pacer = sdk_client_pacer(graph_client)
+            if pacer is not None:
+                pacer.report_response(
+                    response.status_code, response.headers.get("Retry-After")
+                )
             cooldown = backoff_seconds(
                 attempt=retry_number,
                 retry_after=response.headers.get("Retry-After"),
