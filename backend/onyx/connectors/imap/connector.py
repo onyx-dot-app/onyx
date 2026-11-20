@@ -1,3 +1,4 @@
+import calendar
 import copy
 import email
 import imaplib
@@ -42,14 +43,9 @@ _PAGE_SIZE = 100
 _USERNAME_KEY = "imap_username"
 _PASSWORD_KEY = "imap_password"
 _INTERNALDATE_FETCH_BATCH_SIZE = 500
-_IMAP_MONTHS = [
-    "Jan", "Feb", "Mar", "Apr", "May", "Jun",
-    "Jul", "Aug", "Sep", "Oct", "Nov", "Dec",
-]  # fmt: skip
-_INTERNALDATE_RE = re.compile(
-    r'^(\d+) \(.*INTERNALDATE "\s?(\d{1,2})-(\w{3})-(\d{4}) '
-    r'(\d{2}):(\d{2}):(\d{2}) ([+-])(\d{2})(\d{2})"'
-)
+# The stdlib's RFC 3501 INTERNALDATE regex and month table; typeshed omits them.
+_IMAP_INTERNALDATE_RE = imaplib.InternalDate  # ty: ignore[unresolved-attribute]
+_IMAP_MON2NUM: dict[bytes, int] = imaplib.Mon2num  # ty: ignore[unresolved-attribute]
 
 
 class CurrentMailbox(BaseModel):
@@ -371,8 +367,9 @@ def _fetch_email_ids_in_mailbox(
 
 
 def _format_imap_date(day: date) -> str:
-    # strftime("%b") depends on the locale; IMAP needs English month names.
-    return f"{day.day:02d}-{_IMAP_MONTHS[day.month - 1]}-{day.year}"
+    # Time2Internaldate gives '"dd-Mon-yyyy HH:MM:SS +zzzz"'; SEARCH takes the date.
+    midnight = datetime(day.year, day.month, day.day, tzinfo=timezone.utc)
+    return imaplib.Time2Internaldate(midnight).strip('"').split(" ")[0]
 
 
 def _fetch_internal_dates(
@@ -391,35 +388,37 @@ def _fetch_internal_dates(
             line = item[0] if isinstance(item, tuple) else item
             if not isinstance(line, bytes):
                 continue
-            parsed = _parse_internaldate_line(line.decode(errors="replace"))
+            parsed = _parse_internaldate_line(line)
             if parsed:
                 internal_dates[parsed[0]] = parsed[1]
     return internal_dates
 
 
-def _parse_internaldate_line(line: str) -> tuple[str, float] | None:
-    match = _INTERNALDATE_RE.match(line)
-    if not match:
+def _parse_internaldate_line(line: bytes) -> tuple[str, float] | None:
+    """Return the sequence number and epoch of a FETCH INTERNALDATE line.
+
+    `Internaldate2tuple` rolls an out-of-range day or zone over to a wrong time,
+    so reject those first. The caller then keeps the message.
+    """
+    match = _IMAP_INTERNALDATE_RE.match(line)
+    if not match or match["mon"] not in _IMAP_MON2NUM:
         return None
-    seq, day, month, year, hour, minute, second, sign, tz_hour, tz_minute = (
-        match.groups()
+    _, days_in_month = calendar.monthrange(
+        int(match["year"]), _IMAP_MON2NUM[match["mon"]]
     )
-    if month not in _IMAP_MONTHS or int(tz_minute) >= 60:
+    if (
+        not 1 <= int(match["day"]) <= days_in_month
+        or int(match["zoneh"]) >= 24
+        or int(match["zonem"]) >= 60
+    ):
         return None
-    offset = timedelta(hours=int(tz_hour), minutes=int(tz_minute))
-    try:
-        internal_date = datetime(
-            int(year),
-            _IMAP_MONTHS.index(month) + 1,
-            int(day),
-            int(hour),
-            int(minute),
-            int(second),
-            tzinfo=timezone(offset if sign == "+" else -offset),
-        )
-    except ValueError:
+
+    local_time = imaplib.Internaldate2tuple(line)
+    if local_time is None or local_time.tm_gmtoff is None:
         return None
-    return seq, internal_date.timestamp()
+    seq = line.split(b" ", 1)[0].decode()
+    # Local struct_time back to an epoch without a mktime round trip.
+    return seq, float(calendar.timegm(local_time) - local_time.tm_gmtoff)
 
 
 def _fetch_email(mail_client: imaplib.IMAP4_SSL, email_id: str) -> Message | None:

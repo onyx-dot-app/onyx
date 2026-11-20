@@ -1,4 +1,5 @@
 import re
+import time
 from datetime import datetime, timezone
 
 import pytest
@@ -140,7 +141,7 @@ def test_consecutive_polls_neither_skip_nor_repeat() -> None:
 
 def test_parse_internaldate_line_handles_space_padded_day() -> None:
     assert _parse_internaldate_line(
-        '7 (INTERNALDATE " 9-Oct-2026 10:02:00 +0200")'
+        b'7 (INTERNALDATE " 9-Oct-2026 10:02:00 +0200")'
     ) == (
         "7",
         _ts("2026-10-09T10:02:00+02:00"),
@@ -153,10 +154,11 @@ def test_parse_internaldate_line_handles_space_padded_day() -> None:
         '7 (INTERNALDATE "31-Feb-2026 10:02:00 +0000")',
         '7 (INTERNALDATE "09-Oct-2026 10:02:00 +9900")',
         '7 (INTERNALDATE "09-Oct-2026 10:02:00 +0099")',
+        '7 (INTERNALDATE "09-Xyz-2026 10:02:00 +0000")',
     ],
 )
 def test_invalid_internaldate_is_unknown_and_message_is_kept(line: str) -> None:
-    assert _parse_internaldate_line(line) is None
+    assert _parse_internaldate_line(line.encode()) is None
 
     class _BadDateServer(_FakeImapServer):
         def fetch(
@@ -174,3 +176,24 @@ def test_invalid_internaldate_is_unknown_and_message_is_kept(line: str) -> None:
     )
 
     assert ids == ["1"]
+
+
+@pytest.mark.parametrize(
+    "internal_date", ["01-Nov-2026 08:30:00 +0000", "01-Nov-2026 09:30:00 +0000"]
+)
+def test_internaldate_is_exact_across_local_dst_fallback(
+    monkeypatch: pytest.MonkeyPatch, internal_date: str
+) -> None:
+    # 01:30 local happens twice in America/Los_Angeles on this date.
+    monkeypatch.setenv("TZ", "America/Los_Angeles")
+    time.tzset()
+    try:
+        parsed = _parse_internaldate_line(
+            f'3 (INTERNALDATE "{internal_date}")'.encode()
+        )
+    finally:
+        monkeypatch.undo()
+        time.tzset()
+
+    expected = datetime.strptime(internal_date, "%d-%b-%Y %H:%M:%S %z").timestamp()
+    assert parsed == ("3", expected)
