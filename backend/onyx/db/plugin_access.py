@@ -770,12 +770,6 @@ def visible_plugin_ids(user_id: UUID) -> Select[tuple[UUID]]:
     return select(pairs.c.plugin_id)
 
 
-def plugin_ids_visible_to(user_id: UUID, db_session: Session) -> set[UUID]:
-    """The plugins a member with this user's access sees, for the admin
-    lists that leave out what members cannot see."""
-    return set(db_session.scalars(visible_plugin_ids(user_id)))
-
-
 _NO_SKILL_DISK_ACCOUNTS = (
     AccountType.BOT,
     AccountType.EXT_PERM_USER,
@@ -1043,3 +1037,9 @@ def load_plugin_access(
         )
         for row in plugin_rows
     }
+
+
+def plugin_ids_visible_to(user_id: UUID, db_session: Session) -> set[UUID]:
+    """The plugins a member with this user's access sees, for the admin
+    lists that leave out what members cannot see."""
+    return set(db_session.scalars(visible_plugin_ids(user_id)))
