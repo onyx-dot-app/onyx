@@ -7,6 +7,7 @@ from typing import Any, cast
 
 import requests
 from office365.runtime.client_request_exception import ClientRequestException
+from typing_extensions import override
 
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
@@ -219,6 +220,7 @@ class TeamsConnector(
         self.open(credentials)
         return None
 
+    @override
     def set_source_api_limiter(self, limiter: SourceApiLimiter) -> None:
         super().set_source_api_limiter(limiter)
         self.request_pacer = MicrosoftRequestPacer(limiter)
