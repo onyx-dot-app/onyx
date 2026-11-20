@@ -5,7 +5,6 @@ import { useTranslations } from "next-intl";
 import { Badge, Tag, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { SvgSearch } from "@opal/icons";
-import { BlinkingBar } from "@/app/app/message/BlinkingBar";
 import { ValidSources } from "@/lib/connectors/types/source";
 import { getSourceMetadata } from "@/lib/connectors/utils";
 import type { IconFunctionComponent } from "@opal/types";
@@ -92,9 +91,7 @@ export function RetrievalBody({
               />
             )}
           </Section>
-        ) : (
-          !isComplete && <BlinkingBar />
-        ))}
+        ) : null)}
 
       {showResults && !compact && (
         <Text as="p" font="secondary-action" color="text-03">
@@ -134,13 +131,11 @@ export function RetrievalBody({
               />
             )}
           </Section>
-        ) : !isComplete ? (
-          <BlinkingBar />
-        ) : (
+        ) : isComplete ? (
           <Text as="p" font="main-ui-muted" color="text-03">
             {t("internalSearch.noResults.text")}
           </Text>
-        ))}
+        ) : null)}
     </Section>
   );
 }

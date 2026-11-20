@@ -66,11 +66,10 @@ export default function TextChunk({
   return (
     <div className="py-1">
       <MinimalMarkdown
-        // As in chat, `[*]()` renders as the cursor, inline after the last
-        // character (the link renderer hands it to MemoizedLink).
-        content={isStreaming ? `${visible} [*]() ` : visible}
+        content={visible}
         className="text-text-05"
         streaming={isStreaming}
+        cursor={isStreaming}
         components={components}
       />
     </div>

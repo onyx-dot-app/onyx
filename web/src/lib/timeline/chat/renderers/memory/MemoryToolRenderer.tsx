@@ -6,7 +6,6 @@ import {
   MessageRenderer,
   RenderType,
 } from "@/app/app/message/messageComponents/types";
-import { BlinkingBar } from "@/app/app/message/BlinkingBar";
 import { constructCurrentMemoryState } from "./memoryStateUtils";
 import { SvgMaximize2 } from "@opal/icons";
 import { STEP_ICONS } from "@/lib/timeline/icons";
@@ -19,7 +18,7 @@ import { useCreateModal } from "@opal/components";
  * MemoryToolRenderer - Renders memory tool execution steps
  *
  * States:
- * - Loading (start, no delta): "Saving memory..." with BlinkingBar
+ * - Loading (start, no delta): "Saving memory..."
  * - Delta received: operation label + memory text
  * - Complete (SectionEnd): "Memory saved" / "Memory updated" + memory text
  * - No Access: "Memory tool disabled"
@@ -139,9 +138,7 @@ export const MemoryToolRenderer: MessageRenderer<MemoryToolPacket, {}> = ({
             }}
           />
         </Section>
-      ) : (
-        !stopPacketSeen && <BlinkingBar />
-      )}
+      ) : null}
     </div>
   );
 
