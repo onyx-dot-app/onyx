@@ -3,6 +3,7 @@
  * `backend/onyx/server/features/skill/models.py`.
  */
 
+import type { SkillMarketplace } from "@/lib/marketplaces/types";
 import type { PluginDetail } from "@/lib/plugins/types";
 
 export type SkillInstallationPolicy =
@@ -100,6 +101,10 @@ export interface Skill {
   available_count: number;
   needed_count: number;
   plugin: PluginDetail | null;
+  /** Where the skill comes from. Null for built-ins. */
+  marketplace: SkillMarketplace | null;
+  /** Synced from GitHub: its content changes only in GitHub. */
+  content_locked: boolean;
 }
 
 export type BuiltinSkill = Skill & {
@@ -179,20 +184,6 @@ export interface SkillBundleContents {
   description: string;
   instructions_markdown: string;
   files: SkillBundleFile[];
-}
-
-export interface GitHubSkillPreview {
-  path: string;
-  name: string;
-  description: string | null;
-  unavailable_reason: string | null;
-}
-
-export interface GitHubSkillsPreview {
-  repository: string;
-  revision: string;
-  subpath: string | null;
-  skills: GitHubSkillPreview[];
 }
 
 export interface GitHubImportedSkill {

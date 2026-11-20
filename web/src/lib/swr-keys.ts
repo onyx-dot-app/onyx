@@ -297,6 +297,8 @@ export const SWR_KEYS = {
   skillVersions: (skillId: string) => `/api/skills/custom/${skillId}/versions`,
   skillVersion: (skillId: string, versionId: string) =>
     `/api/skills/custom/${skillId}/versions/${versionId}`,
+  marketplaces: "/api/marketplaces",
+  marketplace: (marketplaceId: string) => `/api/marketplaces/${marketplaceId}`,
 
   // ── Tools ─────────────────────────────────────────────────────────────────
   tools: "/api/tool",

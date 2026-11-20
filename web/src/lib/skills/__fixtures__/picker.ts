@@ -37,6 +37,8 @@ export function builtinFixture(over: Partial<BuiltinSkill> = {}): BuiltinSkill {
     available_count: 0,
     needed_count: 0,
     plugin: null,
+    marketplace: null,
+    content_locked: false,
     ...over,
   };
 }
@@ -76,6 +78,8 @@ export function customFixture(over: Partial<CustomSkill> = {}): CustomSkill {
     available_count: 0,
     needed_count: 0,
     plugin: null,
+    marketplace: null,
+    content_locked: false,
     ...over,
   };
 }

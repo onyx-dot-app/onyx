@@ -246,3 +246,67 @@ test("turning on a plugin refreshes the integration rows it turned on", async ()
 
   await waitFor(() => expect(within(row).getByText("On")).toBeInTheDocument());
 });
+
+test("a synced plugin names its repository and hides restore and publish", async () => {
+  window.history.replaceState(
+    null,
+    "",
+    `/app/customize/plugins/${PLUGIN_ID}?tab=versions`
+  );
+  const plugin = customFixture({
+    id: PLUGIN_ID,
+    name: "review-kit",
+    kind: "plugin",
+    user_permission: "OWNER",
+    current_version_id: "version-2",
+    current_version_number: 2,
+    published_version_number: 1,
+    content_locked: true,
+    marketplace: {
+      id: "22222222-2222-4222-8222-222222222222",
+      name: "acme/plugins",
+      kind: "github",
+      repository: "acme/plugins",
+    },
+    plugin: { manifest: null, skills: [], needs: [] },
+  });
+  mockFetch({
+    "/api/skills": { builtins: [], customs: [plugin] },
+    [`/api/skills/${PLUGIN_ID}`]: plugin,
+    [`/api/skills/custom/${PLUGIN_ID}/versions`]: [
+      {
+        id: "version-2",
+        version_number: 2,
+        created_at: "2026-11-02T10:00:00Z",
+        created_by_email: "me@example.com",
+        is_current: true,
+        review_status: "draft",
+      },
+      {
+        id: "version-1",
+        version_number: 1,
+        created_at: "2026-11-01T10:00:00Z",
+        created_by_email: "me@example.com",
+        is_current: false,
+        review_status: "published",
+      },
+    ],
+  });
+  render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
+
+  expect(
+    await screen.findByText("Synced from acme/plugins")
+  ).toBeInTheDocument();
+  expect(
+    await screen.findByText(
+      "This plugin syncs from GitHub, so you change it in GitHub."
+    )
+  ).toBeInTheDocument();
+  expect(await screen.findByText("Version 1")).toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Restore version 1" })
+  ).not.toBeInTheDocument();
+  expect(
+    screen.queryByRole("button", { name: "Publish update" })
+  ).not.toBeInTheDocument();
+});

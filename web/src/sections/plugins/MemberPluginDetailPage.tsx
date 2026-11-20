@@ -3,9 +3,10 @@
 import { useEffect, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
-import { Card, InputSwitch, Text } from "@opal/components";
+import { Badge, Card, InputSwitch, Text } from "@opal/components";
 import { Content, Section } from "@opal/layouts";
 import { SvgBlocks } from "@opal/icons";
+import { SvgGitHub } from "@opal/logos";
 import { useNavigation, useSearchParams } from "@opal/navigation";
 import useUserSkills from "@/hooks/useUserSkills";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
@@ -224,6 +225,8 @@ export default function MemberPluginDetailPage({
     if (skillOnlyId) navigation.go(skillHref(skillOnlyId), { replace: true });
   }, [navigation, skillOnlyId]);
   const skill = entry?.skills.length === 1 ? entry.skills[0] : undefined;
+  const syncedFrom =
+    skill?.marketplace?.kind === "github" ? skill.marketplace.repository : null;
   const showVersions =
     skill !== undefined &&
     (skill.user_permission === "OWNER" || skill.user_permission === "EDITOR");
@@ -306,6 +309,14 @@ export default function MemberPluginDetailPage({
       icon={SvgBlocks}
       title={entry?.name ?? t("title")}
       description={entry?.description ?? undefined}
+      tags={
+        syncedFrom ? (
+          <Badge
+            icon={SvgGitHub}
+            title={t("syncedFrom", { repository: syncedFrom })}
+          />
+        ) : undefined
+      }
       loading={loading || skillOnlyId !== undefined}
       error={
         loading

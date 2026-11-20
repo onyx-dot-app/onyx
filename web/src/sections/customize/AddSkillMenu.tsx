@@ -2,16 +2,21 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { Button, Dropdown, useCreateModal } from "@opal/components";
-import { SvgEdit, SvgPlus, SvgUploadCloud } from "@opal/icons";
+import { Button, Dropdown, type DropdownMenuItem } from "@opal/components";
+import { SvgEdit, SvgPlus, SvgSettings, SvgUploadCloud } from "@opal/icons";
 import { SvgGitHub } from "@opal/logos";
 import { useNavigation } from "@opal/navigation";
 import { toast } from "@opal/layouts";
-import { newSkillHref, pluginHref } from "@/lib/customize/paths";
+import {
+  MARKETPLACES_PATH,
+  newSkillHref,
+  pluginHref,
+} from "@/lib/customize/paths";
+import { useMarketplaceAdded } from "@/lib/marketplaces/hooks";
 import { stageSkillCreationDraft } from "@/lib/skills/creationDraft";
 import { useRefreshSkillLists } from "@/lib/skills/hooks";
 import CreateSkillModal from "@/sections/modals/skills/CreateSkillModal";
-import ImportSkillsFromGitHubModal from "@/sections/modals/skills/ImportSkillsFromGitHubModal";
+import AddMarketplaceModal from "@/sections/marketplaces/AddMarketplaceModal";
 import UploadPluginModal from "@/sections/modals/plugins/UploadPluginModal";
 
 interface AddSkillMenuProps {
@@ -25,7 +30,27 @@ export default function AddSkillMenu({ upload = "skill" }: AddSkillMenuProps) {
   const revalidate = useRefreshSkillLists();
   const [uploadOpen, setUploadOpen] = useState(false);
   const [pluginUploadOpen, setPluginUploadOpen] = useState(false);
-  const githubModal = useCreateModal();
+  const [marketplaceOpen, setMarketplaceOpen] = useState(false);
+  const onMarketplaceAdded = useMarketplaceAdded();
+  const marketplaceItems: DropdownMenuItem[] =
+    upload === "plugin"
+      ? [
+          {
+            kind: "action",
+            id: "marketplace",
+            icon: SvgGitHub,
+            title: t("marketplace"),
+            onSelect: () => setMarketplaceOpen(true),
+          },
+          {
+            kind: "action",
+            id: "manage-marketplaces",
+            icon: SvgSettings,
+            title: t("manageMarketplaces"),
+            onSelect: () => navigation.go(MARKETPLACES_PATH),
+          },
+        ]
+      : [];
 
   return (
     <>
@@ -53,13 +78,7 @@ export default function AddSkillMenu({ upload = "skill" }: AddSkillMenuProps) {
               title: t("create"),
               onSelect: () => navigation.go(newSkillHref()),
             },
-            {
-              kind: "action",
-              id: "github",
-              icon: SvgGitHub,
-              title: t("github"),
-              onSelect: () => githubModal.toggle(true),
-            },
+            ...marketplaceItems,
           ]}
         />
       </Dropdown>
@@ -95,13 +114,15 @@ export default function AddSkillMenu({ upload = "skill" }: AddSkillMenuProps) {
           );
         }}
       />
-      <githubModal.Provider>
-        <ImportSkillsFromGitHubModal
-          open
-          onClose={() => githubModal.toggle(false)}
-          onImported={revalidate}
-        />
-      </githubModal.Provider>
+      <AddMarketplaceModal
+        open={marketplaceOpen}
+        onClose={() => setMarketplaceOpen(false)}
+        onAdded={(marketplace) => {
+          setMarketplaceOpen(false);
+          onMarketplaceAdded(marketplace);
+          navigation.go(MARKETPLACES_PATH);
+        }}
+      />
     </>
   );
 }

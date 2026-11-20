@@ -1,0 +1,145 @@
+"use client";
+
+import { useTranslations } from "next-intl";
+import { Card, MessageCard, Text } from "@opal/components";
+import { Content, KeyValue, Section } from "@opal/layouts";
+import { SvgBlocks } from "@opal/icons";
+import type { StatusColor } from "@opal/types";
+import type {
+  MarketplaceEntryStatus,
+  MarketplacePreview as Preview,
+  MarketplacePreviewEntry,
+} from "@/lib/marketplaces/types";
+import PluginNeedList from "@/sections/plugins/PluginNeedList";
+
+export const ENTRY_STATUS_COLOR = {
+  ok: "success",
+  blocked: "warning",
+  not_supported: "default",
+} as const satisfies Record<MarketplaceEntryStatus, StatusColor>;
+
+interface PreviewEntryProps {
+  entry: MarketplacePreviewEntry;
+}
+
+function PreviewEntry({ entry }: PreviewEntryProps) {
+  const t = useTranslations("plugins.marketplaces");
+  const installs = entry.skills.length > 0 || entry.needs.length > 0;
+  return (
+    <Card padding={2} border="solid">
+      <Section gap={2} alignItems="stretch" height="auto">
+        <Content
+          icon={SvgBlocks}
+          title={entry.name ?? entry.key}
+          description={entry.description ?? entry.reason ?? undefined}
+          badge={[
+            {
+              title: t(`status.${entry.status}`),
+              color: ENTRY_STATUS_COLOR[entry.status],
+            },
+            ...(entry.version
+              ? [{ title: t("preview.version", { version: entry.version }) }]
+              : []),
+          ]}
+        />
+        {entry.status === "ok" && installs && (
+          <Section gap={1} alignItems="stretch" height="auto">
+            <Text as="p" font="secondary-action" color="text-03">
+              {t("preview.willInstall")}
+            </Text>
+            {entry.skills.length > 0 && (
+              <Text as="p" font="secondary-body" color="text-03">
+                {t("preview.skills", {
+                  count: entry.skills.length,
+                  names: entry.skills.map((skill) => skill.name).join(", "),
+                })}
+              </Text>
+            )}
+            {entry.needs.length > 0 && (
+              <PluginNeedList needs={entry.needs} interactive={false} />
+            )}
+          </Section>
+        )}
+        {entry.warnings.map((warning) => (
+          <Text
+            key={warning}
+            as="p"
+            font="secondary-body"
+            color="status-warning-05"
+          >
+            {warning}
+          </Text>
+        ))}
+      </Section>
+    </Card>
+  );
+}
+
+interface MarketplacePreviewProps {
+  preview: Preview;
+}
+
+/** What the add will do: the source Onyx resolved, then each plugin. */
+export default function MarketplacePreview({
+  preview,
+}: MarketplacePreviewProps) {
+  const t = useTranslations("plugins.marketplaces");
+  const ready = preview.entries.filter((entry) => entry.status === "ok");
+  return (
+    <Section gap={3} alignItems="stretch" height="auto">
+      <Card padding={4} border="solid">
+        <Section gap={3} alignItems="stretch" height="auto">
+          <KeyValue
+            label={t("source.repository")}
+            value={preview.repository}
+            mono
+          />
+          <KeyValue
+            label={t("source.folder")}
+            value={preview.folder ?? t("source.root")}
+            mono={preview.folder !== null}
+          />
+          <KeyValue
+            label={t("source.ref")}
+            value={preview.ref ?? t("source.defaultBranch")}
+            mono={preview.ref !== null}
+          />
+          {preview.revision && (
+            <KeyValue
+              label={t("source.commit")}
+              value={preview.revision.slice(0, 12)}
+              mono
+            />
+          )}
+        </Section>
+      </Card>
+      {preview.status === "failed" ? (
+        <MessageCard
+          variant="error"
+          outerPadding={1}
+          innerPadding={1}
+          title={t("preview.failedTitle")}
+          description={preview.reason ?? undefined}
+        />
+      ) : (
+        <Section gap={2} alignItems="stretch" height="auto">
+          <Text as="p" font="main-ui-action" color="text-04">
+            {t("preview.title", {
+              name: preview.name ?? preview.repository,
+              count: ready.length,
+            })}
+          </Text>
+          {preview.entries.length === 0 ? (
+            <Text as="p" font="secondary-body" color="text-03">
+              {t("preview.empty")}
+            </Text>
+          ) : (
+            preview.entries.map((entry) => (
+              <PreviewEntry key={entry.key} entry={entry} />
+            ))
+          )}
+        </Section>
+      )}
+    </Section>
+  );
+}

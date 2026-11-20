@@ -16454,84 +16454,15 @@
         }
       },
       "importGithub": {
-        "cancelButton": {
-          "label": "Annuler"
+        "sharing": {
+          "configureButton": "Configurer l’accès"
         },
         "doneButton": {
           "label": "Terminé"
         },
-        "header": {
-          "chooseDescription": "Choisissez des compétences dans {repository}.",
-          "completeDescription": "Vérifiez ce qui a été ajouté à vos compétences.",
-          "completeTitle": "Importation GitHub terminée",
-          "description": "Importez une ou plusieurs compétences depuis un dépôt GitHub.",
-          "title": "Importer depuis GitHub"
-        },
-        "importError": {
-          "message": "Impossible d'importer les compétences.",
-          "title": "Impossible d'importer les compétences"
-        },
-        "loadError": {
-          "message": "Impossible de charger le dépôt.",
-          "title": "Impossible de charger le dépôt"
-        },
-        "privateRepos": {
-          "askAdmin": "Les dépôts publics s'importent directement. Demandez à un administrateur de configurer GitHub avant d'importer des dépôts privés.",
-          "connect": "Les dépôts publics s'importent directement. Connectez GitHub pour importer des dépôts privés.",
-          "connectButton": {
-            "label": "Connecter GitHub"
-          },
-          "connected": "Les dépôts publics s'importent directement. Les dépôts privés utilisent votre connexion GitHub.",
-          "needsConnection": "Les dépôts publics s'importent directement. Les dépôts privés exigent une connexion GitHub.",
-          "setUp": "Les dépôts publics s'importent directement. Configurez GitHub avant d'importer des dépôts privés.",
-          "setUpButton": {
-            "label": "Configurer GitHub"
-          }
-        },
-        "repositoryInput": {
-          "label": "Dépôt"
-        },
-        "result": {
-          "disabledCount": "{count} importée(s) mais désactivée(s), car une autre compétence du même nom est activée.",
-          "enabledCount": "{count} activée(s) automatiquement.",
-          "failedCount": "{count} non importée(s).",
-          "importedSection": {
-            "title": "Importées"
-          },
-          "importedTitle": "{count, plural, one {# compétence importée} other {# compétences importées}}",
-          "noneTitle": "Aucune compétence importée",
-          "notImportedSection": {
-            "title": "Non importées"
-          },
-          "notSelectedCount": "{count} non sélectionnée(s)."
-        },
-        "selectAll": {
-          "ariaLabel": "Sélectionner toutes les compétences importables"
-        },
-        "selection": {
-          "label": "Sélection : {selected} sur {total, plural, one {# compétence importable} other {# compétences importables}}"
-        },
-        "skillCheckbox": {
-          "ariaLabel": "Sélectionner {name}"
-        },
-        "skillTag": {
-          "disabled": "Désactivée",
-          "enabled": "Activée"
-        },
         "submitButton": {
-          "importLabel": "{count, plural, one {Importer la compétence} other {Importer # compétences}}",
           "importingLabel": "Importation…",
-          "searchLabel": "Rechercher dans le dépôt",
-          "searchingLabel": "Recherche…"
-        },
-        "unavailableFallback": "Cette compétence ne peut pas être importée.",
-        "unavailableTag": {
-          "label": "Importation impossible"
-        },
-        "sharing": {
-          "title": "Accès aux compétences importées",
-          "configureButton": "Configurer l’accès",
-          "description": "Ces paramètres d’accès s’appliquent à {count, plural, one {la compétence sélectionnée} other {toutes les # compétences sélectionnées}}."
+          "importLabel": "{count, plural, one {Importer la compétence} other {Importer # compétences}}"
         }
       },
       "nameConflict": {
@@ -16698,15 +16629,12 @@
           "failedToast": "Impossible de publier cette mise à jour.",
           "sentForReviewToast": "La version {number} a été envoyée à un administrateur pour examen.",
           "offNotice": "La publication est désactivée. Demandez à un administrateur de publier cette mise à jour."
-        }
+        },
+        "locked": "Ce plugin se synchronise depuis GitHub, donc vous le modifiez dans GitHub."
       }
     },
     "page": {
       "createMenu": {
-        "github": {
-          "description": "Importez une ou plusieurs compétences depuis un dépôt.",
-          "title": "Importer depuis GitHub"
-        },
         "scratch": {
           "description": "Rédigez les instructions et ajoutez des fichiers annexes dans {appName}.",
           "title": "Partir de zéro"
@@ -16717,6 +16645,10 @@
         "upload": {
           "description": "Importez un fichier SKILL.md, un fichier ZIP ou un dossier de compétence.",
           "title": "Téléverser une compétence"
+        },
+        "marketplace": {
+          "title": "Ajouter un marketplace",
+          "description": "Ajoutez depuis un dépôt et synchronisez ses plugins."
         }
       },
       "empty": {
@@ -16974,7 +16906,8 @@
           "required": "Votre administrateur a rendu ce plugin obligatoire. Vous ne pouvez pas le désactiver.",
           "unavailable": "Vous ne pouvez pas activer ou désactiver ce plugin.",
           "failed": "Impossible de modifier le plugin."
-        }
+        },
+        "syncedFrom": "Synchronisé depuis {repository}"
       },
       "connection": {
         "askAdmin": "Demandez à votre administrateur",
@@ -17157,6 +17090,155 @@
       "description": "Certaines intégrations dont ce plugin a besoin ne vous sont pas disponibles.",
       "note": "Le plugin fonctionne sans elles. Un plugin ne donne jamais accès à une intégration.",
       "done": "Terminé"
+    },
+    "marketplaces": {
+      "status": {
+        "ok": "Prêt",
+        "blocked": "Bloqué",
+        "not_supported": "Non pris en charge"
+      },
+      "scope": {
+        "personal": "Personnel",
+        "company": "Entreprise"
+      },
+      "source": {
+        "repository": "Dépôt",
+        "folder": "Dossier",
+        "root": "Racine du dépôt",
+        "ref": "Branche, tag ou commit",
+        "defaultBranch": "Branche par défaut",
+        "commit": "Commit"
+      },
+      "preview": {
+        "title": "{name} : {count, plural, one {# plugin à ajouter} other {# plugins à ajouter}}",
+        "empty": "Ce marketplace n’a aucune entrée.",
+        "failedTitle": "Onyx ne peut pas lire ce marketplace",
+        "version": "v{version}",
+        "willInstall": "Sera installé",
+        "skills": "{count, plural, one {Compétence} other {Compétences}} : {names}"
+      },
+      "add": {
+        "menuItem": "Ajouter un marketplace",
+        "title": "Ajouter un marketplace",
+        "description": "Ajoutez depuis un dépôt. Onyx lit son fichier .claude-plugin/marketplace.json, et chaque entrée devient un plugin.",
+        "confirmTitle": "Confirmer le marketplace",
+        "confirmDescription": "Vérifiez qu’il s’agit de la source et des plugins souhaités, puis ajoutez le marketplace.",
+        "repository": {
+          "title": "Dépôt",
+          "description": "Saisissez owner/repo ou l’URL du dépôt.",
+          "placeholder": "Par exemple, anthropics/claude-plugins"
+        },
+        "folder": {
+          "title": "Dossier",
+          "description": "Le dossier qui contient .claude-plugin/marketplace.json. Laissez vide pour utiliser la racine du dépôt.",
+          "placeholder": "Par exemple, plugins"
+        },
+        "ref": {
+          "title": "Branche, tag ou commit",
+          "description": "Laissez vide pour utiliser la branche par défaut.",
+          "placeholder": "Par exemple, main"
+        },
+        "scope": {
+          "title": "Type de marketplace",
+          "personalDescription": "Vous seul recevez les plugins de ce marketplace.",
+          "companyDescription": "Votre organisation reçoit les plugins de ce marketplace, comme pour les plugins publiés."
+        },
+        "defaultAccess": {
+          "title": "Accès par défaut",
+          "description": "Le paramètre d’installation de chaque plugin de ce marketplace. Vous pouvez le modifier plus tard pour un plugin."
+        },
+        "privateNote": "Onyx lit un dépôt privé avec votre connexion GitHub. Connectez GitHub dans Intégrations avant d’ajouter un dépôt privé.",
+        "continue": "Continuer",
+        "previewing": "Lecture…",
+        "back": "Retour",
+        "submit": "Ajouter un marketplace",
+        "adding": "Ajout…",
+        "cancel": "Annuler",
+        "previewFailed": "Impossible de lire le dépôt.",
+        "addFailed": "Impossible d’ajouter le marketplace.",
+        "added": "{name} ajouté. Ses plugins apparaissent après la première synchronisation."
+      },
+      "sync": {
+        "now": "Synchroniser maintenant",
+        "requested": "Synchronisation de {name} démarrée.",
+        "failed": "Impossible de démarrer la synchronisation.",
+        "lastSync": "Dernière synchronisation {date}",
+        "never": "Pas encore synchronisé",
+        "state": {
+          "syncing": "Synchronisation en cours",
+          "needs_confirmation": "Confirmer les suppressions",
+          "failed": "Échec de la synchronisation",
+          "synced": "Synchronisé"
+        }
+      },
+      "columns": {
+        "marketplace": "Marketplace",
+        "sync": "Synchronisation",
+        "items": "Éléments"
+      },
+      "items": "{count, plural, one {# plugin} other {# plugins}}",
+      "tableLabel": "Marketplaces",
+      "open": "Ouvrir {name}",
+      "menu": "Actions pour {name}",
+      "loadFailed": "Impossible de charger les marketplaces.",
+      "empty": {
+        "title": "Aucun marketplace pour l’instant",
+        "description": "Ajoutez un dépôt GitHub pour obtenir ses plugins."
+      },
+      "page": {
+        "title": "Marketplaces",
+        "description": "Les dépôts GitHub dont vous obtenez des plugins, avec leur source. Synchronisez un marketplace pour obtenir les changements de GitHub."
+      },
+      "attention": {
+        "failedTitle": "La dernière synchronisation de {name} a échoué",
+        "deletesTitle": "{name} attend que vous confirmiez les suppressions",
+        "deletesDescription": "Le dépôt n’a plus certaines entrées. Onyx supprime leurs plugins seulement après votre confirmation.",
+        "review": "Vérifier les suppressions"
+      },
+      "pendingDeletes": {
+        "title": "{count, plural, one {# plugin attend} other {# plugins attendent}} une suppression",
+        "description": "Le dépôt n’a plus ces entrées. Confirmez pour supprimer leurs plugins.",
+        "listLabel": "Plugins à supprimer",
+        "confirm": "Supprimer {count, plural, one {# plugin} other {# plugins}}",
+        "done": "Plugins supprimés. Une nouvelle synchronisation a démarré.",
+        "failed": "Impossible de supprimer les plugins."
+      },
+      "defaultAccess": {
+        "title": "Accès par défaut",
+        "description": "Le paramètre d’installation de chaque plugin de {name} qui n’a pas de paramètre propre.",
+        "save": "Enregistrer",
+        "cancel": "Annuler",
+        "saved": "Accès par défaut enregistré.",
+        "failed": "Impossible d’enregistrer l’accès par défaut."
+      },
+      "replaceLogin": {
+        "label": "Remplacer la connexion",
+        "description": "Lire le dépôt avec votre connexion GitHub.",
+        "done": "Onyx lit maintenant {name} avec votre connexion GitHub.",
+        "failed": "Impossible de remplacer la connexion."
+      },
+      "remove": {
+        "label": "Supprimer",
+        "title": "Supprimer {name} ?",
+        "description": "Cela supprime le marketplace et {count, plural, one {son plugin} other {ses # plugins}}. Les utilisateurs perdent ces plugins.",
+        "listLabel": "Plugins à supprimer",
+        "noPlugins": "Ce marketplace n’a aucun plugin.",
+        "confirm": "Supprimer",
+        "done": "{name} supprimé.",
+        "failed": "Impossible de supprimer le marketplace."
+      },
+      "detail": {
+        "title": "Marketplace",
+        "description": "La source, la synchronisation et les entrées de ce marketplace.",
+        "loadFailed": "Impossible de charger le marketplace.",
+        "scope": "Type",
+        "login": "Connexion GitHub",
+        "noLogin": "Aucune. Remplacez la connexion pour synchroniser de nouveau.",
+        "lastSync": "Dernière synchronisation",
+        "entries": "Entrées ({count})",
+        "noEntries": "La dernière synchronisation n’a trouvé aucune entrée.",
+        "close": "Fermer"
+      }
     }
   },
   "integrations": {
@@ -17243,8 +17325,9 @@
         "label": "Ajouter",
         "upload": "Importer une compétence",
         "create": "Créer une compétence",
-        "github": "Importer depuis GitHub",
-        "uploadPlugin": "Importer un plugin"
+        "uploadPlugin": "Importer un plugin",
+        "marketplace": "Ajouter un marketplace",
+        "manageMarketplaces": "Gérer les marketplaces"
       },
       "groups": {
         "mine": "Créées par vous",

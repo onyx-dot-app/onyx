@@ -76,14 +76,19 @@ jest.mock("@/sections/modals/skills/CreateSkillModal", () => ({
     ) : null,
 }));
 
-jest.mock("@/sections/modals/skills/ImportSkillsFromGitHubModal", () => ({
+jest.mock("@/sections/marketplaces/AddMarketplaceModal", () => ({
   __esModule: true,
   default: ({ open, onClose }: { open: boolean; onClose: () => void }) =>
     open ? (
       <button type="button" onClick={onClose}>
-        GitHub import open
+        Add marketplace open
       </button>
     ) : null,
+}));
+
+jest.mock("@/sections/marketplaces/MarketplacesTable", () => ({
+  __esModule: true,
+  default: () => <div>Marketplaces table</div>,
 }));
 
 let mockIsManager = false;
@@ -144,6 +149,8 @@ function customSkill(id: string, name: string): CustomSkill {
     available_count: 0,
     needed_count: 0,
     plugin: null,
+    marketplace: null,
+    content_locked: false,
   };
 }
 
@@ -636,15 +643,19 @@ describe("SkillsPage preference toggles", () => {
     expect(mockRefresh).not.toHaveBeenCalled();
   });
 
-  it("offers GitHub import from the create menu", async () => {
+  it("offers Add marketplace from the create menu and lists marketplaces", async () => {
     const user = setupUser();
     render(<SkillsPage />);
 
+    expect(screen.getByText("Marketplaces table")).toBeInTheDocument();
+    expect(screen.queryByText("Import from GitHub")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Create skill" }));
-    await user.click(screen.getAllByText("Import from GitHub")[0]!);
+    await user.click(
+      screen.getByRole("menuitem", { name: /^Add marketplace/ })
+    );
 
     expect(
-      screen.getByRole("button", { name: "GitHub import open" })
+      screen.getByRole("button", { name: "Add marketplace open" })
     ).toBeInTheDocument();
   });
 

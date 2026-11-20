@@ -16454,84 +16454,15 @@
         }
       },
       "importGithub": {
-        "cancelButton": {
-          "label": "취소"
+        "sharing": {
+          "configureButton": "액세스 설정"
         },
         "doneButton": {
           "label": "완료"
         },
-        "header": {
-          "chooseDescription": "{repository}에서 스킬을 선택하세요.",
-          "completeDescription": "스킬에 추가된 항목을 확인하세요.",
-          "completeTitle": "GitHub 가져오기 완료",
-          "description": "GitHub 리포지토리에서 스킬을 하나 이상 가져옵니다.",
-          "title": "GitHub에서 가져오기"
-        },
-        "importError": {
-          "message": "스킬을 가져오지 못했습니다.",
-          "title": "스킬을 가져오지 못했습니다"
-        },
-        "loadError": {
-          "message": "리포지토리를 불러오지 못했습니다.",
-          "title": "리포지토리를 불러오지 못했습니다"
-        },
-        "privateRepos": {
-          "askAdmin": "공개 리포지토리는 바로 가져옵니다. 비공개 리포지토리를 가져오려면 관리자에게 GitHub 설정을 요청하세요.",
-          "connect": "공개 리포지토리는 바로 가져옵니다. 비공개 리포지토리를 가져오려면 GitHub를 연결하세요.",
-          "connectButton": {
-            "label": "GitHub 연결"
-          },
-          "connected": "공개 리포지토리는 바로 가져옵니다. 비공개 리포지토리는 사용자의 GitHub 연결을 사용합니다.",
-          "needsConnection": "공개 리포지토리는 바로 가져옵니다. 비공개 리포지토리에는 GitHub 연결이 필요합니다.",
-          "setUp": "공개 리포지토리는 바로 가져옵니다. 비공개 리포지토리를 가져오기 전에 GitHub를 설정하세요.",
-          "setUpButton": {
-            "label": "GitHub 설정"
-          }
-        },
-        "repositoryInput": {
-          "label": "리포지토리"
-        },
-        "result": {
-          "disabledCount": "이름이 같은 다른 스킬이 활성화되어 있어 {count}개를 비활성 상태로 가져왔습니다.",
-          "enabledCount": "{count}개를 자동으로 활성화했습니다.",
-          "failedCount": "{count}개를 가져오지 못했습니다.",
-          "importedSection": {
-            "title": "가져옴"
-          },
-          "importedTitle": "{count, plural, one {스킬 #개를 가져왔습니다} other {스킬 #개를 가져왔습니다}}",
-          "noneTitle": "가져온 스킬이 없습니다",
-          "notImportedSection": {
-            "title": "가져오지 않음"
-          },
-          "notSelectedCount": "{count}개를 선택하지 않았습니다."
-        },
-        "selectAll": {
-          "ariaLabel": "가져올 수 있는 스킬 모두 선택"
-        },
-        "selection": {
-          "label": "가져올 수 있는 스킬 {total, plural, one {#개} other {#개}} 중 {selected}개 선택됨"
-        },
-        "skillCheckbox": {
-          "ariaLabel": "{name} 선택"
-        },
-        "skillTag": {
-          "disabled": "비활성화됨",
-          "enabled": "활성화됨"
-        },
         "submitButton": {
-          "importLabel": "{count, plural, one {스킬 가져오기} other {스킬 #개 가져오기}}",
           "importingLabel": "가져오는 중…",
-          "searchLabel": "리포지토리 검색",
-          "searchingLabel": "검색 중…"
-        },
-        "unavailableFallback": "이 스킬은 가져올 수 없습니다.",
-        "unavailableTag": {
-          "label": "가져올 수 없음"
-        },
-        "sharing": {
-          "title": "가져올 스킬의 액세스",
-          "configureButton": "액세스 설정",
-          "description": "이 액세스 설정은 선택한 {count, plural, one {스킬 #개} other {스킬 #개}} 모두에 적용됩니다."
+          "importLabel": "{count, plural, one {스킬 가져오기} other {스킬 #개 가져오기}}"
         }
       },
       "nameConflict": {
@@ -16698,15 +16629,12 @@
           "failedToast": "이 업데이트를 게시할 수 없습니다.",
           "sentForReviewToast": "버전 {number}을(를) 관리자에게 검토 요청했습니다.",
           "offNotice": "게시가 꺼져 있습니다. 관리자에게 이 업데이트 게시를 요청하세요."
-        }
+        },
+        "locked": "이 플러그인은 GitHub에서 동기화되므로 GitHub에서 변경합니다."
       }
     },
     "page": {
       "createMenu": {
-        "github": {
-          "description": "저장소에서 하나 이상의 스킬을 가져오세요.",
-          "title": "GitHub에서 가져오기"
-        },
         "scratch": {
           "description": "{appName}에서 지침을 작성하고 지원 파일을 추가하세요.",
           "title": "처음부터 만들기"
@@ -16717,6 +16645,10 @@
         "upload": {
           "description": "SKILL.md 파일, ZIP 파일 또는 스킬 폴더를 가져오세요.",
           "title": "스킬 업로드"
+        },
+        "marketplace": {
+          "title": "마켓플레이스 추가",
+          "description": "저장소에서 추가하고 해당 플러그인을 동기화합니다."
         }
       },
       "empty": {
@@ -16974,7 +16906,8 @@
           "required": "관리자가 이 플러그인을 필수로 지정했습니다. 끌 수 없습니다.",
           "unavailable": "이 플러그인을 켜거나 끌 수 없습니다.",
           "failed": "플러그인을 변경할 수 없습니다."
-        }
+        },
+        "syncedFrom": "{repository}에서 동기화됨"
       },
       "connection": {
         "askAdmin": "관리자에게 문의하세요",
@@ -17157,6 +17090,155 @@
       "description": "이 플러그인에 필요한 일부 통합을 사용할 수 없습니다.",
       "note": "플러그인은 이 통합 없이도 작동합니다. 플러그인은 통합에 대한 액세스 권한을 주지 않습니다.",
       "done": "완료"
+    },
+    "marketplaces": {
+      "status": {
+        "ok": "준비됨",
+        "blocked": "차단됨",
+        "not_supported": "지원되지 않음"
+      },
+      "scope": {
+        "personal": "개인",
+        "company": "회사"
+      },
+      "source": {
+        "repository": "저장소",
+        "folder": "폴더",
+        "root": "저장소 루트",
+        "ref": "브랜치, 태그 또는 커밋",
+        "defaultBranch": "기본 브랜치",
+        "commit": "커밋"
+      },
+      "preview": {
+        "title": "{name}: {count, plural, one {추가할 플러그인 #개} other {추가할 플러그인 #개}}",
+        "empty": "이 마켓플레이스에는 항목이 없습니다.",
+        "failedTitle": "Onyx에서 이 마켓플레이스를 읽을 수 없습니다",
+        "version": "v{version}",
+        "willInstall": "설치될 항목",
+        "skills": "{count, plural, one {스킬} other {스킬}}: {names}"
+      },
+      "add": {
+        "menuItem": "마켓플레이스 추가",
+        "title": "마켓플레이스 추가",
+        "description": "저장소에서 추가합니다. Onyx는 .claude-plugin/marketplace.json 파일을 읽고, 각 항목이 플러그인이 됩니다.",
+        "confirmTitle": "마켓플레이스 확인",
+        "confirmDescription": "원하는 소스와 플러그인이 맞는지 확인한 후 마켓플레이스를 추가하세요.",
+        "repository": {
+          "title": "저장소",
+          "description": "owner/repo 또는 저장소 URL을 입력하세요.",
+          "placeholder": "예: anthropics/claude-plugins"
+        },
+        "folder": {
+          "title": "폴더",
+          "description": ".claude-plugin/marketplace.json이 있는 폴더입니다. 저장소 루트를 사용하려면 비워 두세요.",
+          "placeholder": "예: plugins"
+        },
+        "ref": {
+          "title": "브랜치, 태그 또는 커밋",
+          "description": "기본 브랜치를 사용하려면 비워 두세요.",
+          "placeholder": "예: main"
+        },
+        "scope": {
+          "title": "마켓플레이스 유형",
+          "personalDescription": "이 마켓플레이스의 플러그인은 본인만 받습니다.",
+          "companyDescription": "이 마켓플레이스의 플러그인은 게시된 플러그인과 같이 조직에서 받습니다."
+        },
+        "defaultAccess": {
+          "title": "기본 액세스",
+          "description": "이 마켓플레이스의 각 플러그인에 대한 설치 설정입니다. 나중에 개별 플러그인에 대해 변경할 수 있습니다."
+        },
+        "privateNote": "Onyx는 GitHub 연결로 비공개 저장소를 읽습니다. 비공개 저장소를 추가하기 전에 통합에서 GitHub를 연결하세요.",
+        "continue": "계속",
+        "previewing": "읽는 중…",
+        "back": "뒤로",
+        "submit": "마켓플레이스 추가",
+        "adding": "추가하는 중…",
+        "cancel": "취소",
+        "previewFailed": "저장소를 읽을 수 없습니다.",
+        "addFailed": "마켓플레이스를 추가할 수 없습니다.",
+        "added": "{name}을(를) 추가했습니다. 플러그인은 첫 동기화 후에 표시됩니다."
+      },
+      "sync": {
+        "now": "지금 동기화",
+        "requested": "{name} 동기화를 시작했습니다.",
+        "failed": "동기화를 시작할 수 없습니다.",
+        "lastSync": "마지막 동기화 {date}",
+        "never": "아직 동기화되지 않음",
+        "state": {
+          "syncing": "동기화 중",
+          "needs_confirmation": "삭제 확인 필요",
+          "failed": "동기화 실패",
+          "synced": "동기화됨"
+        }
+      },
+      "columns": {
+        "marketplace": "마켓플레이스",
+        "sync": "동기화",
+        "items": "항목"
+      },
+      "items": "{count, plural, one {플러그인 #개} other {플러그인 #개}}",
+      "tableLabel": "마켓플레이스",
+      "open": "{name} 열기",
+      "menu": "{name} 작업",
+      "loadFailed": "마켓플레이스를 불러올 수 없습니다.",
+      "empty": {
+        "title": "아직 마켓플레이스가 없습니다",
+        "description": "GitHub 저장소를 추가하여 해당 플러그인을 받으세요."
+      },
+      "page": {
+        "title": "마켓플레이스",
+        "description": "플러그인을 받는 GitHub 저장소와 소스입니다. 마켓플레이스를 동기화하면 GitHub의 변경 사항을 받습니다."
+      },
+      "attention": {
+        "failedTitle": "{name}의 마지막 동기화에 실패했습니다",
+        "deletesTitle": "{name}이(가) 삭제 확인을 기다리고 있습니다",
+        "deletesDescription": "저장소에서 일부 항목이 사라졌습니다. Onyx는 확인한 후에만 해당 플러그인을 삭제합니다.",
+        "review": "삭제 검토"
+      },
+      "pendingDeletes": {
+        "title": "{count, plural, one {플러그인 #개가} other {플러그인 #개가}} 삭제를 기다리고 있습니다",
+        "description": "저장소에서 이 항목들이 사라졌습니다. 확인하면 해당 플러그인을 삭제합니다.",
+        "listLabel": "삭제할 플러그인",
+        "confirm": "{count, plural, one {플러그인 #개} other {플러그인 #개}} 삭제",
+        "done": "플러그인을 삭제했습니다. 새 동기화를 시작했습니다.",
+        "failed": "플러그인을 삭제할 수 없습니다."
+      },
+      "defaultAccess": {
+        "title": "기본 액세스",
+        "description": "자체 설정이 없는 {name}의 각 플러그인에 대한 설치 설정입니다.",
+        "save": "저장",
+        "cancel": "취소",
+        "saved": "기본 액세스를 저장했습니다.",
+        "failed": "기본 액세스를 저장할 수 없습니다."
+      },
+      "replaceLogin": {
+        "label": "로그인 교체",
+        "description": "GitHub 연결로 저장소를 읽습니다.",
+        "done": "이제 Onyx가 GitHub 연결로 {name}을(를) 읽습니다.",
+        "failed": "로그인을 교체할 수 없습니다."
+      },
+      "remove": {
+        "label": "제거",
+        "title": "{name}을(를) 제거하시겠습니까?",
+        "description": "마켓플레이스와 {count, plural, one {해당 플러그인} other {해당 플러그인 #개}}가 삭제됩니다. 사용자는 이 플러그인을 사용할 수 없게 됩니다.",
+        "listLabel": "삭제할 플러그인",
+        "noPlugins": "이 마켓플레이스에는 플러그인이 없습니다.",
+        "confirm": "제거",
+        "done": "{name}을(를) 제거했습니다.",
+        "failed": "마켓플레이스를 제거할 수 없습니다."
+      },
+      "detail": {
+        "title": "마켓플레이스",
+        "description": "이 마켓플레이스의 소스, 동기화, 항목입니다.",
+        "loadFailed": "마켓플레이스를 불러올 수 없습니다.",
+        "scope": "유형",
+        "login": "GitHub 로그인",
+        "noLogin": "없음. 다시 동기화하려면 로그인을 교체하세요.",
+        "lastSync": "마지막 동기화",
+        "entries": "항목 ({count})",
+        "noEntries": "마지막 동기화에서 항목을 찾지 못했습니다.",
+        "close": "닫기"
+      }
     }
   },
   "integrations": {
@@ -17243,8 +17325,9 @@
         "label": "추가",
         "upload": "스킬 업로드",
         "create": "스킬 만들기",
-        "github": "GitHub에서 가져오기",
-        "uploadPlugin": "플러그인 업로드"
+        "uploadPlugin": "플러그인 업로드",
+        "marketplace": "마켓플레이스 추가",
+        "manageMarketplaces": "마켓플레이스 관리"
       },
       "groups": {
         "mine": "내가 만든 항목",
