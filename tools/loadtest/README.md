@@ -203,10 +203,11 @@ The observed selection median was four sections. Classification counts were
 `0: 56`, `1: 707`, `2: 1020`, and `3: 24`; one failed classification was excluded.
 This sample describes one corpus and model, not all production workloads.
 
-Source and time helpers return valid neutral decisions: `[]` and
-`updated (None, None)`. The calibration sample had no such calls. These responses
-exercise unscoped searches; they do not simulate user-directed source or date
-filters. Unknown prompts still receive generic filler.
+Source, time, and excerpt helpers return valid neutral decisions: `[]`,
+`updated (None, None)`, and `NONE`. The calibration sample had no such calls.
+These responses exercise unscoped searches of the user's message; they do not
+simulate user-directed source or date filters or source lookups of copied
+wording. Unknown prompts still receive generic filler.
 
 Usage uses the fixed `cl100k_base` tokenizer on serialized messages/tools and
 generated text, reasoning, and tool arguments. This is a reproducible simulation
@@ -268,8 +269,8 @@ six-character fragments. These boundaries model delivery work, not tokenizer IDs
 
 Tool-producing calls take 1.5 seconds nominally. Helper durations are 0.99 seconds
 for semantic rewrite, 1.15 for keywords, 1.04 for selection, and 0.88 for
-classification. Scope helpers use an uncalibrated one-second duration. Final
-responses start emitting after 1.4 seconds. Streamed and plain responses share an
+classification. Scope and excerpt helpers use an uncalibrated one-second
+duration. Final responses start emitting after 1.4 seconds. Streamed and plain responses share an
 absolute completion deadline, so stream scheduling does not accumulate one sleep
 overhead per fragment. These settings approximate typical model waits, not network
 or provider tail behavior. Explicit `ttft` and `itl` knobs override the schedule;

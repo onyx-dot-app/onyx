@@ -494,6 +494,7 @@ def test_search_helper_responses_match_across_transports() -> None:
             conversation_history="",
             current_cycle_queries="launch decisions",
             previous_cycles="",
+            searched_sources="",
             valid_sources="file\nslack",
             last_user_query="Which launch decisions changed?",
         ),
@@ -502,12 +503,18 @@ def test_search_helper_responses_match_across_transports() -> None:
             current_day_time_str="2026-10-22",
             last_user_query="Which launch decisions changed?",
         ),
+        _production_prompt("VERBATIM_EXCERPT_USER_PROMPT").format(
+            max_chars=180,
+            no_excerpt="NONE",
+            user_query="Which page says 'launch moved to Q3'?",
+        ),
     ]
     expected_shapes = [
         lambda value: isinstance(json.loads(value), list),
         lambda value: value in "0123",
         lambda value: value == "[]",
         lambda value: value == "updated (None, None)",
+        lambda value: value == "NONE",
     ]
     for prompt, valid in zip(prompts, expected_shapes, strict=True):
         messages = [{"role": "user", "content": prompt}]

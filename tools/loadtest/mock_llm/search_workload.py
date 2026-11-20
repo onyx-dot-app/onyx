@@ -52,7 +52,7 @@ def sample_histogram(text: str, histogram: tuple[tuple[int, int], ...]) -> int:
 
 
 HelperKind = Literal[
-    "selection", "classification", "source", "time", "keyword", "semantic"
+    "selection", "classification", "source", "time", "excerpt", "keyword", "semantic"
 ]
 
 
@@ -67,6 +67,10 @@ def helper_kind(prompt: str, system: str = "") -> HelperKind | None:
         return "source"
     if prompt.startswith("You scope an internal search to a time filter,"):
         return "time"
+    if prompt.startswith(
+        "If the user is trying to find the document, message, or record that contains"
+    ):
+        return "excerpt"
     if "reformulates the last user message" in system:
         return "keyword" if "standalone keyword queries" in system else "semantic"
     return None
@@ -76,8 +80,10 @@ def helper_duration(prompt: str, system: str) -> float | None:
     durations: dict[HelperKind, float] = {
         "selection": 1.04,
         "classification": 0.88,
+        # Uncalibrated scope and excerpt calls.
         "source": 1.0,
-        "time": 1.0,  # Uncalibrated scope calls.
+        "time": 1.0,
+        "excerpt": 1.0,
         "keyword": 1.15,
         "semantic": 0.99,
     }
@@ -123,6 +129,9 @@ def search_helper_answer(
         return "[]"
     if kind == "time":
         return "updated (None, None)"
+    if kind == "excerpt":
+        # Valid neutral answer: search keeps the user's message.
+        return "NONE"
     return None
 
 
