@@ -40,7 +40,9 @@ import {
 } from "@/lib/marketplaces/utils";
 import MarketplaceDefaultAccessModal from "@/sections/marketplaces/MarketplaceDefaultAccessModal";
 import MarketplaceDetailModal from "@/sections/marketplaces/MarketplaceDetailModal";
-import MarketplaceSyncStatus from "@/sections/marketplaces/MarketplaceSyncStatus";
+import MarketplaceSyncStatus, {
+  SYNC_STATE_COLOR,
+} from "@/sections/marketplaces/MarketplaceSyncStatus";
 import RemoveMarketplaceModal from "@/sections/marketplaces/RemoveMarketplaceModal";
 
 interface AttentionProps {
@@ -227,13 +229,18 @@ export default function MarketplacesTable() {
       title: t("columns.marketplace"),
       weight: 100,
       cell: (_name, row) => (
-        <Section gap={1} alignItems="start" height="auto">
-          {nameCell(row)}
-          <MarketplaceSyncStatus marketplace={row} />
-          <Text font="secondary-body" color="text-03">
-            {t("items", { count: row.plugin_count })}
-          </Text>
-        </Section>
+        <Content
+          title={row.name}
+          titleMaxLines={1}
+          description={`${marketplaceSource(row)} · ${t("items", {
+            count: row.plugin_count,
+          })}`}
+          descriptionMaxLines={1}
+          badge={{
+            title: t(`sync.state.${marketplaceSyncState(row)}`),
+            color: SYNC_STATE_COLOR[marketplaceSyncState(row)],
+          }}
+        />
       ),
     },
     actionsColumn,

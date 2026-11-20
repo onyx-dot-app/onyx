@@ -10,7 +10,7 @@ import type {
   MarketplaceSyncState,
 } from "@/lib/marketplaces/types";
 
-const STATE_COLOR = {
+export const SYNC_STATE_COLOR = {
   syncing: "pending",
   failed: "error",
   not_synced: "default",
@@ -50,7 +50,7 @@ export default function MarketplaceSyncStatus({
       height="auto"
       width="auto"
     >
-      <Badge title={t(`state.${state}`)} color={STATE_COLOR[state]} />
+      <Badge title={t(`state.${state}`)} color={SYNC_STATE_COLOR[state]} />
       <Text font="secondary-body" color="text-03" maxLines={1} overflowTooltip>
         {state === "failed" && marketplace.last_error
           ? marketplace.last_error
