@@ -222,7 +222,8 @@ OpenAPI integrations, not API apps without an OpenAPI tool.
   `ScheduledTaskRunStatus` or `ScheduledTaskErrorClass` in
   `backend/onyx/db/enums.py`, to `_RUN_STATUS_BY_RESPONSE_STATUS` if a
   response status maps to it, and to the web types and status badges
-  (`web/src/app/craft/v1/tasks/components/StatusBadge.tsx`).
+  (`web/src/sections/scheduledTasks/StatusBadges.tsx`,
+  `web/src/app/craft/v1/tasks/components/StatusBadge.tsx`).
 - `investigate-task-did-not-run` **Investigate "my task did not run".** Read
   the task's run rows. A `SKIPPED` row names the reason. A `QUEUED` row that
   never starts means the `scheduled_tasks` worker is not running or the

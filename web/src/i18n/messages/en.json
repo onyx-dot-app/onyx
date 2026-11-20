@@ -13993,7 +13993,6 @@
     "chatPanel": {
       "input": {
         "continuePlaceholder": "Continue the conversation...",
-        "scheduledRunPlaceholder": "Scheduled run in progress...",
         "subagentPlaceholder": "Switch to the main agent to send a message"
       },
       "openSidebar": {
@@ -14011,8 +14010,7 @@
       },
       "toast": {
         "operationWait": "Please wait for the current operation to complete.",
-        "sandboxWait": "Please wait for sandbox to initialize",
-        "scheduledRunWait": "Please wait for the scheduled run to finish."
+        "sandboxWait": "Please wait for sandbox to initialize"
       },
       "loadError": {
         "title": "Could not load the session",
@@ -14463,23 +14461,6 @@
         "button": "Wake sandbox"
       }
     },
-    "scheduledRun": {
-      "badge": {
-        "label": "Scheduled"
-      },
-      "startedAt": {
-        "label": "Started {time}"
-      },
-      "status": {
-        "awaitingApproval": "This scheduled run is awaiting approval. Follow-up messages unlock after it resumes and finishes.",
-        "running": "This scheduled run is still running. Follow-up messages unlock when it finishes.",
-        "startedBy": "This session was started by scheduled task {task} at {time}."
-      },
-      "viewTask": {
-        "ariaLabel": "View scheduled task {task}. {status}",
-        "label": "View task"
-      }
-    },
     "setupCard": {
       "appFallback": {
         "label": "External app {id}"
@@ -14752,7 +14733,8 @@
         },
         "tabs": {
           "dailyWeekly": "Daily / Weekly",
-          "interval": "Interval"
+          "interval": "Interval",
+          "advanced": "Advanced"
         },
         "weekdays": {
           "fri": "Fri",
@@ -14762,6 +14744,11 @@
           "thu": "Thu",
           "tue": "Tue",
           "wed": "Wed"
+        },
+        "advanced": {
+          "cronLabel": "Cron Expression",
+          "hint": "Five fields: minute, hour, day, month, weekday. The expression runs in UTC.",
+          "placeholder": "For example, 0 9 * * 1-5"
         }
       },
       "unviewedResults": "New results"
@@ -16227,6 +16214,9 @@
       },
       "customize": {
         "label": "Customize"
+      },
+      "scheduledTasks": {
+        "label": "Scheduled Tasks"
       }
     },
     "chatButton": {
@@ -17594,5 +17584,148 @@
       }
     },
     "search": "Search"
+  },
+  "scheduledTasks": {
+    "unviewedResults": "New results",
+    "runStatus": "{status, select, QUEUED {Queued} RUNNING {Running} AWAITING_APPROVAL {Awaiting approval} SUCCEEDED {Succeeded} FAILED {Failed} CANCELLED {Cancelled} SKIPPED {Skipped} other {Unknown}}",
+    "taskStatus": "{status, select, ACTIVE {Active} other {Paused}}",
+    "schedule": {
+      "cron": "Cron (UTC): {cron}",
+      "everyMinutes": "{count, plural, one {Every minute} other {Every # minutes}}",
+      "everyHours": "{count, plural, one {Every hour} other {Every # hours}}",
+      "everyDays": "{count, plural, one {Every day at {time}} other {Every # days at {time}}}",
+      "daily": "Every day at {time}",
+      "weekly": "{days} at {time}"
+    },
+    "list": {
+      "title": "Scheduled Tasks",
+      "description": "Run a prompt on a schedule. Each run opens as a chat you can read and continue.",
+      "search": "Search tasks",
+      "new": "New Task",
+      "never": "Never",
+      "notScheduled": "Not scheduled",
+      "loadFailed": "Could not load your scheduled tasks.",
+      "open": "Open {name}",
+      "columns": {
+        "name": "Name",
+        "schedule": "Schedule",
+        "lastRun": "Last Run",
+        "nextRun": "Next Run",
+        "status": "Status"
+      },
+      "empty": {
+        "title": "No scheduled tasks yet",
+        "description": "Create a task to run a prompt on a schedule."
+      },
+      "noMatches": {
+        "title": "No matching tasks",
+        "description": "Try a different search."
+      }
+    },
+    "actions": {
+      "runNow": "Run once",
+      "pause": "Pause",
+      "resume": "Resume",
+      "edit": "Edit",
+      "delete": "Delete",
+      "menu": "Actions for {name}",
+      "toasts": {
+        "runQueued": "Started a run of \"{name}\".",
+        "runFailed": "Could not start the run.",
+        "resumed": "Task resumed.",
+        "paused": "Task paused.",
+        "statusFailed": "Could not change the task status.",
+        "deleted": "Deleted \"{name}\".",
+        "deleteFailed": "Could not delete the task."
+      },
+      "confirmDelete": {
+        "title": "Delete \"{name}\"?",
+        "description": "The task stops running and its run history goes away.",
+        "submit": "Delete"
+      }
+    },
+    "runs": {
+      "label": "Run history",
+      "open": "Open the run from {time}",
+      "loading": "Loading runs…",
+      "loadFailed": "Could not load the run history.",
+      "loadMore": "Load more",
+      "markAllViewed": "Mark all viewed",
+      "markAllViewedFailed": "Could not mark the runs as viewed. Try again.",
+      "trigger": "{source, select, MANUAL_RUN_NOW {Run once} other {Schedule}}",
+      "errorClass": "{errorClass, select, superseded_by_next_fire {Cancelled: the next run started before anyone answered the approval.} approval_timeout {Cancelled: nobody answered the approval within 24 hours.} user_cancelled {Stopped by you.} agent_permission_required {An action needed approval.} other {Failed: {errorClass}}}",
+      "columns": {
+        "started": "Started",
+        "status": "Status",
+        "duration": "Duration",
+        "trigger": "Trigger",
+        "detail": "Details"
+      },
+      "closed": {
+        "queued": "This run has not started yet, so there is no chat to open.",
+        "skipped": "This run was skipped, so there is no chat to open.",
+        "craft": "This run is from before tasks ran in chat, so there is no chat to open."
+      },
+      "empty": {
+        "title": "No runs yet",
+        "description": "The task adds a run each time it fires. Use Run once to start one now."
+      }
+    },
+    "detail": {
+      "title": "Scheduled Task",
+      "back": "Scheduled Tasks",
+      "loadFailed": "Could not load this scheduled task.",
+      "tabs": {
+        "runs": "Runs",
+        "overview": "Overview"
+      },
+      "overview": {
+        "prompt": "Prompt",
+        "schedule": "Schedule",
+        "nextRun": "Next Run",
+        "notScheduled": "Not scheduled",
+        "lastRun": "Last Run",
+        "never": "Never"
+      }
+    },
+    "editor": {
+      "newTitle": "New Scheduled Task",
+      "editTitle": "Edit Scheduled Task",
+      "description": "Each run sends the prompt to a new chat with the default agent.",
+      "back": "Back",
+      "loadFailed": "Could not load this scheduled task.",
+      "save": "Save",
+      "saveAndRun": "Save and run now",
+      "errors": {
+        "nameRequired": "Enter a name.",
+        "promptRequired": "Enter a prompt."
+      },
+      "toasts": {
+        "created": "Scheduled task created.",
+        "createdAndRun": "Scheduled task created. The first run started.",
+        "updated": "Scheduled task updated.",
+        "saveFailed": "Could not save the scheduled task."
+      },
+      "fields": {
+        "name": {
+          "label": "Name",
+          "placeholder": "For example, weekly customer escalations digest"
+        },
+        "prompt": {
+          "label": "Prompt",
+          "description": "Each run sends this message to a new chat.",
+          "placeholder": "Describe what to do on each run"
+        },
+        "schedule": {
+          "label": "Schedule"
+        }
+      }
+    },
+    "banner": {
+      "title": "Scheduled run of {task}",
+      "inFlight": "{status, select, AWAITING_APPROVAL {This run waits for your approval below.} other {This run is in progress.}}",
+      "startedAt": "Started {time}",
+      "viewTask": "View task"
+    }
   }
 }

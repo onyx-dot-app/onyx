@@ -11,12 +11,15 @@ import ActionPoliciesLoadError from "@/app/craft/v1/tasks/components/ActionPolic
 
 export default function TaskActionPoliciesSummary({
   taskId,
+  url,
 }: {
   taskId: string;
+  /** Reads the integrations from this URL instead of the Craft one. */
+  url?: string;
 }) {
   const t = useTranslations("craft.actionPolicies");
   const { data, error, mutate } = useSWR<TaskIntegrationView[], Error>(
-    SWR_KEYS.taskActionPolicies(taskId),
+    url ?? SWR_KEYS.taskActionPolicies(taskId),
     errorHandlingFetcher
   );
   const enabledIntegrations = data?.filter(

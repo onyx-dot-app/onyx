@@ -548,6 +548,19 @@ export const SWR_KEYS = {
     `/api/build/scheduled-tasks/${taskId}/runs`,
   scheduledTaskHasUnviewedRuns: (taskId: string) =>
     `/api/build/scheduled-tasks/${taskId}/runs?limit=1&unviewed=true`,
-  scheduledRunContext: (sessionId: string) =>
-    `/api/build/sessions/${sessionId}/scheduled-run-context`,
+
+  // ── Scheduled Tasks (chat) ────────────────────────────────────────────────
+  // `chatScheduledTaskRuns` is a base URL, as `scheduledTaskRuns` above.
+  chatScheduledTasks: "/api/scheduled-tasks",
+  chatScheduledTasksUnviewedCount: "/api/scheduled-tasks/unviewed-count",
+  chatScheduledTaskCatalog: "/api/scheduled-tasks/action-policies",
+  chatScheduledTask: (taskId: string) => `/api/scheduled-tasks/${taskId}`,
+  chatScheduledTaskActionPolicies: (taskId: string) =>
+    `/api/scheduled-tasks/${taskId}/action-policies`,
+  chatScheduledTaskRuns: (taskId: string) =>
+    `/api/scheduled-tasks/${taskId}/runs`,
+  chatScheduledTaskHasUnviewedRuns: (taskId: string) =>
+    `/api/scheduled-tasks/${taskId}/runs?limit=1&unviewed=true`,
+  chatScheduledRun: (chatSessionId: string) =>
+    `/api/scheduled-tasks/chat-sessions/${chatSessionId}/run`,
 } as const;

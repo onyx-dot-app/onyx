@@ -227,20 +227,26 @@ export function compileLocalPayloadToUtcCron(
 
 function compileInterval(payload: IntervalPayload): ScheduleValidation {
   const every = Number(payload?.every);
-  if (!Number.isFinite(every) || every < 1) {
-    return { ok: false, error: "Interval must be at least 1." };
+  if (!Number.isInteger(every) || every < 1) {
+    return {
+      ok: false,
+      error: "Interval must be a whole number of at least 1.",
+    };
   }
   const unit: IntervalUnit = payload.unit;
 
   if (unit === "minutes") {
     if (every > 59) {
-      return { ok: false, error: "Use hours/days for intervals over 59 min." };
+      return { ok: false, error: "Use hours for intervals over 59 minutes." };
     }
     return { ok: true, cron: `*/${every} * * * *` };
   }
   if (unit === "hours") {
     if (every > 23) {
-      return { ok: false, error: "Use days for intervals over 23 hours." };
+      return {
+        ok: false,
+        error: "Use a daily schedule for intervals over 23 hours.",
+      };
     }
     return { ok: true, cron: `0 */${every} * * *` };
   }

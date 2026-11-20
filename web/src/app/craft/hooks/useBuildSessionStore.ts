@@ -56,7 +56,6 @@ import {
   fetchMessages,
   fetchActiveTurn,
   fetchKnownTurn,
-  fetchScheduledRunContext,
   fetchArtifacts,
   fetchOutputInventory,
   fetchWebappInfo,
@@ -763,9 +762,7 @@ export interface FilesTabState {
   scrollTop: number;
 }
 
-export type CompletionOwner =
-  | { kind: "interactive"; turnId: string | null }
-  | { kind: "scheduled"; runId: string };
+export type CompletionOwner = { kind: "interactive"; turnId: string | null };
 
 export type TurnSettlement = {
   owner: CompletionOwner;
@@ -908,7 +905,7 @@ function reconcileCompletedTranscript(
   completion?: CompletedInteractiveTurn
 ): Promise<void> {
   const owner = started.turnSettlement?.owner;
-  const requestKey = `${sessionId}:${started.instanceId}:${started.turnGeneration}:${owner?.kind}:${owner?.kind === "interactive" ? owner.turnId : owner?.runId}`;
+  const requestKey = `${sessionId}:${started.instanceId}:${started.turnGeneration}:${owner?.turnId}`;
   const existing = completedTranscriptReads.get(requestKey);
   if (existing) return existing;
   // Final discovery supersedes reads started before the completion boundary.
@@ -948,20 +945,10 @@ function reconcileCompletedTranscript(
         if (!ownsCompletion()) return;
         if (!owner) return;
         let waiting = false;
-        let approvalPause = false;
-        let scheduledFailure = false;
         let interactiveFailure: string | null = null;
         let interactiveFailed = false;
         let successor: Awaited<ReturnType<typeof fetchActiveTurn>> = null;
-        if (owner.kind === "scheduled") {
-          const run = await fetchScheduledRunContext(sessionId);
-          if (!ownsCompletion()) return;
-          if (run.run_id !== owner.runId) return;
-          scheduledFailure =
-            run.status === "FAILED" || run.status === "SKIPPED";
-          waiting = run.status === "RUNNING" || run.status === "QUEUED";
-          approvalPause = run.status === "AWAITING_APPROVAL";
-        } else if (!completion) {
+        if (!completion) {
           const activeTurn = await fetchActiveTurn(sessionId);
           if (!ownsCompletion()) return;
           successor =
@@ -975,7 +962,7 @@ function reconcileCompletedTranscript(
           await new Promise<void>((resolve) => setTimeout(resolve, retryDelay));
           continue;
         }
-        if (owner.kind === "interactive" && owner.turnId !== null) {
+        if (owner.turnId !== null) {
           const completedTurn =
             completion ?? (await fetchKnownTurn(sessionId, owner.turnId));
           if (!ownsCompletion()) return;
@@ -1005,23 +992,21 @@ function reconcileCompletedTranscript(
         });
         let messages = await fetchMessages(sessionId);
         if (!ownsCompletion()) return;
-        if (owner.kind === "interactive") {
-          const historyTurnId = successor?.turn_id;
-          const activeTurn = await fetchActiveTurn(sessionId);
+        const historyTurnId = successor?.turn_id;
+        const activeTurn = await fetchActiveTurn(sessionId);
+        if (!ownsCompletion()) return;
+        if (activeTurn) {
+          if (activeTurn.turn_id === owner.turnId) {
+            await new Promise<void>((resolve) =>
+              setTimeout(resolve, retryDelay)
+            );
+            continue;
+          }
+          successor = activeTurn;
+        }
+        if (successor && successor.turn_id !== historyTurnId) {
+          messages = await fetchMessages(sessionId);
           if (!ownsCompletion()) return;
-          if (activeTurn) {
-            if (activeTurn.turn_id === owner.turnId) {
-              await new Promise<void>((resolve) =>
-                setTimeout(resolve, retryDelay)
-              );
-              continue;
-            }
-            successor = activeTurn;
-          }
-          if (successor && successor.turn_id !== historyTurnId) {
-            messages = await fetchMessages(sessionId);
-            if (!ownsCompletion()) return;
-          }
         }
         const restored = splitActiveTurnTranscript(
           consolidateMessagesIntoTurns(messages),
@@ -1038,7 +1023,7 @@ function reconcileCompletedTranscript(
           contextUsage: deriveContextUsage(messages),
           status: successor
             ? "running"
-            : scheduledFailure || interactiveFailed
+            : interactiveFailed
               ? "failed"
               : "active",
           error:
@@ -1055,7 +1040,7 @@ function reconcileCompletedTranscript(
             wasInterrupted: false,
           }),
           turnSettlement:
-            successor || approvalPause || scheduledFailure || interactiveFailed
+            successor || interactiveFailed
               ? null
               : { ...current.turnSettlement, phase: "ready" },
         });
@@ -2140,8 +2125,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
   beginTurnSettlement: async (sessionId, owner, generation, completion) => {
     if (
       completion &&
-      (owner.kind !== "interactive" ||
-        completion.session_id !== sessionId ||
+      (completion.session_id !== sessionId ||
         completion.turn_id !== owner.turnId)
     )
       return;
@@ -2154,10 +2138,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       session.turnSettlement
     )
       return;
-    if (owner.kind === "scheduled") {
-      if (session.activeTurnLocalOwner || session.activeTurnId !== null) return;
-    } else if (session.status !== "running" && session.status !== "creating")
-      return;
+    if (session.status !== "running" && session.status !== "creating") return;
     get().updateSessionData(sessionId, {
       status: "running",
       activeTurnId: null,

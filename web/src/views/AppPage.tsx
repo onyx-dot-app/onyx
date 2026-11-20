@@ -99,6 +99,7 @@ import { useSidebarState } from "@opal/layouts";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import WelcomeMessage from "@/app/app/components/WelcomeMessage";
 import ChatUI from "@/sections/chat/ChatUI";
+import ScheduledRunBanner from "@/sections/scheduledTasks/ScheduledRunBanner";
 import { FULL_WIDTH_TRANSITION } from "@/lib/chat/layout";
 import { useFullWidthChat } from "@/providers/FullWidthChatProvider";
 import { paidTierGated } from "@/ce";
@@ -885,6 +886,11 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     height="full"
                   >
                     <Section justifyContent="start" gap={0}>
+                      {currentChatSessionId && (
+                        <ScheduledRunBanner
+                          chatSessionId={currentChatSessionId}
+                        />
+                      )}
                       {/* The store's session, not the URL's: the store takes
                           the URL's chat one effect late, and the scroll reset
                           must see the messages of the chat it opens. */}

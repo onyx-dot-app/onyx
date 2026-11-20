@@ -3,11 +3,7 @@
  */
 
 import { formatDistanceToNowStrict, formatRelative } from "date-fns";
-import type {
-  ScheduledRunContextResponse,
-  ScheduledRunSummary,
-  ScheduledTaskRunStatus,
-} from "@/app/craft/v1/tasks/types";
+import type { ScheduledRunSummary } from "@/app/craft/v1/tasks/types";
 
 export function formatRelativeShort(isoOrDate: string | Date | null): string {
   if (!isoOrDate) return "—";
@@ -52,10 +48,10 @@ export function formatRunDuration(
 }
 
 /**
- * Returns a human-readable reason a run row can't be opened as a session,
+ * Returns a human-readable reason a run row can't be opened as a chat,
  * or `null` when the row is clickable.
  *
- * A row is clickable once there is a session to open. Queued rows have not
+ * A row is clickable once there is a chat to open. Queued rows have not
  * created one yet; skipped rows deliberately never create one.
  */
 export type RunReasonTranslate = (
@@ -72,7 +68,7 @@ export function getNonClickableReason(
     run.status === "SUCCEEDED" ||
     run.status === "FAILED"
   ) {
-    return run.session_id ? null : t("noSession");
+    return run.chat_session_id ? null : t("noSession");
   }
 
   switch (run.status) {
@@ -82,18 +78,6 @@ export function getNonClickableReason(
       return t("skipped");
   }
   return null;
-}
-
-export function isScheduledRunInFlight(
-  status: ScheduledTaskRunStatus
-): boolean {
-  return status === "RUNNING" || status === "AWAITING_APPROVAL";
-}
-
-export function isScheduledRunContextInFlight(
-  context: ScheduledRunContextResponse | null | undefined
-): boolean {
-  return context ? isScheduledRunInFlight(context.status) : false;
 }
 
 export function isRunUnviewed(run: {
