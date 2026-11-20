@@ -1,5 +1,6 @@
-"""Arguments and result details of the sandbox tools (sandbox_tools.py). The
-saved-details unions import it, so it imports only models and constants."""
+"""Arguments and result details of the sandbox tools (sandbox_tools.py), and
+the chat file copies (file_copies.py). The saved-details unions import it,
+so it imports only models and constants."""
 
 from typing import Annotated, Literal
 
@@ -17,6 +18,16 @@ from onyx.server.features.build.sandbox.exec_output import (
 from onyx.server.features.build.sandbox.models import ExecCompletionName
 from onyx.tools.constants import DEFAULT_MAX_OUTPUT_CHARS, MAX_OUTPUT_CHARS_DESCRIPTION
 from onyx.utils.pydantic_util import OMITTED_WHEN_NONE
+
+
+class VmChatFile(BaseModel):
+    """A chat file in the chat's sandbox: a file store file and its path,
+    relative to the chat's working directory."""
+
+    model_config = ConfigDict(frozen=True)
+
+    file_id: str
+    path: str
 
 
 class ExecCommandArguments(BaseModel):

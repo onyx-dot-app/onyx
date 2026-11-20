@@ -244,8 +244,10 @@ from tests.external_dependency_unit.microvm.conftest import (
     forget_sandbox_keys,
 )
 from tests.external_dependency_unit.microvm.fake_agent import (
+    ANY_PATH,
     InsecureClientFactory,
     RunningFakeAgent,
+    WriteFailure,
 )
 from tests.external_dependency_unit.mock_content_provider import (
     MockWebContent,
@@ -336,7 +338,11 @@ def make_tools(db_session: Session, user: User) -> MakeTools:
     def make(chat_session_id: UUID | None = None) -> SandboxTools:
         session_id = chat_session_id or uuid4()
         turn = SandboxTurn(
-            tenant_id=TENANT_ID, user_id=user.id, chat_session_id=session_id
+            tenant_id=TENANT_ID,
+            user_id=user.id,
+            chat_session_id=session_id,
+            vm_chat_files=[],
+            copy_vm_chat_files=False,
         )
         return SandboxTools(
             turn=turn,
@@ -2902,7 +2908,9 @@ def test_a_large_result_that_the_vm_cannot_take_keeps_its_head_and_tail(
     node: RunningFakeAgent,
     chat: SandboxChat,
 ) -> None:
-    node.agent.write_file_error = SandboxDaemonErrorReason.INTERNAL
+    node.agent.write_failures[ANY_PATH] = WriteFailure(
+        SandboxDaemonErrorReason.INTERNAL
+    )
     _offer_mcp_tool(monkeypatch, "fetch_report", _big)
     llm = ChatLLM([tool_step("fetch_report", "big", {}), Delta(content="Done.")])
     chat.send(llm)
@@ -3376,7 +3384,9 @@ def test_command_output_that_the_vm_cannot_take_keeps_its_cut(
     node: RunningFakeAgent,
     chat: SandboxChat,
 ) -> None:
-    node.agent.write_file_error = SandboxDaemonErrorReason.INTERNAL
+    node.agent.write_failures[ANY_PATH] = WriteFailure(
+        SandboxDaemonErrorReason.INTERNAL
+    )
     llm = ChatLLM(
         [
             tool_step(ExecCommandTool.NAME, "seq", {"cmd": "seq 20000"}),
@@ -3574,7 +3584,9 @@ def test_open_url_spills_whole_pages_and_the_model_keeps_excerpts_and_citations(
     vm_fails: bool,
 ) -> None:
     if vm_fails:
-        node.agent.write_file_error = SandboxDaemonErrorReason.INTERNAL
+        node.agent.write_failures[ANY_PATH] = WriteFailure(
+            SandboxDaemonErrorReason.INTERNAL
+        )
     # Each page is over its 15,000-character excerpt.
     pages = [_web_page(index, 40_000) for index in range(1, MAX_URLS_PER_CALL + 1)]
     whole = [page.content for page in pages]

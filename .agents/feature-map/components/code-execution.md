@@ -370,6 +370,16 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files (no tool
                                         AgentCancelled. Calls inside a program skip the
                                         hook; the program gets the full value
                                         (stubs.py:program_value)
+  TurnFileCopies (sandbox/file_copies)  SandboxTurn.file_copies: the turn's background copy
+                                        of chat files into the chat's attachments/, and
+                                        the [files] status line (in memory, per turn).
+                                        In a turn that copies them, the turn's first
+                                        sandbox call starts it with the SandboxTurn's
+                                        vm_chat_files; the caller authorizes each file.
+                                        The module docstring has the rules; its
+                                        FileCopyPool holds the pod's threads, shared by
+                                        the chats of each VM, and main.py stops it at
+                                        API shutdown
   Agent.on_drained (root ChatAgent)     SandboxTurn.end: create_chat_agent passes it to the
                                         root chat agent only (bind_run_store: also to a
                                         restored root), not to subagents or deep research

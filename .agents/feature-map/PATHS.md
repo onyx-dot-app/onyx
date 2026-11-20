@@ -246,6 +246,7 @@ covers new files that match it.
 | `deployment/craft-runtime/`, `deployment/craft-fc/rootfs/` | craft-sandboxes |
 | `backend/onyx/server/features/build/sandbox/opencode/`, `backend/onyx/server/features/build/sandbox/event_schema.py`, `backend/onyx/server/features/build/sandbox/sse.py` | craft-streaming |
 | `backend/onyx/server/features/build/sandbox/serve_transport.py` | craft-streaming, craft-sandboxes |
+| `backend/onyx/server/features/build/sandbox/file_copy_state.py` | craft-sandboxes, code-execution |
 | `backend/onyx/server/features/build/sandbox/image/sandbox_daemon/models.py` | craft-sandboxes, craft-sessions |
 | `backend/onyx/server/features/build/session/sandbox_lifecycle.py`, `backend/onyx/db/sandbox.py`, `backend/onyx/server/features/build/session/resource_cleanup.py`, `backend/onyx/background/celery/tasks/build/tasks.py` | craft-sandboxes |
 | `backend/onyx/server/features/build/static_preview.py`, `backend/onyx/server/features/build/webapp_proxy.py`, `backend/onyx/server/features/build/sandbox/nextjs_dev.py`, `backend/onyx/server/features/build/templates/` | craft-webapp-proxy |
