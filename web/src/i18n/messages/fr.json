@@ -9282,6 +9282,12 @@
           },
           "ownersLoadFailed": "Impossible de charger les utilisateurs qui peuvent recevoir les compétences.",
           "retry": "Réessayer"
+        },
+        "marketplaces": {
+          "description": "<strong>{email}</strong> a {count, plural, one {# marketplace personnel} other {# marketplaces personnels}}. La suppression de l'utilisateur les retire avec les plugins qu'ils ont synchronisés.",
+          "submit": {
+            "label": "Retirer et supprimer"
+          }
         }
       },
       "editModal": {
@@ -17214,7 +17220,9 @@
         "noPlugins": "Ce marketplace n’a aucun plugin.",
         "confirm": "Supprimer",
         "done": "{name} supprimé.",
-        "failed": "Impossible de supprimer le marketplace."
+        "failed": "Impossible de supprimer le marketplace.",
+        "loadFailed": "Impossible de charger les plugins de ce marketplace.",
+        "retry": "Réessayer"
       },
       "detail": {
         "title": "Marketplace",

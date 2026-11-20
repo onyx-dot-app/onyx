@@ -9282,6 +9282,12 @@
           },
           "ownersLoadFailed": "无法加载可以接收技能的用户。",
           "retry": "重试"
+        },
+        "marketplaces": {
+          "description": "<strong>{email}</strong> 有 {count, plural, other {# 个个人插件市场}}。删除该用户会同时移除这些市场及其同步的插件。",
+          "submit": {
+            "label": "移除并删除"
+          }
         }
       },
       "editModal": {
@@ -17214,7 +17220,9 @@
         "noPlugins": "此市场没有插件。",
         "confirm": "移除",
         "done": "已移除 {name}。",
-        "failed": "无法移除市场。"
+        "failed": "无法移除市场。",
+        "loadFailed": "无法加载此插件市场的插件。",
+        "retry": "重试"
       },
       "detail": {
         "title": "市场",

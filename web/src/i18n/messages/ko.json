@@ -9282,6 +9282,12 @@
           },
           "ownersLoadFailed": "스킬을 받을 수 있는 사용자를 불러올 수 없습니다.",
           "retry": "다시 시도"
+        },
+        "marketplaces": {
+          "description": "<strong>{email}</strong>에게 개인 마켓플레이스가 {count, plural, other {#개}} 있습니다. 사용자를 삭제하면 해당 마켓플레이스와 동기화된 플러그인이 함께 제거됩니다.",
+          "submit": {
+            "label": "제거 후 삭제"
+          }
         }
       },
       "editModal": {
@@ -17214,7 +17220,9 @@
         "noPlugins": "이 마켓플레이스에는 플러그인이 없습니다.",
         "confirm": "제거",
         "done": "{name}을(를) 제거했습니다.",
-        "failed": "마켓플레이스를 제거할 수 없습니다."
+        "failed": "마켓플레이스를 제거할 수 없습니다.",
+        "loadFailed": "이 마켓플레이스의 플러그인을 불러올 수 없습니다.",
+        "retry": "다시 시도"
       },
       "detail": {
         "title": "마켓플레이스",

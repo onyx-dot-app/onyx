@@ -957,7 +957,10 @@ the app from the same rule
     and delete of a synced plugin with "Change this plugin in GitHub."; shares
     and install settings still change. `db/skill.py:may_delete_skill` takes
     `synced`, so `SkillResponse.can_delete` is false for a synced plugin. A personal marketplace blocks the delete
-    of its owner (`personal_marketplaces` in the 409). The routes are in
+    of its owner (`personal_marketplaces` in the 409); an organization-wide
+    plugin manager may remove another user's personal marketplace (only
+    `DELETE`), and the Users page delete dialog removes them, then deletes
+    the user. A failed task send clears the syncing key. The routes are in
     `server/features/skill/marketplace_api.py`, under `/marketplaces`;
     they authorize before any GitHub call. The web client is
     `web/src/lib/marketplaces/` (`web/src/lib/marketplaces/hooks.ts` reads the list again every 3 s

@@ -106,6 +106,29 @@ def test_sync_now_sends_one_task_until_it_runs(
     assert send_task.call_args.kwargs["kwargs"]["marketplace_id"] == str(marketplace.id)
 
 
+def test_sync_now_after_a_failed_send_sends_again(
+    db_session: Session,
+    users: tuple[User, User, User],
+    marketplace_ids: list[Any],
+    send_task: MagicMock,
+) -> None:
+    owner = users[0]
+    marketplace = make_marketplace(
+        db_session, marketplace_ids, login=owner, owner=owner
+    )
+    send_task.side_effect = ConnectionError("broker down")
+    with pytest.raises(ConnectionError):
+        api.sync_marketplace_now(marketplace.id, BackgroundTasks(), owner, db_session)
+    assert not api.get_marketplace(marketplace.id, owner, db_session).syncing
+
+    send_task.side_effect = None
+    view = api.sync_marketplace_now(
+        marketplace.id, BackgroundTasks(), owner, db_session
+    )
+    assert view.syncing
+    assert send_task.call_count == 2
+
+
 def test_sync_that_lost_its_lock_writes_nothing(
     db_session: Session,
     users: tuple[User, User, User],

@@ -10,7 +10,9 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import has_global_permission
 from onyx.db.enums import Permission, PluginInstallationPolicy
+from onyx.db.marketplace import get_github_marketplace
 from onyx.db.models import User
+from onyx.db.users import delete_user_from_db__no_commit
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.skill import marketplace_api as api
@@ -272,3 +274,27 @@ def test_delete_removes_bundle_files(
     assert len(existing_files(db_session, staged_file_ids)) == 2
     api.delete_marketplace(marketplace_id, _fresh(db_session, owner), db_session)
     assert existing_files(db_session, staged_file_ids) == set()
+
+
+def test_manager_removes_personal_marketplace_to_delete_its_owner(
+    db_session: Session,
+    users: tuple[User, User, User],
+    manager: User,
+    fake_github: FakeGitHub,
+    connections: Connections,  # noqa: ARG001
+    enqueued: list[UUID],  # noqa: ARG001
+) -> None:
+    owner, other, _ = users
+    fake_github.push(OWNER, REPO, plugin_files("alpha"))
+    personal_id = _create(db_session, owner, MarketplaceScope.PERSONAL)
+
+    with pytest.raises(OnyxError) as exc:
+        api.delete_marketplace(personal_id, _fresh(db_session, other), db_session)
+    assert exc.value.error_code == OnyxErrorCode.NOT_FOUND
+    db_session.rollback()
+
+    api.delete_marketplace(personal_id, _fresh(db_session, manager), db_session)
+    assert get_github_marketplace(personal_id, db_session) is None
+    delete_user_from_db__no_commit(_fresh(db_session, owner), db_session)
+    db_session.commit()
+    assert db_session.get(User, owner.id) is None

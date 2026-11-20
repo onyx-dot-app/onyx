@@ -231,6 +231,10 @@ def apply_marketplace_sync__no_commit(
     kept_ids = [plugin.plugin_id for plugin in current]
     before = affected_user_ids_for_plugins(kept_ids, db_session)
     cleanup = [item.bundle_file_id for key, item in staged.items() if key not in needed]
+    # Plugin locks in id order, as bulk sharing takes them, so the two cannot
+    # deadlock.
+    for plugin_id in sorted({*plan.delete_plugin_ids, *plan.add_version.values()}):
+        lock_plugin(plugin_id, db_session)
     for plugin_id in plan.delete_plugin_ids:
         plugin = lock_plugin(plugin_id, db_session)
         if plugin is not None:

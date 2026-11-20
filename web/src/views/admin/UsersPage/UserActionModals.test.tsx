@@ -21,6 +21,7 @@ import {
   resetPassword,
   transferPrivatePlugins,
 } from "@/views/admin/UsersPage/svc";
+import { deleteMarketplace } from "@/lib/marketplaces/api";
 
 const mockGo = jest.fn();
 
@@ -29,6 +30,11 @@ jest.mock("@/views/admin/UsersPage/svc", () => ({
   deleteUser: jest.fn(),
   resetPassword: jest.fn(),
   transferPrivatePlugins: jest.fn(),
+}));
+
+jest.mock("@/lib/marketplaces/api", () => ({
+  ...jest.requireActual("@/lib/marketplaces/api"),
+  deleteMarketplace: jest.fn(),
 }));
 
 jest.mock("@opal/navigation", () => ({
@@ -41,6 +47,9 @@ jest.mock("@/lib/settings/hooks", () => ({
 }));
 
 const mockDeleteUser = deleteUser as jest.MockedFunction<typeof deleteUser>;
+const mockDeleteMarketplace = deleteMarketplace as jest.MockedFunction<
+  typeof deleteMarketplace
+>;
 const mockTransferPrivatePlugins =
   transferPrivatePlugins as jest.MockedFunction<typeof transferPrivatePlugins>;
 const mockResetPassword = resetPassword as jest.MockedFunction<
@@ -255,6 +264,40 @@ describe("DeleteUserModal", () => {
       expect(dismiss).toHaveBeenCalledWith("delete-user-private-skills")
     );
     dismiss.mockRestore();
+  });
+
+  it("removes the personal marketplaces, then deletes", async () => {
+    const detail =
+      "Delete this user's personal marketplaces before deleting the user.";
+    const body = {
+      error_code: "CONFLICT",
+      detail,
+      private_plugins: [],
+      personal_marketplaces: [
+        { id: "m1", name: "acme-tools" },
+        { id: "m2", name: "gone-tools" },
+      ],
+    };
+    mockDeleteUser
+      .mockRejectedValueOnce(new FetchError(detail, 409, body))
+      .mockResolvedValueOnce();
+    mockDeleteMarketplace
+      .mockResolvedValueOnce()
+      .mockRejectedValueOnce(
+        new FetchError("Marketplace not found.", 404, null)
+      );
+    const user = setupUser();
+    renderModal();
+
+    await user.click(screen.getByRole("button", { name: "Delete" }));
+    expect(await screen.findByText("acme-tools")).toBeInTheDocument();
+    expect(screen.getByText("gone-tools")).toBeInTheDocument();
+    expect(screen.getByText(/2 personal marketplaces/)).toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "Remove and Delete" }));
+
+    await waitFor(() => expect(mockDeleteUser).toHaveBeenCalledTimes(2));
+    expect(mockDeleteMarketplace.mock.calls).toEqual([["m1"], ["m2"]]);
   });
 
   it("shows no action for other delete errors", async () => {

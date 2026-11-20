@@ -300,14 +300,17 @@ def enqueue_marketplace_sync(
     marketplace_id: UUID, background_tasks: BackgroundTasks
 ) -> None:
     """Onyx Lite runs no Celery workers, so the API server runs the sync."""
-    get_cache_backend().set(
-        _syncing_key(marketplace_id), b"1", ex=SYNC_TASK_EXPIRES_SECONDS
-    )
+    cache = get_cache_backend()
+    cache.set(_syncing_key(marketplace_id), b"1", ex=SYNC_TASK_EXPIRES_SECONDS)
     tenant_id = get_current_tenant_id()
     if DISABLE_VECTOR_DB:
         background_tasks.add_task(_run_in_tenant, marketplace_id, tenant_id)
         return
-    _send_sync_task(marketplace_id, tenant_id)
+    try:
+        _send_sync_task(marketplace_id, tenant_id)
+    except Exception:
+        cache.delete(_syncing_key(marketplace_id))
+        raise
 
 
 def _send_sync_task(marketplace_id: UUID, tenant_id: str) -> None:

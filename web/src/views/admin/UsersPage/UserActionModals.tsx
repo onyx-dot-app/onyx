@@ -26,6 +26,7 @@ import { errorHandlingFetcher, FetchError } from "@/lib/fetcher";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { AccountType } from "@/lib/types";
+import { deleteMarketplace } from "@/lib/marketplaces/api";
 import {
   TransferOwnershipView,
   type TransferOwnershipTarget,
@@ -276,7 +277,7 @@ interface DeleteUserModalProps {
   onMutate: () => void;
 }
 
-function isPrivatePlugin(value: unknown): value is PrivatePlugin {
+function isNamedItem(value: unknown): value is PrivatePlugin {
   return (
     typeof value === "object" &&
     value !== null &&
@@ -287,15 +288,18 @@ function isPrivatePlugin(value: unknown): value is PrivatePlugin {
   );
 }
 
-/** The private plugins that refused the delete, or null for another error. */
-function privatePluginsFrom(err: unknown): PrivatePlugin[] | null {
+/** The items of one list in a refused delete, or null for another error. */
+function conflictItemsFrom(
+  err: unknown,
+  key: "private_plugins" | "personal_marketplaces"
+): PrivatePlugin[] | null {
   if (!(err instanceof FetchError) || err.info?.error_code !== "CONFLICT") {
     return null;
   }
   const info: object = err.info;
-  const plugins = "private_plugins" in info ? info.private_plugins : null;
-  if (!Array.isArray(plugins) || plugins.length === 0) return null;
-  return plugins.filter(isPrivatePlugin);
+  const items = key in info ? (info as Record<string, unknown>)[key] : null;
+  if (!Array.isArray(items) || items.length === 0) return null;
+  return items.filter(isNamedItem);
 }
 
 export function DeleteUserModal({
@@ -310,6 +314,9 @@ export function DeleteUserModal({
   const [privatePlugins, setPrivatePlugins] = useState<PrivatePlugin[] | null>(
     null
   );
+  const [personalMarketplaces, setPersonalMarketplaces] = useState<
+    PrivatePlugin[] | null
+  >(null);
   const [transferTarget, setTransferTarget] =
     useState<TransferOwnershipTarget>(null);
   const owners = useSWR<FullUserSnapshot[]>(
@@ -325,9 +332,15 @@ export function DeleteUserModal({
   );
 
   function showPrivateSkillsToast(err: unknown): boolean {
-    const plugins = privatePluginsFrom(err);
+    const plugins = conflictItemsFrom(err, "private_plugins");
     if (plugins) {
       setPrivatePlugins(plugins);
+      return true;
+    }
+    const marketplaces = conflictItemsFrom(err, "personal_marketplaces");
+    if (marketplaces) {
+      setPrivatePlugins(null);
+      setPersonalMarketplaces(marketplaces);
       return true;
     }
     if (!(err instanceof FetchError) || err.info?.error_code !== "CONFLICT") {
@@ -365,6 +378,67 @@ export function DeleteUserModal({
     await deleteUser(email);
   }
 
+  async function removeMarketplacesThenDelete(marketplaces: PrivatePlugin[]) {
+    for (const marketplace of marketplaces) {
+      try {
+        await deleteMarketplace(marketplace.id);
+      } catch (err) {
+        // A retry after a partial failure finds some already removed.
+        if (!(err instanceof FetchError) || err.status !== 404) throw err;
+      }
+    }
+    await deleteUser(email);
+  }
+
+  if (personalMarketplaces) {
+    return (
+      <ConfirmationModalLayout
+        icon={(props) => (
+          <SvgUserX {...props} className="text-action-danger-05" />
+        )}
+        title={t("deleteModal.title")}
+        onClose={isSubmitting ? undefined : onClose}
+        submit={
+          <Button
+            disabled={isSubmitting}
+            variant="danger"
+            onClick={() =>
+              runAction(
+                () => removeMarketplacesThenDelete(personalMarketplaces),
+                t("deleteModal.toasts.success"),
+                t("modals.toasts.error"),
+                onDeleted,
+                setIsSubmitting,
+                showPrivateSkillsToast
+              )
+            }
+          >
+            {t("deleteModal.marketplaces.submit.label")}
+          </Button>
+        }
+      >
+        <Section gap={3} height="auto" alignItems="stretch">
+          <Text as="p" color="text-03">
+            {richNodes(
+              t.rich("deleteModal.marketplaces.description", {
+                email,
+                count: personalMarketplaces.length,
+                strong: emailTag,
+              })
+            )}
+          </Text>
+          <Section gap={0.5} height="auto" alignItems="start">
+            {personalMarketplaces.map((marketplace) => (
+              <Text key={marketplace.id} font="main-ui-body" color="text-04">
+                {marketplace.name}
+              </Text>
+            ))}
+          </Section>
+        </Section>
+      </ConfirmationModalLayout>
+    );
+  }
+
   if (privatePlugins) {
     const newOwner = transferTarget?.type === "user" ? transferTarget : null;
     return (
@@ -386,7 +460,8 @@ export function DeleteUserModal({
                 t("deleteModal.toasts.success"),
                 t("modals.toasts.error"),
                 onDeleted,
-                setIsSubmitting
+                setIsSubmitting,
+                showPrivateSkillsToast
               );
             }}
           >

@@ -132,6 +132,27 @@ test("Remove names the plugins that it deletes before it asks to confirm", async
   );
 });
 
+test("Remove stays disabled when the plugin list does not load", async () => {
+  mockFetch({
+    "/api/marketplaces": { marketplaces: [summaryFixture()] },
+    [DETAIL_URL]: new Response(JSON.stringify({ detail: "boom" }), {
+      status: 500,
+    }),
+  });
+  render(<MarketplacesTable />);
+
+  await user().click(
+    await screen.findByRole("button", { name: "Actions for acme/plugins" })
+  );
+  await user().click(await screen.findByRole("menuitem", { name: /Remove/ }));
+
+  expect(
+    await screen.findByText("Could not load the plugins of this marketplace.")
+  ).toBeInTheDocument();
+  expect(screen.queryByText("This marketplace has no plugins.")).toBeNull();
+  expect(screen.getByRole("button", { name: "Remove" })).toBeDisabled();
+});
+
 test("the default access item shows only for a company marketplace", async () => {
   const fetchMock = mockFetch({
     "/api/marketplaces": {

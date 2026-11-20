@@ -9282,6 +9282,12 @@
           },
           "ownersLoadFailed": "Die Benutzer, die die Skills übernehmen können, konnten nicht geladen werden.",
           "retry": "Erneut versuchen"
+        },
+        "marketplaces": {
+          "description": "<strong>{email}</strong> hat {count, plural, one {# persönlichen Marketplace} other {# persönliche Marketplaces}}. Beim Löschen des Benutzers werden sie und ihre synchronisierten Plugins entfernt.",
+          "submit": {
+            "label": "Entfernen und löschen"
+          }
         }
       },
       "editModal": {
@@ -17214,7 +17220,9 @@
         "noPlugins": "Dieses Marketplace hat keine Plugins.",
         "confirm": "Entfernen",
         "done": "{name} wurde entfernt.",
-        "failed": "Das Marketplace konnte nicht entfernt werden."
+        "failed": "Das Marketplace konnte nicht entfernt werden.",
+        "loadFailed": "Die Plugins dieses Marketplace konnten nicht geladen werden.",
+        "retry": "Erneut versuchen"
       },
       "detail": {
         "title": "Marketplace",

@@ -9282,6 +9282,12 @@
           },
           "ownersLoadFailed": "Não foi possível carregar os usuários que podem receber as habilidades.",
           "retry": "Tentar novamente"
+        },
+        "marketplaces": {
+          "description": "<strong>{email}</strong> tem {count, plural, one {# marketplace pessoal} other {# marketplaces pessoais}}. Excluir o usuário remove esses marketplaces e os plugins sincronizados por eles.",
+          "submit": {
+            "label": "Remover e excluir"
+          }
         }
       },
       "editModal": {
@@ -17214,7 +17220,9 @@
         "noPlugins": "Este marketplace não tem plugins.",
         "confirm": "Remover",
         "done": "{name} removido.",
-        "failed": "Não foi possível remover o marketplace."
+        "failed": "Não foi possível remover o marketplace.",
+        "loadFailed": "Não foi possível carregar os plugins deste marketplace.",
+        "retry": "Tentar novamente"
       },
       "detail": {
         "title": "Marketplace",

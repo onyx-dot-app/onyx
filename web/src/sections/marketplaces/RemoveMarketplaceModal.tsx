@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useTranslations } from "next-intl";
-import { Button, Text } from "@opal/components";
+import { Button, MessageCard, Text } from "@opal/components";
 import {
   ConfirmationModalLayout,
   Content,
@@ -30,7 +30,11 @@ export default function RemoveMarketplaceModal({
   onRemoved,
 }: RemoveMarketplaceModalProps) {
   const t = useTranslations("plugins.marketplaces.remove");
-  const { marketplace: detail, isLoading } = useMarketplace(marketplace.id);
+  const {
+    marketplace: detail,
+    isLoading,
+    refresh,
+  } = useMarketplace(marketplace.id);
   const refreshSkillLists = useRefreshSkillLists();
   const [busy, setBusy] = useState(false);
   const plugins = detail?.plugins ?? [];
@@ -59,7 +63,7 @@ export default function RemoveMarketplaceModal({
       submit={
         <Button
           variant="danger"
-          disabled={busy || isLoading}
+          disabled={busy || detail === undefined}
           onClick={() => void remove()}
         >
           {t("confirm")}
@@ -68,6 +72,13 @@ export default function RemoveMarketplaceModal({
     >
       {isLoading ? (
         <IconLoader />
+      ) : detail === undefined ? (
+        <Section alignItems="start" gap={2} height="auto">
+          <MessageCard variant="error" title={t("loadFailed")} />
+          <Button prominence="secondary" onClick={() => void refresh()}>
+            {t("retry")}
+          </Button>
+        </Section>
       ) : plugins.length === 0 ? (
         <Text as="p" font="secondary-body" color="text-03">
           {t("noPlugins")}

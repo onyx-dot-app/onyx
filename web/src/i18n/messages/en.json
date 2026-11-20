@@ -9282,6 +9282,12 @@
           },
           "ownersLoadFailed": "Could not load the users who can receive the skills.",
           "retry": "Retry"
+        },
+        "marketplaces": {
+          "description": "<strong>{email}</strong> has {count, plural, one {# personal marketplace} other {# personal marketplaces}}. Deleting the user removes them and the plugins they synced.",
+          "submit": {
+            "label": "Remove and Delete"
+          }
         }
       },
       "editModal": {
@@ -17214,7 +17220,9 @@
         "noPlugins": "This marketplace has no plugins.",
         "confirm": "Remove",
         "done": "Removed {name}.",
-        "failed": "Could not remove the marketplace."
+        "failed": "Could not remove the marketplace.",
+        "loadFailed": "Could not load the plugins of this marketplace.",
+        "retry": "Retry"
       },
       "detail": {
         "title": "Marketplace",

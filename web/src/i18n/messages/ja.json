@@ -9282,6 +9282,12 @@
           },
           "ownersLoadFailed": "スキルを受け取れるユーザーを読み込めませんでした。",
           "retry": "再試行"
+        },
+        "marketplaces": {
+          "description": "<strong>{email}</strong> には個人マーケットプレイスが {count, plural, other {# 件}} あります。ユーザーを削除すると、それらと同期されたプラグインも削除されます。",
+          "submit": {
+            "label": "削除してユーザーを削除"
+          }
         }
       },
       "editModal": {
@@ -17214,7 +17220,9 @@
         "noPlugins": "このマーケットプレイスにはプラグインがありません。",
         "confirm": "削除",
         "done": "{name} を削除しました。",
-        "failed": "マーケットプレイスを削除できませんでした。"
+        "failed": "マーケットプレイスを削除できませんでした。",
+        "loadFailed": "このマーケットプレイスのプラグインを読み込めませんでした。",
+        "retry": "再試行"
       },
       "detail": {
         "title": "マーケットプレイス",
