@@ -14,7 +14,7 @@ releases="$(python3 .github/scripts/supported-release-branches.py)"
 
 lines=()
 failed=0
-# A pending update alerts once a day. A past-due update or a broken check alerts on every run.
+# A pending update alerts once a day. A past-due update, a broken check, or a failed release observation alerts on every run.
 urgent=false
 reviewer=""
 if [ "${OBSERVE_OUTCOME:-success}" != success ]; then
@@ -61,7 +61,7 @@ if [ "${#lines[@]}" -eq 0 ]; then
   exit 0
 fi
 
-# One person owns each post: the update PR's reviewer, or a CVE reviewer when no PR has one.
+# One person owns each post: the first update PR's requested reviewer, or a random CVE reviewer when no PR has one.
 [ -n "$reviewer" ] || reviewer="$(jq -r '.[]' .github/actions/slack-notify/cve-reviewers.json | shuf -n 1)"
 slack_id="$(jq -r --arg login "$reviewer" 'to_entries[] | select(.value == $login) | .key' .github/actions/slack-notify/user-mappings.json)"
 mention="${slack_id:+<@${slack_id}>}"
@@ -72,9 +72,7 @@ mention="${slack_id:+<@${slack_id}>}"
 } > "$alert"
 cat "$alert"
 
-# Runs are 4 hours apart, so one scheduled run a day starts in this window (8 AM to noon PST).
-hour="$(date -u +%-H)"
-if [ "$urgent" = true ] || [ "${GITHUB_EVENT_NAME:-}" = workflow_dispatch ] || { [ "$hour" -ge 16 ] && [ "$hour" -lt 20 ]; }; then
+if [ "$urgent" = true ] || [ "${DAILY_POST:-false}" = true ]; then
   echo "post=true" >> "$GITHUB_OUTPUT"
 fi
 
