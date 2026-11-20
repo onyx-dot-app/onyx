@@ -17,8 +17,8 @@ import type {
 test.describe("Plugin upload", () => {
   test.describe.configure({ mode: "serial" });
 
-  const suffix = Date.now().toString(36);
-  const base = `https://example.com/pw-plugin-${suffix}`;
+  const suffix = uniqueSkillName("pw-plugin");
+  const base = `https://example.com/${suffix}`;
   const integrationIds: Record<string, number> = {};
   const pluginIds: string[] = [];
 
@@ -115,9 +115,10 @@ test.describe("Plugin upload", () => {
     page,
   }) => {
     const name = uniqueSkillName("pw-plugin");
+    const review = uniqueSkillName("review");
     const zip = await pluginZip({
       name,
-      skills: ["review", "summarize"],
+      skills: [review, uniqueSkillName("summarize")],
       mcpServers: servers(),
       extra: { "commands/deploy.md": "Deploy." },
     });
@@ -138,7 +139,7 @@ test.describe("Plugin upload", () => {
       await pluginZip({
         name,
         version: "1.1.0",
-        skills: ["review"],
+        skills: [review],
         mcpServers: servers(),
       })
     );
