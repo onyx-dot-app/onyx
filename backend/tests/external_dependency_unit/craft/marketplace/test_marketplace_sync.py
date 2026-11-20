@@ -3,12 +3,12 @@ from typing import Any
 from unittest.mock import patch
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from onyx.db import marketplace as marketplace_db
 from onyx.db.marketplace import confirm_marketplace_deletes__no_commit
-from onyx.db.models import PluginVersion, User
+from onyx.db.models import PluginVersion, User, UserIntegrationPreference
 from onyx.db.skill import list_chat_skills
 from onyx.skills.marketplace import sync
 from onyx.skills.marketplace.models import (
@@ -27,7 +27,14 @@ from tests.external_dependency_unit.craft.marketplace.helpers import (
     reload,
     synced_plugins,
 )
+from tests.external_dependency_unit.integration_helpers import (
+    delete_integrations,
+    give_access,
+    make_mcp_integration,
+)
 from tests.unit.onyx.skills.marketplace_fixtures import CLAUDE, skill_md
+
+_MCP_URL = "https://mcp.marketplace-sync.test/mcp"
 
 
 def _versions(db_session: Session, plugin_id: Any) -> list[int]:
@@ -325,6 +332,37 @@ def test_remote_entries_and_private_repository(
     assert reload(db_session, marketplace).last_error is None
 
 
+def test_remote_entries_count_toward_the_marketplace_limits(
+    db_session: Session,
+    users: tuple[User, User, User],
+    fake_github: FakeGitHub,
+    connections: Connections,  # noqa: ARG001
+    marketplace_ids: list[Any],
+) -> None:
+    owner = users[0]
+    fake_github.push("acme", "remote", {"skills/remote/SKILL.md": skill_md("remote")})
+    files = plugin_files("alpha")
+    files[CLAUDE] = catalog_with(
+        [
+            {"name": "alpha", "source": "./plugins/alpha"},
+            {"name": "remote", "source": {"source": "github", "repo": "acme/remote"}},
+        ]
+    )
+    fake_github.push(OWNER, REPO, files)
+    marketplace = make_marketplace(
+        db_session, marketplace_ids, login=owner, owner=owner
+    )
+
+    with patch("onyx.skills.marketplace.reader.GITHUB_SKILL_MAX_COUNT", 1):
+        result = sync.sync_marketplace(marketplace.id)
+
+    assert result.status == MarketplaceSyncStatus.FAILED
+    assert reload(db_session, marketplace).last_error == (
+        "The marketplace has more than 1 skills."
+    )
+    assert synced_plugins(db_session, marketplace.id) == {}
+
+
 def test_login_user_gone(
     db_session: Session,
     users: tuple[User, User, User],
@@ -382,3 +420,46 @@ def test_entry_with_mcp_server_has_a_need(
     assert version is not None
     assert [need["name"] for need in version.needs or []] == ["linear"]
     assert json.loads(json.dumps(version.manifest))["name"] == "linear"
+
+
+def test_personal_sync_turns_on_the_integrations_of_a_plugin_it_turns_on(
+    db_session: Session,
+    users: tuple[User, User, User],
+    fake_github: FakeGitHub,
+    connections: Connections,  # noqa: ARG001
+    marketplace_ids: list[Any],
+) -> None:
+    owner = users[0]
+    integration, _ = make_mcp_integration(db_session, server_url=_MCP_URL)
+    give_access(db_session, [integration])
+    integration_id = integration.id
+    db_session.execute(
+        delete(UserIntegrationPreference).where(
+            UserIntegrationPreference.user_id == owner.id
+        )
+    )
+    db_session.commit()
+    try:
+        files = plugin_files("alpha")
+        files["plugins/alpha/.mcp.json"] = json.dumps(
+            {"mcpServers": {"main": {"type": "http", "url": _MCP_URL}}}
+        ).encode()
+        fake_github.push(OWNER, REPO, files)
+        marketplace = make_marketplace(
+            db_session, marketplace_ids, login=owner, owner=owner
+        )
+
+        with patch.object(sync, "reload_craft_sessions") as reload_sessions:
+            result = sync.sync_marketplace(marketplace.id)
+
+        assert result.status == MarketplaceSyncStatus.APPLIED
+        db_session.expire_all()
+        assert db_session.scalar(
+            select(UserIntegrationPreference.enabled).where(
+                UserIntegrationPreference.user_id == owner.id,
+                UserIntegrationPreference.integration_id == integration_id,
+            )
+        )
+        assert reload_sessions.call_args.args[0] == {owner.id}
+    finally:
+        delete_integrations(db_session, [integration_id])

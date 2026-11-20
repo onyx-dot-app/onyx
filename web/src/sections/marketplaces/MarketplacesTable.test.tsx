@@ -111,7 +111,16 @@ test("held deletes ask the user to review and confirm them", async () => {
 test("Remove names the plugins that it deletes before it asks to confirm", async () => {
   const fetchMock = mockFetch({
     "/api/marketplaces": { marketplaces: [summaryFixture()] },
-    [DETAIL_URL]: detailFixture(),
+    [DETAIL_URL]: detailFixture({
+      pending_delete_revision: "c".repeat(40),
+      pending_deletes: [
+        {
+          plugin_id: "55555555-5555-4555-8555-555555555555",
+          entry_key: "old-kit",
+          name: "old-kit",
+        },
+      ],
+    }),
     [`DELETE ${DETAIL_URL}`]: new Response("null"),
   });
   render(<MarketplacesTable />);
@@ -124,6 +133,7 @@ test("Remove names the plugins that it deletes before it asks to confirm", async
   const list = await screen.findByRole("list", { name: "Plugins to delete" });
   expect(within(list).getByText("review-kit")).toBeInTheDocument();
   expect(within(list).getByText("plan-kit")).toBeInTheDocument();
+  expect(within(list).getByText("old-kit")).toBeInTheDocument();
   expect(within(list).queryByText("npm-kit")).not.toBeInTheDocument();
 
   await user().click(screen.getByRole("button", { name: "Remove" }));

@@ -101,7 +101,7 @@ function Attention({ marketplaces, busy, onSync, onReview }: AttentionProps) {
 
 export default function MarketplacesTable() {
   const t = useTranslations("plugins.marketplaces");
-  const { marketplaces, error, isLoading, refresh, follow } = useMarketplaces();
+  const { marketplaces, error, isLoading, refresh } = useMarketplaces();
   const [openId, setOpenId] = useState<string | null>(null);
   const [defaultTarget, setDefaultTarget] = useState<MarketplaceSummary | null>(
     null
@@ -121,7 +121,6 @@ export default function MarketplacesTable() {
     setBusy((current) => new Set(current).add(row.id));
     try {
       await call(row.id);
-      follow();
       await refresh();
       toast.success(success);
     } catch (caught) {

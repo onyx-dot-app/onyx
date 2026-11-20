@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef } from "react";
 import { useTranslations } from "next-intl";
 import useSWR, { useSWRConfig } from "swr";
 import { toast } from "@opal/layouts";
@@ -15,21 +15,6 @@ import { useRefreshSkillLists } from "@/lib/skills/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
 const POLL_MS = 3000;
-// A started sync clears its request mark, so keep reading for a while after
-// the user asks for one.
-const FOLLOW_MS = 60_000;
-
-function useFollow() {
-  const until = useRef(0);
-  const [, setTick] = useState(0);
-  return {
-    following: () => Date.now() < until.current,
-    follow: () => {
-      until.current = Date.now() + FOLLOW_MS;
-      setTick((tick) => tick + 1);
-    },
-  };
-}
 
 function syncKey(marketplace: MarketplaceSummary): string {
   return [
@@ -41,14 +26,12 @@ function syncKey(marketplace: MarketplaceSummary): string {
 }
 
 export function useMarketplaces(enabled = true) {
-  const { following, follow } = useFollow();
   const refreshSkillLists = useRefreshSkillLists();
   const { data, error, isLoading, mutate } = useSWR<MarketplaceList, Error>(
     enabled ? SWR_KEYS.marketplaces : null,
     errorHandlingFetcher,
     {
       refreshInterval: (latest) =>
-        following() ||
         latest?.marketplaces.some(
           (row) => marketplaceSyncState(row) === "syncing"
         )
@@ -77,25 +60,22 @@ export function useMarketplaces(enabled = true) {
     error,
     isLoading,
     refresh: mutate,
-    follow,
   };
 }
 
 export function useMarketplace(marketplaceId: string | null) {
-  const { following, follow } = useFollow();
   const { data, error, isLoading, mutate } = useSWR<MarketplaceDetail, Error>(
     marketplaceId ? SWR_KEYS.marketplace(marketplaceId) : null,
     errorHandlingFetcher,
     {
       refreshInterval: (latest) =>
-        following() ||
-        (latest !== undefined && marketplaceSyncState(latest) === "syncing")
+        latest !== undefined && marketplaceSyncState(latest) === "syncing"
           ? POLL_MS
           : 0,
       onErrorRetry: skipRetryOnAuthError,
     }
   );
-  return { marketplace: data, error, isLoading, refresh: mutate, follow };
+  return { marketplace: data, error, isLoading, refresh: mutate };
 }
 
 export function useMarketplaceAdded(): (

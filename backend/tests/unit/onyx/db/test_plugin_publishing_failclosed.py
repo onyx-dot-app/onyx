@@ -28,6 +28,10 @@ def test_publish_fails_closed_when_settings_read_fails(
 
     with pytest.raises(RuntimeError):
         plugin_db.publish_or_request_review__no_commit(
-            MagicMock(), uuid4(), MagicMock(), "raise", db_session
+            MagicMock(marketplace_entry_key=None),
+            uuid4(),
+            MagicMock(),
+            "raise",
+            db_session,
         )
     db_session.flush.assert_not_called()

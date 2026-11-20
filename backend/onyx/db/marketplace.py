@@ -32,7 +32,7 @@ from onyx.skills.marketplace.models import (
     ReadyPlugin,
     UnsupportedPlugin,
 )
-from onyx.skills.models import PluginFileEntry, PluginVersionContent
+from onyx.skills.models import PluginFileEntry, PluginNeed, PluginVersionContent
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -192,20 +192,32 @@ def request_marketplace_sync__no_commit(
     )
 
 
-def take_marketplace_sync_request__no_commit(
+def claim_marketplace_sync_request__no_commit(
     marketplace_id: UUID, db_session: Session
-) -> bool:
-    return (
-        db_session.execute(
-            update(Marketplace)
-            .where(
-                Marketplace.id == marketplace_id,
-                Marketplace.sync_requested_at.is_not(None),
-            )
-            .values(sync_requested_at=None)
-            .returning(Marketplace.id)
-        ).first()
-        is not None
+) -> datetime | None:
+    """Restamps the request so it stays live while the sync runs. A request
+    made during the run changes the stamp, and so survives the finish."""
+    return db_session.execute(
+        update(Marketplace)
+        .where(
+            Marketplace.id == marketplace_id,
+            Marketplace.sync_requested_at.is_not(None),
+        )
+        .values(sync_requested_at=func.now())
+        .returning(Marketplace.sync_requested_at)
+    ).scalar_one_or_none()
+
+
+def finish_marketplace_sync_request__no_commit(
+    marketplace_id: UUID, claimed_at: datetime, db_session: Session
+) -> None:
+    db_session.execute(
+        update(Marketplace)
+        .where(
+            Marketplace.id == marketplace_id,
+            Marketplace.sync_requested_at == claimed_at,
+        )
+        .values(sync_requested_at=None)
     )
 
 
@@ -320,20 +332,19 @@ def apply_marketplace_sync__no_commit(
         if owner_user_id is None:
             plugin.published_version_id = plugin.current_version_id
         versioned.append(plugin.id)
-    created: list[Plugin] = [
-        create_synced_plugin__no_commit(
+    created: list[Plugin] = []
+    turned_on_needs: list[PluginNeed] = []
+    affected = set(before)
+    for key in plan.create:
+        plugin = create_synced_plugin__no_commit(
             marketplace, key, staged[key], created_by, db_session
         )
-        for key in plan.create
-    ]
-    affected = set(before)
-    if owner_user_id is not None:
-        turned_on = [
-            _turn_on_for_owner__no_commit(plugin, owner_user_id, db_session)
-            for plugin in created
-        ]
-        if any(turned_on):
+        created.append(plugin)
+        if owner_user_id is not None and _turn_on_for_owner__no_commit(
+            plugin, owner_user_id, db_session
+        ):
             affected.add(owner_user_id)
+            turned_on_needs.extend(staged[key].needs or [])
     _write_sync_state(
         marketplace,
         name=name,
@@ -353,6 +364,7 @@ def apply_marketplace_sync__no_commit(
         blocked=blocked,
         cleanup_file_ids=sorted(cleanup),
         affected_user_ids=affected,
+        turned_on_needs=turned_on_needs,
     )
 
 

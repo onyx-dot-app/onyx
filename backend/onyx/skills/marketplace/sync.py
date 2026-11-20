@@ -15,11 +15,12 @@ from onyx.configs.constants import (
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.marketplace import (
     apply_marketplace_sync__no_commit,
+    claim_marketplace_sync_request__no_commit,
+    finish_marketplace_sync_request__no_commit,
     get_github_marketplace,
     list_synced_plugins,
     record_marketplace_error__no_commit,
     request_marketplace_sync__no_commit,
-    take_marketplace_sync_request__no_commit,
 )
 from onyx.db.users import fetch_user_by_id
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -27,6 +28,8 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.staging import delete_files_best_effort
 from onyx.integrations.github_auth import github_authorization_for
+from onyx.integrations.plugin_needs import turn_on_needed_integrations__no_commit
+from onyx.integrations.service import reload_craft_sessions
 from onyx.skills.ingest import delete_bundle_blob, store_version_content
 from onyx.skills.ingest_from_github import read_repository_archive
 from onyx.skills.marketplace.compare import plan_marketplace_sync
@@ -47,7 +50,11 @@ from onyx.skills.marketplace.provider import (
     marketplace_adapter,
     marketplace_config,
 )
-from onyx.skills.marketplace.reader import build_entry_bundle, read_marketplace
+from onyx.skills.marketplace.reader import (
+    BundleBudget,
+    build_entry_bundle,
+    read_marketplace,
+)
 from onyx.skills.models import PluginVersionContent
 from onyx.skills.push import push_skills_and_commit
 from onyx.utils.logger import setup_logger
@@ -78,47 +85,46 @@ def _resolve_remote_entries(
     entries: tuple[ReadyPlugin | BlockedPlugin | UnsupportedPlugin | RemotePlugin, ...],
     adapter: MarketplaceProviderAdapter,
 ) -> list[ReadyPlugin | BlockedPlugin | UnsupportedPlugin]:
-    repositories: dict[GitHubRepoSource, dict[str, bytes] | OnyxError] = {}
-    resolved: list[ReadyPlugin | BlockedPlugin | UnsupportedPlugin] = []
-    for entry in entries:
-        if not isinstance(entry, RemotePlugin):
-            resolved.append(entry)
+    """Holds the files of one remote repository at a time. Raises ValueError
+    when all ready plugins together pass the marketplace limits."""
+    budget = BundleBudget()
+    by_repository: dict[GitHubRepoSource, list[tuple[int, RemotePlugin]]] = {}
+    resolved: dict[int, ReadyPlugin | BlockedPlugin | UnsupportedPlugin] = {}
+    for index, entry in enumerate(entries):
+        if isinstance(entry, RemotePlugin):
+            by_repository.setdefault(
+                entry.source.model_copy(update={"path": None}), []
+            ).append((index, entry))
             continue
-        repository_key = entry.source.model_copy(update={"path": None})
-        if (
-            repository_key not in repositories
-            and len(repositories) >= REMOTE_REPOSITORY_MAX_COUNT
-        ):
-            resolved.append(
-                BlockedPlugin(
-                    entry_key=entry.entry_key,
-                    path=None,
-                    reason="The marketplace names more than "
-                    f"{REMOTE_REPOSITORY_MAX_COUNT} other repositories.",
-                )
+        if isinstance(entry, ReadyPlugin):
+            budget.add(entry)
+        resolved[index] = entry
+    for count, remote_entries in enumerate(by_repository.values()):
+        source = remote_entries[0][1].source
+        files: dict[str, bytes] | str
+        if count >= REMOTE_REPOSITORY_MAX_COUNT:
+            files = (
+                f"The marketplace names more than {REMOTE_REPOSITORY_MAX_COUNT} "
+                "other repositories."
             )
-            continue
-        if repository_key not in repositories:
+        else:
             try:
-                repositories[repository_key] = adapter.fetch_remote(entry.source)
+                files = adapter.fetch_remote(source)
             except OnyxError as exc:
-                repositories[repository_key] = exc
-        files = repositories[repository_key]
-        if isinstance(files, OnyxError):
-            resolved.append(
-                BlockedPlugin(
-                    entry_key=entry.entry_key,
-                    path=None,
-                    reason=f"{entry.source.owner}/{entry.source.repo}: {files.detail}",
+                files = f"{source.owner}/{source.repo}: {exc.detail}"
+        for index, entry in remote_entries:
+            if isinstance(files, str):
+                resolved[index] = BlockedPlugin(
+                    entry_key=entry.entry_key, path=None, reason=files
                 )
-            )
-            continue
-        resolved.append(
-            build_entry_bundle(
+                continue
+            result = build_entry_bundle(
                 files, entry.source.path or "", entry.entry, entry.entry_key
             )
-        )
-    return resolved
+            if isinstance(result, ReadyPlugin):
+                budget.add(result)
+            resolved[index] = result
+    return [resolved[index] for index in range(len(entries))]
 
 
 def read_marketplace_repository(
@@ -137,12 +143,22 @@ def read_marketplace_repository(
             failure=read.reason,
             entries=[],
         )
+    try:
+        entries = _resolve_remote_entries(read.entries, adapter)
+    except ValueError as exc:
+        return MarketplaceRead(
+            revision=revision,
+            tree_shas=archive.tree_shas,
+            name=None,
+            failure=str(exc),
+            entries=[],
+        )
     return MarketplaceRead(
         revision=revision,
         tree_shas=archive.tree_shas,
         name=read.name,
         failure=None,
-        entries=_resolve_remote_entries(read.entries, adapter),
+        entries=entries,
     )
 
 
@@ -194,6 +210,7 @@ def sync_marketplace(marketplace_id: UUID) -> MarketplaceSyncResult:
         authorization = github_authorization_for(login_user.id, db_session)
         adapter = marketplace_adapter(marketplace, authorization)
         folder = marketplace_config(marketplace).folder
+        owner_user_id = marketplace.owner_user_id
         login_user_id = login_user.id
         login_email = login_user.email
         db_session.expunge(login_user)
@@ -234,6 +251,17 @@ def sync_marketplace(marketplace_id: UUID) -> MarketplaceSyncResult:
                 created_by=login,
                 db_session=db_session,
             )
+            owner = (
+                fetch_user_by_id(db_session, owner_user_id)
+                if owner_user_id is not None and result.turned_on_needs
+                else None
+            )
+            integrations_changed = (
+                owner is not None
+                and turn_on_needed_integrations__no_commit(
+                    owner, result.turned_on_needs, db_session
+                )
+            )
             db_session.commit()
     except Exception:
         for content in staged.values():
@@ -243,6 +271,9 @@ def sync_marketplace(marketplace_id: UUID) -> MarketplaceSyncResult:
     if result.affected_user_ids:
         with get_session_with_current_tenant() as db_session:
             push_skills_and_commit(result.affected_user_ids, db_session)
+    if integrations_changed and owner_user_id is not None:
+        with get_session_with_current_tenant() as db_session:
+            reload_craft_sessions({owner_user_id}, db_session)
     return result
 
 
@@ -254,7 +285,9 @@ def sync_request_is_live(sync_requested_at: datetime | None) -> bool:
 
 def _sync_once(marketplace_id: UUID) -> bool:
     with get_session_with_current_tenant() as db_session:
-        take_marketplace_sync_request__no_commit(marketplace_id, db_session)
+        claimed_at = claim_marketplace_sync_request__no_commit(
+            marketplace_id, db_session
+        )
         db_session.commit()
     try:
         sync_marketplace(marketplace_id)
@@ -266,6 +299,13 @@ def _sync_once(marketplace_id: UUID) -> bool:
     except Exception:
         _record_failure(marketplace_id, SYNC_FAILED_ERROR)
         raise
+    finally:
+        if claimed_at is not None:
+            with get_session_with_current_tenant() as db_session:
+                finish_marketplace_sync_request__no_commit(
+                    marketplace_id, claimed_at, db_session
+                )
+                db_session.commit()
     return True
 
 

@@ -56,6 +56,27 @@ _BUILT_PLUGIN_JSON: Final = ".claude-plugin/plugin.json"
 NOT_SUPPORTED_REASON: Final = "Not supported in Onyx."
 
 
+class BundleBudget:
+    """The limits on all ready plugins of one marketplace, local and remote."""
+
+    def __init__(self) -> None:
+        self.skill_count = 0
+        self.bundle_bytes = 0
+
+    def add(self, plugin: ReadyPlugin) -> None:
+        self.skill_count += len(plugin.bundle.skills)
+        self.bundle_bytes += len(plugin.bundle.content)
+        if self.skill_count > GITHUB_SKILL_MAX_COUNT:
+            raise ValueError(
+                f"The marketplace has more than {GITHUB_SKILL_MAX_COUNT} skills."
+            )
+        if self.bundle_bytes > _BUNDLES_MAX_BYTES:
+            raise ValueError(
+                "The marketplace plugins are larger than "
+                f"{_BUNDLES_MAX_BYTES // (1024 * 1024)} MiB together."
+            )
+
+
 def _join(*parts: str) -> str:
     return "/".join(part for part in parts if part)
 
@@ -371,23 +392,12 @@ def read_marketplace(
             raise ValueError("The marketplace metadata.pluginRoot must be text.")
         plugin_root = _relative_path(plugin_root)
         entries: list[MarketplaceEntry] = []
-        skill_count = 0
-        bundle_bytes = 0
+        budget = BundleBudget()
         for entry in _plugin_entries(manifest):
             key = str(entry["name"])
             result = _read_entry(files, base, plugin_root, key, entry, tree_shas)
             if isinstance(result, ReadyPlugin):
-                skill_count += len(result.bundle.skills)
-                bundle_bytes += len(result.bundle.content)
-                if skill_count > GITHUB_SKILL_MAX_COUNT:
-                    raise ValueError(
-                        f"The marketplace has more than {GITHUB_SKILL_MAX_COUNT} skills."
-                    )
-                if bundle_bytes > _BUNDLES_MAX_BYTES:
-                    raise ValueError(
-                        "The marketplace plugins are larger than "
-                        f"{_BUNDLES_MAX_BYTES // (1024 * 1024)} MiB together."
-                    )
+                budget.add(result)
             entries.append(result)
     except ValueError as exc:
         return FailedMarketplace(reason=str(exc))

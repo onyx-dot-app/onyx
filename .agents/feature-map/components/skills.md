@@ -924,7 +924,9 @@ the app from the same rule
     over the entry fields, or the entry fields alone; an entry `skills` list
     takes only those folders. A bad entry is blocked and the rest go on;
     `github` and `git-subdir` sources on github.com are fetched from their
-    repository (20 per sync); other sources are "Not supported in Onyx".
+    repository (20 per sync, one repository in memory at a time); other
+    sources are "Not supported in Onyx". `skills/marketplace/reader.py:BundleBudget` holds the
+    skill and size limits for local and remote plugins together.
     `skills/marketplace/compare.py:plan_marketplace_sync` decides the writes:
     an entry gets a version only when its file list changed; a gone entry
     deletes its plugin, but more than five deletes that are also more than
@@ -935,8 +937,10 @@ the app from the same rule
     again under the marketplace row lock and writes all in one transaction. A
     failed read or a GitHub error only sets `last_error`. A failure before the
     commit deletes the stored bundles. One sync runs at a time per
-    marketplace (cache lock `marketplace_sync:{id}`); a request during a sync
-    sets `sync_requested_at`, and the holder syncs again. A holder that stops
+    marketplace (cache lock `marketplace_sync:{id}`). The holder restamps
+    `sync_requested_at` when it starts and clears it at the end only if the
+    stamp did not change, so the API shows the sync while it runs. A request
+    during a sync changes the stamp, and the holder syncs again. A holder that stops
     for its time budget or an error with the mark set starts one follow-up
     sync. The API reports a mark older than the lock timeout plus 5 minutes
     as not syncing (`sync_request_is_live`), so Sync now recovers a mark that
@@ -948,7 +952,8 @@ the app from the same rule
     `published_version_id` follows each version;
     `db/plugin_access.py:seen_by_organization` makes the organization see
     them. A personal plugin belongs to the marketplace owner and turns on for
-    the owner unless the skill limit refuses it. `db/plugin.py:refuse_if_synced`
+    the owner unless the skill limit refuses it; the sync then turns on the
+    owner's connected integrations that the plugin needs, as an upload does. `db/plugin.py:refuse_if_synced`
     refuses content edits, uploads, restores, publishing, ownership transfer
     and delete of a synced plugin with "Change this plugin in GitHub."; shares
     and install settings still change. `db/skill.py:may_delete_skill` takes
@@ -957,9 +962,8 @@ the app from the same rule
     `server/features/skill/marketplace_api.py`, under `/marketplaces`;
     they authorize before any GitHub call. The web client is
     `web/src/lib/marketplaces/` (`web/src/lib/marketplaces/hooks.ts` reads the list again every 3 s
-    while a marketplace syncs, and for 60 s after a user asks for a sync,
-    because a started sync clears `sync_requested`; it refreshes the skill
-    lists when a sync changes plugins).
+    while a marketplace syncs, and refreshes the skill lists when a sync
+    changes plugins).
 
 ---
 

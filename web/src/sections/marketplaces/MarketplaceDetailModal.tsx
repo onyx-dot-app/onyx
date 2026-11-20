@@ -180,7 +180,7 @@ export default function MarketplaceDetailModal({
   onChanged,
 }: MarketplaceDetailModalProps) {
   const t = useTranslations("plugins.marketplaces");
-  const { marketplace, error, refresh, follow } = useMarketplace(marketplaceId);
+  const { marketplace, error, refresh } = useMarketplace(marketplaceId);
   const refreshSkillLists = useRefreshSkillLists();
   const [busy, setBusy] = useState(false);
 
@@ -192,7 +192,6 @@ export default function MarketplaceDetailModal({
     setBusy(true);
     try {
       await refresh(await call(), { revalidate: false });
-      follow();
       onChanged();
       refreshSkillLists();
       toast.success(success);

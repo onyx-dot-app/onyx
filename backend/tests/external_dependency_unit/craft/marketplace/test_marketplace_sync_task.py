@@ -68,6 +68,36 @@ def test_busy_lock_sets_the_mark_and_the_holder_syncs_again(
     assert reload(db_session, marketplace).sync_requested_at is None
 
 
+def test_request_stays_live_while_the_sync_runs(
+    db_session: Session,
+    users: tuple[User, User, User],
+    fake_github: FakeGitHub,
+    connections: Connections,  # noqa: ARG001
+    marketplace_ids: list[Any],
+) -> None:
+    owner = users[0]
+    fake_github.push(OWNER, REPO, plugin_files("alpha"))
+    marketplace = make_marketplace(
+        db_session, marketplace_ids, login=owner, owner=owner
+    )
+    marketplace.sync_requested_at = datetime.now(timezone.utc)
+    db_session.commit()
+
+    real_sync = sync.sync_marketplace
+    live_during_run: list[bool] = []
+
+    def recording_sync(marketplace_id: Any) -> MarketplaceSyncResult:
+        live_during_run.append(
+            sync.sync_request_is_live(reload(db_session, marketplace).sync_requested_at)
+        )
+        return real_sync(marketplace_id)
+
+    with patch.object(sync, "sync_marketplace", recording_sync):
+        sync.run_marketplace_sync(marketplace.id)
+    assert live_during_run == [True]
+    assert reload(db_session, marketplace).sync_requested_at is None
+
+
 def test_deleted_marketplace_ends_the_task(
     db_session: Session,
     users: tuple[User, User, User],
