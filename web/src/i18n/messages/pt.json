@@ -4008,6 +4008,16 @@
               "description": "Especifique as caixas de correio a indexar (por exemplo, INBOX, Sent, Drafts). Deixe vazio para indexar todas as caixas de correio."
             }
           }
+        },
+        "microsoft": {
+          "fields": {
+            "ru_per_minute": {
+              "label": "RU por minuto",
+              "description": "A parte do limite de taxa do registro de aplicativo da Microsoft que este conector pode usar, em unidades de recurso (RU) por minuto. A Microsoft define o limite do aplicativo pelo nível de licenças, de 1.250 a 6.250 RU por minuto. Deixe vazio para que o Onyx aprenda o limite. [Como encontrar seu nível](https://docs.onyx.app/admins/connectors/official/microsoft-365/setup#rate-limits)",
+              "others": "Outros conectores neste registro de aplicativo: {connectors}. Total: {total} RU por minuto.",
+              "none": "Nenhum outro conector neste registro de aplicativo define RU por minuto."
+            }
+          }
         }
       }
     },

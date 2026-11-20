@@ -13,6 +13,7 @@ from onyx.connectors.factory import (
     parse_credential_binding,
     validate_ccpair_for_user,
 )
+from onyx.connectors.microsoft_utils.config import configured_ru_per_minute
 from onyx.db.connector_credential_pair import (
     get_manageable_cc_pairs_for_credentials,
     verify_user_can_edit_connector,
@@ -23,11 +24,13 @@ from onyx.db.credentials import (
     alter_credential,
     create_credential,
     delete_credential_for_user,
+    fetch_credential_by_id,
     fetch_credential_by_id_for_user,
     fetch_credential_group_ids,
     fetch_credentials_for_user,
     fetch_credentials_usable_by_source_for_user,
     fetch_editable_credential_ids,
+    fetch_microsoft_app_cc_pairs,
     lock_credential__no_commit,
     swap_credentials_connector,
     update_credential,
@@ -51,6 +54,8 @@ from onyx.server.documents.models import (
     CredentialSnapshot,
     CredentialSwapRequest,
     CredentialUsage,
+    MicrosoftRateBudgetEntry,
+    MicrosoftRateBudgets,
     ObjectCreationIdResponse,
     SimilarCredentialSnapshot,
 )
@@ -209,6 +214,42 @@ def get_cc_source_full_info(
             )
         )
     return snapshots
+
+
+@router.get("/admin/credential/{credential_id}/microsoft-rate-budgets")
+def list_microsoft_rate_budgets(
+    credential_id: int,
+    exclude_connector_id: int | None = None,
+    _: User = Depends(require_permission(Permission.MANAGE_CONNECTORS)),
+    db_session: Session = Depends(get_session),
+) -> MicrosoftRateBudgets:
+    """The Microsoft connectors that use the same app registration as the
+    credential, on any credential, with the RU per minute that each one sets.
+    Microsoft limits the calls of the app, so the sum must stay under its
+    limit. ``exclude_connector_id`` leaves out the connector that the form
+    edits. The answer holds no credential field."""
+    credential = fetch_credential_by_id(credential_id, db_session)
+    if credential is None:
+        raise OnyxError(
+            OnyxErrorCode.CREDENTIAL_NOT_FOUND,
+            f"Credential {credential_id} does not exist",
+        )
+    entries: dict[int, MicrosoftRateBudgetEntry] = {}
+    for cc_pair in fetch_microsoft_app_cc_pairs(db_session, credential):
+        connector = cc_pair.connector
+        if connector.id == exclude_connector_id:
+            continue
+        entries[connector.id] = MicrosoftRateBudgetEntry(
+            connector_id=connector.id,
+            name=cc_pair.name or connector.name,
+            source=connector.source,
+            ru_per_minute=configured_ru_per_minute(connector.connector_specific_config),
+        )
+    connectors = list(entries.values())
+    return MicrosoftRateBudgets(
+        connectors=connectors,
+        total_ru_per_minute=sum(entry.ru_per_minute or 0 for entry in connectors),
+    )
 
 
 @router.delete("/admin/credential/{credential_id}")

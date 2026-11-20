@@ -4008,6 +4008,16 @@
               "description": "Indiquez les boîtes aux lettres à indexer (par ex. INBOX, Sent, Drafts). Laissez vide pour indexer toutes les boîtes aux lettres."
             }
           }
+        },
+        "microsoft": {
+          "fields": {
+            "ru_per_minute": {
+              "label": "RU par minute",
+              "description": "La part de la limite de débit de l’inscription d’application Microsoft que ce connecteur peut utiliser, en unités de ressources (RU) par minute. Microsoft fixe la limite de l’application selon le niveau de licences, de 1 250 à 6 250 RU par minute. Laissez vide pour qu’Onyx apprenne la limite. [Comment trouver votre niveau](https://docs.onyx.app/admins/connectors/official/microsoft-365/setup#rate-limits)",
+              "others": "Autres connecteurs sur cette inscription d’application : {connectors}. Total : {total} RU par minute.",
+              "none": "Aucun autre connecteur de cette inscription d’application ne définit de RU par minute."
+            }
+          }
         }
       }
     },

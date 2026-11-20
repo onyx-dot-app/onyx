@@ -397,6 +397,12 @@ export const SWR_KEYS = {
   // Every stored capability report of one source's credentials.
   credentialCheckReports: (source: string) =>
     `/api/manage/admin/credential/capability-reports?source=${source}`,
+  // The other Microsoft connectors on a credential's app registration, with
+  // the RU per minute that each one sets.
+  microsoftRateBudgets: (credentialId: number, connectorId: number | null) =>
+    `/api/manage/admin/credential/${credentialId}/microsoft-rate-budgets${
+      connectorId === null ? "" : `?exclude_connector_id=${connectorId}`
+    }`,
   // Every file-list page of one connector starts with this, so `mutate` can match them all.
   connectorFilesPrefix: (connectorId: number) =>
     `/api/manage/admin/connector/${connectorId}/files?`,

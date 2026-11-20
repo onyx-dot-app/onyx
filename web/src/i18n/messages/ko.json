@@ -4008,6 +4008,16 @@
               "description": "인덱싱할 사서함을 지정하세요 (예: INBOX, Sent, Drafts). 비워 두면 모든 사서함을 인덱싱합니다."
             }
           }
+        },
+        "microsoft": {
+          "fields": {
+            "ru_per_minute": {
+              "label": "분당 RU",
+              "description": "이 커넥터가 사용할 수 있는 Microsoft 앱 등록 속도 제한의 몫입니다. 단위는 분당 리소스 단위(RU)입니다. Microsoft는 라이선스 등급에 따라 앱의 제한을 분당 1,250~6,250 RU로 정합니다. 비워 두면 Onyx가 제한을 학습합니다. [등급 확인 방법](https://docs.onyx.app/admins/connectors/official/microsoft-365/setup#rate-limits)",
+              "others": "이 앱 등록을 사용하는 다른 커넥터: {connectors}. 합계: 분당 {total} RU.",
+              "none": "이 앱 등록에서 분당 RU를 설정한 다른 커넥터가 없습니다."
+            }
+          }
         }
       }
     },

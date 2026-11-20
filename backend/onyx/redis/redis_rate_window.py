@@ -607,6 +607,34 @@ local current = tonumber(redis.call('GET', KEYS[1]) or '0')
 return math.max(0, current - now)
 """
 
+# Takes ``ARGV[1]`` units from a budget of ``ARGV[2]`` units for 24 hours and
+# returns 0, or takes nothing and returns the seconds until the oldest hour
+# leaves the day. The key is a hash of the units of each hour, so its size
+# does not grow with the number of requests. One request always fits an
+# empty day.
+_DAY_SCRIPT = """
+local t = redis.call('TIME')
+local now = tonumber(t[1])
+local hour = math.floor(now / 3600)
+local cost = tonumber(ARGV[1])
+local limit = tonumber(ARGV[2])
+local total = 0
+local hours = redis.call('HGETALL', KEYS[1])
+for i = 1, #hours, 2 do
+  if tonumber(hours[i]) <= hour - 24 then
+    redis.call('HDEL', KEYS[1], hours[i])
+  else
+    total = total + tonumber(hours[i + 1])
+  end
+end
+if total > 0 and total + cost > limit then
+  return (hour + 1) * 3600 - now
+end
+redis.call('HINCRBY', KEYS[1], tostring(hour), cost)
+redis.call('EXPIRE', KEYS[1], 25 * 3600)
+return 0
+"""
+
 
 _last_unreachable_warning = 0.0
 _unreachable_warning_lock = threading.Lock()
@@ -827,6 +855,21 @@ class RedisRateWindows:
             _warn_redis_unreachable(error)
             return 0.0
         return int(result) / 1000
+
+    def try_take_from_day(self, key: str, cost: int, limit: int) -> float:
+        """Takes ``cost`` units from a budget of ``limit`` units in any 24
+        hours and returns 0, or takes nothing and returns the seconds until
+        the budget can have room. The budget counts by the hour. When Redis
+        cannot be reached, the request is not limited."""
+        try:
+            # no-direct-redis: allow the budget is shared by every indexing and sync worker
+            result = self._redis.eval(
+                _DAY_SCRIPT, keys=[key], args=[str(cost), str(limit)]
+            )
+        except RedisError as error:
+            _warn_redis_unreachable(error)
+            return 0.0
+        return float(int(result))
 
     def delete(self, window: RateWindow) -> None:
         """Removes the window's state. For tests."""

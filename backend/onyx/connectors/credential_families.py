@@ -31,6 +31,7 @@ from onyx.connectors.microsoft_credential import (
     SHAREPOINT_KEY_PREFIX,
     TEAMS_KEY_PREFIX,
     AzureDataLakeCredentialCodec,
+    MicrosoftCredential,
     MicrosoftCredentialCodec,
 )
 
@@ -184,3 +185,55 @@ def _reject_dropped_keys(
     )
     if dropped:
         raise ValueError(f"Not {source.value} credential keys: {', '.join(dropped)}.")
+
+
+# The sources that call Microsoft Graph with an app registration. Microsoft
+# limits the calls of each app in a tenant, whatever source makes them.
+MICROSOFT_GRAPH_SOURCES: frozenset[DocumentSource] = frozenset(
+    {
+        DocumentSource.SHAREPOINT,
+        DocumentSource.ONEDRIVE,
+        DocumentSource.OUTLOOK,
+        DocumentSource.TEAMS,
+    }
+)
+
+
+def microsoft_app_identity(
+    source: DocumentSource, source_json: dict[str, Any]
+) -> tuple[str, str] | None:
+    """The directory (tenant) id and the client id of the app registration
+    that a Microsoft Graph credential uses, in lower case. None when the
+    source is not a Microsoft Graph source or the credential names no app.
+    ``source_json`` has the source's own keys. Only the two ids are read."""
+    codec = FAMILY_CREDENTIAL_CODECS.get(source)
+    if source not in MICROSOFT_GRAPH_SOURCES or codec is None:
+        return None
+    try:
+        credential = codec.to_family(source_json)
+    except ValueError:
+        # A validation error can quote the credential's values, so it is
+        # not logged.
+        return None
+    if not isinstance(credential, MicrosoftCredential):
+        return None
+    directory_id = credential.directory_id.strip().lower()
+    client_id = credential.client_id.strip().lower()
+    if not directory_id or not client_id:
+        return None
+    return directory_id, client_id
+
+
+def stored_microsoft_app_identity(
+    credential_source: DocumentSource | None, stored_json: dict[str, Any]
+) -> tuple[str, str] | None:
+    """``microsoft_app_identity`` for a credential as stored: in the family
+    shape, or in the keys of its own source. None when the stored JSON does
+    not parse."""
+    if stored_credential_family(stored_json) == CredentialFamily.MICROSOFT:
+        directory_id = str(stored_json.get("directory_id") or "").strip().lower()
+        client_id = str(stored_json.get("client_id") or "").strip().lower()
+        return (directory_id, client_id) if directory_id and client_id else None
+    if credential_source is None:
+        return None
+    return microsoft_app_identity(credential_source, stored_json)
