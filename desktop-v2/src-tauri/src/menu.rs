@@ -175,17 +175,47 @@ pub fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         &PredefinedMenuItem::separator(app)?,
         &MenuItem::with_id(app, QUIT, "Quit Onyx", true, None::<&str>)?,
     ])?;
-    TrayIconBuilder::with_id("onyx-tray")
-        .icon(Image::from_bytes(include_bytes!("../icons/tray-icon.png"))?)
+    let icon = Image::from_bytes(include_bytes!("../icons/tray-icon.png"))?;
+    let builder = TrayIconBuilder::with_id("onyx-tray")
         .icon_as_template(true)
         .tooltip("Onyx")
         .menu(&menu)
-        .show_menu_on_left_click(true)
-        // No tray `on_menu_event`: Tauri delivers every menu event, tray items
-        // included, to the app-level handler in main.rs. A second listener here
-        // ran each menu action twice.
-        .build(app)?;
+        .show_menu_on_left_click(true);
+    // No tray `on_menu_event`: Tauri delivers every menu event, tray items
+    // included, to the app-level handler in main.rs. A second listener here
+    // ran each menu action twice.
+    #[cfg(not(target_os = "linux"))]
+    builder.icon(icon).build(app)?;
+    // Linux writes the icon to a file. Set it after the build, when the tray
+    // has its per-user directory.
+    #[cfg(target_os = "linux")]
+    {
+        let tray = builder.build(app)?;
+        let runtime_dir = std::env::var_os("XDG_RUNTIME_DIR");
+        let dir = tray_icon_dir(
+            runtime_dir.as_deref().map(std::path::Path::new),
+            app.path().app_cache_dir().ok(),
+        );
+        if let Some(dir) = dir {
+            tray.with_inner_tray_icon(move |inner| inner.set_temp_dir_path(Some(dir)))?;
+        }
+        tray.set_icon(Some(icon))?;
+    }
     Ok(())
+}
+
+/// The directory for the Linux tray icon file, or `None` for the library
+/// default (`$XDG_RUNTIME_DIR/tray-icon`). With no runtime directory the
+/// default is `/tmp/tray-icon`, which only its first user can write to.
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn tray_icon_dir(
+    runtime_dir: Option<&std::path::Path>,
+    cache_dir: Option<std::path::PathBuf>,
+) -> Option<std::path::PathBuf> {
+    if runtime_dir.is_some_and(std::path::Path::is_absolute) {
+        return None;
+    }
+    cache_dir.map(|dir| dir.join("tray-icon"))
 }
 
 pub fn handle(app: &AppHandle, id: &str) {
@@ -278,4 +308,34 @@ fn set_zoom(app: &AppHandle, id: &str) {
         }
     }
     main_window::sync_chrome(app);
+}
+
+// Unix paths: "/run/user/1000" is not absolute on Windows.
+#[cfg(all(test, unix))]
+mod tests {
+    use super::tray_icon_dir;
+    use std::path::{Path, PathBuf};
+
+    #[test]
+    fn tray_icon_dir_keeps_the_runtime_dir_default() {
+        let cache = Some(PathBuf::from("/home/a/.cache/app"));
+        assert_eq!(
+            tray_icon_dir(Some(Path::new("/run/user/1000")), cache),
+            None
+        );
+    }
+
+    #[test]
+    fn tray_icon_dir_is_per_user_without_a_runtime_dir() {
+        let cache = PathBuf::from("/home/a/.cache/app");
+        let expected = Some(cache.join("tray-icon"));
+        assert_eq!(tray_icon_dir(None, Some(cache.clone())), expected);
+        // dirs::runtime_dir ignores a relative XDG_RUNTIME_DIR.
+        assert_eq!(tray_icon_dir(Some(Path::new("run")), Some(cache)), expected);
+    }
+
+    #[test]
+    fn tray_icon_dir_falls_back_to_the_default_without_a_cache_dir() {
+        assert_eq!(tray_icon_dir(None, None), None);
+    }
 }
