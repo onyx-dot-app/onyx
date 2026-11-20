@@ -165,8 +165,8 @@ and calls `PUT /integrations/{id}/connection`; Disconnect is `DELETE` on the sam
 `web/src/sections/plugins/AlwaysAllowList.tsx` reads and writes `/action-policies/integration/{id}`.
 
 **Required gate.** `sections/integrations/RequiredIntegrationGate.tsx`, mounted
-in `app/app/layout.tsx`, `app/craft/v1/layout.tsx` and `app/nrf/layout.tsx`, covers
-the page while `lib/integrations/connect.ts:requiredSignIns` returns rows: the user's
+in `app/app/layout.tsx`, `app/craft/v1/layout.tsx` and `app/nrf/layout.tsx` (the Chrome
+extension new tab and side panel), covers the page while `lib/integrations/connect.ts:requiredSignIns` returns rows: the user's
 `access.installation_policy` is REQUIRED, `access.state` is `sign_in`, and
 `connectAction` is not null. An integration only an admin can fix never blocks.
 Each row reuses `IntegrationConnectButton` and shows `status.reason` when it needs a reconnect. A row
@@ -179,6 +179,7 @@ keeps the last list), and on an OAuth callback path
 (`lib/oauth/desktopCallback.ts:isOAuthCallbackPath`), so a sign-in can finish.
 `lib/oauth/launch.ts:launchOAuth` cancels an attempt when this page has focus and the
 sign-in tab is closed (checked on focus and every second), so the Connect button resets.
+The gate is UI only: the chat API does not check Required integrations.
 
 **Member OAuth.** `lib/integrations/connect.ts:connectWithOAuth` calls
 `POST /integrations/{id}/oauth/start` (`organization: false`, the page as
