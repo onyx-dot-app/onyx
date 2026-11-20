@@ -285,6 +285,12 @@ class SharepointConnectorCheckpoint(ConnectorCheckpoint):
     # between pages.  None means BFS path or no active delta traversal.
     current_drive_delta_next_link: str | None = None
     current_drive_delta_resync_attempted: bool = False
+    # True while the delta of the current drive comes from a start URL of
+    # this connector, which asks for the `shared` facet of each item. False
+    # for a link from another place: the cursor of a full pass, or the URL
+    # that Graph gives for a resync. A missing `shared` facet then proves
+    # nothing about the item's permissions.
+    current_drive_delta_selects_sharing: bool = False
 
     # The full pass of the current drive, on the stub listing. The walk reads
     # the folders of the drive with `/children`, several at one time. None
@@ -1154,6 +1160,7 @@ class SharepointConnector(
         checkpoint.current_folder = None
         checkpoint.current_drive_delta_next_link = None
         checkpoint.current_drive_delta_resync_attempted = False
+        checkpoint.current_drive_delta_selects_sharing = False
         checkpoint.full_pass_folders = None
         checkpoint.full_pass_catch_up_link = None
         checkpoint.full_pass_catching_up = False
@@ -2014,6 +2021,7 @@ class SharepointConnector(
         checkpoint.full_pass_folders = [FolderCursor()]
         checkpoint.full_pass_catching_up = False
         checkpoint.current_drive_delta_next_link = None
+        checkpoint.current_drive_delta_selects_sharing = False
 
     def _read_full_pass_folders(
         self,
@@ -2281,6 +2289,7 @@ class SharepointConnector(
                         else DRIVE_DELTA_SELECT_FIELDS
                     ),
                 )
+                checkpoint.current_drive_delta_selects_sharing = True
                 # A listing that reads the sharing of each item from the delta
                 # keeps the delta: `/children` does not give that signal.
                 if (
@@ -2344,14 +2353,23 @@ class SharepointConnector(
                         ),
                         hierarchical_sharing=hierarchical_sharing,
                     )
-                    inheritance_known = hierarchical_sharing and (
-                        HIERARCHICAL_SHARING_PREFERENCE in result.applied_preferences
+                    if result.resync_after_410:
+                        # Graph chose the URL of the resync.
+                        checkpoint.current_drive_delta_selects_sharing = False
+                    inheritance_known = (
+                        hierarchical_sharing
+                        and checkpoint.current_drive_delta_selects_sharing
+                        and not checkpoint.full_pass_catching_up
+                        and HIERARCHICAL_SHARING_PREFERENCE
+                        in result.applied_preferences
                     )
                     if hierarchical_sharing and not inheritance_known:
                         logger.info(
-                            "Graph did not apply the hierarchicalsharing preference "
-                            "to drive '%s'; each of its files gets its own "
-                            "permission read.",
+                            "The delta of drive '%s' does not show for certain "
+                            "which files inherit their permissions (Graph did "
+                            "not apply the hierarchicalsharing preference, or "
+                            "the link is not from a start URL); each of its "
+                            "files gets its own permission read.",
                             current_drive.display_name,
                         )
                 except ConnectorStopSignal:

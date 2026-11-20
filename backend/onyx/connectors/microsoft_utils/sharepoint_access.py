@@ -124,6 +124,40 @@ class SharedSharepointPermissionCache(SharepointPermissionCache):
         except RedisError as error:
             logger.warning("Could not store a SharePoint group expansion: %s", error)
 
+    @staticmethod
+    def _container_key(key: str) -> str:
+        digest = hashlib.sha256(key.encode()).hexdigest()
+        return f"{_CONTAINER_ACCESS_KEY_PREFIX}:{digest}"
+
+    def get_container_access(self, key: str) -> ExternalAccess | None:
+        """From Redis, where the entry ends after
+        CONTAINER_ACCESS_TTL_SECONDS. When Redis cannot be reached, nothing
+        is kept: each file then reads its parent again, which is safe."""
+        try:
+            # no-direct-redis: allow indexing shares the folder access between workers
+            raw = get_redis_client().get(self._container_key(key))
+        except RedisError:
+            return None
+        if raw is None:
+            return None
+        try:
+            return ExternalAccess.model_validate_json(raw)
+        except ValueError:
+            return None
+
+    def set_container_access(self, key: str, access: ExternalAccess) -> None:
+        try:
+            # no-direct-redis: allow indexing shares the folder access between workers
+            get_redis_client().set(
+                self._container_key(key),
+                access.model_dump_json(),
+                ex=CONTAINER_ACCESS_TTL_SECONDS,
+            )
+        except RedisError as error:
+            logger.warning(
+                "Could not store the access of a SharePoint folder: %s", error
+            )
+
 
 def _noop_external_access(*args: Any, **kwargs: Any) -> ExternalAccess:  # noqa: ARG001
     return ExternalAccess.empty()
@@ -182,34 +216,3 @@ def get_sharepoint_hierarchy_node_external_access(
         folder_server_relative_path=folder_server_relative_path,
         permission_cache=permission_cache,
     )
-
-    @staticmethod
-    def _container_key(key: str) -> str:
-        digest = hashlib.sha256(key.encode()).hexdigest()
-        return f"{_CONTAINER_ACCESS_KEY_PREFIX}:{digest}"
-
-    def get_container_access(self, key: str) -> ExternalAccess | None:
-        """From Redis only, so that the time limit holds in a long task."""
-        try:
-            # no-direct-redis: allow indexing shares the folder access between workers
-            raw = get_redis_client().get(self._container_key(key))
-        except RedisError:
-            return self.container_access.get(key)
-        if raw is None:
-            return None
-        try:
-            return ExternalAccess.model_validate_json(raw)
-        except ValueError:
-            return None
-
-    def set_container_access(self, key: str, access: ExternalAccess) -> None:
-        try:
-            # no-direct-redis: allow indexing shares the folder access between workers
-            get_redis_client().set(
-                self._container_key(key),
-                access.model_dump_json(),
-                ex=CONTAINER_ACCESS_TTL_SECONDS,
-            )
-        except RedisError:
-            # With no Redis, the access lives for this connector object.
-            self.container_access[key] = access
