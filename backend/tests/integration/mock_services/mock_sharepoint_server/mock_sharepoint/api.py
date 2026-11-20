@@ -1043,15 +1043,16 @@ class MockMicrosoftApi:
         return token.app
 
     def _shared_facet(
-        self, item: MockItem, hierarchical: bool
+        self, item: MockItem, hierarchical: bool, sharing_changed: bool
     ) -> dict[str, Any] | None:
         scope = item.sharing_links[0].scope if item.sharing_links else "users"
         if hierarchical:
             # Only a permission root carries the facet: the library root and
-            # each item with unique permissions.
+            # each item with unique permissions. An item whose sharing
+            # changed to inherited gets an empty facet, as Graph documents.
             if item.is_root or item.unique_assignments is not None:
                 return {"scope": scope}
-            return None
+            return {} if sharing_changed else None
         return {"scope": scope} if item.sharing_links else None
 
     def _item_json(
@@ -1060,6 +1061,7 @@ class MockMicrosoftApi:
         app: str,
         select: str | None,
         hierarchical: bool = False,
+        sharing_changed: bool = False,
     ) -> dict[str, Any]:
         corpus = self.corpus
         drive = corpus.drives[item.drive_id]
@@ -1117,7 +1119,11 @@ class MockMicrosoftApi:
             payload["@microsoft.graph.downloadUrl"] = self._download_url(
                 item, app, self.settings.faults.download_url_ttl_seconds
             )
-        shared = None if item.deleted else self._shared_facet(item, hierarchical)
+        shared = (
+            None
+            if item.deleted
+            else self._shared_facet(item, hierarchical, sharing_changed)
+        )
         if shared is not None:
             payload["shared"] = shared
         return _select(payload, select)
@@ -1258,7 +1264,8 @@ class MockMicrosoftApi:
                 log, (max(cursor.since, cursor.after), "\uffff")
             )
             full_enumeration = cursor.since == 0 and cursor.since_time is None
-            for seq, item_id in log[start:]:
+            for index in range(start, len(log)):
+                seq, item_id = log[index]
                 item = corpus.items[item_id]
                 if item.changed_seq != seq:
                     continue
@@ -1276,12 +1283,13 @@ class MockMicrosoftApi:
         show_sharing = "deltashowsharingchanges" in preferences
         value: list[dict[str, Any]] = []
         for item in items:
-            payload = self._item_json(item, app, cursor.select, hierarchical)
-            if (
-                show_sharing
-                and cursor.since
-                and item.sharing_changed_seq > cursor.since
-            ):
+            sharing_changed = bool(
+                cursor.since and item.sharing_changed_seq > cursor.since
+            )
+            payload = self._item_json(
+                item, app, cursor.select, hierarchical, sharing_changed
+            )
+            if show_sharing and sharing_changed:
                 payload["@microsoft.graph.sharedChanged"] = "True"
             value.append(payload)
 
@@ -1326,7 +1334,7 @@ class MockMicrosoftApi:
 
     def _file_bytes(self, item: MockItem, range_header: str | None) -> MockResponse:
         if item.text is not None:
-            data = item.text.encode()
+            data = content_mod.render_text_file(item.name, item.text)
         else:
             data = content_mod.render_file(
                 self.corpus.settings.seed, item.id, item.version, item.name, item.size

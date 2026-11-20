@@ -655,7 +655,8 @@ def test_permission_changes_show_in_the_access_and_in_delta(
     restored, _ = _delta_pages(mock, delta_link, headers=prefer)
     assert mock.describe_file(inheriting)["has_unique_permissions"] is False
     assert [item["id"] for item in restored] == [inheriting]
-    assert "shared" not in restored[0]
+    # Graph gives an empty facet to an item whose sharing changed to inherited.
+    assert restored[0]["shared"] == {}
 
 
 def test_stats_count_the_calls_and_reset(mock_sharepoint: MockSharepoint) -> None:
