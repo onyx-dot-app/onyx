@@ -28,7 +28,7 @@ from collections.abc import Callable
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.indexing_coordination import IndexingCoordination
+from onyx.db.indexing_coordination import IndexingCoordination, StubBatchProgress
 from onyx.server.metrics.listing_backpressure_metrics import record_listing_pause
 from onyx.utils.logger import setup_logger
 
@@ -52,7 +52,7 @@ LISTING_BACKPRESSURE_MIN_DRAIN_DOCS_PER_MINUTE = 100.0
 LISTING_BACKPRESSURE_WARMUP_BATCHES = 15
 
 
-def _read_stub_batch_progress(index_attempt_id: int) -> tuple[int, int]:
+def _read_stub_batch_progress(index_attempt_id: int) -> StubBatchProgress:
     with get_session_with_current_tenant() as db_session:
         return IndexingCoordination.get_stub_batch_progress(
             db_session, index_attempt_id
@@ -84,13 +84,16 @@ class ListingBackpressure:
             return 0.0
         self._last_check = now
 
-        stored, converted = _read_stub_batch_progress(self._index_attempt_id)
+        progress = _read_stub_batch_progress(self._index_attempt_id)
+        stored, converted = progress.stored, progress.converted
         if self._first_converted is None:
             self._first_converted = converted
         self._samples.append((now, converted))
+        # The baseline is the newest sample at or before the window start,
+        # so a check after a long step still has a rate.
         while (
-            len(self._samples) > 1
-            and now - self._samples[0][0] > LISTING_BACKPRESSURE_RATE_WINDOW_SECONDS
+            len(self._samples) > 2
+            and now - self._samples[1][0] >= LISTING_BACKPRESSURE_RATE_WINDOW_SECONDS
         ):
             self._samples.popleft()
         first_time, first_converted = self._samples[0]
@@ -106,9 +109,15 @@ class ListingBackpressure:
             return 0.0
 
         drain_rate = drained / elapsed
-        # A stub batch holds up to INDEX_BATCH_SIZE documents.
+        # A stub batch holds up to INDEX_BATCH_SIZE documents, and fewer when
+        # the listing dropped unchanged documents from it.
+        documents_per_batch = (
+            min(progress.stored_documents / stored, INDEX_BATCH_SIZE)
+            if stored > 0
+            else INDEX_BATCH_SIZE
+        )
         if (
-            drain_rate * 60 * INDEX_BATCH_SIZE
+            drain_rate * 60 * documents_per_batch
             < LISTING_BACKPRESSURE_MIN_DRAIN_DOCS_PER_MINUTE
         ):
             return 0.0

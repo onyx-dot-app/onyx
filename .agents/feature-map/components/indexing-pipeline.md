@@ -112,11 +112,14 @@ most `DOCCONVERSION_WINDOW_BATCHES` batches in flight.
 `background/indexing/listing_backpressure.py:ListingBackpressure` pauses the
 listing between checkpoints, once a minute at most, when the attempt's backlog
 (stub batches stored minus converted, on the attempt row) needs more than 30
-minutes to drain at the conversion rate of the last 10 minutes. A pause is at
-most 20 minutes. There is no pause before conversion converted 15 batches of
-the attempt, and none while conversion drains fewer than 100 documents per
-minute: slow conversion usually means other connectors load the workers, and
-a pause would only make the run longer. The heartbeat thread keeps the attempt alive during a pause, and the
+minutes to drain at the conversion rate of the last 10 minutes (from the
+newest check at or before the window start, so a long step still has a rate).
+A pause is at most 20 minutes. There is no pause before conversion converted 15
+batches of the attempt, and none while conversion drains fewer than 100
+documents per minute: slow conversion usually means other connectors load the
+workers, and a pause would only make the run longer. The documents per batch
+are the attempt's stored documents (listed minus dropped as unchanged) over its
+stored batches, so the small batches of an incremental run count as small. The heartbeat thread keeps the attempt alive during a pause, and the
 pause checks for a stop or a cancel every 10 seconds. With
 `ENABLE_CONVERSION_STAGE` on,
 `background/indexing/run_docfetching.py:connector_document_extraction` only
