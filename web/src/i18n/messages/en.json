@@ -16811,7 +16811,6 @@
       "enable": "Enable for me",
       "disable": "Disable for me",
       "delete": "Delete",
-      "selectSkill": "Select {name}",
       "updated": "{count, plural, one {# skill updated} other {# skills updated}}",
       "failed": "Could not update skills. Try again.",
       "partialFailure": "{count, plural, one {# skill could not be updated} other {# skills could not be updated}}",
