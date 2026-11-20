@@ -75,6 +75,9 @@ test("a card shows the title, type and size, and downloads the file", () => {
   expect(downloads[0]).toHaveAttribute("href", "/api/chat/file/file-1");
   expect(downloads[0]).toHaveAttribute("download", "report.csv");
   expect(downloads[1]).toHaveAttribute("href", "/api/chat/file/file-2");
+  for (const download of downloads) {
+    expect(within(download).queryByRole("button")).toBeNull();
+  }
 });
 
 test("an HTML file previews as source, not as a rendered page", async () => {

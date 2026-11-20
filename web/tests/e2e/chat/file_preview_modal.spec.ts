@@ -199,8 +199,8 @@ test.describe("File preview modal from chat file links", () => {
     // Verify the code content is rendered
     await expect(modal.getByText("Hello, world!")).toBeVisible();
 
-    // Verify the download icon button exists (tooltip-only, no visible text)
-    const downloadButton = modal.locator("button").last();
+    // Verify the download icon link exists (tooltip-only, no visible text)
+    const downloadButton = modal.getByRole("link", { name: "Download" });
     await expect(downloadButton).toBeVisible();
 
     // Hover to verify the download tooltip appears

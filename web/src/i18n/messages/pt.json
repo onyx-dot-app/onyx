@@ -1662,6 +1662,7 @@
         "removingBadge": {
           "label": "Removendo"
         },
+        "unknownSize": "Desconhecido",
         "saveButton": {
           "label": "Salvar alterações",
           "saving": "Salvando..."
@@ -1934,9 +1935,7 @@
           "size": "Tamanho",
           "other": "Outros",
           "countWithSize": "{count} ({size})",
-          "bytes": "bytes",
-          "loadError": "Não foi possível carregar os tipos de documento.",
-          "sizeValue": "{value} {unit}"
+          "loadError": "Não foi possível carregar os tipos de documento."
         }
       },
       "toasts": {
@@ -13569,10 +13568,6 @@
       },
       "lineCount": {
         "label": "{count, plural, one {# linha} other {# linhas}}"
-      },
-      "size": {
-        "bytes": "{count} bytes",
-        "kilobytes": "{size} KB"
       },
       "viewFullButton": {
         "tooltip": "Ver texto completo"

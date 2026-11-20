@@ -29,8 +29,14 @@ type ButtonContentProps =
       responsiveHideText?: boolean;
     };
 
+// `download` saves the link's target as a file, so it needs `href`.
+type ButtonLinkProps =
+  | { href: string; download?: string | true }
+  | { href?: string; download?: never };
+
 type ButtonProps = DistributiveOmit<InteractiveStatelessProps, "children"> &
-  ButtonContentProps & {
+  ButtonContentProps &
+  ButtonLinkProps & {
     /**
      * Size preset — controls gap, text size, and Container height/rounding.
      */

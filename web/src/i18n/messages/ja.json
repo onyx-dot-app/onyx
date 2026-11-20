@@ -1662,6 +1662,7 @@
         "removingBadge": {
           "label": "削除中"
         },
+        "unknownSize": "不明",
         "saveButton": {
           "label": "変更を保存",
           "saving": "保存しています..."
@@ -1934,9 +1935,7 @@
           "size": "サイズ",
           "other": "その他",
           "countWithSize": "{count}（{size}）",
-          "bytes": "バイト",
-          "loadError": "ドキュメントの種類を読み込めませんでした。",
-          "sizeValue": "{value} {unit}"
+          "loadError": "ドキュメントの種類を読み込めませんでした。"
         }
       },
       "toasts": {
@@ -13569,10 +13568,6 @@
       },
       "lineCount": {
         "label": "{count, plural, one {#行} other {#行}}"
-      },
-      "size": {
-        "bytes": "{count}バイト",
-        "kilobytes": "{size} KB"
       },
       "viewFullButton": {
         "tooltip": "全文を表示"

@@ -1662,6 +1662,7 @@
         "removingBadge": {
           "label": "제거 중"
         },
+        "unknownSize": "알 수 없음",
         "saveButton": {
           "label": "변경 사항 저장",
           "saving": "저장 중..."
@@ -1934,9 +1935,7 @@
           "size": "크기",
           "other": "기타",
           "countWithSize": "{count} ({size})",
-          "bytes": "바이트",
-          "loadError": "문서 유형을 불러오지 못했습니다.",
-          "sizeValue": "{value} {unit}"
+          "loadError": "문서 유형을 불러오지 못했습니다."
         }
       },
       "toasts": {
@@ -13569,10 +13568,6 @@
       },
       "lineCount": {
         "label": "{count, plural, one {#줄} other {#줄}}"
-      },
-      "size": {
-        "bytes": "{count}바이트",
-        "kilobytes": "{size} KB"
       },
       "viewFullButton": {
         "tooltip": "전체 텍스트 보기"
