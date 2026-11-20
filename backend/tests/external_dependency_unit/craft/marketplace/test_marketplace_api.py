@@ -168,6 +168,20 @@ def test_preview_reads_a_folder_url_and_a_schemeless_url(
         )
     assert exc.value.detail == f"The branch or folder 'gone' is not in {OWNER}/{REPO}."
 
+    fake_github.rate_limit_reset = 1_800_000_000
+    with pytest.raises(OnyxError) as exc:
+        api.preview_marketplace(
+            MarketplaceSourceRequest(repository=f"{OWNER}/{REPO}"),
+            _fresh(db_session, users[0]),
+            db_session,
+        )
+    assert exc.value.error_code == OnyxErrorCode.RATE_LIMITED
+    assert exc.value.detail == (
+        "GitHub's API rate limit has been reached. It resets at 08:00 UTC. "
+        "Connect GitHub to raise the limit."
+    )
+    assert exc.value.extra == {"reset_at": "2027-01-15T08:00:00+00:00"}
+
 
 def test_scope_and_owner_rules(
     db_session: Session,
@@ -186,6 +200,12 @@ def test_scope_and_owner_rules(
 
     personal_id = _create(db_session, owner, MarketplaceScope.PERSONAL)
     assert enqueued == [personal_id]
+    preview = api.preview_marketplace(
+        MarketplaceSourceRequest(repository=f"{OWNER}/{REPO}"),
+        _fresh(db_session, owner),
+        db_session,
+    )
+    assert (preview.added_personal, preview.added_company) == (True, False)
     with pytest.raises(OnyxError) as exc:
         _create(db_session, owner, MarketplaceScope.PERSONAL)
     assert exc.value.error_code == OnyxErrorCode.CONFLICT

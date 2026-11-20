@@ -28,6 +28,7 @@ import {
   replaceMarketplaceLogin,
   syncMarketplace,
 } from "@/lib/marketplaces/api";
+import useScreenSize from "@/hooks/useScreenSize";
 import { useMarketplaces } from "@/lib/marketplaces/hooks";
 import type {
   MarketplaceDetail,
@@ -81,6 +82,7 @@ function Attention({ marketplaces, busy, onSync }: AttentionProps) {
 export default function MarketplacesTable() {
   const t = useTranslations("plugins.marketplaces");
   const { marketplaces, error, isLoading, refresh } = useMarketplaces();
+  const { isMobile } = useScreenSize();
   const [openId, setOpenId] = useState<string | null>(null);
   const [defaultTarget, setDefaultTarget] = useState<MarketplaceSummary | null>(
     null
@@ -185,6 +187,57 @@ export default function MarketplacesTable() {
     ];
   }
 
+  const nameCell = (row: MarketplaceSummary) => (
+    <Content
+      title={row.name}
+      titleMaxLines={1}
+      description={marketplaceSource(row)}
+      descriptionMaxLines={1}
+      badge={{ title: t(`scope.${row.scope}`) }}
+    />
+  );
+  const actionsColumn: TableColumn<MarketplaceSummary> = {
+    kind: "actions",
+    showColumnVisibility: false,
+    showSorting: false,
+    cell: (row) =>
+      row.can_manage ? (
+        <Dropdown align="end">
+          <Dropdown.Trigger asChild>
+            <Button
+              prominence="tertiary"
+              size="sm"
+              icon={SvgMoreHorizontal}
+              aria-label={t("menu", { name: row.name })}
+              tooltip={t("menu", { name: row.name })}
+            />
+          </Dropdown.Trigger>
+          <Dropdown.Data
+            label={t("menu", { name: row.name })}
+            items={menu(row)}
+          />
+        </Dropdown>
+      ) : null,
+  };
+  // A phone has no room for four columns: one stacked cell and the menu.
+  const phoneColumns: TableColumn<MarketplaceSummary>[] = [
+    {
+      kind: "data",
+      field: "name",
+      title: t("columns.marketplace"),
+      weight: 100,
+      cell: (_name, row) => (
+        <Section gap={1} alignItems="start" height="auto">
+          {nameCell(row)}
+          <MarketplaceSyncStatus marketplace={row} />
+          <Text font="secondary-body" color="text-03">
+            {t("items", { count: row.plugin_count })}
+          </Text>
+        </Section>
+      ),
+    },
+    actionsColumn,
+  ];
   const columns: TableColumn<MarketplaceSummary>[] = [
     { kind: "qualifier", content: "icon", icon: () => SvgGitHub },
     {
@@ -192,15 +245,7 @@ export default function MarketplacesTable() {
       field: "name",
       title: t("columns.marketplace"),
       weight: 40,
-      cell: (name, row) => (
-        <Content
-          title={name}
-          titleMaxLines={1}
-          description={marketplaceSource(row)}
-          descriptionMaxLines={1}
-          badge={{ title: t(`scope.${row.scope}`) }}
-        />
-      ),
+      cell: (_name, row) => nameCell(row),
     },
     {
       kind: "display",
@@ -220,29 +265,7 @@ export default function MarketplacesTable() {
         </Text>
       ),
     },
-    {
-      kind: "actions",
-      showColumnVisibility: false,
-      showSorting: false,
-      cell: (row) =>
-        row.can_manage ? (
-          <Dropdown align="end">
-            <Dropdown.Trigger asChild>
-              <Button
-                prominence="tertiary"
-                size="sm"
-                icon={SvgMoreHorizontal}
-                aria-label={t("menu", { name: row.name })}
-                tooltip={t("menu", { name: row.name })}
-              />
-            </Dropdown.Trigger>
-            <Dropdown.Data
-              label={t("menu", { name: row.name })}
-              items={menu(row)}
-            />
-          </Dropdown>
-        ) : null,
-    },
+    actionsColumn,
   ];
 
   if (isLoading)
@@ -272,7 +295,7 @@ export default function MarketplacesTable() {
         <Table
           label={t("tableLabel")}
           items={rows}
-          columns={columns}
+          columns={isMobile ? phoneColumns : columns}
           getRowId={(row) => row.id}
           pageSize={false}
           onRowClick={(row) => setOpenId(row.id)}

@@ -14,6 +14,7 @@ from onyx.server.models import MinimalUserSnapshot
 from onyx.skills.marketplace.models import (
     GitHubMarketplaceConfig,
     MarketplaceEntryStatus,
+    MarketplaceReasonCode,
 )
 from onyx.utils.github import GitHubRevision, GitHubSource, parse_github_source
 
@@ -84,7 +85,7 @@ class MarketplacePreviewEntry(BaseModel):
     path: str | None
     status: MarketplaceEntryStatus
     reason: str | None
-    name: str | None = None
+    reason_code: MarketplaceReasonCode | None = None
     description: str | None = None
     version: str | None = None
     skills: list[MarketplacePreviewSkill] = Field(default_factory=list)
@@ -101,6 +102,10 @@ class MarketplacePreviewResponse(BaseModel):
     name: str | None
     reason: str | None
     entries: list[MarketplacePreviewEntry]
+    # The caller already has this source as a personal marketplace, or the
+    # organization has it as a company marketplace.
+    added_personal: bool = False
+    added_company: bool = False
 
 
 class MarketplaceSummary(BaseModel):
@@ -128,6 +133,7 @@ class MarketplaceEntryView(BaseModel):
     path: str | None
     status: MarketplaceEntryStatus
     reason: str | None
+    reason_code: MarketplaceReasonCode | None = None
     plugin_id: UUID | None
 
 

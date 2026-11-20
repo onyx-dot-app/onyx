@@ -20,6 +20,7 @@ from onyx.skills.marketplace.models import (
     FailedMarketplace,
     GitHubRepoSource,
     MarketplaceEntry,
+    MarketplaceReasonCode,
     ReadyPlugin,
     RemotePlugin,
     UnsupportedPlugin,
@@ -29,7 +30,13 @@ from onyx.skills.models import (
     SKILL_NAME_MAX_LENGTH,
     SKILL_NAME_PATTERN,
 )
-from onyx.skills.plugin_bundle import MCP_JSON_PATH, SKILLS_DIR, read_plugin_bundle
+from onyx.skills.plugin_bundle import (
+    MCP_JSON_PATH,
+    NO_SKILL_OR_MCP_SERVER,
+    SKILLS_DIR,
+    has_unused_part,
+    read_plugin_bundle,
+)
 from onyx.utils.github import GITHUB_REPOSITORY_COMPONENT_PATTERN
 
 MARKETPLACE_MANIFEST_PATHS: Final = (
@@ -99,6 +106,7 @@ def _unique_object(pairs: list[tuple[str, JsonValue]]) -> dict[str, JsonValue]:
 
 
 _NESTED_TOO_DEEPLY: Final = "The marketplace files are nested too deeply."
+SKILLS_AND_MCP_ONLY_REASON: Final = "Onyx runs only skills and MCP servers."
 
 
 def _json_object(data: bytes, path: str) -> dict[str, JsonValue]:
@@ -230,7 +238,7 @@ def build_entry_bundle(
     entry: Mapping[str, JsonValue],
     entry_key: str,
     links: frozenset[str] = frozenset(),
-) -> ReadyPlugin | BlockedPlugin:
+) -> ReadyPlugin | BlockedPlugin | UnsupportedPlugin:
     if len(entry_key) > SKILL_NAME_MAX_LENGTH or not SKILL_NAME_PATTERN.fullmatch(
         entry_key
     ):
@@ -262,6 +270,12 @@ def build_entry_bundle(
             _deterministic_zip(_plugin_files(folder_files, entry))
         )
     except OnyxError as exc:
+        if exc.detail == NO_SKILL_OR_MCP_SERVER and has_unused_part(folder_files):
+            return UnsupportedPlugin(
+                entry_key=entry_key,
+                reason=SKILLS_AND_MCP_ONLY_REASON,
+                reason_code=MarketplaceReasonCode.SKILLS_AND_MCP_ONLY,
+            )
         return BlockedPlugin(entry_key=entry_key, path=root, reason=exc.detail)
     except ValueError as exc:
         return BlockedPlugin(entry_key=entry_key, path=root, reason=str(exc))

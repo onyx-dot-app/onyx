@@ -17135,7 +17135,8 @@
         "willInstall": "Sera installé",
         "skills": "{count, plural, one {Compétence} other {Compétences}} : {names}",
         "showUnusable": "{count, plural, one {Afficher # entrée qu'Onyx ne peut pas utiliser} other {Afficher # entrées qu'Onyx ne peut pas utiliser}}",
-        "hideUnusable": "Masquer les entrées qu'Onyx ne peut pas utiliser"
+        "hideUnusable": "Masquer les entrées qu'Onyx ne peut pas utiliser",
+        "summary": "{ready} Prêts · {blocked} Impossible à installer · {unsupported} Non pris en charge"
       },
       "add": {
         "menuItem": "Ajouter un marketplace",
@@ -17176,7 +17177,11 @@
         "cancel": "Annuler",
         "previewFailed": "Impossible de lire le dépôt.",
         "addFailed": "Impossible d’ajouter le marketplace.",
-        "added": "{name} ajouté. Ses plugins apparaissent après la première synchronisation."
+        "added": "{name} ajouté. Ses plugins apparaissent après la première synchronisation.",
+        "duplicate": {
+          "personal": "Vous avez déjà ajouté ce marketplace.",
+          "company": "Votre organisation reçoit déjà ce marketplace."
+        }
       },
       "sync": {
         "now": "Synchroniser maintenant",
@@ -17244,14 +17249,25 @@
         "description": "La source, la synchronisation et les entrées de ce marketplace.",
         "loadFailed": "Impossible de charger le marketplace.",
         "scope": "Type",
-        "login": "Connexion GitHub",
+        "login": "Synchronise en tant que",
         "noLogin": "Aucune. Remplacez la connexion pour synchroniser de nouveau.",
         "lastSync": "Dernière synchronisation",
         "entries": "Entrées ({count})",
         "noEntries": "La dernière synchronisation n’a trouvé aucune entrée.",
         "close": "Fermer"
       },
-      "readOnly": "Votre administrateur gère cette marketplace."
+      "readOnly": "Votre administrateur gère cette marketplace.",
+      "reason": {
+        "skills_and_mcp_only": "Onyx n'exécute que des skills et des serveurs MCP.",
+        "pastLimit": "Onyx n'a pas lu ce dépôt.",
+        "external_repository_limit": "Onyx synchronise au plus {limit} dépôts externes par marketplace.",
+        "external_repository_limit_without_login": "Connectez GitHub pour synchroniser plus de {limit} dépôts externes.",
+        "limitTitle": "Certains plugins viennent de dépôts qu'Onyx n'a pas lus"
+      },
+      "errors": {
+        "rateLimited": "La limite de l'API GitHub est atteinte. Réessayez dans quelques minutes. Connectez GitHub pour augmenter la limite.",
+        "rateLimitedUntil": "La limite de l'API GitHub est atteinte. Elle se réinitialise à {time}. Connectez GitHub pour augmenter la limite."
+      }
     }
   },
   "integrations": {

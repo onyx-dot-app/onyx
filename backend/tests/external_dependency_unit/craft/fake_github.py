@@ -38,6 +38,8 @@ class FakeGitHub:
     def __init__(self) -> None:
         self.repositories: dict[tuple[str, str], FakeRepository] = {}
         self.urls: list[str] = []
+        # Epoch seconds; every call gets GitHub's rate limit answer until reset.
+        self.rate_limit_reset: int | None = None
 
     def push(
         self,
@@ -81,6 +83,14 @@ class FakeGitHub:
         **_kwargs: object,
     ) -> requests.Response:
         self.urls.append(url)
+        if self.rate_limit_reset is not None:
+            return self._response(
+                403,
+                headers={
+                    "X-RateLimit-Remaining": "0",
+                    "X-RateLimit-Reset": str(self.rate_limit_reset),
+                },
+            )
         authorization = (headers or {}).get("Authorization")
         if authorization is not None and authorization != GOOD_TOKEN:
             return self._response(401)
@@ -114,7 +124,8 @@ class FakeGitHub:
                 ref if ref in repository.commits else None
             )
             if sha is None:
-                return self._response(404)
+                # GitHub answers 422 for a ref that names no commit.
+                return self._response(422)
             return self._response(200, json.dumps({"sha": sha}).encode())
         if kind == "tarball":
             sha = parts[4]

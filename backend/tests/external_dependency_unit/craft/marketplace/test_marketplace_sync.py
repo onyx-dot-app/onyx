@@ -126,6 +126,7 @@ def test_blocked_entry_keeps_its_plugin(
             "path": "plugins/alpha",
             "status": "blocked",
             "reason": result_reason(reload(db_session, marketplace).last_sync_result),
+            "reason_code": None,
         }
     ]
 
@@ -355,6 +356,62 @@ def test_remote_entries_count_toward_the_marketplace_limits(
         "The marketplace has more than 1 skills."
     )
     assert synced_plugins(db_session, marketplace.id) == {}
+
+
+def test_external_repository_limit_depends_on_the_github_login(
+    db_session: Session,
+    users: tuple[User, User, User],
+    fake_github: FakeGitHub,
+    connections: Connections,
+    marketplace_ids: list[Any],
+) -> None:
+    owner = users[0]
+    for repo in ("one", "two"):
+        fake_github.push("acme", repo, {f"skills/{repo}/SKILL.md": skill_md(repo)})
+    fake_github.push(
+        OWNER,
+        REPO,
+        {
+            CLAUDE: catalog_with(
+                [
+                    {
+                        "name": repo,
+                        "source": {"source": "github", "repo": f"acme/{repo}"},
+                    }
+                    for repo in ("one", "two")
+                ]
+            )
+        },
+    )
+    marketplace = make_marketplace(
+        db_session, marketplace_ids, login=owner, owner=owner
+    )
+
+    with (
+        patch.object(sync, "REMOTE_REPOSITORY_MAX_COUNT", 1),
+        patch.object(sync, "REMOTE_REPOSITORY_MAX_COUNT_WITH_LOGIN", 2),
+    ):
+        assert sync.sync_marketplace(marketplace.id).blocked == ["two"]
+        assert reload(db_session, marketplace).last_sync_result == [
+            {
+                "key": "one",
+                "path": "",
+                "status": "ok",
+                "reason": None,
+                "reason_code": None,
+            },
+            {
+                "key": "two",
+                "path": None,
+                "status": "blocked",
+                "reason": "Connect GitHub to sync more than 1 external repositories.",
+                "reason_code": "external_repository_limit_without_login",
+            },
+        ]
+
+        connections.connected.add(owner.id)
+        assert sync.sync_marketplace(marketplace.id).blocked == []
+    assert set(synced_plugins(db_session, marketplace.id)) == {"one", "two"}
 
 
 def test_login_user_gone(

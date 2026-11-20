@@ -17135,7 +17135,8 @@
         "willInstall": "将安装",
         "skills": "{count, plural, one {技能} other {技能}}：{names}",
         "showUnusable": "{count, plural, one {显示 # 个 Onyx 无法使用的条目} other {显示 # 个 Onyx 无法使用的条目}}",
-        "hideUnusable": "隐藏 Onyx 无法使用的条目"
+        "hideUnusable": "隐藏 Onyx 无法使用的条目",
+        "summary": "就绪 {ready} · 无法安装 {blocked} · 不支持 {unsupported}"
       },
       "add": {
         "menuItem": "添加市场",
@@ -17176,7 +17177,11 @@
         "cancel": "取消",
         "previewFailed": "无法读取仓库。",
         "addFailed": "无法添加市场。",
-        "added": "已添加 {name}。其插件会在首次同步后显示。"
+        "added": "已添加 {name}。其插件会在首次同步后显示。",
+        "duplicate": {
+          "personal": "你已添加此市场。",
+          "company": "你的组织已经在使用此市场。"
+        }
       },
       "sync": {
         "now": "立即同步",
@@ -17244,14 +17249,25 @@
         "description": "此市场的来源、同步和条目。",
         "loadFailed": "无法加载市场。",
         "scope": "类型",
-        "login": "GitHub 登录",
+        "login": "同步身份",
         "noLogin": "无。请替换登录以再次同步。",
         "lastSync": "上次同步",
         "entries": "条目（{count}）",
         "noEntries": "上次同步未发现条目。",
         "close": "关闭"
       },
-      "readOnly": "您的管理员管理此市场。"
+      "readOnly": "您的管理员管理此市场。",
+      "reason": {
+        "skills_and_mcp_only": "Onyx 只运行技能和 MCP 服务器。",
+        "pastLimit": "Onyx 没有读取此仓库。",
+        "external_repository_limit": "Onyx 每个市场最多同步 {limit} 个外部仓库。",
+        "external_repository_limit_without_login": "连接 GitHub 以同步超过 {limit} 个外部仓库。",
+        "limitTitle": "部分插件来自 Onyx 未读取的仓库"
+      },
+      "errors": {
+        "rateLimited": "已达到 GitHub API 速率限制。请几分钟后重试。连接 GitHub 可提高限制。",
+        "rateLimitedUntil": "已达到 GitHub API 速率限制。将在 {time} 重置。连接 GitHub 可提高限制。"
+      }
     }
   },
   "integrations": {

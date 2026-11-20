@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { Button, Card, MessageCard, Text } from "@opal/components";
 import { Content, KeyValue, Section } from "@opal/layouts";
 import { SvgBlocks } from "@opal/icons";
@@ -11,6 +11,8 @@ import type {
   MarketplacePreview as Preview,
   MarketplacePreviewEntry,
 } from "@/lib/marketplaces/types";
+import { useMarketplaceCopy } from "@/lib/marketplaces/hooks";
+import { sortMarketplaceEntries } from "@/lib/marketplaces/utils";
 import PluginNeedList from "@/sections/plugins/PluginNeedList";
 
 export const ENTRY_STATUS_COLOR = {
@@ -25,14 +27,17 @@ interface PreviewEntryProps {
 
 function PreviewEntry({ entry }: PreviewEntryProps) {
   const t = useTranslations("plugins.marketplaces");
+  const copy = useMarketplaceCopy();
   const installs = entry.skills.length > 0 || entry.needs.length > 0;
   return (
     <Card padding={2} border="solid">
       <Section gap={2} alignItems="stretch" height="auto">
         <Content
           icon={SvgBlocks}
-          title={entry.name ?? entry.key}
-          description={entry.description ?? entry.reason ?? undefined}
+          title={entry.key}
+          description={
+            entry.description ?? copy.entryReason(entry) ?? undefined
+          }
           badge={[
             {
               title: t(`status.${entry.status}`),
@@ -84,9 +89,13 @@ export default function MarketplacePreview({
   preview,
 }: MarketplacePreviewProps) {
   const t = useTranslations("plugins.marketplaces");
+  const locale = useLocale();
+  const copy = useMarketplaceCopy();
   const [showUnusable, setShowUnusable] = useState(false);
-  const ready = preview.entries.filter((entry) => entry.status === "ok");
-  const unusable = preview.entries.filter((entry) => entry.status !== "ok");
+  const entries = sortMarketplaceEntries(preview.entries, locale);
+  const ready = entries.filter((entry) => entry.status === "ok");
+  const unusable = entries.filter((entry) => entry.status !== "ok");
+  const limitNote = copy.limitNote(preview.entries);
   return (
     <Section gap={3} alignItems="stretch" height="auto">
       <Card padding={4} border="solid">
@@ -131,6 +140,27 @@ export default function MarketplacePreview({
               count: ready.length,
             })}
           </Text>
+          {preview.entries.length > 0 && (
+            <Text as="p" font="secondary-body" color="text-03">
+              {t("preview.summary", {
+                ready: ready.length,
+                blocked: unusable.filter((entry) => entry.status === "blocked")
+                  .length,
+                unsupported: unusable.filter(
+                  (entry) => entry.status === "not_supported"
+                ).length,
+              })}
+            </Text>
+          )}
+          {limitNote && (
+            <MessageCard
+              variant="warning"
+              outerPadding={1}
+              innerPadding={1}
+              title={t("reason.limitTitle")}
+              description={limitNote}
+            />
+          )}
           {preview.entries.length === 0 ? (
             <Text as="p" font="secondary-body" color="text-03">
               {t("preview.empty")}

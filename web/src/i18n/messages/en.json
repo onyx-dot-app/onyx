@@ -17135,7 +17135,8 @@
         "willInstall": "Will install",
         "skills": "{count, plural, one {Skill} other {Skills}}: {names}",
         "showUnusable": "{count, plural, one {Show # entry that Onyx cannot use} other {Show # entries that Onyx cannot use}}",
-        "hideUnusable": "Hide the entries that Onyx cannot use"
+        "hideUnusable": "Hide the entries that Onyx cannot use",
+        "summary": "{ready} Ready · {blocked} Cannot install · {unsupported} Not supported"
       },
       "add": {
         "menuItem": "Add marketplace",
@@ -17176,7 +17177,11 @@
         "cancel": "Cancel",
         "previewFailed": "Could not read the repository.",
         "addFailed": "Could not add the marketplace.",
-        "added": "Added {name}. Its plugins show after the first sync."
+        "added": "Added {name}. Its plugins show after the first sync.",
+        "duplicate": {
+          "personal": "You already added this marketplace.",
+          "company": "Your organization already gets this marketplace."
+        }
       },
       "sync": {
         "now": "Sync now",
@@ -17244,14 +17249,25 @@
         "description": "The source, the sync and the entries of this marketplace.",
         "loadFailed": "Could not load the marketplace.",
         "scope": "Type",
-        "login": "GitHub Login",
+        "login": "Syncs As",
         "noLogin": "None. Replace the login to sync again.",
         "lastSync": "Last Sync",
         "entries": "Entries ({count})",
         "noEntries": "The last sync found no entries.",
         "close": "Close"
       },
-      "readOnly": "Your admin manages this marketplace."
+      "readOnly": "Your admin manages this marketplace.",
+      "reason": {
+        "skills_and_mcp_only": "Onyx runs only skills and MCP servers.",
+        "pastLimit": "Onyx did not read this repository.",
+        "external_repository_limit": "Onyx syncs at most {limit} external repositories for one marketplace.",
+        "external_repository_limit_without_login": "Connect GitHub to sync more than {limit} external repositories.",
+        "limitTitle": "Some plugins come from repositories that Onyx did not read"
+      },
+      "errors": {
+        "rateLimited": "GitHub's API rate limit has been reached. Try again in a few minutes. Connect GitHub to raise the limit.",
+        "rateLimitedUntil": "GitHub's API rate limit has been reached. It resets at {time}. Connect GitHub to raise the limit."
+      }
     }
   },
   "integrations": {

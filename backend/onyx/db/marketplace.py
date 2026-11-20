@@ -2,7 +2,7 @@ from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
 from uuid import UUID
 
-from sqlalchemy import func, select, update
+from sqlalchemy import func, or_, select, update
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
@@ -86,6 +86,26 @@ def create_github_marketplace__no_commit(
             OnyxErrorCode.CONFLICT, "This marketplace is already added."
         ) from exc
     return marketplace
+
+
+def source_added_for(
+    config: GitHubMarketplaceConfig, user_id: UUID, db_session: Session
+) -> tuple[bool, bool]:
+    """Whether the user's personal marketplaces, and the company ones, already
+    have this source."""
+    owners = db_session.scalars(
+        select(Marketplace.owner_user_id).where(
+            Marketplace.kind == MarketplaceKind.GITHUB,
+            Marketplace.repository == config.repository,
+            Marketplace.folder == (config.folder or ""),
+            Marketplace.ref == (config.ref or ""),
+            or_(
+                Marketplace.owner_user_id == user_id,
+                Marketplace.owner_user_id.is_(None),
+            ),
+        )
+    ).all()
+    return user_id in owners, None in owners
 
 
 def get_github_marketplace(

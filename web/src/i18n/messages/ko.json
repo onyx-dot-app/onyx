@@ -17135,7 +17135,8 @@
         "willInstall": "설치될 항목",
         "skills": "{count, plural, one {스킬} other {스킬}}: {names}",
         "showUnusable": "{count, plural, one {Onyx가 사용할 수 없는 항목 #개 표시} other {Onyx가 사용할 수 없는 항목 #개 표시}}",
-        "hideUnusable": "Onyx가 사용할 수 없는 항목 숨기기"
+        "hideUnusable": "Onyx가 사용할 수 없는 항목 숨기기",
+        "summary": "준비됨 {ready} · 설치할 수 없음 {blocked} · 지원되지 않음 {unsupported}"
       },
       "add": {
         "menuItem": "마켓플레이스 추가",
@@ -17176,7 +17177,11 @@
         "cancel": "취소",
         "previewFailed": "저장소를 읽을 수 없습니다.",
         "addFailed": "마켓플레이스를 추가할 수 없습니다.",
-        "added": "{name}을(를) 추가했습니다. 플러그인은 첫 동기화 후에 표시됩니다."
+        "added": "{name}을(를) 추가했습니다. 플러그인은 첫 동기화 후에 표시됩니다.",
+        "duplicate": {
+          "personal": "이 마켓플레이스를 이미 추가했습니다.",
+          "company": "조직에서 이미 이 마켓플레이스를 받고 있습니다."
+        }
       },
       "sync": {
         "now": "지금 동기화",
@@ -17244,14 +17249,25 @@
         "description": "이 마켓플레이스의 소스, 동기화, 항목입니다.",
         "loadFailed": "마켓플레이스를 불러올 수 없습니다.",
         "scope": "유형",
-        "login": "GitHub 로그인",
+        "login": "동기화 사용자",
         "noLogin": "없음. 다시 동기화하려면 로그인을 교체하세요.",
         "lastSync": "마지막 동기화",
         "entries": "항목 ({count})",
         "noEntries": "마지막 동기화에서 항목을 찾지 못했습니다.",
         "close": "닫기"
       },
-      "readOnly": "관리자가 이 마켓플레이스를 관리합니다."
+      "readOnly": "관리자가 이 마켓플레이스를 관리합니다.",
+      "reason": {
+        "skills_and_mcp_only": "Onyx는 스킬과 MCP 서버만 실행합니다.",
+        "pastLimit": "Onyx가 이 저장소를 읽지 않았습니다.",
+        "external_repository_limit": "Onyx는 마켓플레이스 하나당 외부 저장소를 최대 {limit}개까지 동기화합니다.",
+        "external_repository_limit_without_login": "외부 저장소를 {limit}개보다 많이 동기화하려면 GitHub를 연결하세요.",
+        "limitTitle": "일부 플러그인은 Onyx가 읽지 않은 저장소에서 제공됩니다"
+      },
+      "errors": {
+        "rateLimited": "GitHub API 사용 한도에 도달했습니다. 몇 분 후에 다시 시도하세요. 한도를 늘리려면 GitHub를 연결하세요.",
+        "rateLimitedUntil": "GitHub API 사용 한도에 도달했습니다. {time}에 재설정됩니다. 한도를 늘리려면 GitHub를 연결하세요."
+      }
     }
   },
   "integrations": {

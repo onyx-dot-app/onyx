@@ -977,7 +977,18 @@ the app from the same rule
     (`.../tree/<ref>/<folder>`) and `github.com/owner/repo` fill the ref and
     the folder. A personal add of a source that a company marketplace has is
     refused with CONFLICT. A missing branch and a missing repository give
-    their own `last_error`. `GitHubMarketplaceConfig` lowercases owner and repo, so the
+    their own `last_error`. Remote entries read at most `REMOTE_REPOSITORY_MAX_COUNT` (20) other
+    repositories without a GitHub login and
+    `REMOTE_REPOSITORY_MAX_COUNT_WITH_LOGIN` (200) with one
+    (`skills/marketplace/provider.py`); entries past it are blocked with a
+    `MarketplaceReasonCode`, and the web shows one note for them. A plugin
+    with only commands, agents or hooks is not supported with
+    `SKILLS_AND_MCP_ONLY`. The web translates `reason_code` and keeps
+    `reason` as the fallback (`lib/marketplaces/hooks.ts:useMarketplaceCopy`).
+    `utils/github.py:github_rate_limited` puts GitHub's reset time in the
+    error (`reset_at`), and a 422 for a ref that names no commit counts as
+    not found. The preview says when the caller or the company already has
+    the source (`db/marketplace.py:source_added_for`). `GitHubMarketplaceConfig` lowercases owner and repo, so the
     unique indexes catch a duplicate that differs only in case. Every JSON
     read in `skills/marketplace/reader.py` turns a `RecursionError` into a
     blocked entry or a failed read. Replace login needs no GitHub

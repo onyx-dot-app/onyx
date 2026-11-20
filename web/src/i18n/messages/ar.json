@@ -17135,7 +17135,8 @@
         "willInstall": "سيتم تثبيتها",
         "skills": "{count, plural, one {المهارة} other {المهارات}}: {names}",
         "showUnusable": "{count, plural, one {إظهار # إدخال لا يمكن لـ Onyx استخدامه} other {إظهار # إدخالات لا يمكن لـ Onyx استخدامها}}",
-        "hideUnusable": "إخفاء الإدخالات التي لا يمكن لـ Onyx استخدامها"
+        "hideUnusable": "إخفاء الإدخالات التي لا يمكن لـ Onyx استخدامها",
+        "summary": "{ready} جاهز · {blocked} لا يمكن تثبيته · {unsupported} غير مدعوم"
       },
       "add": {
         "menuItem": "إضافة سوق",
@@ -17176,7 +17177,11 @@
         "cancel": "إلغاء",
         "previewFailed": "تعذرت قراءة المستودع.",
         "addFailed": "تعذرت إضافة السوق.",
-        "added": "تمت إضافة {name}. تظهر إضافاته بعد أول مزامنة."
+        "added": "تمت إضافة {name}. تظهر إضافاته بعد أول مزامنة.",
+        "duplicate": {
+          "personal": "لقد أضفت هذا السوق بالفعل.",
+          "company": "مؤسستك تحصل على هذا السوق بالفعل."
+        }
       },
       "sync": {
         "now": "مزامنة الآن",
@@ -17244,14 +17249,25 @@
         "description": "مصدر هذا السوق ومزامنته وإدخالاته.",
         "loadFailed": "تعذر تحميل السوق.",
         "scope": "النوع",
-        "login": "تسجيل دخول GitHub",
+        "login": "المزامنة باسم",
         "noLogin": "لا يوجد. استبدل تسجيل الدخول للمزامنة مرة أخرى.",
         "lastSync": "آخر مزامنة",
         "entries": "الإدخالات ({count})",
         "noEntries": "لم تجد آخر مزامنة أي إدخالات.",
         "close": "إغلاق"
       },
-      "readOnly": "يدير المسؤول هذا السوق."
+      "readOnly": "يدير المسؤول هذا السوق.",
+      "reason": {
+        "skills_and_mcp_only": "يشغّل Onyx المهارات وخوادم MCP فقط.",
+        "pastLimit": "لم يقرأ Onyx هذا المستودع.",
+        "external_repository_limit": "يزامن Onyx ما لا يزيد عن {limit} مستودعًا خارجيًا لكل سوق.",
+        "external_repository_limit_without_login": "اربط GitHub لمزامنة أكثر من {limit} مستودعًا خارجيًا.",
+        "limitTitle": "بعض المكونات الإضافية تأتي من مستودعات لم يقرأها Onyx"
+      },
+      "errors": {
+        "rateLimited": "تم بلوغ حد واجهة GitHub البرمجية. حاول مرة أخرى بعد بضع دقائق. اربط GitHub لرفع الحد.",
+        "rateLimitedUntil": "تم بلوغ حد واجهة GitHub البرمجية. تتم إعادة التعيين في {time}. اربط GitHub لرفع الحد."
+      }
     }
   },
   "integrations": {

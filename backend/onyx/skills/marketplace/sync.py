@@ -34,6 +34,7 @@ from onyx.skills.marketplace.models import (
     CompleteMarketplace,
     GitHubRepoSource,
     MarketplaceRead,
+    MarketplaceReasonCode,
     MarketplaceSyncResult,
     MarketplaceSyncStatus,
     ReadyPlugin,
@@ -42,6 +43,7 @@ from onyx.skills.marketplace.models import (
 )
 from onyx.skills.marketplace.provider import (
     REMOTE_REPOSITORY_MAX_COUNT,
+    REMOTE_REPOSITORY_MAX_COUNT_WITH_LOGIN,
     GitHubMarketplaceAdapter,
     marketplace_config,
 )
@@ -99,20 +101,40 @@ def _resolve_remote_entries(
         if isinstance(entry, ReadyPlugin):
             budget.add(entry)
         resolved[index] = entry
+    with_login = adapter.authorization is not None
+    limit = (
+        REMOTE_REPOSITORY_MAX_COUNT_WITH_LOGIN
+        if with_login
+        else REMOTE_REPOSITORY_MAX_COUNT
+    )
+    past_limit = BlockedPlugin(
+        entry_key="",
+        path=None,
+        reason=(
+            f"Onyx syncs at most {limit} external repositories for one marketplace."
+            if with_login
+            else f"Connect GitHub to sync more than {limit} external repositories."
+        ),
+        reason_code=(
+            MarketplaceReasonCode.EXTERNAL_REPOSITORY_LIMIT
+            if with_login
+            else MarketplaceReasonCode.EXTERNAL_REPOSITORY_LIMIT_WITHOUT_LOGIN
+        ),
+    )
     for count, remote_entries in enumerate(by_repository.values()):
+        if count >= limit:
+            for index, entry in remote_entries:
+                resolved[index] = past_limit.model_copy(
+                    update={"entry_key": entry.entry_key}
+                )
+            continue
         source = remote_entries[0][1].source
+        heartbeat()
         files: RepositoryArchive | str
-        if count >= REMOTE_REPOSITORY_MAX_COUNT:
-            files = (
-                f"Onyx reads at most {REMOTE_REPOSITORY_MAX_COUNT} other "
-                "repositories for one marketplace, and this plugin is past the limit."
-            )
-        else:
-            heartbeat()
-            try:
-                files = adapter.fetch_remote(source)
-            except OnyxError as exc:
-                files = f"{source.owner}/{source.repo}: {exc.detail}"
+        try:
+            files = adapter.fetch_remote(source)
+        except OnyxError as exc:
+            files = f"{source.owner}/{source.repo}: {exc.detail}"
         for index, entry in remote_entries:
             if isinstance(files, str):
                 resolved[index] = BlockedPlugin(

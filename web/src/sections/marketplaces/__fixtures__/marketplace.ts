@@ -40,6 +40,7 @@ export function detailFixture(
         path: "plugins/review-kit",
         status: "ok",
         reason: null,
+        reason_code: null,
         plugin_id: "33333333-3333-4333-8333-333333333333",
       },
       {
@@ -47,6 +48,7 @@ export function detailFixture(
         path: "plugins/plan-kit",
         status: "ok",
         reason: null,
+        reason_code: null,
         plugin_id: "44444444-4444-4444-8444-444444444444",
       },
       {
@@ -54,6 +56,7 @@ export function detailFixture(
         path: null,
         status: "not_supported",
         reason: "Not supported in Onyx",
+        reason_code: null,
         plugin_id: null,
       },
     ],
@@ -76,13 +79,15 @@ export function previewFixture(
     status: "complete",
     name: "acme-plugins",
     reason: null,
+    added_personal: false,
+    added_company: false,
     entries: [
       {
         key: "review-kit",
         path: "plugins/review-kit",
         status: "ok",
         reason: null,
-        name: "review-kit",
+        reason_code: null,
         description: "Review pull requests.",
         version: "1.2.0",
         skills: [
@@ -108,7 +113,7 @@ export function previewFixture(
         path: "plugins/broken-kit",
         status: "blocked",
         reason: "The plugin has no skills.",
-        name: null,
+        reason_code: null,
         description: null,
         version: null,
         skills: [],

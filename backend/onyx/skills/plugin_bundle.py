@@ -1,6 +1,6 @@
 import json
 import zipfile
-from collections.abc import Mapping
+from collections.abc import Iterable, Mapping
 from typing import Final
 
 from pydantic import JsonValue
@@ -34,6 +34,11 @@ from onyx.utils.url import mcp_server_url_problem, normalize_mcp_server_url
 SKILLS_DIR: Final = "skills"
 MCP_JSON_PATH: Final = ".mcp.json"
 _JSON_MAX_BYTES: Final = 1024 * 1024
+NO_SKILL_OR_MCP_SERVER: Final = (
+    "This plugin has no skill and no MCP server. Onyx uses only skills "
+    f"in {SKILLS_DIR}/<name>/{SKILL_MD_NAME} and MCP servers in "
+    f"{MCP_JSON_PATH} or plugin.json."
+)
 
 _UNUSED_PART_PATHS: Final[Mapping[PluginUnusedPart, tuple[str, ...]]] = {
     PluginUnusedPart.COMMANDS: ("commands/",),
@@ -54,6 +59,14 @@ _UNUSED_PART_KEYS: Final[Mapping[PluginUnusedPart, str]] = {
     PluginUnusedPart.THEMES: "themes",
     PluginUnusedPart.MONITORS: "monitors",
 }
+
+
+def has_unused_part(file_paths: Iterable[str]) -> bool:
+    """The plugin has commands, agents, hooks or another part Onyx does not run."""
+    prefixes = tuple(
+        prefix for paths in _UNUSED_PART_PATHS.values() for prefix in paths
+    )
+    return any(path.startswith(prefixes) for path in file_paths)
 
 
 def _invalid(detail: str) -> OnyxError:
@@ -287,11 +300,7 @@ def read_plugin_bundle(zip_bytes: bytes) -> PluginBundle:
                 servers[name] = entry
 
     if not skills and not servers:
-        raise _invalid(
-            "This plugin has no skill and no MCP server. Onyx uses only skills "
-            f"in {SKILLS_DIR}/<name>/{SKILL_MD_NAME} and MCP servers in "
-            f"{MCP_JSON_PATH} or plugin.json."
-        )
+        raise _invalid(NO_SKILL_OR_MCP_SERVER)
     return PluginBundle(
         content=normalized.content,
         manifest=manifest,

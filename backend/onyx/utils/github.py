@@ -1,4 +1,6 @@
 import re
+from collections.abc import Mapping
+from datetime import datetime, timezone
 from typing import Final
 from urllib.parse import quote, unquote, urlparse
 
@@ -22,6 +24,27 @@ GITHUB_ARCHIVE_BASE_URL = "https://codeload.github.com"
 GITHUB_REPOSITORY_COMPONENT_PATTERN: Final[re.Pattern[str]] = re.compile(
     r"[A-Za-z0-9_.-]+"
 )
+
+
+def github_rate_limited(headers: Mapping[str, str]) -> OnyxError:
+    """GitHub's limit error, with the reset time from its headers when given."""
+    reset = headers.get("X-RateLimit-Reset")
+    reset_at = (
+        datetime.fromtimestamp(int(reset), tz=timezone.utc)
+        if reset is not None and reset.isdigit()
+        else None
+    )
+    when = (
+        f"It resets at {reset_at:%H:%M} UTC."
+        if reset_at is not None
+        else "Try again in a few minutes."
+    )
+    return OnyxError(
+        OnyxErrorCode.RATE_LIMITED,
+        f"GitHub's API rate limit has been reached. {when} "
+        "Connect GitHub to raise the limit.",
+        extra={"reset_at": reset_at.isoformat()} if reset_at is not None else None,
+    )
 
 
 class GitHubSource(BaseModel):
@@ -187,7 +210,8 @@ def resolve_github_revision(
             )
             used_authorization = True
         with response:
-            last_status = response.status_code
+            # GitHub answers 422 for a branch, tag or commit that does not exist.
+            last_status = 404 if response.status_code == 422 else response.status_code
             last_headers = dict(response.headers)
             if response.status_code != 200:
                 continue
@@ -219,10 +243,7 @@ def resolve_github_revision(
         or last_headers.get("X-RateLimit-Remaining") == "0"
         or "Retry-After" in last_headers
     ):
-        raise OnyxError(
-            OnyxErrorCode.RATE_LIMITED,
-            "GitHub's API rate limit has been reached. Try again in a few minutes.",
-        )
+        raise github_rate_limited(last_headers)
     if last_status == 403 and used_authorization:
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
@@ -285,17 +306,11 @@ def download_github_archive(
                     or redirect_response.headers.get("X-RateLimit-Remaining") == "0"
                     or "Retry-After" in redirect_response.headers
                 )
+                if rate_limited:
+                    raise github_rate_limited(redirect_response.headers)
                 raise OnyxError(
-                    (
-                        OnyxErrorCode.RATE_LIMITED
-                        if rate_limited
-                        else OnyxErrorCode.INSUFFICIENT_PERMISSIONS
-                    ),
-                    (
-                        "GitHub's API rate limit has been reached. Try again in a few minutes."
-                        if rate_limited
-                        else "GitHub denied access to this repository. Confirm that your connected account has access and has authorized organization SSO if required."
-                    ),
+                    OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+                    "GitHub denied access to this repository. Confirm that your connected account has access and has authorized organization SSO if required.",
                 )
             if redirect_response.status_code == 404:
                 raise OnyxError(
@@ -322,10 +337,7 @@ def download_github_archive(
                 "Repository or revision not found. Check the URL. If the repository is private, connect GitHub and try again.",
             )
         if response.status_code == 429:
-            raise OnyxError(
-                OnyxErrorCode.RATE_LIMITED,
-                "GitHub's API rate limit has been reached. Try again in a few minutes.",
-            )
+            raise github_rate_limited(response.headers)
         if response.status_code != 200:
             raise OnyxError(
                 OnyxErrorCode.BAD_GATEWAY,

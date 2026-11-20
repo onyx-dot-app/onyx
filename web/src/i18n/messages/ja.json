@@ -17135,7 +17135,8 @@
         "willInstall": "インストールされるもの",
         "skills": "{count, plural, one {スキル} other {スキル}}: {names}",
         "showUnusable": "{count, plural, one {Onyx が使えない # 件のエントリを表示} other {Onyx が使えない # 件のエントリを表示}}",
-        "hideUnusable": "Onyx が使えないエントリを非表示"
+        "hideUnusable": "Onyx が使えないエントリを非表示",
+        "summary": "準備完了 {ready} · インストール不可 {blocked} · 非対応 {unsupported}"
       },
       "add": {
         "menuItem": "マーケットプレイスを追加",
@@ -17176,7 +17177,11 @@
         "cancel": "キャンセル",
         "previewFailed": "リポジトリを読み取れませんでした。",
         "addFailed": "マーケットプレイスを追加できませんでした。",
-        "added": "{name} を追加しました。プラグインは最初の同期後に表示されます。"
+        "added": "{name} を追加しました。プラグインは最初の同期後に表示されます。",
+        "duplicate": {
+          "personal": "このマーケットプレイスはすでに追加されています。",
+          "company": "組織はすでにこのマーケットプレイスを利用しています。"
+        }
       },
       "sync": {
         "now": "今すぐ同期",
@@ -17244,14 +17249,25 @@
         "description": "このマーケットプレイスのソース、同期、エントリ。",
         "loadFailed": "マーケットプレイスを読み込めませんでした。",
         "scope": "種類",
-        "login": "GitHub ログイン",
+        "login": "同期ユーザー",
         "noLogin": "なし。再度同期するにはログインを置き換えてください。",
         "lastSync": "最終同期",
         "entries": "エントリ（{count}）",
         "noEntries": "前回の同期ではエントリが見つかりませんでした。",
         "close": "閉じる"
       },
-      "readOnly": "このマーケットプレイスは管理者が管理しています。"
+      "readOnly": "このマーケットプレイスは管理者が管理しています。",
+      "reason": {
+        "skills_and_mcp_only": "Onyx はスキルと MCP サーバーのみを実行します。",
+        "pastLimit": "Onyx はこのリポジトリを読み込みませんでした。",
+        "external_repository_limit": "Onyx が 1 つのマーケットプレイスで同期する外部リポジトリは最大 {limit} 件です。",
+        "external_repository_limit_without_login": "{limit} 件を超える外部リポジトリを同期するには GitHub を接続してください。",
+        "limitTitle": "一部のプラグインは Onyx が読み込まなかったリポジトリから提供されています"
+      },
+      "errors": {
+        "rateLimited": "GitHub の API レート制限に達しました。数分後にもう一度お試しください。制限を引き上げるには GitHub を接続してください。",
+        "rateLimitedUntil": "GitHub の API レート制限に達しました。{time} にリセットされます。制限を引き上げるには GitHub を接続してください。"
+      }
     }
   },
   "integrations": {

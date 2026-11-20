@@ -16,6 +16,7 @@ from onyx.db.marketplace import (
     list_github_marketplaces,
     list_marketplace_plugins,
     replace_marketplace_login__no_commit,
+    source_added_for,
 )
 from onyx.db.models import Marketplace, User
 from onyx.db.plugin import set_marketplace_default__no_commit
@@ -150,6 +151,7 @@ def _detail(
                 path=entry.path,
                 status=entry.status,
                 reason=entry.reason,
+                reason_code=entry.reason_code,
                 plugin_id=plugins[entry.key].id if entry.key in plugins else None,
             )
             for entry in entries
@@ -191,6 +193,7 @@ def preview_marketplace(
         GitHubMarketplaceAdapter(config, authorization), config.folder
     )
     integrations = integrations_for_needs(user, db_session)
+    added_personal, added_company = source_added_for(config, user.id, db_session)
     entries: list[MarketplacePreviewEntry] = []
     for entry in read.entries:
         result = entry_result(entry)
@@ -201,6 +204,7 @@ def preview_marketplace(
                     path=result.path,
                     status=result.status,
                     reason=result.reason,
+                    reason_code=result.reason_code,
                 )
             )
             continue
@@ -211,7 +215,6 @@ def preview_marketplace(
                 path=result.path,
                 status=result.status,
                 reason=None,
-                name=manifest.name,
                 description=manifest.description,
                 version=manifest.version,
                 skills=[
@@ -233,6 +236,8 @@ def preview_marketplace(
         name=read.name,
         reason=read.failure,
         entries=entries,
+        added_personal=added_personal,
+        added_company=added_company,
     )
 
 

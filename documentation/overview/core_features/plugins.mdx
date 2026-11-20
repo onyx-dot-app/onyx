@@ -195,12 +195,20 @@ Each entry has one state:
 | --- | --- |
 | **Ready** | Onyx adds the entry as a plugin. |
 | **Cannot install** | Onyx cannot add the entry, for example because its folder is missing or its plugin is not valid. The entry shows the reason. |
-| **Not supported** | The entry comes from a source that Onyx does not read, such as npm or a Git host that is not GitHub. The entry names the source or the host. |
+| **Not supported** | The entry comes from a source that Onyx does not read, such as npm or a Git host that is not GitHub, or the plugin has only commands, agents or hooks. The entry says why. |
 
-The confirm step shows the ready entries first. Click **Show N entries that Onyx cannot use** to see the others.
+The confirm step counts the entries in each state and shows the ready entries first.
+Click **Show N entries that Onyx cannot use** to see the others. If you already added the marketplace,
+or your organization already gets it, the confirm step says so and you cannot add it again.
 
 An entry can point to a folder of the same repository, or to another repository on github.com.
 Onyx reads the same plugin parts as for an [upload](#upload-a-plugin).
+A marketplace that syncs without a GitHub connection reads at most 20 other repositories. With a GitHub connection,
+it reads at most 200. Entries past the limit show **Cannot install**,
+and one note above the entries says how to raise the limit.
+
+Without a GitHub connection, GitHub also limits how often Onyx can read it. When GitHub refuses a read,
+Onyx shows when the limit resets. Connect GitHub to raise the limit.
 
 A public repository needs no sign-in. Onyx reads a private repository with your connection of the GitHub integration.
 Connect GitHub in **Customize → Integrations** before you add a private repository.
