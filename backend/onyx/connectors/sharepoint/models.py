@@ -104,4 +104,6 @@ class SharepointListingPayload(ListingPayload):
     # A site page: the site's Graph id, and the page as the listing returned
     # it, with no canvas.
     site_id: str | None = None
+    # The "site" value of the page document's metadata, when it has one.
+    site_name: str | None = None
     site_page: dict[str, Any] | None = None

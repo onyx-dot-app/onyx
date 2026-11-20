@@ -9,12 +9,13 @@ from datetime import datetime, timezone
 from typing import Any, cast
 from urllib.parse import SplitResult, quote, unquote, urlsplit
 
-from pydantic import AliasChoices, BaseModel, Field
+from pydantic import AliasChoices, BaseModel, Field, ValidationError
 from typing_extensions import override
 
 from onyx.configs.app_configs import (
     INDEX_BATCH_SIZE,
     SHAREPOINT_CONNECTOR_SIZE_THRESHOLD,
+    SHAREPOINT_CONVERSION_WORKERS,
     SHAREPOINT_EXHAUSTIVE_AD_ENUMERATION,
 )
 from onyx.configs.constants import DocumentSource
@@ -61,6 +62,7 @@ from onyx.connectors.microsoft_utils.graph_env import resolve_microsoft_environm
 from onyx.connectors.microsoft_utils.graph_errors import MicrosoftGraphError
 from onyx.connectors.microsoft_utils.request_pacer import MicrosoftRequestPacer
 from onyx.connectors.microsoft_utils.sharepoint_access import (
+    SharedSharepointPermissionCache,
     SharepointPermissionCache,
     get_sharepoint_external_access,
     get_sharepoint_hierarchy_node_external_access,
@@ -76,6 +78,7 @@ from onyx.connectors.models import (
     EntityFailure,
     ExternalAccess,
     HierarchyNode,
+    ResolveTarget,
     SlimDocument,
     SlimDocumentStub,
     TextSection,
@@ -86,7 +89,9 @@ from onyx.connectors.sharepoint.connector_utils import (
 )
 from onyx.connectors.sharepoint.listing import (
     LISTING_SELECT_FIELDS,
+    SharepointListedKind,
     SharepointListingPayload,
+    drive_item_from_payload,
     drive_item_stub,
     is_listable_drive_item,
     site_page_stub,
@@ -104,6 +109,7 @@ from onyx.file_processing.extract_file_text import get_file_ext
 from onyx.file_processing.file_types import OnyxFileExtensions, is_indexable_file_type
 from onyx.file_store.staging import RawFileCallback
 from onyx.utils.logger import setup_logger
+from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
 logger = setup_logger()
 SLIM_BATCH_SIZE = 1000
@@ -283,8 +289,14 @@ class SharepointConnectorCheckpoint(ConnectorCheckpoint):
         validation_alias=AliasChoices("legacy_seen_document_ids", "seen_document_ids"),
         exclude=True,
     )
-    permission_cache: SharepointPermissionCache = Field(
-        default_factory=SharepointPermissionCache
+    # Checkpoints from before the conversion stage kept the group expansions
+    # here. The connector now keeps them in Redis, where the conversion
+    # threads of every worker share them. Read, so that such a checkpoint
+    # resumes, and not written.
+    legacy_permission_cache: dict[str, Any] | None = Field(
+        default=None,
+        validation_alias=AliasChoices("legacy_permission_cache", "permission_cache"),
+        exclude=True,
     )
 
 
@@ -804,6 +816,11 @@ class SharepointConnector(
         self._ops: SharepointSourceOperations | None = None
         self.include_site_pages = include_site_pages
         self.include_site_documents = include_site_documents
+        # The group expansions of the permission reads, shared through Redis
+        # with the conversion threads of every worker.
+        self._permission_cache: SharepointPermissionCache = (
+            SharedSharepointPermissionCache()
+        )
 
         resolved_env = resolve_microsoft_environment(graph_api_host, authority_host)
         self.authority_host = resolved_env.authority_host
@@ -1286,7 +1303,7 @@ class SharepointConnector(
                                     drive,
                                     self.ops,
                                     site_descriptor.url,
-                                    temp_checkpoint.permission_cache,
+                                    self._permission_cache,
                                     parent_hierarchy_raw_node_id=parent_hierarchy_url,
                                     treat_sharing_link_as_public=self.treat_sharing_link_as_public,
                                 )
@@ -1329,7 +1346,7 @@ class SharepointConnector(
                                         site_page,
                                         self.ops,
                                         site_descriptor.url,
-                                        temp_checkpoint.permission_cache,
+                                        self._permission_cache,
                                         parent_hierarchy_raw_node_id=site_descriptor.url,
                                         treat_sharing_link_as_public=self.treat_sharing_link_as_public,
                                     )
@@ -1477,7 +1494,7 @@ class SharepointConnector(
             external_access = get_sharepoint_hierarchy_node_external_access(
                 self.ops,
                 site_url,
-                checkpoint.permission_cache,
+                self._permission_cache,
                 HierarchyNodeType.SITE,
             )
 
@@ -1510,7 +1527,7 @@ class SharepointConnector(
             external_access = get_sharepoint_hierarchy_node_external_access(
                 self.ops,
                 site_url,
-                checkpoint.permission_cache,
+                self._permission_cache,
                 HierarchyNodeType.DRIVE,
                 list_id=drive.list_id,
             )
@@ -1560,7 +1577,7 @@ class SharepointConnector(
                     external_access = get_sharepoint_hierarchy_node_external_access(
                         self.ops,
                         site_url,
-                        checkpoint.permission_cache,
+                        self._permission_cache,
                         HierarchyNodeType.FOLDER,
                         folder_server_relative_path=folder_server_relative_path,
                     )
@@ -1650,11 +1667,6 @@ class SharepointConnector(
                 )
             return
 
-        should_yield_if_empty = (
-            driveitem_extension in OnyxFileExtensions.IMAGE_EXTENSIONS
-            or driveitem_extension == ".pdf"
-        )
-
         folder_path = extract_folder_path_from_parent_reference(
             driveitem.parent_reference_path
         )
@@ -1673,13 +1685,41 @@ class SharepointConnector(
             else drive.web_url
         )
 
+        yield from self._convert_drive_item(
+            driveitem,
+            drive,
+            site_url,
+            include_permissions,
+            parent_hierarchy_url,
+            is_targeted_reindex,
+            seen_document_ids,
+        )
+
+    def _convert_drive_item(
+        self,
+        driveitem: DriveItemData,
+        drive: SiteDrive,
+        site_url: str,
+        include_permissions: bool,
+        parent_hierarchy_url: str | None,
+        is_targeted_reindex: bool,
+        seen_document_ids: set[str] | None = None,
+    ) -> Generator[Document | ConnectorFailure, None, None]:
+        """Downloads one file and yields its document, or a failure. A file
+        with no content yields nothing, but for a PDF or an image, and for a
+        targeted reindex, which gets a failure. Safe to call from many
+        threads at one time."""
+        should_yield_if_empty = (
+            get_file_ext(driveitem.name) in OnyxFileExtensions.IMAGE_EXTENSIONS
+            or get_file_ext(driveitem.name) == ".pdf"
+        )
         try:
             doc_or_failure = _convert_driveitem_to_document_with_permissions(
                 driveitem,
                 drive,
                 self.ops,
                 site_url,
-                permission_cache=checkpoint.permission_cache,
+                permission_cache=self._permission_cache,
                 include_permissions=include_permissions,
                 parent_hierarchy_raw_node_id=parent_hierarchy_url,
                 treat_sharing_link_as_public=self.treat_sharing_link_as_public,
@@ -1687,14 +1727,13 @@ class SharepointConnector(
             )
 
             if isinstance(doc_or_failure, Document):
-                if doc_or_failure.sections:
-                    seen_document_ids.add(doc_or_failure.id)
-                    yield doc_or_failure
-                elif should_yield_if_empty:
+                if not doc_or_failure.sections and should_yield_if_empty:
                     doc_or_failure.sections = [
                         TextSection(link=driveitem.web_url, text="")
                     ]
-                    seen_document_ids.add(doc_or_failure.id)
+                if doc_or_failure.sections:
+                    if seen_document_ids is not None:
+                        seen_document_ids.add(doc_or_failure.id)
                     yield doc_or_failure
                 else:
                     logger.warning(
@@ -1815,7 +1854,10 @@ class SharepointConnector(
                 if not _site_page_in_time_window(page, start, end):
                     continue
                 stub = site_page_stub(
-                    page, site_id=site_id, site_url=site_descriptor.url
+                    page,
+                    site_id=site_id,
+                    site_url=site_descriptor.url,
+                    site_name=site_descriptor.drive_name,
                 )
                 if stub is not None:
                     yield stub
@@ -2190,7 +2232,7 @@ class SharepointConnector(
                                 site_descriptor.drive_name,
                                 self.ops,
                                 site_descriptor.url,
-                                permission_cache=checkpoint.permission_cache,
+                                permission_cache=self._permission_cache,
                                 include_permissions=include_permissions,
                                 # Site pages have the site as their parent
                                 parent_hierarchy_raw_node_id=site_descriptor.url,
@@ -2426,7 +2468,7 @@ class SharepointConnector(
             site_descriptor.drive_name,
             self.ops,
             site_descriptor.url,
-            permission_cache=dedup.permission_cache,
+            permission_cache=self._permission_cache,
             include_permissions=include_permissions,
             parent_hierarchy_raw_node_id=site_descriptor.url,
             treat_sharing_link_as_public=self.treat_sharing_link_as_public,
@@ -2534,6 +2576,129 @@ class SharepointConnector(
             if isinstance(item, Document):
                 raise RuntimeError("Bug: the stub listing yielded a document")
             yield item
+
+    def _convert_listed_drive_item(
+        self, payload: SharepointListingPayload, include_permissions: bool
+    ) -> Document | ConnectorFailure | None:
+        """The document of one listed file: one download by drive id and item
+        id, and with ``include_permissions`` the permission reads, addressed
+        by the list ids of the payload. No metadata call."""
+        driveitem = drive_item_from_payload(payload)
+        drive = SiteDrive(
+            drive_id=driveitem.drive_id or "",
+            display_name=payload.drive_name or "",
+            web_url="",
+            list_id=payload.list_id,
+        )
+        return next(
+            self._convert_drive_item(
+                driveitem,
+                drive,
+                payload.site_url,
+                include_permissions,
+                payload.parent_hierarchy_raw_node_id,
+                is_targeted_reindex=False,
+            ),
+            None,
+        )
+
+    def _convert_listed_site_page(
+        self, payload: SharepointListingPayload, include_permissions: bool
+    ) -> Document | ConnectorFailure:
+        """The document of one listed site page: one read of the page with
+        its canvas. A page with a corrupt canvas keeps its listed metadata."""
+        if not payload.site_id or payload.site_page is None:
+            raise ValueError("The listing payload names no site page")
+        page_id = str(payload.site_page.get("id") or "")
+        page = self._try_expand_single_page(payload.site_id, page_id, payload.site_page)
+        return _convert_sitepage_to_document(
+            page,
+            payload.site_name,
+            self.ops,
+            payload.site_url,
+            permission_cache=self._permission_cache,
+            include_permissions=include_permissions,
+            parent_hierarchy_raw_node_id=payload.site_url,
+            treat_sharing_link_as_public=self.treat_sharing_link_as_public,
+        )
+
+    def _convert_listed_target(
+        self,
+        target: ResolveTarget,
+        payload: SharepointListingPayload,
+        include_permissions: bool,
+    ) -> Document | ConnectorFailure | None:
+        """One target of ``resolve_targets``. It runs on a pool thread, so it
+        returns a failure and does not raise, but for a stop signal."""
+        try:
+            if payload.kind == SharepointListedKind.SITE_PAGE:
+                return self._convert_listed_site_page(payload, include_permissions)
+            return self._convert_listed_drive_item(payload, include_permissions)
+        except ConnectorStopSignal:
+            raise
+        except Exception as e:
+            logger.warning(
+                "Failed to convert SharePoint target %s (%s): %s",
+                target.document_id,
+                payload.web_url,
+                e,
+            )
+            return ConnectorFailure(
+                failed_document=DocumentFailure(
+                    document_id=target.document_id,
+                    document_link=payload.web_url or target.document_link,
+                ),
+                failure_message=f"SharePoint '{payload.name}': {e}",
+                exception=e,
+            )
+
+    @override
+    def resolve_targets(
+        self,
+        targets: list[ResolveTarget],
+        include_permissions: bool = False,
+    ) -> Generator[Document | ConnectorFailure | HierarchyNode, None, None]:
+        """Converts each target from what its listing stored, in a thread
+        pool of SHAREPOINT_CONVERSION_WORKERS: one download for a file, one
+        page read for a site page, and the permission reads. The listing
+        already yielded the hierarchy nodes. A target with no payload goes
+        through ``reindex``."""
+        if self._ops is None:
+            raise ConnectorMissingCredentialError("Sharepoint")
+
+        listed: list[tuple[ResolveTarget, SharepointListingPayload]] = []
+        unlisted: list[ResolveTarget] = []
+        for target in targets:
+            if target.listing_payload is None:
+                unlisted.append(target)
+                continue
+            try:
+                payload = target.listing_payload.as_type(SharepointListingPayload)
+            except ValidationError:
+                unlisted.append(target)
+                continue
+            listed.append((target, payload))
+        if unlisted:
+            yield from super().resolve_targets(unlisted, include_permissions)
+        if not listed:
+            return
+
+        results = cast(
+            list[Document | ConnectorFailure | None],
+            run_functions_tuples_in_parallel(
+                [
+                    (
+                        self._convert_listed_target,
+                        (target, payload, include_permissions),
+                    )
+                    for target, payload in listed
+                ],
+                max_workers=SHAREPOINT_CONVERSION_WORKERS,
+            ),
+        )
+        for result in results:
+            if result is not None:
+                yield result
 
     def build_dummy_checkpoint(self) -> SharepointConnectorCheckpoint:
         return SharepointConnectorCheckpoint(has_more=True)

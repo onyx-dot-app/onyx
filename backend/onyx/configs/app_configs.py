@@ -1427,6 +1427,14 @@ except ValueError:
     )
     GOOGLE_DRIVE_CONVERSION_WORKERS = _GOOGLE_DRIVE_CONVERSION_WORKERS_DEFAULT
 
+# Files and site pages the SharePoint connector converts at once in one
+# docconversion task. Each conversion makes one download, and with permission
+# sync one or more permission reads, so this sets the requests in flight. The
+# shared Graph limiter paces them when ENABLE_SOURCE_API_LIMITER is on.
+SHAREPOINT_CONVERSION_WORKERS = max(
+    1, _int_env("SHAREPOINT_CONVERSION_WORKERS", 16) or 16
+)
+
 # Max bytes buffered for the Google Docs advanced (Docs-API structural-JSON)
 # fetch. Native Docs report no `size`, so the fetch can't be checked from
 # metadata; larger Docs are indexed via the basic text export.
