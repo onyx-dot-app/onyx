@@ -62,9 +62,9 @@ An empty result can be valid. Try a document that you know you can open in Onyx.
 
 ## Permissions and data access
 
-A connected app gets the `read:search` scope. It can search documents that you can access,
-query their metadata and your own Onyx chat history, search the web, and open web pages.
-It cannot create API keys or use other Onyx APIs. Your document permissions still apply.
+A connected app gets the `read:search` scope. It can search documents that you can access, query their metadata,
+search the web, and open web pages. It cannot create API keys or use other Onyx APIs.
+Your document permissions still apply.
 
 Your AI client receives the content that Onyx returns. Use a client that your organization allows to receive it.
 
@@ -206,7 +206,7 @@ Use `search_indexed_documents` for questions about content.
 
 | Parameter | Type | Required | Description |
 | --- | --- | --- | --- |
-| `table` | string | Yes | `document`, `hierarchy_node` (folders, spaces, and channels), `chat_session`, `chat_message`, or `search_doc` (the documents that a past answer used). |
+| `table` | string | Yes | `document`, `hierarchy_node` (folders, spaces, and channels), `chat_session`, `chat_message`, or `search_doc` (the documents that a past answer used). The last three tables hold your chat history and need a token with the `read:chat` scope. |
 | `count` | boolean | No | Defaults to `false`. Set `true` to get only the number of matches. |
 | `group_by` | string | No | With `count`: `source` or `owner` for documents, `month` for chat sessions and messages. |
 | `limit` | integer | No | Number of rows or page size. Defaults to 25. The maximum is 100. |
