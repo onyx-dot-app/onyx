@@ -565,6 +565,39 @@ def test_plugin_versions_preview_and_restore(
         )
 
 
+def test_a_failed_push_state_commit_keeps_the_saved_version(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    users: tuple[User, User, User],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    author, _, _ = users
+    real_commit = db_session.commit
+
+    def fail_the_next_commit(*_args: object) -> None:
+        def failing_commit() -> None:
+            monkeypatch.setattr(db_session, "commit", real_commit)
+            raise RuntimeError("connection lost")
+
+        monkeypatch.setattr(db_session, "commit", failing_commit)
+
+    monkeypatch.setattr(api, "push_skill_to_affected_sandboxes", fail_the_next_commit)
+
+    first = _save(author, _plugin_zip("commit-kit", ["one"]), db_session)
+    second = _save(author, _plugin_zip("commit-kit", ["one", "two"]), db_session)
+    versions = api.list_custom_skill_versions(first.plugin.id, author, db_session)
+    restored = api.restore_custom_skill_version(
+        first.plugin.id,
+        versions[1].id,
+        SkillVersionRestoreRequest(base_version_id=versions[0].id),
+        author,
+        db_session,
+    )
+
+    assert second.target.version_number == 2
+    assert restored.current_version_number == 3
+
+
 def test_bulk_enable_turns_on_the_integrations_of_a_plugin(
     db_session: Session,
     tenant_context: None,  # noqa: ARG001

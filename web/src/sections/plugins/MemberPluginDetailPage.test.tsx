@@ -5,6 +5,7 @@ import {
   waitFor,
   within,
 } from "@tests/setup/test-utils";
+import type { MemberIntegration } from "@/lib/integrations/types";
 import type { PluginNeed } from "@/lib/plugins/types";
 import MemberPluginDetailPage from "@/sections/plugins/MemberPluginDetailPage";
 import { customFixture } from "@/lib/skills/__fixtures__/picker";
@@ -164,4 +165,84 @@ test("turning on a plugin whose skill name is taken asks to switch", async () =>
       )
     ).toHaveLength(1)
   );
+});
+
+test("turning on a plugin refreshes the integration rows it turned on", async () => {
+  window.history.replaceState(
+    null,
+    "",
+    `/app/customize/plugins/${PLUGIN_ID}?tab=integrations`
+  );
+  const searchNeed = (state: PluginNeed["state"]): PluginNeed => ({
+    kind: "mcp",
+    name: "search",
+    url: "https://example.com/search",
+    transport: "http",
+    supported: true,
+    state,
+    integration_id: 3,
+  });
+  const plugin = customFixture({
+    id: PLUGIN_ID,
+    name: "review-kit",
+    enabled: false,
+    kind: "plugin",
+    plugin: {
+      manifest: null,
+      skills: [
+        { path: "skills/review", name: "review", description: "Review." },
+      ],
+      needs: [searchNeed("turn_on")],
+    },
+  });
+  let enabled = false;
+  const integration = (): MemberIntegration => ({
+    id: 3,
+    kind: "mcp",
+    shape: "mcp_server",
+    name: "Search",
+    description: null,
+    preset_id: null,
+    auth_mode: "none",
+    auth_method: null,
+    credential_fields: [],
+    status: { state: "connected", reason: null },
+    access: {
+      state: enabled ? "on" : "turn_on",
+      installation_policy: "AVAILABLE",
+      user_choice: null,
+      user_enabled: enabled,
+      owner_email: null,
+      is_owner: false,
+      can_manage: false,
+      shared_with_everyone: true,
+    },
+    users_can_save_always_allow: false,
+    credential_values: {},
+    external_app_id: null,
+    service_urls: [],
+    mcp_server_id: null,
+    server_url: null,
+  });
+  mockFetch({
+    "/api/skills": { builtins: [], customs: [{ ...plugin, plugin: null }] },
+    [`/api/skills/${PLUGIN_ID}`]: plugin,
+    "/api/integrations": () => [integration()],
+    [`PUT /api/skills/${PLUGIN_ID}/enabled`]: () => {
+      enabled = true;
+      return {
+        ...plugin,
+        enabled: true,
+        plugin: { ...plugin.plugin, needs: [searchNeed("on")] },
+      };
+    },
+  });
+  const user = setupUser();
+  render(<MemberPluginDetailPage pluginId={PLUGIN_ID} />);
+
+  const row = await screen.findByLabelText("search");
+  expect(await within(row).findByText("Turn on")).toBeInTheDocument();
+  await user.click(screen.getByRole("switch", { name: "Use review-kit" }));
+
+  await waitFor(() => expect(within(row).getByText("On")).toBeInTheDocument());
 });

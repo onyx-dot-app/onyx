@@ -22,6 +22,10 @@ jest.mock("next/navigation", () => ({
 jest.mock("@/lib/permissions/hooks", () => ({
   usePermissionAuthority: () => authority,
 }));
+jest.mock("@/lib/integrations/connect", () => ({
+  ...jest.requireActual("@/lib/integrations/connect"),
+  connectWithOAuth: async () => "connected",
+}));
 
 afterEach(() => {
   jest.restoreAllMocks();
@@ -148,4 +152,31 @@ test("Turn on switches the matching integration on and the row reads On", async 
     enabled: true,
   });
   expect(onChanged).toHaveBeenCalledTimes(1);
+});
+
+test("a sign-in that connects tells the plugin to refresh", async () => {
+  mockFetch({
+    "/api/integrations": [
+      {
+        ...integration(5, "sign_in"),
+        auth_mode: "individual",
+        auth_method: "oauth2",
+        status: { state: "not_connected", reason: null },
+      },
+    ],
+  });
+  const onChanged = jest.fn();
+  const user = setupUser();
+  render(
+    <PluginNeedList
+      interactive
+      needs={[need("drive", "sign_in", 5)]}
+      onChanged={onChanged}
+    />
+  );
+  await user.click(
+    await screen.findByRole("button", { name: "Connect Integration 5" })
+  );
+
+  await waitFor(() => expect(onChanged).toHaveBeenCalledTimes(1));
 });

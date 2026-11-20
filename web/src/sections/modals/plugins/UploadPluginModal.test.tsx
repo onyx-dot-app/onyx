@@ -1,6 +1,7 @@
 import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
 import { mockFetch } from "@tests/setup/integrationTestUtils";
 import type { PluginUploadPreview } from "@/lib/plugins/types";
+import type { PreparedSkillBundle } from "@/lib/skills/bundleUpload";
 import UploadPluginModal from "@/sections/modals/plugins/UploadPluginModal";
 
 jest.mock("@/lib/permissions/hooks", () => ({
@@ -11,12 +12,29 @@ jest.mock("@/lib/permissions/hooks", () => ({
 }));
 
 // The zip reader needs streams that jsdom lacks; upload.test.ts covers it.
+let mockKindReads = 0;
 jest.mock("@/lib/plugins/upload", () => ({
-  pluginUploadKind: async ({ file }: { file: File }) =>
-    file.name.startsWith("skill-") ? "skill" : "plugin",
+  pluginUploadKind: async ({ file }: { file: File }) => {
+    mockKindReads += 1;
+    return file.name.startsWith("skill-") ? "skill" : "plugin";
+  },
 }));
 
-afterEach(() => jest.restoreAllMocks());
+let mockPendingPrepare: Promise<PreparedSkillBundle> | null = null;
+jest.mock("@/lib/skills/bundleUpload", () => {
+  const actual = jest.requireActual("@/lib/skills/bundleUpload");
+  return {
+    ...actual,
+    prepareSkillBundleUpload: (...args: unknown[]) =>
+      mockPendingPrepare ?? actual.prepareSkillBundleUpload(...args),
+  };
+});
+
+afterEach(() => {
+  mockPendingPrepare = null;
+  mockKindReads = 0;
+  jest.restoreAllMocks();
+});
 
 function zip(name: string): File {
   return new File(["zip"], name, { type: "application/zip" });
@@ -171,4 +189,25 @@ test("a zip with a skill and no plugin.json continues as a skill", async () => {
       ([url]) => String(url) === "/api/skills/plugins/inspect"
     )
   ).toBe(false);
+});
+
+test("a file that finishes preparing after the modal closes is not read", async () => {
+  let finishPrepare: (bundle: PreparedSkillBundle) => void = () => undefined;
+  mockPendingPrepare = new Promise((resolve) => {
+    finishPrepare = resolve;
+  });
+  const props = {
+    onClose: jest.fn(),
+    onSaved: jest.fn(),
+    onContinueSkill: jest.fn(),
+  };
+  const { rerender } = render(<UploadPluginModal open {...props} />);
+  await choose(zip("review-kit.zip"));
+  rerender(<UploadPluginModal open={false} {...props} />);
+
+  const file = zip("review-kit.zip");
+  finishPrepare({ file, displayName: file.name, source: "zip" });
+  await mockPendingPrepare;
+
+  expect(mockKindReads).toBe(0);
 });

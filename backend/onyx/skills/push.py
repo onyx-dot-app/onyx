@@ -547,6 +547,11 @@ def push_skills_and_commit(user_ids: Iterable[UUID], db_session: Session) -> Non
     """Push to the users after the caller committed the change, and commit the
     push state."""
     push_skills_for_users(set(user_ids), db_session)
+    commit_push_state(db_session)
+
+
+def commit_push_state(db_session: Session) -> None:
+    """Commit the push state after the caller committed the change."""
     try:
         db_session.commit()
     except Exception:
