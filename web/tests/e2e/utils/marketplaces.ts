@@ -77,6 +77,7 @@ export class FakeMarketplacesApi {
           ? (request.default_installation_policy ?? "AVAILABLE")
           : null,
       can_manage: true,
+      login_has_github: true,
       login_user: { id: crypto.randomUUID(), email: "admin_user@example.com" },
       plugin_count: 1,
       last_synced_at: now,

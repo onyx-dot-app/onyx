@@ -17223,6 +17223,7 @@
         "label": "替换登录",
         "description": "以你的身份同步该仓库。如果你有 GitHub 连接，Onyx 会使用它。",
         "done": "Onyx 现在以你的身份同步 {name}。",
+        "doneWithoutGithub": "Onyx 现在以你的身份同步 {name}，但你尚未连接 GitHub。Onyx 只能读取公开仓库。请在集成中连接 GitHub。",
         "failed": "无法替换登录。"
       },
       "remove": {

@@ -34,6 +34,7 @@ export function detailFixture(
 ): MarketplaceDetail {
   return {
     ...summaryFixture(),
+    login_has_github: true,
     entries: [
       {
         key: "review-kit",

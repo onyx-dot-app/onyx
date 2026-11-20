@@ -137,6 +137,9 @@ class MarketplacePluginView(BaseModel):
 
 
 class MarketplaceDetail(MarketplaceSummary):
+    # False when the login user has no working GitHub connection, so the sync
+    # reads only public repositories.
+    login_has_github: bool
     entries: list[MarketplaceEntryView]
     plugins: list[MarketplacePluginView]
 

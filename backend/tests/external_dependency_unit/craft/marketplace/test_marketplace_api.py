@@ -307,6 +307,7 @@ def test_sync_replace_login_and_delete(
         marketplace_id, BackgroundTasks(), _fresh(db_session, manager), db_session
     )
     assert detail.login_user is not None and detail.login_user.id == manager.id
+    assert detail.login_has_github
     assert (
         synced_plugins(db_session, marketplace_id)["tool-0"].id == plugin_ids["tool-0"]
     )
@@ -365,5 +366,6 @@ def test_replace_login_without_github_clears_a_gone_login(
         marketplace_id, _fresh(db_session, manager), db_session
     )
     assert detail.login_user is not None and detail.login_user.id == manager.id
+    assert not detail.login_has_github
     assert detail.last_error is None
     assert set(synced_plugins(db_session, marketplace_id)) == {"alpha"}

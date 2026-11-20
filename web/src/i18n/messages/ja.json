@@ -17223,6 +17223,7 @@
         "label": "ログインを置き換え",
         "description": "あなたとしてリポジトリを同期します。GitHub 接続がある場合は、それを使います。",
         "done": "Onyx は {name} をあなたとして同期します。",
+        "doneWithoutGithub": "Onyx は {name} をあなたとして同期するようになりましたが、GitHub が接続されていません。Onyx は公開リポジトリのみ読み取れます。連携で GitHub を接続してください。",
         "failed": "ログインを置き換えられませんでした。"
       },
       "remove": {

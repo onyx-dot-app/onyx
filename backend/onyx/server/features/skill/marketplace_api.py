@@ -144,6 +144,8 @@ def _detail(
     ]
     return MarketplaceDetail(
         **_summary(marketplace, len(plugins), user, db_session).model_dump(),
+        login_has_github=marketplace.login_user_id is not None
+        and github_authorization_for(marketplace.login_user_id, db_session) is not None,
         entries=[
             MarketplaceEntryView(
                 key=entry.key,

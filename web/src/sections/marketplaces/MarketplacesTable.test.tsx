@@ -7,6 +7,7 @@ import {
   within,
 } from "@tests/setup/test-utils";
 import { mockFetch, requestBody } from "@tests/setup/integrationTestUtils";
+import { toast } from "@opal/layouts";
 import MarketplacesTable from "@/sections/marketplaces/MarketplacesTable";
 import {
   MARKETPLACE_ID,
@@ -199,4 +200,28 @@ test("a member sees a company marketplace with no actions", async () => {
   expect(
     screen.queryByRole("button", { name: "Actions for acme/plugins" })
   ).not.toBeInTheDocument();
+});
+
+test("Replace login warns when the new login has no GitHub connection", async () => {
+  mockFetch({
+    "/api/marketplaces": { marketplaces: [summaryFixture()] },
+    [`POST ${DETAIL_URL}/replace-login`]: detailFixture({
+      login_has_github: false,
+    }),
+  });
+  const warning = jest.spyOn(toast, "warning").mockReturnValue("toast-id");
+  render(<MarketplacesTable />);
+  const actor = user();
+
+  await actor.click(
+    await screen.findByRole("button", { name: "Actions for acme/plugins" })
+  );
+  await actor.click(
+    await screen.findByRole("menuitem", { name: /Replace login/ })
+  );
+  await waitFor(() =>
+    expect(warning).toHaveBeenCalledWith(
+      expect.stringContaining("you have not connected GitHub")
+    )
+  );
 });

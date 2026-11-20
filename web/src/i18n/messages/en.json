@@ -17223,6 +17223,7 @@
         "label": "Replace login",
         "description": "Sync the repository as you. Onyx uses your GitHub connection if you have one.",
         "done": "Onyx now syncs {name} as you.",
+        "doneWithoutGithub": "Onyx now syncs {name} as you, but you have not connected GitHub. Onyx can read only a public repository. Connect GitHub in Integrations.",
         "failed": "Could not replace the login."
       },
       "remove": {

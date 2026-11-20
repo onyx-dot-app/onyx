@@ -17223,6 +17223,7 @@
         "label": "로그인 교체",
         "description": "사용자 본인으로 저장소를 동기화합니다. GitHub 연결이 있으면 그 연결을 사용합니다.",
         "done": "이제 Onyx가 {name}을(를) 사용자 본인으로 동기화합니다.",
+        "doneWithoutGithub": "이제 Onyx가 {name}을(를) 사용자 계정으로 동기화하지만 GitHub가 연결되어 있지 않습니다. Onyx는 공개 저장소만 읽을 수 있습니다. 통합에서 GitHub를 연결하세요.",
         "failed": "로그인을 교체할 수 없습니다."
       },
       "remove": {
