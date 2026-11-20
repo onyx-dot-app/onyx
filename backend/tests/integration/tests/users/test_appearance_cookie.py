@@ -1,6 +1,6 @@
 """The backend owns the appearance cookie the web server layout reads to
-render the saved fonts on first paint: PATCH /user/appearance sets it and
-GET /me reissues it when the browser's copy is missing or stale."""
+render the saved fonts and motion on first paint: PATCH /user/appearance sets
+it and GET /me reissues it when the browser's copy is missing or stale."""
 
 from collections.abc import Callable
 from urllib.parse import parse_qs, quote, unquote, urlencode
@@ -19,13 +19,21 @@ def _appearance_cookie(response: httpx.Response) -> dict[str, list[str]] | None:
     return None if cookie is None else parse_qs(unquote(cookie))
 
 
-def _cookie_value(interface_font: str, response_font: str) -> str:
+def _cookie_value(interface_font: str, response_font: str, motion: str) -> str:
     return quote(
-        urlencode({"interface_font": interface_font, "response_font": response_font})
+        urlencode(
+            {
+                "interface_font": interface_font,
+                "response_font": response_font,
+                "motion": motion,
+            }
+        )
     )
 
 
-def _me(user: DATestUser, appearance_cookie: str | None = None) -> httpx.Response:
+def _with_appearance_cookie(
+    user: DATestUser, appearance_cookie: str | None
+) -> dict[str, str]:
     headers = dict(user.headers)
     if appearance_cookie is not None:
         # The client's cookie jar is skipped when a request has a Cookie
@@ -33,7 +41,13 @@ def _me(user: DATestUser, appearance_cookie: str | None = None) -> httpx.Respons
         headers["Cookie"] = (
             f"{headers['Cookie']}; {APPEARANCE_COOKIE_NAME}={appearance_cookie}"
         )
-    response = client.get(f"{API_SERVER_URL}/me", headers=headers)
+    return headers
+
+
+def _me(user: DATestUser, appearance_cookie: str | None = None) -> httpx.Response:
+    response = client.get(
+        f"{API_SERVER_URL}/me", headers=_with_appearance_cookie(user, appearance_cookie)
+    )
     response.raise_for_status()
     return response
 
@@ -55,9 +69,11 @@ def test_appearance_save_reaches_me_and_cookie(
     fresh = _me(user)
     assert fresh.json()["preferences"]["interface_font"] == "default"
     assert fresh.json()["preferences"]["response_font"] == "match"
+    assert fresh.json()["preferences"]["motion"] == "system"
     assert _appearance_cookie(fresh) == {
         "interface_font": ["default"],
         "response_font": ["match"],
+        "motion": ["system"],
     }
 
     # A partial save keeps the other field and returns the full cookie.
@@ -67,7 +83,11 @@ def test_appearance_save_reaches_me_and_cookie(
         headers=user.headers,
     )
     saved.raise_for_status()
-    expected = {"interface_font": ["opendyslexic"], "response_font": ["match"]}
+    expected = {
+        "interface_font": ["opendyslexic"],
+        "response_font": ["match"],
+        "motion": ["system"],
+    }
     assert _appearance_cookie(saved) == expected
 
     me = _me(user)
@@ -76,9 +96,39 @@ def test_appearance_save_reaches_me_and_cookie(
     assert _appearance_cookie(me) == expected
 
     # A stale cookie is reissued; a current one is left alone.
-    stale = _me(user, _cookie_value("default", "match"))
+    stale = _me(user, _cookie_value("default", "match", "system"))
     assert _appearance_cookie(stale) == expected
-    assert _appearance_cookie(_me(user, _cookie_value("opendyslexic", "match"))) is None
+    assert (
+        _appearance_cookie(_me(user, _cookie_value("opendyslexic", "match", "system")))
+        is None
+    )
+
+    # Motion rides the same cookie; settings without a first-paint effect
+    # save without changing it.
+    reduced = client.patch(
+        f"{API_SERVER_URL}/user/appearance",
+        json={"motion": "reduced"},
+        headers=user.headers,
+    )
+    reduced.raise_for_status()
+    assert _appearance_cookie(reduced) == {
+        "interface_font": ["opendyslexic"],
+        "response_font": ["match"],
+        "motion": ["reduced"],
+    }
+    popups = client.patch(
+        f"{API_SERVER_URL}/user/appearance",
+        json={"popup_dismissal": "stay_on_screen", "dynamic_conversations": False},
+        headers=_with_appearance_cookie(
+            user, _cookie_value("opendyslexic", "match", "reduced")
+        ),
+    )
+    popups.raise_for_status()
+    assert _appearance_cookie(popups) is None
+    saved_preferences = _me(user).json()["preferences"]
+    assert saved_preferences["motion"] == "reduced"
+    assert saved_preferences["popup_dismissal"] == "stay_on_screen"
+    assert saved_preferences["dynamic_conversations"] is False
 
     # The server rejects a value outside the options.
     invalid = client.patch(
@@ -88,9 +138,16 @@ def test_appearance_save_reaches_me_and_cookie(
     )
     assert invalid.status_code == 422
     assert _me(user).json()["preferences"]["interface_font"] == "opendyslexic"
+    invalid_motion = client.patch(
+        f"{API_SERVER_URL}/user/appearance",
+        json={"motion": "none"},
+        headers=user.headers,
+    )
+    assert invalid_motion.status_code == 422
+    assert _me(user).json()["preferences"]["motion"] == "reduced"
 
 
-def test_anonymous_me_returns_default_fonts(admin_user: DATestUser) -> None:
+def test_anonymous_me_returns_default_appearance(admin_user: DATestUser) -> None:
     settings, settings_error = SettingsManager.get_settings(admin_user)
     assert not settings_error, settings_error
     # Unset means disabled.
@@ -103,16 +160,21 @@ def test_anonymous_me_returns_default_fonts(admin_user: DATestUser) -> None:
             f"{API_SERVER_URL}/me",
             headers={
                 "Cookie": f"{APPEARANCE_COOKIE_NAME}="
-                f"{_cookie_value('opendyslexic', 'default')}"
+                f"{_cookie_value('opendyslexic', 'default', 'reduced')}"
             },
         )
         anonymous.raise_for_status()
         assert anonymous.json()["is_anonymous_user"] is True
-        assert anonymous.json()["preferences"]["interface_font"] == "default"
-        assert anonymous.json()["preferences"]["response_font"] == "match"
+        preferences = anonymous.json()["preferences"]
+        assert preferences["interface_font"] == "default"
+        assert preferences["response_font"] == "match"
+        assert preferences["motion"] == "system"
+        assert preferences["popup_dismissal"] == "auto_dismiss"
+        assert preferences["dynamic_conversations"] is True
         assert _appearance_cookie(anonymous) == {
             "interface_font": ["default"],
             "response_font": ["match"],
+            "motion": ["system"],
         }
     finally:
         # The settings record is cached outside the database, so later tests

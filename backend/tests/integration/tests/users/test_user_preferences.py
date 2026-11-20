@@ -31,6 +31,9 @@ DEFAULT_PREFERENCES: dict[str, Any] = {
     "default_app_mode": "CHAT",
     "interface_font": "default",
     "response_font": "match",
+    "motion": "system",
+    "popup_dismissal": "auto_dismiss",
+    "dynamic_conversations": True,
     "paste_as_tile": False,
     "interrupt_on_send": False,
     "voice_auto_send": False,
@@ -107,7 +110,13 @@ def test_every_setting_round_trips(
     _patch(
         user,
         "/user/appearance",
-        {"interface_font": "atkinson", "response_font": "default"},
+        {
+            "interface_font": "atkinson",
+            "response_font": "default",
+            "motion": "reduced",
+            "popup_dismissal": "stay_on_screen",
+            "dynamic_conversations": False,
+        },
     )
     _patch(user, "/user/default-model", {"default_model": "P__openai__gpt-6-luna"})
     _patch(
@@ -142,6 +151,9 @@ def test_every_setting_round_trips(
         "default_app_mode": "SEARCH",
         "interface_font": "atkinson",
         "response_font": "default",
+        "motion": "reduced",
+        "popup_dismissal": "stay_on_screen",
+        "dynamic_conversations": False,
         "default_model": "P__openai__gpt-6-luna",
         "voice_auto_send": True,
         "voice_auto_playback": True,

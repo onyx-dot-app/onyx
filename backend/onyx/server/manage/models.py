@@ -13,6 +13,8 @@ from onyx.db.enums import (
     AccountType,
     DefaultAppMode,
     InterfaceFont,
+    MotionPreference,
+    PopupDismissal,
     ResponseFont,
     SSOProviderType,
     SupportedLanguage,
@@ -157,6 +159,9 @@ class UserPreferences(BaseModel):
     default_app_mode: DefaultAppMode
     interface_font: InterfaceFont
     response_font: ResponseFont
+    motion: MotionPreference
+    popup_dismissal: PopupDismissal
+    dynamic_conversations: bool
 
     # Input preferences
     paste_as_tile: bool | None = None
@@ -197,6 +202,9 @@ class UserPreferences(BaseModel):
             default_app_mode=preferences.default_app_mode,
             interface_font=preferences.interface_font,
             response_font=preferences.response_font,
+            motion=preferences.motion,
+            popup_dismissal=preferences.popup_dismissal,
+            dynamic_conversations=preferences.dynamic_conversations,
             paste_as_tile=preferences.paste_as_tile,
             interrupt_on_send=preferences.interrupt_on_send,
             voice_auto_send=preferences.voice_auto_send,
@@ -388,6 +396,9 @@ class AppearanceRequest(BaseModel):
 
     interface_font: InterfaceFont | None = None
     response_font: ResponseFont | None = None
+    motion: MotionPreference | None = None
+    popup_dismissal: PopupDismissal | None = None
+    dynamic_conversations: bool | None = None
 
 
 class DefaultAppModeRequest(BaseModel):

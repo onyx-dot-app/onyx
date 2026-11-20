@@ -3,13 +3,16 @@
  * (/app/settings/appearance).
  *
  * Covers the theme buttons, the language picker, the font selects, the
- * Transcript Width select and the Chat Auto-scroll switch. The language
- * picker lists languages by endonym (English,
+ * Transcript Width select, the Chat Auto-scroll switch and the Accessibility
+ * section. The language picker lists languages by endonym (English,
  * Español, ...), so its trigger and option locators work in any UI language.
  */
 
 import { type Page, type Locator, expect } from "@playwright/test";
-import type { InterfaceFont } from "@/lib/appearance/preferences";
+import type {
+  AppearanceAttributes,
+  InterfaceFont,
+} from "@/lib/appearance/preferences";
 
 type ThemeName = "System" | "Light" | "Dark";
 type TranscriptWidth = "Standard" | "Wide";
@@ -22,6 +25,10 @@ export class SettingsAppearancePage {
   readonly interfaceFontSelect: Locator;
   readonly responseFontSelect: Locator;
   readonly interfaceFontTitle: Locator;
+  readonly motionSelect: Locator;
+  readonly popupsSelect: Locator;
+  readonly dynamicConversationsSwitch: Locator;
+  readonly updateFailedToasts: Locator;
 
   constructor(page: Page) {
     this.page = page;
@@ -42,6 +49,14 @@ export class SettingsAppearancePage {
     this.interfaceFontTitle = page.getByText("Interface Font", {
       exact: true,
     });
+    this.motionSelect = page.getByRole("combobox", { name: "Motion" });
+    this.popupsSelect = page.getByRole("combobox", { name: "Notifications" });
+    this.dynamicConversationsSwitch = page.getByRole("switch", {
+      name: "Dynamic Conversations",
+    });
+    this.updateFailedToasts = page
+      .getByTestId("toast-container")
+      .getByText("Failed to save preferences");
   }
 
   /** Navigate to the tab and wait for it to render. */
@@ -111,8 +126,8 @@ export class SettingsAppearancePage {
     );
   }
 
-  /** Choose a font in one of the font selects by its label and wait for the save. */
-  async chooseFont(select: Locator, label: string): Promise<void> {
+  /** Choose an option of an appearance select by its label and wait for the save. */
+  async chooseAppearanceOption(select: Locator, label: string): Promise<void> {
     const saved = this.page.waitForResponse((response) =>
       response.url().includes("/api/user/appearance")
     );
@@ -122,15 +137,57 @@ export class SettingsAppearancePage {
     await expect(select).toHaveValue(label);
   }
 
+  /** Make `count` appearance saves fail, each raising an error toast. */
+  async raiseUpdateFailedToasts(count: number): Promise<void> {
+    await this.page.route("**/api/user/appearance", (route) =>
+      route.fulfill({ status: 500, json: { detail: "Save failed" } })
+    );
+    for (let raised = 1; raised <= count; raised++) {
+      await this.dynamicConversationsSwitch.click();
+      await expect(this.updateFailedToasts).toHaveCount(raised);
+    }
+    await this.page.unroute("**/api/user/appearance");
+  }
+
+  /** Assert the CSS animation of the newest toast on screen. */
+  async expectToastAnimationName(name: string): Promise<void> {
+    await expect(
+      this.page.getByTestId("toast-container").locator(".opal-toast").first()
+    ).toHaveCSS("animation-name", name);
+  }
+
+  /** Close every toast with the Close all button beside the pile. */
+  async closeAllToasts(): Promise<void> {
+    await this.page
+      .getByTestId("toast-container")
+      .getByRole("button", { name: "Close all" })
+      .click();
+    await expect(this.updateFailedToasts).toHaveCount(0);
+  }
+
+  /** Assert an appearance attribute that the app sets on <html>. */
+  async expectAppearance<Name extends keyof AppearanceAttributes>(
+    name: Name,
+    value: AppearanceAttributes[Name]
+  ): Promise<void> {
+    await expect(this.page.locator("html")).toHaveAttribute(name, value);
+  }
+
+  /** Turn Dynamic Conversations on or off and wait for the save. */
+  async setDynamicConversations(enabled: boolean): Promise<void> {
+    const saved = this.page.waitForResponse((response) =>
+      response.url().includes("/api/user/appearance")
+    );
+    await this.dynamicConversationsSwitch.setChecked(enabled);
+    expect((await saved).ok()).toBe(true);
+  }
+
   /** Assert the interface font attribute and the font the body renders in. */
   async expectInterfaceFont(
     font: InterfaceFont,
     renderedFamily: RegExp
   ): Promise<void> {
-    await expect(this.page.locator("html")).toHaveAttribute(
-      "data-interface-font",
-      font
-    );
+    await this.expectAppearance("data-interface-font", font);
     await expect(this.page.locator("body")).toHaveCSS(
       "font-family",
       renderedFamily
@@ -160,11 +217,14 @@ export class SettingsAppearancePage {
     });
   }
 
-  /** Assert the server renders the interface font before any client script runs. */
-  async expectServerRenderedInterfaceFont(font: InterfaceFont): Promise<void> {
+  /** Assert the server renders an appearance attribute before any client script runs. */
+  async expectServerRenderedAppearance<Name extends keyof AppearanceAttributes>(
+    name: Name,
+    value: AppearanceAttributes[Name]
+  ): Promise<void> {
     const response = await this.page.request.get(this.page.url());
     expect(response.ok()).toBe(true);
-    expect(await response.text()).toContain(`data-interface-font="${font}"`);
+    expect(await response.text()).toContain(`${name}="${value}"`);
   }
 
   /** The language select trigger, located by the endonym it displays. */

@@ -45,6 +45,11 @@ chat retention needs Enterprise. The settings API enforces these tiers.
   Transcript width is stored per browser, not on the server. Wide widens only
   an open conversation, not the new-session view. Mobile widths hide its control,
   because chat is always full width there.
+- **A user** sets accessibility options in Settings > Appearance >
+  Accessibility: motion (follow the OS, or always reduce), notifications
+  (close by themselves, or stay until closed; **Close all** under the toast
+  pile clears them) and dynamic conversations (unload off-screen chat
+  messages; off keeps every message reachable by screen readers).
 - **An admin**, at Admin > Chat Preferences, sets workspace chat options. These
   include the team name and context that every prompt includes, the default
   language, the default assistant's system prompt and built-in tools, and the
@@ -119,6 +124,20 @@ the settings routes, the TTS route, and a chat turn.
 `server/manage/users.py` and a flat field in the API model
 `server/manage/models.py:UserPreferences`.
 
+**Accessibility preferences.** `motion`, `popup_dismissal` and
+`dynamic_conversations` are `user_preferences` columns, saved through
+`PATCH /user/appearance`. Motion rides the appearance cookie (below) as
+`data-motion` on `<html>`. The Opal `motion-reduce:` and `motion-safe:`
+variants, `@variant motion-reduce` rules and `prefersReducedMotion()` from
+`@opal/utils` read it together with the OS setting. Use them in new animation
+code, not a raw `prefers-reduced-motion` query.
+`web/src/providers/AppearancePreferencesProvider.tsx` applies the rest once
+`/me` loads: `MotionConfig` for motion/react, `toast.setPersistentByDefault`
+for stay-on-screen notifications (toasts already on screen with the default
+time become persistent too), and `DynamicConversationsContext`. When dynamic
+conversations are off, `WindowedRow` keeps every chat row mounted and
+`OlderMessagesLoader` loads all older pages without waiting for a scroll.
+
 **From setting to prompt.** `chat/process_message.py:prepare_chat_turn`
 ([[core-chat-loop]]) reads the preferences once per turn. It passes their chat
 defaults to `llm/factory.py:get_llm_for_persona`, and the row to
@@ -132,16 +151,19 @@ Language falls back from `UserPreferences.language` to `Settings.default_languag
 `server/manage/users.py:set_preference_cookie` copies the resolved language into
 the `NEXT_LOCALE` cookie, so the UI and the answers use the same language.
 
-**Appearance cookie.** `PATCH /user/appearance` saves `interface_font` and
-`response_font`. It and `GET /me` call
+**Appearance cookie.** `PATCH /user/appearance` saves the fonts and the
+accessibility preferences. It and `GET /me` call
 `server/manage/users.py:set_appearance_cookie`, which keeps the
 `onyx_appearance` cookie (a form-encoded query string) equal to the saved
-values. `set_preference_cookie` writes both preference cookies with the same
-attributes. `web/src/app/layout.tsx` parses it with
-`web/src/lib/appearance/preferences.ts:parseAppearanceCookie` and renders the
-`data-interface-font` / `data-response-font` attributes on `<html>`, so the
-first paint has the saved fonts. `web/src/providers/AppearancePreferencesProvider.tsx`
-applies the saved values to `<html>` after a save or a newer `/me`.
+first-paint values: the fonts and motion. `set_preference_cookie` writes both
+preference cookies with the same attributes. `web/src/app/layout.tsx` parses
+it with `web/src/lib/appearance/preferences.ts:parseAppearanceCookie` and
+renders the `data-interface-font` / `data-response-font` / `data-motion`
+attributes on `<html>`, so the first paint has the saved fonts and motion.
+`web/src/providers/AppearancePreferencesProvider.tsx` is the one client owner
+of the appearance preferences. It applies the saved values to `<html>` after a
+save or a newer `/me`, wraps the app in `MotionConfig`, sets the toast
+default and provides the dynamic-conversations flag.
 `web/src/app/globals.css` maps each attribute to the font variables that the
 typography presets read.
 
@@ -374,7 +396,9 @@ paths read it; find them with `git grep -n load_settings backend`.
   appearance cookie).
 - Playwright: `web/tests/e2e/settings/font_preferences.spec.ts` (a font
   applies at once and renders from the server after a reload; the response
-  font applies to answers in a chat).
+  font applies to answers in a chat) and
+  `web/tests/e2e/settings/accessibility_preferences.spec.ts` (server-rendered
+  reduced motion, a stay-on-screen toast, every row of a long chat mounted).
 - No integration test covers input prompt behaviour or
   `auto_detect_search_filters`.
 - By hand: set a name and a preference, then ask "what do you know about me".

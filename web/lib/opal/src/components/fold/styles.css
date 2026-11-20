@@ -48,11 +48,11 @@
   min-height: 0;
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .opal-fold-grid,
-  .opal-fold-grid[data-open="true"],
-  .opal-fold-content,
-  .opal-fold-content[data-open="true"] {
+.opal-fold-grid,
+.opal-fold-grid[data-open="true"],
+.opal-fold-content,
+.opal-fold-content[data-open="true"] {
+  @variant motion-reduce {
     transition: none;
   }
 }

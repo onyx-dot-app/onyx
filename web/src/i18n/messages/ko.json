@@ -15747,7 +15747,8 @@
       "scrollRight": "탭을 오른쪽으로 스크롤"
     },
     "toast": {
-      "moreCount": "+{count}개 더"
+      "moreCount": "+{count}개 더",
+      "closeAll": "모두 닫기"
     },
     "sidebar": {
       "open": "사이드바 열기",
@@ -15912,6 +15913,27 @@
         "atkinson": "Atkinson Hyperlegible Next",
         "system": "시스템",
         "placeholder": "글꼴 선택"
+      },
+      "accessibility": {
+        "title": "접근성"
+      },
+      "motion": {
+        "title": "모션",
+        "description": "시스템의 모션 설정을 따르거나 앱 전체에서 애니메이션을 줄입니다.",
+        "placeholder": "모션 설정 선택",
+        "system": "시스템",
+        "reduced": "줄이기"
+      },
+      "popupDismissal": {
+        "title": "알림",
+        "description": "알림이 자동으로 닫힐지, 직접 닫을 때까지 화면에 남을지 선택하세요.",
+        "placeholder": "알림을 닫는 시점 선택",
+        "auto_dismiss": "자동으로 닫기",
+        "stay_on_screen": "화면에 유지"
+      },
+      "dynamicConversations": {
+        "title": "동적 대화",
+        "description": "긴 대화를 스크롤할 때 메시지를 불러오고 해제합니다. 성능이 향상되지만, 스크린 리더는 해제된 메시지에 접근할 수 없습니다. 모든 메시지를 불러온 상태로 유지하려면 이 기능을 끄세요."
       }
     },
     "chats": {

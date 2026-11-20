@@ -10,7 +10,7 @@ import React, {
   useState,
 } from "react";
 import { ScrollContainerProvider } from "@/lib/chatScroll/components/ScrollContainerContext";
-import { cn } from "@opal/utils";
+import { cn, prefersReducedMotion } from "@opal/utils";
 import { CHAT_GUTTER } from "@/lib/chat/layout";
 import { getChatScrollMemory } from "@/lib/chatScroll/scrollMemory";
 
@@ -418,7 +418,10 @@ const ChatScrollContainer = React.memo(
           if (container.scrollTop < glideStart) {
             container.scrollTop = glideStart;
           }
-          container.scrollTo({ top: targetScrollTop, behavior: "smooth" });
+          container.scrollTo({
+            top: targetScrollTop,
+            behavior: prefersReducedMotion() ? "auto" : "smooth",
+          });
 
           // The glide ends on a scrollend at its target (the jump above can
           // fire one early); the timeout covers browsers without it and a
