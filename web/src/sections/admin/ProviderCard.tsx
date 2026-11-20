@@ -111,14 +111,14 @@ export default function ProviderCard({
         padding={2}
         rounding={4}
         aria-label={label}
+        // A connected card without its select or deselect action configures
+        // the provider, as its edit button does.
         onClick={
-          isDisconnected && onConnect
+          isDisconnected
             ? onConnect
-            : isConnected && onSelect
-              ? onSelect
-              : isSelected && onDeselect
-                ? onDeselect
-                : undefined
+            : isConnected
+              ? (onSelect ?? onEdit)
+              : (onDeselect ?? onEdit)
         }
       >
         <ContentAction
