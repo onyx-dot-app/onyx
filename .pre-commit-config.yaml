@@ -371,7 +371,8 @@ repos:
         language: system
         entry: python3 backend/lint/check_connector_docs.py
         pass_filenames: false
-        files: ^(backend/onyx/connectors/registry\.py|backend/onyx/configs/constants\.py|backend/lint/(check_connector_docs\.py|connector_docs\.txt)|documentation/admins/connectors/official/.*)$
+        # Deleted pages and worker files must also trigger the check.
+        always_run: true
         stages: [pre-commit]
       - id: desktop-v2-update-feed
         name: every OS desktop-v2 builds has an update feed entry
@@ -388,7 +389,8 @@ repos:
         language: system
         entry: python3 backend/lint/check_celery_queue_consumers.py
         pass_filenames: false
-        files: ^(backend/(onyx|ee)/.*\.py|backend/supervisord\.conf|deployment/helm/charts/onyx/templates/celery-worker-.*\.yaml)$
+        # Deleted pages and worker files must also trigger the check.
+        always_run: true
         stages: [pre-commit]
       # Lower the baseline with `check_no_http_exception.py --write-baseline`.
       - id: no-http-exception
