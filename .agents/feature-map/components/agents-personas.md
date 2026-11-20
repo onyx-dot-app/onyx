@@ -15,17 +15,20 @@ adds group shares, group ownership and per-agent usage stats.
   sets, single documents, connector folders, or the user's own files), tools,
   starter messages and an icon. CE grants `ADD_AGENTS` to every user. EE grants
   it through groups.
-- **Plugins in the editor.** The agent editor attaches plugins, not single MCP
-  or OpenAPI tools. `web/src/sections/agents/AgentPluginsSection.tsx` offers
-  the plugins of `GET /integrations/agent-catalog`. For each action the owner
+- **Integrations in the editor.** The agent editor links integrations by id,
+  not single MCP or OpenAPI tools. `web/src/sections/agents/AgentIntegrationsSection.tsx`
+  offers the integrations of `GET /integrations/agent-catalog` and saves
+  `integrations: [{integration_id, action_settings}]`. For each action the owner
   picks Use the agent default (no key), Use the integration setting
   (`inherit`), Allow, Ask or Blocked, and a "Default for other actions" row
   covers the actions with no key. Allow is hidden when the admin value is
-  locked (`web/src/lib/agents/plugins.ts:lockReason`), except an Allow that is
+  locked (`web/src/lib/agents/integrations.ts:lockReason`), except an Allow that is
   already stored. Each action shows the value that applies
-  (`effectiveSetting`, the backend policy order without the user's grant), or
-  the stricter value of another attached plugin that holds the integration
-  (`stricterPlugin`). Save sends each action key as loaded, so a migrated
+  (`effectiveSetting`, the backend policy order without the user's grant).
+  An agent gives no access: when the agent is shared and an integration is
+  not shared with everyone (`access.shared_with_everyone`), the card shows a
+  warning; the agent viewer marks an integration the viewer cannot use. Save
+  sends each action key as loaded, so a migrated
   `{"default": "blocked", "actions": {"x": "inherit"}}` stays as it is, and
   `tool_ids` holds only built-in tools.
 - **In chat**, picking an agent applies its instructions, scopes search to its
@@ -158,8 +161,9 @@ read. `seed_pinned_personas_from_featured` runs once, at account creation.
    caller without global `MANAGE_AGENTS`, `upsert_persona` checks that each
    added document set and folder is readable by the caller, and that each
    added file is the caller's own. For every signed-in caller, each added
-   plugin link (also one that an old MCP or custom tool id maps to) needs a
-   plugin the caller can see (`backend/onyx/db/persona.py:_write_persona_plugins`). Attached items stay when
+   integration link (also one that an old MCP or custom tool id maps to)
+   needs an integration the caller has access to
+   (`backend/onyx/db/persona.py:_write_persona_integrations`). Attached items stay when
    the editor loses access. Single documents are filtered for every caller:
    unreadable ids are dropped, and the call fails only when none remain.
 6. `sharing-not-document-access` **Sharing an agent does not share its
@@ -171,8 +175,10 @@ read. `seed_pinned_personas_from_featured` runs once, at account creation.
    skips them. Never treat the join row as
    proof that a tool runs ([[tools-framework]]). Only built-in tool ids stay
    on `Persona__Tool`; an old custom or MCP id in `tool_ids` adds a
-   `persona__plugin` link
-   (`backend/onyx/db/integration_policy.py:legacy_tool_plugin_links`).
+   `persona__integration` link
+   (`backend/onyx/db/integration_policy.py:legacy_tool_integration_links`).
+   The link gives no access: each user of the agent needs access to the
+   integration.
 8. `persona-search-info-detached` **`PersonaSearchInfo` must stay a detached
    snapshot.** `db/tools.py:capture_persona_tool_configuration` copies document
    set names, `search_start_date`, document ids and folder ids before the

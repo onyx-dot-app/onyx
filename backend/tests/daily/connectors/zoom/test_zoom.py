@@ -9,7 +9,7 @@ must let exactly the right people find each recording.
 
 import time
 from collections import Counter, defaultdict
-from collections.abc import Iterator, Mapping
+from collections.abc import Iterator
 from contextlib import contextmanager
 from types import SimpleNamespace
 from typing import Any, cast
@@ -22,7 +22,11 @@ from ee.onyx.access.access import _get_acl_for_user
 from ee.onyx.external_permissions.zoom.doc_sync import zoom_doc_sync
 from ee.onyx.external_permissions.zoom.group_sync import zoom_group_sync
 from onyx.access.models import DocExternalAccess, DocumentAccess, ExternalAccess
-from onyx.access.utils import build_domain_group_id, build_ext_group_name_for_onyx
+from onyx.access.utils import (
+    build_domain_group_id,
+    build_ext_group_name_for_onyx,
+    build_ext_group_names_for_storage,
+)
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.models import Document, SlimDocument, TextSection
 from onyx.connectors.zoom.client import MAX_LISTING_PAGES
@@ -270,24 +274,6 @@ def _readers(docs: list[Document]) -> dict[str, ExternalAccess]:
     return readers
 
 
-def _stored(rows: Mapping[str, ExternalAccess | None]) -> dict[str, ExternalAccess]:
-    """The doc sync's rows as the database holds them: its writer adds the
-    source prefix to each group id, which indexing adds itself, so this is the
-    form the two paths can be compared in."""
-    stored: dict[str, ExternalAccess] = {}
-    for doc_id, access in rows.items():
-        assert access is not None, doc_id
-        stored[doc_id] = ExternalAccess(
-            external_user_emails=access.external_user_emails,
-            external_user_group_ids={
-                build_ext_group_name_for_onyx(group_id, DocumentSource.ZOOM)
-                for group_id in access.external_user_group_ids
-            },
-            is_public=access.is_public,
-        )
-    return stored
-
-
 def _groups(cc_pair: ConnectorCredentialPair) -> dict[str, set[str]]:
     groups = list(zoom_group_sync("tenant", cc_pair))
     assert not any(group.gives_anyone_access for group in groups)
@@ -332,7 +318,7 @@ def test_the_perm_sync_walk_names_the_readers_indexing_named(
     with _no_transcript_downloads(host_connector):
         listed = _slim(host_connector.retrieve_all_slim_docs_perm_sync())
 
-    assert _stored(listed) == _readers(indexed)
+    assert listed == _readers(indexed)
 
 
 @pytest.mark.parametrize(
@@ -360,7 +346,7 @@ def test_an_id_walk_lists_and_names_readers_as_indexing_did(
 
     assert set(pruned) == {doc.id for doc in indexed}
     assert all(access is None for access in pruned.values())
-    assert _stored(synced) == _readers(indexed)
+    assert synced == _readers(indexed)
 
 
 def test_the_doc_sync_rewrites_every_access_and_revokes_a_vanished_document(
@@ -375,7 +361,7 @@ def test_the_doc_sync_rewrites_every_access_and_revokes_a_vanished_document(
         if isinstance(row, DocExternalAccess)
     }
 
-    assert _stored(synced) == {**readers, VANISHED_ID: ExternalAccess.empty()}
+    assert synced == {**readers, VANISHED_ID: ExternalAccess.empty()}
 
 
 def test_the_group_sync_fills_one_group_per_roster_domain(
@@ -416,12 +402,16 @@ def _acl_of(viewer: str, groups: dict[str, set[str]]) -> set[str]:
 
 
 def _document_acl(access: ExternalAccess) -> set[str]:
-    """What the search filter holds for a document, as indexing wrote it."""
+    """What the search filter holds for a document, as indexing stored it."""
     return DocumentAccess.build(
         user_emails=[],
         user_groups=[],
         external_user_emails=list(access.external_user_emails),
-        external_user_group_ids=list(access.external_user_group_ids),
+        external_user_group_ids=list(
+            build_ext_group_names_for_storage(
+                access.external_user_group_ids, DocumentSource.ZOOM
+            )
+        ),
         is_public=access.is_public,
     ).to_acl()
 

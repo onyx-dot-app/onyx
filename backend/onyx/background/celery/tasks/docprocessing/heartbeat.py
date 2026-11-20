@@ -1,5 +1,6 @@
 import contextvars
 import threading
+from collections.abc import Callable
 
 from onyx.configs.constants import INDEXING_WORKER_HEARTBEAT_INTERVAL
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
@@ -9,8 +10,11 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 
-def start_heartbeat(index_attempt_id: int) -> tuple[threading.Thread, threading.Event]:
-    """Start a heartbeat thread for the given index attempt"""
+def start_heartbeat(
+    index_attempt_id: int, on_beat: Callable[[], None] | None = None
+) -> tuple[threading.Thread, threading.Event]:
+    """Start a heartbeat thread for the given index attempt. `on_beat` runs
+    on each beat too."""
     stop_event = threading.Event()
 
     def heartbeat_loop() -> None:
@@ -22,6 +26,15 @@ def start_heartbeat(index_attempt_id: int) -> tuple[threading.Thread, threading.
             except Exception:
                 logger.exception(
                     "Failed to update heartbeat counter for index attempt %s",
+                    index_attempt_id,
+                )
+            if on_beat is None:
+                continue
+            try:
+                on_beat()
+            except Exception:
+                logger.exception(
+                    "Heartbeat callback failed for index attempt %s",
                     index_attempt_id,
                 )
 

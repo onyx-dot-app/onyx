@@ -18,7 +18,6 @@ from onyx.db.persona_sharing import (
 from onyx.db.plugin_access import (
     PluginAccess,
     load_plugin_access,
-    load_user_plugin_states,
     plugin_ids_in_managed_scope,
 )
 from onyx.db.scoped_permissions import fetch_managed_group_ids
@@ -248,9 +247,9 @@ def skill_preview_response(
             raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
         app_type = EXTERNAL_APP_SKILL_ID_TO_APP_TYPE.get(definition.built_in_skill_id)
         if app_type is not None and definition.has_template:
-            external_app_id = built_in_app_skills(
-                load_user_plugin_states([user.id], db_session), db_session
-            ).get(definition.built_in_skill_id)
+            external_app_id = built_in_app_skills(user.id, db_session).get(
+                definition.built_in_skill_id
+            )
             rendered = render_external_app_files(
                 db_session, external_app_id, app_type, definition.source_dir
             )
@@ -263,10 +262,10 @@ def skill_preview_response(
         )
 
     access = _access_of(skill, load_plugin_access([skill.id], user.id, db_session))
+    contents = read_version_contents(access.version_user_runs, db_session)
     return SkillPreviewResponse.from_custom(
         skill,
         access,
-        instructions_markdown=read_version_contents(
-            access.version_user_runs, db_session
-        ).instructions_markdown,
+        instructions_markdown=contents.instructions_markdown,
+        files=contents.files,
     )

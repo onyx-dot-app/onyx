@@ -9,14 +9,18 @@ import { usePathname, useSearchParams } from "@opal/navigation";
 import type { IconProps } from "@opal/types";
 import { cn } from "@opal/utils";
 import { connectAction } from "@/lib/integrations/connect";
-import { useAgentChatPlugins } from "@/lib/plugins/hooks";
+import { useAgentChatIntegrations } from "@/lib/integrations/hooks";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 import IntegrationConnectModal from "@/sections/plugins/IntegrationConnectModal";
 import { locationKey } from "@/app/app/services/submitLocation";
+import { isIntegrationOnInChat } from "@/lib/integrations/chat";
 
 interface IntegrationConnectPromptProps {
   agentId: number;
-  toolConfiguration: Pick<ToolConfigurationHandle, "isPluginEnabled" | "ready">;
+  toolConfiguration: Pick<
+    ToolConfigurationHandle,
+    "isIntegrationEnabled" | "ready"
+  >;
   disabled?: boolean;
   onConnectionsClosed?: () => void;
 }
@@ -34,8 +38,8 @@ function InfoKey({ className, ...props }: IconProps) {
 }
 
 /**
- * The chat's connect prompt: the integrations of the agent's plugins that
- * are on and need the user's sign-in. Such an integration gives the model no
+ * The chat's connect prompt: the integrations of the agent that are on and
+ * need the user's sign-in. Such an integration gives the model no
  * action until the user connects it.
  */
 export default function IntegrationConnectPrompt({
@@ -47,18 +51,14 @@ export default function IntegrationConnectPrompt({
   const t = useTranslations("plugins.chat.connectPrompt");
   const pathname = usePathname();
   const searchParams = useSearchParams();
-  const { plugins, refresh } = useAgentChatPlugins(agentId);
+  const catalog = useAgentChatIntegrations(agentId);
+  const { refresh } = catalog;
   const [openedIds, setOpenedIds] = useState<number[] | null>(null);
   const triggerRef = useRef<HTMLButtonElement>(null);
 
-  const integrations = [
-    ...new Map(
-      plugins
-        .filter((plugin) => toolConfiguration.isPluginEnabled(plugin.pluginId))
-        .flatMap((plugin) => plugin.integrations)
-        .map((integration) => [integration.id, integration])
-    ).values(),
-  ];
+  const integrations = catalog.integrations.filter((integration) =>
+    isIntegrationOnInChat(integration, toolConfiguration.isIntegrationEnabled)
+  );
   const pending = integrations.filter(
     (integration) => connectAction(integration) !== null
   );

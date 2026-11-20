@@ -89,7 +89,7 @@ def test_python_tool_available_when_health_check_passes(
     )
 
     mock_client = MagicMock()
-    mock_client.health.return_value = HealthResponse(connected=True, version="1.0.0")
+    mock_client.health.return_value = HealthResponse(connected=True)
     mock_client_cls.return_value.__enter__ = MagicMock(return_value=mock_client)
     mock_client_cls.return_value.__exit__ = MagicMock(return_value=False)
 
@@ -211,54 +211,3 @@ def test_health_check_no_cache_by_default() -> None:
         assert client.health().healthy is True
         # Both calls hit the network when use_cache=False (default)
         assert mock_get.call_count == 2
-
-
-def test_health_check_returns_version_when_present() -> None:
-    from onyx.tools.tool_implementations.python.code_interpreter_client import (
-        CodeInterpreterClient,
-    )
-
-    client = CodeInterpreterClient(base_url="http://fake:9000")
-    mock_response = MagicMock()
-    mock_response.json.return_value = {"status": "ok", "version": "1.4.2"}
-
-    with patch.object(client.session, "get", return_value=mock_response):
-        result = client.health()
-
-    assert result.healthy is True
-    assert result.version == "1.4.2"
-
-
-def test_health_check_defaults_version_when_missing() -> None:
-    """Older code-interpreter versions don't return a version field — the
-    client must default to '0.0.0' rather than raising."""
-    from onyx.tools.tool_implementations.python.code_interpreter_client import (
-        CodeInterpreterClient,
-    )
-
-    client = CodeInterpreterClient(base_url="http://fake:9000")
-    mock_response = MagicMock()
-    mock_response.json.return_value = {"status": "ok"}
-
-    with patch.object(client.session, "get", return_value=mock_response):
-        result = client.health()
-
-    assert result.healthy is True
-    assert result.version == "0.0.0"
-
-
-def test_health_check_defaults_version_on_request_failure() -> None:
-    """When the request itself fails, healthy=False and version='0.0.0'."""
-    from onyx.tools.tool_implementations.python.code_interpreter_client import (
-        CodeInterpreterClient,
-    )
-
-    client = CodeInterpreterClient(base_url="http://fake:9000")
-
-    with patch.object(
-        client.session, "get", side_effect=RuntimeError("connection refused")
-    ):
-        result = client.health()
-
-    assert result.healthy is False
-    assert result.version == "0.0.0"

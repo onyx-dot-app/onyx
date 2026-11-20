@@ -32,11 +32,24 @@ import { getDisplayName } from "@/lib/languageModels/utils";
 import { useLanguageModelsForAgent } from "@/lib/languageModels/hooks";
 import { Interactive } from "@opal/core";
 import { useSettings } from "@/lib/settings/hooks";
+import { useMemberIntegrations } from "@/lib/integrations/hooks";
 
-function ViewerPluginCard({ name }: { name: string }) {
+interface ViewerIntegrationCardProps {
+  name: string;
+  /** False: the user has no access, so a chat runs without it. */
+  usable: boolean;
+}
+
+function ViewerIntegrationCard({ name, usable }: ViewerIntegrationCardProps) {
+  const t = useTranslations("agents.modals");
   return (
     <Card border="solid" rounding={4} padding={4}>
-      <Content font="main-ui-action" icon={SvgActions} title={name} />
+      <Content
+        font="main-ui-action"
+        icon={SvgActions}
+        title={name}
+        description={usable ? undefined : t("viewer.actions.noAccess")}
+      />
     </Card>
   );
 }
@@ -119,6 +132,7 @@ export function AgentViewerModal({ agent, onClose }: AgentViewerModalProps) {
   const { allRecentFiles } = useProjectsContext();
   const { llmProviders } = useLanguageModelsForAgent(agent.id);
   const { appName } = useSettings();
+  const { data: memberIntegrations } = useMemberIntegrations();
 
   const handleStartChat = useCallback(
     ({ message, mentions }: ComposedMessage) => {
@@ -143,8 +157,13 @@ export function AgentViewerModal({ agent, onClose }: AgentViewerModalProps) {
     (agent.hierarchy_nodes && agent.hierarchy_nodes.length > 0) ||
     (agent.user_file_ids && agent.user_file_ids.length > 0);
 
-  const plugins = agent.plugins ?? [];
-  const hasActions = plugins.length > 0;
+  const integrations = agent.integrations ?? [];
+  const hasActions = integrations.length > 0;
+  const usableIds = new Set(
+    (memberIntegrations ?? [])
+      .filter((integration) => integration.access.state !== "no_access")
+      .map((integration) => integration.id)
+  );
   const defaultModel = getDisplayName(agent, llmProviders ?? []);
 
   return (
@@ -235,10 +254,14 @@ export function AgentViewerModal({ agent, onClose }: AgentViewerModalProps) {
           <Collapsible title={t("viewer.actions.title")}>
             {hasActions ? (
               <Section gap={2} alignItems="start">
-                {plugins.map((plugin) => (
-                  <ViewerPluginCard
-                    key={plugin.plugin_id}
-                    name={plugin.plugin_name}
+                {integrations.map((integration) => (
+                  <ViewerIntegrationCard
+                    key={integration.integration_id}
+                    name={integration.integration_name}
+                    usable={
+                      memberIntegrations === undefined ||
+                      usableIds.has(integration.integration_id)
+                    }
                   />
                 ))}
               </Section>

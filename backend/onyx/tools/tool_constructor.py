@@ -29,9 +29,6 @@ from onyx.tools.models import (
     ToolConfiguration,
     ToolOptions,
 )
-from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
-    CodingAgentTool,
-)
 from onyx.tools.tool_implementations.file_reader.file_reader_tool import FileReaderTool
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
@@ -363,15 +360,6 @@ def _construct_tools_impl(
                     )
                 )
 
-            # Handle Coding Agent Tool
-            elif tool_cls.__name__ == CodingAgentTool.__name__:
-                tools.append(
-                    CodingAgentTool(
-                        tool_id=db_tool_model.id,
-                        llm=llm,
-                    )
-                )
-
             # Handle File Reader Tool
             elif tool_cls.__name__ == FileReaderTool.__name__:
                 cfg = file_reader_tool_config or FileReaderToolConfig()
@@ -423,13 +411,15 @@ def _construct_tools_impl(
         user,
         IntegrationChatRequest(
             persona_id=configuration.persona_id,
-            plugin_links=configuration.plugin_links,
+            integration_links=configuration.integration_links,
             approval_mode=approval_mode,
             chat_session_id=custom_tool_config.chat_session_id,
             message_id=custom_tool_config.message_id,
             additional_headers=custom_tool_config.additional_headers or {},
             mcp_headers=custom_tool_config.mcp_headers,
-            allowed_plugins=tool_options.allowed_plugins() if tool_options else None,
+            allowed_integrations=(
+                tool_options.allowed_integrations() if tool_options else None
+            ),
         ),
     )
     return tools + integration_tools

@@ -6,7 +6,7 @@ from sqlalchemy.sql.elements import ColumnElement
 
 from onyx.context.search.models import PersonaSearchInfo
 from onyx.db.enums import MCPServerStatus
-from onyx.db.integration_policy import list_persona_plugin_links
+from onyx.db.integration_policy import list_persona_integration_links
 from onyx.db.models import (
     MCPServer,
     Persona,
@@ -15,8 +15,8 @@ from onyx.db.models import (
 from onyx.integrations.policy import parse_action_settings
 from onyx.tools.built_in_tools import BUILT_IN_TOOL_TYPES
 from onyx.tools.models import (
+    IntegrationLinkConfiguration,
     PersonaToolConfiguration,
-    PluginLinkConfiguration,
     ToolConfiguration,
 )
 
@@ -24,7 +24,7 @@ from onyx.tools.models import (
 def capture_persona_tool_configuration(
     persona: Persona, db_session: Session
 ) -> PersonaToolConfiguration:
-    """Copies built-in tools and plugin links; the caller owns the session."""
+    """Copies built-in tools and integration links; the caller owns the session."""
     return PersonaToolConfiguration(
         persona_id=persona.id,
         persona_name=persona.name,
@@ -33,12 +33,12 @@ def capture_persona_tool_configuration(
             for tool in persona.tools
             if tool.in_code_tool_id is not None
         ],
-        plugin_links=[
-            PluginLinkConfiguration(
-                plugin_id=link.plugin_id,
+        integration_links=[
+            IntegrationLinkConfiguration(
+                integration_id=link.integration_id,
                 action_settings=parse_action_settings(link.action_settings),
             )
-            for link in list_persona_plugin_links(db_session, persona.id)
+            for link in list_persona_integration_links(db_session, persona.id)
         ],
         search=PersonaSearchInfo(
             document_set_names=[item.name for item in persona.document_sets],

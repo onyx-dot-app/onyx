@@ -1,3 +1,4 @@
+import { StrictMode } from "react";
 import { act, renderHook, waitFor } from "@testing-library/react";
 import { ReadonlyURLSearchParams } from "next/navigation";
 import useChatSessionController from "@/hooks/useChatSessionController";
@@ -27,9 +28,6 @@ jest.mock("@/providers/IncognitoProvider", () => ({
     setIncognitoEnabled: jest.fn(),
     setIncognitoSessionId: jest.fn(),
   }),
-}));
-jest.mock("@/lib/projects/svc", () => ({
-  getProjectFilesForSession: async () => [],
 }));
 jest.mock("@/app/app/services/lib", () => ({
   processRawChatHistory: jest.fn(),
@@ -84,21 +82,23 @@ function serveSession(session: BackendChatSession) {
   });
 }
 
-function mountController() {
-  return renderHook(() =>
-    useChatSessionController({
-      existingChatSessionId: "session",
-      searchParams: new ReadonlyURLSearchParams(),
-      setSelectedDocuments: jest.fn(),
-      setCurrentMessageFiles: jest.fn(),
-      chatSessionIdRef: { current: null },
-      loadedIdSessionRef: { current: null },
-      chatInputBarRef: { current: null },
-      isInitialLoad: { current: true },
-      submitOnLoadPerformed: { current: false },
-      refreshChatSessions: jest.fn(),
-      onSubmit: jest.fn(),
-    })
+function mountController(wrapper?: typeof StrictMode) {
+  return renderHook(
+    ({ sessionId }: { sessionId: string }) =>
+      useChatSessionController({
+        existingChatSessionId: sessionId,
+        searchParams: new ReadonlyURLSearchParams(),
+        setSelectedDocuments: jest.fn(),
+        setCurrentMessageFiles: jest.fn(),
+        chatSessionIdRef: { current: null },
+        loadedIdSessionRef: { current: null },
+        chatInputBarRef: { current: null },
+        isInitialLoad: { current: true },
+        submitOnLoadPerformed: { current: false },
+        refreshChatSessions: jest.fn(),
+        onSubmit: jest.fn(),
+      }),
+    { initialProps: { sessionId: "session" }, wrapper }
   );
 }
 
@@ -113,6 +113,69 @@ beforeEach(() => {
 afterEach(() => {
   jest.restoreAllMocks();
   jest.clearAllMocks();
+});
+
+/** Holds each history load open; the test resolves them in any order. */
+function holdHistoryLoads() {
+  const loads: {
+    signal: AbortSignal | undefined;
+    response: ReturnType<typeof deferred<Response>>;
+  }[] = [];
+  jest.mocked(global.fetch).mockImplementation(async (url, init) => {
+    if (!String(url).startsWith("/api/chat/get-chat-session/"))
+      return new Response(JSON.stringify(null));
+    const response = deferred<Response>();
+    loads.push({ signal: init?.signal ?? undefined, response });
+    return response.promise;
+  });
+  return loads;
+}
+
+test("a StrictMode remount cancels the first history load and applies one", async () => {
+  const loads = holdHistoryLoads();
+  mountController(StrictMode);
+  await waitFor(() => expect(loads).toHaveLength(2));
+  expect(loads[0]!.signal?.aborted).toBe(true);
+  expect(loads[1]!.signal?.aborted).toBe(false);
+  await act(async () => {
+    for (const load of loads)
+      load.response.resolve(
+        new Response(JSON.stringify(backendSession(false)))
+      );
+  });
+  await waitFor(() =>
+    expect(
+      useChatSessionStore.getState().sessions.get("session")
+        ?.isFetchingChatMessages
+    ).toBe(false)
+  );
+  expect(processRawChatHistory).toHaveBeenCalledTimes(1);
+});
+
+test("opening a chat requests only its history", async () => {
+  mountController();
+  await waitFor(() =>
+    expect(
+      useChatSessionStore.getState().sessions.get("session")
+        ?.isFetchingChatMessages
+    ).toBe(false)
+  );
+  await act(async () => {});
+  expect(
+    jest
+      .mocked(global.fetch)
+      .mock.calls.filter(([url]) => String(url).includes("/projects/"))
+  ).toEqual([]);
+});
+
+test("switching chats cancels the earlier history load", async () => {
+  const loads = holdHistoryLoads();
+  const view = mountController();
+  await waitFor(() => expect(loads).toHaveLength(1));
+  view.rerender({ sessionId: "other" });
+  await waitFor(() => expect(loads).toHaveLength(2));
+  expect(loads[0]!.signal?.aborted).toBe(true);
+  expect(loads[1]!.signal?.aborted).toBe(false);
 });
 
 test("reloaded setup stays busy until execution and history are settled", async () => {

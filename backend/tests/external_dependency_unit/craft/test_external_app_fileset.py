@@ -25,7 +25,7 @@ from onyx.skills.built_in import SLACK
 from onyx.skills.bundle import strip_skill_md_frontmatter
 from onyx.skills.push import build_skills_fileset_for_user
 from tests.external_dependency_unit.craft.db_helpers import (
-    make_app_plugin_for_user,
+    give_app_to_user,
     make_external_app,
     make_user,
     reset_built_in_skill_row,
@@ -58,7 +58,7 @@ def test_authenticated_provider_delivers_content_under_stable_dir(
         app_type=ExternalAppType.SLACK,
         auth_template=_AUTH_TEMPLATE,
     )
-    make_app_plugin_for_user(db_session, app=app, user=user)
+    give_app_to_user(db_session, app=app, user=user)
     db_session.commit()
 
     files = build_skills_fileset_for_user(user, db_session)
@@ -85,7 +85,7 @@ def test_denied_action_listed_as_unavailable(
             SlackAction.MESSAGES_WRITE.value: IntegrationActionPolicyValue.BLOCKED
         },
     )
-    make_app_plugin_for_user(db_session, app=app, user=user)
+    give_app_to_user(db_session, app=app, user=user)
     db_session.commit()
 
     files = build_skills_fileset_for_user(user, db_session)
@@ -115,7 +115,7 @@ def test_no_disabled_actions_omits_section(
         app_type=ExternalAppType.SLACK,
         auth_template=_AUTH_TEMPLATE,
     )
-    make_app_plugin_for_user(db_session, app=app, user=user)
+    give_app_to_user(db_session, app=app, user=user)
     db_session.commit()
 
     files = build_skills_fileset_for_user(user, db_session)
@@ -140,7 +140,7 @@ def test_zendesk_push_and_preview_share_account_and_action_policy(
             ZendeskAction.TICKETS_UPDATE.value: IntegrationActionPolicyValue.BLOCKED
         },
     )
-    make_app_plugin_for_user(db_session, app=app, user=test_user)
+    give_app_to_user(db_session, app=app, user=test_user)
     db_session.commit()
 
     files = build_skills_fileset_for_user(test_user, db_session)

@@ -14,7 +14,7 @@ Craft can read a private Slack channel and reply in one of its threads only if y
 Examples include finding customer context in HubSpot, drafting a reply in Gmail, creating a Linear issue,
 writing a document to Google Drive, or opening a pull request in GitHub.
 
-<img className="rounded-image" src="/assets/overview/core_features/plugins/craft_plugins_directory.webp" alt="The Craft Plugins page with an MCP server and the Slack Craft App"/>
+<img className="rounded-image" src="/assets/overview/core_features/plugins/craft_plugins_directory.webp" alt="The Integrations tab of Customize with an MCP server and the Slack Craft App"/>
 
 <Note>
   Craft Apps work only in Craft. Main Chat does not support them.
@@ -35,7 +35,7 @@ These sources serve different purposes in a Craft session:
 ## Available apps
 
 Craft Apps are available on Onyx Cloud and Enterprise Edition (Business plan or higher).
-The Plugins page shows only the apps your organization has enabled. Onyx includes built-in support for:
+**Customize → Integrations** shows only the apps that you have access to. Onyx includes built-in support for:
 
 | App                 | Example uses                                                                                        |
 | ------------------- | --------------------------------------------------------------------------------------------------- |
@@ -57,7 +57,7 @@ The actions available to you depend on the access granted by the external servic
 
 <Steps>
   <Step title="Connect your account">
-    Select **Plugins** in the Craft sidebar, click the app, then click **Connect**.
+    Select **Customize → Integrations** in the Craft sidebar, then click **Connect** on the app.
     Built-in apps open the service's sign-in page in a new tab.
     A custom app may instead ask for fields defined by your admin.
 
@@ -130,7 +130,7 @@ You cannot turn on an action that your admin set to **Blocked**.
 ## Apps in Scheduled Tasks
 
 A [Scheduled Task](/overview/core_features/craft_scheduled_tasks) runs without you present.
-In the task's **Plugins** section, enable only the apps that the task needs,
+In the task's **Integrations** section, enable only the apps that the task needs,
 and set the actions it must perform to **Allow** in the app's **Approval settings**.
 
 Task settings apply only to that task. An action with a **Blocked** policy stays blocked.
@@ -138,7 +138,7 @@ If a run reaches an action that needs approval, the run stops and waits for you.
 
 ## Disconnect an app
 
-Open **Plugins**, click the app, and click **Disconnect**.
+Open **Customize → Integrations**, click the app, and click **Disconnect**.
 
 <Info>
   Raw app credentials never enter Craft's sandbox workspace.
@@ -156,8 +156,8 @@ Open **Plugins**, click the app, and click **Disconnect**.
 </Accordion>
 
   <Accordion title="A Scheduled Task is awaiting approval">
-    Edit the task and confirm that the required app is enabled under **Plugins** and the action is set to **Allow** in
-    its approval settings. If it is, an admin may have disabled that action, or the run may need a different app.
+    Edit the task and confirm that the required app is enabled under **Integrations** and the action is set to **Allow**
+    in its approval settings. If it is, an admin may have disabled that action, or the run may need a different app.
   </Accordion>
 </AccordionGroup>
 

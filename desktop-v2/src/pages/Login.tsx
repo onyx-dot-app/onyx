@@ -16,6 +16,8 @@ import {
 
 function Login() {
   const [server, setServer] = useState("");
+  // Managed policy can lock the server; then there is no Change server.
+  const [serverLocked, setServerLocked] = useState(true);
   const [methods, setMethods] = useState<AuthMethods | null>(null);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -42,7 +44,10 @@ function Login() {
   }
 
   useEffect(() => {
-    void getPrefs().then((prefs) => setServer(prefs.serverUrl ?? ""));
+    void getPrefs().then((prefs) => {
+      setServer(prefs.serverUrl ?? "");
+      setServerLocked(prefs.serverLocked);
+    });
     loadMethods();
     // An SSO sign-in that fails after it left this window reports back here.
     const unlisten = listen<string>("sso-failed", (event) => {
@@ -143,17 +148,23 @@ function Login() {
                   onChange={(e) => setPassword(e.target.value)}
                 />
               </Field>
-              <Section flexDirection="row" justifyContent="between" height="fit">
-                <Button prominence="tertiary" disabled={busy} onClick={() => void changeServer()}>
-                  Change server
-                </Button>
+              <Section
+                flexDirection="row"
+                justifyContent={serverLocked ? "end" : "between"}
+                height="fit"
+              >
+                {serverLocked ? null : (
+                  <Button prominence="tertiary" disabled={busy} onClick={() => void changeServer()}>
+                    Change server
+                  </Button>
+                )}
                 <Button type="submit" disabled={busy || email.trim() === "" || password === ""}>
                   {busy ? "Signing in…" : "Sign in"}
                 </Button>
               </Section>
             </Section>
           </form>
-        ) : (
+        ) : serverLocked ? null : (
           <Section flexDirection="row" justifyContent="start" height="fit">
             <Button prominence="tertiary" disabled={busy} onClick={() => void changeServer()}>
               Change server

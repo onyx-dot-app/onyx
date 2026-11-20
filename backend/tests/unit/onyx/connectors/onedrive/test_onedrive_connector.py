@@ -9,7 +9,6 @@ from ee.onyx.external_permissions.onedrive.permission_mapper import (
     map_onedrive_permissions,
 )
 from onyx.access.models import ExternalAccess
-from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.models import (
     MAX_FINDING_OPTIONS,
@@ -853,45 +852,48 @@ def test_onedrive_file_permission_transient_error_fails_attempt() -> None:
         _run_perm_step(connector, checkpoint)
 
 
-def test_onedrive_slim_folder_access_prefixes_external_groups(
+def test_onedrive_folder_access_is_the_same_on_indexing_and_slim_walks(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    connector, gateway = _connector()
     monkeypatch.setattr(
         "onyx.connectors.onedrive.connector.get_onedrive_external_access",
         map_onedrive_permissions,
     )
     folder = _folder_item()
-    gateway.get_delta_page.return_value = DriveDeltaFetchResult(
-        page=DriveDeltaPage(items=[folder])
-    )
-    gateway.list_permissions.return_value = _fixture_permissions("visible_group")
-    checkpoint = OneDriveCheckpoint(
-        has_more=True,
-        current_user=_user(),
-        current_drive=_drive(),
-    )
 
-    output = list(
-        connector._discover_from_checkpoint(
-            0,
-            0,
-            checkpoint,
-            include_permissions=True,
-            add_group_prefix=False,
+    def folder_node_access(*, slim: bool) -> ExternalAccess | None:
+        connector, gateway = _connector()
+        gateway.get_delta_page.return_value = DriveDeltaFetchResult(
+            page=DriveDeltaPage(items=[folder])
         )
-    )
+        gateway.list_permissions.return_value = _fixture_permissions("visible_group")
+        checkpoint = OneDriveCheckpoint(
+            has_more=True,
+            current_user=_user(),
+            current_drive=_drive(),
+        )
+        output: list[object]
+        if slim:
+            monkeypatch.setattr(connector, "build_dummy_checkpoint", lambda: checkpoint)
+            # The first batch holds the one delta page of the drive.
+            output = list(next(iter(connector.retrieve_all_slim_docs_perm_sync())))
+        else:
+            output = list(_run_perm_step(connector, checkpoint)[0])
+        node = next(
+            item
+            for item in output
+            if isinstance(item, HierarchyNode)
+            and item.raw_node_id == hierarchy_item_id("drive-1", folder.id)
+        )
+        return node.external_access
 
-    node = next(
-        item
-        for item in output
-        if isinstance(item, HierarchyNode)
-        and item.raw_node_id == hierarchy_item_id("drive-1", folder.id)
-    )
-    assert node.external_access is not None
-    assert node.external_access.external_user_group_ids == {
-        build_ext_group_name_for_onyx("<visible-group-id>", DocumentSource.ONEDRIVE)
-    }
+    indexing_access = folder_node_access(slim=False)
+    slim_access = folder_node_access(slim=True)
+
+    # Storage adds the source prefix, so both walks yield the bare id.
+    assert indexing_access is not None
+    assert indexing_access.external_user_group_ids == {"<visible-group-id>"}
+    assert slim_access == indexing_access
 
 
 def test_onedrive_fixture_child_before_parent_reads_child_permissions(
@@ -1760,13 +1762,7 @@ def test_onedrive_hybrid_permissions_inherit_known_parent_and_read_shared_child(
         }
     )
 
-    assert connector._item_access(user, drive, folder, add_prefix=False) == (
-        inherited_access
-    )
-    assert connector._item_access(user, drive, child, add_prefix=False) == (
-        inherited_access
-    )
-    assert connector._item_access(user, drive, shared_child, add_prefix=False) == (
-        direct_access
-    )
+    assert connector._item_access(user, drive, folder) == (inherited_access)
+    assert connector._item_access(user, drive, child) == (inherited_access)
+    assert connector._item_access(user, drive, shared_child) == (direct_access)
     assert gateway.list_permissions.call_count == 2

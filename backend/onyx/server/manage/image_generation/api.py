@@ -320,7 +320,7 @@ def list_llm_provider_image_models(
     }
     result: list[ImageGenerationLLMProvider] = []
     for llm_provider in fetch_existing_llm_providers(
-        db_session=db_session, flow_type_filter=[], include_model_flows=True
+        db_session=db_session, flow_type_filter=[]
     ):
         if not is_usable_for_image_generation(llm_provider):
             continue

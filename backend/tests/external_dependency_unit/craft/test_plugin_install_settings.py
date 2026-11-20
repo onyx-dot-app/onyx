@@ -34,7 +34,6 @@ from onyx.db.plugin import (
 )
 from onyx.db.plugin_access import (
     UserPluginState,
-    affected_user_ids_for_plugins,
     load_user_plugin_states,
     order_skill_names,
 )
@@ -44,9 +43,7 @@ from onyx.skills import push
 from tests.external_dependency_unit.craft.db_helpers import (
     add_user_to_group,
     make_group,
-    make_sandbox,
     make_skill,
-    make_skillless_plugin,
     make_user,
     set_current_version_validity,
     set_plugin_created_at,
@@ -462,73 +459,6 @@ def test_name_order(
         shared_old.id,
         shared_new.id,
     }
-
-
-def test_plugin_with_no_skills_takes_no_name(
-    db_session: Session,
-    test_user: User,  # noqa: ARG001
-) -> None:
-    """A Required plugin with no skills and the name of a user's skill: it
-    is on, but it takes no skill name, so the skill stays in the run time."""
-    user = make_user(db_session, standard_account=True)
-    name = f"no-skills-{uuid4().hex[:8]}"
-    skill = make_skill(db_session, name=name, author_user_id=user.id)
-    set_plugin_preferences__no_commit(user.id, [skill.id], True, db_session)
-    set_current_version_validity(db_session, skill.id, True)
-    plugin = make_skillless_plugin(
-        db_session, name=name, published=True, installation_policy=REQUIRED
-    )
-
-    states = {
-        state.plugin_id: state
-        for state in load_user_plugin_states([user.id], db_session)
-    }
-    assert states[plugin.id].enabled and states[plugin.id].skill_names == ()
-    assert not order_skill_names(states.values()) & {skill.id, plugin.id}
-    runtime = {
-        runtime.id: runtime.name
-        for runtime in list_runtime_skills_for_user(user=user, db_session=db_session)
-    }
-    assert runtime.get(skill.id) == name
-    assert plugin.id not in runtime
-
-
-def test_reads_accept_the_rows_of_a_private_integration(
-    db_session: Session,
-    test_user: User,  # noqa: ARG001
-) -> None:
-    """The U1 rows of a private MCP server: Not available company setting,
-    one plugin__user row and one plugin__user_group row. Share recipients see
-    it as Available; other users do not see it."""
-    group = make_group(db_session)
-    direct = _member_of(db_session)
-    in_group = _member_of(db_session, group)
-    outsider = _member_of(db_session)
-    plugin = make_skillless_plugin(
-        db_session,
-        installation_policy=NOT_AVAILABLE,
-        shared_user_ids=[direct.id],
-        shared_group_ids=[group.id],
-    )
-    db_session.expire_all()
-    states = {
-        state.user_id: state
-        for state in load_user_plugin_states(
-            [direct.id, in_group.id, outsider.id], db_session, [plugin.id]
-        )
-    }
-    for user in (direct, in_group):
-        assert _setting(states.get(user.id)) == AVAILABLE
-        assert not states[user.id].enabled
-    assert _setting(states.get(outsider.id)) is None
-
-    for user in (direct, in_group, outsider):
-        make_sandbox(db_session, user)
-    assert affected_user_ids_for_plugins([plugin.id], db_session) & {
-        direct.id,
-        in_group.id,
-        outsider.id,
-    } == {direct.id, in_group.id}
 
 
 def _bundle(name: str) -> bytes:

@@ -14,7 +14,7 @@ import {
 import { qualifiedMcpToolName } from "@tests/e2e/mcp/mcpToolInvocation";
 import { ChatPage } from "@tests/e2e/chat/ChatPage";
 import { ToolApprovalCard } from "@tests/e2e/pages/ToolApprovalCard";
-import { MemberPluginDetailPage } from "@tests/e2e/pages/MemberPluginDetailPage";
+import { CustomizeIntegrationPage } from "@tests/e2e/pages/CustomizeIntegrationPage";
 
 const API_KEY = process.env.MCP_API_KEY || "test-api-key-12345";
 // Without it, each server takes a free port.
@@ -42,7 +42,6 @@ test.describe("MCP tool approval in chat @code-mode", () => {
 
   let serverProcess: McpServerProcess | null = null;
   let integrationId: number;
-  let pluginId: string;
   let agentId: number;
   let agentName: string;
   let qualifiedToolName: string;
@@ -84,9 +83,6 @@ test.describe("MCP tool approval in chat @code-mode", () => {
       },
     });
     integrationId = created.id;
-    const plugin = created.plugins[0];
-    if (!plugin) throw new Error("The integration has no plugin");
-    pluginId = plugin.plugin_id;
     const connect = await adminContext.request.put(
       `/api/admin/integrations/${integrationId}/organization-connection`,
       { data: { fields: { api_key: API_KEY } } }
@@ -117,8 +113,8 @@ test.describe("MCP tool approval in chat @code-mode", () => {
       SLOW_TOOL_NAME
     );
     agentName = `PW Approval Agent ${Date.now()}`;
-    agentId = await adminClient.createAgentWithPlugins(agentName, [
-      plugin.plugin_id,
+    agentId = await adminClient.createAgentWithIntegrations(agentName, [
+      integrationId,
     ]);
     await adminContext.close();
   });
@@ -464,14 +460,14 @@ test.describe("MCP tool approval in chat @code-mode", () => {
     await card.expectApproved(toolDisplayName);
   });
 
-  test("Always allow on the plugin page runs later calls without a card", async ({
+  test("Always allow on the integration page runs later calls without a card", async ({
     page,
   }) => {
     await page.context().clearCookies();
     await loginAs(page, "admin");
-    const pluginPage = new MemberPluginDetailPage(page);
-    await pluginPage.goto(pluginId, "Integrations");
-    await pluginPage.setAlwaysAllow(toolDisplayName, true);
+    const integrationPage = new CustomizeIntegrationPage(page);
+    await integrationPage.goto(integrationId, "Actions");
+    await integrationPage.setAlwaysAllow(toolDisplayName, true);
 
     try {
       const { answer, conversation } = await askForToolCall(page);
@@ -489,8 +485,8 @@ test.describe("MCP tool approval in chat @code-mode", () => {
           )
       ).toBe(true);
     } finally {
-      await pluginPage.goto(pluginId, "Integrations");
-      await pluginPage.setAlwaysAllow(toolDisplayName, false);
+      await integrationPage.goto(integrationId, "Actions");
+      await integrationPage.setAlwaysAllow(toolDisplayName, false);
     }
   });
 

@@ -3,8 +3,7 @@ from typing import Any
 from uuid import UUID
 
 from sqlalchemy import ColumnElement, Select, and_, delete, func, select, update
-from sqlalchemy.orm import InstrumentedAttribute, Session, aliased, load_only
-from sqlalchemy.sql.elements import KeyedColumnElement
+from sqlalchemy.orm import InstrumentedAttribute, Session
 
 from onyx.db.enums import (
     ExternalAppType,
@@ -14,8 +13,8 @@ from onyx.db.enums import (
     IntegrationAuthMode,
     IntegrationKind,
     IntegrationOAuthProviderMode,
-    MarketplaceKind,
     MCPTransport,
+    PluginInstallationPolicy,
 )
 from onyx.db.external_app import delete_external_app__no_commit
 from onyx.db.models import (
@@ -25,20 +24,14 @@ from onyx.db.models import (
     IntegrationActionPolicy,
     IntegrationConnection,
     IntegrationOAuthClient,
-    Marketplace,
     MCPServer,
-    Plugin,
-    Plugin__Integration,
-    PluginSkill,
-    PluginVersion,
     Tool,
-    User,
 )
 from onyx.db.utils import UnsetType, is_set
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.integrations.connection_models import read_oauth_client
-from onyx.integrations.models import IntegrationActionSpec, IntegrationPluginRow
+from onyx.integrations.models import IntegrationActionSpec
 
 
 def get_integration_by_id(
@@ -288,35 +281,6 @@ def list_openapi_tools_by_integration(
     )
 
 
-def list_action_summaries(
-    integration_ids: Collection[int], db_session: Session
-) -> dict[int, list[IntegrationAction]]:
-    """The actions of each integration with only the columns a view shows,
-    in action order."""
-    actions: dict[int, list[IntegrationAction]] = {
-        integration_id: [] for integration_id in integration_ids
-    }
-    if not integration_ids:
-        return actions
-    for action in db_session.scalars(
-        select(IntegrationAction)
-        .options(
-            load_only(
-                IntegrationAction.integration_id,
-                IntegrationAction.key,
-                IntegrationAction.display_name,
-                IntegrationAction.description,
-                IntegrationAction.read_only,
-                IntegrationAction.default_policy,
-            )
-        )
-        .where(IntegrationAction.integration_id.in_(integration_ids))
-        .order_by(IntegrationAction.id)
-    ):
-        actions[action.integration_id].append(action)
-    return actions
-
-
 def list_external_apps_by_integration(
     integration_ids: Collection[int], db_session: Session
 ) -> dict[int, ExternalApp]:
@@ -376,6 +340,25 @@ def lock_integration__no_commit(integration_id: int, db_session: Session) -> Non
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Integration not found.")
 
 
+def integration_action_from_spec(
+    integration_id: int, spec: IntegrationActionSpec
+) -> IntegrationAction:
+    """A new row, not added to any session."""
+    return IntegrationAction(
+        integration_id=integration_id,
+        key=spec.key,
+        source=spec.source,
+        display_name=spec.display_name,
+        description=spec.description,
+        read_only=spec.read_only,
+        default_policy=spec.default_policy,
+        input_schema=spec.input_schema,
+        output_schema=spec.output_schema,
+        http_method=spec.http_method,
+        path_template=spec.path_template,
+    )
+
+
 def replace_integration_actions__no_commit(
     integration_id: int,
     source: IntegrationActionSource,
@@ -401,21 +384,7 @@ def replace_integration_actions__no_commit(
         if existing is not None:
             _apply_spec(existing, spec)
             continue
-        db_session.add(
-            IntegrationAction(
-                integration_id=integration_id,
-                key=spec.key,
-                source=spec.source,
-                display_name=spec.display_name,
-                description=spec.description,
-                read_only=spec.read_only,
-                default_policy=spec.default_policy,
-                input_schema=spec.input_schema,
-                output_schema=spec.output_schema,
-                http_method=spec.http_method,
-                path_template=spec.path_template,
-            )
-        )
+        db_session.add(integration_action_from_spec(integration_id, spec))
 
     stale_ids = [
         action.id
@@ -429,61 +398,6 @@ def replace_integration_actions__no_commit(
             .execution_options(synchronize_session="fetch")
         )
     db_session.flush()
-
-
-def list_integration_plugin_rows(
-    integration_ids: Collection[int], db_session: Session
-) -> dict[int, list[IntegrationPluginRow]]:
-    """The plugins that hold each integration, in plugin name order. The
-    install setting falls back to the marketplace default."""
-    rows: dict[int, list[IntegrationPluginRow]] = {
-        integration_id: [] for integration_id in integration_ids
-    }
-    if not integration_ids:
-        return rows
-    owner_email: KeyedColumnElement[str] = User.__table__.c.email
-    for (
-        integration_id,
-        plugin_id,
-        name,
-        description,
-        kind,
-        author_user_id,
-        email,
-        policy,
-        default_policy,
-    ) in db_session.execute(
-        select(
-            Plugin__Integration.integration_id,
-            Plugin.id,
-            Plugin.name,
-            Plugin.description,
-            Marketplace.kind,
-            Plugin.author_user_id,
-            owner_email,
-            Plugin.installation_policy,
-            Marketplace.default_installation_policy,
-        )
-        .join(Plugin, Plugin.id == Plugin__Integration.plugin_id)
-        .join(Marketplace, Marketplace.id == Plugin.marketplace_id)
-        .outerjoin(User, User.__table__.c.id == Plugin.author_user_id)
-        .where(Plugin__Integration.integration_id.in_(integration_ids))
-        .order_by(Plugin.name, Plugin.id)
-    ).tuples():
-        in_library = kind == MarketplaceKind.ORGANIZATION_LIBRARY
-        rows[integration_id].append(
-            IntegrationPluginRow(
-                integration_id=integration_id,
-                plugin_id=plugin_id,
-                plugin_name=name,
-                plugin_description=description,
-                in_organization_library=in_library,
-                author_user_id=author_user_id,
-                owner_email=None if in_library else email,
-                installation_policy=policy or default_policy,
-            )
-        )
-    return rows
 
 
 def list_integrations_by_ids(
@@ -500,30 +414,6 @@ def list_integrations_by_ids(
     )
 
 
-def list_integration_ids_held_by_plugins(
-    plugin_ids: Select[tuple[UUID]] | Collection[UUID], db_session: Session
-) -> list[int]:
-    return list(
-        db_session.scalars(
-            select(Plugin__Integration.integration_id)
-            .where(Plugin__Integration.plugin_id.in_(plugin_ids))
-            .distinct()
-            .order_by(Plugin__Integration.integration_id)
-        ).all()
-    )
-
-
-def plugin_holds_integration(plugin_id: UUID, db_session: Session) -> bool:
-    return (
-        db_session.scalar(
-            select(Plugin__Integration.integration_id)
-            .where(Plugin__Integration.plugin_id == plugin_id)
-            .limit(1)
-        )
-        is not None
-    )
-
-
 def lock_integration(integration_id: int, db_session: Session) -> Integration | None:
     return db_session.scalars(
         select(Integration).where(Integration.id == integration_id).with_for_update()
@@ -534,7 +424,8 @@ def insert_integration__no_commit(
     *,
     name: str,
     description: str | None,
-    created_by_user_id: UUID | None,
+    owner_user_id: UUID | None,
+    installation_policy: PluginInstallationPolicy,
     auth_mode: IntegrationAuthMode,
     auth_method: IntegrationAuthMethod | None,
     credential_fields: list[dict[str, Any]] | None,
@@ -552,7 +443,8 @@ def insert_integration__no_commit(
         tool_id=tool_id,
         name=name,
         description=description,
-        created_by_user_id=created_by_user_id,
+        owner_user_id=owner_user_id,
+        installation_policy=installation_policy,
         auth_mode=auth_mode,
         auth_method=auth_method,
         credential_fields=credential_fields,
@@ -713,34 +605,8 @@ def delete_integration__no_commit(
     integration: Integration, db_session: Session
 ) -> None:
     """Delete the integration and then its kind row. The connections,
-    actions, policies, OAuth client and plugin links go by cascade. A plugin
-    that held only this integration and no skill goes too."""
-    other_link = aliased(Plugin__Integration)
-    other_integration = (
-        select(other_link.integration_id)
-        .where(
-            other_link.plugin_id == Plugin.id,
-            other_link.integration_id != integration.id,
-        )
-        .exists()
-    )
-    any_skill = (
-        select(PluginSkill.id)
-        .join(PluginVersion, PluginVersion.id == PluginSkill.plugin_version_id)
-        .where(PluginVersion.plugin_id == Plugin.id)
-        .exists()
-    )
-    emptied_plugin_ids = list(
-        db_session.scalars(
-            select(Plugin.id)
-            .join(Plugin__Integration, Plugin__Integration.plugin_id == Plugin.id)
-            .where(
-                Plugin__Integration.integration_id == integration.id,
-                ~other_integration,
-                ~any_skill,
-            )
-        ).all()
-    )
+    actions, policies, OAuth client, shares, choices and links go by
+    cascade."""
     mcp_server_id = integration.mcp_server_id
     tool_id = integration.tool_id
     external_app_id = integration.external_app_id
@@ -755,13 +621,6 @@ def delete_integration__no_commit(
     if external_app_id is not None:
         delete_external_app__no_commit(db_session, external_app_id)
     db_session.flush()
-    if emptied_plugin_ids:
-        db_session.execute(
-            delete(Plugin)
-            .where(Plugin.id.in_(emptied_plugin_ids))
-            .execution_options(synchronize_session="fetch")
-        )
-        db_session.flush()
 
 
 def set_policy_rows__no_commit(

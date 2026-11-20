@@ -19,6 +19,14 @@ export class AdminSkillsPage {
     await expect(this.page.getByTestId("SkillsPage/container")).toBeVisible();
   }
 
+  /** Opens the publish requests list from the banner above the skills. */
+  async openRequests(): Promise<void> {
+    await this.page
+      .getByRole("button", { name: "Review", exact: true })
+      .click();
+    await expect(this.requests).toBeVisible();
+  }
+
   async expectRequest(name: string, kind: string): Promise<void> {
     const row = this.requests.getByRole("row").filter({ hasText: name });
     await expect(row).toBeVisible();
@@ -50,13 +58,16 @@ export class AdminSkillsPage {
   }
 
   card(name: string): Locator {
-    return this.page.getByTestId("SkillCard").filter({
-      has: this.page.getByRole("button", { name, exact: true }),
-    });
+    return this.page.getByRole("row", { name: `Open ${name}`, exact: true });
   }
 
   async openSharing(name: string): Promise<void> {
-    await this.card(name).getByRole("button", { name: "Edit sharing" }).click();
+    await this.page
+      .getByRole("button", { name: `More for ${name}`, exact: true })
+      .click();
+    await this.page
+      .getByRole("menuitem", { name: "Share", exact: true })
+      .click();
     await expect(this.page.getByRole("dialog")).toBeVisible();
   }
 

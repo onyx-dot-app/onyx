@@ -73,8 +73,6 @@ export type MessageRenderer<
   packets: T[];
   /** Tool calls nested under the step, ordered by sub_turn_index */
   nestedCalls: NestedCall[];
-  /** Every packet of the step, nested calls included, in stream order */
-  streamPackets: Packet[];
   state: S;
   /** Node id for the message currently being rendered */
   messageNodeId?: number;

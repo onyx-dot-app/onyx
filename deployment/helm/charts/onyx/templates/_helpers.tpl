@@ -1206,3 +1206,15 @@ immutable.
 {{- printf "%s-%s" (include "onyx.resourceName" (list . "legacy-minio-copy") | trunc 54 | trimSuffix "-") (printf "%s\n%v" $podTemplate $copy.backoffLimit | sha256sum | trunc 8) -}}
 {{- end -}}
 {{- end }}
+
+{{/*
+"true" when the chart deploys a docconversion worker. Docfetching only lists
+then: with no worker, the listed batches would wait for a consumer that never
+runs.
+*/}}
+{{- define "onyx.docconversion.deployed" -}}
+{{- $worker := .Values.celery_worker_docconversion -}}
+{{- if and .Values.vectorDB.enabled $worker.enabled (or $worker.autoscaling.enabled (gt (int $worker.replicaCount) 0)) -}}
+true
+{{- end -}}
+{{- end }}

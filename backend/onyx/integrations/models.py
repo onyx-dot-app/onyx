@@ -11,7 +11,6 @@ from onyx.db.enums import (
     IntegrationActionSource,
     IntegrationAuthMethod,
     MCPTransport,
-    PluginInstallationPolicy,
 )
 from onyx.external_apps.providers.base import ExternalAppProvider
 
@@ -135,8 +134,8 @@ class ApprovalMode(str, Enum):
 
 
 class ActionSettings(BaseModel):
-    """The ``action_settings`` of a ``persona__plugin`` or
-    ``scheduled_task__plugin`` row. ``{}`` inherits each action."""
+    """The ``action_settings`` of a ``persona__integration`` or
+    ``scheduled_task__integration`` row. ``{}`` inherits each action."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -179,39 +178,22 @@ class CallCredentials(BaseModel):
 
 
 class UsableIntegrationIds(BaseModel):
+    """The integrations that an admin did not turn off, of one user."""
+
     model_config = ConfigDict(frozen=True)
 
-    # Of the plugins that the user turned on.
-    turned_on: frozenset[int]
-    # Of each plugin that the user can see, on or off.
-    by_visible_plugin: dict[UUID, frozenset[int]]
-
-    @property
-    def visible(self) -> frozenset[int]:
-        return frozenset().union(*self.by_visible_plugin.values())
+    # The integrations that are on for the user.
+    on: frozenset[int]
+    # The integrations that the user has access to, on or off.
+    accessible: frozenset[int]
 
 
-class PersonaPluginLink(BaseModel):
-    """A plugin on an agent (``persona__plugin``)."""
+class PersonaIntegrationLink(BaseModel):
+    """An integration on an agent (``persona__integration``)."""
 
-    plugin_id: UUID
+    integration_id: int
     action_settings: ActionSettings = ActionSettings()
 
 
-class PersonaPluginSnapshot(PersonaPluginLink):
-    plugin_name: str
-
-
-class IntegrationPluginRow(BaseModel):
-    """One plugin that holds an integration, with where it lives."""
-
-    model_config = ConfigDict(frozen=True)
-
-    integration_id: int
-    plugin_id: UUID
-    plugin_name: str
-    plugin_description: str
-    in_organization_library: bool
-    author_user_id: UUID | None
-    owner_email: str | None
-    installation_policy: PluginInstallationPolicy | None
+class PersonaIntegrationSnapshot(PersonaIntegrationLink):
+    integration_name: str

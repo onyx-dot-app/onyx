@@ -337,7 +337,20 @@ on `task_revoked`, by the same prefixes, because an expired task never reaches
   `backend/supervisord.conf`, and to the matching Helm worker template.
 - `add-worker` **A worker.** Copy the light worker: its app, versioned app and
   config modules, a supervisord program, and a Helm template. Update the worker
-  table in the backend AGENTS file.
+  table in the backend AGENTS file. Then add the worker to each list of
+  workers, or it is missing from dev, EE and monitoring:
+  `.vscode/launch.json` (the normal and k8s configs, and each compound that
+  lists the other workers), `.zed/debug.json`, `.zed/tasks.json` and
+  `.zed/process-compose.k8s.yaml`, `tools/ods/internal/devstack/launch.go`
+  (profiles and metrics port) with its tests, an EE versioned app in
+  `ee/onyx/background/celery/apps/` that loads the log export tasks,
+  `ee/onyx/server/log_export/api.py:WORKER_COLLECT_QUEUES`, the metrics port in
+  `server/metrics/metrics_server.py`, the worker list in
+  `backend/tests/integration/conftest.py`, `_UNACKED_QUEUES` in
+  `server/metrics/indexing_pipeline.py` and the queue log line in
+  `background/celery/tasks/monitoring/tasks.py`, and the Helm CI values
+  (`deployment/helm/charts/onyx/ci/ct-values.yaml`) so CI renders an optional
+  worker.
 - `investigate-task-not-running` **Investigate a task that does not run.** Look
   for the "Schedule updated" or "Schedule unchanged" beat log line; it gives the
   task count and the `beat_multiplier`. Read the queue depth with

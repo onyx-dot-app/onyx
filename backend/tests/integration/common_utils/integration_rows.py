@@ -2,8 +2,7 @@
 
 An MCP server made through the admin MCP routes has no integration, and chat
 offers no action of it. These helpers make the integration of such a server,
-its actions, a plugin in the Organization library that holds it, agent links
-and policy rows."""
+its actions, agent links and policy rows."""
 
 from collections.abc import Mapping, Sequence
 from uuid import UUID
@@ -17,26 +16,26 @@ from onyx.db.enums import (
 from onyx.db.models import (
     Integration,
     IntegrationActionPolicy,
-    Persona__Plugin,
+    Persona__Integration,
 )
 
 
 def link_persona(
-    persona_id: int, plugin_id: UUID, action_settings: Mapping[str, object]
+    persona_id: int, integration_id: int, action_settings: Mapping[str, object]
 ) -> None:
-    """Set the agent's link to the plugin, as the agent editor saves it."""
+    """Set the agent's link to the integration, as the agent editor saves it."""
     with get_session_with_current_tenant() as db_session:
         link = db_session.scalar(
-            select(Persona__Plugin).where(
-                Persona__Plugin.persona_id == persona_id,
-                Persona__Plugin.plugin_id == plugin_id,
+            select(Persona__Integration).where(
+                Persona__Integration.persona_id == persona_id,
+                Persona__Integration.integration_id == integration_id,
             )
         )
         if link is None:
             db_session.add(
-                Persona__Plugin(
+                Persona__Integration(
                     persona_id=persona_id,
-                    plugin_id=plugin_id,
+                    integration_id=integration_id,
                     action_settings=dict(action_settings),
                 )
             )

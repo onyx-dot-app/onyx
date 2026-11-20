@@ -1,10 +1,15 @@
+use std::collections::BTreeMap;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Mutex;
 
 use serde::{Deserialize, Serialize};
 
+#[cfg(target_os = "macos")]
 pub const DEFAULT_HOTKEY: &str = "CommandOrControl+Shift+Space";
+// Windows and some Linux desktops already use Ctrl+Shift+Space (IME switch).
+#[cfg(not(target_os = "macos"))]
+pub const DEFAULT_HOTKEY: &str = "Control+Alt+Space";
 
 #[derive(Debug, Clone, Default, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -16,6 +21,11 @@ pub struct Config {
     pub aonyx: Option<bool>,
     /// Where the pet sits, in logical screen coordinates.
     pub aonyx_position: Option<[f64; 2]>,
+    /// Notify when a launcher answer finishes while the launcher is hidden.
+    pub notify_answers: Option<bool>,
+    /// The launcher's last agent, by server origin. No entry: the default agent.
+    #[serde(default, skip_serializing_if = "BTreeMap::is_empty")]
+    pub launcher_agents: BTreeMap<String, i64>,
 }
 
 impl Config {
@@ -27,6 +37,10 @@ impl Config {
         self.hotkey
             .clone()
             .unwrap_or_else(|| DEFAULT_HOTKEY.to_string())
+    }
+
+    pub fn notify_answers(&self) -> bool {
+        self.notify_answers.unwrap_or(true)
     }
 }
 

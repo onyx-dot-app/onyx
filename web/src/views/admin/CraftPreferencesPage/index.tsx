@@ -34,7 +34,6 @@ import {
 import { refreshLlmProviderCaches } from "@/lib/languageModels/cache";
 import { BuildLlmSelection } from "@/app/craft/onboarding/constants";
 import ModelPickerButton from "@/app/craft/components/ModelPickerButton";
-import SkillPublishingCard from "@/views/admin/CraftPreferencesPage/SkillPublishingCard";
 
 const MAX_INSTRUCTIONS_LENGTH = 4000;
 
@@ -310,8 +309,6 @@ export default function CraftPreferencesPage() {
             </InputVertical>
           </Section>
         </Card>
-
-        <SkillPublishingCard />
 
         <Collapsible
           defaultOpen={false}

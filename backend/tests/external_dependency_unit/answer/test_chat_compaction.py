@@ -18,6 +18,7 @@ from onyx.chat.process_message import handle_stream_message_objects
 from onyx.configs.constants import FileOrigin, MessageType
 from onyx.configs.model_configs import GEN_AI_INPUT_TOKEN_SAFETY_MARGIN
 from onyx.db.chat import delete_chat_session
+from onyx.db.chat_response import load_child_responses
 from onyx.db.enums import IncognitoRecordMode, UserFileStatus
 from onyx.db.models import ChatMessage, ChatResponseItem, UserFile
 from onyx.file_store.file_store import get_default_file_store
@@ -589,7 +590,10 @@ def test_compacted_chat_reloads_continues_and_regenerates_selected_branch(
             saved = db_session.get(ChatMessage, ids.reserved_assistant_message_id)
             assert saved is not None
             replayed = translate_assistant_message_to_packets(
-                saved, load_session_tools([saved], db_session), db_session
+                saved,
+                load_session_tools([saved], db_session),
+                db_session,
+                child_responses=load_child_responses(db_session, [saved]),
             )
             assert (
                 "".join(

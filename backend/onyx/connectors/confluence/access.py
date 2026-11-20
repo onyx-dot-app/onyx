@@ -14,15 +14,10 @@ def get_page_restrictions(
     page_id: str,
     page_restrictions: dict[str, Any],
     ancestors: list[dict[str, Any]],
-    add_prefix: bool = False,
 ) -> ExternalAccess | None:
     """
     Get page access restrictions for a Confluence page.
     This functionality requires Enterprise Edition.
-
-    add_prefix: True for the indexing path (Document.external_access) so group
-    ids carry the source-type prefix the search filter expects. False for the
-    permission-sync path, where upsert_document_external_perms adds the prefix.
 
     Returns ExternalAccess for the page, or None if EE is not enabled or no
     restrictions are found.
@@ -37,7 +32,6 @@ def get_page_restrictions(
                 str,
                 dict[str, Any],
                 list[dict[str, Any]],
-                bool,
             ],
             ExternalAccess | None,
         ],
@@ -47,7 +41,7 @@ def get_page_restrictions(
     )
 
     return ee_get_all_page_restrictions(
-        source_operations, page_id, page_restrictions, ancestors, add_prefix
+        source_operations, page_id, page_restrictions, ancestors
     )
 
 
@@ -57,7 +51,6 @@ def get_page_restrictions_with_per_ancestor_fetch(
     page_restrictions: dict[str, Any],
     ancestors: list[dict[str, Any]],
     ancestor_restrictions_cache: dict[str, dict[str, Any] | None],
-    add_prefix: bool = False,
 ) -> ExternalAccess | None:
     """CONFCLOUD-77618 variant of `get_page_restrictions`. Ancestors
     arrive without inline restrictions; each is fetched via
@@ -73,7 +66,6 @@ def get_page_restrictions_with_per_ancestor_fetch(
                 dict[str, Any],
                 list[dict[str, Any]],
                 dict[str, dict[str, Any] | None],
-                bool,
             ],
             ExternalAccess | None,
         ],
@@ -89,22 +81,16 @@ def get_page_restrictions_with_per_ancestor_fetch(
         page_restrictions,
         ancestors,
         ancestor_restrictions_cache,
-        add_prefix,
     )
 
 
 def get_all_space_permissions(
     source_operations: ConfluenceSourceOperations,
     is_cloud: bool,
-    add_prefix: bool = False,
 ) -> dict[str, ExternalAccess]:
     """
     Get access permissions for all spaces in Confluence.
     This functionality requires Enterprise Edition.
-
-    add_prefix: True for the indexing path (Document.external_access) so group
-    ids carry the source-type prefix the search filter expects. False for the
-    permission-sync path, where upsert_document_external_perms adds the prefix.
 
     Returns a mapping of space key to ExternalAccess. Empty dict if EE is not
     enabled.
@@ -114,7 +100,7 @@ def get_all_space_permissions(
 
     ee_get_all_space_permissions = cast(
         Callable[
-            [ConfluenceSourceOperations, bool, bool],
+            [ConfluenceSourceOperations, bool],
             dict[str, ExternalAccess],
         ],
         fetch_versioned_implementation(
@@ -123,4 +109,4 @@ def get_all_space_permissions(
         ),
     )
 
-    return ee_get_all_space_permissions(source_operations, is_cloud, add_prefix)
+    return ee_get_all_space_permissions(source_operations, is_cloud)

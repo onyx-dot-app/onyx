@@ -13,8 +13,12 @@ from onyx.db.enums import (
 )
 from onyx.db.integration import (
     get_external_app_for_integration,
+    get_integration_by_id,
     get_openapi_tool_for_integration,
+    integration_action_from_spec,
     list_integration_actions,
+    lock_integration__no_commit,
+    replace_integration_actions__no_commit,
 )
 from onyx.db.models import ExternalApp, Integration, IntegrationAction
 from onyx.db.models import Tool as ToolModel
@@ -54,6 +58,9 @@ from onyx.tools.tool_implementations.custom.openapi_parsing import (
     openapi_to_url,
 )
 from onyx.utils.headers import header_dict_to_header_list
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 CATALOG_POLICY_VALUES: dict[ActionPolicy, IntegrationActionPolicyValue] = {
     ActionPolicy.ALWAYS: IntegrationActionPolicyValue.ALLOW,
@@ -266,12 +273,12 @@ class ApiKindHandler(IntegrationKindHandler):
                 user_email=ctx.user_email,
             ),
             approval_for=ctx.approval_for,
-            plugin_ids=ctx.plugin_ids,
         )
         return [
             tool
             for tool in tools
-            if tool.plugin_action is not None and tool.plugin_action.action in keys
+            if tool.integration_action is not None
+            and tool.integration_action.action in keys
         ]
 
     def match_request(
@@ -327,7 +334,7 @@ class ApiKindHandler(IntegrationKindHandler):
         method = method.upper()
         path_matches = [
             (action, action.path_template)
-            for action in list_integration_actions(integration_id, db_session)
+            for action in api_integration_actions(integration_id, db_session)
             if action.path_template is not None
             and _openapi_path_matches(action.path_template, relative_path)
         ]
@@ -358,3 +365,48 @@ class ApiKindHandler(IntegrationKindHandler):
             or [_whole_domain_action(integration_id, f"{method} {path}")],
             path_prefix_length=len(target.path_prefix),
         )
+
+
+def sync_integration_actions__no_commit(
+    integration: Integration, db_session: Session
+) -> None:
+    """A stored source that the kind no longer finds loses its rows. The kind
+    settings are read under the integration lock, so a sync that started
+    earlier cannot write an older action list over a newer one."""
+    lock_integration__no_commit(integration.id, db_session)
+    specs = ApiKindHandler().discover_actions(integration, db_session)
+    stored_sources = {
+        action.source for action in list_integration_actions(integration.id, db_session)
+    }
+    for source in sorted(stored_sources | {spec.source for spec in specs}):
+        replace_integration_actions__no_commit(
+            integration.id,
+            source,
+            [spec for spec in specs if spec.source == source],
+            db_session,
+        )
+
+
+def api_integration_actions(
+    integration_id: int, db_session: Session
+) -> list[IntegrationAction]:
+    """The stored actions. The migration of the integration tables writes no
+    API actions: with no stored rows, the actions come from the settings and
+    stay unsaved, so a read path never writes. An admin save of the actions,
+    an edit or a refresh writes them."""
+    stored = list_integration_actions(integration_id, db_session)
+    if stored:
+        return stored
+    integration = get_integration_by_id(integration_id, db_session)
+    if integration is None:
+        return []
+    try:
+        specs = ApiKindHandler().discover_actions(integration, db_session)
+    except OnyxError as error:
+        logger.warning(
+            "Integration %s: the API settings give no actions: %s",
+            integration_id,
+            error.detail,
+        )
+        return []
+    return [integration_action_from_spec(integration_id, spec) for spec in specs]

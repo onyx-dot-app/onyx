@@ -7,6 +7,7 @@ from typing import Any, cast
 from unittest.mock import MagicMock, patch
 
 import pytest
+from opensearchpy import AuthorizationException, RequestError, TransportError
 
 from onyx.agents.runtime import Agent
 from onyx.agents.tools import ToolInvocation, ToolProgress
@@ -21,7 +22,11 @@ from onyx.context.search.models import (
     TimeFilter,
     UserAccessFilters,
 )
-from onyx.document_index.interfaces import DocumentIndex, DocumentSectionRequest
+from onyx.document_index.interfaces import (
+    DocumentIndex,
+    DocumentSectionRequest,
+    KeywordTermCounts,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.feature_flags.interface import NoOpFeatureFlagProvider
@@ -37,8 +42,14 @@ from onyx.llm.models import (
 )
 from onyx.tools.models import ToolContext
 from onyx.tools.tool_implementations.search.constants import (
+    ANALYZED_QUERY_MAX_CHARS,
+    LLM_NON_CUSTOM_QUERY_WEIGHT,
+    LLM_SEMANTIC_QUERY_WEIGHT,
     MAX_QUERIES_PER_CALL,
     MAX_SELECTED_SECTIONS,
+    QUERY_MAX_DISTINCT_TERMS,
+    QUERY_MAX_TERMS,
+    UNANALYZED_QUERY_MAX_CHARS,
 )
 from onyx.tools.tool_implementations.search.models import (
     SearchContext,
@@ -98,9 +109,17 @@ def _run(
     context: ToolContext | None = None,
     queries: list[str] | None = None,
     federated_mock: MagicMock | None = None,
+    search_pipeline_mock: MagicMock | None = None,
+    fusion_mock: MagicMock | None = None,
+    results: list[ToolResult] | None = None,
+    user_message: str = "resolve the ticket",
 ) -> MagicMock:
     """Mock retrieval and scope selection; supplied sections exercise context expansion."""
-    mock_search_pipeline = MagicMock(return_value=[])
+    mock_search_pipeline = (
+        search_pipeline_mock
+        if search_pipeline_mock is not None
+        else MagicMock(return_value=[])
+    )
     decide = (
         decide_mock if decide_mock is not None else MagicMock(return_value=decision)
     )
@@ -125,7 +144,10 @@ def _run(
         patch(f"{MODULE}.keyword_query_expansion", return_value=[]),
         patch(f"{MODULE}.decide_search_scope", decide),
         patch(f"{MODULE}.decide_time_filter", MagicMock(return_value=None)),
-        patch(f"{MODULE}.weighted_reciprocal_rank_fusion", return_value=[]),
+        patch(
+            f"{MODULE}.weighted_reciprocal_rank_fusion",
+            fusion_mock if fusion_mock is not None else MagicMock(return_value=[]),
+        ),
         patch(f"{MODULE}.merge_individual_chunks", return_value=sections or []),
         patch(f"{MODULE}.search_pipeline", mock_search_pipeline),
     ):
@@ -141,13 +163,15 @@ def _run(
                     if progress is not None
                     else None
                 ),
-                messages=[UserMessage(content="resolve the ticket")],
+                messages=[UserMessage(content=user_message)],
             ),
             context=(context or ToolContext()).model_copy(
                 update={"skip_search_query_expansion": skip_query_expansion}
             ),
         )
     assert isinstance(result, ToolResult)
+    if results is not None:
+        results.append(result)
     if context is not None:
         context.search_context = update_search_context(
             context.search_context,
@@ -1317,3 +1341,329 @@ def test_failed_rerank_stops_at_the_primary_budget() -> None:
     # The budget error ends the search before the over-budget LLM selects.
     select.assert_not_called()
     merge.assert_not_called()
+
+
+# Bodies OpenSearch returned for an oversized hybrid query, trimmed to the
+# fields that identify the failure.
+_TOO_MANY_CLAUSES_BODY = {
+    "error": {
+        "root_cause": [
+            {
+                "type": "query_shard_exception",
+                "reason": "failed to create query: maxClauseCount is set to 1024",
+            }
+        ],
+        "type": "search_phase_execution_exception",
+        "reason": "all shards failed",
+        "caused_by": {
+            "type": "query_shard_exception",
+            "reason": "failed to create query: maxClauseCount is set to 1024",
+            "caused_by": {
+                "type": "too_many_clauses",
+                "reason": "maxClauseCount is set to 1024",
+            },
+        },
+    },
+    "status": 400,
+}
+_TOO_MANY_NESTED_CLAUSES_BODY = {
+    "error": {
+        "root_cause": [
+            {
+                "type": "too_many_nested_clauses",
+                "reason": "Query contains too many nested clauses; maxClauseCount is set to 1024",
+            }
+        ],
+        "type": "search_phase_execution_exception",
+        "reason": "all shards failed",
+    },
+    "status": 500,
+}
+_CLAUSE_LIMIT_ERRORS = [
+    RequestError(400, "search_phase_execution_exception", _TOO_MANY_CLAUSES_BODY),
+    TransportError(
+        500, "search_phase_execution_exception", _TOO_MANY_NESTED_CLAUSES_BODY
+    ),
+]
+# _run sends the rephrased query, the model's query, then the user message.
+_ORIGINAL_MESSAGE = "resolve the ticket"
+
+
+def _chunk(document_id: str) -> InferenceChunk:
+    return cast(InferenceChunk, MagicMock(document_id=document_id, chunk_id=0))
+
+
+def _pipeline_failing_for(
+    failing_queries: set[str], error: Exception
+) -> tuple[MagicMock, dict[str, list[InferenceChunk]]]:
+    hits = {
+        query: [_chunk(query)]
+        for query in ("rephrased query", "ticket", _ORIGINAL_MESSAGE)
+    }
+
+    def search(**kwargs: Any) -> list[InferenceChunk]:
+        query = kwargs["chunk_search_request"].query
+        if query in failing_queries:
+            raise error
+        return hits[query]
+
+    return MagicMock(side_effect=search), hits
+
+
+@pytest.mark.parametrize("error", _CLAUSE_LIMIT_ERRORS)
+def test_oversized_query_leaves_the_other_queries_to_answer(error: Exception) -> None:
+    pipeline, hits = _pipeline_failing_for({_ORIGINAL_MESSAGE}, error)
+    fusion = MagicMock(return_value=[])
+    results: list[ToolResult] = []
+
+    _run(
+        _make_tool(),
+        connected_sources=[DocumentSource.CONFLUENCE],
+        search_pipeline_mock=pipeline,
+        fusion_mock=fusion,
+        results=results,
+    )
+
+    assert not results[0].is_error
+    fused = fusion.call_args.kwargs
+    assert fused["ranked_results"] == [hits["rephrased query"], hits["ticket"]]
+    assert fused["weights"] == [LLM_SEMANTIC_QUERY_WEIGHT, LLM_NON_CUSTOM_QUERY_WEIGHT]
+
+
+@pytest.mark.parametrize("error", _CLAUSE_LIMIT_ERRORS)
+def test_every_query_oversized_is_a_tool_error(error: Exception) -> None:
+    pipeline, _ = _pipeline_failing_for(
+        {"rephrased query", "ticket", _ORIGINAL_MESSAGE}, error
+    )
+    fusion = MagicMock(return_value=[])
+    results: list[ToolResult] = []
+
+    _run(
+        _make_tool(),
+        connected_sources=[DocumentSource.CONFLUENCE],
+        search_pipeline_mock=pipeline,
+        fusion_mock=fusion,
+        results=results,
+    )
+
+    assert results[0].is_error
+    assert "shorter" in results[0].text
+    fusion.assert_not_called()
+
+
+def test_empty_query_result_is_not_an_oversized_query() -> None:
+    def search(**kwargs: Any) -> list[InferenceChunk]:
+        if kwargs["chunk_search_request"].query == "ticket":
+            return []
+        raise _CLAUSE_LIMIT_ERRORS[0]
+
+    fusion = MagicMock(return_value=[])
+    results: list[ToolResult] = []
+
+    _run(
+        _make_tool(),
+        connected_sources=[DocumentSource.CONFLUENCE],
+        search_pipeline_mock=MagicMock(side_effect=search),
+        fusion_mock=fusion,
+        results=results,
+    )
+
+    assert not results[0].is_error
+    fused = fusion.call_args.kwargs
+    assert fused["ranked_results"] == [[]]
+    assert fused["weights"] == [LLM_NON_CUSTOM_QUERY_WEIGHT]
+
+
+def test_other_index_errors_are_not_treated_as_oversized_queries() -> None:
+    error = AuthorizationException(
+        403,
+        "security_exception",
+        {"error": {"type": "security_exception", "reason": "no permissions"}},
+    )
+    pipeline, _ = _pipeline_failing_for({_ORIGINAL_MESSAGE}, error)
+    fusion = MagicMock(return_value=[])
+    results: list[ToolResult] = []
+
+    _run(
+        _make_tool(),
+        connected_sources=[DocumentSource.CONFLUENCE],
+        search_pipeline_mock=pipeline,
+        fusion_mock=fusion,
+        results=results,
+    )
+
+    assert results[0].is_error
+    assert "security_exception" in results[0].text
+    fusion.assert_not_called()
+
+
+@pytest.mark.parametrize("slack_chunks", [[], [_chunk("slack")]])
+def test_every_index_query_oversized_with_slack(
+    slack_chunks: list[InferenceChunk],
+) -> None:
+    tool = _make_tool()
+    tool.enable_slack_search = True
+    pipeline, _ = _pipeline_failing_for(
+        {"rephrased query", "ticket", _ORIGINAL_MESSAGE}, _CLAUSE_LIMIT_ERRORS[0]
+    )
+    fusion = MagicMock(return_value=[])
+    results: list[ToolResult] = []
+
+    with (
+        patch.object(
+            tool, "_prefetch_slack_data", return_value=("slack-token", None, {})
+        ),
+        # A failed Slack search also returns [].
+        patch.object(tool, "_run_slack_search", return_value=slack_chunks),
+    ):
+        _run(
+            tool,
+            connected_sources=[DocumentSource.SLACK],
+            search_pipeline_mock=pipeline,
+            fusion_mock=fusion,
+            results=results,
+        )
+
+    # Slack results still answer; with none, the model is told to shorten.
+    assert results[0].is_error == (not slack_chunks)
+    if slack_chunks:
+        assert fusion.call_args.kwargs["ranked_results"] == [slack_chunks]
+
+
+_SMALL_TERM_COUNTS = KeywordTermCounts(total=1, distinct=1)
+
+
+def _run_with_user_message(
+    user_message: str,
+    term_counts: KeywordTermCounts | Exception = _SMALL_TERM_COUNTS,
+    retrieval_only: bool = False,
+    skip_query_expansion: bool = False,
+    queries: list[str] | None = None,
+) -> tuple[list[str], MagicMock]:
+    """Returns the queries sent to retrieval and the index term counter."""
+    tool = _make_tool(retrieval_only=retrieval_only)
+    count_terms = cast(MagicMock, tool.document_index).count_keyword_terms
+    if isinstance(term_counts, Exception):
+        count_terms.side_effect = term_counts
+    else:
+        count_terms.return_value = term_counts
+    pipeline = _run(
+        tool,
+        connected_sources=[DocumentSource.CONFLUENCE],
+        user_message=user_message,
+        skip_query_expansion=skip_query_expansion,
+        queries=queries,
+    )
+    return _queries_sent(pipeline), count_terms
+
+
+@pytest.mark.parametrize(
+    ("length", "analyzed"),
+    [(UNANALYZED_QUERY_MAX_CHARS, False), (UNANALYZED_QUERY_MAX_CHARS + 1, True)],
+)
+def test_short_ascii_message_runs_without_analysis(length: int, analyzed: bool) -> None:
+    message = "a" * length
+    sent, count_terms = _run_with_user_message(message)
+
+    assert message in sent
+    assert count_terms.called is analyzed
+
+
+def test_short_non_ascii_message_is_analyzed() -> None:
+    message = "Où est le rapport d'incident ?"
+    sent, count_terms = _run_with_user_message(message)
+
+    assert message in sent
+    count_terms.assert_called_once_with(message)
+
+
+@pytest.mark.parametrize(
+    ("length", "sent_expected"),
+    [(ANALYZED_QUERY_MAX_CHARS, True), (ANALYZED_QUERY_MAX_CHARS + 1, False)],
+)
+def test_message_over_the_character_limit_is_skipped_unanalyzed(
+    length: int, sent_expected: bool
+) -> None:
+    message = "a" * length
+    sent, count_terms = _run_with_user_message(message)
+
+    assert (message in sent) is sent_expected
+    assert count_terms.called is sent_expected
+    assert "ticket" in sent
+
+
+@pytest.mark.parametrize(
+    ("total", "distinct", "sent_expected"),
+    [
+        (QUERY_MAX_TERMS, QUERY_MAX_DISTINCT_TERMS, True),
+        (QUERY_MAX_TERMS + 1, QUERY_MAX_DISTINCT_TERMS, False),
+        (QUERY_MAX_TERMS, QUERY_MAX_DISTINCT_TERMS + 1, False),
+    ],
+)
+def test_analyzed_message_runs_within_the_term_limits(
+    total: int, distinct: int, sent_expected: bool
+) -> None:
+    message = "a" * (UNANALYZED_QUERY_MAX_CHARS + 1)
+    sent, _ = _run_with_user_message(
+        message, KeywordTermCounts(total=total, distinct=distinct)
+    )
+
+    assert (message in sent) is sent_expected
+    assert "ticket" in sent
+
+
+def test_failed_analysis_still_searches_the_message() -> None:
+    message = "a" * (UNANALYZED_QUERY_MAX_CHARS + 1)
+    sent, _ = _run_with_user_message(message, RuntimeError("analyzer unavailable"))
+
+    assert {message, "rephrased query", "ticket"} <= set(sent)
+
+
+def test_generated_echo_of_an_oversized_message_is_skipped() -> None:
+    message = "a" * (ANALYZED_QUERY_MAX_CHARS + 1)
+    sent, _ = _run_with_user_message(message, queries=[message.upper(), "ticket"])
+
+    assert sent and all(len(query) <= ANALYZED_QUERY_MAX_CHARS for query in sent)
+
+
+def test_raw_search_sends_the_message_without_a_size_check() -> None:
+    message = "a" * (ANALYZED_QUERY_MAX_CHARS + 1)
+    sent, count_terms = _run_with_user_message(message, retrieval_only=True)
+
+    assert message in sent
+    count_terms.assert_not_called()
+
+
+def test_follow_up_round_still_searches_the_message() -> None:
+    sent, _ = _run_with_user_message(
+        "who owned the rollback", skip_query_expansion=True, queries=["owner"]
+    )
+
+    assert "who owned the rollback" in sent
+
+
+def test_focused_queries_do_not_wait_for_message_analysis() -> None:
+    message = "a" * (UNANALYZED_QUERY_MAX_CHARS + 1)
+    focused_searched = threading.Event()
+    tool = _make_tool()
+
+    def count_terms(_: str) -> KeywordTermCounts:
+        # Rejects the message if focused retrieval waits for its analysis.
+        if focused_searched.wait(timeout=5):
+            return KeywordTermCounts(total=1, distinct=1)
+        return KeywordTermCounts(total=QUERY_MAX_TERMS + 1, distinct=1)
+
+    def search(**kwargs: Any) -> list[InferenceChunk]:
+        if kwargs["chunk_search_request"].query == "ticket":
+            focused_searched.set()
+        return []
+
+    cast(MagicMock, tool.document_index).count_keyword_terms.side_effect = count_terms
+    pipeline = _run(
+        tool,
+        connected_sources=[DocumentSource.CONFLUENCE],
+        user_message=message,
+        search_pipeline_mock=MagicMock(side_effect=search),
+    )
+
+    assert message in _queries_sent(pipeline)

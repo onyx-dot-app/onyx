@@ -6,7 +6,7 @@ from onyx.agents.runtime import Agent, Run
 from onyx.agents.tools import AgentTool
 from onyx.chat.emitter import Emitter
 from onyx.chat.presentation import ResponsePresenter, project_response, replay_response
-from onyx.deep_research.tool_definitions import THINK_TOOL_NAME
+from onyx.deep_research.tool_definitions import GENERATE_REPORT_TOOL_NAME
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.interfaces import GenerationContext
 from onyx.llm.models import (
@@ -105,7 +105,7 @@ def test_an_ended_card_keeps_its_result_and_replay_shows_the_amended_one() -> No
 
 
 def test_an_amended_hidden_call_stays_hidden() -> None:
-    live, _run = _stream(_agent(THINK_TOOL_NAME))
+    live, _run = _stream(_agent(GENERATE_REPORT_TOOL_NAME))
 
     assert not any(
         isinstance(packet.obj, (CustomToolStart, CustomToolDelta)) for packet in live

@@ -14,7 +14,7 @@ from sqlalchemy.engine import Connection
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import IntegrationAuthMethod, IntegrationAuthMode
-from onyx.db.models import Integration, Persona, Persona__Plugin, User
+from onyx.db.models import Integration, Persona, Persona__Integration, User
 from onyx.integrations.connections import connect_with_fields__no_commit
 from onyx.server.features.integrations import admin_api, api
 from onyx.server.features.integrations.models import (
@@ -27,7 +27,7 @@ from onyx.server.features.tool import api as tool_api
 from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.external_dependency_unit.integration_helpers import (
     delete_integrations,
-    hold_in_plugin,
+    give_access,
     make_openapi_integration,
 )
 
@@ -204,11 +204,11 @@ def test_persona_detail_batches_openapi_snapshots(
                     db_session, openapi_schema=_openapi_spec(str(i))
                 )
                 created.append(integration.id)
-                plugin = hold_in_plugin(
-                    db_session, [integration], author_user_id=admin.id
-                )
+                give_access(db_session, [integration], owner_user_id=admin.id)
                 db_session.add(
-                    Persona__Plugin(persona_id=persona.id, plugin_id=plugin.id)
+                    Persona__Integration(
+                        persona_id=persona.id, integration_id=integration.id
+                    )
                 )
                 db_session.flush()
                 expected[tool.id] = tool_api.openapi_tool_snapshot(

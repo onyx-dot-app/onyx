@@ -3,7 +3,6 @@
 import { useNavigation, usePathname, useSearchParams } from "@opal/navigation";
 import {
   buildChatUrl,
-  getAvailableContextTokens,
   nameChatSession,
   setPreferredResponse,
   updateLlmOverrideForChatSession,
@@ -14,8 +13,6 @@ import {
   getMostVisibleResponseId,
   getUnresolvedMultiModelTurn,
 } from "@/app/app/message/multiModel";
-import { getMaxSelectedDocumentTokens } from "@/lib/projects/svc";
-import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
 import { StreamStopInfo } from "@/lib/search/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Route } from "next";
@@ -78,7 +75,7 @@ import {
 import { Packet, MessageStart } from "@/app/app/services/streamingModels";
 import { SelectedModel } from "@/sections/model-selector/MultiModelSelector";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
-import { effectiveChatPreference } from "@/lib/plugins/chat";
+import { effectiveChatPreference } from "@/lib/tools/chat";
 import { ProjectFile, useProjectsContext } from "@/lib/projects/providers";
 import { useIncognito } from "@/providers/IncognitoProvider";
 import { projectFilesToFileDescriptors } from "@/lib/projects/utils";
@@ -1064,8 +1061,7 @@ export default function useChatController({
               requestedToolId: toolConfiguration.preferredToolId,
               requestedAction: toolConfiguration.preferredAction,
               agent: activeAgent,
-              incognito,
-              isPluginEnabled: toolConfiguration.isPluginEnabled,
+              isIntegrationEnabled: toolConfiguration.isIntegrationEnabled,
             });
 
         // Determine origin for telemetry tracking (also used for frontend PostHog tracking below)
@@ -1691,64 +1687,6 @@ export default function useChatController({
     handleSlackChatRedirect();
   }, [searchParams, navigation]);
 
-  // Available context tokens: if a chat session exists, fetch from the session
-  // API (dynamic per session/model). Otherwise derive from the persona's max
-  // document tokens. The backend already accounts for system prompt, tools,
-  // and user-message reservations.
-  const [availableContextTokens, setAvailableContextTokens] = useState<number>(
-    DEFAULT_CONTEXT_TOKENS
-  );
-
-  useEffect(() => {
-    if (!llmManager.hasAnyProvider) return;
-
-    let cancelled = false;
-
-    const setIfActive = (tokens: number) => {
-      if (!cancelled) setAvailableContextTokens(tokens);
-    };
-
-    // Prefer the Zustand session ID, but fall back to the URL-derived prop
-    // so we don't incorrectly take the persona path while the store is
-    // still initialising on navigation to an existing chat.
-    const sessionId = currentSessionId || existingChatSessionId;
-
-    (async () => {
-      try {
-        if (sessionId) {
-          const available = await getAvailableContextTokens(
-            sessionId,
-            llmManager.currentLlm.modelConfigurationId
-          );
-          setIfActive(available ?? DEFAULT_CONTEXT_TOKENS);
-          return;
-        }
-
-        const personaId = activeAgent?.id;
-        if (personaId == null) {
-          setIfActive(DEFAULT_CONTEXT_TOKENS);
-          return;
-        }
-
-        const maxTokens = await getMaxSelectedDocumentTokens(personaId);
-        setIfActive(maxTokens ?? DEFAULT_CONTEXT_TOKENS);
-      } catch (e) {
-        console.error("Failed to fetch available context tokens:", e);
-        setIfActive(DEFAULT_CONTEXT_TOKENS);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    currentSessionId,
-    existingChatSessionId,
-    activeAgent?.id,
-    llmManager.hasAnyProvider,
-    llmManager.currentLlm.modelConfigurationId,
-  ]);
-
   // check if there's an image file in the message history so that we know
   // which LLMs are available to use
   const imageFileInMessageHistory = useMemo(() => {
@@ -1776,7 +1714,5 @@ export default function useChatController({
     onSubmit,
     stopGenerating,
     handleMessageSpecificFileUpload,
-    // data
-    availableContextTokens,
   };
 }

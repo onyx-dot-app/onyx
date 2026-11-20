@@ -35,12 +35,12 @@ from onyx.db.models import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.integrations.craft import replace_task_plugins__no_commit
+from onyx.integrations.craft import replace_task_integrations__no_commit
 from onyx.server.features.build.scheduled_tasks.schedule import (
     EditorMode,
     compute_next_run_at,
 )
-from onyx.tools.models import PluginLinkConfiguration
+from onyx.tools.models import IntegrationLinkConfiguration
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -60,7 +60,7 @@ def create_scheduled_task(
     cron_expression: str,
     editor_mode: EditorMode,
     status: ScheduledTaskStatus = ScheduledTaskStatus.ACTIVE,
-    plugins: list[PluginLinkConfiguration] | None = None,
+    integrations: list[IntegrationLinkConfiguration] | None = None,
     now: datetime | None = None,
 ) -> ScheduledTask:
     """Insert a new ``ScheduledTask``.
@@ -90,8 +90,8 @@ def create_scheduled_task(
     user = db_session.get(User, user_id)
     if user is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "User not found")
-    if plugins is not None:
-        replace_task_plugins__no_commit(db_session, user, task.id, plugins)
+    if integrations is not None:
+        replace_task_integrations__no_commit(db_session, user, task.id, integrations)
     return task
 
 
@@ -205,7 +205,7 @@ def update_scheduled_task(
     cron_expression: str | None = None,
     editor_mode: EditorMode | None = None,
     status: ScheduledTaskStatus | None = None,
-    plugins: list[PluginLinkConfiguration] | None = None,
+    integrations: list[IntegrationLinkConfiguration] | None = None,
     now: datetime | None = None,
 ) -> ScheduledTask:
     """Apply a partial update to a scheduled task.
@@ -247,11 +247,11 @@ def update_scheduled_task(
     elif schedule_changed and task.status == ScheduledTaskStatus.ACTIVE:
         task.next_run_at = compute_next_run_at(task.cron_expression, now)
 
-    if plugins is not None:
+    if integrations is not None:
         user = db_session.get(User, user_id)
         if user is None:
             raise OnyxError(OnyxErrorCode.NOT_FOUND, "User not found")
-        replace_task_plugins__no_commit(db_session, user, task.id, plugins)
+        replace_task_integrations__no_commit(db_session, user, task.id, integrations)
     db_session.flush()
     return task
 

@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-discard-answer"
+description = "Enables the discard_answer command without any pre-configured scope."
+commands.allow = ["discard_answer"]
+
+[[permission]]
+identifier = "deny-discard-answer"
+description = "Denies the discard_answer command without any pre-configured scope."
+commands.deny = ["discard_answer"]

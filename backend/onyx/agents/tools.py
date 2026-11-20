@@ -1,7 +1,6 @@
 """Executable tools and their invocation-scoped services."""
 
 from collections.abc import Callable, Collection, Mapping, Sequence
-from concurrent.futures import Future
 from enum import Enum
 from typing import TYPE_CHECKING, Literal, Protocol
 
@@ -163,10 +162,6 @@ class AgentControl(Protocol):
         total_timeout_s: float | None = None,
     ) -> "AgentMessageReceipt": ...
 
-    def add_completion_cleanup(
-        self, run_id: str, callback: Callable[[], None]
-    ) -> Future[None]: ...
-
     @property
     def agent_id(self) -> str:
         """The calling agent."""
@@ -213,11 +208,13 @@ class NestedCallGate(Protocol):
     tool calls, as the run decides its direct calls: the before_tool_call hook,
     then the user's approval.
 
-    A request that the gate returns is open: the run shows it at once. The call
-    does not block on it. The tool returns it in a `NestedInputWait`, which the
-    run saves and answers, or withdraws it. A request that is neither ends
-    when the run suspends or ends. An approved request runs its call. Raises
-    BeforeToolCallFailed when the hook or the approval gate raises.
+    A request that the gate returns is open: the run shows it at once and saves
+    it with its progress. The call does not block on it. The tool returns it in
+    a `NestedInputWait`, which the run saves and answers, or withdraws it. A
+    request that neither holds stays open while the run suspends; its answer
+    goes to `AgentTool.continue_open_input`. Open requests end with the run.
+    An approved request runs its call. Raises BeforeToolCallFailed when the
+    hook or the approval gate raises.
     """
 
     def decide(self, call: ToolCall) -> ToolResult | NestedInputRequest | None:
@@ -271,9 +268,8 @@ class ToolInvocation:
         # Decides the calls that the tool makes for the model, such as a
         # program's tool calls; None when no hook or approval decides calls.
         self.nested_calls = nested_calls
-        # The run's work. Work that outlives this call, such as threads it
-        # starts, joins it (`track_operation`): the run drains, calls
-        # on_drained and becomes idle only after that work.
+        # The run's work, which work that outlives this call joins; see
+        # "Suspend and accept input" in agents/README.md for how it holds the run.
         self.run_work = run_work
         self._agents = agents
 
@@ -314,6 +310,10 @@ class AgentTool:
             [ToolInvocation, list[NestedInputAnswer]], ToolOutcome
         ]
         | None = None,
+        continue_open_input: Callable[
+            [ToolInvocation, list[NestedInputAnswer]], Collection[str]
+        ]
+        | None = None,
         execution_mode: ToolExecutionMode = ToolExecutionMode.PARALLEL,
         sequence_group: str | None = None,
         merge_arguments: Callable[
@@ -331,6 +331,12 @@ class AgentTool:
         # Continues a call that returned NestedInputWait, with the answers to
         # its requests in their order; it does not repeat `execute`.
         self.resume_with_input = resume_with_input
+        # Continues the calls that the tool made for the model whose open
+        # requests have answers, such as a background program's, with the
+        # answers of the requests that `invocation`'s call opened. Returns
+        # the IDs of the requests it took; the run ends those. The others
+        # stay open, and the run offers them again later.
+        self.continue_open_input = continue_open_input
         self.execution_mode = execution_mode
         self.sequence_group = sequence_group
         self.merge_arguments = merge_arguments
@@ -350,6 +356,7 @@ class AgentTool:
             execute=self.execute,
             result_from_children=self.result_from_children,
             resume_with_input=self.resume_with_input,
+            continue_open_input=self.continue_open_input,
             execution_mode=self.execution_mode,
             sequence_group=self.sequence_group,
             merge_arguments=self.merge_arguments,

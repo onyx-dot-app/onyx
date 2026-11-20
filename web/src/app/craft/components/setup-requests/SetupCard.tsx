@@ -23,6 +23,7 @@ import IntegrationCredentialsModal from "@/sections/plugins/IntegrationCredentia
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { refreshSkillLists } from "@/lib/skills/cache";
 import { locationKey } from "@/app/app/services/submitLocation";
+import { customizeTabHref } from "@/lib/customize/paths";
 
 interface SetupCardProps {
   // Correlation id for the parked `connect_app` request (from the packet).
@@ -189,7 +190,7 @@ export default function SetupCard({
           {connected && (
             <Button
               prominence="tertiary"
-              {...navigation.linkTo("/craft/v1/plugins")}
+              {...navigation.linkTo(customizeTabHref("integrations"))}
             >
               {tActionPolicies("title")}
             </Button>

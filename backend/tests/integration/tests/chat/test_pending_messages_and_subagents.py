@@ -10,7 +10,6 @@ import pytest
 
 from onyx.agents.models import MessageDelivery, RunStatus
 from onyx.chat.models import PendingChatMessage
-from onyx.coding_agent.tool_definitions import CODING_AGENT_TOOL_NAME
 from onyx.configs.constants import MessageType
 from onyx.llm.override_models import LLMOverride
 from onyx.server.query_and_chat.models import (
@@ -527,10 +526,10 @@ def test_turns_the_server_starts_use_the_saved_tool_options(
         },
         admin_user,
     )
-    integration_id, plugin_id = created.id, created.plugins[0].plugin_id
+    integration_id = created.id
     tool_name = normalize_external_tool_name(f"custom__{integration_id}__ping")
     persona = PersonaManager.create(tool_ids=[], user_performing_action=admin_user)
-    link_persona(persona.id, plugin_id, {})
+    link_persona(persona.id, integration_id, {})
     mock_llm.conversation(
         nonce,
         Reply(text="Answer without the tool."),
@@ -559,7 +558,13 @@ def test_turns_the_server_starts_use_the_saved_tool_options(
         for message, allowed, answer in (
             (
                 enabled,
-                [{"type": "plugin", "plugin_id": str(plugin_id), "actions": ["ping"]}],
+                [
+                    {
+                        "type": "integration",
+                        "integration_id": integration_id,
+                        "actions": ["ping"],
+                    }
+                ],
                 "Answer with the tool.",
             ),
             (blocked, [], "Answer without the tool again."),
@@ -664,4 +669,4 @@ def test_incognito_chat_has_no_child_agents(
         ).raise_for_status()
     normal_request, private_request = mock_llm.requests_in(nonce)
     assert SUBAGENT_TOOLS <= set(normal_request.tools)
-    assert not {*SUBAGENT_TOOLS, CODING_AGENT_TOOL_NAME} & set(private_request.tools)
+    assert not SUBAGENT_TOOLS & set(private_request.tools)

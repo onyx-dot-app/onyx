@@ -62,10 +62,8 @@ from onyx.chat.tool_results import (
     tool_result_parts,
     tool_result_sources,
 )
-from onyx.coding_agent.tool_definitions import CODING_AGENT_TOOL_NAME
 from onyx.context.search.models import SearchDoc, SearchDocsResponse
 from onyx.deep_research.models import ResearchMessageMetadata, ResearchPhase
-from onyx.deep_research.tool_definitions import THINK_TOOL_NAME
 from onyx.llm.models import AssistantMessage, ToolCall, ToolResultMessage, UserMessage
 from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
@@ -229,22 +227,11 @@ def _tool_record(
     )
 
 
-def message_presentation(
-    metadata: BaseModel | None,
-    *,
-    parent_tool_name: str | None = None,
-) -> MessageRendering:
+def message_presentation(metadata: BaseModel | None) -> MessageRendering:
     """Resolve feature metadata into display settings retained for history replay."""
     if isinstance(metadata, MessageRendering):
         return metadata.model_copy(deep=True)
-    presentation = MessageRendering(
-        mode=PresentationMode.CODING_THINKING
-        if parent_tool_name == CODING_AGENT_TOOL_NAME
-        else PresentationMode.ANSWER,
-        think_tool=THINK_TOOL_NAME
-        if parent_tool_name == CODING_AGENT_TOOL_NAME
-        else None,
-    )
+    presentation = MessageRendering()
     if isinstance(metadata, ChatMessageMetadata):
         presentation.citation_mode = (
             CitationMode.HYPERLINK
@@ -262,10 +249,7 @@ def message_presentation(
         if metadata.phase == ResearchPhase.PLANNING:
             presentation.mode = PresentationMode.PLAN
         elif metadata.phase == ResearchPhase.RESEARCH:
-            presentation.text_as_thinking = True
-            presentation.think_tool = (
-                THINK_TOOL_NAME if not metadata.is_reasoning_model else None
-            )
+            presentation.mode = PresentationMode.RESEARCH
         elif metadata.phase == ResearchPhase.REPORT:
             presentation.mode = (
                 PresentationMode.REPORT
@@ -354,22 +338,18 @@ def _project_response_display(
     record = response.response
     if record is None:
         raise ValueError("Saved response content is required for display projection")
-    pending: list[tuple[RunState, str | None]] = [(snapshot, None)]
+    pending = [snapshot]
     while pending:
-        node, parent_tool_name = pending.pop()
-        call_names: dict[tuple[str, str], str] = {}
+        node = pending.pop()
         for step_index, step in enumerate(node.steps):
             message = step.message
             message_id = _message_identity(message)
-            call_names.update(
-                {(message_id, call.id): call.name for call in message.tool_calls}
-            )
-            setting = message_presentation(
-                message.metadata,
-                parent_tool_name=parent_tool_name,
-            )
+            setting = message_presentation(message.metadata)
             presentation[message_id] = setting
-            if node is not snapshot or setting.mode != PresentationMode.ANSWER:
+            if node is not snapshot or setting.mode not in (
+                PresentationMode.ANSWER,
+                PresentationMode.RESEARCH,
+            ):
                 continue
             renderer = MessageRenderer(
                 setting,
@@ -394,15 +374,7 @@ def _project_response_display(
                     and not message.tool_calls,
                 }
             )
-        pending.extend(
-            (
-                child,
-                call_names.get(
-                    (child.parent_message_id or "", child.parent_tool_call_id or "")
-                ),
-            )
-            for child in node.child_runs
-        )
+        pending.extend(node.child_runs)
     return response.model_copy(update={"presentation": presentation})
 
 
@@ -455,8 +427,8 @@ class ResponsePresenter:
         settings: dict[str, MessageRendering],
     ) -> None:
         """Send the saved output of a suspended response that this stream
-        continues, then `ReplayEnd`; its calls that wait stay open for their
-        live events."""
+        continues, then `ReplayEnd`; the live events of its calls reuse their
+        cards, and its calls that wait stay open."""
         for packet in replay_response(
             response,
             replay.tools,
@@ -489,10 +461,7 @@ class ResponsePresenter:
             if parent is not None:
                 parent.has_child_output = True
             self.renderers[event.run_id] = MessageRenderer(
-                message_presentation(
-                    event.metadata,
-                    parent_tool_name=parent.call.name if parent else None,
-                ),
+                message_presentation(event.metadata),
                 message_documents(event.metadata),
                 self.layout,
                 parent.placement if parent else None,
@@ -505,8 +474,7 @@ class ResponsePresenter:
             calls = [
                 call
                 for call in event.message.tool_calls
-                if call.name != renderer.settings.think_tool
-                and call.name not in HIDDEN_TOOLS
+                if call.name not in HIDDEN_TOOLS
             ]
             for call in calls:
                 tool_placement = renderer.tool_placement(call.id)
@@ -515,29 +483,22 @@ class ResponsePresenter:
                     tool_placement,
                     self.tool_ids.get(call.name),
                 )
-        elif isinstance(
-            event,
-            (
-                ToolStartEvent,
-                ToolUpdateEvent,
-                ToolEndEvent,
-                InputRequiredEvent,
-                InputEndedEvent,
-            ),
-        ):
+        elif isinstance(event, (ToolStartEvent, ToolUpdateEvent, ToolEndEvent)):
             tool = self.tools.get((event.run_id, event.message_id, event.tool_call.id))
             if tool is None:
                 return
             output = tool.consume(event)
-        elif isinstance(event, ToolResultAmendedEvent):
+        elif isinstance(
+            event, (InputRequiredEvent, InputEndedEvent, ToolResultAmendedEvent)
+        ):
             if event.tool_call.name in HIDDEN_TOOLS:
                 return
             key = (event.run_id, event.message_id, event.tool_call.id)
             tool = self.tools.get(key)
+            amended = isinstance(event, ToolResultAmendedEvent)
             if tool is None:
-                # A call recorded before a restore has no card in this stream;
-                # the amended result renders in a new card, which later
-                # amendments reuse.
+                # A call that this stream did not draw gets an open card, which
+                # later events of the call reuse. An amended result completes it.
                 renderer = self.renderers.get(event.run_id)
                 tool = self.tools[key] = tool_renderer(
                     event.tool_call,
@@ -545,9 +506,9 @@ class ResponsePresenter:
                     if renderer is not None
                     else self.layout.next_section(parent.placement if parent else None),
                     self.tool_ids.get(event.tool_call.name),
-                    event.display_name,
+                    event.display_name if amended else None,
                 )
-            output = tool.amend(event.result)
+            output = tool.amend(event.result) if amended else tool.consume(event)
         elif isinstance(event, AgentEndEvent):
             # The response owner reports classified failures separately.
             for key in tuple(self.tools):
@@ -585,7 +546,6 @@ def replay_response(
     documents: Mapping[str, SearchDoc],
     layout: ResponseLayout | None = None,
     parent: Placement | None = None,
-    default_mode: PresentationMode = PresentationMode.ANSWER,
     *,
     approvals: Mapping[tuple[str, str], Sequence[SavedToolApproval]] = _NO_APPROVALS,
     agent_approvals: Mapping[
@@ -604,8 +564,9 @@ def replay_response(
     the same way. The
     calls of a suspended response that have no result stay open, as its stream
     left them. With `open_calls`, the replay starts a stream that continues the
-    response: it collects those calls' renderers, by run, message and call ID,
-    for their live events, and sends no stop. The session response carries the saved message error separately.
+    response: it collects the renderer of each call it draws, ended or open
+    and in child runs too, by run, message and call ID, so that the call's
+    live events reuse its card, and sends no stop. The session response carries the saved message error separately.
     Stop packets close rendering; they do not classify execution success or
     failure.
     """
@@ -615,14 +576,10 @@ def replay_response(
         packets.extend(user_message_packets(step.input_messages, layout, parent))
         message = step.message
         message_id = _message_identity(message)
-        setting = settings.get(message_id, MessageRendering(mode=default_mode))
+        setting = settings.get(message_id) or MessageRendering()
         renderer = MessageRenderer(setting, documents, layout, parent)
         packets.extend(renderer.complete(message))
-        calls = [
-            call
-            for call in message.tool_calls
-            if call.name not in HIDDEN_TOOLS and call.name != setting.think_tool
-        ]
+        calls = [call for call in message.tool_calls if call.name not in HIDDEN_TOOLS]
         if not calls:
             continue
         for call in calls:
@@ -723,11 +680,6 @@ def replay_response(
                 ):
                     continue
                 renderer_of_call.has_child_output = True
-                child_mode = (
-                    PresentationMode.CODING_THINKING
-                    if call.name == CODING_AGENT_TOOL_NAME
-                    else PresentationMode.ANSWER
-                )
                 packets.extend(
                     replay_response(
                         child,
@@ -736,17 +688,14 @@ def replay_response(
                         documents,
                         layout,
                         tool_placement,
-                        child_mode,
                         approvals=approvals,
+                        open_calls=open_calls,
                     )
                 )
-            if waits:
-                if open_calls is not None:
-                    open_calls[(response.run_id, message_id, call.id)] = (
-                        renderer_of_call
-                    )
-                continue
-            packets.extend(renderer_of_call.complete(result))
+            if open_calls is not None:
+                open_calls[(response.run_id, message_id, call.id)] = renderer_of_call
+            if not waits:
+                packets.extend(renderer_of_call.complete(result))
     if response.parent_run_id is None and open_calls is None:
         packets.append(
             Packet(

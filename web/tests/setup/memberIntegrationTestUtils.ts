@@ -1,7 +1,24 @@
-import type { MemberAction, MemberIntegration } from "@/lib/integrations/types";
+import type {
+  IntegrationAccess,
+  MemberAction,
+  MemberIntegration,
+} from "@/lib/integrations/types";
 
-export const LINEAR_PLUGIN_ID = "11111111-1111-4111-8111-111111111111";
-export const REPORTS_PLUGIN_ID = "22222222-2222-4222-8222-222222222222";
+export function makeAccess(
+  overrides: Partial<IntegrationAccess> = {}
+): IntegrationAccess {
+  return {
+    state: "sign_in",
+    installation_policy: "AVAILABLE",
+    user_choice: true,
+    user_enabled: true,
+    owner_email: null,
+    is_owner: false,
+    can_manage: false,
+    shared_with_everyone: true,
+    ...overrides,
+  };
+}
 
 export function makeMemberIntegration(
   overrides: Partial<MemberIntegration> = {}
@@ -17,16 +34,7 @@ export function makeMemberIntegration(
     auth_method: "oauth2",
     credential_fields: [],
     status: { state: "not_connected", reason: null },
-    plugins: [
-      {
-        plugin_id: LINEAR_PLUGIN_ID,
-        plugin_name: "Linear",
-        scope: "organization",
-        owner_email: null,
-        installation_policy: "AVAILABLE",
-        enabled: true,
-      },
-    ],
+    access: makeAccess(),
     users_can_save_always_allow: false,
     credential_values: {},
     external_app_id: null,

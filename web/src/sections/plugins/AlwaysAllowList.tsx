@@ -40,8 +40,8 @@ export default function AlwaysAllowList({
         </Button>
       </Section>
     );
-  if (!data.users_can_save_always_allow || data.actions.length === 0)
-    return null;
+  if (data.actions.length === 0) return null;
+  const canSave = data.users_can_save_always_allow;
 
   async function change(action: MemberAction, allow: boolean) {
     setSavingKey(action.key);
@@ -65,11 +65,11 @@ export default function AlwaysAllowList({
     <Section gap={1} alignItems="stretch" height="auto">
       <Content
         font="secondary-action"
-        title={t("title")}
-        description={t("description")}
+        title={canSave ? t("title") : t("readOnlyTitle")}
+        description={canSave ? t("description") : t("readOnlyDescription")}
       />
       {data.actions.map((action) => {
-        const asks = action.effective_admin_policy === "ask";
+        const asks = canSave && action.effective_admin_policy === "ask";
         return (
           <ContentAction
             key={action.key}
@@ -82,20 +82,30 @@ export default function AlwaysAllowList({
             }
             padding={1}
             rightChildren={
-              asks ? (
-                <InputSwitch
-                  aria-label={t("switch.label", { name: action.display_name })}
-                  checked={action.user_policy === "allow"}
-                  disabled={savingKey !== null || action.always_asks}
-                  onCheckedChange={(checked) => void change(action, checked)}
-                />
-              ) : (
+              <Section
+                flexDirection="row"
+                justifyContent="end"
+                alignItems="center"
+                width="auto"
+                height="auto"
+                gap={1}
+              >
                 <Text font="secondary-body" color="text-03">
                   {policyCopy(
                     `${POLICY_LABEL_KEYS[action.effective_admin_policy]}.label`
                   )}
                 </Text>
-              )
+                {asks && (
+                  <InputSwitch
+                    aria-label={t("switch.label", {
+                      name: action.display_name,
+                    })}
+                    checked={action.user_policy === "allow"}
+                    disabled={savingKey !== null || action.always_asks}
+                    onCheckedChange={(checked) => void change(action, checked)}
+                  />
+                )}
+              </Section>
             }
           />
         );

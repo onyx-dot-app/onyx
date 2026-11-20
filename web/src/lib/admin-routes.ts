@@ -233,12 +233,12 @@ export const ADMIN_ROUTES = {
     requiredTier: null,
     visibleWhen: null,
   },
-  PLUGINS: {
-    path: "/admin/plugins",
-    icon: SvgPlug,
-    title: "Plugins",
-    sidebarLabel: "Plugins",
-    requiredPermission: Permission.MANAGE_ACTIONS,
+  SKILLS: {
+    path: "/admin/skills",
+    icon: SvgBlocks,
+    title: "Skills",
+    sidebarLabel: "Skills",
+    requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
     section: "Agents & Plugins",
     requiredTier: null,
     visibleWhen: null,
@@ -252,16 +252,6 @@ export const ADMIN_ROUTES = {
     section: "Agents & Plugins",
     requiredTier: null,
     visibleWhen: null,
-  },
-  SKILLS: {
-    path: "/admin/skills",
-    icon: SvgBlocks,
-    title: "Skills",
-    sidebarLabel: "Skills",
-    requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
-    section: "Agents & Plugins",
-    requiredTier: null,
-    visibleWhen: (f: FeatureFlags) => f.craftAvailable,
   },
 
   // ── Documents & Knowledge ─────────────────────────────────────────

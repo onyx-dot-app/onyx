@@ -20,13 +20,12 @@ import { useAppPosition } from "@/lib/navigation/hooks";
 import { useActiveAgent } from "@/lib/agents/hooks";
 import { toast } from "@opal/layouts";
 import {
-  useAgentPluginIds,
-  useAgentPluginPreferences,
-} from "@/lib/plugins/hooks";
+  useAgentIntegrationIds,
+  useAgentIntegrationPreferences,
+} from "@/lib/integrations/hooks";
 import { useUser } from "@/providers/UserProvider";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import {
-  CODING_AGENT_TOOL_ID,
   FILE_READER_TOOL_ID,
   IMAGE_GENERATION_TOOL_ID,
   KNOWLEDGE_GRAPH_TOOL_ID,
@@ -78,20 +77,20 @@ export function useAvailableTools() {
 // Sending a message preserves the selection.
 
 type ToolConfiguration = Readonly<Record<number, ToolState>>;
-/** The plugins switched off, by plugin id. A plugin not listed is on. */
-type PluginConfiguration = Readonly<Record<string, "disabled">>;
+/** The integrations switched off, by integration id. One not listed is on. */
+type IntegrationConfiguration = Readonly<Record<number, "disabled">>;
 /**
- * The action keys that saved options keep for a plugin, by plugin id. A
- * plugin not listed keeps each action. No control edits them; they come from
+ * The action keys that saved options keep for an integration, by integration
+ * id. One not listed keeps each action. No control edits them; they come from
  * options another client saved and go back unchanged.
  */
-type PluginActions = Readonly<Record<string, readonly string[]>>;
+type IntegrationActions = Readonly<Record<number, readonly string[]>>;
 
 /** Everything a chat's next message is configured with. */
 interface ChatConfiguration {
   tools: ToolConfiguration;
-  plugins: PluginConfiguration;
-  pluginActions: PluginActions;
+  integrations: IntegrationConfiguration;
+  integrationActions: IntegrationActions;
   /** Applies only while no built-in tool is preferred. */
   preferredAction: ActionPreference | null;
   filters: ChatSearchFilters;
@@ -106,8 +105,8 @@ const NEUTRAL_FILTERS: ChatSearchFilters = {
 
 const NEUTRAL: ChatConfiguration = {
   tools: {},
-  plugins: {},
-  pluginActions: {},
+  integrations: {},
+  integrationActions: {},
   preferredAction: null,
   filters: NEUTRAL_FILTERS,
 };
@@ -124,8 +123,8 @@ function isNeutralFilters(filters: ChatSearchFilters): boolean {
 function isNeutralConfiguration(configuration: ChatConfiguration): boolean {
   return (
     Object.keys(configuration.tools).length === 0 &&
-    Object.keys(configuration.plugins).length === 0 &&
-    Object.keys(configuration.pluginActions).length === 0 &&
+    Object.keys(configuration.integrations).length === 0 &&
+    Object.keys(configuration.integrationActions).length === 0 &&
     configuration.preferredAction === null &&
     isNeutralFilters(configuration.filters)
   );
@@ -138,7 +137,7 @@ const EMPTY_OPTIONS: ChatToolOptions = {
   preferred: null,
   internal_search_filters: null,
 };
-// The halves of the options that change together: the tool and plugin
+// The halves of the options that change together: the tool and integration
 // controls own the first, the search filters the second. A save sends only the
 // halves the user changed, so a change to one never rewrites the other.
 const OPTION_HALVES: readonly (readonly (keyof ChatToolOptions)[])[] = [
@@ -270,13 +269,17 @@ function parseTools(entries: Record<string, unknown>): ToolConfiguration {
   return configuration;
 }
 
-/** The plugin half of {@link parseConfiguration}, on an already-checked object. */
-function parsePlugins(entries: Record<string, unknown>): PluginConfiguration {
-  const plugins: Record<string, "disabled"> = {};
+/** The integration half of {@link parseConfiguration}, on an already-checked
+ * object. A key that is not an integration id goes. */
+function parseIntegrations(
+  entries: Record<string, unknown>
+): IntegrationConfiguration {
+  const integrations: Record<number, "disabled"> = {};
   for (const key of Object.keys(entries)) {
-    if (entries[key] === "disabled") plugins[key] = "disabled";
+    if (/^\d+$/.test(key) && entries[key] === "disabled")
+      integrations[Number(key)] = "disabled";
   }
-  return plugins;
+  return integrations;
 }
 
 /** The preferred action of {@link parseConfiguration}, on an already-checked object. */
@@ -286,9 +289,13 @@ function parsePreferredAction(
   const value = entries.preferredAction;
   return isRecord(value) &&
     value.type === "action" &&
-    typeof value.plugin_id === "string" &&
+    typeof value.integration_id === "number" &&
     typeof value.action === "string"
-    ? { type: "action", plugin_id: value.plugin_id, action: value.action }
+    ? {
+        type: "action",
+        integration_id: value.integration_id,
+        action: value.action,
+      }
     : null;
 }
 
@@ -316,8 +323,10 @@ function parseConfiguration(raw: string): ChatConfiguration {
   if (isRecord(value.tools)) {
     return {
       tools: parseTools(value.tools),
-      plugins: isRecord(value.plugins) ? parsePlugins(value.plugins) : {},
-      pluginActions: {},
+      integrations: isRecord(value.integrations)
+        ? parseIntegrations(value.integrations)
+        : {},
+      integrationActions: {},
       preferredAction: parsePreferredAction(value),
       filters: isRecord(value.filters)
         ? parseFilters(value.filters)
@@ -326,8 +335,8 @@ function parseConfiguration(raw: string): ChatConfiguration {
   }
   return {
     tools: parseTools(value),
-    plugins: {},
-    pluginActions: {},
+    integrations: {},
+    integrationActions: {},
     preferredAction: null,
     filters: NEUTRAL_FILTERS,
   };
@@ -391,26 +400,26 @@ function effectiveOptions(
 }
 
 /**
- * Reads saved options as the composer's tool and plugin states and filters.
- * `pluginIds` is every plugin the composer knows: one that `allowed` leaves
- * out is off.
+ * Reads saved options as the composer's tool and integration states and
+ * filters. `integrationIds` is every integration the composer knows: one that
+ * `allowed` leaves out is off.
  */
 function configurationFrom(
   options: ChatToolOptions,
   agentTools: readonly ToolSnapshot[],
-  pluginIds: readonly string[],
-  preferredPlugins: PluginConfiguration
+  integrationIds: readonly number[],
+  preferredIntegrations: IntegrationConfiguration
 ): ChatConfiguration {
   const tools: Record<number, ToolState> = {};
-  const plugins: Record<string, "disabled"> =
-    options.allowed === null ? { ...preferredPlugins } : {};
-  const pluginActions: Record<string, string[] | null> = {};
+  const integrations: Record<number, "disabled"> =
+    options.allowed === null ? { ...preferredIntegrations } : {};
+  const integrationActions: Record<number, string[] | null> = {};
   const allowed = options.allowed;
   if (allowed !== null) {
     for (const entry of allowed) {
-      if (entry.type !== "plugin") continue;
-      const kept = pluginActions[entry.plugin_id];
-      pluginActions[entry.plugin_id] =
+      if (entry.type !== "integration") continue;
+      const kept = integrationActions[entry.integration_id];
+      integrationActions[entry.integration_id] =
         entry.actions == null || kept === null
           ? null
           : [...new Set([...(kept ?? []), ...entry.actions])];
@@ -425,13 +434,15 @@ function configurationFrom(
         tools[tool.id] = "disabled";
       }
     }
-    for (const pluginId of pluginIds) {
+    for (const integrationId of integrationIds) {
       if (
         !allowed.some(
-          (entry) => entry.type === "plugin" && entry.plugin_id === pluginId
+          (entry) =>
+            entry.type === "integration" &&
+            entry.integration_id === integrationId
         )
       ) {
-        plugins[pluginId] = "disabled";
+        integrations[integrationId] = "disabled";
       }
     }
   }
@@ -440,14 +451,14 @@ function configurationFrom(
   }
   const filters = options.internal_search_filters;
   const rangeStart = filters?.updated_at_range?.start ?? null;
-  const limited: Record<string, readonly string[]> = {};
-  for (const [pluginId, actions] of Object.entries(pluginActions)) {
-    if (actions !== null) limited[pluginId] = actions;
+  const limited: Record<number, readonly string[]> = {};
+  for (const [integrationId, actions] of Object.entries(integrationActions)) {
+    if (actions !== null) limited[Number(integrationId)] = actions;
   }
   return {
     tools,
-    plugins,
-    pluginActions: limited,
+    integrations,
+    integrationActions: limited,
     preferredAction:
       options.preferred?.type === "action" ? options.preferred : null,
     filters: {
@@ -463,21 +474,21 @@ function configurationFrom(
 }
 
 /**
- * The allowed tools and plugins, or null when nothing is off. Only sent then:
+ * The allowed tools and integrations, or null when nothing is off. Only sent then:
  * to the server a list is a whitelist, and this one holds only the built-in
- * tools and the plugins that the frontend knows.
+ * tools and the integrations that the frontend knows.
  */
 function allowedEntries(
   tools: ToolConfiguration,
-  plugins: PluginConfiguration,
-  pluginActions: PluginActions,
+  integrations: IntegrationConfiguration,
+  integrationActions: IntegrationActions,
   agent: MinimalAgent,
-  pluginIds: readonly string[]
+  integrationIds: readonly number[]
 ): ToolOptionsEntry[] | null {
   if (
     !Object.values(tools).includes("disabled") &&
-    Object.keys(plugins).length === 0 &&
-    Object.keys(pluginActions).length === 0
+    Object.keys(integrations).length === 0 &&
+    Object.keys(integrationActions).length === 0
   ) {
     return null;
   }
@@ -490,13 +501,17 @@ function allowedEntries(
           tool_id: tool.id,
         })
       ),
-    ...pluginIds
-      .filter((pluginId) => plugins[pluginId] !== "disabled")
-      .map((pluginId): ToolOptionsEntry => {
-        const actions = pluginActions[pluginId];
+    ...integrationIds
+      .filter((integrationId) => integrations[integrationId] !== "disabled")
+      .map((integrationId): ToolOptionsEntry => {
+        const actions = integrationActions[integrationId];
         return actions === undefined
-          ? { type: "plugin", plugin_id: pluginId }
-          : { type: "plugin", plugin_id: pluginId, actions: [...actions] };
+          ? { type: "integration", integration_id: integrationId }
+          : {
+              type: "integration",
+              integration_id: integrationId,
+              actions: [...actions],
+            };
       }),
   ];
 }
@@ -533,15 +548,22 @@ function withTools(
 function toolFields(
   configuration: Pick<
     ChatConfiguration,
-    "tools" | "plugins" | "pluginActions" | "preferredAction"
+    "tools" | "integrations" | "integrationActions" | "preferredAction"
   >,
   agent: MinimalAgent,
-  pluginIds: readonly string[]
+  integrationIds: readonly number[]
 ): Pick<ChatToolOptions, "allowed" | "preferred"> {
-  const { tools, plugins, pluginActions, preferredAction } = configuration;
+  const { tools, integrations, integrationActions, preferredAction } =
+    configuration;
   const preferred = preferredToolIdOf(tools);
   return {
-    allowed: allowedEntries(tools, plugins, pluginActions, agent, pluginIds),
+    allowed: allowedEntries(
+      tools,
+      integrations,
+      integrationActions,
+      agent,
+      integrationIds
+    ),
     preferred:
       preferred === null
         ? preferredAction
@@ -695,17 +717,20 @@ export interface ToolConfigurationHandle {
   clearPreferredTool: () => void;
   /** The preferred tool for this chat, if any. */
   preferredToolId: number | null;
-  /** The preferred plugin action, saved by another client; the tool wins. */
+  /** The preferred integration action, saved by another client; the tool wins. */
   preferredAction: ActionPreference | null;
   /** The built-in tools the model may not use in this chat. */
   disabledToolIds: number[];
-  /** Whether a plugin is on for this chat. */
-  isPluginEnabled: (pluginId: string) => boolean;
-  /** Switches plugins on or off for this chat. */
-  setPluginEnabled: (pluginIds: readonly string[], enabled: boolean) => void;
+  /** Whether an integration is on for this chat. */
+  isIntegrationEnabled: (integrationId: number) => boolean;
+  /** Switches integrations on or off for this chat. */
+  setIntegrationEnabled: (
+    integrationIds: readonly number[],
+    enabled: boolean
+  ) => void;
   /**
-   * The tools and plugins a send allows, or null for every tool and plugin
-   * of the agent.
+   * The tools and integrations a send allows, or null for every tool and
+   * integration of the agent.
    */
   allowed: ToolOptionsEntry[] | null;
 
@@ -719,9 +744,9 @@ export interface ToolConfigurationHandle {
   ready: boolean;
 
   /**
-   * False while an existing chat's saved options, or the plugins a new
-   * chat starts with turned off, have not loaded. A send then would carry
-   * no allow-list and turn on what the user turned off.
+   * False while an existing chat's saved options, the integrations a new
+   * chat starts with turned off, or the agent's integrations have not
+   * loaded. A send then would carry a wrong allow-list.
    */
   optionsLoaded: boolean;
 
@@ -810,24 +835,24 @@ export function useToolConfiguration(
 
   const { user } = useUser();
   const signedIn = user !== null && !user.is_anonymous_user;
-  // The plugins the user turned off for this agent. A chat that does not
+  // The integrations the user turned off for this agent. A chat that does not
   // exist yet starts with them; a switch in any chat saves them.
-  const preferences = useAgentPluginPreferences(signedIn);
-  // The agent whose plugins this composer reads and saves: the agent viewer
+  const preferences = useAgentIntegrationPreferences(signedIn);
+  // The agent whose integrations this composer reads and saves: the agent viewer
   // names its own.
   const configAgentId = newChatWithAgentId ?? activeAgent?.id;
   const preferredOff =
     configAgentId === undefined
       ? null
-      : preferences.disabledPluginIds(configAgentId);
+      : preferences.disabledIntegrationIds(configAgentId);
   const preferredOffKey = preferredOff === null ? null : preferredOff.join(",");
-  const preferredPlugins = useMemo((): PluginConfiguration | null => {
+  const preferredIntegrations = useMemo((): IntegrationConfiguration | null => {
     if (preferredOffKey === null) return null;
-    const plugins: Record<string, "disabled"> = {};
+    const integrations: Record<number, "disabled"> = {};
     for (const id of preferredOffKey.split(",")) {
-      if (id !== "") plugins[id] = "disabled";
+      if (id !== "") integrations[Number(id)] = "disabled";
     }
-    return plugins;
+    return integrations;
   }, [preferredOffKey]);
   const chatSessionId =
     newChatWithAgentId === undefined ? appPosition.chat() : null;
@@ -846,17 +871,21 @@ export function useToolConfiguration(
       : state.sessions.get(chatSessionId)?.toolOptionsEdits
   );
   const agentTools = activeAgent?.tools;
-  // Every plugin of the agent, null until it loads. Saved options name
-  // plugins in an allow-list, so a plugin unknown here would be left out.
-  const agentPluginIds = useAgentPluginIds(configAgentId).pluginIds;
-  const pluginIdsKey =
-    agentPluginIds === null ? null : agentPluginIds.join(",");
-  const pluginIds = useMemo(
+  // Every integration of the agent, null until it loads. Saved options name
+  // integrations in an allow-list, so one unknown here would be left out.
+  const agentIntegrationIds =
+    useAgentIntegrationIds(configAgentId).integrationIds;
+  const integrationIdsKey =
+    agentIntegrationIds === null ? null : agentIntegrationIds.join(",");
+  const integrationIds = useMemo(
     () =>
-      pluginIdsKey === null
+      integrationIdsKey === null
         ? null
-        : pluginIdsKey.split(",").filter((id) => id !== ""),
-    [pluginIdsKey]
+        : integrationIdsKey
+            .split(",")
+            .filter((id) => id !== "")
+            .map(Number),
+    [integrationIdsKey]
   );
 
   // A chat that does not exist yet keeps its configuration here, tagged with
@@ -887,7 +916,7 @@ export function useToolConfiguration(
       key === null ||
       chatSessionId === null ||
       activeAgent === undefined ||
-      pluginIds === null
+      integrationIds === null
     ) {
       return;
     }
@@ -896,17 +925,17 @@ export function useToolConfiguration(
     handedOffConfigurations.delete(key);
     useChatSessionStore.getState().updateSessionData(chatSessionId, {
       toolOptionsEdits: {
-        ...toolFields(handedOff, activeAgent, pluginIds),
+        ...toolFields(handedOff, activeAgent, integrationIds),
         ...filterFields(handedOff.filters),
       },
     });
-  }, [key, chatSessionId, activeAgent, pluginIds]);
+  }, [key, chatSessionId, activeAgent, integrationIds]);
 
   const chatOptions = useMemo(
     () => effectiveOptions(savedOptions, optionsEdits),
     [savedOptions, optionsEdits]
   );
-  // Until the plugin catalogs load, the tools and filters come from the saved
+  // Until the integration catalogs load, the tools and filters come from the saved
   // options and a send carries the saved allow-list as it is.
   const chatConfiguration = useMemo(
     () =>
@@ -915,10 +944,10 @@ export function useToolConfiguration(
         : configurationFrom(
             chatOptions,
             agentTools,
-            pluginIds ?? [],
-            preferredPlugins ?? {}
+            integrationIds ?? [],
+            preferredIntegrations ?? {}
           ),
-    [chatOptions, agentTools, pluginIds, preferredPlugins]
+    [chatOptions, agentTools, integrationIds, preferredIntegrations]
   );
 
   const isChat = key !== null && isChatKey(key);
@@ -927,23 +956,26 @@ export function useToolConfiguration(
       entry.key !== key
         ? NEUTRAL
         : signedIn
-          ? { ...entry.configuration, plugins: preferredPlugins ?? {} }
+          ? {
+              ...entry.configuration,
+              integrations: preferredIntegrations ?? {},
+            }
           : entry.configuration,
-    [entry, key, signedIn, preferredPlugins]
+    [entry, key, signedIn, preferredIntegrations]
   );
   const configuration = isChat
     ? (chatConfiguration ?? NEUTRAL)
     : newChatConfiguration;
   const ready = isChat
     ? chatConfiguration !== null &&
-      pluginIds !== null &&
-      (chatOptions?.allowed !== null || preferredPlugins !== null)
+      integrationIds !== null &&
+      (chatOptions?.allowed !== null || preferredIntegrations !== null)
     : key !== null &&
       entry.key === key &&
-      pluginIds !== null &&
-      preferredPlugins !== null;
+      integrationIds !== null &&
+      preferredIntegrations !== null;
   const savedAllowed =
-    isChat && pluginIds === null && chatOptions !== undefined
+    isChat && integrationIds === null && chatOptions !== undefined
       ? chatOptions.allowed
       : undefined;
 
@@ -958,7 +990,7 @@ export function useToolConfiguration(
       if (
         chatSessionId === null ||
         activeAgent === undefined ||
-        pluginIds === null
+        integrationIds === null
       ) {
         return;
       }
@@ -973,8 +1005,8 @@ export function useToolConfiguration(
         configurationFrom(
           options,
           activeAgent.tools,
-          pluginIds,
-          preferredPlugins ?? {}
+          integrationIds,
+          preferredIntegrations ?? {}
         )
       );
       if (fields === null) return;
@@ -982,7 +1014,7 @@ export function useToolConfiguration(
         toolOptionsEdits: { ...session?.toolOptionsEdits, ...fields },
       });
     },
-    [chatSessionId, activeAgent, pluginIds, preferredPlugins]
+    [chatSessionId, activeAgent, integrationIds, preferredIntegrations]
   );
 
   const setToolState = useCallback(
@@ -996,9 +1028,13 @@ export function useToolConfiguration(
           const tools = withToolState(current.tools, toolId, change);
           return tools === current.tools ||
             activeAgent === undefined ||
-            pluginIds === null
+            integrationIds === null
             ? null
-            : toolFields(withTools(current, tools), activeAgent, pluginIds);
+            : toolFields(
+                withTools(current, tools),
+                activeAgent,
+                integrationIds
+              );
         });
         return;
       }
@@ -1016,22 +1052,24 @@ export function useToolConfiguration(
         return { key, configuration: withTools(current, tools) };
       });
     },
-    [key, editChat, activeAgent, pluginIds]
+    [key, editChat, activeAgent, integrationIds]
   );
 
-  const { setPluginsDisabled } = preferences;
-  const setPluginEnabled = useCallback(
-    (ids: readonly string[], enabled: boolean) => {
+  const { setIntegrationsDisabled } = preferences;
+  const setIntegrationEnabled = useCallback(
+    (ids: readonly number[], enabled: boolean) => {
       if (key === null || configAgentId === undefined) return;
       if (signedIn)
-        setPluginsDisabled(configAgentId, ids, !enabled).catch(() =>
+        setIntegrationsDisabled(configAgentId, ids, !enabled).catch(() =>
           toast.error(t("toolsPopover.selectionSaveFailed"))
         );
-      const change = (current: PluginConfiguration): PluginConfiguration => {
+      const change = (
+        current: IntegrationConfiguration
+      ): IntegrationConfiguration => {
         if (ids.every((id) => (current[id] === "disabled") !== enabled)) {
           return current;
         }
-        const next: Record<string, "disabled"> = { ...current };
+        const next: Record<number, "disabled"> = { ...current };
         for (const id of ids) {
           if (enabled) delete next[id];
           else next[id] = "disabled";
@@ -1040,12 +1078,16 @@ export function useToolConfiguration(
       };
       if (isChatKey(key)) {
         editChat((current) => {
-          const plugins = change(current.plugins);
-          return plugins === current.plugins ||
+          const integrations = change(current.integrations);
+          return integrations === current.integrations ||
             activeAgent === undefined ||
-            pluginIds === null
+            integrationIds === null
             ? null
-            : toolFields({ ...current, plugins }, activeAgent, pluginIds);
+            : toolFields(
+                { ...current, integrations },
+                activeAgent,
+                integrationIds
+              );
         });
         return;
       }
@@ -1054,9 +1096,9 @@ export function useToolConfiguration(
       setEntry((previous) => {
         if (previous.key !== key) return previous;
         const current = previous.configuration;
-        const plugins = change(current.plugins);
-        if (plugins === current.plugins) return previous;
-        return { key, configuration: { ...current, plugins } };
+        const integrations = change(current.integrations);
+        if (integrations === current.integrations) return previous;
+        return { key, configuration: { ...current, integrations } };
       });
     },
     [
@@ -1064,9 +1106,9 @@ export function useToolConfiguration(
       editChat,
       activeAgent,
       configAgentId,
-      pluginIds,
+      integrationIds,
       signedIn,
-      setPluginsDisabled,
+      setIntegrationsDisabled,
       t,
     ]
   );
@@ -1131,12 +1173,12 @@ export function useToolConfiguration(
       disabledToolIds: ids.filter(
         (toolId) => configuration.tools[toolId] === "disabled"
       ),
-      // A plugin removed from the agent is off, so a saved action of it is
+      // An integration removed from the agent is off, so a saved action of it is
       // not sent.
-      isPluginEnabled: (pluginId: string) =>
-        (pluginIds === null || pluginIds.includes(pluginId)) &&
-        configuration.plugins[pluginId] !== "disabled",
-      setPluginEnabled,
+      isIntegrationEnabled: (integrationId: number) =>
+        (integrationIds === null || integrationIds.includes(integrationId)) &&
+        configuration.integrations[integrationId] !== "disabled",
+      setIntegrationEnabled,
       allowed:
         activeAgent === undefined
           ? null
@@ -1144,13 +1186,17 @@ export function useToolConfiguration(
             ? savedAllowed
             : allowedEntries(
                 configuration.tools,
-                configuration.plugins,
-                configuration.pluginActions,
+                configuration.integrations,
+                configuration.integrationActions,
                 activeAgent,
-                pluginIds ?? []
+                integrationIds ?? []
               ),
       ready,
-      optionsLoaded: isChat ? chatConfiguration !== null : preferences.loaded,
+      // The allow-list names the agent's integrations, so a send also waits
+      // for them: without them it would leave each integration out.
+      optionsLoaded:
+        (isChat ? chatConfiguration !== null : preferences.loaded) &&
+        (activeAgent === undefined || integrationIds !== null),
       filters: configuration.filters,
       setFilters,
       handOffTo,
@@ -1164,9 +1210,9 @@ export function useToolConfiguration(
     preferences.loaded,
     savedAllowed,
     activeAgent,
-    pluginIds,
+    integrationIds,
     setToolState,
-    setPluginEnabled,
+    setIntegrationEnabled,
     setFilters,
     handOffTo,
     handOffToNewChatWith,
@@ -1209,7 +1255,6 @@ export function useBuiltInToolNames(): Record<string, string> {
       [PYTHON_TOOL_ID]: t("toolNames.codeInterpreter.label"),
       [FILE_READER_TOOL_ID]: t("toolNames.fileReader.label"),
       [MEMORY_TOOL_ID]: t("toolNames.addMemory.label"),
-      [CODING_AGENT_TOOL_ID]: t("toolNames.codingAgent.label"),
     }),
     [t]
   );

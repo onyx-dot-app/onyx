@@ -47,7 +47,6 @@ def get_sharepoint_external_access(
     drive_item: DriveItemData | None = None,
     list_id: str | None = None,
     site_page: dict[str, Any] | None = None,
-    add_prefix: bool = False,
     treat_sharing_link_as_public: bool = False,
 ) -> ExternalAccess:
     if drive_item and not list_id:
@@ -60,14 +59,13 @@ def get_sharepoint_external_access(
     )
 
     return get_external_access_func(
-        reader,
-        site_url,
-        list_id,
-        drive_item,
-        site_page,
-        add_prefix,
-        treat_sharing_link_as_public,
-        permission_cache,
+        reader=reader,
+        site_url=site_url,
+        list_id=list_id,
+        drive_item=drive_item,
+        site_page=site_page,
+        treat_sharing_link_as_public=treat_sharing_link_as_public,
+        permission_cache=permission_cache,
     )
 
 
@@ -88,10 +86,10 @@ def get_sharepoint_hierarchy_node_external_access(
         fallback=_noop_external_access,
     )
     return get_external_access_func(
-        reader,
-        site_url,
-        node_type,
-        list_id,
-        folder_server_relative_path,
-        permission_cache,
+        reader=reader,
+        site_url=site_url,
+        node_type=node_type,
+        list_id=list_id,
+        folder_server_relative_path=folder_server_relative_path,
+        permission_cache=permission_cache,
     )

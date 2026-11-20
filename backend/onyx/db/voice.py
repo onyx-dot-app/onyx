@@ -9,6 +9,9 @@ from onyx.db.llm import (
     fetch_llm_provider_by_zoom_voice_provider_id,
     remove_llm_provider,
 )
+from onyx.db.model_configuration import (
+    fetch_model_configuration_by_provider_id_and_name,
+)
 from onyx.db.models import (
     LLMModelFlow,
     LLMProvider,
@@ -177,11 +180,8 @@ def ensure_zoom_decision_provider(
         ("zoom-decisions", "Zoom Decisions"),
         ("zoom-decisions-pro", "Zoom Decisions Pro"),
     ):
-        model = db_session.scalar(
-            select(ModelConfiguration).where(
-                ModelConfiguration.llm_provider_id == provider.id,
-                ModelConfiguration.name == name,
-            )
+        model = fetch_model_configuration_by_provider_id_and_name(
+            db_session, provider.id, name
         )
         if model is None:
             model = ModelConfiguration(

@@ -10,6 +10,7 @@ import time
 from collections.abc import Iterator
 
 import pytest
+from prometheus_client import REGISTRY
 
 from onyx.utils import threadpool_concurrency
 from onyx.utils.threadpool_concurrency import (
@@ -489,3 +490,34 @@ def test_pushback_before_a_drain_cuts_the_limit_that_run_leaves() -> None:
         PUSHBACK_OBSERVER.reset(token)
 
     assert pool.limit == 4
+
+
+def test_a_named_pool_records_its_limit_cuts_and_growth() -> None:
+    now = 100.0
+    observer = PushbackObserver()
+    concurrency = AdaptiveConcurrency(
+        observer, initial=4, maximum=8, clock=lambda: now, metrics_name="test_pool"
+    )
+
+    def sample(name: str) -> float | None:
+        return REGISTRY.get_sample_value(name, {"pool": "test_pool"})
+
+    cuts = sample("onyx_adaptive_pool_cuts_total") or 0.0
+    grows = sample("onyx_adaptive_pool_grows_total") or 0.0
+
+    now += threadpool_concurrency.ADAPTIVE_GROW_INTERVAL_SECONDS
+    concurrency.observe(in_flight=4)
+    assert sample("onyx_adaptive_pool_limit") == 5
+    assert sample("onyx_adaptive_pool_in_flight") == 4
+    assert sample("onyx_adaptive_pool_grows_total") == grows + 1
+
+    observer.record()
+    concurrency.observe(in_flight=5)
+    assert sample("onyx_adaptive_pool_limit") == 2
+    assert sample("onyx_adaptive_pool_cuts_total") == cuts + 1
+
+    # The pool recovers after the cooldown, one worker per interval.
+    now += threadpool_concurrency.ADAPTIVE_COOLDOWN_SECONDS
+    concurrency.observe(in_flight=2)
+    assert sample("onyx_adaptive_pool_limit") == 3
+    assert sample("onyx_adaptive_pool_grows_total") == grows + 2

@@ -6,7 +6,7 @@
  */
 
 import { type Page, type Locator, expect } from "@playwright/test";
-import type { TaskPluginView } from "@/app/craft/v1/tasks/types";
+import type { TaskIntegrationView } from "@/app/craft/v1/tasks/types";
 import type { MemberIntegration } from "@/lib/integrations/types";
 
 function memberIntegration(
@@ -21,16 +21,16 @@ function memberIntegration(
     auth_method: "api_key",
     credential_fields: [],
     status: { state: "connected", reason: null },
-    plugins: [
-      {
-        plugin_id: `plugin-${overrides.id}`,
-        plugin_name: overrides.name,
-        scope: "organization",
-        owner_email: null,
-        installation_policy: "AVAILABLE",
-        enabled: true,
-      },
-    ],
+    access: {
+      state: "on",
+      installation_policy: "AVAILABLE",
+      user_choice: true,
+      user_enabled: true,
+      owner_email: null,
+      is_owner: false,
+      can_manage: false,
+      shared_with_everyone: true,
+    },
     users_can_save_always_allow: true,
     credential_values: {},
     external_app_id: null,
@@ -168,36 +168,31 @@ export class ScheduledTasksPage {
   }
 
   async mockActionPolicyOptions(): Promise<void> {
-    const plugins: TaskPluginView[] = [
+    const integrations: TaskIntegrationView[] = [
       { id: 11, name: "Acme CRM", kind: "api" as const },
       { id: 12, name: "Acme Support", kind: "api" as const },
       { id: 22, name: "Acme MCP", kind: "mcp" as const },
     ].map(({ id, name, kind }) => ({
-      plugin_id: `plugin-${id}`,
-      plugin_name: name,
-      enabled: false,
-      action_settings: null,
-      integrations: [
+      id,
+      name,
+      kind,
+      app_type: null,
+      status: { state: "connected", reason: null },
+      actions: [
         {
-          id,
-          name,
-          kind,
-          app_type: null,
-          status: { state: "connected", reason: null },
-          actions: [
-            {
-              key: "send",
-              display_name: "Send message",
-              description: "Send a message.",
-              integration_policy: "ask",
-              locked: false,
-            },
-          ],
+          key: "send",
+          display_name: "Send message",
+          description: "Send a message.",
+          integration_policy: "ask",
+          locked: false,
         },
       ],
+      enabled: false,
+      action_settings: null,
+      runnable: true,
     }));
     await this.page.route("**/api/build/action-policies", async (route) => {
-      await route.fulfill({ json: plugins });
+      await route.fulfill({ json: integrations });
     });
     await this.page.route("**/api/integrations", async (route) => {
       await route.fulfill({

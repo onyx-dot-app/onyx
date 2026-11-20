@@ -81,6 +81,7 @@ from onyx.integrations.connection_models import (
     secret_fingerprint,
 )
 from onyx.oauth.authorization_attempt import canonical_json_fingerprint
+from onyx.server.features.integrations.models import CredentialField
 from onyx.server.features.mcp.models import (
     DENYLISTED_MCP_HEADERS,
     merge_mcp_headers,
@@ -1071,6 +1072,31 @@ def header_field_keys(header_template: Mapping[str, str]) -> list[str]:
             if key is not None and key != "user_email" and key not in keys:
                 keys.append(key)
     return keys
+
+
+def credential_fields_json(
+    fields: list[CredentialField] | None,
+    header_template: Mapping[str, str] | None,
+    stored: list[dict[str, Any]] | None = None,
+) -> list[dict[str, Any]] | None:
+    """The stored credential fields: the given fields, then a secret field
+    for each other placeholder of the template."""
+    if fields is not None:
+        stored = [field.model_dump() for field in fields]
+    if not header_template:
+        return stored if fields is not None else None
+    kept = {field.get("key"): field for field in stored or []}
+    template_fields = [
+        kept.get(key) or {"key": key, "label": key.replace("_", " "), "secret": True}
+        for key in header_field_keys(header_template)
+    ]
+    if fields is not None:
+        listed = {field["key"] for field in stored or []}
+        return [
+            *(stored or []),
+            *(f for f in template_fields if f["key"] not in listed),
+        ]
+    return template_fields or None
 
 
 def check_connection_mode(integration: Integration, for_organization: bool) -> None:

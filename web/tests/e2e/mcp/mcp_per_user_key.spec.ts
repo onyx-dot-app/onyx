@@ -6,9 +6,9 @@ import {
   startMcpPerUserKeyServer,
   McpServerProcess,
 } from "@tests/e2e/utils/mcpServer";
-import { ChatPluginsPopover } from "@tests/e2e/pages/ChatPluginsPopover";
+import { ChatIntegrationsPopover } from "@tests/e2e/pages/ChatIntegrationsPopover";
 import { IntegrationConnectPrompt } from "@tests/e2e/pages/IntegrationConnectPrompt";
-import { MemberPluginDetailPage } from "@tests/e2e/pages/MemberPluginDetailPage";
+import { CustomizeIntegrationPage } from "@tests/e2e/pages/CustomizeIntegrationPage";
 
 // API keys baked into run_mcp_server_per_user_key.py. Launched with
 // `--require-header X-Username`, the server also needs that header.
@@ -26,14 +26,14 @@ const FIELDS = { "API Key": MEMBER_API_KEY, Username: "basic-pw" };
 
 /**
  * An MCP server where each user signs in with an API key and a user name. A
- * member connects it from the plugin page and from the chat connect prompt.
+ * member connects it from the integration page and from the chat connect
+ * prompt.
  */
 test.describe("MCP per-user API key auth (two credential fields)", () => {
   test.describe.configure({ mode: "serial" });
 
   let serverProcess: McpServerProcess | null = null;
   let integrationId: number;
-  let pluginId: string;
   let serverName: string;
   let serverUrl: string;
   let agentId: number | null = null;
@@ -79,9 +79,6 @@ test.describe("MCP per-user API key auth (two credential fields)", () => {
       },
     });
     integrationId = created.id;
-    const plugin = created.plugins[0];
-    if (!plugin) throw new Error("The integration has no plugin");
-    pluginId = plugin.plugin_id;
     // MCP actions load after a connection: the admin connects their own account.
     const connect = await adminContext.request.put(
       `/api/integrations/${integrationId}/connection`,
@@ -89,11 +86,12 @@ test.describe("MCP per-user API key auth (two credential fields)", () => {
     );
     expect(connect.ok(), await connect.text()).toBeTruthy();
     await adminClient.refreshIntegrationActions(integrationId);
-    // The connect prompt test chats with an agent that has the plugin. The
-    // default agent runs only the plugins that a member turned on.
-    agentId = await adminClient.createAgentWithPlugins(
+    // The connect prompt test chats with an agent that links the
+    // integration. The default agent runs only the integrations that a member
+    // turned on.
+    agentId = await adminClient.createAgentWithIntegrations(
       `PW Per-User Key Agent ${Date.now()}`,
-      [pluginId],
+      [integrationId],
       { isPublic: true }
     );
 
@@ -119,15 +117,15 @@ test.describe("MCP per-user API key auth (two credential fields)", () => {
     if (serverProcess) await serverProcess.stop();
   });
 
-  test("A member connects from the plugin page with every credential field", async ({
+  test("A member connects from the integration page with every credential field", async ({
     page,
   }) => {
     const member = users[0]!;
     await page.context().clearCookies();
     await apiLogin(page, member.email, member.password);
 
-    const detail = new MemberPluginDetailPage(page);
-    await detail.goto(pluginId, "Integrations");
+    const detail = new CustomizeIntegrationPage(page);
+    await detail.goto(integrationId, "Configuration");
     await detail.expectStatus("Not connected");
     await detail.connectWithCredentials(serverName, FIELDS);
     await detail.expectStatus("Connected");
@@ -153,8 +151,8 @@ test.describe("MCP per-user API key auth (two credential fields)", () => {
     await prompt.dialog.close();
     await prompt.expectHidden();
 
-    const popover = new ChatPluginsPopover(page);
+    const popover = new ChatIntegrationsPopover(page);
     await popover.expectConnected(serverName);
-    await popover.expectPluginEnabled(serverName, true);
+    await popover.expectIntegrationEnabled(serverName, true);
   });
 });

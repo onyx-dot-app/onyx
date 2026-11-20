@@ -1,11 +1,18 @@
+import time
+from enum import Enum
 from typing import cast
 
+from onyx.configs.constants import INDEXING_WORKER_HEARTBEAT_INTERVAL
 from onyx.redis.redis_pool import get_redis_client
 from onyx.redis.tenant_redis_client import TenantRedisClient
 
 # Safety-net TTL against leaked keys if cleanup() fails silently. Long enough
 # that no legitimate sync will hit it; keys are normally deleted by cleanup().
 _COUNTER_TTL_SECONDS = 15 * 24 * 3600  # 15 days
+
+# A running task refreshes its live entry on each heartbeat. The entry of a
+# task whose worker was killed expires after this long.
+LIVE_TASK_TTL_SECONDS = 4 * INDEXING_WORKER_HEARTBEAT_INTERVAL
 
 # Why Lua scripts for decrements:
 #
@@ -53,8 +60,15 @@ end
 """
 
 
+class BatchStage(str, Enum):
+    """A batch stage with its own pending / in-flight counters."""
+
+    DOCCONVERSION = "docconversion"
+    DOCPROCESSING = "docprocessing"
+
+
 class RedisDocprocessing:
-    """Manages per-attempt docprocessing batch counters in Redis.
+    """Manages per-attempt batch counters of one stage in Redis.
 
     Two counters track batches as they move through the lifecycle:
       pending   - dispatched to queue, not yet picked up by a worker
@@ -63,21 +77,27 @@ class RedisDocprocessing:
     Together they let the monitor distinguish worker crashes (in_flight > 0)
     from queue backlogs (in_flight = 0, pending > 0) when the heartbeat stops.
 
-    Counter keys are namespaced by IndexAttempt.id.
+    A killed worker leaves in_flight raised. A stage whose tasks refresh a
+    live entry (one for each task, with its own expiry) can tell a running
+    task from that leaked count.
+
+    Counter keys are namespaced by stage and IndexAttempt.id.
     """
 
-    PENDING_PREFIX = "docprocessing_pending"
-    IN_FLIGHT_PREFIX = "docprocessing_in_flight"
-
     def __init__(
-        self, index_attempt_id: int, r: TenantRedisClient | None = None
+        self,
+        index_attempt_id: int,
+        r: TenantRedisClient | None = None,
+        stage: BatchStage = BatchStage.DOCPROCESSING,
     ) -> None:
         """`r` defaults to the current tenant's client."""
         self.index_attempt_id = index_attempt_id
         self.redis = r if r is not None else get_redis_client()
+        self.stage = stage
 
-        self.pending_key: str = f"{self.PENDING_PREFIX}_{index_attempt_id}"
-        self.in_flight_key: str = f"{self.IN_FLIGHT_PREFIX}_{index_attempt_id}"
+        self.pending_key: str = _pending_key(stage, index_attempt_id)
+        self.in_flight_key: str = _in_flight_key(stage, index_attempt_id)
+        self.live_tasks_key: str = _live_tasks_key(stage, index_attempt_id)
 
     def incr_pending(self) -> None:
         val = self.redis.incr(self.pending_key)
@@ -95,6 +115,25 @@ class RedisDocprocessing:
     def decr_in_flight(self) -> None:
         self.redis.eval(_DECR_IN_FLIGHT_SCRIPT, keys=[self.in_flight_key])
 
+    def reset_in_flight(self) -> None:
+        """Drops an in-flight count that no running task holds."""
+        self.redis.delete(self.in_flight_key)
+
+    def mark_task_live(self, task_id: str) -> None:
+        """Adds or refreshes the live entry of a running task."""
+        self.redis.zadd(
+            self.live_tasks_key, {task_id: time.time() + LIVE_TASK_TTL_SECONDS}
+        )
+        self.redis.expire(self.live_tasks_key, _COUNTER_TTL_SECONDS)
+
+    def clear_task_live(self, task_id: str) -> None:
+        self.redis.zrem(self.live_tasks_key, task_id)
+
+    def has_live_task(self) -> bool:
+        """True when a task of the stage refreshed its live entry in time."""
+        self.redis.zremrangebyscore(self.live_tasks_key, "-inf", time.time())
+        return self.redis.zcard(self.live_tasks_key) > 0
+
     def pending(self) -> int:
         return max(0, int(cast(bytes, self.redis.get(self.pending_key)) or 0))
 
@@ -102,4 +141,91 @@ class RedisDocprocessing:
         return max(0, int(cast(bytes, self.redis.get(self.in_flight_key)) or 0))
 
     def cleanup(self) -> None:
-        self.redis.delete(self.pending_key, self.in_flight_key)
+        """Deletes the counters of every stage: callers clean up when the
+        attempt ends."""
+        self.redis.delete(
+            *(
+                key
+                for stage in BatchStage
+                for key in (
+                    _pending_key(stage, self.index_attempt_id),
+                    _in_flight_key(stage, self.index_attempt_id),
+                    _live_tasks_key(stage, self.index_attempt_id),
+                )
+            )
+        )
+
+
+def _pending_key(stage: BatchStage, index_attempt_id: int) -> str:
+    return f"{stage.value}_pending_{index_attempt_id}"
+
+
+def _in_flight_key(stage: BatchStage, index_attempt_id: int) -> str:
+    return f"{stage.value}_in_flight_{index_attempt_id}"
+
+
+def _live_tasks_key(stage: BatchStage, index_attempt_id: int) -> str:
+    return f"{stage.value}_live_tasks_{index_attempt_id}"
+
+
+def _recovery_misses_key(index_attempt_id: int) -> str:
+    return f"docconversion:recovery_misses:{index_attempt_id}"
+
+
+def incr_conversion_recovery_misses(r: TenantRedisClient, index_attempt_id: int) -> int:
+    """Counts one watchdog run in which the conversion chain of the attempt
+    was stuck and nothing could be sent. Returns the count."""
+    key = _recovery_misses_key(index_attempt_id)
+    misses = r.incr(key)
+    r.expire(key, _COUNTER_TTL_SECONDS)
+    return misses
+
+
+def reset_conversion_recovery_misses(
+    r: TenantRedisClient, index_attempt_id: int
+) -> None:
+    r.delete(_recovery_misses_key(index_attempt_id))
+
+
+def _conversion_batch_claim_key(index_attempt_id: int, batch_num: int) -> str:
+    return f"docconversion:batch_claim:{index_attempt_id}:{batch_num}"
+
+
+def claim_conversion_batch(
+    r: TenantRedisClient, index_attempt_id: int, batch_num: int, owner: str
+) -> bool:
+    """Claims one stub batch for conversion. A recovery resend can overlap a
+    run that still converts the batch, and only one run may convert it. The
+    claim of a killed worker expires like its live entry."""
+    return bool(
+        r.set(
+            _conversion_batch_claim_key(index_attempt_id, batch_num),
+            owner,
+            nx=True,
+            ex=LIVE_TASK_TTL_SECONDS,
+        )
+    )
+
+
+def refresh_conversion_batch_claim(
+    r: TenantRedisClient, index_attempt_id: int, batch_num: int, owner: str
+) -> None:
+    r.renew_if_value(
+        _conversion_batch_claim_key(index_attempt_id, batch_num),
+        owner.encode(),
+        LIVE_TASK_TTL_SECONDS,
+    )
+
+
+def release_conversion_batch_claim(
+    r: TenantRedisClient, index_attempt_id: int, batch_num: int, owner: str
+) -> None:
+    r.delete_if_value(
+        _conversion_batch_claim_key(index_attempt_id, batch_num), owner.encode()
+    )
+
+
+def conversion_batch_is_claimed(
+    r: TenantRedisClient, index_attempt_id: int, batch_num: int
+) -> bool:
+    return r.exists(_conversion_batch_claim_key(index_attempt_id, batch_num)) > 0

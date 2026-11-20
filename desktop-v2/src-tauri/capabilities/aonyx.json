@@ -1,0 +1,14 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "aonyx",
+  "description": "The Aonyx pet: its state events, dragging and clicks.",
+  "local": true,
+  "windows": ["aonyx"],
+  "permissions": [
+    "core:event:allow-listen",
+    "core:event:allow-unlisten",
+    "core:window:allow-start-dragging",
+    "allow-aonyx-clicked",
+    "allow-aonyx-menu"
+  ]
+}

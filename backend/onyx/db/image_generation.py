@@ -2,6 +2,9 @@ from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session, selectinload
 
 from onyx.db.enums import LLMModelFlowType
+from onyx.db.model_configuration import (
+    fetch_model_configuration_by_provider_id_and_name,
+)
 from onyx.db.models import (
     ImageGenerationConfig,
     LLMModelFlow,
@@ -258,11 +261,8 @@ def link_image_generation_model__no_commit(
 ) -> ImageGenerationConfig:
     """Point a new image generation config at a model on an existing LLM
     provider. The provider's own credentials are used at call time."""
-    model_configuration = db_session.scalar(
-        select(ModelConfiguration).where(
-            ModelConfiguration.llm_provider_id == llm_provider_id,
-            ModelConfiguration.name == model_name,
-        )
+    model_configuration = fetch_model_configuration_by_provider_id_and_name(
+        db_session, llm_provider_id, model_name
     )
     if model_configuration is None:
         model_configuration = ModelConfiguration(

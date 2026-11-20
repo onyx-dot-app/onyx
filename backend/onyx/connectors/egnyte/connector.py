@@ -7,7 +7,6 @@ from urllib.parse import quote
 from pydantic import Field
 
 from onyx.access.models import ExternalAccess
-from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.configs.app_configs import (
     EGNYTE_CLIENT_ID,
     EGNYTE_CLIENT_SECRET,
@@ -190,19 +189,6 @@ def _build_document(
             [BasicExpertInfo(email=file.uploaded_by)] if file.uploaded_by else None
         ),
         parent_hierarchy_raw_node_id=parent_folder_id,
-    )
-
-
-def _prefixed(access: ExternalAccess) -> ExternalAccess:
-    """Doc sync adds the source prefix to group ids when it stores them.
-    Indexing and hierarchy nodes store access as given, so they carry it."""
-    return ExternalAccess(
-        external_user_emails=access.external_user_emails,
-        external_user_group_ids={
-            build_ext_group_name_for_onyx(group_id, DocumentSource.EGNYTE)
-            for group_id in access.external_user_group_ids
-        },
-        is_public=access.is_public,
     )
 
 
@@ -394,7 +380,7 @@ class EgnyteConnector(
             display_name=folder.name or folder.path,
             link=f"{_app_base(self.domain)}/navigate/folder/{folder.folder_id}",
             node_type=HierarchyNodeType.FOLDER,
-            external_access=_prefixed(access) if access is not None else None,
+            external_access=access,
         )
 
     def _convert_file(
@@ -412,7 +398,7 @@ class EgnyteConnector(
                 _app_base(self.domain),
                 parent_folder_id,
             )
-            document.external_access = _prefixed(access) if access else None
+            document.external_access = access
             return document
         except Exception as e:
             if _is_fatal(e):
@@ -505,7 +491,6 @@ class EgnyteConnector(
             if not is_indexable(file) or not _in_time_window(file, start, end):
                 continue
             if slim:
-                # Bare group ids: doc sync adds the source prefix when it stores them.
                 yield SlimDocument(
                     id=egnyte_document_id(file.group_id),
                     external_access=access,

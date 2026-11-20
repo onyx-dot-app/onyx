@@ -16,7 +16,6 @@ from sqlalchemy import select, text, update
 from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
-from onyx.db.enums import PluginInstallationPolicy
 from onyx.db.models import Plugin, PluginVersion, User
 from onyx.db.plugin import set_plugin_preferences__no_commit
 from onyx.db.plugin_access import load_user_plugin_states, skill_usage_by_user
@@ -33,7 +32,6 @@ from onyx.skills.limits import SKILL_WRITE_MAX_BYTES
 from onyx.skills.models import SkillUsage
 from tests.external_dependency_unit.craft.db_helpers import (
     make_skill,
-    make_skillless_plugin,
     make_user,
 )
 
@@ -74,39 +72,6 @@ def test_backfilled_version_counts_as_zero(db_session: Session) -> None:
 
     _set_size(db_session, skill.id, 3 * _MB, 7)
     assert _usage(db_session, user, skill.id) == 3 * _MB
-
-
-def test_plugin_with_no_skills_counts_as_zero(db_session: Session) -> None:
-    """A Required plugin with no skills and no recorded size runs for the user
-    and adds nothing to the user's usage."""
-    user = make_user(db_session, standard_account=True)
-    skill = make_skill(db_session, author_user_id=user.id)
-    set_plugin_preferences__no_commit(user.id, [skill.id], True, db_session)
-    _set_size(db_session, skill.id, 3 * _MB, 7)
-    plugin = make_skillless_plugin(
-        db_session,
-        published=True,
-        installation_policy=PluginInstallationPolicy.REQUIRED,
-    )
-
-    states = load_user_plugin_states(
-        [user.id], db_session, [skill.id, plugin.id], runnable_only=True
-    )
-    assert {state.plugin_id for state in states} == {skill.id, plugin.id}
-    assert skill_usage_by_user(states)[user.id] == SkillUsage(bytes=3 * _MB, files=7)
-
-    # Each NULL counts as 0 on its own: a known file count still counts.
-    current = select(Plugin.current_version_id).where(Plugin.id == skill.id)
-    db_session.execute(
-        update(PluginVersion)
-        .where(PluginVersion.id == current.scalar_subquery())
-        .values(unpacked_size_bytes=None)
-    )
-    db_session.flush()
-    states = load_user_plugin_states(
-        [user.id], db_session, [skill.id, plugin.id], runnable_only=True
-    )
-    assert skill_usage_by_user(states)[user.id] == SkillUsage(bytes=0, files=7)
 
 
 def _wait_for_lock_waiter(blocker_pid: int, timeout: float = 10.0) -> bool:

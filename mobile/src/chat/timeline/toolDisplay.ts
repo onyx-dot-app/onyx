@@ -66,8 +66,6 @@ export function getToolName(packets: Packet[]): string {
       return "Generate plan";
     case PacketType.RESEARCH_AGENT_START:
       return "Research agent";
-    case PacketType.CODING_AGENT_START:
-      return "Coding agent";
     case PacketType.REASONING_START:
       return "Thinking";
     case PacketType.MEMORY_TOOL_START:

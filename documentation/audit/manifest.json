@@ -757,24 +757,6 @@
       ]
     },
     {
-      "page": "overview/core_features/coding_agent.mdx",
-      "tab": "Overview",
-      "in_nav": true,
-      "title": "Coding Agent",
-      "words": 355,
-      "last_commit": "2026-06-02",
-      "components": [
-        "core-chat-loop",
-        "chat-frontend",
-        "internal-search",
-        "projects",
-        "citations",
-        "file-store-and-user-files",
-        "agents-personas"
-      ],
-      "images": []
-    },
-    {
       "page": "overview/core_features/connectors.mdx",
       "tab": "Overview",
       "in_nav": true,
@@ -4220,23 +4202,6 @@
           "kind": "onyx-ui"
         }
       ]
-    },
-    {
-      "page": "admins/actions/coding_agent.mdx",
-      "tab": "Admins",
-      "in_nav": true,
-      "title": "Coding Agent",
-      "words": 356,
-      "last_commit": "2026-06-02",
-      "components": [
-        "tools-framework",
-        "web-search",
-        "image-generation",
-        "code-execution",
-        "voice",
-        "mcp-and-custom-tools"
-      ],
-      "images": []
     },
     {
       "page": "admins/actions/image_generation.mdx",

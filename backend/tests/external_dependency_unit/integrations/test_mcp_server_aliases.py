@@ -8,36 +8,41 @@ from unittest.mock import patch
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import MASK_CREDENTIAL_SHORT
 from onyx.db.enums import (
     IntegrationAuthMethod,
     IntegrationAuthMode,
-    MarketplaceKind,
     MCPAuthenticationPerformer,
     MCPAuthenticationType,
     MCPTransport,
+    PluginInstallationPolicy,
 )
 from onyx.db.integration import (
     count_integration_actions,
     get_integration_by_kind_row,
 )
+from onyx.db.integration_access import load_integration_group_settings
 from onyx.db.integration_connection import get_connection
-from onyx.db.integration_policy import list_persona_plugin_links
+from onyx.db.integration_policy import list_persona_integration_links
 from onyx.db.models import (
     Integration,
-    Marketplace,
+    Integration__UserGroup,
     MCPServer,
-    Plugin,
-    Plugin__Integration,
     Tool,
     User,
+    UserGroup,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.integrations.connection_models import read_connection_secret
+from onyx.server.features.integrations import admin_api
+from onyx.server.features.integrations.models import (
+    IntegrationGroupSettingChange,
+    IntegrationGroupSettingsUpdate,
+)
 from onyx.server.features.mcp import api as mcp_api
 from onyx.server.features.mcp.models import (
     MCPAuthTemplate,
@@ -49,6 +54,7 @@ from onyx.server.features.persona.models import PersonaUpsertRequest
 from onyx.server.features.tool import api as tool_api
 from onyx.server.features.tool.models import CustomToolCreate
 from tests.external_dependency_unit.conftest import MakeTestUser
+from tests.external_dependency_unit.craft.db_helpers import make_group
 from tests.external_dependency_unit.integration_helpers import delete_integrations
 
 SERVER_URL = "https://mcp.example.com/mcp"
@@ -118,12 +124,11 @@ def _integration(db_session: Session, server_id: int) -> Integration:
     return integration
 
 
-def _marketplace_kind(db_session: Session, integration_id: int) -> MarketplaceKind:
+def _installation_policy(
+    db_session: Session, integration_id: int
+) -> PluginInstallationPolicy:
     return db_session.scalars(
-        select(Marketplace.kind)
-        .join(Plugin, Plugin.marketplace_id == Marketplace.id)
-        .join(Plugin__Integration, Plugin__Integration.plugin_id == Plugin.id)
-        .where(Plugin__Integration.integration_id == integration_id)
+        select(Integration.installation_policy).where(Integration.id == integration_id)
     ).one()
 
 
@@ -160,8 +165,8 @@ def test_create_get_update_and_delete_keep_the_old_shapes(
         "no_user_authentication_required": True,
     }
     assert integration.auth_mode is IntegrationAuthMode.NONE
-    assert _marketplace_kind(db_session, integration.id) is (
-        MarketplaceKind.ORGANIZATION_LIBRARY
+    assert _installation_policy(db_session, integration.id) is (
+        PluginInstallationPolicy.AVAILABLE
     )
 
     server = mcp_api.get_mcp_server_alias(response.server_id, db_session, admin)
@@ -233,8 +238,8 @@ def test_create_get_update_and_delete_keep_the_old_shapes(
     assert server_row is not None
     db_session.refresh(server_row)
     assert server_row.name == "renamed"
-    assert _marketplace_kind(db_session, integration.id) is (
-        MarketplaceKind.USER_UPLOADS
+    assert _installation_policy(db_session, integration.id) is (
+        PluginInstallationPolicy.NOT_AVAILABLE
     )
 
     mcp_api.update_mcp_server_alias(
@@ -243,8 +248,8 @@ def test_create_get_update_and_delete_keep_the_old_shapes(
         db_session,
         admin,
     )
-    assert _marketplace_kind(db_session, integration.id) is (
-        MarketplaceKind.ORGANIZATION_LIBRARY
+    assert _installation_policy(db_session, integration.id) is (
+        PluginInstallationPolicy.AVAILABLE
     )
 
     assert mcp_api.delete_mcp_server_alias(
@@ -400,7 +405,7 @@ def test_a_private_user_list_round_trips_and_clears(
     assert mcp_api.get_mcp_server_alias(server_id, db_session, admin).users == []
 
 
-def test_agent_tool_ids_round_trip_through_the_plugin_links(
+def test_agent_tool_ids_round_trip_through_the_integration_links(
     db_session: Session, admin: User, created: list[int]
 ) -> None:
     tool = tool_api.create_custom_tool(
@@ -435,11 +440,11 @@ def test_agent_tool_ids_round_trip_through_the_plugin_links(
     assert [
         t.id for t in persona_api.get_persona(agent.id, admin, db_session).tools
     ] == [tool.id]
-    assert len(list_persona_plugin_links(db_session, agent.id)) == 1
+    assert len(list_persona_integration_links(db_session, agent.id)) == 1
 
     updated = persona_api.update_persona(agent.id, request([], name), admin, db_session)
     assert updated.tools == []
-    assert list_persona_plugin_links(db_session, agent.id) == []
+    assert list_persona_integration_links(db_session, agent.id) == []
     # The integration stays; only the link of the agent goes.
     assert db_session.get(Integration, integration.id) is not None
 
@@ -470,7 +475,7 @@ def test_agent_mcp_tool_ids_round_trip_and_change_the_selection(
     def links() -> list[dict[str, Any] | None]:
         return [
             row.action_settings
-            for row in list_persona_plugin_links(db_session, agent.id)
+            for row in list_persona_integration_links(db_session, agent.id)
         ]
 
     name = f"agent-{uuid4().hex[:8]}"
@@ -493,3 +498,75 @@ def test_agent_mcp_tool_ids_round_trip_and_change_the_selection(
     cleared = persona_api.update_persona(agent.id, request([], name), admin, db_session)
     assert cleared.tools == []
     assert links() == []
+
+
+def test_a_private_server_lists_each_group_with_access(
+    db_session: Session, admin: User, created: list[int]
+) -> None:
+    """The legacy view has no group settings, so it lists a group whose own
+    setting gives access. A legacy edit keeps the setting."""
+    group = make_group(db_session)
+    db_session.commit()
+    try:
+        server_id = _upsert(db_session, admin, created)
+        integration = _integration(db_session, server_id)
+        admin_api.set_integration_group_settings(
+            integration.id,
+            IntegrationGroupSettingsUpdate(
+                group_settings=[
+                    IntegrationGroupSettingChange(
+                        group_id=group.id,
+                        installation_policy=PluginInstallationPolicy.AVAILABLE,
+                    )
+                ]
+            ),
+            admin,
+            db_session,
+        )
+
+        # A public server lists no groups, so a Terraform plan with
+        # groups=[] converges.
+        server = mcp_api.get_mcp_server_alias(server_id, db_session, admin)
+        assert (server.is_public, server.groups) == (True, [])
+
+        mcp_api.update_mcp_server_alias(
+            server_id,
+            MCPServerSimpleUpdateRequest(is_public=False),
+            db_session,
+            admin,
+        )
+        server = mcp_api.get_mcp_server_alias(server_id, db_session, admin)
+        assert (server.is_public, server.groups) == (False, [group.id])
+
+        # A share-only edit keeps the group setting.
+        mcp_api.update_mcp_server_alias(
+            server_id,
+            MCPServerSimpleUpdateRequest(users=[admin.id]),
+            db_session,
+            admin,
+        )
+        assert [
+            setting.group_id
+            for setting in load_integration_group_settings(integration.id, db_session)
+        ] == [group.id]
+
+        # The legacy groups are each group with access, so groups=[] takes
+        # the access away, setting and all.
+        mcp_api.update_mcp_server_alias(
+            server_id,
+            MCPServerSimpleUpdateRequest(groups=[]),
+            db_session,
+            admin,
+        )
+        assert load_integration_group_settings(integration.id, db_session) == []
+        server = mcp_api.get_mcp_server_alias(server_id, db_session, admin)
+        assert server.groups == []
+    finally:
+        db_session.rollback()
+        db_session.execute(
+            delete(Integration__UserGroup).where(
+                Integration__UserGroup.user_group_id == group.id
+            )
+        )
+        db_session.execute(delete(UserGroup).where(UserGroup.id == group.id))
+        db_session.commit()

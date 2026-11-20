@@ -119,9 +119,6 @@
       "addConnectors": {
         "label": "Konnektoren hinzufügen"
       },
-      "codingAgentIncognito": {
-        "tooltip": "Der Coding-Agent ist im Inkognito-Modus nicht verfügbar"
-      },
       "configure": {
         "tooltip": "Konfigurieren"
       },
@@ -266,9 +263,6 @@
       },
       "addMemory": {
         "label": "Erinnerung hinzufügen"
-      },
-      "codingAgent": {
-        "label": "Coding-Agent"
       }
     },
     "toolsPopover": {
@@ -323,9 +317,6 @@
       "tooltips": {
         "askAdminSuffix": {
           "text": "Bitten Sie einen Admin um die Konfiguration."
-        },
-        "codingAgent": {
-          "description": "Untersucht ein GitHub-Repository und beantwortet Fragen zu dessen Code."
         },
         "configureSuffix": {
           "text": "Zum Aktivieren auf das Zahnrad tippen."
@@ -1507,10 +1498,6 @@
           "description": "Code erzeugen und ausführen.",
           "title": "Code-Interpreter"
         },
-        "codingAgent": {
-          "description": "Ein GitHub-Repository untersuchen und Fragen zu seinem Code beantworten.",
-          "title": "Coding-Agent"
-        },
         "description": "Tools und Funktionen, die der Chat verwenden kann. Dies gilt nicht für Agenten.",
         "pluginsNote": "Verwalten Sie MCP-Server und OpenAPI-Apps unter [Integrationen]({url}).",
         "imageGeneration": {
@@ -2178,7 +2165,15 @@
           "close": "Schließen",
           "count": "({count})"
         },
-        "showing": "<mono>{from}</mono>~<mono>{to}</mono> von <mono>{total}</mono>"
+        "showing": "<mono>{from}</mono>~<mono>{to}</mono> von <mono>{total}</mono>",
+        "progress": {
+          "listed": "Aufgelistet",
+          "converted": "Konvertiert",
+          "indexed": "Indexiert",
+          "listedSoFar": "{count, plural, one {Bisher # Dokument aufgelistet} other {Bisher # Dokumente aufgelistet}}",
+          "skipped": "{count, plural, one {# unverändertes Dokument übersprungen} other {# unveränderte Dokumente übersprungen}}",
+          "eta": "Noch etwa {duration}"
+        }
       },
       "activity": {
         "search": {
@@ -10364,65 +10359,36 @@
         }
       }
     },
-    "plugins": {
-      "title": "Plugins",
-      "description": "Plugins stellen Personen Skills und Integrationen bereit. Diese Seite zeigt die Plugins, die Integrationen enthalten.",
-      "search": "Plugins suchen",
-      "loadFailed": "Die Plugins konnten nicht geladen werden.",
-      "manageIntegrations": "Integrationen verwalten",
-      "columns": {
-        "name": "Plugin",
-        "library": "Bibliothek",
-        "installation": "Installation",
-        "integrations": "Integrationen"
-      },
-      "library": {
-        "organization": "Organisationsbibliothek",
-        "personal": "Meine Uploads von {owner}"
-      },
-      "installationSelect": "Installationseinstellung von {name}",
-      "installationSaved": "{name} ist jetzt {policy}.",
-      "installationSaveFailed": "Die Installationseinstellung konnte nicht gespeichert werden.",
-      "openIntegration": "{name} öffnen",
-      "empty": {
-        "title": "Keine Plugins mit Integrationen",
-        "description": "Fügen Sie eine Integration hinzu. Onyx erstellt ein Plugin, das sie enthält."
-      }
-    },
     "integrations": {
       "title": "Integrationen",
-      "description": "Verbinden Sie MCP-Server und Apps. Jede Integration ist in einem Plugin enthalten, das Personen Zugriff darauf gibt.",
+      "description": "Verbinden Sie MCP-Server und Apps. Jede Integration hat einen Eigentümer, eine Installationseinstellung und eigene Freigaben.",
       "search": "Integrationen suchen",
       "open": "{name} öffnen",
       "loadFailed": "Die Integrationen konnten nicht geladen werden.",
       "add": {
         "label": "Hinzufügen",
         "title": "Integration hinzufügen",
-        "description": "Wählen Sie den Integrationstyp.",
+        "description": "Verbinden Sie einen Dienst, damit Personen ihn im Chat und in Craft verwenden können.",
         "created": "{name} wurde hinzugefügt.",
         "createFailed": "Die Integration konnte nicht hinzugefügt werden.",
-        "formTitle": {
-          "mcp_server": "MCP-Server hinzufügen",
-          "openapi": "OpenAPI-App hinzufügen",
-          "preset": "App aus Vorlage hinzufügen",
-          "custom": "Eigene App hinzufügen"
-        },
-        "kindDescription": {
-          "mcp_server": "Verbinden Sie einen Remote-MCP-Server über seine URL.",
-          "openapi": "Erstellen Sie Aktionen aus einem OpenAPI-Schema.",
-          "preset": "Verbinden Sie eine integrierte App, z. B. GitHub oder Slack.",
-          "custom": "Lassen Sie Craft einen HTTP-Dienst aufrufen, der zu URL-Mustern passt."
-        },
         "openapi": {
-          "title": "OpenAPI-App hinzufügen"
+          "title": "OpenAPI-App hinzufügen",
+          "schema": {
+            "title": "Schema",
+            "description": "Fügen Sie das OpenAPI-Schema hinzu, das die Aktionen definiert.",
+            "added": "{count, plural, one {Das Schema hat # Pfad.} other {Das Schema hat # Pfade.}}",
+            "required": "Fügen Sie ein Schema hinzu.",
+            "add": "Schema hinzufügen",
+            "edit": "Schema bearbeiten"
+          }
         },
         "preset": {
-          "title": "Vorlage",
-          "placeholder": "Vorlage auswählen",
-          "required": "Wählen Sie eine Vorlage.",
+          "title": "Ausgangspunkt",
           "loadFailed": "Die Vorlagen konnten nicht geladen werden.",
           "instructions": "Einrichtungsanleitung",
-          "credentialRequired": "Geben Sie diesen Wert ein."
+          "credentialRequired": "Geben Sie diesen Wert ein.",
+          "description": "Eine Vorlage füllt den Namen und die Anmeldung einer integrierten App aus. Wählen Sie „Benutzerdefinierte App“, um einen beliebigen HTTP-Dienst einzurichten.",
+          "custom": "Benutzerdefinierte App"
         },
         "name": {
           "title": "Name",
@@ -10465,16 +10431,38 @@
           "title": "Eigentümer",
           "personal": "Für mich",
           "organization": "Für die Organisation",
-          "personalDescription": "Onyx legt die Integration in einem Plugin unter „Meine Uploads“ ab. Sie können das Plugin später teilen.",
-          "organizationDescription": "Onyx legt die Integration in einem Plugin in der Organisationsbibliothek ab."
+          "personalDescription": "Nur Sie können die Integration verwenden. Sie können sie später teilen.",
+          "organizationDescription": "Jeder Benutzer der Organisation kann die Integration aktivieren."
         },
-        "back": "Zurück",
         "submit": "Hinzufügen",
-        "adding": "Wird hinzugefügt …"
+        "adding": "Wird hinzugefügt …",
+        "cancel": "Abbrechen",
+        "type": {
+          "title": "Typ",
+          "description": "Wählen Sie, wie Onyx sich mit dem Dienst verbindet.",
+          "mcp_server": {
+            "title": "MCP-Server",
+            "description": "Verbinden Sie einen entfernten MCP-Server über seine URL."
+          },
+          "openapi": {
+            "title": "OpenAPI-App",
+            "description": "Erstellen Sie Aktionen aus einem OpenAPI-Schema."
+          },
+          "app": {
+            "title": "App",
+            "description": "Beginnen Sie mit einer Vorlage wie GitHub oder einer eigenen App."
+          }
+        },
+        "details": {
+          "title": "Details"
+        },
+        "signIn": {
+          "title": "Anmeldung"
+        }
       },
       "filters": {
         "label": "Integrationstyp",
-        "all": "Alle",
+        "all": "Alle Typen",
         "mcp": "MCP-Server",
         "api": "Apps"
       },
@@ -10482,8 +10470,8 @@
         "name": "Name",
         "type": "Typ",
         "signIn": "Anmeldung",
-        "access": "Zugriff",
-        "status": "Status"
+        "status": "Status",
+        "installation": "Installation"
       },
       "empty": {
         "title": "Keine Integrationen",
@@ -10498,12 +10486,6 @@
         "custom": "Eigene App"
       },
       "signInSummary": "{mode, select, none {Keine Anmeldung} shared {{method, select, oauth2 {Organisationskonto (OAuth)} api_key {API-Schlüssel der Organisation} onyx_login {Onyx-Anmeldung} managed {Von Onyx verwaltet} other {Organisationskonto}}} individual {{method, select, oauth2 {Jeder Nutzer (OAuth)} api_key {Jeder Nutzer (API-Schlüssel)} onyx_login {Onyx-Anmeldung} managed {Von Onyx verwaltet} other {Jeder Nutzer}}} other {Unbekannt}}",
-      "access": {
-        "none": "In keinem Plugin",
-        "many": "{count, plural, one {# Plugin} other {# Plugins}}",
-        "organization": "{plugin} (Organisationsbibliothek)",
-        "personal": "{plugin} (Meine Uploads von {owner})"
-      },
       "status": {
         "needsSetup": "Einrichtung nötig",
         "off": "Aus",
@@ -10583,23 +10565,14 @@
           "createdBy": "Hinzugefügt von",
           "needsSetup": "Einrichtung nötig",
           "needsSetupDefault": "Schließen Sie die Anmeldeeinstellungen auf dem Tab „Konfiguration“ ab.",
-          "plugins": {
-            "title": "Plugins",
-            "description": "Personen erhalten diese Integration über diese Plugins.",
-            "organization": "{policy, select, REQUIRED {Organisationsbibliothek, erforderlich} DEFAULT {Organisationsbibliothek, standardmäßig aktiv} AVAILABLE {Organisationsbibliothek, verfügbar} NOT_AVAILABLE {Organisationsbibliothek, nicht verfügbar} other {Organisationsbibliothek}}",
-            "personal": "Meine Uploads von {owner}",
-            "manage": "Plugins verwalten"
-          },
           "enabled": {
             "title": "Aktiviert",
             "description": "Wenn dies aus ist, kann kein Agent und kein Nutzer die Integration verwenden."
           },
           "delete": {
-            "title": "Integration löschen",
-            "description": "Entfernt die Integration aus jedem Plugin und löscht ihre Verbindungen und Aktionseinstellungen.",
             "label": "Löschen",
             "confirmTitle": "{name} löschen?",
-            "confirmDescription": "Onyx entfernt die Integration aus jedem Plugin und löscht ihre Verbindungen und Aktionseinstellungen. Dies kann nicht rückgängig gemacht werden.",
+            "confirmDescription": "Onyx löscht die Integration mit ihren Verbindungen und Aktionseinstellungen und entfernt sie aus jedem Agenten und jeder Aufgabe. Dies kann nicht rückgängig gemacht werden.",
             "confirm": "Löschen"
           },
           "deleted": "{name} wurde gelöscht.",
@@ -10610,8 +10583,15 @@
             "nameRequired": "Geben Sie der Integration einen Namen.",
             "description": "Beschreibung",
             "save": "Speichern",
-            "saved": "Name und Beschreibung gespeichert."
-          }
+            "saved": "Name und Beschreibung gespeichert.",
+            "edit": "Details bearbeiten",
+            "title": "Details bearbeiten",
+            "cancel": "Abbrechen",
+            "saveFailed": "Name und Beschreibung konnten nicht gespeichert werden."
+          },
+          "description": "Beschreibung",
+          "menu": "Weitere Aktionen",
+          "owner": "Eigentümer"
         },
         "configuration": {
           "readOnly": "Sie können diese Integration sehen, aber nicht ändern.",
@@ -10681,10 +10661,23 @@
             "title": "Verbinden Sie zuerst den Server",
             "description": "Onyx lädt die Aktionen eines MCP-Servers, nachdem der Server verbunden ist.",
             "open": "Konfiguration öffnen",
-            "individualDescription": "Jeder Benutzer meldet sich bei diesem Server an. Verbinden Sie Ihr eigenes Konto auf der Seite „Plugins“ und klicken Sie dann auf „Aktualisieren“.",
-            "openPlugins": "Plugins öffnen"
+            "individualDescription": "Jeder Benutzer meldet sich bei diesem Server an. Verbinden Sie Ihr eigenes Konto auf der Integrationsseite und klicken Sie dann auf Aktualisieren.",
+            "openIntegration": "Integration Öffnen"
           }
         }
+      },
+      "installation": {
+        "select": "Installationseinstellung von {name}",
+        "saved": "{name} ist jetzt {policy}.",
+        "saveFailed": "Die Installationseinstellung konnte nicht gespeichert werden.",
+        "title": "Installationseinstellung",
+        "description": "Wer diese Integration erhält. Nicht verfügbar hält sie privat: Nur der Eigentümer, die Personen, mit denen sie geteilt ist, und die Gruppen mit eigener Einstellung nutzen sie. Entferne diese Gruppeneinstellungen, um sie auf den Eigentümer und die Freigaben zu beschränken.",
+        "notAvailable": "Privat. Nur der Eigentümer, die Personen, mit denen sie geteilt ist, und die Gruppen mit eigener Einstellung nutzen sie."
+      },
+      "ownedBy": "Eigentümer: {owner}",
+      "groupAccess": {
+        "saved": "Gruppeneinstellungen für {name} gespeichert.",
+        "saveFailed": "Die Gruppeneinstellung konnte nicht gespeichert werden."
       }
     }
   },
@@ -10720,10 +10713,6 @@
         "codeInterpreter": {
           "description": "Generieren und führen Sie Code aus.",
           "title": "Code-Interpreter"
-        },
-        "codingAgent": {
-          "description": "Untersuchen Sie ein GitHub-Repository und beantworten Sie Fragen zu dessen Code.",
-          "title": "Coding-Agent"
         },
         "description": "Tools und Fähigkeiten, die dieser Agent nutzen kann.",
         "imageGeneration": {
@@ -10808,52 +10797,6 @@
       },
       "page": {
         "ariaLabel": "Agenten-Editor-Seite"
-      },
-      "plugins": {
-        "askHint": "Damit dies ohne Rückfrage läuft, ändern Sie die Agent-Einstellung, ein Administrator setzt es in der Integration auf Erlauben, oder jeder Benutzer wählt Immer erlauben.",
-        "askHintAdminOnly": "Damit dies ohne Rückfrage läuft, setzt ein Administrator es in der Integration auf Erlauben.",
-        "askHintAgent": "Damit dies ohne Rückfrage läuft, ändern Sie die Agent-Einstellung, oder jeder Benutzer wählt Immer erlauben.",
-        "askHintAgentOnly": "Damit dies ohne Rückfrage läuft, ändern Sie die Agent-Einstellung.",
-        "choice": {
-          "inherit": "Integrationseinstellung verwenden",
-          "agentDefault": "Agentenstandard verwenden"
-        },
-        "default": {
-          "description": "Gilt für jede Aktion ohne eigene Einstellung, auch für Aktionen, die die Integration später hinzufügt.",
-          "title": "Standard für andere Aktionen"
-        },
-        "description": "Geben Sie dem Agenten Plugins. Jede Aktion verwendet die Integrationseinstellung, sofern Sie keine andere wählen.",
-        "effective": "{policy, select, allow {Erlaubt} ask {Fragt} other {Blockiert}} ({source, select, integration {Integrationseinstellung} agentDefault {Agentenstandard} other {Agenteneinstellung}})",
-        "empty": "Für Sie sind keine Plugins mit Integrationen verfügbar.",
-        "loadFailed": "Die Plugins konnten nicht geladen werden.",
-        "lock": {
-          "adminBlocked": "Erlauben ist nicht verfügbar: Ein Administrator hat diese Aktion blockiert.",
-          "alwaysAsks": "Erlauben ist nicht verfügbar: Craft fragt bei jeder dieser Anfragen nach einer Freigabe.",
-          "adminFinal": "Erlauben ist nicht verfügbar: Die Administratoreinstellung dieser Integration ist endgültig.",
-          "defaultFinal": "Erlauben ist nicht verfügbar: Die Administratoreinstellungen dieser Integrationen sind endgültig."
-        },
-        "noActions": "Diese Integration hat noch keine Aktionen.",
-        "notVisible": "Sie können die Aktionen dieses Plugins nicht sehen. Seine Einstellungen bleiben unverändert.",
-        "title": "Plugins",
-        "add": {
-          "placeholder": "Plugin hinzufügen"
-        },
-        "remove": {
-          "ariaLabel": "{plugin} entfernen"
-        },
-        "retry": {
-          "label": "Erneut versuchen"
-        },
-        "actionSetting": {
-          "label": "Einstellung für {action}"
-        },
-        "defaultSetting": {
-          "label": "Standardeinstellung für {plugin}"
-        },
-        "openIntegration": {
-          "label": "Aktionen von {integration} öffnen"
-        },
-        "stricterPlugin": "Das Plugin {plugin} dieses Agenten legt für diese Aktion eine strengere Einstellung fest."
       },
       "prompts": {
         "instructions": {
@@ -10946,6 +10889,51 @@
       },
       "warnings": {
         "openUrl": "Websuche ohne die Möglichkeit, URLs zu öffnen, kann zu deutlich schlechteren webbasierten Ergebnissen führen."
+      },
+      "integrations": {
+        "askHint": "Damit dies ohne Rückfrage läuft, ändern Sie die Agent-Einstellung, ein Administrator setzt es in der Integration auf Erlauben, oder jeder Benutzer wählt Immer erlauben.",
+        "askHintAdminOnly": "Damit dies ohne Rückfrage läuft, setzt ein Administrator es in der Integration auf Erlauben.",
+        "askHintAgent": "Damit dies ohne Rückfrage läuft, ändern Sie die Agent-Einstellung, oder jeder Benutzer wählt Immer erlauben.",
+        "askHintAgentOnly": "Damit dies ohne Rückfrage läuft, ändern Sie die Agent-Einstellung.",
+        "choice": {
+          "inherit": "Integrationseinstellung verwenden",
+          "agentDefault": "Agentenstandard verwenden"
+        },
+        "default": {
+          "description": "Gilt für jede Aktion ohne eigene Einstellung, auch für Aktionen, die die Integration später hinzufügt.",
+          "title": "Standard für andere Aktionen"
+        },
+        "description": "Geben Sie dem Agenten Integrationen. Jede Aktion verwendet die Integrationseinstellung, sofern Sie keine andere wählen.",
+        "effective": "{policy, select, allow {Erlaubt} ask {Fragt} other {Blockiert}} ({source, select, integration {Integrationseinstellung} agentDefault {Agentenstandard} other {Agenteneinstellung}})",
+        "empty": "Für Sie sind keine Integrationen verfügbar.",
+        "loadFailed": "Die Integrationen konnten nicht geladen werden.",
+        "lock": {
+          "adminBlocked": "Erlauben ist nicht verfügbar: Ein Administrator hat diese Aktion blockiert.",
+          "alwaysAsks": "Erlauben ist nicht verfügbar: Craft fragt bei jeder dieser Anfragen nach einer Freigabe.",
+          "adminFinal": "Erlauben ist nicht verfügbar: Die Administratoreinstellung dieser Integration ist endgültig."
+        },
+        "noActions": "Diese Integration hat noch keine Aktionen.",
+        "notVisible": "Sie können die Aktionen dieser Integration nicht sehen. Ihre Einstellungen bleiben unverändert.",
+        "title": "Integrationen",
+        "add": {
+          "placeholder": "Integration hinzufügen"
+        },
+        "remove": {
+          "ariaLabel": "{integration} entfernen"
+        },
+        "retry": {
+          "label": "Erneut versuchen"
+        },
+        "actionSetting": {
+          "label": "Einstellung für {action}"
+        },
+        "defaultSetting": {
+          "label": "Standardeinstellung für {integration}"
+        },
+        "openIntegration": {
+          "label": "Aktionen von {integration} öffnen"
+        },
+        "sharedWider": "Einige Personen, die diesen Agenten verwenden können, können {integration} nicht verwenden. Ihre Chats laufen ohne die Integration. Teilen Sie {integration} mit ihnen, um ihnen Zugriff zu geben."
       }
     },
     "filters": {
@@ -11086,7 +11074,8 @@
           "empty": {
             "title": "Keine Aktionen"
           },
-          "title": "Aktionen & Tools"
+          "title": "Aktionen & Tools",
+          "noAccess": "Sie können diese Integration nicht verwenden. Ein Chat mit diesem Agenten läuft ohne sie."
         },
         "conversationStarters": {
           "title": "Gesprächseinstiege"
@@ -11633,50 +11622,11 @@
       }
     },
     "skill": {
-      "edit": {
-        "tooltip": "Skill bearbeiten"
-      },
-      "invalid": {
-        "description": "Löschen Sie diesen ungültigen Skill und erstellen Sie einen neuen."
-      },
       "tags": {
-        "builtin": {
-          "label": "Integriert"
-        },
-        "invalid": {
-          "label": "Ungültig"
-        },
-        "personal": {
-          "label": "Persönlich"
-        },
-        "required": {
-          "tooltip": "Der Administrator Ihrer Organisation schreibt diesen Skill für Sie vor."
-        },
-        "unavailable": {
-          "label": "Nicht verfügbar - klicken Sie, um mehr zu erfahren"
-        },
-        "shared": {
-          "label": "Geteilt"
-        },
-        "organization": {
-          "label": "Organisation"
-        },
         "unpublished": {
           "label": "Unveröffentlichte Änderungen",
           "tooltip": "Die Organisation nutzt noch Version {number}."
         }
-      },
-      "toggle": {
-        "disable": {
-          "ariaLabel": "{name} deaktivieren"
-        },
-        "enable": {
-          "ariaLabel": "{name} aktivieren"
-        }
-      },
-      "tooltips": {
-        "invalid": "Dieser Skill ist ungültig. Löschen Sie ihn und erstellen Sie einen neuen Skill.",
-        "unavailable": "Der Skill ist derzeit nicht verfügbar. Klicken Sie, um Details anzuzeigen."
       }
     }
   },
@@ -12014,6 +11964,9 @@
         },
         "skillsGroup": {
           "label": "Skills"
+        },
+        "manageSkills": {
+          "label": "Skills verwalten"
         }
       },
       "inputChip": {
@@ -12360,41 +12313,6 @@
         }
       },
       "timeline": {
-        "codingAgent": {
-          "bashExit": {
-            "header": "Bash · Exit {exitCode}"
-          },
-          "bashFailed": {
-            "header": "Bash · fehlgeschlagen"
-          },
-          "bashRequest": {
-            "label": "Anfrage"
-          },
-          "bashResponse": {
-            "label": "Antwort"
-          },
-          "bashRunning": {
-            "header": "Bash · läuft…"
-          },
-          "bashTimedOut": {
-            "header": "Bash · Zeitüberschreitung"
-          },
-          "noOutput": {
-            "text": "Keine Ausgabe"
-          },
-          "response": {
-            "header": "Antwort"
-          },
-          "task": {
-            "header": "Programmieraufgabe"
-          },
-          "taskWithRepo": {
-            "text": "{query}\n\nRepository: {repo}"
-          },
-          "thinking": {
-            "header": "Denkt nach"
-          }
-        },
         "collapseButton": {
           "ariaLabel": "Zeitleiste einklappen"
         },
@@ -12657,7 +12575,6 @@
         },
         "toolNames": {
           "codeInterpreter": "Code-Interpreter",
-          "codingAgent": "Coding-Agent",
           "customTool": "Benutzerdefiniertes Werkzeug",
           "generateImage": "Bild generieren",
           "generatePlan": "Plan erstellen",
@@ -14646,15 +14563,12 @@
         "empty": "Legen Sie los! Der Sitzungsverlauf erscheint hier.",
         "title": "Sitzungen"
       },
-      "skills": {
-        "label": "Skills"
-      },
       "toast": {
         "deleteFailed": "Sitzung konnte nicht gelöscht werden",
         "deleted": "\"{title}\" gelöscht."
       },
-      "plugins": {
-        "label": "Plugins"
+      "customize": {
+        "label": "Anpassen"
       }
     },
     "skillsStale": {
@@ -15164,7 +15078,7 @@
       "appTitle": "{name} Genehmigungseinstellungen",
       "title": "Genehmigungseinstellungen",
       "personalDescription": "Diese Einstellungen legen fest, ob Aktionen in Craft-Unterhaltungen, neuen Aufgaben und MCP-Toolaufrufen im Chat automatisch ausgeführt werden oder eine Genehmigung erfordern; bestehende Aufgaben behalten ihre eigenen Einstellungen.",
-      "taskDescription": "Wählen Sie die Plugins für diese Aufgabe und legen Sie fest, welche Aktionen automatisch ausgeführt werden. Änderungen gelten nur für diese Aufgabe.",
+      "taskDescription": "Wählen Sie die Integrationen, die diese Aufgabe verwenden kann, und legen Sie dann fest, welche Aktionen automatisch ausgeführt werden. Änderungen gelten nur für diese Aufgabe.",
       "userManagement": "Nutzer dürfen Genehmigungseinstellungen verwalten",
       "userManagementDescription": "Benutzer können Genehmigungseinstellungen für verfügbare Aktionen ändern.",
       "loading": "Genehmigungseinstellungen werden geladen…",
@@ -15178,9 +15092,9 @@
       "enableAppForTask": "{app} für diese Aufgabe aktivieren",
       "enabledForTask": "Für diese Aufgabe aktiviert",
       "disabledForTask": "Für diese Aufgabe deaktiviert",
-      "taskAppsTitle": "Plugins",
-      "taskAccessTitle": "Plugin-Zugriff",
-      "noEnabledApps": "Für diese Aufgabe sind keine Plugins aktiviert.",
+      "taskAppsTitle": "Integrationen",
+      "taskAccessTitle": "Integrationszugriff",
+      "noEnabledApps": "Für diese Aufgabe sind keine Integrationen aktiviert.",
       "actionPolicies": "Genehmigungseinstellungen",
       "manageActions": "Aktionen verwalten",
       "taskModalDescription": "Änderungen gelten, wenn Sie die Aufgabe speichern. Workspace-Einschränkungen gelten immer.",
@@ -15191,8 +15105,6 @@
       "saveChanges": "Änderungen speichern",
       "resetDefaults": "Alle auf Standardwerte zurücksetzen",
       "resetAll": "Alle auf Workspace-Standardwerte zurücksetzen",
-      "newTaskPluginsDescription": "Aktivieren Sie die Plugins, die diese Aufgabe verwenden kann. Jede Aktion nutzt die Einstellung ihrer Integration, bis Sie sie ändern.",
-      "emptyPlugins": "Es sind keine Plugins mit Integrationen verfügbar.",
       "needsSignIn": "{name} erfordert eine Anmeldung.",
       "taskPolicyCounts": "{allow} erlauben · {ask} fragen · {blocked} blockiert",
       "actionSetting": "Einstellung für {action}",
@@ -15202,7 +15114,10 @@
         "allow": "Erlauben",
         "ask": "Fragen",
         "blocked": "Blockiert"
-      }
+      },
+      "newTaskIntegrationsDescription": "Aktivieren Sie die Integrationen, die diese Aufgabe verwenden kann. Jede Aktion verwendet ihre Integrationseinstellung, bis Sie sie ändern.",
+      "emptyIntegrations": "Keine Integrationen verfügbar.",
+      "notRunnable": "Craft kann {name} gerade nicht ausführen, daher überspringt die Aufgabe es."
     },
     "skillRuntimeNotice": {
       "title": "{count, plural, one {# Skill wurde nicht geladen} other {# Skills wurden nicht geladen}}",
@@ -15633,7 +15548,9 @@
       "sort": "Sortieren",
       "sortBy": "Sortieren nach",
       "sortingOrder": "Sortierrichtung",
-      "viewSelected": "Auswahl anzeigen"
+      "viewSelected": "Auswahl anzeigen",
+      "selectAll": "Alle auswählen",
+      "selectRow": "Zeile auswählen"
     },
     "tabs": {
       "scrollLeft": "Tabs nach links scrollen",
@@ -16181,9 +16098,6 @@
         "llmGateway": {
           "label": "LLM Gateway"
         },
-        "plugins": {
-          "label": "Plugins"
-        },
         "plansAndBilling": {
           "label": "Tarife & Abrechnung"
         },
@@ -16309,8 +16223,8 @@
       "searchChats": {
         "label": "Chats durchsuchen"
       },
-      "plugins": {
-        "label": "Plugins"
+      "customize": {
+        "label": "Anpassen"
       }
     },
     "chatButton": {
@@ -16431,12 +16345,7 @@
         "importSubmit": {
           "label": "Skill importieren"
         },
-        "importTitle": "Diesen Skill importieren?",
-        "replaceBody": "Dieser Upload muss denselben Skill-Namen verwenden. Wenn Sie fortfahren, werden die Beschreibung, die Anweisungen und die Dateien durch das hochgeladene Paket ersetzt.",
-        "replaceSubmit": {
-          "label": "Inhalt ersetzen"
-        },
-        "replaceTitle": "Skill-Inhalt ersetzen?"
+        "importTitle": "Diesen Skill importieren?"
       },
       "delete": {
         "button": {
@@ -16450,68 +16359,21 @@
         "label": "Löschen",
         "pendingLabel": "Wird gelöscht..."
       },
-      "details": {
-        "description": "Legen Sie fest, wann und wie Craft diesen Skill verwenden soll.",
-        "descriptionField": {
-          "description": "Beschreiben Sie, wann dieser Skill verwendet werden soll.",
-          "placeholder": "Wobei hilft dieser Skill?",
-          "title": "Beschreibung"
-        },
-        "name": {
-          "createDescription": "Verwenden Sie Kleinbuchstaben, Zahlen und einzelne Bindestriche.",
-          "lockedDescription": "Skill-Namen können nach der Erstellung nicht geändert werden.",
-          "placeholder": "Benennen Sie Ihren Skill",
-          "title": "Name"
-        },
-        "title": "Details"
-      },
       "files": {
-        "busyLabel": "Wird hochgeladen...",
-        "description": "Fügen Sie Referenzen, Skripte, Assets oder andere von diesem Skill verwendete Dateien hinzu. ZIP-Dateien werden automatisch entpackt.",
-        "input": {
-          "ariaLabel": "Unterstützende Dateien hinzufügen"
-        },
-        "pendingUpload": {
-          "emptyMessage": "Dateien aus diesem Upload erscheinen, nachdem Sie den Skill erstellt haben."
-        },
-        "title": "Unterstützende Dateien"
-      },
-      "filesTooltip": {
-        "noPermission": "Sie haben keine Berechtigung, die Dateien dieses Skills zu aktualisieren.",
-        "saveFirst": "Speichern Sie die Detailänderungen, bevor Sie die Skill-Dateien aktualisieren.",
-        "updating": "Skill-Dateien werden aktualisiert..."
+        "addedOnCreate": "„Erstellen“ fügt diese Datei dem Skill hinzu."
       },
       "header": {
         "createDescription": "Erstellen Sie einen persönlichen Skill",
         "createTitle": "Skill erstellen",
-        "editDescription": "Aktualisieren Sie Skill-Details und -Dateien",
         "editTitle": "Skill bearbeiten",
         "save": {
-          "label": "Speichern",
-          "pendingLabel": "Wird gespeichert..."
-        }
-      },
-      "import": {
-        "busyLabel": "Wird importiert...",
-        "button": {
-          "label": "Skill importieren"
+          "label": "Erstellen",
+          "pendingLabel": "Wird erstellt..."
         },
-        "description": "Importieren Sie eine SKILL.md, eine ZIP-Datei oder einen Skill-Ordner, um das Formular vorauszufüllen und die Dateien einzubeziehen.",
-        "input": {
-          "ariaLabel": "Vorhandenen Skill importieren"
-        },
-        "prompt": "Wählen Sie eine SKILL.md oder ZIP-Datei oder ziehen Sie einen Skill-Ordner hierher.",
-        "title": "Haben Sie bereits einen Skill?"
-      },
-      "instructions": {
-        "description": "Beschreiben Sie das Verhalten und den Workflow, den dieser Skill zu Craft hinzufügt.",
-        "emptyFallback": "Noch keine Anweisungen.",
-        "placeholder": "Schreiben Sie die Skill-Anweisungen.",
-        "title": "Anweisungen"
+        "cancel": "Abbrechen"
       },
       "loadError": {
-        "description": "Dieser Skill existiert möglicherweise nicht, ist integriert oder kann mit Ihrem Konto nicht bearbeitet werden.",
-        "title": "Skill nicht verfügbar"
+        "description": "Dieser Skill existiert möglicherweise nicht, ist integriert oder kann mit Ihrem Konto nicht bearbeitet werden."
       },
       "management": {
         "sharing": {
@@ -16521,12 +16383,9 @@
         }
       },
       "saveTooltip": {
-        "missingDescription": "Fügen Sie vor dem Speichern eine Beschreibung hinzu.",
         "missingInstructions": "Fügen Sie vor dem Speichern Anweisungen hinzu.",
         "missingName": "Fügen Sie vor dem Speichern einen Namen hinzu.",
         "noChanges": "Es wurden keine Änderungen vorgenommen.",
-        "noPermission": "Sie haben keine Berechtigung, die Details dieses Skills zu bearbeiten.",
-        "savingChanges": "Änderungen werden gespeichert...",
         "savingSkill": "Skill wird gespeichert..."
       },
       "staleVersion": {
@@ -16540,14 +16399,10 @@
         "created": "„{name}“ erstellt",
         "deleteFailed": "Skill konnte nicht gelöscht werden",
         "deleted": "„{name}“ gelöscht",
-        "fileRemoveFailed": "Skill-Datei konnte nicht entfernt werden",
-        "fileRemoved": "„{path}“ entfernt",
-        "filesUpdateFailed": "Skill-Dateien konnten nicht aktualisiert werden",
-        "filesUpdated": "Dateien für „{name}“ aktualisiert",
-        "importMissingSkillMd": "Importieren Sie eine SKILL.md, eine ZIP-Datei oder einen Ordner mit SKILL.md.",
         "inspectFailed": "Skill-Paket konnte nicht geprüft werden",
         "saveFailed": "Skill konnte nicht gespeichert werden",
-        "saved": "„{name}“ gespeichert"
+        "saved": "„{name}“ gespeichert",
+        "mergeLimit": "{limit, select, files {Ein Skill kann bis zu {max, number} Dateien enthalten. Entfernen Sie einige Dateien und wählen Sie dann „Erstellen“.} other {Ein Skill kann bis zu {max, number} MB an Dateien enthalten. Entfernen Sie einige Dateien und wählen Sie dann „Erstellen“.}}"
       },
       "creationAccess": {
         "title": "Zugriff"
@@ -16821,11 +16676,7 @@
           "ariaLabel": "Version {number} wiederherstellen",
           "successToast": "Version {number} als Version {newNumber} wiederhergestellt.",
           "unchangedToast": "Version {number} hat dieselben Dateien wie die aktuelle Version.",
-          "failedToast": "Diese Version konnte nicht wiederhergestellt werden.",
-          "unsavedChanges": {
-            "title": "Speichern Sie zuerst Ihre Änderungen",
-            "description": "Speichern oder verwerfen Sie die Änderungen im Editor, bevor Sie eine Version wiederherstellen."
-          }
+          "failedToast": "Diese Version konnte nicht wiederhergestellt werden."
         },
         "loadError": {
           "title": "Versionen konnten nicht geladen werden",
@@ -16851,12 +16702,6 @@
       }
     },
     "page": {
-      "browse": {
-        "title": "Skills auswählen"
-      },
-      "countSeparator": {
-        "label": "{count, plural, one {Skill} other {Skills}}"
-      },
       "createMenu": {
         "github": {
           "description": "Importieren Sie einen oder mehrere Skills aus einem Repository.",
@@ -16886,7 +16731,6 @@
         }
       },
       "header": {
-        "description": "Fähigkeitspakete, auf die Ihr Craft-Agent zugreifen kann. Diese Seite zeigt integrierte Skills, mit Ihnen geteilte Skills und Ihre persönlichen Skills.",
         "title": "Skills"
       },
       "loadError": {
@@ -16911,10 +16755,8 @@
       "toasts": {
         "disableFailed": "{name} konnte nicht deaktiviert werden",
         "enableFailed": "{name} konnte nicht aktiviert werden",
-        "refreshFailed": "{name} wurde aktualisiert, aber die Skill-Liste konnte nicht aktualisiert werden."
-      },
-      "builtins": {
-        "title": "Integrierte Skills ({count, number})"
+        "refreshFailed": "{name} wurde aktualisiert, aber die Skill-Liste konnte nicht aktualisiert werden.",
+        "listRefreshFailed": "Die Skill-Liste konnte nicht aktualisiert werden. Laden Sie die Seite neu, um die Änderung zu sehen."
       }
     },
     "sections": {
@@ -16932,26 +16774,12 @@
           "label": "Ziehen Sie eine Datei hierher oder klicken Sie zum Hochladen"
         }
       },
-      "fileTree": {
-        "empty": {
-          "description": "Noch keine zusätzlichen Dateien."
-        },
-        "remove": {
-          "label": "{name} entfernen"
-        }
-      },
       "filesPicker": {
-        "addFiles": {
-          "label": "Dateien hinzufügen"
-        },
         "input": {
           "ariaLabel": "Skill-Dateien hinzufügen"
         },
         "preparing": {
           "label": "Wird vorbereitet..."
-        },
-        "prompt": {
-          "description": "Wählen Sie Dateien oder eine ZIP-Datei aus oder legen Sie einen Ordner hier ab."
         }
       },
       "instructionsToggle": {
@@ -16978,7 +16806,6 @@
     },
     "bulk": {
       "adminDescription": "Skills und Zugriff in Ihrer Organisation verwalten.",
-      "selectAll": "Alle sichtbaren benutzerdefinierten Skills auswählen",
       "selected": "{count, plural, one {# ausgewählt} other {# ausgewählt}}",
       "share": "Teilen",
       "enable": "Für mich aktivieren",
@@ -17028,6 +16855,10 @@
       "version": {
         "firstPublish": "v{number} · Erste Veröffentlichung",
         "update": "v{number} · Update von v{published}"
+      },
+      "banner": {
+        "title": "{count, plural, one {# Skill wartet auf Veröffentlichung} other {# Skills warten auf Veröffentlichung}}",
+        "review": "Prüfen"
       }
     },
     "installationPolicy": {
@@ -17036,11 +16867,11 @@
         "description": "Installiert und immer aktiv. Mitglieder können es nicht deaktivieren."
       },
       "DEFAULT": {
-        "label": "Standardmäßig installiert",
+        "label": "Installiert",
         "description": "Für jedes Mitglied installiert. Mitglieder können es deaktivieren."
       },
       "AVAILABLE": {
-        "label": "Zur Installation verfügbar",
+        "label": "Verfügbar",
         "description": "Mitglieder finden es und aktivieren es bei Bedarf."
       },
       "NOT_AVAILABLE": {
@@ -17069,6 +16900,25 @@
         "user": "{email}: {size}, {files, plural, one {# Datei} other {# Dateien}}, {notLoaded, plural, one {# Skill nicht geladen} other {# Skills nicht geladen}}",
         "more": "Und {count, number} weitere."
       }
+    },
+    "adminTable": {
+      "label": "Benutzerdefinierte Skills",
+      "columns": {
+        "name": "Name",
+        "source": "Quelle",
+        "version": "Version",
+        "audience": "Zielgruppe"
+      },
+      "organizationLibrary": "Organisationsbibliothek",
+      "noOwner": "Kein Eigentümer",
+      "version": "v{current}{published, select, none {} other { · v{published} live}}",
+      "private": "Nur der Eigentümer",
+      "shared": "Mit Personen oder Gruppen geteilt",
+      "open": "{name} öffnen",
+      "menu": "Mehr zu {name}",
+      "share": "Teilen",
+      "delete": "Löschen",
+      "select": "{name} auswählen"
     }
   },
   "opensearchHealth": {
@@ -17086,46 +16936,10 @@
   },
   "plugins": {
     "member": {
-      "title": "Plugins",
-      "description": "Skills und Integrationen, die Sie in Chats und Agenten nutzen können.",
-      "filters": {
-        "label": "Plugin-Typ",
-        "all": {
-          "label": "Alle"
-        },
-        "skills": {
-          "label": "Skills"
-        },
-        "integrations": {
-          "label": "Integrationen"
-        }
-      },
       "sections": {
         "organization": "Organisationsbibliothek",
         "mine": "Meine Uploads",
         "shared": "Mit Ihnen geteilt"
-      },
-      "row": {
-        "skillCount": "{count, plural, one {# Skill} other {# Skills}}",
-        "integrationCount": "{count, plural, one {# Integration} other {# Integrationen}}",
-        "needsConnection": "{count, plural, one {# braucht Anmeldung} other {# brauchen Anmeldung}}",
-        "open": {
-          "label": "{name} öffnen"
-        }
-      },
-      "state": {
-        "loading": "Plugins werden geladen",
-        "loadFailed": "Einige Plugins konnten nicht geladen werden.",
-        "emptyTitle": "Noch keine Plugins",
-        "emptyDescription": "Bitten Sie Ihren Admin, ein Plugin hinzuzufügen.",
-        "noResultsTitle": "Keine passenden Plugins",
-        "noResultsDescription": "Versuchen Sie einen anderen Namen oder Filter.",
-        "retry": {
-          "label": "Erneut versuchen"
-        },
-        "clear": {
-          "label": "Alle Plugins anzeigen"
-        }
       },
       "detail": {
         "title": "Plugin",
@@ -17134,7 +16948,6 @@
         "tabs": {
           "overview": "Übersicht",
           "skills": "Skills",
-          "integrations": "Integrationen",
           "versions": "Versionen"
         },
         "overview": {
@@ -17142,34 +16955,19 @@
           "location": "Ort",
           "owner": "Eigentümer",
           "skills": "Skills",
-          "integrations": "Integrationen"
+          "description": "Beschreibung"
         },
         "skills": {
           "off": "Aus",
           "invalid": "Ungültig"
-        },
-        "back": {
-          "label": "Plugins"
         },
         "switch": {
           "title": "Dieses Plugin verwenden",
           "description": "Wenn dies aktiviert ist, kann der Standardagent dieses Plugin verwenden.",
           "label": "{name} verwenden",
           "required": "Ihr Admin hat dieses Plugin als erforderlich festgelegt. Sie können es nicht deaktivieren.",
-          "notAvailable": "Ihr Admin hat dieses Plugin als nicht verfügbar festgelegt.",
           "unavailable": "Sie können dieses Plugin nicht aktivieren oder deaktivieren.",
           "failed": "Das Plugin konnte nicht geändert werden."
-        },
-        "share": {
-          "label": "Teilen"
-        },
-        "publish": {
-          "label": "Veröffentlichen",
-          "blocked": "Nur ein Benutzer mit der organisationsweiten Berechtigung „Aktionen verwalten“ kann ein Plugin mit einer Integration veröffentlichen.",
-          "confirmTitle": "{name} veröffentlichen?",
-          "confirmMessage": "Das Plugin wird in die Organisationsbibliothek verschoben. Dies kann nicht rückgängig gemacht werden. Admins legen dann die Installationseinstellung fest.",
-          "done": "{name} ist jetzt in der Organisationsbibliothek.",
-          "failed": "Das Plugin konnte nicht veröffentlicht werden."
         }
       },
       "connection": {
@@ -17215,7 +17013,9 @@
         },
         "retry": {
           "label": "Erneut versuchen"
-        }
+        },
+        "readOnlyTitle": "Aktionen",
+        "readOnlyDescription": "Ihr Administrator legt fest, wie jede Aktion ausgeführt wird."
       },
       "oauthCallback": {
         "processing": "Ihr Konto wird verbunden…",
@@ -17226,55 +17026,30 @@
         "invalidLink": "Dieser Anmeldelink ist ungültig. Starten Sie die Anmeldung erneut.",
         "failed": "Die Anmeldung wurde nicht abgeschlossen. Versuchen Sie es erneut.",
         "back": {
-          "label": "Zurück zu den Plugins"
+          "label": "Zurück zu den Integrationen"
         }
-      },
-      "search": {
-        "placeholder": "Plugins suchen"
-      },
-      "addIntegration": {
-        "label": "Integration Hinzufügen"
-      },
-      "manage": {
-        "label": "Plugins verwalten"
-      },
-      "share": {
-        "title": "{name} teilen",
-        "description": "Geben Sie Personen und Gruppen Zugriff auf dieses Plugin.",
-        "sharedSignIn": "{names} verwendet ein Konto. Personen mit Zugriff verwenden das Konto, das Sie verbunden haben.",
-        "loadFailed": "Die Personen mit Zugriff konnten nicht geladen werden.",
-        "empty": "Nur Sie haben Zugriff.",
-        "remove": {
-          "label": "{name} entfernen"
-        },
-        "cancel": {
-          "label": "Abbrechen"
-        },
-        "submit": {
-          "label": "Speichern",
-          "pendingLabel": "Wird gespeichert..."
-        },
-        "saved": "Der Zugriff auf {name} wurde gespeichert.",
-        "failed": "Der Zugriff konnte nicht gespeichert werden."
       }
     },
     "chat": {
       "popover": {
-        "empty": "Dieser Agent hat keine Plugins mit Integrationen.",
-        "searchEmpty": "Keine Plugins passen zu Ihrer Suche.",
-        "loading": "Plugins werden geladen",
-        "loadError": "Einige Plugins konnten nicht geladen werden. Versuchen Sie es erneut.",
+        "empty": "Dieser Agent hat keine Integrationen.",
+        "searchEmpty": "Keine Integrationen entsprechen Ihrer Suche.",
+        "loading": "Integrationen werden geladen",
+        "loadError": "Einige Integrationen konnten nicht geladen werden. Versuchen Sie es erneut.",
         "trigger": {
-          "label": "Plugins"
+          "label": "Integrationen"
         },
         "retry": {
           "label": "Erneut versuchen"
         },
         "browse": {
-          "label": "Plugins durchsuchen"
+          "label": "Integrationen durchsuchen"
         },
         "toggle": {
           "label": "{name} mit diesem Agenten verwenden"
+        },
+        "search": {
+          "placeholder": "Integrationen suchen"
         }
       },
       "connectPrompt": {
@@ -17292,6 +17067,263 @@
     }
   },
   "integrations": {
-    "connectionState": "{state, select, connected {Verbunden} not_connected {Nicht verbunden} needs_reconnect {Neu verbinden} not_set_up {Nicht eingerichtet} other {Unbekannt}}"
+    "connectionState": "{state, select, connected {Verbunden} not_connected {Nicht verbunden} needs_reconnect {Neu verbinden} not_set_up {Nicht eingerichtet} other {Unbekannt}}",
+    "share": {
+      "title": "{name} teilen",
+      "description": "Geben Sie bestimmten Personen Zugriff, um diese Integration zu verwenden. Eine Freigabe erlaubt nur die Nutzung.",
+      "sharedSignIn": "{name} verwendet ein Konto. Personen mit Zugriff verwenden das Konto, das Sie verbunden haben.",
+      "loadFailed": "Die Personen mit Zugriff konnten nicht geladen werden.",
+      "empty": "Nur Sie haben Zugriff.",
+      "remove": {
+        "label": "{name} entfernen"
+      },
+      "cancel": {
+        "label": "Abbrechen"
+      },
+      "submit": {
+        "label": "Speichern",
+        "pendingLabel": "Wird gespeichert..."
+      },
+      "saved": "Der Zugriff auf {name} wurde gespeichert.",
+      "failed": "Der Zugriff konnte nicht gespeichert werden."
+    },
+    "memberState": {
+      "on": {
+        "label": "An"
+      },
+      "turn_on": {
+        "label": "Aktivieren"
+      },
+      "sign_in": {
+        "label": "Anmelden"
+      },
+      "no_access": {
+        "label": "Kein Zugriff",
+        "reason": "Kein Zugriff: Diese Integration wurde nicht mit Ihnen geteilt.",
+        "reasonOwner": "Kein Zugriff: {owner} hat sie nicht mit Ihnen geteilt."
+      },
+      "turned_off": {
+        "label": "Deaktiviert",
+        "reason": "Von einem Admin deaktiviert."
+      },
+      "switch": {
+        "label": "{name} verwenden",
+        "required": "Ihr Admin hat diese Integration als erforderlich festgelegt. Sie können sie nicht deaktivieren.",
+        "failed": "Die Integration konnte nicht geändert werden."
+      }
+    },
+    "menu": {
+      "label": "Weitere Aktionen für {name}",
+      "share": "Teilen",
+      "publish": {
+        "label": "In der Organisation veröffentlichen",
+        "blocked": "Nur ein Benutzer mit der organisationsweiten Berechtigung „Aktionen verwalten“ kann eine Integration veröffentlichen.",
+        "confirmTitle": "{name} in der Organisation veröffentlichen?",
+        "confirmMessage": "Danach kann jeder Benutzer der Organisation sie aktivieren. Admins legen ihre Installationseinstellung fest. Die Personen, mit denen Sie sie geteilt haben, behalten den Zugriff.",
+        "done": "{name} ist jetzt für die Organisation verfügbar.",
+        "failed": "Die Integration konnte nicht veröffentlicht werden."
+      }
+    }
+  },
+  "customize": {
+    "title": "Anpassen",
+    "tabs": {
+      "label": "Bereiche zum Anpassen",
+      "skills": "Skills",
+      "integrations": "Integrationen",
+      "plugins": "Plugins"
+    },
+    "skills": {
+      "loadFailed": "Ihre Skills konnten nicht geladen werden.",
+      "filter": {
+        "label": "Filtern",
+        "all": "Alle Skills",
+        "on": "Aktiviert",
+        "off": "Deaktiviert"
+      },
+      "sort": {
+        "label": "Sortieren",
+        "updated": "Zuletzt aktualisiert",
+        "name": "Name"
+      },
+      "add": {
+        "label": "Hinzufügen",
+        "upload": "Skill hochladen",
+        "create": "Skill erstellen",
+        "github": "Aus GitHub importieren"
+      },
+      "groups": {
+        "mine": "Von Ihnen erstellt",
+        "organization": "Aus Ihrer Organisation",
+        "shared": "Mit Ihnen geteilt",
+        "builtin": "Integriert"
+      },
+      "source": {
+        "mine": "von Ihnen",
+        "organization": "aus Ihrer Organisation",
+        "sharedBy": "geteilt von {email}",
+        "shared": "mit Ihnen geteilt",
+        "builtin": "integriert"
+      },
+      "subtitle": "{source} · {description}",
+      "tag": {
+        "off": "Deaktiviert",
+        "required": "Erforderlich",
+        "pending": "Prüfung ausstehend",
+        "invalid": "Ungültig"
+      },
+      "open": "{name} öffnen",
+      "menu": {
+        "label": "Mehr zu {name}",
+        "turnOn": "Aktivieren",
+        "turnOff": "Deaktivieren",
+        "share": "Teilen",
+        "remove": "Entfernen"
+      },
+      "empty": {
+        "title": "Noch keine Skills",
+        "description": "Erstellen oder laden Sie einen Skill hoch, um dem Assistenten eine Aufgabe beizubringen."
+      },
+      "noMatches": {
+        "title": "Keine passenden Skills",
+        "description": "Versuchen Sie eine andere Suche oder einen anderen Filter.",
+        "clear": "Alle Skills anzeigen"
+      }
+    },
+    "integrations": {
+      "title": "Integrationen",
+      "loadFailed": "Ihre Integrationen konnten nicht geladen werden.",
+      "columns": {
+        "name": "Integration",
+        "type": "Typ",
+        "authorization": "Autorisierung",
+        "status": "Status"
+      },
+      "status": {
+        "connected": "Verbunden"
+      },
+      "add": {
+        "label": "Hinzufügen",
+        "integration": "Integration hinzufügen",
+        "manage": "Integrationen verwalten"
+      },
+      "open": "{name} öffnen",
+      "empty": {
+        "title": "Noch keine Integrationen",
+        "description": "Bitten Sie Ihren Administrator, eine Integration hinzuzufügen."
+      },
+      "noMatches": {
+        "title": "Keine passenden Integrationen",
+        "description": "Versuchen Sie eine andere Suche."
+      }
+    },
+    "plugins": {
+      "contents": "{skills, plural, one {1 Skill} other {{skills} Skills}}",
+      "loadFailed": "Ihre Plugins konnten nicht geladen werden.",
+      "filter": {
+        "all": "Alle Plugins"
+      },
+      "empty": {
+        "title": "Noch keine Plugins",
+        "description": "Erstellen Sie einen Skill. Jeder Skill ist ein Plugin."
+      },
+      "noMatches": {
+        "title": "Keine passenden Plugins",
+        "clear": "Alle Plugins anzeigen"
+      },
+      "intro": "Ein Plugin bündelt Skills, die Sie gemeinsam aktivieren. Jeder hinzugefügte Skill kommt in einem eigenen Plugin. Integrationen finden Sie im Tab Integrationen."
+    },
+    "skillPage": {
+      "title": "Skill",
+      "back": "Skills",
+      "meta": "{owner} · v{version}{published, select, none {} other { · v{published} ist für Ihre Organisation live}} · aktualisiert am {updated}",
+      "ownerYou": "von Ihnen",
+      "ownerEmail": "von {email}",
+      "ownerYouTitle": "Sie",
+      "fromOrganization": "Aus der Organisationsbibliothek",
+      "copyLink": "Link kopieren",
+      "share": "Teilen",
+      "menu": "Mehr",
+      "edit": "Bearbeiten",
+      "remove": "Entfernen",
+      "add": "Hinzufügen",
+      "switch": "{name} verwenden",
+      "loadFailed": "Dieser Skill ist für Sie nicht verfügbar.",
+      "tabs": {
+        "overview": "Übersicht",
+        "contents": "Inhalt",
+        "versions": "Versionen",
+        "contentsCount": "Inhalt · {count}"
+      },
+      "overview": {
+        "description": "Beschreibung",
+        "noDescription": "Keine Beschreibung.",
+        "createdBy": "Erstellt von",
+        "access": "Zugriff",
+        "accessValue": "{access, select, personal {Nur Sie} private {Nur der Besitzer} shared {Mit Personen oder Gruppen geteilt} other {Organisationsbibliothek}}",
+        "tools": "Integrationen und Aktionen",
+        "instructionsOnly": "Fügt dem Agenten nur Anweisungen hinzu"
+      },
+      "backAdmin": "Skill-Bestand",
+      "contents": {
+        "version": "{name} v{version} · aktuell",
+        "edit": "Bearbeiten",
+        "cancel": "Abbrechen",
+        "saveVersion": "Version speichern",
+        "saving": "Wird gespeichert…",
+        "addFile": "Datei hinzufügen",
+        "removeFile": "{name} entfernen",
+        "editorLabel": "SKILL.md",
+        "noPreview": "Onyx zeigt nur den Text von SKILL.md. Diese Datei gehört zum Skill.",
+        "addedFile": "„Version speichern“ fügt diese Datei dem Skill hinzu.",
+        "errors": {
+          "frontmatter": "SKILL.md muss mit einem ---‑Block beginnen, der den Namen und die Beschreibung enthält.",
+          "description": "Fügen Sie dem ---‑Block von SKILL.md eine Beschreibung hinzu.",
+          "name": "Der Name muss „{name}“ bleiben.",
+          "skillMd": "Bearbeiten Sie SKILL.md im Editor. Fügen Sie hier nur zusätzliche Dateien hinzu."
+        },
+        "loadFailed": "Der Inhalt dieses Skills konnte nicht geladen werden.",
+        "retry": "Erneut versuchen",
+        "reloadFailed": "Die neueste Version konnte nicht geladen werden. Ihre Änderungen bleiben erhalten. Versuchen Sie erneut „Neu laden“."
+      },
+      "required": {
+        "label": "Erforderlich",
+        "tooltip": "Ihr Administrator schreibt diesen Skill vor, daher können Sie ihn nicht deaktivieren."
+      }
+    },
+    "integrationPage": {
+      "title": "Integration",
+      "back": "Integrationen",
+      "loadFailed": "Diese Integration ist für Sie nicht verfügbar.",
+      "tabs": {
+        "overview": "Übersicht",
+        "configuration": "Konfiguration",
+        "actions": "Aktionen"
+      },
+      "overview": {
+        "description": "Beschreibung",
+        "noDescription": "Keine Beschreibung.",
+        "type": "Typ",
+        "signIn": "Anmeldung",
+        "url": "Server-URL",
+        "owner": "Eigentümer",
+        "organization": "Organisation",
+        "status": "Status",
+        "switch": {
+          "title": "Diese Integration Verwenden",
+          "description": "Wenn dies aktiviert ist, können Sie sie in Chats und in Craft verwenden.",
+          "required": "Ihr Admin hat diese Integration als erforderlich festgelegt. Sie können sie nicht deaktivieren."
+        }
+      },
+      "configuration": {
+        "description": "{mode, select, individual {Ihre Verbindung zu dieser Integration. Nur Sie verwenden sie.} shared {Das Konto dieser Integration. Alle mit Zugriff verwenden es.} other {Diese Integration benötigt keine Anmeldung.}}"
+      }
+    },
+    "pluginPage": {
+      "tabs": {
+        "skills": "Skills · {count}"
+      }
+    },
+    "search": "Suchen"
   }
 }
