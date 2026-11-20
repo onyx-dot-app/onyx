@@ -14,6 +14,7 @@ from typing_extensions import override
 
 from onyx.configs.app_configs import (
     INDEX_BATCH_SIZE,
+    SHAREPOINT_CONNECTOR_SIZE_THRESHOLD,
     SHAREPOINT_EXHAUSTIVE_AD_ENUMERATION,
 )
 from onyx.configs.constants import DocumentSource
@@ -21,6 +22,7 @@ from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.interfaces import (
     CheckpointedConnectorWithPermSync,
+    CheckpointedSlimConnector,
     CheckpointOutput,
     CredentialsConnector,
     CredentialsProviderInterface,
@@ -28,6 +30,7 @@ from onyx.connectors.interfaces import (
     IndexingHeartbeatInterface,
     Resolver,
     SecondsSinceUnixEpoch,
+    SlimCheckpointOutput,
     SlimConnector,
     SlimConnectorWithPermSync,
     SourceApiLimiter,
@@ -70,11 +73,19 @@ from onyx.connectors.models import (
     ExternalAccess,
     HierarchyNode,
     SlimDocument,
+    SlimDocumentStub,
     TextSection,
 )
 from onyx.connectors.sharepoint.connector_utils import (
     validate_content_types,
     validate_site_url,
+)
+from onyx.connectors.sharepoint.listing import (
+    SharepointListingPayload,
+    drive_item_stub,
+    is_listable_drive_item,
+    site_page_stub,
+    store_drive_delta_link,
 )
 from onyx.connectors.sharepoint.models import SharepointDrive
 from onyx.connectors.sharepoint.source_operations import (
@@ -253,18 +264,35 @@ class SharepointConnectorCheckpoint(ConnectorCheckpoint):
 
     process_site_pages: bool = False
 
-    # Track yielded hierarchy nodes by their raw_node_id (URLs) to avoid duplicates
+    # The raw ids (URLs) of the hierarchy nodes that the walk yielded for the
+    # current site and drive, so that it yields each node one time. The walk
+    # drops the folder ids when it leaves a drive, and every id above
+    # MAX_SEEN_HIERARCHY_NODE_IDS. A node that is yielded again is stored
+    # again with no harm.
     seen_hierarchy_node_raw_ids: set[str] = Field(default_factory=set)
 
-    # Track yielded document IDs to avoid processing the same document twice.
-    # The Microsoft Graph delta API can return the same item on multiple pages.
-    seen_document_ids: set[str] = Field(default_factory=set)
+    # Checkpoints from before the stub listing kept every document id of the
+    # current drive here. It is read, so that such a checkpoint resumes, and
+    # not written.
+    legacy_seen_document_ids: set[str] | None = Field(
+        default=None,
+        validation_alias=AliasChoices("legacy_seen_document_ids", "seen_document_ids"),
+        exclude=True,
+    )
     permission_cache: SharepointPermissionCache = Field(
         default_factory=SharepointPermissionCache
     )
 
 
 GRAPH_INVALID_REQUEST_CODE = "invalidRequest"
+# The most hierarchy node ids that a checkpoint keeps. A drive with more
+# folders yields some folder nodes again.
+MAX_SEEN_HIERARCHY_NODE_IDS = 20_000
+
+# What one step of the walk yields: documents on the fetching path, stubs on
+# the listing path, and hierarchy nodes and failures on both.
+_WalkItem = Document | ConnectorFailure | HierarchyNode | SlimDocument
+_WalkOutput = Generator[_WalkItem, None, "SharepointConnectorCheckpoint"]
 
 
 def is_graph_invalid_request(error: MicrosoftGraphError) -> bool:
@@ -731,11 +759,13 @@ def site_drive_from_graph(drive: SharepointDrive) -> SiteDrive:
 class SharepointConnector(
     SlimConnector,
     SlimConnectorWithPermSync,
+    CheckpointedSlimConnector[SharepointConnectorCheckpoint],
     CheckpointedConnectorWithPermSync[SharepointConnectorCheckpoint],
     CredentialsConnector,
     Resolver,
 ):
     slim_listing_honors_indexing_start = True
+    listing_payload_type = SharepointListingPayload
 
     def __init__(
         self,
@@ -1064,7 +1094,15 @@ class SharepointConnector(
         checkpoint.current_folder = None
         checkpoint.current_drive_delta_next_link = None
         checkpoint.current_drive_delta_resync_attempted = False
-        checkpoint.seen_document_ids.clear()
+        checkpoint.legacy_seen_document_ids = None
+        # The folder nodes of the drive are not needed after it. The site
+        # node stays, so that the next drive does not yield it again.
+        site = checkpoint.current_site_descriptor
+        checkpoint.seen_hierarchy_node_raw_ids = (
+            {site.url}
+            if site and site.url in checkpoint.seen_hierarchy_node_raw_ids
+            else set()
+        )
 
     @staticmethod
     def _match_legacy_drive(
@@ -1501,6 +1539,11 @@ class SharepointConnector(
             if folder_url in checkpoint.seen_hierarchy_node_raw_ids:
                 continue
 
+            if (
+                len(checkpoint.seen_hierarchy_node_raw_ids)
+                >= MAX_SEEN_HIERARCHY_NODE_IDS
+            ):
+                checkpoint.seen_hierarchy_node_raw_ids.clear()
             checkpoint.seen_hierarchy_node_raw_ids.add(folder_url)
             external_access = None
             if include_permissions:
@@ -1549,14 +1592,18 @@ class SharepointConnector(
         checkpoint: SharepointConnectorCheckpoint,
         include_permissions: bool,
         is_targeted_reindex: bool = False,
+        seen_document_ids: set[str] | None = None,
     ) -> Generator[Document | ConnectorFailure | HierarchyNode, None, None]:
         """Process a single drive item into a Document (plus ancestor folder
         nodes), or a ConnectorFailure on error.
 
         Shared by the normal crawl (Phase 3b) and the targeted-reindex
-        ``reindex`` path. ``checkpoint`` is used purely as a dedup container
-        (``seen_document_ids`` / ``seen_hierarchy_node_raw_ids``); reindex passes
-        a throwaway checkpoint.
+        ``reindex`` path. ``checkpoint`` holds the hierarchy nodes already
+        yielded; reindex passes a throwaway checkpoint. ``seen_document_ids``
+        holds the documents that this call already yielded. It lives for one
+        call and not in the checkpoint, so a checkpoint does not grow with
+        the drive. Graph can return one item on two delta pages: the item is
+        then converted two times, and the later one is stored.
 
         When ``is_targeted_reindex`` is True, the branches that the crawl skips
         silently (denylist, unsupported type, empty non-PDF/image, non-indexable
@@ -1573,7 +1620,12 @@ class SharepointConnector(
                 yield _create_document_failure(driveitem, "excluded by path denylist")
             return
 
-        if driveitem.id and driveitem.id in checkpoint.seen_document_ids:
+        if seen_document_ids is None:
+            seen_document_ids = set()
+        if driveitem.id and (
+            driveitem.id in seen_document_ids
+            or driveitem.id in (checkpoint.legacy_seen_document_ids or ())
+        ):
             logger.debug(
                 "Skipping duplicate document %s (%s)",
                 driveitem.id,
@@ -1632,13 +1684,13 @@ class SharepointConnector(
 
             if isinstance(doc_or_failure, Document):
                 if doc_or_failure.sections:
-                    checkpoint.seen_document_ids.add(doc_or_failure.id)
+                    seen_document_ids.add(doc_or_failure.id)
                     yield doc_or_failure
                 elif should_yield_if_empty:
                     doc_or_failure.sections = [
                         TextSection(link=driveitem.web_url, text="")
                     ]
-                    checkpoint.seen_document_ids.add(doc_or_failure.id)
+                    seen_document_ids.add(doc_or_failure.id)
                     yield doc_or_failure
                 else:
                     logger.warning(
@@ -1675,6 +1727,110 @@ class SharepointConnector(
         checkpoint: SharepointConnectorCheckpoint,
         include_permissions: bool = False,
     ) -> CheckpointOutput[SharepointConnectorCheckpoint]:
+        """One step of the fetching path: it downloads and converts each file."""
+        walk = self._walk_from_checkpoint(
+            start, end, checkpoint, include_permissions, stub_listing=False
+        )
+        while True:
+            try:
+                item = next(walk)
+            except StopIteration as stop:
+                return stop.value
+            if isinstance(item, SlimDocument):
+                raise RuntimeError("Bug: the fetching path yielded a slim document")
+            yield item
+
+    def _stub_drive_item(
+        self,
+        driveitem: DriveItemData,
+        drive: SiteDrive,
+        site_url: str,
+        checkpoint: SharepointConnectorCheckpoint,
+        include_permissions: bool,
+        seen_document_ids: set[str],
+    ) -> Generator[SlimDocumentStub | HierarchyNode, None, None]:
+        """The stub of one listed file, after its folder nodes. A file that
+        the fetching path drops before or after its download has no stub."""
+        if self._is_driveitem_excluded(driveitem):
+            logger.debug("Excluding by path denylist: %s", driveitem.web_url)
+            return
+        if driveitem.id in seen_document_ids:
+            return
+        if not is_listable_drive_item(driveitem, SHAREPOINT_CONNECTOR_SIZE_THRESHOLD):
+            logger.debug("Not listing %s: not a file to index", driveitem.web_url)
+            return
+
+        folder_path = extract_folder_path_from_parent_reference(
+            driveitem.parent_reference_path
+        )
+        if folder_path:
+            yield from self._yield_folder_hierarchy_nodes(
+                site_url,
+                drive,
+                folder_path,
+                checkpoint,
+                include_permissions=include_permissions,
+            )
+        seen_document_ids.add(driveitem.id)
+        yield drive_item_stub(
+            driveitem,
+            site_url=site_url,
+            drive_id=drive.drive_id,
+            drive_name=drive.display_name,
+            list_id=drive.list_id,
+            parent_hierarchy_raw_node_id=(
+                self._folder_url(drive, folder_path, checkpoint)
+                if folder_path
+                else drive.web_url
+            ),
+        )
+
+    def _list_site_page_stubs(
+        self,
+        site_descriptor: SiteDescriptor,
+        start: datetime | None,
+        end: datetime | None,
+    ) -> Generator[SlimDocumentStub, None, None]:
+        """One stub for each site page in the time window, from the pages
+        listing with no canvas. The Pages API has no time filter, so every
+        run lists every page. Conversion reads the canvas of the pages that
+        changed."""
+        site_id = self.ops.get_site_id(site_url=site_descriptor.url)
+        next_link: str | None = None
+        while True:
+            try:
+                listing = self.ops.list_site_pages(
+                    site_id=site_id, next_link=next_link, expand_canvas=False
+                )
+            except MicrosoftGraphError as e:
+                if e.status == 404:
+                    logger.warning("Site page not found: %s", next_link or site_id)
+                    return
+                raise
+            for page in listing.pages:
+                if not _site_page_in_time_window(page, start, end):
+                    continue
+                stub = site_page_stub(
+                    page, site_id=site_id, site_url=site_descriptor.url
+                )
+                if stub is not None:
+                    yield stub
+            next_link = listing.next_link
+            if next_link is None:
+                return
+
+    def _walk_from_checkpoint(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: SharepointConnectorCheckpoint,
+        include_permissions: bool,
+        stub_listing: bool,
+    ) -> _WalkOutput:
+        """One step of the walk over sites, drives, delta pages and site
+        pages. With ``stub_listing``, the step yields a stub for each file
+        and page and downloads nothing. Without it, the step yields the
+        documents."""
         if self._ops is None:
             raise ConnectorMissingCredentialError("Sharepoint")
 
@@ -1890,6 +2046,11 @@ class SharepointConnector(
 
                 if result.resync_after_410:
                     checkpoint.current_drive_delta_resync_attempted = True
+                if stub_listing and result.page.delta_link:
+                    # The last page of the drive's delta.
+                    store_drive_delta_link(
+                        current_drive.drive_id, result.page.delta_link
+                    )
                 driveitems = iter_delta_page_files(result.page, start_dt, end_dt)
                 has_more_delta_pages = result.next_checkpoint_url is not None
                 checkpoint.current_drive_delta_next_link = result.next_checkpoint_url
@@ -1906,17 +2067,31 @@ class SharepointConnector(
                 )
 
             item_count = 0
+            # The documents of this call. Not in the checkpoint: see
+            # _process_drive_item.
+            seen_document_ids: set[str] = set()
             # Outer try catches BFS-generator failures mid-iteration;
             # per-item errors are still caught by the inner try below.
             try:
                 for driveitem in driveitems:
                     item_count += 1
+                    if stub_listing:
+                        yield from self._stub_drive_item(
+                            driveitem,
+                            current_drive,
+                            site_descriptor.url,
+                            checkpoint,
+                            include_permissions,
+                            seen_document_ids,
+                        )
+                        continue
                     yield from self._process_drive_item(
                         driveitem,
                         current_drive,
                         site_descriptor.url,
                         checkpoint,
                         include_permissions,
+                        seen_document_ids=seen_document_ids,
                     )
             except ConnectorStopSignal:
                 raise
@@ -1979,8 +2154,16 @@ class SharepointConnector(
             start_dt = datetime.fromtimestamp(start, tz=timezone.utc)
             end_dt = datetime.fromtimestamp(end, tz=timezone.utc)
             try:
-                site_pages = self._fetch_site_pages(
-                    site_descriptor, start=start_dt, end=end_dt
+                if stub_listing:
+                    yield from self._list_site_page_stubs(
+                        site_descriptor, start=start_dt, end=end_dt
+                    )
+                site_pages = (
+                    iter(())
+                    if stub_listing
+                    else self._fetch_site_pages(
+                        site_descriptor, start=start_dt, end=end_dt
+                    )
                 )
                 for site_page in site_pages:
                     page_id = site_page.get("id")
@@ -2176,6 +2359,7 @@ class SharepointConnector(
         dedup: SharepointConnectorCheckpoint,
         site_drives_cache: dict[str, list[SiteDrive]],
         include_permissions: bool,
+        seen_document_ids: set[str],
     ) -> Generator[Document | ConnectorFailure | HierarchyNode, None, None]:
         resolved = self._resolve_driveitem_by_link(
             document_id, document_link, site_drives_cache
@@ -2200,6 +2384,7 @@ class SharepointConnector(
             dedup,
             include_permissions,
             is_targeted_reindex=True,
+            seen_document_ids=seen_document_ids,
         )
 
     def _reindex_site_page(
@@ -2255,8 +2440,9 @@ class SharepointConnector(
             raise ConnectorMissingCredentialError("Sharepoint")
 
         # Throwaway checkpoint used purely as a dedup container for the shared
-        # helpers (seen_document_ids / seen_hierarchy_node_raw_ids).
+        # helpers (seen_hierarchy_node_raw_ids).
         dedup = self.build_dummy_checkpoint()
+        seen_document_ids: set[str] = set()
         site_drives_cache: dict[str, list[SiteDrive]] = {}
         # TODO(evan): Resolver.reindex is one-call-per-job and resolves targets
         # sequentially. If the interface grows batch semantics, Graph $batch
@@ -2293,6 +2479,7 @@ class SharepointConnector(
                         dedup,
                         site_drives_cache,
                         include_permissions,
+                        seen_document_ids,
                     )
             except ConnectorStopSignal:
                 raise
@@ -2311,6 +2498,33 @@ class SharepointConnector(
                     failure_message=f"Failed to resolve during targeted reindex: {e}",
                     exception=e,
                 )
+
+    @override
+    def retrieve_slim_docs_from_checkpoint(
+        self,
+        start: SecondsSinceUnixEpoch,
+        end: SecondsSinceUnixEpoch,
+        checkpoint: SharepointConnectorCheckpoint,
+        include_permissions: bool = False,
+    ) -> SlimCheckpointOutput[SharepointConnectorCheckpoint]:
+        """One step of the stub listing, for the conversion stage. It walks
+        the same sites, drives and delta pages as ``load_from_checkpoint``,
+        and yields a stub for each file and site page that indexing keeps.
+        It downloads nothing. The returned checkpoint covers exactly what the
+        step yielded. With ``include_permissions``, the hierarchy nodes carry
+        their access, as on the fetching path. Conversion reads the access of
+        the documents."""
+        walk = self._walk_from_checkpoint(
+            start, end, checkpoint, include_permissions, stub_listing=True
+        )
+        while True:
+            try:
+                item = next(walk)
+            except StopIteration as stop:
+                return stop.value
+            if isinstance(item, Document):
+                raise RuntimeError("Bug: the stub listing yielded a document")
+            yield item
 
     def build_dummy_checkpoint(self) -> SharepointConnectorCheckpoint:
         return SharepointConnectorCheckpoint(has_more=True)
