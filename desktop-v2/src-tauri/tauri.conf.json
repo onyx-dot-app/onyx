@@ -40,8 +40,20 @@
       "webviewInstallMode": {
         "type": "offlineInstaller"
       },
+      "allowDowngrades": false,
       "nsis": {
-        "installMode": "perMachine"
+        "installMode": "perMachine",
+        "installerHooks": "windows/installer-hooks.nsh",
+        "installerIcon": "icons/icon.ico",
+        "uninstallerIcon": "icons/icon.ico"
+      },
+      "wix": {
+        "fragmentPaths": [
+          "windows/installer-guards.wxs"
+        ],
+        "componentGroupRefs": [
+          "OnyxInstallerGuards"
+        ]
       }
     },
     "linux": {

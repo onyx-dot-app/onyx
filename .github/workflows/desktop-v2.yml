@@ -213,13 +213,34 @@ jobs:
       # Unsigned: for reviewers only.
       # APPIMAGE_EXTRACT_AND_RUN: the runner has no FUSE for linuxdeploy.
       # NO_STRIP: linuxdeploy's strip cannot read Ubuntu 24.04's libraries.
+      # WINDOWS_SIGN_COMMAND: the Authenticode hook. It is empty until release
+      # engineering sets the repository variable and the signing credentials
+      # (README, "Windows code signing"). Tauri then signs the app, the
+      # uninstaller and both installers.
       - name: Build installers
         working-directory: ./desktop-v2
         env:
           BUNDLES: ${{ matrix.bundles }}
           APPIMAGE_EXTRACT_AND_RUN: "1"
           NO_STRIP: "true"
-        run: bun run tauri build --bundles "${BUNDLES}" -- --locked
+          WINDOWS_SIGN_COMMAND: ${{ runner.os == 'Windows' && github.event.pull_request.head.repo.full_name == github.repository && vars.DESKTOP_V2_WINDOWS_SIGN_COMMAND || '' }}
+        run: |
+          set -euo pipefail
+          ARGS=(--bundles "${BUNDLES}")
+          if [ -n "${WINDOWS_SIGN_COMMAND}" ]; then
+            ARGS+=(--config "$(bun -e 'console.log(JSON.stringify({bundle: {windows: {signCommand: process.env.WINDOWS_SIGN_COMMAND}}}))')")
+          fi
+          bun run tauri build "${ARGS[@]}" -- --locked
+
+      - name: Check Authenticode signatures
+        if: runner.os == 'Windows' && github.event.pull_request.head.repo.full_name == github.repository && vars.DESKTOP_V2_WINDOWS_SIGN_COMMAND != ''
+        working-directory: ./desktop-v2/src-tauri/target/release
+        shell: pwsh
+        run: |
+          $files = @(Get-Item onyx-desktop-v2.exe) + @(Get-ChildItem bundle/nsis/*.exe, bundle/msi/*.msi)
+          $unsigned = $files | Where-Object { (Get-AuthenticodeSignature $_.FullName).Status -ne 'Valid' }
+          foreach ($file in $unsigned) { Write-Error "No valid Authenticode signature: $($file.Name)" -ErrorAction Continue }
+          if ($unsigned) { exit 1 }
 
       # Fork pull requests get no installer artifact or attestation.
       - name: Attest build provenance
