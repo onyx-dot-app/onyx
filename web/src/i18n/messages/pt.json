@@ -13993,7 +13993,6 @@
     "chatPanel": {
       "input": {
         "continuePlaceholder": "Continue a conversa...",
-        "scheduledRunPlaceholder": "Execução agendada em andamento...",
         "subagentPlaceholder": "Mude para o agente principal para enviar uma mensagem"
       },
       "openSidebar": {
@@ -14011,8 +14010,7 @@
       },
       "toast": {
         "operationWait": "Aguarde a conclusão da operação atual.",
-        "sandboxWait": "Aguarde a inicialização do sandbox",
-        "scheduledRunWait": "Aguarde a conclusão da execução agendada."
+        "sandboxWait": "Aguarde a inicialização do sandbox"
       },
       "loadError": {
         "title": "Não foi possível carregar a sessão",
@@ -14463,23 +14461,6 @@
         "button": "Acordar sandbox"
       }
     },
-    "scheduledRun": {
-      "badge": {
-        "label": "Agendada"
-      },
-      "startedAt": {
-        "label": "Iniciada {time}"
-      },
-      "status": {
-        "awaitingApproval": "Esta execução agendada aguarda aprovação. As mensagens de acompanhamento serão desbloqueadas depois que ela for retomada e concluída.",
-        "running": "Esta execução agendada ainda está em andamento. As mensagens de acompanhamento serão desbloqueadas quando ela terminar.",
-        "startedBy": "Esta sessão foi iniciada pela tarefa agendada {task} às {time}."
-      },
-      "viewTask": {
-        "ariaLabel": "Ver a tarefa agendada {task}. {status}",
-        "label": "Ver tarefa"
-      }
-    },
     "setupCard": {
       "appFallback": {
         "label": "Aplicativo externo {id}"
@@ -14752,7 +14733,8 @@
         },
         "tabs": {
           "dailyWeekly": "Diário / Semanal",
-          "interval": "Intervalo"
+          "interval": "Intervalo",
+          "advanced": "Avançado"
         },
         "weekdays": {
           "fri": "Sex",
@@ -14762,6 +14744,21 @@
           "thu": "Qui",
           "tue": "Ter",
           "wed": "Qua"
+        },
+        "advanced": {
+          "cronLabel": "Expressão cron",
+          "hint": "Cinco campos: minuto, hora, dia, mês, dia da semana. A expressão é executada em UTC.",
+          "placeholder": "Por exemplo, 0 9 * * 1-5"
+        },
+        "errors": {
+          "intervalNotPositiveInteger": "O intervalo deve ser um número inteiro de pelo menos 1.",
+          "minutesIntervalTooLong": "Use horas para intervalos acima de 59 minutos.",
+          "hoursIntervalTooLong": "Use um agendamento diário para intervalos acima de 23 horas.",
+          "dayIntervalTimeRequired": "Escolha um horário para intervalos em dias.",
+          "timeRequired": "Escolha um horário.",
+          "weekdayOutOfRange": "Os dias da semana devem ser 0-6 (dom..sáb).",
+          "cronRequired": "Insira uma expressão cron.",
+          "cronFieldCount": "O cron deve ter exatamente 5 campos (minuto hora dia mês dia da semana)."
         }
       },
       "unviewedResults": "Novos resultados"
@@ -16227,6 +16224,9 @@
       },
       "customize": {
         "label": "Personalizar"
+      },
+      "scheduledTasks": {
+        "label": "Tarefas agendadas"
       }
     },
     "chatButton": {
@@ -17594,5 +17594,158 @@
       }
     },
     "search": "Pesquisar"
+  },
+  "scheduledTasks": {
+    "unviewedResults": "Novos resultados",
+    "runStatus": "{status, select, QUEUED {Na fila} RUNNING {Em execução} AWAITING_APPROVAL {Aguardando aprovação} SUCCEEDED {Concluída} FAILED {Falhou} CANCELLED {Cancelada} SKIPPED {Ignorada} other {Desconhecido}}",
+    "taskStatus": "{status, select, ACTIVE {Ativa} other {Pausada}}",
+    "schedule": {
+      "cron": "Cron (UTC): {cron}",
+      "everyMinutes": "{count, plural, one {A cada minuto} other {A cada # minutos}}",
+      "everyHours": "{count, plural, one {A cada hora} other {A cada # horas}}",
+      "everyDays": "{count, plural, one {Todos os dias às {time}} other {A cada # dias às {time}}}",
+      "daily": "Todos os dias às {time}",
+      "weekly": "{days} às {time}"
+    },
+    "list": {
+      "title": "Tarefas agendadas",
+      "description": "Execute um prompt de acordo com um agendamento. Cada execução abre como um chat que você pode ler e continuar.",
+      "search": "Pesquisar tarefas",
+      "new": "Nova tarefa",
+      "never": "Nunca",
+      "notScheduled": "Não agendada",
+      "loadFailed": "Não foi possível carregar suas tarefas agendadas.",
+      "open": "Abrir {name}",
+      "columns": {
+        "name": "Nome",
+        "schedule": "Agendamento",
+        "lastRun": "Última execução",
+        "nextRun": "Próxima execução",
+        "status": "Status"
+      },
+      "empty": {
+        "title": "Nenhuma tarefa agendada ainda",
+        "description": "Crie uma tarefa para executar um prompt de acordo com um agendamento."
+      },
+      "noMatches": {
+        "title": "Nenhuma tarefa correspondente",
+        "description": "Tente outra pesquisa ou outro filtro."
+      },
+      "filter": {
+        "label": "Filtrar tarefas",
+        "all": "Todas as tarefas",
+        "unviewed": "Novos resultados"
+      }
+    },
+    "actions": {
+      "runNow": "Executar uma vez",
+      "pause": "Pausar",
+      "resume": "Retomar",
+      "edit": "Editar",
+      "delete": "Excluir",
+      "menu": "Ações para {name}",
+      "toasts": {
+        "runQueued": "Uma execução de \"{name}\" foi iniciada.",
+        "runFailed": "Não foi possível iniciar a execução.",
+        "resumed": "Tarefa retomada.",
+        "paused": "Tarefa pausada.",
+        "statusFailed": "Não foi possível alterar o status da tarefa.",
+        "deleted": "\"{name}\" excluída.",
+        "deleteFailed": "Não foi possível excluir a tarefa."
+      },
+      "confirmDelete": {
+        "title": "Excluir \"{name}\"?",
+        "description": "A tarefa deixa de ser executada e o histórico de execuções é removido.",
+        "submit": "Excluir"
+      }
+    },
+    "runs": {
+      "label": "Histórico de execuções",
+      "open": "Abrir a execução de {time}",
+      "loading": "Carregando execuções…",
+      "loadFailed": "Não foi possível carregar o histórico de execuções.",
+      "loadMore": "Carregar mais",
+      "markAllViewed": "Marcar tudo como visto",
+      "markAllViewedFailed": "Não foi possível marcar as execuções como vistas. Tente novamente.",
+      "trigger": "{source, select, MANUAL_RUN_NOW {Executar uma vez} other {Agendamento}}",
+      "errorClass": "{errorClass, select, superseded_by_next_fire {Cancelada: a próxima execução começou antes que alguém respondesse à aprovação.} approval_timeout {Cancelada: ninguém respondeu à aprovação em 24 horas.} user_cancelled {Interrompida por você.} agent_permission_required {Uma ação precisava de aprovação.} agent_exception {Falhou: a execução encontrou um erro.} stuck {Falhou: a execução não começou a tempo.} timeout {Falhou: a execução atingiu o limite de uma hora.} other {Falhou: {errorClass}}}",
+      "columns": {
+        "started": "Início",
+        "status": "Status",
+        "duration": "Duração",
+        "trigger": "Gatilho",
+        "detail": "Detalhes"
+      },
+      "closed": {
+        "queued": "Esta execução ainda não começou, então não há chat para abrir.",
+        "skipped": "Esta execução foi ignorada, então não há chat para abrir.",
+        "noChat": "Esta execução não tem um chat para abrir."
+      },
+      "empty": {
+        "title": "Nenhuma execução ainda",
+        "description": "A tarefa adiciona uma execução cada vez que dispara. Use Executar uma vez para iniciar uma agora."
+      }
+    },
+    "detail": {
+      "title": "Tarefa agendada",
+      "back": "Tarefas agendadas",
+      "loadFailed": "Não foi possível carregar esta tarefa agendada.",
+      "tabs": {
+        "runs": "Execuções",
+        "overview": "Visão geral"
+      },
+      "overview": {
+        "prompt": "Prompt",
+        "schedule": "Agendamento",
+        "nextRun": "Próxima execução",
+        "notScheduled": "Não agendada",
+        "lastRun": "Última execução",
+        "never": "Nunca"
+      },
+      "switch": {
+        "title": "Executar conforme o agendamento",
+        "label": "Executar {name} conforme o agendamento"
+      },
+      "menu": "Mais ações"
+    },
+    "editor": {
+      "newTitle": "Nova tarefa agendada",
+      "editTitle": "Editar tarefa agendada",
+      "description": "Cada execução envia o prompt para um novo chat com o agente padrão.",
+      "back": "Voltar",
+      "loadFailed": "Não foi possível carregar esta tarefa agendada.",
+      "save": "Salvar",
+      "saveAndRun": "Salvar e executar agora",
+      "errors": {
+        "nameRequired": "Insira um nome.",
+        "promptRequired": "Insira um prompt."
+      },
+      "toasts": {
+        "created": "Tarefa agendada criada.",
+        "createdAndRun": "Tarefa agendada criada. A primeira execução foi iniciada.",
+        "updated": "Tarefa agendada atualizada.",
+        "saveFailed": "Não foi possível salvar a tarefa agendada."
+      },
+      "fields": {
+        "name": {
+          "label": "Nome",
+          "placeholder": "Por exemplo, resumo semanal de escalonamentos de clientes"
+        },
+        "prompt": {
+          "label": "Prompt",
+          "description": "Cada execução envia esta mensagem para um novo chat.",
+          "placeholder": "Descreva o que fazer em cada execução"
+        },
+        "schedule": {
+          "label": "Agendamento"
+        }
+      }
+    },
+    "banner": {
+      "title": "Execução agendada de {task}",
+      "inFlight": "{status, select, AWAITING_APPROVAL {Esta execução aguarda sua aprovação abaixo.} other {Esta execução está em andamento.}}",
+      "startedAt": "Iniciada {time}",
+      "viewTask": "Ver tarefa"
+    }
   }
 }

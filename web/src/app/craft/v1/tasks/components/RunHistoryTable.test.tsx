@@ -32,7 +32,7 @@ function run(
     trigger_source: "SCHEDULED",
     started_at: "2026-10-30T10:00:00Z",
     finished_at: "2026-10-30T10:01:00Z",
-    session_id: `session-${id}`,
+    chat_session_id: `chat-${id}`,
     summary: `Summary ${id}`,
     skip_reason: null,
     error_class: null,
@@ -109,4 +109,24 @@ it("enables mark all viewed when only an unloaded run is unviewed", () => {
   render(<RunHistoryTable taskId="task" />);
 
   expect(screen.getByRole("button", { name: "Mark all viewed" })).toBeEnabled();
+});
+
+it("opens a run's chat and leaves a run without one closed", async () => {
+  window.history.replaceState(null, "", "/craft/v1/tasks/task");
+  mockRuns = [
+    run("chat", 1, 1),
+    { ...run("no-chat", 1, 1), chat_session_id: null },
+  ];
+  render(<RunHistoryTable taskId="task" />);
+
+  const rows = screen.getAllByRole("row").slice(1);
+  await userEvent.click(rows[1]!);
+  expect(window.location.pathname).toBe("/craft/v1/tasks/task");
+
+  await userEvent.click(rows[0]!);
+  await waitFor(() =>
+    expect(window.location.pathname + window.location.search).toBe(
+      "/app?chatId=chat-chat"
+    )
+  );
 });

@@ -13993,7 +13993,6 @@
     "chatPanel": {
       "input": {
         "continuePlaceholder": "تابع المحادثة...",
-        "scheduledRunPlaceholder": "التشغيل المجدول قيد التقدم...",
         "subagentPlaceholder": "بدّل إلى الوكيل الرئيسي لإرسال رسالة"
       },
       "openSidebar": {
@@ -14011,8 +14010,7 @@
       },
       "toast": {
         "operationWait": "يرجى الانتظار حتى تكتمل العملية الحالية.",
-        "sandboxWait": "يرجى الانتظار حتى تتم تهيئة بيئة الاختبار",
-        "scheduledRunWait": "يرجى الانتظار حتى ينتهي التشغيل المجدول."
+        "sandboxWait": "يرجى الانتظار حتى تتم تهيئة بيئة الاختبار"
       },
       "loadError": {
         "title": "تعذر تحميل الجلسة",
@@ -14463,23 +14461,6 @@
         "button": "إيقاظ بيئة الاختبار"
       }
     },
-    "scheduledRun": {
-      "badge": {
-        "label": "مجدولة"
-      },
-      "startedAt": {
-        "label": "بدأت {time}"
-      },
-      "status": {
-        "awaitingApproval": "هذا التشغيل المجدول في انتظار الموافقة. ستُتاح رسائل المتابعة بعد استئنافه وانتهائه.",
-        "running": "لا يزال هذا التشغيل المجدول قيد التنفيذ. ستُتاح رسائل المتابعة عند انتهائه.",
-        "startedBy": "بدأت هذه الجلسة بواسطة المهمة المجدولة {task} في {time}."
-      },
-      "viewTask": {
-        "ariaLabel": "عرض المهمة المجدولة {task}. {status}",
-        "label": "عرض المهمة"
-      }
-    },
     "setupCard": {
       "appFallback": {
         "label": "تطبيق خارجي {id}"
@@ -14752,7 +14733,8 @@
         },
         "tabs": {
           "dailyWeekly": "يومي / أسبوعي",
-          "interval": "الفاصل الزمني"
+          "interval": "الفاصل الزمني",
+          "advanced": "متقدم"
         },
         "weekdays": {
           "fri": "الجمعة",
@@ -14762,6 +14744,21 @@
           "thu": "الخميس",
           "tue": "الثلاثاء",
           "wed": "الأربعاء"
+        },
+        "advanced": {
+          "cronLabel": "تعبير cron",
+          "hint": "خمسة حقول: الدقيقة، الساعة، اليوم، الشهر، يوم الأسبوع. يعمل التعبير بتوقيت UTC.",
+          "placeholder": "على سبيل المثال، 0 9 * * 1-5"
+        },
+        "errors": {
+          "intervalNotPositiveInteger": "يجب أن يكون الفاصل الزمني عددًا صحيحًا لا يقل عن 1.",
+          "minutesIntervalTooLong": "استخدم الساعات للفواصل الزمنية التي تزيد على 59 دقيقة.",
+          "hoursIntervalTooLong": "استخدم جدولًا يوميًا للفواصل الزمنية التي تزيد على 23 ساعة.",
+          "dayIntervalTimeRequired": "اختر وقتًا من اليوم للفواصل الزمنية بالأيام.",
+          "timeRequired": "اختر وقتًا من اليوم.",
+          "weekdayOutOfRange": "يجب أن تكون قيم أيام الأسبوع بين 0 و6 (الأحد..السبت).",
+          "cronRequired": "أدخل تعبير cron.",
+          "cronFieldCount": "يجب أن يحتوي cron على 5 حقول بالضبط (الدقيقة الساعة اليوم الشهر يوم الأسبوع)."
         }
       },
       "unviewedResults": "نتائج جديدة"
@@ -16227,6 +16224,9 @@
       },
       "customize": {
         "label": "التخصيص"
+      },
+      "scheduledTasks": {
+        "label": "المهام المجدولة"
       }
     },
     "chatButton": {
@@ -17594,5 +17594,158 @@
       }
     },
     "search": "بحث"
+  },
+  "scheduledTasks": {
+    "unviewedResults": "نتائج جديدة",
+    "runStatus": "{status, select, QUEUED {في قائمة الانتظار} RUNNING {قيد التشغيل} AWAITING_APPROVAL {بانتظار الموافقة} SUCCEEDED {نجح} FAILED {فشل} CANCELLED {أُلغي} SKIPPED {تم التخطي} other {غير معروف}}",
+    "taskStatus": "{status, select, ACTIVE {نشطة} other {متوقفة مؤقتًا}}",
+    "schedule": {
+      "cron": "Cron (UTC): {cron}",
+      "everyMinutes": "{count, plural, one {كل دقيقة} other {كل # دقائق}}",
+      "everyHours": "{count, plural, one {كل ساعة} other {كل # ساعات}}",
+      "everyDays": "{count, plural, one {كل يوم في {time}} other {كل # أيام في {time}}}",
+      "daily": "كل يوم في {time}",
+      "weekly": "{days} في {time}"
+    },
+    "list": {
+      "title": "المهام المجدولة",
+      "description": "شغّل موجّهًا وفق جدول زمني. يُفتح كل تشغيل كمحادثة يمكنك قراءتها ومتابعتها.",
+      "search": "البحث في المهام",
+      "new": "مهمة جديدة",
+      "never": "أبدًا",
+      "notScheduled": "غير مجدولة",
+      "loadFailed": "تعذّر تحميل مهامك المجدولة.",
+      "open": "فتح {name}",
+      "columns": {
+        "name": "الاسم",
+        "schedule": "الجدول الزمني",
+        "lastRun": "آخر تشغيل",
+        "nextRun": "التشغيل التالي",
+        "status": "الحالة"
+      },
+      "empty": {
+        "title": "لا توجد مهام مجدولة بعد",
+        "description": "أنشئ مهمة لتشغيل موجّه وفق جدول زمني."
+      },
+      "noMatches": {
+        "title": "لا توجد مهام مطابقة",
+        "description": "جرّب بحثًا أو عامل تصفية مختلفًا."
+      },
+      "filter": {
+        "label": "تصفية المهام",
+        "all": "كل المهام",
+        "unviewed": "نتائج جديدة"
+      }
+    },
+    "actions": {
+      "runNow": "تشغيل مرة واحدة",
+      "pause": "إيقاف مؤقت",
+      "resume": "استئناف",
+      "edit": "تعديل",
+      "delete": "حذف",
+      "menu": "إجراءات {name}",
+      "toasts": {
+        "runQueued": "بدأ تشغيل «{name}».",
+        "runFailed": "تعذّر بدء التشغيل.",
+        "resumed": "تم استئناف المهمة.",
+        "paused": "تم إيقاف المهمة مؤقتًا.",
+        "statusFailed": "تعذّر تغيير حالة المهمة.",
+        "deleted": "تم حذف «{name}».",
+        "deleteFailed": "تعذّر حذف المهمة."
+      },
+      "confirmDelete": {
+        "title": "حذف «{name}»؟",
+        "description": "تتوقف المهمة عن التشغيل ويُحذف سجل تشغيلها.",
+        "submit": "حذف"
+      }
+    },
+    "runs": {
+      "label": "سجل التشغيل",
+      "open": "فتح التشغيل من {time}",
+      "loading": "جارٍ تحميل عمليات التشغيل…",
+      "loadFailed": "تعذّر تحميل سجل التشغيل.",
+      "loadMore": "تحميل المزيد",
+      "markAllViewed": "وضع علامة مقروء على الكل",
+      "markAllViewedFailed": "تعذّر وضع علامة مقروء على عمليات التشغيل. حاول مرة أخرى.",
+      "trigger": "{source, select, MANUAL_RUN_NOW {تشغيل مرة واحدة} other {الجدول الزمني}}",
+      "errorClass": "{errorClass, select, superseded_by_next_fire {أُلغي: بدأ التشغيل التالي قبل أن يرد أحد على طلب الموافقة.} approval_timeout {أُلغي: لم يرد أحد على طلب الموافقة خلال 24 ساعة.} user_cancelled {أوقفته أنت.} agent_permission_required {احتاج إجراء إلى موافقة.} agent_exception {فشل: حدث خطأ أثناء التشغيل.} stuck {فشل: لم يبدأ التشغيل في الوقت المحدد.} timeout {فشل: وصل التشغيل إلى حد الساعة الواحدة.} other {فشل: {errorClass}}}",
+      "columns": {
+        "started": "البدء",
+        "status": "الحالة",
+        "duration": "المدة",
+        "trigger": "المشغّل",
+        "detail": "التفاصيل"
+      },
+      "closed": {
+        "queued": "لم يبدأ هذا التشغيل بعد، لذا لا توجد محادثة لفتحها.",
+        "skipped": "تم تخطي هذا التشغيل، لذا لا توجد محادثة لفتحها.",
+        "noChat": "لا تحتوي هذه العملية على محادثة لفتحها."
+      },
+      "empty": {
+        "title": "لا توجد عمليات تشغيل بعد",
+        "description": "تضيف المهمة تشغيلًا في كل مرة تنطلق فيها. استخدم «تشغيل مرة واحدة» لبدء تشغيل الآن."
+      }
+    },
+    "detail": {
+      "title": "مهمة مجدولة",
+      "back": "المهام المجدولة",
+      "loadFailed": "تعذّر تحميل هذه المهمة المجدولة.",
+      "tabs": {
+        "runs": "عمليات التشغيل",
+        "overview": "نظرة عامة"
+      },
+      "overview": {
+        "prompt": "الموجّه",
+        "schedule": "الجدول الزمني",
+        "nextRun": "التشغيل التالي",
+        "notScheduled": "غير مجدولة",
+        "lastRun": "آخر تشغيل",
+        "never": "أبدًا"
+      },
+      "switch": {
+        "title": "التشغيل وفق الجدول",
+        "label": "تشغيل {name} وفق الجدول"
+      },
+      "menu": "إجراءات أخرى"
+    },
+    "editor": {
+      "newTitle": "مهمة مجدولة جديدة",
+      "editTitle": "تعديل المهمة المجدولة",
+      "description": "يرسل كل تشغيل الموجّه إلى محادثة جديدة مع الوكيل الافتراضي.",
+      "back": "رجوع",
+      "loadFailed": "تعذّر تحميل هذه المهمة المجدولة.",
+      "save": "حفظ",
+      "saveAndRun": "حفظ وتشغيل الآن",
+      "errors": {
+        "nameRequired": "أدخل اسمًا.",
+        "promptRequired": "أدخل موجّهًا."
+      },
+      "toasts": {
+        "created": "تم إنشاء المهمة المجدولة.",
+        "createdAndRun": "تم إنشاء المهمة المجدولة. بدأ التشغيل الأول.",
+        "updated": "تم تحديث المهمة المجدولة.",
+        "saveFailed": "تعذّر حفظ المهمة المجدولة."
+      },
+      "fields": {
+        "name": {
+          "label": "الاسم",
+          "placeholder": "على سبيل المثال، ملخص أسبوعي لتصعيدات العملاء"
+        },
+        "prompt": {
+          "label": "الموجّه",
+          "description": "يرسل كل تشغيل هذه الرسالة إلى محادثة جديدة.",
+          "placeholder": "صف ما يجب فعله في كل تشغيل"
+        },
+        "schedule": {
+          "label": "الجدول الزمني"
+        }
+      }
+    },
+    "banner": {
+      "title": "تشغيل مجدول لـ {task}",
+      "inFlight": "{status, select, AWAITING_APPROVAL {ينتظر هذا التشغيل موافقتك أدناه.} other {هذا التشغيل قيد التنفيذ.}}",
+      "startedAt": "بدأ {time}",
+      "viewTask": "عرض المهمة"
+    }
   }
 }

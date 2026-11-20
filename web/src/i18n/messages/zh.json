@@ -13993,7 +13993,6 @@
     "chatPanel": {
       "input": {
         "continuePlaceholder": "继续对话...",
-        "scheduledRunPlaceholder": "计划运行进行中...",
         "subagentPlaceholder": "切换到主代理以发送消息"
       },
       "openSidebar": {
@@ -14011,8 +14010,7 @@
       },
       "toast": {
         "operationWait": "请等待当前操作完成。",
-        "sandboxWait": "请等待沙箱初始化",
-        "scheduledRunWait": "请等待计划运行结束。"
+        "sandboxWait": "请等待沙箱初始化"
       },
       "loadError": {
         "title": "无法加载会话",
@@ -14463,23 +14461,6 @@
         "button": "唤醒沙箱"
       }
     },
-    "scheduledRun": {
-      "badge": {
-        "label": "已计划"
-      },
-      "startedAt": {
-        "label": "开始于 {time}"
-      },
-      "status": {
-        "awaitingApproval": "此计划运行正在等待批准。恢复并结束后即可发送后续消息。",
-        "running": "此计划运行仍在进行中。运行结束后即可发送后续消息。",
-        "startedBy": "此会话由计划任务 {task} 于 {time} 启动。"
-      },
-      "viewTask": {
-        "ariaLabel": "查看计划任务 {task}。{status}",
-        "label": "查看任务"
-      }
-    },
     "setupCard": {
       "appFallback": {
         "label": "外部应用 {id}"
@@ -14752,7 +14733,8 @@
         },
         "tabs": {
           "dailyWeekly": "每日 / 每周",
-          "interval": "间隔"
+          "interval": "间隔",
+          "advanced": "高级"
         },
         "weekdays": {
           "fri": "周五",
@@ -14762,6 +14744,21 @@
           "thu": "周四",
           "tue": "周二",
           "wed": "周三"
+        },
+        "advanced": {
+          "cronLabel": "Cron 表达式",
+          "hint": "五个字段：分钟、小时、日、月、星期。表达式按 UTC 运行。",
+          "placeholder": "例如 0 9 * * 1-5"
+        },
+        "errors": {
+          "intervalNotPositiveInteger": "间隔必须是不小于 1 的整数。",
+          "minutesIntervalTooLong": "超过 59 分钟的间隔请使用小时。",
+          "hoursIntervalTooLong": "超过 23 小时的间隔请使用每日计划。",
+          "dayIntervalTimeRequired": "请为按天的间隔选择一天中的时间。",
+          "timeRequired": "请选择一天中的时间。",
+          "weekdayOutOfRange": "星期值必须为 0-6（周日..周六）。",
+          "cronRequired": "请输入 cron 表达式。",
+          "cronFieldCount": "Cron 必须正好有 5 个字段（分钟 小时 日 月 星期）。"
         }
       },
       "unviewedResults": "新结果"
@@ -16227,6 +16224,9 @@
       },
       "customize": {
         "label": "自定义"
+      },
+      "scheduledTasks": {
+        "label": "计划任务"
       }
     },
     "chatButton": {
@@ -17594,5 +17594,158 @@
       }
     },
     "search": "搜索"
+  },
+  "scheduledTasks": {
+    "unviewedResults": "新结果",
+    "runStatus": "{status, select, QUEUED {排队中} RUNNING {运行中} AWAITING_APPROVAL {等待批准} SUCCEEDED {成功} FAILED {失败} CANCELLED {已取消} SKIPPED {已跳过} other {未知}}",
+    "taskStatus": "{status, select, ACTIVE {活跃} other {已暂停}}",
+    "schedule": {
+      "cron": "Cron (UTC)：{cron}",
+      "everyMinutes": "{count, plural, one {每分钟} other {每 # 分钟}}",
+      "everyHours": "{count, plural, one {每小时} other {每 # 小时}}",
+      "everyDays": "{count, plural, one {每天 {time}} other {每 # 天 {time}}}",
+      "daily": "每天 {time}",
+      "weekly": "{days} {time}"
+    },
+    "list": {
+      "title": "计划任务",
+      "description": "按计划运行提示词。每次运行都会作为一个聊天打开，您可以阅读并继续。",
+      "search": "搜索任务",
+      "new": "新建任务",
+      "never": "从未",
+      "notScheduled": "未计划",
+      "loadFailed": "无法加载您的计划任务。",
+      "open": "打开 {name}",
+      "columns": {
+        "name": "名称",
+        "schedule": "计划",
+        "lastRun": "上次运行",
+        "nextRun": "下次运行",
+        "status": "状态"
+      },
+      "empty": {
+        "title": "尚无计划任务",
+        "description": "创建任务以按计划运行提示词。"
+      },
+      "noMatches": {
+        "title": "没有匹配的任务",
+        "description": "请尝试其他搜索词或筛选条件。"
+      },
+      "filter": {
+        "label": "筛选任务",
+        "all": "所有任务",
+        "unviewed": "新结果"
+      }
+    },
+    "actions": {
+      "runNow": "运行一次",
+      "pause": "暂停",
+      "resume": "恢复",
+      "edit": "编辑",
+      "delete": "删除",
+      "menu": "{name} 的操作",
+      "toasts": {
+        "runQueued": "已开始运行“{name}”。",
+        "runFailed": "无法开始运行。",
+        "resumed": "任务已恢复。",
+        "paused": "任务已暂停。",
+        "statusFailed": "无法更改任务状态。",
+        "deleted": "已删除“{name}”。",
+        "deleteFailed": "无法删除任务。"
+      },
+      "confirmDelete": {
+        "title": "删除“{name}”？",
+        "description": "任务将停止运行，其运行历史也会被删除。",
+        "submit": "删除"
+      }
+    },
+    "runs": {
+      "label": "运行历史",
+      "open": "打开 {time} 的运行",
+      "loading": "正在加载运行…",
+      "loadFailed": "无法加载运行历史。",
+      "loadMore": "加载更多",
+      "markAllViewed": "全部标记为已查看",
+      "markAllViewedFailed": "无法将运行标记为已查看。请重试。",
+      "trigger": "{source, select, MANUAL_RUN_NOW {运行一次} other {计划}}",
+      "errorClass": "{errorClass, select, superseded_by_next_fire {已取消：在有人回应批准之前，下一次运行已开始。} approval_timeout {已取消：24 小时内无人回应批准。} user_cancelled {已由您停止。} agent_permission_required {某个操作需要批准。} agent_exception {失败：运行时出错。} stuck {失败：运行未能按时开始。} timeout {失败：运行达到了一小时的上限。} other {失败：{errorClass}}}",
+      "columns": {
+        "started": "开始时间",
+        "status": "状态",
+        "duration": "时长",
+        "trigger": "触发方式",
+        "detail": "详情"
+      },
+      "closed": {
+        "queued": "此运行尚未开始，因此没有可打开的聊天。",
+        "skipped": "此运行已被跳过，因此没有可打开的聊天。",
+        "noChat": "此运行没有可打开的聊天。"
+      },
+      "empty": {
+        "title": "尚无运行",
+        "description": "任务每次触发都会添加一次运行。使用“运行一次”可立即开始一次运行。"
+      }
+    },
+    "detail": {
+      "title": "计划任务",
+      "back": "计划任务",
+      "loadFailed": "无法加载此计划任务。",
+      "tabs": {
+        "runs": "运行",
+        "overview": "概览"
+      },
+      "overview": {
+        "prompt": "提示词",
+        "schedule": "计划",
+        "nextRun": "下次运行",
+        "notScheduled": "未计划",
+        "lastRun": "上次运行",
+        "never": "从未"
+      },
+      "switch": {
+        "title": "按计划运行",
+        "label": "按计划运行 {name}"
+      },
+      "menu": "更多操作"
+    },
+    "editor": {
+      "newTitle": "新建计划任务",
+      "editTitle": "编辑计划任务",
+      "description": "每次运行都会将提示词发送到使用默认智能体的新聊天。",
+      "back": "返回",
+      "loadFailed": "无法加载此计划任务。",
+      "save": "保存",
+      "saveAndRun": "保存并立即运行",
+      "errors": {
+        "nameRequired": "请输入名称。",
+        "promptRequired": "请输入提示词。"
+      },
+      "toasts": {
+        "created": "计划任务已创建。",
+        "createdAndRun": "计划任务已创建。第一次运行已开始。",
+        "updated": "计划任务已更新。",
+        "saveFailed": "无法保存计划任务。"
+      },
+      "fields": {
+        "name": {
+          "label": "名称",
+          "placeholder": "例如，每周客户升级问题摘要"
+        },
+        "prompt": {
+          "label": "提示词",
+          "description": "每次运行都会将此消息发送到新聊天。",
+          "placeholder": "描述每次运行时要做什么"
+        },
+        "schedule": {
+          "label": "计划"
+        }
+      }
+    },
+    "banner": {
+      "title": "{task} 的计划运行",
+      "inFlight": "{status, select, AWAITING_APPROVAL {此运行正在等待您在下方批准。} other {此运行正在进行中。}}",
+      "startedAt": "开始于 {time}",
+      "viewTask": "查看任务"
+    }
   }
 }

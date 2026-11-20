@@ -35,7 +35,6 @@ jest.mock("@/providers/CraftStreamingProvider", () => ({
     streamMessage,
     retryQueuedMessage,
     interruptStreaming: idle,
-    streamScheduledRunEvents: idle,
     streamTurnEvents: idle,
   }),
 }));
@@ -140,11 +139,6 @@ jest.mock("@/app/craft/components/ModelPickerButton", () => ({
       </button>
     </div>
   ),
-}));
-jest.mock("@/app/craft/components/ScheduledRunBanner", () => ({
-  __esModule: true,
-  default: () => null,
-  useScheduledRunContext: () => ({ data: null, mutate: idle }),
 }));
 jest.mock("@/app/craft/components/BuildMessageList", () => ({
   __esModule: true,

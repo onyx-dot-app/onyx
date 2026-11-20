@@ -13993,7 +13993,6 @@
     "chatPanel": {
       "input": {
         "continuePlaceholder": "Gespräch fortsetzen...",
-        "scheduledRunPlaceholder": "Geplante Ausführung läuft...",
         "subagentPlaceholder": "Wechseln Sie zum Hauptagenten, um eine Nachricht zu senden"
       },
       "openSidebar": {
@@ -14011,8 +14010,7 @@
       },
       "toast": {
         "operationWait": "Bitte warten Sie, bis der aktuelle Vorgang abgeschlossen ist.",
-        "sandboxWait": "Bitte warten Sie, bis die Sandbox initialisiert ist",
-        "scheduledRunWait": "Bitte warten Sie, bis die geplante Ausführung abgeschlossen ist."
+        "sandboxWait": "Bitte warten Sie, bis die Sandbox initialisiert ist"
       },
       "loadError": {
         "title": "Die Sitzung konnte nicht geladen werden",
@@ -14463,23 +14461,6 @@
         "button": "Sandbox aufwecken"
       }
     },
-    "scheduledRun": {
-      "badge": {
-        "label": "Geplant"
-      },
-      "startedAt": {
-        "label": "Gestartet {time}"
-      },
-      "status": {
-        "awaitingApproval": "Diese geplante Ausführung wartet auf Genehmigung. Folgemeldungen werden freigeschaltet, nachdem sie fortgesetzt und abgeschlossen wurde.",
-        "running": "Diese geplante Ausführung läuft noch. Folgemeldungen werden freigeschaltet, sobald sie abgeschlossen ist.",
-        "startedBy": "Diese Sitzung wurde von der geplanten Aufgabe {task} um {time} gestartet."
-      },
-      "viewTask": {
-        "ariaLabel": "Geplante Aufgabe {task} anzeigen. {status}",
-        "label": "Aufgabe anzeigen"
-      }
-    },
     "setupCard": {
       "appFallback": {
         "label": "Externe App {id}"
@@ -14752,7 +14733,8 @@
         },
         "tabs": {
           "dailyWeekly": "Täglich / Wöchentlich",
-          "interval": "Intervall"
+          "interval": "Intervall",
+          "advanced": "Erweitert"
         },
         "weekdays": {
           "fri": "Fr",
@@ -14762,6 +14744,21 @@
           "thu": "Do",
           "tue": "Di",
           "wed": "Mi"
+        },
+        "advanced": {
+          "cronLabel": "Cron-Ausdruck",
+          "hint": "Fünf Felder: Minute, Stunde, Tag, Monat, Wochentag. Der Ausdruck läuft in UTC.",
+          "placeholder": "Zum Beispiel 0 9 * * 1-5"
+        },
+        "errors": {
+          "intervalNotPositiveInteger": "Das Intervall muss eine ganze Zahl von mindestens 1 sein.",
+          "minutesIntervalTooLong": "Verwenden Sie Stunden für Intervalle über 59 Minuten.",
+          "hoursIntervalTooLong": "Verwenden Sie einen täglichen Zeitplan für Intervalle über 23 Stunden.",
+          "dayIntervalTimeRequired": "Wählen Sie eine Uhrzeit für Intervalle in Tagen.",
+          "timeRequired": "Wählen Sie eine Uhrzeit.",
+          "weekdayOutOfRange": "Wochentagswerte müssen zwischen 0 und 6 liegen (So..Sa).",
+          "cronRequired": "Geben Sie einen Cron-Ausdruck ein.",
+          "cronFieldCount": "Cron muss genau 5 Felder haben (Minute Stunde Tag Monat Wochentag)."
         }
       },
       "unviewedResults": "Neue Ergebnisse"
@@ -16227,6 +16224,9 @@
       },
       "customize": {
         "label": "Anpassen"
+      },
+      "scheduledTasks": {
+        "label": "Geplante Aufgaben"
       }
     },
     "chatButton": {
@@ -17594,5 +17594,158 @@
       }
     },
     "search": "Suchen"
+  },
+  "scheduledTasks": {
+    "unviewedResults": "Neue Ergebnisse",
+    "runStatus": "{status, select, QUEUED {In Warteschlange} RUNNING {Läuft} AWAITING_APPROVAL {Wartet auf Genehmigung} SUCCEEDED {Erfolgreich} FAILED {Fehlgeschlagen} CANCELLED {Abgebrochen} SKIPPED {Übersprungen} other {Unbekannt}}",
+    "taskStatus": "{status, select, ACTIVE {Aktiv} other {Pausiert}}",
+    "schedule": {
+      "cron": "Cron (UTC): {cron}",
+      "everyMinutes": "{count, plural, one {Jede Minute} other {Alle # Minuten}}",
+      "everyHours": "{count, plural, one {Jede Stunde} other {Alle # Stunden}}",
+      "everyDays": "{count, plural, one {Jeden Tag um {time}} other {Alle # Tage um {time}}}",
+      "daily": "Jeden Tag um {time}",
+      "weekly": "{days} um {time}"
+    },
+    "list": {
+      "title": "Geplante Aufgaben",
+      "description": "Führen Sie einen Prompt nach Zeitplan aus. Jede Ausführung öffnet sich als Chat, den Sie lesen und fortsetzen können.",
+      "search": "Aufgaben durchsuchen",
+      "new": "Neue Aufgabe",
+      "never": "Nie",
+      "notScheduled": "Nicht geplant",
+      "loadFailed": "Ihre geplanten Aufgaben konnten nicht geladen werden.",
+      "open": "{name} öffnen",
+      "columns": {
+        "name": "Name",
+        "schedule": "Zeitplan",
+        "lastRun": "Letzte Ausführung",
+        "nextRun": "Nächste Ausführung",
+        "status": "Status"
+      },
+      "empty": {
+        "title": "Noch keine geplanten Aufgaben",
+        "description": "Erstellen Sie eine Aufgabe, um einen Prompt nach Zeitplan auszuführen."
+      },
+      "noMatches": {
+        "title": "Keine passenden Aufgaben",
+        "description": "Versuchen Sie eine andere Suche oder einen anderen Filter."
+      },
+      "filter": {
+        "label": "Aufgaben filtern",
+        "all": "Alle Aufgaben",
+        "unviewed": "Neue Ergebnisse"
+      }
+    },
+    "actions": {
+      "runNow": "Einmal ausführen",
+      "pause": "Pausieren",
+      "resume": "Fortsetzen",
+      "edit": "Bearbeiten",
+      "delete": "Löschen",
+      "menu": "Aktionen für {name}",
+      "toasts": {
+        "runQueued": "Eine Ausführung von „{name}“ wurde gestartet.",
+        "runFailed": "Die Ausführung konnte nicht gestartet werden.",
+        "resumed": "Aufgabe fortgesetzt.",
+        "paused": "Aufgabe pausiert.",
+        "statusFailed": "Der Aufgabenstatus konnte nicht geändert werden.",
+        "deleted": "„{name}“ gelöscht.",
+        "deleteFailed": "Die Aufgabe konnte nicht gelöscht werden."
+      },
+      "confirmDelete": {
+        "title": "„{name}“ löschen?",
+        "description": "Die Aufgabe wird nicht mehr ausgeführt und ihr Ausführungsverlauf wird entfernt.",
+        "submit": "Löschen"
+      }
+    },
+    "runs": {
+      "label": "Ausführungsverlauf",
+      "open": "Ausführung von {time} öffnen",
+      "loading": "Ausführungen werden geladen…",
+      "loadFailed": "Der Ausführungsverlauf konnte nicht geladen werden.",
+      "loadMore": "Mehr laden",
+      "markAllViewed": "Alle als gesehen markieren",
+      "markAllViewedFailed": "Die Ausführungen konnten nicht als gesehen markiert werden. Versuchen Sie es erneut.",
+      "trigger": "{source, select, MANUAL_RUN_NOW {Einmal ausführen} other {Zeitplan}}",
+      "errorClass": "{errorClass, select, superseded_by_next_fire {Abgebrochen: Die nächste Ausführung begann, bevor jemand die Genehmigung beantwortet hat.} approval_timeout {Abgebrochen: Niemand hat die Genehmigung innerhalb von 24 Stunden beantwortet.} user_cancelled {Von Ihnen gestoppt.} agent_permission_required {Eine Aktion benötigte eine Genehmigung.} agent_exception {Fehlgeschlagen: Bei der Ausführung ist ein Fehler aufgetreten.} stuck {Fehlgeschlagen: Die Ausführung hat nicht rechtzeitig begonnen.} timeout {Fehlgeschlagen: Die Ausführung hat das Limit von einer Stunde erreicht.} other {Fehlgeschlagen: {errorClass}}}",
+      "columns": {
+        "started": "Gestartet",
+        "status": "Status",
+        "duration": "Dauer",
+        "trigger": "Auslöser",
+        "detail": "Details"
+      },
+      "closed": {
+        "queued": "Diese Ausführung hat noch nicht begonnen, daher gibt es keinen Chat zum Öffnen.",
+        "skipped": "Diese Ausführung wurde übersprungen, daher gibt es keinen Chat zum Öffnen.",
+        "noChat": "Diese Ausführung hat keinen Chat zum Öffnen."
+      },
+      "empty": {
+        "title": "Noch keine Ausführungen",
+        "description": "Die Aufgabe fügt bei jedem Auslösen eine Ausführung hinzu. Verwenden Sie „Einmal ausführen“, um jetzt eine zu starten."
+      }
+    },
+    "detail": {
+      "title": "Geplante Aufgabe",
+      "back": "Geplante Aufgaben",
+      "loadFailed": "Diese geplante Aufgabe konnte nicht geladen werden.",
+      "tabs": {
+        "runs": "Ausführungen",
+        "overview": "Übersicht"
+      },
+      "overview": {
+        "prompt": "Prompt",
+        "schedule": "Zeitplan",
+        "nextRun": "Nächste Ausführung",
+        "notScheduled": "Nicht geplant",
+        "lastRun": "Letzte Ausführung",
+        "never": "Nie"
+      },
+      "switch": {
+        "title": "Nach Zeitplan ausführen",
+        "label": "{name} nach Zeitplan ausführen"
+      },
+      "menu": "Weitere Aktionen"
+    },
+    "editor": {
+      "newTitle": "Neue geplante Aufgabe",
+      "editTitle": "Geplante Aufgabe bearbeiten",
+      "description": "Jede Ausführung sendet den Prompt an einen neuen Chat mit dem Standard-Agenten.",
+      "back": "Zurück",
+      "loadFailed": "Diese geplante Aufgabe konnte nicht geladen werden.",
+      "save": "Speichern",
+      "saveAndRun": "Speichern und jetzt ausführen",
+      "errors": {
+        "nameRequired": "Geben Sie einen Namen ein.",
+        "promptRequired": "Geben Sie einen Prompt ein."
+      },
+      "toasts": {
+        "created": "Geplante Aufgabe erstellt.",
+        "createdAndRun": "Geplante Aufgabe erstellt. Die erste Ausführung wurde gestartet.",
+        "updated": "Geplante Aufgabe aktualisiert.",
+        "saveFailed": "Die geplante Aufgabe konnte nicht gespeichert werden."
+      },
+      "fields": {
+        "name": {
+          "label": "Name",
+          "placeholder": "Zum Beispiel wöchentliche Übersicht der Kundeneskalationen"
+        },
+        "prompt": {
+          "label": "Prompt",
+          "description": "Jede Ausführung sendet diese Nachricht an einen neuen Chat.",
+          "placeholder": "Beschreiben Sie, was bei jeder Ausführung passieren soll"
+        },
+        "schedule": {
+          "label": "Zeitplan"
+        }
+      }
+    },
+    "banner": {
+      "title": "Geplante Ausführung von {task}",
+      "inFlight": "{status, select, AWAITING_APPROVAL {Diese Ausführung wartet unten auf Ihre Genehmigung.} other {Diese Ausführung läuft.}}",
+      "startedAt": "Gestartet {time}",
+      "viewTask": "Aufgabe anzeigen"
+    }
   }
 }

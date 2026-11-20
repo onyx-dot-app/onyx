@@ -185,7 +185,7 @@ Each action in a built-in App has one workspace policy:
 | --- | --- | --- |
 | **Allow** | Craft runs the action without a prompt. | Narrow, low-risk reads |
 | **Ask** | Craft stops before the request and shows the user an approval card. | Sends, creates, edits, and broad reads |
-| **Blocked** | The proxy blocks the action. Users and scheduled tasks cannot override it. | Destructive or prohibited actions |
+| **Blocked** | The proxy blocks the action. Users cannot override it. | Destructive or prohibited actions |
 
 Built-in Apps start with defaults: most reads are **Allow**, and most changes are **Ask**.
 
@@ -205,16 +205,8 @@ They cannot turn on an action that you set to **Blocked**.
 
 ### Scheduled Tasks
 
-A [Scheduled Task](/overview/core_features/craft_scheduled_tasks) runs without a user present,
-so it cannot show an approval card.
-The task owner turns on the integrations that the task can use in the task's **Integrations** section.
-A run can use only those integrations. Each action starts with the integration setting,
-and the owner can set it to **Allow**, **Ask** or **Blocked** for that task only.
-
-- If users cannot save **Always allow** on the integration, **Allow** in a task does not change your setting.
-- Task settings cannot override **Blocked**.
-- If a run reaches an action that needs approval, the run stops with the **Awaiting approval** status.
-  The owner must change the action settings of the task, then run the task again.
+Craft Apps are not available to [Scheduled Tasks](/overview/core_features/scheduled_tasks).
+A Scheduled Task runs in chat and can use only MCP and OpenAPI integrations.
 
 ## Skills for Apps
 
@@ -315,7 +307,7 @@ the sandbox proxy injects the rendered headers on the way out.
 | Action | Effect |
 | --- | --- |
 | **Turn off Enabled** | On the **Overview** tab. Hides the App from users and stops credential injection. Onyx keeps the configuration and user connections. |
-| **Delete** | On the **Overview** tab, click **Delete**. Onyx removes the App, its policies, user credentials, and its Scheduled Task settings. |
+| **Delete** | On the **Overview** tab, click **Delete**. Onyx removes the App, its policies, and user credentials. |
 
 Onyx-managed Apps on Onyx Cloud cannot be deleted. Turn off **Enabled** instead.
 
@@ -337,12 +329,6 @@ Onyx-managed Apps on Onyx Cloud cannot be deleted. Turn off **Enabled** instead.
     Check the action's admin policy and the scopes or capabilities granted by the external account.
     A **Blocked** policy cannot be overridden.
     An Ask request can also fail if the user rejects it or the approval expires.
-  </Accordion>
-
-  <Accordion title="A Scheduled Task is awaiting approval">
-    Confirm that the task owner is still connected to the app and that the task has the app on.
-    Then check for a **Blocked** policy, or a different app than the prompt was expected to use.
-    Correct the task and use **Run now**. The blocked run does not resume automatically.
   </Accordion>
 </AccordionGroup>
 

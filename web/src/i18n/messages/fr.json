@@ -13993,7 +13993,6 @@
     "chatPanel": {
       "input": {
         "continuePlaceholder": "Poursuivez la conversation...",
-        "scheduledRunPlaceholder": "Exécution planifiée en cours...",
         "subagentPlaceholder": "Passez à l'agent principal pour envoyer un message"
       },
       "openSidebar": {
@@ -14011,8 +14010,7 @@
       },
       "toast": {
         "operationWait": "Veuillez attendre la fin de l'opération en cours.",
-        "sandboxWait": "Veuillez attendre l'initialisation du bac à sable",
-        "scheduledRunWait": "Veuillez attendre la fin de l'exécution planifiée."
+        "sandboxWait": "Veuillez attendre l'initialisation du bac à sable"
       },
       "loadError": {
         "title": "Impossible de charger la session",
@@ -14463,23 +14461,6 @@
         "button": "Réveiller le bac à sable"
       }
     },
-    "scheduledRun": {
-      "badge": {
-        "label": "Planifiée"
-      },
-      "startedAt": {
-        "label": "Démarrée {time}"
-      },
-      "status": {
-        "awaitingApproval": "Cette exécution planifiée attend une approbation. Les messages de suivi seront débloqués après sa reprise et sa fin.",
-        "running": "Cette exécution planifiée est toujours en cours. Les messages de suivi seront débloqués à la fin.",
-        "startedBy": "Cette session a été lancée par la tâche planifiée {task} à {time}."
-      },
-      "viewTask": {
-        "ariaLabel": "Voir la tâche planifiée {task}. {status}",
-        "label": "Voir la tâche"
-      }
-    },
     "setupCard": {
       "appFallback": {
         "label": "Application externe {id}"
@@ -14752,7 +14733,8 @@
         },
         "tabs": {
           "dailyWeekly": "Quotidien / Hebdomadaire",
-          "interval": "Intervalle"
+          "interval": "Intervalle",
+          "advanced": "Avancé"
         },
         "weekdays": {
           "fri": "Ven",
@@ -14762,6 +14744,21 @@
           "thu": "Jeu",
           "tue": "Mar",
           "wed": "Mer"
+        },
+        "advanced": {
+          "cronLabel": "Expression cron",
+          "hint": "Cinq champs : minute, heure, jour, mois, jour de la semaine. L'expression s'exécute en UTC.",
+          "placeholder": "Par exemple, 0 9 * * 1-5"
+        },
+        "errors": {
+          "intervalNotPositiveInteger": "L'intervalle doit être un nombre entier d'au moins 1.",
+          "minutesIntervalTooLong": "Utilisez des heures pour les intervalles de plus de 59 minutes.",
+          "hoursIntervalTooLong": "Utilisez une planification quotidienne pour les intervalles de plus de 23 heures.",
+          "dayIntervalTimeRequired": "Choisissez une heure pour les intervalles en jours.",
+          "timeRequired": "Choisissez une heure.",
+          "weekdayOutOfRange": "Les jours de la semaine doivent être compris entre 0 et 6 (dim..sam).",
+          "cronRequired": "Saisissez une expression cron.",
+          "cronFieldCount": "Cron doit comporter exactement 5 champs (minute heure jour mois jour de la semaine)."
         }
       },
       "unviewedResults": "Nouveaux résultats"
@@ -16227,6 +16224,9 @@
       },
       "customize": {
         "label": "Personnaliser"
+      },
+      "scheduledTasks": {
+        "label": "Tâches planifiées"
       }
     },
     "chatButton": {
@@ -17594,5 +17594,158 @@
       }
     },
     "search": "Rechercher"
+  },
+  "scheduledTasks": {
+    "unviewedResults": "Nouveaux résultats",
+    "runStatus": "{status, select, QUEUED {En file d'attente} RUNNING {En cours} AWAITING_APPROVAL {En attente d'approbation} SUCCEEDED {Réussie} FAILED {Échouée} CANCELLED {Annulée} SKIPPED {Ignorée} other {Inconnu}}",
+    "taskStatus": "{status, select, ACTIVE {Active} other {En pause}}",
+    "schedule": {
+      "cron": "Cron (UTC) : {cron}",
+      "everyMinutes": "{count, plural, one {Toutes les minutes} other {Toutes les # minutes}}",
+      "everyHours": "{count, plural, one {Toutes les heures} other {Toutes les # heures}}",
+      "everyDays": "{count, plural, one {Tous les jours à {time}} other {Tous les # jours à {time}}}",
+      "daily": "Tous les jours à {time}",
+      "weekly": "{days} à {time}"
+    },
+    "list": {
+      "title": "Tâches planifiées",
+      "description": "Exécutez un prompt selon une planification. Chaque exécution s'ouvre comme un chat que vous pouvez lire et poursuivre.",
+      "search": "Rechercher des tâches",
+      "new": "Nouvelle tâche",
+      "never": "Jamais",
+      "notScheduled": "Non planifiée",
+      "loadFailed": "Impossible de charger vos tâches planifiées.",
+      "open": "Ouvrir {name}",
+      "columns": {
+        "name": "Nom",
+        "schedule": "Planification",
+        "lastRun": "Dernière exécution",
+        "nextRun": "Prochaine exécution",
+        "status": "Statut"
+      },
+      "empty": {
+        "title": "Aucune tâche planifiée pour le moment",
+        "description": "Créez une tâche pour exécuter un prompt selon une planification."
+      },
+      "noMatches": {
+        "title": "Aucune tâche correspondante",
+        "description": "Essayez une autre recherche ou un autre filtre."
+      },
+      "filter": {
+        "label": "Filtrer les tâches",
+        "all": "Toutes les tâches",
+        "unviewed": "Nouveaux résultats"
+      }
+    },
+    "actions": {
+      "runNow": "Exécuter une fois",
+      "pause": "Mettre en pause",
+      "resume": "Reprendre",
+      "edit": "Modifier",
+      "delete": "Supprimer",
+      "menu": "Actions pour {name}",
+      "toasts": {
+        "runQueued": "Une exécution de « {name} » a démarré.",
+        "runFailed": "Impossible de démarrer l'exécution.",
+        "resumed": "Tâche reprise.",
+        "paused": "Tâche mise en pause.",
+        "statusFailed": "Impossible de modifier le statut de la tâche.",
+        "deleted": "« {name} » supprimée.",
+        "deleteFailed": "Impossible de supprimer la tâche."
+      },
+      "confirmDelete": {
+        "title": "Supprimer « {name} » ?",
+        "description": "La tâche cesse de s'exécuter et son historique d'exécution est supprimé.",
+        "submit": "Supprimer"
+      }
+    },
+    "runs": {
+      "label": "Historique des exécutions",
+      "open": "Ouvrir l'exécution de {time}",
+      "loading": "Chargement des exécutions…",
+      "loadFailed": "Impossible de charger l'historique des exécutions.",
+      "loadMore": "Charger plus",
+      "markAllViewed": "Tout marquer comme vu",
+      "markAllViewedFailed": "Impossible de marquer les exécutions comme vues. Réessayez.",
+      "trigger": "{source, select, MANUAL_RUN_NOW {Exécuter une fois} other {Planification}}",
+      "errorClass": "{errorClass, select, superseded_by_next_fire {Annulée : l'exécution suivante a démarré avant que quiconque réponde à l'approbation.} approval_timeout {Annulée : personne n'a répondu à l'approbation dans les 24 heures.} user_cancelled {Arrêtée par vous.} agent_permission_required {Une action nécessitait une approbation.} agent_exception {Échec : l’exécution a rencontré une erreur.} stuck {Échec : l’exécution n’a pas démarré à temps.} timeout {Échec : l’exécution a atteint la limite d’une heure.} other {Échouée : {errorClass}}}",
+      "columns": {
+        "started": "Début",
+        "status": "Statut",
+        "duration": "Durée",
+        "trigger": "Déclencheur",
+        "detail": "Détails"
+      },
+      "closed": {
+        "queued": "Cette exécution n'a pas encore démarré, il n'y a donc aucun chat à ouvrir.",
+        "skipped": "Cette exécution a été ignorée, il n'y a donc aucun chat à ouvrir.",
+        "noChat": "Cette exécution n’a pas de chat à ouvrir."
+      },
+      "empty": {
+        "title": "Aucune exécution pour le moment",
+        "description": "La tâche ajoute une exécution à chaque déclenchement. Utilisez Exécuter une fois pour en démarrer une maintenant."
+      }
+    },
+    "detail": {
+      "title": "Tâche planifiée",
+      "back": "Tâches planifiées",
+      "loadFailed": "Impossible de charger cette tâche planifiée.",
+      "tabs": {
+        "runs": "Exécutions",
+        "overview": "Aperçu"
+      },
+      "overview": {
+        "prompt": "Prompt",
+        "schedule": "Planification",
+        "nextRun": "Prochaine exécution",
+        "notScheduled": "Non planifiée",
+        "lastRun": "Dernière exécution",
+        "never": "Jamais"
+      },
+      "switch": {
+        "title": "Exécuter selon la planification",
+        "label": "Exécuter {name} selon la planification"
+      },
+      "menu": "Plus d’actions"
+    },
+    "editor": {
+      "newTitle": "Nouvelle tâche planifiée",
+      "editTitle": "Modifier la tâche planifiée",
+      "description": "Chaque exécution envoie le prompt à un nouveau chat avec l'agent par défaut.",
+      "back": "Retour",
+      "loadFailed": "Impossible de charger cette tâche planifiée.",
+      "save": "Enregistrer",
+      "saveAndRun": "Enregistrer et exécuter maintenant",
+      "errors": {
+        "nameRequired": "Saisissez un nom.",
+        "promptRequired": "Saisissez un prompt."
+      },
+      "toasts": {
+        "created": "Tâche planifiée créée.",
+        "createdAndRun": "Tâche planifiée créée. La première exécution a démarré.",
+        "updated": "Tâche planifiée mise à jour.",
+        "saveFailed": "Impossible d'enregistrer la tâche planifiée."
+      },
+      "fields": {
+        "name": {
+          "label": "Nom",
+          "placeholder": "Par exemple, synthèse hebdomadaire des escalades clients"
+        },
+        "prompt": {
+          "label": "Prompt",
+          "description": "Chaque exécution envoie ce message à un nouveau chat.",
+          "placeholder": "Décrivez ce qu'il faut faire à chaque exécution"
+        },
+        "schedule": {
+          "label": "Planification"
+        }
+      }
+    },
+    "banner": {
+      "title": "Exécution planifiée de {task}",
+      "inFlight": "{status, select, AWAITING_APPROVAL {Cette exécution attend votre approbation ci-dessous.} other {Cette exécution est en cours.}}",
+      "startedAt": "Démarrée {time}",
+      "viewTask": "Voir la tâche"
+    }
   }
 }

@@ -33,12 +33,6 @@ import {
 } from "@/app/craft/contexts/UploadFilesContext";
 import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
-import {
-  isRunUnviewed,
-  isScheduledRunContextInFlight,
-} from "@/app/craft/v1/tasks/utils";
-import { markScheduledRunViewed } from "@/app/craft/v1/tasks/api";
-import { revalidateScheduledRunViews } from "@/lib/scheduledTasks/hooks";
 import { toast } from "@opal/layouts";
 import Dropzone from "react-dropzone";
 import CraftInputBar, {
@@ -53,9 +47,6 @@ import {
 } from "@/app/craft/onboarding/constants";
 import { getPreferredLlmSelection } from "@/app/craft/utils/llmPreferences";
 import { useUser } from "@/providers/UserProvider";
-import ScheduledRunBanner, {
-  useScheduledRunContext,
-} from "@/app/craft/components/ScheduledRunBanner";
 import BuildWelcome from "@/app/craft/components/BuildWelcome";
 import BuildMessageList from "@/app/craft/components/BuildMessageList";
 import { craftMessageRowId } from "@/app/craft/utils/rowIds";
@@ -143,42 +134,9 @@ function ChatPanelContent({
     },
     [outputSessionId]
   );
-  const scheduledSessionId = sessionId ?? existingSessionId ?? null;
-  // Gate on origin so interactive sessions don't 404 on scheduled-run-context.
-  const scheduledRunSessionId =
-    session?.origin === "SCHEDULED" ? scheduledSessionId : null;
-  const { data: scheduledRunContext, mutate: mutateScheduledRunContext } =
-    useScheduledRunContext(scheduledRunSessionId);
-  const scheduledRunInFlight =
-    isScheduledRunContextInFlight(scheduledRunContext);
-  const shouldStreamScheduledRun = scheduledRunContext?.status === "RUNNING";
-  const scheduledRunId = scheduledRunContext?.run_id;
-  const viewedScheduledRunRevision = useRef<string | null>(null);
-  useEffect(() => {
-    if (
-      !scheduledRunContext ||
-      scheduledRunContext.status === "RUNNING" ||
-      !isRunUnviewed(scheduledRunContext)
-    )
-      return;
-    const { task_id, run_id, revision } = scheduledRunContext;
-    const key = `${run_id}:${revision}`;
-    if (viewedScheduledRunRevision.current === key) return;
-    viewedScheduledRunRevision.current = key;
-    void markScheduledRunViewed(task_id, run_id, revision)
-      .then(() =>
-        Promise.all([
-          mutateScheduledRunContext(),
-          revalidateScheduledRunViews(task_id),
-        ])
-      )
-      .catch(() => {
-        viewedScheduledRunRevision.current = null;
-      });
-  }, [scheduledRunContext, mutateScheduledRunContext]);
+  const activeSessionId = sessionId ?? existingSessionId ?? null;
   const hasSession = useHasSession();
   const isRunning = useIsRunning();
-  const displayIsRunning = isRunning || scheduledRunInFlight;
   const isRestoring: boolean =
     session?.status === "creating" &&
     !session.activeTurnLocalOwner &&
@@ -268,12 +226,8 @@ function ChatPanelContent({
   const appendMessageToCurrent = useBuildSessionStore(
     (state) => state.appendMessageToCurrent
   );
-  const {
-    streamMessage,
-    interruptStreaming,
-    streamScheduledRunEvents,
-    retryQueuedMessage,
-  } = useCraftStreaming();
+  const { streamMessage, interruptStreaming, retryQueuedMessage } =
+    useCraftStreaming();
   const isInterrupting = useIsInterrupting();
   const sessionQueue = useQueuedMessages();
   const queuedMessages = useMemo(
@@ -302,7 +256,6 @@ function ChatPanelContent({
   const removeQueuedMessage = useBuildSessionStore(
     (state) => state.removeQueuedMessage
   );
-  const activeTurnId = session?.activeTurnId ?? null;
   const isPreProvisioning = useIsPreProvisioning();
   const isPreProvisioningFailed = useIsPreProvisioningFailed();
   const preProvisionedSessionId = usePreProvisionedSessionId();
@@ -323,53 +276,6 @@ function ChatPanelContent({
     setActiveSession(activeSession, { draftId: existingSessionId ?? null });
   }, [existingSessionId, preProvisionedSessionId, setActiveSession]);
 
-  useEffect(() => {
-    if (!scheduledSessionId || !scheduledRunId || !shouldStreamScheduledRun)
-      return;
-
-    const controller = new AbortController();
-    void streamScheduledRunEvents(
-      scheduledSessionId,
-      scheduledRunId,
-      controller.signal,
-      () => {
-        void mutateScheduledRunContext();
-      }
-    );
-
-    return () => controller.abort();
-  }, [
-    scheduledSessionId,
-    scheduledRunId,
-    shouldStreamScheduledRun,
-    streamScheduledRunEvents,
-    mutateScheduledRunContext,
-  ]);
-
-  useEffect(() => {
-    if (
-      !scheduledSessionId ||
-      !scheduledRunContext ||
-      scheduledRunInFlight ||
-      activeTurnId
-    ) {
-      return;
-    }
-    const store = useBuildSessionStore.getState();
-    const current = store.sessions.get(scheduledSessionId);
-    if (current)
-      void store.beginTurnSettlement(
-        scheduledSessionId,
-        { kind: "scheduled", runId: scheduledRunContext.run_id },
-        current.turnGeneration
-      );
-  }, [
-    scheduledSessionId,
-    scheduledRunContext,
-    scheduledRunInFlight,
-    activeTurnId,
-  ]);
-
   // Ref to access InputBar methods
   const inputBarRef = useRef<CraftInputBarHandle>(null);
 
@@ -383,8 +289,7 @@ function ChatPanelContent({
   }, [reduceMotion]);
   // The setting decides whether a running turn is followed. With nothing
   // running, a view at the end keeps to it while layout settles.
-  const autoScroll =
-    user?.preferences?.auto_scroll !== false || !displayIsRunning;
+  const autoScroll = user?.preferences?.auto_scroll !== false || !isRunning;
   // The latest user message anchors a new turn.
   // The transcript on screen. A switch to or from a subagent fades the old
   // one out first; the scroll container takes the new one's key after that,
@@ -406,10 +311,6 @@ function ChatPanelContent({
       modelOverride?: BuildLlmSelection | null
     ): Promise<boolean> => {
       if (submissionBlocked) return false;
-      if (scheduledRunInFlight) {
-        toast.error(t("toast.scheduledRunWait"));
-        return false;
-      }
 
       track(AnalyticsEvent.SENT_CRAFT_MESSAGE);
 
@@ -514,7 +415,6 @@ function ChatPanelContent({
       hasSession,
       sessionId,
       isRunning,
-      scheduledRunInFlight,
       submissionBlocked,
       appendMessageToCurrent,
       streamMessage,
@@ -604,10 +504,6 @@ function ChatPanelContent({
                   />
                 )}
                 <AgentSwitcher />
-                <ScheduledRunBanner
-                  sessionId={scheduledSessionId}
-                  context={scheduledRunContext ?? null}
-                />
               </div>
               <SandboxStatusIndicator />
               {/* Soft fade border at bottom */}
@@ -667,7 +563,7 @@ function ChatPanelContent({
                           />
                         </div>
                       )}
-                      {recoverableError && scheduledSessionId && (
+                      {recoverableError && activeSessionId && (
                         <div className="pb-2" role="alert">
                           <MessageCard
                             variant="error"
@@ -683,13 +579,11 @@ function ChatPanelContent({
                               <Button
                                 onClick={() => {
                                   if (settlementError)
-                                    void retryTurnSettlement(
-                                      scheduledSessionId
-                                    );
+                                    void retryTurnSettlement(activeSessionId);
                                   else if (queuedSendError)
-                                    void retryQueuedMessage(scheduledSessionId);
+                                    void retryQueuedMessage(activeSessionId);
                                   else
-                                    void loadSession(scheduledSessionId, {
+                                    void loadSession(activeSessionId, {
                                       force: true,
                                     });
                                 }}
@@ -746,26 +640,21 @@ function ChatPanelContent({
                           sessionId={existingSessionId}
                           ref={inputBarRef}
                           onSubmit={handleSubmit}
-                          isRunning={displayIsRunning}
+                          isRunning={isRunning}
                           isInterrupting={isInterrupting}
                           onInterrupt={
-                            hasInterruptibleTurn && !scheduledRunInFlight
-                              ? handleInterrupt
-                              : undefined
+                            hasInterruptibleTurn ? handleInterrupt : undefined
                           }
                           disabled={
                             isViewingSubagent ||
                             isRestoring ||
                             submissionBlocked ||
-                            scheduledRunInFlight ||
                             !hasProvider
                           }
                           placeholder={
                             isViewingSubagent
                               ? t("input.subagentPlaceholder")
-                              : scheduledRunInFlight
-                                ? t("input.scheduledRunPlaceholder")
-                                : t("input.continuePlaceholder")
+                              : t("input.continuePlaceholder")
                           }
                           queuedMessages={queuedMessages}
                           onQueueMessage={handleQueueMessage}
@@ -796,7 +685,7 @@ function ChatPanelContent({
                   ) : !hasSession && !existingSessionId ? (
                     <BuildWelcome
                       onSubmit={handleSubmit}
-                      isRunning={displayIsRunning}
+                      isRunning={isRunning}
                       sandboxInitializing={sandboxNotReady}
                     />
                   ) : (
@@ -813,13 +702,13 @@ function ChatPanelContent({
                           .getState()
                           .openOutputsTab(outputSessionId, turnIndex)
                       }
-                      isStreaming={displayIsRunning}
+                      isStreaming={isRunning}
                       isFinalizing={
                         session?.turnSettlement?.phase === "reconciling"
                       }
                       trailingAssistantSlot={
                         <>
-                          {wasInterrupted && !displayIsRunning && (
+                          {wasInterrupted && !isRunning && (
                             <div className="flex items-center gap-2 text-sm text-text-03">
                               <SvgStopCircle className="size-4 shrink-0 stroke-text-03" />
                               <span>{t("responseStopped.label")}</span>

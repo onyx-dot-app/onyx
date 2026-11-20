@@ -13993,7 +13993,6 @@
     "chatPanel": {
       "input": {
         "continuePlaceholder": "会話を続ける...",
-        "scheduledRunPlaceholder": "スケジュール実行中...",
         "subagentPlaceholder": "メッセージを送るにはメインエージェントに切り替えてください"
       },
       "openSidebar": {
@@ -14011,8 +14010,7 @@
       },
       "toast": {
         "operationWait": "現在の操作が完了するまでお待ちください。",
-        "sandboxWait": "サンドボックスの初期化をお待ちください",
-        "scheduledRunWait": "スケジュール実行が完了するまでお待ちください。"
+        "sandboxWait": "サンドボックスの初期化をお待ちください"
       },
       "loadError": {
         "title": "セッションを読み込めませんでした",
@@ -14463,23 +14461,6 @@
         "button": "サンドボックスを起動"
       }
     },
-    "scheduledRun": {
-      "badge": {
-        "label": "スケジュール済み"
-      },
-      "startedAt": {
-        "label": "{time} に開始"
-      },
-      "status": {
-        "awaitingApproval": "このスケジュール実行は承認待ちです。再開して完了すると追加メッセージを送信できるようになります。",
-        "running": "このスケジュール実行はまだ進行中です。完了すると追加メッセージを送信できるようになります。",
-        "startedBy": "このセッションはスケジュールされたタスク {task} により {time} に開始されました。"
-      },
-      "viewTask": {
-        "ariaLabel": "スケジュールされたタスク {task} を表示。{status}",
-        "label": "タスクを表示"
-      }
-    },
     "setupCard": {
       "appFallback": {
         "label": "外部アプリ {id}"
@@ -14752,7 +14733,8 @@
         },
         "tabs": {
           "dailyWeekly": "毎日 / 毎週",
-          "interval": "間隔"
+          "interval": "間隔",
+          "advanced": "詳細"
         },
         "weekdays": {
           "fri": "金",
@@ -14762,6 +14744,21 @@
           "thu": "木",
           "tue": "火",
           "wed": "水"
+        },
+        "advanced": {
+          "cronLabel": "cron 式",
+          "hint": "5 つのフィールド: 分、時、日、月、曜日。式は UTC で実行されます。",
+          "placeholder": "例: 0 9 * * 1-5"
+        },
+        "errors": {
+          "intervalNotPositiveInteger": "間隔は 1 以上の整数である必要があります。",
+          "minutesIntervalTooLong": "59 分を超える間隔には時間単位を使用してください。",
+          "hoursIntervalTooLong": "23 時間を超える間隔には毎日のスケジュールを使用してください。",
+          "dayIntervalTimeRequired": "日単位の間隔には時刻を選択してください。",
+          "timeRequired": "時刻を選択してください。",
+          "weekdayOutOfRange": "曜日の値は 0〜6（日〜土）である必要があります。",
+          "cronRequired": "cron 式を入力してください。",
+          "cronFieldCount": "cron はちょうど 5 つのフィールド（分 時 日 月 曜日）が必要です。"
         }
       },
       "unviewedResults": "新しい結果"
@@ -16227,6 +16224,9 @@
       },
       "customize": {
         "label": "カスタマイズ"
+      },
+      "scheduledTasks": {
+        "label": "スケジュールされたタスク"
       }
     },
     "chatButton": {
@@ -17594,5 +17594,158 @@
       }
     },
     "search": "検索"
+  },
+  "scheduledTasks": {
+    "unviewedResults": "新しい結果",
+    "runStatus": "{status, select, QUEUED {待機中} RUNNING {実行中} AWAITING_APPROVAL {承認待ち} SUCCEEDED {成功} FAILED {失敗} CANCELLED {キャンセル済み} SKIPPED {スキップ} other {不明}}",
+    "taskStatus": "{status, select, ACTIVE {有効} other {一時停止中}}",
+    "schedule": {
+      "cron": "cron (UTC): {cron}",
+      "everyMinutes": "{count, plural, other {# 分ごと}}",
+      "everyHours": "{count, plural, other {# 時間ごと}}",
+      "everyDays": "{count, plural, other {# 日ごとの {time}}}",
+      "daily": "毎日 {time}",
+      "weekly": "{days} の {time}"
+    },
+    "list": {
+      "title": "スケジュールされたタスク",
+      "description": "スケジュールに従ってプロンプトを実行します。各実行は、読んで続けられるチャットとして開きます。",
+      "search": "タスクを検索",
+      "new": "新しいタスク",
+      "never": "なし",
+      "notScheduled": "未スケジュール",
+      "loadFailed": "スケジュールされたタスクを読み込めませんでした。",
+      "open": "{name} を開く",
+      "columns": {
+        "name": "名前",
+        "schedule": "スケジュール",
+        "lastRun": "前回の実行",
+        "nextRun": "次回の実行",
+        "status": "ステータス"
+      },
+      "empty": {
+        "title": "スケジュールされたタスクはまだありません",
+        "description": "タスクを作成して、スケジュールに従ってプロンプトを実行します。"
+      },
+      "noMatches": {
+        "title": "一致するタスクはありません",
+        "description": "別の検索語句またはフィルターをお試しください。"
+      },
+      "filter": {
+        "label": "タスクを絞り込む",
+        "all": "すべてのタスク",
+        "unviewed": "新しい結果"
+      }
+    },
+    "actions": {
+      "runNow": "1回実行",
+      "pause": "一時停止",
+      "resume": "再開",
+      "edit": "編集",
+      "delete": "削除",
+      "menu": "{name} の操作",
+      "toasts": {
+        "runQueued": "「{name}」の実行を開始しました。",
+        "runFailed": "実行を開始できませんでした。",
+        "resumed": "タスクを再開しました。",
+        "paused": "タスクを一時停止しました。",
+        "statusFailed": "タスクのステータスを変更できませんでした。",
+        "deleted": "「{name}」を削除しました。",
+        "deleteFailed": "タスクを削除できませんでした。"
+      },
+      "confirmDelete": {
+        "title": "「{name}」を削除しますか？",
+        "description": "タスクの実行が停止し、実行履歴も削除されます。",
+        "submit": "削除"
+      }
+    },
+    "runs": {
+      "label": "実行履歴",
+      "open": "{time} の実行を開く",
+      "loading": "実行を読み込み中…",
+      "loadFailed": "実行履歴を読み込めませんでした。",
+      "loadMore": "さらに読み込む",
+      "markAllViewed": "すべて既読にする",
+      "markAllViewedFailed": "実行を既読にできませんでした。もう一度お試しください。",
+      "trigger": "{source, select, MANUAL_RUN_NOW {1回実行} other {スケジュール}}",
+      "errorClass": "{errorClass, select, superseded_by_next_fire {キャンセル済み: 承認に誰も応答する前に次の実行が開始されました。} approval_timeout {キャンセル済み: 24 時間以内に誰も承認に応答しませんでした。} user_cancelled {あなたが停止しました。} agent_permission_required {操作に承認が必要でした。} agent_exception {失敗: 実行中にエラーが発生しました。} stuck {失敗: 実行が時間内に開始されませんでした。} timeout {失敗: 実行が 1 時間の上限に達しました。} other {失敗: {errorClass}}}",
+      "columns": {
+        "started": "開始",
+        "status": "ステータス",
+        "duration": "所要時間",
+        "trigger": "トリガー",
+        "detail": "詳細"
+      },
+      "closed": {
+        "queued": "この実行はまだ開始されていないため、開くチャットはありません。",
+        "skipped": "この実行はスキップされたため、開くチャットはありません。",
+        "noChat": "この実行には開くチャットがありません。"
+      },
+      "empty": {
+        "title": "まだ実行はありません",
+        "description": "タスクは発火するたびに実行を追加します。今すぐ開始するには「1回実行」を使用してください。"
+      }
+    },
+    "detail": {
+      "title": "スケジュールされたタスク",
+      "back": "スケジュールされたタスク",
+      "loadFailed": "このスケジュールされたタスクを読み込めませんでした。",
+      "tabs": {
+        "runs": "実行",
+        "overview": "概要"
+      },
+      "overview": {
+        "prompt": "プロンプト",
+        "schedule": "スケジュール",
+        "nextRun": "次回の実行",
+        "notScheduled": "未スケジュール",
+        "lastRun": "前回の実行",
+        "never": "なし"
+      },
+      "switch": {
+        "title": "スケジュールどおりに実行",
+        "label": "{name} をスケジュールどおりに実行"
+      },
+      "menu": "その他の操作"
+    },
+    "editor": {
+      "newTitle": "新しいスケジュールされたタスク",
+      "editTitle": "スケジュールされたタスクを編集",
+      "description": "各実行は、デフォルトのエージェントを使用する新しいチャットにプロンプトを送信します。",
+      "back": "戻る",
+      "loadFailed": "このスケジュールされたタスクを読み込めませんでした。",
+      "save": "保存",
+      "saveAndRun": "保存して今すぐ実行",
+      "errors": {
+        "nameRequired": "名前を入力してください。",
+        "promptRequired": "プロンプトを入力してください。"
+      },
+      "toasts": {
+        "created": "スケジュールされたタスクを作成しました。",
+        "createdAndRun": "スケジュールされたタスクを作成しました。最初の実行を開始しました。",
+        "updated": "スケジュールされたタスクを更新しました。",
+        "saveFailed": "スケジュールされたタスクを保存できませんでした。"
+      },
+      "fields": {
+        "name": {
+          "label": "名前",
+          "placeholder": "例: 顧客エスカレーションの週次ダイジェスト"
+        },
+        "prompt": {
+          "label": "プロンプト",
+          "description": "各実行は、このメッセージを新しいチャットに送信します。",
+          "placeholder": "各実行で行うことを説明してください"
+        },
+        "schedule": {
+          "label": "スケジュール"
+        }
+      }
+    },
+    "banner": {
+      "title": "{task} のスケジュール実行",
+      "inFlight": "{status, select, AWAITING_APPROVAL {この実行は下であなたの承認を待っています。} other {この実行は進行中です。}}",
+      "startedAt": "{time} に開始",
+      "viewTask": "タスクを表示"
+    }
   }
 }
