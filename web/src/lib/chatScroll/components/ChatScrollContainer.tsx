@@ -521,19 +521,21 @@ const ChatScrollContainer = React.memo(
       // MutationObserver (structural) + ResizeObserver (height growth).
       // Re-attached per session: the scroll element remounts on a session
       // change (it is keyed by `sessionId`).
-      // NOT characterData — typewriter reveals don't change scrollHeight
-      // and firing per-char thrashed auto-scroll.
+      // NOT characterData: firing per character thrashed auto-scroll. Text
+      // that grows inside the latest turn's min-height changes no scroll
+      // height, so the ResizeObserver also watches that turn's rows.
+      // oxlint-disable-next-line react-doctor/effect-needs-cleanup -- the cleanup disconnects rowObserver, which owns every row observe.
       useEffect(() => {
         const container = scrollContainerRef.current;
         const contentWrapper = contentWrapperRef.current;
         if (!container) return;
 
         let rafId: number | null = null;
-
         const onContentChange = () => {
           if (rafId) return;
           rafId = requestAnimationFrame(() => {
             rafId = null;
+            observeLatestTurnRows();
 
             // Capture whether we were at bottom BEFORE content changed
             const wasAtBottom = isAtBottomRef.current;
@@ -576,6 +578,24 @@ const ChatScrollContainer = React.memo(
         });
 
         const resizeObserver = new ResizeObserver(onContentChange);
+        // The latest turn's rows: they change as turns arrive. Only rows
+        // new to the set are observed: observing fires a callback.
+        const rowObserver = new ResizeObserver(onContentChange);
+        let observedRows = new Set<Element>();
+        const observeLatestTurnRows = () => {
+          const turns = container.querySelectorAll("[data-chat-turn]");
+          const rows = new Set(
+            Array.from(turns.item(turns.length - 1)?.children ?? [])
+          );
+          for (const row of observedRows) {
+            if (!rows.has(row)) rowObserver.unobserve(row);
+          }
+          for (const row of rows) {
+            if (!observedRows.has(row)) rowObserver.observe(row);
+          }
+          observedRows = rows;
+        };
+
         resizeObserver.observe(container);
         if (contentWrapper) {
           resizeObserver.observe(contentWrapper);
@@ -589,10 +609,12 @@ const ChatScrollContainer = React.memo(
             resizeObserver.observe(footer);
           }
         }
+        observeLatestTurnRows();
 
         return () => {
           mutationObserver.disconnect();
           resizeObserver.disconnect();
+          rowObserver.disconnect();
           if (rafId) cancelAnimationFrame(rafId);
         };
       }, [
