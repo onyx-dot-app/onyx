@@ -97,14 +97,7 @@ export function ScrollableTable({
     <div ref={wrapRef} dir={dir} className="markdown-table-card">
       <Hoverable.Root group="markdownTable">
         <div ref={scrollRef} className="markdown-table-breakout">
-          <table
-            ref={tableRef}
-            className={cn(
-              className,
-              "min-w-full my-0! [&_th]:whitespace-nowrap [&_td]:whitespace-nowrap"
-            )}
-            {...props}
-          >
+          <table ref={tableRef} className={cn(className, "my-0!")} {...props}>
             {children}
           </table>
         </div>
