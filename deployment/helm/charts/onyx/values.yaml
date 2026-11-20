@@ -1163,6 +1163,8 @@ celery_worker_user_file_processing:
 celery_worker_scheduled_tasks:
   # Threads for each pod (the worker's --concurrency): the scheduled runs that
   # one pod runs at the same time. A run mostly waits on LLM and tool I/O.
+  # CELERY_WORKER_SCHEDULED_TASKS_CONCURRENCY in configMap or in this worker's
+  # extraEnv takes precedence over this value.
   concurrency: 32
   extraEnv: []
   replicaCount: 1
@@ -2016,7 +2018,8 @@ configMap:
   CELERY_WORKER_LIGHT_PREFETCH_MULTIPLIER: ""
   CELERY_WORKER_USER_FILE_PROCESSING_CONCURRENCY: ""
   # Seconds a scheduled run can wait in the queue before it fails (default:
-  # 10800, 3h). Set the worker threads with celery_worker_scheduled_tasks.concurrency.
+  # 10800, 3h). Each fire of the task while its run waits restarts this time.
+  # Set the worker threads with celery_worker_scheduled_tasks.concurrency.
   SCHEDULED_RUN_QUEUE_RESIDENCY_SECONDS: ""
   # Each scheduled task fires a fixed delay inside this window after its cron
   # time, so tasks with the same schedule do not start at once (default: 300,

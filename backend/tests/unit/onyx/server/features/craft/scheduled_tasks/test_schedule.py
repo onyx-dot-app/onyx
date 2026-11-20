@@ -45,6 +45,7 @@ def test_next_n_fires_returns_aware_utc_datetimes() -> None:
 _TASK_ID = UUID("8a6e0f2c-3b1d-4c5e-9f7a-0123456789ab")
 
 
+@patch.object(schedule, "SCHEDULED_TASK_FIRE_WINDOW_SECONDS", 300)
 def test_offset_is_stable_per_task_and_inside_the_window() -> None:
     offsets = [offset_seconds(uuid4()) for _ in range(200)]
 

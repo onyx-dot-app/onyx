@@ -71,7 +71,15 @@ spec:
               "-A",
               "onyx.background.celery.versioned_apps.scheduled_tasks",
               "worker",
+              {{- $concurrencyEnv := index .Values.configMap "CELERY_WORKER_SCHEDULED_TASKS_CONCURRENCY" | default "" }}
+              {{- range .Values.celery_worker_scheduled_tasks.extraEnv }}
+              {{- if eq .name "CELERY_WORKER_SCHEDULED_TASKS_CONCURRENCY" }}
+              {{- $concurrencyEnv = "set" }}
+              {{- end }}
+              {{- end }}
+              {{- if not $concurrencyEnv }}
               {{ printf "--concurrency=%d" (int .Values.celery_worker_scheduled_tasks.concurrency) | quote }},
+              {{- end }}
               {{- with .Values.celery_worker_scheduled_tasks.logLevel }}
               {{ printf "--loglevel=%s" . | quote }},
               {{- end }}

@@ -102,8 +102,9 @@ For example:
 
 Onyx stores each schedule in UTC. **Daily / Weekly** times use the local time of your browser when you save the task.
 **Interval** schedules run on repeating clock boundaries, not at a fixed delay after the previous run ends. By default,
-each run starts up to five minutes after its scheduled time. The delay is the same for every run of a task,
+Onyx queues each run up to five minutes after its scheduled time. The delay is the same for every run of a task,
 so tasks that share a schedule do not all start at the same time. **Next run** shows the time with this delay.
+When many runs are due at the same time, a run can also wait in the queue for a free worker.
 
 <Note>
   A saved daily or weekly time does not change when your UTC offset changes,

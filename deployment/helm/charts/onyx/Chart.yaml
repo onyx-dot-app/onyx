@@ -22,7 +22,9 @@ annotations:
   artifacthub.io/changes: |
     - kind: changed
       description: celery_worker_scheduled_tasks.concurrency sets the threads of
-        the scheduled-tasks worker. The default is now 32 (was 4).
+        the scheduled-tasks worker. The default is now 32 (was 4). A
+        CELERY_WORKER_SCHEDULED_TASKS_CONCURRENCY value in configMap or in the
+        worker's extraEnv still takes precedence.
 dependencies:
   # Helm uses the first condition path that exists: `postgresqlOperator.enabled`
   # is unset by default, so this falls through to `postgresql.enabled`. Set it
