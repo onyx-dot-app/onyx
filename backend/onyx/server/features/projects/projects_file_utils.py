@@ -15,12 +15,18 @@ from onyx.db.llm import fetch_default_model
 from onyx.file_processing.extract_file_text import (
     count_docx_embedded_images,
     extract_file_text,
+    file_io_to_text,
     get_file_ext,
+    is_text_file,
 )
 from onyx.file_processing.file_types import OnyxFileExtensions
 from onyx.file_processing.password_validation import is_file_password_protected
 from onyx.file_processing.pdf_image_utils import count_pdf_embedded_images
-from onyx.natural_language_processing.utils import count_tokens, get_tokenizer
+from onyx.natural_language_processing.utils import (
+    BaseTokenizer,
+    count_tokens,
+    get_tokenizer,
+)
 from onyx.server.settings.store import load_settings
 from onyx.utils.logger import setup_logger
 
@@ -158,6 +164,38 @@ def estimate_image_tokens_for_upload(
             pass
 
 
+def _categorize_sandbox_only_file(
+    upload: UploadFile,
+    filename: str,
+    tokenizer: BaseTokenizer,
+    token_threshold_k: int | None,
+    results: CategorizedFiles,
+) -> None:
+    """Accept a text code file but flag it to skip indexing."""
+    upload.file.seek(0)
+    if not is_text_file(upload.file):
+        results.rejected.append(
+            RejectedFile(filename=filename, reason="Unsupported file contents")
+        )
+        return
+    token_threshold = token_threshold_k * 1000 if token_threshold_k else None
+    token_count = count_tokens(
+        file_io_to_text(upload.file), tokenizer, token_limit=token_threshold
+    )
+    upload.file.seek(0)
+    if token_threshold is not None and token_count > token_threshold:
+        results.rejected.append(
+            RejectedFile(
+                filename=filename,
+                reason=f"Exceeds {token_threshold_k}K token limit",
+            )
+        )
+        return
+    results.acceptable.append(upload)
+    results.acceptable_file_to_token_count[filename] = token_count
+    results.skip_indexing.add(filename)
+
+
 def categorize_uploaded_files(
     files: list[UploadFile], db_session: Session
 ) -> CategorizedFiles:
@@ -165,9 +203,11 @@ def categorize_uploaded_files(
     Categorize uploaded files based on text extractability and tokenized length.
 
     - Images are estimated for token cost via a patch-based heuristic.
+    - Sandbox-only code files (.py, .js, .sh, …) must be text. They are
+      accepted but flagged to skip indexing.
     - All other files are run through extract_file_text, which handles known
       document formats (.pdf, .docx, …) and falls back to a text-detection
-      heuristic for unknown extensions (.py, .js, .rs, …).
+      heuristic for unknown extensions.
     - Uses default tokenizer to compute token length.
     - If token length exceeds the admin-configured threshold, reject file.
     - If extension unsupported or text cannot be extracted, reject file.
@@ -249,9 +289,15 @@ def categorize_uploaded_files(
                     results.acceptable_file_to_token_count[filename] = token_count
                 continue
 
+            # Code and script files: kept for the Python tool, never indexed.
+            elif extension in OnyxFileExtensions.SANDBOX_ONLY_EXTENSIONS:
+                _categorize_sandbox_only_file(
+                    upload, filename, tokenizer, token_threshold_k, results
+                )
+                continue
+
             # Handle as text/document: attempt text extraction and count tokens.
-            # This accepts any file that extract_file_text can handle, including
-            # code files (.py, .js, .rs, etc.) via its is_text_file() fallback.
+            # Unknown extensions fall back to extract_file_text's text detection.
             else:
                 if is_file_password_protected(
                     file=upload.file,

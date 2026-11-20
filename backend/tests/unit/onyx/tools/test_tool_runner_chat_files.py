@@ -202,6 +202,32 @@ class TestChatFileConversion:
         assert chat_files == []
         mock_file_store_factory.assert_not_called()
 
+    def test_context_code_user_files_loaded_for_tools(self) -> None:
+        # Browsers send no reliable mime type for code, so staging uses the name.
+        from uuid import uuid4
+
+        from onyx.chat.files import load_context_user_files_for_tools
+
+        user_file = UserFileMetadata(
+            id=uuid4(),
+            file_id="stored-py-file",
+            name="analyze.py",
+            file_type="application/octet-stream",
+            token_count=10,
+        )
+        with patch("onyx.chat.files.get_default_file_store") as mock_file_store_factory:
+            mock_file_store = mock_file_store_factory.return_value
+            mock_file_store.read_file.return_value.read.return_value = b"print(1)\n"
+
+            chat_files = load_context_user_files_for_tools(
+                [user_file],
+                existing_filenames=set(),
+            )
+
+            assert len(chat_files) == 1
+            assert chat_files[0].filename == "analyze.py"
+            assert chat_files[0].content == b"print(1)\n"
+
     def test_context_user_file_filename_collision_gets_suffix(self) -> None:
         # Avoid overwriting an existing staged chat attachment with the same name.
         from uuid import uuid4

@@ -776,23 +776,25 @@ def _create_file_tool_metadata_message(
             for meta in metas
         ]
 
+    lines = []
+    remaining = file_metadata
     if SearchTool.NAME in offered:
-        lines = [
-            "These files are attached but too large to include in full. Their "
-            "contents are indexed — use internal search to find the relevant "
-            "passages. Do not guess them or search the web for them:",
-            *_entries(file_metadata),
-        ]
-        return _finalize_file_metadata_message(lines, token_counter)
+        # Only indexed files can be found by search; the rest fall through.
+        searchable = [meta for meta in file_metadata if meta.indexed]
+        remaining = [meta for meta in file_metadata if not meta.indexed]
+        if searchable:
+            lines.append(
+                "These files are attached but too large to include in full. Their "
+                "contents are indexed — use internal search to find the relevant "
+                "passages. Do not guess them or search the web for them:"
+            )
+            lines.extend(_entries(searchable))
 
     python_offered = PythonTool.NAME in offered
-    staged = [
-        meta for meta in file_metadata if python_offered and meta.staged_for_tools
-    ]
+    staged = [meta for meta in remaining if python_offered and meta.staged_for_tools]
     unreadable = [
-        meta for meta in file_metadata if not (python_offered and meta.staged_for_tools)
+        meta for meta in remaining if not (python_offered and meta.staged_for_tools)
     ]
-    lines = []
     if staged:
         lines.append(
             "These files are attached but too large to include in full. The "

@@ -18,12 +18,6 @@ export function adminSkillHref(skillId: string): `/admin/skills/${string}` {
   return `/admin/skills/${skillId}`;
 }
 
-export function skillEditHref(
-  skillId: string
-): `/app/customize/skills/${string}` {
-  return `/app/customize/skills/${skillId}?edit=1`;
-}
-
 export function newSkillHref(
   draftId?: string
 ): `/app/customize/skills/new${string}` {

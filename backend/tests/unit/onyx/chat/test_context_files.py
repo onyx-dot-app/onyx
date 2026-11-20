@@ -23,6 +23,7 @@ from onyx.chat.files import (
 )
 from onyx.chat.models import AvailableFiles, SearchParams
 from onyx.configs.constants import DEFAULT_PERSONA_ID
+from onyx.db.enums import UserFileStatus
 from onyx.db.models import ChatMessage, UserFile
 from onyx.db.user_file import capture_user_file_metadata
 from onyx.file_processing.file_types import (
@@ -583,6 +584,23 @@ class TestExtractContextFiles:
         assert len(result.file_metadata_for_tool) == 1
         assert result.file_metadata_for_tool[0].filename == "data.xlsx"
 
+    def test_overflow_with_vector_db_lists_unindexed_code_files(self) -> None:
+        """Search cannot find files that skipped indexing, so overflow lists them."""
+        text_uf = _make_user_file(token_count=7000, name="bigfile.txt")
+        code_uf = _make_user_file(token_count=50, name="analyze.py")
+        code_uf.status = UserFileStatus.SKIPPED
+
+        result = extract_context_files(
+            user_files=capture_user_file_metadata([text_uf, code_uf]),
+            llm_max_context_window=10000,
+            reserved_token_count=0,
+        )
+
+        assert result.use_as_search_filter is True
+        assert [m.filename for m in result.file_metadata_for_tool] == ["analyze.py"]
+        assert result.file_metadata_for_tool[0].staged_for_tools is True
+        assert result.file_metadata_for_tool[0].indexed is False
+
     @patch("onyx.chat.files.DISABLE_VECTOR_DB", True)
     def test_overflow_no_vector_db_includes_all_files_in_tool_metadata(self) -> None:
         """When vector DB is disabled and files overflow, all files
@@ -806,3 +824,43 @@ class TestGetOrExtractPlaintext:
         assert result == ""
         extract_fn.assert_called_once()
         store_plaintext.assert_called_once_with("file-3", "")
+
+
+def test_chat_history_attachment_keeps_its_indexed_state() -> None:
+    """A SKIPPED attachment from an earlier turn is not sent to search."""
+    from onyx.chat.chat_utils import convert_chat_history
+    from onyx.chat.models import ChatHistoryMessage
+    from onyx.configs.constants import MessageType
+    from onyx.file_store.models import ChatFileType, ChatLoadedFile
+
+    user_file_id = str(uuid4())
+    loaded = ChatLoadedFile.lazy_loaded(
+        file_id="store-id",
+        file_type=ChatFileType.PLAIN_TEXT,
+        filename="analyze.py",
+        content_text="print(1)",
+        token_count=3,
+        loader=lambda: b"print(1)",
+        indexed=False,
+    )
+    message = ChatHistoryMessage(
+        id=1,
+        message_type=MessageType.USER,
+        message="Run it",
+        token_count=2,
+        files=[
+            {
+                "id": "store-id",
+                "type": ChatFileType.PLAIN_TEXT,
+                "name": "analyze.py",
+                "user_file_id": user_file_id,
+            }
+        ],
+        is_clarification=False,
+        skill_messages=[],
+        response_messages=[],
+    )
+
+    result = convert_chat_history([message], [loaded])
+
+    assert result.all_injected_file_metadata[user_file_id].indexed is False
