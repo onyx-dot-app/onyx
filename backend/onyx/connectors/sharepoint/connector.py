@@ -2295,11 +2295,17 @@ class SharepointConnector(
                 )
                 checkpoint.current_drive_delta_selects_sharing = True
                 # A listing that reads the sharing of each item from the delta
-                # keeps the delta: `/children` does not give that signal.
+                # keeps the delta: `/children` does not give that signal. With
+                # excluded paths it walks `/children`: Graph documents that
+                # delta items have no `parentReference.path`, and the
+                # exclusions match on that path.
                 if (
                     stub_listing
                     and start_dt <= _EPOCH
-                    and not self._lists_hierarchical_sharing(include_permissions)
+                    and (
+                        not self._lists_hierarchical_sharing(include_permissions)
+                        or bool(self.excluded_paths)
+                    )
                 ):
                     self._start_full_pass(checkpoint, checkpoint.current_drive)
         if checkpoint.current_site_descriptor and checkpoint.current_drive is not None:

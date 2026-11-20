@@ -3,12 +3,14 @@ which files have permissions of their own, and conversion reads permissions
 only for those files. A file that inherits gets the access of its parent."""
 
 import time
+from typing import Any
 
 import pytest
 
 from onyx.access.models import ExternalAccess
 from onyx.connectors.load_all import load_all_from_connector
 from onyx.connectors.microsoft_utils import drive_delta
+from onyx.connectors.microsoft_utils.drive_items import is_path_excluded
 from onyx.connectors.models import (
     ConnectorFailure,
     Document,
@@ -272,3 +274,40 @@ def test_a_file_with_no_known_parent_gets_its_own_read(
         doc_id: expected[doc_id] for doc_id in changed
     }
     assert mock.op_count("rest.role_assignments") >= len(changed)
+
+
+def test_excluded_paths_apply_to_nested_files_with_permission_sync(
+    own_mock_sharepoint: MockSharepoint, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """Graph documents that delta items have no `parentReference.path`. A
+    permission-synced listing with excluded paths walks `/children`, so an
+    excluded folder's nested files get no stub."""
+    mock = own_mock_sharepoint
+    mock.set_corpus(_CORPUS)
+    original = drive_delta.DriveDeltaItem.to_graph_json
+
+    def without_path(item: drive_delta.DriveDeltaItem) -> dict[str, Any]:
+        graph_json = original(item)
+        graph_json.get("parentReference", {}).pop("path", None)
+        return graph_json
+
+    monkeypatch.setattr(drive_delta.DriveDeltaItem, "to_graph_json", without_path)
+    paths = {
+        file_id: mock.describe_file(file_id)["path"]
+        for file_id in mock.supported_file_ids()
+    }
+    excluded_folder = min(path.split("/")[0] for path in paths.values() if "/" in path)
+    patterns = [f"{excluded_folder}/*"]
+
+    connector = mock.build_connector(certificate=True, excluded_paths=patterns)
+    listing = list_stubs(connector, include_permissions=True)
+
+    assert not listing.failures
+    listed = set(_file_payloads(listing.stubs))
+    kept = {
+        file_id
+        for file_id, path in paths.items()
+        if not is_path_excluded(path, patterns)
+    }
+    assert kept < set(paths)
+    assert listed == kept

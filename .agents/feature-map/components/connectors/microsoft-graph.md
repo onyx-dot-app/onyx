@@ -205,7 +205,9 @@ Graph then gives the `shared` facet only to an item with permissions of its
 own. The listing sets `inherits_permissions` on a payload only when Graph
 names the preference in `Preference-Applied` and the file has no `shared`
 facet. Such a listing reads a full pass with the delta and not with
-`/children`, which has no such signal. Conversion gives a file that inherits
+`/children`, which has no such signal. A connector with excluded paths still
+walks `/children` on a full pass: Graph documents that delta items have no
+`parentReference.path`, and the exclusions match on that path. Conversion gives a file that inherits
 the access of its parent folder, or of the library for a file at the root
 (`SharepointConnector._inherited_access`): one read for each parent in a
 listing run, kept in Redis under `sharepoint_container_access:<run id>:<hash>`
