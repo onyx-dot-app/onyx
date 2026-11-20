@@ -126,9 +126,9 @@ export function RunCard<S extends RunCardStep>({
   const finishedSeconds =
     startedAt !== undefined ? Math.max(1, elapsedSeconds) : durationSeconds;
 
-  // A run that stopped working with no steps (e.g. "Thinking..." before a
-  // text-only answer) has nothing to show. It leaves through Presence's exit,
-  // so it fades out and its height closes, instead of vanishing.
+  // A run that stopped working with no steps (e.g. a wait for the user that
+  // ended) has nothing to show. It leaves through Presence's exit, so it
+  // fades out and its height closes, instead of vanishing.
   const visible = steps.length > 0 || isRunning;
   const foldable = steps.length > 0;
 
@@ -206,8 +206,8 @@ export function RunCard<S extends RunCardStep>({
           }
         >
           {/* The header swaps when the run's state changes: working,
-              stopped or done. While working, a new activity ("Thinking..."
-              to "Searching...") updates the text in place, so the shimmer
+              stopped or done. While working, a new activity ("Thinking" to
+              "Searching...") updates the text in place, so the shimmer
               never restarts. */}
           <Presence.Swap
             swapKey={isRunning ? "working" : stopped ? "stopped" : "done"}
