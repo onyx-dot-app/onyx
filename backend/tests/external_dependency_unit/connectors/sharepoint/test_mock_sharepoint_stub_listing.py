@@ -4,17 +4,12 @@ and site page that indexing keeps, and it downloads nothing."""
 import base64
 import json
 import time
-from typing import Any
 from urllib.parse import urlsplit
 
 import pytest
 
 from ee.onyx.utils import encryption as ee_encryption
 from onyx.connectors.load_all import load_all_from_connector
-from onyx.connectors.microsoft_utils.drive_items import (
-    DRIVE_ITEM_DOWNLOAD_URL_PROPERTY,
-    DriveItemData,
-)
 from onyx.connectors.models import (
     ConnectorFailure,
     Document,
@@ -91,16 +86,6 @@ def test_the_listing_stores_each_download_link_encrypted(
     keys = json.dumps({"test": base64.b64encode(b"k" * 32).decode()})
     keyring = ee_encryption.build_keyring("", keys, "test")
     monkeypatch.setattr(ee_encryption, "get_keyring", lambda: keyring)
-    links: dict[str, str] = {}
-    original = DriveItemData.from_graph_json
-
-    def spy(item: dict[str, Any]) -> DriveItemData:
-        link = item.get(DRIVE_ITEM_DOWNLOAD_URL_PROPERTY)
-        if isinstance(link, str):
-            links[item["id"]] = link
-        return original(item)
-
-    monkeypatch.setattr(DriveItemData, "from_graph_json", spy)
 
     listing = list_stubs(mock_sharepoint.build_connector())
 
@@ -108,20 +93,22 @@ def test_the_listing_stores_each_download_link_encrypted(
     file_stubs = [stub for stub in listing.stubs if stub.id in files]
     assert {stub.id for stub in file_stubs} == files
     for stub in file_stubs:
-        link = links[stub.id]
-        stored = stub.model_dump_json()
-        for secret in (
-            link,
-            urlsplit(link).query,
-            base64.b64encode(link.encode()).decode(),
-        ):
-            assert secret not in stored
-        assert "tempauth" not in stored
-        loaded = SlimDocumentStub.model_validate_json(stored)
-        assert loaded.listing_payload is not None
-        payload = loaded.listing_payload.as_type(SharepointListingPayload)
-        assert payload.download_url_listed_at is not None
-        assert fresh_download_url(payload) == link
+        _assert_link_stored_encrypted(stub)
+
+
+def _assert_link_stored_encrypted(stub: SlimDocumentStub) -> None:
+    stored = stub.model_dump_json()
+    loaded = SlimDocumentStub.model_validate_json(stored)
+    assert loaded.listing_payload is not None
+    payload = loaded.listing_payload.as_type(SharepointListingPayload)
+    assert payload.download_url_listed_at is not None
+    link = fresh_download_url(payload)
+    assert link is not None
+    query = urlsplit(link).query
+    assert "tempauth=" in query
+    for secret in (link, query, base64.b64encode(link.encode()).decode()):
+        assert secret not in stored
+    assert "tempauth" not in stored
 
 
 def test_the_stubs_match_the_documents_of_the_fetching_path(
