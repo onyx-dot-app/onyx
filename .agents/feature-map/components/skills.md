@@ -36,7 +36,8 @@
   `.claude-plugin/marketplace.json` as a marketplace ([[#github-marketplaces]]).
   Each entry becomes one plugin, and "Sync now" brings the repository's
   changes. A personal marketplace belongs to the user who adds it. A company
-  marketplace needs organization-wide `MANAGE_PLUGINS`, and the organization
+  marketplace needs organization-wide `MANAGE_PLUGINS` on the user and on the
+  token (`server/features/skill/marketplace_api.py:_is_manager`), and the organization
   sees its plugins as it sees published ones, under the marketplace default.
   A synced plugin's content changes only in GitHub. A company plugin's sharing
   and install settings change in Onyx; a personal one has neither. On the web, the Plugins tab Add menu
