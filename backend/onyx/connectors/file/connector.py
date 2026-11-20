@@ -1,5 +1,5 @@
 import os
-from datetime import datetime, timezone
+from datetime import datetime
 from io import BytesIO
 from pathlib import Path
 from typing import IO, Any
@@ -93,6 +93,7 @@ def _process_file(
     stage: RawFileCallback | None,
     skip_spreadsheet_content: bool = False,
     file_size: int | None = None,
+    uploaded_at: datetime | None = None,
 ) -> list[Document]:
     """
     Process a file and return a list of Documents.
@@ -114,7 +115,8 @@ def _process_file(
     # If a zip is uploaded with a metadata file, we can process it here
     onyx_metadata, custom_tags = process_onyx_metadata(metadata)
     file_display_name = onyx_metadata.file_display_name or os.path.basename(file_name)
-    time_updated = onyx_metadata.doc_updated_at
+    # A stable fallback lets the content hash gate skip unchanged files.
+    time_updated = onyx_metadata.doc_updated_at or uploaded_at
     primary_owners = onyx_metadata.primary_owners
     secondary_owners = onyx_metadata.secondary_owners
     link = onyx_metadata.link
@@ -372,6 +374,7 @@ class LocalFileConnector(LoadConnector):
                 stage=self.raw_file_callback,
                 skip_spreadsheet_content=self.skip_spreadsheet_content,
                 file_size=file_record.file_size,
+                uploaded_at=file_record.created_at,
             )
             documents.extend(new_docs)
 
