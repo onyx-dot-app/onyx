@@ -187,6 +187,9 @@ pub fn notify(app: &AppHandle, title: &str, text: &str) {
     crate::dialog::show(app, dialog, |_, _| {});
 }
 
+/// How long opening Onyx waits for the session renewal.
+const RENEWAL_WAIT: std::time::Duration = std::time::Duration::from_secs(5);
+
 pub fn route(app: &AppHandle) {
     route_to(app, "/app");
 }
@@ -209,6 +212,20 @@ pub fn route_to(app: &AppHandle, path: &str) {
         let state = app.state::<AppState>();
         match state.api.session_valid(&server, &token).await {
             Ok(true) => {
+                // Renewed before the window opens: the web UI reads the
+                // session's expiry when it loads, and a page that sees the
+                // old expiry pass signs the session out on the server.
+                let renewal = tokio::time::timeout(
+                    RENEWAL_WAIT,
+                    main_window::renew_session(&app, &server, &token),
+                )
+                .await;
+                let (token, renewed) = match renewal {
+                    Ok(Some(fresh)) => (fresh, true),
+                    // A sign-out, a new sign-in or a server change came first.
+                    Ok(None) => return,
+                    Err(_) => (token, false),
+                };
                 if let Err(e) = main_window::open(&app, &server, &token, &path).await {
                     log::warn!("could not open main window: {e}");
                     match state.api.health(&server).await {
@@ -216,22 +233,13 @@ pub fn route_to(app: &AppHandle, path: &str) {
                         Ok(()) => open_failed(&app, "Could not open Onyx", &e),
                     }
                 }
-                // After the window is up, so a slow refresh never delays it.
-                // The renewed token reaches the window only if this session
-                // is still the stored one.
-                main_window::renew_session(&app, &server, &token).await;
-            }
-            Ok(false) => {
-                // A sign-in that finished meanwhile keeps its session and windows.
-                if matches!(state.clear_rejected_token(&server, &token), Ok(false)) {
-                    return;
+                // A slow renewal does not delay the window; it finishes
+                // here, and the renewed token reaches the window.
+                if !renewed {
+                    main_window::renew_session(&app, &server, &token).await;
                 }
-                // The rejected account's answers and pages (a main window
-                // kept hidden during an outage) must not reach the next one.
-                reset_launcher(&app);
-                main_window::close(&app, &server);
-                let _ = open_login(&app);
             }
+            Ok(false) => end_rejected_session(&app, &server, &token),
             // Unreachable is not signed out: the session is kept, and
             // Sign in is only for a rejected session or the user's choice.
             Err(reason) => show_offline(&app, &server, &path, reason, epoch),
@@ -239,8 +247,28 @@ pub fn route_to(app: &AppHandle, path: &str) {
     });
 }
 
+/// Ends a session the server no longer accepts and shows the sign-in window,
+/// unless a sign-in that finished meanwhile replaced `token`.
+pub fn end_rejected_session(app: &AppHandle, server: &str, token: &str) {
+    let state = app.state::<AppState>();
+    if matches!(state.clear_rejected_token(server, token), Ok(false)) {
+        return;
+    }
+    // The rejected account's answers and pages (a main window kept hidden
+    // during an outage) must not reach the next one.
+    reset_launcher(app);
+    main_window::close(app, server);
+    let _ = open_login(app);
+}
+
 /// The offline window, or the "Try Again / Sign In" dialog if it cannot open.
-fn show_offline(app: &AppHandle, server: &str, path: &str, reason: Unreachable, epoch: u64) {
+pub(crate) fn show_offline(
+    app: &AppHandle,
+    server: &str,
+    path: &str,
+    reason: Unreachable,
+    epoch: u64,
+) {
     if let Err(e) = crate::offline::show(app, path, reason, epoch) {
         log::warn!("showing the dialog instead of the offline window: {e}");
         open_failed(app, "Could not open Onyx", &reason.message(server));

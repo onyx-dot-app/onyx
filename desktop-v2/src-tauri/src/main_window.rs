@@ -1,8 +1,9 @@
 //! The main window renders the server's own web UI. It gets no IPC; the shell only
 //! hands in the session cookie and decides where links, popups and downloads go.
 
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::{Mutex, MutexGuard};
+use std::time::{Duration, Instant};
 
 use tauri::webview::cookie::{Cookie, SameSite};
 use tauri::webview::{DownloadEvent, NewWindowFeatures, NewWindowResponse};
@@ -77,6 +78,38 @@ pub fn classify(url: &Url, server_origin: &str) -> LinkAction {
         "http" | "https" | "mailto" | "tel" => LinkAction::External,
         _ => LinkAction::Block,
     }
+}
+
+/// Whether a main-window navigation starts the web app's own sign-in: its
+/// login or signup page, an SSO authorize URL on the server, or an identity
+/// provider's authorize page that returns to the server's sign-in callback.
+/// That sign-in can never reach the app (the identity provider opens in the
+/// browser), so the app handles it as a lost web session.
+pub fn is_web_sign_in(url: &Url, server_url: &Url) -> bool {
+    if !matches!(url.scheme(), "http" | "https") {
+        return false;
+    }
+    if url.origin() == server_url.origin() {
+        return is_sign_in_path(url.path());
+    }
+    url.query_pairs().any(|(key, value)| match key.as_ref() {
+        "redirect_uri" => Url::parse(&value).is_ok_and(|target| {
+            target.origin() == server_url.origin() && is_auth_path(target.path())
+        }),
+        "SAMLRequest" => true,
+        _ => false,
+    })
+}
+
+fn is_auth_path(path: &str) -> bool {
+    (path.starts_with("/auth/") || path.starts_with("/api/auth/"))
+        && !path.starts_with("/api/auth/mobile/")
+}
+
+fn is_sign_in_path(path: &str) -> bool {
+    let path = path.trim_end_matches('/');
+    matches!(path, "/auth/login" | "/auth/signup")
+        || (is_auth_path(path) && path.ends_with("/authorize"))
 }
 
 /// Popups and the SSO window may also load other HTTPS sites (OAuth consent,
@@ -327,6 +360,7 @@ pub async fn open_url(
     let origin = server_url.origin().ascii_serialization();
     let nav_app = app.clone();
     let nav_origin = origin.clone();
+    let nav_server_url = server_url.clone();
     let popup_app = app.clone();
     let popup_origin = origin.clone();
 
@@ -350,18 +384,12 @@ pub async fn open_url(
         })
         // Let the web page receive dropped files (chat attachments).
         .disable_drag_drop_handler()
-        .on_navigation(move |url| match classify(url, &nav_origin) {
-            LinkAction::Allow => {
-                if matches!(url.scheme(), "http" | "https") {
-                    crate::offline::watch_load(&nav_app, url);
-                }
-                true
+        .on_navigation(move |url| {
+            if is_web_sign_in(url, &nav_server_url) {
+                recover_web_session(&nav_app, url);
+                return false;
             }
-            LinkAction::External => {
-                open_external(&nav_app, url.as_str());
-                false
-            }
-            LinkAction::Block => false,
+            navigation_allowed(&nav_app, url, &nav_origin)
         })
         .on_new_window(move |url, features| {
             open_new_window(&popup_app, url, features, &popup_origin)
@@ -417,12 +445,134 @@ pub async fn open_url(
     Ok(())
 }
 
+fn navigation_allowed(app: &AppHandle, url: &Url, origin: &str) -> bool {
+    match classify(url, origin) {
+        LinkAction::Allow => {
+            if matches!(url.scheme(), "http" | "https") {
+                crate::offline::watch_load(app, url);
+            }
+            true
+        }
+        LinkAction::External => {
+            open_external(app, url.as_str());
+            false
+        }
+        LinkAction::Block => false,
+    }
+}
+
+/// A recovery of the web session is running; sign-in navigations meanwhile
+/// are only blocked.
+static RECOVERING: AtomicBool = AtomicBool::new(false);
+/// When the cookie was last handed over again, so a web app that still asks
+/// for a sign-in does not loop.
+static LAST_HANDOVER_RETRY: Mutex<Option<Instant>> = Mutex::new(None);
+const HANDOVER_RETRY_GAP: Duration = Duration::from_secs(60);
+
+/// Where to go once the web session is back: the login page's `next` path,
+/// or the app's home.
+fn return_path(url: &Url, server_url: &Url) -> String {
+    if url.origin() == server_url.origin() {
+        let next = url
+            .query_pairs()
+            .find(|(key, _)| key == "next")
+            .map(|(_, value)| value.into_owned());
+        if let Some(next) = next {
+            if let Ok(target) = server_url_join(server_url, &next) {
+                if !is_sign_in_path(target.path()) {
+                    return next;
+                }
+            }
+        }
+    }
+    "/app".to_string()
+}
+
+/// The web app lost its session and started its own sign-in. If the app's
+/// session is still valid, the cookie is handed over again (once a minute at
+/// most); otherwise the session ends as a rejected one does, and the native
+/// sign-in window opens.
+fn recover_web_session(app: &AppHandle, url: &Url) {
+    if RECOVERING.swap(true, Ordering::SeqCst) {
+        return;
+    }
+    let app = app.clone();
+    let url = url.clone();
+    tauri::async_runtime::spawn(async move {
+        recover(&app, &url).await;
+        RECOVERING.store(false, Ordering::SeqCst);
+    });
+}
+
+async fn recover(app: &AppHandle, url: &Url) {
+    let state = app.state::<AppState>();
+    let epoch = state.epoch();
+    let Ok((server, token)) = state.session() else {
+        close(app, &state.server().unwrap_or_default());
+        crate::windows::route(app);
+        return;
+    };
+    let Ok(server_url) = Url::parse(&server) else {
+        return;
+    };
+    let path = return_path(url, &server_url);
+    match state.api.session_valid(&server, &token).await {
+        Ok(true) if take_handover_retry() => {
+            if let Err(e) = hand_over_again(app, &server, &server_url, &token, &path, epoch).await {
+                log::warn!("could not give the session back to the window: {e}");
+            }
+        }
+        Ok(true) => {
+            log::warn!("the web app still asks for a sign-in; signing in again");
+            crate::windows::end_rejected_session(app, &server, &token);
+        }
+        Ok(false) => crate::windows::end_rejected_session(app, &server, &token),
+        Err(reason) => crate::windows::show_offline(app, &server, &path, reason, epoch),
+    }
+}
+
+/// True, and starts a new gap, if no hand-over retry ran in the last gap.
+fn take_handover_retry() -> bool {
+    let mut last = LAST_HANDOVER_RETRY
+        .lock()
+        .unwrap_or_else(|p| p.into_inner());
+    if last.is_some_and(|at| at.elapsed() < HANDOVER_RETRY_GAP) {
+        return false;
+    }
+    *last = Some(Instant::now());
+    true
+}
+
+async fn hand_over_again(
+    app: &AppHandle,
+    server: &str,
+    server_url: &Url,
+    token: &str,
+    path: &str,
+    epoch: u64,
+) -> Result<(), String> {
+    let state = app.state::<AppState>();
+    let name = state.cookie_name(server).await?;
+    let window = app
+        .get_webview_window(LABEL)
+        .ok_or("the main window is closed")?;
+    if state.epoch() != epoch {
+        return Ok(());
+    }
+    hand_over_session(&window, server_url, &name, token)?;
+    let target = server_url_join(server_url, path)?;
+    window.navigate(target).map_err(|e| e.to_string())
+}
+
 /// Removes the session cookie and closes the main window and its popups.
 pub fn close(app: &AppHandle, server: &str) {
     let Some(window) = app.get_webview_window(LABEL) else {
         return;
     };
     *window_token() = None;
+    *LAST_HANDOVER_RETRY
+        .lock()
+        .unwrap_or_else(|p| p.into_inner()) = None;
     if let Ok(server_url) = Url::parse(server) {
         let name = app.state::<AppState>().cached_cookie_name(server);
         #[cfg(target_os = "macos")]
@@ -483,7 +633,9 @@ pub fn spawn_session_renewal(app: &AppHandle) {
 
 #[cfg(test)]
 mod tests {
-    use super::{classify, classify_popup, server_url_join, LinkAction};
+    use super::{
+        classify, classify_popup, is_web_sign_in, return_path, server_url_join, LinkAction,
+    };
     use url::Url;
 
     const ORIGIN: &str = "http://localhost:3000";
@@ -587,6 +739,87 @@ mod tests {
         assert_eq!(action("https://docs.onyx.app/"), LinkAction::External);
         assert_eq!(action("http://localhost:3001/"), LinkAction::External);
         assert_eq!(action("mailto:support@onyx.app"), LinkAction::External);
+    }
+
+    fn web_sign_in(url: &str) -> bool {
+        let server = Url::parse("https://onyx.corp").unwrap();
+        is_web_sign_in(&Url::parse(url).unwrap(), &server)
+    }
+
+    #[test]
+    fn web_sign_in_pages_on_the_server() {
+        for url in [
+            "https://onyx.corp/auth/login",
+            "https://onyx.corp/auth/login/",
+            "https://onyx.corp/auth/login?next=%2Fapp%3FchatId%3D1",
+            "https://onyx.corp/auth/signup",
+            "https://onyx.corp/api/auth/oauth/authorize?redirect=true",
+            "https://onyx.corp/api/auth/oidc/okta/authorize",
+            "https://onyx.corp/api/auth/saml/authorize",
+            "https://onyx.corp/auth/oauth/authorize",
+        ] {
+            assert!(web_sign_in(url), "{url}");
+        }
+    }
+
+    #[test]
+    fn identity_providers_returning_to_the_server() {
+        assert!(web_sign_in(
+            "https://accounts.google.com/o/oauth2/v2/auth?client_id=x&response_type=code\
+             &redirect_uri=https%3A%2F%2Fonyx.corp%2Fauth%2Foauth%2Fcallback&state=s"
+        ));
+        assert!(web_sign_in(
+            "https://login.okta.example/authorize?redirect_uri=https://onyx.corp/auth/oidc/callback"
+        ));
+        assert!(web_sign_in(
+            "https://idp.example/sso?SAMLRequest=abc&RelayState=x"
+        ));
+    }
+
+    #[test]
+    fn other_navigations_are_not_web_sign_in() {
+        for url in [
+            "https://onyx.corp/app",
+            "https://onyx.corp/app?chatId=1",
+            "https://onyx.corp/auth/logout",
+            "https://onyx.corp/auth/app-handoff",
+            "https://onyx.corp/auth/oauth/callback?code=c&state=s",
+            "https://onyx.corp/admin/connectors/google-drive/auth/authorize",
+            "https://onyx.corp/api/auth/mobile/oauth/authorize",
+            "https://onyx.corp/api/connector/oauth/authorize/slack",
+            "https://docs.onyx.app/",
+            // Connector OAuth returns to a connector page, not a sign-in.
+            "https://slack.com/oauth/v2/authorize?redirect_uri=https://onyx.corp/connector/oauth/callback/slack",
+            // A sign-in for another site.
+            "https://accounts.google.com/o/oauth2/v2/auth?redirect_uri=https://other.example/auth/oauth/callback",
+            "http://onyx.corp/auth/login",
+            "about:blank",
+        ] {
+            assert!(!web_sign_in(url), "{url}");
+        }
+    }
+
+    #[test]
+    fn returns_to_the_login_page_next_path() {
+        let server = Url::parse("https://onyx.corp").unwrap();
+        let path = |url: &str| return_path(&Url::parse(url).unwrap(), &server);
+        assert_eq!(
+            path("https://onyx.corp/auth/login?next=%2Fapp%3FchatId%3D1"),
+            "/app?chatId=1"
+        );
+        assert_eq!(path("https://onyx.corp/auth/login"), "/app");
+        assert_eq!(
+            path("https://onyx.corp/auth/login?next=//evil.example"),
+            "/app"
+        );
+        assert_eq!(
+            path("https://onyx.corp/auth/login?next=/auth/login"),
+            "/app"
+        );
+        assert_eq!(
+            path("https://accounts.google.com/o/oauth2/v2/auth?next=/admin"),
+            "/app"
+        );
     }
 
     #[test]
