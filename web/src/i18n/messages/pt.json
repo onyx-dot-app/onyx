@@ -10674,7 +10674,7 @@
         "title": "Configuração de Instalação",
         "description": "Quem recebe esta integração. Não disponível a mantém privada: só a usam o proprietário, as pessoas com quem ela é compartilhada e os grupos com configuração própria. Remova essas configurações de grupo para limitá-la ao proprietário e aos compartilhamentos.",
         "notAvailable": "Privada. Só a usam o proprietário, as pessoas com quem ela é compartilhada e os grupos com configuração própria.",
-        "required": "Os membros precisam conectá-la antes de usar o chat e o Craft."
+        "required": "Os membros que entram com a própria conta precisam conectá-la antes de usar o chat e o Craft."
       },
       "ownedBy": "Proprietário: {owner}",
       "groupAccess": {

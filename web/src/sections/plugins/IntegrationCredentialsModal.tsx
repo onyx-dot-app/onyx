@@ -67,6 +67,7 @@ export default function IntegrationCredentialsModal({
         onKeyDown={(event) => {
           if (
             event.key === "Enter" &&
+            !event.nativeEvent.isComposing &&
             event.target instanceof HTMLInputElement &&
             !busy
           ) {

@@ -289,7 +289,11 @@ export function launchOAuth(
         !popup?.closed
       )
         return;
-      closedTabTimeout = window.setTimeout(cancel, CLOSED_TAB_GRACE_MS);
+      closedTabTimeout = window.setTimeout(() => {
+        closedTabTimeout = undefined;
+        if (document.visibilityState === "visible" && document.hasFocus())
+          cancel();
+      }, CLOSED_TAB_GRACE_MS);
     }
     function receiveBroadcastCompletion(event: MessageEvent<unknown>) {
       try {

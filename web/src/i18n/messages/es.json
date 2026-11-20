@@ -10674,7 +10674,7 @@
         "title": "Configuración de Instalación",
         "description": "Quién recibe esta integración. No disponible la mantiene privada: solo la usan su propietario, las personas con quienes se comparte y los grupos con su propia configuración. Quita esas configuraciones de grupo para limitarla al propietario y a las personas con acceso compartido.",
         "notAvailable": "Privada. Solo la usan el propietario, las personas con quienes se comparte y los grupos con su propia configuración.",
-        "required": "Los miembros deben conectarla antes de usar el chat y Craft."
+        "required": "Los miembros que inician sesión con su propia cuenta deben conectarla antes de usar el chat y Craft."
       },
       "ownedBy": "Propiedad de {owner}",
       "groupAccess": {

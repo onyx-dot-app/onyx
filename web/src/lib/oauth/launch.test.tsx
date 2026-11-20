@@ -129,6 +129,22 @@ test("cancels when the user is back and the sign-in tab is closed", async () => 
   hasFocus.mockReturnValue(true);
   jest.advanceTimersByTime(2000);
   await expect(waiting).rejects.toMatchObject({ reason: "cancelled" });
+
+  // The user leaves for the provider tab during the grace period.
+  const fourth = openPopup().popup as unknown as { closed: boolean };
+  fourth.closed = false;
+  const left = launchOAuth(async () => authUrl);
+  let leftSettled = false;
+  left.catch(() => {}).finally(() => (leftSettled = true));
+  await flush();
+  fourth.closed = true;
+  window.dispatchEvent(new Event("focus"));
+  hasFocus.mockReturnValue(false);
+  jest.advanceTimersByTime(1500);
+  await flush();
+  expect(leftSettled).toBe(false);
+  notifyOAuthComplete("abc_123");
+  await expect(left).resolves.toEqual({});
 });
 
 test("resolves from a BroadcastChannel completion and rejects a failed one", async () => {

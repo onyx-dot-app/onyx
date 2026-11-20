@@ -10674,7 +10674,7 @@
         "title": "Paramètre d'Installation",
         "description": "Qui reçoit cette intégration. Non disponible la garde privée : seuls son propriétaire, les personnes avec qui elle est partagée et les groupes qui ont leur propre paramètre l’utilisent. Supprimez ces paramètres de groupe pour la limiter au propriétaire et aux partages.",
         "notAvailable": "Privée. Seuls le propriétaire, les personnes avec qui elle est partagée et les groupes qui ont leur propre paramètre l’utilisent.",
-        "required": "Les membres doivent la connecter avant d'utiliser le chat et Craft."
+        "required": "Les membres qui se connectent avec leur propre compte doivent la connecter avant d'utiliser le chat et Craft."
       },
       "ownedBy": "Propriété de {owner}",
       "groupAccess": {

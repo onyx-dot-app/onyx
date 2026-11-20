@@ -10674,7 +10674,7 @@
         "title": "Install Setting",
         "description": "Who gets this integration. Not available keeps it private: only its owner, the people it is shared with and the groups with their own setting use it. Remove those group settings to limit it to the owner and the shares.",
         "notAvailable": "Private. Only the owner, the people it is shared with and the groups with their own setting use it.",
-        "required": "Members must connect it before they can use chat and Craft."
+        "required": "Members who sign in with their own account must connect it before they can use chat and Craft."
       },
       "ownedBy": "Owned by {owner}",
       "groupAccess": {

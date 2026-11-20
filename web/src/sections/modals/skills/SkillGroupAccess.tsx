@@ -18,6 +18,7 @@ import {
   type PolicyChoice,
 } from "@/lib/skills/installationPolicy";
 import { usePolicyOptions } from "@/lib/skills/hooks";
+import type { RichStr } from "@opal/types";
 
 interface SkillGroupAccessProps {
   rows: GroupAccessRow[];
@@ -29,7 +30,7 @@ interface SkillGroupAccessProps {
   onChoice: (groupId: number, choice: PolicyChoice) => void;
   onAdd: (group: MinimalUserGroupSnapshot) => void;
   onRemove: (groupId: number) => void;
-  requiredDescription?: string;
+  requiredDescription?: string | RichStr;
 }
 
 /** Claude's "Group access": one row for each group and its setting. A group
