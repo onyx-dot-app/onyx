@@ -30,6 +30,7 @@ from onyx.connectors.cross_connector_utils.tabular_section_utils import (
     is_tabular_file,
 )
 from onyx.connectors.microsoft_utils.drive_delta import (
+    DRIVE_ITEM_SHARED_PROPERTY,
     SHAREPOINT_IDS_PROPERTY,
     DriveDeltaPage,
     fetch_drive_delta_checkpoint_page,
@@ -248,6 +249,10 @@ class DriveItemData(BaseModel):
     parent_reference_path: str | None = None
     drive_id: str | None = None
     list_item_id: str | None = None
+    # True when the item has a ``shared`` facet. On a delta page with the
+    # ``hierarchicalsharing`` preference, Graph gives the facet only to an
+    # item with permissions of its own.
+    has_sharing_facet: bool = False
 
     @classmethod
     def from_graph_json(cls, item: dict[str, Any]) -> "DriveItemData":
@@ -278,6 +283,7 @@ class DriveItemData(BaseModel):
             parent_reference_path=parent_ref.get("path"),
             drive_id=parent_ref.get("driveId"),
             list_item_id=sharepoint_ids.list_item_id if sharepoint_ids else None,
+            has_sharing_facet=DRIVE_ITEM_SHARED_PROPERTY in item,
         )
 
     def to_sdk_driveitem(self, graph_client: GraphClient) -> DriveItem:

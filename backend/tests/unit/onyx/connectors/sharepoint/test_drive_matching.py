@@ -101,6 +101,7 @@ def _fake_get_delta_page(
     page_url: str,  # noqa: ARG001
     allow_full_resync: bool,  # noqa: ARG001
     select_fields: str,  # noqa: ARG001
+    hierarchical_sharing: bool,  # noqa: ARG001
 ) -> DriveDeltaFetchResult:
     return _delta_fetch_result(_SAMPLE_ITEM)
 

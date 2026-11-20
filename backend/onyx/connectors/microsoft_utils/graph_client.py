@@ -215,12 +215,14 @@ def graph_api_get_json(
     headers: dict[str, str] | None = None,
     *,
     pacer: MicrosoftRequestPacer | None = None,
+    response_headers: dict[str, str] | None = None,
 ) -> dict[str, Any]:
     """Make an authenticated GET request to the Graph API with retry.
 
     ``headers`` carries request preferences such as ``Prefer``. Authorization
     and User-Agent are always set here. With a ``pacer``, each try takes the
-    cost of the call from the shared limiter first.
+    cost of the call from the shared limiter first. ``response_headers``, when
+    given, gets the headers of the answer.
     """
     for attempt in range(GRAPH_API_MAX_RETRIES + 1):
         if pacer is not None:
@@ -255,6 +257,9 @@ def graph_api_get_json(
                 time.sleep(wait)
                 continue
             log_and_raise_for_status(response)
+            if response_headers is not None:
+                response_headers.clear()
+                response_headers.update(response.headers)
             # ValueError covers the empty/non-JSON 2xx bodies Graph
             # intermittently returns under load.
             return response.json()
@@ -310,3 +315,21 @@ class GraphApiClient:
         return graph_api_get_json(
             self.get_access_token, url, params, headers, pacer=self.pacer
         )
+
+    def get_json_with_headers(
+        self,
+        url: str,
+        params: dict[str, str] | None = None,
+        headers: dict[str, str] | None = None,
+    ) -> tuple[dict[str, Any], dict[str, str]]:
+        """``get_json``, with the headers of the answer."""
+        response_headers: dict[str, str] = {}
+        data = graph_api_get_json(
+            self.get_access_token,
+            url,
+            params,
+            headers,
+            pacer=self.pacer,
+            response_headers=response_headers,
+        )
+        return data, response_headers

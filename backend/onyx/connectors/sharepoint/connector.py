@@ -46,6 +46,7 @@ from onyx.connectors.microsoft_utils.config import (
 )
 from onyx.connectors.microsoft_utils.drive_delta import (
     DRIVE_DELTA_SELECT_FIELDS,
+    HIERARCHICAL_SHARING_PREFERENCE,
     build_delta_start_url,
 )
 from onyx.connectors.microsoft_utils.drive_items import (
@@ -414,6 +415,7 @@ def _convert_driveitem_to_document_with_permissions(
     treat_sharing_link_as_public: bool = False,
     raw_file_callback: RawFileCallback | None = None,
     permission_cache: SharepointPermissionCache | None = None,
+    inherited_access: ExternalAccess | None = None,
 ) -> Document | ConnectorFailure | None:
     if not driveitem.name or not driveitem.id:
         raise ValueError("DriveItem name/id is required")
@@ -432,7 +434,9 @@ def _convert_driveitem_to_document_with_permissions(
     sections = content.sections
     staged_file_id = content.staged_file_id
 
-    if include_permissions:
+    if include_permissions and inherited_access is not None:
+        external_access = inherited_access
+    elif include_permissions:
         logger.info("Getting external access for %s", driveitem.name)
         external_access = get_sharepoint_external_access(
             reader=ops,
@@ -853,6 +857,9 @@ class SharepointConnector(
         self._permission_cache = SharepointPermissionCache()
         self._run_permission_caches: dict[str, SharedSharepointPermissionCache] = {}
         self._run_permission_caches_lock = threading.Lock()
+        # One lock for each folder or library whose access conversion reads.
+        self._container_locks: dict[str, threading.Lock] = {}
+        self._container_locks_guard = threading.Lock()
 
         resolved_env = resolve_microsoft_environment(graph_api_host, authority_host)
         self.authority_host = resolved_env.authority_host
@@ -1741,8 +1748,11 @@ class SharepointConnector(
         is_targeted_reindex: bool,
         permission_cache: SharepointPermissionCache,
         seen_document_ids: set[str] | None = None,
+        inherited_access: ExternalAccess | None = None,
     ) -> Generator[Document | ConnectorFailure, None, None]:
-        """Downloads one file and yields its document, or a failure. A file
+        """Downloads one file and yields its document, or a failure. With
+        ``inherited_access``, the document gets that access and the file's
+        permissions are not read. A file
         with no content yields nothing, but for a PDF or an image, and for a
         targeted reindex, which gets a failure. Safe to call from many
         threads at one time."""
@@ -1761,6 +1771,12 @@ class SharepointConnector(
                 parent_hierarchy_raw_node_id=parent_hierarchy_url,
                 treat_sharing_link_as_public=self.treat_sharing_link_as_public,
                 raw_file_callback=self.raw_file_callback,
+                # Only passed when the file inherits, for the fetching path.
+                **(
+                    {"inherited_access": inherited_access}
+                    if inherited_access is not None
+                    else {}
+                ),
             )
 
             if isinstance(doc_or_failure, Document):
@@ -1828,9 +1844,13 @@ class SharepointConnector(
         checkpoint: SharepointConnectorCheckpoint,
         include_permissions: bool,
         seen_document_ids: set[str],
+        inheritance_known: bool = False,
     ) -> Generator[SlimDocumentStub | HierarchyNode, None, None]:
         """The stub of one listed file, after its folder nodes. A file that
-        the fetching path drops before or after its download has no stub."""
+        the fetching path drops before or after its download has no stub.
+        ``inheritance_known`` is True when Graph applied the
+        ``hierarchicalsharing`` preference to the page of the file: a file
+        with no ``shared`` facet then has no permissions of its own."""
         if self._is_driveitem_excluded(driveitem):
             logger.debug("Excluding by path denylist: %s", driveitem.web_url)
             return
@@ -1864,6 +1884,10 @@ class SharepointConnector(
                 else drive.web_url
             ),
             listing_run_id=checkpoint.listing_run_id,
+            drive_web_url=drive.web_url,
+            inherits_permissions=(
+                inheritance_known and not driveitem.has_sharing_facet
+            ),
         )
 
     def _list_site_page_stubs(
@@ -1904,6 +1928,68 @@ class SharepointConnector(
             next_link = listing.next_link
             if next_link is None:
                 return
+
+    def _lists_hierarchical_sharing(self, include_permissions: bool) -> bool:
+        """True when the stub listing asks the delta which files have
+        permissions of their own, so that conversion reads permissions only
+        for those files. Not with ``treat_sharing_link_as_public``: the
+        sharing links of a file are then read for each file."""
+        return include_permissions and not self.treat_sharing_link_as_public
+
+    def _inherited_access(
+        self, payload: SharepointListingPayload
+    ) -> ExternalAccess | None:
+        """The access of the parent of a listed file that has no permissions
+        of its own: its folder, or the library for a file at the root. The
+        parent's access is read one time and kept. None when the listing was
+        not certain, or when the parent cannot be read: the file then gets a
+        permission read of its own."""
+        if (
+            not payload.inherits_permissions
+            or self.treat_sharing_link_as_public
+            or not payload.list_id
+            or not payload.drive_web_url
+        ):
+            return None
+        folder_path = extract_folder_path_from_parent_reference(payload.parent_path)
+        server_relative_path = (
+            build_folder_server_relative_path(payload.drive_web_url, folder_path)
+            if folder_path
+            else None
+        )
+        key = f"{payload.site_url}|{payload.list_id}|{server_relative_path or ''}"
+        # One thread reads a parent. The other threads of the batch wait for
+        # it and take its answer.
+        with self._container_locks_guard:
+            lock = self._container_locks.setdefault(key, threading.Lock())
+        with lock:
+            cached = self._permission_cache.get_container_access(key)
+            if cached is not None:
+                return cached
+            try:
+                access = get_sharepoint_hierarchy_node_external_access(
+                    self.ops,
+                    payload.site_url,
+                    self._permission_cache,
+                    HierarchyNodeType.FOLDER
+                    if server_relative_path
+                    else HierarchyNodeType.DRIVE,
+                    list_id=payload.list_id,
+                    folder_server_relative_path=server_relative_path,
+                )
+            except ConnectorStopSignal:
+                raise
+            except Exception as e:
+                _raise_if_throttled(e)
+                logger.warning(
+                    "Could not read the access of the parent of %s (%s); reading "
+                    "the file's own permissions.",
+                    payload.web_url,
+                    e,
+                )
+                return None
+            self._permission_cache.set_container_access(key, access)
+            return access
 
     def _start_full_pass(
         self, checkpoint: SharepointConnectorCheckpoint, drive: SiteDrive
@@ -2195,7 +2281,13 @@ class SharepointConnector(
                         else DRIVE_DELTA_SELECT_FIELDS
                     ),
                 )
-                if stub_listing and start_dt <= _EPOCH:
+                # A listing that reads the sharing of each item from the delta
+                # keeps the delta: `/children` does not give that signal.
+                if (
+                    stub_listing
+                    and start_dt <= _EPOCH
+                    and not self._lists_hierarchical_sharing(include_permissions)
+                ):
                     self._start_full_pass(checkpoint, checkpoint.current_drive)
         if checkpoint.current_site_descriptor and checkpoint.current_drive is not None:
             site_descriptor = checkpoint.current_site_descriptor
@@ -2206,6 +2298,7 @@ class SharepointConnector(
             # --- determine item source ---
             driveitems: Iterable[DriveItemData]
             has_more_delta_pages = False
+            inheritance_known = False
 
             if checkpoint.full_pass_folders is not None:
                 try:
@@ -2234,6 +2327,10 @@ class SharepointConnector(
                 has_more_delta_pages = True
             elif checkpoint.current_drive_delta_next_link:
                 try:
+                    hierarchical_sharing = (
+                        stub_listing
+                        and self._lists_hierarchical_sharing(include_permissions)
+                    )
                     result = self.ops.get_delta_page(
                         drive_id=current_drive.drive_id,
                         page_url=checkpoint.current_drive_delta_next_link,
@@ -2245,7 +2342,18 @@ class SharepointConnector(
                             if stub_listing
                             else DRIVE_ITEM_SELECT_FIELDS
                         ),
+                        hierarchical_sharing=hierarchical_sharing,
                     )
+                    inheritance_known = hierarchical_sharing and (
+                        HIERARCHICAL_SHARING_PREFERENCE in result.applied_preferences
+                    )
+                    if hierarchical_sharing and not inheritance_known:
+                        logger.info(
+                            "Graph did not apply the hierarchicalsharing preference "
+                            "to drive '%s'; each of its files gets its own "
+                            "permission read.",
+                            current_drive.display_name,
+                        )
                 except ConnectorStopSignal:
                     raise
                 except Exception as e:
@@ -2303,6 +2411,7 @@ class SharepointConnector(
                             checkpoint,
                             include_permissions,
                             seen_document_ids,
+                            inheritance_known,
                         )
                         continue
                     yield from self._process_drive_item(
@@ -2787,6 +2896,9 @@ class SharepointConnector(
                 payload.parent_hierarchy_raw_node_id,
                 is_targeted_reindex=False,
                 permission_cache=self._run_permission_cache(payload),
+                inherited_access=(
+                    self._inherited_access(payload) if include_permissions else None
+                ),
             ),
             None,
         )
