@@ -255,6 +255,8 @@ def test_scope_and_owner_rules(
     assert [
         (item.id, item.can_manage, item.default_installation_policy)
         for item in owner_list.marketplaces
+        # Other tests and seed data may share the database.
+        if item.id in (personal_id, company_id)
     ] == [
         (personal_id, True, None),
         (company_id, False, PluginInstallationPolicy.DEFAULT),
@@ -266,9 +268,11 @@ def test_scope_and_owner_rules(
     manager_list = api.list_marketplaces(
         http_request(), _fresh(db_session, manager), db_session
     )
-    assert [(item.id, item.can_manage) for item in manager_list.marketplaces] == [
-        (company_id, True)
-    ]
+    assert [
+        (item.id, item.can_manage)
+        for item in manager_list.marketplaces
+        if item.id in (personal_id, company_id)
+    ] == [(company_id, True)]
 
     # The company already gets this source, in any letter case.
     with pytest.raises(OnyxError) as exc:
