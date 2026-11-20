@@ -11,12 +11,17 @@ meaningful failure rate.
 """
 
 import logging
+import time
 from collections.abc import Generator
 from contextlib import contextmanager
 
 from prometheus_client import Counter, Gauge, Histogram
 
 from onyx.document_index.opensearch.constants import OpenSearchSearchType
+from onyx.document_index.opensearch.search_samples import (
+    SearchResult,
+    record_search_sample,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -128,6 +133,9 @@ def observe_opensearch_search(
         server_took_ms: The ``took`` value from the OpenSearch response, in
             milliseconds. May be ``None`` if the response did not include it.
     """
+    record_search_sample(
+        search_type.value, client_duration_s, server_took_ms, SearchResult.OK
+    )
     try:
         label = search_type.value
         _client_duration.labels(search_type=label).observe(client_duration_s)
@@ -176,8 +184,19 @@ def track_opensearch_search(
         incremented = True
     except Exception:
         logger.warning("Failed to increment in-progress search gauge.", exc_info=True)
+    started: float = time.monotonic()
     try:
         yield
+    except BaseException as e:
+        record_search_sample(
+            label,
+            time.monotonic() - started,
+            None,
+            SearchResult.TIMEOUT
+            if "Timeout" in type(e).__name__
+            else SearchResult.ERROR,
+        )
+        raise
     finally:
         if incremented:
             try:

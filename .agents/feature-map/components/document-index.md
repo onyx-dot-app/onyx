@@ -37,7 +37,12 @@ different shard settings on AWS-managed OpenSearch.
   cluster status (`GET /admin/service-status/opensearch`, EE): cluster health,
   each data node's disk, heap and vector memory against its file cache, the
   current and reindex indexes, and the issues with their severity. The result is
-  shared for 60 seconds. Multi-tenant Cloud refuses it.
+  shared for 60 seconds. Multi-tenant Cloud refuses it. A second route
+  (`/admin/service-status/opensearch/searches`) returns the last 30 minutes of
+  searches: per minute the count, failures and the p10 and p90 of the
+  successful searches, the window's p90, the slow p90 threshold (700 ms), each
+  slow or failed search, and up to 20 random other searches per minute. The
+  current minute reports its elapsed seconds, so its rate is not understated.
 - **An operator** sees the old index deleted about a day after a switch, once
   the new index is healthy. A reclaim that fails repeatedly stops and needs a
   person.
@@ -273,6 +278,16 @@ it deletes the old one.
   (`veq`, `veb`) when there is one, else the float32 `vec`. The file cache is
   the smaller of host RAM and the cgroup limit, minus the heap. The resource
   warning and the status page share this estimate.
+- **Search samples are buffered per process, not written per search.** Each
+  search adds a small sample to an in-process buffer
+  (`document_index/opensearch/search_samples.py`). A daemon thread flushes it
+  every 5 seconds as one member of a per-minute set in the shared cache, so a
+  search pays no cache round trip. Prometheus keeps only latency buckets per
+  pod. The read returns per-minute percentiles of the successful searches
+  and lists the latest 1,000 slow or failed searches. It also lists up to 20
+  other searches per minute, picked at random with the minute as the seed, so
+  a refresh shows the same ones.
+  Multi-tenant deployments record nothing.
 - **Reindex copies stored chunks instead of fetching sources again.** A full
   refetch is slow and fails when a connector is broken. The port re-embeds what
   PRESENT holds, and the reindex endpoint creates every FUTURE row with

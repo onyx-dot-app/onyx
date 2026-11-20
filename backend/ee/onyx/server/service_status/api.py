@@ -19,6 +19,10 @@ from onyx.document_index.opensearch.cluster_status import (
     collect_cluster_status,
 )
 from onyx.document_index.opensearch.models import ClusterStatus
+from onyx.document_index.opensearch.search_samples import (
+    SearchActivity,
+    read_search_activity,
+)
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.logger import setup_logger
@@ -45,12 +49,7 @@ def _index_ref(search_settings: SearchSettings, is_current: bool) -> OnyxIndexRe
     )
 
 
-@router.get("/opensearch")
-def read_opensearch_status(
-    refresh: bool = False,
-    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
-    db_session: Session = Depends(get_session),
-) -> ClusterStatus:
+def _check_available() -> None:
     # Cloud shares the cluster across tenants, so its numbers are not a tenant's.
     if MULTI_TENANT:
         raise OnyxError(
@@ -63,6 +62,14 @@ def read_opensearch_status(
             "This deployment runs without a document index.",
         )
 
+
+@router.get("/opensearch")
+def read_opensearch_status(
+    refresh: bool = False,
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> ClusterStatus:
+    _check_available()
     cache: CacheBackend = get_shared_cache_backend()
     raw: bytes | None = cache.get(CLUSTER_STATUS_KEY)
     if raw is not None:
@@ -89,3 +96,12 @@ def read_opensearch_status(
         CLUSTER_STATUS_KEY, status.model_dump_json(), ex=CLUSTER_STATUS_TTL_SECONDS
     )
     return status
+
+
+@router.get("/opensearch/searches")
+def read_opensearch_searches(
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+) -> SearchActivity:
+    """The searches of the last minutes: rate per minute, percentiles, samples."""
+    _check_available()
+    return read_search_activity()
