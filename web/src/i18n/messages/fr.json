@@ -10715,6 +10715,7 @@
         "p90Note": "(90e centile)",
         "p90Row": "p90 {value}",
         "p10Row": "p10 {value}",
+        "minuteLabel": "{time} : p90 {p90}, p10 {p10}",
         "rateTooltip": "{rate} appels/s",
         "millisecondsUnit": "ms",
         "secondsUnit": "s",
@@ -10779,6 +10780,10 @@
         "indexMissing": {
           "title": "L'index de recherche est absent",
           "description": "OpenSearch n'a pas d'index pour les paramètres de recherche actuels, la recherche ne renvoie donc rien. Consultez les journaux d'OpenSearch, puis lancez une réindexation depuis les paramètres d'index."
+        },
+        "nodesUnanswered": {
+          "title": "{value, plural, one {# nœud de données n'a pas répondu} other {# nœuds de données n'ont pas répondu}}",
+          "description": "L'état omet ce que ces nœuds n'ont pas signalé, comme leur disque et leur mémoire. Vérifiez que chaque nœud de données fonctionne, puis actualisez."
         },
         "dismiss": "Ignorer"
       }

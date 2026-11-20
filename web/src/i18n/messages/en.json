@@ -10715,6 +10715,7 @@
         "p90Note": "(90th percentile)",
         "p90Row": "p90 {value}",
         "p10Row": "p10 {value}",
+        "minuteLabel": "{time}: p90 {p90}, p10 {p10}",
         "rateTooltip": "{rate} calls/s",
         "millisecondsUnit": "ms",
         "secondsUnit": "s",
@@ -10779,6 +10780,10 @@
         "indexMissing": {
           "title": "The search index is missing",
           "description": "OpenSearch has no index for the current search settings, so search returns nothing. Check the OpenSearch logs, then start a reindex from Index Settings."
+        },
+        "nodesUnanswered": {
+          "title": "{value, plural, one {# data node} other {# data nodes}} did not answer",
+          "description": "The status leaves out what those nodes did not report, such as their disk and memory. Check that every data node is running, then refresh."
         },
         "dismiss": "Dismiss"
       }

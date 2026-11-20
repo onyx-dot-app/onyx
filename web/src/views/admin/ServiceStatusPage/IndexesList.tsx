@@ -80,6 +80,7 @@ function IndexRows({ indexes }: IndexRowsProps) {
                 >
                   {/* One line; the full ID, with its organization prefix, is in the tooltip. */}
                   <Text
+                    as="p"
                     font="main-ui-action"
                     color="text-04"
                     maxLines={1}
@@ -89,7 +90,7 @@ function IndexRows({ indexes }: IndexRowsProps) {
                   </Text>
                   {!index.is_current && <Tag title={t("reindex")} />}
                 </Section>
-                <Text font="secondary-body" color="text-03">
+                <Text as="p" font="secondary-body" color="text-03">
                   {detail(index)}
                 </Text>
               </Section>
@@ -102,7 +103,7 @@ function IndexRows({ indexes }: IndexRowsProps) {
                 {/* A reindex copies the current index, so its share of the
                   current chunks is how far it has got. */}
                 {!index.is_current && currentChunks > 0 && (
-                  <Text font="secondary-body" color="text-03">
+                  <Text as="p" font="secondary-body" color="text-03">
                     {t("reindexProgress", {
                       percent: Math.min(
                         100,
@@ -112,7 +113,7 @@ function IndexRows({ indexes }: IndexRowsProps) {
                   </Text>
                 )}
                 {index.is_current && index.deleted_chunk_count > 0 && (
-                  <Text font="secondary-body" color="text-03">
+                  <Text as="p" font="secondary-body" color="text-03">
                     {t("deleted", { percent: deletedPercent(index) })}
                   </Text>
                 )}

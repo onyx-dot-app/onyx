@@ -8,7 +8,8 @@ export type ClusterIssueKind =
   | "disk"
   | "vector_memory"
   | "jvm_memory"
-  | "index_missing";
+  | "index_missing"
+  | "nodes_unanswered";
 
 export type ClusterIssueSeverity = "critical" | "warning";
 
@@ -18,7 +19,8 @@ export interface ClusterIssue {
   kind: ClusterIssueKind;
   severity: ClusterIssueSeverity;
   node_names: string[];
-  // The highest usage percent among node_names, or the unassigned shard count.
+  // The highest usage percent among node_names, or the count of unassigned
+  // shards or unanswered nodes.
   value: number;
 }
 

@@ -10715,6 +10715,7 @@
         "p90Note": "(90パーセンタイル)",
         "p90Row": "p90 {value}",
         "p10Row": "p10 {value}",
+        "minuteLabel": "{time}: p90 {p90}、p10 {p10}",
         "rateTooltip": "{rate} 回/秒",
         "millisecondsUnit": "ミリ秒",
         "secondsUnit": "秒",
@@ -10779,6 +10780,10 @@
         "indexMissing": {
           "title": "検索インデックスがありません",
           "description": "現在の検索設定のインデックスが OpenSearch にないため、検索結果が返りません。OpenSearch のログを確認してから、インデックス設定で再インデックスを開始してください。"
+        },
+        "nodesUnanswered": {
+          "title": "{value} 個のデータノードが応答しませんでした",
+          "description": "状態には、これらのノードが報告しなかったディスクやメモリなどの情報が含まれていません。すべてのデータノードが動作していることを確認してから、更新してください。"
         },
         "dismiss": "閉じる"
       }

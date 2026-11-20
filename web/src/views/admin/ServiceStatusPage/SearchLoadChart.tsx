@@ -8,6 +8,7 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { cn } from "@opal/utils";
 import type { SearchRatePoint } from "@/lib/service-status/types";
 import {
   CHART_HEIGHT_CLASS,
@@ -67,7 +68,7 @@ export default function SearchLoadChart({
     // dir="ltr": time runs left to right in every locale.
     <div
       dir="ltr"
-      className={`${CHART_HEIGHT_CLASS} w-full font-secondary-mono`}
+      className={cn(CHART_HEIGHT_CLASS, "w-full font-secondary-mono")}
     >
       <ResponsiveContainer width="100%" height="100%">
         <AreaChart data={points} margin={CHART_MARGIN}>

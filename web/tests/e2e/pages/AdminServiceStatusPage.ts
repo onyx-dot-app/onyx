@@ -13,7 +13,12 @@ export class AdminServiceStatusPage {
 
   async goto(): Promise<void> {
     await this.page.goto("/admin/service-status");
-    await expect(this.issuesPanel).toBeVisible();
+    // A healthy cluster has no issues, so the issues panel stays closed.
+    await expect(this.nodes.first()).toBeVisible();
+  }
+
+  get clusterHeading(): Locator {
+    return this.page.getByText("Search Cluster - OpenSearch");
   }
 
   get nodes(): Locator {

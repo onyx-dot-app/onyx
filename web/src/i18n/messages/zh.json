@@ -10715,6 +10715,7 @@
         "p90Note": "(第 90 百分位)",
         "p90Row": "p90 {value}",
         "p10Row": "p10 {value}",
+        "minuteLabel": "{time}：p90 {p90}，p10 {p10}",
         "rateTooltip": "{rate} 次/秒",
         "millisecondsUnit": "毫秒",
         "secondsUnit": "秒",
@@ -10779,6 +10780,10 @@
         "indexMissing": {
           "title": "搜索索引缺失",
           "description": "OpenSearch 中没有当前搜索设置的索引，因此搜索没有结果。请检查 OpenSearch 日志，然后在索引设置中开始重新索引。"
+        },
+        "nodesUnanswered": {
+          "title": "{value} 个数据节点没有响应",
+          "description": "状态中缺少这些节点未报告的信息，例如磁盘和内存。请确认所有数据节点都在运行，然后刷新。"
         },
         "dismiss": "忽略"
       }

@@ -1,5 +1,6 @@
 "use client";
 
+import type { RichStr } from "@opal/types";
 import { useFormatter, useLocale, useNow, useTranslations } from "next-intl";
 import { Badge, Card, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
@@ -28,7 +29,7 @@ const HEALTH_COLORS = {
 } as const;
 
 interface StatProps {
-  label: string;
+  label: string | RichStr;
   value: string;
   unit?: string;
 }
@@ -36,7 +37,7 @@ interface StatProps {
 function Stat({ label, value, unit }: StatProps) {
   return (
     <Section gap={0.25} alignItems="start" width="full">
-      <Text font="secondary-body" color="text-03">
+      <Text as="p" font="secondary-body" color="text-03">
         {label}
       </Text>
       <ValueWithUnit value={value} unit={unit} size="headline" />
@@ -68,7 +69,7 @@ function ClusterSummary({ status }: ClusterSummaryProps) {
     <Card border="solid" rounding={4} padding={4}>
       <Section flexDirection="row" gap={2} alignItems="start" width="full">
         <Section gap={0.5} alignItems="start" width="full">
-          <Text font="secondary-action" color="text-04">
+          <Text as="p" font="secondary-action" color="text-04">
             {t("status")}
           </Text>
           <Badge
@@ -82,7 +83,7 @@ function ClusterSummary({ status }: ClusterSummaryProps) {
             size={6}
             tooltip={t(HEALTH_TOOLTIP_KEYS[health])}
           />
-          <Text font="secondary-body" color="text-03">
+          <Text as="p" font="secondary-body" color="text-03">
             {t("updated", {
               // A server clock slightly ahead must not read "in 1 second".
               time: format.relativeTime(
@@ -108,8 +109,8 @@ function ClusterSummary({ status }: ClusterSummaryProps) {
         <Section gap={1} alignItems="start" width="full">
           <Stat
             label={t("indexSize")}
-            value={toSize(indexBytes).value}
-            unit={toSize(indexBytes).unit}
+            value={toSize(indexBytes, locale).value}
+            unit={toSize(indexBytes, locale).unit}
           />
           <Stat
             label={t("chunks")}

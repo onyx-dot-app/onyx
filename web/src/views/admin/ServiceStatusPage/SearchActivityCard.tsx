@@ -1,5 +1,6 @@
 "use client";
 
+import type { RichStr } from "@opal/types";
 import { useFormatter, useTranslations } from "next-intl";
 import { Card, MessageCard, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
@@ -12,17 +13,17 @@ import ValueWithUnit from "@/views/admin/ServiceStatusPage/ValueWithUnit";
 const MINUTE_MS = 60_000;
 
 interface HeadlineProps {
-  title: string;
+  title: string | RichStr;
   value: string;
-  unit?: string;
+  unit?: string | RichStr;
   // What the value is, on the right of the value line.
-  note?: string;
+  note?: string | RichStr;
 }
 
 function Headline({ title, value, unit, note }: HeadlineProps) {
   return (
     <Section gap={0.25} alignItems="start" width="full">
-      <Text font="secondary-body" color="text-03">
+      <Text as="p" font="secondary-body" color="text-03">
         {title}
       </Text>
       <Section
@@ -33,7 +34,7 @@ function Headline({ title, value, unit, note }: HeadlineProps) {
       >
         <ValueWithUnit value={value} unit={unit} size="headline" />
         {note && (
-          <Text font="secondary-body" color="text-03">
+          <Text as="p" font="secondary-body" color="text-03">
             {note}
           </Text>
         )}
@@ -108,20 +109,29 @@ export default function SearchActivityCard() {
   ) => (
     <Card border="solid" rounding={2} padding={2}>
       <Section gap={0.25} alignItems="start" width="fit">
-        <Text font="secondary-body" color="text-05">
+        <Text as="p" font="secondary-body" color="text-05">
           {t("rateTooltip", { rate: formatRate(perSecond) })}
         </Text>
         {failed > 0 && (
-          <Text font="secondary-body" color="status-error-05">
+          <Text as="p" font="secondary-body" color="status-error-05">
             {t("failedInMinute", { count: failed })}
           </Text>
         )}
-        <Text font="secondary-body" color="text-03">
+        <Text as="p" font="secondary-body" color="text-03">
           {formatTime(atMs)}
         </Text>
       </Section>
     </Card>
   );
+
+  const describeMinute = (minuteMs: number) => {
+    const point = data.rate.find((minute) => minute.minute_ms === minuteMs);
+    return t("minuteLabel", {
+      time: formatTime(minuteMs),
+      p90: point?.p90_ms != null ? formatDuration(point.p90_ms) : "—",
+      p10: point?.p10_ms != null ? formatDuration(point.p10_ms) : "—",
+    });
+  };
 
   const renderMinute = (minuteMs: number) => {
     const point = data.rate.find((minute) => minute.minute_ms === minuteMs);
@@ -129,13 +139,13 @@ export default function SearchActivityCard() {
     return (
       <Card border="solid" rounding={2} padding={2}>
         <Section gap={0.25} alignItems="start" width="fit">
-          <Text font="secondary-body" color="text-05">
+          <Text as="p" font="secondary-body" color="text-05">
             {t("p90Row", { value: formatDuration(point.p90_ms) })}
           </Text>
-          <Text font="secondary-body" color="text-05">
+          <Text as="p" font="secondary-body" color="text-05">
             {t("p10Row", { value: formatDuration(point.p10_ms) })}
           </Text>
-          <Text font="secondary-body" color="text-03">
+          <Text as="p" font="secondary-body" color="text-03">
             {formatTime(point.minute_ms)}
           </Text>
         </Section>
@@ -176,6 +186,7 @@ export default function SearchActivityCard() {
             endMs={endMs}
             formatTime={formatTime}
             renderMinute={renderMinute}
+            describeMinute={describeMinute}
           />
         </Section>
       </Section>

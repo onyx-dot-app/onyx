@@ -10715,6 +10715,7 @@
         "p90Note": "(90. Perzentil)",
         "p90Row": "p90 {value}",
         "p10Row": "p10 {value}",
+        "minuteLabel": "{time}: p90 {p90}, p10 {p10}",
         "rateTooltip": "{rate} Aufrufe/s",
         "millisecondsUnit": "ms",
         "secondsUnit": "s",
@@ -10779,6 +10780,10 @@
         "indexMissing": {
           "title": "Der Suchindex fehlt",
           "description": "OpenSearch hat keinen Index für die aktuellen Sucheinstellungen, daher liefert die Suche nichts. Prüfen Sie die OpenSearch-Protokolle und starten Sie dann eine Neuindizierung in den Indexeinstellungen."
+        },
+        "nodesUnanswered": {
+          "title": "{value, plural, one {# Datenknoten hat} other {# Datenknoten haben}} nicht geantwortet",
+          "description": "Der Status lässt aus, was diese Knoten nicht gemeldet haben, etwa ihren Speicherplatz und Arbeitsspeicher. Prüfen Sie, ob alle Datenknoten laufen, und aktualisieren Sie dann."
         },
         "dismiss": "Ausblenden"
       }

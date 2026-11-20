@@ -1,6 +1,7 @@
 "use client";
 
 import { Text } from "@opal/components";
+import type { RichStr } from "@opal/types";
 import { richNodes } from "@opal/utils";
 
 const SIZES = {
@@ -12,9 +13,9 @@ const SIZES = {
 
 interface ValueWithUnitProps {
   value: string;
-  unit?: string;
+  unit?: string | RichStr;
   // A status after the unit, in the error color, e.g. "· 5 failed".
-  note?: string;
+  note?: string | RichStr;
   size: keyof typeof SIZES;
 }
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useTranslations } from "next-intl";
+import { useLocale, useTranslations } from "next-intl";
 import { Card, CopyButton, ProgressBar, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
 import ColumnLabels from "@/views/admin/ServiceStatusPage/ColumnLabels";
@@ -39,21 +39,22 @@ function UsageCell({
   critical,
 }: UsageCellProps) {
   const t = useTranslations("admin.serviceStatus.nodes");
+  const locale = useLocale();
   return (
     <Section gap={0.25} alignItems="stretch" width="full">
       <Section flexDirection="row" gap={0.25} alignItems="center" width="fit">
-        <Text font="main-ui-action" color="text-04">
+        <Text as="p" font="main-ui-action" color="text-04">
           {t("percent", { value: Math.round(value) })}
         </Text>
         {value >= critical && (
           <SvgAlertTriangle size={14} className="text-status-error-05" />
         )}
       </Section>
-      <Text font="secondary-body" color="text-03">
+      <Text as="p" font="secondary-body" color="text-03">
         {t("usedOfTotal", {
-          used: toSize(used, total).value,
-          total: toSize(total).value,
-          unit: toSize(total).unit,
+          used: toSize(used, locale, total).value,
+          total: toSize(total, locale).value,
+          unit: toSize(total, locale).unit,
         })}
       </Text>
       <ProgressBar
@@ -98,7 +99,7 @@ function NodeRows({ nodes, thresholds }: NodeRowsProps) {
                   alignItems="center"
                   width="fit"
                 >
-                  <Text font="main-ui-action" color="text-04">
+                  <Text as="p" font="main-ui-action" color="text-04">
                     {GENERATED_NAME.test(node.name)
                       ? t("unnamed", { number: index + 1 })
                       : node.name}
@@ -109,7 +110,7 @@ function NodeRows({ nodes, thresholds }: NodeRowsProps) {
                     size="xs"
                   />
                 </Section>
-                <Text font="secondary-body" color="text-03">
+                <Text as="p" font="secondary-body" color="text-03">
                   {t("shards", { count: node.shard_count })}
                 </Text>
               </Section>

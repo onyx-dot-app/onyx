@@ -59,7 +59,8 @@ export default function ServiceStatusPage() {
       width="xl"
       narrowGutters
       loading={!data && !error}
-      error={error ? t("page.loadFailed") : false}
+      // A failed background read keeps the last status on the page.
+      error={error && !data ? t("page.loadFailed") : false}
     >
       <SettingsLayouts.Header
         icon={route.icon}
@@ -78,7 +79,10 @@ export default function ServiceStatusPage() {
           </Button>,
         ]}
       />
-      {data && (
+      {!data ? (
+        // Shows the loader, or the error when the first read fails.
+        <SettingsLayouts.Body />
+      ) : (
         // The layout Indexing Status uses: the column, and the panel beside it
         // from 816px of content and under it below.
         <PanelPageBody

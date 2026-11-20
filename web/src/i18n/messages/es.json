@@ -10715,6 +10715,7 @@
         "p90Note": "(percentil 90)",
         "p90Row": "p90 {value}",
         "p10Row": "p10 {value}",
+        "minuteLabel": "{time}: p90 {p90}, p10 {p10}",
         "rateTooltip": "{rate} llamadas/s",
         "millisecondsUnit": "ms",
         "secondsUnit": "s",
@@ -10779,6 +10780,10 @@
         "indexMissing": {
           "title": "Falta el índice de búsqueda",
           "description": "OpenSearch no tiene un índice para la configuración de búsqueda actual, así que la búsqueda no devuelve nada. Revise los registros de OpenSearch y luego inicie una reindexación desde la configuración del índice."
+        },
+        "nodesUnanswered": {
+          "title": "{value, plural, one {# nodo de datos no respondió} other {# nodos de datos no respondieron}}",
+          "description": "El estado omite lo que esos nodos no informaron, como su disco y su memoria. Compruebe que todos los nodos de datos estén en ejecución y luego actualice."
         },
         "dismiss": "Descartar"
       }

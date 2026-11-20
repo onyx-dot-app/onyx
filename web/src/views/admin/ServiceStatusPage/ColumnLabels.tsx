@@ -1,5 +1,6 @@
 "use client";
 
+import type { RichStr } from "@opal/types";
 import { Spacer, Text } from "@opal/components";
 import { Section } from "@opal/layouts";
 
@@ -8,8 +9,8 @@ import { Section } from "@opal/layouts";
 const ROW_INSET_REM = 0.8125;
 
 interface ColumnLabelsProps {
-  title: string;
-  labels: [string, string];
+  title: string | RichStr;
+  labels: [string | RichStr, string | RichStr];
 }
 
 /** The heading of a list of row cards, with the column labels on its grid. */
@@ -30,9 +31,9 @@ export default function ColumnLabels({ title, labels }: ColumnLabelsProps) {
             {title}
           </Text>
         </Section>
-        {labels.map((label) => (
-          <Section key={label} alignItems="start" width="full" padding={0}>
-            <Text font="secondary-body" color="text-03">
+        {labels.map((label, index) => (
+          <Section key={index} alignItems="start" width="full" padding={0}>
+            <Text as="p" font="secondary-body" color="text-03">
               {label}
             </Text>
           </Section>

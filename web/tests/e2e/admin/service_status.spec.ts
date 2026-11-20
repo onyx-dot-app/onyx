@@ -14,7 +14,7 @@ test.describe("service status", () => {
 
     await expect(status.nodes.first()).toBeVisible();
     await expect(status.indexes.first()).toBeVisible();
-    await expect(page.getByText("Search Cluster - OpenSearch")).toBeVisible();
+    await expect(status.clusterHeading).toBeVisible();
 
     await status.refresh();
     await expect(status.nodes.first()).toBeVisible();

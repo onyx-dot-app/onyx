@@ -40,6 +40,7 @@ const INDEX_SETTINGS_KINDS: ReadonlySet<ClusterIssueKind> = new Set([
 // Kinds that more storage or memory does not fix.
 const NO_SIZING_GUIDE_KINDS: ReadonlySet<ClusterIssueKind> = new Set([
   "index_missing",
+  "nodes_unanswered",
 ]);
 
 const ISSUE_MESSAGES = {
@@ -66,6 +67,10 @@ const ISSUE_MESSAGES = {
   index_missing: {
     critical: ["indexMissing.title", "indexMissing.description"],
     warning: ["indexMissing.title", "indexMissing.description"],
+  },
+  nodes_unanswered: {
+    critical: ["nodesUnanswered.title", "nodesUnanswered.description"],
+    warning: ["nodesUnanswered.title", "nodesUnanswered.description"],
   },
 } as const;
 
@@ -173,7 +178,7 @@ function Count({ icon: Icon, count, className }: CountProps) {
   return (
     <Section flexDirection="row" gap={0.25} alignItems="center" width="fit">
       <Icon size={14} className={className} />
-      <Text font="secondary-body" color="text-03">
+      <Text as="p" font="secondary-body" color="text-03">
         {String(count)}
       </Text>
     </Section>
@@ -252,7 +257,7 @@ function IssueList({ issues }: IssueListProps) {
           </Section>
         </Section>
         {critical.length === 0 && warnings.length === 0 && (
-          <Text font="secondary-body" color="text-03">
+          <Text as="p" font="secondary-body" color="text-03">
             {t("none")}
           </Text>
         )}

@@ -9,6 +9,7 @@ import {
   useXAxisScale,
   useYAxisScale,
 } from "recharts";
+import { cn } from "@opal/utils";
 import type { SearchRatePoint, SearchSample } from "@/lib/service-status/types";
 import {
   BAND_COLOR,
@@ -247,6 +248,8 @@ interface SearchLatencyChartProps {
   formatTime: (ms: number) => string;
   // The card for a marked minute: its p90 and p10.
   renderMinute: (minuteMs: number) => React.ReactNode;
+  // The same for a screen reader, as each minute's label.
+  describeMinute: (minuteMs: number) => string;
 }
 
 /**
@@ -264,6 +267,7 @@ export default function SearchLatencyChart({
   endMs,
   formatTime,
   renderMinute,
+  describeMinute,
 }: SearchLatencyChartProps) {
   const [selection, setSelection] = useState<Selection | null>(null);
   const dots: Dot[] = samples
@@ -295,7 +299,7 @@ export default function SearchLatencyChart({
     // dir="ltr": time runs left to right in every locale.
     <div
       dir="ltr"
-      className={`${CHART_HEIGHT_CLASS} relative w-full font-secondary-mono`}
+      className={cn(CHART_HEIGHT_CLASS, "relative w-full font-secondary-mono")}
     >
       <ResponsiveContainer width="100%" height="100%">
         <ComposedChart data={axisData} margin={CHART_MARGIN}>
@@ -308,7 +312,7 @@ export default function SearchLatencyChart({
             domain={domain}
             selectedMinuteMs={selection?.minute_ms ?? null}
             onSelect={setSelection}
-            describeMinute={formatTime}
+            describeMinute={describeMinute}
           />
         </ComposedChart>
       </ResponsiveContainer>

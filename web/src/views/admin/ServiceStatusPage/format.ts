@@ -3,10 +3,11 @@ import type { ClusterNodeStatus } from "@/lib/service-status/types";
 const MB = 1024 ** 2;
 const GB = 1024 ** 3;
 
-/** Bytes as GB with one decimal below 100 GB, whole GB above. */
-export function toGb(bytes: number): string {
-  const gb = bytes / GB;
-  return gb >= 100 ? gb.toFixed(0) : gb.toFixed(1);
+function fixed(value: number, digits: number, locale: string): string {
+  return new Intl.NumberFormat(locale, {
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  }).format(value);
 }
 
 /** A size and its unit: MB below 1 GB, else GB. Pass scaleBytes to use the
@@ -16,11 +17,20 @@ export interface SizeParts {
   unit: "MB" | "GB";
 }
 
-export function toSize(bytes: number, scaleBytes: number = bytes): SizeParts {
+/** One decimal below 10 MB or 100 GB, whole numbers above. */
+export function toSize(
+  bytes: number,
+  locale: string,
+  scaleBytes: number = bytes
+): SizeParts {
   if (scaleBytes < GB) {
-    return { value: (bytes / MB).toFixed(bytes < 10 * MB ? 1 : 0), unit: "MB" };
+    return {
+      value: fixed(bytes / MB, bytes < 10 * MB ? 1 : 0, locale),
+      unit: "MB",
+    };
   }
-  return { value: toGb(bytes), unit: "GB" };
+  const gb = bytes / GB;
+  return { value: fixed(gb, gb >= 100 ? 0 : 1, locale), unit: "GB" };
 }
 
 /** Not rounded, so a bar's color matches the backend's issues at a limit. */
@@ -32,7 +42,9 @@ export function diskPercent(node: ClusterNodeStatus): number {
   return percent(node.disk_used_bytes, node.disk_total_bytes);
 }
 
+/** Vectors with no file cache to hold them count as full, as in the backend. */
 export function vectorPercent(node: ClusterNodeStatus): number {
+  if (node.file_cache_bytes <= 0) return node.vector_bytes > 0 ? 100 : 0;
   return percent(node.vector_bytes, node.file_cache_bytes);
 }
 
