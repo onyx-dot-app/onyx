@@ -16,10 +16,9 @@
   and Built-in, which shows only with Craft on, as `list_chat_skills` leaves
   built-ins out of chat (`lib/customize/skills.ts:groupSkills`). A row has the
   tag Disabled, Required, Pending review or Unpublished changes, the date, Turn
-  on, and a menu (Turn on/off, Share, Remove). Add has Upload skill, Create a
-  skill (`/app/customize/skills/new`) and Import from GitHub. The backend
-  routes of Import from GitHub are gone ([[#github-marketplaces]] replaces
-  them), so that modal fails until the web moves to `/marketplaces`. A custom skill
+  on, and a menu (Turn on/off, Share, Remove). Add has Upload skill and Create a
+  skill (`/app/customize/skills/new`); GitHub skills come in through a
+  marketplace ([[#github-marketplaces]]). A custom skill
   opens at `/app/customize/skills/[id]`; a built-in opens a preview. A custom
   skill's icon is a themed glyph picked from its name and description
   (`sections/customize/skillIcon.tsx`). The Admin Panel lists custom skills
@@ -40,7 +39,18 @@
   marketplace needs organization-wide `MANAGE_PLUGINS`, and the organization
   sees its plugins as it sees published ones, under the marketplace default.
   A synced plugin's content changes only in GitHub; its sharing and install
-  settings change in Onyx.
+  settings change in Onyx. On the web, the Plugins tab Add menu
+  (`sections/customize/AddSkillMenu.tsx`) has Add marketplace
+  (`sections/marketplaces/AddMarketplaceModal.tsx`: source, then a confirm
+  step with the resolved source and each entry's Will install list) and
+  Manage marketplaces (`/app/customize/plugins/marketplaces`,
+  `sections/marketplaces/MarketplacesPage.tsx`). The admin skills page
+  (`views/SkillsPage.tsx`) shows the same table
+  (`sections/marketplaces/MarketplacesTable.tsx`): failed syncs and held
+  deletes above it, a row menu (Sync now, Default Access, Replace login,
+  Remove, which names the plugins it deletes) and a detail modal. The plugin
+  page shows "Synced from owner/repo" and the versions tab hides restore and
+  publish for `content_locked`.
 - **Plugin upload.** A user uploads a Claude Code or Codex plugin zip
   ([[#plugin-upload]]). `POST /skills/plugins/inspect` shows the skills, the
   MCP servers the plugin needs with their state for the user, the parts Onyx
@@ -935,7 +945,11 @@ the app from the same rule
     and install settings still change. A personal marketplace blocks the delete
     of its owner (`personal_marketplaces` in the 409). The routes are in
     `server/features/skill/marketplace_api.py`, under `/marketplaces`;
-    they authorize before any GitHub call.
+    they authorize before any GitHub call. The web client is
+    `web/src/lib/marketplaces/` (`web/src/lib/marketplaces/hooks.ts` reads the list again every 3 s
+    while a marketplace syncs, and for 60 s after a user asks for a sync,
+    because a started sync clears `sync_requested`; it refreshes the skill
+    lists when a sync changes plugins).
 
 ---
 
