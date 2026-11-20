@@ -141,6 +141,9 @@ Key facts:
   `lint/check_celery_task_expires.py` enforces this on commit for `send_task`, `apply_async`,
   `delay` and beat schedule entries. `# celery-expires: allow (<reason>)` on the line that opens
   the call marks a deliberate exception.
+- Send a task only to a queue that a worker consumes. `lint/check_celery_queue_consumers.py`
+  fails a `queue=` or beat `"queue"` that no `-Q` list names in `supervisord.conf` and in the Helm
+  `celery-worker-*.yaml` templates. `# celery-queue: allow <reason>` marks a deliberate exception.
 
 ### Task Time Limits
 

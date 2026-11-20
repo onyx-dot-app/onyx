@@ -241,6 +241,8 @@ jobs:
   # (deployment.yml, build-desktop): v1 ships them unsigned today, so a
   # Windows code-signing step (Authenticode) and the "windows-x86_64" and
   # "linux-x86_64" entries in latest.json are still to add.
+  # update-feed: allow windows the release has no Windows build yet, so the app never gets an update there
+  # update-feed: allow linux the release has no Linux build yet, so the app never gets an update there
   release:
     name: Release (signed universal DMG)
     # Main only: this job gets the Apple and updater signing keys.
