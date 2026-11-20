@@ -64,21 +64,41 @@ export function integrationHref(
 
 export const NEW_INTEGRATION_PATH = "/app/customize/integrations/new";
 
+export type PluginPagePath = `/app/customize/plugins/${string}`;
+
+export function isPluginPagePath(path: string): path is PluginPagePath {
+  return path.startsWith("/app/customize/plugins/");
+}
+const ADMIN_NEW_INTEGRATION_PATH = "/admin/integrations/new";
+
 export interface NewIntegrationPrefill {
   name: string;
   serverUrl: string;
   transport: "STREAMABLE_HTTP" | "SSE";
+  /** Preset the owner to the organization (admin page only). */
+  forOrganization?: boolean;
+  /** The plugin page to open after the save: the plugin that needs it. */
+  returnTo?: PluginPagePath;
 }
 
+/** The add page with the fields filled in. `admin` opens the admin page,
+ * where the owner can be the organization. */
 export function newIntegrationHref(
-  prefill: NewIntegrationPrefill
-): `/app/customize/integrations/new?${string}` {
+  prefill: NewIntegrationPrefill,
+  admin = false
+):
+  | `/app/customize/integrations/new?${string}`
+  | `/admin/integrations/new?${string}` {
   const params = new URLSearchParams({
     name: prefill.name,
     server_url: prefill.serverUrl,
     transport: prefill.transport,
   });
-  return `${NEW_INTEGRATION_PATH}?${params.toString()}`;
+  if (prefill.forOrganization) params.set("owner", "organization");
+  if (prefill.returnTo) params.set("return_to", prefill.returnTo);
+  return admin
+    ? `${ADMIN_NEW_INTEGRATION_PATH}?${params.toString()}`
+    : `${NEW_INTEGRATION_PATH}?${params.toString()}`;
 }
 
 export function parseNewIntegrationPrefill(
@@ -87,9 +107,13 @@ export function parseNewIntegrationPrefill(
   const name = params.get("name");
   const serverUrl = params.get("server_url");
   if (!name || !serverUrl) return null;
+  const returnTo = params.get("return_to");
   return {
     name,
     serverUrl,
     transport: params.get("transport") === "SSE" ? "SSE" : "STREAMABLE_HTTP",
+    forOrganization: params.get("owner") === "organization",
+    // Only a plugin page, so the link cannot send the user to another site.
+    returnTo: returnTo && isPluginPagePath(returnTo) ? returnTo : undefined,
   };
 }

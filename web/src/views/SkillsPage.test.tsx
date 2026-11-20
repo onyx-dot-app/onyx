@@ -131,7 +131,6 @@ function customSkill(id: string, name: string): CustomSkill {
     can_delete: true,
     group_summaries: [],
     required_for_user: false,
-    name_taken_by: null,
     author_user_id: "owner-id",
     author_email: "owner@example.com",
     owner: { id: "owner-id", email: "owner@example.com" },
@@ -142,6 +141,8 @@ function customSkill(id: string, name: string): CustomSkill {
     group_shares: [],
     public_permission: "VIEWER",
     user_permission: "VIEWER",
+    member_visible: true,
+    name_held_by: [],
     current_version_id: null,
     current_version_number: null,
     published_version_number: null,
@@ -210,6 +211,8 @@ describe("SkillsPage preference toggles", () => {
       {
         ...customSkill("shared-id", "shared-skill"),
         user_permission: "VIEWER",
+        member_visible: true,
+        name_held_by: [],
       },
     ];
     render(<SkillsPage />);
@@ -388,6 +391,8 @@ describe("SkillsPage preference toggles", () => {
       ...customSkill(`skill-${index}`, name),
       public_permission: null,
       user_permission: "OWNER",
+      member_visible: true,
+      name_held_by: [],
     }));
     render(<SkillsPage />);
     const user = setupUser();
@@ -583,6 +588,8 @@ describe("SkillsPage preference toggles", () => {
         ...customSkill("invalid-id", "invalid-skill"),
         is_valid: false,
         user_permission: "OWNER",
+        member_visible: true,
+        name_held_by: [],
       },
     ];
     mockDeleteUserSkill.mockResolvedValue(undefined);
@@ -612,6 +619,8 @@ describe("SkillsPage preference toggles", () => {
         ...customSkill("invalid-id", "invalid-skill"),
         is_valid: false,
         user_permission: "OWNER",
+        member_visible: true,
+        name_held_by: [],
       },
     ];
     mockDeleteUserSkill.mockRejectedValue(new Error("Delete failed"));
@@ -843,9 +852,7 @@ describe("SkillsPage preference toggles", () => {
     await user.click(switches()[1]!);
 
     expect(mockSetSkillEnabled).not.toHaveBeenCalled();
-    expect(
-      screen.getByText("Switch “report-writer” skill?")
-    ).toBeInTheDocument();
+    expect(screen.getByText("Turn on “report-writer”?")).toBeInTheDocument();
     expect(
       screen.getAllByText(
         "Only one skill named “report-writer” can be enabled at a time."
@@ -861,7 +868,7 @@ describe("SkillsPage preference toggles", () => {
     expect(mockSetSkillEnabled).not.toHaveBeenCalled();
 
     await user.click(switches()[1]!);
-    await user.click(screen.getByRole("button", { name: "Switch skill" }));
+    await user.click(screen.getByRole("button", { name: "Switch" }));
 
     await waitFor(() =>
       expect(mockSetSkillEnabled).toHaveBeenCalledWith("second-id", true, true)
@@ -871,7 +878,7 @@ describe("SkillsPage preference toggles", () => {
       expect(switches()[1]).toHaveAttribute("aria-checked", "true");
     });
     expect(
-      screen.queryByText("Switch “report-writer” skill?")
+      screen.queryByText("Turn on “report-writer”?")
     ).not.toBeInTheDocument();
   });
 
@@ -890,12 +897,10 @@ describe("SkillsPage preference toggles", () => {
     await user.click(
       screen.getAllByRole("switch", { name: "report-writer" })[1]!
     );
-    await user.click(screen.getByRole("button", { name: "Switch skill" }));
+    await user.click(screen.getByRole("button", { name: "Switch" }));
 
     expect(screen.getByRole("button", { name: "Switching..." })).toBeDisabled();
-    expect(
-      screen.getByText("Switch “report-writer” skill?")
-    ).toBeInTheDocument();
+    expect(screen.getByText("Turn on “report-writer”?")).toBeInTheDocument();
 
     await act(async () => {
       mutation.reject(new Error("Replacement failed"));
@@ -903,11 +908,9 @@ describe("SkillsPage preference toggles", () => {
     });
 
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Switch skill" })).toBeEnabled()
+      expect(screen.getByRole("button", { name: "Switch" })).toBeEnabled()
     );
-    expect(
-      screen.getByText("Switch “report-writer” skill?")
-    ).toBeInTheDocument();
+    expect(screen.getByText("Turn on “report-writer”?")).toBeInTheDocument();
     expect(mockToastError).toHaveBeenCalledWith("Replacement failed");
   });
 
@@ -924,11 +927,11 @@ describe("SkillsPage preference toggles", () => {
     await user.click(screen.getByRole("switch", { name: "first-skill" }));
 
     expect(
-      await screen.findByText("Switch “first-skill” skill?")
+      await screen.findByText("Turn on “first-skill”?")
     ).toBeInTheDocument();
     expect(mockToastError).not.toHaveBeenCalled();
 
-    await user.click(screen.getByRole("button", { name: "Switch skill" }));
+    await user.click(screen.getByRole("button", { name: "Switch" }));
     await waitFor(() =>
       expect(mockSetSkillEnabled).toHaveBeenLastCalledWith(
         "first-id",
@@ -938,7 +941,7 @@ describe("SkillsPage preference toggles", () => {
     );
     await waitFor(() =>
       expect(
-        screen.queryByText("Switch “first-skill” skill?")
+        screen.queryByText("Turn on “first-skill”?")
       ).not.toBeInTheDocument()
     );
   });

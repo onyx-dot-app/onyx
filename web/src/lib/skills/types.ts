@@ -74,9 +74,6 @@ export interface Skill {
   /** The setting for the current user is REQUIRED, from the company setting
    * or one of their groups. */
   required_for_user: boolean;
-  /** The user turned the skill on, but this plugin or built-in skill holds
-   * one of its skill names, so it does not load. */
-  name_taken_by: string | null;
   author_user_id: string | null;
   author_email: string | null;
   owner: {
@@ -92,6 +89,12 @@ export interface Skill {
   group_summaries: SkillGroupSummary[];
   public_permission: SkillSharePermission | null;
   user_permission: SkillAccessLevel | null;
+  /** False for a skill an organization-wide manager sees only through that
+   * permission. The member lists leave it out. */
+  member_visible: boolean;
+  /** The user turned the skill on, but these skills hold one of its names,
+   * so it is off. */
+  name_held_by: string[];
   /** Newest plugin version of a custom skill. Edits send it back as
    * `base_version_id`, so a save over a newer version gets a 409. */
   current_version_id: string | null;
@@ -156,11 +159,15 @@ export interface SkillVersion {
   created_by_email: string | null;
   is_current: boolean;
   review_status: SkillVersionReviewStatus;
+  /** The version in plugin.json, for a plugin version that has one. */
+  manifest_version: string | null;
 }
 
 export interface SkillVersionPreview {
   description: string;
   instructions_markdown: string;
+  /** The skills, integrations and plugin.json of a plugin version. */
+  plugin: PluginDetail | null;
 }
 
 export interface SkillReviewRequest {

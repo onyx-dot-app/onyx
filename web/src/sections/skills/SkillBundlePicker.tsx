@@ -4,7 +4,7 @@ import { useCallback, useState } from "react";
 import { useTranslations } from "next-intl";
 import { Section } from "@opal/layouts";
 import { Button, Text } from "@opal/components";
-import { SvgUploadCloud } from "@opal/icons";
+import { SvgFolder, SvgUploadCloud } from "@opal/icons";
 import { cn } from "@opal/utils";
 import { useDropzone } from "react-dropzone";
 import {
@@ -77,15 +77,28 @@ export default function SkillBundlePicker({
     [allowPlugin, onBatchChange, onChange, onError, onPreparingChange, t]
   );
 
-  const { getRootProps, getInputProps, isDragActive, open } = useDropzone({
-    disabled: disabled || preparing,
-    // Folder entries can contain any file type. The input-level accept below
-    // limits only the system file picker to supported single-file uploads.
-    multiple: true,
-    noClick: true,
-    noKeyboard: true,
-    onDropAccepted: handleDrop,
-  });
+  const { getRootProps, getInputProps, isDragActive, open, inputRef } =
+    useDropzone({
+      disabled: disabled || preparing,
+      // Folder entries can contain any file type. The input-level accept below
+      // limits only the system file picker to supported single-file uploads.
+      multiple: true,
+      noClick: true,
+      noKeyboard: true,
+      onDropAccepted: handleDrop,
+      onFileDialogCancel: () =>
+        inputRef.current?.removeAttribute("webkitdirectory"),
+    });
+
+  function pick(folder: boolean) {
+    const input = inputRef.current;
+    if (!input) return;
+    // One input serves both pickers: the folder picker sets webkitdirectory
+    // only while it is open.
+    if (folder) input.setAttribute("webkitdirectory", "");
+    else input.removeAttribute("webkitdirectory");
+    open();
+  }
 
   return (
     <Section
@@ -116,7 +129,7 @@ export default function SkillBundlePicker({
           icon={SvgUploadCloud}
           prominence="secondary"
           disabled={disabled || preparing}
-          onClick={open}
+          onClick={() => pick(false)}
         >
           {preparing
             ? t("bundlePicker.preparing.label")
@@ -126,6 +139,17 @@ export default function SkillBundlePicker({
                 ? t("bundlePicker.chooseDifferent.label")
                 : t("bundlePicker.upload.label")}
         </Button>
+        {allowPlugin && !preparing && !busyLabel && (
+          <Button
+            type="button"
+            icon={SvgFolder}
+            prominence="tertiary"
+            disabled={disabled}
+            onClick={() => pick(true)}
+          >
+            {t("bundlePicker.chooseFolder.label")}
+          </Button>
+        )}
         {(value || compact) && (
           <Text font="main-ui-body" color="text-03">
             {value

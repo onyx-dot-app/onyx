@@ -2,17 +2,29 @@
 
 import { useEffect, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { useSWRConfig } from "swr";
+import useSWR, { useSWRConfig } from "swr";
 import {
   Badge,
   Button,
   Card,
+  Dropdown,
   InputSwitch,
   MessageCard,
+  Modal,
   Text,
+  useCreateModal,
+  type DropdownMenuItem,
 } from "@opal/components";
-import { Content, Section } from "@opal/layouts";
-import { SvgBlocks } from "@opal/icons";
+import { Content, ContentAction, Section, toast } from "@opal/layouts";
+import { IconLoader } from "@opal/loaders";
+import {
+  SvgBlocks,
+  SvgFileText,
+  SvgMoreHorizontal,
+  SvgShare,
+  SvgTrash,
+  SvgUploadCloud,
+} from "@opal/icons";
 import { SvgGitHub } from "@opal/logos";
 import { useNavigation, useSearchParams } from "@opal/navigation";
 import useUserSkills from "@/hooks/useUserSkills";
@@ -32,7 +44,9 @@ import {
 } from "@/lib/customize/paths";
 import { usePluginDetail } from "@/lib/plugins/hooks";
 import { needsAttention } from "@/lib/plugins/needs";
-import type { PluginDetail } from "@/lib/plugins/types";
+import type { PluginDetail, PluginSkillSummary } from "@/lib/plugins/types";
+import { errorHandlingFetcher } from "@/lib/fetcher";
+import { deleteUserSkill } from "@/lib/skills/api";
 import {
   useRefreshSkillLists,
   useSkillEnablement,
@@ -44,6 +58,10 @@ import { canChangeOrganizationAccess } from "@/lib/skills/sharing";
 import { Permission } from "@/lib/types";
 import { useUser } from "@/providers/UserProvider";
 import SkillVersionsTab from "@/sections/modals/skills/SkillVersionsTab";
+import ShareSkillModal from "@/sections/modals/skills/ShareSkillModal";
+import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
+import { SkillInstructionsPanel } from "@/sections/modals/SkillPreviewModal";
+import UploadPluginFlow from "@/sections/modals/plugins/UploadPluginFlow";
 import SkillSwitchModal from "@/sections/modals/skills/SkillSwitchModal";
 import PluginTurnOnModal from "@/sections/modals/plugins/PluginTurnOnModal";
 import PluginNeedList from "@/sections/plugins/PluginNeedList";
@@ -67,7 +85,10 @@ function PluginSwitch({ entry, enablement }: PluginSwitchProps) {
   const skill = entry.skills[0];
 
   return (
-    <Section width="auto" height="auto" padding={1}>
+    <Section flexDirection="row" width="auto" height="auto" gap={1} padding={1}>
+      <Text font="main-ui-body" color="text-03">
+        {t("title")}
+      </Text>
       <InputSwitch
         aria-label={t("label", { name: entry.name })}
         checked={skill ? enablement.enabledOf(skill) : false}
@@ -82,6 +103,7 @@ function PluginSwitch({ entry, enablement }: PluginSwitchProps) {
 
 interface OverviewTabProps extends PluginTabProps {
   plugin: PluginDetail | null;
+  enablement: SkillEnablement;
 }
 
 interface ManagedNoteProps {
@@ -114,16 +136,19 @@ function ManagedNote({ marketplace }: ManagedNoteProps) {
   );
 }
 
-function OverviewTab({ entry, plugin }: OverviewTabProps) {
+function OverviewTab({ entry, plugin, enablement }: OverviewTabProps) {
   const t = useTranslations("plugins.member.detail.overview");
   const switchCopy = useTranslations("plugins.member.detail.switch");
   const sections = useTranslations("plugins.member.sections");
   const unusedCopy = useTranslations("plugins.upload.unusedParts");
   const { blocked } = pluginSwitch(entry);
+  const skill = entry.skills[0];
+  const heldBy = skill?.name_held_by ?? [];
+  const enabled = skill ? enablement.enabledOf(skill) : false;
   const manifest = plugin?.manifest ?? null;
   const skillNames = plugin
-    ? plugin.skills.map((skill) => skill.name)
-    : entry.skills.map((skill) => skill.name);
+    ? plugin.skills.map((item) => item.name)
+    : entry.skills.map((item) => item.name);
   const author = manifest?.author?.name ?? manifest?.author?.email ?? null;
   const link = manifest?.homepage ?? manifest?.repository ?? null;
   const location = entry.marketplace
@@ -143,11 +168,11 @@ function OverviewTab({ entry, plugin }: OverviewTabProps) {
             label: switchCopy("title"),
             value: blocked
               ? switchCopy(blocked)
-              : entry.skills[0]?.name_taken_by
-                ? switchCopy("nameTaken", {
-                    name: entry.skills[0].name_taken_by,
-                  })
-                : switchCopy("description"),
+              : heldBy.length > 0
+                ? switchCopy("nameHeld", { names: heldBy.join(", ") })
+                : enabled
+                  ? switchCopy("on")
+                  : switchCopy("off"),
           },
           { label: t("location"), value: location },
           ...(entry.ownerEmail
@@ -180,16 +205,79 @@ function OverviewTab({ entry, plugin }: OverviewTabProps) {
   );
 }
 
-function SkillsTab({ entry, plugin }: OverviewTabProps) {
+interface PluginSkillModalProps {
+  pluginId: string;
+  skill: PluginSkillSummary;
+  onClose: () => void;
+}
+
+/** The SKILL.md instructions of one skill in the plugin. */
+function PluginSkillModal({ pluginId, skill, onClose }: PluginSkillModalProps) {
   const t = useTranslations("plugins.member.detail.skills");
+  const { data, error, isLoading } = useSWR<{ instructions_markdown: string }>(
+    SWR_KEYS.pluginSkill(pluginId, skill.path),
+    errorHandlingFetcher
+  );
+  return (
+    <Modal open onOpenChange={(isOpen) => !isOpen && onClose()}>
+      <Modal.Content width="lg" maxHeight="85dvh">
+        <Modal.Header
+          icon={SvgFileText}
+          title={skill.name}
+          description={skill.description}
+          onClose={onClose}
+        />
+        <Modal.Body>
+          {isLoading ? (
+            <IconLoader />
+          ) : error || !data ? (
+            <MessageCard variant="error" title={t("readFailed")} />
+          ) : (
+            <SkillInstructionsPanel
+              instructionsMarkdown={
+                data.instructions_markdown || t("noInstructions")
+              }
+            />
+          )}
+        </Modal.Body>
+      </Modal.Content>
+    </Modal>
+  );
+}
+
+function SkillsTab({ entry, plugin }: Omit<OverviewTabProps, "enablement">) {
+  const t = useTranslations("plugins.member.detail.skills");
+  const [reading, setReading] = useState<PluginSkillSummary | null>(null);
   if (plugin)
     return (
       <Section gap={2} alignItems="stretch" height="auto">
         {plugin.skills.map((skill) => (
-          <Card key={skill.path} padding={4}>
-            <Content title={skill.name} description={skill.description} />
+          <Card key={skill.path} padding={2}>
+            <ContentAction
+              title={skill.name}
+              description={skill.description}
+              padding={1}
+              responsive
+              rightChildren={
+                <Button
+                  prominence="secondary"
+                  icon={SvgFileText}
+                  aria-label={t("readAriaLabel", { name: skill.name })}
+                  onClick={() => setReading(skill)}
+                >
+                  {t("read")}
+                </Button>
+              }
+            />
           </Card>
         ))}
+        {reading && (
+          <PluginSkillModal
+            pluginId={entry.id}
+            skill={reading}
+            onClose={() => setReading(null)}
+          />
+        )}
       </Section>
     );
   return (
@@ -257,6 +345,11 @@ export default function MemberPluginDetailPage({
   const refreshLists = useRefreshSkillLists();
   const { mutate } = useSWRConfig();
   const [turnedOn, setTurnedOn] = useState<Skill | null>(null);
+  const [sharing, setSharing] = useState(false);
+  const [uploading, setUploading] = useState(false);
+  const [removing, setRemoving] = useState(false);
+  const removeModal = useCreateModal();
+  const removeCopy = useTranslations("plugins.member.detail.remove");
   const enablement = useSkillEnablement(
     skills.data?.customs ?? [],
     skills.refresh,
@@ -287,6 +380,12 @@ export default function MemberPluginDetailPage({
     ? plugin.skills.length
     : (entry?.skills.length ?? 0);
   const needCount = plugin?.needs.length ?? 0;
+  // The supported needs only, as the plugin list counts them.
+  const supportedNeedCount =
+    plugin?.needs.filter((need) => need.supported).length ?? 0;
+  const canEdit =
+    skill !== undefined &&
+    (skill.user_permission === "OWNER" || skill.user_permission === "EDITOR");
   async function refresh(): Promise<void> {
     await Promise.all([skills.refresh(), isPlugin ? detail.refresh() : null]);
   }
@@ -296,7 +395,13 @@ export default function MemberPluginDetailPage({
         {
           value: "overview",
           label: t("tabs.overview"),
-          content: <OverviewTab entry={entry} plugin={plugin} />,
+          content: (
+            <OverviewTab
+              entry={entry}
+              plugin={plugin}
+              enablement={enablement}
+            />
+          ),
         },
         ...(skillCount > 0
           ? [
@@ -311,7 +416,9 @@ export default function MemberPluginDetailPage({
           ? [
               {
                 value: "integrations" as const,
-                label: pageCopy("tabs.integrations", { count: needCount }),
+                label: pageCopy("tabs.integrations", {
+                  count: supportedNeedCount,
+                }),
                 content: (
                   <IntegrationsTab
                     plugin={plugin}
@@ -344,6 +451,56 @@ export default function MemberPluginDetailPage({
           : []),
       ]
     : null;
+  async function remove(): Promise<void> {
+    if (!skill || removing) return;
+    setRemoving(true);
+    try {
+      await deleteUserSkill(skill.id);
+      refreshLists();
+      toast.success(removeCopy("done", { name: skill.name }));
+      navigation.go(customizeTabHref("plugins"), { replace: true });
+    } catch (failure) {
+      toast.error(
+        failure instanceof Error && failure.message
+          ? failure.message
+          : removeCopy("failed")
+      );
+    } finally {
+      setRemoving(false);
+    }
+  }
+
+  const menu: DropdownMenuItem[] = [
+    ...(canEdit && isPlugin
+      ? [
+          {
+            kind: "action" as const,
+            id: "upload",
+            icon: SvgUploadCloud,
+            title: t("actions.uploadVersion"),
+            onSelect: () => setUploading(true),
+          },
+        ]
+      : []),
+    ...(skill?.can_delete
+      ? [
+          {
+            kind: "group" as const,
+            items: [
+              {
+                kind: "action" as const,
+                id: "remove",
+                icon: SvgTrash,
+                title: t("actions.remove"),
+                danger: true,
+                onSelect: () => removeModal.toggle(true),
+              },
+            ],
+          },
+        ]
+      : []),
+  ];
+
   const requested = parsePluginPageTab(searchParams.get("tab"));
   const tab = tabs?.some((item) => item.value === requested)
     ? requested
@@ -386,6 +543,33 @@ export default function MemberPluginDetailPage({
       actions={
         entry
           ? [
+              ...(canEdit
+                ? [
+                    <Button
+                      key="share"
+                      prominence="secondary"
+                      icon={SvgShare}
+                      onClick={() => setSharing(true)}
+                    >
+                      {t("actions.share")}
+                    </Button>,
+                  ]
+                : []),
+              ...(menu.length > 0
+                ? [
+                    <Dropdown key="menu" align="end">
+                      <Dropdown.Trigger asChild>
+                        <Button
+                          prominence="tertiary"
+                          icon={SvgMoreHorizontal}
+                          aria-label={t("actions.menu")}
+                          tooltip={t("actions.menu")}
+                        />
+                      </Dropdown.Trigger>
+                      <Dropdown.Data label={t("actions.menu")} items={menu} />
+                    </Dropdown>,
+                  ]
+                : []),
               <PluginSwitch
                 key="switch"
                 entry={entry}
@@ -396,6 +580,32 @@ export default function MemberPluginDetailPage({
       }
     >
       <SkillSwitchModal enablement={enablement} />
+      {skill && (
+        <ShareSkillModal
+          mode="edit"
+          skillId={skill.id}
+          fallbackTitle={skill.name}
+          open={sharing}
+          onClose={() => setSharing(false)}
+          onSaved={() => void refresh()}
+        />
+      )}
+      <UploadPluginFlow open={uploading} onClose={() => setUploading(false)} />
+      <removeModal.Provider>
+        {skill && (
+          <ConfirmEntityModal
+            danger
+            entityType={removeCopy("entityType")}
+            entityName={skill.name}
+            additionalDetails={removeCopy("description")}
+            actionButtonText={removeCopy(removing ? "pending" : "submit")}
+            onClose={() => {
+              if (!removing) removeModal.toggle(false);
+            }}
+            onSubmit={() => void remove()}
+          />
+        )}
+      </removeModal.Provider>
       {turnedOn && (
         <PluginTurnOnModal
           plugin={turnedOn}

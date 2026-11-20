@@ -7,7 +7,7 @@ import { Button, Card, Text } from "@opal/components";
 import { ContentAction, Section, toast } from "@opal/layouts";
 import { SvgPlug, SvgPlus } from "@opal/icons";
 import { useNavigation, usePathname } from "@opal/navigation";
-import { newIntegrationHref } from "@/lib/customize/paths";
+import { isPluginPagePath, newIntegrationHref } from "@/lib/customize/paths";
 import { useMemberIntegrations } from "@/lib/integrations/hooks";
 import { setIntegrationEnabled } from "@/lib/integrations/svc";
 import type { MemberIntegration } from "@/lib/integrations/types";
@@ -26,12 +26,15 @@ import IntegrationConnectButton from "@/sections/plugins/IntegrationConnectButto
 interface NeedActionControlProps {
   need: PluginNeed;
   action: PluginNeedAction;
+  /** An organization-wide manager adds the integration for everyone. */
+  canAddForOrganization: boolean;
   onChanged?: () => void;
 }
 
 function NeedActionControl({
   need,
   action,
+  canAddForOrganization,
   onChanged,
 }: NeedActionControlProps) {
   const t = useTranslations("plugins.needs");
@@ -87,16 +90,22 @@ function NeedActionControl({
           prominence="secondary"
           icon={SvgPlus}
           aria-label={t("add.ariaLabel", { name: need.name })}
-          onClick={() =>
-            need.url &&
+          onClick={() => {
+            if (!need.url) return;
+            const returnTo = `${pathname}?tab=integrations`;
             navigation.go(
-              newIntegrationHref({
-                name: need.name,
-                serverUrl: need.url,
-                transport: needTransport(need),
-              })
-            )
-          }
+              newIntegrationHref(
+                {
+                  name: need.name,
+                  serverUrl: need.url,
+                  transport: needTransport(need),
+                  forOrganization: canAddForOrganization,
+                  returnTo: isPluginPagePath(returnTo) ? returnTo : undefined,
+                },
+                canAddForOrganization
+              )
+            );
+          }}
         >
           {t("add.label")}
         </Button>
@@ -153,6 +162,8 @@ export default function PluginNeedList({
               icon={SvgPlug}
               font="main-ui-action"
               title={need.name}
+              titleMaxLines={1}
+              responsive={interactive}
               description={
                 need.url ??
                 (need.url_problem
@@ -173,6 +184,7 @@ export default function PluginNeedList({
                     <NeedActionControl
                       need={need}
                       action={action}
+                      canAddForOrganization={isGlobalHolder}
                       onChanged={onChanged}
                     />
                   </Section>

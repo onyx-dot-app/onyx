@@ -167,8 +167,9 @@ class SkillUserState(BaseModel):
     can_toggle: bool
     # The install setting for this user is REQUIRED (company or group).
     required: bool = False
-    # Turned on, but this plugin or built-in skill holds one of its names.
-    name_taken_by: str | None = None
+    # The user turned the skill on, but these skills hold one of its names,
+    # so it does not load and shows as off.
+    name_held_by: tuple[str, ...] = ()
 
 
 def is_published(plugin: Plugin, db_session: Session) -> bool:
@@ -216,21 +217,6 @@ class _UserSkillSelection(BaseModel):
     def enabled(self, skill_id: UUID) -> bool:
         state = self.states.get(skill_id)
         return state is not None and state.enabled and skill_id not in self.hidden
-
-    def name_taken_by(self, skill_id: UUID) -> str | None:
-        """The plugin or built-in skill that keeps a name of a skill the user
-        turned on, when the name order leaves the skill out."""
-        state = self.states.get(skill_id)
-        if state is None or not state.enabled or skill_id not in self.hidden:
-            return None
-        built_in_names = {skill.name for skill in self.built_ins}
-        for name in state.skill_names:
-            if name in built_in_names:
-                return name
-            for other in self.other_skills_named([name], skill_id):
-                if other.plugin_id not in self.hidden:
-                    return other.plugin_name
-        return None
 
     def loaded(self) -> list[UserPluginState]:
         """The plugins the sandbox gets: they can run, have a skill and lose
@@ -783,16 +769,31 @@ def skill_user_states(
             or built_in_skill_id in selection.built_in_app_skills,
             can_toggle=False,
         )
+    built_in_names = {skill.name for skill in selection.built_ins}
     for skill_id in requested_ids - states.keys():
         state = selection.states.get(skill_id)
+        name_held_by: tuple[str, ...] = ()
+        if state is not None and state.can_run and skill_id in selection.hidden:
+            name_held_by = tuple(
+                sorted(
+                    {
+                        other.plugin_name
+                        for other in selection.other_skills_named(
+                            state.skill_names, skill_id
+                        )
+                        if other.plugin_id not in selection.hidden
+                    }
+                    | (built_in_names & set(state.skill_names))
+                )
+            )
         states[skill_id] = SkillUserState(
             enabled=selection.enabled(skill_id),
+            name_held_by=name_held_by,
             can_toggle=state is not None
             and state.version_is_valid is not False
             and state.installation_policy != PluginInstallationPolicy.REQUIRED,
             required=state is not None
             and state.installation_policy == PluginInstallationPolicy.REQUIRED,
-            name_taken_by=selection.name_taken_by(skill_id),
         )
     return states
 
@@ -842,6 +843,9 @@ def set_skill_enabled_for_user(
             raise OnyxError(
                 OnyxErrorCode.SKILL_NAME_CONFLICT,
                 f"Another skill named '{names[0]}' is already enabled.",
+                extra={
+                    "conflict_names": sorted({other.plugin_name for other in others})
+                },
             )
         return conflicts
 

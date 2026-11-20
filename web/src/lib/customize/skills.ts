@@ -36,7 +36,7 @@ export function skillGroup(skill: Skill, userId: string | null): SkillGroup {
 
 function visible(skill: Skill, craftEnabled: boolean): boolean {
   return skill.source === "custom"
-    ? true
+    ? skill.member_visible
     : craftEnabled && skill.is_available !== null;
 }
 

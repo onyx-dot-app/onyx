@@ -428,5 +428,5 @@ def test_required_default_wins_a_member_skill_name(
         enabled=True, can_toggle=False, required=True
     )
     assert states[own.id] == SkillUserState(
-        enabled=False, can_toggle=True, name_taken_by="alpha"
+        enabled=False, can_toggle=True, name_held_by=("alpha",)
     )

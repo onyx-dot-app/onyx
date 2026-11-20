@@ -61,7 +61,7 @@ from onyx.db.skill import (
     skill_name_conflicts,
     transfer_skill_ownership,
 )
-from onyx.db.skill_limit import users_past_write_limit
+from onyx.db.skill_limit import lock_user_skill_preferences, users_past_write_limit
 from onyx.db.users import fetch_user_by_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -79,6 +79,7 @@ from onyx.server.features.skill.models import (
     GitHubSkillNotImported,
     GitHubSkillsImportResponse,
     OrganizationLibraryDefaultAccess,
+    PluginSkillInstructions,
     PluginUploadPreview,
     PluginUploadResponse,
     PluginUploadSkill,
@@ -123,9 +124,14 @@ from onyx.skills.bundle import (
     read_bundle_file,
     read_custom_bundle_instructions,
     rewrite_custom_bundle_skill_md,
+    strip_skill_md_frontmatter,
     update_custom_bundle_files,
 )
-from onyx.skills.content import read_skill_bundle_blob, read_version_contents
+from onyx.skills.content import (
+    read_skill_bundle_blob,
+    read_version_contents,
+    read_versions_skill_md,
+)
 from onyx.skills.ingest import (
     IngestedBundle,
     delete_bundle_blob,
@@ -139,6 +145,7 @@ from onyx.skills.models import (
     GITHUB_SKILL_MAX_COUNT,
     ChatSkill,
     PluginBundle,
+    PluginManifest,
     SkillBundleFile,
 )
 from onyx.skills.plugin_bundle import read_plugin_bundle
@@ -528,6 +535,30 @@ def preview_skill_for_current_user(
     return skill_preview_response(skill, user, db_session)
 
 
+@user_router.get("/{skill_id}/plugin-skill")
+def read_plugin_skill_for_current_user(
+    skill_id: UUID,
+    path: str,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> PluginSkillInstructions:
+    """The SKILL.md instructions of one skill in the plugin version the user
+    runs."""
+    skill = fetch_skill(skill_id, user=user, db_session=db_session)
+    if not isinstance(skill, Plugin):
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
+    version_id = get_version_user_runs(skill.id, user.id, db_session)
+    if version_id is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Skill not found")
+    key = (version_id, path)
+    skill_md = read_versions_skill_md([key], user.id, db_session).get(key)
+    if skill_md is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "This skill could not be read.")
+    return PluginSkillInstructions(
+        instructions_markdown=strip_skill_md_frontmatter(skill_md)
+    )
+
+
 @user_router.post("/custom")
 def create_custom_skill(
     bundle: UploadFile = File(...),
@@ -681,11 +712,14 @@ def save_plugin_upload(
     db_session: Session = Depends(get_session),
 ) -> PluginUploadResponse:
     plugin_bundle = _read_plugin_upload(bundle)
-    target = _upload_target(plugin_bundle, save_as_new, user, db_session)
     file_store = get_default_file_store()
     added = True
     name_conflicts: list[str] = []
     with stored_plugin_bundle(plugin_bundle, file_store) as content:
+        # Two uploads of one new name at the same time make one plugin with
+        # two versions: the second one finds the first under the lock.
+        lock_user_skill_preferences(user.id, db_session)
+        target = _upload_target(plugin_bundle, save_as_new, user, db_session)
         if target.plugin_id is not None:
             plugin, version, added = add_uploaded_plugin_version__no_commit(
                 target.plugin_id, content, user, db_session
@@ -900,6 +934,11 @@ def list_custom_skill_versions(
             is_current=is_current,
             review_status=(
                 "published" if is_published else "pending" if is_pending else "draft"
+            ),
+            manifest_version=(
+                PluginManifest.model_validate(version.manifest).version
+                if version.manifest is not None
+                else None
             ),
         )
         for version, is_current, is_published, is_pending in list_plugin_versions(
