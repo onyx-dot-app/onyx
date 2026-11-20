@@ -635,7 +635,7 @@ def test_a_wake_after_sleep_starts_past_the_stopped_attempt(
     placement = get_sandbox_placement(tenant_cache, ref.sandbox_id)
     assert placement is not None and placement.attempt == 4
     result = collect_exec_result(sandbox.exec_command(ref, "echo ok"))
-    assert result.output == "ok\n"
+    assert (result.head, result.tail) == ("ok\n", "")
 
 
 def test_a_save_runs_in_the_sandbox_tenant(

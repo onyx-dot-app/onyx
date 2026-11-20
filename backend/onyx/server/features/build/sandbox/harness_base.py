@@ -11,14 +11,16 @@ Every call blocks the calling thread (agent runtime tools run in threads).
 events and read the last one, an `ExecCommandResult`, or call
 `collect_exec_result`.
 
-Exec contract (Codex `exec_command` / `write_stdin`):
+Exec contract (`exec_command` / `write_stdin`):
 - `exec_command` starts a command and waits up to `yield_time_ms`. If the
   command ended, the result has its exit code. Otherwise it has a
   `session_id` for `write_stdin`.
 - `write_stdin` with no chars polls for new output. Chars go to the
   command's stdin. "\\x03" interrupts the command.
-- Output of one call keeps at most `EXEC_CALL_OUTPUT_MAX_BYTES` (head and
-  tail); the result text keeps at most `max_output_tokens` (head and tail).
+- Output of one call keeps at most `EXEC_CALL_OUTPUT_MAX_BYTES`: the
+  result has its head and tail, and the characters dropped between them.
+  The caller cuts what its reader gets, and stops forwarding live output
+  where its cut would.
 - Exec session IDs stay valid across turns and API pods until the command's
   record is evicted, or the sandbox stops (idle stop, restore): then the call
   raises `ExecSessionEndedError`.
@@ -179,7 +181,6 @@ class HarnessSandbox(abc.ABC):
         *,
         workdir: str | None = None,
         yield_time_ms: int | None = None,
-        max_output_tokens: int | None = None,
     ) -> Generator[ExecEvent]:
         """Run `cmd` with bash in `workdir` (default: the session
         directory)."""
@@ -192,7 +193,6 @@ class HarnessSandbox(abc.ABC):
         chars: str = "",
         *,
         yield_time_ms: int | None = None,
-        max_output_tokens: int | None = None,
     ) -> Generator[ExecEvent]:
         """Write to a running command, or poll it with empty chars."""
 

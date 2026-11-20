@@ -69,6 +69,8 @@ TOP_FILES_ROOT = ".onyx-top-level"
 WORKSPACES = "/home/onyx/workspaces"
 # Absolute paths that the daemon refuses with no session ID.
 _DENIED_VM_PATHS = ("/proc", "/sys", "/dev", "/run/craft-fc")
+# The daemon streams output in chunks of at most this size (guestd server.go).
+_STREAM_CHUNK_BYTES = 64 << 10
 
 
 def _abort(
@@ -673,8 +675,9 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
 
 @dataclass
 class FakeExecution:
-    """A scripted command: echo, fail <code>, cat (echoes stdin), sleep or
-    mkdir. `bash -c <script>` runs the script's words as one of these."""
+    """A scripted command: echo, fail <code>, cat (echoes stdin), sleep,
+    mkdir or seq <n>. `bash -c <script>` runs the script's words as one of
+    these."""
 
     execution_id: str
     argv: list[str]
@@ -842,6 +845,7 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
             "sleep",
             "mkdir",
             "true",
+            "seq",
         ):
             abort_daemon(context, SandboxDaemonErrorReason.START_FAILED, "no program")
         running = [
@@ -865,6 +869,11 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
             execution.end(sandboxd_pb2.EXITED, 0)
         elif argv[0] == "echo":
             execution.stdout = (" ".join(argv[1:]) + "\n").encode()
+            execution.end(sandboxd_pb2.EXITED, 0)
+        elif argv[0] == "seq":
+            execution.stdout = "".join(
+                f"{n}\n" for n in range(1, int(argv[1]) + 1)
+            ).encode()
             execution.end(sandboxd_pb2.EXITED, 0)
         elif argv[0] == "say":
             # Prints its arguments, then runs until it is killed.
@@ -969,14 +978,17 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
                 setattr(gap, "from", offset)
                 events.append(sandboxd_pb2.ExecEvent(gap=gap))
                 offset = kept_from
-            if offset < len(data):
-                events.append(
-                    sandboxd_pb2.ExecEvent(
-                        output=sandboxd_pb2.OutputChunk(
-                            stream=stream, offset=offset, data=data[offset:]
-                        )
+            # In chunks of at most the daemon's chunk size.
+            events.extend(
+                sandboxd_pb2.ExecEvent(
+                    output=sandboxd_pb2.OutputChunk(
+                        stream=stream,
+                        offset=start,
+                        data=data[start : start + _STREAM_CHUNK_BYTES],
                     )
                 )
+                for start in range(offset, len(data), _STREAM_CHUNK_BYTES)
+            )
         if execution.result is not None:
             events.append(sandboxd_pb2.ExecEvent(result=execution.result))
         return events
