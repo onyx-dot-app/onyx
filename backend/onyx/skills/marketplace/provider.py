@@ -1,5 +1,3 @@
-"""Reach the repository of a marketplace. The one reader of provider_config."""
-
 from typing import Final, Protocol
 
 from onyx.db.enums import MarketplaceKind
@@ -22,7 +20,6 @@ from onyx.utils.github import (
     resolve_github_revision,
 )
 
-# Each entry in another repository costs one download per sync.
 REMOTE_REPOSITORY_MAX_COUNT: Final = 20
 
 

@@ -101,9 +101,7 @@ export interface Skill {
   available_count: number;
   needed_count: number;
   plugin: PluginDetail | null;
-  /** Where the skill comes from. Null for built-ins. */
   marketplace: SkillMarketplace | null;
-  /** Synced from GitHub: its content changes only in GitHub. */
   content_locked: boolean;
 }
 

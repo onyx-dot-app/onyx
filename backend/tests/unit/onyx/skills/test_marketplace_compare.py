@@ -126,7 +126,6 @@ def test_delete_guard_after_a_force_push() -> None:
     plan = plan_marketplace_sync([_ready("plugin-0"), _ready("plugin-1")], current)
     assert plan.needs_confirmation
     assert len(plan.delete_plugin_ids) == 8
-    # Five deletes, or half of the marketplace, go without a confirmation.
     assert not plan_marketplace_sync(
         [_ready(plugin.entry_key) for plugin in current[:5]], current
     ).needs_confirmation

@@ -49,7 +49,6 @@ interface AttentionProps {
   onReview: (marketplace: MarketplaceSummary) => void;
 }
 
-/** Failed syncs and held deletes: each one asks the user to act. */
 function Attention({ marketplaces, busy, onSync, onReview }: AttentionProps) {
   const t = useTranslations("plugins.marketplaces.attention");
   const syncCopy = useTranslations("plugins.marketplaces.sync");
@@ -100,8 +99,6 @@ function Attention({ marketplaces, busy, onSync, onReview }: AttentionProps) {
   );
 }
 
-/** The GitHub marketplaces the user manages: each with its source, plugins
- * and sync, a row menu, and a detail view. */
 export default function MarketplacesTable() {
   const t = useTranslations("plugins.marketplaces");
   const { marketplaces, error, isLoading, refresh, follow } = useMarketplaces();

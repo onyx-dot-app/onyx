@@ -26,7 +26,6 @@ export function marketplaceSyncState(
   return "synced";
 }
 
-/** "owner/repo/folder@ref": the GitHub place a marketplace reads. */
 export function marketplaceSource(marketplace: MarketplaceSummary): string {
   return [
     marketplace.repository,

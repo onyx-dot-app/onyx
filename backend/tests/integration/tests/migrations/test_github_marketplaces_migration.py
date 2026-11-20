@@ -117,7 +117,6 @@ def test_upgrade_downgrade_upgrade(engine: Engine) -> None:
     _seed_github_marketplace(engine)
     assert _github_rows(engine) == 1
 
-    # The kind rule still holds for the old kinds.
     with pytest.raises(IntegrityError), engine.begin() as conn:
         conn.execute(
             text(

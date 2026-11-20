@@ -21,5 +21,4 @@ def sync_marketplace_task(
     marketplace_id: str,
     tenant_id: str,  # noqa: ARG001
 ) -> None:
-    """Sync one GitHub marketplace (``onyx.skills.marketplace.sync``)."""
     run_marketplace_sync(UUID(marketplace_id))

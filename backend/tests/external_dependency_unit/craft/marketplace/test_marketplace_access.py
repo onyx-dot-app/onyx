@@ -60,11 +60,9 @@ def test_company_marketplace_follows_its_default(
         for plugin in plugins.values()
     )
 
-    # Installed by default: on for each user.
     assert {"alpha", "beta"} <= _on(db_session, member)
     assert {"alpha", "beta"} <= _on(db_session, login)
 
-    # A plugin with its own setting does not move with the default.
     apply_plugin_access_change__no_commit(
         [beta_id],
         PluginAccessChange(

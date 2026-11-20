@@ -342,8 +342,6 @@ def fetch_github_tree(
     revision: str,
     authorization_header: str | None = None,
 ) -> dict[str, str] | None:
-    """The git tree of each folder at a commit, by repository path, with ""
-    for the root. None when GitHub cut the listing short."""
     tree_url = (
         f"{GITHUB_API_BASE_URL}/repos/{quote(source.owner, safe='')}/"
         f"{quote(source.repo, safe='')}/git/trees/{quote(revision, safe='')}"

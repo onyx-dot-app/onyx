@@ -120,8 +120,6 @@ describe("ShareSkillModal", () => {
       await screen.findByRole("option", { name: "Remove Access" })
     );
     await user.click(screen.getByRole("button", { name: "Save" }));
-    // The organization access is not sent: the backend refuses it for a
-    // synced skill.
     await waitFor(() =>
       expect(mockUpdateSkillShares).toHaveBeenCalledWith("custom-1", {
         installation_policy: undefined,

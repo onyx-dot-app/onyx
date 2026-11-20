@@ -40,8 +40,6 @@ function syncKey(marketplace: MarketplaceSummary): string {
   ].join("|");
 }
 
-/** The marketplaces the user manages. Reads again while a sync runs, and
- * refreshes the skill lists when a sync changed plugins. */
 export function useMarketplaces(enabled = true) {
   const { following, follow } = useFollow();
   const refreshSkillLists = useRefreshSkillLists();
@@ -100,7 +98,6 @@ export function useMarketplace(marketplaceId: string | null) {
   return { marketplace: data, error, isLoading, refresh: mutate, follow };
 }
 
-/** After an add: a toast, and the marketplace lists read again. */
 export function useMarketplaceAdded(): (
   marketplace: MarketplaceDetail
 ) => void {

@@ -1,10 +1,3 @@
-"""DB operations for GitHub marketplaces and their sync.
-
-A sync stages its bundles first, then ``apply_marketplace_sync__no_commit``
-writes every change of one read in the caller's transaction, under the
-marketplace row lock. Functions here flush and never commit.
-"""
-
 from collections.abc import Mapping, Sequence
 from datetime import datetime, timezone
 from typing import Any
@@ -97,8 +90,6 @@ def find_github_marketplace(
     provider_config: dict[str, Any],
     db_session: Session,
 ) -> Marketplace | None:
-    """The marketplace of the same owner (None: the company) that reads the
-    same repository, folder and ref."""
     return db_session.scalar(
         select(Marketplace)
         .where(
@@ -115,8 +106,6 @@ def find_github_marketplace(
 def list_github_marketplaces(
     owner_user_id: UUID, include_company: bool, db_session: Session
 ) -> list[tuple[Marketplace, int]]:
-    """The user's personal marketplaces, and the company ones when
-    ``include_company`` is set, each with its plugin count."""
     plugin_count = (
         select(func.count(Plugin.id))
         .where(Plugin.marketplace_id == Marketplace.id)
@@ -206,7 +195,6 @@ def request_marketplace_sync__no_commit(
 def take_marketplace_sync_request__no_commit(
     marketplace_id: UUID, db_session: Session
 ) -> bool:
-    """Clear the "sync again" mark and return whether it was set."""
     return (
         db_session.execute(
             update(Marketplace)
@@ -253,7 +241,6 @@ def _write_sync_state(
 def _turn_on_for_owner__no_commit(
     plugin: Plugin, owner_user_id: UUID, db_session: Session
 ) -> bool:
-    """A plugin that would put the owner past the skill limit stays off."""
     try:
         with db_session.begin_nested():
             return enable_new_skill_if_name_available__no_commit(
@@ -277,9 +264,6 @@ def apply_marketplace_sync__no_commit(
     created_by: User | None,
     db_session: Session,
 ) -> MarketplaceSyncResult:
-    """Write one complete read. Compares again under the marketplace lock, so
-    the plan fits the rows it writes. ``staged`` holds the stored content of
-    each entry to create or version."""
     marketplace = get_github_marketplace(marketplace_id, db_session)
     if marketplace is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Marketplace not found.")
@@ -387,8 +371,6 @@ def _delete_plugins__no_commit(
 def pending_delete_plugins(
     marketplace: Marketplace, db_session: Session
 ) -> list[CurrentSyncedPlugin]:
-    """The plugins a sync waiting for confirmation would delete: those whose
-    entry the last read did not hold."""
     if marketplace.pending_delete_revision is None:
         return []
     keys = {
@@ -405,9 +387,6 @@ def pending_delete_plugins(
 def confirm_marketplace_deletes__no_commit(
     marketplace_id: UUID, revision: str, db_session: Session
 ) -> tuple[set[UUID], list[str]]:
-    """Delete the plugins a sync held back at ``revision``. The next sync
-    then writes the rest of that read. Returns the affected users and the
-    bundle files to delete after commit."""
     marketplace = lock_github_marketplace(marketplace_id, db_session)
     if marketplace is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Marketplace not found.")
@@ -430,8 +409,6 @@ def confirm_marketplace_deletes__no_commit(
 def delete_github_marketplace__no_commit(
     marketplace_id: UUID, db_session: Session
 ) -> tuple[set[UUID], list[str]]:
-    """Delete a marketplace and its plugins. Returns the affected users and
-    the bundle files to delete after commit."""
     marketplace = lock_github_marketplace(marketplace_id, db_session)
     if marketplace is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Marketplace not found.")

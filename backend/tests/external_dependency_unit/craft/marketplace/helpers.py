@@ -1,6 +1,3 @@
-"""Fixtures and helpers for GitHub marketplace tests: real PostgreSQL and file
-store, a fake GitHub."""
-
 import json
 from uuid import UUID
 
@@ -24,7 +21,6 @@ REPO = "tools"
 
 
 def plugin_files(*names: str, body: str = "") -> dict[str, bytes]:
-    """A marketplace with one plugin folder per name, each with one skill."""
     files: dict[str, bytes] = {
         CLAUDE: json.dumps(
             {
@@ -48,9 +44,6 @@ def catalog_with(plugins: list[dict[str, JsonValue]]) -> bytes:
 
 
 class Connections:
-    """Which users have a GitHub connection, as github_authorization_for
-    sees it."""
-
     def __init__(self) -> None:
         self.connected: set[UUID] = set()
 

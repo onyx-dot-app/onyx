@@ -33,7 +33,6 @@ interface SkillContentsTabProps {
   files: readonly SkillBundleFile[] | null;
   /** The editable skill; undefined for a user who may not edit it. */
   detail: SkillEditableDetail | undefined;
-  /** The skill syncs from GitHub: no edits, and the tab says why. */
   locked?: boolean;
   editing: boolean;
   onEditingChange: (editing: boolean) => void;

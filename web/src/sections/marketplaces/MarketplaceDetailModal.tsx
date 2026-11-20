@@ -171,7 +171,6 @@ function DetailBody({ marketplace, busy, onConfirmDeletes }: DetailBodyProps) {
 interface MarketplaceDetailModalProps {
   marketplaceId: string;
   onClose: () => void;
-  /** Called after a change, so the host list reads again. */
   onChanged: () => void;
 }
 

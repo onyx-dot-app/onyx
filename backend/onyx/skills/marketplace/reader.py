@@ -1,9 +1,3 @@
-"""Read a marketplace.json and build one plugin bundle for each entry.
-
-Pure: no database, provider or network access. A read either completes, with
-one result per entry, or fails as a whole and changes nothing.
-"""
-
 import io
 import json
 import zipfile
@@ -44,11 +38,9 @@ MARKETPLACE_MANIFEST_PATHS: Final = (
 )
 PLUGIN_ENTRY_MAX_COUNT: Final = 500
 _MANIFEST_MAX_BYTES: Final = 1024 * 1024
-# All bundles of one read are held in memory together.
 _BUNDLES_MAX_BYTES: Final = 256 * 1024 * 1024
 # A fixed time makes the same files give the same zip.
 _ZIP_DATE_TIME: Final = (1980, 1, 1, 0, 0, 0)
-# The plugin.json fields a marketplace entry can give. plugin.json wins.
 _ENTRY_FIELDS: Final = (
     "name",
     "description",
@@ -69,8 +61,6 @@ def _join(*parts: str) -> str:
 
 
 def _relative_path(value: str) -> str:
-    """A path in the repository with no "./", "." or trailing "/". Raises
-    ValueError for an absolute path or one that leaves the repository."""
     parts = [part for part in value.strip().split("/") if part not in {"", "."}]
     if value.startswith("/") or "\\" in value or ".." in parts:
         raise ValueError(f"The path '{value}' must stay in the repository.")
@@ -114,8 +104,6 @@ def _folder_files(files: Mapping[str, bytes], root: str) -> dict[str, bytes]:
 def _declared_skill_folders(
     folder_files: Mapping[str, bytes], declared: JsonValue
 ) -> list[str]:
-    """The skill folders an entry's ``skills`` list names. A folder with no
-    SKILL.md of its own stands for each child folder that has one."""
     paths = [declared] if isinstance(declared, str) else declared
     if not isinstance(paths, list) or not all(isinstance(p, str) for p in paths):
         raise ValueError("The entry field 'skills' must be a list of folders.")
@@ -157,8 +145,6 @@ def _deterministic_zip(bundle_files: Mapping[str, bytes]) -> bytes:
 def _plugin_files(
     folder_files: Mapping[str, bytes], entry: Mapping[str, JsonValue]
 ) -> dict[str, bytes]:
-    """The files of the bundle, with one plugin.json: the folder's plugin.json
-    over the entry fields, or the entry fields alone."""
     manifest_path = next(
         (path for path in PLUGIN_MANIFEST_PATHS if path in folder_files), None
     )
@@ -208,8 +194,6 @@ def build_entry_bundle(
     entry_key: str,
     tree_sha: str | None = None,
 ) -> ReadyPlugin | BlockedPlugin:
-    """Build the plugin of one entry from the files under ``root``. A bundle
-    U12 refuses, a limit or a bad file blocks this entry only."""
     if len(entry_key) > SKILL_NAME_MAX_LENGTH or not SKILL_NAME_PATTERN.fullmatch(
         entry_key
     ):
@@ -245,7 +229,6 @@ def build_entry_bundle(
 
 
 def _github_repository(value: JsonValue) -> tuple[str, str] | None:
-    """owner and repo of "owner/repo" or a github.com URL; None otherwise."""
     if not isinstance(value, str):
         return None
     text = value.strip().removesuffix("/").removesuffix(".git")
@@ -361,7 +344,6 @@ def read_marketplace(
     folder: str | None,
     tree_shas: Mapping[str, str] | None = None,
 ) -> CompleteMarketplace | FailedMarketplace:
-    """Read the marketplace in ``folder`` (None: the repository root)."""
     base = folder or ""
     manifest_path = next(
         (

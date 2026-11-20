@@ -79,7 +79,6 @@ interface MarketplacePreviewProps {
   preview: Preview;
 }
 
-/** What the add will do: the source Onyx resolved, then each plugin. */
 export default function MarketplacePreview({
   preview,
 }: MarketplacePreviewProps) {

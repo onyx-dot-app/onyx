@@ -1,8 +1,3 @@
-/**
- * GitHub marketplace API shapes; mirrors
- * `backend/onyx/server/features/skill/marketplace_models.py`.
- */
-
 import type { PluginNeed } from "@/lib/plugins/types";
 import type { OrganizationLibraryDefaultPolicy } from "@/lib/skills/types";
 
@@ -10,21 +5,16 @@ export type MarketplaceScope = "personal" | "company";
 
 export type MarketplaceEntryStatus = "ok" | "blocked" | "not_supported";
 
-/** A marketplace default cannot be REQUIRED. */
 export type MarketplaceDefaultPolicy = OrganizationLibraryDefaultPolicy;
 
 export interface MarketplaceSource {
-  /** "owner/repo" or a github.com URL. */
   repository: string;
-  /** The folder that holds `.claude-plugin/marketplace.json`. Null: the root. */
   folder: string | null;
-  /** A branch, tag or commit. Null: the default branch. */
   ref: string | null;
 }
 
 export interface MarketplaceCreateRequest extends MarketplaceSource {
   scope: MarketplaceScope;
-  /** Company only. Null: Available. */
   default_installation_policy: MarketplaceDefaultPolicy | null;
 }
 
@@ -70,15 +60,12 @@ export interface MarketplaceSummary {
   folder: string | null;
   ref: string | null;
   default_installation_policy: MarketplaceDefaultPolicy;
-  /** The user whose GitHub connection reads the repository; null when gone. */
   login_user: MarketplaceLoginUser | null;
   plugin_count: number;
   last_synced_at: string | null;
   last_synced_revision: string | null;
   last_error: string | null;
-  /** A sync is asked for and has not started yet. */
   sync_requested: boolean;
-  /** A sync waits for a user to confirm its deletes. */
   needs_confirmation: boolean;
   created_at: string;
 }
@@ -100,7 +87,6 @@ export interface MarketplacePendingDelete {
 
 export interface MarketplaceDetail extends MarketplaceSummary {
   entries: MarketplaceEntry[];
-  /** Send this back to confirm the deletes. Null when nothing waits. */
   pending_delete_revision: string | null;
   pending_deletes: MarketplacePendingDelete[];
 }
@@ -114,12 +100,10 @@ export type MarketplaceKind =
   | "organization_library"
   | "github";
 
-/** Where a custom skill or plugin comes from. */
 export interface SkillMarketplace {
   id: string;
   name: string;
   kind: MarketplaceKind;
-  /** "owner/repo" for a GitHub marketplace. */
   repository: string | null;
 }
 

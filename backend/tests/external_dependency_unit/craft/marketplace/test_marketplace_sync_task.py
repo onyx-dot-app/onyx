@@ -39,7 +39,6 @@ def test_busy_lock_sets_the_mark_and_the_holder_syncs_again(
         db_session, marketplace_ids, login=owner, owner=owner
     )
 
-    # A sync asked for while another holds the lock only sets the mark.
     lock = get_cache_backend().lock(f"marketplace_sync:{marketplace.id}", timeout=60)
     assert lock.acquire(blocking=False)
     try:
@@ -49,8 +48,6 @@ def test_busy_lock_sets_the_mark_and_the_holder_syncs_again(
     assert reload(db_session, marketplace).sync_requested_at is not None
     assert synced_plugins(db_session, marketplace.id) == {}
 
-    # While the holder runs, a push and a new request land. The holder goes
-    # again and syncs the second commit.
     real_sync = sync.sync_marketplace
     runs = 0
 
@@ -93,7 +90,6 @@ def test_deleted_marketplace_ends_the_task(
 
 @pytest.fixture
 def send_task() -> Iterator[MagicMock]:
-    """Record the follow-up tasks the sync sends to Celery."""
     with (
         patch.object(sync, "DISABLE_VECTOR_DB", False),
         patch.object(celery_app, "send_task") as sent,
@@ -169,7 +165,6 @@ def test_failed_sync_with_a_new_request_starts_one_follow_up(
     assert reload(db_session, marketplace).last_error == sync.SYNC_FAILED_ERROR
     assert _sent_marketplace_ids(send_task) == [str(marketplace.id)]
 
-    # The follow-up takes the mark. Its failure starts no further task.
     def failing_sync(_marketplace_id: Any) -> MarketplaceSyncResult:
         raise RuntimeError("boom")
 

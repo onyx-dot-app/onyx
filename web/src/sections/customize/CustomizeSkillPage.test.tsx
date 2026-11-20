@@ -607,7 +607,6 @@ test("a skill synced from GitHub offers no content changes, and says why", async
   const user = setupUser();
   const lockedCopy = messages.skills.modals.versions.locked;
 
-  // A saved edit link opens the Overview, not the editor.
   expect(
     await screen.findByRole("tab", { name: copy.tabs.overview })
   ).toHaveAttribute("aria-selected", "true");
@@ -620,7 +619,6 @@ test("a skill synced from GitHub offers no content changes, and says why", async
     screen.queryByRole("button", { name: copy.contents.saveVersion })
   ).not.toBeInTheDocument();
 
-  // Sharing still changes in Onyx; the menu has no Edit or Remove.
   expect(screen.getByRole("button", { name: copy.share })).toBeVisible();
   expect(
     screen.queryByRole("button", { name: copy.menu })

@@ -112,8 +112,6 @@ def rank_of(
 
 
 def seen_by_organization(marketplace: type[Marketplace]) -> ColumnElement[bool]:
-    """The organization sees the plugins of the Organization library and of a
-    company GitHub marketplace, as it sees published plugins."""
     return or_(
         marketplace.kind == MarketplaceKind.ORGANIZATION_LIBRARY,
         and_(
@@ -896,9 +894,7 @@ class PluginAccess(BaseModel):
     marketplace_id: UUID
     marketplace_kind: MarketplaceKind
     marketplace_name: str
-    # GitHub marketplaces only.
     marketplace_provider_config: dict[str, Any] | None
-    # A plugin of a GitHub marketplace; its content comes from the repository.
     synced: bool
     # The default of the plugin's marketplace.
     marketplace_default_policy: PluginInstallationPolicy

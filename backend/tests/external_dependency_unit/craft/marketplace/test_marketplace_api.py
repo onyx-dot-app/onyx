@@ -38,7 +38,6 @@ from tests.unit.onyx.skills.marketplace_fixtures import CLAUDE, skill_md
 
 @pytest.fixture
 def enqueued(marketplace_ids: list[UUID]) -> Iterator[list[UUID]]:
-    """Run each enqueued sync at once, and clean up each new marketplace."""
     ids: list[UUID] = []
 
     def run_now(marketplace_id: UUID, _tasks: BackgroundTasks) -> None:
@@ -257,7 +256,6 @@ def test_sync_confirm_deletes_replace_login_and_delete(
     assert not detail.needs_confirmation
     assert set(synced_plugins(db_session, marketplace_id)) == {"tool-0"}
 
-    # Replace login needs the caller's GitHub connection; plugins stay.
     with pytest.raises(OnyxError):
         api.replace_marketplace_login(
             marketplace_id, BackgroundTasks(), _fresh(db_session, manager), db_session

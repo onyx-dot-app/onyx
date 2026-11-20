@@ -65,12 +65,9 @@ class PluginDetail(BaseModel):
 
 
 class SkillMarketplace(BaseModel):
-    """Where a custom skill or plugin comes from."""
-
     id: UUID
     name: str
     kind: MarketplaceKind
-    # "owner/repo" for a GitHub marketplace, None for the others.
     repository: str | None
 
 
@@ -122,9 +119,7 @@ class SkillResponse(BaseModel):
     published_version_number: int | None = None
     # The version that waits for an admin's review, if any.
     pending_version_number: int | None = None
-    # None for built-ins.
     marketplace: SkillMarketplace | None = None
-    # The content comes from a GitHub repository and cannot change in Onyx.
     content_locked: bool = False
 
     @classmethod

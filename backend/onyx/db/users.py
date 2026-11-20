@@ -992,8 +992,6 @@ def delete_user_from_db__no_commit(
     blocking = db_session.scalars(
         private_plugins_blocking_user_delete(user_to_delete.id)
     ).all()
-    # A personal GitHub marketplace cannot change owner; its plugins come from
-    # the repository.
     personal_marketplaces = db_session.scalars(
         select(Marketplace)
         .where(

@@ -1,18 +1,3 @@
-"""Decide what one sync writes. Pure: the caller reads and writes the rows.
-
-Rules:
-- An entry that is gone deletes its plugin. When more than
-  ``DELETE_GUARD_MIN`` plugins and more than half of the marketplace would go,
-  nothing is written until a user confirms the deletes.
-- A blocked or unsupported entry keeps its plugin and its versions. A new
-  blocked entry adds nothing.
-- A new entry whose plugin name another plugin of the marketplace keeps is
-  blocked.
-- An entry adds a version only when its files differ from the current
-  version's files. A moved folder with the same files writes nothing.
-- A renamed entry is a new key: the old plugin goes and a new one comes.
-"""
-
 from collections.abc import Sequence
 from typing import Final
 from uuid import UUID

@@ -90,8 +90,6 @@ def _add_columns() -> None:
         sa.Column("source_tree_sha", sa.String(length=40), nullable=True),
     )
     op.drop_constraint(OLD_OWNER_CHECK, "plugin_marketplace", type_="check")
-    # A personal GitHub marketplace has an owner and a company one has none,
-    # so the owner rule now depends on the kind.
     op.create_check_constraint(
         OWNER_CHECK,
         "plugin_marketplace",
@@ -122,7 +120,6 @@ def _build_index_and_validate(conn: sa.engine.Connection, schema: str) -> None:
 
 
 def downgrade() -> None:
-    # Versions, skills, shares and choices cascade from the plugin rows.
     op.execute(
         "DELETE FROM plugin WHERE marketplace_id IN "
         "(SELECT id FROM plugin_marketplace WHERE kind = 'github')"

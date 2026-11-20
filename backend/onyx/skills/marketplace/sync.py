@@ -1,12 +1,3 @@
-"""Sync a GitHub marketplace: read the repository, stage the bundles that
-change, write every change of the read in one transaction, then delete the
-files nothing uses and push to the affected sandboxes.
-
-One sync runs at a time for each marketplace. A sync asked for while one runs
-sets the "sync again" mark, and the running sync goes again. A holder that
-stops with the mark set starts a follow-up task.
-"""
-
 import time
 from datetime import datetime, timedelta, timezone
 from typing import Final
@@ -69,10 +60,8 @@ from shared_configs.contextvars import (
 logger = setup_logger()
 
 SYNC_LOCK_TIMEOUT_SECONDS: Final = 30 * 60
-# Runs after this time do not start again for the "sync again" mark.
 SYNC_TIME_BUDGET_SECONDS: Final = 20 * 60
 SYNC_TASK_EXPIRES_SECONDS: Final = 60 * 60
-# A mark this old outlived the lock of the task that should take it.
 SYNC_REQUEST_STALE_SECONDS: Final = SYNC_LOCK_TIMEOUT_SECONDS + 5 * 60
 LOGIN_GONE_ERROR: Final = (
     "The login user of this marketplace is gone. Replace the login."
@@ -89,8 +78,6 @@ def _resolve_remote_entries(
     entries: tuple[ReadyPlugin | BlockedPlugin | UnsupportedPlugin | RemotePlugin, ...],
     adapter: MarketplaceProviderAdapter,
 ) -> list[ReadyPlugin | BlockedPlugin | UnsupportedPlugin]:
-    """Fetch each repository that remote entries name, at most
-    ``REMOTE_REPOSITORY_MAX_COUNT`` per sync, and build their bundles."""
     repositories: dict[GitHubRepoSource, dict[str, bytes] | OnyxError] = {}
     resolved: list[ReadyPlugin | BlockedPlugin | UnsupportedPlugin] = []
     for entry in entries:
@@ -137,8 +124,6 @@ def _resolve_remote_entries(
 def read_marketplace_repository(
     adapter: MarketplaceProviderAdapter, folder: str | None
 ) -> MarketplaceRead:
-    """Read the marketplace at the newest commit of its ref. Raises OnyxError
-    when GitHub fails; a bad marketplace is a read with a failure."""
     revision = adapter.resolve_revision()
     archive = adapter.fetch(revision)
     read = read_marketplace(
@@ -165,8 +150,6 @@ def _stage(
     entries: list[ReadyPlugin | BlockedPlugin | UnsupportedPlugin],
     keys: set[str],
 ) -> dict[str, PluginVersionContent]:
-    """Store the bundle of each entry in ``keys``. On a failure, deletes the
-    bundles it stored."""
     file_store = get_default_file_store()
     staged: dict[str, PluginVersionContent] = {}
     try:
@@ -197,8 +180,6 @@ def _record_failure(marketplace_id: UUID, error: str) -> MarketplaceSyncResult:
 
 
 def sync_marketplace(marketplace_id: UUID) -> MarketplaceSyncResult:
-    """One sync. A failure of GitHub or of the read is recorded in
-    last_error and changes no plugin."""
     with get_session_with_current_tenant() as db_session:
         marketplace = get_github_marketplace(marketplace_id, db_session)
         if marketplace is None:
@@ -266,15 +247,12 @@ def sync_marketplace(marketplace_id: UUID) -> MarketplaceSyncResult:
 
 
 def sync_request_is_live(sync_requested_at: datetime | None) -> bool:
-    """A mark older than the lock timeout has no task left to take it: its
-    worker died. The marketplace then counts as not syncing."""
     return sync_requested_at is not None and datetime.now(
         timezone.utc
     ) - sync_requested_at < timedelta(seconds=SYNC_REQUEST_STALE_SECONDS)
 
 
 def _sync_once(marketplace_id: UUID) -> bool:
-    """Take the mark and sync. Returns False when the marketplace is gone."""
     with get_session_with_current_tenant() as db_session:
         take_marketplace_sync_request__no_commit(marketplace_id, db_session)
         db_session.commit()
@@ -298,8 +276,6 @@ def _sync_requested(marketplace_id: UUID) -> bool:
 
 
 def _start_follow_up_sync(marketplace_id: UUID) -> None:
-    """Start a new task for a mark that a request set during this run. Each
-    pass clears the mark first, so this follows only a newer request."""
     if not _sync_requested(marketplace_id):
         return
     tenant_id = get_current_tenant_id()
@@ -310,10 +286,6 @@ def _start_follow_up_sync(marketplace_id: UUID) -> None:
 
 
 def run_marketplace_sync(marketplace_id: UUID) -> None:
-    """Sync under the marketplace's lock. When the lock is taken, set the
-    "sync again" mark for the holder and return. The holder syncs again while
-    the mark is set. When it stops for the time budget or an error with the
-    mark set, it starts a follow-up task."""
     lock = get_cache_backend().lock(
         _sync_lock_name(marketplace_id), timeout=SYNC_LOCK_TIMEOUT_SECONDS
     )
@@ -354,8 +326,7 @@ def _run_in_tenant(marketplace_id: UUID, tenant_id: str) -> None:
 def enqueue_marketplace_sync(
     marketplace_id: UUID, background_tasks: BackgroundTasks
 ) -> None:
-    """Start a sync after the caller committed. Onyx Lite runs no Celery
-    workers, so the API server runs the sync after the response."""
+    """Onyx Lite runs no Celery workers, so the API server runs the sync."""
     tenant_id = get_current_tenant_id()
     if DISABLE_VECTOR_DB:
         background_tasks.add_task(_run_in_tenant, marketplace_id, tenant_id)

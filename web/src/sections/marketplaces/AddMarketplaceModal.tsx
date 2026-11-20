@@ -49,8 +49,6 @@ interface AddMarketplaceFormProps extends Omit<
   onBusyChange: (busy: boolean) => void;
 }
 
-/** Add from a repository: Onyx resolves the source and shows the plugins it
- * will add, and the user confirms before anything is saved. */
 function AddMarketplaceForm({
   onClose,
   onAdded,

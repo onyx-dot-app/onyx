@@ -1,7 +1,3 @@
-"""A fake GitHub for marketplace tests. Patches the HTTP call of
-``onyx.utils.github`` and points its base URLs at hosts that do not exist, so
-no test reaches the real GitHub."""
-
 import hashlib
 import io
 import json
@@ -83,8 +79,6 @@ class FakeGitHub:
         ref: str = "main",
         private: bool = False,
     ) -> str:
-        """Commit ``files`` as the whole repository on ``ref``, which is also
-        the default branch. Returns the commit."""
         repository = self.repositories.setdefault(
             (owner, repo), FakeRepository(private)
         )

@@ -193,7 +193,6 @@ class PluginVersionContent(BaseModel):
     skills: list[PluginSkillContent]
     manifest: PluginManifest | None = None
     needs: list[PluginNeed] | None = None
-    # The git tree of the folder a synced version came from.
     source_tree_sha: str | None = None
 
 

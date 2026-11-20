@@ -6,15 +6,9 @@ import type {
   MarketplaceSource,
 } from "@/lib/marketplaces/types";
 
-/**
- * A fake of the /api/marketplaces routes for one page.
- *
- * The backend reads GitHub through module constants and an SSRF guard that
+/** The backend reads GitHub through module constants and an SSRF guard that
  * refuses loopback hosts, so a running server cannot reach a local fake
- * GitHub. The spec fakes the marketplaces API at the browser instead; the
- * backend contract is covered by the external dependency tests of
- * backend/tests/external_dependency_unit/craft/marketplace/.
- */
+ * GitHub. */
 export class FakeMarketplacesApi {
   readonly marketplaces = new Map<string, MarketplaceDetail>();
   readonly syncRequests: string[] = [];

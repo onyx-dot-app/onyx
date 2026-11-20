@@ -11,7 +11,6 @@ interface MarketplacesSectionProps {
   onAdd: () => void;
 }
 
-/** The marketplaces table of the admin skills page. */
 export default function MarketplacesSection({
   onAdd,
 }: MarketplacesSectionProps) {

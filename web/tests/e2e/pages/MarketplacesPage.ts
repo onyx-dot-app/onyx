@@ -6,8 +6,6 @@ export interface MarketplaceSourceInput {
   ref?: string;
 }
 
-/** Add marketplace (Customize → Plugins → Add) and the Manage marketplaces
- * page at /app/customize/plugins/marketplaces. */
 export class MarketplacesPage {
   readonly page: Page;
   readonly addDialog: Locator;

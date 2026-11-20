@@ -5681,11 +5681,9 @@ class Marketplace(Base):
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
-    # GitHub only. GitHubMarketplaceConfig: owner, repo, folder and ref.
     provider_config: Mapped[dict[str, Any] | None] = mapped_column(
         PGJSONB(), nullable=True
     )
-    # GitHub only. The user whose GitHub connection reads the repository.
     login_user_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey(
@@ -5699,15 +5697,12 @@ class Marketplace(Base):
         DateTime(timezone=True), nullable=True
     )
     last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
-    # Set when a sync is asked for while another sync runs.
     sync_requested_at: Mapped[datetime.datetime | None] = mapped_column(
         DateTime(timezone=True), nullable=True
     )
-    # The revision whose deletes wait for confirmation.
     pending_delete_revision: Mapped[str | None] = mapped_column(
         String(40), nullable=True
     )
-    # One MarketplaceEntryResult for each entry of the last read.
     last_sync_result: Mapped[list[dict[str, Any]] | None] = mapped_column(
         PGJSONB(), nullable=True
     )
@@ -5786,7 +5781,6 @@ class Plugin(Base):
         nullable=False,
     )
 
-    # The marketplace.json entry name of a synced plugin; NULL otherwise.
     marketplace_entry_key: Mapped[str | None] = mapped_column(String(64), nullable=True)
 
     marketplace: Mapped[Marketplace] = relationship("Marketplace")
@@ -5844,7 +5838,6 @@ class PluginVersion(Base):
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
-    # The git tree of the plugin folder a synced version came from.
     source_tree_sha: Mapped[str | None] = mapped_column(String(40), nullable=True)
 
     __table_args__ = (

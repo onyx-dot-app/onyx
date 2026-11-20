@@ -23,7 +23,6 @@ def plugin_json(name: str, **fields: JsonValue) -> bytes:
 
 
 def tar_archive(files: dict[str, bytes], wrapper: str = "acme-tools-abc123/") -> bytes:
-    """A GitHub-style tar.gz download: every path under one wrapper folder."""
     out = io.BytesIO()
     with tarfile.open(fileobj=out, mode="w:gz") as archive:
         for path, data in files.items():

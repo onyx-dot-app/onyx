@@ -65,7 +65,6 @@ def test_personal_sync_creates_versions_and_deletes(
     assert stored.last_error is None
     assert stored.last_synced_revision is not None
     assert [item["status"] for item in stored.last_sync_result or []] == ["ok", "ok"]
-    # A new personal plugin is on for its owner.
     owner_row = db_session.get(User, owner.id)
     assert owner_row is not None
     assert {skill.name for skill in list_chat_skills(db_session, owner_row)} >= {
@@ -73,14 +72,12 @@ def test_personal_sync_creates_versions_and_deletes(
         "beta",
     }
 
-    # A commit that changes nothing in the plugins adds no version.
     files = plugin_files("alpha", "beta")
     files["README.md"] = b"new readme\n"
     fake_github.push(OWNER, REPO, files)
     sync.sync_marketplace(marketplace.id)
     assert _versions(db_session, ids["alpha"]) == [1]
 
-    # A changed file adds a version; a removed entry deletes its plugin.
     fake_github.push(OWNER, REPO, plugin_files("alpha", body="More steps.\n"))
     result = sync.sync_marketplace(marketplace.id)
     assert result.deleted == [ids["beta"]]
@@ -223,7 +220,6 @@ def test_failed_upload_leaves_no_rows_and_no_files(
     assert len(staged_file_ids) == 1
     assert existing_files(db_session, staged_file_ids) == set()
 
-    # The next sync works.
     assert sync.sync_marketplace(marketplace.id).status == MarketplaceSyncStatus.APPLIED
     assert set(synced_plugins(db_session, marketplace.id)) == {"alpha", "beta"}
 
@@ -316,7 +312,6 @@ def test_remote_entries_and_private_repository(
         db_session, marketplace_ids, login=owner, owner=owner
     )
 
-    # A private repository and no GitHub connection.
     assert sync.sync_marketplace(marketplace.id).status == MarketplaceSyncStatus.FAILED
     assert reload(db_session, marketplace).last_error == (
         f"The GitHub connection of {owner.email} is gone. Replace the login."

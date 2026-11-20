@@ -112,8 +112,6 @@ def test_content_and_ownership_changes_are_refused(
             db_session,
         ),
     ]
-    # The skill editor routes take skills only, so a plugin is not found
-    # there; the shared save lock refuses a synced plugin too.
     for call in calls[:4]:
         with pytest.raises(OnyxError, match="Skill not found"):
             call()
@@ -154,7 +152,6 @@ def test_sharing_still_works(
     )
     assert [share.user.id for share in response.user_shares] == [users[1].id]
     assert response.content_locked
-    # The owner may edit it, but the delete route refuses a synced plugin.
     assert response.user_permission == "OWNER"
     assert not response.can_delete
     assert response.marketplace is not None

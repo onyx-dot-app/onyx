@@ -1,6 +1,3 @@
-"""Fixtures for GitHub marketplace tests: real PostgreSQL and file store, a
-fake GitHub."""
-
 from collections.abc import Iterator
 from uuid import UUID
 
@@ -45,7 +42,6 @@ def connections(monkeypatch: pytest.MonkeyPatch) -> Connections:
 
 @pytest.fixture
 def staged_file_ids(monkeypatch: pytest.MonkeyPatch) -> list[str]:
-    """Every bundle file the sync stores."""
     stored: list[str] = []
     real = ingest.save_skill_bundle_bytes
 
@@ -82,7 +78,6 @@ def users(db_session: Session, created_user_ids: list[UUID]) -> tuple[User, User
 
 @pytest.fixture
 def marketplace_ids(db_session: Session) -> Iterator[list[UUID]]:
-    """Marketplaces to delete, with their plugins and files, after the test."""
     ids: list[UUID] = []
     yield ids
     db_session.rollback()

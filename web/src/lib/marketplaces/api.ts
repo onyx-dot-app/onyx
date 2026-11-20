@@ -1,8 +1,3 @@
-/**
- * Client calls of `backend/onyx/server/features/skill/marketplace_api.py`.
- * A failed call throws a `FetchError`; `fetchErrorDetail` reads its message.
- */
-
 import { errorHandlingFetchWith } from "@/lib/fetcher";
 import type {
   MarketplaceCreateRequest,

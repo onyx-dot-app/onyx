@@ -17,7 +17,6 @@ const STATE_COLOR = {
   synced: "success",
 } as const satisfies Record<MarketplaceSyncState, StatusColor>;
 
-/** The last sync time, or "Not synced yet". With `prefixed`, "Last sync …". */
 export function useLastSyncCopy(
   prefixed = true
 ): (marketplace: MarketplaceSummary) => string {

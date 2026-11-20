@@ -9,9 +9,6 @@ from onyx.utils.github import GITHUB_REPOSITORY_COMPONENT_PATTERN
 
 
 class GitHubMarketplaceConfig(BaseModel):
-    """The repository of a GitHub marketplace. A None ref is the default
-    branch. ``folder`` holds the .claude-plugin folder; None is the root."""
-
     model_config = ConfigDict(extra="forbid", frozen=True)
 
     owner: str
@@ -68,9 +65,6 @@ class GitHubMarketplaceConfig(BaseModel):
 
 
 class GitHubRepoSource(BaseModel):
-    """A marketplace entry whose plugin is in another GitHub repository.
-    ``path`` is the plugin folder in that repository (git-subdir)."""
-
     model_config = ConfigDict(frozen=True)
 
     owner: str
@@ -88,7 +82,6 @@ class ReadyPlugin(BaseModel):
     path: str
     bundle: PluginBundle
     file_manifest: list[PluginFileEntry]
-    # The git tree of the plugin folder; None when the tree was not read.
     tree_sha: str | None
 
 
@@ -110,9 +103,6 @@ class UnsupportedPlugin(BaseModel):
 
 
 class RemotePlugin(BaseModel):
-    """An entry the reader cannot build from the marketplace repository. The
-    sync fetches its repository and builds it with ``build_entry_bundle``."""
-
     model_config = ConfigDict(frozen=True)
 
     status: Literal["remote"] = "remote"
@@ -133,8 +123,6 @@ class CompleteMarketplace(BaseModel):
 
 
 class FailedMarketplace(BaseModel):
-    """A read that changes nothing: no plugin is added, changed or deleted."""
-
     model_config = ConfigDict(frozen=True)
 
     status: Literal["failed"] = "failed"
@@ -146,8 +134,6 @@ class MarketplaceArchive(BaseModel):
 
     revision: str
     archive_bytes: bytes
-    # Git tree of each folder by repository path, "" for the root. None when
-    # GitHub cut the tree short.
     tree_shas: dict[str, str] | None
 
 
@@ -158,8 +144,6 @@ class MarketplaceEntryStatus(str, Enum):
 
 
 class MarketplaceEntryResult(BaseModel):
-    """One entry of the last read, as stored in last_sync_result."""
-
     model_config = ConfigDict(frozen=True)
 
     key: str
@@ -175,8 +159,6 @@ class MarketplaceSyncStatus(str, Enum):
 
 
 class CurrentSyncedPlugin(BaseModel):
-    """A synced plugin as compare sees it."""
-
     model_config = ConfigDict(frozen=True)
 
     plugin_id: UUID
@@ -186,8 +168,6 @@ class CurrentSyncedPlugin(BaseModel):
 
 
 class SyncPlan(BaseModel):
-    """What one sync writes. ``create`` and ``add_version`` hold entry keys."""
-
     model_config = ConfigDict(frozen=True)
 
     create: list[str]
@@ -210,14 +190,10 @@ class MarketplaceSyncResult(BaseModel):
 
 
 class MarketplaceRead(BaseModel):
-    """One read of a marketplace repository, with remote entries built."""
-
     model_config = ConfigDict(frozen=True)
 
     revision: str
     tree_shas: dict[str, str] | None
-    # The marketplace.json name; None when the read failed.
     name: str | None
-    # Why the read failed; None when it completed.
     failure: str | None
     entries: list[ReadyPlugin | BlockedPlugin | UnsupportedPlugin]

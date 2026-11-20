@@ -23,8 +23,7 @@ interface RemoveMarketplaceModalProps {
   onRemoved: () => void;
 }
 
-/** Names the plugins that the remove deletes before it asks to confirm.
- * Render it inside the `Provider` of a `useCreateModal` owner. */
+/** Render it inside the `Provider` of a `useCreateModal` owner. */
 export default function RemoveMarketplaceModal({
   marketplace,
   onClose,

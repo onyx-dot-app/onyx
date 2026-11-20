@@ -200,8 +200,6 @@ SYNCED_PLUGIN_LOCKED = "Change this plugin in GitHub."
 
 
 def is_synced(plugin: Plugin) -> bool:
-    """A plugin of a GitHub marketplace. Its content comes only from its
-    repository; its access can change."""
     return plugin.marketplace_entry_key is not None
 
 
@@ -632,9 +630,6 @@ def create_synced_plugin__no_commit(
     created_by: User | None,
     db_session: Session,
 ) -> Plugin:
-    """Create the plugin of a marketplace entry. A personal marketplace's
-    plugin belongs to its owner; a company one has no author and the
-    organization runs its version."""
     if content.manifest is None:
         raise RuntimeError("Bug: a synced plugin has a manifest.")
     plugin_id = uuid4()

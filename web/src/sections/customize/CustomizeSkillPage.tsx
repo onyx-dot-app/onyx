@@ -85,7 +85,6 @@ export default function CustomizeSkillPage({
     !isPlugin &&
     (listed?.user_permission === "OWNER" ||
       listed?.user_permission === "EDITOR");
-  // A skill synced from GitHub changes only in GitHub.
   const locked = listed?.content_locked === true;
   const canChangeContent = canEdit && !locked;
   const detail = useSWR<SkillEditableDetail>(

@@ -1,8 +1,4 @@
-"""GitHub marketplaces. Every route authorizes before any GitHub call.
-
-A personal marketplace is reached only by its owner. A company marketplace
-needs organization-wide manage:plugins.
-"""
+"""Every route authorizes before any GitHub call."""
 
 from uuid import UUID
 
@@ -371,7 +367,6 @@ def replace_marketplace_login(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> MarketplaceDetail:
-    """Make the caller the login user. Plugins, versions and shares stay."""
     _authorized_marketplace(marketplace_id, user, db_session)
     if github_authorization_for(user.id, db_session) is None:
         raise OnyxError(
@@ -391,7 +386,6 @@ def delete_marketplace(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    """Delete the marketplace and its plugins."""
     _authorized_marketplace(marketplace_id, user, db_session)
     affected, file_ids = delete_github_marketplace__no_commit(
         marketplace_id, db_session
