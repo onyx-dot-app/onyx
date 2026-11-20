@@ -21,8 +21,9 @@ from psycopg2.errors import QueryCanceled
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import (
     Select,
+    String,
     and_,
-    any_,
+    cast,
     distinct,
     exists,
     false,
@@ -31,6 +32,7 @@ from sqlalchemy import (
     select,
     true,
 )
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.engine import Result
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import InstrumentedAttribute, Session, aliased
@@ -153,10 +155,15 @@ def _execute_with_timeout(db_session: Session, stmt: Select) -> Result:
 
 def _ilike_contains(
     column: InstrumentedAttribute[str] | InstrumentedAttribute[str | None],
-    substring: str,
+    substrings: list[str],
 ) -> ColumnElement[bool]:
-    pattern = f"%{escape_like_pattern(substring)}%"
-    return column.ilike(pattern, escape="\\")
+    """The column contains any of the substrings."""
+    return or_(
+        *(
+            column.ilike(f"%{escape_like_pattern(substring)}%", escape="\\")
+            for substring in substrings
+        )
+    )
 
 
 # =========================== Knowledge scope ===========================
@@ -333,15 +340,15 @@ def _hierarchy_scope_filter(scope: DocumentScope) -> ColumnElement[bool]:
 
 
 def _document_source_types(
-    source_type: DocumentSource | None, scope: DocumentScope | None
+    source_type: list[DocumentSource] | None, scope: DocumentScope | None
 ) -> list[DocumentSource] | None:
     """The sources the request and the scope both allow; None allows all."""
     scope_sources = scope.source_types if scope is not None else None
     if source_type is None:
         return scope_sources
-    if scope_sources is not None and source_type not in scope_sources:
-        return []
-    return [source_type]
+    if scope_sources is None:
+        return source_type
+    return [source for source in source_type if source in scope_sources]
 
 
 def _apply_document_filters(
@@ -352,12 +359,12 @@ def _apply_document_filters(
     *,
     user_id: UUID | None,
     prior_emails: list[str] | None,
-    source_type: DocumentSource | None,
-    title_contains: str | None,
+    source_type: list[DocumentSource] | None,
+    title_contains: list[str] | None,
     updated_after: datetime | None,
     updated_before: datetime | None,
-    owned_by: str | None,
-    parent_hierarchy_node_id: int | None,
+    owned_by: list[str] | None,
+    parent_hierarchy_node_id: list[int] | None,
     scope: DocumentScope | None,
     ensure_connector_join: bool = False,
 ) -> Select:
@@ -404,9 +411,15 @@ def _apply_document_filters(
     if updated_before is not None:
         stmt = stmt.where(Document.doc_updated_at < updated_before)
     if owned_by is not None:
-        stmt = stmt.where(any_(Document.primary_owners) == owned_by)
+        stmt = stmt.where(
+            Document.primary_owners.overlap(
+                cast(postgresql.array(owned_by), postgresql.ARRAY(String))
+            )
+        )
     if parent_hierarchy_node_id is not None:
-        stmt = stmt.where(Document.parent_hierarchy_node_id == parent_hierarchy_node_id)
+        stmt = stmt.where(
+            Document.parent_hierarchy_node_id.in_(parent_hierarchy_node_id)
+        )
     if scope is not None:
         stmt = stmt.where(_document_scope_filter(scope))
     return stmt
@@ -461,12 +474,12 @@ def query_documents_for_tool(
     *,
     user_id: UUID | None = None,
     prior_emails: list[str] | None = None,
-    source_type: DocumentSource | None = None,
-    title_contains: str | None = None,
+    source_type: list[DocumentSource] | None = None,
+    title_contains: list[str] | None = None,
     updated_after: datetime | None = None,
     updated_before: datetime | None = None,
-    owned_by: str | None = None,
-    parent_hierarchy_node_id: int | None = None,
+    owned_by: list[str] | None = None,
+    parent_hierarchy_node_id: list[int] | None = None,
     scope: DocumentScope | None = None,
     order: DocumentOrder = DocumentOrder.UPDATED_DESC,
     after: DocumentCursor | None = None,
@@ -528,12 +541,12 @@ def _count_documents_stmt(
     *,
     user_id: UUID | None,
     prior_emails: list[str] | None,
-    source_type: DocumentSource | None,
-    title_contains: str | None,
+    source_type: list[DocumentSource] | None,
+    title_contains: list[str] | None,
     updated_after: datetime | None,
     updated_before: datetime | None,
-    owned_by: str | None,
-    parent_hierarchy_node_id: int | None,
+    owned_by: list[str] | None,
+    parent_hierarchy_node_id: list[int] | None,
     scope: DocumentScope | None,
 ) -> Select:
     stmt = select(func.count(distinct(Document.id))).select_from(Document)
@@ -561,12 +574,12 @@ def count_documents_for_tool(
     *,
     user_id: UUID | None = None,
     prior_emails: list[str] | None = None,
-    source_type: DocumentSource | None = None,
-    title_contains: str | None = None,
+    source_type: list[DocumentSource] | None = None,
+    title_contains: list[str] | None = None,
     updated_after: datetime | None = None,
     updated_before: datetime | None = None,
-    owned_by: str | None = None,
-    parent_hierarchy_node_id: int | None = None,
+    owned_by: list[str] | None = None,
+    parent_hierarchy_node_id: list[int] | None = None,
     scope: DocumentScope | None = None,
 ) -> int:
     """Exact count of accessible documents matching the filters."""
@@ -594,12 +607,12 @@ def try_count_documents_for_tool(
     *,
     user_id: UUID | None = None,
     prior_emails: list[str] | None = None,
-    source_type: DocumentSource | None = None,
-    title_contains: str | None = None,
+    source_type: list[DocumentSource] | None = None,
+    title_contains: list[str] | None = None,
     updated_after: datetime | None = None,
     updated_before: datetime | None = None,
-    owned_by: str | None = None,
-    parent_hierarchy_node_id: int | None = None,
+    owned_by: list[str] | None = None,
+    parent_hierarchy_node_id: list[int] | None = None,
     scope: DocumentScope | None = None,
 ) -> int | None:
     """`count_documents_for_tool` under a short timeout, or None when it runs
@@ -644,12 +657,12 @@ def count_documents_grouped_for_tool(
     *,
     user_id: UUID | None = None,
     prior_emails: list[str] | None = None,
-    source_type: DocumentSource | None = None,
-    title_contains: str | None = None,
+    source_type: list[DocumentSource] | None = None,
+    title_contains: list[str] | None = None,
     updated_after: datetime | None = None,
     updated_before: datetime | None = None,
-    owned_by: str | None = None,
-    parent_hierarchy_node_id: int | None = None,
+    owned_by: list[str] | None = None,
+    parent_hierarchy_node_id: list[int] | None = None,
     scope: DocumentScope | None = None,
 ) -> list[GroupCount]:
     """Accessible-document counts grouped by source or owner, largest first.
@@ -739,10 +752,10 @@ def _apply_hierarchy_node_filters(
     stmt: Select,
     access_filter: ColumnElement[bool],
     *,
-    source_type: DocumentSource | None,
-    name_contains: str | None,
-    parent_id: int | None,
-    node_type: HierarchyNodeType | None,
+    source_type: list[DocumentSource] | None,
+    name_contains: list[str] | None,
+    parent_id: list[int] | None,
+    node_type: list[HierarchyNodeType] | None,
     scope: DocumentScope | None,
 ) -> Select:
     # STUB nodes are internal placeholders and never surfaced (existing
@@ -750,13 +763,13 @@ def _apply_hierarchy_node_filters(
     stmt = stmt.where(HierarchyNode.node_type != HierarchyNodeType.STUB, access_filter)
 
     if source_type is not None:
-        stmt = stmt.where(HierarchyNode.source == source_type)
+        stmt = stmt.where(HierarchyNode.source.in_(source_type))
     if name_contains is not None:
         stmt = stmt.where(_ilike_contains(HierarchyNode.display_name, name_contains))
     if parent_id is not None:
-        stmt = stmt.where(HierarchyNode.parent_id == parent_id)
+        stmt = stmt.where(HierarchyNode.parent_id.in_(parent_id))
     if node_type is not None:
-        stmt = stmt.where(HierarchyNode.node_type == node_type)
+        stmt = stmt.where(HierarchyNode.node_type.in_(node_type))
     if scope is not None:
         stmt = stmt.where(_hierarchy_scope_filter(scope))
     return stmt
@@ -766,10 +779,10 @@ def _query_hierarchy_nodes(
     db_session: Session,
     access_filter: ColumnElement[bool],
     *,
-    source_type: DocumentSource | None = None,
-    name_contains: str | None = None,
-    parent_id: int | None = None,
-    node_type: HierarchyNodeType | None = None,
+    source_type: list[DocumentSource] | None = None,
+    name_contains: list[str] | None = None,
+    parent_id: list[int] | None = None,
+    node_type: list[HierarchyNodeType] | None = None,
     scope: DocumentScope | None = None,
     limit: int = POSTGRES_TOOL_DEFAULT_LIMIT,
 ) -> list[HierarchyNode]:
@@ -793,10 +806,10 @@ def _count_hierarchy_nodes(
     db_session: Session,
     access_filter: ColumnElement[bool],
     *,
-    source_type: DocumentSource | None = None,
-    name_contains: str | None = None,
-    parent_id: int | None = None,
-    node_type: HierarchyNodeType | None = None,
+    source_type: list[DocumentSource] | None = None,
+    name_contains: list[str] | None = None,
+    parent_id: list[int] | None = None,
+    node_type: list[HierarchyNodeType] | None = None,
     scope: DocumentScope | None = None,
 ) -> int:
     stmt = select(func.count()).select_from(HierarchyNode)
@@ -818,10 +831,10 @@ def query_hierarchy_nodes_for_tool(
     external_group_ids: list[str],
     *,
     user_id: UUID | None = None,
-    source_type: DocumentSource | None = None,
-    name_contains: str | None = None,
-    parent_id: int | None = None,
-    node_type: HierarchyNodeType | None = None,
+    source_type: list[DocumentSource] | None = None,
+    name_contains: list[str] | None = None,
+    parent_id: list[int] | None = None,
+    node_type: list[HierarchyNodeType] | None = None,
     scope: DocumentScope | None = None,
     limit: int = POSTGRES_TOOL_DEFAULT_LIMIT,
 ) -> list[HierarchyNode]:
@@ -847,10 +860,10 @@ def count_hierarchy_nodes_for_tool(
     external_group_ids: list[str],
     *,
     user_id: UUID | None = None,
-    source_type: DocumentSource | None = None,
-    name_contains: str | None = None,
-    parent_id: int | None = None,
-    node_type: HierarchyNodeType | None = None,
+    source_type: list[DocumentSource] | None = None,
+    name_contains: list[str] | None = None,
+    parent_id: list[int] | None = None,
+    node_type: list[HierarchyNodeType] | None = None,
     scope: DocumentScope | None = None,
 ) -> int:
     """Exact count of accessible hierarchy nodes matching the filters."""
@@ -890,7 +903,7 @@ def _apply_chat_session_filters(
     stmt: Select,
     user_id: UUID | None,
     *,
-    description_contains: str | None,
+    description_contains: list[str] | None,
     created_after: datetime | None,
     created_before: datetime | None,
     exclude_chat_session_id: UUID | None,
@@ -921,7 +934,7 @@ def query_chat_sessions_for_tool(
     db_session: Session,
     user_id: UUID | None,
     *,
-    description_contains: str | None = None,
+    description_contains: list[str] | None = None,
     created_after: datetime | None = None,
     created_before: datetime | None = None,
     exclude_chat_session_id: UUID | None = None,
@@ -947,7 +960,7 @@ def count_chat_sessions_for_tool(
     db_session: Session,
     user_id: UUID | None,
     *,
-    description_contains: str | None = None,
+    description_contains: list[str] | None = None,
     created_after: datetime | None = None,
     created_before: datetime | None = None,
     exclude_chat_session_id: UUID | None = None,
@@ -969,7 +982,7 @@ def count_chat_sessions_by_month_for_tool(
     db_session: Session,
     user_id: UUID | None,
     *,
-    description_contains: str | None = None,
+    description_contains: list[str] | None = None,
     created_after: datetime | None = None,
     created_before: datetime | None = None,
     exclude_chat_session_id: UUID | None = None,
@@ -998,8 +1011,8 @@ def _apply_chat_message_filters(
     stmt: Select,
     user_id: UUID | None,
     *,
-    chat_session_id: UUID | None,
-    content_contains: str | None,
+    chat_session_id: list[UUID] | None,
+    content_contains: list[str] | None,
     message_type: MessageType | None,
     sent_after: datetime | None,
     sent_before: datetime | None,
@@ -1019,7 +1032,7 @@ def _apply_chat_message_filters(
         ChatMessage.message != "",
     )
     if chat_session_id is not None:
-        stmt = stmt.where(ChatMessage.chat_session_id == chat_session_id)
+        stmt = stmt.where(ChatMessage.chat_session_id.in_(chat_session_id))
     if content_contains is not None:
         stmt = stmt.where(_ilike_contains(ChatMessage.message, content_contains))
     if message_type is not None:
@@ -1037,8 +1050,8 @@ def query_chat_messages_for_tool(
     db_session: Session,
     user_id: UUID | None,
     *,
-    chat_session_id: UUID | None = None,
-    content_contains: str | None = None,
+    chat_session_id: list[UUID] | None = None,
+    content_contains: list[str] | None = None,
     message_type: MessageType | None = None,
     sent_after: datetime | None = None,
     sent_before: datetime | None = None,
@@ -1067,8 +1080,8 @@ def count_chat_messages_for_tool(
     db_session: Session,
     user_id: UUID | None,
     *,
-    chat_session_id: UUID | None = None,
-    content_contains: str | None = None,
+    chat_session_id: list[UUID] | None = None,
+    content_contains: list[str] | None = None,
     message_type: MessageType | None = None,
     sent_after: datetime | None = None,
     sent_before: datetime | None = None,
@@ -1093,8 +1106,8 @@ def count_chat_messages_by_month_for_tool(
     db_session: Session,
     user_id: UUID | None,
     *,
-    chat_session_id: UUID | None = None,
-    content_contains: str | None = None,
+    chat_session_id: list[UUID] | None = None,
+    content_contains: list[str] | None = None,
     message_type: MessageType | None = None,
     sent_after: datetime | None = None,
     sent_before: datetime | None = None,
