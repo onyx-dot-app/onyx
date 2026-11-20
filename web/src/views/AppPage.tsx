@@ -65,7 +65,7 @@ import FederatedOAuthModal from "@/components/chat/FederatedOAuthModal";
 import { messageRowId } from "@/lib/chat/rowIds";
 import ChatScrollContainer, {
   ChatScrollContainerHandle,
-} from "@/sections/chat/ChatScrollContainer";
+} from "@/lib/chatScroll/components/ChatScrollContainer";
 import {
   ProjectContextPanel,
   ProjectChatSessionList,

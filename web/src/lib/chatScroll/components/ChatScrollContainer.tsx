@@ -9,10 +9,10 @@ import React, {
   useRef,
   useState,
 } from "react";
-import { ScrollContainerProvider } from "@/sections/chat/ScrollContainerContext";
+import { ScrollContainerProvider } from "@/lib/chatScroll/components/ScrollContainerContext";
 import { cn } from "@opal/utils";
 import { CHAT_GUTTER } from "@/lib/chat/layout";
-import { getChatScrollMemory } from "@/lib/chat/scrollMemory";
+import { getChatScrollMemory } from "@/lib/chatScroll/scrollMemory";
 
 // Size constants
 const DEFAULT_ANCHOR_OFFSET_PX = 16; // 1rem

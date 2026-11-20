@@ -21,7 +21,7 @@ import { MultiModelResponse } from "@/app/app/message/types";
 import { getMultiModelResponses } from "@/app/app/message/multiModel";
 import { SelectedModel } from "@/sections/model-selector/MultiModelSelector";
 import { buildModelProviderLookup } from "@/lib/languageModels/options";
-import DynamicBottomSpacer from "@/components/chat/DynamicBottomSpacer";
+import DynamicBottomSpacer from "@/lib/chatScroll/components/DynamicBottomSpacer";
 import {
   useCurrentChatState,
   useCurrentMessageHistory,
@@ -32,15 +32,15 @@ import {
 } from "@/app/app/stores/useChatSessionStore";
 import WindowedRow, {
   ESTIMATED_ROW_HEIGHT_PX,
-} from "@/sections/chat/WindowedRow";
+} from "@/lib/chatScroll/components/WindowedRow";
 import OlderMessagesLoader from "@/sections/chat/OlderMessagesLoader";
-import { useOptionalScrollContainer } from "@/sections/chat/ScrollContainerContext";
+import { useOptionalScrollContainer } from "@/lib/chatScroll/components/ScrollContainerContext";
 import ToolApprovalsRegion from "@/sections/chat/ToolApprovalsRegion";
 import ToolQuestionsRegion from "@/sections/chat/ToolQuestionsRegion";
 import { cn } from "@opal/utils";
 import { CHAT_COLUMN_WIDTH } from "@/lib/chat/layout";
 import { messageRowId } from "@/lib/chat/rowIds";
-import { getChatScrollMemory } from "@/lib/chat/scrollMemory";
+import { getChatScrollMemory } from "@/lib/chatScroll/scrollMemory";
 
 /** Width constraint for normal (non-multi-model) messages. */
 

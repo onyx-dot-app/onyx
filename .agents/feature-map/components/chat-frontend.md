@@ -717,7 +717,7 @@ up its own branding.
     ([[#packet-list-append-only]]).
 
 15. `scroll-follow-intent` **Content growth must not cancel following.**
-    `sections/chat/ChatScrollContainer.tsx` keeps following intent across the
+    `lib/chatScroll/components/ChatScrollContainer.tsx` keeps following intent across the
     typewriter drain and spacer smooth-scroll pauses. When either pause ends,
     catch up if auto-scroll is enabled and the user has not scrolled away.
     During the opening-follow window, content observers can also catch up with
@@ -727,14 +727,14 @@ up its own branding.
     the user, so only movement beyond it stops following. Following measures
     "at the bottom" from the real scroll end, spacer included.
     Every scroll baseline records the position and the content height
-    together. `components/chat/DynamicBottomSpacer.tsx` adds space only for a
+    together. `lib/chatScroll/components/DynamicBottomSpacer.tsx` adds space only for a
     turn sent from the page, which passes through `loading`. A run the page
     resumes starts at `streaming` and gets no space. The space is fitted to
     live layout for the whole turn. The scroll element is
     keyed by session, so a chat switch remounts the spacer. Its unmount clears
     its state and the shared spacer height.
     Each chat's position (end, or a row and offset), its turn's space and its
-    row heights live in `lib/chat/scrollMemory.ts`; the opening layout effect
+    row heights live in `lib/chatScroll/scrollMemory.ts`; the opening layout effect
     restores them from loaded rows only, so a switch never waits on the
     network. Rows use `lib/chat/rowIds.ts:messageRowId`. Do not write
     `scrollTop` while the user scrolls, and keep native scroll anchoring on:

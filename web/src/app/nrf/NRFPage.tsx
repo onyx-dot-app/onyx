@@ -34,7 +34,7 @@ import {
 } from "@/app/app/stores/useChatSessionStore";
 import ChatUI from "@/sections/chat/ChatUI";
 import { messageRowId } from "@/lib/chat/rowIds";
-import ChatScrollContainer from "@/sections/chat/ChatScrollContainer";
+import ChatScrollContainer from "@/lib/chatScroll/components/ChatScrollContainer";
 import WelcomeMessage from "@/app/app/components/WelcomeMessage";
 import useChatSessions from "@/hooks/useChatSessions";
 import { cn } from "@opal/utils";

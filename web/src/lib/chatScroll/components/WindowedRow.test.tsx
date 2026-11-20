@@ -1,7 +1,7 @@
 import { useRef } from "react";
 import { act, render, screen } from "@tests/setup/test-utils";
-import WindowedRow from "@/sections/chat/WindowedRow";
-import { ScrollContainerProvider } from "@/sections/chat/ScrollContainerContext";
+import WindowedRow from "@/lib/chatScroll/components/WindowedRow";
+import { ScrollContainerProvider } from "@/lib/chatScroll/components/ScrollContainerContext";
 
 // Distance from the row to the scroll container's viewport.
 const ROW_DISTANCE_PX = 400;
