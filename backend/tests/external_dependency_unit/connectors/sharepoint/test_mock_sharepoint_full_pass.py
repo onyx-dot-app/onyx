@@ -146,3 +146,32 @@ def test_a_stop_during_a_limiter_wait_ends_the_listing(
 
     with pytest.raises(ConnectorStopSignal):
         list_stubs(connector)
+
+
+def test_a_folder_deleted_during_the_walk_is_skipped(
+    own_mock_sharepoint: MockSharepoint,
+) -> None:
+    """A folder deleted after the walk read its parent answers 404. The walk
+    skips it and lists the rest of the drive, with no failure."""
+    drive_id = own_mock_sharepoint.drive_ids()[0]
+    children = own_mock_sharepoint.graph_get(f"/drives/{drive_id}/root/children")
+    children.raise_for_status()
+    folder_id = next(
+        item["id"] for item in children.json()["value"] if "folder" in item
+    )
+    own_mock_sharepoint.write_during_walk(
+        drive_id=drive_id,
+        op="children",
+        after_calls=1,
+        action="delete",
+        file_id=folder_id,
+    )
+
+    listing = list_stubs(own_mock_sharepoint.build_connector())
+
+    hook = own_mock_sharepoint.walk_hooks()[0]
+    assert hook["fired"] is True and hook["error"] is None
+    assert not listing.failures
+    stub_ids = [stub.id for stub in listing.stubs]
+    assert len(stub_ids) == len(set(stub_ids))
+    assert set(stub_ids) == own_mock_sharepoint.document_ids()
