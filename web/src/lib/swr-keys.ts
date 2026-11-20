@@ -157,6 +157,7 @@ export const SWR_KEYS = {
   documentSets: "/api/manage/document-set",
   documentSetsEditable: "/api/manage/document-set?get_editable=true",
   tags: "/api/query/valid-tags",
+  hierarchyNode: (nodeId: number) => `/api/hierarchy-nodes/${nodeId}`,
   connectorStatus: "/api/manage/connector-status",
 
   // ── Credentials & Connectors ──────────────────────────────────────────────

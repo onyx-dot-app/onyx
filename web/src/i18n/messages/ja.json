@@ -12505,7 +12505,7 @@
               "between": "{start} – {end} に送信"
             },
             "owner": "所有者: {owner}",
-            "folder": "フォルダー {id} 内",
+            "folder": "フォルダー {name} 内",
             "nodeType": "種類: {type}",
             "author": "送信者: {author}",
             "message": "メッセージ {id}",

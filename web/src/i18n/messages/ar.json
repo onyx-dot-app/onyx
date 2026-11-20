@@ -12505,7 +12505,7 @@
               "between": "أُرسل {start} – {end}"
             },
             "owner": "المالك: {owner}",
-            "folder": "في المجلد {id}",
+            "folder": "في المجلد {name}",
             "nodeType": "النوع: {type}",
             "author": "من: {author}",
             "message": "الرسالة {id}",

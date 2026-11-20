@@ -12505,7 +12505,7 @@
               "between": "Envoyé du {start} au {end}"
             },
             "owner": "Propriétaire : {owner}",
-            "folder": "Dans le dossier {id}",
+            "folder": "Dans le dossier {name}",
             "nodeType": "Type : {type}",
             "author": "De : {author}",
             "message": "Message {id}",

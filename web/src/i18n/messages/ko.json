@@ -12505,7 +12505,7 @@
               "between": "{start} – {end} 전송"
             },
             "owner": "소유자: {owner}",
-            "folder": "폴더 {id} 안",
+            "folder": "폴더 {name} 안",
             "nodeType": "유형: {type}",
             "author": "보낸 사람: {author}",
             "message": "메시지 {id}",
