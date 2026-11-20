@@ -584,6 +584,15 @@ const ChatScrollContainer = React.memo(
         resizeObserver.observe(container);
         if (contentWrapper) {
           resizeObserver.observe(contentWrapper);
+          // A footer (a sticky composer) that grows covers more of the
+          // viewport, which changes the scroll-to-bottom button.
+          for (
+            let footer = contentWrapper.nextElementSibling;
+            footer;
+            footer = footer.nextElementSibling
+          ) {
+            resizeObserver.observe(footer);
+          }
         }
 
         return () => {

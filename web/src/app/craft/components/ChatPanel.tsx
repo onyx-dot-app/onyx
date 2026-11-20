@@ -386,6 +386,15 @@ function ChatPanelContent({
   const autoScroll =
     user?.preferences?.auto_scroll !== false || !displayIsRunning;
   // The latest user message anchors a new turn.
+  // The transcript on screen. A switch to or from a subagent fades the old
+  // one out first; the scroll container takes the new one's key after that,
+  // so each transcript has its own placement and following state.
+  const viewedTranscript = viewedSubagentSessionId ?? "main";
+  const [shownTranscript, setShownTranscript] = useState(viewedTranscript);
+  const scrollViewKey =
+    shownTranscript === "main"
+      ? (outputSessionId ?? undefined)
+      : `${outputSessionId ?? ""}:${shownTranscript}`;
   const lastUserMessageId = isViewingSubagent
     ? undefined
     : session?.messages.filter((message) => message.type === "user").at(-1)?.id;
@@ -611,7 +620,7 @@ function ChatPanelContent({
             agent and a subagent (keyed by the viewed agent). */}
             <ChatScrollContainer
               ref={scrollContainerRef}
-              sessionId={outputSessionId ?? undefined}
+              sessionId={scrollViewKey}
               anchorSelector={
                 lastUserMessageId
                   ? `#${craftMessageRowId(lastUserMessageId)}`
@@ -769,7 +778,11 @@ function ChatPanelContent({
                 )
               }
             >
-              <AnimatePresence mode="wait" initial={false}>
+              <AnimatePresence
+                mode="wait"
+                initial={false}
+                onExitComplete={() => setShownTranscript(viewedTranscript)}
+              >
                 <motion.div
                   key={viewedSubagentSessionId ?? "main"}
                   initial={reduceMotion ? false : { opacity: 0, y: 4 }}
