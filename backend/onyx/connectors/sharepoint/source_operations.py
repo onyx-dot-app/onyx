@@ -89,6 +89,7 @@ from onyx.connectors.microsoft_utils.models import (
     SharepointSecurable,
 )
 from onyx.connectors.microsoft_utils.request_pacer import (
+    THROTTLE_STATUSES,
     MicrosoftCall,
     MicrosoftRequestPacer,
     prepare_sdk_client,
@@ -570,6 +571,13 @@ class SharepointSourceOperations(SourceOperations):
                         )
                     )
                 except requests.RequestException as error:
+                    # A throttle is not a refused link: /content redirects
+                    # to the same download host.
+                    if (
+                        error.response is not None
+                        and error.response.status_code in THROTTLE_STATUSES
+                    ):
+                        raise
                     # The link's query carries a download credential.
                     logger.warning(
                         "Download link of '%s' refused (%s). Reading through Graph.",

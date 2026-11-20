@@ -158,9 +158,13 @@ batch of stubs in a thread pool of `SHAREPOINT_CONVERSION_WORKERS` (16). A file
 target makes one download from its listed link while the link is younger than
 `connectors/sharepoint/listing.py:DOWNLOAD_URL_MAX_AGE` (45 minutes; links live about one hour),
 which is no Graph call. An older link, a link that does not decrypt, and a
-refused link (any request error) fall back to `/drives/{d}/items/{i}/content`
+refused link (any other request error) fall back to `/drives/{d}/items/{i}/content`
 (1 RU) in
-`connectors/microsoft_utils/drive_items.py:extract_drive_item_content`. With
+`connectors/microsoft_utils/drive_items.py:extract_drive_item_content`. A
+throttled link (429 or 503) does not fall back, because `/content` redirects to
+the same download host: the pacer reports its Retry-After to the shared
+limiter, so every caller on the app pauses, and the link is tried again. A link
+that stays throttled fails the document. With
 permission sync, it also makes the role-assignment reads from the list ids of
 the payload. A
 page target makes one read of the page with its canvas. No target makes a
