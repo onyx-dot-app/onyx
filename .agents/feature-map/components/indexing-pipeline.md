@@ -118,8 +118,10 @@ A pause is at most 20 minutes. There is no pause before conversion converted 15
 batches of the attempt, and none while conversion drains fewer than 100
 documents per minute: slow conversion usually means other connectors load the
 workers, and a pause would only make the run longer. The documents per batch
-are the attempt's stored documents (listed minus dropped as unchanged) over its
-stored batches, so the small batches of an incremental run count as small. The heartbeat thread keeps the attempt alive during a pause, and the
+are the change in the attempt's stored documents (listed minus dropped as
+unchanged) over the change in its stored batches since the first check, so the
+small batches of an incremental run count as small, and a resumed attempt's
+batch numbers and taken-over batches do not count. The heartbeat thread keeps the attempt alive during a pause, and the
 pause checks for a stop or a cancel every 10 seconds. With
 `ENABLE_CONVERSION_STAGE` on,
 `background/indexing/run_docfetching.py:connector_document_extraction` only

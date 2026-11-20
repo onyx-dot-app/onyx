@@ -68,6 +68,11 @@ class ListingBackpressure:
         self._last_check: float | None = None
         # The converted count at the first check, the start of the warm-up.
         self._first_converted: int | None = None
+        # (stub batches stored, documents in them) at the first check. The
+        # stored count starts at the attempt's first batch number and holds
+        # batches taken over from an earlier attempt, and the document count
+        # does not, so only the change from this check gives a batch size.
+        self._first_stored: tuple[int, int] | None = None
         # (monotonic time, stub batches converted) at each recent check.
         self._samples: deque[tuple[float, int]] = deque()
 
@@ -88,6 +93,9 @@ class ListingBackpressure:
         stored, converted = progress.stored, progress.converted
         if self._first_converted is None:
             self._first_converted = converted
+        if self._first_stored is None:
+            self._first_stored = (stored, progress.stored_documents)
+        first_stored, first_documents = self._first_stored
         self._samples.append((now, converted))
         # The baseline is the newest sample at or before the window start,
         # so a check after a long step still has a rate.
@@ -111,9 +119,13 @@ class ListingBackpressure:
         drain_rate = drained / elapsed
         # A stub batch holds up to INDEX_BATCH_SIZE documents, and fewer when
         # the listing dropped unchanged documents from it.
+        new_batches = stored - first_stored
         documents_per_batch = (
-            min(progress.stored_documents / stored, INDEX_BATCH_SIZE)
-            if stored > 0
+            min(
+                (progress.stored_documents - first_documents) / new_batches,
+                INDEX_BATCH_SIZE,
+            )
+            if new_batches > 0
             else INDEX_BATCH_SIZE
         )
         if (
