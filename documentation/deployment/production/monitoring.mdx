@@ -100,7 +100,7 @@ All Onyx-specific metrics start with `onyx_`. Each scrape returns a help string 
 | Connector state | `onyx_connector_*` | API server, `docfetching`, `docprocessing` | Status, access type, last index, prune, and sync times, error state, and document counts for each connector. |
 | License | `onyx_license_*` | API server | Seats in total, used, and available, and the license expiry time. No series when no license is installed. |
 | Search | `onyx_opensearch_search_*`, `onyx_opensearch_searches_in_progress` | API server | OpenSearch search latency, volume, errors, and searches in progress by search type. |
-| Internal search | `onyx_internal_search_*` | API server | Chat search latency by message size, and which search queries pass the size check before they reach OpenSearch. |
+| Internal search | `onyx_internal_search_*` | API server | Chat search latency by message size, which search queries pass the size check before they reach OpenSearch, and whether a source lookup's copied excerpt was used. |
 | Embeddings | `onyx_embedding*`, `onyx_query_embedding_cache_*` | API server, workers | Embedding request latency, volume, and query embedding cache use. |
 | MCP | `onyx_mcp_server_*`, `onyx_mcp_client_*` | MCP server, API server | MCP server token checks and tool calls, and calls from Onyx to external MCP tools. |
 | Background tasks | `onyx_celery_task_*`, `onyx_celery_tasks_active` | Workers | Tasks started, completed, retried, and in progress, task duration, and time in the queue. |
