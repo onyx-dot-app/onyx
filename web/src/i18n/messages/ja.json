@@ -12385,9 +12385,6 @@
           "thinking": {
             "label": "思考中"
           },
-          "thinkingEllipsis": {
-            "label": "思考中..."
-          },
           "updatingMemory": {
             "label": "メモリを更新中..."
           },

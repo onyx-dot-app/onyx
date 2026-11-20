@@ -12385,9 +12385,6 @@
           "thinking": {
             "label": "생각 중"
           },
-          "thinkingEllipsis": {
-            "label": "생각 중..."
-          },
           "updatingMemory": {
             "label": "메모리 업데이트 중..."
           },
