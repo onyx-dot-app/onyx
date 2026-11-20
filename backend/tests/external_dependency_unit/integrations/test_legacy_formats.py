@@ -45,6 +45,7 @@ from onyx.integrations.connection_models import (
 )
 from onyx.integrations.connections import (
     _refresh_connection,
+    connect_with_fields__no_commit,
     ensure_fresh_connection,
     integration_status,
     mark_sign_in_settings_changed,
@@ -53,6 +54,7 @@ from onyx.integrations.connections import (
     render_headers,
     resolve_connection,
 )
+from onyx.server.features.integrations.api import delete_member_connection
 from onyx.server.features.mcp.oauth import (
     IntegrationTokenStorage,
     integration_mcp_server_connection,
@@ -60,6 +62,7 @@ from onyx.server.features.mcp.oauth import (
 )
 from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.external_dependency_unit.integration_helpers import (
+    give_access,
     make_app_integration,
     make_mcp_integration,
 )
@@ -758,6 +761,54 @@ def test_individual_custom_app_user_without_row_uses_full_organization_values(
     assert expect_problem(resolve_connection(integration, None, db_session)).code is (
         ConnectionState.NOT_CONNECTED
     )
+
+
+def test_custom_app_user_who_disconnects_does_not_fall_back_to_organization_values(
+    db_session: Session,
+    make_test_user: MakeTestUser,
+) -> None:
+    integration, _ = make_app_integration(
+        db_session,
+        auth_mode=IntegrationAuthMode.INDIVIDUAL,
+        auth_method=IntegrationAuthMethod.API_KEY,
+        header_template={"X-Key": "{api_key}"},
+    )
+    _seed(
+        db_session,
+        integration,
+        None,
+        IntegrationLegacyFormat.EXTERNAL_APP_ORG,
+        {"api_key": "org-key"},
+    )
+    give_access(db_session, [integration])
+    user = make_test_user("legacy_custom_app_disconnects")
+    other = make_test_user("legacy_custom_app_never_connected")
+    connect_with_fields__no_commit(integration, user, {"api_key": "own"}, db_session)
+    db_session.commit()
+
+    delete_member_connection(integration.id, user, db_session)
+
+    problem = expect_problem(resolve_connection(integration, user, db_session))
+    assert problem.code is ConnectionState.NOT_CONNECTED
+    assert (
+        integration_status(integration, user, db_session).state
+        is ConnectionState.NOT_CONNECTED
+    )
+    mark_sign_in_settings_changed(integration.id, db_session)
+    db_session.commit()
+    assert (
+        expect_problem(resolve_connection(integration, user, db_session)).code
+        is ConnectionState.NOT_CONNECTED
+    )
+    assert (
+        expect_problem(resolve_connection(integration, other, db_session)).code
+        is ConnectionState.NEEDS_RECONNECT
+    )
+
+    connect_with_fields__no_commit(integration, user, {"api_key": "again"}, db_session)
+    db_session.commit()
+    secret = expect_resolved(resolve_connection(integration, user, db_session)).secret
+    assert render_headers(integration.header_template, secret) == {"X-Key": "again"}
 
 
 def test_custom_app_user_without_row_needs_reconnect_after_settings_change(
