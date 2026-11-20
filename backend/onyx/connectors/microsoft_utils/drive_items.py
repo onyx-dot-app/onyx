@@ -574,7 +574,7 @@ def extract_drive_item_content(
     driveitem: DriveItemData,
     size_threshold: int,
     graph_api_base: str,
-    access_token: str | None = None,
+    get_access_token: Callable[[], str] | None = None,
     raw_file_callback: RawFileCallback | None = None,
     pacer: MicrosoftRequestPacer | None = None,
 ) -> DriveItemContent | None:
@@ -636,11 +636,11 @@ def extract_drive_item_content(
             )
 
     # Fallback: download via Graph API /content endpoint
-    if content_bytes is None and access_token and driveitem.drive_id:
-        token: str = access_token
+    if content_bytes is None and get_access_token and driveitem.drive_id:
         try:
+            # The token is read for each try, after its limiter wait.
             content_bytes = download_via_graph_api(
-                lambda: token,
+                get_access_token,
                 driveitem.drive_id,
                 driveitem.id,
                 size_threshold,

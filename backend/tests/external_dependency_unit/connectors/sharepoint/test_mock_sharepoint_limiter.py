@@ -102,9 +102,10 @@ def test_a_retry_after_pauses_a_second_connector_on_the_app(
         }
     )
     own_mock_sharepoint.reset_stats()
-    stop = threading.Event()
-    first = _limited_connector(own_mock_sharepoint, stop)
-    second = _limited_connector(own_mock_sharepoint, stop)
+    first_stop = threading.Event()
+    second_stop = threading.Event()
+    first = _limited_connector(own_mock_sharepoint, first_stop)
+    second = _limited_connector(own_mock_sharepoint, second_stop)
 
     def run_first() -> None:
         try:
@@ -120,20 +121,23 @@ def test_a_retry_after_pauses_a_second_connector_on_the_app(
             assert time.monotonic() < deadline, "the mock refused no call"
             time.sleep(0.05)  # test-flakes: allow the test polls the mock's stats
         throttled_at = time.monotonic()
-        # The first connector stops, so only the second one calls from here.
-        stop.set()
-        runner.join(timeout=30)
-        assert not runner.is_alive()
-
-        stop.clear()
+        # The first connector stops. The second one calls while the pause
+        # is still on.
+        first_stop.set()
+        started = time.monotonic()
         site_urls = second.ops.list_site_urls().site_urls
-        waited = time.monotonic() - throttled_at
+        ended = time.monotonic()
     finally:
-        stop.set()
+        first_stop.set()
+        second_stop.set()
+        runner.join(timeout=30)
+    assert not runner.is_alive()
 
     assert site_urls
-    # The second connector's first call waited for the pause to end.
-    assert waited >= _RETRY_AFTER_SECONDS - 0.5
+    # The second connector's first call started in the pause and waited for
+    # its end.
+    assert started - throttled_at < _RETRY_AFTER_SECONDS / 2
+    assert ended - throttled_at >= _RETRY_AFTER_SECONDS - 0.5
     stats = own_mock_sharepoint.stats()
     assert stats["throttled"] >= 1
     assert stats["calls_during_pause_total"] == 0

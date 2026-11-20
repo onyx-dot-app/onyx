@@ -313,7 +313,7 @@ class OneDriveSourceOperations(SourceOperations):
             item,
             SHAREPOINT_CONNECTOR_SIZE_THRESHOLD,
             self._base(),
-            self._access_token(),
+            self._access_token,
             raw_file_callback,
             self.request_pacer,
         )
