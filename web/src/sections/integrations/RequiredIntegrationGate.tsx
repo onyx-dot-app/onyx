@@ -65,7 +65,10 @@ function GateForUser() {
     const byId = new Map((data ?? []).map((item) => [item.id, item]));
     return ids.flatMap((id) => {
       const integration = byId.get(id);
-      return integration ? [integration] : [];
+      return integration &&
+        (blockingIds.includes(id) || integration.status.state === "connected")
+        ? [integration]
+        : [];
     });
   }, [trackedIds, blockingIds, data]);
 
@@ -208,7 +211,7 @@ interface GateRowProps {
 
 function GateRow({ integration, returnPath }: GateRowProps) {
   const t = useTranslations("integrations.requiredGate");
-  const connected = requiredSignIns([integration]).length === 0;
+  const connected = integration.status.state === "connected";
   return (
     <Section
       role="group"

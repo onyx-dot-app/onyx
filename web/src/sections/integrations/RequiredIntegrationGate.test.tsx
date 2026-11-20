@@ -87,6 +87,45 @@ test("a member continues only after each required integration connects", async (
   );
 });
 
+test("a row that stops being required without a connection leaves the gate", async () => {
+  const user = setupUser({ pointerEventsCheck: PointerEventsCheckLevel.Never });
+  const other = makeMemberIntegration({
+    id: 2,
+    name: "Billing API",
+    access: makeAccess({ installation_policy: "REQUIRED" }),
+  });
+  const nowAvailable: MemberIntegration = {
+    ...other,
+    access: makeAccess({ installation_policy: "AVAILABLE" }),
+  };
+  let list = [required, other];
+  mockFetch({
+    "/api/integrations": () => list,
+    "PUT /api/integrations/1/connection": () => {
+      list = [connected, nowAvailable];
+      return { state: "connected", reason: null };
+    },
+  });
+
+  render(<RequiredIntegrationGate />);
+
+  const gate = await screen.findByRole("dialog", { name: copy.title });
+  expect(within(gate).getByText("Billing API")).toBeInTheDocument();
+  await user.click(
+    within(gate).getByRole("button", { name: "Connect Reports API" })
+  );
+  const modal = await screen.findByRole("dialog", {
+    name: /^Connect Reports API/,
+  });
+  await user.type(within(modal).getByLabelText(/Token/), "secret");
+  await user.click(within(modal).getByRole("button", { name: "Connect" }));
+
+  const next = within(gate).getByRole("button", { name: copy.continue });
+  await waitFor(() => expect(next).toBeEnabled());
+  expect(within(gate).queryByText("Billing API")).not.toBeInTheDocument();
+  expect(within(gate).getAllByText(copy.connected)).toHaveLength(1);
+});
+
 test("an admin can continue without connecting", async () => {
   mockIsAdmin = true;
   const user = setupUser({ pointerEventsCheck: PointerEventsCheckLevel.Never });

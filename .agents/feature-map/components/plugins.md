@@ -169,8 +169,9 @@ in `app/app/layout.tsx` and `app/craft/v1/layout.tsx`, covers the page while
 `lib/integrations/connect.ts:requiredSignIns` returns rows: the user's
 `access.installation_policy` is REQUIRED, `access.state` is `sign_in`, and
 `connectAction` is not null. An integration only an admin can fix never blocks.
-Each row reuses `IntegrationConnectButton`. A row stays after it connects;
-Continue opens when no row needs a sign-in. An admin can continue at once, for
+Each row reuses `IntegrationConnectButton`. A row stays after it connects
+(`status.state` is `connected`). A row that stops being required with no
+connection leaves the gate. Continue opens when no row needs a sign-in. An admin can continue at once, for
 the page session only. The gate renders nothing for an anonymous user, while
 `GET /integrations` loads or fails, and on an OAuth callback path
 (`lib/oauth/desktopCallback.ts:isOAuthCallbackPath`), so a sign-in can finish.
