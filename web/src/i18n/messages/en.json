@@ -10681,6 +10681,113 @@
         "saved": "Group settings of {name} saved.",
         "saveFailed": "Could not save the group setting."
       }
+    },
+    "serviceStatus": {
+      "page": {
+        "description": "Current resource usage and search cluster health of your Onyx instance",
+        "refresh": "Refresh",
+        "refreshFailed": "Could not refresh the cluster status. The page shows the last result.",
+        "loadFailed": "Could not read the search cluster status. Check that OpenSearch is reachable."
+      },
+      "cluster": {
+        "title": "Search Cluster - OpenSearch",
+        "status": "Cluster Status",
+        "version": "OpenSearch {version}",
+        "health": "Status {health}",
+        "updated": "Updated {time}",
+        "dataNodes": "Data Nodes",
+        "shards": "Shards",
+        "shardLayout": "{primaries} × {copies}",
+        "copies": "Copies",
+        "indexSize": "Index Size",
+        "chunks": "Chunks",
+        "healthGreen": "Green: every shard copy is assigned.",
+        "healthYellow": "Yellow: some replica shards are not assigned. Search works, but losing a data node can lose data.",
+        "healthYellowSingleNode": "Yellow: replica copies need a second data node. This is normal for a cluster with one data node, and search works.",
+        "healthRed": "Red: some primary shards are not assigned, so part of the index cannot be searched."
+      },
+      "searches": {
+        "loadTitle": "Search Load",
+        "loadUnit": "calls/s",
+        "timeTitle": "Search Latency",
+        "seconds": "{value} s",
+        "milliseconds": "{value} ms",
+        "loadFailed": "Could not read the recent searches.",
+        "p90Note": "(90th percentile)",
+        "p90Row": "p90 {value}",
+        "p10Row": "p10 {value}",
+        "minuteLabel": "{time}: p90 {p90}, p10 {p10}",
+        "rateTooltip": "{rate} calls/s",
+        "millisecondsUnit": "ms",
+        "secondsUnit": "s",
+        "failedInMinute": "{count, plural, one {# failed} other {# failed}}"
+      },
+      "nodes": {
+        "title": "Data Nodes",
+        "disk": "Disk Usage",
+        "vector": "Vector Memory",
+        "percent": "{value}%",
+        "usedOfTotal": "{used} / {total} {unit}",
+        "shards": "{count, plural, one {# shard} other {# shards}}",
+        "unnamed": "Node {number}",
+        "copyName": "Copy the OpenSearch node name ({name})"
+      },
+      "indexes": {
+        "title": "Indexes",
+        "chunks": "Chunks",
+        "shards": "Shards",
+        "reindex": "Reindex",
+        "detail": "Embedding model · {dim} dimensions",
+        "deleted": "{percent}% deleted chunks",
+        "detailQuantized": "Embedding model · {dim} dimensions · {quantization} vectors",
+        "reindexProgress": "{percent}% of current"
+      },
+      "issues": {
+        "title": "Issues & Recommendations",
+        "none": "No issues found.",
+        "criticalCount": "{count} Critical",
+        "warningCount": "{count, plural, one {# Warning} other {# Warnings}}",
+        "nodeCount": "{count} data nodes",
+        "indexSettings": "Index Settings",
+        "sizingGuide": "Sizing Guide",
+        "clusterRed": {
+          "title": "The cluster status is red",
+          "description": "Some primary shards are not assigned, so part of the index cannot be searched. Check the OpenSearch logs."
+        },
+        "unassignedShards": {
+          "title": "{value, plural, one {# shard copy is} other {# shard copies are}} not assigned",
+          "description": "OpenSearch has no data node to place them on. Add data nodes or lower the replica count."
+        },
+        "diskCritical": {
+          "title": "Disk at {value}% on {nodes}",
+          "description": "OpenSearch stops placing shards on a data node at 85%. Add storage or data nodes."
+        },
+        "diskWarning": {
+          "title": "Disk at {value}% on {nodes}",
+          "description": "A reindex needs room for a second index. Add storage or data nodes."
+        },
+        "vectorCritical": {
+          "title": "Vector memory at {value}% on {nodes}",
+          "description": "The vectors do not fit in memory, so search reads them from disk. Add memory or data nodes, or use a smaller vector quantization."
+        },
+        "vectorWarning": {
+          "title": "Vector memory at {value}% on {nodes}",
+          "description": "Search slows down when the vectors do not fit in memory. Add memory or data nodes, or use a smaller vector quantization."
+        },
+        "heap": {
+          "title": "JVM heap at {value}% on {nodes}",
+          "description": "OpenSearch can reject requests when the heap is full. Add memory or data nodes."
+        },
+        "indexMissing": {
+          "title": "The search index is missing",
+          "description": "OpenSearch has no index for the current search settings, so search returns nothing. Check the OpenSearch logs, then start a reindex from Index Settings."
+        },
+        "nodesUnanswered": {
+          "title": "{value, plural, one {# data node} other {# data nodes}} did not answer",
+          "description": "The status leaves out what those nodes did not report, such as their disk and memory. Check that every data node is running, then refresh."
+        },
+        "dismiss": "Dismiss"
+      }
     }
   },
   "agents": {
@@ -16147,6 +16254,9 @@
         },
         "discordBot": {
           "label": "Discord Bot"
+        },
+        "serviceStatus": {
+          "label": "Service Status"
         }
       },
       "sections": {

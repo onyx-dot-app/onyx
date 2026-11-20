@@ -10681,6 +10681,113 @@
         "saved": "Gruppeneinstellungen für {name} gespeichert.",
         "saveFailed": "Die Gruppeneinstellung konnte nicht gespeichert werden."
       }
+    },
+    "serviceStatus": {
+      "page": {
+        "description": "Aktuelle Ressourcennutzung und Zustand des Such-Clusters Ihrer Onyx-Instanz",
+        "refresh": "Aktualisieren",
+        "refreshFailed": "Der Clusterstatus konnte nicht aktualisiert werden. Die Seite zeigt das letzte Ergebnis.",
+        "loadFailed": "Der Status des Such-Clusters konnte nicht gelesen werden. Prüfen Sie, ob OpenSearch erreichbar ist."
+      },
+      "cluster": {
+        "title": "Such-Cluster - OpenSearch",
+        "status": "Cluster-Status",
+        "version": "OpenSearch {version}",
+        "health": "Status {health}",
+        "updated": "Aktualisiert {time}",
+        "dataNodes": "Datenknoten",
+        "shards": "Shards",
+        "shardLayout": "{primaries} × {copies}",
+        "copies": "Kopien",
+        "indexSize": "Indexgröße",
+        "chunks": "Chunks",
+        "healthGreen": "Grün: Alle Shard-Kopien sind zugewiesen.",
+        "healthYellow": "Gelb: Einige Replikat-Shards sind nicht zugewiesen. Die Suche funktioniert, aber der Ausfall eines Datenknotens kann Daten verlieren.",
+        "healthYellowSingleNode": "Gelb: Replikatkopien brauchen einen zweiten Datenknoten. Bei einem Cluster mit nur einem Datenknoten ist das normal, und die Suche funktioniert.",
+        "healthRed": "Rot: Einige primäre Shards sind nicht zugewiesen, daher kann ein Teil des Index nicht durchsucht werden."
+      },
+      "searches": {
+        "loadTitle": "Suchlast",
+        "loadUnit": "Aufrufe/s",
+        "timeTitle": "Suchlatenz",
+        "seconds": "{value} s",
+        "milliseconds": "{value} ms",
+        "loadFailed": "Die letzten Suchen konnten nicht gelesen werden.",
+        "p90Note": "(90. Perzentil)",
+        "p90Row": "p90 {value}",
+        "p10Row": "p10 {value}",
+        "minuteLabel": "{time}: p90 {p90}, p10 {p10}",
+        "rateTooltip": "{rate} Aufrufe/s",
+        "millisecondsUnit": "ms",
+        "secondsUnit": "s",
+        "failedInMinute": "{count, plural, one {# fehlgeschlagen} other {# fehlgeschlagen}}"
+      },
+      "nodes": {
+        "title": "Datenknoten",
+        "disk": "Festplattennutzung",
+        "vector": "Vektorspeicher",
+        "percent": "{value} %",
+        "usedOfTotal": "{used} / {total} {unit}",
+        "shards": "{count, plural, one {# Shard} other {# Shards}}",
+        "unnamed": "Knoten {number}",
+        "copyName": "OpenSearch-Knotennamen kopieren ({name})"
+      },
+      "indexes": {
+        "title": "Indizes",
+        "chunks": "Chunks",
+        "shards": "Shards",
+        "reindex": "Neuindizierung",
+        "detail": "Embedding-Modell · {dim} Dimensionen",
+        "deleted": "{percent} % gelöschte Chunks",
+        "detailQuantized": "Embedding-Modell · {dim} Dimensionen · {quantization}-Vektoren",
+        "reindexProgress": "{percent} % des aktuellen"
+      },
+      "issues": {
+        "title": "Probleme und Empfehlungen",
+        "none": "Keine Probleme gefunden.",
+        "criticalCount": "{count} kritisch",
+        "warningCount": "{count, plural, one {# Warnung} other {# Warnungen}}",
+        "nodeCount": "{count} Datenknoten",
+        "indexSettings": "Indexeinstellungen",
+        "sizingGuide": "Dimensionierungsleitfaden",
+        "clusterRed": {
+          "title": "Der Cluster-Status ist rot",
+          "description": "Einige primäre Shards sind nicht zugewiesen, daher kann ein Teil des Index nicht durchsucht werden. Prüfen Sie die OpenSearch-Protokolle."
+        },
+        "unassignedShards": {
+          "title": "{value, plural, one {# Shard-Kopie ist nicht zugewiesen} other {# Shard-Kopien sind nicht zugewiesen}}",
+          "description": "OpenSearch hat keinen Datenknoten, auf dem sie liegen können. Fügen Sie Datenknoten hinzu oder verringern Sie die Anzahl der Replikate."
+        },
+        "diskCritical": {
+          "title": "Festplatte bei {value} % auf {nodes}",
+          "description": "OpenSearch platziert ab 85 % keine Shards mehr auf einem Datenknoten. Fügen Sie Speicher oder Datenknoten hinzu."
+        },
+        "diskWarning": {
+          "title": "Festplatte bei {value} % auf {nodes}",
+          "description": "Eine Neuindizierung braucht Platz für einen zweiten Index. Fügen Sie Speicher oder Datenknoten hinzu."
+        },
+        "vectorCritical": {
+          "title": "Vektorspeicher bei {value} % auf {nodes}",
+          "description": "Die Vektoren passen nicht in den Speicher, daher liest die Suche sie von der Festplatte. Fügen Sie Speicher oder Datenknoten hinzu oder verwenden Sie eine kleinere Vektorquantisierung."
+        },
+        "vectorWarning": {
+          "title": "Vektorspeicher bei {value} % auf {nodes}",
+          "description": "Die Suche wird langsamer, wenn die Vektoren nicht in den Speicher passen. Fügen Sie Speicher oder Datenknoten hinzu oder verwenden Sie eine kleinere Vektorquantisierung."
+        },
+        "heap": {
+          "title": "JVM-Heap bei {value} % auf {nodes}",
+          "description": "OpenSearch kann Anfragen ablehnen, wenn der Heap voll ist. Fügen Sie Speicher oder Datenknoten hinzu."
+        },
+        "indexMissing": {
+          "title": "Der Suchindex fehlt",
+          "description": "OpenSearch hat keinen Index für die aktuellen Sucheinstellungen, daher liefert die Suche nichts. Prüfen Sie die OpenSearch-Protokolle und starten Sie dann eine Neuindizierung in den Indexeinstellungen."
+        },
+        "nodesUnanswered": {
+          "title": "{value, plural, one {# Datenknoten hat} other {# Datenknoten haben}} nicht geantwortet",
+          "description": "Der Status lässt aus, was diese Knoten nicht gemeldet haben, etwa ihren Speicherplatz und Arbeitsspeicher. Prüfen Sie, ob alle Datenknoten laufen, und aktualisieren Sie dann."
+        },
+        "dismiss": "Ausblenden"
+      }
     }
   },
   "agents": {
@@ -16147,6 +16254,9 @@
         },
         "discordBot": {
           "label": "Discord-Bot"
+        },
+        "serviceStatus": {
+          "label": "Dienststatus"
         }
       },
       "sections": {

@@ -10681,6 +10681,113 @@
         "saved": "已保存 {name} 的群组设置。",
         "saveFailed": "无法保存群组设置。"
       }
+    },
+    "serviceStatus": {
+      "page": {
+        "description": "Onyx 实例当前的资源使用情况和搜索集群健康状况",
+        "refresh": "刷新",
+        "refreshFailed": "无法刷新集群状态。页面显示的是上一次的结果。",
+        "loadFailed": "无法读取搜索集群状态。请检查 OpenSearch 是否可以访问。"
+      },
+      "cluster": {
+        "title": "搜索集群 - OpenSearch",
+        "status": "集群状态",
+        "version": "OpenSearch {version}",
+        "health": "状态 {health}",
+        "updated": "{time}更新",
+        "dataNodes": "数据节点",
+        "shards": "分片",
+        "shardLayout": "{primaries} × {copies}",
+        "copies": "副本",
+        "indexSize": "索引大小",
+        "chunks": "分块",
+        "healthGreen": "绿色：所有分片副本都已分配。",
+        "healthYellow": "黄色：部分副本分片未分配。搜索正常，但丢失数据节点可能导致数据丢失。",
+        "healthYellowSingleNode": "黄色：副本需要第二个数据节点。对于只有一个数据节点的集群，这是正常状态，搜索可以正常工作。",
+        "healthRed": "红色：部分主分片未分配，因此索引的一部分无法搜索。"
+      },
+      "searches": {
+        "loadTitle": "搜索负载",
+        "loadUnit": "次/秒",
+        "timeTitle": "搜索延迟",
+        "seconds": "{value} 秒",
+        "milliseconds": "{value} 毫秒",
+        "loadFailed": "无法读取最近的搜索。",
+        "p90Note": "(第 90 百分位)",
+        "p90Row": "p90 {value}",
+        "p10Row": "p10 {value}",
+        "minuteLabel": "{time}：p90 {p90}，p10 {p10}",
+        "rateTooltip": "{rate} 次/秒",
+        "millisecondsUnit": "毫秒",
+        "secondsUnit": "秒",
+        "failedInMinute": "{count, plural, other {# 次失败}}"
+      },
+      "nodes": {
+        "title": "数据节点",
+        "disk": "磁盘使用量",
+        "vector": "向量内存",
+        "percent": "{value}%",
+        "usedOfTotal": "{used} / {total} {unit}",
+        "shards": "{count, plural, other {# 个分片}}",
+        "unnamed": "节点 {number}",
+        "copyName": "复制 OpenSearch 节点名称 ({name})"
+      },
+      "indexes": {
+        "title": "索引",
+        "chunks": "分块",
+        "shards": "分片",
+        "reindex": "重建索引",
+        "detail": "嵌入模型 · {dim} 维",
+        "deleted": "已删除分块 {percent}%",
+        "detailQuantized": "嵌入模型 · {dim} 维 · {quantization} 向量",
+        "reindexProgress": "当前的 {percent}%"
+      },
+      "issues": {
+        "title": "问题和建议",
+        "none": "未发现问题。",
+        "criticalCount": "{count} 个严重问题",
+        "warningCount": "{count, plural, other {# 个警告}}",
+        "nodeCount": "{count} 个数据节点",
+        "indexSettings": "索引设置",
+        "sizingGuide": "容量规划指南",
+        "clusterRed": {
+          "title": "集群状态为红色",
+          "description": "部分主分片未分配，因此索引的一部分无法搜索。请检查 OpenSearch 日志。"
+        },
+        "unassignedShards": {
+          "title": "{value, plural, other {# 个分片副本未分配}}",
+          "description": "OpenSearch 没有可放置它们的数据节点。请添加数据节点或减少副本数量。"
+        },
+        "diskCritical": {
+          "title": "{nodes} 的磁盘使用率为 {value}%",
+          "description": "数据节点磁盘达到 85% 时，OpenSearch 会停止在其上放置分片。请添加存储或数据节点。"
+        },
+        "diskWarning": {
+          "title": "{nodes} 的磁盘使用率为 {value}%",
+          "description": "重建索引需要为第二个索引预留空间。请添加存储或数据节点。"
+        },
+        "vectorCritical": {
+          "title": "{nodes} 的向量内存使用率为 {value}%",
+          "description": "向量无法全部放入内存，因此搜索会从磁盘读取它们。请添加内存或数据节点，或使用更小的向量量化。"
+        },
+        "vectorWarning": {
+          "title": "{nodes} 的向量内存使用率为 {value}%",
+          "description": "当向量无法全部放入内存时，搜索会变慢。请添加内存或数据节点，或使用更小的向量量化。"
+        },
+        "heap": {
+          "title": "{nodes} 的 JVM 堆使用率为 {value}%",
+          "description": "堆满时，OpenSearch 可能会拒绝请求。请添加内存或数据节点。"
+        },
+        "indexMissing": {
+          "title": "搜索索引缺失",
+          "description": "OpenSearch 中没有当前搜索设置的索引，因此搜索没有结果。请检查 OpenSearch 日志，然后在索引设置中开始重新索引。"
+        },
+        "nodesUnanswered": {
+          "title": "{value, plural, other {# 个数据节点没有响应}}",
+          "description": "状态中缺少这些节点未报告的信息，例如磁盘和内存。请确认所有数据节点都在运行，然后刷新。"
+        },
+        "dismiss": "忽略"
+      }
     }
   },
   "agents": {
@@ -16147,6 +16254,9 @@
         },
         "discordBot": {
           "label": "Discord 机器人"
+        },
+        "serviceStatus": {
+          "label": "服务状态"
         }
       },
       "sections": {
