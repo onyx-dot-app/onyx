@@ -1,6 +1,7 @@
 import json
 from collections.abc import Iterator
 from unittest.mock import patch
+from uuid import UUID
 
 import pytest
 from litellm.exceptions import APIConnectionError, InternalServerError
@@ -744,6 +745,28 @@ def test_xml_without_a_recovered_call_stays_in_the_answer(
     )
     assert message.text == complete.text == text
     assert message.tool_calls == complete.tool_calls == []
+
+
+@pytest.mark.parametrize("reserved", [False, True])
+def test_text_recovery_honors_reserved_and_sibling_call_ids(reserved: bool) -> None:
+    # Recovery assigns a short random suffix. Exercise both collision cases.
+    request = GenerationRequest(
+        tools=[ToolDefinition(name="search", description="Search", parameters={})],
+        reserved_tool_call_ids=frozenset({"extracted_00000000"} if reserved else ()),
+        options=GenerationOptions(tool_choice=ToolChoiceOptions.REQUIRED),
+    )
+    payload = AssistantMessage(
+        content=[
+            TextContent(
+                text='<function_calls><invoke name="search"></invoke><invoke name="search"></invoke></function_calls>'
+            )
+        ]
+    )
+    with patch("onyx.llm.tool_parsing.uuid.uuid4", return_value=UUID(int=0)):
+        calls = recover_tool_calls(payload, request).tool_calls
+    assert len(calls) == 2
+    ids = {call.id for call in calls}
+    assert len(ids) == 2 and ids.isdisjoint(request.reserved_tool_call_ids)
 
 
 def test_non_string_json_names_do_not_block_xml_recovery() -> None:

@@ -29,6 +29,7 @@ from onyx.chat.stream_buffer import (
     _StreamStatus,
     read_stream_chunks,
 )
+from onyx.server.query_and_chat.acp_stream import acp_line
 from onyx.server.query_and_chat.models import (
     MessageResponseIDInfo,
     ModelResponseSlot,
@@ -41,7 +42,6 @@ from onyx.server.query_and_chat.streaming_models import (
     Packet,
     StreamingError,
 )
-from onyx.server.utils import get_json_line
 from onyx.utils.fleet_query_telemetry import QueryMode, QueryObservation
 from tests.unit.fakes import FakeCache
 
@@ -400,7 +400,7 @@ def test_concurrent_delivery_keeps_reader_and_cache_order(
     assert saved is not None
     assert saved.done
     assert "".join(saved.blocks) == "".join(
-        get_json_line(packet.model_dump()) for packet in (first, second)
+        acp_line(str(session_id), packet) for packet in (first, second)
     )
 
 
@@ -438,7 +438,7 @@ def test_initial_ids_precede_response_in_live_and_replayed_output(
     saved = read_stream_chunks(cache, session_id, _STREAM_ID, cursor=0)
     assert saved is not None and saved.done and not saved.gap
     assert "".join(saved.blocks) == "".join(
-        get_json_line(packet.model_dump()) for packet in packets
+        acp_line(str(session_id), packet) for packet in packets
     )
 
 
@@ -484,7 +484,7 @@ def test_final_replay_batch_and_live_completion_exclude_late_packets() -> None:
     assert list(output.reader) == [first]
     saved = read_stream_chunks(cache, session_id, _STREAM_ID, cursor=0)
     assert saved is not None and saved.done and not saved.gap
-    assert "".join(saved.blocks) == get_json_line(first.model_dump())
+    assert "".join(saved.blocks) == acp_line(str(session_id), first)
 
 
 def test_delayed_refresh_does_not_mark_stream_inactive() -> None:
@@ -571,10 +571,11 @@ def test_event_delivery_and_cache_writes_share_worker(
     assert len(workers) == 1
     assert get_ident() not in workers
     assert "".join(saved.blocks) == "".join(
-        get_json_line(
+        acp_line(
+            str(session_id),
             Packet(
                 placement=Placement(turn_index=0), obj=OverallStop(stop_reason=reason)
-            ).model_dump()
+            ),
         )
         for reason in ("first", "control", "second")
     )
@@ -619,7 +620,7 @@ def test_delivery_finish_drains_accepted_agent_events() -> None:
     saved = read_stream_chunks(cache, session_id, _STREAM_ID, cursor=0)
     assert saved is not None and saved.done and not saved.gap
     assert "".join(saved.blocks) == "".join(
-        get_json_line(packet.model_dump()) for packet in packets
+        acp_line(str(session_id), packet) for packet in packets
     )
 
 
@@ -711,7 +712,7 @@ def test_packet_bursts_flush_full_batches_before_the_timer(
     saved = read_stream_chunks(cache, session_id, _STREAM_ID, cursor=0)
     assert saved is not None and saved.done and not saved.gap
     assert "".join(saved.blocks) == "".join(
-        get_json_line(packet.model_dump()) for packet in packets
+        acp_line(str(session_id), packet) for packet in packets
     )
 
 
@@ -735,7 +736,7 @@ def test_pending_replay_retains_many_small_packets() -> None:
     saved = read_stream_chunks(cache, session_id, _STREAM_ID, cursor=0)
     assert saved is not None and saved.done and not saved.gap
     assert "".join(saved.blocks) == "".join(
-        get_json_line(packet.model_dump()) for packet in packets
+        acp_line(str(session_id), packet) for packet in packets
     )
 
 
@@ -749,7 +750,7 @@ def test_pending_replay_byte_limit_preserves_live_output(
     packet = Packet(
         placement=Placement(turn_index=0), obj=AgentResponseDelta(content="🙂")
     )
-    line = get_json_line(packet.model_dump())
+    line = acp_line(str(session_id), packet)
     monkeypatch.setattr(
         stream_buffer,
         "_REPLAY_BACKLOG_MAX_BYTES",
@@ -806,12 +807,12 @@ def test_replay_overflow_does_not_suppress_a_later_live_gap(
     monkeypatch.setattr(
         stream_buffer,
         "_REPLAY_BACKLOG_MAX_BYTES",
-        len(get_json_line(packet.model_dump()).encode("utf-8")),
+        len(acp_line(str(session_id), packet).encode("utf-8")),
     )
     for _ in range(2):
         output.publish(packet)
         assert next(output.reader) == packet
-    with patch("onyx.chat.stream_buffer.get_json_line") as serialize:
+    with patch("onyx.chat.stream_buffer.acp_line") as serialize:
         output.publish(packet)
         serialize.assert_not_called()
     assert next(output.reader) == packet
@@ -907,5 +908,5 @@ def test_completion_drains_delayed_events_before_closing_live_output(
     assert saved is not None and saved.done and not saved.gap
     assert list(output.reader) == ([] if detached else packets)
     assert "".join(saved.blocks) == "".join(
-        get_json_line(packet.model_dump()) for packet in packets
+        acp_line(str(session_id), packet) for packet in packets
     )

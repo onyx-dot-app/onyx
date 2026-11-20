@@ -1620,6 +1620,11 @@ def test_a_resumed_background_program_shows_its_next_request_in_its_saved_card()
         for packet in later
         if isinstance(packet.obj, ToolApprovalResolved)
     ] == [(card, SECOND_BACKGROUND_REQUEST_ID, "approved")]
+    for packet in later:
+        if packet.placement == card and isinstance(
+            packet.obj, (ToolApprovalRequest, ToolApprovalResolved)
+        ):
+            assert packet.acp_update and packet.acp_update.status is None
     # The ended card neither starts again nor ends again when the run ends.
     assert not [
         packet

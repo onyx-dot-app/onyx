@@ -4,6 +4,7 @@ the client. The client gets a stable error packet instead."""
 import asyncio
 import json
 from collections.abc import Iterator
+from typing import Literal
 from unittest.mock import Mock
 
 import pytest
@@ -59,8 +60,9 @@ def _collect(req: SendMessageRequest) -> list[str]:
 
 
 @pytest.mark.parametrize("multi_model", [False, True])
+@pytest.mark.parametrize("protocol_version", [1, 2])
 def test_unhandled_stream_error_is_sanitized(
-    monkeypatch: pytest.MonkeyPatch, multi_model: bool
+    monkeypatch: pytest.MonkeyPatch, multi_model: bool, protocol_version: Literal[1, 2]
 ) -> None:
     monkeypatch.setattr(chat_backend, "handle_stream_message_objects", _failing_stream)
     monkeypatch.setattr(chat_backend, "handle_multi_model_stream", _failing_stream)
@@ -68,6 +70,7 @@ def test_unhandled_stream_error_is_sanitized(
 
     req = SendMessageRequest(
         message="hello",
+        protocol_version=protocol_version,
         stream=True,
         llm_overrides=(
             [LLMOverride(model_version="a"), LLMOverride(model_version="b")]
@@ -81,6 +84,10 @@ def test_unhandled_stream_error_is_sanitized(
     assert _MARKER not in chunks[0]
     assert "secret-marker" not in chunks[0]
     packet = json.loads(chunks[0])
+    if protocol_version == 2:
+        assert packet["jsonrpc"] == "2.0"
+        assert packet["method"] == "_onyx/error"
+        packet = packet["params"]["packet"]
     assert packet["error_code"] == OnyxErrorCode.INTERNAL_ERROR.code
     assert packet["error"]
     assert packet["stack_trace"] is None

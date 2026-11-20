@@ -305,10 +305,14 @@ class ToolBatch:
             ]
         if len(found) < len(requests):
             return
-        self.run.resolve_tool_wait(call)
-        if isinstance(pending, PendingToolInput) and (
-            found[0].decision != InputDecision.APPROVE
-        ):
+        supplied_result = (
+            isinstance(pending, PendingToolInput)
+            and found[0].decision != InputDecision.APPROVE
+        )
+        self.run.resolve_tool_wait(
+            call, resumes_tool=not supplied_result and call.name in self.tools
+        )
+        if supplied_result:
             self.run.record_tool_results(
                 found[0].result
                 or ToolResult(content=DENIED_CALL_MESSAGE, is_error=True),

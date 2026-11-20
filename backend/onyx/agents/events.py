@@ -119,6 +119,8 @@ class InputEndedEvent(_MessageEvent):
     request: PendingToolInput
     answer: HumanToolAnswer | None
     nested_call: ToolCall | None = None
+    # The last input was applied and execution of this tool can continue.
+    resumes_tool: bool = False
 
 
 class ToolResultAmendedEvent(_MessageEvent):

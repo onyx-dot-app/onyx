@@ -32,7 +32,8 @@ You can receive a streaming response or one complete response.
 | `parent_message_id` | The ID of the parent message in the chat history. Omit it (or pass `-1`) to place the new message after the latest message in the session. Pass a specific message ID to branch from that point. <br/><br/>**Warning:** If set to `null`, the new message starts from the root of the session, as the first message. |
 | `chat_session_id` | To continue an existing conversation, pass the chat session ID. If left blank, Onyx creates a new chat session from `chat_session_info`. Pass only one of `chat_session_id` and `chat_session_info`. |
 | `chat_session_info` | Settings for a new chat session. They apply to every message in the session. Leave fields blank to use defaults. <br/><br/>• `persona_id` – The ID of the Agent to use. Defaults to `0`, the default Agent <br/>• `project_id` – ID of a Project if the chat should be scoped to a Project <br/>• `incognito` – Start the session in incognito mode. The request fails with an error when incognito is not available to the user. It is never silently downgraded to an ordinary chat <br/>• `incognito_session_id` – The session ID you already used when uploading files, so the new session owns those files. Ignored unless `incognito` is true |
-| `stream` | Defaults to `true`. If true, Onyx responds with an SSE stream of packets, the same set the Onyx UI uses. You assemble the answer, reasoning tokens, and tool calls from the streamed packets. If false, Onyx returns one `ChatFullResponse` JSON object. |
+| `stream` | Defaults to `true`. Onyx streams one JSON object per line. Set it to `false` for a single `ChatFullResponse` object. |
+| `protocol_version` | Defaults to `1`. Use `2` to receive ACP notifications for streamed answers, reasoning, and tool calls. |
 | `include_citations` | Defaults to `true`. If false, Onyx removes citation markers such as `[1]` from the answer text and does not emit `citation_info` packets. |
 | `additional_context` | A string of extra context injected into the LLM call for this request. The model sees it, but Onyx does **not store it** and it does not appear in chat history.<br></br>Use it for request-scoped information such as the user's current page URL or session metadata.<br></br>Pass `null` or omit the field to send no additional context. |
 | `origin` | Where the message comes from, for usage reporting. Set it to `api` for scripts and integrations. Other values: `webapp`, `chrome_extension`, `slackbot`, `widget`, `discordbot`, `mobile`. Defaults to `unset`. |
@@ -84,8 +85,18 @@ This request allows only web search and the `listOrders` Action of one Integrati
 
 ### Streaming Response
 
-Onyx returns different packet types in the streaming response, depending on what the Agent does.
-Each packet is one JSON object with a `type` field.
+With `protocol_version=2`, each line is a JSON-RPC notification.
+Read `params.update` on a `session/update` notification. An `agent_message_chunk` carries answer text in `content.text`.
+An `agent_thought_chunk` carries reasoning. Track `tool_call` and `tool_call_update` by `toolCallId`.
+Later updates can amend a tool result.
+A tool that waits for approval stays pending when the stream ends with `awaiting_user`.
+
+Onyx sends session IDs, citations, stop reasons, and stream errors as `_onyx/*` notifications.
+Read their payload from `params.packet`. For a multi-model response,
+`_meta.onyx.placement.model_index` on an update identifies the model.
+Pass `protocol_version=2` on the session history and resume requests to receive the same representation.
+
+The default streaming format uses the following packet types.
 
 See our
 [streaming_models.py](https://github.com/onyx-dot-app/onyx/blob/main/backend/onyx/server/query_and_chat/streaming_models.py)

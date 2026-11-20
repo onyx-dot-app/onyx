@@ -194,8 +194,7 @@ class SendMessageRequest(BaseModel):
     # When False, returns ChatFullResponse with complete data
     stream: bool = True
 
-    # The streamed wire format. 1 (default): chat's packets. 2: ACP updates
-    # (see acp_stream.py). Single-model streams only; others stay on 1.
+    # REST stream representation. Version 2 carries ACP JSON-RPC notifications.
     protocol_version: Literal[1, 2] = 1
 
     # When False, disables citation generation:

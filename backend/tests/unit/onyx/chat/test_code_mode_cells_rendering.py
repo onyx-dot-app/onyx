@@ -227,12 +227,24 @@ def test_cell_observations_and_closing_render_in_call_order(
     # end, as live does.
     projected = project_response(run.snapshot(), tool_ids={})
     assert projected.response is not None
-    replayed = replay_response(projected.response, {}, {}, {})
+    replayed = replay_response(projected.response, {}, {}, {}, acp_runs={})
     assert [
         (p.placement.turn_index, p.obj.status, p.obj.observation, p.obj.response_ended)
         for p in replayed
         if isinstance(p.obj, packets.CodeModeDelta) and p.obj.status is not None
     ] == finals
+    for stream in (live, replayed):
+        updates = [p.acp_update for p in stream if p.acp_update is not None]
+        # The cell's late termination amends the same wait call. Repeated
+        # observations of an inner call also retain its original identity.
+        for call, status in (
+            ("exec", "completed"),
+            ("wait", "failed"),
+            ("exec%3A0", "completed"),
+        ):
+            seen = [u for u in updates if u.tool_call_id.endswith("/" + call)]
+            assert [u.session_update for u in seen].count("tool_call") == 1
+            assert [u.status for u in seen if u.status][-1] == status
     replayed_wait = [p for p in replayed if p.placement.turn_index == 1]
     for card in (wait_card, replayed_wait):
         assert [

@@ -3,9 +3,11 @@
 from collections.abc import Mapping
 from typing import Literal
 
+from acp.schema import ToolKind
 from pydantic import BaseModel, JsonValue, TypeAdapter, ValidationError
 from typing_extensions import override
 
+from onyx.agents.acp import AcpToolScope, ToolActivity
 from onyx.agents.events import (
     InputEndedEvent,
     InputRequiredEvent,
@@ -127,6 +129,19 @@ EXEC_TOOL_NAMES = frozenset({ExecCommandTool.NAME, WriteStdinTool.NAME})
 # Tools whose calls render as a patch card and end with apply_patch_end.
 PATCH_TOOL_NAMES = frozenset({ApplyPatchTool.NAME, EditTool.NAME, WriteTool.NAME})
 
+_ACP_TOOL_KINDS: dict[str, ToolKind] = {
+    SearchTool.NAME: "search",
+    WebSearchTool.NAME: "search",
+    PostgresTool.NAME: "search",
+    OpenURLTool.NAME: "fetch",
+    FileReaderTool.NAME: "read",
+    MemoryTool.NAME: "edit",
+    **dict.fromkeys(
+        CODE_ARGUMENT_TOOLS | EXEC_TOOL_NAMES | CODE_MODE_TOOL_NAMES, "execute"
+    ),
+    **dict.fromkeys(PATCH_TOOL_NAMES, "edit"),
+}
+
 _STRING = TypeAdapter(str)
 _OPTIONAL_STRING = TypeAdapter(str | None)
 _INT = TypeAdapter(int)
@@ -167,7 +182,9 @@ class MessageRenderer:
         documents: Mapping[str, SearchDoc],
         layout: ResponseLayout,
         parent: Placement | None = None,
+        acp_tools: AcpToolScope | None = None,
     ) -> None:
+        self.acp_tools = acp_tools
         self.settings = settings
         self.layout = layout
         self.parent = parent
@@ -332,14 +349,18 @@ class MessageRenderer:
         call.arguments = arguments
         if not deltas:
             return []
-        return [
-            packets.Packet(
-                placement=self.tool_placement(call.id),
-                obj=packets.ToolCallArgumentDelta(
-                    tool_type=call.name, argument_deltas=deltas
-                ),
+        packet = packets.Packet(
+            placement=self.tool_placement(call.id),
+            obj=packets.ToolCallArgumentDelta(
+                tool_type=call.name, argument_deltas=deltas
+            ),
+        )
+        if self.acp_tools is not None:
+            run, message_id = self.acp_tools
+            packet.acp_update = run.report(
+                message_id, call.id, call.name, "execute", activity="preparing"
             )
-        ]
+        return [packet]
 
     def complete(self, message: AssistantMessage) -> list[packets.Packet]:
         if self._finished:
@@ -522,7 +543,12 @@ class ToolRenderer:
         placement: Placement,
         tool_id: int | None = None,
         display_name: str | None = None,
+        acp_tools: AcpToolScope | None = None,
+        *,
+        nested: bool = False,
     ) -> None:
+        self.acp_tools = acp_tools
+        self.nested = nested
         self.call = call
         self.placement = placement
         self.tool_id = tool_id
@@ -536,6 +562,52 @@ class ToolRenderer:
         self._files: set[str] = set()
         self._started = False
         self._finished = False
+
+    def present(
+        self,
+        output: list[packets.Packet],
+        *,
+        activity: ToolActivity = "progress",
+        is_output: bool = False,
+    ) -> list[packets.Packet]:
+        """Attach SDK lifecycle and explicitly public content to the call's packets."""
+        if self.acp_tools is None:
+            return output
+        run, message_id = self.acp_tools
+        for i, packet in enumerate(output):
+            if packet.acp_update is not None or packet.placement != self.placement:
+                continue
+            packet.acp_update = run.report(
+                message_id,
+                self.call.id,
+                self.display_name or self.call.name,
+                _ACP_TOOL_KINDS.get(self.call.name, "other"),
+                activity=activity if i == len(output) - 1 else "progress",
+                public_output=packet.obj if is_output else None,
+                nested=self.nested,
+            )
+        return output
+
+    def input_packet(
+        self,
+        obj: packets.ToolApprovalRequest
+        | packets.ToolApprovalResolved
+        | packets.ToolQuestionRequest
+        | packets.ToolQuestionResolved,
+        *,
+        resumes_tool: bool = False,
+    ) -> packets.Packet:
+        packet = packets.Packet(placement=self.placement, obj=obj)
+        activity: ToolActivity = "progress"
+        if not self._finished:
+            if resumes_tool:
+                activity = "started"
+            elif isinstance(obj, packets.ToolQuestionRequest) or (
+                isinstance(obj, packets.ToolApprovalRequest) and obj.agent_name is None
+            ):
+                activity = "waiting"
+        self.present([packet], activity=activity)
+        return packet
 
     def consume(
         self,
@@ -572,7 +644,12 @@ class ToolRenderer:
                 approval_id=event.request.request_id,
                 outcome=approval_outcome(event.answer),
             )
-        return [packets.Packet(placement=self.placement, obj=obj)]
+        return [
+            self.input_packet(
+                obj,
+                resumes_tool=isinstance(event, InputEndedEvent) and event.resumes_tool,
+            )
+        ]
 
     def start(self) -> list[packets.Packet]:
         if self._started:
@@ -613,7 +690,10 @@ class ToolRenderer:
                     },
                 ),
             )
-        return [packets.Packet(placement=self.placement, obj=obj) for obj in objects]
+        return self.present(
+            [packets.Packet(placement=self.placement, obj=obj) for obj in objects],
+            activity="started",
+        )
 
     def _start_objects(self, args: dict[str, JsonValue]) -> list[packets.PacketObj]:
         """The tool's own start packets; empty for the generic tool display.
@@ -756,7 +836,7 @@ class ToolRenderer:
         """Render progress; progress after the call completes is dropped."""
         if self._finished:
             return []
-        return self._detail_packets(details, content)
+        return self.present(self._detail_packets(details, content), is_output=True)
 
     def _detail_packets(
         self, details: BaseModel | None, content: str
@@ -937,10 +1017,11 @@ class ToolRenderer:
         if self._finished:
             return []
         output = self.start()
-        output.extend(self._result_packets(result))
+        output.extend(self.present(self._result_packets(result), is_output=True))
         self._finished = True
+        end: list[packets.Packet] = []
         if result is not None and isinstance(result.details, ToolExecutionError):
-            output.append(
+            end.append(
                 packets.Packet(
                     placement=self.placement,
                     obj=packets.PacketException(
@@ -948,9 +1029,8 @@ class ToolRenderer:
                     ),
                 )
             )
-        output.append(
-            packets.Packet(placement=self.placement, obj=packets.SectionEnd())
-        )
+        end.append(packets.Packet(placement=self.placement, obj=packets.SectionEnd()))
+        output.extend(self.present(end, activity=result))
         if result is not None:
             output.extend(self._amendment_packets(result))
         return output
@@ -1002,11 +1082,8 @@ class ToolRenderer:
         return self._amendment_packets(result)
 
     def _amendment_packets(self, result: ToolResultFields) -> list[packets.Packet]:  # noqa: ARG002
-        """What a release hook added to the result after the call ended.
-
-        The generic display cannot tell an amendment apart from the result it
-        replaces, so it adds nothing; the saved result shows on replay.
-        """
+        # The generic display cannot tell an amendment apart from the result
+        # it replaces. The saved result shows on replay.
         return []
 
 
@@ -1037,7 +1114,12 @@ class QuestionToolRenderer(ToolRenderer):
             obj = question_resolved(event.request.request_id, event.answer)
         else:
             return super().consume(event)
-        return [packets.Packet(placement=self.placement, obj=obj)]
+        return [
+            self.input_packet(
+                obj,
+                resumes_tool=isinstance(event, InputEndedEvent) and event.resumes_tool,
+            )
+        ]
 
     @override
     def start(self) -> list[packets.Packet]:
@@ -1055,7 +1137,10 @@ class QuestionToolRenderer(ToolRenderer):
         if self._finished:
             return []
         self._finished = True
-        return [packets.Packet(placement=self.placement, obj=packets.SectionEnd())]
+        return self.present(
+            [packets.Packet(placement=self.placement, obj=packets.SectionEnd())],
+            activity=result,
+        )
 
 
 def _stored_keys(window: CellWindow) -> list[str] | None:
@@ -1084,8 +1169,9 @@ class CodeModeRenderer(ToolRenderer):
         placement: Placement,
         tool_id: int | None = None,
         display_name: str | None = None,
+        acp_tools: AcpToolScope | None = None,
     ) -> None:
-        super().__init__(call, placement, tool_id, display_name)
+        super().__init__(call, placement, tool_id, display_name, acp_tools)
         self._children: dict[int, ToolRenderer] = {}
         self._stdout = ""
 
@@ -1137,6 +1223,8 @@ class CodeModeRenderer(ToolRenderer):
                 self.placement.model_copy(update={"sub_turn_index": call.index}),
                 call.tool_id,
                 call.display_name,
+                self.acp_tools,
+                nested=True,
             )
             self._children[call.index] = child
         return child
@@ -1222,14 +1310,10 @@ class CodeModeRenderer(ToolRenderer):
 
     @override
     def _amendment_packets(self, result: ToolResultFields) -> list[packets.Packet]:
-        """The cell's closing record: what the cell did after the observation, up
-        to the end of the response."""
         details = result.details
-        closing = (
-            details.closing if isinstance(details, CodeModeExecutionResult) else None
-        )
-        if closing is None:
+        if not isinstance(details, CodeModeExecutionResult) or details.closing is None:
             return []
+        closing = details.closing
         output = [
             packet for call in closing.calls for packet in self._complete_child(call)
         ]
@@ -1254,7 +1338,13 @@ class CodeModeRenderer(ToolRenderer):
                 ),
             )
         )
-        return output
+        return self.present(
+            output,
+            # The observation originally returned to the model. The closing
+            # record supplies the program outcome after that return.
+            activity=result if closing.status == "completed" else "amended_failure",
+            is_output=True,
+        )
 
 
 def tool_renderer(
@@ -1262,6 +1352,7 @@ def tool_renderer(
     placement: Placement,
     tool_id: int | None = None,
     display_name: str | None = None,
+    acp_tools: AcpToolScope | None = None,
 ) -> ToolRenderer:
     """The renderer of a tool call: a code mode card, a question card, or the
     generic tool display."""
@@ -1272,4 +1363,4 @@ def tool_renderer(
         if call.name in QUESTION_TOOL_NAMES
         else ToolRenderer
     )
-    return renderer(call, placement, tool_id, display_name)
+    return renderer(call, placement, tool_id, display_name, acp_tools)

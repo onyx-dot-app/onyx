@@ -129,18 +129,18 @@ model column. It is `None` on packets that no `Emitter` tagged, such as
 heartbeats. `chat/renderer.py:ResponseLayout.next_section` hands out turn and
 sub-turn indexes.
 
-**The v2 wire.** A client that sends `protocol_version=2` gets the same
-stream as ACP updates (`backend/onyx/server/query_and_chat/acp_stream.py:ChatAcpTranslator`).
-Text and reasoning become message and thought chunks. A tool's start packet
-opens a `tool_call`, later packets at its placement are updates that carry the
-v1 packet in `_meta.onyx.packet`, and `section_end` closes it, `failed` when an
-error or a result reported failure. `stop` closes the calls still open
-before its `_onyx/stop` notification: `failed` when the user stopped (with
-`cancelled`) or a deadline cut them off (`timed_out`), otherwise `completed`.
-A stream that ends on an error closes them as `failed` before its
-`_onyx/error` notification.
-`message_start` and every packet outside a call go out as `_onyx/<type>`
-notifications, so no v1 data is lost. v1 stays the default.
+**The v2 wire.** Clients can request `protocol_version=2` on send, resume,
+and session history. Each frame is an ACP JSON-RPC notification. Text and reasoning
+use the same visible, citation-processed content as the saved response. SDK tool
+identity uses the run, accepted assistant message, and call IDs. A program's inner calls
+keep their run-scoped IDs across cell observations. The SDK's `AcpRunTools.report` derives tool
+status from an execution result, an interrupted call, or an input wait. Chat supplies
+public result details and late cell failures. `Placement` routes display details to the card.
+A stop while waiting for input ends delivery and leaves the call pending.
+Chat controls, IDs, and stream errors use `_onyx/*` methods with the existing object
+in `params.packet`. New runs buffer ACP frames, including scheduled and resumed turns.
+Resume converts older buffers at their original cursor boundaries. REST callers that
+omit the version receive the v1 packet representation.
 
 **Packet families.**
 `backend/onyx/server/query_and_chat/streaming_models.py:StreamingType` holds every type string, and `PacketObj` is the union that `Packet.obj` is

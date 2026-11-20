@@ -940,7 +940,7 @@ def test_interrupted_python_arguments_close_the_live_code_card(
     tool_finished: bool,
 ) -> None:
     output: list[Packet] = []
-    presenter = ResponsePresenter(_emitter(output))
+    presenter = ResponsePresenter(Emitter(output.append))
     call = ToolCall(
         id="python",
         name=PythonTool.NAME,
@@ -993,6 +993,13 @@ def test_interrupted_python_arguments_close_the_live_code_card(
             )
         )
     presenter.consume(AgentEndEvent(run_id="r", outcome=RunStatus.CANCELLED))
+    statuses = [
+        p.acp_update.status
+        for p in output
+        if p.acp_update is not None and p.acp_update.status is not None
+    ]
+    assert statuses[0] == "pending"
+    assert statuses[-1] == ("completed" if tool_finished else "failed")
     replay = replay_response(
         ResponseRecord(
             run_id="r",
