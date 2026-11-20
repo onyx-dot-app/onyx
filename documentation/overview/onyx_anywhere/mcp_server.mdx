@@ -167,7 +167,7 @@ and context expansion.
 | `query` | string | Yes | The question or search query. |
 | `source_types` | string array | No | Connector identifiers, such as `github` or `google_drive`. |
 | `document_set_names` | string array | No | Names of accessible document sets. |
-| `tags` | object array | No | Metadata pairs, such as `{"tag_key": "assignee", "tag_value": "Jane Doe"}`. Keeps documents that match at least one pair. |
+| `tags` | object array | No | Metadata pairs, such as `{"tag_key": "assignee", "tag_value": "Jane Doe"}`. Keeps documents that match at least one pair. Federated sources, such as Slack search, are not searched when you set tags. |
 | `time_cutoff` | string | No | ISO 8601 timestamp. Keeps documents updated on or after this time. Include a timezone. |
 | `skip_query_expansion` | boolean | No | Defaults to `false`. Set `true` to bypass query expansion. |
 | `agent` | string | No | Name of an accessible Onyx agent whose knowledge scope and model the search should use. |

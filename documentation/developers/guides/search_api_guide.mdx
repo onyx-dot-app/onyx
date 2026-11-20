@@ -36,7 +36,7 @@ The request needs nothing but a query. Everything else narrows the search or cha
 | `query` | The query to search for. Between 1 and 2048 characters. |
 | `sources` | Restrict results to these connector source types, e.g. `["slack", "google_drive"]`. |
 | `document_sets` | Restrict results to documents in these document sets, by name. |
-| `tags` | Restrict results to documents carrying at least one of these metadata tags, as a list of `{"tag_key": ..., "tag_value": ...}` objects. |
+| `tags` | Restrict results to documents carrying at least one of these metadata tags, as a list of `{"tag_key": ..., "tag_value": ...}` objects. Federated sources, such as Slack search, cannot apply tags, so a search with tags does not include them. |
 | `time_cutoff` | ISO 8601 timestamp. Only documents updated on or after this moment are returned. Timestamps without a timezone are treated as UTC. |
 | `persona_id` | Search as an Agent. The Agent's document sets, attached documents and search start date apply on top of the other filters, and its LLM is used for query expansion. |
 | `provider` / `model` | The LLM used for query expansion and section selection. Both must be sent together, and the caller must have access to the provider. Defaults to the Agent's LLM, or the deployment default. |
