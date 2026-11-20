@@ -1011,6 +1011,15 @@
     }
   },
   "contextual": {
-    "options": []
+    "options": [
+      "copy",
+      "view",
+      "chatgpt",
+      "claude",
+      "mcp",
+      "add-mcp",
+      "cursor",
+      "vscode"
+    ]
   }
 }
