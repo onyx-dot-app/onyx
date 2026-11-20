@@ -651,12 +651,23 @@ def test_permission_changes_show_in_the_access_and_in_delta(
     assert changed[0]["shared"] == {"scope": "users"}
     assert changed[0]["@microsoft.graph.sharedChanged"] == "True"
 
+    before_restore = time.strftime(
+        "%Y-%m-%dT%H:%M:%S+00:00", time.gmtime(time.time() - 1)
+    )
     mock.set_permissions(item_id=inheriting, inherit=True)
     restored, _ = _delta_pages(mock, delta_link, headers=prefer)
     assert mock.describe_file(inheriting)["has_unique_permissions"] is False
     assert [item["id"] for item in restored] == [inheriting]
     # Graph gives an empty facet to an item whose sharing changed to inherited.
     assert restored[0]["shared"] == {}
+
+    # A time cursor shows the same sharing change.
+    since_time, _ = _delta_pages(
+        mock, f"{path}?token={before_restore}".replace("+", "%2B"), headers=prefer
+    )
+    by_time = [item for item in since_time if item["id"] == inheriting]
+    assert by_time[0]["shared"] == {}
+    assert by_time[0]["@microsoft.graph.sharedChanged"] == "True"
 
 
 def test_stats_count_the_calls_and_reset(mock_sharepoint: MockSharepoint) -> None:
