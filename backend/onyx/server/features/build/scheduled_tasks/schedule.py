@@ -232,14 +232,33 @@ def offset_seconds(task_id: UUID) -> int:
     return task_id.int % SCHEDULED_TASK_FIRE_WINDOW_SECONDS
 
 
-def compute_next_dispatch_at(cron: str, after: datetime, task_id: UUID) -> datetime:
+def compute_next_dispatch_at(
+    cron: str,
+    after: datetime,
+    task_id: UUID,
+    handled_dispatch_at: datetime | None = None,
+) -> datetime:
     """The next fire of ``cron`` plus the task's offset, strictly after ``after``.
 
     Shifting ``after`` back by the offset keeps every fire, even when the
-    offset is longer than the cron interval.
+    offset is longer than the cron interval. ``handled_dispatch_at`` is the
+    dispatch time that just fired; its cron fire is never chosen again, also
+    when it was saved with another offset (an older row, or a changed window).
     """
     offset = timedelta(seconds=offset_seconds(task_id))
-    return compute_next_run_at(cron, datetime_to_utc(after) - offset) + offset
+    floor = datetime_to_utc(after) - offset
+    if handled_dispatch_at is not None:
+        handled = datetime_to_utc(handled_dispatch_at)
+        handled_fire = handled - offset
+        if compute_next_run_at(cron, handled_fire - timedelta(seconds=1)) != (
+            handled_fire
+        ):
+            # Saved with another offset: the fire is the last one at or before it.
+            handled_fire = croniter(cron, handled + timedelta(seconds=1)).get_prev(
+                datetime
+            )
+        floor = max(floor, datetime_to_utc(handled_fire))
+    return compute_next_run_at(cron, floor) + offset
 
 
 def next_n_fires(

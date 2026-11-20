@@ -144,6 +144,8 @@ OpenAPI integrations, not API apps without an OpenAPI tool.
    `SCHEDULED_RUN_QUEUE_RESIDENCY_SECONDS` (3 h), which is also the
    stuck-queued threshold of both sweepers. The sweepers measure the queue age
    from `started_at`, so a fire that sends a QUEUED run again resets it.
+   `find_stuck_runs` locks its candidates (`SKIP LOCKED`), so a sweep cannot
+   fail a run that a fire requeues at the same time.
 4. `link-session-before-turn` **The response is the run's source of truth.**
    Write run status only through `sync_chat_run__no_commit` or a cancel.
    The turn can end on any API server after an approval, so nothing at the

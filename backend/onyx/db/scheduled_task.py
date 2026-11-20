@@ -303,7 +303,9 @@ def advance_next_run_at(
 
     Returns the new ``next_run_at`` (UTC).
     """
-    next_run_at = compute_next_dispatch_at(task.cron_expression, now, task.id)
+    next_run_at = compute_next_dispatch_at(
+        task.cron_expression, now, task.id, handled_dispatch_at=task.next_run_at
+    )
     task.next_run_at = next_run_at
     db_session.flush()
     return next_run_at
@@ -565,14 +567,18 @@ def find_stuck_runs(
     now: datetime | None = None,
 ) -> list[ScheduledTaskRun]:
     """QUEUED runs older than ``queued_older_than``: the worker died between
-    dispatch and pick-up, or the message expired."""
+    dispatch and pick-up, or the message expired. Locked, so a dispatch tick
+    cannot requeue a run between this read and its failure; a run that a tick
+    holds is left for the next sweep."""
     cutoff = (now or datetime.now(tz=timezone.utc)) - queued_older_than
     return list(
         db_session.scalars(
-            select(ScheduledTaskRun).where(
+            select(ScheduledTaskRun)
+            .where(
                 ScheduledTaskRun.status == ScheduledTaskRunStatus.QUEUED,
                 ScheduledTaskRun.started_at < cutoff,
             )
+            .with_for_update(skip_locked=True)
         )
     )
 

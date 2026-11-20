@@ -67,11 +67,12 @@ def _dispatches(
     """Advance the way the dispatcher does: from the moment the run is due."""
     fires: list[datetime] = []
     after = start
+    handled: datetime | None = None
     for _ in range(count):
-        nxt = compute_next_dispatch_at(cron, after, task_id)
+        nxt = compute_next_dispatch_at(cron, after, task_id, handled)
         assert nxt > after
         fires.append(nxt)
-        after = nxt
+        after = handled = nxt
     return fires
 
 
@@ -100,3 +101,44 @@ def test_the_next_dispatch_is_always_after_now(cron: str) -> None:
         for second in range(0, 900, 7):
             after = base + timedelta(seconds=second)
             assert compute_next_dispatch_at(cron, after, task_id) > after
+
+
+# offset_seconds(UUID(int=180)) == 180 with the default 300 s window.
+_OFFSET_180 = UUID(int=180)
+
+
+@pytest.mark.parametrize(
+    ("cron", "handled", "expected"),
+    [
+        # A row saved without an offset fired at its cron time.
+        (
+            "0 9 * * *",
+            datetime(2026, 5, 25, 9, 0, tzinfo=timezone.utc),
+            datetime(2026, 5, 26, 9, 3, tzinfo=timezone.utc),
+        ),
+        # A row saved with another offset (the window changed).
+        (
+            "0 9 * * *",
+            datetime(2026, 5, 25, 9, 0, 40, tzinfo=timezone.utc),
+            datetime(2026, 5, 26, 9, 3, tzinfo=timezone.utc),
+        ),
+        # A row saved with this offset.
+        (
+            "0 9 * * *",
+            datetime(2026, 5, 25, 9, 3, tzinfo=timezone.utc),
+            datetime(2026, 5, 26, 9, 3, tzinfo=timezone.utc),
+        ),
+        (
+            "* * * * *",
+            datetime(2026, 5, 25, 9, 3, tzinfo=timezone.utc),
+            datetime(2026, 5, 25, 9, 4, tzinfo=timezone.utc),
+        ),
+    ],
+)
+def test_a_handled_fire_does_not_fire_again(
+    cron: str, handled: datetime, expected: datetime
+) -> None:
+    with patch.object(schedule, "SCHEDULED_TASK_FIRE_WINDOW_SECONDS", 300):
+        assert offset_seconds(_OFFSET_180) == 180
+        after = handled + timedelta(seconds=5)
+        assert compute_next_dispatch_at(cron, after, _OFFSET_180, handled) == expected

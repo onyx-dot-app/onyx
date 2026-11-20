@@ -34,6 +34,7 @@ from onyx.db.chat import (
     delete_chat_session,
     get_chat_sessions_by_user,
 )
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import (
     IntegrationActionPolicyValue,
     PluginInstallationPolicy,
@@ -53,8 +54,10 @@ from onyx.db.models import (
 )
 from onyx.db.scheduled_task import (
     create_scheduled_task,
+    find_stuck_runs,
     insert_run,
     mark_run_status,
+    requeue_queued_run__no_commit,
     sync_chat_run__no_commit,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -685,3 +688,35 @@ def test_a_fire_skips_while_a_prior_run_is_running(
     assert skipped.status == ScheduledTaskRunStatus.SKIPPED
     assert skipped.skip_reason == ScheduledTaskSkipReason.PRIOR_IN_FLIGHT
     assert sent == []
+
+
+def test_the_stuck_sweep_skips_a_run_that_a_fire_is_requeuing(
+    db_session: Session,
+    owner: User,
+    cleanup: list[int],  # noqa: ARG001
+) -> None:
+    task = _task(db_session, owner)
+    run = insert_run(
+        db_session=db_session,
+        task_id=task.id,
+        trigger_source=ScheduledTaskTriggerSource.SCHEDULED,
+    )
+    run.started_at = datetime.now(timezone.utc) - timedelta(
+        seconds=RUN_EXPIRES_SECONDS + 60
+    )
+    db_session.commit()
+    stuck_after = timedelta(seconds=RUN_EXPIRES_SECONDS)
+
+    # A dispatch tick holds the run's lock while it requeues it.
+    with get_session_with_current_tenant() as dispatch_session:
+        requeue_queued_run__no_commit(
+            dispatch_session, task.id, datetime.now(timezone.utc)
+        )
+        stuck = find_stuck_runs(db_session=db_session, queued_older_than=stuck_after)
+        assert run.id not in {candidate.id for candidate in stuck}
+        db_session.rollback()
+        dispatch_session.commit()
+
+    stuck = find_stuck_runs(db_session=db_session, queued_older_than=stuck_after)
+    assert run.id not in {candidate.id for candidate in stuck}
+    db_session.rollback()
