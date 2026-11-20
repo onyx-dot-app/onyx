@@ -114,6 +114,9 @@ def search_chunks(
             source_types=list(source_filters) if source_filters else None,
             document_set_names=query_request.filters.document_set,
         )
+    # Federated sources cannot apply tag filters.
+    if query_request.filters.tags:
+        federated_retrieval_infos = []
 
     federated_sources = {
         federated_retrieval_info.source.to_non_federated_source()

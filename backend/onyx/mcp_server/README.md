@@ -127,7 +127,9 @@ Most MCP clients support HTTP transport with custom headers. Refer to your clien
 The server provides three tools for searching and retrieving information:
 
 1. `search_indexed_documents`
-Search the user's private knowledge base indexed in Onyx. Returns ranked documents with content snippets, scores, and metadata.
+Search the user's private knowledge base indexed in Onyx. Returns ranked documents with content and, when the source supplies it, `metadata` such as a Jira reporter or assignee. The result is one JSON text block, with no `structuredContent` copy.
+
+Pass `tags` (a list of `{"tag_key", "tag_value"}` pairs) to keep documents that match at least one pair.
 
 Pass `agent` with an agent name to run the search as that Onyx agent. The search then applies the agent's knowledge scope (document sets, attached documents, start date) and its configured model. With `retrieval_only`, the search uses the agent's knowledge scope and calls no model. An unresolvable name returns an error listing the agents available to the user, so no lookup call is needed first.
 
@@ -146,7 +148,7 @@ Retrieve the complete text content from specific web URLs. Useful for fetching f
 ### Resources
 
 1. `indexed_sources`
-Lists all document sources currently indexed in the tenant (e.g., `"confluence"`, `"github"`). Use these values to filter results when calling `search_indexed_documents`.
+Lists all document sources currently indexed in the tenant (e.g., `"confluence"`, `"github"`), plus `"ingestion_api"` once documents were sent through the Ingestion API. Use these values to filter results when calling `search_indexed_documents`.
 
 2. `document_sets`
 Lists the Document Sets accessible to the user. Use the returned `name` values with the `document_set_names` filter of `search_indexed_documents`.
