@@ -105,15 +105,17 @@ function SkillRow({
               year: "numeric",
             });
   const source =
-    group === "mine"
-      ? t("source.mine")
-      : group === "organization"
-        ? t("source.organization")
-        : group === "builtin"
-          ? t("source.builtin")
-          : skill.owner
-            ? t("source.sharedBy", { email: skill.owner.email })
-            : t("source.shared");
+    group === "marketplace" && skill.marketplace
+      ? t("source.marketplace", { name: skill.marketplace.name })
+      : group === "mine"
+        ? t("source.mine")
+        : group === "organization"
+          ? t("source.organization")
+          : group === "builtin"
+            ? t("source.builtin")
+            : skill.owner
+              ? t("source.sharedBy", { email: skill.owner.email })
+              : t("source.shared");
   const menu: DropdownMenuItem[] = [
     ...(skill.can_toggle
       ? [

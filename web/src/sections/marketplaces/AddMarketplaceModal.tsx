@@ -128,6 +128,13 @@ function AddMarketplaceForm({
         onClose={disabled ? undefined : onClose}
       />
       <Modal.Body padding={2}>
+        {error && (
+          <Section role="alert" height="auto" alignItems="start">
+            <Text as="p" font="secondary-body" color="status-error-05">
+              {error}
+            </Text>
+          </Section>
+        )}
         {preview ? (
           <>
             {isGlobalHolder && preview.status === "complete" && (
@@ -233,13 +240,6 @@ function AddMarketplaceForm({
               </Text>
             </Section>
           </Card>
-        )}
-        {error && (
-          <Section role="alert" height="auto" alignItems="start">
-            <Text as="p" font="secondary-body" color="status-error-05">
-              {error}
-            </Text>
-          </Section>
         )}
       </Modal.Body>
       <Modal.Footer>
