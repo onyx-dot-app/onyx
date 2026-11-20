@@ -192,7 +192,11 @@ preview.
    read; indexing does not.**
    `server/features/projects/projects_file_utils.py:categorize_uploaded_files` rejects a file with
    empty extracted text, except a PDF or DOCX with embedded images when image
-   analysis is on. `file_processing/extract_file_text.py:_extract_text_and_images`
+   analysis is on. A code or script file
+   (`file_processing/file_types.py:OnyxFileExtensions.SANDBOX_ONLY_EXTENSIONS`,
+   for example `.py`, `.ts`, `.sh`) must be text. Upload marks it `SKIPPED`, so
+   it is never indexed. The sets that connectors index do not include these
+   extensions. `file_processing/extract_file_text.py:_extract_text_and_images`
    catches every parser error and returns empty text. A parser crash during
    indexing can therefore give a `COMPLETED` file with no content, not
    `FAILED`: the chunker emits one empty chunk for an empty document

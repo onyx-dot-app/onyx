@@ -95,7 +95,10 @@ leaves it out. A project-only search (`project_id_filter` set,
 
 **Files are indexed at upload, not on overflow.** Each project file is indexed
 when it is uploaded, whatever the project size. Upload marks a spreadsheet
-over the token limit `SKIPPED`, and it is not indexed. A project that grows
+over the token limit `SKIPPED`, and it is not indexed. Upload also marks every
+code file (`OnyxFileExtensions.SANDBOX_ONLY_EXTENSIONS`) `SKIPPED`. Search cannot
+find these files, so on overflow they are listed for tools with the
+metadata-only files. A project that grows
 past the limit, or a switch to a model with a smaller context, needs no new
 indexing. Chunks carry the ids of the projects that hold the file. When
 `DISABLE_VECTOR_DB` is set, overflow files are listed for `FileReaderTool`

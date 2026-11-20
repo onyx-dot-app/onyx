@@ -26,7 +26,7 @@ Variables from one run are not available in the next run unless the model writes
 Onyx copies these files into the working directory of each code run:
 
 - All files that the user attaches to the chat.
-- Word (`.docx`), PowerPoint (`.pptx`), Excel (`.xlsx`, `.xlsm`), and CSV files in the Agent's
+- Word (`.docx`), PowerPoint (`.pptx`), Excel (`.xlsx`, `.xlsm`), CSV, and code files in the Agent's
   [knowledge](/admins/agents/overview) or in the chat's Project.
 
 Onyx copies the original file, not its extracted text. The code can open a Word, PowerPoint, or Excel template,
@@ -40,6 +40,17 @@ The `CODE_INTERPRETER_MAX_STAGED_FILES` and `CODE_INTERPRETER_MAX_STAGED_BYTES` 
 together. If a code run has more files than the limits allow, Onyx first copies the files that the code names.
 Onyx always copies at least one file, even if that file is larger than `CODE_INTERPRETER_MAX_STAGED_BYTES`.
 The model gets a notice that names the files that Onyx did not copy.
+
+### Code files
+
+Users can upload source code, script, and config files, for example `.py`, `.js`, `.ts`, `.sh`, `.go`, `.ipynb`,
+and `.toml`. Onyx stores these files but does not index them, so search does not find them.
+The model reads the text of the file in the prompt, and the code can run it.
+Onyx rejects a code file that is not text or that is larger than the file token limit.
+
+The full list of extensions is `.py`, `.ipynb`, `.js`, `.mjs`, `.cjs`, `.jsx`, `.ts`, `.tsx`, `.sh`, `.bash`, `.zsh`,
+`.ps1`, `.rb`, `.go`, `.rs`, `.java`, `.kt`, `.scala`, `.c`, `.h`, `.cc`, `.cpp`, `.hpp`, `.cs`, `.php`, `.swift`, `.r`,
+`.lua`, `.pl`, `.toml`, `.ini`, and `.cfg`.
 
 ## Availability
 
