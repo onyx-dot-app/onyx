@@ -8,6 +8,18 @@ policy="$2"
 alert="$3"
 installer=backend/onyx/server/features/build/sandbox/image/install-browser.sh
 repo_url="${GITHUB_SERVER_URL}/${GITHUB_REPOSITORY}"
+notify=.github/actions/slack-notify
+
+mention() {
+  local slack_id
+  slack_id="$(jq -r --arg login "$1" 'to_entries[] | select(.value == $login) | .key' "${notify}/user-mappings.json")"
+  if [ -n "$slack_id" ]; then echo "<@${slack_id}>"; else echo "$1"; fi
+}
+
+# One person owns each post: the first update PR's requested reviewer, or a random CVE reviewer when no PR has one.
+fallback_reviewer="$(jq -r '.[]' "${notify}/cve-reviewers.json" | shuf -n 1)"
+# This alert stays if a later command stops the script.
+echo "$(mention "$fallback_reviewer") *The dependency update check failed.*" > "$alert"
 
 latest="$(jq -r '.chrome.releases | keys | max_by(split(".") | map(tonumber))' "$policy")"
 releases="$(python3 .github/scripts/supported-release-branches.py)"
@@ -57,17 +69,13 @@ while IFS= read -r base; do
 done <<< "main"$'\n'"${releases}"
 
 if [ "${#lines[@]}" -eq 0 ]; then
+  rm -f "$alert"
   echo "No dependency update has been pending for 24 hours."
   exit 0
 fi
 
-# One person owns each post: the first update PR's requested reviewer, or a random CVE reviewer when no PR has one.
-[ -n "$reviewer" ] || reviewer="$(jq -r '.[]' .github/actions/slack-notify/cve-reviewers.json | shuf -n 1)"
-slack_id="$(jq -r --arg login "$reviewer" 'to_entries[] | select(.value == $login) | .key' .github/actions/slack-notify/user-mappings.json)"
-mention="${slack_id:+<@${slack_id}>}"
-
 {
-  echo "${mention:-$reviewer} *Dependency updates need attention.* Merge each update PR. If a branch has no PR, check <${repo_url}/actions/workflows/update-sandbox-browser.yml|Update Sandbox Browser>."
+  echo "$(mention "${reviewer:-$fallback_reviewer}") *Dependency updates need attention.* Merge each update PR. If a branch has no PR, check <${repo_url}/actions/workflows/update-sandbox-browser.yml|Update Sandbox Browser>."
   printf '%s\n' "${lines[@]}"
 } > "$alert"
 cat "$alert"
