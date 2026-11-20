@@ -32,8 +32,10 @@ class CoordinationStatus(BaseModel):
 
 
 class StubBatchProgress(BaseModel):
-    """The stub batches of an attempt that the listing stored and that
-    conversion converted, and the documents in the stored batches."""
+    """The stub batch counters of an attempt. ``stored`` and ``converted``
+    count from the attempt's first batch number and include batches taken
+    over from an earlier attempt. ``stored_documents`` counts only the
+    documents in the batches that this attempt's listing stored."""
 
     stored: int = 0
     converted: int = 0
@@ -453,8 +455,8 @@ class IndexingCoordination:
         if row is None:
             return StubBatchProgress()
         # A batch is stored only when stubs are left after the unchanged
-        # ones are dropped, so the stored documents are the listed ones
-        # that were not dropped.
+        # ones are dropped, so the stored documents are the ones that this
+        # attempt listed and did not drop.
         return StubBatchProgress(
             stored=row[0], converted=row[1], stored_documents=row[2]
         )

@@ -225,3 +225,25 @@ def test_a_check_after_a_long_step_still_has_a_rate(
 
     assert paused == pytest.approx(45 * _MINUTE - LISTING_BACKPRESSURE_TARGET_SECONDS)
     assert counters.pauses_recorded == 1
+
+
+def test_a_resumed_attempt_measures_its_batches_from_the_first_check(
+    clock: _FakeClock, counters: _FakeCounters
+) -> None:
+    """A resumed attempt counts its batches from its first batch number, and
+    its documents from zero. The batch size comes from the change since the
+    first check."""
+    backpressure = ListingBackpressure(1, DocumentSource.SHAREPOINT)
+    counters.stored = 10_000
+    counters.converted = 10_000
+    counters.stored_documents = 0
+    assert backpressure.maybe_pause(_no_stop) == 0
+    # 500 full batches stored and 100 converted in 10 minutes: 400 waiting,
+    # 40 minutes to drain at 160 documents per minute.
+    counters.stored = 10_500
+    counters.converted = 10_100
+    counters.stored_documents = 500 * _BATCH_SIZE
+
+    paused = _check_after(clock, backpressure, 10)
+
+    assert paused == pytest.approx(40 * _MINUTE - LISTING_BACKPRESSURE_TARGET_SECONDS)
