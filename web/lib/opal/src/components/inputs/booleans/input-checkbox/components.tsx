@@ -136,6 +136,7 @@ function InputCheckbox({
           aria-label={ariaLabel}
           aria-labelledby={ariaLabelledby}
           aria-describedby={ariaDescribedby}
+          aria-disabled={disabled || undefined}
           tabIndex={disabled ? -1 : 0}
           data-state={state}
           data-disabled={disabled || undefined}

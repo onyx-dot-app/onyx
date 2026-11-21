@@ -299,7 +299,8 @@ function InputDatePicker({
   }
 
   function handleCalendarSelect(date: Date | undefined) {
-    if (!date) return;
+    // The row can disable the input while its calendar is open.
+    if (!date || disabled) return;
     onChange(date);
     setOpen(false);
   }
@@ -412,12 +413,14 @@ function InputDatePicker({
               startMonth={normalizedMin}
               endMonth={normalizedMax}
               disabled={
-                normalizedMin || normalizedMax
-                  ? [
-                      ...(normalizedMin ? [{ before: normalizedMin }] : []),
-                      ...(normalizedMax ? [{ after: normalizedMax }] : []),
-                    ]
-                  : undefined
+                disabled
+                  ? true
+                  : normalizedMin || normalizedMax
+                    ? [
+                        ...(normalizedMin ? [{ before: normalizedMin }] : []),
+                        ...(normalizedMax ? [{ after: normalizedMax }] : []),
+                      ]
+                    : undefined
               }
             />
           </Popover.Content>

@@ -17,9 +17,15 @@ interface InputRowState {
   hovered: boolean;
 }
 
-const InputRowContext = createContext<InputRowState>({
+interface InputRowContextValue extends InputRowState {
+  /** The input is inside an input layout. */
+  inRow: boolean;
+}
+
+const InputRowContext = createContext<InputRowContextValue>({
   disabled: false,
   hovered: false,
+  inRow: false,
 });
 
 interface InputRowProviderProps extends InputRowState {
@@ -37,7 +43,9 @@ function InputRowProvider({
   children,
 }: InputRowProviderProps) {
   return (
-    <InputRowContext.Provider value={{ disabled, disabledTooltip, hovered }}>
+    <InputRowContext.Provider
+      value={{ disabled, disabledTooltip, hovered, inRow: true }}
+    >
       {children}
     </InputRowContext.Provider>
   );
@@ -113,25 +121,30 @@ interface InputTooltipProps {
 /**
  * The tooltip of an Opal input, anchored to the input.
  *
- * - In a row with a `disabledTooltip`, the row's hover opens it: the reason
- *   while the row is disabled, else the input's own `tooltip`.
+ * - While its row is disabled with a `disabledTooltip`, the row's hover shows
+ *   that reason.
  * - Otherwise the input's own `tooltip` shows on hover over the input.
  *
- * The wrapper stays mounted, so a change of state does not remount the input.
+ * Inside a row the wrapper is always mounted, so a change of the row's state
+ * or reason never remounts the input (an uncontrolled field keeps its text).
  */
 function InputTooltip({ tooltip, children }: InputTooltipProps) {
   const row = useContext(InputRowContext);
+  const [selfOpen, setSelfOpen] = useState(false);
 
-  if (row.disabledTooltip != null) {
-    const shown = row.disabled ? row.disabledTooltip : tooltip;
-    return (
-      <Tooltip tooltip={shown ?? ""} open={row.hovered && shown != null}>
-        {children}
-      </Tooltip>
-    );
+  if (!row.inRow) {
+    if (tooltip == null) return children;
+    return <Tooltip tooltip={tooltip}>{children}</Tooltip>;
   }
-  if (tooltip == null) return children;
-  return <Tooltip tooltip={tooltip}>{children}</Tooltip>;
+
+  const rowReason = row.disabled ? row.disabledTooltip : undefined;
+  const shown = rowReason ?? tooltip;
+  const open = rowReason != null ? row.hovered : selfOpen && tooltip != null;
+  return (
+    <Tooltip tooltip={shown ?? ""} open={open} onOpenChange={setSelfOpen}>
+      {children}
+    </Tooltip>
+  );
 }
 
 export {

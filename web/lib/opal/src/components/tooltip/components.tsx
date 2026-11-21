@@ -59,6 +59,12 @@ interface TooltipProps {
   open?: boolean;
 
   /**
+   * Radix's own open state, for a caller that sets `open` and also needs the
+   * plain hover (e.g. to show it from either). Without `open` it is not needed.
+   */
+  onOpenChange?: (open: boolean) => void;
+
+  /**
    * Delay in milliseconds before the tooltip appears on hover.
    * Passed to `TooltipPrimitive.Root`.
    */
@@ -122,8 +128,8 @@ function physicalSide(side: TooltipSide): "top" | "bottom" | "left" | "right" {
  * drops any open change that already matches the value it was given, so a
  * caller that gates `open` on something other than the hover state stops
  * hearing about closes and holds a hover that ended. Use `suppressed` to turn
- * a tooltip off instead. `open` is only for a hover the caller tracks itself,
- * with no `onOpenChange`.
+ * a tooltip off instead. `open` is only for a hover the caller tracks itself;
+ * `onOpenChange` then only reports Radix's own hover, never gates it.
  *
  * @example
  * ```tsx
@@ -146,6 +152,7 @@ function Tooltip({
   align = "center",
   suppressed,
   open,
+  onOpenChange,
   delayDuration,
   sideOffset = 4,
   children,
@@ -191,6 +198,7 @@ function Tooltip({
   return (
     <TooltipPrimitive.Root
       open={open}
+      onOpenChange={onOpenChange}
       delayDuration={delayDuration}
       /* Radix closes on a pointer that leaves the trigger from the content
       itself, which tracks the pointer across the gap between the two. A

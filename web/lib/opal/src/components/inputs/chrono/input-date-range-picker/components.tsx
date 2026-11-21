@@ -235,6 +235,7 @@ export const InputDateRangePicker = memo(function InputDateRangePicker({
                   if (pendingStart) setHoveredEnd(day);
                 }}
                 onDayClick={(day) => {
+                  if (disabled) return;
                   if (!pendingStart) {
                     setDraftRange({ from: day });
                     setPendingStart(day);
@@ -254,7 +255,8 @@ export const InputDateRangePicker = memo(function InputDateRangePicker({
                   setIsOpen(false);
                 }}
                 numberOfMonths={1}
-                disabled={(date) => date > new Date()}
+                // The row can disable the input while its calendar is open.
+                disabled={(date) => disabled || date > new Date()}
               />
             </div>
           </Popover.Content>
