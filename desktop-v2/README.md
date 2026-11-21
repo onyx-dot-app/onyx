@@ -278,8 +278,8 @@ The app reads `/etc/onyx-desktop/policy.json`, one JSON object with the same key
 ([`deploy/linux/policy.json`](deploy/linux/policy.json)). Make it readable by all users, and
 writable only by root (for example, `root:root` with mode `644`). The app does not trust the file
 if it, or a directory above it, is not owned by root or is writable by group or others. A sticky
-directory such as `/tmp` is allowed. If the file is a symlink, the same check applies to each link
-and to the target. A file that is not trusted counts as a policy that cannot be read (see
+directory such as `/tmp` is allowed. Each symlink on the path must also be owned by root, and the
+directories on the way to its target get the same check. A file that is not trusted counts as a policy that cannot be read (see
 [Invalid policy](#invalid-policy)).
 
 ```json
