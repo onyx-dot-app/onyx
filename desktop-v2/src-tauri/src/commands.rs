@@ -688,10 +688,11 @@ mod tests {
 
     #[test]
     fn commands_that_open_windows_are_async() {
-        let source = include_str!("commands.rs");
-        assert!(commands(source).len() > 20, "commands were not found");
+        // A Windows checkout has CRLF line endings.
+        let source = include_str!("commands.rs").replace("\r\n", "\n");
+        assert!(commands(&source).len() > 20, "commands were not found");
         assert_eq!(
-            sync_commands_that_open_windows(source),
+            sync_commands_that_open_windows(&source),
             Vec::<String>::new()
         );
     }
