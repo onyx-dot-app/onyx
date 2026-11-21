@@ -2,6 +2,8 @@
 name = "onyx-desktop-v2"
 version = "0.0.0-dev"
 description = "Onyx Desktop v2 (preview)"
+# The .deb Maintainer field.
+authors = ["Onyx <founders@onyx.app>"]
 edition = "2021"
 rust-version = "1.90"
 publish = false

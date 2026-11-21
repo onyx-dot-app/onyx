@@ -120,8 +120,10 @@ jobs:
             bundle-paths: |
               desktop-v2/src-tauri/target/release/bundle/nsis/*.exe
               desktop-v2/src-tauri/target/release/bundle/msi/*.msi
+          # The oldest supported Ubuntu LTS: the bundles need the glibc they
+          # are built with or newer.
           - name: Linux x64
-            platform: ubuntu-24.04
+            platform: ubuntu-22.04
             artifact: linux-x64
             bundles: appimage,deb
             bundle-paths: |
@@ -178,9 +180,9 @@ jobs:
             ~/.cargo/registry/cache/
             ~/.cargo/git/db/
             desktop-v2/src-tauri/target/
-          key: ${{ runner.os }}-desktop-v2-cargo-${{ hashFiles('desktop-v2/src-tauri/Cargo.lock') }}
+          key: ${{ matrix.platform }}-desktop-v2-cargo-${{ hashFiles('desktop-v2/src-tauri/Cargo.lock') }}
           restore-keys: |
-            ${{ runner.os }}-desktop-v2-cargo-
+            ${{ matrix.platform }}-desktop-v2-cargo-
 
       - name: Install web dependencies
         working-directory: ./web
@@ -212,14 +214,40 @@ jobs:
 
       # Unsigned: for reviewers only.
       # APPIMAGE_EXTRACT_AND_RUN: the runner has no FUSE for linuxdeploy.
-      # NO_STRIP: linuxdeploy's strip cannot read Ubuntu 24.04's libraries.
+      # NO_STRIP: linuxdeploy's strip cannot read some system libraries.
+      # Cargo strips the Linux app binary instead.
       - name: Build installers
         working-directory: ./desktop-v2
         env:
           BUNDLES: ${{ matrix.bundles }}
           APPIMAGE_EXTRACT_AND_RUN: "1"
           NO_STRIP: "true"
-        run: bun run tauri build --bundles "${BUNDLES}" -- --locked
+        run: |
+          if [ "${RUNNER_OS}" = "Linux" ]; then
+            export CARGO_PROFILE_RELEASE_STRIP=symbols
+          fi
+          bun run tauri build --bundles "${BUNDLES}" -- --locked
+
+      # The .deb declares libc6 (>= 2.35) in tauri.conf.json. No file in the
+      # .deb or the AppImage may need a newer glibc.
+      - name: Check the glibc floor
+        if: runner.os == 'Linux'
+        working-directory: ./desktop-v2/src-tauri/target/release/bundle
+        run: |
+          set -euo pipefail
+          FLOOR=2.35
+          WORK="${RUNNER_TEMP}/glibc-check"
+          mkdir -p "${WORK}"
+          dpkg-deb -x deb/*.deb "${WORK}/deb"
+          APPIMAGE=$(ls "${PWD}"/appimage/*.AppImage)
+          (cd "${WORK}" && "${APPIMAGE}" --appimage-extract > /dev/null)
+          NEEDED=$(find "${WORK}" -type f -exec sh -c 'file -b "$1" | grep -q "^ELF" && objdump -T "$1"' _ {} \; 2> /dev/null \
+            | grep -o 'GLIBC_[0-9.]*' | sed 's/^GLIBC_//' | sort -uV | tail -n 1)
+          echo "The bundles need glibc ${NEEDED} or newer."
+          if [ "$(printf '%s\n' "${NEEDED}" "${FLOOR}" | sort -V | tail -n 1)" != "${FLOOR}" ]; then
+            echo "glibc ${NEEDED} is newer than the declared floor ${FLOOR}." >&2
+            exit 1
+          fi
 
       # Fork pull requests get no installer artifact or attestation.
       - name: Attest build provenance
