@@ -21,7 +21,8 @@ from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.server.features.suggested_questions.config import (
     SQ_ACTIVE_DAYS,
     SQ_POOL_LOCK_HELD_S,
-    SQ_POOL_MAX,
+    SQ_PRIVATE_SHELF,
+    SQ_SHARED_SHELF,
     SQ_USED_IDS_MAX,
     SQ_USER_RECORD_LOCK_TIMEOUT_S,
 )
@@ -75,9 +76,9 @@ def merge_questions(
     existing: Iterable[PoolQuestion],
     new: Iterable[PoolQuestion],
     live_document_ids: set[str],
-    max_size: int = SQ_POOL_MAX,
+    max_size: int = SQ_SHARED_SHELF,
 ) -> list[PoolQuestion]:
-    """Merge a run's questions into the pool: drop questions whose document is
+    """Merge a run's questions into a shelf: drop questions whose document is
     gone, keep one question per document (the best search position, then the
     newest), and keep the newest `max_size`."""
 
@@ -154,6 +155,36 @@ def mark_used(user_id: UUID, question_id: str) -> UserRecord:
 
 def record_topup(user_id: UUID, now: datetime, window: timedelta) -> UserRecord:
     return _update_user_record(user_id, lambda record: record.record_topup(now, window))
+
+
+def save_private_questions(
+    user_id: UUID,
+    added: list[PoolQuestion],
+    live_document_ids: set[str],
+    now: datetime,
+) -> None:
+    """Merge a run's questions into one person's private shelf. Questions the
+    person used, questions too old to show and questions whose document is gone
+    leave it; merge_questions keeps one per document and the newest
+    SQ_PRIVATE_SHELF. Saved under the person's record lock, so a click saved at
+    the same moment is not lost. Callers hold the pool lock, so no other run
+    changes the shelf meanwhile."""
+
+    def merge(record: UserRecord) -> UserRecord:
+        kept = [
+            question
+            for question in record.questions
+            if question.id not in record.used and question.is_fresh(now)
+        ]
+        return record.model_copy(
+            update={
+                "questions": merge_questions(
+                    kept, added, live_document_ids, SQ_PRIVATE_SHELF
+                )
+            }
+        )
+
+    _update_user_record(user_id, merge)
 
 
 def get_recently_active_users(db_session: Session, now: datetime) -> list[User]:
