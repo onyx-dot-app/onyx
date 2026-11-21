@@ -3,6 +3,69 @@ entries:
   onyx:
   - annotations:
       artifacthub.io/changes: |
+        - kind: changed
+          description: celery_worker_scheduled_tasks.concurrency sets the threads of
+            the scheduled-tasks worker. The default is now 32 (was 4). A
+            CELERY_WORKER_SCHEDULED_TASKS_CONCURRENCY value in configMap or in the
+            worker's extraEnv still takes precedence.
+      category: Productivity
+      images: |
+        - name: webserver
+          image: docker.io/onyxdotapp/onyx-web-server:latest
+        - name: background
+          image: docker.io/onyxdotapp/onyx-backend:latest
+      licenses: MIT
+      org.opencontainers.image.source: https://github.com/onyx-dot-app/onyx
+    apiVersion: v2
+    appVersion: latest
+    created: "2026-11-21T00:51:14.882359729Z"
+    dependencies:
+    - alias: postgresql
+      condition: postgresqlOperator.enabled,postgresql.enabled
+      name: cloudnative-pg
+      repository: https://cloudnative-pg.github.io/charts
+      version: 0.26.0
+    - condition: postgresql.installCRDs,postgresqlOperator.enabled,postgresql.enabled
+      name: onyx-cnpg-crds
+      repository: file://../onyx-cnpg-crds
+      version: 0.1.0
+    - condition: opensearch.enabled
+      name: opensearch
+      repository: https://opensearch-project.github.io/helm-charts
+      version: 3.6.0
+    - alias: nginx
+      condition: nginx.enabled
+      name: ingress-nginx
+      repository: https://kubernetes.github.io/ingress-nginx
+      version: 4.13.3
+    - condition: redisOperator.enabled,redis.enabled
+      name: redis-operator
+      repository: https://ot-container-kit.github.io/helm-charts
+      version: 0.24.0
+    - condition: redis.enabled
+      name: redis
+      repository: https://ot-container-kit.github.io/helm-charts
+      version: 0.16.6
+    - condition: minio.enabled
+      name: minio
+      repository: https://charts.min.io/
+      version: 5.4.0
+    - condition: codeInterpreter.enabled
+      name: code-interpreter
+      repository: https://onyx-dot-app.github.io/python-sandbox/
+      version: 0.4.10
+    description: Onyx application and Craft sandbox deployment chart
+    digest: 32cb8010fe9933cfd95edabd16b0c74c18d4f0b06a39c5dcd9ec3b536d984d77
+    home: https://www.onyx.app/
+    name: onyx
+    sources:
+    - https://github.com/onyx-dot-app/onyx
+    type: application
+    urls:
+    - https://github.com/onyx-dot-app/onyx/releases/download/helm/onyx-0.9.57/onyx-0.9.57.tgz
+    version: 0.9.57
+  - annotations:
+      artifacthub.io/changes: |
         - kind: added
           description: New worker celery_worker_docconversion, off by default. When
             enabled, the chart deploys it and sets ENABLE_CONVERSION_STAGE on the
@@ -12405,4 +12468,4 @@ entries:
     urls:
     - https://github.com/onyx-dot-app/onyx/releases/download/onyx-stack-0.2.4/onyx-stack-0.2.4.tgz
     version: 0.2.4
-generated: "2026-11-19T23:46:52.673107274Z"
+generated: "2026-11-21T00:51:14.882827203Z"
