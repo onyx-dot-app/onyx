@@ -339,7 +339,7 @@ plugin required for the user, then a published one, then the user's own,
 then a shared one. The older plugin (`plugin.created_at`, then id) wins a
 tie. It returns the one set of plugins that lose a name: they do not load and
 show as off. Only skills that can run take part, and the names of the
-built-in skills the user gets are reserved. The toggle and the auto-enable
+built-in skills the user gets, and of their nested skills, are reserved. The toggle and the auto-enable
 count a conflict by the same rule (`db/skill.py:_UserSkillSelection.other_skills_named`).
 
 **Two hashes.** `compute_skill_runtime_hash` is a SHA-256 over every rendered
