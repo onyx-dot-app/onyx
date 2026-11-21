@@ -1106,6 +1106,36 @@ export const connectorConfigs: Record<
     ],
     advanced_values: [],
   },
+  jsm: {
+    description: "connectors.jsm.description",
+    subtext: "connectors.jsm.subtext",
+    values: [
+      {
+        type: "text",
+        label: "connectors.jsm.fields.jsm_base_url.label",
+        name: "jsm_base_url",
+        optional: false,
+        placeholder: "connectors.jsm.fields.jsm_base_url.placeholder",
+        subDescription: "siteUrl",
+        description: "connectors.jsm.fields.jsm_base_url.description",
+      },
+      {
+        type: "text",
+        label: "connectors.jsm.fields.service_desk_id.label",
+        name: "service_desk_id",
+        optional: true,
+        description: "connectors.jsm.fields.service_desk_id.description",
+      },
+      {
+        type: "text",
+        label: "connectors.jsm.fields.jql_query.label",
+        name: "jql_query",
+        optional: true,
+        description: "connectors.jsm.fields.jql_query.description",
+      },
+    ],
+    advanced_values: [],
+  },
   salesforce: {
     description: "connectors.salesforce.description",
     values: [

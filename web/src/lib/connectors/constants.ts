@@ -37,6 +37,7 @@ import {
   SvgHighspot,
   SvgHubSpot,
   SvgJira,
+  SvgJira as SvgJsm,
   SvgLinear,
   SvgLoopio,
   SvgLumApps,
@@ -98,6 +99,7 @@ export const SOURCE_DESCRIPTION_KEYS = {
   [ValidSources.Outline]: "sources.outline.description",
   [ValidSources.Confluence]: "sources.confluence.description",
   [ValidSources.Jira]: "sources.jira.description",
+  [ValidSources.Jsm]: "sources.jsm.description",
   [ValidSources.Productboard]: "sources.productboard.description",
   [ValidSources.Slab]: "sources.slab.description",
   [ValidSources.Coda]: "sources.coda.description",
@@ -368,6 +370,16 @@ export const SOURCE_METADATA_MAP: SourceMap = {
     category: SourceCategory.TicketingAndTaskManagement,
     docs: `${DOCS_ADMINS_PATH}/connectors/official/jira`,
     isPopular: true,
+  },
+  jsm: {
+    icon: SvgJsm,
+    displayName: "Jira Service Management",
+    category: SourceCategory.TicketingAndTaskManagement,
+    // TODO: link a Jira Service Management-specific setup page when one
+    // exists under documentation/admins/connectors/official/; the Jira
+    // guide is the closest page today but does not cover the JSM service
+    // desk scope.
+    docs: `${DOCS_ADMINS_PATH}/connectors/official/jira`,
   },
   zendesk: {
     icon: SvgZendesk,
