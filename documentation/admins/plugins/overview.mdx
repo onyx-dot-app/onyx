@@ -1,0 +1,222 @@
+---
+title: "Overview"
+description: "Add MCP servers, OpenAPI plugins, and Craft Apps from one Admin Panel page"
+icon: "plug"
+---
+
+Plugins give Onyx agents live access to external tools and services.
+An agent can use a plugin to read current data or to take an action, such as post a Slack reply or create a ticket.
+
+Admins manage plugins and integrations in the **Agents & Plugins** section of the Admin Panel:
+
+- **Admin Panel → Integrations** (`/admin/integrations`) lists each MCP server and app. Add, configure and approve
+  actions, and set the install setting of each integration here.
+
+Each integration has its own access: an owner, an install setting, and the people it is shared with.
+A plugin holds skills only. It does not hold an integration and gives no access to one.
+
+Users turn integrations on, connect their accounts,
+and set personal defaults in **Customize → Integrations** in the main sidebar (`/app/customize/integrations`).
+The [release notes](/changelog) list the old admin pages and where they are now.
+
+## Plugin types
+
+Onyx has three plugin types. Each type connects to a different kind of external system.
+
+| Type | What it connects | Where agents can use it | Use it when |
+| --- | --- | --- | --- |
+| [MCP](/admins/plugins/mcp) | A server that uses the [Model Context Protocol](https://modelcontextprotocol.io/) | Chat, custom agents, and Craft | The vendor publishes an MCP server, or you run your own. |
+| [OpenAPI](/admins/plugins/openapi) | A REST API that you describe with an OpenAPI schema | Chat and custom agents | You have an internal or third-party REST API and no MCP server. |
+| [Craft App](/admins/plugins/craft_apps) | A catalog of API endpoints for one application, such as Slack or Gmail | Craft only | Craft must act as each user in a supported application, with action-level approvals. Requires Craft, which is available on the **Business** and **Enterprise** plans. |
+
+<Tip>
+  You can add the same service more than once. For example,
+  add the Slack Craft App for Craft and the Slack MCP server for Chat.
+</Tip>
+
+### Plugins compared to connectors
+
+[Connectors](/admins/connectors/overview) and plugins solve different problems.
+
+| | Connectors | Plugins |
+| --- | --- | --- |
+| Data | Index a copy of documents into the Onyx knowledge index | Call the external service live, at the time of the request |
+| Permissions | Onyx applies the permissions it syncs from the source, so each user finds only documents they can access | The external service applies its own permissions to the account that the plugin uses |
+| Actions | Read only | Read and write, if the service and the plugin allow it |
+
+## Add an integration
+
+<Steps>
+  <Step title="Open the add page">
+    Go to **Admin Panel → Integrations** and click **Add**.
+  </Step>
+
+  <Step title="Select the type">
+    Under **Type**, select **MCP Server**, **OpenAPI App**, or **App**.
+    **App** shows only when Craft is available on your plan.
+  </Step>
+
+  <Step title="Fill in the details">
+    Fill in the details of that type. For an MCP server, pick a suggested server or enter its URL.
+    Onyx checks the server URL and suggests the sign-in settings. For an App,
+    select a preset under **Start From** to fill in the name and sign-in,
+    or keep **Custom app** to set up any HTTP service.
+  </Step>
+
+  <Step title="Set the sign-in">
+    Select the sign-in mode: **No sign-in**, **One account for the organization**, or **Each user signs in**.
+    Then select the method, such as **OAuth** or **API key**.
+  </Step>
+
+  <Step title="Select the owner and add">
+    **For me** makes a private integration. Only you can use it until you share it.
+    **For the organization** makes an integration with the install setting **Available**. Click **Add**.
+  </Step>
+</Steps>
+
+Follow the guide for the type: [MCP](/admins/plugins/mcp), [OpenAPI](/admins/plugins/openapi),
+or [Craft Apps](/admins/plugins/craft_apps).
+
+Users with the **Manage Actions** permission can add integrations.
+Only users with the organization-wide **Manage Actions** permission see **For the organization**.
+A user with **Manage Actions** for some groups adds integrations **For me** and manages only the private integrations
+that they own.
+
+## The Integrations page
+
+The list shows **Name**, **Type**, **Sign-in**, **Install Setting**, and **Status** for each integration.
+Under the name, a private integration shows its owner. If you manage an integration that is not shared with you,
+the row shows **No access** and the reason. Use the type filter and the search field to find an integration.
+An integration that needs setup comes first and shows **Needs setup**. Point to the status to see the reason,
+for example a missing organization connection or OAuth client.
+
+Deleting an integration removes it from each agent and scheduled task, and deletes its connections and action settings.
+To keep an integration but stop all use of it, turn off **Enabled** on its **Overview** tab instead.
+
+## Access and install setting
+
+Each integration has a company install setting.
+Set it in the **Install Setting** column of **Admin Panel → Integrations**,
+or on the **Overview** tab of the integration.
+
+| Install setting | Effect |
+| --- | --- |
+| **Required** | On for each user. Users cannot turn it off. |
+| **Installed** | On for each user. Each user can turn it off. |
+| **Available** | Off for each user. Each user can turn it on in **Customize → Integrations**. |
+| **Not available** | Private. Only its owner and the people it is shared with can use it. |
+
+Only users with the organization-wide **Manage Actions** permission can change the install setting.
+
+When an integration is **Required** and each user signs in with their own account,
+each user must connect it before they can use chat, Craft, or the Chrome extension.
+Onyx shows a **Connect your work tools** page on the next page load,
+with a **Connect** button for each Required integration. **Continue** stays off until the user connects each one.
+Admins see the same page, but they can click **Continue** without a connection.
+The page then stays hidden for the admin until they open Onyx in a new browser tab.
+If a connection fails or the user cancels it, the page asks the user to contact an admin and shows **Skip for now**.
+**Skip for now** hides the page until the user opens Onyx in a new browser tab.
+A Required integration that only an admin can connect, such as one with an organization account, does not block users.
+The page is a prompt in the Onyx web and desktop apps. The Onyx API and the mobile app do not check it.
+If Onyx cannot read the list of integrations when a page loads, it does not show the page.
+
+On the Enterprise plan, a group can have its own install setting. Set it in **Group Access** on the **Overview** tab.
+A group setting replaces the company setting for the members of the group, also when it is stricter.
+A group with no setting uses the company setting.
+A user in more than one group gets the most open setting of those groups.
+A user outside the groups gets the company setting.
+If the company setting is **Not available** and the user has no share,
+**Customize → Integrations** shows the integration below the others, with **No access**.
+
+Each user has one on/off choice for each integration. When an integration is on,
+the user can use it in Chat and in Craft. The default agent uses only the integrations that a user has on.
+A custom agent uses each integration that it links to, if the user has access to the integration and is signed in.
+An agent gives no access: a person who can use an agent but not one of its integrations chats without that integration.
+The agent editor shows a warning when the agent is shared with more people than an integration.
+
+<Note>
+  **Upgrade note.** Before this release, a person who could use an agent could also use each tool of that agent.
+  The upgrade keeps the access that each user had: a custom tool that an admin made,
+  or that default Chat or a public agent has, becomes **Available**.
+  A private MCP server whose owner was deleted stays private, and each admin gets a share.
+  A person who used a private MCP server, or another person's custom tool,
+  only through an agent shared with some people loses those tools. To give the access back,
+  share the integration with the person or the group, or set its install setting.
+</Note>
+
+### Share or publish a private integration
+
+The owner of a private integration, and each user who manages it, can share it. In **Customize → Integrations**,
+click **...** on the integration row or its page, then click **Share**. Add specific people. On the Enterprise plan,
+you can also add groups. A share gives use of the integration only. It does not let the person change the integration.
+
+To make a private integration available to the whole organization, click **...**, then **Publish to Org**.
+The install setting becomes **Available**, and the existing shares stay.
+Only users with the organization-wide **Manage Actions** permission can publish.
+
+## Integration settings
+
+Click an integration to open its detail page.
+
+| Tab | Settings |
+| --- | --- |
+| **Overview** | Name, description, type, sign-in, owner, **Install Setting**, **Group Access**, **Enabled**, and **Delete** |
+| **Configuration** | Server URL, OpenAPI schema, or URL patterns, sign-in mode and method, OAuth client, header template, **Users Can Save Always Allow**, and the organization connection |
+| **Actions** | **Default for New Actions**, then the read-only actions and the write actions, each with **Allow**, **Ask**, or **Blocked** |
+
+If you change the sign-in method, the OAuth client, the URLs, or the scopes, each user must connect again.
+
+When the sign-in mode is **One account for the organization**,
+connect the organization account on the **Configuration** tab.
+The actions of an MCP server load after the server is connected.
+Click **Refresh** on the **Actions** tab to load them again.
+
+## Approvals
+
+Onyx can ask a user to approve an action before it runs.
+Admins set the policy for each action on the **Actions** tab of an integration. MCP tool policies apply in Chat,
+in custom agents, and in Craft. Craft App policies apply in Craft.
+
+| Policy | Effect |
+| --- | --- |
+| **Allow** | The action runs without a prompt. |
+| **Ask** | Onyx shows an approval card. The user can approve once, approve for the chat or Craft session, or reject. |
+| **Blocked** | The action never runs. Users and scheduled tasks cannot override it. |
+
+The first row, **Default for New Actions**, applies to each action with no setting of its own,
+and to actions that the integration adds later. Each action shows **Uses default** or **Set by admin**.
+
+Turn on **Users Can Save Always Allow** on the **Configuration** tab to let each user save **Always allow** for an
+action with the **Ask** policy. Users cannot run an action with the **Blocked** policy.
+
+An Agent can also set each action of its integrations. See [Action Settings](/admins/agents/overview#action-settings).
+
+The Slack and Discord bots cannot show approval requests, so a tool with the **Ask** policy is not available to them.
+Each tool that the agent of a bot had before integrations were added keeps running without approval.
+In some other chats, a tool call cannot wait for approval, and a tool with the **Ask** policy does not run.
+See [Approvals in Chat](/admins/plugins/mcp#approvals-in-chat).
+
+<Warning>
+  OpenAPI plugins follow the same policies. A `GET` operation runs without a prompt, and each other operation asks.
+  The OpenAPI plugins made before integrations were added keep running without a prompt.
+</Warning>
+
+## Next steps
+
+<CardGroup cols={2}>
+  <Card title="MCP servers" icon="server" href="/admins/plugins/mcp">
+    Connect an MCP server and choose its tools.
+  </Card>
+
+  <Card title="OpenAPI plugins" icon="code" href="/admins/plugins/openapi">
+    Turn a REST API schema into agent tools.
+  </Card>
+
+  <Card title="Craft Apps" icon="hammer" href="/admins/plugins/craft_apps">
+    Let Craft act as each user in Slack, Gmail, Notion, and more.
+  </Card>
+
+  <Card title="Plugins for users" icon="user" href="/overview/core_features/plugins">
+    Connect accounts and set personal defaults.
+  </Card>
+</CardGroup>
