@@ -356,6 +356,7 @@ class DocumentSource(str, Enum):
     BRAINTRUST = "braintrust"
     LUMAPPS = "lumapps"
     YOUTRACK = "youtrack"
+    JIRA_SERVICE_MANAGEMENT = "jira_service_management"
     AZURE_DATALAKE = "azure_datalake"
 
     # Special case just for integration tests
@@ -928,6 +929,7 @@ DocumentSourceDescription: dict[DocumentSource, str] = {
     DocumentSource.BRAINTRUST: "LLM eval experiments, datasets, and prompts",
     DocumentSource.LUMAPPS: "Intranet pages, news, and content",
     DocumentSource.YOUTRACK: "Issues and project tracking",
+    DocumentSource.JIRA_SERVICE_MANAGEMENT: "Service desk requests and tickets",
     DocumentSource.AZURE_DATALAKE: "Files in Azure Data Lake Storage containers",
 }
 

@@ -627,6 +627,9 @@
         "youtrack": {
           "description": "问题跟踪与项目管理"
         },
+        "jiraServiceManagement": {
+          "description": "服务台请求和工单"
+        },
         "canvas": {
           "description": "课程、页面和公告"
         },
@@ -2978,6 +2981,15 @@
             "lang": {
               "label": "语言",
               "description": "用于内容标题/正文和元数据标签的语言（ISO 639-1，例如 en、fr）。"
+            }
+          }
+        },
+        "jiraServiceManagement": {
+          "description": "配置 Jira Service Management 连接器",
+          "fields": {
+            "project_key": {
+              "label": "项目键",
+              "description": "要索引的 Jira Service Management 项目的键，例如 HELP。仅接受服务项目。"
             }
           }
         },

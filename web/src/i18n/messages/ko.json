@@ -627,6 +627,9 @@
         "youtrack": {
           "description": "이슈 추적 및 프로젝트 관리"
         },
+        "jiraServiceManagement": {
+          "description": "서비스 데스크 요청 및 티켓"
+        },
         "canvas": {
           "description": "강좌, 페이지, 공지"
         },
@@ -2978,6 +2981,15 @@
             "lang": {
               "label": "언어",
               "description": "콘텐츠 제목/본문과 메타데이터 레이블에 사용할 언어입니다 (ISO 639-1, 예: en, fr)."
+            }
+          }
+        },
+        "jiraServiceManagement": {
+          "description": "Jira Service Management 커넥터 구성",
+          "fields": {
+            "project_key": {
+              "label": "프로젝트 키",
+              "description": "인덱싱할 Jira Service Management 프로젝트의 키입니다(예: HELP). 서비스 프로젝트만 허용됩니다."
             }
           }
         },
