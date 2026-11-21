@@ -426,6 +426,8 @@ def prepare_chat_turn(
                 response_ids = [resumed_response_id]
                 stream_id = reserve_stream_id(db_session)
             accepted_text = None
+            # Name the chat from this question while its answer streams.
+            auto_name = False
             if queued_turn is not None:
                 # Submitted input already passed the hook before entering the queue.
                 accepted_text = new_msg_req.message
@@ -620,6 +622,16 @@ def prepare_chat_turn(
                     skill_messages=picks.skill_messages if keeps_content else None,
                     db_session=db_session,
                     commit=False,
+                )
+                # A chat that keeps content and has no name yet gets one from
+                # its first question.
+                auto_name = (
+                    keeps_content
+                    and not chat_session.description
+                    and not any(
+                        message.message_type == MessageType.USER
+                        for message in chat_history
+                    )
                 )
                 chat_history.append(user_message)
                 # The question and its responses are saved together, so a later
@@ -921,6 +933,7 @@ def prepare_chat_turn(
             research_tool_id=research_tool_id,
             checkpoint=checkpoint,
             user_message_id=user_message_id,
+            auto_name=auto_name,
             mentions=mentions,
             user_identity=LLMUserIdentity(
                 user_id="anonymous_user"

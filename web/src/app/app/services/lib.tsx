@@ -9,6 +9,7 @@ import { ReasoningEffortOverride } from "@/lib/languageModels/types";
 import { FeedbackType } from "@/app/app/types";
 import {
   BackendMessage,
+  ChatSessionNameInfo,
   DocumentsResponse,
   FileDescriptor,
   FileChatDisplay,
@@ -152,6 +153,7 @@ export type PacketType =
   | StreamingError
   | MessageResponseIDInfo
   | MultiModelMessageResponseIDInfo
+  | ChatSessionNameInfo
   | StreamStopInfo
   | UserKnowledgeFilePacket
   | Packet;

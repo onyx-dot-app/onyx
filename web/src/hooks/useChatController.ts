@@ -812,6 +812,8 @@ export default function useChatController({
       let packetsVersion = 0;
 
       let newUserMessageId: number | null = null;
+      // The server names a new chat while it answers and sends the name here.
+      let serverNamedChat = false;
       let newAgentMessageId: number | null = null;
       // What the saved question mentioned, as the server recorded it.
       let recordedMentions = initialUserNode.mentions;
@@ -1174,6 +1176,14 @@ export default function useChatController({
                 ?.streamingStartTime
             ) {
               setStreamingStartTime(frozenSessionId, Date.now());
+            }
+
+            if (Object.hasOwn(packet, "chat_session_name")) {
+              // The turn's stream only carries the name of its own chat.
+              serverNamedChat = true;
+              void refreshChatSessions();
+              void fetchProjects();
+              continue;
             }
 
             if ((packet as MessageResponseIDInfo).user_message_id) {
@@ -1560,8 +1570,10 @@ export default function useChatController({
         setUncaughtError(frozenSessionId, rejectedSendError);
       }
 
-      // Name the chat now that we have the first AI response (navigation already happened before streaming)
-      if (shouldAutoNameChatSessionAfterResponse) {
+      // The server names a new chat while it answers. If its name did not
+      // arrive on the stream, ask for it; the server returns a saved name
+      // rather than generating another.
+      if (shouldAutoNameChatSessionAfterResponse && !serverNamedChat) {
         handleNewSessionNaming(currChatSessionId);
       }
     },

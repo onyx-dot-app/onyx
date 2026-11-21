@@ -603,12 +603,20 @@ class CreateChatSessionID(BaseModel):
     incognito: bool = False
 
 
+class ChatSessionNameInfo(BaseModel):
+    """The name the server gave a new chat, sent once it is saved."""
+
+    chat_session_id: UUID
+    chat_session_name: str
+
+
 AnswerStreamPart = (
     Packet
     | MessageResponseIDInfo
     | MultiModelMessageResponseIDInfo
     | StreamingError
     | CreateChatSessionID
+    | ChatSessionNameInfo
 )
 
 AnswerStream = Iterator[AnswerStreamPart]
@@ -939,6 +947,9 @@ class ChatTurnSetup(BaseModel):
     # The preferred tool comes from the chat's saved options, which can
     # outlive the tool or its plugin; the turn then runs without it.
     preferred_tool_saved: bool = False
+    # Name the chat from its first question while the answer streams
+    # (`chat/session_naming.py`).
+    auto_name: bool = False
     chat_files_for_tools: list[ChatFile]
     custom_agent_prompt: str | None
     user_memory_context: UserMemoryContext
