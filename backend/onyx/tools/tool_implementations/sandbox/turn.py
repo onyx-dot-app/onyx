@@ -77,20 +77,20 @@ class SandboxTurn:
 
     def _sync_skills(self, ref: HarnessSandboxRef) -> None:
         """Show the user's chat built-ins in the sandbox once per turn, before
-        the turn's first call runs. A failure leaves the last skills there."""
+        the turn's first call runs. After a failure the next call tries again."""
         # Deferred: the skills push stack loads only when a tool runs.
         from onyx.skills.push import build_chat_built_in_files
 
         with self._skills_lock:
             if self._skills_synced:
                 return
-            self._skills_synced = True
             try:
                 with get_session_with_tenant(tenant_id=self._tenant_id) as db_session:
                     user = fetch_user_by_id(db_session, self._user_id)
                     files = build_chat_built_in_files(user, db_session) if user else {}
                 if files:
                     self.sandbox.sync_skills(ref, files)
+                self._skills_synced = True
             except Exception:
                 logger.exception(
                     "sandbox_skills_sync_failed sandbox=%s session=%s",

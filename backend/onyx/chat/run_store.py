@@ -134,12 +134,12 @@ from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.staging import delete_files_best_effort
 from onyx.llm.cancellation import CancelReason
 from onyx.llm.models import Message, ToolCall, ToolResult, UserMessage
-from onyx.microvm.configs import HARNESS_SANDBOX_ENABLED
 from onyx.server.query_and_chat.token_limit import check_token_rate_limits
 from onyx.skills.chat import accept_picked_skills
 from onyx.tools.constants import QUESTION_TOOL_NAMES, SPAWN_AGENT_TOOL_NAME
 from onyx.tools.interface import Tool
 from onyx.tools.models import ToolApprovalScope, ToolOptions
+from onyx.tools.tool_implementations.sandbox.sandbox_tools import SandboxTool
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
@@ -432,6 +432,7 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
         self._capped_runs: set[str] = set()
         # Saved child tool calls link to these tool rows by name.
         self._tool_ids = {tool.name: tool.id for tool in tools}
+        self._sandbox_tools = any(isinstance(tool, SandboxTool) for tool in tools)
         self.chat_session_id = chat_session_id
         self.response_id = response_id
         # Branch IDs stay newest first, as the branch queries order them.
@@ -675,7 +676,7 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
                 accept_picked_skills(
                     picks,
                     list_chat_skills(
-                        session, self._user, built_ins=HARNESS_SANDBOX_ENABLED
+                        session, self._user, built_ins=self._sandbox_tools
                     ),
                     self._user.id,
                     session,
