@@ -99,7 +99,7 @@ export default function CraftPage() {
         cell: (email, row) => (
           <Content
             font="main-ui-action"
-            title={row.personal_name ?? email}
+            title={row.personal_name || email}
             description={row.personal_name ? email : undefined}
           />
         ),
