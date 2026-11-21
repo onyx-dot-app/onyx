@@ -270,11 +270,15 @@ def postgres_query(
     if DISABLE_POSTGRES_QUERY_TOOL:
         raise OnyxError(OnyxErrorCode.FEATURE_DISABLED, "postgres_query is turned off.")
     # Chat history is not search: a token scoped to read:search must not read it.
-    if request.arguments.get("table") in {
-        table.value for table in CHAT_HISTORY_TABLES
-    } and not (
-        has_global_permission(user, Permission.READ_CHAT)
-        and token_allows(http_request, Permission.READ_CHAT)
+    # The tool rejects a table that is not a string.
+    table = request.arguments.get("table")
+    if (
+        isinstance(table, str)
+        and table in {chat_table.value for chat_table in CHAT_HISTORY_TABLES}
+        and not (
+            has_global_permission(user, Permission.READ_CHAT)
+            and token_allows(http_request, Permission.READ_CHAT)
+        )
     ):
         raise OnyxError(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
