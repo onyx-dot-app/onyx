@@ -39,10 +39,11 @@ chat retention needs Enterprise. The settings API enforces these tiers.
 - **A user** chooses, in Settings > Chat Preferences, whether Enter and the send arrow wait
   for the current step or interrupt current work. Ctrl/Cmd+Enter always queues
   a follow-up.
-- **A user** sets the theme, language, chat background, transcript width,
-  auto-scroll and smooth streaming in Settings > Appearance. Transcript width
-  is stored per browser, not on the server. Wide widens only an open
-  conversation, not the new-session view. Mobile widths hide its control,
+- **A user** sets the theme, language, interface and response fonts, chat
+  background, transcript width, auto-scroll and smooth streaming in
+  Settings > Appearance. The response font applies only inside chat answers.
+  Transcript width is stored per browser, not on the server. Wide widens only
+  an open conversation, not the new-session view. Mobile widths hide its control,
   because chat is always full width there.
 - **An admin**, at Admin > Chat Preferences, sets workspace chat options. These
   include the team name and context that every prompt includes, the default
@@ -128,8 +129,22 @@ that the tool saves during a turn reaches the prompt on the next turn.
 
 Language falls back from `UserPreferences.language` to `Settings.default_language` through
 `server/settings/store.py:resolve_user_language`.
-`server/manage/users.py:set_locale_cookie` copies the resolved language into
+`server/manage/users.py:set_preference_cookie` copies the resolved language into
 the `NEXT_LOCALE` cookie, so the UI and the answers use the same language.
+
+**Appearance cookie.** `PATCH /user/appearance` saves `interface_font` and
+`response_font`. It and `GET /me` call
+`server/manage/users.py:set_appearance_cookie`, which keeps the
+`onyx_appearance` cookie (a form-encoded query string) equal to the saved
+values. `set_preference_cookie` writes both preference cookies with the same
+attributes. `web/src/app/layout.tsx` parses it with
+`web/src/lib/appearance/preferences.ts:parseAppearanceCookie` and renders the
+`data-interface-font` / `data-response-font` attributes on `<html>`, so the
+first paint has the saved fonts. `web/src/providers/AppearancePreferencesProvider.tsx`
+applies the saved values to `<html>` after a save or a newer `/me`.
+`web/src/app/globals.css` maps each attribute to the font variables that the
+typography presets read.
+
 `chat/prompt_utils.py:build_chat_prompt` substitutes `{{user.<key>}}`
 placeholders into the agent, project and task prompts on each step, and
 `prepare_chat_turn` substitutes them before it reserves tokens. Name, role and email never overwrite an
@@ -354,7 +369,12 @@ paths read it; find them with `git grep -n load_settings backend`.
   for how a chat turn reads the saved preferences.
 - Integration tests: `backend/tests/integration/tests/personalization/` and
   `backend/tests/integration/tests/users/test_user_preferences.py` (defaults
-  without a row, then every settings route).
+  without a row, then every settings route), and
+  `backend/tests/integration/tests/users/test_appearance_cookie.py` (the
+  appearance cookie).
+- Playwright: `web/tests/e2e/settings/font_preferences.spec.ts` (a font
+  applies at once and renders from the server after a reload; the response
+  font applies to answers in a chat).
 - No integration test covers input prompt behaviour or
   `auto_detect_search_filters`.
 - By hand: set a name and a preference, then ask "what do you know about me".

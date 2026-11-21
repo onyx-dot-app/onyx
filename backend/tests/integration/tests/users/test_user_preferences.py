@@ -29,6 +29,8 @@ DEFAULT_PREFERENCES: dict[str, Any] = {
     "language": None,
     "chat_background": None,
     "default_app_mode": "CHAT",
+    "interface_font": "default",
+    "response_font": "match",
     "paste_as_tile": False,
     "interrupt_on_send": False,
     "voice_auto_send": False,
@@ -102,6 +104,11 @@ def test_every_setting_round_trips(
     _patch(user, "/user/language", {"language": "de"})
     _patch(user, "/user/chat-background", {"chat_background": "aurora"})
     _patch(user, "/user/default-app-mode", {"default_app_mode": "SEARCH"})
+    _patch(
+        user,
+        "/user/appearance",
+        {"interface_font": "atkinson", "response_font": "default"},
+    )
     _patch(user, "/user/default-model", {"default_model": "P__openai__gpt-6-luna"})
     _patch(
         user,
@@ -133,6 +140,8 @@ def test_every_setting_round_trips(
         "language": "de",
         "chat_background": "aurora",
         "default_app_mode": "SEARCH",
+        "interface_font": "atkinson",
+        "response_font": "default",
         "default_model": "P__openai__gpt-6-luna",
         "voice_auto_send": True,
         "voice_auto_playback": True,

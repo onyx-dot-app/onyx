@@ -15887,11 +15887,31 @@
       "general": {
         "title": "一般"
       },
+      "fonts": {
+        "title": "フォント"
+      },
       "transcriptWidth": {
         "title": "会話の表示幅",
         "description": "このデバイスでのチャットメッセージと入力バーの幅を設定します。",
         "standard": "標準",
-        "wide": "ワイド"
+        "wide": "ワイド",
+        "placeholder": "幅を選択"
+      },
+      "responseFont": {
+        "default": "デフォルト",
+        "match": "インターフェースに合わせる",
+        "title": "回答のフォント",
+        "description": "チャットの回答に使用するフォントを選択してください。",
+        "placeholder": "フォントを選択"
+      },
+      "interfaceFont": {
+        "title": "インターフェースのフォント",
+        "description": "アプリ全体のテキストに使用するフォントを選択してください。",
+        "default": "デフォルト",
+        "opendyslexic": "OpenDyslexic",
+        "atkinson": "Atkinson Hyperlegible Next",
+        "system": "システム",
+        "placeholder": "フォントを選択"
       }
     },
     "chats": {

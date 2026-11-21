@@ -9,7 +9,13 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql.schema import ScalarElementColumnDefault
 
 from onyx.configs.constants import ANONYMOUS_USER_UUID
-from onyx.db.enums import AccountType, DefaultAppMode, ThemePreference
+from onyx.db.enums import (
+    AccountType,
+    DefaultAppMode,
+    InterfaceFont,
+    ResponseFont,
+    ThemePreference,
+)
 from onyx.db.integration_connection import delete_connections_for_user__no_commit
 from onyx.db.models import (
     AccessToken,
@@ -118,6 +124,8 @@ class UserPreferenceValues(TypedDict, total=False):
     language: str | None
     chat_background: str | None
     default_app_mode: DefaultAppMode
+    interface_font: InterfaceFont
+    response_font: ResponseFont
     use_memories: bool
     enable_memory_tool: bool
     instructions: str | None
