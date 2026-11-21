@@ -128,12 +128,17 @@ def extract_jira_project(url: str) -> tuple[str, str]:
 
 
 def get_comment_strs(
-    issue: dict[str, Any], comment_email_blacklist: tuple[str, ...] = ()
+    issue: dict[str, Any],
+    comment_email_blacklist: tuple[str, ...] = (),
+    exclude_internal_comments: bool = False,
 ) -> list[str]:
     comment_field: dict[str, Any] = get_issue_field(issue, "comment") or {}
     comment_strs: list[str] = []
     for comment in comment_field.get("comments", []):
         try:
+            # Jira Service Management marks agent-only comments jsdPublic=false.
+            if exclude_internal_comments and comment.get("jsdPublic") is False:
+                continue
             author: dict[str, Any] = comment.get("author") or {}
             if author.get("emailAddress") in comment_email_blacklist:
                 continue  # Skip adding comment if author's email is in blacklist
@@ -144,3 +149,31 @@ def get_comment_strs(
             continue
 
     return comment_strs
+
+
+def get_jsm_request_type(issue: dict[str, Any]) -> str | None:
+    """The Jira Service Management request type name of an issue, if any.
+
+    The request type lives in a customfield whose id differs per site, so it
+    is found by its shape: a dict holding a ``requestType`` with a name.
+    """
+    fields: dict[str, Any] = issue.get("fields") or {}
+    for key, value in fields.items():
+        if not key.startswith("customfield_") or not isinstance(value, dict):
+            continue
+        request_type = value.get("requestType")
+        if isinstance(request_type, dict) and request_type.get("name"):
+            return str(request_type["name"])
+    return None
+
+
+def get_jsm_metadata(issue: dict[str, Any]) -> dict[str, str]:
+    """Status category and (for service desk issues) request type metadata."""
+    metadata: dict[str, str] = {}
+    status: Any = get_issue_field(issue, "status")
+    category: Any = status.get("statusCategory") if isinstance(status, dict) else None
+    if isinstance(category, dict) and category.get("name"):
+        metadata["status_category"] = str(category["name"])
+    if request_type := get_jsm_request_type(issue):
+        metadata["request_type"] = request_type
+    return metadata

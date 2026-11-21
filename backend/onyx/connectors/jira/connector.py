@@ -49,6 +49,7 @@ from onyx.connectors.jira.utils import (
     build_jira_url,
     get_comment_strs,
     get_issue_field,
+    get_jsm_metadata,
     get_named_field,
     rich_text,
 )
@@ -352,6 +353,7 @@ def process_jira_issue(
     comment_email_blacklist: tuple[str, ...] = (),
     labels_to_skip: set[str] | None = None,
     parent_hierarchy_raw_node_id: str | None = None,
+    exclude_internal_comments: bool = False,
 ) -> Document | None:
     issue_key: str = _issue_key(issue)
     issue_labels: list[str] = get_issue_field(issue, _FIELD_LABELS) or []
@@ -370,6 +372,7 @@ def process_jira_issue(
     comments: list[str] = get_comment_strs(
         issue=issue,
         comment_email_blacklist=comment_email_blacklist,
+        exclude_internal_comments=exclude_internal_comments,
     )
     ticket_content = f"{description}\n" + "\n".join(
         [f"Comment: {comment}" for comment in comments if comment]
@@ -412,6 +415,7 @@ def process_jira_issue(
         metadata_dict[_FIELD_PRIORITY] = priority
     if status := get_named_field(issue, _FIELD_STATUS):
         metadata_dict[_FIELD_STATUS] = status
+    metadata_dict.update(get_jsm_metadata(issue))
     if resolution := get_named_field(issue, _FIELD_RESOLUTION):
         metadata_dict[_FIELD_RESOLUTION] = resolution
     if issue_labels:
@@ -474,7 +478,7 @@ class JiraConnector(
 ):
     slim_listing_honors_indexing_start = True
 
-    def __init__(
+    def __init__(  # noqa: PLR0913, PLR0917 - args mirror the connector config
         self,
         jira_base_url: str,
         project_key: str | None = None,
@@ -487,7 +491,10 @@ class JiraConnector(
         # Custom JQL query to filter Jira issues
         jql_query: str | None = None,
         scoped_token: bool = False,
+        # Jira Service Management: drop agent-only (jsdPublic=false) comments.
+        exclude_internal_comments: bool = False,
     ) -> None:
+        self.exclude_internal_comments = exclude_internal_comments
         self.batch_size = batch_size
 
         # dealing with scoped tokens is a bit tricky becasue we need to hit api.atlassian.net
@@ -803,6 +810,7 @@ class JiraConnector(
             comment_email_blacklist=self.comment_email_blacklist,
             labels_to_skip=self.labels_to_skip,
             parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
+            exclude_internal_comments=self.exclude_internal_comments,
         ):
             # Add permission information to the document if requested
             if include_permissions:

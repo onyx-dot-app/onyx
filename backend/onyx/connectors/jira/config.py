@@ -50,6 +50,8 @@ class JiraConnectorConfig(JiraCredentialBinding, ConnectorConfig):
     comment_email_blacklist: Annotated[
         list[str] | None, FieldPolicy(FieldClass.BEHAVIOR)
     ] = None
+    # Jira Service Management: drops agent-only comments (jsdPublic=false).
+    exclude_internal_comments: Annotated[bool, FieldPolicy(FieldClass.BEHAVIOR)] = False
     batch_size: Annotated[int, FieldPolicy(FieldClass.COSMETIC)] = INDEX_BATCH_SIZE
     labels_to_skip: Annotated[
         list[str], FieldPolicy(FieldClass.SCOPE, scope=ScopeExclude())

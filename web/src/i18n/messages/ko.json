@@ -3314,6 +3314,10 @@
             "comment_email_blacklist": {
               "label": "댓글 이메일 차단 목록",
               "description": "특정 봇을 무시할 때 유용합니다. 댓글을 인덱싱하지 않을 사용자의 이메일을 추가하세요."
+            },
+            "exclude_internal_comments": {
+              "label": "내부 댓글 제외",
+              "description": "Jira Service Management 프로젝트의 경우: 상담원 전용(내부) 댓글은 건너뛰고 고객에게 표시되는 댓글만 인덱싱합니다. 기존 커넥터에서 이 옵션을 켜면 이미 인덱싱된 내부 댓글을 제거하기 위해 전체 재인덱싱이 필요합니다."
             }
           }
         },

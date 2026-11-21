@@ -3314,6 +3314,10 @@
             "comment_email_blacklist": {
               "label": "Kommentar-E-Mail-Sperrliste",
               "description": "Nützlich, um bestimmte Bots zu ignorieren. Fügen Sie E-Mail-Adressen von Nutzern hinzu, deren Kommentare NICHT indexiert werden sollen."
+            },
+            "exclude_internal_comments": {
+              "label": "Interne Kommentare ausschließen",
+              "description": "Für Jira Service Management-Projekte: Interne Kommentare nur für Agenten überspringen und nur für Kunden sichtbare Kommentare indexieren. Wenn Sie dies für einen bestehenden Connector aktivieren, ist eine vollständige Neuindexierung erforderlich, um bereits indexierte interne Kommentare zu entfernen."
             }
           }
         },
