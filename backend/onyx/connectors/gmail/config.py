@@ -1,9 +1,37 @@
-from typing import Annotated
+from typing import Annotated, Any
+
+from pydantic import field_validator
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE
-from onyx.connectors.connector_config import ConnectorConfig
+from onyx.connectors.connector_config import ConnectorConfig, field_format_error
 from onyx.connectors.field_policy import FieldClass, FieldPolicy
 
 
 class GmailConnectorConfig(ConnectorConfig):
     batch_size: Annotated[int, FieldPolicy(FieldClass.COSMETIC)] = INDEX_BATCH_SIZE
+    # Addresses of Google Groups with Collaborative Inbox turned on. The mail
+    # they deliver is indexed once for the group, not once per member. Only a
+    # from-beginning run rewrites the mail that is already indexed.
+    collaborative_inbox_groups: Annotated[
+        list[str] | None, FieldPolicy(FieldClass.BEHAVIOR)
+    ] = None
+
+    # The edit planner diffs this list, so it is trimmed, lowercased, deduped
+    # and sorted, and blank entries are dropped.
+    @field_validator("collaborative_inbox_groups", mode="before")
+    @classmethod
+    def _normalize_collaborative_inbox_groups(cls, value: Any) -> Any:
+        if not isinstance(value, list) or not all(isinstance(v, str) for v in value):
+            return value
+        return sorted({entry.strip().lower() for entry in value if entry.strip()})
+
+    @field_validator("collaborative_inbox_groups")
+    @classmethod
+    def _collaborative_inbox_groups_are_addresses(
+        cls, value: list[str] | None
+    ) -> list[str] | None:
+        if any(entry.count("@") != 1 for entry in value or []):
+            raise field_format_error(
+                "Enter each group as an email address, such as support@example.com."
+            )
+        return value

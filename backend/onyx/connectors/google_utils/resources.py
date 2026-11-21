@@ -26,11 +26,16 @@ class GmailService(Resource):
     pass
 
 
+class GroupsSettingsService(Resource):
+    pass
+
+
 class GoogleService(Enum):
     DOCS = ("docs", "v1")
     DRIVE = ("drive", "v3")
     ADMIN = ("admin", "directory_v1")
     GMAIL = ("gmail", "v1")
+    GROUPS_SETTINGS = ("groupssettings", "v1")
 
 
 @overload
