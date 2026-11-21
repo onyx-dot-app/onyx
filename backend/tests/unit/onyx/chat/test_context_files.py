@@ -1,7 +1,7 @@
 """Tests for file selection, prompt budgets, and search policy.
 
 Covers:
-- resolve_context_user_files: combined project and custom persona files
+- resolve_context_user_files: project and custom persona files
 - extract_context_files: all-or-nothing context window fit check
 - Search filter / search_usage determination in the caller
 """
@@ -21,7 +21,7 @@ from onyx.chat.files import (
     load_context_user_files_for_tools,
     resolve_context_user_files,
 )
-from onyx.chat.models import AvailableFiles, SearchParams
+from onyx.chat.models import AvailableFiles, ContextUserFiles, SearchParams
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.db.enums import UserFileStatus
 from onyx.db.models import ChatMessage, UserFile
@@ -197,13 +197,15 @@ class TestResolveContextUserFiles:
             "onyx.chat.files.get_user_files_from_project",
             return_value=[project_file],
         ) as get_files:
-            result: list[UserFile] = resolve_context_user_files(
+            result = resolve_context_user_files(
                 persona, 99 if has_project else None, user_id, db_session
             )
-        expected: list[UserFile] = [project_file] if has_project else []
-        if persona_id != DEFAULT_PERSONA_ID and has_persona_files:
-            expected.append(persona_file)
-        assert result == expected
+        assert result == ContextUserFiles(
+            project=[project_file] if has_project else [],
+            agent=[persona_file]
+            if persona_id != DEFAULT_PERSONA_ID and has_persona_files
+            else [],
+        )
         if has_project:
             get_files.assert_called_once_with(
                 project_id=99, user_id=user_id, db_session=db_session
@@ -228,12 +230,13 @@ class TestResolveContextUserFiles:
             "onyx.chat.files.get_user_files_from_project",
             return_value=[shared_file, shared_file],
         ):
-            selected: list[UserFile] = resolve_context_user_files(
-                persona, 99, uuid4(), MagicMock()
-            )
-        assert selected == [shared_file, persona_file]
+            selected = resolve_context_user_files(persona, 99, uuid4(), MagicMock())
+        # A file of both the project and the agent is the agent's.
+        assert selected == ContextUserFiles(
+            project=[], agent=[shared_file, persona_file]
+        )
         available: AvailableFiles = collect_available_file_ids(
-            history, capture_user_file_metadata(selected)
+            history, capture_user_file_metadata([*selected.project, *selected.agent])
         )
         assert set(available.user_file_ids) == {shared_file.id, persona_file.id}
         assert available.chat_file_ids == [attachment_id]
@@ -256,11 +259,11 @@ class TestResolveContextUserFiles:
                 ],
             ) as load,
         ):
-            selected: list[UserFile] = resolve_context_user_files(
-                persona, 99, uuid4(), MagicMock()
-            )
+            selected = resolve_context_user_files(persona, 99, uuid4(), MagicMock())
             extracted: ExtractedContextFiles = extract_context_files(
-                capture_user_file_metadata(selected), 10000, 0
+                capture_user_file_metadata([*selected.project, *selected.agent]),
+                10000,
+                0,
             )
         assert extracted.uncapped_token_count == 2 * tokens_per_file
         if tokens_per_file == 100:
@@ -759,7 +762,9 @@ def test_file_reader_uses_the_same_combined_file_scope_as_prompt() -> None:
         "onyx.chat.files.get_user_files_from_project", return_value=[project_file]
     ) as project_files:
         selected = resolve_context_user_files(persona, 99, uuid4(), MagicMock())
-        available = collect_available_file_ids([], capture_user_file_metadata(selected))
+        available = collect_available_file_ids(
+            [], capture_user_file_metadata([*selected.project, *selected.agent])
+        )
     assert set(available.user_file_ids) == {persona_file.id, project_file.id}
     project_files.assert_called_once()
 
@@ -861,6 +866,6 @@ def test_chat_history_attachment_keeps_its_indexed_state() -> None:
         response_messages=[],
     )
 
-    result = convert_chat_history([message], [loaded])
+    result = convert_chat_history([message], [loaded], vm_paths={})
 
     assert result.all_injected_file_metadata[user_file_id].indexed is False

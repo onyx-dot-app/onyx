@@ -30,7 +30,7 @@ import {
   SvgPlusCircle,
   SvgX,
 } from "@opal/icons";
-import { formatBytes } from "@/lib/utils";
+import { useFormatBytes } from "@/hooks/useFormatBytes";
 import { timestampToReadableDate } from "@/lib/dateUtils";
 
 interface InlineFileManagementProps {
@@ -43,6 +43,7 @@ export default function InlineFileManagement({
   onRefresh,
 }: InlineFileManagementProps) {
   const t = useTranslations("admin.connector");
+  const formatBytes = useFormatBytes();
   const [isEditing, setIsEditing] = useState(false);
   const [selectedFilesToRemove, setSelectedFilesToRemove] = useState<
     Set<string>
@@ -299,7 +300,9 @@ export default function InlineFileManagement({
                           isMarkedForRemoval ? "line-through opacity-60" : ""
                         }
                       >
-                        {formatBytes(file.file_size)}
+                        {file.file_size === null
+                          ? t("fileManagement.unknownSize")
+                          : formatBytes(file.file_size)}
                       </TableCell>
                       <TableCell
                         className={

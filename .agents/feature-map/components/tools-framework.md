@@ -350,9 +350,12 @@ are plain `AgentTool` objects with no `Tool` row, and
    a successful result only. An error shows no text unless its details are
    `ToolExecutionError`. Return typed `details`: with `details=None`, the live
    stream sends the text twice, because both the result update and the
-   completion emit it. Streamed argument
-   deltas go only to `run_python` and `execute_code`
-   (`chat/renderer.py:MessageRenderer.consume`). Code mode calls render with
+   completion emit it. Streamed arguments
+   show live only for some tools (`chat/renderer.py:MessageRenderer.consume`):
+   `run_python` and `execute_code` stream argument deltas, the file tools
+   (`write`, `edit`, `apply_patch`) report `file_tool_progress`. Every stream
+   is throttled
+   ([[streaming-protocol]]). Code mode calls render with
    `chat/renderer.py:CodeModeRenderer`, a `ToolRenderer` that
    `tool_renderer` picks by tool name; question calls render only their card
    (`chat/renderer.py:QuestionToolRenderer`: `tool_question_request` and
@@ -395,7 +398,9 @@ are plain `AgentTool` objects with no `Tool` row, and
    the finalized result into the run record that chat saves, and publishes
    `ToolEndEvent`. Before `Run.record_tool_results` records and streams a
    result, `Agent.prepare_tool_result` can replace it, one result at a time in
-   completion order; chat's sandbox spill uses it ([[code-execution]]). After a
+   completion order; chat's sandbox spill uses it, and then adds the file copy
+   status line to the root agent's sandbox and code mode results
+   ([[code-execution]]). After a
    cancel between `Run.record_tool_results` and `finish_tool`, the saved
    result is the recorded result, before `after_tool_call`, and no
    `ToolEndEvent` is sent. A tool whose calls must not overlap

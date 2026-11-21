@@ -43,6 +43,7 @@ export function isToolPacket(
     PacketType.WRITE_STDIN_START,
     PacketType.EXEC_OUTPUT_DELTA,
     PacketType.EXEC_END,
+    PacketType.FILE_TOOL_PROGRESS,
     PacketType.APPLY_PATCH_START,
     PacketType.APPLY_PATCH_END,
     PacketType.PUBLISH_FILES_START,

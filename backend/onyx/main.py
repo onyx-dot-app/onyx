@@ -187,6 +187,7 @@ from onyx.server.settings.api import basic_router as settings_router
 from onyx.server.sso_discovery import router as sso_discovery_router
 from onyx.server.utils import BasicAuthenticationError
 from onyx.setup import setup_multitenant_onyx, setup_onyx
+from onyx.tools.tool_implementations.sandbox.file_copies import shutdown_file_copies
 from onyx.tracing.setup import setup_tracing
 from onyx.utils.client_ip import ClientIPMiddleware
 from onyx.utils.encryption import validate_encryption_configuration
@@ -477,6 +478,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
                 logger.error("Chat turns did not drain before API shutdown")
         except Exception:
             logger.exception("Failed to drain chat turns on shutdown")
+
+        try:
+            shutdown_file_copies()
+        except Exception:
+            logger.exception("Failed to stop chat file copies on shutdown")
 
         # Flush buffered per-user usage before disposing the DB engines its drain
         # thread writes through.

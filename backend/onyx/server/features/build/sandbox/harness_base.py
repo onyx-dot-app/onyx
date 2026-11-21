@@ -51,10 +51,15 @@ from onyx.server.features.build.sandbox.models import (
     HarnessSandboxRef,
     SandboxPathInfo,
     SkillsBundle,
+    session_workspace,
 )
 
-# Parent of each chat session's working directory in the sandbox.
-SESSION_WORKSPACE_ROOT = "/home/onyx/workspaces"
+# The directory of the chat's files in its session directory: copies of file
+# store files (tools/tool_implementations/sandbox/file_copies.py).
+CHAT_FILES_DIR = "attachments"
+# The chat's project files and its agent's files, in CHAT_FILES_DIR.
+PROJECT_FILES_DIR = f"{CHAT_FILES_DIR}/project"
+AGENT_FILES_DIR = f"{CHAT_FILES_DIR}/agent"
 
 # Parent of the files that Onyx writes outside every session directory (for
 # example large tool results). No session save keeps them; they go when the
@@ -66,6 +71,19 @@ ONYX_VM_FILES_ROOT = "/tmp/onyx"  # noqa: S108 - a path in the sandbox VM.
 # never used the sandbox otherwise, and a write that lands after the purge
 # deletes the directory again and raises HarnessSandboxError.
 TOOL_RESULTS_ROOT = f"{ONYX_VM_FILES_ROOT}/tool-results"
+
+# render_first_page: a JPEG of a file's first page, at most this many pixels on
+# its longer side, drawn in a scratch directory of its own under this root.
+RENDER_FIRST_PAGE_SIZE_PX = 640
+RENDER_FIRST_PAGE_ROOT = f"{ONYX_VM_FILES_ROOT}/renders"
+# The suffixes it draws: a PDF directly, Office files through LibreOffice.
+RENDER_FIRST_PAGE_SUFFIXES = frozenset({".pdf", ".pptx", ".docx"})
+# Largest file that callers render, and largest JPEG that it reads back.
+RENDER_FIRST_PAGE_MAX_INPUT_BYTES = 20 << 20
+RENDER_FIRST_PAGE_MAX_OUTPUT_BYTES = 4 << 20
+# The renders of one publish_files call end by this budget, which starts once
+# the call has its sandbox. A file after it publishes without a thumbnail.
+RENDER_FIRST_PAGE_BUDGET_SECONDS = 30.0
 
 # Most exec session records per sandbox; the least recently used goes
 # first. The guest daemon caps the running commands.
@@ -83,10 +101,6 @@ EXEC_DEFAULT_ENV: dict[str, str] = {
 }
 
 INTERRUPT_CHAR = "\x03"
-
-
-def session_workspace(session_id: UUID) -> str:
-    return f"{SESSION_WORKSPACE_ROOT}/{session_id}"
 
 
 def session_tool_results(session_id: UUID) -> str:
@@ -171,6 +185,36 @@ def onyx_vm_path(path: str) -> str | None:
     file calls reach; else None."""
     normalized = posixpath.normpath(path)
     return normalized if normalized.startswith(ONYX_VM_FILES_ROOT + "/") else None
+
+
+class SessionFiles(abc.ABC):
+    """File calls in one chat session's directory on one running VM
+    instance. The VM is placed and the session set up once, so each call is
+    one guest daemon call; a call fails once the instance stopped. Paths are
+    relative to the session directory. Safe to call from several threads."""
+
+    @abc.abstractmethod
+    def write(self, path: str, data: IO[bytes], *, timeout_seconds: float) -> None:
+        """write_file, mode 0644, on this instance. A write makes a missing
+        session directory; a write that finds the session purged deletes
+        that directory again and raises HarnessSandboxError."""
+
+    @abc.abstractmethod
+    def delete(self, path: str) -> bool:
+        """Delete a file or a link (not a directory) inside the session
+        directory; a link is never followed. False when nothing was at the
+        path. Never sets the session up again, so after a purge it deletes
+        nothing."""
+
+    @abc.abstractmethod
+    def list_files(self, directory: str, *, max_entries: int) -> FileListing:
+        """The entries directly in `directory`, not those of its
+        subdirectories; none for a missing directory."""
+
+    @abc.abstractmethod
+    def mark_busy(self, seconds: float | None) -> None:
+        """Keep the sandbox busy (no idle stop) for `seconds` from now, or
+        end that (None). Each SessionFiles has one such mark."""
 
 
 class HarnessSandbox(abc.ABC):
@@ -286,6 +330,24 @@ class HarnessSandbox(abc.ABC):
         at the path."""
 
     @abc.abstractmethod
+    def session_files(self, ref: HarnessSandboxRef) -> SessionFiles:
+        """Start the sandbox if needed, set up the chat session's directory,
+        and return file calls bound to the running VM instance. Raises
+        HarnessSandboxError for a purged session."""
+
+    @abc.abstractmethod
+    def render_first_page(
+        self, ref: HarnessSandboxRef, path: str, *, until: float
+    ) -> bytes | None:
+        """A JPEG of the first page of a file with a RENDER_FIRST_PAGE_SUFFIXES
+        suffix, at a path that `read_file` accepts, RENDER_FIRST_PAGE_SIZE_PX
+        on its longer side, drawn by the VM's poppler and LibreOffice by
+        `until` (time.monotonic()). Callers pass files up to
+        RENDER_FIRST_PAGE_MAX_INPUT_BYTES. Returns None, and logs why, on any
+        failure. A cancel of the current signal kills the render and raises
+        AgentCancelled."""
+
+    @abc.abstractmethod
     def touch(self, ref: HarnessSandboxRef) -> None:
         """Record activity for the idle stop. Never starts the sandbox."""
 
@@ -304,5 +366,5 @@ class HarnessSandbox(abc.ABC):
 
     @abc.abstractmethod
     def is_busy(self, *, tenant_id: str, sandbox_id: UUID) -> bool:
-        """True while a command runs, a turn is in progress, or an approval
-        waits. Never starts the sandbox."""
+        """True while a command runs, a turn is in progress, a copy runs, or
+        an approval waits. Never starts the sandbox."""

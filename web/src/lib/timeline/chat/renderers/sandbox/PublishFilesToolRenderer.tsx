@@ -3,6 +3,7 @@ import { useTranslations } from "next-intl";
 import { Section } from "@opal/layouts";
 import { Text } from "@opal/components";
 import { SvgFiles } from "@opal/icons";
+import { stripBidiControls } from "@opal/utils";
 import {
   PacketType,
   PublishFilesEnd,
@@ -15,6 +16,7 @@ import {
   SandboxCallError,
 } from "@/lib/timeline/chat/renderers/sandbox/sandboxCall";
 import { useSandboxCallStatus } from "@/lib/sandbox/hooks";
+import { publishedFileLabel } from "@/lib/chat/publishedFiles";
 
 type PublishFilesToolRendererProps = ComponentProps<
   MessageRenderer<PublishFilesToolPacket, {}>
@@ -58,11 +60,14 @@ export function PublishFilesToolRenderer({
     () =>
       end !== null && end.files.length > 0
         ? end.files.map((file) => ({
-            label: file.title ?? file.name,
+            label: publishedFileLabel(file),
             path: file.path,
           }))
         : (start?.files ?? []).map((file) => ({
-            label: file.title ?? file.path.split("/").pop() ?? file.path,
+            label: publishedFileLabel({
+              title: file.title,
+              name: file.path.split("/").pop() || file.path,
+            }),
             path: file.path,
           })),
     [start, end]
@@ -95,16 +100,17 @@ export function PublishFilesToolRenderer({
               gap={0.5}
               height="fit"
             >
-              <Text font="secondary-action" color="text-04">
+              <Text dir="auto" font="secondary-action" color="text-04">
                 {row.label}
               </Text>
               {row.path !== row.label && (
                 <Text
+                  dir="ltr"
                   font="secondary-mono"
                   color="text-03"
                   wordWrap="break-all"
                 >
-                  {row.path}
+                  {stripBidiControls(row.path)}
                 </Text>
               )}
             </Section>

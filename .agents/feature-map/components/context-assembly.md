@@ -374,6 +374,14 @@ counts what is sent, not the stored token counts.
   Full results remain available while the runtime manages the context budget.
 - **Attached files stay where they were attached.** User attachments remain
   beside their question; project files and images remain in the preamble.
+  In a turn with the sandbox, each attachment's file message names its copy
+  in the VM with an "In the VM: attachments/<id prefix>-<name>" line, counted in the
+  message's tokens (`chat/files.py:build_file_context`), and the images of a
+  message get one more message with a line for each image
+  (`chat/chat_utils.py:convert_chat_history`). A path depends on its file
+  alone (`chat/files.py:place_chat_files`), so a message keeps its lines
+  and the prefix stays cacheable. The `exec_command` description gains the
+  layout of `attachments/` once, when the chat gets its first file.
   Only user attachments enter the prompt as text, so turn preparation
   extracts text only for the files of user messages
   (`chat/process_message.py:prepare_chat_turn`, `text_file_ids`). Files of

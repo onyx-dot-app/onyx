@@ -19,6 +19,12 @@ type LineStepProps = LineBaseProps &
     /** What the line is about. Fills the row, on one line. */
     title: string | RichStr;
     /**
+     * The title's identity. A new key swaps the title through an animation;
+     * a new title with the same key updates in place, so a live title that
+     * changes often does not flash. Defaults to the title's text.
+     */
+    titleKey?: React.Key;
+    /**
      * Makes the row toggle the line, as a `Collapsible.Header` with a chevron
      * fold button: a click on the row calls this, and hovering it darkens
      * its title and icon (no fill). The body never calls this. Controls in
@@ -65,6 +71,7 @@ function LineStep({
   padding = 1,
   icon,
   title,
+  titleKey,
   rightChildren,
   onClick,
   expandable,
@@ -79,9 +86,11 @@ function LineStep({
       className="min-w-0 flex-1"
     >
       <span className="opal-line-title">
-        {/* A new title (e.g. "Searching" to "Searched") swaps; it never
+        {/* A new title key (e.g. "Searching" to "Searched") swaps; it never
             flashes. */}
-        <Presence.Swap swapKey={typeof title === "string" ? title : title.raw}>
+        <Presence.Swap
+          swapKey={titleKey ?? (typeof title === "string" ? title : title.raw)}
+        >
           <Text
             maxLines={1}
             overflowTooltip

@@ -22,6 +22,13 @@ FileSet: TypeAlias = dict[str, bytes]
 # Fixed zip entry times keep a skills bundle's bytes stable.
 _ZIP_EPOCH = (1980, 1, 1, 0, 0, 0)
 
+# Parent of each chat session's working directory in the sandbox.
+SESSION_WORKSPACE_ROOT = "/home/onyx/workspaces"
+
+
+def session_workspace(session_id: UUID) -> str:
+    return f"{SESSION_WORKSPACE_ROOT}/{session_id}"
+
 
 class SandboxResourceKind(str, Enum):
     POD = "pod"

@@ -1,7 +1,7 @@
 """The sandbox that the sandbox tools of one chat session share during a run."""
 
 import threading
-from collections.abc import Iterable
+from collections.abc import Iterable, Sequence
 from uuid import UUID
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
@@ -11,6 +11,8 @@ from onyx.db.skill import list_chat_skills
 from onyx.server.features.build.sandbox.harness_base import HarnessSandbox
 from onyx.server.features.build.sandbox.models import HarnessSandboxRef, SkillsBundle
 from onyx.skills.models import ChatSkill
+from onyx.tools.tool_implementations.sandbox.file_copies import TurnFileCopies
+from onyx.tools.tool_implementations.sandbox.models import VmChatFile
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -29,17 +31,33 @@ class SandboxTurn:
     on_drained hook (`chat/execution.py:create_chat_agent`). Subagent runs never end it,
     since the root can be mid-call when they release; a background subagent
     that outlives the root leaves its renewed mark to expire.
+
+    `vm_chat_files` are the chat's files in the VM. In a turn that copies
+    them (`copy_vm_chat_files`), the first call starts `file_copies`, their
+    background copy; the root chat agent adds its status line to sandbox and
+    code mode results (`chat/agent.py`).
     """
 
-    def __init__(self, *, tenant_id: str, user: User, chat_session_id: UUID) -> None:
+    def __init__(
+        self,
+        *,
+        tenant_id: str,
+        user: User,
+        chat_session_id: UUID,
+        vm_chat_files: Sequence[VmChatFile],
+        copy_vm_chat_files: bool,
+    ) -> None:
         self._tenant_id = tenant_id
         self._user = user
         self._chat_session_id = chat_session_id
+        self.vm_chat_files = vm_chat_files
+        self._copy_vm_chat_files = copy_vm_chat_files
         self._lock = threading.Lock()
         self._ref: HarnessSandboxRef | None = None
         self._skills_lock = threading.Lock()
         self._skills_loaded = False
         self._skills_bundle: SkillsBundle | None = None
+        self.file_copies: TurnFileCopies | None = None
         # Custom skills the model read or the user picked, by name; resolved
         # to the user's current version once per turn.
         self._wanted: set[str] = set()
@@ -63,9 +81,11 @@ class SandboxTurn:
         return get_harness_sandbox()
 
     def start_call(self) -> HarnessSandboxRef:
-        """The sandbox reference for one call, with the turn mark renewed."""
+        """The sandbox reference for one call, with the turn mark renewed.
+        The first call starts the copy of the chat's files."""
         with self._lock:
             ref = self._ref
+        first = False
         if ref is None:
             # Outside the lock: concurrent first calls get the same row.
             with get_session_with_tenant(tenant_id=self._tenant_id) as db_session:
@@ -77,6 +97,7 @@ class SandboxTurn:
                         sandbox_id=sandbox_id,
                         session_id=self._chat_session_id,
                     )
+                    first = True
                 ref = self._ref
         # The mark expires on its own, so a failed renewal only lets a
         # turn-end save run sooner; the call still runs.
@@ -88,6 +109,16 @@ class SandboxTurn:
                 ref.sandbox_id,
                 ref.session_id,
             )
+        if first and self._copy_vm_chat_files:
+            # A copy that fails to start leaves the files to the next turn.
+            try:
+                self.file_copies = TurnFileCopies(ref, self.sandbox, self.vm_chat_files)
+            except Exception:
+                logger.exception(
+                    "sandbox_file_copies_start_failed sandbox=%s session=%s",
+                    ref.sandbox_id,
+                    ref.session_id,
+                )
         self._sync_skills(ref)
         return ref
 

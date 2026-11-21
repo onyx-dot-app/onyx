@@ -610,7 +610,9 @@ const ChatScrollContainer = React.memo(
       // Content changes (structure or size), batched per frame. A following
       // view keeps to the end; with following off (auto-scroll off while a
       // reply runs), growth that leaves the end makes the view a reading one,
-      // so a later resume never jumps. Not while the user scrolls.
+      // so a later resume never jumps. A width change (a side panel opens or
+      // resizes) reflows the rows, so a following view keeps to the end then
+      // too. Not while the user scrolls.
       // NOT characterData: firing per character thrashed auto-scroll. Text
       // that grows inside the latest turn's min-height changes no scroll
       // height, so the ResizeObserver also watches that turn's rows.
@@ -621,19 +623,20 @@ const ChatScrollContainer = React.memo(
         if (!container) return;
 
         let rafId: number | null = null;
+        let width = container.clientWidth;
         const onContentChange = () => {
           if (rafId) return;
           rafId = requestAnimationFrame(() => {
             rafId = null;
             observeLatestTurnRows();
+            const resized = container.clientWidth !== width;
+            width = container.clientWidth;
+            const follow = autoScrollRef.current || resized;
             if (modeRef.current === "following") {
-              if (
-                !autoScrollRef.current &&
-                !isAtScrollEnd(container, buttonThresholdPx)
-              ) {
+              if (!follow && !isAtScrollEnd(container, buttonThresholdPx)) {
                 // Even during input: a later resume must not jump.
                 modeRef.current = "reading";
-              } else if (autoScrollRef.current && !pauseFollowingRef.current) {
+              } else if (follow && !pauseFollowingRef.current) {
                 // A write during scroll input waits for it to settle.
                 if (userIsScrolling()) catchUpAfterInput();
                 else stickToEnd();

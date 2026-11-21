@@ -65,7 +65,6 @@ from onyx.server.features.build.sandbox.harness_base import (
     collect_exec_result,
     session_relative_path,
     session_tool_results,
-    session_workspace,
 )
 from onyx.server.features.build.sandbox.models import (
     ExecCommandResult,
@@ -73,6 +72,7 @@ from onyx.server.features.build.sandbox.models import (
     ExecOutputDelta,
     HarnessSandboxRef,
     SkillsBundle,
+    session_workspace,
 )
 from onyx.skills.built_in import CHAT_CUSTOM_SKILLS_PATH
 from tests.external_dependency_unit.microvm.conftest import (

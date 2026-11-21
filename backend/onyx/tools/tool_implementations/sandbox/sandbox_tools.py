@@ -8,6 +8,7 @@ sandbox is the isolation, so calls need no approval.
 """
 
 import posixpath
+import time
 from collections.abc import Callable, Generator, Hashable, Iterator, Sequence
 from contextlib import closing, contextmanager
 from functools import partial
@@ -20,14 +21,15 @@ from onyx.agents.tools import (
     ToolInvocation,
     ToolProgress,
 )
-from onyx.configs.constants import FileOrigin
-from onyx.file_store.staging import delete_files_best_effort
-from onyx.file_store.utils import chat_output_file_type, save_chat_output_file
+from onyx.db.chat import delete_unpublished_chat_artifacts, save_chat_artifact
+from onyx.file_store.utils import chat_output_file_type
 from onyx.llm.model_capabilities import is_claude_model
 from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.prompts.sandbox_tools import (
     APPLY_PATCH_DESCRIPTION,
     APPLY_PATCH_USE,
+    ATTACHMENTS_NOT_SAVED_NOTE,
+    CHAT_FILES_LAYOUT,
     EDIT_DESCRIPTION,
     EDIT_USE,
     EXEC_COMMAND_DESCRIPTION,
@@ -41,17 +43,21 @@ from onyx.prompts.sandbox_tools import (
     WRITE_USE,
 )
 from onyx.server.features.build.sandbox.harness_base import (
+    CHAT_FILES_DIR,
+    RENDER_FIRST_PAGE_BUDGET_SECONDS,
+    RENDER_FIRST_PAGE_MAX_INPUT_BYTES,
+    RENDER_FIRST_PAGE_SUFFIXES,
     HarnessSandbox,
     HarnessSandboxError,
     SandboxPathError,
     session_relative_path,
-    session_workspace,
 )
 from onyx.server.features.build.sandbox.models import (
     ExecCommandResult,
     ExecEvent,
     HarnessSandboxRef,
     SandboxPathInfo,
+    session_workspace,
 )
 from onyx.tools.interface import (
     Tool,
@@ -67,6 +73,7 @@ from onyx.tools.models import (
 )
 from onyx.tools.tool_implementations.sandbox.models import (
     PUBLISH_FILES_MAX_BYTES,
+    PUBLISH_FILES_MAX_TITLE_CHARS,
     ApplyPatchArguments,
     ApplyPatchFileChange,
     ApplyPatchResult,
@@ -100,6 +107,7 @@ from onyx.tools.tool_implementations.sandbox.patch import (
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
 from onyx.tools.tool_implementations.utils import cut_middle, output_chars
 from onyx.utils.logger import setup_logger
+from onyx.utils.postgres_sanitization import sanitize_string
 
 logger = setup_logger()
 
@@ -260,6 +268,12 @@ class ExecCommandTool(SandboxTool):
     ARGUMENTS = ExecCommandArguments
     # Matches the web card title.
     display_name = "Terminal"
+
+    @property
+    def description(self) -> str:
+        if self._turn.vm_chat_files:
+            return f"{self.DESCRIPTION} {CHAT_FILES_LAYOUT}"
+        return self.DESCRIPTION
 
     @property
     def code_mode_result(self) -> CodeModeResultSpec:
@@ -430,6 +444,20 @@ def _change_file(
         invocation.cancellation.check()
         _write_file(sandbox, ref, path, data, info)
     return ApplyPatchFileChange(path=path, change="add" if created else "update")
+
+
+def _noted(content: str, changes: Sequence[ApplyPatchFileChange]) -> str:
+    """The result text of file changes; a later turn can put back the
+    original chat files in attachments/."""
+    changed = [
+        path
+        for change in changes
+        for path in (change.path, change.move_path)
+        if path is not None
+    ]
+    if any(path.startswith(CHAT_FILES_DIR + "/") for path in changed):
+        return f"{content}\n\n{ATTACHMENTS_NOT_SAVED_NOTE}"
+    return content
 
 
 class ApplyPatchTool(_FileTool):
@@ -608,20 +636,17 @@ class ApplyPatchTool(_FileTool):
                     )
                     raise ToolCallException(message, message) from error
                 changed.append(path)
+        changes = [
+            ApplyPatchFileChange(
+                path=hunk.path,
+                change=_CHANGES[type(hunk)],
+                move_path=hunk.move_path if isinstance(hunk, UpdateFile) else None,
+            )
+            for hunk in hunks
+        ]
         return ToolResult(
-            content=summarize(hunks),
-            details=ApplyPatchResult(
-                files=[
-                    ApplyPatchFileChange(
-                        path=hunk.path,
-                        change=_CHANGES[type(hunk)],
-                        move_path=hunk.move_path
-                        if isinstance(hunk, UpdateFile)
-                        else None,
-                    )
-                    for hunk in hunks
-                ]
-            ),
+            content=_noted(summarize(hunks), changes),
+            details=ApplyPatchResult(files=changes),
         )
 
 
@@ -655,11 +680,12 @@ class EditTool(_FileTool):
             ),
         )
         return ToolResult(
-            content=(
+            content=_noted(
                 f"The file {change.path} has been updated. All occurrences were "
                 "successfully replaced."
                 if arguments.replace_all
-                else f"The file {change.path} has been updated successfully."
+                else f"The file {change.path} has been updated successfully.",
+                [change],
             ),
             details=ApplyPatchResult(files=[change]),
         )
@@ -691,22 +717,28 @@ class WriteTool(_FileTool):
             lambda _read: arguments.content,
         )
         return ToolResult(
-            content=f"File created successfully at: {change.path}"
-            if change.change == "add"
-            else f"The file {change.path} has been updated successfully.",
+            content=_noted(
+                f"File created successfully at: {change.path}"
+                if change.change == "add"
+                else f"The file {change.path} has been updated successfully.",
+                [change],
+            ),
             details=ApplyPatchResult(files=[change]),
         )
 
 
 class PublishFilesTool(_FileTool):
-    """Copies files from the VM to the file store, stamped with the chat
-    session, so that everyone who can read the chat can download them
-    (`access/access.py:user_can_access_chat_file`). The response's save
-    attaches them to its message (`db/chat_response.py:save_chat_turn`), and
-    a hard chat delete deletes them by their ID prefix, saved or not
-    (`db/chat.py:delete_messages_and_files_from_chat_session`). A call
-    publishes all of its files or none.
-    It takes turns with the file tools, so it publishes their changes."""
+    """Copies files from the VM to the file store, each as the next version
+    of the root chat's artifact at its path, so that everyone who can read the
+    chat can download them (`access/access.py:user_can_access_chat_file`). The
+    response's save attaches them to its message
+    (`db/chat_response.py:save_chat_turn`), and a hard chat delete deletes
+    them through their artifacts, saved or not
+    (`db/chat.py:delete_messages_and_files_from_chat_session`). A PDF,
+    PowerPoint or Word file also gets a thumbnail of its first page, drawn in
+    the VM, when it renders within the call's render budget. A call publishes
+    all of its files or none. It takes turns with the file tools, so it
+    publishes their changes."""
 
     NAME = "publish_files"
     # The tool description is its only instruction to the model.
@@ -734,6 +766,9 @@ class PublishFilesTool(_FileTool):
                 # The turn's chat session is the root chat's, whose readers
                 # may download the files; subagent runs share it.
                 ref = self._turn.start_call()
+                # The budget starts once the call has its sandbox, so a wake
+                # or a skills sync does not spend it.
+                render_until = time.monotonic() + RENDER_FIRST_PAGE_BUDGET_SECONDS
                 for requested in arguments.files:
                     invocation.cancellation.check()
                     data = sandbox.read_file(
@@ -745,32 +780,51 @@ class PublishFilesTool(_FileTool):
                         )
                     )
                     name = posixpath.basename(path)
-                    mime_type = chat_output_file_type(name)
+                    # Postgres text cannot hold NUL, and a blank title is no
+                    # title
+                    title = (
+                        sanitize_string(requested.title or "")
+                        .strip()[:PUBLISH_FILES_MAX_TITLE_CHARS]
+                        .rstrip()
+                        or None
+                    )
+                    # A file with no thumbnail still publishes. Once the
+                    # budget is spent, no render looks up its file or logs.
+                    thumbnail = (
+                        sandbox.render_first_page(ref, path, until=render_until)
+                        if posixpath.splitext(name)[1].lower()
+                        in RENDER_FIRST_PAGE_SUFFIXES
+                        and len(data) <= RENDER_FIRST_PAGE_MAX_INPUT_BYTES
+                        and time.monotonic() < render_until
+                        else None
+                    )
                     published.append(
-                        PublishedFile(
-                            file_id=save_chat_output_file(
-                                data,
-                                display_name=name,
-                                file_type=mime_type,
-                                file_origin=FileOrigin.CHAT_ARTIFACT,
-                                chat_session_id=ref.session_id,
-                            ),
+                        save_chat_artifact(
+                            data,
                             name=name,
-                            title=requested.title,
+                            mime_type=chat_output_file_type(name),
+                            chat_session_id=ref.session_id,
                             path=path,
-                            size=len(data),
-                            mime_type=mime_type,
+                            title=title,
+                            thumbnail=thumbnail,
                         )
                     )
                 # A Stop during the last copy publishes nothing.
                 invocation.cancellation.check()
         except BaseException:
-            delete_files_best_effort(
-                [file.file_id for file in published], "unpublished sandbox files"
-            )
+            # A failed clean-up must not replace the call's own error or Stop.
+            try:
+                delete_unpublished_chat_artifacts(published)
+            except Exception:
+                logger.warning(
+                    "publish_files_cleanup_failed files=%s",
+                    [file.file_id for file in published],
+                    exc_info=True,
+                )
             raise
         listed = "\n".join(
-            f"- {file.path}: file ID {file.file_id}, {file.size} bytes, {file.mime_type}"
+            f"- {file.path}: version {file.version}, file ID {file.file_id}, "
+            f"{file.size} bytes, {file.mime_type}"
             for file in published
         )
         return ToolResult(

@@ -350,7 +350,11 @@ def test_the_sandbox_section_names_the_turn_s_sandbox_tools(code_mode: bool) -> 
         return build_system_prompt("base", tools=offered, include_user_info=False)
 
     turn = SandboxTurn(
-        tenant_id="t", user=MagicMock(id=uuid4()), chat_session_id=uuid4()
+        tenant_id="t",
+        user=MagicMock(id=uuid4()),
+        chat_session_id=uuid4(),
+        vm_chat_files=[],
+        copy_vm_chat_files=False,
     )
     prefix = "tools." if code_mode else ""
     assert "## Sandbox" not in prompt([EchoTool()])

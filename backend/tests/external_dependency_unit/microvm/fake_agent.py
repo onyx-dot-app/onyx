@@ -75,6 +75,8 @@ WORKSPACES = "/home/onyx/workspaces"
 _DENIED_VM_PATHS = ("/proc", "/sys", "/dev", "/run/craft-fc")
 # The daemon streams output in chunks of at most this size (guestd server.go).
 _STREAM_CHUNK_BYTES = 64 << 10
+# What the fake pdftoppm writes; tests compare the bytes.
+FAKE_JPEG = b"\xff\xd8\xff\xe0fake-first-page\xff\xd9"
 
 
 def _abort(
@@ -172,8 +174,22 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
         self.path_stats: dict[tuple[str, str, str], sandboxd_pb2.PathStat] = {}
         # The data message sizes of each WriteFile, in order.
         self.write_chunk_sizes: list[list[int]] = []
-        # WriteFile fails with this reason.
-        self.write_file_error: SandboxDaemonErrorReason | None = None
+        # Injected WriteFile failures, by path as the daemon takes it
+        # (session-relative, or absolute with no session), or ANY_PATH.
+        self.write_failures: dict[str, WriteFailure] = {}
+        # The path of each WriteFile, as the daemon takes it, in order.
+        self.write_paths: list[str] = []
+        # By path: WriteFile waits for the event after all data arrived,
+        # before it stores; the path is in write_waiting meanwhile.
+        self.write_gates: dict[str, threading.Event] = {}
+        self.write_waiting: set[str] = set()
+        # By path: WriteFile waits for the event after this many data
+        # messages (mid-stream); the path is in write_held meanwhile.
+        self.write_holds: dict[str, tuple[int, threading.Event]] = {}
+        self.write_held: set[str] = set()
+        # WriteFile calls in progress, and the most at one time.
+        self.writes_running = 0
+        self.most_writes_running = 0
         # ZipFiles fails with LIMIT_EXCEEDED over this many input bytes.
         self.zip_max_input_bytes: int | None = None
         # Spooled captures by ID, and "object storage" by presigned URL.
@@ -204,6 +220,11 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
         self.stopped_attempts: set[tuple[str, int]] = set()
         # ListFiles returns at most this many entries (None: 10,000).
         self.list_max_entries: int | None = None
+        # ListFiles fails with RESOURCE_EXHAUSTED when its response has more
+        # entries, as one over the gRPC message limit does.
+        self.list_response_limit: int | None = None
+        # The (path, recursive) of each ListFiles, in order.
+        self.list_requests: list[tuple[str, bool]] = []
         # False: an older root drive whose daemon has no StatFiles.
         self.stat_files_supported = True
         # Seconds each Stop waits before it runs.
@@ -677,11 +698,30 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
             return hostagent_pb2.SwapManagedResponse(results=results)
 
 
+# A write_failures key that matches every path without its own entry.
+ANY_PATH = "*"
+
+
+class WriteFailure:
+    """WriteFile fails with `reason` after all data arrived, and stores
+    nothing: the next `count` times (None: every time). A status code
+    `reason` fails the call with no daemon reason, as a deadline does."""
+
+    def __init__(
+        self,
+        reason: SandboxDaemonErrorReason | grpc.StatusCode,
+        count: int | None = None,
+    ) -> None:
+        self.reason = reason
+        self.count = count
+
+
 @dataclass
 class FakeExecution:
     """A scripted command: echo, fail <code>, cat (echoes stdin), sleep,
-    mkdir or seq <n>. `bash -c <script>` runs the script's words as one of
-    these."""
+    mkdir, seq <n>, soffice (a PDF of any existing source) or pdftoppm (a
+    FAKE_JPEG of a source that starts with "%PDF"). `bash -c <script>` runs
+    the script's words as one of these."""
 
     execution_id: str
     argv: list[str]
@@ -745,6 +785,15 @@ def _skipped(path: str, exclude: set[str], *, skip_hidden: bool) -> bool:
     return bool(exclude & set(parts)) or (
         skip_hidden and any(p.startswith(".") for p in parts)
     )
+
+
+def _vm_file_key(sandbox_id: str, path: str) -> tuple[str, str, str]:
+    """The `files` key of an absolute path that a command names: a session
+    file under WORKSPACES, else a VM file."""
+    session, _, rel = path.removeprefix(WORKSPACES + "/").partition("/")
+    if path.startswith(WORKSPACES + "/") and rel:
+        return sandbox_id, session, rel
+    return sandbox_id, "", path
 
 
 class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
@@ -851,6 +900,8 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
             "true",
             "seq",
             "python3",
+            "soffice",
+            "pdftoppm",
         ):
             abort_daemon(context, SandboxDaemonErrorReason.START_FAILED, "no program")
         running = [
@@ -889,6 +940,24 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
         elif argv[0] == "python3":
             code, execution.stderr = self._run_python(sandbox_id, argv[1:])
             execution.end(sandboxd_pb2.EXITED, code)
+        elif argv[0] == "soffice":
+            # Like LibreOffice: exit 0 even when the source does not load.
+            outdir = argv[argv.index("--outdir") + 1]
+            source = self.agent.files.get(_vm_file_key(sandbox_id, argv[-1]))
+            if source is not None:
+                stem = posixpath.splitext(posixpath.basename(argv[-1]))[0]
+                self.agent.files[(sandbox_id, "", f"{outdir}/{stem}.pdf")] = (
+                    b"%PDF-" + source
+                )
+            execution.end(sandboxd_pb2.EXITED, 0)
+        elif argv[0] == "pdftoppm":
+            source = self.agent.files.get(_vm_file_key(sandbox_id, argv[-2]))
+            if source is None or not source.startswith(b"%PDF"):
+                execution.stderr = b"Syntax Error: Couldn't read xref table\n"
+                execution.end(sandboxd_pb2.EXITED, 1)
+            else:
+                self.agent.files[(sandbox_id, "", f"{argv[-1]}.jpg")] = FAKE_JPEG
+                execution.end(sandboxd_pb2.EXITED, 0)
         self.agent.executions.setdefault(sandbox_id, {})[execution.execution_id] = (
             execution
         )
@@ -1272,6 +1341,20 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
         abort_daemon(context, SandboxDaemonErrorReason.INVALID_ARGUMENT, "loop")
         raise AssertionError("unreachable")
 
+    def _parents_followed(
+        self, context: grpc.ServicerContext, key: tuple[str, str, str]
+    ) -> tuple[str, str, str]:
+        """`key` with the links on its parent directories followed, as the
+        daemon's root resolves a session path. Call with the lock held."""
+        if not key[1]:
+            return key
+        *parents, name = key[2].split("/")
+        resolved = ""
+        for part in parents:
+            joined = f"{resolved}/{part}" if resolved else part
+            resolved = self._followed(context, (key[0], key[1], joined))[2]
+        return key[0], key[1], f"{resolved}/{name}" if resolved else name
+
     def ReadFile(  # noqa: N802
         self, request: sandboxd_pb2.ReadFileRequest, context: grpc.ServicerContext
     ) -> Iterator[sandboxd_pb2.ReadFileResponse]:
@@ -1330,6 +1413,22 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
         request_iterator: Iterator[sandboxd_pb2.WriteFileRequest],
         context: grpc.ServicerContext,
     ) -> sandboxd_pb2.WriteFileResponse:
+        with self.agent.lock:
+            self.agent.writes_running += 1
+            self.agent.most_writes_running = max(
+                self.agent.most_writes_running, self.agent.writes_running
+            )
+        try:
+            return self._write_file(request_iterator, context)
+        finally:
+            with self.agent.lock:
+                self.agent.writes_running -= 1
+
+    def _write_file(
+        self,
+        request_iterator: Iterator[sandboxd_pb2.WriteFileRequest],
+        context: grpc.ServicerContext,
+    ) -> sandboxd_pb2.WriteFileResponse:
         first = next(request_iterator)
         if first.WhichOneof("part") != "header":
             abort_daemon(
@@ -1338,16 +1437,42 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
         header = first.header
         sizes: list[int] = []
         parts: list[bytes] = []
+        hold = self.agent.write_holds.get(header.path)
         for request in request_iterator:
             sizes.append(len(request.data))
             parts.append(request.data)
+            if hold is not None and len(sizes) == hold[0]:
+                with self.agent.lock:
+                    self.agent.write_held.add(header.path)
+                hold[1].wait()
+                with self.agent.lock:
+                    self.agent.write_held.discard(header.path)
         data = b"".join(parts)
+        gate = self.agent.write_gates.get(header.path)
+        if gate is not None:
+            with self.agent.lock:
+                self.agent.write_waiting.add(header.path)
+            gate.wait()
+            with self.agent.lock:
+                self.agent.write_waiting.discard(header.path)
         with self.agent.lock:
             self.agent.write_chunk_sizes.append(sizes)
+            self.agent.write_paths.append(header.path)
             sandbox_id = self._ready(context)
-            if self.agent.write_file_error is not None:
-                abort_daemon(context, self.agent.write_file_error, "write failed")
-            key = self._file_key(context, sandbox_id, header.session_id, header.path)
+            failure = self.agent.write_failures.get(
+                header.path
+            ) or self.agent.write_failures.get(ANY_PATH)
+            if failure is not None and failure.count != 0:
+                if failure.count is not None:
+                    failure.count -= 1
+                if isinstance(failure.reason, grpc.StatusCode):
+                    context.abort(failure.reason, "injected write failure")
+                else:
+                    abort_daemon(context, failure.reason, "injected write failure")
+            key = self._parents_followed(
+                context,
+                self._file_key(context, sandbox_id, header.session_id, header.path),
+            )
             path = key[2]
             if key in self.agent.files and not header.overwrite:
                 abort_daemon(context, SandboxDaemonErrorReason.FILE_EXISTS, path)
@@ -1402,9 +1527,35 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
                 if request.session_id
                 else self._file_key(context, sandbox_id, "", request.path)[2]
             )
-            files = self._session_files(sandbox_id, request.session_id)
+            files: dict[str, bytes | None] = {
+                **self._session_files(sandbox_id, request.session_id),
+                # Links, which have no data.
+                **{
+                    path: None
+                    for (sid, session, path) in self.agent.links
+                    if sid == sandbox_id and session == request.session_id
+                },
+            }
+            self.agent.list_requests.append((base, request.recursive))
+            # The directory that the path names through its links; entries
+            # keep the requested path.
+            real = (
+                self._followed(
+                    context,
+                    self._parents_followed(
+                        context, (sandbox_id, request.session_id, base)
+                    ),
+                )[2]
+                if request.session_id and base
+                else base
+            )
         prefix = f"{base}/" if base else ""
-        under = {p: d for p, d in files.items() if p.startswith(prefix)}
+        real_prefix = f"{real}/" if real else ""
+        under = {
+            prefix + p[len(real_prefix) :]: d
+            for p, d in files.items()
+            if p.startswith(real_prefix)
+        }
         if base and not under:
             abort_daemon(context, SandboxDaemonErrorReason.FILE_NOT_FOUND, base)
         exclude = set(request.exclude_names)
@@ -1413,7 +1564,7 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
         depth_cut = False
         dirs: set[str] = set()
         entries: list[sandboxd_pb2.FileInfo] = []
-        for path, data in sorted(under.items()):
+        for path, data in sorted(under.items(), key=lambda item: item[0]):
             rel = path[len(prefix) :]
             if _skipped(rel, exclude, skip_hidden=request.skip_hidden):
                 continue
@@ -1424,7 +1575,14 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
                 depth_cut = depth_cut or request.recursive
                 continue
             entries.append(
-                self._info(
+                sandboxd_pb2.FileInfo(
+                    path=path,
+                    name=path.rsplit("/", 1)[-1],
+                    type=sandboxd_pb2.FILE_TYPE_SYMLINK,
+                    mode=0o777,
+                )
+                if data is None
+                else self._info(
                     path,
                     len(data),
                     modified_at=self.agent.file_times.get(
@@ -1434,6 +1592,11 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
             )
         listing = [self._info(d, 0, directory=True) for d in sorted(dirs)] + entries
         limit = request.max_entries or self.agent.list_max_entries or 10_000
+        response_limit = self.agent.list_response_limit
+        if response_limit is not None and min(len(listing), limit) > response_limit:
+            context.abort(
+                grpc.StatusCode.RESOURCE_EXHAUSTED, "the response is over the limit"
+            )
         return sandboxd_pb2.ListFilesResponse(
             entries=listing[:limit], truncated=len(listing) > limit or depth_cut
         )
@@ -1451,7 +1614,10 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
                 for k in gone:
                     del self.agent.files[k]
                 return sandboxd_pb2.DeleteFileResponse(deleted=bool(gone))
-            key = self._file_key(context, sandbox_id, request.session_id, request.path)
+            key = self._parents_followed(
+                context,
+                self._file_key(context, sandbox_id, request.session_id, request.path),
+            )
             path = key[2]
             self.agent.file_modes.pop(key, None)
             if (
@@ -1511,7 +1677,8 @@ class RunningFakeAgent:
         server_credentials: grpc.ServerCredentials | None = None,
     ) -> None:
         self.agent = agent
-        self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=4))
+        # Room for the pod's parallel copies and the calls beside them.
+        self.server = grpc.server(futures.ThreadPoolExecutor(max_workers=32))
         hostagent_pb2_grpc.add_HostAgentServicer_to_server(agent, self.server)
         sandboxd_pb2_grpc.add_SandboxdServicer_to_server(
             FakeSandboxd(agent), self.server

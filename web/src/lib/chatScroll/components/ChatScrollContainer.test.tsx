@@ -126,6 +126,30 @@ test("with auto-scroll off, growth does not move the view, nor does a later resu
   expect(container.scrollTop).toBe(600);
 });
 
+/** The chat's width changes, as when a side panel opens beside it. */
+function resize(container: HTMLElement, width: number) {
+  Object.defineProperty(container, "clientWidth", {
+    configurable: true,
+    get: () => width,
+  });
+}
+
+test("with auto-scroll off, a width change that reflows the rows keeps a view at the end there", async () => {
+  const { container, grow } = renderChat({ autoScroll: false });
+  resize(container, 600);
+  await grow(300);
+  expect(container.scrollTop).toBe(900);
+});
+
+test("a width change does not move a reading view", async () => {
+  const { container, grow, userScroll, settleInput } = renderChat();
+  userScroll(100);
+  settleInput();
+  resize(container, 600);
+  await grow(300);
+  expect(container.scrollTop).toBe(100);
+});
+
 test("a user scroll up stops following", async () => {
   const { container, grow, userScroll, settleInput } = renderChat();
   userScroll(100);

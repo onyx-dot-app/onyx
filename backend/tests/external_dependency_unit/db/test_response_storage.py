@@ -1159,7 +1159,7 @@ def test_a_repeated_save_lists_each_published_file_once(
     response = _response(db_session, conversation)
     record = _record(response)
     published = PublishedFile(
-        file_id=f"chat-artifact-{conversation.id}-{uuid4().hex}",
+        file_id=str(uuid4()),
         name="report.md",
         path="/home/sandbox/report.md",
         size=9,
@@ -1929,6 +1929,7 @@ def test_old_rows_keep_the_legacy_reader(
     history = convert_chat_history(
         chat_history=capture_chat_history([response], {}, len),
         files=[],
+        vm_paths={},
     ).messages
     assert [message.text for message in history] == ["Existing answer"]
 

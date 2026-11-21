@@ -478,8 +478,9 @@ class FileStoreType(str, Enum):
 
 
 # Key in FileRecord.file_metadata naming the chat session that produced a
-# chat output file (CHAT_OUTPUT_FILE_ORIGINS). user_can_access_chat_file gives
-# the file to the session's readers.
+# generated image (FileOrigin.CHAT_IMAGE_GEN). user_can_access_chat_file gives
+# the file to the session's readers. A published file's chat is its
+# artifact's (ChatArtifact).
 CHAT_SESSION_ID_FILE_METADATA_KEY = "chat_session_id"
 
 
@@ -488,6 +489,8 @@ class FileOrigin(str, Enum):
     CHAT_IMAGE_GEN = "chat_image_gen"
     # A file that the model published from its sandbox (publish_files).
     CHAT_ARTIFACT = "chat_artifact"
+    # A JPEG of a published file's first page (ChatArtifactVersion).
+    CHAT_ARTIFACT_THUMBNAIL = "chat_artifact_thumbnail"
     CONNECTOR = "connector"
     CONNECTOR_FILE_UPLOAD = "connector_file_upload"
     CONNECTOR_METADATA = "connector_metadata"
@@ -505,9 +508,18 @@ class FileOrigin(str, Enum):
 
 
 # Files that a chat produced for its readers: generated images and code
-# interpreter outputs, and the files that the model published from its sandbox.
+# interpreter outputs, and the files that the model published from its sandbox
+# with their thumbnails.
 CHAT_OUTPUT_FILE_ORIGINS = frozenset(
-    {FileOrigin.CHAT_IMAGE_GEN, FileOrigin.CHAT_ARTIFACT}
+    {
+        FileOrigin.CHAT_IMAGE_GEN,
+        FileOrigin.CHAT_ARTIFACT,
+        FileOrigin.CHAT_ARTIFACT_THUMBNAIL,
+    }
+)
+# Chat output files whose chat is their artifact's (ChatArtifact).
+CHAT_ARTIFACT_FILE_ORIGINS = frozenset(
+    {FileOrigin.CHAT_ARTIFACT, FileOrigin.CHAT_ARTIFACT_THUMBNAIL}
 )
 
 

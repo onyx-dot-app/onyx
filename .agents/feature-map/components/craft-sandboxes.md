@@ -354,15 +354,36 @@ Harness sandboxes (the agent harness runs outside the sandbox):
   inside the session with a device and inode identity, or why there is none:
   missing, escapes, loop; at most 8 links per path; up to 1,000 paths and
   1 MiB of path bytes per call; an older root drive fails with a message
-  that it updates after a restart) and `delete_file` for apply_patch, and
-  busy signals (turn and parked-approval marks). `read_file`, `write_file`,
+  that it updates after a restart) and `delete_file` for apply_patch,
+  `session_files` (a `SessionFiles` bound to the running VM instance: a
+  write and a delete that share the session path checks of `write_file` and
+  `delete_file`, a listing of one directory, and one busy mark; a purged
+  session is refused, and a write that finds its session purged deletes the
+  session directory again; each turn's background chat file copy uses one: see
+  the docstring of `tools/tool_implementations/sandbox/file_copies.py`
+  ([[code-execution]])), and busy signals (turn,
+  background-copy and parked-approval marks).
+  `read_file`, `write_file`,
   `delete_file` and `delete_listed_files` also take an absolute path under
   `ONYX_VM_FILES_ROOT` (`/tmp/onyx`,
   `server/features/build/sandbox/harness_base.py:onyx_vm_path`), which the
   daemon confines to its onyx root with no session: the call wakes the VM but
   restores no session, and session saves never include the path. They refuse
   every other path outside the session directory. `publish_files` reads
-  through `read_file`.
+  through `read_file`. `render_first_page` draws a JPEG of the first page of a
+  `.pdf`, `.pptx` or `.docx` at a path that `read_file` accepts (a
+  session path or one under `ONYX_VM_FILES_ROOT`, through `_file_target`)
+  with the root drive's poppler and LibreOffice, as typed argv execs
+  (`daemon.run`, no shell) in a scratch directory under
+  `ONYX_VM_FILES_ROOT/renders` that it deletes, by the caller's deadline
+  (`publish_files` gives all renders of a call one 30 s budget, which starts
+  once the call has its sandbox). It returns
+  None on any failure; a cancel, or a step that ends without a result (a
+  broken stream), kills the running step before the delete. LibreOffice runs
+  without the AF_UNIX shim of
+  `backend/onyx/skills/builtin/pptx/scripts/office/soffice.py`: the guest
+  allows AF_UNIX sockets, and `deployment/craft-runtime/check-kvm.sh` runs
+  the runtime smoke test's `soffice` conversion in a real VM.
   Each chat session works in `SESSION_WORKSPACE_ROOT/<session_id>`
   (`/home/onyx/workspaces`); file calls take paths by
   `session_relative_path`. For a missing file, `read_file` raises
@@ -405,12 +426,14 @@ Harness sandboxes (the agent harness runs outside the sandbox):
 - Session saves (`.../firecracker/session_saves.py`): the idle evictor
   (node reports, `get_eviction_policy`, 15 min) saves each session on the
   VM first, in the background: CaptureSession of the session's top-level
-  directories and files (without dependencies and caches; files go under
+  directories and files (without dependencies, caches and the chat file
+  copies in `attachments/`; files go under
   `.onyx-top-level` in the archive, which older daemons restore as a
   directory; a later save sends that directory as a root, and the daemon
   takes its files back as top-level files), presigned upload, file
   store finalize, commit of the new save in the cache, then deletion of the
-  old archive. A busy sandbox (running command, turn, parked approval) or a
+  old archive. A busy sandbox (running command, turn, background file
+  copy, parked approval) or a
   failed save keeps the VM. A session's first use on a new VM instance
   restores its last save, once across pods (cache lock + session-instance
   record). The record is written under the placement lock only while the
@@ -451,7 +474,11 @@ Harness sandboxes (the agent harness runs outside the sandbox):
   100 saved sessions whose chat session is gone or whose build session had
   no activity in the window.
   A purge mark makes a save in progress drop its archive instead of
-  committing. Saves are indexed per sandbox in the tenant cache. A chat's
+  committing. Saves are indexed per sandbox in the tenant cache. A session
+  purge also takes the chat's next copy generation, so the chat's
+  background file copies stop (`.../sandbox/file_copy_state.py`; the
+  Generations rule in `tools/tool_implementations/sandbox/file_copies.py`).
+  A chat's
   published files are chat files, not sandbox state: a hard chat delete
   deletes them, and a soft delete keeps them ([[chat-persistence]]).
 

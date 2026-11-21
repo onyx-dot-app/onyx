@@ -144,8 +144,6 @@ export type PanelTab =
   | { kind: "file"; path: string; fileName: string }
   | { kind: "browser"; id: string; appId: string | null; appName?: string };
 
-export type OutputPanelMode = "closed" | "medium" | "full";
-
 export function normalizePanelPath(path: string): string {
   const segments: string[] = [];
   for (const segment of path.split("/")) {
