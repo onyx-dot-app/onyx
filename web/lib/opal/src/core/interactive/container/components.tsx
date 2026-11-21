@@ -102,6 +102,7 @@ function InteractiveContainer({
     href,
     target,
     rel,
+    download,
     ...rest
   } = props as typeof props & {
     className?: string;
@@ -109,6 +110,7 @@ function InteractiveContainer({
     href?: string;
     target?: string;
     rel?: string;
+    download?: string | true;
   };
   const { height, minWidth, padding } = containerSizeVariants[size];
   const sharedProps = {
@@ -130,6 +132,26 @@ function InteractiveContainer({
       ...slotStyle,
     },
   };
+
+  // A download is a file, not a page: the router must not prefetch or render it.
+  if (href && download !== undefined) {
+    // SAFETY: this branch renders an anchor, so the ref targets one.
+    const anchorRef = ref as React.Ref<HTMLAnchorElement>;
+    // SAFETY: the shared DOM props hold no div-only attribute.
+    const anchorProps = sharedProps as React.HTMLAttributes<HTMLAnchorElement>;
+    return (
+      <a
+        ref={anchorRef}
+        href={href}
+        download={download}
+        target={target}
+        rel={rel}
+        {...anchorProps}
+      >
+        {rest.children}
+      </a>
+    );
+  }
 
   if (href) {
     return (

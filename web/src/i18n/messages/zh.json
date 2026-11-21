@@ -1662,6 +1662,7 @@
         "removingBadge": {
           "label": "移除中"
         },
+        "unknownSize": "未知",
         "saveButton": {
           "label": "保存更改",
           "saving": "保存中..."
@@ -1934,9 +1935,7 @@
           "size": "大小",
           "other": "其他",
           "countWithSize": "{count}（{size}）",
-          "bytes": "字节",
-          "loadError": "无法加载文档类型。",
-          "sizeValue": "{value} {unit}"
+          "loadError": "无法加载文档类型。"
         }
       },
       "toasts": {
@@ -13676,10 +13675,6 @@
       },
       "lineCount": {
         "label": "{count, plural, one {# 行} other {# 行}}"
-      },
-      "size": {
-        "bytes": "{count} 字节",
-        "kilobytes": "{size} KB"
       },
       "viewFullButton": {
         "tooltip": "查看全文"

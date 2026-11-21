@@ -243,9 +243,9 @@ export default function PreviewModal({
                 {loadError}
               </Text>
               {fileUrl && (
-                <a href={fileUrl} download={fileName}>
-                  <Button>{t("downloadButton.label")}</Button>
-                </a>
+                <Button href={fileUrl} download={fileName}>
+                  {t("downloadButton.label")}
+                </Button>
               )}
             </Section>
           ) : (
