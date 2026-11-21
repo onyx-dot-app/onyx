@@ -13,6 +13,7 @@ from onyx.connectors.github.connector import (
     is_indexable_path,
 )
 from onyx.connectors.github.models import (
+    GitHubBranch,
     GitHubFileContent,
     GitHubGitTree,
     GitHubRepository,
@@ -317,6 +318,47 @@ def test_empty_repository_tree_skips_file_stage(
     assert outputs[-1].next_checkpoint.has_more is False
 
 
+def test_default_branch_with_empty_commit_tree_skips_file_stage(
+    build_files_connector: Callable[..., GithubConnector],
+    mock_source_operations: MagicMock,
+    serve_files: Callable[..., GitHubRepository],
+) -> None:
+    connector = build_files_connector()
+    serve_files({})
+    mock_source_operations.get_git_tree.side_effect = GitHubApiError(
+        "404", status_code=404, github_message="Not Found"
+    )
+    mock_source_operations.get_branch.return_value = GitHubBranch(
+        name="main", tree_sha="4b825dc642cb6eb9a060e54bf8d69288fbee4904"
+    )
+
+    assert connector._list_indexable_files(
+        mock_source_operations.get_repository.return_value
+    ) == ([], False)
+    mock_source_operations.get_branch.assert_called_once_with(
+        repo_full_name="test-org/test-repo", branch="main"
+    )
+
+
+def test_default_branch_nonempty_tree_404_is_not_suppressed(
+    build_files_connector: Callable[..., GithubConnector],
+    mock_source_operations: MagicMock,
+    serve_files: Callable[..., GitHubRepository],
+) -> None:
+    connector = build_files_connector()
+    repo = serve_files({})
+    error = GitHubApiError("404", status_code=404, github_message="Not Found")
+    mock_source_operations.get_git_tree.side_effect = error
+    mock_source_operations.get_branch.return_value = GitHubBranch(
+        name="main", tree_sha="not-the-empty-tree"
+    )
+
+    with pytest.raises(GitHubApiError) as excinfo:
+        connector._list_indexable_files(repo)
+
+    assert excinfo.value is error
+
+
 def test_branch_override_threads_through_listing_fetching_and_urls(
     build_files_connector: Callable[..., GithubConnector],
     mock_source_operations: MagicMock,
@@ -457,6 +499,7 @@ def test_nonexistent_branch_raises_clear_error(
 
     with pytest.raises(ConnectorValidationError, match="no-such-branch"):
         connector._list_indexable_files(repo)
+    mock_source_operations.get_branch.assert_not_called()
 
 
 def test_prs_disabled_404_does_not_crash_files(

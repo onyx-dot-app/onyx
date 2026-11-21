@@ -127,6 +127,7 @@ FILE_BATCH_SIZE = 100
 
 _GITHUB_EMPTY_REPOSITORY_TREE_STATUS = 409
 _GITHUB_EMPTY_REPOSITORY_TREE_MESSAGE = "Git Repository is empty."
+_GITHUB_EMPTY_TREE_SHA = "4b825dc642cb6eb9a060e54bf8d69288fbee4904"
 
 
 def is_indexable_path(path: str, size: int | None) -> bool:
@@ -928,6 +929,24 @@ class GithubConnector(
                     f"{repo.full_name}. Leave the branch setting blank to use "
                     f"the repository's default branch."
                 ) from e
+
+            if e.status_code == 404 and repo.default_branch is not None:
+                try:
+                    branch = self.source_operations.get_branch(
+                        repo_full_name=repo.full_name, branch=repo.default_branch
+                    )
+                except GitHubRateLimitError:
+                    sleep_after_rate_limit_exception(self.source_operations)
+                    return self._list_indexable_files(repo, attempt_num + 1)
+                except GitHubApiError:
+                    raise e
+
+                if branch.tree_sha == _GITHUB_EMPTY_TREE_SHA:
+                    logger.info(
+                        "Skipping files for repo with an empty default-branch tree: %s",
+                        repo.full_name,
+                    )
+                    return [], False
 
             if not (
                 e.status_code == _GITHUB_EMPTY_REPOSITORY_TREE_STATUS

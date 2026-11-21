@@ -230,6 +230,7 @@ class GitHubFileContent(BaseModel):
 
 class GitHubBranch(BaseModel):
     name: str
+    tree_sha: str
 
 
 class GitHubTokenKind(str, Enum):

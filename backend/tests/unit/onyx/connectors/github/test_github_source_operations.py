@@ -13,6 +13,7 @@ from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.connectors.github import source_operations as github_ops
 from onyx.connectors.github.models import (
+    GitHubBranch,
     GitHubRepository,
     GitHubTokenKind,
 )
@@ -326,6 +327,21 @@ def test_file_content_is_decoded() -> None:
     request.assert_called_once_with(
         "GET", "/repos/o/r/contents/README.md", parameters={"ref": "main"}
     )
+
+
+def test_branch_includes_its_tree_sha() -> None:
+    gateway, request = _gateway()
+    request.return_value = (
+        {},
+        {
+            "name": "main",
+            "commit": {"commit": {"tree": {"sha": "empty-tree-sha"}}},
+        },
+    )
+
+    branch = gateway.get_branch(repo_full_name="o/r", branch="main")
+
+    assert branch == GitHubBranch(name="main", tree_sha="empty-tree-sha")
 
 
 def test_file_content_without_base64_has_no_bytes() -> None:
