@@ -41,8 +41,8 @@ You need all of the following:
 - Your Onyx account has access to that model.
 - A Personal Access Token (PAT) with the **LLM Gateway &mdash; Use** scope.
 
-Create a [Personal Access Token](/developers/overview#personal-access-tokens) from **Settings** > **Accounts & Access**
-> **New Access Token**, or click **New token** in **Settings** > **LLM Gateway**.
+Create a [Personal Access Token](/developers/overview#personal-access-tokens) from **Settings** > **3rd Party Access**
+> **New Access Token**, or click **New token** in **Settings** > **3rd Party Access** > **LLM Gateway**.
 Under **Permissions**, choose **Limited access** and select **LLM Gateway &mdash; Use**. Onyx shows the token only once.
 
 A full-access token does not work with the gateway. The gateway accepts only tokens with an explicit scope,
@@ -50,7 +50,8 @@ and it rejects API keys and browser sessions.
 
 ## Gateway address
 
-**Settings** > **LLM Gateway** shows the **Gateway URL** for your deployment. For a standard Onyx deployment, it is:
+**Settings** > **3rd Party Access** > **LLM Gateway** shows the **Gateway URL** for your deployment.
+For a standard Onyx deployment, it is:
 
 ```text
 https://your-onyx-domain.com/api/gateway/v1
@@ -68,8 +69,9 @@ export ONYX_GATEWAY_API_KEY="onyx_pat_..."
 
 ## Find an available model
 
-The easiest way to find a model ID is in the **Models** section of **Settings** > **LLM Gateway**.
-The tab appears only when your plan includes the gateway and at least one model is visible and accessible to your
+The easiest way to find a model ID is in the **Models** section of **Settings** > **3rd Party Access** > **LLM
+Gateway**.
+The section appears only when your plan includes the gateway and at least one model is visible and accessible to your
 account. The copied value already has the required format:
 
 <img className="rounded-image" src="/assets/developers/llm_gateway_available_models.webp" alt="Onyx LLM Gateway settings with an expanded provider and model IDs"/>
@@ -164,7 +166,7 @@ usage attribution, and token limits as other gateway traffic.
 ### Claude Code
 
 Set the gateway's parent endpoint as the Anthropic base URL,
-then use a Claude model ID from **Settings** > **LLM Gateway**:
+then use a Claude model ID from **Settings** > **3rd Party Access** > **LLM Gateway**:
 
 ```bash
 export ANTHROPIC_BASE_URL="https://your-onyx-domain.com/api/gateway"
@@ -200,7 +202,7 @@ export ONYX_GATEWAY_API_KEY="onyx_pat_..."
 codex -p onyx
 ```
 
-The configured model must be an OpenAI-compatible model ID from **Settings** > **LLM Gateway**.
+The configured model must be an OpenAI-compatible model ID from **Settings** > **3rd Party Access** > **LLM Gateway**.
 
 ### OpenCode
 
@@ -270,7 +272,7 @@ Both default to on.
 | `401` or `403` | Use a PAT with the **LLM Gateway &mdash; Use** scope. A full-access token, an API key, or a browser session is rejected. Check that the user still has model access. |
 | `402` | The workspace plan does not include the gateway. Upgrade to Business or Enterprise. |
 | `FEATURE_DISABLED` | An administrator turned the gateway off in **Admin Panel** > **LLM Gateway**. |
-| Model not found (`404`) | Copy the model ID again from **Settings** > **LLM Gateway**. The provider ID is part of the identifier. |
+| Model not found (`404`) | Copy the model ID again from **Settings** > **3rd Party Access** > **LLM Gateway**. The provider ID is part of the identifier. |
 | Rate limited (`429`) | Ask an administrator to review the user, group, or workspace spending limit in **Admin Panel** > **Usage**. |
 | Model unavailable | Ask an administrator to configure the provider or make the model visible in **Language Models**. |
 | Wrong token counts | `count_tokens` falls back to a rough local estimate when the provider cannot be reached. |

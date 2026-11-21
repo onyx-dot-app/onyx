@@ -490,7 +490,8 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         nullable=False,
         default=DefaultAppMode.CHAT,
     )
-    # personalization fields are exposed via the chat user settings "Personalization" tab
+    # Personalization fields: name and role are in Settings > Account; the
+    # preferences (Instructions) and memory are in Settings > Chat Preferences.
     personal_name: Mapped[str | None] = mapped_column(String, nullable=True)
     personal_role: Mapped[str | None] = mapped_column(String, nullable=True)
     use_memories: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)

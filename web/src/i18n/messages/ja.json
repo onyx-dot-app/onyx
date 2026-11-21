@@ -9819,7 +9819,7 @@
       },
       "tierTooltip": "LLM ゲートウェイには Business プランまたは Enterprise プランが必要です。",
       "scopeNote": {
-        "title": "各ユーザーは設定 → LLM ゲートウェイで独自のトークンと接続情報を設定します。"
+        "title": "各ユーザーは設定 → サードパーティアクセス → LLM ゲートウェイで独自のトークンと接続情報を設定します。"
       },
       "toasts": {
         "settingsUpdateFailed": "設定の更新に失敗しました"
@@ -11799,11 +11799,6 @@
       "exportPlaintext": {
         "label": "プレーンテキスト"
       },
-      "fullWidth": {
-        "ariaLabel": "チャットの全幅表示を切り替え",
-        "fitTooltip": "幅を合わせる",
-        "fullTooltip": "全幅"
-      },
       "incognitoExit": {
         "ariaLabel": "シークレットチャットを終了",
         "tooltip": "シークレットチャットを終了"
@@ -13554,11 +13549,6 @@
       },
       "plant": {
         "label": "植物"
-      }
-    },
-    "colorSwatch": {
-      "sample": {
-        "text": "あア"
       }
     },
     "commandMenu": {
@@ -15773,11 +15763,6 @@
   },
   "settings": {
     "accounts": {
-      "email": {
-        "anonymousFallback": "匿名",
-        "description": "アカウントのメールアドレスです。",
-        "title": "メールアドレス"
-      },
       "password": {
         "changeButton": "パスワードを変更",
         "description": "アカウントのパスワードを更新します。",
@@ -15810,8 +15795,7 @@
           "mismatch": "パスワードが一致しません",
           "newRequired": "新しいパスワードは必須です"
         }
-      },
-      "title": "アカウント"
+      }
     },
     "apiKeys": {
       "createModal": {
@@ -15896,13 +15880,21 @@
         "title": "チャットの背景"
       },
       "colorMode": {
-        "auto": "自動",
+        "auto": "システム",
         "dark": "ダーク",
-        "description": "UI で使用するカラーモードを選択してください。",
+        "description": "UI で使用するテーマを選択してください。",
         "light": "ライト",
-        "title": "カラーモード"
+        "title": "テーマ"
       },
-      "title": "外観"
+      "general": {
+        "title": "一般"
+      },
+      "transcriptWidth": {
+        "title": "会話の表示幅",
+        "description": "このデバイスでのチャットメッセージと入力バーの幅を設定します。",
+        "standard": "標準",
+        "wide": "ワイド"
+      }
     },
     "chats": {
       "autoScroll": {
@@ -15936,7 +15928,6 @@
         "description": "ストリーミング応答を 1 文字ずつアニメーション表示します。無効にすると、受信したチャンクをそのまま表示します。",
         "title": "スムーズストリーミング"
       },
-      "title": "チャット",
       "toasts": {
         "saveFailed": "設定を保存できませんでした"
       },
@@ -15949,6 +15940,7 @@
     },
     "connectors": {
       "connectButton": "接続",
+      "disconnectAriaLabel": "{name} の接続を解除",
       "disconnectModal": {
         "continueNote": "{name} のコンテンツを参照している既存のセッションは、引き続き利用できます。",
         "description": "{appName} はあなたの {name} アカウントのコンテンツにアクセスまたは検索できなくなります。",
@@ -15956,11 +15948,9 @@
         "submit": "切断",
         "title": "*{name}* を切断"
       },
-      "emptyMessage": "組織に設定されたコネクターはありません。",
       "status": {
         "connected": "接続済み",
-        "notConnected": "未接続",
-        "paused": "一時停止中"
+        "notConnected": "未接続"
       },
       "title": "コネクター",
       "toasts": {
@@ -16024,7 +16014,6 @@
         "description": "UI で使用する言語を選択してください。",
         "title": "表示言語"
       },
-      "title": "言語",
       "toasts": {
         "updateFailed": "言語設定を更新できませんでした"
       }
@@ -16037,23 +16026,20 @@
         "placeholder": "セクションを選択"
       },
       "tabs": {
-        "accountsAccess": {
-          "label": "アカウントとアクセス"
+        "appearance": {
+          "label": "外観"
+        },
+        "usage": {
+          "label": "使用状況"
+        },
+        "account": {
+          "label": "アカウント"
         },
         "chatPreferences": {
           "label": "チャット設定"
         },
-        "connectors": {
-          "label": "コネクタ"
-        },
-        "general": {
-          "label": "一般"
-        },
-        "llmGateway": {
-          "label": "LLMゲートウェイ"
-        },
-        "usage": {
-          "label": "使用状況"
+        "thirdPartyAccess": {
+          "label": "サードパーティアクセス"
         }
       }
     },
@@ -16102,9 +16088,9 @@
       }
     },
     "personalPreferences": {
-      "description": "カスタム設定を自然な文章で入力してください。",
+      "description": "{appName} はすべてのチャットでこれらを考慮します。",
       "placeholder": "システムに期待する動作と、使ってほしい口調を記述してください。",
-      "title": "個人設定"
+      "title": "指示"
     },
     "profile": {
       "fullName": {
@@ -16129,7 +16115,6 @@
         "publicTooltip": "組織全体のプロンプトショートカットは削除できません。",
         "removeAriaLabel": "ショートカットを削除"
       },
-      "title": "プロンプトショートカット",
       "toasts": {
         "bothRequired": "ショートカットと展開後のテキストの両方が必要です",
         "deleteFailed": "ショートカットを削除できませんでした",
@@ -16152,9 +16137,6 @@
       "empty": {
         "description": "チャットを始めると、モデルの使用状況とコストがここに表示されます。",
         "title": "まだ使用記録がありません"
-      },
-      "header": {
-        "title": "使用状況"
       },
       "loadError": {
         "description": "使用状況の取得中に問題が発生しました。しばらくしてからもう一度お試しください。",
@@ -16215,9 +16197,16 @@
       },
       "playbackSpeed": {
         "description": "音声再生の速度を調整します。",
-        "title": "再生速度"
+        "title": "再生速度",
+        "value": "{speed}x"
       },
       "title": "音声"
+    },
+    "modelPreferences": {
+      "title": "モデルの設定"
+    },
+    "interactions": {
+      "title": "操作"
     }
   },
   "sidebar": {

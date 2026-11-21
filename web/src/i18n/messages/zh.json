@@ -9819,7 +9819,7 @@
       },
       "tierTooltip": "LLM 网关需要商业版或企业版套餐。",
       "scopeNote": {
-        "title": "每个用户在 设置 → LLM 网关 中配置自己的令牌和连接信息。"
+        "title": "每个用户在 设置 → 第三方访问 → LLM 网关 中配置自己的令牌和连接信息。"
       },
       "toasts": {
         "settingsUpdateFailed": "更新设置失败"
@@ -11799,11 +11799,6 @@
       "exportPlaintext": {
         "label": "纯文本"
       },
-      "fullWidth": {
-        "ariaLabel": "切换全宽聊天",
-        "fitTooltip": "适应宽度",
-        "fullTooltip": "全宽"
-      },
       "incognitoExit": {
         "ariaLabel": "退出无痕聊天",
         "tooltip": "退出无痕聊天"
@@ -13554,11 +13549,6 @@
       },
       "plant": {
         "label": "植物"
-      }
-    },
-    "colorSwatch": {
-      "sample": {
-        "text": "文"
       }
     },
     "commandMenu": {
@@ -15773,11 +15763,6 @@
   },
   "settings": {
     "accounts": {
-      "email": {
-        "anonymousFallback": "匿名",
-        "description": "您的账户电子邮件地址。",
-        "title": "电子邮件"
-      },
       "password": {
         "changeButton": "修改密码",
         "description": "更新您的账户密码。",
@@ -15810,8 +15795,7 @@
           "mismatch": "两次输入的密码不一致",
           "newRequired": "新密码为必填项"
         }
-      },
-      "title": "账户"
+      }
     },
     "apiKeys": {
       "createModal": {
@@ -15896,13 +15880,21 @@
         "title": "对话背景"
       },
       "colorMode": {
-        "auto": "自动",
+        "auto": "跟随系统",
         "dark": "深色",
-        "description": "选择您偏好的界面配色模式。",
+        "description": "选择您偏好的界面主题。",
         "light": "浅色",
-        "title": "配色模式"
+        "title": "主题"
       },
-      "title": "外观"
+      "general": {
+        "title": "常规"
+      },
+      "transcriptWidth": {
+        "title": "对话宽度",
+        "description": "设置此设备上聊天消息和输入栏的宽度。",
+        "standard": "标准",
+        "wide": "宽"
+      }
     },
     "chats": {
       "autoScroll": {
@@ -15936,7 +15928,6 @@
         "description": "以逐字动画的方式显示流式回复。禁用后，内容块到达时会直接渲染。",
         "title": "平滑流式输出"
       },
-      "title": "对话",
       "toasts": {
         "saveFailed": "保存偏好设置失败"
       },
@@ -15949,6 +15940,7 @@
     },
     "connectors": {
       "connectButton": "连接",
+      "disconnectAriaLabel": "断开与 {name} 的连接",
       "disconnectModal": {
         "continueNote": "您仍然可以继续引用 {name} 内容的现有会话。",
         "description": "{appName} 将无法再访问或搜索您 {name} 账户中的内容。",
@@ -15956,11 +15948,9 @@
         "submit": "断开连接",
         "title": "断开 *{name}* 连接"
       },
-      "emptyMessage": "您的组织尚未设置任何连接器。",
       "status": {
         "connected": "已连接",
-        "notConnected": "未连接",
-        "paused": "已暂停"
+        "notConnected": "未连接"
       },
       "title": "连接器",
       "toasts": {
@@ -16024,7 +16014,6 @@
         "description": "选择界面语言。",
         "title": "显示语言"
       },
-      "title": "语言",
       "toasts": {
         "updateFailed": "更新语言偏好设置失败"
       }
@@ -16037,23 +16026,20 @@
         "placeholder": "选择一个部分"
       },
       "tabs": {
-        "accountsAccess": {
-          "label": "账户与访问"
-        },
-        "chatPreferences": {
-          "label": "聊天偏好设置"
-        },
-        "connectors": {
-          "label": "连接器"
-        },
-        "general": {
-          "label": "常规"
-        },
-        "llmGateway": {
-          "label": "LLM 网关"
+        "appearance": {
+          "label": "外观"
         },
         "usage": {
           "label": "使用情况"
+        },
+        "account": {
+          "label": "账户"
+        },
+        "chatPreferences": {
+          "label": "对话偏好设置"
+        },
+        "thirdPartyAccess": {
+          "label": "第三方访问"
         }
       }
     },
@@ -16102,9 +16088,9 @@
       }
     },
     "personalPreferences": {
-      "description": "用自然语言填写您的自定义偏好。",
+      "description": "{appName} 会在您的所有对话中考虑这些内容。",
       "placeholder": "描述您希望系统如何表现，以及应使用的语气。",
-      "title": "个人偏好"
+      "title": "指令"
     },
     "profile": {
       "fullName": {
@@ -16129,7 +16115,6 @@
         "publicTooltip": "无法删除组织范围的提示词快捷方式。",
         "removeAriaLabel": "移除快捷方式"
       },
-      "title": "提示词快捷方式",
       "toasts": {
         "bothRequired": "快捷方式和展开内容都必须填写",
         "deleteFailed": "删除快捷方式失败",
@@ -16152,9 +16137,6 @@
       "empty": {
         "description": "开始聊天后，您的模型使用情况和费用将显示在此处。",
         "title": "尚未记录使用情况"
-      },
-      "header": {
-        "title": "使用情况"
       },
       "loadError": {
         "description": "获取使用情况时出错。请稍后重试。",
@@ -16215,9 +16197,16 @@
       },
       "playbackSpeed": {
         "description": "调整语音播放速度。",
-        "title": "播放速度"
+        "title": "播放速度",
+        "value": "{speed}x"
       },
       "title": "语音"
+    },
+    "modelPreferences": {
+      "title": "模型偏好"
+    },
+    "interactions": {
+      "title": "交互"
     }
   },
   "sidebar": {

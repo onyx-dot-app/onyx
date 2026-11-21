@@ -47,6 +47,24 @@ describe("InputSingleSelect", () => {
     expect(banana).not.toHaveTextContent("Limit set");
   });
 
+  it("aria-label names the trigger and the list instead of the placeholder", async () => {
+    const user = setupUser();
+    render(
+      <InputSingleSelect
+        placeholder="Select an option"
+        aria-label="Default App Mode"
+        value=""
+        options={mockOptions}
+      />
+    );
+    await user.click(
+      screen.getByRole("combobox", { name: "Default App Mode" })
+    );
+    expect(
+      screen.getByRole("listbox", { name: "Default App Mode" })
+    ).toBeVisible();
+  });
+
   describe("Search and foldable dividers", () => {
     const providerOptions = [
       {

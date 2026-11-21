@@ -15,7 +15,7 @@ export enum ThemePreference {
   SYSTEM = "system",
 }
 
-interface UserPreferences {
+export interface UserPreferences {
   // TODO: rename to agent — https://linear.app/onyx-app/issue/ENG-3766
   chosen_assistants: number[] | null;
   visible_assistants: number[];
@@ -662,6 +662,16 @@ export interface ConfigurationFieldSpec {
 
 export interface ConfigurationSchemaResponse {
   configuration: Record<string, ConfigurationFieldSpec>;
+}
+
+// The user's OAuth connection to a federated connector.
+export interface FederatedConnectorOAuthStatus {
+  federated_connector_id: number;
+  source: string;
+  name: string;
+  has_oauth_token: boolean;
+  oauth_token_expires_at?: string;
+  authorize_url?: string;
 }
 
 export interface FederatedConnectorCreateRequest {

@@ -163,6 +163,11 @@ export class AppSidebarPage {
     return this.page.getByRole("button", { name: "New Project" });
   }
 
+  /** Opens a new session in the running app, without a page load. */
+  async newSession(): Promise<void> {
+    await this.page.getByTestId("AppSidebar/new-session").click();
+  }
+
   /** Folds the sidebar if it is not folded already. */
   async fold(): Promise<void> {
     if (await this.projectsPopover.trigger.isVisible()) return;

@@ -283,9 +283,10 @@ covers new files that match it.
 | `web/src/lib/richInputTile.ts`, `web/src/lib/contentEditable.ts` | chat-frontend |
 | `web/src/app/app/agents/` | chat-frontend, agents-personas |
 | `web/src/app/app/customize/`, `web/src/sections/customize/`, `web/src/lib/customize/` | plugins, skills, chat-frontend |
-| `web/src/app/app/settings/llm-gateway/` | llm-gateway |
 | `web/src/app/app/settings/usage/` | observability |
-| `web/src/views/SettingsPage.tsx` | chat-preferences |
+| `web/src/views/settings/`, `web/src/app/app/settings/account/`, `web/src/app/app/settings/appearance/`, `web/src/app/app/settings/chat-preferences/`, `web/src/app/app/settings/layout.tsx`, `web/src/providers/WideChatProvider.tsx`, `web/src/lib/appearance/` | chat-preferences |
+| `web/src/views/settings/ThirdPartyAccessSettings.tsx`, `web/src/views/settings/PATModal.tsx`, `web/src/app/app/settings/third-party-access/` | auth-and-identity, federated-search |
+| `web/src/views/settings/LLMGatewaySection.tsx` | llm-gateway |
 | `web/src/hooks/useUserPersonalization.ts`, `web/src/hooks/usePromptShortcuts.ts`, `web/src/hooks/useMemoryManager.ts`, `web/src/sections/settings/Memories.tsx`, `web/src/refresh-components/modals/MemoriesModal.tsx` | chat-preferences |
 | `web/src/lib/settings/`, `web/src/providers/SettingsProvider.tsx` | chat-preferences, whitelabelling-and-theme |
 | `web/src/providers/VoiceModeProvider.tsx`, `web/src/hooks/useVoiceRecorder.ts`, `web/src/hooks/useVoicePlayback.ts`, `web/src/hooks/useVoiceStatus.ts`, `web/src/lib/streamingTTS.ts`, `web/src/sections/input/MicrophoneButton.tsx`, `web/src/components/voice/` | voice |
@@ -426,4 +427,4 @@ the admin routes and check that each has a row above, run
 | `web/src/lib/types.ts` | Shared frontend types for users, preferences, permissions, and connectors. Read the component that owns the changed type. |
 | `web/src/sections/admin/` | Admin UI that several admin pages share, such as `ProviderCard` (Tracing, Voice, Web Search) and the Lite-mode indexing notice. Read the calling page's component. |
 | `web/src/components/`, `web/src/refresh-components/`, `web/src/layouts/`, `web/lib/opal/`, `web/lib/shared/`, `web/src/hooks/useContainerCenter.ts`, `web/src/hooks/usePaginatedFetch.ts`, `web/src/hooks/useUnsavedChangesGuard.ts`, `web/src/hooks/useDraft.ts` | Shared UI. Read the calling component, and the Opal rules in `web/AGENTS.md`. |
-| `web/src/app/layout.tsx`, `web/src/app/page.tsx`, `web/src/app/not-found.tsx`, `web/src/app/providers.tsx`, `web/src/app/css/`, `web/tailwind-themes/`, `web/src/i18n/`, `web/public/` | The app shell, global styles, translations and static assets. |
+| `web/src/app/layout.tsx`, `web/src/app/page.tsx`, `web/src/app/not-found.tsx`, `web/src/app/providers.tsx`, `web/src/app/globals.css`, `web/src/app/css/`, `web/tailwind-themes/`, `web/src/i18n/`, `web/public/` | The app shell, global styles, translations and static assets. |
