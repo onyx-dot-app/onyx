@@ -268,7 +268,8 @@ the stored token on each request, so a new token takes effect at once.
   agent, with session saves (capture, upload, discard, restore) and the
   managed drive (put, swap). Chat's built-ins use the skills drive:
   `FirecrackerHarnessSandbox.sync_skills` zips the files with fixed entry
-  times (same files, same image ID), and puts and swaps the image only when
+  times (same files, same image ID), and, under the per-sandbox lock
+  `sandbox_fc:skills_sync:<sandbox>`, puts and swaps the image only when
   the `sandbox_fc:skills_image:<sandbox>` cache record names another VM
   instance `(attempt, generation)` or another image. A woken or replaced VM is a
   new instance, so its first chat turn pushes again. Stubs in `backend/onyx/microvm/generated/`; the
