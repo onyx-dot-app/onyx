@@ -66,7 +66,7 @@ def run(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     set_(tasks, "worth_running", lambda *_a, **_kw: state["decision"])
     set_(tasks, "get_recently_active_users", lambda _s, _now: [])
     set_(tasks, "choose_documents", lambda *_a, **_kw: state["candidates"])
-    set_(tasks, "fetch_chunks", lambda *_a: [])
+    set_(tasks, "fetch_chunks", lambda *_a: [MagicMock()])
     set_(tasks, "build_triage_clients", list)
     state["triage"] = MagicMock(return_value=[])
     set_(tasks, "triage_chunks", state["triage"])
@@ -181,6 +181,67 @@ def test_pool_run_retries_when_writing_fails(
 
     assert retry.call_args.kwargs["countdown"] == tasks.SQ_RUN_RETRY_DELAY_S
     assert run["saved"] is None
+
+
+def _nothing_searchable(*_a: Any) -> list[Any]:
+    raise tasks.NothingSearchableYet("no chunks yet")
+
+
+def test_pool_run_retries_when_its_documents_are_not_searchable_yet(
+    run: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(tasks, "fetch_chunks", _nothing_searchable)
+    retry = MagicMock(side_effect=Retry())
+    monkeypatch.setattr(tasks.generate_suggested_questions_pool, "retry", retry)
+
+    with pytest.raises(Retry):
+        _pool_task()
+
+    assert retry.call_args.kwargs["countdown"] == tasks.SQ_RUN_RETRY_DELAY_S
+    run["triage"].assert_not_called()
+    # No run is recorded, so a first run stays a first run.
+    assert run["saved"] is None
+
+
+def test_unsearchable_documents_on_the_last_retry_record_no_run(
+    run: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    task: Any = tasks.generate_suggested_questions_pool
+    monkeypatch.setattr(tasks, "fetch_chunks", _nothing_searchable)
+    retry = MagicMock()
+    monkeypatch.setattr(task, "retry", retry)
+    task.push_request(retries=task.max_retries)
+    try:
+        task.run(tenant_id="tenant", reason="first_run")
+    finally:
+        task.pop_request()
+
+    retry.assert_not_called()
+    assert run["saved"] is None
+
+
+def test_a_run_whose_chunks_were_all_junk_is_recorded(
+    run: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    # The index answered, so retrying would read the same junk again.
+    monkeypatch.setattr(tasks, "fetch_chunks", lambda *_a: [])
+
+    _pool_task()
+
+    assert len(run["saved"].runs) == 1
+
+
+def test_a_retry_leaves_the_queued_flag_alone(run: dict[str, Any]) -> None:
+    # The first delivery freed it; a flag set now belongs to a newer request.
+    task: Any = tasks.generate_suggested_questions_pool
+    task.push_request(retries=1)
+    try:
+        task.run(tenant_id="tenant", reason="growth")
+    finally:
+        task.pop_request()
+
+    assert run["released"] == []
+    assert run["saved"] is not None
 
 
 @pytest.fixture

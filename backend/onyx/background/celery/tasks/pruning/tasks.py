@@ -97,6 +97,9 @@ from onyx.redis.redis_hierarchy import (
 from onyx.redis.redis_pool import get_redis_client, get_redis_replica_client
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.redis.tenant_redis_client import TenantRedisClient
+from onyx.server.features.suggested_questions.scheduling import (
+    drop_orphaned_questions,
+)
 from onyx.server.metrics.pruning_metrics import (
     inc_pruning_failure,
     observe_pruning_diff_duration,
@@ -983,6 +986,8 @@ def monitor_ccpair_pruning_taskset(
     # (mark_ccpair_as_pruned / update_sync_record_status commit internally),
     # so the per-batch commits of the drain are safe here.
     if initial > 0:
+        # A failed prune may still have removed some documents.
+        drop_orphaned_questions(tenant_id)
         sweep_orphan_tags(r, db_session)
 
 
