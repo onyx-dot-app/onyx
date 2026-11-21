@@ -538,6 +538,25 @@ pub fn sync_hotkey(app: &AppHandle) {
 
 static REFRESHING: Mutex<()> = Mutex::new(());
 
+/// A policy that failed closed keeps the restrictions it had. A value that is
+/// not valid keeps its last valid value; other values apply as read.
+fn keep_last_good(old: &Policy, mut new: Policy) -> Policy {
+    if new.fail_closed {
+        new.disable_auto_update |= old.disable_auto_update;
+        new.disable_launcher |= old.disable_launcher;
+        new.disable_notifications |= old.disable_notifications;
+    }
+    let lost = |key: &str| new.fail_closed || new.ignored.contains(&key);
+    let (shortcut_lost, login_lost) = (lost(LAUNCHER_SHORTCUT), lost(LAUNCH_AT_LOGIN));
+    if shortcut_lost {
+        new.launcher_shortcut = new.launcher_shortcut.or(old.launcher_shortcut.clone());
+    }
+    if login_lost {
+        new.launch_at_login = new.launch_at_login.or(old.launch_at_login);
+    }
+    new
+}
+
 /// Reads the policy again and applies what changed. Runs on any thread.
 /// The server keeps its startup value for this run, so the session never
 /// moves to another server under the open windows.
@@ -553,14 +572,7 @@ pub fn refresh(app: &AppHandle) {
         new.server_url = old.server(state.config.get().server_url);
     }
     new.lock_server_url = old.lock_server_url || new.lock_server_url;
-    // A policy that cannot be read keeps the restrictions it had.
-    if new.invalid() {
-        new.disable_auto_update |= old.disable_auto_update;
-        new.disable_launcher |= old.disable_launcher;
-        new.disable_notifications |= old.disable_notifications;
-        new.launcher_shortcut = new.launcher_shortcut.or(old.launcher_shortcut.clone());
-        new.launch_at_login = new.launch_at_login.or(old.launch_at_login);
-    }
+    let new = keep_last_good(&old, new);
     if new != old {
         state.set_policy(new.clone());
         if new.disable_auto_update {
@@ -570,7 +582,7 @@ pub fn refresh(app: &AppHandle) {
             crate::windows::hide_launcher(app);
         }
         if new.disable_launcher != old.disable_launcher {
-            crate::menu::set_launcher_enabled(app, !new.disable_launcher);
+            crate::menu::sync_launcher_items(app);
         }
     }
     // Every refresh: a managed value that failed to apply is tried again. It
@@ -829,6 +841,32 @@ mod tests {
         assert!(mixed.starts_with(POLICY_LOCKED), "{mixed}");
         assert!(mixed.contains("server URL"), "{mixed}");
         assert!(mixed.ends_with(CONTACT_IT), "{mixed}");
+    }
+
+    #[test]
+    fn a_refresh_keeps_last_good_values_only_where_they_were_lost() {
+        let old = policy(&[
+            (DISABLE_LAUNCHER, RawValue::Bool(true)),
+            (LAUNCHER_SHORTCUT, s("Alt+Space")),
+            (LAUNCH_AT_LOGIN, RawValue::Bool(true)),
+        ]);
+        // IT turns the launcher back on, but the new shortcut is not valid.
+        let new = keep_last_good(
+            &old,
+            policy(&[
+                (DISABLE_LAUNCHER, RawValue::Bool(false)),
+                (LAUNCHER_SHORTCUT, s("Foo+Bar")),
+            ]),
+        );
+        assert!(!new.disable_launcher);
+        assert_eq!(new.launcher_shortcut.as_deref(), Some("Alt+Space"));
+        // LaunchAtLogin was removed, not broken.
+        assert_eq!(new.launch_at_login, None);
+
+        let unreadable = keep_last_good(&old, Policy::unreadable());
+        assert!(unreadable.disable_launcher);
+        assert_eq!(unreadable.launcher_shortcut.as_deref(), Some("Alt+Space"));
+        assert_eq!(unreadable.launch_at_login, Some(true));
     }
 
     fn scratch_dir(name: &str) -> std::path::PathBuf {
