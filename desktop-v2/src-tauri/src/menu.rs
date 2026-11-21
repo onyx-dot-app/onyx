@@ -160,18 +160,23 @@ fn launcher_item(app: &AppHandle, menu: &'static str) -> tauri::Result<MenuItem<
         .lock()
         .unwrap_or_else(|p| p.into_inner())
         .insert(menu, item.clone());
+    // A policy refresh during the build may have missed this item.
+    sync_launcher_items(app);
     Ok(item)
 }
 
-/// Queued on the main thread without waiting, like `updater::set_menu_label`.
-pub fn set_launcher_enabled(app: &AppHandle, enabled: bool) {
-    let items: Vec<MenuItem<Wry>> = LAUNCHER_ITEMS
-        .lock()
-        .unwrap_or_else(|p| p.into_inner())
-        .values()
-        .cloned()
-        .collect();
+/// Sets every "Open Launcher" item to the policy at the time it runs. Queued
+/// on the main thread without waiting, like `updater::set_menu_label`.
+pub fn sync_launcher_items(app: &AppHandle) {
+    let handle = app.clone();
     let _ = app.run_on_main_thread(move || {
+        let enabled = !handle.state::<AppState>().policy().disable_launcher;
+        let items: Vec<MenuItem<Wry>> = LAUNCHER_ITEMS
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .values()
+            .cloned()
+            .collect();
         for item in &items {
             let _ = item.set_enabled(enabled);
         }
