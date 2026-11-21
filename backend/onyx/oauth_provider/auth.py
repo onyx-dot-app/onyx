@@ -31,6 +31,7 @@ _ACCESS_ROUTES = frozenset(
         ("GET", "/oauth-provider/introspect"),
         ("POST", "/search"),
         ("POST", "/search/raw"),
+        ("POST", "/search/postgres-query"),
         ("POST", "/web-search/search-lite"),
         ("POST", "/web-search/open-urls"),
         ("GET", "/manage/indexed-sources"),
