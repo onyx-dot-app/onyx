@@ -74,6 +74,9 @@ fn local_window(
     let builder = builder
         .title_bar_style(tauri::TitleBarStyle::Overlay)
         .hidden_title(true);
+    // Windows keeps the Maximize button of a window that cannot be resized.
+    #[cfg(not(target_os = "macos"))]
+    let builder = builder.maximizable(false);
     let window = builder.build().map_err(|e| e.to_string())?;
     activate_app(app);
     Ok(window)
