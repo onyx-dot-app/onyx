@@ -1,5 +1,7 @@
 import os
 
+ENABLE_TEAMS_BOT = os.environ.get("ENABLE_TEAMS_BOT", "false").lower() == "true"
+
 #####
 # Onyx Slack Bot Configs
 #####
