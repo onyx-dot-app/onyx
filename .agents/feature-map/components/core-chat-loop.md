@@ -178,9 +178,11 @@ session only) and the message-ID packet on `ChatDelivery` and starts the
 non-daemon control thread. For a chat that keeps content, has no name and gets
 its first question (`ChatTurnSetup.auto_name`), it also starts a `chat-naming`
 thread that names the chat from that question while the answer streams
-(`chat/session_naming.py:name_new_chat_session`). A failure there never touches
-the turn. The reader only tails `ChatDelivery.reader`. When the
-HTTP client disconnects, the reader closes and the turn continues.
+(`chat/session_naming.py:name_new_chat_session`). Without a chat-naming model,
+it uses the turn's own model, so the user's model choice applies to naming
+too. A failure there never touches the turn. The reader only tails
+`ChatDelivery.reader`. When the HTTP client disconnects, the reader closes and
+the turn continues.
 
 **Response threads.** Each response thread builds its tools and agent through
 `chat/execution.py:create_chat_agent` and checks that the reserved row belongs

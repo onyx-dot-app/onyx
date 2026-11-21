@@ -5,10 +5,15 @@ A new chat is named from its first question while the answer streams
 `PUT /chat/rename-chat-session` with no name (`name_chat_session`) names a chat
 that still has none. One cache lock per chat keeps the two from generating a
 name twice, and both save only while the chat is unnamed, so a rename wins.
+
+Without an admin-set chat-naming model, the chat's own model names it: the
+model the turn runs on, or for a naming request, the model the chat's agent and
+saved override select.
 """
 
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from contextlib import contextmanager
+from functools import partial
 from uuid import UUID
 
 from onyx.cache.factory import get_cache_backend
@@ -22,13 +27,13 @@ from onyx.db.chat import (
 )
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import LLMModelFlowType, record_mode_persists_content
-from onyx.db.models import ChatMessage, Persona, User
+from onyx.db.models import ChatMessage, User
 from onyx.llm.factory import (
     get_default_utility_llm,
     get_llm_for_persona,
     get_llm_token_counter,
 )
-from onyx.llm.override_models import LLMOverride
+from onyx.llm.interfaces import LLM
 from onyx.secondary_llm_flows.chat_session_naming import (
     generate_chat_session_name,
     get_fallback_chat_session_name,
@@ -88,12 +93,12 @@ def generate_chat_session_name_or_fallback(
     chat_history: list[ChatMessage],
     user: User,
     chat_session_id: UUID,
-    persona: Persona | None,
-    llm_override: LLMOverride | None,
+    get_chat_llm: Callable[[], LLM],
     additional_headers: dict[str, str] | None,
 ) -> str:
     """Generate a name from `chat_history`, or fall back to the first question
-    when generation is not allowed or fails."""
+    when generation is not allowed or fails. `get_chat_llm` gives the chat's
+    model; it is called only when no chat-naming model is set."""
     user_id = user.id
     fallback_name = get_fallback_chat_session_name(chat_history)
 
@@ -104,12 +109,7 @@ def generate_chat_session_name_or_fallback(
             flow_type=LLMModelFlowType.CHAT_NAMING,
         )
         if llm is None:
-            llm = get_llm_for_persona(
-                persona=persona,
-                user=user,
-                llm_override=llm_override,
-                additional_headers=additional_headers,
-            )
+            llm = get_chat_llm()
             with get_session_with_current_tenant() as db_session:
                 check_llm_cost_limit_for_provider(
                     db_session=db_session,
@@ -146,9 +146,11 @@ def name_new_chat_session(
     *,
     chat_session_id: UUID,
     user: User,
+    chat_llm: LLM,
     additional_headers: dict[str, str] | None,
 ) -> str | None:
-    """Name a chat from its first question and save the name.
+    """Name a chat from its first question and save the name. `chat_llm` is
+    the model the turn runs on (its first model when it compares several).
 
     Returns the saved name, or None when the chat keeps no content, already
     has a name, got one while this one was generated, or is being named by a
@@ -163,7 +165,6 @@ def name_new_chat_session(
                 chat_session_id=chat_session_id,
                 user_id=user.id,
                 db_session=db_session,
-                eager_load_persona=True,
             )
             if chat_session.description or not record_mode_persists_content(
                 chat_session.incognito_record_mode
@@ -177,8 +178,6 @@ def name_new_chat_session(
                 )
                 if message.message_type == MessageType.USER
             ][:1]
-            persona = chat_session.persona
-            llm_override = chat_session.llm_override
         if not first_question:
             return None
 
@@ -186,8 +185,7 @@ def name_new_chat_session(
             chat_history=first_question,
             user=user,
             chat_session_id=chat_session_id,
-            persona=persona,
-            llm_override=llm_override,
+            get_chat_llm=lambda: chat_llm,
             additional_headers=additional_headers,
         )
         with get_session_with_current_tenant() as db_session:
@@ -230,8 +228,13 @@ def name_chat_session(
             chat_history=chat_history,
             user=user,
             chat_session_id=chat_session_id,
-            persona=persona,
-            llm_override=llm_override,
+            get_chat_llm=partial(
+                get_llm_for_persona,
+                persona=persona,
+                user=user,
+                llm_override=llm_override,
+                additional_headers=additional_headers,
+            ),
             additional_headers=additional_headers,
         )
         with get_session_with_current_tenant() as db_session:

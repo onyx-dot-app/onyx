@@ -271,6 +271,7 @@ def _name_new_chat_session(
         name = name_new_chat_session(
             chat_session_id=setup.chat_session_id,
             user=user,
+            chat_llm=setup.responses[0].llm,
             additional_headers=setup.litellm_additional_headers,
         )
     except Exception:
