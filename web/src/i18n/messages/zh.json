@@ -9133,7 +9133,8 @@
         "submit": {
           "label": "删除"
         },
-        "title": "删除 {label}"
+        "title": "删除 {label}",
+        "envBody": "**{label}** 的 API 密钥和设置将被删除。追踪保持关闭。如需使用环境变量配置再次发送追踪,请重新连接。"
       }
     },
     "usage": {

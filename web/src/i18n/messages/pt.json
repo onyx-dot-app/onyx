@@ -9133,7 +9133,8 @@
         "submit": {
           "label": "Excluir"
         },
-        "title": "Excluir {label}"
+        "title": "Excluir {label}",
+        "envBody": "A chave de API e as configurações de **{label}** serão excluídas. O rastreamento continua desativado. Para enviar traces novamente com a configuração das variáveis de ambiente, reconecte-o."
       }
     },
     "usage": {

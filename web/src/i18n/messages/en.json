@@ -9133,7 +9133,8 @@
         "submit": {
           "label": "Delete"
         },
-        "title": "Delete {label}"
+        "title": "Delete {label}",
+        "envBody": "The **{label}** API key and settings will be deleted. Tracing stays off. To send traces with the environment-variable configuration again, reconnect it."
       }
     },
     "usage": {

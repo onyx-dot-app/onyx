@@ -9133,7 +9133,8 @@
         "submit": {
           "label": "Supprimer"
         },
-        "title": "Supprimer {label}"
+        "title": "Supprimer {label}",
+        "envBody": "La clé API et les paramètres de **{label}** seront supprimés. Le traçage reste désactivé. Pour envoyer de nouveau des traces avec la configuration des variables d'environnement, reconnectez-le."
       }
     },
     "usage": {

@@ -1,6 +1,6 @@
 "use client";
 
-import type { IconFunctionComponent } from "@opal/types";
+import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { useTranslations } from "next-intl";
 import { Button, SelectCard } from "@opal/components";
 import { ContentAction, ReverseContent, Section } from "@opal/layouts";
@@ -82,7 +82,7 @@ interface ProviderCardProps {
    * A status for a connected card with no "Set as Default" action, shown as
    * Code Interpreter shows its connection (e.g. "Connected").
    */
-  connectedLabel?: string;
+  connectedLabel?: string | RichStr;
   /** Defaults to the shared "Current Default" label. */
   selectedLabel?: string;
   "aria-label"?: string;

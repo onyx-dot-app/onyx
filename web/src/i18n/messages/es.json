@@ -9133,7 +9133,8 @@
         "submit": {
           "label": "Eliminar"
         },
-        "title": "Eliminar {label}"
+        "title": "Eliminar {label}",
+        "envBody": "Se eliminarán la clave de API y la configuración de **{label}**. El trazado seguirá desactivado. Para volver a enviar trazas con la configuración de las variables de entorno, vuelve a conectarlo."
       }
     },
     "usage": {

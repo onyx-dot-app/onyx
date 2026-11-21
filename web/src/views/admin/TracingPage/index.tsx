@@ -15,6 +15,7 @@ import {
 } from "@/lib/tracing/utils";
 import type {
   TracingDisconnectTarget,
+  TracingProviderType,
   TracingProviderView,
 } from "@/lib/tracing/types";
 import {
@@ -75,21 +76,37 @@ export default function TracingPage() {
         : error.message) || t("loadError.description")
     : false;
 
+  function openSetup(
+    providerType: TracingProviderType,
+    provider: TracingProviderView | null
+  ) {
+    setActiveProvider({
+      providerType,
+      detail: TRACING_PROVIDER_DETAILS[providerType],
+      provider,
+    });
+    setupModal.toggle(true);
+  }
+
   async function handleReconnect(
     target: TracingDisconnectTarget,
     provider: TracingProviderView | null
   ) {
     try {
-      // A row with no saved key only switched off an env-var config; removing
-      // it turns that config back on.
       if (provider?.masked_api_key) {
         await reconnectTracingProvider(target.providerType, target.config);
-      } else {
+      } else if (provider?.env_configured) {
+        // The row only switches off an env-var config; removing it turns
+        // that config back on.
         await deleteTracingProvider(target.providerType);
+      } else {
+        // Saved settings without a key: the admin enters one in setup.
+        openSetup(target.providerType, provider);
+        return;
       }
     } catch (reconnectError) {
       toast.error(
-        reconnectError instanceof Error
+        reconnectError instanceof Error && reconnectError.message
           ? reconnectError.message
           : t("toasts.unexpectedError")
       );
@@ -115,10 +132,7 @@ export default function TracingPage() {
               config: provider?.config ?? {},
             };
             // Connect and configure open the same setup modal.
-            const openSetup = () => {
-              setActiveProvider({ providerType, detail, provider });
-              setupModal.toggle(true);
-            };
+            const openCardSetup = () => openSetup(providerType, provider);
 
             return (
               <ProviderCard
@@ -131,13 +145,13 @@ export default function TracingPage() {
                 description={t(detail.descriptionKey)}
                 status={connected ? "connected" : "disconnected"}
                 connectedLabel={t("provider.connected.label")}
-                onConnect={openSetup}
+                onConnect={openCardSetup}
                 onReconnect={
                   disconnected
                     ? () => void handleReconnect(target, provider)
                     : undefined
                 }
-                onEdit={connected || disconnected ? openSetup : undefined}
+                onEdit={connected || disconnected ? openCardSetup : undefined}
                 onDisconnect={
                   connected
                     ? () => {
@@ -187,6 +201,11 @@ export default function TracingPage() {
         <deleteModal.Provider>
           <TracingDeleteModal
             target={deleteTarget}
+            envConfigured={
+              providers.find(
+                (p) => p.provider_type === deleteTarget.providerType
+              )?.env_configured ?? false
+            }
             onDeleted={async () => {
               await mutateProviders();
             }}

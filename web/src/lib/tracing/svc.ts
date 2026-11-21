@@ -4,15 +4,21 @@ import type { TracingProviderType } from "@/lib/tracing/types";
 const TRACING_PROVIDERS_URL = SWR_KEYS.tracingProviders;
 const JSON_HEADERS = { "Content-Type": "application/json" };
 
-async function parseErrorDetail(
-  res: Response,
-  fallback: string
-): Promise<string> {
+/**
+ * The server's error detail, or "" without one. Callers show a translated
+ * fallback for an empty message.
+ */
+async function parseErrorDetail(res: Response): Promise<string> {
   try {
-    const body = await res.json();
-    return body?.detail ?? fallback;
+    const body: unknown = await res.json();
+    return typeof body === "object" &&
+      body !== null &&
+      "detail" in body &&
+      typeof body.detail === "string"
+      ? body.detail
+      : "";
   } catch {
-    return fallback;
+    return "";
   }
 }
 
@@ -43,9 +49,7 @@ export async function connectTracingProvider({
     }),
   });
   if (!testRes.ok) {
-    throw new Error(
-      await parseErrorDetail(testRes, "Failed to validate credentials.")
-    );
+    throw new Error(await parseErrorDetail(testRes));
   }
 
   const res = await fetch(TRACING_PROVIDERS_URL, {
@@ -60,7 +64,7 @@ export async function connectTracingProvider({
     }),
   });
   if (!res.ok) {
-    throw new Error(await parseErrorDetail(res, "Failed to connect provider."));
+    throw new Error(await parseErrorDetail(res));
   }
 }
 
@@ -101,14 +105,31 @@ async function setTracingProviderEnabled(
     }),
   });
   if (!res.ok) {
-    throw new Error(
-      await parseErrorDetail(
-        res,
-        enabled
-          ? "Failed to reconnect provider."
-          : "Failed to disconnect provider."
-      )
-    );
+    throw new Error(await parseErrorDetail(res));
+  }
+}
+
+/**
+ * Deletes the provider's saved key and settings but keeps it switched off,
+ * for a provider that env vars also configure. Deleting its row would let the
+ * env config send traces again.
+ */
+export async function clearTracingProviderSettings(
+  providerType: TracingProviderType
+): Promise<void> {
+  const res = await fetch(TRACING_PROVIDERS_URL, {
+    method: "POST",
+    headers: JSON_HEADERS,
+    body: JSON.stringify({
+      provider_type: providerType,
+      api_key: null,
+      api_key_changed: true,
+      config: {},
+      enabled: false,
+    }),
+  });
+  if (!res.ok) {
+    throw new Error(await parseErrorDetail(res));
   }
 }
 
@@ -120,6 +141,6 @@ export async function deleteTracingProvider(
     method: "DELETE",
   });
   if (!res.ok) {
-    throw new Error(await parseErrorDetail(res, "Failed to delete provider."));
+    throw new Error(await parseErrorDetail(res));
   }
 }

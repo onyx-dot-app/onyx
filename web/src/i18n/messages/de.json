@@ -9133,7 +9133,8 @@
         "submit": {
           "label": "Löschen"
         },
-        "title": "{label} löschen"
+        "title": "{label} löschen",
+        "envBody": "Der API-Schlüssel und die Einstellungen für **{label}** werden gelöscht. Tracing bleibt aus. Um wieder Traces mit der Konfiguration aus den Umgebungsvariablen zu senden, verbinden Sie den Anbieter erneut."
       }
     },
     "usage": {

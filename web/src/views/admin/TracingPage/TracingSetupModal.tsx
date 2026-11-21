@@ -93,7 +93,9 @@ export function TracingSetupModal({ state, onSaved }: TracingSetupModalProps) {
       onClose?.();
     } catch (error) {
       toast.error(
-        error instanceof Error ? error.message : t("toasts.unexpectedError")
+        error instanceof Error && error.message
+          ? error.message
+          : t("toasts.unexpectedError")
       );
     } finally {
       setSubmitting(false);
