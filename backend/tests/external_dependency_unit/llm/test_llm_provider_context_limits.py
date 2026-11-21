@@ -236,6 +236,7 @@ def test_ui_echo_of_a_stored_override_preserves_it(
         LlmProviderNames.NEBIUS_TOKENFACTORY,
         LlmProviderNames.PORTKEY,
         LlmProviderNames.VERCEL_AI_GATEWAY,
+        LlmProviderNames.REQUESTY,
     ],
 )
 def test_source_api_providers_keep_their_reported_limit(
