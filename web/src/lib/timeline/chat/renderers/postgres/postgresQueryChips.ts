@@ -88,11 +88,19 @@ export function formatQueryDate(value: string, locale: string): string {
   }).format(date);
 }
 
+/** The hierarchy node the query lists inside, if any. */
+export function postgresQueryFolderId(query: PostgresToolQuery): number | null {
+  const folder = text(query.parent_hierarchy_node_id) ?? text(query.parent_id);
+  return folder !== null && /^\d+$/.test(folder) ? Number(folder) : null;
+}
+
+/** `folderName` is the node's display name, once known; until then the chip shows its id. */
 export function postgresQueryChips(
   query: PostgresToolQuery,
   label: PostgresQueryLabel,
   locale: string,
-  sourceName: (source: string) => string
+  sourceName: (source: string) => string,
+  folderName?: string
 ): PostgresQueryChip[] {
   const chips: PostgresQueryChip[] = [];
   const add = (
@@ -161,7 +169,7 @@ export function postgresQueryChips(
   const owner = text(query.owned_by);
   if (owner) add("owner", "owner", { owner });
   const folder = text(query.parent_hierarchy_node_id) ?? text(query.parent_id);
-  if (folder) add("folder", "folder", { id: folder });
+  if (folder) add("folder", "folder", { name: folderName || folder });
   const nodeType = text(query.node_type);
   if (nodeType) add("node_type", "nodeType", { type: nodeType });
   const author = text(query.message_type);

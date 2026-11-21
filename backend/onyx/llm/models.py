@@ -277,7 +277,10 @@ class AssistantMessage(BaseMessage):
         return [block for block in self.content if isinstance(block, ToolCall)]
 
 
-class ToolResult(BaseMessage):
+class ToolResultFields(BaseMessage):
+    """What a tool's result and its recorded message share."""
+
+    # What the model reads: the tool's bounded view of its value.
     content: str
     details: SerializeAsAny[BaseModel] | None = None
     is_error: bool = False
@@ -288,7 +291,18 @@ class ToolResult(BaseMessage):
         return self.content
 
 
-class ToolResultMessage(ToolResult):
+class ToolResult(ToolResultFields):
+    """What a tool returns."""
+
+    # The value that `content` bounds, set when the bound left part of it out.
+    # A code mode program receives it (code_mode/stubs.py:program_value), and
+    # in a chat with a sandbox the spill writes it to a file
+    # (sandbox/spill.py). A recorded ToolResultMessage has no such field, so
+    # it is never saved.
+    full_value: str | BaseModel | None = Field(default=None, exclude=True, repr=False)
+
+
+class ToolResultMessage(ToolResultFields):
     role: Literal[MessageRole.TOOL_RESULT] = MessageRole.TOOL_RESULT
     tool_call_id: str
     tool_name: str

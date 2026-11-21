@@ -232,6 +232,8 @@ def test_sleep_saves_the_session_and_the_next_use_restores_it(
     sandbox.write_file(ref, "node_modules/x/index.js", b"dependency")
     sandbox.write_file(ref, ".pytest_cache/v/cache", b"cache")
     sandbox.write_file(ref, "env-3.12/pyvenv.cfg", b"home = /usr/bin\n")
+    # Chat files are copied again after a restart.
+    sandbox.write_file(ref, "attachments/q3.csv", b"a,b\n")
     result = collect_exec_result(
         sandbox.exec_command(ref, "sleep 60", yield_time_ms=250)
     )
@@ -635,7 +637,7 @@ def test_a_wake_after_sleep_starts_past_the_stopped_attempt(
     placement = get_sandbox_placement(tenant_cache, ref.sandbox_id)
     assert placement is not None and placement.attempt == 4
     result = collect_exec_result(sandbox.exec_command(ref, "echo ok"))
-    assert result.output == "ok\n"
+    assert (result.head, result.tail) == ("ok\n", "")
 
 
 def test_a_save_runs_in_the_sandbox_tenant(

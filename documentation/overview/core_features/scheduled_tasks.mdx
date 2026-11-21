@@ -1,0 +1,233 @@
+---
+title: "Scheduled Tasks"
+description: "Run a chat prompt automatically on a recurring schedule"
+icon: "calendar-clock"
+---
+
+A Scheduled Task sends a prompt to Onyx for you on a recurring schedule.
+Each run sends the prompt to a new chat with the default agent, records the result in the run history of the task,
+and continues when you do not have Onyx open. You can open each run as a chat, read it, and continue it.
+
+Use Scheduled Tasks for work that has a predictable cadence and a clear definition of done.
+
+| Use case                     | Example                                                                                                      |
+| ---------------------------- | ------------------------------------------------------------------------------------------------------------ |
+| **Send a daily briefing**    | Summarize new customer escalations every morning and send the important items to a Slack channel.            |
+| **Monitor for changes**      | Check an inbox, project, or data source regularly and report only material changes that need attention.      |
+| **Build a recurring report** | Gather the latest numbers each week, update a standard report, and save it to the right destination.         |
+| **Maintain a workflow**      | Review open work on a schedule, identify stale items, and add an approved comment or follow-up where needed. |
+
+<Tip>
+  Test the prompt in a normal chat with the default agent first.
+  Schedule it only after it reliably finds the right information, produces the intended output,
+  and handles missing data safely.
+</Tip>
+
+## What each run can access
+
+A Scheduled Task runs as the person who created it. Each run is one chat turn of the default agent,
+with the model of the default agent.
+The run uses the current Onyx permissions and company knowledge access of the task owner.
+
+The run can use only the [integrations](/overview/core_features/plugins) that you turn on for the task.
+Tasks can use MCP and OpenAPI integrations. Craft Apps are not available to Scheduled Tasks.
+
+Each run starts in a new chat,
+so it does **not** inherit the messages or attachments of the chat where you tested the prompt.
+Put the information that the run needs in the prompt, or point the prompt to company knowledge or an integration.
+
+<Note>
+  A Scheduled Task does not send you its result. If the output must go to Slack, Gmail, Google Drive,
+  or another destination, say so in the prompt, turn on that integration for the task,
+  and set the delivery action to **Allow**. Otherwise, read the output in the run history of the task.
+</Note>
+
+## Create a Scheduled Task
+
+Open **Scheduled Tasks** in the sidebar of the chat app, then select **New Task**.
+
+<Steps>
+  <Step title="Name the task and write a self-contained prompt">
+    Enter a **Name**. In **Prompt**, describe what to inspect, the time window, what qualifies for inclusion,
+    the output, and where to deliver it.
+  </Step>
+
+  <Step title="Choose a schedule">
+    Use **Interval** to run every set number of minutes or hours. Use **Daily / Weekly** to choose a time and,
+    optionally, specific days of the week. Use **Advanced** to enter a five-field cron expression, which runs in UTC.
+  </Step>
+
+  <Step title="Choose integrations">
+    Under **Integrations**, turn on only the integrations that the task must use without you present.
+    A new task starts with each integration off.
+    The list shows the integrations that you turned on in **Customize → Integrations** and that a task can use.
+    When you edit a task, the list also shows each integration that the task already uses, so a save keeps its settings.
+    Open **Manage actions** on an integration to set a value for each of its actions.
+    Connect your account to each required integration before you create the task.
+  </Step>
+
+  <Step title="Save and test">
+    Select **Save** to wait for the next scheduled time, or **Save and run now** to start the first run immediately.
+  </Step>
+</Steps>
+
+<img className="rounded-image" src="/assets/overview/core_features/scheduled_task_new.webp" alt="The New Scheduled Task form with a name, a prompt, a Daily / Weekly schedule at 9:00 AM on weekdays, and the Integrations section"/>
+
+### Write a prompt that can run unattended
+
+Nobody can answer a follow-up question while a Scheduled Task runs.
+Put the decisions that the run needs from you in the prompt:
+
+| Include                | Example                                                                                  |
+| ---------------------- | ---------------------------------------------------------------------------------------- |
+| **Scope**              | “Review messages in `#customer-escalations` and open P1 issues in Linear.”               |
+| **Time window**        | “Include activity from the last 24 hours.”                                               |
+| **Selection criteria** | “Include only items that are blocked, overdue, or need an executive decision.”           |
+| **Output**             | “Use a table with account, owner, issue, impact, and next step.”                         |
+| **Destination**        | “Post the final digest to `#support-leads` in Slack.”                                    |
+| **Fallback**           | “If there are no qualifying items, post ‘No new escalations’ and do not invent content.” |
+
+For example:
+
+> Review the `#customer-escalations` Slack channel and open P1 issues in Linear for activity from the last 24 hours.
+> Include only items that are blocked, overdue, or need an executive decision. Group them by account and list the owner,
+> impact, and next step. Post the final digest to `#support-leads`. If nothing qualifies, post “No new escalations.”
+
+<Tip>
+  Use a relative time window that matches the cadence, such as “during the last 24 hours” for a daily task.
+  Fixed dates quickly become stale in a recurring prompt.
+</Tip>
+
+### Understand schedule timing
+
+Onyx stores each schedule in UTC. **Daily / Weekly** times use the local time of your browser when you save the task.
+**Interval** schedules run on repeating clock boundaries, not at a fixed delay after the previous run ends. By default,
+Onyx queues each run up to five minutes after its scheduled time. The delay is the same for every run of a task,
+so tasks that share a schedule do not all start at the same time. **Next run** shows the time with this delay.
+When many runs are due at the same time, a run can also wait in the queue for a free worker.
+
+<Note>
+  A saved daily or weekly time does not change when your UTC offset changes,
+  for example after a daylight-saving transition. The task pages show the true local time of each run.
+  After a daylight-saving transition or a change of time zone, edit the task, select the local time again, and save.
+  Saving without selecting the time again keeps the old UTC time.
+</Note>
+
+## Set task action settings carefully
+
+Each task has its own **Integrations** section. A run can use only the integrations that you turn on there.
+Other integrations are blocked. Each action starts with **Use integration setting**. Changes apply only to that task.
+
+| Task value                  | During a Scheduled Task                                                         |
+| --------------------------- | ------------------------------------------------------------------------------- |
+| **Use integration setting** | The action uses the setting of the integration, as the menu shows it.           |
+| **Allow**                   | The action runs without approval.                                               |
+| **Ask**                     | The run stops with the **Awaiting approval** status when it reaches the action. |
+| **Blocked**                 | The action is blocked.                                                          |
+
+If your admin set an action to **Blocked**, a task cannot turn it on.
+If your admin does not let users save **Always allow** on an integration,
+**Allow** in a task does not change the admin setting. Saved **Always allow** choices do not apply to task runs:
+to run an action without approval, set it to **Allow** in the task, where your admin permits it.
+
+<Warning>
+  Keep the prompt and the list of integrations that you turn on as narrow as possible.
+  Allow only the actions that the task must perform. Be especially careful with integrations that can send messages,
+  change customer data, delete content, or publish externally.
+</Warning>
+
+### Approve a run that waits
+
+When a run reaches an action set to **Ask**, the run stops with the **Awaiting approval** status,
+and you get an Onyx notification. Select the notification to open the run chat.
+
+- Select **Approve once** or **Approve for this chat**. The action runs, and the run continues from that point.
+- Select **Reject**. The action does not run, and the agent finishes the run without it.
+
+If nobody answers, Onyx cancels the run when the next scheduled run starts, or 24 hours after the run started.
+The next scheduled run then runs as usual.
+
+## Review run history
+
+Open a task to see its **Runs** and its **Overview**. A blue dot on **Scheduled Tasks** in the sidebar, on a task,
+and on a run marks runs that you have not opened. **Mark all viewed** clears the dots of a task.
+
+Select a run to open its chat. A banner at the top of the chat names the task.
+A run that is still running shows its progress in the chat. Queued runs do not have a chat yet,
+and skipped runs never get one, so you cannot open those rows.
+
+Run chats are not in your chat history list or in chat search. Open them from the run history of the task.
+
+You can send follow-up messages in a run chat. Follow-up messages use your normal integration settings,
+not the integration settings of the task.
+
+| Status                | Meaning                                                                                                 |
+| --------------------- | ------------------------------------------------------------------------------------------------------- |
+| **Queued**            | The run waits to start.                                                                                 |
+| **Running**           | The default agent works on the prompt in the run chat.                                                  |
+| **Awaiting approval** | The run reached an action set to **Ask** and waits for your approval in the run chat.                   |
+| **Succeeded**         | The run completed normally.                                                                             |
+| **Failed**            | The run had an error or reached the one-hour limit of a chat turn. Open its chat to investigate.        |
+| **Cancelled**         | You stopped the run, or nobody answered an approval in time.                                            |
+| **Skipped**           | The run did not start because the previous run of the task was still running.                           |
+
+A failed run sends you an Onyx notification. Onyx does not retry failed or cancelled runs.
+
+To stop a run that is still running, open its chat and stop the response.
+Stop does not cancel a run that waits for approval. Reject the action, or wait for Onyx to cancel the run.
+
+## Manage a task
+
+Open the actions menu of a task to use these actions:
+
+| Action       | What it does                                                                                            |
+| ------------ | ------------------------------------------------------------------------------------------------------- |
+| **Run once** | Starts a one-off run without changing the recurring schedule. This also works while the task is paused. |
+| **Pause**    | Stops future scheduled runs. It does not cancel a run that is already queued or running.                |
+| **Resume**   | Turns the schedule on again and computes the next run from the current time. Missed runs do not run.   |
+| **Edit**     | Changes the name, prompt, schedule, or integrations of the task.                                       |
+| **Delete**   | Removes the task and its run history from Scheduled Tasks and stops future runs.                        |
+
+Deleting a task does not cancel a run that is already queued or running.
+
+On the page of a task, the **Run on schedule** switch pauses and resumes the task.
+
+To find a task, search by name in the task list. Use the filter to show only active tasks, paused tasks,
+or tasks with new results.
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="A run succeeded, but I did not receive anything">
+    Open the run chat from the run history and inspect its output. If the task must deliver somewhere else,
+    add an explicit destination to the prompt, turn on that integration for the task,
+    and set the delivery action to **Allow**.
+  </Accordion>
+
+  <Accordion title="A run was skipped">
+    The previous run of the task was still running when the next run was due. Make the prompt smaller,
+    or use a less frequent schedule. If the previous run is still queued, Onyx does not record a skip.
+    The queued run starts one time and uses the current prompt.
+  </Accordion>
+
+  <Accordion title="A run is awaiting approval">
+    Open the run chat from the notification or the run history, then approve or reject the action.
+    To let future runs do the action without approval, edit the task and set the action to **Allow**.
+    If the action is **Blocked** by your admin, the task cannot use it.
+  </Accordion>
+
+  <Accordion title="A run failed">
+    Open the run chat. Confirm that the required integrations are still connected and turned on for the task,
+    and that the prompt can finish in one chat turn. After you correct the task, select **Run once**.
+  </Accordion>
+</AccordionGroup>
+
+<CardGroup cols={2}>
+  <Card title="Plugins" icon="plug" href="/overview/core_features/plugins">
+    Turn on integrations, connect your accounts, and understand approvals.
+  </Card>
+
+  <Card title="Chat" icon="message" href="/overview/core_features/chat">
+    Test a prompt in a normal chat before you schedule it.
+  </Card>
+</CardGroup>

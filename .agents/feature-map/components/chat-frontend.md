@@ -716,21 +716,47 @@ up its own branding.
     production caller.** Grouping happens in `processPackets`
     ([[#packet-list-append-only]]).
 
-15. `scroll-follow-intent` **Content growth must not cancel following.**
-    `sections/chat/ChatScrollContainer.tsx` keeps following intent across the
-    typewriter drain and spacer smooth-scroll pauses. When either pause ends,
-    catch up if auto-scroll is enabled and the user has not scrolled away.
-    During the opening-follow window, content observers can also catch up with
-    auto-scroll disabled. Scrolling up ends that window. Content observers
-    update visual state without treating layout growth as a user scroll. When
-    the content shrinks, an upward scroll up to the shrinkage is layout, not
-    the user, so only movement beyond it stops following.
-    Every scroll baseline records the position and the content height
-    together. `components/chat/DynamicBottomSpacer.tsx` adds space only for a
-    turn sent from the page, which passes through `loading`. A run the page
-    resumes starts at `streaming` and gets no space. The scroll element is
-    keyed by session, so a chat switch remounts the spacer. Its unmount clears
-    its state and the shared spacer height.
+15. `scroll-follow-intent` **The user's input sets the scroll mode; layout keeps it.**
+    `lib/chatScroll/components/ChatScrollContainer.tsx` is in one of three
+    modes: `following` keeps to the end as content grows; `reading` never moves
+    (native scroll anchoring keeps the content still); `gliding` is its own
+    smooth scroll to the end (a send, the button), which ends on `scrollend` or
+    a timeout. A scroll event is the user's only within 600ms of scroll input
+    (wheel, touch, scroll keys, a focus move into the view), or while a pointer
+    is held on the view; each such move restarts the 600ms, so a fling stays the
+    user's while it moves. Then the position sets the mode. A glide ignores
+    input from before it started, and a send's glide stops at the user message
+    of a turn taller than the view, which then reads. A move that keeps the
+    distance from the end is native anchoring, not the user, even with a
+    pointer held. Any other move is layout (Firefox clamps the
+    position while content briefly shrinks, anchoring adjusts, a glide runs),
+    and only a `following` view reacts, by returning to the end. The one
+    exception: with auto-scroll off while a reply runs, growth that leaves the
+    end makes the view `reading`, so a later resume never jumps. The
+    typewriter's drain is a pause (`pauseFollowing`), and the view catches up
+    when it ends. Do not write `scrollTop` while the user scrolls: a following
+    view catches up once the input settles. Keep native scroll anchoring on: a
+    script write stops a trackpad fling.
+    **Turn anchoring is layout.** `sections/chat/ChatUI.tsx` groups each turn (a
+    user message and its replies) in a `data-chat-turn` element. The latest turn
+    has `min-height: calc(100cqh - 3rem)` (the scroll element is a size
+    container): at the end of every chat, in every tab and after a reload, the
+    latest user message sits 1rem below the top, with space below it, while the
+    turn fits in that height. A taller turn ends at the bottom, and its user
+    message is above the viewport. Nothing
+    measures it. A send glides to the end through
+    `lib/chatScroll/hooks.ts:useScrollToNewTurn` (only while the chat is
+    `loading`, and not on a switch back to a running chat, so a resumed run
+    never moves the view). The scroll-to-bottom button ignores the latest
+    turn's unfilled space. Text that grows inside that space changes no scroll
+    height, so a ResizeObserver watches the latest turn's rows.
+    Each chat's position (end, or a row and offset) and its row heights live
+    in `lib/chatScroll/scrollMemory.ts`; the opening layout effect restores
+    them from loaded rows only, so a switch never waits on the network. Rows
+    use `lib/chat/rowIds.ts:messageRowId`.
+    Craft's transcript (`app/craft/components/ChatPanel.tsx`) uses the same
+    `ChatScrollContainer`, with its composer in the `footer` slot. Its rows are
+    not turn groups, so Craft has no space below its latest turn.
 
 ---
 
@@ -756,9 +782,12 @@ up its own branding.
 - **A fast send after a branch switch can race.** `patchMessageToBeLatest` is
   not awaited. A send that reaches the server first can fail with "not on the
   latest mainline". This is inferred from the code, not seen in a test.
-- **Auto-naming can run twice.** `handleNewSessionNaming` names a new session
-  after its first answer, and the session controller names an untitled session
-  with two or more messages on load. A quick reload can trigger both.
+- **The server names a new chat.** It names it during the first turn and sends
+  a `chat_session_name` line, because `sendMessage` sets
+  `accepts_chat_session_name`. `handleNewSessionNaming` runs only when the
+  stream ends without that line. It and the session controller's on-load naming
+  call `PUT /chat/rename-chat-session`, which returns a saved name or waits for
+  one in progress (one naming lock per chat, `backend/onyx/chat/session_naming.py`).
 
 ---
 

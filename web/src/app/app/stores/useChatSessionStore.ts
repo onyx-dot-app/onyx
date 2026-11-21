@@ -48,6 +48,9 @@ interface ChatSessionData {
   isFetchingChatMessages: boolean;
   // Paged loading: the current branch has messages above the loaded ones.
   hasOlderMessages: boolean;
+  // An older page failed to load, so `hasOlderMessages` was turned off to
+  // stop retrying; reopening the chat tries again.
+  olderMessagesFailed: boolean;
   // The `approvals_version` of the load whose approval requests the chat shows.
   approvalsVersion?: string;
   isLoadingOlderMessages: boolean;
@@ -207,6 +210,7 @@ const createInitialSessionData = (
   // Session-specific state defaults
   isFetchingChatMessages: false,
   hasOlderMessages: false,
+  olderMessagesFailed: false,
   isLoadingOlderMessages: false,
   uncaughtError: null,
   loadingError: null,

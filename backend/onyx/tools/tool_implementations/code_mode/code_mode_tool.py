@@ -13,7 +13,12 @@ from onyx.agents.tools import (
     ToolOutcome,
 )
 from onyx.llm.models import ToolDefinition, ToolResult
-from onyx.tools.constants import CODE_MODE_TOOL_NAME, WAIT_CODE_TOOL_NAME
+from onyx.tools.constants import (
+    CODE_MODE_TOOL_NAME,
+    DEFAULT_MAX_OUTPUT_CHARS,
+    MAX_OUTPUT_CHARS_DESCRIPTION,
+    WAIT_CODE_TOOL_NAME,
+)
 from onyx.tools.interface import (
     Tool,
     parse_tool_arguments,
@@ -26,14 +31,11 @@ from onyx.tools.models import (
     ToolPreference,
 )
 from onyx.tools.tool_implementations.code_mode.cells import (
-    DEFAULT_MAX_OUTPUT_TOKENS,
     CodeCells,
     Program,
     SequentialCalls,
 )
-from onyx.tools.tool_implementations.code_mode.models import (
-    SandboxLimits,
-)
+from onyx.tools.tool_implementations.code_mode.models import SandboxLimits
 from onyx.tools.tool_implementations.code_mode.prompt import (
     INNER_CALL_MESSAGE,
     WAIT_CODE_DESCRIPTION,
@@ -42,6 +44,7 @@ from onyx.tools.tool_implementations.code_mode.prompt import (
 )
 from onyx.tools.tool_implementations.code_mode.sandbox import TOOLS_NAMESPACE
 from onyx.tools.tool_implementations.code_mode.stubs import build_tool_stubs
+from onyx.tools.tool_implementations.utils import output_chars
 
 # How long a call waits for the cell before it returns the output so far.
 DEFAULT_EXECUTE_YIELD_MS = 30_000
@@ -49,8 +52,6 @@ MAX_EXECUTE_YIELD_MS = 120_000
 DEFAULT_WAIT_YIELD_MS = 15_000
 MAX_WAIT_YIELD_MS = 300_000
 MIN_YIELD_MS = 1_000
-# Tokens of output that one observation can return to the model.
-MAX_OUTPUT_TOKENS = 40_000
 
 RESTORED_RUNNING_MESSAGE = (
     "Execution was interrupted before it finished and was not run again. Its tool "
@@ -64,13 +65,6 @@ RESTORED_WAIT_MESSAGE = (
 )
 
 
-_MAX_OUTPUT_TOKENS_DESCRIPTION = (
-    "Token budget for the output this call returns; longer output is cut in the "
-    f"middle. Defaults to {DEFAULT_MAX_OUTPUT_TOKENS} tokens, at most "
-    f"{MAX_OUTPUT_TOKENS}."
-)
-
-
 class CodeModeArguments(BaseModel):
     code: str = Field(description="The Python program to run.")
     yield_time_ms: int = Field(
@@ -79,8 +73,8 @@ class CodeModeArguments(BaseModel):
         f"so far while it keeps running. Defaults to {DEFAULT_EXECUTE_YIELD_MS} ms, "
         f"at most {MAX_EXECUTE_YIELD_MS} ms.",
     )
-    max_output_tokens: int = Field(
-        default=DEFAULT_MAX_OUTPUT_TOKENS, description=_MAX_OUTPUT_TOKENS_DESCRIPTION
+    max_output_chars: int = Field(
+        default=DEFAULT_MAX_OUTPUT_CHARS, description=MAX_OUTPUT_CHARS_DESCRIPTION
     )
 
 
@@ -91,8 +85,8 @@ class WaitCodeArguments(BaseModel):
         description="How long to wait for more output before returning. Defaults "
         f"to {DEFAULT_WAIT_YIELD_MS} ms, at most {MAX_WAIT_YIELD_MS} ms.",
     )
-    max_output_tokens: int = Field(
-        default=DEFAULT_MAX_OUTPUT_TOKENS, description=_MAX_OUTPUT_TOKENS_DESCRIPTION
+    max_output_chars: int = Field(
+        default=DEFAULT_MAX_OUTPUT_CHARS, description=MAX_OUTPUT_CHARS_DESCRIPTION
     )
     terminate: bool = Field(
         default=False,
@@ -102,10 +96,6 @@ class WaitCodeArguments(BaseModel):
 
 def yield_seconds(yield_time_ms: int, maximum_ms: int) -> float:
     return min(max(yield_time_ms, MIN_YIELD_MS), maximum_ms) / 1000
-
-
-def output_tokens(requested: int) -> int:
-    return min(max(requested, 1), MAX_OUTPUT_TOKENS)
 
 
 # The saved result of an `execute_code` call that stopped before it returned. A
@@ -251,7 +241,7 @@ class CodeModeTool(Tool):
             invocation,
             context,
             yield_seconds=yield_seconds(arguments.yield_time_ms, MAX_EXECUTE_YIELD_MS),
-            max_tokens=output_tokens(arguments.max_output_tokens),
+            max_chars=output_chars(arguments.max_output_chars),
         )
 
     def _resume_with_input(
@@ -322,7 +312,7 @@ class WaitCodeTool(Tool):
             context,
             programs=self._programs,
             yield_seconds=yield_seconds(arguments.yield_time_ms, MAX_WAIT_YIELD_MS),
-            max_tokens=output_tokens(arguments.max_output_tokens),
+            max_chars=output_chars(arguments.max_output_chars),
             terminate=arguments.terminate,
         )
 

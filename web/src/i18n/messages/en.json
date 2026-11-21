@@ -10418,7 +10418,8 @@
             "public": "Found {count, plural, one {# tool} other {# tools}}. The server needs no sign-in.",
             "oauth": "The server uses OAuth sign-in.",
             "authUnknown": "The server needs sign-in. Add an API key header or OAuth.",
-            "unreachable": "Onyx cannot reach this server. Check the URL."
+            "unreachable": "Onyx cannot reach this server. Check the URL.",
+            "forbidden": "Only an admin can check this server before it is added. You can still add it."
           },
           "transport": {
             "title": "Transport",
@@ -10672,12 +10673,120 @@
         "saveFailed": "Could not save the install setting.",
         "title": "Install Setting",
         "description": "Who gets this integration. Not available keeps it private: only its owner, the people it is shared with and the groups with their own setting use it. Remove those group settings to limit it to the owner and the shares.",
-        "notAvailable": "Private. Only the owner, the people it is shared with and the groups with their own setting use it."
+        "notAvailable": "Private. Only the owner, the people it is shared with and the groups with their own setting use it.",
+        "required": "Members who sign in with their own account must connect it before they can use chat and Craft."
       },
       "ownedBy": "Owned by {owner}",
       "groupAccess": {
         "saved": "Group settings of {name} saved.",
         "saveFailed": "Could not save the group setting."
+      }
+    },
+    "serviceStatus": {
+      "page": {
+        "description": "Current resource usage and search cluster health of your Onyx instance",
+        "refresh": "Refresh",
+        "refreshFailed": "Could not refresh the cluster status. The page shows the last result.",
+        "loadFailed": "Could not read the search cluster status. Check that OpenSearch is reachable."
+      },
+      "cluster": {
+        "title": "Search Cluster - OpenSearch",
+        "status": "Cluster Status",
+        "version": "OpenSearch {version}",
+        "health": "Status {health}",
+        "updated": "Updated {time}",
+        "dataNodes": "Data Nodes",
+        "shards": "Shards",
+        "shardLayout": "{primaries} × {copies}",
+        "copies": "Copies",
+        "indexSize": "Index Size",
+        "chunks": "Chunks",
+        "healthGreen": "Green: every shard copy is assigned.",
+        "healthYellow": "Yellow: some replica shards are not assigned. Search works, but losing a data node can lose data.",
+        "healthYellowSingleNode": "Yellow: replica copies need a second data node. This is normal for a cluster with one data node, and search works.",
+        "healthRed": "Red: some primary shards are not assigned, so part of the index cannot be searched."
+      },
+      "searches": {
+        "loadTitle": "Search Load",
+        "loadUnit": "calls/s",
+        "timeTitle": "Search Latency",
+        "seconds": "{value} s",
+        "milliseconds": "{value} ms",
+        "loadFailed": "Could not read the recent searches.",
+        "p90Note": "(90th percentile)",
+        "p90Row": "p90 {value}",
+        "p10Row": "p10 {value}",
+        "minuteLabel": "{time}: p90 {p90}, p10 {p10}",
+        "rateTooltip": "{rate} calls/s",
+        "millisecondsUnit": "ms",
+        "secondsUnit": "s",
+        "failedInMinute": "{count, plural, one {# failed} other {# failed}}"
+      },
+      "nodes": {
+        "title": "Data Nodes",
+        "disk": "Disk Usage",
+        "vector": "Vector Memory",
+        "percent": "{value}%",
+        "usedOfTotal": "{used} / {total} {unit}",
+        "shards": "{count, plural, one {# shard} other {# shards}}",
+        "unnamed": "Node {number}",
+        "copyName": "Copy the OpenSearch node name ({name})"
+      },
+      "indexes": {
+        "title": "Indexes",
+        "chunks": "Chunks",
+        "shards": "Shards",
+        "reindex": "Reindex",
+        "detail": "Embedding model · {dim} dimensions",
+        "deleted": "{percent}% deleted chunks",
+        "detailQuantized": "Embedding model · {dim} dimensions · {quantization} vectors",
+        "reindexProgress": "{percent}% of current"
+      },
+      "issues": {
+        "title": "Issues & Recommendations",
+        "none": "No issues found.",
+        "criticalCount": "{count} Critical",
+        "warningCount": "{count, plural, one {# Warning} other {# Warnings}}",
+        "nodeCount": "{count} data nodes",
+        "indexSettings": "Index Settings",
+        "sizingGuide": "Sizing Guide",
+        "clusterRed": {
+          "title": "The cluster status is red",
+          "description": "Some primary shards are not assigned, so part of the index cannot be searched. Check the OpenSearch logs."
+        },
+        "unassignedShards": {
+          "title": "{value, plural, one {# shard copy is} other {# shard copies are}} not assigned",
+          "description": "OpenSearch has no data node to place them on. Add data nodes or lower the replica count."
+        },
+        "diskCritical": {
+          "title": "Disk at {value}% on {nodes}",
+          "description": "OpenSearch stops placing shards on a data node at 85%. Add storage or data nodes."
+        },
+        "diskWarning": {
+          "title": "Disk at {value}% on {nodes}",
+          "description": "A reindex needs room for a second index. Add storage or data nodes."
+        },
+        "vectorCritical": {
+          "title": "Vector memory at {value}% on {nodes}",
+          "description": "The vectors do not fit in memory, so search reads them from disk. Add memory or data nodes, or use a smaller vector quantization."
+        },
+        "vectorWarning": {
+          "title": "Vector memory at {value}% on {nodes}",
+          "description": "Search slows down when the vectors do not fit in memory. Add memory or data nodes, or use a smaller vector quantization."
+        },
+        "heap": {
+          "title": "JVM heap at {value}% on {nodes}",
+          "description": "OpenSearch can reject requests when the heap is full. Add memory or data nodes."
+        },
+        "indexMissing": {
+          "title": "The search index is missing",
+          "description": "OpenSearch has no index for the current search settings, so search returns nothing. Check the OpenSearch logs, then start a reindex from Index Settings."
+        },
+        "nodesUnanswered": {
+          "title": "{value, plural, one {# data node} other {# data nodes}} did not answer",
+          "description": "The status leaves out what those nodes did not report, such as their disk and memory. Check that every data node is running, then refresh."
+        },
+        "dismiss": "Dismiss"
       }
     }
   },
@@ -12503,7 +12612,7 @@
               "between": "Sent {start} – {end}"
             },
             "owner": "Owner: {owner}",
-            "folder": "In folder {id}",
+            "folder": "In folder {name}",
             "nodeType": "Type: {type}",
             "author": "From: {author}",
             "message": "Message {id}",
@@ -13991,7 +14100,6 @@
     "chatPanel": {
       "input": {
         "continuePlaceholder": "Continue the conversation...",
-        "scheduledRunPlaceholder": "Scheduled run in progress...",
         "subagentPlaceholder": "Switch to the main agent to send a message"
       },
       "openSidebar": {
@@ -14009,8 +14117,7 @@
       },
       "toast": {
         "operationWait": "Please wait for the current operation to complete.",
-        "sandboxWait": "Please wait for sandbox to initialize",
-        "scheduledRunWait": "Please wait for the scheduled run to finish."
+        "sandboxWait": "Please wait for sandbox to initialize"
       },
       "loadError": {
         "title": "Could not load the session",
@@ -14461,23 +14568,6 @@
         "button": "Wake sandbox"
       }
     },
-    "scheduledRun": {
-      "badge": {
-        "label": "Scheduled"
-      },
-      "startedAt": {
-        "label": "Started {time}"
-      },
-      "status": {
-        "awaitingApproval": "This scheduled run is awaiting approval. Follow-up messages unlock after it resumes and finishes.",
-        "running": "This scheduled run is still running. Follow-up messages unlock when it finishes.",
-        "startedBy": "This session was started by scheduled task {task} at {time}."
-      },
-      "viewTask": {
-        "ariaLabel": "View scheduled task {task}. {status}",
-        "label": "View task"
-      }
-    },
     "setupCard": {
       "appFallback": {
         "label": "External app {id}"
@@ -14750,7 +14840,8 @@
         },
         "tabs": {
           "dailyWeekly": "Daily / Weekly",
-          "interval": "Interval"
+          "interval": "Interval",
+          "advanced": "Advanced"
         },
         "weekdays": {
           "fri": "Fri",
@@ -14760,6 +14851,21 @@
           "thu": "Thu",
           "tue": "Tue",
           "wed": "Wed"
+        },
+        "advanced": {
+          "cronLabel": "Cron Expression",
+          "hint": "Five fields: minute, hour, day, month, weekday. The expression runs in UTC.",
+          "placeholder": "For example, 0 9 * * 1-5"
+        },
+        "errors": {
+          "intervalNotPositiveInteger": "Interval must be a whole number of at least 1.",
+          "minutesIntervalTooLong": "Use hours for intervals over 59 minutes.",
+          "hoursIntervalTooLong": "Use a daily schedule for intervals over 23 hours.",
+          "dayIntervalTimeRequired": "Pick a time of day for day-cadence intervals.",
+          "timeRequired": "Pick a time of day.",
+          "weekdayOutOfRange": "Weekday values must be 0-6 (Sun..Sat).",
+          "cronRequired": "Enter a cron expression.",
+          "cronFieldCount": "Cron must have exactly 5 fields (minute hour day month weekday)."
         }
       },
       "unviewedResults": "New results"
@@ -16148,6 +16254,9 @@
         },
         "discordBot": {
           "label": "Discord Bot"
+        },
+        "serviceStatus": {
+          "label": "Service Status"
         }
       },
       "sections": {
@@ -16225,6 +16334,9 @@
       },
       "customize": {
         "label": "Customize"
+      },
+      "scheduledTasks": {
+        "label": "Scheduled Tasks"
       }
     },
     "chatButton": {
@@ -16454,84 +16566,15 @@
         }
       },
       "importGithub": {
-        "cancelButton": {
-          "label": "Cancel"
-        },
         "doneButton": {
           "label": "Done"
         },
-        "header": {
-          "chooseDescription": "Choose skills from {repository}.",
-          "completeDescription": "Review what was added to your skills.",
-          "completeTitle": "GitHub import complete",
-          "description": "Import one or more skills from a GitHub repository.",
-          "title": "Import from GitHub"
-        },
-        "importError": {
-          "message": "Couldn't import skills.",
-          "title": "Couldn't import skills"
-        },
-        "loadError": {
-          "message": "Couldn't load repository.",
-          "title": "Couldn't load repository"
-        },
-        "privateRepos": {
-          "askAdmin": "Public repositories import directly. Ask an admin to set up GitHub before importing private repositories.",
-          "connect": "Public repositories import directly. Connect GitHub to import private repositories.",
-          "connectButton": {
-            "label": "Connect GitHub"
-          },
-          "connected": "Public repositories import directly. Private repositories use your GitHub connection.",
-          "needsConnection": "Public repositories import directly. Private repositories require a GitHub connection.",
-          "setUp": "Public repositories import directly. Set up GitHub before importing private repositories.",
-          "setUpButton": {
-            "label": "Set up GitHub"
-          }
-        },
-        "repositoryInput": {
-          "label": "Repository"
-        },
-        "result": {
-          "disabledCount": "{count} imported disabled because another skill with the same name is enabled.",
-          "enabledCount": "{count} enabled automatically.",
-          "failedCount": "{count} could not be imported.",
-          "importedSection": {
-            "title": "Imported"
-          },
-          "importedTitle": "{count, plural, one {# skill imported} other {# skills imported}}",
-          "noneTitle": "No skills were imported",
-          "notImportedSection": {
-            "title": "Not imported"
-          },
-          "notSelectedCount": "{count} not selected."
-        },
-        "selectAll": {
-          "ariaLabel": "Select all importable skills"
-        },
-        "selection": {
-          "label": "{selected} of {total, plural, one {# importable skill} other {# importable skills}} selected"
-        },
-        "skillCheckbox": {
-          "ariaLabel": "Select {name}"
-        },
-        "skillTag": {
-          "disabled": "Disabled",
-          "enabled": "Enabled"
-        },
         "submitButton": {
           "importLabel": "{count, plural, one {Import skill} other {Import # skills}}",
-          "importingLabel": "Importing…",
-          "searchLabel": "Search repository",
-          "searchingLabel": "Searching…"
-        },
-        "unavailableFallback": "This skill cannot be imported.",
-        "unavailableTag": {
-          "label": "Can't import"
+          "importingLabel": "Importing…"
         },
         "sharing": {
-          "title": "Access for Imported Skills",
-          "configureButton": "Configure access",
-          "description": "These access settings apply to all {count, plural, one {# selected skill} other {# selected skills}}."
+          "configureButton": "Configure access"
         }
       },
       "nameConflict": {
@@ -16648,10 +16691,22 @@
           "remove": "Remove {name}",
           "shared": "Shared with this group",
           "settingOnly": "Group setting only"
+        },
+        "plugin": {
+          "installation": {
+            "description": "Choose how this plugin is installed for everyone with access."
+          },
+          "published": {
+            "description": "Published. Everyone in the organization can use this plugin."
+          },
+          "publishWarning": {
+            "description": "After you save, everyone in the organization can use this plugin. You cannot make it private again. Only an admin can delete it.",
+            "reviewDescription": "The plugin stays private until an admin approves the request. After approval, you cannot make it private again."
+          },
+          "publishOff": {
+            "description": "An admin turned off publishing to the organization. Ask an admin to publish this plugin."
+          }
         }
-      },
-      "placeholders": {
-        "githubRepository": "owner/repository or https://github.com/owner/repository"
       },
       "tabs": {
         "details": "Details",
@@ -16663,7 +16718,8 @@
         "columns": {
           "version": "Version",
           "madeBy": "Made by",
-          "date": "Date"
+          "date": "Date",
+          "manifestVersion": "plugin.json"
         },
         "versionLabel": "Version {number}",
         "currentBadge": "Current",
@@ -16686,7 +16742,9 @@
           "back": "All versions",
           "loadError": {
             "title": "Couldn't load this version"
-          }
+          },
+          "skills": "Skills · {count}",
+          "integrations": "Integrations · {count}"
         },
         "status": {
           "pending": "Pending review",
@@ -16698,15 +16756,14 @@
           "failedToast": "Couldn't publish this update.",
           "sentForReviewToast": "Version {number} went to an admin for review.",
           "offNotice": "Publishing is turned off. Ask an admin to publish this update."
-        }
+        },
+        "noManifestVersion": "None",
+        "manifestVersion": "plugin.json {version}",
+        "locked": "This plugin syncs from GitHub, so you change it in GitHub."
       }
     },
     "page": {
       "createMenu": {
-        "github": {
-          "description": "Import one or more skills from a repository.",
-          "title": "Import from GitHub"
-        },
         "scratch": {
           "description": "Write the instructions and add supporting files in {appName}.",
           "title": "Start from scratch"
@@ -16717,6 +16774,10 @@
         "upload": {
           "description": "Import a SKILL.md file, ZIP file, or skill folder.",
           "title": "Upload a skill"
+        },
+        "marketplace": {
+          "title": "Add marketplace",
+          "description": "Add from a repository and sync its plugins."
         }
       },
       "empty": {
@@ -16747,10 +16808,12 @@
         "body": "Continuing will disable the currently enabled skill and enable this one.",
         "description": "Only one skill named “{name}” can be enabled at a time.",
         "submit": {
-          "label": "Switch skill",
+          "label": "Switch",
           "pendingLabel": "Switching..."
         },
-        "title": "Switch “{name}” skill?"
+        "title": "Turn on “{name}”?",
+        "descriptionNamed": "{names} already uses a skill name that “{name}” uses. Only one of them can be on at a time.",
+        "bodyNamed": "Turning on “{name}” turns off {names}."
       },
       "toasts": {
         "disableFailed": "Failed to disable {name}",
@@ -16772,6 +16835,9 @@
         },
         "upload": {
           "label": "Drag and drop or click to upload"
+        },
+        "chooseFolder": {
+          "label": "Choose a folder"
         }
       },
       "filesPicker": {
@@ -16795,7 +16861,8 @@
       },
       "upload": {
         "error": {
-          "readFailed": "Could not read the upload."
+          "readFailed": "Could not read the upload.",
+          "folderRoot": "{upload, select, plugin {The selected folder must contain SKILL.md or a plugin.json manifest at its top level.} other {The selected folder must contain SKILL.md at its top level.}}"
         }
       }
     },
@@ -16938,7 +17005,9 @@
       "sections": {
         "organization": "Organization library",
         "mine": "My uploads",
-        "shared": "Shared with you"
+        "shared": "Shared with you",
+        "marketplace": "From a marketplace",
+        "private": "Private to another user"
       },
       "detail": {
         "title": "Plugin",
@@ -16954,19 +17023,51 @@
           "location": "Location",
           "owner": "Owner",
           "skills": "Skills",
-          "description": "Description"
+          "description": "Description",
+          "version": "Version in plugin.json",
+          "author": "Author",
+          "homepage": "Homepage",
+          "license": "License",
+          "notUsed": "Not used in Onyx",
+          "marketplace": "{name} marketplace, {scope, select, personal {personal} other {company}} ({repository})"
         },
         "skills": {
           "off": "Off",
-          "invalid": "Not valid"
+          "invalid": "Not valid",
+          "read": "Read",
+          "readAriaLabel": "Read the {name} skill",
+          "readFailed": "Could not read this skill.",
+          "noInstructions": "This skill has no instructions."
         },
         "switch": {
           "title": "Use this plugin",
-          "description": "When this is on, the default agent can use this plugin.",
           "label": "Use {name}",
           "required": "Your admin made this plugin required. You cannot turn it off.",
           "unavailable": "You cannot turn this plugin on or off.",
-          "failed": "Could not change the plugin."
+          "failed": "Could not change the plugin.",
+          "on": "On. The default agent can use this plugin.",
+          "off": "Off. Turn it on to let the default agent use this plugin.",
+          "nameHeld": "Off because {names} uses the same skill name. Turn this plugin on to use it instead."
+        },
+        "actions": {
+          "share": "Share",
+          "menu": "More actions",
+          "uploadVersion": "Upload New Version",
+          "remove": "Delete Plugin"
+        },
+        "remove": {
+          "entityType": "plugin",
+          "description": "Everyone who uses this plugin loses it. You cannot undo this.",
+          "submit": "Delete",
+          "pending": "Deleting…",
+          "done": "Deleted {name}.",
+          "failed": "Could not delete the plugin."
+        },
+        "syncedFrom": "Synced from {repository}",
+        "managed": {
+          "title": "Managed by the {name} marketplace",
+          "description": "Onyx syncs this plugin from {repository}. Change it in GitHub, then sync the marketplace.",
+          "open": "Open Marketplaces"
         }
       },
       "connection": {
@@ -17063,6 +17164,263 @@
           "label": "Done"
         }
       }
+    },
+    "needs": {
+      "intro": "A plugin never gives access to an integration. Each row shows your own state of the integration. The plugin works without the integrations that are not on.",
+      "state": {
+        "on": "On",
+        "turn_on": "Off",
+        "sign_in": "Not signed in",
+        "no_access": "No access",
+        "turned_off": "Turned off",
+        "not_added": "Not added",
+        "more_than_one": "More than one match",
+        "not_supported": "Not supported"
+      },
+      "note": {
+        "askAdmin": "Ask an admin",
+        "turnedOff": "Turned off by your admin",
+        "moreThanOne": "More than one integration matches",
+        "notSupported": "Not supported in Onyx"
+      },
+      "localServer": "Local server",
+      "noUrl": "No server URL",
+      "turnOn": {
+        "label": "Turn on",
+        "ariaLabel": "Turn on {name}",
+        "failed": "Could not turn on {name}."
+      },
+      "add": {
+        "label": "Add integration",
+        "ariaLabel": "Add the {name} integration"
+      },
+      "urlProblem": {
+        "variable": "The URL uses a variable. Onyx does not fill in variables.",
+        "credential": "The URL has a credential in it. Onyx does not keep it.",
+        "invalid": "The URL is not a valid http or https URL."
+      }
+    },
+    "upload": {
+      "title": "Upload Plugin",
+      "description": "Upload a Claude Code or Codex plugin. Choose a .zip file, or drag the plugin folder here.",
+      "reading": "Reading…",
+      "requirements": {
+        "title": "Onyx uses these parts of a plugin:",
+        "skills": "Skills in skills/'<name>'/SKILL.md",
+        "mcp": "MCP servers in .mcp.json or plugin.json",
+        "other": "Onyx does not use commands, agents, hooks or the other parts."
+      },
+      "skillOnly": {
+        "title": "This upload is a skill",
+        "description": "It has no plugin.json. Continue to add it as a skill.",
+        "continue": "Continue"
+      },
+      "version": "plugin.json {version}",
+      "target": {
+        "newVersion": "Updates {name} to Onyx version {version}",
+        "newPlugin": "New plugin: {name}"
+      },
+      "willBeOff": "The plugin is saved off. {names} already has a skill with the same name.",
+      "saveAsNew": {
+        "label": "Save as a New Plugin",
+        "description": "Keep the plugin that has this name as it is."
+      },
+      "sections": {
+        "skills": "Skills · {count}",
+        "integrations": "Integrations · {count}",
+        "unused": "Not used in Onyx",
+        "warnings": "Warnings"
+      },
+      "integrationsNote": "Saving turns on the integrations that you can already use. A plugin never gives access to an integration.",
+      "integrationsNoteOff": "The plugin is off after the save, so the save turns on no integrations.",
+      "unusedParts": {
+        "commands": "Commands",
+        "agents": "Agents",
+        "hooks": "Hooks",
+        "lsp_servers": "LSP servers",
+        "output_styles": "Output styles",
+        "bin": "Executables (bin)",
+        "themes": "Themes",
+        "monitors": "Monitors"
+      },
+      "cancel": "Cancel",
+      "save": "Save",
+      "saving": "Saving…",
+      "readFailed": "Could not read the plugin.",
+      "saveFailed": "Could not save the plugin.",
+      "saved": {
+        "newPlugin": "Added {name}.",
+        "newVersion": "Updated {name} to Onyx version {version}.",
+        "unchanged": "No changes. {name} is already at Onyx version {version}.",
+        "off": "Added {name}. It is off because {names} already has a skill with the same name."
+      }
+    },
+    "turnOn": {
+      "title": "{name} is on",
+      "description": "Some integrations that this plugin needs are not available to you.",
+      "note": "The plugin works without them. A plugin never gives access to an integration.",
+      "done": "Done"
+    },
+    "marketplaces": {
+      "status": {
+        "ok": "Ready",
+        "blocked": "Cannot install",
+        "not_supported": "Not supported"
+      },
+      "scope": {
+        "personal": "Personal",
+        "company": "Company"
+      },
+      "source": {
+        "repository": "Repository",
+        "folder": "Folder",
+        "root": "Root of the repository",
+        "ref": "Branch, Tag or Commit",
+        "defaultBranch": "Default branch",
+        "commit": "Commit"
+      },
+      "preview": {
+        "title": "{name}: {count, plural, one {# plugin to add} other {# plugins to add}}",
+        "empty": "This marketplace has no entries.",
+        "failedTitle": "Onyx cannot read this marketplace",
+        "version": "v{version}",
+        "willInstall": "Will install",
+        "skills": "{count, plural, one {Skill} other {Skills}}: {names}",
+        "showUnusable": "{count, plural, one {Show # entry that Onyx cannot use} other {Show # entries that Onyx cannot use}}",
+        "hideUnusable": "Hide the entries that Onyx cannot use",
+        "summary": "{ready} Ready · {blocked} Cannot install · {unsupported} Not supported"
+      },
+      "add": {
+        "menuItem": "Add marketplace",
+        "title": "Add Marketplace",
+        "description": "Add from a repository. Onyx reads its .claude-plugin/marketplace.json file, and each entry becomes a plugin.",
+        "confirmTitle": "Confirm Marketplace",
+        "confirmDescription": "Make sure that this is the source and the plugins that you want, then add the marketplace.",
+        "repository": {
+          "title": "Repository",
+          "description": "Type owner/repo or the URL of the repository.",
+          "placeholder": "For example, anthropics/claude-plugins-official"
+        },
+        "folder": {
+          "title": "Folder",
+          "description": "The folder that holds .claude-plugin/marketplace.json. Leave it empty for the root of the repository.",
+          "placeholder": "For example, plugins"
+        },
+        "ref": {
+          "title": "Branch, Tag or Commit",
+          "description": "Leave it empty to use the default branch.",
+          "placeholder": "For example, main"
+        },
+        "scope": {
+          "title": "Marketplace Type",
+          "personalDescription": "Only you get the plugins of this marketplace.",
+          "companyDescription": "Your organization gets the plugins of this marketplace, as it gets published plugins."
+        },
+        "defaultAccess": {
+          "title": "Default Access",
+          "description": "The install setting of each plugin of this marketplace. You can change it for one plugin later."
+        },
+        "privateNote": "Onyx reads a private repository with your GitHub connection. Connect GitHub in Integrations before you add a private repository.",
+        "continue": "Continue",
+        "previewing": "Reading…",
+        "back": "Back",
+        "submit": "Add marketplace",
+        "adding": "Adding…",
+        "cancel": "Cancel",
+        "previewFailed": "Could not read the repository.",
+        "addFailed": "Could not add the marketplace.",
+        "added": "Added {name}. Its plugins show after the first sync.",
+        "duplicate": {
+          "personal": "You already added this marketplace.",
+          "company": "Your organization already gets this marketplace."
+        }
+      },
+      "sync": {
+        "now": "Sync now",
+        "requested": "Started a sync of {name}.",
+        "failed": "Could not start the sync.",
+        "lastSync": "Last sync {date}",
+        "never": "Not synced yet",
+        "state": {
+          "syncing": "Syncing",
+          "failed": "Sync failed",
+          "not_synced": "Not synced",
+          "synced": "Synced"
+        }
+      },
+      "columns": {
+        "marketplace": "Marketplace",
+        "sync": "Sync",
+        "items": "Plugins"
+      },
+      "items": "{count, plural, one {# plugin} other {# plugins}}",
+      "tableLabel": "Marketplaces",
+      "open": "Open {name}",
+      "menu": "Actions for {name}",
+      "loadFailed": "Could not load the marketplaces.",
+      "empty": {
+        "title": "No marketplaces yet",
+        "description": "Add a GitHub repository to get its plugins."
+      },
+      "page": {
+        "title": "Marketplaces",
+        "description": "The GitHub repositories that you get plugins from, with their source. Sync a marketplace to get the changes from GitHub."
+      },
+      "attention": {
+        "failedTitle": "The last sync of {name} failed"
+      },
+      "defaultAccess": {
+        "title": "Default Access",
+        "description": "The install setting of each plugin of {name} that has no setting of its own.",
+        "save": "Save",
+        "cancel": "Cancel",
+        "saved": "Saved the default access.",
+        "failed": "Could not save the default access."
+      },
+      "replaceLogin": {
+        "label": "Replace login",
+        "description": "Sync the repository as you. Onyx uses your GitHub connection if you have one.",
+        "done": "Onyx now syncs {name} as you.",
+        "doneWithoutGithub": "Onyx now syncs {name} as you, but you have not connected GitHub. Onyx can read only a public repository. Connect GitHub in Integrations.",
+        "failed": "Could not replace the login."
+      },
+      "remove": {
+        "label": "Remove",
+        "title": "Remove {name}?",
+        "description": "This deletes the marketplace and {count, plural, one {its plugin} other {its # plugins}}. Members lose these plugins.",
+        "listLabel": "Plugins to delete",
+        "noPlugins": "This marketplace has no plugins.",
+        "confirm": "Remove",
+        "done": "Removed {name}.",
+        "failed": "Could not remove the marketplace.",
+        "loadFailed": "Could not load the plugins of this marketplace.",
+        "retry": "Retry",
+        "personalDescription": "This deletes the marketplace and {count, plural, one {its plugin} other {its # plugins}}. You lose these plugins."
+      },
+      "detail": {
+        "title": "Marketplace",
+        "description": "The source, the sync and the entries of this marketplace.",
+        "loadFailed": "Could not load the marketplace.",
+        "scope": "Type",
+        "login": "Syncs As",
+        "noLogin": "None. Replace the login to sync again.",
+        "lastSync": "Last Sync",
+        "entries": "Entries ({count})",
+        "noEntries": "The last sync found no entries.",
+        "close": "Close"
+      },
+      "readOnly": "Your admin manages this marketplace.",
+      "reason": {
+        "skills_and_mcp_only": "Onyx runs only skills and MCP servers.",
+        "pastLimit": "Onyx did not read this repository.",
+        "external_repository_limit": "Onyx syncs at most {limit} external repositories for one marketplace.",
+        "external_repository_limit_without_login": "Connect GitHub to sync more than {limit} external repositories.",
+        "limitTitle": "Some plugins come from repositories that Onyx did not read"
+      },
+      "errors": {
+        "rateLimited": "GitHub's API rate limit has been reached. Try again in a few minutes. Connect GitHub to raise the limit.",
+        "rateLimitedUntil": "GitHub's API rate limit has been reached. It resets at {time}. Connect GitHub to raise the limit."
+      }
     }
   },
   "integrations": {
@@ -17122,6 +17480,18 @@
         "done": "{name} is now available to the organization.",
         "failed": "Could not publish the integration."
       }
+    },
+    "requiredGate": {
+      "title": "Connect your work tools",
+      "description": "Your admin requires these integrations. Connect each one to continue.",
+      "adminDescription": "Members must connect these integrations before they can use Onyx. You can continue without them because you are an admin.",
+      "connected": "Connected",
+      "progress": "{connected} of {total} connected",
+      "askAdmin": "Can't connect {name}? Ask your admin for help. You can skip it for now.",
+      "skip": "Skip for now",
+      "continue": "Continue",
+      "signOut": "Sign out",
+      "signOutFailed": "Could not sign out. Try again."
     }
   },
   "customize": {
@@ -17149,20 +17519,26 @@
         "label": "Add",
         "upload": "Upload skill",
         "create": "Create a skill",
-        "github": "Import from GitHub"
+        "uploadPlugin": "Upload plugin",
+        "marketplace": "Add marketplace",
+        "manageMarketplaces": "Manage marketplaces"
       },
       "groups": {
         "mine": "Created by you",
         "organization": "From your organization",
         "shared": "Shared with you",
-        "builtin": "Built-in"
+        "builtin": "Built-in",
+        "marketplace": "From marketplaces",
+        "private": "Private to other users"
       },
       "source": {
         "mine": "by you",
         "organization": "from your organization",
         "sharedBy": "shared by {email}",
         "shared": "shared with you",
-        "builtin": "built-in"
+        "builtin": "built-in",
+        "marketplace": "from {name} ({scope, select, personal {personal} other {company}})",
+        "privateTo": "private to {email}"
       },
       "subtitle": "{source} · {description}",
       "tag": {
@@ -17224,13 +17600,16 @@
       },
       "empty": {
         "title": "No plugins yet",
-        "description": "Create a skill. Each skill is a plugin."
+        "description": "Upload a plugin, add a marketplace from GitHub, or create a skill. Each skill is a plugin.",
+        "upload": "Upload Plugin"
       },
       "noMatches": {
         "title": "No matching plugins",
         "clear": "Show all plugins"
       },
-      "intro": "A plugin packages skills that you turn on together. Each skill you add comes in its own plugin. Integrations are on the Integrations tab."
+      "intro": "A plugin packages skills and the integrations that they need. Upload a Claude Code or Codex plugin, add a marketplace from GitHub, or add a skill. Each skill that you add comes in its own plugin.",
+      "integrations": "{available} of {needed} integrations available",
+      "nameHeld": "Off: {names} uses the same skill name"
     },
     "skillPage": {
       "title": "Skill",
@@ -17320,9 +17699,163 @@
     },
     "pluginPage": {
       "tabs": {
-        "skills": "Skills · {count}"
+        "skills": "Skills · {count}",
+        "integrations": "Integrations · {count}"
       }
     },
     "search": "Search"
+  },
+  "scheduledTasks": {
+    "unviewedResults": "New results",
+    "runStatus": "{status, select, QUEUED {Queued} RUNNING {Running} AWAITING_APPROVAL {Awaiting approval} SUCCEEDED {Succeeded} FAILED {Failed} CANCELLED {Cancelled} SKIPPED {Skipped} other {Unknown}}",
+    "taskStatus": "{status, select, ACTIVE {Active} other {Paused}}",
+    "schedule": {
+      "cron": "Cron (UTC): {cron}",
+      "everyMinutes": "{count, plural, one {Every minute} other {Every # minutes}}",
+      "everyHours": "{count, plural, one {Every hour} other {Every # hours}}",
+      "everyDays": "{count, plural, one {Every day at {time}} other {Every # days at {time}}}",
+      "daily": "Every day at {time}",
+      "weekly": "{days} at {time}"
+    },
+    "list": {
+      "title": "Scheduled Tasks",
+      "description": "Run a prompt on a schedule. Each run opens as a chat you can read and continue.",
+      "search": "Search tasks",
+      "new": "New Task",
+      "never": "Never",
+      "notScheduled": "Not scheduled",
+      "loadFailed": "Could not load your scheduled tasks.",
+      "open": "Open {name}",
+      "columns": {
+        "name": "Name",
+        "schedule": "Schedule",
+        "lastRun": "Last Run",
+        "nextRun": "Next Run",
+        "status": "Status"
+      },
+      "empty": {
+        "title": "No scheduled tasks yet",
+        "description": "Create a task to run a prompt on a schedule."
+      },
+      "noMatches": {
+        "title": "No matching tasks",
+        "description": "Try a different search or filter."
+      },
+      "filter": {
+        "label": "Filter tasks",
+        "all": "All tasks",
+        "unviewed": "New results"
+      }
+    },
+    "actions": {
+      "runNow": "Run once",
+      "pause": "Pause",
+      "resume": "Resume",
+      "edit": "Edit",
+      "delete": "Delete",
+      "menu": "Actions for {name}",
+      "toasts": {
+        "runQueued": "Started a run of \"{name}\".",
+        "runFailed": "Could not start the run.",
+        "resumed": "Task resumed.",
+        "paused": "Task paused.",
+        "statusFailed": "Could not change the task status.",
+        "deleted": "Deleted \"{name}\".",
+        "deleteFailed": "Could not delete the task."
+      },
+      "confirmDelete": {
+        "title": "Delete \"{name}\"?",
+        "description": "The task stops running and its run history goes away.",
+        "submit": "Delete"
+      }
+    },
+    "runs": {
+      "label": "Run history",
+      "open": "Open the run from {time}",
+      "loading": "Loading runs…",
+      "loadFailed": "Could not load the run history.",
+      "loadMore": "Load more",
+      "markAllViewed": "Mark all viewed",
+      "markAllViewedFailed": "Could not mark the runs as viewed. Try again.",
+      "trigger": "{source, select, MANUAL_RUN_NOW {Run once} other {Schedule}}",
+      "errorClass": "{errorClass, select, superseded_by_next_fire {Cancelled: the next run started before anyone answered the approval.} approval_timeout {Cancelled: nobody answered the approval within 24 hours.} user_cancelled {Stopped by you.} agent_permission_required {An action needed approval.} agent_exception {Failed: the run hit an error.} stuck {Failed: the run did not start in time.} timeout {Failed: the run reached the one-hour limit.} other {Failed: {errorClass}}}",
+      "columns": {
+        "started": "Started",
+        "status": "Status",
+        "duration": "Duration",
+        "trigger": "Trigger",
+        "detail": "Details"
+      },
+      "closed": {
+        "queued": "This run has not started yet, so there is no chat to open.",
+        "skipped": "This run was skipped, so there is no chat to open.",
+        "noChat": "This run has no chat to open."
+      },
+      "empty": {
+        "title": "No runs yet",
+        "description": "The task adds a run each time it fires. Use Run once to start one now."
+      }
+    },
+    "detail": {
+      "title": "Scheduled Task",
+      "back": "Scheduled Tasks",
+      "loadFailed": "Could not load this scheduled task.",
+      "tabs": {
+        "runs": "Runs",
+        "overview": "Overview"
+      },
+      "overview": {
+        "prompt": "Prompt",
+        "schedule": "Schedule",
+        "nextRun": "Next Run",
+        "notScheduled": "Not scheduled",
+        "lastRun": "Last Run",
+        "never": "Never"
+      },
+      "switch": {
+        "title": "Run on schedule",
+        "label": "Run {name} on schedule"
+      },
+      "menu": "More actions"
+    },
+    "editor": {
+      "newTitle": "New Scheduled Task",
+      "editTitle": "Edit Scheduled Task",
+      "description": "Each run sends the prompt to a new chat with the default agent.",
+      "back": "Back",
+      "loadFailed": "Could not load this scheduled task.",
+      "save": "Save",
+      "saveAndRun": "Save and run now",
+      "errors": {
+        "nameRequired": "Enter a name.",
+        "promptRequired": "Enter a prompt."
+      },
+      "toasts": {
+        "created": "Scheduled task created.",
+        "createdAndRun": "Scheduled task created. The first run started.",
+        "updated": "Scheduled task updated.",
+        "saveFailed": "Could not save the scheduled task."
+      },
+      "fields": {
+        "name": {
+          "label": "Name",
+          "placeholder": "For example, weekly customer escalations digest"
+        },
+        "prompt": {
+          "label": "Prompt",
+          "description": "Each run sends this message to a new chat.",
+          "placeholder": "Describe what to do on each run"
+        },
+        "schedule": {
+          "label": "Schedule"
+        }
+      }
+    },
+    "banner": {
+      "title": "Scheduled run of {task}",
+      "inFlight": "{status, select, AWAITING_APPROVAL {This run waits for your approval below.} other {This run is in progress.}}",
+      "startedAt": "Started {time}",
+      "viewTask": "View task"
+    }
   }
 }

@@ -10418,7 +10418,8 @@
             "public": "{count, plural, one {# Tool gefunden} other {# Tools gefunden}}. Der Server benötigt keine Anmeldung.",
             "oauth": "Der Server verwendet die OAuth-Anmeldung.",
             "authUnknown": "Der Server benötigt eine Anmeldung. Fügen Sie einen API-Schlüssel-Header oder OAuth hinzu.",
-            "unreachable": "Onyx kann diesen Server nicht erreichen. Prüfen Sie die URL."
+            "unreachable": "Onyx kann diesen Server nicht erreichen. Prüfen Sie die URL.",
+            "forbidden": "Nur ein Admin kann diesen Server vor dem Hinzufügen prüfen. Sie können ihn trotzdem hinzufügen."
           },
           "transport": {
             "title": "Transport",
@@ -10672,12 +10673,120 @@
         "saveFailed": "Die Installationseinstellung konnte nicht gespeichert werden.",
         "title": "Installationseinstellung",
         "description": "Wer diese Integration erhält. Nicht verfügbar hält sie privat: Nur der Eigentümer, die Personen, mit denen sie geteilt ist, und die Gruppen mit eigener Einstellung nutzen sie. Entferne diese Gruppeneinstellungen, um sie auf den Eigentümer und die Freigaben zu beschränken.",
-        "notAvailable": "Privat. Nur der Eigentümer, die Personen, mit denen sie geteilt ist, und die Gruppen mit eigener Einstellung nutzen sie."
+        "notAvailable": "Privat. Nur der Eigentümer, die Personen, mit denen sie geteilt ist, und die Gruppen mit eigener Einstellung nutzen sie.",
+        "required": "Mitglieder, die sich mit ihrem eigenen Konto anmelden, müssen sie verbinden, bevor sie Chat und Craft nutzen können."
       },
       "ownedBy": "Eigentümer: {owner}",
       "groupAccess": {
         "saved": "Gruppeneinstellungen für {name} gespeichert.",
         "saveFailed": "Die Gruppeneinstellung konnte nicht gespeichert werden."
+      }
+    },
+    "serviceStatus": {
+      "page": {
+        "description": "Aktuelle Ressourcennutzung und Zustand des Such-Clusters Ihrer Onyx-Instanz",
+        "refresh": "Aktualisieren",
+        "refreshFailed": "Der Clusterstatus konnte nicht aktualisiert werden. Die Seite zeigt das letzte Ergebnis.",
+        "loadFailed": "Der Status des Such-Clusters konnte nicht gelesen werden. Prüfen Sie, ob OpenSearch erreichbar ist."
+      },
+      "cluster": {
+        "title": "Such-Cluster - OpenSearch",
+        "status": "Cluster-Status",
+        "version": "OpenSearch {version}",
+        "health": "Status {health}",
+        "updated": "Aktualisiert {time}",
+        "dataNodes": "Datenknoten",
+        "shards": "Shards",
+        "shardLayout": "{primaries} × {copies}",
+        "copies": "Kopien",
+        "indexSize": "Indexgröße",
+        "chunks": "Chunks",
+        "healthGreen": "Grün: Alle Shard-Kopien sind zugewiesen.",
+        "healthYellow": "Gelb: Einige Replikat-Shards sind nicht zugewiesen. Die Suche funktioniert, aber der Ausfall eines Datenknotens kann Daten verlieren.",
+        "healthYellowSingleNode": "Gelb: Replikatkopien brauchen einen zweiten Datenknoten. Bei einem Cluster mit nur einem Datenknoten ist das normal, und die Suche funktioniert.",
+        "healthRed": "Rot: Einige primäre Shards sind nicht zugewiesen, daher kann ein Teil des Index nicht durchsucht werden."
+      },
+      "searches": {
+        "loadTitle": "Suchlast",
+        "loadUnit": "Aufrufe/s",
+        "timeTitle": "Suchlatenz",
+        "seconds": "{value} s",
+        "milliseconds": "{value} ms",
+        "loadFailed": "Die letzten Suchen konnten nicht gelesen werden.",
+        "p90Note": "(90. Perzentil)",
+        "p90Row": "p90 {value}",
+        "p10Row": "p10 {value}",
+        "minuteLabel": "{time}: p90 {p90}, p10 {p10}",
+        "rateTooltip": "{rate} Aufrufe/s",
+        "millisecondsUnit": "ms",
+        "secondsUnit": "s",
+        "failedInMinute": "{count, plural, one {# fehlgeschlagen} other {# fehlgeschlagen}}"
+      },
+      "nodes": {
+        "title": "Datenknoten",
+        "disk": "Festplattennutzung",
+        "vector": "Vektorspeicher",
+        "percent": "{value} %",
+        "usedOfTotal": "{used} / {total} {unit}",
+        "shards": "{count, plural, one {# Shard} other {# Shards}}",
+        "unnamed": "Knoten {number}",
+        "copyName": "OpenSearch-Knotennamen kopieren ({name})"
+      },
+      "indexes": {
+        "title": "Indizes",
+        "chunks": "Chunks",
+        "shards": "Shards",
+        "reindex": "Neuindizierung",
+        "detail": "Embedding-Modell · {dim} Dimensionen",
+        "deleted": "{percent} % gelöschte Chunks",
+        "detailQuantized": "Embedding-Modell · {dim} Dimensionen · {quantization}-Vektoren",
+        "reindexProgress": "{percent} % des aktuellen"
+      },
+      "issues": {
+        "title": "Probleme und Empfehlungen",
+        "none": "Keine Probleme gefunden.",
+        "criticalCount": "{count} kritisch",
+        "warningCount": "{count, plural, one {# Warnung} other {# Warnungen}}",
+        "nodeCount": "{count} Datenknoten",
+        "indexSettings": "Indexeinstellungen",
+        "sizingGuide": "Dimensionierungsleitfaden",
+        "clusterRed": {
+          "title": "Der Cluster-Status ist rot",
+          "description": "Einige primäre Shards sind nicht zugewiesen, daher kann ein Teil des Index nicht durchsucht werden. Prüfen Sie die OpenSearch-Protokolle."
+        },
+        "unassignedShards": {
+          "title": "{value, plural, one {# Shard-Kopie ist nicht zugewiesen} other {# Shard-Kopien sind nicht zugewiesen}}",
+          "description": "OpenSearch hat keinen Datenknoten, auf dem sie liegen können. Fügen Sie Datenknoten hinzu oder verringern Sie die Anzahl der Replikate."
+        },
+        "diskCritical": {
+          "title": "Festplatte bei {value} % auf {nodes}",
+          "description": "OpenSearch platziert ab 85 % keine Shards mehr auf einem Datenknoten. Fügen Sie Speicher oder Datenknoten hinzu."
+        },
+        "diskWarning": {
+          "title": "Festplatte bei {value} % auf {nodes}",
+          "description": "Eine Neuindizierung braucht Platz für einen zweiten Index. Fügen Sie Speicher oder Datenknoten hinzu."
+        },
+        "vectorCritical": {
+          "title": "Vektorspeicher bei {value} % auf {nodes}",
+          "description": "Die Vektoren passen nicht in den Speicher, daher liest die Suche sie von der Festplatte. Fügen Sie Speicher oder Datenknoten hinzu oder verwenden Sie eine kleinere Vektorquantisierung."
+        },
+        "vectorWarning": {
+          "title": "Vektorspeicher bei {value} % auf {nodes}",
+          "description": "Die Suche wird langsamer, wenn die Vektoren nicht in den Speicher passen. Fügen Sie Speicher oder Datenknoten hinzu oder verwenden Sie eine kleinere Vektorquantisierung."
+        },
+        "heap": {
+          "title": "JVM-Heap bei {value} % auf {nodes}",
+          "description": "OpenSearch kann Anfragen ablehnen, wenn der Heap voll ist. Fügen Sie Speicher oder Datenknoten hinzu."
+        },
+        "indexMissing": {
+          "title": "Der Suchindex fehlt",
+          "description": "OpenSearch hat keinen Index für die aktuellen Sucheinstellungen, daher liefert die Suche nichts. Prüfen Sie die OpenSearch-Protokolle und starten Sie dann eine Neuindizierung in den Indexeinstellungen."
+        },
+        "nodesUnanswered": {
+          "title": "{value, plural, one {# Datenknoten hat} other {# Datenknoten haben}} nicht geantwortet",
+          "description": "Der Status lässt aus, was diese Knoten nicht gemeldet haben, etwa ihren Speicherplatz und Arbeitsspeicher. Prüfen Sie, ob alle Datenknoten laufen, und aktualisieren Sie dann."
+        },
+        "dismiss": "Ausblenden"
       }
     }
   },
@@ -12503,7 +12612,7 @@
               "between": "Gesendet {start} – {end}"
             },
             "owner": "Eigentümer: {owner}",
-            "folder": "Im Ordner {id}",
+            "folder": "Im Ordner {name}",
             "nodeType": "Typ: {type}",
             "author": "Von: {author}",
             "message": "Nachricht {id}",
@@ -13991,7 +14100,6 @@
     "chatPanel": {
       "input": {
         "continuePlaceholder": "Gespräch fortsetzen...",
-        "scheduledRunPlaceholder": "Geplante Ausführung läuft...",
         "subagentPlaceholder": "Wechseln Sie zum Hauptagenten, um eine Nachricht zu senden"
       },
       "openSidebar": {
@@ -14009,8 +14117,7 @@
       },
       "toast": {
         "operationWait": "Bitte warten Sie, bis der aktuelle Vorgang abgeschlossen ist.",
-        "sandboxWait": "Bitte warten Sie, bis die Sandbox initialisiert ist",
-        "scheduledRunWait": "Bitte warten Sie, bis die geplante Ausführung abgeschlossen ist."
+        "sandboxWait": "Bitte warten Sie, bis die Sandbox initialisiert ist"
       },
       "loadError": {
         "title": "Die Sitzung konnte nicht geladen werden",
@@ -14461,23 +14568,6 @@
         "button": "Sandbox aufwecken"
       }
     },
-    "scheduledRun": {
-      "badge": {
-        "label": "Geplant"
-      },
-      "startedAt": {
-        "label": "Gestartet {time}"
-      },
-      "status": {
-        "awaitingApproval": "Diese geplante Ausführung wartet auf Genehmigung. Folgemeldungen werden freigeschaltet, nachdem sie fortgesetzt und abgeschlossen wurde.",
-        "running": "Diese geplante Ausführung läuft noch. Folgemeldungen werden freigeschaltet, sobald sie abgeschlossen ist.",
-        "startedBy": "Diese Sitzung wurde von der geplanten Aufgabe {task} um {time} gestartet."
-      },
-      "viewTask": {
-        "ariaLabel": "Geplante Aufgabe {task} anzeigen. {status}",
-        "label": "Aufgabe anzeigen"
-      }
-    },
     "setupCard": {
       "appFallback": {
         "label": "Externe App {id}"
@@ -14750,7 +14840,8 @@
         },
         "tabs": {
           "dailyWeekly": "Täglich / Wöchentlich",
-          "interval": "Intervall"
+          "interval": "Intervall",
+          "advanced": "Erweitert"
         },
         "weekdays": {
           "fri": "Fr",
@@ -14760,6 +14851,21 @@
           "thu": "Do",
           "tue": "Di",
           "wed": "Mi"
+        },
+        "advanced": {
+          "cronLabel": "Cron-Ausdruck",
+          "hint": "Fünf Felder: Minute, Stunde, Tag, Monat, Wochentag. Der Ausdruck läuft in UTC.",
+          "placeholder": "Zum Beispiel 0 9 * * 1-5"
+        },
+        "errors": {
+          "intervalNotPositiveInteger": "Das Intervall muss eine ganze Zahl von mindestens 1 sein.",
+          "minutesIntervalTooLong": "Verwenden Sie Stunden für Intervalle über 59 Minuten.",
+          "hoursIntervalTooLong": "Verwenden Sie einen täglichen Zeitplan für Intervalle über 23 Stunden.",
+          "dayIntervalTimeRequired": "Wählen Sie eine Uhrzeit für Intervalle in Tagen.",
+          "timeRequired": "Wählen Sie eine Uhrzeit.",
+          "weekdayOutOfRange": "Wochentagswerte müssen zwischen 0 und 6 liegen (So..Sa).",
+          "cronRequired": "Geben Sie einen Cron-Ausdruck ein.",
+          "cronFieldCount": "Cron muss genau 5 Felder haben (Minute Stunde Tag Monat Wochentag)."
         }
       },
       "unviewedResults": "Neue Ergebnisse"
@@ -16148,6 +16254,9 @@
         },
         "discordBot": {
           "label": "Discord-Bot"
+        },
+        "serviceStatus": {
+          "label": "Dienststatus"
         }
       },
       "sections": {
@@ -16225,6 +16334,9 @@
       },
       "customize": {
         "label": "Anpassen"
+      },
+      "scheduledTasks": {
+        "label": "Geplante Aufgaben"
       }
     },
     "chatButton": {
@@ -16454,84 +16566,15 @@
         }
       },
       "importGithub": {
-        "cancelButton": {
-          "label": "Abbrechen"
-        },
         "doneButton": {
           "label": "Fertig"
         },
-        "header": {
-          "chooseDescription": "Wählen Sie Skills aus {repository}.",
-          "completeDescription": "Prüfen Sie, was zu Ihren Skills hinzugefügt wurde.",
-          "completeTitle": "GitHub-Import abgeschlossen",
-          "description": "Importieren Sie einen oder mehrere Skills aus einem GitHub-Repository.",
-          "title": "Aus GitHub importieren"
-        },
-        "importError": {
-          "message": "Die Skills konnten nicht importiert werden.",
-          "title": "Die Skills konnten nicht importiert werden"
-        },
-        "loadError": {
-          "message": "Das Repository konnte nicht geladen werden.",
-          "title": "Das Repository konnte nicht geladen werden"
-        },
-        "privateRepos": {
-          "askAdmin": "Öffentliche Repositorys werden direkt importiert. Bitten Sie einen Administrator, GitHub einzurichten, bevor Sie private Repositorys importieren.",
-          "connect": "Öffentliche Repositorys werden direkt importiert. Verbinden Sie GitHub, um private Repositorys zu importieren.",
-          "connectButton": {
-            "label": "GitHub verbinden"
-          },
-          "connected": "Öffentliche Repositorys werden direkt importiert. Private Repositorys verwenden Ihre GitHub-Verbindung.",
-          "needsConnection": "Öffentliche Repositorys werden direkt importiert. Private Repositorys erfordern eine GitHub-Verbindung.",
-          "setUp": "Öffentliche Repositorys werden direkt importiert. Richten Sie GitHub ein, bevor Sie private Repositorys importieren.",
-          "setUpButton": {
-            "label": "GitHub einrichten"
-          }
-        },
-        "repositoryInput": {
-          "label": "Repository"
-        },
-        "result": {
-          "disabledCount": "{count} deaktiviert importiert, weil ein anderer Skill mit demselben Namen aktiviert ist.",
-          "enabledCount": "{count} automatisch aktiviert.",
-          "failedCount": "{count} konnten nicht importiert werden.",
-          "importedSection": {
-            "title": "Importiert"
-          },
-          "importedTitle": "{count, plural, one {# Skill importiert} other {# Skills importiert}}",
-          "noneTitle": "Es wurden keine Skills importiert",
-          "notImportedSection": {
-            "title": "Nicht importiert"
-          },
-          "notSelectedCount": "{count} nicht ausgewählt."
-        },
-        "selectAll": {
-          "ariaLabel": "Alle importierbaren Skills auswählen"
-        },
-        "selection": {
-          "label": "{selected} von {total, plural, one {# importierbaren Skill} other {# importierbaren Skills}} ausgewählt"
-        },
-        "skillCheckbox": {
-          "ariaLabel": "{name} auswählen"
-        },
-        "skillTag": {
-          "disabled": "Deaktiviert",
-          "enabled": "Aktiviert"
-        },
         "submitButton": {
           "importLabel": "{count, plural, one {Skill importieren} other {# Skills importieren}}",
-          "importingLabel": "Wird importiert…",
-          "searchLabel": "Repository durchsuchen",
-          "searchingLabel": "Wird gesucht…"
-        },
-        "unavailableFallback": "Dieser Skill kann nicht importiert werden.",
-        "unavailableTag": {
-          "label": "Nicht importierbar"
+          "importingLabel": "Wird importiert…"
         },
         "sharing": {
-          "title": "Zugriff auf importierte Skills",
-          "configureButton": "Zugriff konfigurieren",
-          "description": "Diese Zugriffseinstellungen gelten für {count, plural, one {den ausgewählten Skill} other {alle # ausgewählten Skills}}."
+          "configureButton": "Zugriff konfigurieren"
         }
       },
       "nameConflict": {
@@ -16648,10 +16691,22 @@
           "remove": "{name} entfernen",
           "shared": "Mit dieser Gruppe geteilt",
           "settingOnly": "Nur Gruppeneinstellung"
+        },
+        "plugin": {
+          "installation": {
+            "description": "Wählen Sie, wie dieses Plugin für alle mit Zugriff installiert wird."
+          },
+          "published": {
+            "description": "Veröffentlicht. Alle in der Organisation können dieses Plugin verwenden."
+          },
+          "publishWarning": {
+            "description": "Nach dem Speichern können alle in der Organisation dieses Plugin verwenden. Sie können es nicht wieder privat machen. Nur ein Admin kann es löschen.",
+            "reviewDescription": "Das Plugin bleibt privat, bis ein Admin die Anfrage genehmigt. Nach der Genehmigung können Sie es nicht wieder privat machen."
+          },
+          "publishOff": {
+            "description": "Ein Admin hat das Veröffentlichen in der Organisation deaktiviert. Bitten Sie einen Admin, dieses Plugin zu veröffentlichen."
+          }
         }
-      },
-      "placeholders": {
-        "githubRepository": "inhaber/repository oder https://github.com/inhaber/repository"
       },
       "tabs": {
         "details": "Details",
@@ -16663,7 +16718,8 @@
         "columns": {
           "version": "Version",
           "madeBy": "Erstellt von",
-          "date": "Datum"
+          "date": "Datum",
+          "manifestVersion": "plugin.json"
         },
         "versionLabel": "Version {number}",
         "currentBadge": "Aktuell",
@@ -16686,7 +16742,9 @@
           "back": "Alle Versionen",
           "loadError": {
             "title": "Diese Version konnte nicht geladen werden"
-          }
+          },
+          "skills": "Skills · {count}",
+          "integrations": "Integrationen · {count}"
         },
         "status": {
           "pending": "Prüfung ausstehend",
@@ -16698,15 +16756,14 @@
           "failedToast": "Dieses Update konnte nicht veröffentlicht werden.",
           "sentForReviewToast": "Version {number} wurde einem Admin zur Prüfung gesendet.",
           "offNotice": "Die Veröffentlichung ist deaktiviert. Bitten Sie einen Admin, dieses Update zu veröffentlichen."
-        }
+        },
+        "noManifestVersion": "Keine",
+        "manifestVersion": "plugin.json {version}",
+        "locked": "Dieses Plugin wird aus GitHub synchronisiert. Änderungen nehmen Sie daher in GitHub vor."
       }
     },
     "page": {
       "createMenu": {
-        "github": {
-          "description": "Importieren Sie einen oder mehrere Skills aus einem Repository.",
-          "title": "Aus GitHub importieren"
-        },
         "scratch": {
           "description": "Schreiben Sie die Anweisungen und fügen Sie unterstützende Dateien in {appName} hinzu.",
           "title": "Von Grund auf neu beginnen"
@@ -16717,6 +16774,10 @@
         "upload": {
           "description": "Importieren Sie eine SKILL.md-Datei, eine ZIP-Datei oder einen Skill-Ordner.",
           "title": "Skill hochladen"
+        },
+        "marketplace": {
+          "title": "Marketplace hinzufügen",
+          "description": "Aus einem Repository hinzufügen und dessen Plugins synchronisieren."
         }
       },
       "empty": {
@@ -16747,10 +16808,12 @@
         "body": "Wenn Sie fortfahren, wird der derzeit aktivierte Skill deaktiviert und dieser aktiviert.",
         "description": "Es kann jeweils nur ein Skill mit dem Namen „{name}“ aktiviert sein.",
         "submit": {
-          "label": "Skill wechseln",
+          "label": "Wechseln",
           "pendingLabel": "Wird gewechselt..."
         },
-        "title": "Skill „{name}“ wechseln?"
+        "title": "„{name}“ aktivieren?",
+        "descriptionNamed": "{names} verwendet bereits einen Skill-Namen, den auch „{name}“ verwendet. Es kann jeweils nur eines aktiv sein.",
+        "bodyNamed": "Wenn Sie „{name}“ aktivieren, wird {names} deaktiviert."
       },
       "toasts": {
         "disableFailed": "{name} konnte nicht deaktiviert werden",
@@ -16772,6 +16835,9 @@
         },
         "upload": {
           "label": "Ziehen Sie eine Datei hierher oder klicken Sie zum Hochladen"
+        },
+        "chooseFolder": {
+          "label": "Ordner auswählen"
         }
       },
       "filesPicker": {
@@ -16795,7 +16861,8 @@
       },
       "upload": {
         "error": {
-          "readFailed": "Der Upload konnte nicht gelesen werden."
+          "readFailed": "Der Upload konnte nicht gelesen werden.",
+          "folderRoot": "{upload, select, plugin {Der ausgewählte Ordner muss auf oberster Ebene SKILL.md oder ein plugin.json-Manifest enthalten.} other {Der ausgewählte Ordner muss auf oberster Ebene SKILL.md enthalten.}}"
         }
       }
     },
@@ -16938,7 +17005,9 @@
       "sections": {
         "organization": "Organisationsbibliothek",
         "mine": "Meine Uploads",
-        "shared": "Mit Ihnen geteilt"
+        "shared": "Mit Ihnen geteilt",
+        "marketplace": "Aus einem Marketplace",
+        "private": "Privat für einen anderen Benutzer"
       },
       "detail": {
         "title": "Plugin",
@@ -16954,19 +17023,51 @@
           "location": "Ort",
           "owner": "Eigentümer",
           "skills": "Skills",
-          "description": "Beschreibung"
+          "description": "Beschreibung",
+          "version": "Version in plugin.json",
+          "author": "Autor",
+          "homepage": "Homepage",
+          "license": "Lizenz",
+          "notUsed": "Nicht in Onyx verwendet",
+          "marketplace": "Marketplace {name}, {scope, select, personal {persönlich} other {Unternehmen}} ({repository})"
         },
         "skills": {
           "off": "Aus",
-          "invalid": "Ungültig"
+          "invalid": "Ungültig",
+          "read": "Lesen",
+          "readAriaLabel": "Den Skill {name} lesen",
+          "readFailed": "Dieser Skill konnte nicht gelesen werden.",
+          "noInstructions": "Dieser Skill hat keine Anweisungen."
         },
         "switch": {
           "title": "Dieses Plugin verwenden",
-          "description": "Wenn dies aktiviert ist, kann der Standardagent dieses Plugin verwenden.",
           "label": "{name} verwenden",
           "required": "Ihr Admin hat dieses Plugin als erforderlich festgelegt. Sie können es nicht deaktivieren.",
           "unavailable": "Sie können dieses Plugin nicht aktivieren oder deaktivieren.",
-          "failed": "Das Plugin konnte nicht geändert werden."
+          "failed": "Das Plugin konnte nicht geändert werden.",
+          "on": "An. Der Standard-Agent kann dieses Plugin verwenden.",
+          "off": "Aus. Aktivieren Sie es, damit der Standard-Agent dieses Plugin verwenden kann.",
+          "nameHeld": "Aus, weil {names} denselben Skill-Namen verwendet. Aktivieren Sie dieses Plugin, um es stattdessen zu verwenden."
+        },
+        "actions": {
+          "share": "Teilen",
+          "menu": "Weitere Aktionen",
+          "uploadVersion": "Neue Version hochladen",
+          "remove": "Plugin löschen"
+        },
+        "remove": {
+          "entityType": "Plugin",
+          "description": "Alle, die dieses Plugin verwenden, verlieren es. Dies kann nicht rückgängig gemacht werden.",
+          "submit": "Löschen",
+          "pending": "Wird gelöscht…",
+          "done": "{name} wurde gelöscht.",
+          "failed": "Das Plugin konnte nicht gelöscht werden."
+        },
+        "syncedFrom": "Synchronisiert aus {repository}",
+        "managed": {
+          "title": "Vom Marketplace {name} verwaltet",
+          "description": "Onyx synchronisiert dieses Plugin aus {repository}. Ändern Sie es in GitHub und synchronisieren Sie dann den Marketplace.",
+          "open": "Marketplaces öffnen"
         }
       },
       "connection": {
@@ -17063,6 +17164,263 @@
           "label": "Fertig"
         }
       }
+    },
+    "needs": {
+      "intro": "Ein Plugin gibt nie Zugriff auf eine Integration. Jede Zeile zeigt Ihren eigenen Status der Integration. Das Plugin funktioniert auch ohne die Integrationen, die nicht aktiv sind.",
+      "state": {
+        "on": "An",
+        "turn_on": "Aus",
+        "sign_in": "Nicht angemeldet",
+        "no_access": "Kein Zugriff",
+        "turned_off": "Deaktiviert",
+        "not_added": "Nicht hinzugefügt",
+        "more_than_one": "Mehrere Treffer",
+        "not_supported": "Nicht unterstützt"
+      },
+      "note": {
+        "askAdmin": "Fragen Sie einen Admin",
+        "turnedOff": "Von Ihrem Admin deaktiviert",
+        "moreThanOne": "Mehr als eine Integration passt",
+        "notSupported": "In Onyx nicht unterstützt"
+      },
+      "localServer": "Lokaler Server",
+      "noUrl": "Keine Server-URL",
+      "turnOn": {
+        "label": "Aktivieren",
+        "ariaLabel": "{name} aktivieren",
+        "failed": "{name} konnte nicht aktiviert werden."
+      },
+      "add": {
+        "label": "Integration hinzufügen",
+        "ariaLabel": "Integration {name} hinzufügen"
+      },
+      "urlProblem": {
+        "variable": "Die URL enthält eine Variable. Onyx füllt keine Variablen aus.",
+        "credential": "Die URL enthält Zugangsdaten. Onyx speichert sie nicht.",
+        "invalid": "Die URL ist keine gültige http- oder https-URL."
+      }
+    },
+    "upload": {
+      "title": "Plugin hochladen",
+      "description": "Laden Sie ein Claude Code- oder Codex-Plugin hoch. Wählen Sie eine .zip-Datei oder ziehen Sie den Plugin-Ordner hierher.",
+      "reading": "Wird gelesen…",
+      "requirements": {
+        "title": "Onyx verwendet diese Teile eines Plugins:",
+        "skills": "Skills in skills/'<name>'/SKILL.md",
+        "mcp": "MCP-Server in .mcp.json oder plugin.json",
+        "other": "Onyx verwendet keine Befehle, Agenten, Hooks oder anderen Teile."
+      },
+      "skillOnly": {
+        "title": "Dieser Upload ist ein Skill",
+        "description": "Er hat keine plugin.json. Fahren Sie fort, um ihn als Skill hinzuzufügen.",
+        "continue": "Weiter"
+      },
+      "version": "plugin.json {version}",
+      "target": {
+        "newVersion": "Aktualisiert {name} auf Onyx-Version {version}",
+        "newPlugin": "Neues Plugin: {name}"
+      },
+      "willBeOff": "Das Plugin wird deaktiviert gespeichert. {names} hat bereits einen Skill mit demselben Namen.",
+      "saveAsNew": {
+        "label": "Als neues Plugin speichern",
+        "description": "Das Plugin mit diesem Namen bleibt unverändert."
+      },
+      "sections": {
+        "skills": "Skills · {count}",
+        "integrations": "Integrationen · {count}",
+        "unused": "Nicht in Onyx verwendet",
+        "warnings": "Warnungen"
+      },
+      "integrationsNote": "Beim Speichern werden die Integrationen aktiviert, die Sie bereits verwenden können. Ein Plugin gibt nie Zugriff auf eine Integration.",
+      "integrationsNoteOff": "Das Plugin ist nach dem Speichern deaktiviert, daher werden keine Integrationen aktiviert.",
+      "unusedParts": {
+        "commands": "Befehle",
+        "agents": "Agenten",
+        "hooks": "Hooks",
+        "lsp_servers": "LSP-Server",
+        "output_styles": "Ausgabestile",
+        "bin": "Programme (bin)",
+        "themes": "Designs",
+        "monitors": "Monitore"
+      },
+      "cancel": "Abbrechen",
+      "save": "Speichern",
+      "saving": "Wird gespeichert…",
+      "readFailed": "Das Plugin konnte nicht gelesen werden.",
+      "saveFailed": "Das Plugin konnte nicht gespeichert werden.",
+      "saved": {
+        "newPlugin": "{name} hinzugefügt.",
+        "newVersion": "{name} auf Onyx-Version {version} aktualisiert.",
+        "unchanged": "Keine Änderungen. {name} ist bereits auf Onyx-Version {version}.",
+        "off": "{name} hinzugefügt. Es ist deaktiviert, weil {names} bereits einen Skill mit demselben Namen hat."
+      }
+    },
+    "turnOn": {
+      "title": "{name} ist aktiv",
+      "description": "Einige Integrationen, die dieses Plugin benötigt, sind für Sie nicht verfügbar.",
+      "note": "Das Plugin funktioniert auch ohne sie. Ein Plugin gibt nie Zugriff auf eine Integration.",
+      "done": "Fertig"
+    },
+    "marketplaces": {
+      "status": {
+        "ok": "Bereit",
+        "blocked": "Nicht installierbar",
+        "not_supported": "Nicht unterstützt"
+      },
+      "scope": {
+        "personal": "Persönlich",
+        "company": "Unternehmen"
+      },
+      "source": {
+        "repository": "Repository",
+        "folder": "Ordner",
+        "root": "Stammverzeichnis des Repositorys",
+        "ref": "Branch, Tag oder Commit",
+        "defaultBranch": "Standard-Branch",
+        "commit": "Commit"
+      },
+      "preview": {
+        "title": "{name}: {count, plural, one {# Plugin zum Hinzufügen} other {# Plugins zum Hinzufügen}}",
+        "empty": "Dieses Marketplace hat keine Einträge.",
+        "failedTitle": "Onyx kann dieses Marketplace nicht lesen",
+        "version": "v{version}",
+        "willInstall": "Wird installiert",
+        "skills": "{count, plural, one {Skill} other {Skills}}: {names}",
+        "showUnusable": "{count, plural, one {# Eintrag anzeigen, den Onyx nicht verwenden kann} other {# Einträge anzeigen, die Onyx nicht verwenden kann}}",
+        "hideUnusable": "Einträge ausblenden, die Onyx nicht verwenden kann",
+        "summary": "{ready} Bereit · {blocked} Nicht installierbar · {unsupported} Nicht unterstützt"
+      },
+      "add": {
+        "menuItem": "Marketplace hinzufügen",
+        "title": "Marketplace hinzufügen",
+        "description": "Aus einem Repository hinzufügen. Onyx liest die Datei .claude-plugin/marketplace.json, und jeder Eintrag wird zu einem Plugin.",
+        "confirmTitle": "Marketplace bestätigen",
+        "confirmDescription": "Prüfen Sie, ob dies die gewünschte Quelle und die gewünschten Plugins sind, und fügen Sie dann das Marketplace hinzu.",
+        "repository": {
+          "title": "Repository",
+          "description": "Geben Sie owner/repo oder die URL des Repositorys ein.",
+          "placeholder": "Zum Beispiel anthropics/claude-plugins-official"
+        },
+        "folder": {
+          "title": "Ordner",
+          "description": "Der Ordner mit .claude-plugin/marketplace.json. Lassen Sie das Feld leer für das Stammverzeichnis des Repositorys.",
+          "placeholder": "Zum Beispiel plugins"
+        },
+        "ref": {
+          "title": "Branch, Tag oder Commit",
+          "description": "Lassen Sie das Feld leer, um den Standard-Branch zu verwenden.",
+          "placeholder": "Zum Beispiel main"
+        },
+        "scope": {
+          "title": "Marketplace-Typ",
+          "personalDescription": "Nur Sie erhalten die Plugins dieses Marketplace.",
+          "companyDescription": "Ihre Organisation erhält die Plugins dieses Marketplace, genau wie veröffentlichte Plugins."
+        },
+        "defaultAccess": {
+          "title": "Standardzugriff",
+          "description": "Die Installationseinstellung jedes Plugins dieses Marketplace. Sie können sie später für ein einzelnes Plugin ändern."
+        },
+        "privateNote": "Onyx liest ein privates Repository über Ihre GitHub-Verbindung. Verbinden Sie GitHub unter Integrationen, bevor Sie ein privates Repository hinzufügen.",
+        "continue": "Weiter",
+        "previewing": "Wird gelesen…",
+        "back": "Zurück",
+        "submit": "Marketplace hinzufügen",
+        "adding": "Wird hinzugefügt…",
+        "cancel": "Abbrechen",
+        "previewFailed": "Das Repository konnte nicht gelesen werden.",
+        "addFailed": "Das Marketplace konnte nicht hinzugefügt werden.",
+        "added": "{name} hinzugefügt. Die Plugins erscheinen nach der ersten Synchronisierung.",
+        "duplicate": {
+          "personal": "Sie haben diesen Marketplace bereits hinzugefügt.",
+          "company": "Ihre Organisation erhält diesen Marketplace bereits."
+        }
+      },
+      "sync": {
+        "now": "Jetzt synchronisieren",
+        "requested": "Synchronisierung von {name} gestartet.",
+        "failed": "Die Synchronisierung konnte nicht gestartet werden.",
+        "lastSync": "Zuletzt synchronisiert {date}",
+        "never": "Noch nicht synchronisiert",
+        "state": {
+          "syncing": "Wird synchronisiert",
+          "failed": "Synchronisierung fehlgeschlagen",
+          "not_synced": "Nicht synchronisiert",
+          "synced": "Synchronisiert"
+        }
+      },
+      "columns": {
+        "marketplace": "Marketplace",
+        "sync": "Synchronisierung",
+        "items": "Plugins"
+      },
+      "items": "{count, plural, one {# Plugin} other {# Plugins}}",
+      "tableLabel": "Marketplaces",
+      "open": "{name} öffnen",
+      "menu": "Aktionen für {name}",
+      "loadFailed": "Die Marketplaces konnten nicht geladen werden.",
+      "empty": {
+        "title": "Noch keine Marketplaces",
+        "description": "Fügen Sie ein GitHub-Repository hinzu, um dessen Plugins zu erhalten."
+      },
+      "page": {
+        "title": "Marketplaces",
+        "description": "Die GitHub-Repositorys, aus denen Sie Plugins erhalten, mit ihrer Quelle. Synchronisieren Sie ein Marketplace, um die Änderungen aus GitHub zu übernehmen."
+      },
+      "attention": {
+        "failedTitle": "Die letzte Synchronisierung von {name} ist fehlgeschlagen"
+      },
+      "defaultAccess": {
+        "title": "Standardzugriff",
+        "description": "Die Installationseinstellung jedes Plugins von {name}, das keine eigene Einstellung hat.",
+        "save": "Speichern",
+        "cancel": "Abbrechen",
+        "saved": "Der Standardzugriff wurde gespeichert.",
+        "failed": "Der Standardzugriff konnte nicht gespeichert werden."
+      },
+      "replaceLogin": {
+        "label": "Anmeldung ersetzen",
+        "description": "Das Repository als Sie synchronisieren. Onyx nutzt Ihre GitHub-Verbindung, falls vorhanden.",
+        "done": "Onyx synchronisiert {name} jetzt als Sie.",
+        "doneWithoutGithub": "Onyx synchronisiert {name} jetzt als Sie, aber Sie haben GitHub nicht verbunden. Onyx kann nur ein öffentliches Repository lesen. Verbinden Sie GitHub unter Integrationen.",
+        "failed": "Die Anmeldung konnte nicht ersetzt werden."
+      },
+      "remove": {
+        "label": "Entfernen",
+        "title": "{name} entfernen?",
+        "description": "Dadurch werden das Marketplace und {count, plural, one {sein Plugin} other {seine # Plugins}} gelöscht. Mitglieder verlieren diese Plugins.",
+        "listLabel": "Zu löschende Plugins",
+        "noPlugins": "Dieses Marketplace hat keine Plugins.",
+        "confirm": "Entfernen",
+        "done": "{name} wurde entfernt.",
+        "failed": "Das Marketplace konnte nicht entfernt werden.",
+        "loadFailed": "Die Plugins dieses Marketplace konnten nicht geladen werden.",
+        "retry": "Erneut versuchen",
+        "personalDescription": "Dadurch werden das Marketplace und {count, plural, one {sein Plugin} other {seine # Plugins}} gelöscht. Sie verlieren diese Plugins."
+      },
+      "detail": {
+        "title": "Marketplace",
+        "description": "Die Quelle, die Synchronisierung und die Einträge dieses Marketplace.",
+        "loadFailed": "Das Marketplace konnte nicht geladen werden.",
+        "scope": "Typ",
+        "login": "Synchronisiert als",
+        "noLogin": "Keine. Ersetzen Sie die Anmeldung, um erneut zu synchronisieren.",
+        "lastSync": "Letzte Synchronisierung",
+        "entries": "Einträge ({count})",
+        "noEntries": "Die letzte Synchronisierung hat keine Einträge gefunden.",
+        "close": "Schließen"
+      },
+      "readOnly": "Ihr Administrator verwaltet diesen Marketplace.",
+      "reason": {
+        "skills_and_mcp_only": "Onyx führt nur Skills und MCP-Server aus.",
+        "pastLimit": "Onyx hat dieses Repository nicht gelesen.",
+        "external_repository_limit": "Onyx synchronisiert höchstens {limit} externe Repositories pro Marketplace.",
+        "external_repository_limit_without_login": "Verbinden Sie GitHub, um mehr als {limit} externe Repositories zu synchronisieren.",
+        "limitTitle": "Einige Plugins stammen aus Repositories, die Onyx nicht gelesen hat"
+      },
+      "errors": {
+        "rateLimited": "Das API-Limit von GitHub ist erreicht. Versuchen Sie es in einigen Minuten erneut. Verbinden Sie GitHub, um das Limit zu erhöhen.",
+        "rateLimitedUntil": "Das API-Limit von GitHub ist erreicht. Es wird um {time} zurückgesetzt. Verbinden Sie GitHub, um das Limit zu erhöhen."
+      }
     }
   },
   "integrations": {
@@ -17122,6 +17480,18 @@
         "done": "{name} ist jetzt für die Organisation verfügbar.",
         "failed": "Die Integration konnte nicht veröffentlicht werden."
       }
+    },
+    "requiredGate": {
+      "title": "Verbinden Sie Ihre Arbeitstools",
+      "description": "Ihr Administrator verlangt diese Integrationen. Verbinden Sie jede, um fortzufahren.",
+      "adminDescription": "Mitglieder müssen diese Integrationen verbinden, bevor sie Onyx nutzen können. Als Admin können Sie ohne sie fortfahren.",
+      "connected": "Verbunden",
+      "progress": "{connected} von {total} verbunden",
+      "askAdmin": "{name} lässt sich nicht verbinden? Bitten Sie Ihren Administrator um Hilfe. Sie können diesen Schritt vorerst überspringen.",
+      "skip": "Vorerst überspringen",
+      "continue": "Weiter",
+      "signOut": "Abmelden",
+      "signOutFailed": "Abmelden fehlgeschlagen. Versuchen Sie es erneut."
     }
   },
   "customize": {
@@ -17149,20 +17519,26 @@
         "label": "Hinzufügen",
         "upload": "Skill hochladen",
         "create": "Skill erstellen",
-        "github": "Aus GitHub importieren"
+        "uploadPlugin": "Plugin hochladen",
+        "marketplace": "Marketplace hinzufügen",
+        "manageMarketplaces": "Marketplaces verwalten"
       },
       "groups": {
         "mine": "Von Ihnen erstellt",
         "organization": "Aus Ihrer Organisation",
         "shared": "Mit Ihnen geteilt",
-        "builtin": "Integriert"
+        "builtin": "Integriert",
+        "marketplace": "Aus Marketplaces",
+        "private": "Privat für andere Benutzer"
       },
       "source": {
         "mine": "von Ihnen",
         "organization": "aus Ihrer Organisation",
         "sharedBy": "geteilt von {email}",
         "shared": "mit Ihnen geteilt",
-        "builtin": "integriert"
+        "builtin": "integriert",
+        "marketplace": "aus {name} ({scope, select, personal {persönlich} other {Unternehmen}})",
+        "privateTo": "privat für {email}"
       },
       "subtitle": "{source} · {description}",
       "tag": {
@@ -17224,13 +17600,16 @@
       },
       "empty": {
         "title": "Noch keine Plugins",
-        "description": "Erstellen Sie einen Skill. Jeder Skill ist ein Plugin."
+        "description": "Laden Sie ein Plugin hoch, fügen Sie einen Marketplace aus GitHub hinzu oder erstellen Sie einen Skill. Jeder Skill ist ein Plugin.",
+        "upload": "Plugin hochladen"
       },
       "noMatches": {
         "title": "Keine passenden Plugins",
         "clear": "Alle Plugins anzeigen"
       },
-      "intro": "Ein Plugin bündelt Skills, die Sie gemeinsam aktivieren. Jeder hinzugefügte Skill kommt in einem eigenen Plugin. Integrationen finden Sie im Tab Integrationen."
+      "intro": "Ein Plugin bündelt Skills und die Integrationen, die sie benötigen. Laden Sie ein Claude-Code- oder Codex-Plugin hoch, fügen Sie einen Marketplace aus GitHub hinzu oder fügen Sie einen Skill hinzu. Jeder Skill, den Sie hinzufügen, kommt in einem eigenen Plugin.",
+      "integrations": "{available} von {needed} Integrationen verfügbar",
+      "nameHeld": "Aus: {names} verwendet denselben Skill-Namen"
     },
     "skillPage": {
       "title": "Skill",
@@ -17320,9 +17699,163 @@
     },
     "pluginPage": {
       "tabs": {
-        "skills": "Skills · {count}"
+        "skills": "Skills · {count}",
+        "integrations": "Integrationen · {count}"
       }
     },
     "search": "Suchen"
+  },
+  "scheduledTasks": {
+    "unviewedResults": "Neue Ergebnisse",
+    "runStatus": "{status, select, QUEUED {In Warteschlange} RUNNING {Läuft} AWAITING_APPROVAL {Wartet auf Genehmigung} SUCCEEDED {Erfolgreich} FAILED {Fehlgeschlagen} CANCELLED {Abgebrochen} SKIPPED {Übersprungen} other {Unbekannt}}",
+    "taskStatus": "{status, select, ACTIVE {Aktiv} other {Pausiert}}",
+    "schedule": {
+      "cron": "Cron (UTC): {cron}",
+      "everyMinutes": "{count, plural, one {Jede Minute} other {Alle # Minuten}}",
+      "everyHours": "{count, plural, one {Jede Stunde} other {Alle # Stunden}}",
+      "everyDays": "{count, plural, one {Jeden Tag um {time}} other {Alle # Tage um {time}}}",
+      "daily": "Jeden Tag um {time}",
+      "weekly": "{days} um {time}"
+    },
+    "list": {
+      "title": "Geplante Aufgaben",
+      "description": "Führen Sie einen Prompt nach Zeitplan aus. Jede Ausführung öffnet sich als Chat, den Sie lesen und fortsetzen können.",
+      "search": "Aufgaben durchsuchen",
+      "new": "Neue Aufgabe",
+      "never": "Nie",
+      "notScheduled": "Nicht geplant",
+      "loadFailed": "Ihre geplanten Aufgaben konnten nicht geladen werden.",
+      "open": "{name} öffnen",
+      "columns": {
+        "name": "Name",
+        "schedule": "Zeitplan",
+        "lastRun": "Letzte Ausführung",
+        "nextRun": "Nächste Ausführung",
+        "status": "Status"
+      },
+      "empty": {
+        "title": "Noch keine geplanten Aufgaben",
+        "description": "Erstellen Sie eine Aufgabe, um einen Prompt nach Zeitplan auszuführen."
+      },
+      "noMatches": {
+        "title": "Keine passenden Aufgaben",
+        "description": "Versuchen Sie eine andere Suche oder einen anderen Filter."
+      },
+      "filter": {
+        "label": "Aufgaben filtern",
+        "all": "Alle Aufgaben",
+        "unviewed": "Neue Ergebnisse"
+      }
+    },
+    "actions": {
+      "runNow": "Einmal ausführen",
+      "pause": "Pausieren",
+      "resume": "Fortsetzen",
+      "edit": "Bearbeiten",
+      "delete": "Löschen",
+      "menu": "Aktionen für {name}",
+      "toasts": {
+        "runQueued": "Eine Ausführung von „{name}“ wurde gestartet.",
+        "runFailed": "Die Ausführung konnte nicht gestartet werden.",
+        "resumed": "Aufgabe fortgesetzt.",
+        "paused": "Aufgabe pausiert.",
+        "statusFailed": "Der Aufgabenstatus konnte nicht geändert werden.",
+        "deleted": "„{name}“ gelöscht.",
+        "deleteFailed": "Die Aufgabe konnte nicht gelöscht werden."
+      },
+      "confirmDelete": {
+        "title": "„{name}“ löschen?",
+        "description": "Die Aufgabe wird nicht mehr ausgeführt und ihr Ausführungsverlauf wird entfernt.",
+        "submit": "Löschen"
+      }
+    },
+    "runs": {
+      "label": "Ausführungsverlauf",
+      "open": "Ausführung von {time} öffnen",
+      "loading": "Ausführungen werden geladen…",
+      "loadFailed": "Der Ausführungsverlauf konnte nicht geladen werden.",
+      "loadMore": "Mehr laden",
+      "markAllViewed": "Alle als gesehen markieren",
+      "markAllViewedFailed": "Die Ausführungen konnten nicht als gesehen markiert werden. Versuchen Sie es erneut.",
+      "trigger": "{source, select, MANUAL_RUN_NOW {Einmal ausführen} other {Zeitplan}}",
+      "errorClass": "{errorClass, select, superseded_by_next_fire {Abgebrochen: Die nächste Ausführung begann, bevor jemand die Genehmigung beantwortet hat.} approval_timeout {Abgebrochen: Niemand hat die Genehmigung innerhalb von 24 Stunden beantwortet.} user_cancelled {Von Ihnen gestoppt.} agent_permission_required {Eine Aktion benötigte eine Genehmigung.} agent_exception {Fehlgeschlagen: Bei der Ausführung ist ein Fehler aufgetreten.} stuck {Fehlgeschlagen: Die Ausführung hat nicht rechtzeitig begonnen.} timeout {Fehlgeschlagen: Die Ausführung hat das Limit von einer Stunde erreicht.} other {Fehlgeschlagen: {errorClass}}}",
+      "columns": {
+        "started": "Gestartet",
+        "status": "Status",
+        "duration": "Dauer",
+        "trigger": "Auslöser",
+        "detail": "Details"
+      },
+      "closed": {
+        "queued": "Diese Ausführung hat noch nicht begonnen, daher gibt es keinen Chat zum Öffnen.",
+        "skipped": "Diese Ausführung wurde übersprungen, daher gibt es keinen Chat zum Öffnen.",
+        "noChat": "Diese Ausführung hat keinen Chat zum Öffnen."
+      },
+      "empty": {
+        "title": "Noch keine Ausführungen",
+        "description": "Die Aufgabe fügt bei jedem Auslösen eine Ausführung hinzu. Verwenden Sie „Einmal ausführen“, um jetzt eine zu starten."
+      }
+    },
+    "detail": {
+      "title": "Geplante Aufgabe",
+      "back": "Geplante Aufgaben",
+      "loadFailed": "Diese geplante Aufgabe konnte nicht geladen werden.",
+      "tabs": {
+        "runs": "Ausführungen",
+        "overview": "Übersicht"
+      },
+      "overview": {
+        "prompt": "Prompt",
+        "schedule": "Zeitplan",
+        "nextRun": "Nächste Ausführung",
+        "notScheduled": "Nicht geplant",
+        "lastRun": "Letzte Ausführung",
+        "never": "Nie"
+      },
+      "switch": {
+        "title": "Nach Zeitplan ausführen",
+        "label": "{name} nach Zeitplan ausführen"
+      },
+      "menu": "Weitere Aktionen"
+    },
+    "editor": {
+      "newTitle": "Neue geplante Aufgabe",
+      "editTitle": "Geplante Aufgabe bearbeiten",
+      "description": "Jede Ausführung sendet den Prompt an einen neuen Chat mit dem Standard-Agenten.",
+      "back": "Zurück",
+      "loadFailed": "Diese geplante Aufgabe konnte nicht geladen werden.",
+      "save": "Speichern",
+      "saveAndRun": "Speichern und jetzt ausführen",
+      "errors": {
+        "nameRequired": "Geben Sie einen Namen ein.",
+        "promptRequired": "Geben Sie einen Prompt ein."
+      },
+      "toasts": {
+        "created": "Geplante Aufgabe erstellt.",
+        "createdAndRun": "Geplante Aufgabe erstellt. Die erste Ausführung wurde gestartet.",
+        "updated": "Geplante Aufgabe aktualisiert.",
+        "saveFailed": "Die geplante Aufgabe konnte nicht gespeichert werden."
+      },
+      "fields": {
+        "name": {
+          "label": "Name",
+          "placeholder": "Zum Beispiel wöchentliche Übersicht der Kundeneskalationen"
+        },
+        "prompt": {
+          "label": "Prompt",
+          "description": "Jede Ausführung sendet diese Nachricht an einen neuen Chat.",
+          "placeholder": "Beschreiben Sie, was bei jeder Ausführung passieren soll"
+        },
+        "schedule": {
+          "label": "Zeitplan"
+        }
+      }
+    },
+    "banner": {
+      "title": "Geplante Ausführung von {task}",
+      "inFlight": "{status, select, AWAITING_APPROVAL {Diese Ausführung wartet unten auf Ihre Genehmigung.} other {Diese Ausführung läuft.}}",
+      "startedAt": "Gestartet {time}",
+      "viewTask": "Aufgabe anzeigen"
+    }
   }
 }

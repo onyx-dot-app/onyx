@@ -1,6 +1,7 @@
 import { useEffect, useState, type FormEvent } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { Button, InputPasswordTypeIn, InputTypeIn, Text } from "@opal/components";
+import { SvgGoogle } from "@opal/logos";
 import { Section } from "@opal/layouts";
 import { mount } from "@/lib/mount";
 import { ErrorText, Field, WindowFrame } from "@/lib/WindowFrame";
@@ -98,6 +99,7 @@ function Login() {
                 key={option.provider ?? option.label}
                 prominence="secondary"
                 width="full"
+                icon={option.google ? SvgGoogle : undefined}
                 disabled={startingSso}
                 onClick={() => void onSso(option.browser, option.provider)}
               >

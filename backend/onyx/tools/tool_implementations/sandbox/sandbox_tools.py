@@ -28,6 +28,8 @@ from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.prompts.sandbox_tools import (
     APPLY_PATCH_DESCRIPTION,
     APPLY_PATCH_USE,
+    ATTACHMENTS_NOT_SAVED_NOTE,
+    CHAT_FILES_LAYOUT,
     EDIT_DESCRIPTION,
     EDIT_USE,
     EXEC_COMMAND_DESCRIPTION,
@@ -41,6 +43,7 @@ from onyx.prompts.sandbox_tools import (
     WRITE_USE,
 )
 from onyx.server.features.build.sandbox.harness_base import (
+    CHAT_FILES_DIR,
     HarnessSandbox,
     HarnessSandboxError,
     SandboxPathError,
@@ -98,6 +101,7 @@ from onyx.tools.tool_implementations.sandbox.patch import (
     update_contents,
 )
 from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
+from onyx.tools.tool_implementations.utils import cut_middle, output_chars
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -135,26 +139,56 @@ def _sandbox_errors_as_tool_errors() -> Iterator[None]:
 
 
 def _exec_tool_result(
-    events: Generator[ExecEvent], invocation: ToolInvocation
+    events: Generator[ExecEvent], invocation: ToolInvocation, max_chars: int
 ) -> ToolResult:
-    """Stream the output as progress; the result has the exec header text and
-    the saved details."""
+    """Stream the output as progress, up to the `max_chars` that the result
+    can show; the result is `_exec_result`'s."""
     result: ExecCommandResult | None = None
+    streamed = 0
     # Closed at once when the progress callback raises for a Stop, so the
     # client kills the command before the call ends.
     with _sandbox_errors_as_tool_errors(), closing(events):
         for event in events:
             if isinstance(event, ExecCommandResult):
                 result = event
-            else:
-                invocation.update(ToolProgress(details=event))
+                continue
+            text = event.text[: max(max_chars - streamed, 0)]
+            # Closed once a piece is cut: a later, smaller piece must not
+            # skip the cut text.
+            streamed = (
+                streamed + len(text) if len(text) == len(event.text) else max_chars
+            )
+            if text:
+                invocation.update(
+                    ToolProgress(details=event.model_copy(update={"text": text}))
+                )
     if result is None:
         raise RuntimeError("The exec stream ended without a result")
-    return _exec_result(result)
+    return _exec_result(result, max_chars)
 
 
-def _exec_result(result: ExecCommandResult) -> ToolResult:
-    """The exec header text and output, with the saved details."""
+def _exec_result(result: ExecCommandResult, max_chars: int) -> ToolResult:
+    """The exec header and the output cut in the middle to `max_chars`, with
+    one marker that counts every omitted character; the details save that
+    cut. When the cut leaves output out, the full value is the details with
+    all the output that the call kept."""
+    kept_chars = len(result.head) + len(result.tail)
+    output = cut_middle(
+        result.head,
+        result.tail,
+        max_chars,
+        omitted=result.omitted_chars,
+        label="exec output",
+    )
+    cut = kept_chars > max_chars
+    details = SandboxExecResult(
+        output=output,
+        wall_time_seconds=result.wall_time_seconds,
+        exit_code=result.exit_code,
+        session_id=result.session_id,
+        completion=result.completion,
+        truncated=result.truncated or cut,
+    )
     header = [f"Wall time: {result.wall_time_seconds:.4f} seconds"]
     if result.exit_code is not None:
         header.append(f"Process exited with code {result.exit_code}")
@@ -162,11 +196,25 @@ def _exec_result(result: ExecCommandResult) -> ToolResult:
         header.append(f"Process ended: {result.completion}")
     if result.session_id is not None:
         header.append(f"Process running with session ID {result.session_id}")
-    header.append(f"Original token count: {result.original_token_count}")
+    header.append(f"Original character count: {kept_chars + result.omitted_chars}")
     header.append("Output:")
     return ToolResult(
-        content="\n".join(header) + "\n" + result.output,
-        details=SandboxExecResult.model_validate(result, from_attributes=True),
+        content="\n".join(header) + "\n" + output,
+        details=details,
+        full_value=details.model_copy(
+            update={
+                "output": cut_middle(
+                    result.head,
+                    result.tail,
+                    kept_chars,
+                    omitted=result.omitted_chars,
+                    label="exec output",
+                ),
+                "truncated": result.truncated,
+            }
+        )
+        if cut
+        else None,
     )
 
 
@@ -185,6 +233,10 @@ class SandboxTool(Tool):
 
     def __init__(self, turn: SandboxTurn) -> None:
         self._turn = turn
+
+    @property
+    def turn(self) -> SandboxTurn:
+        return self._turn
 
     @property
     def name(self) -> str:
@@ -213,20 +265,27 @@ class ExecCommandTool(SandboxTool):
     display_name = "Terminal"
 
     @property
+    def description(self) -> str:
+        if self._turn.vm_chat_files:
+            return f"{self.DESCRIPTION} {CHAT_FILES_LAYOUT}"
+        return self.DESCRIPTION
+
+    @property
     def code_mode_result(self) -> CodeModeResultSpec:
         return _EXEC_RESULT
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
         arguments = parse_tool_arguments(ExecCommandArguments, invocation.arguments)
+        max_chars = output_chars(arguments.max_output_chars)
         return _exec_tool_result(
             self._turn.sandbox.exec_command(
                 self._turn.start_call(),
                 arguments.cmd,
                 workdir=arguments.workdir,
                 yield_time_ms=arguments.yield_time_ms,
-                max_output_tokens=arguments.max_output_tokens,
             ),
             invocation,
+            max_chars,
         )
 
 
@@ -244,15 +303,16 @@ class WriteStdinTool(SandboxTool):
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
         arguments = parse_tool_arguments(WriteStdinArguments, invocation.arguments)
+        max_chars = output_chars(arguments.max_output_chars)
         return _exec_tool_result(
             self._turn.sandbox.write_stdin(
                 self._turn.start_call(),
                 arguments.session_id,
                 arguments.chars,
                 yield_time_ms=arguments.yield_time_ms,
-                max_output_tokens=arguments.max_output_tokens,
             ),
             invocation,
+            max_chars,
         )
 
 
@@ -379,6 +439,20 @@ def _change_file(
         invocation.cancellation.check()
         _write_file(sandbox, ref, path, data, info)
     return ApplyPatchFileChange(path=path, change="add" if created else "update")
+
+
+def _noted(content: str, changes: Sequence[ApplyPatchFileChange]) -> str:
+    """The result text of file changes; a later turn can put back the
+    original chat files in attachments/."""
+    changed = [
+        path
+        for change in changes
+        for path in (change.path, change.move_path)
+        if path is not None
+    ]
+    if any(path.startswith(CHAT_FILES_DIR + "/") for path in changed):
+        return f"{content}\n\n{ATTACHMENTS_NOT_SAVED_NOTE}"
+    return content
 
 
 class ApplyPatchTool(_FileTool):
@@ -557,20 +631,17 @@ class ApplyPatchTool(_FileTool):
                     )
                     raise ToolCallException(message, message) from error
                 changed.append(path)
+        changes = [
+            ApplyPatchFileChange(
+                path=hunk.path,
+                change=_CHANGES[type(hunk)],
+                move_path=hunk.move_path if isinstance(hunk, UpdateFile) else None,
+            )
+            for hunk in hunks
+        ]
         return ToolResult(
-            content=summarize(hunks),
-            details=ApplyPatchResult(
-                files=[
-                    ApplyPatchFileChange(
-                        path=hunk.path,
-                        change=_CHANGES[type(hunk)],
-                        move_path=hunk.move_path
-                        if isinstance(hunk, UpdateFile)
-                        else None,
-                    )
-                    for hunk in hunks
-                ]
-            ),
+            content=_noted(summarize(hunks), changes),
+            details=ApplyPatchResult(files=changes),
         )
 
 
@@ -604,11 +675,12 @@ class EditTool(_FileTool):
             ),
         )
         return ToolResult(
-            content=(
+            content=_noted(
                 f"The file {change.path} has been updated. All occurrences were "
                 "successfully replaced."
                 if arguments.replace_all
-                else f"The file {change.path} has been updated successfully."
+                else f"The file {change.path} has been updated successfully.",
+                [change],
             ),
             details=ApplyPatchResult(files=[change]),
         )
@@ -640,9 +712,12 @@ class WriteTool(_FileTool):
             lambda _read: arguments.content,
         )
         return ToolResult(
-            content=f"File created successfully at: {change.path}"
-            if change.change == "add"
-            else f"The file {change.path} has been updated successfully.",
+            content=_noted(
+                f"File created successfully at: {change.path}"
+                if change.change == "add"
+                else f"The file {change.path} has been updated successfully.",
+                [change],
+            ),
             details=ApplyPatchResult(files=[change]),
         )
 

@@ -28,12 +28,17 @@ import useChatSessionController from "@/hooks/useChatSessionController";
 import { useActiveAgent } from "@/lib/agents/hooks";
 import {
   useCurrentChatState,
+  useCurrentIsStreamDraining,
   useCurrentMessageHistory,
   useChatSessionStore,
   useDocumentSidebarVisible,
 } from "@/app/app/stores/useChatSessionStore";
 import ChatUI from "@/sections/chat/ChatUI";
-import ChatScrollContainer from "@/sections/chat/ChatScrollContainer";
+import { messageRowId } from "@/lib/chat/rowIds";
+import { useScrollToNewTurn } from "@/lib/chatScroll/hooks";
+import ChatScrollContainer, {
+  type ChatScrollContainerHandle,
+} from "@/lib/chatScroll/components/ChatScrollContainer";
 import WelcomeMessage from "@/app/app/components/WelcomeMessage";
 import useChatSessions from "@/hooks/useChatSessions";
 import { cn } from "@opal/utils";
@@ -204,7 +209,13 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   const resolvedAgent = activeAgent ?? undefined;
 
   // Auto-scroll preference from user settings (matches ChatPage pattern)
-  const autoScrollEnabled = user?.preferences?.auto_scroll !== false;
+  // The setting decides whether a running reply is followed. With nothing
+  // running, a view at the end keeps to it (matches AppPage).
+  const autoScrollEnabled =
+    user?.preferences?.auto_scroll !== false || currentChatState === "input";
+  // Pause following while the typewriter drains a finished reply (matches
+  // AppPage).
+  const isStreamDraining = useCurrentIsStreamDraining();
   const isStreaming = currentChatState === "streaming";
 
   // Query controller for search/chat classification (EE feature)
@@ -217,7 +228,18 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   // Anchor for scroll positioning (matches ChatPage pattern)
   const anchorMessage = messageHistory.at(-2) ?? messageHistory[0];
   const anchorNodeId = anchorMessage?.nodeId;
-  const anchorSelector = anchorNodeId ? `#message-${anchorNodeId}` : undefined;
+  // The row keeps the id it was first shown with (see messageRowId).
+  const anchorSelector = anchorMessage
+    ? `#${messageRowId(anchorMessage)}`
+    : undefined;
+  const scrollContainerRef = useRef<ChatScrollContainerHandle>(null);
+  // A send glides to the new turn: its message at the top.
+  useScrollToNewTurn(
+    scrollContainerRef,
+    "nrf-session",
+    anchorSelector,
+    currentChatState === "loading"
+  );
 
   useSendMessageToParent();
 
@@ -496,9 +518,11 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                 {/* Fake header - pushes content below absolute settings button (non-side-panel only) */}
                 {!isSidePanel && <Spacer rem={2} />}
                 <ChatScrollContainer
+                  ref={scrollContainerRef}
                   sessionId="nrf-session"
                   anchorSelector={anchorSelector}
                   autoScroll={autoScrollEnabled}
+                  pauseFollowing={isStreamDraining}
                   isStreaming={isStreaming}
                   hideScrollbar={isSidePanel}
                 >

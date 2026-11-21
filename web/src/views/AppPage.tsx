@@ -62,9 +62,11 @@ import {
   useCurrentIsStreamDraining,
 } from "@/app/app/stores/useChatSessionStore";
 import FederatedOAuthModal from "@/components/chat/FederatedOAuthModal";
+import { messageRowId } from "@/lib/chat/rowIds";
+import { useScrollToNewTurn } from "@/lib/chatScroll/hooks";
 import ChatScrollContainer, {
   ChatScrollContainerHandle,
-} from "@/sections/chat/ChatScrollContainer";
+} from "@/lib/chatScroll/components/ChatScrollContainer";
 import {
   ProjectContextPanel,
   ProjectChatSessionList,
@@ -97,6 +99,7 @@ import { useSidebarState } from "@opal/layouts";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import WelcomeMessage from "@/app/app/components/WelcomeMessage";
 import ChatUI from "@/sections/chat/ChatUI";
+import ScheduledRunBanner from "@/sections/scheduledTasks/ScheduledRunBanner";
 import { FULL_WIDTH_TRANSITION } from "@/lib/chat/layout";
 import { useFullWidthChat } from "@/providers/FullWidthChatProvider";
 import { paidTierGated } from "@/ce";
@@ -372,7 +375,17 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   // Determine anchor: second-to-last message (last user message before current response)
   const anchorMessage = messageHistory.at(-2) ?? messageHistory[0];
   const anchorNodeId = anchorMessage?.nodeId;
-  const anchorSelector = anchorNodeId ? `#message-${anchorNodeId}` : undefined;
+  // The row keeps the id it was first shown with (see messageRowId).
+  const anchorSelector = anchorMessage
+    ? `#${messageRowId(anchorMessage)}`
+    : undefined;
+  // A send glides to the new turn: its message at the top.
+  useScrollToNewTurn(
+    scrollContainerRef,
+    storeSessionId,
+    anchorSelector,
+    currentChatState === "loading"
+  );
 
   // Auto-scroll preference from user settings. Pause while the
   // typewriter is running its post-finish adaptive drain — the user is
@@ -380,7 +393,11 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   // is jarring.
   const autoScrollPreference = user?.preferences?.auto_scroll !== false;
   const isStreamDraining = useCurrentIsStreamDraining();
-  const autoScrollEnabled = autoScrollPreference && !isStreamDraining;
+  // The setting decides whether a running reply is followed. With nothing
+  // running, growth is layout settling (an action row, a card growing in),
+  // so a view at the end keeps to it, and a reopened chat lands at the end.
+  const autoScrollEnabled =
+    autoScrollPreference || currentChatState === "input";
   const isStreaming = currentChatState === "streaming";
 
   const multiModel = useMultiModelChat(llmManager);
@@ -869,6 +886,11 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     height="full"
                   >
                     <Section justifyContent="start" gap={0}>
+                      {currentChatSessionId && (
+                        <ScheduledRunBanner
+                          chatSessionId={currentChatSessionId}
+                        />
+                      )}
                       {/* The store's session, not the URL's: the store takes
                           the URL's chat one effect late, and the scroll reset
                           must see the messages of the chat it opens. */}
@@ -877,6 +899,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         sessionId={storeSessionId ?? undefined}
                         anchorSelector={anchorSelector}
                         autoScroll={autoScrollEnabled}
+                        pauseFollowing={isStreamDraining}
                         isStreaming={isStreaming}
                         onScrollButtonVisibilityChange={setShowScrollButton}
                         fullWidth={fullWidthActive}

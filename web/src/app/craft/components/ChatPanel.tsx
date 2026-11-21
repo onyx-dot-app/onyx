@@ -33,12 +33,6 @@ import {
 } from "@/app/craft/contexts/UploadFilesContext";
 import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
-import {
-  isRunUnviewed,
-  isScheduledRunContextInFlight,
-} from "@/app/craft/v1/tasks/utils";
-import { markScheduledRunViewed } from "@/app/craft/v1/tasks/api";
-import { revalidateScheduledRunViews } from "@/lib/scheduledTasks/hooks";
 import { toast } from "@opal/layouts";
 import Dropzone from "react-dropzone";
 import CraftInputBar, {
@@ -53,11 +47,12 @@ import {
 } from "@/app/craft/onboarding/constants";
 import { getPreferredLlmSelection } from "@/app/craft/utils/llmPreferences";
 import { useUser } from "@/providers/UserProvider";
-import ScheduledRunBanner, {
-  useScheduledRunContext,
-} from "@/app/craft/components/ScheduledRunBanner";
 import BuildWelcome from "@/app/craft/components/BuildWelcome";
 import BuildMessageList from "@/app/craft/components/BuildMessageList";
+import { craftMessageRowId } from "@/app/craft/utils/rowIds";
+import ChatScrollContainer, {
+  type ChatScrollContainerHandle,
+} from "@/lib/chatScroll/components/ChatScrollContainer";
 import SessionApprovalsRegion from "@/app/craft/components/approvals/SessionApprovalsRegion";
 import AgentSwitcher from "@/app/craft/components/AgentSwitcher";
 import SubagentView from "@/app/craft/components/SubagentView";
@@ -139,42 +134,9 @@ function ChatPanelContent({
     },
     [outputSessionId]
   );
-  const scheduledSessionId = sessionId ?? existingSessionId ?? null;
-  // Gate on origin so interactive sessions don't 404 on scheduled-run-context.
-  const scheduledRunSessionId =
-    session?.origin === "SCHEDULED" ? scheduledSessionId : null;
-  const { data: scheduledRunContext, mutate: mutateScheduledRunContext } =
-    useScheduledRunContext(scheduledRunSessionId);
-  const scheduledRunInFlight =
-    isScheduledRunContextInFlight(scheduledRunContext);
-  const shouldStreamScheduledRun = scheduledRunContext?.status === "RUNNING";
-  const scheduledRunId = scheduledRunContext?.run_id;
-  const viewedScheduledRunRevision = useRef<string | null>(null);
-  useEffect(() => {
-    if (
-      !scheduledRunContext ||
-      scheduledRunContext.status === "RUNNING" ||
-      !isRunUnviewed(scheduledRunContext)
-    )
-      return;
-    const { task_id, run_id, revision } = scheduledRunContext;
-    const key = `${run_id}:${revision}`;
-    if (viewedScheduledRunRevision.current === key) return;
-    viewedScheduledRunRevision.current = key;
-    void markScheduledRunViewed(task_id, run_id, revision)
-      .then(() =>
-        Promise.all([
-          mutateScheduledRunContext(),
-          revalidateScheduledRunViews(task_id),
-        ])
-      )
-      .catch(() => {
-        viewedScheduledRunRevision.current = null;
-      });
-  }, [scheduledRunContext, mutateScheduledRunContext]);
+  const activeSessionId = sessionId ?? existingSessionId ?? null;
   const hasSession = useHasSession();
   const isRunning = useIsRunning();
-  const displayIsRunning = isRunning || scheduledRunInFlight;
   const isRestoring: boolean =
     session?.status === "creating" &&
     !session.activeTurnLocalOwner &&
@@ -264,12 +226,8 @@ function ChatPanelContent({
   const appendMessageToCurrent = useBuildSessionStore(
     (state) => state.appendMessageToCurrent
   );
-  const {
-    streamMessage,
-    interruptStreaming,
-    streamScheduledRunEvents,
-    retryQueuedMessage,
-  } = useCraftStreaming();
+  const { streamMessage, interruptStreaming, retryQueuedMessage } =
+    useCraftStreaming();
   const isInterrupting = useIsInterrupting();
   const sessionQueue = useQueuedMessages();
   const queuedMessages = useMemo(
@@ -298,7 +256,6 @@ function ChatPanelContent({
   const removeQueuedMessage = useBuildSessionStore(
     (state) => state.removeQueuedMessage
   );
-  const activeTurnId = session?.activeTurnId ?? null;
   const isPreProvisioning = useIsPreProvisioning();
   const isPreProvisioningFailed = useIsPreProvisioningFailed();
   const preProvisionedSessionId = usePreProvisionedSessionId();
@@ -319,124 +276,33 @@ function ChatPanelContent({
     setActiveSession(activeSession, { draftId: existingSessionId ?? null });
   }, [existingSessionId, preProvisionedSessionId, setActiveSession]);
 
-  useEffect(() => {
-    if (!scheduledSessionId || !scheduledRunId || !shouldStreamScheduledRun)
-      return;
-
-    const controller = new AbortController();
-    void streamScheduledRunEvents(
-      scheduledSessionId,
-      scheduledRunId,
-      controller.signal,
-      () => {
-        void mutateScheduledRunContext();
-      }
-    );
-
-    return () => controller.abort();
-  }, [
-    scheduledSessionId,
-    scheduledRunId,
-    shouldStreamScheduledRun,
-    streamScheduledRunEvents,
-    mutateScheduledRunContext,
-  ]);
-
-  useEffect(() => {
-    if (
-      !scheduledSessionId ||
-      !scheduledRunContext ||
-      scheduledRunInFlight ||
-      activeTurnId
-    ) {
-      return;
-    }
-    const store = useBuildSessionStore.getState();
-    const current = store.sessions.get(scheduledSessionId);
-    if (current)
-      void store.beginTurnSettlement(
-        scheduledSessionId,
-        { kind: "scheduled", runId: scheduledRunContext.run_id },
-        current.turnGeneration
-      );
-  }, [
-    scheduledSessionId,
-    scheduledRunContext,
-    scheduledRunInFlight,
-    activeTurnId,
-  ]);
-
   // Ref to access InputBar methods
   const inputBarRef = useRef<CraftInputBarHandle>(null);
 
-  // Scroll detection for auto-scroll "magnet"
-  const scrollContainerRef = useRef<HTMLDivElement>(null);
-  const [isAtBottom, setIsAtBottom] = useState(true);
-  const prevScrollTopRef = useRef(0);
-
-  // Check if user is at bottom of scroll container
-  const checkIfAtBottom = useCallback(() => {
-    const container = scrollContainerRef.current;
-    if (!container) return true;
-
-    const scrollTop = container.scrollTop;
-    const scrollHeight = container.scrollHeight;
-    const clientHeight = container.clientHeight;
-    const distanceFromBottom = scrollHeight - scrollTop - clientHeight;
-    const threshold = 32; // 2rem threshold
-
-    return distanceFromBottom <= threshold;
-  }, []);
-
-  // Handle scroll events - only update state on user-initiated scrolling
-  const handleScroll = useCallback(() => {
-    const container = scrollContainerRef.current;
-    if (!container) return;
-
-    const currentScrollTop = container.scrollTop;
-    const prevScrollTop = prevScrollTopRef.current;
-    const wasAtBottom = checkIfAtBottom();
-
-    // Detect if user scrolled up (scrollTop decreased)
-    // This distinguishes user scrolling from content growth
-    const scrolledUp = currentScrollTop < prevScrollTop - 5; // 5px threshold
-
-    // Only update state if user scrolled up (definitely user action)
-    // If content grows and we're still at bottom, don't change state
-    if (scrolledUp) {
-      // User scrolled up - release auto-scroll magnet
-      setIsAtBottom(wasAtBottom);
-    } else if (wasAtBottom) {
-      // We're at bottom - ensure button stays hidden (handles content growth)
-      setIsAtBottom(true);
-    }
-    // If scrollTop increased but we're still at bottom, it's content growth - do nothing
-
-    prevScrollTopRef.current = currentScrollTop;
-  }, [checkIfAtBottom]);
-
-  // Scroll to bottom and resume auto-scroll
+  // The shared chat scroll container owns the transcript's scroll position.
+  const scrollContainerRef = useRef<ChatScrollContainerHandle>(null);
+  const [showScrollButton, setShowScrollButton] = useState(false);
   const scrollToBottom = useCallback(() => {
-    const container = scrollContainerRef.current;
-    if (!container) return;
-
-    // Use requestAnimationFrame to ensure we scroll after any layout changes
-    requestAnimationFrame(() => {
-      container.scrollTo({
-        top: container.scrollHeight,
-        behavior: reduceMotion ? "instant" : "smooth",
-      });
-
-      // Update state immediately
-      setIsAtBottom(true);
-    });
+    scrollContainerRef.current?.scrollToBottom(
+      reduceMotion ? "instant" : "smooth"
+    );
   }, [reduceMotion]);
-
-  // Reset scroll state when session changes
-  useEffect(() => {
-    setIsAtBottom(true);
-    prevScrollTopRef.current = 0;
-  }, [sessionId]);
+  // The setting decides whether a running turn is followed. With nothing
+  // running, a view at the end keeps to it while layout settles.
+  const autoScroll = user?.preferences?.auto_scroll !== false || !isRunning;
+  // The latest user message anchors a new turn.
+  // The transcript on screen. A switch to or from a subagent fades the old
+  // one out first; the scroll container takes the new one's key after that,
+  // so each transcript has its own placement and following state.
+  const viewedTranscript = viewedSubagentSessionId ?? "main";
+  const [shownTranscript, setShownTranscript] = useState(viewedTranscript);
+  const scrollViewKey =
+    shownTranscript === "main"
+      ? (outputSessionId ?? undefined)
+      : `${outputSessionId ?? ""}:${shownTranscript}`;
+  const lastUserMessageId = isViewingSubagent
+    ? undefined
+    : session?.messages.filter((message) => message.type === "user").at(-1)?.id;
 
   const sendMessage = useCallback(
     async (
@@ -445,10 +311,6 @@ function ChatPanelContent({
       modelOverride?: BuildLlmSelection | null
     ): Promise<boolean> => {
       if (submissionBlocked) return false;
-      if (scheduledRunInFlight) {
-        toast.error(t("toast.scheduledRunWait"));
-        return false;
-      }
 
       track(AnalyticsEvent.SENT_CRAFT_MESSAGE);
 
@@ -553,7 +415,6 @@ function ChatPanelContent({
       hasSession,
       sessionId,
       isRunning,
-      scheduledRunInFlight,
       submissionBlocked,
       appendMessageToCurrent,
       streamMessage,
@@ -643,10 +504,6 @@ function ChatPanelContent({
                   />
                 )}
                 <AgentSwitcher />
-                <ScheduledRunBanner
-                  sessionId={scheduledSessionId}
-                  context={scheduledRunContext ?? null}
-                />
               </div>
               <SandboxStatusIndicator />
               {/* Soft fade border at bottom */}
@@ -657,14 +514,164 @@ function ChatPanelContent({
 
             {/* Main content area — cross-fades when switching between the main
             agent and a subagent (keyed by the viewed agent). */}
-            <div
+            <ChatScrollContainer
               ref={scrollContainerRef}
+              sessionId={scrollViewKey}
+              anchorSelector={
+                lastUserMessageId
+                  ? `#${craftMessageRowId(lastUserMessageId)}`
+                  : undefined
+              }
+              autoScroll={autoScroll}
+              onScrollButtonVisibilityChange={setShowScrollButton}
               data-testid="craft-chat-scroll"
-              onScroll={handleScroll}
-              className="flex flex-col flex-1 min-h-0 overflow-y-scroll overflow-x-hidden [scrollbar-color:var(--border-02)_transparent] supports-[selector(::-webkit-scrollbar)]:[scrollbar-color:auto] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border-02 [&::-webkit-scrollbar-thumb:hover]:bg-border-03"
-              style={{ scrollbarWidth: "auto" }}
+              fadeEdges={false}
+              // Positioned: the container measures offsetTop from here.
+              className="relative flex flex-col flex-1 min-h-0"
+              scrollClassName="flex flex-col flex-1 min-h-0 overflow-y-scroll overflow-x-hidden [scrollbar-color:var(--border-02)_transparent] supports-[selector(::-webkit-scrollbar)]:[scrollbar-color:auto] [&::-webkit-scrollbar]:w-1.5 [&::-webkit-scrollbar-track]:bg-transparent [&::-webkit-scrollbar-thumb]:rounded-full [&::-webkit-scrollbar-thumb]:bg-border-02 [&::-webkit-scrollbar-thumb:hover]:bg-border-03"
+              contentClassName="flex flex-col flex-1 shrink-0"
+              footer={
+                // Keep the composer inside the scroll viewport so its
+                // scrollbar spans the full height.
+                (hasSession || existingSessionId) && (
+                  <div
+                    data-testid="craft-chat-composer"
+                    className={cn(
+                      "sticky bottom-0 z-10 shrink-0 px-4 pb-8 pt-4",
+                      !videoBackgroundEnabled && "bg-background-neutral-01"
+                    )}
+                  >
+                    {/* Soft fade border at top */}
+                    {!videoBackgroundEnabled && (
+                      <div className="absolute top-0 start-0 end-0 h-12 bg-linear-to-t from-background-neutral-01 to-transparent pointer-events-none -translate-y-full" />
+                    )}
+                    <div
+                      className="max-w-[720px] mx-auto"
+                      onFocusCapture={onWakeIntent}
+                      onKeyDownCapture={onWakeIntent}
+                    >
+                      {/* Scroll to bottom button - shown when user has scrolled away */}
+                      {showScrollButton && (
+                        <div className="absolute -top-12 start-1/2 -translate-x-1/2 z-10">
+                          <Button
+                            icon={SvgChevronDown}
+                            size="md"
+                            prominence="secondary"
+                            tooltip={t("scrollToBottom.label")}
+                            aria-label={t("scrollToBottom.label")}
+                            onClick={scrollToBottom}
+                          />
+                        </div>
+                      )}
+                      {recoverableError && activeSessionId && (
+                        <div className="pb-2" role="alert">
+                          <MessageCard
+                            variant="error"
+                            title={t(
+                              settlementError
+                                ? "settlementError.title"
+                                : queuedSendError
+                                  ? "queuedSendError.title"
+                                  : "loadError.title"
+                            )}
+                            description={recoverableError}
+                            rightChildren={
+                              <Button
+                                onClick={() => {
+                                  if (settlementError)
+                                    void retryTurnSettlement(activeSessionId);
+                                  else if (queuedSendError)
+                                    void retryQueuedMessage(activeSessionId);
+                                  else
+                                    void loadSession(activeSessionId, {
+                                      force: true,
+                                    });
+                                }}
+                              >
+                                {t("loadError.retry")}
+                              </Button>
+                            }
+                          />
+                        </div>
+                      )}
+                      {sessionId && (
+                        <SkillRuntimeNotice
+                          key={sessionId}
+                          sessionId={sessionId}
+                        />
+                      )}
+                      {sessionId && session?.skillsStale && (
+                        <div className="pb-2">
+                          <SkillsStaleNotice
+                            sessionId={sessionId}
+                            turnActive={isRunning}
+                          />
+                        </div>
+                      )}
+                      {/* The selected model is sent with each message, so a
+                  switch applies from the next turn. Subagent transcripts
+                  cannot send, so they get no picker. */}
+                      {session?.isLoaded && !isViewingSubagent && (
+                        <div className="flex justify-end pb-2">
+                          <ModelPickerButton
+                            selection={selectedModel}
+                            onChange={(model) => {
+                              if (sessionId) {
+                                setModelBySession((m) => ({
+                                  ...m,
+                                  [sessionId]: model,
+                                }));
+                              }
+                            }}
+                          />
+                        </div>
+                      )}
+                      {/* The composer stays in view for subagents (layout consistency)
+                  but is disabled — replying to subagents is not supported. */}
+                      <motion.div
+                        layoutId="craft-composer"
+                        transition={{
+                          duration: reduceMotion ? 0 : 0.25,
+                          ease: "easeOut",
+                        }}
+                      >
+                        <CraftInputBar
+                          key={existingSessionId ?? "new"}
+                          sessionId={existingSessionId}
+                          ref={inputBarRef}
+                          onSubmit={handleSubmit}
+                          isRunning={isRunning}
+                          isInterrupting={isInterrupting}
+                          onInterrupt={
+                            hasInterruptibleTurn ? handleInterrupt : undefined
+                          }
+                          disabled={
+                            isViewingSubagent ||
+                            isRestoring ||
+                            submissionBlocked ||
+                            !hasProvider
+                          }
+                          placeholder={
+                            isViewingSubagent
+                              ? t("input.subagentPlaceholder")
+                              : t("input.continuePlaceholder")
+                          }
+                          queuedMessages={queuedMessages}
+                          onQueueMessage={handleQueueMessage}
+                          onRemoveQueuedMessage={handleRemoveQueuedMessage}
+                          contextUsage={contextUsage}
+                        />
+                      </motion.div>
+                    </div>
+                  </div>
+                )
+              }
             >
-              <AnimatePresence mode="wait" initial={false}>
+              <AnimatePresence
+                mode="wait"
+                initial={false}
+                onExitComplete={() => setShownTranscript(viewedTranscript)}
+              >
                 <motion.div
                   key={viewedSubagentSessionId ?? "main"}
                   initial={reduceMotion ? false : { opacity: 0, y: 4 }}
@@ -678,7 +685,7 @@ function ChatPanelContent({
                   ) : !hasSession && !existingSessionId ? (
                     <BuildWelcome
                       onSubmit={handleSubmit}
-                      isRunning={displayIsRunning}
+                      isRunning={isRunning}
                       sandboxInitializing={sandboxNotReady}
                     />
                   ) : (
@@ -695,15 +702,13 @@ function ChatPanelContent({
                           .getState()
                           .openOutputsTab(outputSessionId, turnIndex)
                       }
-                      isStreaming={displayIsRunning}
+                      isStreaming={isRunning}
                       isFinalizing={
                         session?.turnSettlement?.phase === "reconciling"
                       }
-                      autoScrollEnabled={isAtBottom}
-                      scrollContainerRef={scrollContainerRef}
                       trailingAssistantSlot={
                         <>
-                          {wasInterrupted && !displayIsRunning && (
+                          {wasInterrupted && !isRunning && (
                             <div className="flex items-center gap-2 text-sm text-text-03">
                               <SvgStopCircle className="size-4 shrink-0 stroke-text-03" />
                               <span>{t("responseStopped.label")}</span>
@@ -718,146 +723,7 @@ function ChatPanelContent({
                   )}
                 </motion.div>
               </AnimatePresence>
-
-              {/* Keep the composer inside the scroll viewport so its scrollbar spans the full height. */}
-              {(hasSession || existingSessionId) && (
-                <div
-                  data-testid="craft-chat-composer"
-                  className={cn(
-                    "sticky bottom-0 z-10 shrink-0 px-4 pb-8 pt-4",
-                    !videoBackgroundEnabled && "bg-background-neutral-01"
-                  )}
-                >
-                  {/* Soft fade border at top */}
-                  {!videoBackgroundEnabled && (
-                    <div className="absolute top-0 start-0 end-0 h-12 bg-linear-to-t from-background-neutral-01 to-transparent pointer-events-none -translate-y-full" />
-                  )}
-                  <div
-                    className="max-w-[720px] mx-auto"
-                    onFocusCapture={onWakeIntent}
-                    onKeyDownCapture={onWakeIntent}
-                  >
-                    {/* Scroll to bottom button - shown when user has scrolled away */}
-                    {!isAtBottom && (
-                      <div className="absolute -top-12 start-1/2 -translate-x-1/2 z-10">
-                        <Button
-                          icon={SvgChevronDown}
-                          size="md"
-                          prominence="secondary"
-                          tooltip={t("scrollToBottom.label")}
-                          aria-label={t("scrollToBottom.label")}
-                          onClick={scrollToBottom}
-                        />
-                      </div>
-                    )}
-                    {recoverableError && scheduledSessionId && (
-                      <div className="pb-2" role="alert">
-                        <MessageCard
-                          variant="error"
-                          title={t(
-                            settlementError
-                              ? "settlementError.title"
-                              : queuedSendError
-                                ? "queuedSendError.title"
-                                : "loadError.title"
-                          )}
-                          description={recoverableError}
-                          rightChildren={
-                            <Button
-                              onClick={() => {
-                                if (settlementError)
-                                  void retryTurnSettlement(scheduledSessionId);
-                                else if (queuedSendError)
-                                  void retryQueuedMessage(scheduledSessionId);
-                                else
-                                  void loadSession(scheduledSessionId, {
-                                    force: true,
-                                  });
-                              }}
-                            >
-                              {t("loadError.retry")}
-                            </Button>
-                          }
-                        />
-                      </div>
-                    )}
-                    {sessionId && (
-                      <SkillRuntimeNotice
-                        key={sessionId}
-                        sessionId={sessionId}
-                      />
-                    )}
-                    {sessionId && session?.skillsStale && (
-                      <div className="pb-2">
-                        <SkillsStaleNotice
-                          sessionId={sessionId}
-                          turnActive={isRunning}
-                        />
-                      </div>
-                    )}
-                    {/* The selected model is sent with each message, so a
-                  switch applies from the next turn. Subagent transcripts
-                  cannot send, so they get no picker. */}
-                    {session?.isLoaded && !isViewingSubagent && (
-                      <div className="flex justify-end pb-2">
-                        <ModelPickerButton
-                          selection={selectedModel}
-                          onChange={(model) => {
-                            if (sessionId) {
-                              setModelBySession((m) => ({
-                                ...m,
-                                [sessionId]: model,
-                              }));
-                            }
-                          }}
-                        />
-                      </div>
-                    )}
-                    {/* The composer stays in view for subagents (layout consistency)
-                  but is disabled — replying to subagents is not supported. */}
-                    <motion.div
-                      layoutId="craft-composer"
-                      transition={{
-                        duration: reduceMotion ? 0 : 0.25,
-                        ease: "easeOut",
-                      }}
-                    >
-                      <CraftInputBar
-                        key={existingSessionId ?? "new"}
-                        sessionId={existingSessionId}
-                        ref={inputBarRef}
-                        onSubmit={handleSubmit}
-                        isRunning={displayIsRunning}
-                        isInterrupting={isInterrupting}
-                        onInterrupt={
-                          hasInterruptibleTurn && !scheduledRunInFlight
-                            ? handleInterrupt
-                            : undefined
-                        }
-                        disabled={
-                          isViewingSubagent ||
-                          isRestoring ||
-                          submissionBlocked ||
-                          scheduledRunInFlight ||
-                          !hasProvider
-                        }
-                        placeholder={
-                          isViewingSubagent
-                            ? t("input.subagentPlaceholder")
-                            : scheduledRunInFlight
-                              ? t("input.scheduledRunPlaceholder")
-                              : t("input.continuePlaceholder")
-                        }
-                        queuedMessages={queuedMessages}
-                        onQueueMessage={handleQueueMessage}
-                        onRemoveQueuedMessage={handleRemoveQueuedMessage}
-                        contextUsage={contextUsage}
-                      />
-                    </motion.div>
-                  </div>
-                </div>
-              )}
-            </div>
+            </ChatScrollContainer>
           </div>
         )}
       </Dropzone>

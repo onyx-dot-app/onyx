@@ -21,7 +21,7 @@ from onyx.prompts.skill_prompts import (
     SKILLS_CATALOG_PROMPT,
     SKILLS_OMITTED_LINE,
 )
-from onyx.skills.content import read_versions_skill_md
+from onyx.skills.content import read_chat_skills_md
 from onyx.skills.models import ChatSkill
 
 # Codex limits: the catalog's skill lines use at most 2% of the context
@@ -152,13 +152,13 @@ def accept_picked_skills(
     count. A skill that the user cannot use, or whose SKILL.md cannot be
     read, is left out, so the message does not apply it; a repeated pick
     counts once."""
-    versions = {skill.name: skill.version_id for skill in skills}
-    readable = read_versions_skill_md(
+    by_name = {skill.name: skill for skill in skills}
+    readable = read_chat_skills_md(
         {
-            versions[mention.name]
+            by_name[mention.name]
             for mentions in picks
             for mention in mentions
-            if mention.name in versions
+            if mention.name in by_name
         },
         user_id,
         db_session,
@@ -169,10 +169,15 @@ def accept_picked_skills(
     for mentions in picks:
         message = AcceptedPicks()
         for mention in dict.fromkeys(mentions):
-            version_id = versions.get(mention.name)
-            text = readable.get(version_id) if version_id is not None else None
-            if version_id is None or text is None:
+            skill = by_name.get(mention.name)
+            text = (
+                readable.get((skill.version_id, skill.path))
+                if skill is not None
+                else None
+            )
+            if skill is None or text is None:
                 continue
+            version_id = skill.version_id
             if len(encoded := text.encode()) > MAX_SKILL_PROMPT_BYTES:
                 # A cut inside a character leaves that character out.
                 kept = encoded[:MAX_SKILL_PROMPT_BYTES].decode(errors="ignore")

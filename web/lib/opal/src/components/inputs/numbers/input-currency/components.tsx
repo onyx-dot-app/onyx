@@ -18,6 +18,10 @@ import {
   usePendingCaret,
 } from "@opal/components/inputs/segmented";
 import { useOpalStrings } from "@opal/strings";
+import {
+  InputTooltip,
+  useInputDisabled,
+} from "@opal/components/inputs/disabled";
 
 // ---------------------------------------------------------------------------
 // Types and segment helpers
@@ -163,6 +167,9 @@ interface InputCurrencyProps {
   error?: boolean;
   disabled?: boolean;
 
+  /** Shown on hover, in any state. A disabled row's reason replaces it. */
+  tooltip?: string | RichStr;
+
   /** Applied to the whole-number segment so a `<label htmlFor>` can target the field. */
   id?: string;
 }
@@ -172,6 +179,9 @@ interface InputCurrencyProps {
  * shared .opal-input chrome. The locale sets the symbol, its side and the
  * decimal separator. Edits report through onChange as they happen (an empty
  * field reports null); blur and Enter tidy the display.
+ *
+ * Inside `InputHorizontal` or `InputVertical`, the row's `disabled` and
+ * `disabledTooltip` apply to it too.
  */
 function InputCurrency({
   value,
@@ -181,9 +191,11 @@ function InputCurrency({
   placeholder,
   suffix,
   error,
-  disabled,
+  disabled: disabledProp,
+  tooltip,
   id,
 }: InputCurrencyProps) {
+  const disabled = useInputDisabled(disabledProp);
   const strings = useOpalStrings();
   const parts = strings.inputCurrencyParts(currency);
   const maxFraction = resolvePrecision(precision, parts.fractionDigits);
@@ -369,127 +381,134 @@ function InputCurrency({
   const symbol = <CurrencyMark>{parts.symbol}</CurrencyMark>;
 
   return (
-    <div className="opal-input-segmented-root opal-input-currency">
-      <InputContainer
-        className="opal-input-segmented"
-        variant={variant}
-        onFocus={() => setFocused(true)}
-        // Tidy when focus leaves the whole field, not on intra-field moves.
-        onFieldBlur={() => {
-          setFocused(false);
-          commit(segments);
-        }}
-        // A click on the chrome, not on a segment, focuses the whole segment.
-        focusTarget={() => wholeRef.current}
-      >
-        <div
-          className="opal-input-segmented-content"
-          role="group"
-          aria-label={strings.inputCurrencyAmount}
-          data-placeholder-shown={showPlaceholder || undefined}
+    <InputTooltip tooltip={tooltip}>
+      <div className="opal-input-segmented-root opal-input-currency">
+        <InputContainer
+          className="opal-input-segmented"
+          variant={variant}
+          onFocus={() => setFocused(true)}
+          // Tidy when focus leaves the whole field, not on intra-field moves.
+          onFieldBlur={() => {
+            setFocused(false);
+            commit(segments);
+          }}
+          // A click on the chrome, not on a segment, focuses the whole segment.
+          focusTarget={() => wholeRef.current}
         >
-          {/* The segments stay mounted under the placeholder, so a click or
+          <div
+            className="opal-input-segmented-content"
+            role="group"
+            aria-label={strings.inputCurrencyAmount}
+            data-placeholder-shown={showPlaceholder || undefined}
+          >
+            {/* The segments stay mounted under the placeholder, so a click or
               Tab still lands in the whole segment and reveals them. */}
-          {showPlaceholder && (
-            // Inert: a link in a RichStr placeholder must not take focus.
-            <span
-              className="opal-input-segmented-placeholder"
-              aria-hidden
-              inert
-            >
-              <Text
-                font="main-ui-muted"
-                color={disabled ? "text-01" : "text-02"}
+            {showPlaceholder && (
+              // Inert: a link in a RichStr placeholder must not take focus.
+              <span
+                className="opal-input-segmented-placeholder"
+                aria-hidden
+                inert
               >
-                {placeholder}
-              </Text>
-            </span>
-          )}
-          {/* Screen readers hear the placeholder while the field is empty,
-              focused or not. */}
-          {placeholder && (
-            <span id={placeholderId} hidden>
-              <Text>{placeholder}</Text>
-            </span>
-          )}
-          {!parts.symbolAfter && symbol}
-          {/* The number reads left to right on every page, like the digits it
-              holds; the symbol outside it keeps the page's side. */}
-          <span className="opal-input-currency-amount" dir="ltr">
-            {/* raw-ok: segmented numeric fields have no Opal input primitive. The field chrome is the surrounding .opal-input. */}
-            <input
-              {...SEGMENT_INPUT_PROPS}
-              inputMode={showFraction ? "decimal" : "numeric"}
-              disabled={disabled}
-              ref={wholeRef}
-              // Tidy the whole segment as soon as focus leaves it, not only when
-              // focus leaves the field.
-              onBlur={() =>
-                setSegments((prev) => ({
-                  ...prev,
-                  whole: trimLeadingZeros(prev.whole),
-                }))
-              }
-              id={id}
-              // With an id, the field's <label> names it; an aria-label
-              // would override that name.
-              aria-label={
-                id === undefined ? strings.inputCurrencyWhole : undefined
-              }
-              aria-describedby={describedBy}
-              placeholder={wholePlaceholder}
-              value={segments.whole}
-              style={{ width: segmentWidth(segments.whole, wholePlaceholder) }}
-              onChange={handleWholeChange}
-              onPaste={handlePaste("whole")}
-              onKeyDown={handleKeyDown(
-                "whole",
-                null,
-                showFraction ? fractionRef : null
-              )}
-            />
-            {showFraction && (
-              <>
-                <CurrencyMark>{parts.decimal}</CurrencyMark>
-                {/* raw-ok: segmented numeric fields have no Opal input primitive. The field chrome is the surrounding .opal-input. */}
-                <input
-                  {...SEGMENT_INPUT_PROPS}
-                  disabled={disabled}
-                  ref={fractionRef}
-                  aria-label={strings.inputCurrencyFraction}
-                  aria-describedby={describedBy}
-                  maxLength={maxFraction}
-                  placeholder={fractionPlaceholder}
-                  value={segments.fraction}
-                  style={{
-                    width: segmentWidth(segments.fraction, fractionPlaceholder),
-                  }}
-                  onChange={handleFractionChange}
-                  onPaste={handlePaste("fraction")}
-                  onKeyDown={handleKeyDown("fraction", wholeRef, null)}
-                />
-              </>
+                <Text
+                  font="main-ui-muted"
+                  color={disabled ? "text-01" : "text-02"}
+                >
+                  {placeholder}
+                </Text>
+              </span>
             )}
-          </span>
-          {parts.symbolAfter && symbol}
-          {suffix && (
-            // Inert under the placeholder: a hidden link must not take focus.
-            <span
-              id={suffixId}
-              className="opal-input-currency-suffix"
-              inert={showPlaceholder || undefined}
-            >
-              <Text
-                font="main-ui-muted"
-                color={disabled ? "text-01" : "text-02"}
-              >
-                {suffix}
-              </Text>
+            {/* Screen readers hear the placeholder while the field is empty,
+              focused or not. */}
+            {placeholder && (
+              <span id={placeholderId} hidden>
+                <Text>{placeholder}</Text>
+              </span>
+            )}
+            {!parts.symbolAfter && symbol}
+            {/* The number reads left to right on every page, like the digits it
+              holds; the symbol outside it keeps the page's side. */}
+            <span className="opal-input-currency-amount" dir="ltr">
+              {/* raw-ok: segmented numeric fields have no Opal input primitive. The field chrome is the surrounding .opal-input. */}
+              <input
+                {...SEGMENT_INPUT_PROPS}
+                inputMode={showFraction ? "decimal" : "numeric"}
+                disabled={disabled}
+                ref={wholeRef}
+                // Tidy the whole segment as soon as focus leaves it, not only when
+                // focus leaves the field.
+                onBlur={() =>
+                  setSegments((prev) => ({
+                    ...prev,
+                    whole: trimLeadingZeros(prev.whole),
+                  }))
+                }
+                id={id}
+                // With an id, the field's <label> names it; an aria-label
+                // would override that name.
+                aria-label={
+                  id === undefined ? strings.inputCurrencyWhole : undefined
+                }
+                aria-describedby={describedBy}
+                placeholder={wholePlaceholder}
+                value={segments.whole}
+                style={{
+                  width: segmentWidth(segments.whole, wholePlaceholder),
+                }}
+                onChange={handleWholeChange}
+                onPaste={handlePaste("whole")}
+                onKeyDown={handleKeyDown(
+                  "whole",
+                  null,
+                  showFraction ? fractionRef : null
+                )}
+              />
+              {showFraction && (
+                <>
+                  <CurrencyMark>{parts.decimal}</CurrencyMark>
+                  {/* raw-ok: segmented numeric fields have no Opal input primitive. The field chrome is the surrounding .opal-input. */}
+                  <input
+                    {...SEGMENT_INPUT_PROPS}
+                    disabled={disabled}
+                    ref={fractionRef}
+                    aria-label={strings.inputCurrencyFraction}
+                    aria-describedby={describedBy}
+                    maxLength={maxFraction}
+                    placeholder={fractionPlaceholder}
+                    value={segments.fraction}
+                    style={{
+                      width: segmentWidth(
+                        segments.fraction,
+                        fractionPlaceholder
+                      ),
+                    }}
+                    onChange={handleFractionChange}
+                    onPaste={handlePaste("fraction")}
+                    onKeyDown={handleKeyDown("fraction", wholeRef, null)}
+                  />
+                </>
+              )}
             </span>
-          )}
-        </div>
-      </InputContainer>
-    </div>
+            {parts.symbolAfter && symbol}
+            {suffix && (
+              // Inert under the placeholder: a hidden link must not take focus.
+              <span
+                id={suffixId}
+                className="opal-input-currency-suffix"
+                inert={showPlaceholder || undefined}
+              >
+                <Text
+                  font="main-ui-muted"
+                  color={disabled ? "text-01" : "text-02"}
+                >
+                  {suffix}
+                </Text>
+              </span>
+            )}
+          </div>
+        </InputContainer>
+      </div>
+    </InputTooltip>
   );
 }
 

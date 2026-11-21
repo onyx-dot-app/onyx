@@ -80,3 +80,28 @@ test("the status filter and the search narrow every group", () => {
   expect(ids({ query: "RELEASE" }).shared).toEqual(["shared"]);
   expect(ids({ query: "RELEASE" }).organization).toEqual([]);
 });
+
+test("a skill synced from a marketplace is grouped by its marketplace, not its owner", () => {
+  const groups = groupSkills(
+    {
+      builtins: [],
+      customs: [
+        customFixture({
+          id: "synced",
+          name: "frontend-design",
+          owner: { id: ME, email: "me@example.com" },
+          marketplace: {
+            id: "m1",
+            name: "claude-code-plugins",
+            kind: "github",
+            repository: "anthropics/claude-code",
+            personal: true,
+          },
+        }),
+      ],
+    },
+    OPTIONS
+  );
+  expect(groups.mine).toEqual([]);
+  expect(groups.marketplace.map((skill) => skill.id)).toEqual(["synced"]);
+});

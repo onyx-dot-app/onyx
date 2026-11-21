@@ -82,7 +82,7 @@ _SANDBOX_ERROR_MESSAGES: dict[SandboxProxyError, str] = {
     SandboxProxyError.POLICY_DENIED: (
         "The current action policies block this request, so it was not performed. "
         "Do not retry the same request. Tell the user the action was blocked "
-        "and ask whether they want to review their app or task settings. "
+        "and ask whether they want to review their app settings. "
         "Only an administrator can change workspace restrictions."
     ),
     SandboxProxyError.CREDENTIAL_ERROR: (

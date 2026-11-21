@@ -1,5 +1,9 @@
 """Pydantic models for sandbox module communication."""
 
+import hashlib
+import io
+import stat
+import zipfile
 from datetime import datetime
 from enum import Enum
 from typing import Literal, TypeAlias
@@ -14,6 +18,9 @@ from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
 from onyx.server.gateway.models import GatewayModelDescriptor
 
 FileSet: TypeAlias = dict[str, bytes]
+
+# Fixed zip entry times keep a skills bundle's bytes stable.
+_ZIP_EPOCH = (1980, 1, 1, 0, 0, 0)
 
 
 class SandboxResourceKind(str, Enum):
@@ -146,6 +153,27 @@ class HarnessSandboxRef(BaseModel):
     session_id: UUID
 
 
+class SkillsBundle(BaseModel):
+    """Skill files (`<skill>/<path>` to bytes) as a zip, and its sha256."""
+
+    model_config = ConfigDict(frozen=True)
+
+    zip_bytes: bytes
+    image_id: str
+
+    @classmethod
+    def from_files(cls, files: FileSet) -> "SkillsBundle":
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+            for path in sorted(files):
+                info = zipfile.ZipInfo(path, _ZIP_EPOCH)
+                info.compress_type = zipfile.ZIP_DEFLATED
+                info.external_attr = (stat.S_IFREG | 0o644) << 16
+                zf.writestr(info, files[path])
+        zip_bytes = buffer.getvalue()
+        return cls(zip_bytes=zip_bytes, image_id=hashlib.sha256(zip_bytes).hexdigest())
+
+
 SandboxFileType = Literal["file", "directory", "other"]
 
 
@@ -193,8 +221,12 @@ class ExecCommandResult(BaseModel):
 
     model_config = ConfigDict(frozen=True)
 
-    # Output of this call, cut to max_output_tokens (head and tail).
-    output: str
+    # The output of this call that the byte cap kept: the first and the last
+    # half of EXEC_CALL_OUTPUT_MAX_BYTES, in arrival order, with
+    # `omitted_chars` characters dropped between them.
+    head: str
+    tail: str
+    omitted_chars: int
     # Set while the command runs: pass it to write_stdin.
     session_id: str | None
     # Set when the command exited. None while it runs, or when a signal,
@@ -204,9 +236,8 @@ class ExecCommandResult(BaseModel):
     # reported no kind of end.
     completion: ExecCompletionName | None
     wall_time_seconds: float
-    # Estimated tokens of the output before the token cut.
-    original_token_count: int
-    # True when the byte or token cap removed output.
+    # True when the byte cap dropped output, or the daemon lost some; a
+    # reader's own cut does not count.
     truncated: bool
 
     @property

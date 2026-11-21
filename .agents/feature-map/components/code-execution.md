@@ -168,10 +168,11 @@ execute_code / wait_code (code mode; a cell per program, a store per chat)
                                         a sentence that names where its saved results
                                         hold its end (tools/tool_implementations/code_mode/prompt.py:closed_cell_text)
   each observation                      taken under the cell lock, formatted after it:
-                                        prompt.py:format_content (model text, cut once in the
-                                        middle to max_output_tokens, 10,000 by
-                                        default) and CodeModeExecutionResult (each part cut to
-                                        about 4 characters per budget token): a CellWindow
+                                        prompt.py:format_content (model text, cut once
+                                        in the middle to max_output_chars, 40,000 by
+                                        default, at most 160,000) and
+                                        CodeModeExecutionResult (each part cut to the
+                                        same budget): a CellWindow
                                         (stdout, calls, commit at the program's end,
                                         tool_call_count) with cell_id, observation and status
                                         (running while the cell runs)
@@ -236,11 +237,31 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files (no tool
                                         (build/db/sandbox.py:get_or_create_sandbox); before
                                         each call: HarnessSandbox.begin_turn (an error is
                                         logged, the call still runs)
-  ExecCommandTool / WriteStdinTool      HarnessSandbox.exec_command / write_stdin; each
-                                        ExecOutputDelta -> ToolProgress; the result is the
-                                        exec header text (wall time, exit code or ending,
-                                        session ID while it runs, token count, output) and
-                                        SandboxExecResult. A cancel of the current signal (a
+  SandboxTurn._sync_skills              before each call (calls wait on one lock): the turn
+                                        reads the available chat built-ins once
+                                        (skills/push.py:build_chat_built_ins_bundle; the
+                                        zip is built once per process for each set), then
+                                        HarnessSandbox.sync_skills shows them at /mnt/skills
+                                        and skips a VM instance that has them (an error is
+                                        logged; the next call tries again)
+  ExecCommandTool / WriteStdinTool      HarnessSandbox.exec_command / write_stdin (each
+                                        command gets AGENT_BROWSER_SESSION=<chat session>, so
+                                        chats in one VM keep separate browsers); each
+                                        ExecOutputDelta -> ToolProgress, which the tool
+                                        stops at max_output_chars; the result is the exec
+                                        header text (wall time, exit code or ending,
+                                        session ID while it runs, character count) and the
+                                        output that the harness kept (head, tail and the
+                                        count between them), cut in the middle to
+                                        max_output_chars (40,000 by default, at most
+                                        160,000) by tool_implementations/utils.py:cut_middle
+                                        with one marker (truncation_marker) that
+                                        counts every omitted character; SandboxExecResult
+                                        saves that cut, and its truncated flag says the
+                                        cut, the byte cap or the daemon left output out.
+                                        When the cut leaves output out, full_value holds
+                                        all the kept output (cut_middle with no cut),
+                                        truncated only for the byte cap or the daemon. A cancel of the current signal (a
                                         Stop, or the end of the calling cell) ends the wait,
                                         kills the command (SIGKILL) and raises AgentCancelled;
                                         the stopped call has no result and renders as stopped
@@ -300,6 +321,95 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files (no tool
                                         and files of one name are versions of one file.
                                         save_chat_turn adds the files to the response's
                                         ChatMessage.files ([[chat-persistence]])
+  Agent.prepare_tool_result (ChatAgent) sandbox/spill.py:spill_large_result, in a chat whose
+                                        configured tools hold a SandboxTool. A result
+                                        with ToolResult.full_value always spills: the tool
+                                        sets it only when its cut leaves something out.
+                                        Any other result spills when it is over
+                                        RESULT_MAX_CHARS or past the step's
+                                        STEP_MAX_CHARS, and its preview leaves out more
+                                        than SPILL_MIN_DROPPED_CHARS (PREVIEW_HEAD_CHARS +
+                                        PREVIEW_TAIL_CHARS). Exempt
+                                        from those two limits (_OWN_LIMITS): the cells,
+                                        exec_command, write_stdin, read_file, skills_read
+                                        and CITEABLE_TOOLS_NAMES. A cell's closing record
+                                        sets the recorded result and its own output uncut
+                                        as the full value. Where:
+                                        the full value or the content, at most
+                                        SPILL_MAX_BYTES (a lone surrogate becomes "?"), to
+                                        /tmp/onyx/tool-results/<chat session>/<message>_<call>.txt
+                                        (_amended for a release hook's amendment) with
+                                        HarnessSandbox.write_file, which wakes the VM. No
+                                        write starts after a Stop. The run's _result_lock
+                                        covers prepare_tool_result, so the parallel calls
+                                        of one step spill one after another.
+                                        Lifetime: a file lasts while the VM runs, until
+                                        the chat's purge (the purge rule at
+                                        harness_base.py:TOOL_RESULTS_ROOT), or until
+                                        eviction deletes it. Eviction runs after each
+                                        write, outside its wait, on one VM lookup
+                                        (delete_listed_files, LIST_MAX_ENTRIES): it
+                                        deletes the oldest files of any chat, files with
+                                        no modification time last, while all of them hold
+                                        more than TOOL_RESULTS_MAX_BYTES, or half of it
+                                        when the listing is truncated.
+                                        The model and the saved row get the tool's content
+                                        with a <persisted-output> note (path, size, how to
+                                        read it, and that a missing file means a restart
+                                        or eviction), or a preview in that note. open_url's
+                                        pages go one JSON object to a line, and the note
+                                        lists each page's citation number. The card
+                                        shows the head and tail with
+                                        renderer.SPILLED_OUTPUT_NOTE
+                                        (CustomToolCallSummary.spilled,
+                                        CodeModeExecutionResult.spilled,
+                                        SandboxExecResult.spilled), live and on
+                                        replay. A failed write or a write past
+                                        SPILL_WRITE_TIMEOUT_SECONDS gives the bounded view
+                                        with SPILL_FAILED_NOTE; a Stop ends the wait with
+                                        AgentCancelled. Calls inside a program skip the
+                                        hook; the program gets the full value
+                                        (stubs.py:program_value)
+  ChatAgent._prepare_sandbox_result     Wraps the spill. After it, the root agent's
+                                        successful sandbox and code mode results end
+                                        with the turn's TurnFileCopies.status.line() when
+                                        it changed; failed results, amendments,
+                                        subagents and calls inside a program never get
+                                        it
+  TurnFileCopies (sandbox/file_copies)  SandboxTurn.file_copies: the turn's background copy
+                                        of chat files into the chat's attachments/, and
+                                        the [files] status line (in memory, per turn).
+                                        The turn's first sandbox call starts it with the
+                                        chat files that turn setup chose
+                                        (process_message: ChatTurnSetup.vm_chat_files,
+                                        from chat/files.py:place_chat_files): the
+                                        chat's uploads on every branch (the user
+                                        messages' file descriptors,
+                                        db/chat.py:get_chat_session_user_files) in
+                                        attachments/, and the project's and the
+                                        agent's files in attachments/project/ and
+                                        attachments/agent/. A name is the first 8 hex
+                                        digits of the file store ID and the file's
+                                        name, so a path never holds another file;
+                                        the file messages of the branch name their
+                                        paths in "In the VM:" lines
+                                        (chat_utils.convert_chat_history). Each
+                                        copy lists the three directories, writes
+                                        the files that are not there at their
+                                        size, and deletes the project and agent
+                                        files that left; a per-chat generation
+                                        lets the newest turn win.
+                                        Agent-host turns copy too, so an agent
+                                        resumed on a restored VM has its files; deep
+                                        research has no sandbox. The module docstring
+                                        has the rules; its FileCopyPool holds the pod's
+                                        threads, shared by the chats of each VM, and
+                                        main.py stops it at API shutdown. In a chat
+                                        with chat files, the exec_command description
+                                        gives the layout (CHAT_FILES_LAYOUT), in
+                                        agent-host turns too; edits to
+                                        attachments/ get ATTACHMENTS_NOT_SAVED_NOTE
+                                        (sandbox_tools.py), and session saves skip it
   Agent.on_drained (root ChatAgent)     SandboxTurn.end: create_chat_agent passes it to the
                                         root chat agent only (bind_run_store: also to a
                                         restored root), not to subagents or deep research
@@ -469,7 +579,9 @@ follows `Retry-After`, and stays inside the call's time budget. Then it raises
     the program keeps its worker too
     (`onyx_code_mode_suspensions_total{outcome="over_memory"}`). A dump that
     still runs out of memory ends the program with `DUMP_MEMORY_MESSAGE` and
-    counts a lost worker (`reason="out_of_memory"`). The compute
+    counts a lost worker (`reason="out_of_memory"`). A program that runs out
+    of its memory limit fails with its `MemoryError` and `PROGRAM_MEMORY_HINT`,
+    which tells it to keep less or to save large results to files. The compute
     limit carries across these segments. While a worker computes, the cell's
     cancellation kills it at once, and a timer kills it at the end of its
     lifetime when that falls within the segment; the pool replaces it. Waits

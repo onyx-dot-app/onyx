@@ -17,7 +17,7 @@ from onyx.chat.models import (
     ResponseRecord,
 )
 from onyx.chat.response import response_record, response_snapshot
-from onyx.llm.models import Message, ToolResult
+from onyx.llm.models import Message, ToolResultFields
 
 
 class SavedCheckpoint(BaseModel):
@@ -58,10 +58,10 @@ class CheckpointStorage:
         for message in [*response.input_messages, *response.messages]:
             response_details.append(
                 self.serializer.encode_payload(message.details)
-                if isinstance(message, ToolResult)
+                if isinstance(message, ToolResultFields)
                 else None
             )
-            if isinstance(message, ToolResult):
+            if isinstance(message, ToolResultFields):
                 message.details = None
         return SavedCheckpoint(
             response=response,
@@ -84,7 +84,7 @@ class CheckpointStorage:
             saved.response_details,
             strict=True,
         ):
-            if isinstance(message, ToolResult):
+            if isinstance(message, ToolResultFields):
                 message.details = self.serializer.decode_payload(details)
         context = saved.context
         for raw in saved.history:
@@ -92,7 +92,7 @@ class CheckpointStorage:
             details = raw.pop("details", None)
             message = TypeAdapter(Message).validate_python(raw)
             message.metadata = self.serializer.decode_payload(metadata)
-            if isinstance(message, ToolResult):
+            if isinstance(message, ToolResultFields):
                 message.details = self.serializer.decode_payload(details)
             context.messages.append(message)
         if saved.checkpoint is None:

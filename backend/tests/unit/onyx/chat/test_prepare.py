@@ -27,6 +27,7 @@ from onyx.chat.models import (
     ChatHistoryMessage,
     ChatHistoryResult,
     ChatTurnSetup,
+    ContextUserFiles,
     IncognitoAgentResponse,
     IncognitoState,
     PendingChatMessage,
@@ -270,7 +271,8 @@ def _mock_chat_preparation(
     )
 
     monkeypatch.setattr(
-        "onyx.chat.process_message.resolve_context_user_files", lambda *_args: []
+        "onyx.chat.process_message.resolve_context_user_files",
+        lambda *_args: ContextUserFiles(project=[], agent=[]),
     )
     monkeypatch.setattr(
         "onyx.chat.process_message.get_memories",
@@ -280,7 +282,9 @@ def _mock_chat_preparation(
         "onyx.chat.process_message.get_default_base_system_prompt",
         lambda *_args: "System",
     )
-    monkeypatch.setattr("onyx.chat.process_message.list_chat_skills", lambda *_args: [])
+    monkeypatch.setattr(
+        "onyx.chat.process_message.list_chat_skills", lambda *_args, **_kwargs: []
+    )
     monkeypatch.setattr(
         "onyx.chat.process_message.calculate_reserved_tokens", lambda **_kwargs: 100
     )

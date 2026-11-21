@@ -223,10 +223,7 @@ If a request matches multiple built-in App actions, the strictest policy wins: *
 then **Allow**. An uncataloged request to a built-in App falls back to **Ask**.
 Custom Apps use **Ask** for every request matching their configured URL patterns.
 
-Scheduled Tasks have no user present to answer an approval. Each task has its own approval settings.
-The task owner enables the Apps that the task can use and can set actions to **Allow** for that task.
-Task settings apply only when the admin lets users manage approval settings, and they cannot override **Blocked**.
-A run that reaches an **Ask** action stops and waits for the owner.
+Scheduled Tasks run in chat, not in Craft, and cannot use Craft Apps.
 
 ## Generated web apps
 
@@ -271,7 +268,7 @@ The preview runs in a sandboxed iframe, with scripts, forms, and user-initiated 
 | --- | --- |
 | Model-generated code behaves unexpectedly | Keep the sandbox boundary and proxy controls intact; review outputs before using or sharing them. |
 | A Skill contains unsafe instructions or scripts | Review custom Skill bundles before granting broader access. |
-| A user approves an unintended App action | Keep consequential actions on **Ask** or **Blocked** and keep Scheduled Task approval settings narrow. |
+| A user approves an unintended App action | Keep consequential actions on **Ask** or **Blocked**. |
 | Generated content includes sensitive company data | Document permissions protect retrieval, but users remain responsible for generated files and shared web apps. |
 | Prompts and context leave Onyx | Review the data handling terms and configuration of each model provider and external App. |
 | Docker socket compromise affects the host | Use Kubernetes for broader deployments and restrict Docker Compose to trusted, controlled hosts. |

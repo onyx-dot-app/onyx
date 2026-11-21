@@ -82,6 +82,7 @@ task HOOK_EXECUTION_LOG_CLEANUP_TASK: Beat cleanup of old hook execution logs.
 task CLEANUP_IDLE_SANDBOXES: Beat sweep of one tenant's stale and idle sandbox rows.
 task RECONCILE_SANDBOX_RUNTIMES: Beat check of every live sandbox runtime against its tenant's database state.
 task PUSH_SKILLS_TO_USERS: Pushes skills to running sandboxes, out of the request that changed them.
+task SYNC_MARKETPLACE: Syncs one GitHub marketplace when a user asks; downloads and stores many plugin bundles.
 task SCHEDULED_TASKS_DISPATCH_DUE: Beat check that claims due scheduled tasks and sends their runs.
 task SCHEDULED_TASKS_RUN: Runs one user-scheduled Craft task, on the scheduled tasks worker.
 task SCHEDULED_TASKS_CLEANUP_STUCK: Beat cleanup that fails abandoned scheduled runs.

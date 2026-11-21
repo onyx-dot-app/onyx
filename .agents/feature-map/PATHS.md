@@ -52,6 +52,7 @@ covers new files that match it.
 | `backend/onyx/server/query_and_chat/streaming_models.py`, `backend/onyx/server/query_and_chat/placement.py`, `backend/onyx/server/query_and_chat/acp_stream.py` | streaming-protocol |
 | `backend/onyx/server/query_and_chat/token_limit.py` | rate-and-usage-limits |
 | `backend/onyx/secondary_llm_flows/chat_session_naming.py` | chat-persistence |
+| `backend/onyx/chat/session_naming.py` | chat-persistence, core-chat-loop |
 | `backend/onyx/secondary_llm_flows/memory_update.py` | chat-preferences |
 
 ## Backend: tools
@@ -80,7 +81,7 @@ covers new files that match it.
 | `backend/onyx/server/features/search/`, `backend/onyx/server/query_and_chat/query_backend.py`, `backend/ee/onyx/server/query_and_chat/`, `backend/ee/onyx/search/` | internal-search |
 | `web/src/ee/sections/SearchUI.tsx`, `web/src/ee/sections/SearchCard.tsx`, `web/src/ee/lib/search/`, `web/src/ee/providers/QueryControllerProvider.tsx`, `web/src/providers/QueryControllerProvider.tsx` | internal-search |
 | `backend/onyx/document_index/` | document-index |
-| `backend/onyx/server/manage/opensearch_health/`, `web/src/lib/opensearch-health/`, `web/src/sections/banners/OpenSearchResourceWarning.tsx` | document-index |
+| `backend/onyx/server/manage/opensearch_health/`, `backend/ee/onyx/server/service_status/`, `web/src/lib/opensearch-health/`, `web/src/sections/banners/OpenSearchResourceWarning.tsx`, `web/src/lib/service-status/`, `web/src/views/admin/ServiceStatusPage/`, `web/src/app/ee/admin/service-status/` | document-index |
 | `backend/onyx/natural_language_processing/` | document-index, internal-search |
 | `backend/onyx/db/search_settings.py`, `backend/onyx/db/swap_index.py`, `backend/onyx/db/port_attempt.py`, `backend/onyx/db/port_orphan_candidate.py` | document-index |
 | `backend/onyx/redis/redis_document_set.py`, `backend/onyx/redis/redis_usergroup.py`, `backend/ee/onyx/background/celery/tasks/vespa/` | document-index |
@@ -138,7 +139,7 @@ covers new files that match it.
 |---|---|
 | `backend/onyx/db/persona.py`, `backend/onyx/db/persona_sharing.py`, `backend/onyx/db/pinned_personas.py`, `backend/onyx/server/features/persona/`, `backend/onyx/server/features/default_assistant/`, `backend/ee/onyx/db/persona.py` | agents-personas |
 | `backend/onyx/db/projects.py`, `backend/onyx/server/features/projects/` | projects |
-| `backend/onyx/skills/`, `backend/onyx/db/skill.py`, `backend/onyx/db/plugin.py`, `backend/onyx/db/plugin_access.py`, `backend/onyx/db/skill_limit.py`, `backend/onyx/db/app_skill.py`, `backend/onyx/server/features/skill/` | skills |
+| `backend/onyx/skills/`, `backend/onyx/db/skill.py`, `backend/onyx/db/plugin.py`, `backend/onyx/db/plugin_access.py`, `backend/onyx/db/skill_limit.py`, `backend/onyx/db/app_skill.py`, `backend/onyx/db/marketplace.py`, `backend/onyx/integrations/github_auth.py`, `backend/onyx/background/celery/tasks/marketplace_sync/`, `backend/onyx/server/features/skill/` | skills |
 | `backend/onyx/server/features/action_policies/` | craft-external-apps, plugins |
 | `backend/onyx/db/mcp.py`, `backend/onyx/server/features/mcp/`, `backend/onyx/server/features/tool/`, `backend/onyx/db/tools.py` | mcp-and-custom-tools |
 | `backend/onyx/server/features/tool/tool_visibility.py` | mcp-and-custom-tools, plugins |
@@ -240,11 +241,12 @@ covers new files that match it.
 | `backend/onyx/db/action_approval.py` | craft-external-apps |
 | `web/src/sections/actions/PolicyEditor.tsx` | craft-external-apps |
 | `web/src/sections/approvals/`, `web/src/lib/approvals/` | chat-frontend, craft-frontend |
-| `backend/onyx/server/features/build/scheduled_tasks/`, `backend/onyx/db/scheduled_task.py`, `backend/onyx/background/celery/tasks/scheduled_tasks/`, `backend/onyx/background/celery/apps/scheduled_tasks.py` | craft-scheduled-tasks |
+| `backend/onyx/server/features/build/scheduled_tasks/`, `backend/onyx/scheduled_tasks/`, `backend/onyx/db/scheduled_task.py`, `backend/onyx/background/celery/tasks/scheduled_tasks/`, `backend/onyx/background/celery/apps/scheduled_tasks.py` | craft-scheduled-tasks |
 | `backend/onyx/server/features/build/sandbox/` | craft-sandboxes |
 | `deployment/craft-runtime/`, `deployment/craft-fc/rootfs/` | craft-sandboxes |
 | `backend/onyx/server/features/build/sandbox/opencode/`, `backend/onyx/server/features/build/sandbox/event_schema.py`, `backend/onyx/server/features/build/sandbox/sse.py` | craft-streaming |
 | `backend/onyx/server/features/build/sandbox/serve_transport.py` | craft-streaming, craft-sandboxes |
+| `backend/onyx/server/features/build/sandbox/file_copy_state.py` | craft-sandboxes, code-execution |
 | `backend/onyx/server/features/build/sandbox/image/sandbox_daemon/models.py` | craft-sandboxes, craft-sessions |
 | `backend/onyx/server/features/build/session/sandbox_lifecycle.py`, `backend/onyx/db/sandbox.py`, `backend/onyx/server/features/build/session/resource_cleanup.py`, `backend/onyx/background/celery/tasks/build/tasks.py` | craft-sandboxes |
 | `backend/onyx/server/features/build/static_preview.py`, `backend/onyx/server/features/build/webapp_proxy.py`, `backend/onyx/server/features/build/sandbox/nextjs_dev.py`, `backend/onyx/server/features/build/templates/` | craft-webapp-proxy |
@@ -267,7 +269,7 @@ covers new files that match it.
 | `web/src/app/api/[...path]/route.ts` | chat-frontend |
 | `web/next.config.js` | chat-frontend, plugins |
 | `web/src/hooks/useChatController.ts`, `web/src/hooks/useChatSessionController.ts`, `web/src/hooks/useFeedbackController.ts`, `web/src/hooks/useMultiModelChat.ts`, `web/src/hooks/useChatSessions.ts`, `web/src/hooks/useQueuedMessageNavigation.ts`, `web/src/hooks/useDeepResearchToggle.ts`, `web/src/hooks/useContentEditable.ts` | chat-frontend |
-| `web/src/sections/chat/`, `web/src/sections/sidebar/`, `web/src/lib/app/components/AccountPopover.tsx`, `web/src/lib/app/components/AboutDetails.tsx`, `web/src/sections/document-sidebar/`, `web/src/sections/input/`, `web/src/lib/chat/`, `web/src/lib/multiModel/`, `web/src/lib/sandbox/`, `web/src/lib/sidebar/`, `web/src/lib/searchFilters/`, `web/src/sections/modals/ShareChatSessionModal.tsx` | chat-frontend |
+| `web/src/sections/chat/`, `web/src/sections/sidebar/`, `web/src/lib/app/components/AccountPopover.tsx`, `web/src/lib/app/components/AboutDetails.tsx`, `web/src/sections/document-sidebar/`, `web/src/sections/input/`, `web/src/lib/chat/`, `web/src/lib/chatScroll/`, `web/src/lib/multiModel/`, `web/src/lib/sandbox/`, `web/src/lib/sidebar/`, `web/src/lib/searchFilters/`, `web/src/sections/modals/ShareChatSessionModal.tsx` | chat-frontend |
 | `web/src/lib/navigation/`, `web/lib/opal/src/navigation/`, `web/tools/oxlint/navigation/` | chat-frontend |
 | `web/src/lib/timeline/` | chat-frontend, craft-frontend |
 | `web/src/lib/app/hooks.ts` | chat-frontend, whitelabelling-and-theme |
@@ -308,6 +310,7 @@ covers new files that match it.
 | `web/tools/prepare-pdf-assets.cjs`, `web/src/lib/readSpreadsheetPreview.ts`, `web/src/lib/spreadsheetPreview.worker.ts`, `web/src/lib/spreadsheetPreview.ts` | craft-frontend |
 | `web/src/lib/docx/`, `web/src/lib/csv.ts` | chat-frontend, craft-frontend |
 | `web/src/app/craft/v1/tasks/` | craft-scheduled-tasks |
+| `web/src/app/app/scheduled-tasks/`, `web/src/sections/scheduledTasks/`, `web/src/lib/scheduledTasks/` | craft-scheduled-tasks |
 | `web/src/app/craft/v1/apps/`, `web/src/hooks/useUserExternalApps.ts` | craft-external-apps |
 | `web/src/app/craft/components/SkillsStaleNotice.tsx`, `web/src/app/craft/components/SkillRuntimeNotice.tsx` | skills |
 | `web/src/app/admin/skills/` | skills |
@@ -348,7 +351,8 @@ covers new files that match it.
 | `web/src/app/admin/voice/`, `web/src/views/admin/VoicePage/`, `web/src/lib/voice/` | voice |
 | `web/src/app/admin/integrations/` | plugins |
 | `web/src/sections/integrations/`, `web/src/lib/integrations/`, `web/src/sections/oauth/IntegrationOAuthCallback.tsx` | plugins |
-| `web/src/sections/plugins/`, `web/src/lib/plugins/` | plugins |
+| `web/src/sections/plugins/`, `web/src/lib/plugins/`, `web/src/sections/modals/plugins/` | plugins |
+| `web/src/sections/marketplaces/`, `web/src/lib/marketplaces/` | skills, plugins |
 | `web/src/sections/actions/`, `web/src/lib/mcp/`, `web/src/app/mcp/oauth/` | plugins, mcp-and-custom-tools |
 | `web/src/app/mcp/[[...path]]/` | mcp-server |
 | `web/src/app/admin/bots/`, `web/src/lib/updateSlackBotField.ts` | slack-bot |

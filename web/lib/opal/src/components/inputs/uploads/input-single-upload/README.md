@@ -44,7 +44,12 @@ A dropped file must match `accept`, and is refused above `maxSizeKb`, as a picke
 | `accept`                              | both | `string`                        | The picker's filter, as the HTML `accept` attribute; a drop must match it                      |
 | `maxSizeKb`                           | both | `number`                        | Rejects a file larger than this                                                                |
 | `onFileSizeExceeded`                  | both | `({ file, maxSizeKb }) => void` | Called when a file is rejected for its size                                                    |
+| `tooltip`                             | both | `string \| RichStr`             | Shown on hover, in any state                                                                   |
 | `id`, `name`, `onBlur`, `data-testid` | both | —                               | Passed to the control (`name` to the hidden file input)                                        |
+
+Inside `InputHorizontal` or `InputVertical`, the row's `disabled` sets the
+`"disabled"` variant, and its `disabledTooltip` replaces `tooltip` while
+disabled.
 
 Without `value`, the control keeps its own. `InputSingleUploadField` binds it to Formik: a `string` field in
 text mode, a `File | null` field in file mode. An upload, paste or clear marks the field touched; a

@@ -180,8 +180,23 @@ export class ChatPage {
     await expect(this.inputBar.textbox).toHaveText("");
   }
 
+  /** Waits until the chat is placed at its opening position and shown. */
+  async waitForScrollReady(): Promise<void> {
+    await this.page.locator('[data-scroll-ready="true"]').waitFor();
+  }
+
+  /** The latest user message's top, relative to the scroll container's. */
+  async latestHumanMessageOffset(): Promise<number> {
+    const container = await this.scrollContainer.boundingBox();
+    const message = await this.humanMessages.last().boundingBox();
+    if (!container || !message) return Number.POSITIVE_INFINITY;
+    return message.y - container.y;
+  }
+
   async scrollTo(position: "top" | "bottom"): Promise<void> {
     await this.scrollContainer.evaluate(async (el, pos) => {
+      // The chat treats an upward scroll as the user's only after input.
+      el.dispatchEvent(new WheelEvent("wheel"));
       el.scrollTo({ top: pos === "top" ? 0 : el.scrollHeight });
       await new Promise<void>((r) => requestAnimationFrame(() => r()));
     }, position);

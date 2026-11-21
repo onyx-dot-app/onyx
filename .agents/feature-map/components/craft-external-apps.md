@@ -33,7 +33,7 @@ and stays retryable after a failure. When the user declines, the agent gets a
 rejection and can choose another way.
 
 The user can set personal Allow, Ask or Blocked choices per action when
-the admin allows it. A scheduled task has its own choices
+the admin allows it. Scheduled tasks run in chat, not in Craft
 ([[craft-scheduled-tasks]]).
 
 The agent never sees the real token or the Craft PAT. It holds a placeholder,
@@ -107,10 +107,8 @@ sandbox process  --HTTP(S)_PROXY-->  sandbox-proxy (GateAddon, addons/gate.py)
 
 **Recognition.** `sandbox_proxy/request_evaluator.py:IntegrationRequestEvaluator`
 loads the integrations the sandbox owner can use. These are the integrations
-that are on for the user ([[mcp-and-custom-tools]] has the access rule). A
-scheduled run uses only the enabled integrations of the task that the
-owner has access to, also those the owner turned off. `GateAddon._running_task_id` finds the task from the
-session tag in one query. `sandbox_proxy/usable_integrations.py:UsableIntegrations`
+that are on for the user ([[mcp-and-custom-tools]] has the access rule).
+`sandbox_proxy/usable_integrations.py:UsableIntegrations`
 caches the integration ids of each user for 30 seconds, and the evaluator and
 the resolver share it. It also caches, for 30 seconds per tenant, one
 `IntegrationMatchTarget` (`sandbox_proxy/resolvers/mcp_matching.py`) for each
@@ -141,21 +139,11 @@ calls the one policy function (`integrations/policy.py:resolve_action_policies`)
 with the interactive approval mode and the stored actions, so Ask keeps the
 approval wait. An interactive session and the task catalog pass empty link
 settings, which inherit each action; no link (`None`) would block each
-action. A scheduled run uses the
-`action_settings` of the `scheduled_task__integration` row of the
-integration; an integration that the task does not have is Blocked.
-`integrations/craft.py:load_task_integrations` reads the
-task integrations once; the Craft MCP config uses that one
-`TaskPlugins` for its integration list and the settings of each integration. The gate maps Allow, Ask and Blocked to the
+action. The gate maps Allow, Ask and Blocked to the
 `ActionPolicy` values that approval rows store (`sandbox_proxy/addons/gate.py:resolve_gate_policies`),
 then forces `unspecified` on an API integration to Ask unless it resolved to
 DENY (`GateAddon._resolve_request_policies`). `AllMatchedActions` sorts actions
 strictest first, and `governing_action` decides the verdict.
-
-**Session and run context.** `db/scheduled_task.py:get_active_scheduled_task_context`
-returns the run for a session only while the run is `RUNNING`. A scheduled
-session with no running run raises, and the gate returns `no_active_session`.
-Only interactive and Slack sessions fall back to personal choices.
 
 **Approvals.** For an Ask verdict, `GateAddon._apply_session_grant` first looks
 for an "approve for session" grant. Otherwise `_persist_approval_row` commits a
@@ -186,8 +174,7 @@ permission on the sandbox: allow for connected, reject for declined.
 `server/features/build/sandbox/util/mcp_config.py:resolve_craft_mcp_servers`
 writes the MCP integrations whose `integration_status` is connected (or that
 have no sign-in) into the opencode config, with each Blocked action as a
-disabled tool. A session of a scheduled run gets only the task integrations,
-also one that the owner turned off ([[craft-scheduled-tasks]]). The web reads
+disabled tool. The web reads
 the Craft apps and MCP servers from the member list (`GET /integrations`,
 `web/src/lib/integrations/craft.ts`), and
 `integrations/craft.py:list_connectable_apps` lists the external apps the user
@@ -297,22 +284,18 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
    A new kind of held request must register in `GateAddon._parked` and
    `_inflight_tasks`, or a shutdown leaves its row pending until the orphan
    window.
-9. `task-authority-ends-with-run` **A task's authority ends with its run.**
-   Policy and recheck read the run on each request. A follow-up message in a
-   finished scheduled session cannot use the task's choices or personal
-   choices.
-10. `pinned-upstream-addresses` **Pinned addresses only.**
-    `GateAddon.server_connect` calls `backend/onyx/sandbox_proxy/destination_policy.py:resolve_destination`
-    and pins the TCP connection to those addresses through
-    `UpstreamEventLoop`. The hostname stays for SNI and certificate checks.
-    Keep the real TLS tests when you upgrade mitmproxy.
-11. `ca-key-stays-in-proxy` **The CA key stays in the proxy.** Kubernetes
+9. `pinned-upstream-addresses` **Pinned addresses only.**
+   `GateAddon.server_connect` calls `backend/onyx/sandbox_proxy/destination_policy.py:resolve_destination`
+   and pins the TCP connection to those addresses through
+   `UpstreamEventLoop`. The hostname stays for SNI and certificate checks.
+   Keep the real TLS tests when you upgrade mitmproxy.
+10. `ca-key-stays-in-proxy` **The CA key stays in the proxy.** Kubernetes
     stores it in a Secret in the proxy namespace and projects only the
     certificate to sandboxes
     (`backend/onyx/sandbox_proxy/certificate_authority/kubernetes.py:K8sSecretCAStore`). Never mount the
     key or the Secret into the sandbox namespace. A CA rotation breaks TLS in
     every running sandbox, because sandboxes install the CA only at boot.
-12. `url-patterns-on-app-row` **URL patterns live on the app row, not the
+11. `url-patterns-on-app-row` **URL patterns live on the app row, not the
     provider.** `backend/onyx/db/integration.py:create_external_app_row__no_commit`
     stores the patterns of the create request; a preset gets the patterns of
     its provider.
@@ -324,7 +307,7 @@ credentials through `OAuthExternalAppProvider.resolve_oauth_flow`.
     (Zendesk fills `{subdomain}` from organization credentials) needs per-row
     resolution. `backend/onyx/integrations/service.py:update_integration__no_commit`
     resolves the patterns again on each save of the preset settings.
-13. `connect-app-idempotent` **A connect-app decision is idempotent and
+12. `connect-app-idempotent` **A connect-app decision is idempotent and
     retryable.** An expired or answered request is a no-op. When the sandbox is
     unreachable the route returns 502 and keeps the pending record, so the
     user can retry. The record expires with the opencode permission wait

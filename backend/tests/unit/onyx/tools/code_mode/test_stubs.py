@@ -971,3 +971,41 @@ def test_details_results_give_the_program_the_declared_details() -> None:
         program_value(function, ToolResult(content=""))
     with pytest.raises(ValueError, match="needs the model"):
         CodeModeResultSpec(kind=CodeModeResultKind.DETAILS)
+
+
+class _TextTool(FakeTool):
+    @property
+    def code_mode_result(self) -> CodeModeResultSpec:
+        return CodeModeResultSpec(kind=CodeModeResultKind.TEXT, annotation="str")
+
+
+class _ResultsTool(FakeTool):
+    @property
+    def code_mode_result(self) -> CodeModeResultSpec:
+        return CodeModeResultSpec(kind=CodeModeResultKind.JSON_OBJECT)
+
+
+def test_a_program_gets_the_full_value_that_the_content_cuts() -> None:
+    stubs = build_tool_stubs(
+        [
+            _StatusTool("status", _unused),
+            _TextTool("text", _unused),
+            _ResultsTool("results", _unused),
+        ]
+    ).functions
+
+    details = ToolResult(
+        content="cut",
+        details=_Status(status="cut"),
+        full_value=_Status(status="whole", exit_code=0),
+    )
+    assert program_value(stubs["status"], details) == {"state": "whole", "exit_code": 0}
+    text = ToolResult(content="he…il", full_value="head and tail")
+    assert program_value(stubs["text"], text) == "head and tail"
+    results = ToolResult(
+        content='{"status": "cut"}', full_value=_Status(status="whole")
+    )
+    assert program_value(stubs["results"], results) == {
+        "state": "whole",
+        "exit_code": None,
+    }

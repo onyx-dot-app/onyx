@@ -10418,7 +10418,8 @@
             "public": "{count, plural, one {# 個のツール} other {# 個のツール}}が見つかりました。このサーバーはログイン不要です。",
             "oauth": "このサーバーは OAuth ログインを使用します。",
             "authUnknown": "このサーバーにはログインが必要です。API キーのヘッダーまたは OAuth を追加してください。",
-            "unreachable": "Onyx はこのサーバーに接続できません。URL を確認してください。"
+            "unreachable": "Onyx はこのサーバーに接続できません。URL を確認してください。",
+            "forbidden": "追加する前にこのサーバーを確認できるのは管理者だけです。このまま追加することもできます。"
           },
           "transport": {
             "title": "トランスポート",
@@ -10672,12 +10673,120 @@
         "saveFailed": "インストール設定を保存できませんでした。",
         "title": "インストール設定",
         "description": "この連携を使える人。利用不可にすると非公開になり、所有者、共有相手、独自の設定を持つグループだけが使えます。所有者と共有相手だけに限定するには、それらのグループ設定を削除してください。",
-        "notAvailable": "非公開。所有者、共有相手、独自の設定を持つグループだけが使えます。"
+        "notAvailable": "非公開。所有者、共有相手、独自の設定を持つグループだけが使えます。",
+        "required": "自分のアカウントでサインインするメンバーは、チャットと Craft を使う前に接続する必要があります。"
       },
       "ownedBy": "所有者: {owner}",
       "groupAccess": {
         "saved": "{name} のグループ設定を保存しました。",
         "saveFailed": "グループ設定を保存できませんでした。"
+      }
+    },
+    "serviceStatus": {
+      "page": {
+        "description": "Onyx インスタンスの現在のリソース使用量と検索クラスターの状態",
+        "refresh": "更新",
+        "refreshFailed": "クラスターの状態を更新できませんでした。ページには前回の結果が表示されています。",
+        "loadFailed": "検索クラスターの状態を読み取れませんでした。OpenSearch に接続できるか確認してください。"
+      },
+      "cluster": {
+        "title": "検索クラスター - OpenSearch",
+        "status": "クラスターの状態",
+        "version": "OpenSearch {version}",
+        "health": "状態 {health}",
+        "updated": "{time}に更新",
+        "dataNodes": "データノード",
+        "shards": "シャード",
+        "shardLayout": "{primaries} × {copies}",
+        "copies": "コピー",
+        "indexSize": "インデックスサイズ",
+        "chunks": "チャンク",
+        "healthGreen": "緑: すべてのシャードコピーが割り当てられています。",
+        "healthYellow": "黄: 一部のレプリカシャードが割り当てられていません。検索は機能しますが、データノードを失うとデータが失われる可能性があります。",
+        "healthYellowSingleNode": "黄: レプリカのコピーには 2 つ目のデータノードが必要です。データノードが 1 つのクラスターでは正常な状態で、検索は動作します。",
+        "healthRed": "赤: 一部のプライマリシャードが割り当てられていないため、インデックスの一部を検索できません。"
+      },
+      "searches": {
+        "loadTitle": "検索負荷",
+        "loadUnit": "回/秒",
+        "timeTitle": "検索レイテンシ",
+        "seconds": "{value} 秒",
+        "milliseconds": "{value} ミリ秒",
+        "loadFailed": "最近の検索を読み取れませんでした。",
+        "p90Note": "(90パーセンタイル)",
+        "p90Row": "p90 {value}",
+        "p10Row": "p10 {value}",
+        "minuteLabel": "{time}: p90 {p90}、p10 {p10}",
+        "rateTooltip": "{rate} 回/秒",
+        "millisecondsUnit": "ミリ秒",
+        "secondsUnit": "秒",
+        "failedInMinute": "{count, plural, other {# 件失敗}}"
+      },
+      "nodes": {
+        "title": "データノード",
+        "disk": "ディスク使用量",
+        "vector": "ベクトルメモリ",
+        "percent": "{value}%",
+        "usedOfTotal": "{used} / {total} {unit}",
+        "shards": "{count, plural, other {# シャード}}",
+        "unnamed": "ノード {number}",
+        "copyName": "OpenSearch のノード名をコピー ({name})"
+      },
+      "indexes": {
+        "title": "インデックス",
+        "chunks": "チャンク",
+        "shards": "シャード",
+        "reindex": "再インデックス",
+        "detail": "埋め込みモデル · {dim} 次元",
+        "deleted": "削除済みチャンク {percent}%",
+        "detailQuantized": "埋め込みモデル · {dim} 次元 · {quantization} ベクトル",
+        "reindexProgress": "現在の {percent}%"
+      },
+      "issues": {
+        "title": "問題と推奨事項",
+        "none": "問題は見つかりませんでした。",
+        "criticalCount": "重大 {count} 件",
+        "warningCount": "{count, plural, other {警告 # 件}}",
+        "nodeCount": "{count} 個のデータノード",
+        "indexSettings": "インデックス設定",
+        "sizingGuide": "サイジングガイド",
+        "clusterRed": {
+          "title": "クラスターの状態が赤です",
+          "description": "一部のプライマリシャードが割り当てられていないため、インデックスの一部を検索できません。OpenSearch のログを確認してください。"
+        },
+        "unassignedShards": {
+          "title": "{value, plural, other {# 個のシャードコピーが割り当てられていません}}",
+          "description": "OpenSearch にはそれらを配置するデータノードがありません。データノードを追加するか、レプリカ数を減らしてください。"
+        },
+        "diskCritical": {
+          "title": "{nodes} のディスクが {value}%",
+          "description": "OpenSearch は 85% でデータノードへのシャード配置を停止します。ストレージまたはデータノードを追加してください。"
+        },
+        "diskWarning": {
+          "title": "{nodes} のディスクが {value}%",
+          "description": "再インデックスには 2 つ目のインデックス用の空き容量が必要です。ストレージまたはデータノードを追加してください。"
+        },
+        "vectorCritical": {
+          "title": "{nodes} のベクトルメモリが {value}%",
+          "description": "ベクトルがメモリに収まらないため、検索はディスクから読み取ります。メモリまたはデータノードを追加するか、より小さいベクトル量子化を使用してください。"
+        },
+        "vectorWarning": {
+          "title": "{nodes} のベクトルメモリが {value}%",
+          "description": "ベクトルがメモリに収まらないと検索が遅くなります。メモリまたはデータノードを追加するか、より小さいベクトル量子化を使用してください。"
+        },
+        "heap": {
+          "title": "{nodes} の JVM ヒープが {value}%",
+          "description": "ヒープがいっぱいになると、OpenSearch はリクエストを拒否することがあります。メモリまたはデータノードを追加してください。"
+        },
+        "indexMissing": {
+          "title": "検索インデックスがありません",
+          "description": "現在の検索設定のインデックスが OpenSearch にないため、検索結果が返りません。OpenSearch のログを確認してから、インデックス設定で再インデックスを開始してください。"
+        },
+        "nodesUnanswered": {
+          "title": "{value, plural, other {# 個のデータノードが応答しませんでした}}",
+          "description": "状態には、これらのノードが報告しなかったディスクやメモリなどの情報が含まれていません。すべてのデータノードが動作していることを確認してから、更新してください。"
+        },
+        "dismiss": "閉じる"
       }
     }
   },
@@ -12503,7 +12612,7 @@
               "between": "{start} – {end} に送信"
             },
             "owner": "所有者: {owner}",
-            "folder": "フォルダー {id} 内",
+            "folder": "フォルダー {name} 内",
             "nodeType": "種類: {type}",
             "author": "送信者: {author}",
             "message": "メッセージ {id}",
@@ -13991,7 +14100,6 @@
     "chatPanel": {
       "input": {
         "continuePlaceholder": "会話を続ける...",
-        "scheduledRunPlaceholder": "スケジュール実行中...",
         "subagentPlaceholder": "メッセージを送るにはメインエージェントに切り替えてください"
       },
       "openSidebar": {
@@ -14009,8 +14117,7 @@
       },
       "toast": {
         "operationWait": "現在の操作が完了するまでお待ちください。",
-        "sandboxWait": "サンドボックスの初期化をお待ちください",
-        "scheduledRunWait": "スケジュール実行が完了するまでお待ちください。"
+        "sandboxWait": "サンドボックスの初期化をお待ちください"
       },
       "loadError": {
         "title": "セッションを読み込めませんでした",
@@ -14461,23 +14568,6 @@
         "button": "サンドボックスを起動"
       }
     },
-    "scheduledRun": {
-      "badge": {
-        "label": "スケジュール済み"
-      },
-      "startedAt": {
-        "label": "{time} に開始"
-      },
-      "status": {
-        "awaitingApproval": "このスケジュール実行は承認待ちです。再開して完了すると追加メッセージを送信できるようになります。",
-        "running": "このスケジュール実行はまだ進行中です。完了すると追加メッセージを送信できるようになります。",
-        "startedBy": "このセッションはスケジュールされたタスク {task} により {time} に開始されました。"
-      },
-      "viewTask": {
-        "ariaLabel": "スケジュールされたタスク {task} を表示。{status}",
-        "label": "タスクを表示"
-      }
-    },
     "setupCard": {
       "appFallback": {
         "label": "外部アプリ {id}"
@@ -14750,7 +14840,8 @@
         },
         "tabs": {
           "dailyWeekly": "毎日 / 毎週",
-          "interval": "間隔"
+          "interval": "間隔",
+          "advanced": "詳細"
         },
         "weekdays": {
           "fri": "金",
@@ -14760,6 +14851,21 @@
           "thu": "木",
           "tue": "火",
           "wed": "水"
+        },
+        "advanced": {
+          "cronLabel": "cron 式",
+          "hint": "5 つのフィールド: 分、時、日、月、曜日。式は UTC で実行されます。",
+          "placeholder": "例: 0 9 * * 1-5"
+        },
+        "errors": {
+          "intervalNotPositiveInteger": "間隔は 1 以上の整数である必要があります。",
+          "minutesIntervalTooLong": "59 分を超える間隔には時間単位を使用してください。",
+          "hoursIntervalTooLong": "23 時間を超える間隔には毎日のスケジュールを使用してください。",
+          "dayIntervalTimeRequired": "日単位の間隔には時刻を選択してください。",
+          "timeRequired": "時刻を選択してください。",
+          "weekdayOutOfRange": "曜日の値は 0〜6（日〜土）である必要があります。",
+          "cronRequired": "cron 式を入力してください。",
+          "cronFieldCount": "cron はちょうど 5 つのフィールド（分 時 日 月 曜日）が必要です。"
         }
       },
       "unviewedResults": "新しい結果"
@@ -16148,6 +16254,9 @@
         },
         "discordBot": {
           "label": "Discord ボット"
+        },
+        "serviceStatus": {
+          "label": "サービスステータス"
         }
       },
       "sections": {
@@ -16225,6 +16334,9 @@
       },
       "customize": {
         "label": "カスタマイズ"
+      },
+      "scheduledTasks": {
+        "label": "スケジュールされたタスク"
       }
     },
     "chatButton": {
@@ -16454,84 +16566,15 @@
         }
       },
       "importGithub": {
-        "cancelButton": {
-          "label": "キャンセル"
-        },
         "doneButton": {
           "label": "完了"
         },
-        "header": {
-          "chooseDescription": "{repository} からスキルを選択してください。",
-          "completeDescription": "スキルに追加された内容を確認してください。",
-          "completeTitle": "GitHub からのインポートが完了しました",
-          "description": "GitHub リポジトリから 1 つ以上のスキルをインポートします。",
-          "title": "GitHub からインポート"
-        },
-        "importError": {
-          "message": "スキルをインポートできませんでした。",
-          "title": "スキルをインポートできませんでした"
-        },
-        "loadError": {
-          "message": "リポジトリを読み込めませんでした。",
-          "title": "リポジトリを読み込めませんでした"
-        },
-        "privateRepos": {
-          "askAdmin": "パブリックリポジトリはそのままインポートできます。プライベートリポジトリをインポートする前に、管理者に GitHub の設定を依頼してください。",
-          "connect": "パブリックリポジトリはそのままインポートできます。プライベートリポジトリをインポートするには GitHub を接続してください。",
-          "connectButton": {
-            "label": "GitHub を接続"
-          },
-          "connected": "パブリックリポジトリはそのままインポートできます。プライベートリポジトリでは、お使いの GitHub 接続を使用します。",
-          "needsConnection": "パブリックリポジトリはそのままインポートできます。プライベートリポジトリには GitHub 接続が必要です。",
-          "setUp": "パブリックリポジトリはそのままインポートできます。プライベートリポジトリをインポートする前に GitHub を設定してください。",
-          "setUpButton": {
-            "label": "GitHub を設定"
-          }
-        },
-        "repositoryInput": {
-          "label": "リポジトリ"
-        },
-        "result": {
-          "disabledCount": "同じ名前のスキルが有効になっているため、{count} 件は無効の状態でインポートしました。",
-          "enabledCount": "{count} 件を自動的に有効にしました。",
-          "failedCount": "{count} 件をインポートできませんでした。",
-          "importedSection": {
-            "title": "インポート済み"
-          },
-          "importedTitle": "{count, plural, one {# 件のスキルをインポートしました} other {# 件のスキルをインポートしました}}",
-          "noneTitle": "インポートされたスキルはありません",
-          "notImportedSection": {
-            "title": "インポートなし"
-          },
-          "notSelectedCount": "{count} 件は選択されていません。"
-        },
-        "selectAll": {
-          "ariaLabel": "インポート可能なすべてのスキルを選択"
-        },
-        "selection": {
-          "label": "インポート可能な{total, plural, one {# 件のスキル} other {# 件のスキル}}のうち {selected} 件を選択中"
-        },
-        "skillCheckbox": {
-          "ariaLabel": "{name} を選択"
-        },
-        "skillTag": {
-          "disabled": "無効",
-          "enabled": "有効"
-        },
         "submitButton": {
           "importLabel": "{count, plural, one {スキルをインポート} other {# 件のスキルをインポート}}",
-          "importingLabel": "インポート中…",
-          "searchLabel": "リポジトリを検索",
-          "searchingLabel": "検索中…"
-        },
-        "unavailableFallback": "このスキルはインポートできません。",
-        "unavailableTag": {
-          "label": "インポート不可"
+          "importingLabel": "インポート中…"
         },
         "sharing": {
-          "title": "インポートするスキルのアクセス権",
-          "configureButton": "アクセス権を設定",
-          "description": "これらのアクセス設定は、選択した{count, plural, one {# 件のスキル} other {# 件のスキル}}すべてに適用されます。"
+          "configureButton": "アクセス権を設定"
         }
       },
       "nameConflict": {
@@ -16648,10 +16691,22 @@
           "remove": "{name} を削除",
           "shared": "このグループと共有済み",
           "settingOnly": "グループ設定のみ"
+        },
+        "plugin": {
+          "installation": {
+            "description": "アクセス権を持つすべての人に対するこのプラグインのインストール方法を選択します。"
+          },
+          "published": {
+            "description": "公開済み。組織の全員がこのプラグインを使用できます。"
+          },
+          "publishWarning": {
+            "description": "保存すると、組織の全員がこのプラグインを使用できるようになります。非公開に戻すことはできません。削除できるのは管理者だけです。",
+            "reviewDescription": "管理者がリクエストを承認するまで、プラグインは非公開のままです。承認後は非公開に戻せません。"
+          },
+          "publishOff": {
+            "description": "管理者が組織への公開をオフにしました。このプラグインの公開を管理者に依頼してください。"
+          }
         }
-      },
-      "placeholders": {
-        "githubRepository": "ona/ripojitori または https://github.com/ona/ripojitori"
       },
       "tabs": {
         "details": "詳細",
@@ -16663,7 +16718,8 @@
         "columns": {
           "version": "バージョン",
           "madeBy": "作成者",
-          "date": "日付"
+          "date": "日付",
+          "manifestVersion": "plugin.json"
         },
         "versionLabel": "バージョン {number}",
         "currentBadge": "現在",
@@ -16686,7 +16742,9 @@
           "back": "すべてのバージョン",
           "loadError": {
             "title": "このバージョンを読み込めませんでした"
-          }
+          },
+          "skills": "スキル · {count}",
+          "integrations": "連携 · {count}"
         },
         "status": {
           "pending": "レビュー待ち",
@@ -16698,15 +16756,14 @@
           "failedToast": "この更新を公開できませんでした。",
           "sentForReviewToast": "バージョン {number} を管理者のレビューに送信しました。",
           "offNotice": "公開はオフになっています。このアップデートの公開を管理者に依頼してください。"
-        }
+        },
+        "noManifestVersion": "なし",
+        "manifestVersion": "plugin.json {version}",
+        "locked": "このプラグインは GitHub から同期されるため、変更は GitHub で行います。"
       }
     },
     "page": {
       "createMenu": {
-        "github": {
-          "description": "リポジトリから1つ以上のスキルをインポートします。",
-          "title": "GitHubからインポート"
-        },
         "scratch": {
           "description": "{appName}で指示を書き、サポートファイルを追加します。",
           "title": "最初から作成"
@@ -16717,6 +16774,10 @@
         "upload": {
           "description": "SKILL.mdファイル、ZIPファイル、またはスキルフォルダをインポートします。",
           "title": "スキルをアップロード"
+        },
+        "marketplace": {
+          "title": "マーケットプレイスを追加",
+          "description": "リポジトリから追加して、そのプラグインを同期します。"
         }
       },
       "empty": {
@@ -16747,10 +16808,12 @@
         "body": "続行すると、現在有効なスキルが無効になり、このスキルが有効になります。",
         "description": "「{name}」という名前のスキルは一度に1つだけ有効にできます。",
         "submit": {
-          "label": "スキルを切り替え",
+          "label": "切り替え",
           "pendingLabel": "切り替え中..."
         },
-        "title": "スキル「{name}」を切り替えますか？"
+        "title": "「{name}」をオンにしますか？",
+        "descriptionNamed": "{names} は「{name}」と同じスキル名をすでに使用しています。一度にオンにできるのは1つだけです。",
+        "bodyNamed": "「{name}」をオンにすると、{names} がオフになります。"
       },
       "toasts": {
         "disableFailed": "{name}を無効にできませんでした",
@@ -16772,6 +16835,9 @@
         },
         "upload": {
           "label": "ドラッグ＆ドロップするか、クリックしてアップロード"
+        },
+        "chooseFolder": {
+          "label": "フォルダーを選択"
         }
       },
       "filesPicker": {
@@ -16795,7 +16861,8 @@
       },
       "upload": {
         "error": {
-          "readFailed": "アップロードされたファイルを読み込めませんでした。"
+          "readFailed": "アップロードされたファイルを読み込めませんでした。",
+          "folderRoot": "{upload, select, plugin {選択したフォルダーの最上位に SKILL.md または plugin.json マニフェストが必要です。} other {選択したフォルダーの最上位に SKILL.md が必要です。}}"
         }
       }
     },
@@ -16938,7 +17005,9 @@
       "sections": {
         "organization": "組織ライブラリ",
         "mine": "マイアップロード",
-        "shared": "あなたと共有"
+        "shared": "あなたと共有",
+        "marketplace": "マーケットプレイスから",
+        "private": "別のユーザー専用"
       },
       "detail": {
         "title": "プラグイン",
@@ -16954,19 +17023,51 @@
           "location": "場所",
           "owner": "所有者",
           "skills": "スキル",
-          "description": "説明"
+          "description": "説明",
+          "version": "plugin.json のバージョン",
+          "author": "作成者",
+          "homepage": "ホームページ",
+          "license": "ライセンス",
+          "notUsed": "Onyx では使用しない部分",
+          "marketplace": "{name} マーケットプレイス、{scope, select, personal {個人} other {会社}}（{repository}）"
         },
         "skills": {
           "off": "オフ",
-          "invalid": "無効"
+          "invalid": "無効",
+          "read": "読む",
+          "readAriaLabel": "スキル {name} を読む",
+          "readFailed": "このスキルを読み込めませんでした。",
+          "noInstructions": "このスキルには手順がありません。"
         },
         "switch": {
           "title": "このプラグインを使用",
-          "description": "オンにすると、デフォルトのエージェントがこのプラグインを使用できます。",
           "label": "{name} を使用",
           "required": "管理者がこのプラグインを必須にしました。オフにできません。",
           "unavailable": "このプラグインのオンとオフを切り替えることはできません。",
-          "failed": "プラグインを変更できませんでした。"
+          "failed": "プラグインを変更できませんでした。",
+          "on": "オン。デフォルトのエージェントはこのプラグインを使用できます。",
+          "off": "オフ。オンにすると、デフォルトのエージェントがこのプラグインを使用できます。",
+          "nameHeld": "{names} が同じスキル名を使用しているため、オフです。代わりにこのプラグインを使うにはオンにしてください。"
+        },
+        "actions": {
+          "share": "共有",
+          "menu": "その他の操作",
+          "uploadVersion": "新しいバージョンをアップロード",
+          "remove": "プラグインを削除"
+        },
+        "remove": {
+          "entityType": "プラグイン",
+          "description": "このプラグインを使用しているすべての人が利用できなくなります。元に戻すことはできません。",
+          "submit": "削除",
+          "pending": "削除中…",
+          "done": "{name} を削除しました。",
+          "failed": "プラグインを削除できませんでした。"
+        },
+        "syncedFrom": "{repository} から同期",
+        "managed": {
+          "title": "マーケットプレイス {name} が管理しています",
+          "description": "Onyx はこのプラグインを {repository} から同期します。GitHub で変更してから、マーケットプレイスを同期してください。",
+          "open": "マーケットプレイスを開く"
         }
       },
       "connection": {
@@ -17063,6 +17164,263 @@
           "label": "完了"
         }
       }
+    },
+    "needs": {
+      "intro": "プラグインが連携へのアクセス権を与えることはありません。各行には、その連携に対するあなた自身の状態が表示されます。オンでない連携がなくても、プラグインは動作します。",
+      "state": {
+        "on": "オン",
+        "turn_on": "オフ",
+        "sign_in": "未サインイン",
+        "no_access": "アクセス権なし",
+        "turned_off": "管理者がオフに設定",
+        "not_added": "未追加",
+        "more_than_one": "複数が一致",
+        "not_supported": "非対応"
+      },
+      "note": {
+        "askAdmin": "管理者に依頼してください",
+        "turnedOff": "管理者がオフにしています",
+        "moreThanOne": "複数の連携が一致します",
+        "notSupported": "Onyx では非対応"
+      },
+      "localServer": "ローカルサーバー",
+      "noUrl": "サーバー URL なし",
+      "turnOn": {
+        "label": "オンにする",
+        "ariaLabel": "{name} をオンにする",
+        "failed": "{name} をオンにできませんでした。"
+      },
+      "add": {
+        "label": "インテグレーションを追加",
+        "ariaLabel": "{name} インテグレーションを追加"
+      },
+      "urlProblem": {
+        "variable": "URL に変数が含まれています。Onyx は変数を埋めません。",
+        "credential": "URL に認証情報が含まれています。Onyx はそれを保存しません。",
+        "invalid": "URL は有効な http または https の URL ではありません。"
+      }
+    },
+    "upload": {
+      "title": "プラグインをアップロード",
+      "description": "Claude Code または Codex のプラグインをアップロードします。.zip ファイルを選択するか、プラグインのフォルダーをここにドラッグしてください。",
+      "reading": "読み込み中…",
+      "requirements": {
+        "title": "Onyx はプラグインの次の部分を使用します:",
+        "skills": "skills/'<name>'/SKILL.md 内のスキル",
+        "mcp": ".mcp.json または plugin.json 内の MCP サーバー",
+        "other": "Onyx はコマンド、エージェント、フック、その他の部分を使用しません。"
+      },
+      "skillOnly": {
+        "title": "このアップロードはスキルです",
+        "description": "plugin.json がありません。続行してスキルとして追加します。",
+        "continue": "続行"
+      },
+      "version": "plugin.json {version}",
+      "target": {
+        "newVersion": "{name} を Onyx バージョン {version} に更新します",
+        "newPlugin": "新しいプラグイン: {name}"
+      },
+      "willBeOff": "プラグインはオフで保存されます。{names} に同じ名前のスキルがあります。",
+      "saveAsNew": {
+        "label": "新しいプラグインとして保存",
+        "description": "この名前のプラグインは変更しません。"
+      },
+      "sections": {
+        "skills": "スキル · {count}",
+        "integrations": "連携 · {count}",
+        "unused": "Onyx では使用しない部分",
+        "warnings": "警告"
+      },
+      "integrationsNote": "保存すると、すでに利用できる連携がオンになります。プラグインが連携へのアクセス権を与えることはありません。",
+      "integrationsNoteOff": "保存後もプラグインはオフのため、インテグレーションはオンになりません。",
+      "unusedParts": {
+        "commands": "コマンド",
+        "agents": "エージェント",
+        "hooks": "フック",
+        "lsp_servers": "LSP サーバー",
+        "output_styles": "出力スタイル",
+        "bin": "実行ファイル (bin)",
+        "themes": "テーマ",
+        "monitors": "モニター"
+      },
+      "cancel": "キャンセル",
+      "save": "保存",
+      "saving": "保存中…",
+      "readFailed": "プラグインを読み込めませんでした。",
+      "saveFailed": "プラグインを保存できませんでした。",
+      "saved": {
+        "newPlugin": "{name} を追加しました。",
+        "newVersion": "{name} を Onyx バージョン {version} に更新しました。",
+        "unchanged": "変更はありません。{name} はすでに Onyx バージョン {version} です。",
+        "off": "{name} を追加しました。{names} に同じ名前のスキルがあるため、オフになっています。"
+      }
+    },
+    "turnOn": {
+      "title": "{name} はオンです",
+      "description": "このプラグインが必要とする連携の一部は、あなたには利用できません。",
+      "note": "それらがなくてもプラグインは動作します。プラグインが連携へのアクセス権を与えることはありません。",
+      "done": "完了"
+    },
+    "marketplaces": {
+      "status": {
+        "ok": "準備完了",
+        "blocked": "インストール不可",
+        "not_supported": "未対応"
+      },
+      "scope": {
+        "personal": "個人",
+        "company": "会社"
+      },
+      "source": {
+        "repository": "リポジトリ",
+        "folder": "フォルダ",
+        "root": "リポジトリのルート",
+        "ref": "ブランチ、タグ、またはコミット",
+        "defaultBranch": "デフォルトブランチ",
+        "commit": "コミット"
+      },
+      "preview": {
+        "title": "{name}: {count, plural, one {追加するプラグイン # 件} other {追加するプラグイン # 件}}",
+        "empty": "このマーケットプレイスにはエントリがありません。",
+        "failedTitle": "Onyx はこのマーケットプレイスを読み取れません",
+        "version": "v{version}",
+        "willInstall": "インストールされるもの",
+        "skills": "{count, plural, one {スキル} other {スキル}}: {names}",
+        "showUnusable": "{count, plural, one {Onyx が使えない # 件のエントリを表示} other {Onyx が使えない # 件のエントリを表示}}",
+        "hideUnusable": "Onyx が使えないエントリを非表示",
+        "summary": "準備完了 {ready} · インストール不可 {blocked} · 非対応 {unsupported}"
+      },
+      "add": {
+        "menuItem": "マーケットプレイスを追加",
+        "title": "マーケットプレイスを追加",
+        "description": "リポジトリから追加します。Onyx は .claude-plugin/marketplace.json ファイルを読み取り、各エントリがプラグインになります。",
+        "confirmTitle": "マーケットプレイスを確認",
+        "confirmDescription": "ソースとプラグインが意図したものか確認してから、マーケットプレイスを追加してください。",
+        "repository": {
+          "title": "リポジトリ",
+          "description": "owner/repo またはリポジトリの URL を入力してください。",
+          "placeholder": "例: anthropics/claude-plugins-official"
+        },
+        "folder": {
+          "title": "フォルダ",
+          "description": ".claude-plugin/marketplace.json があるフォルダ。リポジトリのルートを使う場合は空のままにします。",
+          "placeholder": "例: plugins"
+        },
+        "ref": {
+          "title": "ブランチ、タグ、またはコミット",
+          "description": "空のままにすると、デフォルトブランチを使用します。",
+          "placeholder": "例: main"
+        },
+        "scope": {
+          "title": "マーケットプレイスの種類",
+          "personalDescription": "このマーケットプレイスのプラグインはあなただけが利用できます。",
+          "companyDescription": "このマーケットプレイスのプラグインは、公開済みプラグインと同様に組織が利用できます。"
+        },
+        "defaultAccess": {
+          "title": "デフォルトのアクセス",
+          "description": "このマーケットプレイスの各プラグインのインストール設定。後で個別のプラグインについて変更できます。"
+        },
+        "privateNote": "Onyx は GitHub 接続を使ってプライベートリポジトリを読み取ります。プライベートリポジトリを追加する前に、連携で GitHub を接続してください。",
+        "continue": "続行",
+        "previewing": "読み取り中…",
+        "back": "戻る",
+        "submit": "マーケットプレイスを追加",
+        "adding": "追加中…",
+        "cancel": "キャンセル",
+        "previewFailed": "リポジトリを読み取れませんでした。",
+        "addFailed": "マーケットプレイスを追加できませんでした。",
+        "added": "{name} を追加しました。プラグインは最初の同期後に表示されます。",
+        "duplicate": {
+          "personal": "このマーケットプレイスはすでに追加されています。",
+          "company": "組織はすでにこのマーケットプレイスを利用しています。"
+        }
+      },
+      "sync": {
+        "now": "今すぐ同期",
+        "requested": "{name} の同期を開始しました。",
+        "failed": "同期を開始できませんでした。",
+        "lastSync": "最終同期 {date}",
+        "never": "未同期",
+        "state": {
+          "syncing": "同期中",
+          "failed": "同期に失敗",
+          "not_synced": "未同期",
+          "synced": "同期済み"
+        }
+      },
+      "columns": {
+        "marketplace": "マーケットプレイス",
+        "sync": "同期",
+        "items": "プラグイン"
+      },
+      "items": "{count, plural, one {# 件のプラグイン} other {# 件のプラグイン}}",
+      "tableLabel": "マーケットプレイス",
+      "open": "{name} を開く",
+      "menu": "{name} の操作",
+      "loadFailed": "マーケットプレイスを読み込めませんでした。",
+      "empty": {
+        "title": "マーケットプレイスはまだありません",
+        "description": "GitHub リポジトリを追加して、そのプラグインを取得します。"
+      },
+      "page": {
+        "title": "マーケットプレイス",
+        "description": "プラグインの取得元の GitHub リポジトリとそのソースです。マーケットプレイスを同期すると、GitHub の変更を取得します。"
+      },
+      "attention": {
+        "failedTitle": "{name} の前回の同期に失敗しました"
+      },
+      "defaultAccess": {
+        "title": "デフォルトのアクセス",
+        "description": "{name} のうち、独自の設定がない各プラグインのインストール設定。",
+        "save": "保存",
+        "cancel": "キャンセル",
+        "saved": "デフォルトのアクセスを保存しました。",
+        "failed": "デフォルトのアクセスを保存できませんでした。"
+      },
+      "replaceLogin": {
+        "label": "ログインを置き換え",
+        "description": "あなたとしてリポジトリを同期します。GitHub 接続がある場合は、それを使います。",
+        "done": "Onyx は {name} をあなたとして同期します。",
+        "doneWithoutGithub": "Onyx は {name} をあなたとして同期するようになりましたが、GitHub が接続されていません。Onyx は公開リポジトリのみ読み取れます。連携で GitHub を接続してください。",
+        "failed": "ログインを置き換えられませんでした。"
+      },
+      "remove": {
+        "label": "削除",
+        "title": "{name} を削除しますか？",
+        "description": "マーケットプレイスと{count, plural, one {そのプラグイン} other {その # 件のプラグイン}}を削除します。メンバーはこれらのプラグインを使えなくなります。",
+        "listLabel": "削除するプラグイン",
+        "noPlugins": "このマーケットプレイスにはプラグインがありません。",
+        "confirm": "削除",
+        "done": "{name} を削除しました。",
+        "failed": "マーケットプレイスを削除できませんでした。",
+        "loadFailed": "このマーケットプレイスのプラグインを読み込めませんでした。",
+        "retry": "再試行",
+        "personalDescription": "マーケットプレイスと{count, plural, one {そのプラグイン} other {その # 件のプラグイン}}を削除します。あなたはこれらのプラグインを使えなくなります。"
+      },
+      "detail": {
+        "title": "マーケットプレイス",
+        "description": "このマーケットプレイスのソース、同期、エントリ。",
+        "loadFailed": "マーケットプレイスを読み込めませんでした。",
+        "scope": "種類",
+        "login": "同期ユーザー",
+        "noLogin": "なし。再度同期するにはログインを置き換えてください。",
+        "lastSync": "最終同期",
+        "entries": "エントリ（{count}）",
+        "noEntries": "前回の同期ではエントリが見つかりませんでした。",
+        "close": "閉じる"
+      },
+      "readOnly": "このマーケットプレイスは管理者が管理しています。",
+      "reason": {
+        "skills_and_mcp_only": "Onyx はスキルと MCP サーバーのみを実行します。",
+        "pastLimit": "Onyx はこのリポジトリを読み込みませんでした。",
+        "external_repository_limit": "Onyx が 1 つのマーケットプレイスで同期する外部リポジトリは最大 {limit} 件です。",
+        "external_repository_limit_without_login": "{limit} 件を超える外部リポジトリを同期するには GitHub を接続してください。",
+        "limitTitle": "一部のプラグインは Onyx が読み込まなかったリポジトリから提供されています"
+      },
+      "errors": {
+        "rateLimited": "GitHub の API レート制限に達しました。数分後にもう一度お試しください。制限を引き上げるには GitHub を接続してください。",
+        "rateLimitedUntil": "GitHub の API レート制限に達しました。{time} にリセットされます。制限を引き上げるには GitHub を接続してください。"
+      }
     }
   },
   "integrations": {
@@ -17122,6 +17480,18 @@
         "done": "{name}は組織で利用できるようになりました。",
         "failed": "統合を公開できませんでした。"
       }
+    },
+    "requiredGate": {
+      "title": "業務ツールを接続",
+      "description": "管理者がこれらの連携を必須にしています。続行するには、それぞれを接続してください。",
+      "adminDescription": "メンバーは Onyx を使う前にこれらの連携を接続する必要があります。管理者なので、接続せずに続行できます。",
+      "connected": "接続済み",
+      "progress": "{total} 件中 {connected} 件接続済み",
+      "askAdmin": "{name} に接続できない場合は、管理者に相談してください。今はスキップできます。",
+      "skip": "今はスキップ",
+      "continue": "続行",
+      "signOut": "サインアウト",
+      "signOutFailed": "サインアウトできませんでした。もう一度お試しください。"
     }
   },
   "customize": {
@@ -17149,20 +17519,26 @@
         "label": "追加",
         "upload": "スキルをアップロード",
         "create": "スキルを作成",
-        "github": "GitHub からインポート"
+        "uploadPlugin": "プラグインをアップロード",
+        "marketplace": "マーケットプレイスを追加",
+        "manageMarketplaces": "マーケットプレイスを管理"
       },
       "groups": {
         "mine": "自分が作成",
         "organization": "組織から",
         "shared": "共有されたもの",
-        "builtin": "組み込み"
+        "builtin": "組み込み",
+        "marketplace": "マーケットプレイスから",
+        "private": "他のユーザー専用"
       },
       "source": {
         "mine": "自分",
         "organization": "組織から",
         "sharedBy": "{email} が共有",
         "shared": "共有されたもの",
-        "builtin": "組み込み"
+        "builtin": "組み込み",
+        "marketplace": "{name} から（{scope, select, personal {個人} other {会社}}）",
+        "privateTo": "{email} 専用"
       },
       "subtitle": "{source} · {description}",
       "tag": {
@@ -17224,13 +17600,16 @@
       },
       "empty": {
         "title": "プラグインはまだありません",
-        "description": "スキルを作成します。各スキルが1つのプラグインです。"
+        "description": "プラグインをアップロードするか、GitHub からマーケットプレイスを追加するか、スキルを作成します。各スキルは 1 つのプラグインです。",
+        "upload": "プラグインをアップロード"
       },
       "noMatches": {
         "title": "一致するプラグインはありません",
         "clear": "すべてのプラグインを表示"
       },
-      "intro": "プラグインは、まとめてオンにするスキルをパッケージ化したものです。追加した各スキルは個別のプラグインになります。統合は[統合]タブにあります。"
+      "intro": "プラグインはスキルと、そのスキルに必要な連携をまとめたものです。Claude Code または Codex のプラグインをアップロードするか、GitHub からマーケットプレイスを追加するか、スキルを追加します。追加した各スキルは個別のプラグインになります。",
+      "integrations": "{needed} 件中 {available} 件の連携が利用可能",
+      "nameHeld": "オフ: {names} が同じスキル名を使用しています"
     },
     "skillPage": {
       "title": "スキル",
@@ -17320,9 +17699,163 @@
     },
     "pluginPage": {
       "tabs": {
-        "skills": "スキル · {count}"
+        "skills": "スキル · {count}",
+        "integrations": "連携 · {count}"
       }
     },
     "search": "検索"
+  },
+  "scheduledTasks": {
+    "unviewedResults": "新しい結果",
+    "runStatus": "{status, select, QUEUED {待機中} RUNNING {実行中} AWAITING_APPROVAL {承認待ち} SUCCEEDED {成功} FAILED {失敗} CANCELLED {キャンセル済み} SKIPPED {スキップ} other {不明}}",
+    "taskStatus": "{status, select, ACTIVE {有効} other {一時停止中}}",
+    "schedule": {
+      "cron": "cron (UTC): {cron}",
+      "everyMinutes": "{count, plural, other {# 分ごと}}",
+      "everyHours": "{count, plural, other {# 時間ごと}}",
+      "everyDays": "{count, plural, other {# 日ごとの {time}}}",
+      "daily": "毎日 {time}",
+      "weekly": "{days} の {time}"
+    },
+    "list": {
+      "title": "スケジュールされたタスク",
+      "description": "スケジュールに従ってプロンプトを実行します。各実行は、読んで続けられるチャットとして開きます。",
+      "search": "タスクを検索",
+      "new": "新しいタスク",
+      "never": "なし",
+      "notScheduled": "未スケジュール",
+      "loadFailed": "スケジュールされたタスクを読み込めませんでした。",
+      "open": "{name} を開く",
+      "columns": {
+        "name": "名前",
+        "schedule": "スケジュール",
+        "lastRun": "前回の実行",
+        "nextRun": "次回の実行",
+        "status": "ステータス"
+      },
+      "empty": {
+        "title": "スケジュールされたタスクはまだありません",
+        "description": "タスクを作成して、スケジュールに従ってプロンプトを実行します。"
+      },
+      "noMatches": {
+        "title": "一致するタスクはありません",
+        "description": "別の検索語句またはフィルターをお試しください。"
+      },
+      "filter": {
+        "label": "タスクを絞り込む",
+        "all": "すべてのタスク",
+        "unviewed": "新しい結果"
+      }
+    },
+    "actions": {
+      "runNow": "1回実行",
+      "pause": "一時停止",
+      "resume": "再開",
+      "edit": "編集",
+      "delete": "削除",
+      "menu": "{name} の操作",
+      "toasts": {
+        "runQueued": "「{name}」の実行を開始しました。",
+        "runFailed": "実行を開始できませんでした。",
+        "resumed": "タスクを再開しました。",
+        "paused": "タスクを一時停止しました。",
+        "statusFailed": "タスクのステータスを変更できませんでした。",
+        "deleted": "「{name}」を削除しました。",
+        "deleteFailed": "タスクを削除できませんでした。"
+      },
+      "confirmDelete": {
+        "title": "「{name}」を削除しますか？",
+        "description": "タスクの実行が停止し、実行履歴も削除されます。",
+        "submit": "削除"
+      }
+    },
+    "runs": {
+      "label": "実行履歴",
+      "open": "{time} の実行を開く",
+      "loading": "実行を読み込み中…",
+      "loadFailed": "実行履歴を読み込めませんでした。",
+      "loadMore": "さらに読み込む",
+      "markAllViewed": "すべて既読にする",
+      "markAllViewedFailed": "実行を既読にできませんでした。もう一度お試しください。",
+      "trigger": "{source, select, MANUAL_RUN_NOW {1回実行} other {スケジュール}}",
+      "errorClass": "{errorClass, select, superseded_by_next_fire {キャンセル済み: 承認に誰も応答する前に次の実行が開始されました。} approval_timeout {キャンセル済み: 24 時間以内に誰も承認に応答しませんでした。} user_cancelled {あなたが停止しました。} agent_permission_required {操作に承認が必要でした。} agent_exception {失敗: 実行中にエラーが発生しました。} stuck {失敗: 実行が時間内に開始されませんでした。} timeout {失敗: 実行が 1 時間の上限に達しました。} other {失敗: {errorClass}}}",
+      "columns": {
+        "started": "開始",
+        "status": "ステータス",
+        "duration": "所要時間",
+        "trigger": "トリガー",
+        "detail": "詳細"
+      },
+      "closed": {
+        "queued": "この実行はまだ開始されていないため、開くチャットはありません。",
+        "skipped": "この実行はスキップされたため、開くチャットはありません。",
+        "noChat": "この実行には開くチャットがありません。"
+      },
+      "empty": {
+        "title": "まだ実行はありません",
+        "description": "タスクは発火するたびに実行を追加します。今すぐ開始するには「1回実行」を使用してください。"
+      }
+    },
+    "detail": {
+      "title": "スケジュールされたタスク",
+      "back": "スケジュールされたタスク",
+      "loadFailed": "このスケジュールされたタスクを読み込めませんでした。",
+      "tabs": {
+        "runs": "実行",
+        "overview": "概要"
+      },
+      "overview": {
+        "prompt": "プロンプト",
+        "schedule": "スケジュール",
+        "nextRun": "次回の実行",
+        "notScheduled": "未スケジュール",
+        "lastRun": "前回の実行",
+        "never": "なし"
+      },
+      "switch": {
+        "title": "スケジュールどおりに実行",
+        "label": "{name} をスケジュールどおりに実行"
+      },
+      "menu": "その他の操作"
+    },
+    "editor": {
+      "newTitle": "新しいスケジュールされたタスク",
+      "editTitle": "スケジュールされたタスクを編集",
+      "description": "各実行は、デフォルトのエージェントを使用する新しいチャットにプロンプトを送信します。",
+      "back": "戻る",
+      "loadFailed": "このスケジュールされたタスクを読み込めませんでした。",
+      "save": "保存",
+      "saveAndRun": "保存して今すぐ実行",
+      "errors": {
+        "nameRequired": "名前を入力してください。",
+        "promptRequired": "プロンプトを入力してください。"
+      },
+      "toasts": {
+        "created": "スケジュールされたタスクを作成しました。",
+        "createdAndRun": "スケジュールされたタスクを作成しました。最初の実行を開始しました。",
+        "updated": "スケジュールされたタスクを更新しました。",
+        "saveFailed": "スケジュールされたタスクを保存できませんでした。"
+      },
+      "fields": {
+        "name": {
+          "label": "名前",
+          "placeholder": "例: 顧客エスカレーションの週次ダイジェスト"
+        },
+        "prompt": {
+          "label": "プロンプト",
+          "description": "各実行は、このメッセージを新しいチャットに送信します。",
+          "placeholder": "各実行で行うことを説明してください"
+        },
+        "schedule": {
+          "label": "スケジュール"
+        }
+      }
+    },
+    "banner": {
+      "title": "{task} のスケジュール実行",
+      "inFlight": "{status, select, AWAITING_APPROVAL {この実行は下であなたの承認を待っています。} other {この実行は進行中です。}}",
+      "startedAt": "{time} に開始",
+      "viewTask": "タスクを表示"
+    }
   }
 }

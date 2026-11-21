@@ -8,6 +8,11 @@ are returned as-is with no wrapping. Uses Radix Tooltip primitives internally.
 Hover is Radix's to track. There is no controlled `open` — use `suppressed` to turn a tooltip
 off while keeping the trigger mounted.
 
+A press on a disabled control (`aria-disabled="true"`) inside the trigger does not close the
+tooltip. It closes on blur or when the pointer leaves. A row's `disabledTooltip` follows the row's
+hover instead: it opens over the row and closes when the pointer leaves the row. For a labeled input, give the reason as its row's `disabledTooltip` (see the input
+layouts README); other inputs take a `tooltip` prop.
+
 ## Props
 
 | Prop            | Type                                     | Default    | Description                                                                                                    |

@@ -17,8 +17,6 @@ import {
   interruptMessageStream,
   processSSEStream,
   fetchSession,
-  fetchScheduledRunEventStream,
-  fetchScheduledRunContext,
   RateLimitedError,
 } from "@/app/craft/services/apiServices";
 import { CRAFT_GATEWAY_PROVIDER } from "@/app/craft/onboarding/constants";
@@ -1388,118 +1386,13 @@ export function useBuildStreaming({
     [requestStop, cancelLatestInFlightToolCallStreamItem]
   );
 
-  const streamScheduledRunEvents = useCallback(
-    async (
-      sessionId: string,
-      runId: string,
-      signal: AbortSignal,
-      onSettled?: () => void
-    ): Promise<void> => {
-      const owner = useBuildSessionStore.getState().sessions.get(sessionId);
-      if (!owner || signal.aborted) return;
-      const ownsScheduledStream = (): boolean => {
-        const current = useBuildSessionStore.getState().sessions.get(sessionId);
-        return (
-          !signal.aborted &&
-          current?.instanceId === owner.instanceId &&
-          current.turnGeneration === owner.turnGeneration
-        );
-      };
-      // A scheduled run owns one session; reattaching does not start a new turn.
-      updateSessionData(sessionId, { status: "running" });
-      clearStreamItems(sessionId);
-      let settledFromTerminalPacket = false;
-      const settleFromTerminalPacket = (): void => {
-        if (!ownsScheduledStream()) return;
-        settledFromTerminalPacket = true;
-        void useBuildSessionStore
-          .getState()
-          .beginTurnSettlement(
-            sessionId,
-            { kind: "scheduled", runId },
-            owner.turnGeneration
-          );
-        onSettled?.();
-      };
-      const processor = createStreamPacketProcessor(sessionId, {
-        signal,
-        onPromptResponse: settleFromTerminalPacket,
-        onTerminalError: settleFromTerminalPacket,
-      });
-
-      try {
-        while (ownsScheduledStream()) {
-          try {
-            const response = await fetchScheduledRunEventStream(
-              sessionId,
-              signal
-            );
-            if (!ownsScheduledStream()) return;
-            await processSSEStream(response, processor.processPacket);
-          } catch (error) {
-            if (
-              signal.aborted ||
-              (error instanceof Error && error.name === "AbortError")
-            )
-              return;
-            if (isAuthStatusError(error) || isNotFoundError(error)) throw error;
-            console.warn("[Streaming] Scheduled run stream error:", error);
-          }
-          if (!ownsScheduledStream() || settledFromTerminalPacket) return;
-          let run: Awaited<ReturnType<typeof fetchScheduledRunContext>>;
-          try {
-            run = await fetchScheduledRunContext(sessionId);
-          } catch (error) {
-            if (!ownsScheduledStream()) return;
-            if (isAuthStatusError(error) || isNotFoundError(error)) throw error;
-            console.warn("[Streaming] Failed to check scheduled run:", error);
-            await sleep(STREAM_RECONNECT_INTERVAL_MS);
-            continue;
-          }
-          if (!ownsScheduledStream() || run.run_id !== runId) return;
-          if (run.status !== "RUNNING" && run.status !== "QUEUED") {
-            await useBuildSessionStore
-              .getState()
-              .beginTurnSettlement(
-                sessionId,
-                { kind: "scheduled", runId },
-                owner.turnGeneration
-              );
-            return;
-          }
-          await sleep(STREAM_RECONNECT_INTERVAL_MS);
-        }
-      } catch (error) {
-        if (ownsScheduledStream())
-          updateSessionData(sessionId, {
-            status: "failed",
-            loadError: error instanceof Error ? error.message : String(error),
-            activeTurnId: null,
-            activeTurnIndex: null,
-            activeTurnLocalOwner: false,
-          });
-      } finally {
-        processor.cancelOutputs();
-        if (ownsScheduledStream() && !settledFromTerminalPacket) onSettled?.();
-      }
-    },
-    [updateSessionData, clearStreamItems, createStreamPacketProcessor]
-  );
-
   return useMemo(
     () => ({
       streamMessage,
       retryQueuedMessage,
       interruptStreaming,
-      streamScheduledRunEvents,
       streamTurnEvents,
     }),
-    [
-      streamMessage,
-      retryQueuedMessage,
-      interruptStreaming,
-      streamScheduledRunEvents,
-      streamTurnEvents,
-    ]
+    [streamMessage, retryQueuedMessage, interruptStreaming, streamTurnEvents]
   );
 }

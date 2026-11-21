@@ -5,6 +5,7 @@ import { useTranslations } from "next-intl";
 import { InputSingleSelect, InputTypeIn, Tag, Text } from "@opal/components";
 import { InputVertical, Section } from "@opal/layouts";
 import { IconLoader } from "@opal/loaders";
+import { FetchError } from "@/lib/fetcher";
 import { streamMCPServerProbe } from "@/lib/mcp/svc";
 import { SUGGESTED_MCP_PLUGINS } from "@/lib/plugins/catalog";
 import type { MCPSetupProbeResult } from "@/lib/mcp/types";
@@ -16,6 +17,7 @@ const TRANSPORTS: readonly McpTransport[] = ["STREAMABLE_HTTP", "SSE"];
 type ProbeState =
   | { kind: "idle" }
   | { kind: "checking" }
+  | { kind: "forbidden" }
   | { kind: "done"; result: MCPSetupProbeResult };
 
 interface McpServerFieldsProps {
@@ -62,7 +64,13 @@ export default function McpServerFields({
           () => undefined,
           controller.signal
         );
-      } catch {
+      } catch (failure) {
+        if (controller.signal.aborted) return;
+        // Only admins can check a server. The add still works.
+        if (failure instanceof FetchError && failure.status === 403) {
+          setProbe({ kind: "forbidden" });
+          return;
+        }
         result = { kind: "unreachable", reason: "connection_failed" };
       }
       if (controller.signal.aborted) return;
@@ -130,6 +138,11 @@ export default function McpServerFields({
             {t("probe.checking")}
           </Text>
         </Section>
+      )}
+      {probe.kind === "forbidden" && (
+        <Text font="secondary-body" color="text-03">
+          {t("probe.forbidden")}
+        </Text>
       )}
       {probe.kind === "done" && (
         <Text

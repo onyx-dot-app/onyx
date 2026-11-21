@@ -1,6 +1,9 @@
 import io
 import os
-from collections.abc import Callable
+import posixpath
+import string
+import unicodedata
+from collections.abc import Callable, Sequence
 from typing import cast
 from uuid import UUID
 
@@ -8,7 +11,9 @@ from sqlalchemy.orm import Session
 
 from onyx.chat.models import (
     AvailableFiles,
+    ContextUserFiles,
     FileContextResult,
+    PlacedChatFiles,
     PromptMetadata,
     SearchParams,
 )
@@ -41,11 +46,17 @@ from onyx.file_store.utils import (
 from onyx.llm.constants import APPROX_CHARS_PER_TOKEN
 from onyx.llm.models import UserMessage
 from onyx.prompts.chat_prompts import CONTENT_PENDING_NOTICE, CONTENT_UNAVAILABLE_NOTICE
+from onyx.server.features.build.sandbox.harness_base import (
+    AGENT_FILES_DIR,
+    CHAT_FILES_DIR,
+    PROJECT_FILES_DIR,
+)
 from onyx.server.query_and_chat.chat_utils import (
     is_code_interpreter_staged_file,
     mime_type_to_chat_file_type,
 )
 from onyx.tools.models import ChatFile, SearchToolUsage
+from onyx.tools.tool_implementations.sandbox.models import VmChatFile
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
 
@@ -169,26 +180,71 @@ def resolve_context_user_files(
     project_id: int | None,
     user_id: UUID | None,
     db_session: Session,
-) -> list[UserFile]:
-    """Combine project files with a custom persona's files, without duplicates."""
-    user_files: list[UserFile] = []
-    if project_id:
-        user_files.extend(
-            get_user_files_from_project(
-                project_id=project_id,
-                user_id=user_id,
-                db_session=db_session,
-            )
+) -> ContextUserFiles:
+    agent = list(persona.user_files) if persona.id != DEFAULT_PERSONA_ID else []
+    seen = {user_file.id for user_file in agent}
+    project: list[UserFile] = []
+    for user_file in (
+        get_user_files_from_project(
+            project_id=project_id, user_id=user_id, db_session=db_session
         )
-    if persona.id != DEFAULT_PERSONA_ID and persona.user_files:
-        user_files.extend(persona.user_files)
-    seen_ids: set[UUID] = set()
-    selected_files: list[UserFile] = []
-    for user_file in user_files:
-        if user_file.id not in seen_ids:
-            seen_ids.add(user_file.id)
-            selected_files.append(user_file)
-    return selected_files
+        if project_id
+        else []
+    ):
+        if user_file.id not in seen:
+            seen.add(user_file.id)
+            project.append(user_file)
+    return ContextUserFiles(project=project, agent=agent)
+
+
+# The longest file name, in UTF-8 bytes, of the VM's file system.
+_MAX_NAME_BYTES = 255
+
+
+def place_chat_files(
+    uploads: Sequence[UserFile], context_files: ContextUserFiles
+) -> PlacedChatFiles:
+    """The chat files in the chat's sandbox, with their paths relative to the
+    chat's working directory: the chat's uploads (on every branch) in
+    attachments/, and the project's and the agent's files in
+    attachments/project/ and attachments/agent/.
+
+    A path is a function of its file alone, so it never holds another file:
+    `<directory>/<the first 8 hex digits of the file store ID>-<name>`. The
+    name is the last part of the file's name (the file store ID without one),
+    NFC, with control characters replaced by `_`; its stem is cut so that
+    the whole name fits _MAX_NAME_BYTES."""
+    vm_chat_files: list[VmChatFile] = []
+    upload_paths: dict[str, str] = {}
+    for directory, user_files in (
+        (CHAT_FILES_DIR, uploads),
+        (PROJECT_FILES_DIR, context_files.project),
+        (AGENT_FILES_DIR, context_files.agent),
+    ):
+        for user_file in user_files:
+            file_id = user_file.file_id
+            base = "file"
+            for raw in (user_file.name or "", file_id):
+                cleaned = "".join(
+                    "_" if unicodedata.category(char) == "Cc" else char
+                    for char in posixpath.basename(
+                        unicodedata.normalize("NFC", raw).replace("\\", "/")
+                    )
+                )
+                if cleaned not in ("", ".", ".."):
+                    base = cleaned
+                    break
+            prefix = "".join(c for c in file_id if c in string.hexdigits)[:8].lower()
+            stem, extension = os.path.splitext(base)
+            if len(extension.encode()) > _MAX_NAME_BYTES // 2:
+                stem, extension = base, ""
+            room = _MAX_NAME_BYTES - len(f"{prefix}-{extension}".encode())
+            name = f"{prefix}-{stem.encode()[:room].decode(errors='ignore')}{extension}"
+            path = f"{directory}/{name}"
+            vm_chat_files.append(VmChatFile(file_id=file_id, path=path))
+            if directory == CHAT_FILES_DIR:
+                upload_paths[file_id] = path
+    return PlacedChatFiles(files=vm_chat_files, upload_paths=upload_paths)
 
 
 def _extract_text_from_in_memory_file(f: InMemoryChatFile) -> str | None:
@@ -400,14 +456,17 @@ def build_file_context(
     approx_char_count: int | None = None,
     content_pending: bool = False,
     indexed: bool = True,
+    vm_path: str | None = None,
 ) -> FileContextResult:
-    """Build file content and tool metadata with the same file ID."""
+    """Build file content and tool metadata with the same file ID. `vm_path`:
+    the file's path in the chat's sandbox, if it has one."""
+    in_vm = "" if vm_path is None else f"\nIn the VM: {vm_path}"
     if file_type.use_metadata_only():
         message_text: str = (
-            f"File: {filename} (id={tool_file_id})\n"
+            f"File: {filename} (id={tool_file_id}){in_vm}\n"
             "Use the read_file or python tools to access this file's contents."
             if DISABLE_VECTOR_DB
-            else f"File: {filename}\n"
+            else f"File: {filename}{in_vm}\n"
             "This file's contents are not included here. Use your available "
             "tools to read it. Do not guess the contents and do not search "
             "the web for this file."
@@ -425,7 +484,7 @@ def build_file_context(
         notice = (
             CONTENT_PENDING_NOTICE if content_pending else CONTENT_UNAVAILABLE_NOTICE
         )
-        message_text = f"File: {filename}\n{notice}\nEnd of File"
+        message_text = f"File: {filename}{in_vm}\n{notice}\nEnd of File"
         message = UserMessage(
             content=message_text,
             metadata=PromptMetadata(
@@ -433,13 +492,15 @@ def build_file_context(
             ),
         )
     else:
-        message_text = f"File: {filename}\n{content_text or ''}\nEnd of File"
+        message_text = f"File: {filename}{in_vm}\n{content_text or ''}\nEnd of File"
         message = UserMessage(
             content=message_text,
             metadata=PromptMetadata(
-                token_count=token_count,
+                token_count=token_count + len(in_vm) // APPROX_CHARS_PER_TOKEN,
                 file_id=tool_file_id,
-                compaction_text=f"Attached file: {filename} (id={tool_file_id}). Contents omitted from summary input.",
+                compaction_text=f"Attached file: {filename} (id={tool_file_id})."
+                + ("" if vm_path is None else f" In the VM: {vm_path}.")
+                + " Contents omitted from summary input.",
             ),
         )
 

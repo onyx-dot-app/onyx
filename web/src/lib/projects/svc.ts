@@ -34,7 +34,9 @@ export async function createProject(name: string): Promise<Project> {
 export async function uploadFiles(
   files: File[],
   projectId?: number | null,
-  tempIdMap?: Map<string, string>,
+  // The temporary ID of each file, in order; the server returns each with
+  // its file.
+  tempIds?: string[],
   incognitoSessionId?: string | null
 ): Promise<CategorizedFiles> {
   const formData = new FormData();
@@ -46,11 +48,8 @@ export async function uploadFiles(
   if (incognitoSessionId) {
     formData.append("incognito_session_id", incognitoSessionId);
   }
-  if (tempIdMap !== undefined && tempIdMap !== null) {
-    formData.append(
-      "temp_id_map",
-      JSON.stringify(Object.fromEntries(tempIdMap))
-    );
+  if (tempIds !== undefined) {
+    formData.append("temp_ids", JSON.stringify(tempIds));
   }
 
   const response = await fetch("/api/user/projects/file/upload", {

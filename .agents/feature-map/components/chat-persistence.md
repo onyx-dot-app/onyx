@@ -480,7 +480,9 @@ Community downgrade clears it ([[billing]]).
    filters.** Owner history skips incognito; workspace surfaces skip only
    content-free sessions (`db/chat.py:content_persisting_sessions_filter`).
    Every read also skips child sessions (`spawned_by_message_id IS NULL`) and
-   summary rows (`db/chat.py:visible_chat_messages_filter`). A new list,
+   summary rows (`db/chat.py:visible_chat_messages_filter`). Owner history,
+   search and delete-all skip scheduled-run chats
+   (`db/chat.py:not_a_scheduled_run_chat`, [[craft-scheduled-tasks#run-link-hides-chat]]). A new list,
    search or export query that omits one of these leaks rows. Search applies
    the incognito filter to both halves of its union
    (`db/chat_search.py:search_chat_sessions`). Usage exports keep child
