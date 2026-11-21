@@ -26,9 +26,7 @@ from onyx.db.suggested_questions import (
 )
 from onyx.db.users import fetch_user_by_id
 from onyx.secondary_llm_flows.suggested_questions import (
-    build_triage_clients,
     build_writing_llms,
-    triage_chunks,
     write_questions,
 )
 from onyx.server.features.suggested_questions.config import (
@@ -61,7 +59,6 @@ from onyx.server.features.suggested_questions.scheduling import (
 )
 from onyx.server.features.suggested_questions.selection import (
     NothingSearchableYet,
-    best_chunks_per_document,
     choose_documents,
     fetch_chunks,
 )
@@ -325,18 +322,17 @@ def _write_and_test(
     user: User | None,
     clock: "_RunClock",
 ) -> list[PoolQuestion]:
-    """The model steps: triage, the writing call, and the search test. A pool
-    run passes no user; a top-up passes the person."""
+    """The model steps: the writing call and the search test. A pool run
+    passes no user; a top-up passes the person."""
     with get_session_with_current_tenant() as db_session:
         chunks = fetch_chunks(db_session, candidates, tenant_id)
-    passages = best_chunks_per_document(triage_chunks(chunks, build_triage_clients()))
     # Keep the candidates' order (a top-up's private documents first), so the
     # writing call's passage limit drops the least wanted ones.
     rank = {c.document_id: i for i, c in enumerate(candidates)}
-    passages.sort(key=lambda p: rank.get(p.chunk.document_id, len(rank)))
+    chunks.sort(key=lambda chunk: rank.get(chunk.document_id, len(rank)))
     clock.check()
     drafts = write_questions(
-        passages, build_writing_llms(), load_settings().company_name, roles
+        chunks, build_writing_llms(), load_settings().company_name, roles
     )
     clock.check()
     return run_search_test(drafts, user=user, timeout_s=clock.remaining())

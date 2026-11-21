@@ -77,11 +77,8 @@ def run(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     set_(tasks, "worth_running", lambda *_a, **_kw: state["decision"])
     set_(tasks, "get_recently_active_users", lambda _s, _now: [])
     set_(tasks, "choose_documents", lambda *_a, **_kw: state["candidates"])
-    set_(tasks, "fetch_chunks", lambda *_a: [MagicMock()])
-    set_(tasks, "build_triage_clients", list)
-    state["triage"] = MagicMock(return_value=[])
-    set_(tasks, "triage_chunks", state["triage"])
-    set_(tasks, "best_chunks_per_document", lambda t: t)
+    state["chunks"] = [MagicMock(document_id="doc")]
+    set_(tasks, "fetch_chunks", lambda *_a: list(state["chunks"]))
     set_(tasks, "build_writing_llms", lambda: [MagicMock()])
     state["write"] = MagicMock(return_value=[])
     set_(tasks, "write_questions", state["write"])
@@ -147,7 +144,7 @@ def test_a_run_for_a_person_who_is_no_longer_short_is_skipped(
 
     _pool_task_for(str(alice))
 
-    run["triage"].assert_not_called()
+    run["write"].assert_not_called()
     assert run["saved"] is None
 
 
@@ -176,7 +173,7 @@ def test_a_run_for_a_person_who_is_gone_is_skipped(
 
     _pool_task_for(str(uuid4()))
 
-    run["triage"].assert_not_called()
+    run["write"].assert_not_called()
     assert run["saved"] is None
 
 
@@ -205,7 +202,7 @@ def test_pool_run_skipped_makes_no_model_call(run: dict[str, Any]) -> None:
 
     _pool_task()
 
-    run["triage"].assert_not_called()
+    run["write"].assert_not_called()
     run["write"].assert_not_called()
     assert run["saved"] is None
 
@@ -288,7 +285,7 @@ def test_pool_run_retries_when_its_documents_are_not_searchable_yet(
         _pool_task()
 
     assert retry.call_args.kwargs["countdown"] == tasks.SQ_RUN_RETRY_DELAY_S
-    run["triage"].assert_not_called()
+    run["write"].assert_not_called()
     # No run is recorded, so a first run stays a first run.
     assert run["saved"] is None
 
@@ -397,7 +394,7 @@ def test_topup_stops_before_any_model_call(
 
     _topup(person)
 
-    run["triage"].assert_not_called()
+    run["write"].assert_not_called()
     run["write"].assert_not_called()
     assert run["topups"] == []
     assert run["private_saved"] == {}
@@ -560,15 +557,12 @@ def test_passages_keep_the_candidates_order(run: dict[str, Any]) -> None:
         CandidateDocument(document_id=d, kind=QuestionKind.DOCUMENT)
         for d in ("private", "shared")
     ]
-    passages = [
-        MagicMock(chunk=MagicMock(document_id=d)) for d in ("shared", "private")
-    ]
-    run["triage"].return_value = passages
+    run["chunks"] = [MagicMock(document_id=d) for d in ("shared", "private")]
 
     _pool_task()
 
     written = run["write"].call_args.args[0]
-    assert [p.chunk.document_id for p in written] == ["private", "shared"]
+    assert [chunk.document_id for chunk in written] == ["private", "shared"]
     assert run["search_timeout"] is not None
 
 
