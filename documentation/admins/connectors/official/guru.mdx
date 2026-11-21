@@ -1,0 +1,45 @@
+---
+title: "Guru"
+description: "Access cards and collections from Guru"
+---
+
+## How it works
+
+The Guru connector indexes the Cards that the connected Guru user can see. Each Card becomes one document.
+The Card's collection and folders are stored as document metadata.
+
+Onyx checks Guru for new and changed Cards on the connector's refresh schedule. The default is every **30** minutes.
+The Guru connector does not support **Sync with Guru** (permission sync).
+
+## Setting up
+
+### Authorization
+
+<Steps>
+  <Step title="Obtain access token">
+    Create a Guru **User Token** for the account that Onyx indexes as.
+    Follow the [Guru API guide](https://developer.getguru.com/docs/getting-started) for details.
+  </Step>
+</Steps>
+
+<video className="rounded-image" src="/assets/admins/connectors/guru/GuruConnectorAuth.mp4" autoPlay muted loop playsInline aria-label="Guru API dashboard steps to create a User Access Token" />
+
+### Indexing
+
+<Steps>
+  <Step title="Create a credential">
+    Go to **Admin Panel → Connectors** and select **Guru**. Select **New Guru Account**.
+    Enter the user's email in **Guru Account Email** and the User Token in **API Token**, then select **Create**.
+
+    <img className="rounded-image" src="/assets/admins/connectors/guru/GuruConnector.webp" alt="Onyx Guru connector credentials form with username and access token"/>
+  </Step>
+
+  <Step title="Choose document access">
+    Under **Document Access**, select **Everyone in Your Organization** or **Specific Groups**.
+    **Specific Groups** needs the Business or Enterprise tier on Onyx Cloud, or the Enterprise Edition when self-hosted.
+  </Step>
+
+  <Step title="Start indexing">
+    Select **Create Connector** to start indexing.
+  </Step>
+</Steps>

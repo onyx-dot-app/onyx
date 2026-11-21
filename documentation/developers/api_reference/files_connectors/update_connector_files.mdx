@@ -1,0 +1,11 @@
+---
+title: "Update Connector Files"
+openapi: "POST /manage/admin/connector/{connector_id}/files/update"
+---
+
+<Info>
+  **Required permission:** Manage Connectors & Document Sets (`manage:connectors`), or Admin (`admin`).
+</Info>
+
+When you remove files, Onyx queues a prune request to remove their indexed documents. Onyx retries the request,
+with up to three attempts. If pruning fails, check the connector run history and submit a manual prune request.
