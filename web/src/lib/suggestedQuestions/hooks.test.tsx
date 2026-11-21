@@ -137,15 +137,15 @@ describe("checking again while questions are being prepared", () => {
   const preparing: PersonSuggestions = { questions: [], state: "preparing" };
   const ready: PersonSuggestions = { questions: [], state: "ready" };
 
-  test("checks every 10 seconds until just after the server's window", () => {
-    expect(nextPollDelay(preparing, opened, opened)).toBe(10_000);
+  test("checks every 5 seconds until just after the server's window", () => {
+    expect(nextPollDelay(preparing, opened, opened)).toBe(5_000);
     // The server ends "preparing" at 120 s; one more check sees that.
-    expect(nextPollDelay(preparing, opened, opened + 120_000)).toBe(10_000);
-    expect(nextPollDelay(preparing, opened, opened + 130_000)).toBe(0);
+    expect(nextPollDelay(preparing, opened, opened + 120_000)).toBe(5_000);
+    expect(nextPollDelay(preparing, opened, opened + 125_000)).toBe(0);
   });
 
   test("stops once the questions are ready", () => {
-    expect(nextPollDelay(ready, opened, opened + 10_000)).toBe(0);
+    expect(nextPollDelay(ready, opened, opened + 5_000)).toBe(0);
   });
 
   test("does not check before the chat open reached the server", () => {

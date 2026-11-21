@@ -53,20 +53,6 @@ class CandidateDocument(BaseModel):
     owner_ids: list[UUID] = Field(default_factory=list)
 
 
-class TriagedChunk(BaseModel):
-    """A chunk with the decision model's answers about it."""
-
-    chunk: InferenceChunk
-    # Expected usable score, 0 (useless) to 3 (excellent).
-    usable: float
-    # Probability that it reveals private information.
-    sensitive: float
-    # None when the model refused or the rules-only fallback scored it.
-    topic: UseCase | None
-    # Probability that it states a number, date, name or short list.
-    has_fact: float
-
-
 class WrittenQuestion(BaseModel):
     """One question as the writing call returns it, before any check."""
 

@@ -12,7 +12,6 @@ from onyx.server.features.suggested_questions import selection
 from onyx.server.features.suggested_questions.models import (
     CandidateDocument,
     QuestionKind,
-    TriagedChunk,
 )
 
 PROSE = (
@@ -267,37 +266,3 @@ def test_keep_useful_chunks_drops_near_duplicates() -> None:
 )
 def test_looks_useful(content: str, useful: bool) -> None:
     assert selection.looks_useful(content) is useful
-
-
-def _triaged(document_id: str, usable: float, has_fact: float = 0.0) -> TriagedChunk:
-    return TriagedChunk(
-        chunk=_chunk(document_id, int(usable * 10)),
-        usable=usable,
-        sensitive=0.0,
-        topic=None,
-        has_fact=has_fact,
-    )
-
-
-def test_best_chunks_keeps_one_per_document_when_there_are_many() -> None:
-    triaged = [_triaged(f"doc-{i}", 1.0) for i in range(6)] + [
-        _triaged("doc-0", 3.0),
-        # Rounds to the same score as doc-1's other chunk; the fact decides.
-        _triaged("doc-1", 0.9, has_fact=0.9),
-    ]
-
-    best = selection.best_chunks_per_document(triaged)
-
-    assert len(best) == 6
-    assert [(item.usable, item.has_fact) for item in best[:2]] == [
-        (3.0, 0.0),
-        (0.9, 0.9),
-    ]
-
-
-def test_best_chunks_keeps_two_per_document_when_there_are_few() -> None:
-    triaged = [_triaged("doc", score) for score in (1.0, 3.0, 2.0)]
-
-    best = selection.best_chunks_per_document(triaged)
-
-    assert [item.usable for item in best] == [3.0, 2.0]

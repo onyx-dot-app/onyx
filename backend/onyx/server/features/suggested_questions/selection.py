@@ -18,7 +18,6 @@ from onyx.document_index.factory import get_default_document_index
 from onyx.server.features.suggested_questions.config import (
     SQ_CHUNKS_PER_DOC,
     SQ_FETCH_CHUNKS_PER_DOC,
-    SQ_FEW_DOCUMENTS,
     SQ_MAX_LINE_REPEATS,
     SQ_MAX_LINK_RATIO,
     SQ_MAX_WORD_OVERLAP,
@@ -26,12 +25,10 @@ from onyx.server.features.suggested_questions.config import (
     SQ_MIN_LETTER_RATIO,
     SQ_PRIVATE_DOCS_PER_USER,
     SQ_SHARED_DOCS,
-    SQ_TRIAGE_CHUNKS_MAX,
 )
 from onyx.server.features.suggested_questions.models import (
     CandidateDocument,
     QuestionKind,
-    TriagedChunk,
 )
 from onyx.utils.logger import setup_logger
 
@@ -176,15 +173,13 @@ def keep_useful_chunks(chunks: list[InferenceChunk]) -> list[InferenceChunk]:
         kept.append(chunk)
         kept_words.append(words)
         per_document[chunk.document_id] += 1
-        if len(kept) >= SQ_TRIAGE_CHUNKS_MAX:
-            break
     return kept
 
 
 def looks_useful(content: str) -> bool:
     """Cheap rules for chunks with nothing to ask about: too short, mostly
     links, numbers or code, or the same line again and again (footers,
-    tables of contents). Everything else goes to triage."""
+    tables of contents). Everything else goes to the writing call."""
     text = content.strip()
     if len(text) < SQ_MIN_CHUNK_CHARS:
         return False
@@ -197,22 +192,3 @@ def looks_useful(content: str) -> bool:
         return False
     line_counts = Counter(line.strip() for line in text.splitlines() if line.strip())
     return max(line_counts.values(), default=0) <= SQ_MAX_LINE_REPEATS
-
-
-def best_chunks_per_document(triaged: list[TriagedChunk]) -> list[TriagedChunk]:
-    """The best chunks of each document after triage: one per document, or two
-    when fewer than SQ_FEW_DOCUMENTS documents are left, so a small company
-    still gets enough passages. Usable score first, a concrete fact breaks
-    ties."""
-    by_document: dict[str, list[TriagedChunk]] = defaultdict(list)
-    for item in triaged:
-        by_document[item.chunk.document_id].append(item)
-    per_document = 2 if len(by_document) < SQ_FEW_DOCUMENTS else 1
-    return [
-        best
-        for items in by_document.values()
-        # Rounded, so close usable scores tie and a concrete fact decides.
-        for best in sorted(
-            items, key=lambda item: (round(item.usable), item.has_fact), reverse=True
-        )[:per_document]
-    ]
