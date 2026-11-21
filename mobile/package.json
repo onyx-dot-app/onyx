@@ -28,7 +28,7 @@
     "expo-font": "~57.0.1",
     "expo-image": "~57.0.3",
     "expo-image-picker": "~57.0.12",
-    "expo-linking": "~57.0.7",
+    "expo-linking": "~58.0.16",
     "expo-router": "~57.0.15",
     "expo-secure-store": "~57.0.1",
     "expo-splash-screen": "~57.0.7",
