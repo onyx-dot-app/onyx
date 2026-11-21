@@ -198,7 +198,12 @@ fn warn_if_no_session_bus() {
 
 #[cfg(any(test, target_os = "linux"))]
 fn session_bus_findable(address: Option<&std::ffi::OsStr>, runtime_socket: bool) -> bool {
-    address.is_some_and(|a| !a.is_empty()) || runtime_socket
+    // zbus uses the socket only when the variable is unset; a set but
+    // empty address fails to parse.
+    match address {
+        Some(address) => !address.is_empty(),
+        None => runtime_socket,
+    }
 }
 
 /// Only the current answer notifies, and only while the launcher is hidden.
@@ -237,6 +242,7 @@ mod tests {
         assert!(session_bus_findable(None, true));
         assert!(!session_bus_findable(None, false));
         assert!(!session_bus_findable(Some(std::ffi::OsStr::new("")), false));
+        assert!(!session_bus_findable(Some(std::ffi::OsStr::new("")), true));
     }
 
     #[test]
