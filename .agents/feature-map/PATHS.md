@@ -406,7 +406,8 @@ the admin routes and check that each has a row above, run
 | `cli/` | The Onyx CLI client. Only its packet parser has an owner (streaming-protocol). |
 | `tools/`, `backend/scripts/`, `backend/lint/`, `backend/requirements/` | Developer tooling and dependency files. |
 | `web/src/lib/common/` | App components meant for any feature: the list states `NoResults` and `NoItems`, and `GridSearchInput`. The agents catalog is their only caller so far. Check the callers. |
-| `web/.oxlintrc.json` | Lint config for `web/`, with the design-system, layout and navigation baselines. A file in a baseline only warns. When you move a baselined file, change its path; never add a new file (`web/AGENTS.md`). |
+| `web/tools/oxlint/anti-slop/` | Oxlint rules for web code, including effect reasons. |
+| `web/.oxlintrc.json` | Lint config for `web/`, with the design-system, layout, navigation, and React effect baselines. A file in a baseline only warns. When you move a baselined file, change its path; never add a new file (`web/AGENTS.md`). |
 | `AGENTS.md` | Repository-wide standards for agents. Read it before changing the repository. |
 | `web/AGENTS.md` | Frontend standards for every agent. Read it before you work in `web/`. |
 | `web/playwright.config.ts` | Shared Playwright projects, retry settings, and reporters for end-to-end tests. |
