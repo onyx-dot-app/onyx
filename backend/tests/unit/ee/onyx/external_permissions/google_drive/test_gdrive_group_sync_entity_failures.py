@@ -11,6 +11,11 @@ import pytest
 from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.google_drive import group_sync
 from ee.onyx.external_permissions.models import SyncEntityFailure
+from onyx.connectors.google_drive.drive_access import (
+    DriveMember,
+    DriveRole,
+    PrincipalType,
+)
 from onyx.connectors.google_drive.source_operations import (
     GoogleDriveSourceOperations,
 )
@@ -34,22 +39,25 @@ def _member(email: str) -> MagicMock:
     return member
 
 
-@patch.object(group_sync, "get_modified_folders")
-def test_failing_user_is_reported_and_the_others_sync(
-    mock_get_modified_folders: MagicMock,
-) -> None:
-    def _folders(ops: Any, user_email: str) -> Iterator[dict[str, Any]]:  # noqa: ARG001
-        if user_email == "b@a.com":
+def test_failing_user_is_reported_and_the_others_sync() -> None:
+    def _folders(**kwargs: Any) -> Iterator[dict[str, Any]]:
+        if kwargs["user_email"] == "b@a.com":
             raise RuntimeError("403 for b")
-        yield _folder(f"folder-{user_email}")
+        yield _folder(f"folder-{kwargs['user_email']}")
 
-    mock_get_modified_folders.side_effect = _folders
+    ops = MagicMock(spec=GoogleDriveSourceOperations)
+    ops.list_folders_with_permissions.side_effect = _folders
+    ops.list_drives.side_effect = lambda **_kwargs: iter([])
     connector = MagicMock()
+    connector.ops = ops
     connector._get_all_user_emails.return_value = ["a@a.com", "b@a.com", "c@a.com"]
 
     items = list(
         group_sync._get_all_folders(
-            google_drive_connector=connector, skip_folders_without_permissions=True
+            google_drive_connector=connector,
+            skip_folders_without_permissions=True,
+            drive_members={},
+            expand_group=lambda _group: [],
         )
     )
 
@@ -87,7 +95,16 @@ def _run_gdrive_group_sync(
         patch.object(
             group_sync,
             "_get_drive_members",
-            return_value={_DRIVE_ID: (set(groups), set())},
+            return_value={
+                _DRIVE_ID: [
+                    DriveMember(
+                        email=group_email,
+                        principal_type=PrincipalType.GROUP,
+                        role=DriveRole.READER,
+                    )
+                    for group_email in groups
+                ]
+            },
         ),
         patch.object(group_sync, "_get_all_google_groups", return_value=list(groups)),
         patch.object(group_sync, "_get_all_folders", return_value=iter([])),
