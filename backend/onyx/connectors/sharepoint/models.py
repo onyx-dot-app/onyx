@@ -106,6 +106,14 @@ class SharepointListingPayload(ListingPayload):
     list_item_id: str | None = None
     # The file's ``parentReference.path``.
     parent_path: str | None = None
+    # The web URL of the library, to address the file's parent folder.
+    drive_web_url: str | None = None
+    # True only when the listing is certain that the file has no permissions
+    # of its own: Graph applied the `hierarchicalsharing` preference to the
+    # delta page, and the file has no `shared` facet. Conversion then gives
+    # the file the access of its parent, with no read for the file. False
+    # is the safe value: the file gets a permission read of its own.
+    inherits_permissions: bool = False
     mime_type: str | None = None
     size: int | None = None
     last_modified_by_display_name: str | None = None

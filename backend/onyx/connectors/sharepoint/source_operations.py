@@ -38,8 +38,10 @@ from onyx.connectors.microsoft_utils.drive_delta import (
     DEFAULT_DRIVE_DELTA_PAGE_SIZE,
     DRIVE_ITEM_FOLDER_PROPERTY,
     DRIVE_ITEM_ID_PROPERTY,
+    HIERARCHICAL_SHARING_PREFERENCE,
     ODATA_DELTA_LINK_PROPERTY,
     ODATA_NEXT_LINK_PROPERTY,
+    PREFER_HEADER,
     DriveDeltaFetchResult,
     fetch_drive_delta_checkpoint_page,
 )
@@ -528,16 +530,26 @@ class SharepointSourceOperations(SourceOperations):
         page_url: str,
         allow_full_resync: bool,
         select_fields: str = DRIVE_ITEM_SELECT_FIELDS,
+        hierarchical_sharing: bool = False,
     ) -> DriveDeltaFetchResult:
         """One page of a drive's delta. ``select_fields`` is the ``$select`` of
-        the URL that a 410 resync starts."""
+        the URL that a 410 resync starts. With ``hierarchical_sharing``, the
+        request asks Graph to give the ``shared`` facet only to an item with
+        permissions of its own. The result's ``applied_preferences`` tells
+        if Graph did so."""
         with raise_microsoft_errors():
             return fetch_drive_delta_checkpoint_page(
                 self._graph_api(),
                 page_url=page_url,
                 drive_id=drive_id,
+                request_headers=(
+                    {PREFER_HEADER: HIERARCHICAL_SHARING_PREFERENCE}
+                    if hierarchical_sharing
+                    else None
+                ),
                 select_fields=select_fields,
                 allow_full_resync=allow_full_resync,
+                read_applied_preferences=hierarchical_sharing,
             )
 
     @source_operation(

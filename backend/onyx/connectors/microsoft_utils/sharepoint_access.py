@@ -56,6 +56,22 @@ class SharepointPermissionCache(BaseModel):
     ) -> None:
         self.group_expansions[key] = expansion
 
+    # The access of a folder or a library, for the files in it that have no
+    # permissions of their own.
+    container_access: dict[str, ExternalAccess] = Field(default_factory=dict)
+
+    def get_container_access(self, key: str) -> ExternalAccess | None:
+        return self.container_access.get(key)
+
+    def set_container_access(self, key: str, access: ExternalAccess) -> None:
+        self.container_access[key] = access
+
+
+# The access of a folder or a library in Redis is used for this long, in one
+# listing run. It is short: a change to a folder's permissions during a long
+# run must reach the files that the run converts later.
+CONTAINER_ACCESS_TTL_SECONDS = 600
+_CONTAINER_ACCESS_KEY_PREFIX = "sharepoint_container_access"
 
 # A group expansion in Redis lives this long. Each key is for one listing run,
 # so this only bounds the memory of a run that ends early.
@@ -108,6 +124,39 @@ class SharedSharepointPermissionCache(SharepointPermissionCache):
             )
         except RedisError as error:
             logger.warning("Could not store a SharePoint group expansion: %s", error)
+
+    def _container_key(self, key: str) -> str:
+        digest = hashlib.sha256(key.encode()).hexdigest()
+        return f"{_CONTAINER_ACCESS_KEY_PREFIX}:{self.scope}:{digest}"
+
+    def get_container_access(self, key: str) -> ExternalAccess | None:
+        """From Redis, where the entry ends after
+        CONTAINER_ACCESS_TTL_SECONDS. When Redis cannot be reached, nothing
+        is kept: each file then reads its parent again, which is safe."""
+        try:
+            # no-direct-redis: allow indexing shares the folder access between workers
+            raw = get_redis_client().get(self._container_key(key))
+        except RedisError:
+            return None
+        if raw is None:
+            return None
+        try:
+            return ExternalAccess.model_validate_json(raw)
+        except ValueError:
+            return None
+
+    def set_container_access(self, key: str, access: ExternalAccess) -> None:
+        try:
+            # no-direct-redis: allow indexing shares the folder access between workers
+            get_redis_client().set(
+                self._container_key(key),
+                access.model_dump_json(),
+                ex=CONTAINER_ACCESS_TTL_SECONDS,
+            )
+        except RedisError as error:
+            logger.warning(
+                "Could not store the access of a SharePoint folder: %s", error
+            )
 
 
 def _noop_external_access(*args: Any, **kwargs: Any) -> ExternalAccess:  # noqa: ARG001

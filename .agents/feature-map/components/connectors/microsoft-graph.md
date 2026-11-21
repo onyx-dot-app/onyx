@@ -198,6 +198,25 @@ run, as before. The checkpoint no longer holds them. The docconversion
 Postgres pool holds a connection for each file thread of the source with the
 most threads (`docconversion_pool_size`).
 
+**SharePoint inherited permissions.** A stub listing with permission sync
+(and `treat_sharing_link_as_public` off) asks each delta page for
+`Prefer: hierarchicalsharing` (`SharepointSourceOperations.get_delta_page`).
+Graph then gives the `shared` facet only to an item with permissions of its
+own. The listing sets `inherits_permissions` on a payload only when Graph
+names the preference in `Preference-Applied` and the file has no `shared`
+facet. Such a listing reads a full pass with the delta and not with
+`/children`, which has no such signal. A connector with excluded paths still
+walks `/children` on a full pass: Graph documents that delta items have no
+`parentReference.path`, and the exclusions match on that path. Conversion gives a file that inherits
+the access of its parent folder, or of the library for a file at the root
+(`SharepointConnector._inherited_access`): one read for each parent in a
+listing run, kept in Redis under `sharepoint_container_access:<run id>:<hash>`
+for at most 10 minutes. A later run reads the parent again. When the read of
+the parent fails, the file gets a read of its own. Every other file, and every
+page, gets a read of its own, as before. The listing selects the `shared`
+facet (`LISTING_SELECT_FIELDS`); without it every file would look as if it
+inherits.
+
 ---
 
 ## Contracts and traps
@@ -236,12 +255,20 @@ most threads (`docconversion_pool_size`).
    accepts only `https` URLs with a `/sites/`, `/teams/` or `/personal/` path
    (`connectors/sharepoint/config.py:is_site_url_well_formed`).
 
-9. `sdk-client-prepared` **Build an office365 client through
+9. `inheritance-fails-closed` **A file inherits only when the listing is
+   certain.** `inherits_permissions` is False when Graph did not answer
+   `Preference-Applied`, when the file came from `/children`, when the parent
+   cannot be read, and with `treat_sharing_link_as_public`. It is also False
+   on a delta that does not come from a start URL of the connector, which
+   asks for `shared` in its `$select`: the cursor of a full pass and the URL
+   of a 410 resync (`current_drive_delta_selects_sharing`). The file then gets
+   a permission read of its own.
+10. `sdk-client-prepared` **Build an office365 client through
    `prepare_sdk_client`.** A `GraphClient` or `ClientContext` built without it
    sends requests that take no cost from the limiter and carry no User-Agent.
    The pacer is read for each request, because the factory gives a connector
    its limiter after its credentials.
-10. `call-cost-from-url` **A new Graph call gets its cost from its URL.** Add a
+11. `call-cost-from-url` **A new Graph call gets its cost from its URL.** Add a
    pattern to `graph_call_type` when a new endpoint has a cost above 1 RU.
 
 ---

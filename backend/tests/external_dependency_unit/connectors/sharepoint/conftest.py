@@ -12,6 +12,7 @@ from pydantic import BaseModel, ConfigDict
 
 from onyx.connectors.models import ConnectorFailure, HierarchyNode, SlimDocumentStub
 from onyx.connectors.sharepoint.connector import SharepointConnector
+from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation,
     global_version,
@@ -292,3 +293,19 @@ def list_stubs(
         listing.largest_checkpoint = max(listing.largest_checkpoint, len(stored))
         checkpoint = connector.validate_checkpoint_json(stored)
     return listing
+
+
+def clear_sharepoint_permission_cache() -> None:
+    """Removes the group expansions and the folder access that conversion
+    keeps in Redis for a listing run, so that a test leaves none behind."""
+    client = get_redis_client()
+    for pattern in ("sharepoint_container_access:*", "sharepoint_group_expansion:*"):
+        for key in client.scan_iter(pattern):
+            client.delete(key)
+
+
+@pytest.fixture(autouse=True)
+def _fresh_sharepoint_permission_cache() -> Iterator[None]:
+    clear_sharepoint_permission_cache()
+    yield
+    clear_sharepoint_permission_cache()

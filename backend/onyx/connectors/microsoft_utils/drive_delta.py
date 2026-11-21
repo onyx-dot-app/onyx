@@ -38,6 +38,7 @@ DEFAULT_DRIVE_DELTA_PAGE_SIZE = 200
 HTTP_GONE_STATUS = 410
 LOCATION_HEADER = "Location"
 PREFER_HEADER = "Prefer"
+PREFERENCE_APPLIED_HEADER = "Preference-Applied"
 HIERARCHICAL_SHARING_PREFERENCE = "hierarchicalsharing"
 SHOW_REMOVED_AS_DELETED_PREFERENCE = "deltashowremovedasdeleted"
 TRAVERSE_PERMISSION_GAPS_PREFERENCE = "deltatraversepermissiongaps"
@@ -190,11 +191,24 @@ class DriveDeltaFetchResult(BaseModel):
     page: DriveDeltaPage
     next_checkpoint_url: str | None = None
     resync_after_410: bool = False
+    # The preferences that Graph says it applied to this page, in lower case.
+    # Empty when the caller did not ask to read them.
+    applied_preferences: frozenset[str] = frozenset()
 
 
 class DriveDeltaResyncPayload(_GraphModel):
     next_link: str | None = Field(default=None, alias=ODATA_NEXT_LINK_PROPERTY)
     delta_link: str | None = Field(default=None, alias=ODATA_DELTA_LINK_PROPERTY)
+
+
+def parse_applied_preferences(response_headers: dict[str, str]) -> frozenset[str]:
+    """The preferences in a ``Preference-Applied`` header, in lower case."""
+    for name, value in response_headers.items():
+        if name.lower() == PREFERENCE_APPLIED_HEADER.lower():
+            return frozenset(
+                part.strip().lower() for part in value.split(",") if part.strip()
+            )
+    return frozenset()
 
 
 def build_onedrive_delta_request_headers() -> dict[str, str]:
@@ -282,10 +296,20 @@ def fetch_drive_delta_checkpoint_page(
     page_size: int = DEFAULT_DRIVE_DELTA_PAGE_SIZE,
     select_fields: str = DRIVE_DELTA_SELECT_FIELDS,
     allow_full_resync: bool = True,
+    read_applied_preferences: bool = False,
 ) -> DriveDeltaFetchResult:
-    """Fetch one page and return the exact cursor the caller can checkpoint."""
+    """Fetch one page and return the exact cursor the caller can checkpoint.
+    With ``read_applied_preferences``, the result names the ``Prefer`` values
+    that Graph applied (its ``Preference-Applied`` header)."""
+    applied_preferences: frozenset[str] = frozenset()
     try:
-        data = client.get_json(page_url, query_params, request_headers)
+        if read_applied_preferences:
+            data, response_headers = client.get_json_with_headers(
+                page_url, query_params, request_headers
+            )
+            applied_preferences = parse_applied_preferences(response_headers)
+        else:
+            data = client.get_json(page_url, query_params, request_headers)
     except requests.HTTPError as error:
         response = error.response
         if (
@@ -316,4 +340,5 @@ def fetch_drive_delta_checkpoint_page(
     return DriveDeltaFetchResult(
         page=page,
         next_checkpoint_url=page.next_link,
+        applied_preferences=applied_preferences,
     )
