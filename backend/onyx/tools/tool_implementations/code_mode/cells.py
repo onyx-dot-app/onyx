@@ -798,13 +798,16 @@ class CodeCell:
         # How the calls that waited for input run when the program resumes, by
         # call index: an answer to their request, or the result they get.
         self._answers: dict[int, NestedInputAnswer | ToolResult] = {}
+        # The budget that the cell takes its running-cell slots from and gives
+        # them back to.
+        self._running_cells = _running_cells
         self._holds_slot = saved is None
         if saved is not None:
             self._restore(saved)
             return
         # Last, so a cell that exists holds a running-cell slot; `_end_program`
         # releases it.
-        if not _running_cells.acquire(self._tenant_id):
+        if not self._running_cells.acquire(self._tenant_id):
             raise _rejected(BUSY_MESSAGE)
 
     def _restore(self, saved: SavedCodeCell) -> None:
@@ -1446,7 +1449,7 @@ class CodeCell:
                 end = self._execute(invocation, None)
             elif parked.monty_version != pydantic_monty.__version__:
                 end = SandboxResult(status="failed", error=PROGRAM_VERSION_MESSAGE)
-            elif _running_cells.acquire(self._tenant_id, wait=self._stopping):
+            elif self._running_cells.acquire(self._tenant_id, wait=self._stopping):
                 with self._lock:
                     self._holds_slot = True
                     self._started_at = time.monotonic() - parked.state.elapsed_seconds
@@ -1583,7 +1586,9 @@ class CodeCell:
         """Give back the running-cell slot; the caller holds the lock."""
         if self._holds_slot:
             self._holds_slot = False
-            _running_cells.release(self._tenant_id, time.monotonic() - self._started_at)
+            self._running_cells.release(
+                self._tenant_id, time.monotonic() - self._started_at
+            )
 
     def _end_program(self, end: SandboxResult) -> None:
         """Commit the program's store writes, make its end visible, end the
