@@ -53,7 +53,24 @@ fn exit_now(app: &tauri::AppHandle) -> ! {
     std::process::exit(code)
 }
 
+/// The app cannot talk to any server without its HTTP client, so it tells
+/// the user why and quits.
+fn startup_failed(error: &str) -> ! {
+    let text = format!(
+        "Onyx could not start secure connections: {error}\n\nCheck this computer's TLS \
+         settings (for example, OPENSSL_CONF), or contact your IT team."
+    );
+    eprintln!("{text}");
+    rfd::MessageDialog::new()
+        .set_level(rfd::MessageLevel::Error)
+        .set_title("Onyx could not start")
+        .set_description(dialog::text(text))
+        .show();
+    std::process::exit(1)
+}
+
 fn main() {
+    let api = api::Api::new().unwrap_or_else(|e| startup_failed(&e));
     let builder = tauri::Builder::default()
         // Must come first: a second launch (or an onyx:// link that starts
         // the app) hands its URL to the running instance and exits.
@@ -84,7 +101,7 @@ fn main() {
             let handle = app.handle();
             let policy = policy::read(handle);
             policy::apply_launch_at_login(handle, &policy);
-            app.manage(AppState::new(ConfigStore::load(config_path), policy));
+            app.manage(AppState::new(ConfigStore::load(config_path), policy, api));
 
             // Windows and Linux: the main window gets its own menu (main_window.rs).
             #[cfg(target_os = "macos")]

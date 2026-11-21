@@ -210,6 +210,8 @@ export type Unreachable =
   | { kind: "timeout" }
   | { kind: "refused" }
   | { kind: "serverError"; status: number }
+  | { kind: "notOnyx" }
+  | { kind: "apiNotRouted" }
   | { kind: "unknown" };
 
 export interface OfflineStatus {
@@ -220,6 +222,8 @@ export interface OfflineStatus {
   nextRetryMs: number | null;
   // Managed policy locks the server, so Change server is hidden.
   serverLocked: boolean;
+  // No automatic checks: only Retry checks again.
+  retryByHand: boolean;
 }
 
 export const OFFLINE_STATUS_EVENT = "offline-status";

@@ -430,6 +430,8 @@ pub async fn open_url(
     let builder = builder.menu(crate::menu::build_window_menu(app).map_err(|e| e.to_string())?);
 
     let window = builder.build().map_err(|e| e.to_string())?;
+    #[cfg(target_os = "linux")]
+    crate::offline::watch_webview_failures(&window);
     // Entering or leaving full screen resizes the window.
     let resize_app = app.clone();
     window.on_window_event(move |event| {
