@@ -38,7 +38,7 @@ DOWNLOAD_LIMITER_API = "download"
 USER_AGENT_HEADER = "User-Agent"
 MICROSOFT_USER_AGENT = f"ISV|Onyx|Onyx/{__version__}"
 
-_THROTTLE_STATUSES: frozenset[int] = frozenset({429, 503})
+THROTTLE_STATUSES: frozenset[int] = frozenset({429, 503})
 _RATE_LIMIT_STATUS = 429
 _SERVER_WAIT_SOURCE = "microsoft_graph"
 
@@ -125,7 +125,7 @@ class MicrosoftRequestPacer:
         """Reports a 429 or 503 answer to the lane of ``call``: the download
         lane for a link download, else the Graph lane. Call it from the
         thread that sent the request, before the retry wait."""
-        if status not in _THROTTLE_STATUSES:
+        if status not in THROTTLE_STATUSES:
             return
         api = (
             DOWNLOAD_LIMITER_API

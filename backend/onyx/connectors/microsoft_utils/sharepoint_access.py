@@ -1,17 +1,27 @@
 """Permission lookups for content in a SharePoint site. The SharePoint
 connector uses them, and so does Teams, whose channel files are in SharePoint."""
 
+import hashlib
 from typing import Any
 
 from pydantic import BaseModel, Field, field_serializer
+
+# no-direct-redis: allow indexing shares the group expansions between workers
+from redis.exceptions import RedisError
 
 from onyx.connectors.microsoft_utils.drive_items import DriveItemData
 from onyx.connectors.microsoft_utils.sharepoint_rest import SharepointPermissionReader
 from onyx.connectors.models import ExternalAccess
 from onyx.db.enums import HierarchyNodeType
+
+# no-direct-redis: allow indexing shares the group expansions between workers
+from onyx.redis.redis_pool import get_redis_client
+from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation_with_fallback,
 )
+
+logger = setup_logger()
 
 
 class SharepointGroup(BaseModel):
@@ -33,7 +43,71 @@ class SharepointGroupExpansion(BaseModel):
 
 
 class SharepointPermissionCache(BaseModel):
+    """The nested groups of each group that a permission read met, so that a
+    group is expanded one time. This one lives in one process."""
+
     group_expansions: dict[str, SharepointGroupExpansion] = Field(default_factory=dict)
+
+    def get_group_expansion(self, key: str) -> SharepointGroupExpansion | None:
+        return self.group_expansions.get(key)
+
+    def set_group_expansion(
+        self, key: str, expansion: SharepointGroupExpansion
+    ) -> None:
+        self.group_expansions[key] = expansion
+
+
+# A group expansion in Redis lives this long. Each key is for one listing run,
+# so this only bounds the memory of a run that ends early.
+GROUP_EXPANSION_TTL_SECONDS = 3600
+_GROUP_EXPANSION_KEY_PREFIX = "sharepoint_group_expansion"
+
+
+class SharedSharepointPermissionCache(SharepointPermissionCache):
+    """A permission cache that also keeps each expansion in Redis, so that the
+    conversion threads of every worker expand a group one time in one listing
+    run. ``scope`` is the id of that run: another run, or a connector with
+    another credential, never reads these keys, so each run sees access as
+    it is when the run reads it. When Redis cannot be reached, the cache
+    works in the process only."""
+
+    scope: str
+
+    def _redis_key(self, key: str) -> str:
+        digest = hashlib.sha256(key.encode()).hexdigest()
+        return f"{_GROUP_EXPANSION_KEY_PREFIX}:{self.scope}:{digest}"
+
+    def get_group_expansion(self, key: str) -> SharepointGroupExpansion | None:
+        local = self.group_expansions.get(key)
+        if local is not None:
+            return local
+        try:
+            # no-direct-redis: allow indexing shares the group expansions between workers
+            raw = get_redis_client().get(self._redis_key(key))
+        except RedisError:
+            return None
+        if raw is None:
+            return None
+        try:
+            expansion = SharepointGroupExpansion.model_validate_json(raw)
+        except ValueError:
+            return None
+        self.group_expansions[key] = expansion
+        return expansion
+
+    def set_group_expansion(
+        self, key: str, expansion: SharepointGroupExpansion
+    ) -> None:
+        self.group_expansions[key] = expansion
+        try:
+            # no-direct-redis: allow indexing shares the group expansions between workers
+            get_redis_client().set(
+                self._redis_key(key),
+                expansion.model_dump_json(),
+                ex=GROUP_EXPANSION_TTL_SECONDS,
+            )
+        except RedisError as error:
+            logger.warning("Could not store a SharePoint group expansion: %s", error)
 
 
 def _noop_external_access(*args: Any, **kwargs: Any) -> ExternalAccess:  # noqa: ARG001

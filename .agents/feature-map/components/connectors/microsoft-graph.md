@@ -144,13 +144,46 @@ drives, delta pages and site pages, with one checkpoint model. The listing
 yields a `SlimDocumentStub` for each file that the fetching path keeps
 (`connectors/sharepoint/listing.py:is_listable_drive_item`) and downloads
 nothing. The payload holds the drive id, the item id, the list ids, the site
-URL and the file fields, and never the `downloadUrl`. A site page is listed
-with no `canvasLayout`. The stub's time and size are those of the document, so
-`drop_unchanged_stubs` drops an unchanged file. The listing selects no
-`content.downloadUrl` (`LISTING_SELECT_FIELDS`). A run starts the delta of a
-drive from a time token, as the fetching path does. The listing does not keep
+URL and the file fields. It also holds the listing's `downloadUrl`, encrypted
+with `onyx.utils.encryption.encrypt_string_to_bytes` as credentials are
+(plain text when the deployment has no key), and the time of the listing. A
+site page is listed with no `canvasLayout`. The stub's time and size are
+those of the document, so `drop_unchanged_stubs` drops an unchanged file. A
+run starts the delta of a drive from a time token, as the fetching path does. The listing does not keep
 the `@odata.deltaLink`: the walk drops items modified after the window end, so
 a run that continued from that link would miss them.
+
+**SharePoint conversion.** `SharepointConnector.resolve_targets` converts a
+batch of stubs in a thread pool of `SHAREPOINT_CONVERSION_WORKERS` (16). A file
+target makes one download from its listed link while the link is younger than
+`connectors/sharepoint/listing.py:DOWNLOAD_URL_MAX_AGE` (45 minutes; links live about one hour),
+which is no Graph call. An older link, a link that does not decrypt, and a
+refused link (any other request error) fall back to `/drives/{d}/items/{i}/content`
+(1 RU) in
+`connectors/microsoft_utils/drive_items.py:extract_drive_item_content`. A
+throttled link (429 or 503) does not fall back, because `/content` redirects to
+the same download host: the pacer reports its Retry-After to the download lane
+of the app, so every link download on the app pauses (Graph calls go on), and
+the link is tried again while it is fresh. A link that stays throttled fails the
+document. A link download costs 0 Graph RU. With
+permission sync, it also makes the role-assignment reads from the list ids of
+the payload. A
+page target makes one read of the page with its canvas. No target makes a
+metadata call, and the listing already yielded the hierarchy nodes. A target
+with no payload goes through `reindex`. The first step of a listing sets
+`listing_run_id` in the checkpoint, and each stub carries it. Conversion keeps
+the group expansions of the permission reads in a
+`SharedSharepointPermissionCache` for that run
+(`connectors/microsoft_utils/sharepoint_access.py`): in the process and in
+Redis under `sharepoint_group_expansion:<run id>:<hash>`, so the threads of
+every worker share the expansion of a group in a run. The cache does not
+lock a key: threads that miss the same group at the same time each read it,
+and the last write wins. A later run, or a connector on
+another credential, never reads these keys. The fetching path, the slim walk
+and permission sync keep the expansions in the connector object only, for one
+run, as before. The checkpoint no longer holds them. The docconversion
+Postgres pool holds a connection for each file thread of the source with the
+most threads (`docconversion_pool_size`).
 
 ---
 
@@ -181,8 +214,11 @@ a run that continued from that link would miss them.
    `seen_hierarchy_node_raw_ids` is cut when the walk leaves a drive and at
    `MAX_SEEN_HIERARCHY_NODE_IDS`. Graph can return one item on two delta pages;
    the item is then converted two times.
-7. `no-download-url-in-payload` **Do not put `downloadUrl` in a listing
-   payload.** It expires in about an hour and it is a credential for the file.
+7. `download-url-encrypted-in-payload` **A listing payload holds `downloadUrl`
+   only encrypted.** It is a credential for the file, so store it through
+   `encrypt_string_to_bytes` and never log it. It expires in about an hour, so
+   use it only while it is younger than `DOWNLOAD_URL_MAX_AGE`, and keep the
+   `/content` fallback.
 8. `site-urls-full` **Site URLs must be full.** The SharePoint `sites` field
    accepts only `https` URLs with a `/sites/`, `/teams/` or `/personal/` path
    (`connectors/sharepoint/config.py:is_site_url_well_formed`).

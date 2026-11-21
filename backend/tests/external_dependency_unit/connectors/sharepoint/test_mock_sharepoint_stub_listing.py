@@ -1,78 +1,30 @@
 """The SharePoint stub listing against the mock server: it lists every file
 and site page that indexing keeps, and it downloads nothing."""
 
+import base64
+import json
 import time
-from collections.abc import Generator
-from datetime import datetime
+from urllib.parse import urlsplit
 
 import pytest
 
+from ee.onyx.utils import encryption as ee_encryption
 from onyx.connectors.load_all import load_all_from_connector
-from onyx.connectors.microsoft_utils.drive_delta import DriveDeltaPage
-from onyx.connectors.microsoft_utils.drive_items import (
-    DRIVE_ITEM_DOWNLOAD_URL_PROPERTY,
-    DriveItemData,
-)
 from onyx.connectors.models import (
     ConnectorFailure,
     Document,
-    HierarchyNode,
     ResolveTarget,
     SlimDocumentStub,
 )
-from onyx.connectors.sharepoint import connector as sharepoint_connector
-from onyx.connectors.sharepoint.connector import SharepointConnector
 from onyx.connectors.sharepoint.listing import (
     SharepointListedKind,
     SharepointListingPayload,
+    fresh_download_url,
 )
 from tests.external_dependency_unit.connectors.sharepoint.conftest import (
     MockSharepoint,
+    list_stubs,
 )
-
-
-class _Listing:
-    def __init__(self) -> None:
-        self.stubs: list[SlimDocumentStub] = []
-        self.nodes: list[HierarchyNode] = []
-        self.failures: list[ConnectorFailure] = []
-        self.steps = 0
-        self.largest_checkpoint = 0
-
-
-def list_stubs(
-    connector: SharepointConnector,
-    start: float = 0,
-    end: float | None = None,
-    include_permissions: bool = False,
-) -> _Listing:
-    """Runs the stub listing to its end, each step from the checkpoint as
-    docfetching stores it."""
-    listing = _Listing()
-    checkpoint = connector.build_dummy_checkpoint()
-    end = time.time() if end is None else end
-    while checkpoint.has_more:
-        listing.steps += 1
-        assert listing.steps < 10_000, "the listing does not end"
-        step = connector.retrieve_slim_docs_from_checkpoint(
-            start, end, checkpoint, include_permissions
-        )
-        while True:
-            try:
-                item = next(step)
-            except StopIteration as stop:
-                checkpoint = stop.value
-                break
-            if isinstance(item, SlimDocumentStub):
-                listing.stubs.append(item)
-            elif isinstance(item, HierarchyNode):
-                listing.nodes.append(item)
-            elif isinstance(item, ConnectorFailure):
-                listing.failures.append(item)
-        stored = checkpoint.model_dump_json()
-        listing.largest_checkpoint = max(listing.largest_checkpoint, len(stored))
-        checkpoint = connector.validate_checkpoint_json(stored)
-    return listing
 
 
 def test_the_listing_has_a_stub_for_each_file_and_page_and_downloads_nothing(
@@ -124,28 +76,39 @@ def test_the_listing_has_a_stub_for_each_file_and_page_and_downloads_nothing(
         assert stub.doc_updated_at is not None and stub.doc_created_at is not None
 
 
-def test_the_listing_selects_no_download_url(
+@pytest.mark.usefixtures("ee_permission_sync")
+def test_the_listing_stores_each_download_link_encrypted(
     mock_sharepoint: MockSharepoint, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """The delta pages of the listing do not carry the download URL of each
-    file: the listing downloads nothing."""
-    listed_files = 0
-    original = sharepoint_connector.iter_delta_page_files
-
-    def spy(
-        page: DriveDeltaPage, start: datetime | None, end: datetime | None
-    ) -> Generator[DriveItemData, None, None]:
-        nonlocal listed_files
-        for item in page.items:
-            assert DRIVE_ITEM_DOWNLOAD_URL_PROPERTY not in item.to_graph_json()
-            listed_files += 0 if item.is_folder else 1
-        yield from original(page, start, end)
-
-    monkeypatch.setattr(sharepoint_connector, "iter_delta_page_files", spy)
+    """Each file's stub keeps the download link that the listing read,
+    encrypted with the deployment's key: the stored stub holds no part of
+    the link. Conversion gets the link back from the stored stub."""
+    keys = json.dumps({"test": base64.b64encode(b"k" * 32).decode()})
+    keyring = ee_encryption.build_keyring("", keys, "test")
+    monkeypatch.setattr(ee_encryption, "get_keyring", lambda: keyring)
 
     listing = list_stubs(mock_sharepoint.build_connector())
 
-    assert listing.stubs and listed_files
+    files = mock_sharepoint.supported_file_ids()
+    file_stubs = [stub for stub in listing.stubs if stub.id in files]
+    assert {stub.id for stub in file_stubs} == files
+    for stub in file_stubs:
+        _assert_link_stored_encrypted(stub)
+
+
+def _assert_link_stored_encrypted(stub: SlimDocumentStub) -> None:
+    stored = stub.model_dump_json()
+    loaded = SlimDocumentStub.model_validate_json(stored)
+    assert loaded.listing_payload is not None
+    payload = loaded.listing_payload.as_type(SharepointListingPayload)
+    assert payload.download_url_listed_at is not None
+    link = fresh_download_url(payload)
+    assert link is not None
+    query = urlsplit(link).query
+    assert "tempauth=" in query
+    for secret in (link, query, base64.b64encode(link.encode()).decode()):
+        assert secret not in stored
+    assert "tempauth" not in stored
 
 
 def test_the_stubs_match_the_documents_of_the_fetching_path(

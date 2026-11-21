@@ -194,11 +194,14 @@ def sleep_and_retry(
 
 
 def retry_wait(
-    response: requests.Response, attempt: int, max_retries: int
+    response: requests.Response,
+    attempt: int,
+    max_retries: int,
+    retryable_statuses: frozenset[int] = GRAPH_API_RETRYABLE_STATUSES,
 ) -> float | None:
     """How long to wait before retrying this answer, or None when it is final:
-    a status Graph asks us to retry, with retries left, waits Retry-After."""
-    if response.status_code not in GRAPH_API_RETRYABLE_STATUSES:
+    a status in ``retryable_statuses``, with retries left, waits Retry-After."""
+    if response.status_code not in retryable_statuses:
         return None
     if attempt >= max_retries:
         return None

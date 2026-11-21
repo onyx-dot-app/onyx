@@ -34,6 +34,7 @@ from onyx.configs.constants import (
 from onyx.connectors.interfaces import Resolver
 from onyx.connectors.models import (
     ConnectorFailure,
+    ConnectorStopSignal,
     Document,
     DocumentFailure,
     HierarchyNode,
@@ -85,8 +86,9 @@ class _FakeConnector(Resolver):
 
     listing_payload_type = _Payload
 
-    def __init__(self, folder_id: str) -> None:
+    def __init__(self, folder_id: str, cc_pair_id: int) -> None:
         self.folder_id = folder_id
+        self.cc_pair_id = cc_pair_id
         self.calls: list[tuple[list[str], bool]] = []
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:  # noqa: ARG002
@@ -118,6 +120,12 @@ class _FakeConnector(Resolver):
                 yield doc
             elif payload.outcome == "raise":
                 raise ConnectionResetError(104, "Connection reset by peer")
+            elif payload.outcome == "stop":
+                # The attempt stops while the connector waits for its budget.
+                RedisConnector(get_current_tenant_id(), self.cc_pair_id).stop.set_fence(
+                    True
+                )
+                raise ConnectorStopSignal("Stop signal while waiting for the budget")
             elif payload.outcome == "failure":
                 yield ConnectorFailure(
                     failed_document=DocumentFailure(document_id=target.document_id),
@@ -143,7 +151,9 @@ class _Run:
         db_session.commit()
         self.attempt_id = attempt.id
         self.tag = uuid4().hex[:8]
-        self.connector = _FakeConnector(folder_id=f"folder_{self.tag}")
+        self.connector = _FakeConnector(
+            folder_id=f"folder_{self.tag}", cc_pair_id=pair.id
+        )
         self.app = MagicMock()
         self.stubs = get_stub_batch_storage(pair.id, self.attempt_id, is_backfill=False)
         self.docs = get_document_batch_storage(
@@ -440,6 +450,41 @@ def test_a_stopped_attempt_converts_nothing(run: _Run, how: str) -> None:
     assert run.stubs.get_batch(0, _Payload) is not None
     assert run.docs.get_batch(0) is None
     assert run.attempt().stub_batches_converted == 0
+    assert run.sends(OnyxCeleryTask.DOCPROCESSING_TASK) == []
+
+
+def test_a_stop_signal_during_conversion_logs_once_and_is_no_failure(
+    run: _Run, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """A stop during a wait for the source budget is normal. The batch is
+    dropped with one INFO line and no traceback, and no failure is stored."""
+    logged: list[tuple[str, str]] = []
+
+    class _Logger:
+        def __getattr__(self, level: str) -> Any:
+            def record(message: str, *args: Any, **_kwargs: Any) -> None:
+                logged.append((level, message % args if args else message))
+
+            return record
+
+    monkeypatch.setattr(run_docconversion, "logger", _Logger())
+    run.store_stub_batch(0, ["document", "stop", "document"])
+    run.dispatch()
+
+    run.convert(0)
+
+    levels = [level for level, _ in logged]
+    assert "exception" not in levels and "error" not in levels
+    dropped = [text for level, text in logged if "Conversion dropped" in text]
+    assert len(dropped) == 1 and "(stop signal)" in dropped[0]
+    assert ("info", dropped[0]) in logged
+    errors = run.db_session.scalars(
+        select(IndexAttemptError).where(
+            IndexAttemptError.index_attempt_id == run.attempt_id
+        )
+    ).all()
+    assert errors == []
+    assert run.docs.get_batch(0) is None
     assert run.sends(OnyxCeleryTask.DOCPROCESSING_TASK) == []
 
 

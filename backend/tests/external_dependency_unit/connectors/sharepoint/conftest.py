@@ -1,6 +1,7 @@
 """Fixtures that point the SharePoint connector at the mock Graph and
 SharePoint server (tests/integration/mock_services/mock_sharepoint_server)."""
 
+import time
 from collections.abc import Iterator
 from typing import Any
 from unittest import mock
@@ -9,6 +10,7 @@ import httpx
 import pytest
 from pydantic import BaseModel, ConfigDict
 
+from onyx.connectors.models import ConnectorFailure, HierarchyNode, SlimDocumentStub
 from onyx.connectors.sharepoint.connector import SharepointConnector
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation,
@@ -35,6 +37,10 @@ _SMALL_CORPUS = {
     "sharing_link_fraction": 0.2,
 }
 _CONFIG = {"corpus": _SMALL_CORPUS, "latency": {"enabled": False}}
+# The module's shared server serves several full runs with permission reads
+# in one minute, which pass the smallest tier. Throttle tests use their own
+# server and set its quota.
+_SHARED_CONFIG = {**_CONFIG, "quota": {"ru_per_minute": 1_000_000}}
 
 
 class MockSharepoint(BaseModel):
@@ -184,7 +190,7 @@ class MockSharepoint(BaseModel):
 
 @pytest.fixture(scope="module")
 def mock_sharepoint_url() -> Iterator[str]:
-    process, url = start_mock_server(_CONFIG)
+    process, url = start_mock_server(_SHARED_CONFIG)
     try:
         yield url
     finally:
@@ -242,3 +248,47 @@ def ee_permission_sync(monkeypatch: pytest.MonkeyPatch) -> Iterator[None]:
     monkeypatch.setattr(global_version, "is_ee_version", lambda: True)
     yield
     fetch_versioned_implementation.cache_clear()
+
+
+class StubListing:
+    def __init__(self) -> None:
+        self.stubs: list[SlimDocumentStub] = []
+        self.nodes: list[HierarchyNode] = []
+        self.failures: list[ConnectorFailure] = []
+        self.steps = 0
+        self.largest_checkpoint = 0
+
+
+def list_stubs(
+    connector: SharepointConnector,
+    start: float = 0,
+    end: float | None = None,
+    include_permissions: bool = False,
+) -> StubListing:
+    """Runs the stub listing to its end, each step from the checkpoint as
+    docfetching stores it."""
+    listing = StubListing()
+    checkpoint = connector.build_dummy_checkpoint()
+    end = time.time() if end is None else end
+    while checkpoint.has_more:
+        listing.steps += 1
+        assert listing.steps < 10_000, "the listing does not end"
+        step = connector.retrieve_slim_docs_from_checkpoint(
+            start, end, checkpoint, include_permissions
+        )
+        while True:
+            try:
+                item = next(step)
+            except StopIteration as stop:
+                checkpoint = stop.value
+                break
+            if isinstance(item, SlimDocumentStub):
+                listing.stubs.append(item)
+            elif isinstance(item, HierarchyNode):
+                listing.nodes.append(item)
+            elif isinstance(item, ConnectorFailure):
+                listing.failures.append(item)
+        stored = checkpoint.model_dump_json()
+        listing.largest_checkpoint = max(listing.largest_checkpoint, len(stored))
+        checkpoint = connector.validate_checkpoint_json(stored)
+    return listing
