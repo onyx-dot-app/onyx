@@ -14,8 +14,10 @@ from sqlalchemy.orm import Session
 
 from onyx.agents.models import RunFailure, RunFailureKind, RunStatus
 from onyx.background.celery.tasks.scheduled_tasks.tasks import (
+    NO_RESPONSE_OLDER_THAN,
     RUN_EXPIRES_SECONDS,
     _cancel_parked_runs,
+    _sync_chat_runs,
     cleanup_stuck_scheduled_runs,
     dispatch_due_scheduled_tasks,
 )
@@ -64,7 +66,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.integrations.models import ActionSettings, EffectivePolicy
 from onyx.integrations.policy import chat_integrations, resolve_chat_action_policy
-from onyx.scheduled_tasks.executor import run_scheduled_task_logic
+from onyx.scheduled_tasks.executor import _start_run, run_scheduled_task_logic
 from onyx.tools.models import IntegrationLinkConfiguration
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.conftest import MakeTestUser
@@ -720,3 +722,71 @@ def test_the_stuck_sweep_skips_a_run_that_a_fire_is_requeuing(
     stuck = find_stuck_runs(db_session=db_session, queued_older_than=stuck_after)
     assert run.id not in {candidate.id for candidate in stuck}
     db_session.rollback()
+
+
+def test_a_run_counts_its_time_from_its_start_not_its_queue_time(
+    db_session: Session,
+    owner: User,
+    cleanup: list[int],  # noqa: ARG001
+) -> None:
+    task = _task(db_session, owner)
+    run = insert_run(
+        db_session=db_session,
+        task_id=task.id,
+        trigger_source=ScheduledTaskTriggerSource.SCHEDULED,
+    )
+    run.started_at = datetime.now(timezone.utc) - timedelta(hours=2)
+    db_session.commit()
+
+    before_start = datetime.now(timezone.utc)
+    assert _start_run(run.id) is not None
+    db_session.expire_all()
+    # The response does not exist yet: the turn has not begun.
+    _sync_chat_runs(
+        db_session, POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, datetime.now(timezone.utc)
+    )
+    db_session.commit()
+
+    db_session.expire_all()
+    assert run.status == ScheduledTaskRunStatus.RUNNING
+    assert run.started_at >= before_start
+
+
+def test_a_started_run_without_a_response_fails_after_the_start_limit(
+    db_session: Session,
+    owner: User,
+    cleanup: list[int],  # noqa: ARG001
+) -> None:
+    task = _task(db_session, owner)
+    now = datetime.now(timezone.utc)
+    runs: list[ScheduledTaskRun] = []
+    for age in (timedelta(minutes=1), NO_RESPONSE_OLDER_THAN + timedelta(minutes=1)):
+        chat = create_chat_session(
+            db_session,
+            description=task.name,
+            user_id=task.user_id,
+            persona_id=DEFAULT_PERSONA_ID,
+        )
+        run = insert_run(
+            db_session=db_session,
+            task_id=task.id,
+            trigger_source=ScheduledTaskTriggerSource.SCHEDULED,
+        )
+        mark_run_status(
+            db_session=db_session,
+            run_id=run.id,
+            status=ScheduledTaskRunStatus.RUNNING,
+            chat_session_id=chat.id,
+            started_at=now - age,
+        )
+        runs.append(run)
+    db_session.commit()
+
+    _sync_chat_runs(db_session, POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, now)
+    db_session.commit()
+
+    db_session.expire_all()
+    fresh, stuck = runs
+    assert fresh.status == ScheduledTaskRunStatus.RUNNING
+    assert stuck.status == ScheduledTaskRunStatus.FAILED
+    assert stuck.error_class == ScheduledTaskErrorClass.STUCK

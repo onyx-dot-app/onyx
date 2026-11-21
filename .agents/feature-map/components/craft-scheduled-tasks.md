@@ -142,8 +142,10 @@ OpenAPI integrations, not API apps without an OpenAPI tool.
 3. `send-expires-and-tenant` **Every send needs `expires=` and `tenant_id`.**
    The dispatcher and `server/features/build/scheduled_tasks/api.py:_enqueue_executor` both expire after
    `SCHEDULED_RUN_QUEUE_RESIDENCY_SECONDS` (3 h), which is also the
-   stuck-queued threshold of both sweepers. The sweepers measure the queue age
-   from `started_at`, so a fire that sends a QUEUED run again resets it.
+   stuck-queued threshold of `cleanup_stuck_scheduled_runs`. While a run is
+   QUEUED, `started_at` is its queue clock: a fire that sends it again resets
+   it. `_start_run` sets it to the real start, and `_sync_chat_runs` fails a
+   started run with no chat response after `NO_RESPONSE_OLDER_THAN` (15 min).
    `find_stuck_runs` locks its candidates (`SKIP LOCKED`), so a sweep cannot
    fail a run that a fire requeues at the same time.
 4. `link-session-before-turn` **The response is the run's source of truth.**

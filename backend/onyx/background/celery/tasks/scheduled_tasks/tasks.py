@@ -65,6 +65,8 @@ DISPATCH_BATCH_SIZE = 50
 # by the same threshold.
 RUN_EXPIRES_SECONDS = SCHEDULED_RUN_QUEUE_RESIDENCY_SECONDS
 STUCK_QUEUED_OLDER_THAN = timedelta(seconds=SCHEDULED_RUN_QUEUE_RESIDENCY_SECONDS)
+# A started run makes its chat response within seconds; counted from the start.
+NO_RESPONSE_OLDER_THAN = timedelta(minutes=15)
 APPROVAL_WAIT_LIMIT = timedelta(hours=24)
 
 
@@ -103,7 +105,7 @@ def _sync_chat_runs(db_session: Session, tenant_id: str, now: datetime) -> None:
                 )
             elif (
                 responses.get(run.id) is None
-                and run.started_at < now - STUCK_QUEUED_OLDER_THAN
+                and run.started_at < now - NO_RESPONSE_OLDER_THAN
             ):
                 mark_run_status(
                     db_session=db_session,

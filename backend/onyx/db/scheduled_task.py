@@ -400,8 +400,12 @@ def mark_run_status(
     error_class: ScheduledTaskErrorClass | None = None,
     error_detail: str | None = None,
     summary: str | None = None,
+    started_at: datetime | None = None,
 ) -> ScheduledTaskRun:
     """Update a run row's status + optional fields.
+
+    A QUEUED run's ``started_at`` is its queue clock; the move to RUNNING
+    passes ``started_at`` so it becomes the real start.
 
     Terminal statuses get ``finished_at = now()``. A move into a status
     with results (``has_results``) advances ``version``.
@@ -427,6 +431,8 @@ def mark_run_status(
         run.error_detail = error_detail
     if summary is not None:
         run.summary = summary
+    if started_at is not None:
+        run.started_at = started_at
     if status.is_terminal():
         run.finished_at = datetime.now(tz=timezone.utc)
     db_session.flush()

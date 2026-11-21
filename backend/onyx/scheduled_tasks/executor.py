@@ -5,6 +5,7 @@ A response that waits for approval parks; the owner's approval resumes it on
 an API server, and the dispatcher brings the run status up to date.
 """
 
+from datetime import datetime, timezone
 from uuid import UUID
 
 from onyx.auth.permissions import has_global_permission
@@ -94,6 +95,7 @@ def _start_run(run_id: UUID) -> tuple[User, UUID, str] | None:
             run_id=run_id,
             status=ScheduledTaskRunStatus.RUNNING,
             chat_session_id=chat_session.id,
+            started_at=datetime.now(tz=timezone.utc),
         )
         db_session.commit()
         return user, chat_session.id, task.prompt
