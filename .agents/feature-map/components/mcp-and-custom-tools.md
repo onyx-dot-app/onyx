@@ -600,7 +600,10 @@ default agent, is Blocked.
    user who can use the agent and has access to the integration, when the
    agent links it (`integrations/chat_tools.py`). The user's on/off choice
    applies only on the default agent. The agent link, a plugin, and old
-   server grants give no access in chat.
+   server grants give no access in chat. While a scheduled run is in flight in
+   the chat, the task's links replace the agent's
+   (`integrations/policy.py:chat_integrations`,
+   [[craft-scheduled-tasks#task-choices-default-ask]]).
 9. `destination-change-deletes-credentials` **A changed URL or sign-in
    setting resets connections.** `integrations/connections.py:sign_in_settings_for`
    includes `sign_in_host`: the MCP server URL, or the OpenAPI server URL, the

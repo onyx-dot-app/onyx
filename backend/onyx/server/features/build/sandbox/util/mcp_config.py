@@ -6,7 +6,6 @@ import hashlib
 import json
 import re
 from collections.abc import Sequence
-from uuid import UUID
 
 from sqlalchemy.orm import Session
 
@@ -19,9 +18,7 @@ from onyx.integrations.actions import integration_actions
 from onyx.integrations.connection_models import ConnectionState
 from onyx.integrations.connections import integration_status
 from onyx.integrations.craft import (
-    TaskIntegrations,
     list_runnable_integrations,
-    load_task_integrations,
     resolve_craft_action_policies,
 )
 from onyx.integrations.models import EffectivePolicy
@@ -44,7 +41,6 @@ def _blocked_actions(
     db_session: Session,
     integration: Integration,
     user: User,
-    task: TaskIntegrations | None,
 ) -> tuple[str, ...]:
     actions = integration_actions(integration.id, db_session)
     policies = resolve_craft_action_policies(
@@ -53,7 +49,6 @@ def _blocked_actions(
         actions=actions,
         action_keys=[action.key for action in actions],
         user_id=user.id,
-        task=task,
     )
     return tuple(
         sorted(
@@ -63,27 +58,15 @@ def _blocked_actions(
 
 
 def resolve_craft_mcp_servers(
-    db_session: Session, user: User, task_id: UUID | None = None
+    db_session: Session, user: User
 ) -> list[CraftMCPServerConfig]:
     """The MCP integrations that are on for ``user``, as opencode config
-    input. A session of a scheduled run (``task_id``) gets only the task
-    integrations that the owner has access to, also one the owner turned off, and the
-    task settings decide its disabled tools, as in the proxy. Only a connected integration (or one with
-    no sign-in) is listed: injection blocks the tool discovery of an
-    unauthenticated server, so emitting it only buys a permanently failed MCP
-    client. A Blocked action is a disabled tool."""
-    task = (
-        load_task_integrations(db_session, task_id, user.id)
-        if task_id is not None
-        else None
-    )
-    integrations = (
-        list_runnable_integrations(db_session, user.id)
-        if task is None
-        else task.integrations()
-    )
+    input. Only a connected integration (or one with no sign-in) is listed:
+    injection blocks the tool discovery of an unauthenticated server, so
+    emitting it only buys a permanently failed MCP client. A Blocked action
+    is a disabled tool."""
     configs: list[CraftMCPServerConfig] = []
-    for integration in integrations:
+    for integration in list_runnable_integrations(db_session, user.id):
         if integration.kind is not IntegrationKind.MCP:
             continue
         server = get_mcp_server_for_integration(integration.id, db_session)
@@ -103,7 +86,7 @@ def resolve_craft_mcp_servers(
             CraftMCPServerConfig(
                 key=_server_key(integration),
                 url=server.server_url,
-                disabled_tools=_blocked_actions(db_session, integration, user, task),
+                disabled_tools=_blocked_actions(db_session, integration, user),
                 integration_id=integration.id,
             )
         )

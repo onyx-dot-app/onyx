@@ -129,12 +129,8 @@ You cannot turn on an action that your admin set to **Blocked**.
 
 ## Apps in Scheduled Tasks
 
-A [Scheduled Task](/overview/core_features/craft_scheduled_tasks) runs without you present.
-In the task's **Integrations** section, enable only the apps that the task needs,
-and set the actions it must perform to **Allow** in the app's **Approval settings**.
-
-Task settings apply only to that task. An action with a **Blocked** policy stays blocked.
-If a run reaches an action that needs approval, the run stops and waits for you.
+Craft Apps are not available to [Scheduled Tasks](/overview/core_features/scheduled_tasks).
+A Scheduled Task runs in chat and can use only MCP and OpenAPI integrations.
 
 ## Disconnect an app
 
@@ -154,11 +150,6 @@ Open **Customize → Integrations**, click the app, and click **Disconnect**.
   or expired while awaiting approval. Craft does not retry a blocked action automatically;
   adjust the request or contact an admin if the action should be available.
 </Accordion>
-
-  <Accordion title="A Scheduled Task is awaiting approval">
-    Edit the task and confirm that the required app is enabled under **Integrations** and the action is set to **Allow**
-    in its approval settings. If it is, an admin may have disabled that action, or the run may need a different app.
-  </Accordion>
 </AccordionGroup>
 
 <CardGroup cols={2}>

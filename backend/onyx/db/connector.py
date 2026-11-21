@@ -12,6 +12,7 @@ from onyx.db.enums import IndexingMode
 from onyx.db.models import (
     Connector,
     ConnectorCredentialPair,
+    DocumentByConnectorCredentialPair,
     FederatedConnector,
     IndexAttempt,
     UserGroup__ConnectorCredentialPair,
@@ -344,7 +345,9 @@ _INTERNAL_ONLY_SOURCES = {
 }
 
 
-def fetch_unique_document_sources(db_session: Session) -> list[DocumentSource]:
+def fetch_unique_document_sources(
+    db_session: Session, *, include_ingestion_api: bool = False
+) -> list[DocumentSource]:
     distinct_sources = db_session.query(Connector.source).distinct().all()
 
     sources = [
@@ -352,6 +355,17 @@ def fetch_unique_document_sources(db_session: Session) -> list[DocumentSource]:
         for source in distinct_sources
         if source[0] not in _INTERNAL_ONLY_SOURCES
     ]
+    # The default Ingestion API connector always exists, so list its source
+    # only once documents were pushed to an Ingestion API connector.
+    if include_ingestion_api and db_session.scalar(
+        select(
+            exists().where(
+                DocumentByConnectorCredentialPair.connector_id == Connector.id,
+                Connector.source == DocumentSource.INGESTION_API,
+            )
+        )
+    ):
+        sources.append(DocumentSource.INGESTION_API)
 
     return sources
 

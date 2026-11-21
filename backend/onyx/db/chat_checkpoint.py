@@ -201,13 +201,15 @@ def interrupt_response__no_commit(
     cancelled: bool = False,
     failure: RunFailure | None = None,
     keep_parked: bool = False,
+    only_parked: bool = False,
 ) -> list[str] | None:
     """Caller holds the response's cache lock and has verified that no owner remains.
 
     A cancelled response keeps `failure`, the reason its Stop gave, if any; a
     failed one keeps `failure`, or says that its owner stopped. Its approval
     requests and questions end, since no call waits for them anymore. With `keep_parked`, a
-    parked response, SUSPENDED with a checkpoint, stays as it is. Returns the dumps that its checkpoint
+    parked response, SUSPENDED with a checkpoint, stays as it is; with
+    `only_parked`, only a SUSPENDED response ends. Returns the dumps that its checkpoint
     owned, which the caller deletes after commit; None when the response did
     not end here.
     """
@@ -215,6 +217,7 @@ def interrupt_response__no_commit(
     if (
         response.response_status is None
         or response.response_status.is_terminal
+        or (only_parked and response.response_status != RunStatus.SUSPENDED)
         or (
             keep_parked
             and response.response_status == RunStatus.SUSPENDED

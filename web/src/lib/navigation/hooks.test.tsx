@@ -32,6 +32,17 @@ test.each(["/app/customize", "/app/customize/skills/7"])(
   }
 );
 
+test.each(["/app/scheduled-tasks", "/app/scheduled-tasks/task-1/edit"])(
+  "recognizes %s as Scheduled Tasks",
+  (pathname) => {
+    mockPathname = pathname;
+    const { result } = renderHook(() => useAppPosition());
+    expect(result.current.isScheduledTasks()).toBe(true);
+    expect(result.current.isNewSession()).toBe(false);
+    expect(result.current.href()).toBe("/app/scheduled-tasks");
+  }
+);
+
 test("keeps conversation routing separate from Customize", () => {
   mockParams = new URLSearchParams("chatId=existing-chat");
   const { result } = renderHook(() => useAppPosition());

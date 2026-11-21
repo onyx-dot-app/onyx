@@ -52,7 +52,7 @@ export interface RunCardProps<S extends RunCardStep> {
   autoCollapse?: boolean;
   /** When the run started, for the live timer. Defaults to its first render. */
   streamingStartTime?: number;
-  /** How long the run took, when the server knows. Otherwise it is timed. */
+  /** The server's duration, shown for a run that did not work here. */
   durationSeconds?: number;
   summary?: RunCardSummary;
 }
@@ -111,24 +111,20 @@ export function RunCard<S extends RunCardStep>({
     wasRunning.current = isRunning;
   }, [isRunning]);
 
-  // A run that works here is timed; a saved run has no duration.
-  const [startedAt] = useState<number | undefined>(() =>
+  // A run that works here is timed in the browser; a saved run shows the
+  // server's duration.
+  const [startedAt, setStartedAt] = useState<number | undefined>(() =>
     isRunning ? (streamingStartTime ?? Date.now()) : undefined
   );
-  // The live timer runs while the run works; the server's duration, when it
-  // has one, stops it.
-  const elapsedSeconds = useStreamingDuration(
-    isRunning,
-    startedAt,
-    durationSeconds
-  );
-
-  const [timedSeconds, setTimedSeconds] = useState(0);
+  // A card that mounted settled starts its timer when its run starts here.
   useEffect(() => {
-    if (!isRunning && startedAt !== undefined) {
-      setTimedSeconds(Math.max(1, Math.round((Date.now() - startedAt) / 1000)));
+    if (isRunning && startedAt === undefined) {
+      setStartedAt(streamingStartTime ?? Date.now());
     }
-  }, [isRunning, startedAt]);
+  }, [isRunning, startedAt, streamingStartTime]);
+  const elapsedSeconds = useStreamingDuration(isRunning, startedAt);
+  const finishedSeconds =
+    startedAt !== undefined ? Math.max(1, elapsedSeconds) : durationSeconds;
 
   // A run that stopped working with no steps (e.g. "Thinking..." before a
   // text-only answer) has nothing to show. It leaves through Presence's exit,
@@ -228,7 +224,7 @@ export function RunCard<S extends RunCardStep>({
             ) : (
               <CompletedHeader
                 isExpanded={isOpen}
-                processingDurationSeconds={durationSeconds ?? timedSeconds}
+                processingDurationSeconds={finishedSeconds}
                 {...summary}
               />
             )}

@@ -76,6 +76,7 @@ PATH_PREFIX_MIN_TIER: dict[str, Tier] = {
     "/admin/chat-session-history": Tier.BUSINESS,
     "/admin/query-history": Tier.BUSINESS,
     "/admin/usage-report": Tier.BUSINESS,
+    "/admin/service-status": Tier.BUSINESS,  # OpenSearch cluster status
     "/analytics/admin": Tier.BUSINESS,  # query/user/onyxbot/persona analytics
     "/admin/api-key": Tier.BUSINESS,  # service-account keys (no user-bound variant)
     "/admin/enterprise-settings": Tier.BUSINESS,  # admin writes; public /enterprise-settings stays open

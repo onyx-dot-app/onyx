@@ -1,6 +1,6 @@
 """The sandbox proxy on the integration tables: which integration a request
-belongs to, the credential it gets, the policy of a Craft session and of a
-scheduled run, approval rows and session grants."""
+belongs to, the credential it gets, the policy of a Craft session, approval
+rows and session grants. Also the integration catalog of a scheduled task."""
 
 from __future__ import annotations
 
@@ -27,8 +27,6 @@ from onyx.db.enums import (
     IntegrationAuthMethod,
     IntegrationAuthMode,
     PluginInstallationPolicy,
-    ScheduledTaskRunStatus,
-    ScheduledTaskTriggerSource,
 )
 from onyx.db.models import (
     ActionApproval,
@@ -38,12 +36,9 @@ from onyx.db.models import (
     MCPServer,
     ScheduledTask,
     ScheduledTask__Integration,
-    ScheduledTaskRun,
     User,
 )
-from onyx.db.scheduled_task import get_scheduled_task_id_for_session
 from onyx.external_apps.matching.engine import (
-    WHOLE_DOMAIN_ACTION_TYPE,
     AllMatchedActions,
 )
 from onyx.integrations.connection_models import ConnectionSecret
@@ -61,7 +56,6 @@ from onyx.sandbox_proxy.resolvers.integration import IntegrationResolver
 from onyx.sandbox_proxy.sandbox_identity.models import ResolvedSandbox, SessionContext
 from onyx.sandbox_proxy.sandbox_identity.resolution import SandboxIdentityResolver
 from onyx.sandbox_proxy.usable_integrations import UsableIntegrations
-from onyx.server.features.build.configs import MCP_SESSION_TAG_HEADER
 from onyx.server.features.build.sandbox.util.mcp_config import (
     resolve_craft_mcp_servers,
 )
@@ -76,7 +70,6 @@ from tests.external_dependency_unit.integration_helpers import (
     turn_off_integrations,
 )
 from tests.external_dependency_unit.integrations.conftest import add_connection
-from tests.unit.sandbox_proxy.conftest import StubResolver, make_flow
 
 TENANT = POSTGRES_DEFAULT_SCHEMA
 
@@ -167,12 +160,8 @@ def _sandbox(user: User) -> ResolvedSandbox:
     )
 
 
-def _evaluate(
-    request: http.Request, user: User, scheduled_task_id: UUID | None = None
-) -> Any:
-    return IntegrationRequestEvaluator().evaluate(
-        request, TENANT, user.id, scheduled_task_id
-    )
+def _evaluate(request: http.Request, user: User) -> Any:
+    return IntegrationRequestEvaluator().evaluate(request, TENANT, user.id)
 
 
 def _headers(request: http.Request, user: User, matched: Any) -> dict[str, str]:
@@ -312,16 +301,14 @@ def test_a_request_to_a_moved_endpoint_gets_no_credential(
     add_connection(db_session, mcp, user.id, ConnectionSecret(access_token="mcp-tok"))
     request = _request(f"https://{old_host}/mcp", _tool_call("update"))
     evaluator = IntegrationRequestEvaluator(usable)
-    assert isinstance(
-        evaluator.evaluate(request, TENANT, user.id, None), AllMatchedActions
-    )
+    assert isinstance(evaluator.evaluate(request, TENANT, user.id), AllMatchedActions)
 
     server = db_session.get(MCPServer, mcp.mcp_server_id)
     assert server is not None
     server.server_url = f"https://{_host()}/mcp"
     db_session.commit()
 
-    matched = evaluator.evaluate(request, TENANT, user.id, None)
+    matched = evaluator.evaluate(request, TENANT, user.id)
     assert isinstance(matched, AllMatchedActions)
     ctx = InjectionContext(sandbox=_sandbox(user), matched_actions=matched)
     with pytest.raises(CredentialUnavailableError):
@@ -416,22 +403,22 @@ def test_the_match_targets_reload_after_the_cache_time(
     ctx = InjectionContext(
         sandbox=_sandbox(user), matched_actions=None, protocol_target=None
     )
-    assert evaluator.evaluate(request, TENANT, user.id, None) is None
+    assert evaluator.evaluate(request, TENANT, user.id) is None
 
     mcp = _mcp(db_session, created, f"https://{host}/mcp")
     _run(db_session, [mcp])
-    assert evaluator.evaluate(request, TENANT, user.id, None) is None
+    assert evaluator.evaluate(request, TENANT, user.id) is None
     assert not resolver.claims(request, ctx)
 
     now[0] += 31
-    matched = evaluator.evaluate(request, TENANT, user.id, None)
+    matched = evaluator.evaluate(request, TENANT, user.id)
     assert isinstance(matched, AllMatchedActions)
     assert matched.target.integration_id == mcp.id
     assert resolver.claims(request, ctx)
 
     mcp.enabled = False
     db_session.commit()
-    assert evaluator.evaluate(request, TENANT, user.id, None) is None
+    assert evaluator.evaluate(request, TENANT, user.id) is None
 
 
 def test_an_integration_the_user_does_not_run_is_not_matched(
@@ -482,9 +469,7 @@ def test_an_unparsable_mcp_body_is_blocked(
     assert matched.governing_action.policy is ActionPolicy.DENY
 
 
-def _task_run(
-    db_session: Session, user: User, session_id: UUID, links: dict[int, Any]
-) -> ScheduledTask:
+def _task(db_session: Session, user: User, links: dict[int, Any]) -> ScheduledTask:
     task = ScheduledTask(
         user_id=user.id,
         name="Report",
@@ -495,63 +480,18 @@ def _task_run(
     db_session.add(task)
     db_session.flush()
     db_session.add_all(
-        [
-            ScheduledTaskRun(
-                task_id=task.id,
-                session_id=session_id,
-                status=ScheduledTaskRunStatus.RUNNING,
-                trigger_source=ScheduledTaskTriggerSource.SCHEDULED,
-            ),
-            *(
-                ScheduledTask__Integration(
-                    scheduled_task_id=task.id,
-                    integration_id=integration_id,
-                    action_settings=settings,
-                )
-                for integration_id, settings in links.items()
-            ),
-        ]
+        ScheduledTask__Integration(
+            scheduled_task_id=task.id,
+            integration_id=integration_id,
+            action_settings=settings,
+        )
+        for integration_id, settings in links.items()
     )
     db_session.commit()
     return task
 
 
-def test_a_scheduled_task_calls_only_its_integrations(
-    db_session: Session, created: list[int], user: User
-) -> None:
-    task_host = _host()
-    in_task = _mcp(db_session, created, f"https://{task_host}/mcp")
-    other_host = _host()
-    other = _mcp(db_session, created, f"https://{other_host}/mcp")
-    _run(db_session, [in_task])
-    _run(db_session, [other])
-    ctx = _session_ctx(db_session, user)
-    _task_run(
-        db_session,
-        user,
-        ctx.session_id,
-        {in_task.id: {"default": "inherit", "actions": {"update": "allow"}}},
-    )
-    addon = _addon()
-
-    allowed = _evaluate(
-        _request(f"https://{task_host}/mcp", _tool_call("update")), user
-    )
-    run_ctx, resolved = addon._resolve_request_policies(ctx, allowed)
-    assert run_ctx.scheduled_context is not None
-    # The pre-approval of the task runs with no approval wait.
-    assert resolved.governing_action.policy is ActionPolicy.ALWAYS
-    assert addon._task_can_use_app(ctx, allowed.target)
-
-    blocked = _evaluate(
-        _request(f"https://{other_host}/mcp", _tool_call("search")), user
-    )
-    _, resolved = addon._resolve_request_policies(ctx, blocked)
-    assert resolved.governing_action.policy is ActionPolicy.DENY
-    assert not addon._task_can_use_app(ctx, blocked.target)
-
-
-def test_a_scheduled_task_ask_ignores_the_owners_always_allow(
+def test_a_session_uses_the_owners_always_allow(
     db_session: Session, created: list[int], user: User
 ) -> None:
     host = _host()
@@ -569,41 +509,17 @@ def test_a_scheduled_task_ask_ignores_the_owners_always_allow(
     ctx = _session_ctx(db_session, user)
     addon = _addon()
     request = _request(f"https://{host}/mcp", _tool_call("update"))
-    _, resolved = addon._resolve_request_policies(ctx, _evaluate(request, user))
+    resolved = addon._resolve_request_policies(ctx, _evaluate(request, user))
     assert resolved.governing_action.policy is ActionPolicy.ALWAYS
 
-    run_ctx = _session_ctx(db_session, user)
-    task = _task_run(
-        db_session,
-        user,
-        run_ctx.session_id,
-        {mcp.id: {"default": "inherit", "actions": {"update": "ask"}}},
-    )
-    _, resolved = addon._resolve_request_policies(
-        run_ctx, _evaluate(request, user, task.id)
-    )
-    assert resolved.governing_action.policy is ActionPolicy.ASK
 
-
-def test_a_scheduled_task_integration_that_inherits_does_not_block(
+def test_the_task_catalog_shows_the_inherited_policies(
     db_session: Session, created: list[int], user: User
 ) -> None:
-    host = _host()
-    mcp = _mcp(db_session, created, f"https://{host}/mcp")
+    mcp = _mcp(db_session, created, f"https://{_host()}/mcp")
     _run(db_session, [mcp])
-    ctx = _session_ctx(db_session, user)
-    task = _task_run(db_session, user, ctx.session_id, {mcp.id: {}})
-    addon = _addon()
+    task = _task(db_session, user, {mcp.id: {}})
 
-    for action, policy in (
-        ("search", ActionPolicy.ALWAYS),
-        ("update", ActionPolicy.ASK),
-    ):
-        request = _request(f"https://{host}/mcp", _tool_call(action))
-        _, resolved = addon._resolve_request_policies(
-            ctx, _evaluate(request, user, task.id)
-        )
-        assert resolved.governing_action.policy is policy
     shown = {
         action.key: action.integration_policy
         for integration in list_task_integration_views(db_session, user, task.id)
@@ -622,8 +538,7 @@ def test_an_ask_action_in_a_session_opens_an_approval_with_the_integration(
     ctx = _session_ctx(db_session, user)
     addon = _addon()
     matched = _evaluate(_request(f"https://{host}/mcp", _tool_call("update")), user)
-    run_ctx, resolved = addon._resolve_request_policies(ctx, matched)
-    assert run_ctx.scheduled_context is None
+    resolved = addon._resolve_request_policies(ctx, matched)
     assert resolved.governing_action.policy is ActionPolicy.ASK
 
     approval_id = addon._persist_approval_row(ctx, resolved)
@@ -647,7 +562,7 @@ def test_a_session_grant_approves_the_same_actions_of_the_integration(
     ctx = _session_ctx(db_session, user)
     addon = _addon()
     matched = _evaluate(_request(f"https://{host}/mcp", _tool_call("update")), user)
-    _, resolved = addon._resolve_request_policies(ctx, matched)
+    resolved = addon._resolve_request_policies(ctx, matched)
     db_session.add(
         ActionApproval(
             session_id=ctx.session_id,
@@ -674,7 +589,7 @@ def test_a_session_grant_approves_the_same_actions_of_the_integration(
     other_matched = _evaluate(
         _request(f"https://{other_host}/mcp", _tool_call("update")), user
     )
-    _, other_resolved = addon._resolve_request_policies(ctx, other_matched)
+    other_resolved = addon._resolve_request_policies(ctx, other_matched)
     assert addon._apply_session_grant(ctx, other_resolved) is None
 
 
@@ -714,73 +629,6 @@ def test_the_craft_mcp_config_lists_only_connected_integrations_that_are_on(
     assert turned_off.id not in listed
 
 
-def test_a_scheduled_run_matches_a_task_integration_that_the_owner_turned_off(
-    db_session: Session, created: list[int], user: User
-) -> None:
-    host = _host()
-    mcp = _mcp(db_session, created, f"https://{host}/mcp")
-    _run(db_session, [mcp])
-    turn_off_integrations(db_session, user.id, [mcp])
-    ctx = _session_ctx(db_session, user)
-    task = _task_run(
-        db_session,
-        user,
-        ctx.session_id,
-        {mcp.id: {"actions": {"update": "allow"}}},
-    )
-    request = _request(f"https://{host}/mcp", _tool_call("update"))
-
-    assert _evaluate(request, user) is None
-    matched = _evaluate(request, user, task.id)
-    assert isinstance(matched, AllMatchedActions)
-    assert matched.target.integration_id == mcp.id
-    _, resolved = _addon()._resolve_request_policies(ctx, matched)
-    assert resolved.governing_action.policy is ActionPolicy.ALWAYS
-
-    # The gate finds the task from the session tag of the run.
-    gate = GateAddon(
-        destination_policy=parse_destination_policy(""),
-        identity=StubResolver(session_by_id=ctx.session_id),
-        request_evaluator=IntegrationRequestEvaluator(),
-        cache_factory=lambda tenant: get_cache_backend(tenant_id=tenant),
-        proxy_instance_id="proxy-test",
-        credential_dispatcher=CredentialInjectionDispatcher([]),
-    )
-    request.headers[MCP_SESSION_TAG_HEADER] = str(ctx.session_id)
-    flow = make_flow(host=host)
-    flow.request = request
-    run_matched = gate._evaluate(flow, ctx.without_session())
-    assert isinstance(run_matched, AllMatchedActions)
-    assert run_matched.target.integration_id == mcp.id
-    # The resolver injects for the matched integration of the run, and lets
-    # the run reach the server host.
-    assert _headers(request, user, run_matched) == {}
-    assert IntegrationResolver().allows_destination(_sandbox(user), "https", host, 443)
-
-
-def test_a_scheduled_run_ignores_an_integration_that_is_not_on_the_task(
-    db_session: Session, created: list[int], user: User
-) -> None:
-    host = _host()
-    in_task = _mcp(db_session, created, f"https://{host}/mcp")
-    # Turned on by the owner, with the same URL, but not on the task.
-    _run(db_session, [_mcp(db_session, created, f"https://{host}/mcp")])
-    _run(db_session, [in_task])
-    ctx = _session_ctx(db_session, user)
-    task = _task_run(
-        db_session,
-        user,
-        ctx.session_id,
-        {in_task.id: {"actions": {"update": "allow"}}},
-    )
-
-    matched = _evaluate(
-        _request(f"https://{host}/mcp", _tool_call("update")), user, task.id
-    )
-    assert isinstance(matched, AllMatchedActions)
-    assert matched.target.integration_id == in_task.id
-
-
 def test_the_task_catalog_locks_a_task_allow_that_the_policy_ignores(
     db_session: Session, created: list[int], user: User
 ) -> None:
@@ -802,33 +650,7 @@ def test_the_task_catalog_locks_a_task_allow_that_the_policy_ignores(
     assert locked[(no_always_allow.id, "update")] is True
 
 
-def test_the_task_catalog_shows_that_a_custom_app_always_asks(
-    db_session: Session, created: list[int], user: User
-) -> None:
-    custom = _custom_app(db_session, created, _host())
-    _run(db_session, [custom])
-    db_session.add(
-        IntegrationActionPolicy(
-            integration_id=custom.id,
-            action=WHOLE_DOMAIN_ACTION_TYPE,
-            user_id=None,
-            policy=IntegrationActionPolicyValue.ALLOW,
-        )
-    )
-    db_session.commit()
-
-    (action,) = [
-        action
-        for integration in list_task_integration_views(db_session, user, None)
-        if integration.id == custom.id
-        for action in integration.actions
-    ]
-    assert action.key == WHOLE_DOMAIN_ACTION_TYPE
-    assert action.integration_policy is EffectivePolicy.ASK
-    assert action.locked is True
-
-
-def test_the_task_catalog_leaves_out_openapi_integrations(
+def test_the_task_catalog_lists_what_chat_can_run(
     db_session: Session, created: list[int], user: User
 ) -> None:
     host = _host()
@@ -847,15 +669,16 @@ def test_the_task_catalog_leaves_out_openapi_integrations(
     )
     created.append(openapi.id)
     mcp = _mcp(db_session, created, f"https://{_host()}/mcp")
+    custom = _custom_app(db_session, created, _host())
     _run(db_session, [openapi])
-    _run(db_session, [mcp])
+    _run(db_session, [mcp, custom])
 
     listed = {
         integration.id
         for integration in list_task_integration_views(db_session, user, None)
     }
-    assert mcp.id in listed
-    assert openapi.id not in listed
+    assert {mcp.id, openapi.id} <= listed
+    assert custom.id not in listed
 
 
 def test_the_task_catalog_ignores_the_owners_always_allow(
@@ -881,54 +704,13 @@ def test_the_task_catalog_ignores_the_owners_always_allow(
     assert policies[(mcp.id, "update")] is EffectivePolicy.ASK
 
 
-def test_a_scheduled_session_config_lists_the_task_integrations_the_owner_turned_off(
-    db_session: Session, created: list[int], user: User
-) -> None:
-    mcp = _mcp(db_session, created, f"https://{_host()}/mcp")
-    other = _mcp(db_session, created, f"https://{_host()}/mcp")
-    _run(db_session, [mcp])
-    _run(db_session, [other])
-    turn_off_integrations(db_session, user.id, [mcp])
-    ctx = _session_ctx(db_session, user)
-    task = _task_run(
-        db_session,
-        user,
-        ctx.session_id,
-        {mcp.id: {"actions": {"update": "blocked"}}},
-    )
-
-    interactive = {
-        config.integration_id: config.disabled_tools
-        for config in resolve_craft_mcp_servers(db_session, user)
-    }
-    scheduled = {
-        config.integration_id: config.disabled_tools
-        for config in resolve_craft_mcp_servers(
-            db_session,
-            user,
-            get_scheduled_task_id_for_session(db_session, ctx.session_id),
-        )
-    }
-
-    assert mcp.id not in interactive
-    assert interactive[other.id] == ()
-    # The task settings decide the tools, as in the proxy.
-    assert scheduled[mcp.id] == ("update",)
-    assert other.id not in scheduled
-    assert get_scheduled_task_id_for_session(db_session, ctx.session_id) == task.id
-
-
 def test_the_task_catalog_keeps_an_integration_that_an_admin_turned_off(
     db_session: Session, created: list[int], user: User
 ) -> None:
     mcp = _mcp(db_session, created, f"https://{_host()}/mcp")
     _run(db_session, [mcp])
-    ctx = _session_ctx(db_session, user)
-    task = _task_run(
-        db_session,
-        user,
-        ctx.session_id,
-        {mcp.id: {"actions": {"update": "allow", "removed": "allow"}}},
+    task = _task(
+        db_session, user, {mcp.id: {"actions": {"update": "allow", "removed": "allow"}}}
     )
     mcp.enabled = False
     db_session.commit()

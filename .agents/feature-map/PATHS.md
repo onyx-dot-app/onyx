@@ -80,7 +80,7 @@ covers new files that match it.
 | `backend/onyx/server/features/search/`, `backend/onyx/server/query_and_chat/query_backend.py`, `backend/ee/onyx/server/query_and_chat/`, `backend/ee/onyx/search/` | internal-search |
 | `web/src/ee/sections/SearchUI.tsx`, `web/src/ee/sections/SearchCard.tsx`, `web/src/ee/lib/search/`, `web/src/ee/providers/QueryControllerProvider.tsx`, `web/src/providers/QueryControllerProvider.tsx` | internal-search |
 | `backend/onyx/document_index/` | document-index |
-| `backend/onyx/server/manage/opensearch_health/`, `web/src/lib/opensearch-health/`, `web/src/sections/banners/OpenSearchResourceWarning.tsx` | document-index |
+| `backend/onyx/server/manage/opensearch_health/`, `backend/ee/onyx/server/service_status/`, `web/src/lib/opensearch-health/`, `web/src/sections/banners/OpenSearchResourceWarning.tsx`, `web/src/lib/service-status/`, `web/src/views/admin/ServiceStatusPage/`, `web/src/app/ee/admin/service-status/` | document-index |
 | `backend/onyx/natural_language_processing/` | document-index, internal-search |
 | `backend/onyx/db/search_settings.py`, `backend/onyx/db/swap_index.py`, `backend/onyx/db/port_attempt.py`, `backend/onyx/db/port_orphan_candidate.py` | document-index |
 | `backend/onyx/redis/redis_document_set.py`, `backend/onyx/redis/redis_usergroup.py`, `backend/ee/onyx/background/celery/tasks/vespa/` | document-index |
@@ -240,7 +240,7 @@ covers new files that match it.
 | `backend/onyx/db/action_approval.py` | craft-external-apps |
 | `web/src/sections/actions/PolicyEditor.tsx` | craft-external-apps |
 | `web/src/sections/approvals/`, `web/src/lib/approvals/` | chat-frontend, craft-frontend |
-| `backend/onyx/server/features/build/scheduled_tasks/`, `backend/onyx/db/scheduled_task.py`, `backend/onyx/background/celery/tasks/scheduled_tasks/`, `backend/onyx/background/celery/apps/scheduled_tasks.py` | craft-scheduled-tasks |
+| `backend/onyx/server/features/build/scheduled_tasks/`, `backend/onyx/scheduled_tasks/`, `backend/onyx/db/scheduled_task.py`, `backend/onyx/background/celery/tasks/scheduled_tasks/`, `backend/onyx/background/celery/apps/scheduled_tasks.py` | craft-scheduled-tasks |
 | `backend/onyx/server/features/build/sandbox/` | craft-sandboxes |
 | `deployment/craft-runtime/`, `deployment/craft-fc/rootfs/` | craft-sandboxes |
 | `backend/onyx/server/features/build/sandbox/opencode/`, `backend/onyx/server/features/build/sandbox/event_schema.py`, `backend/onyx/server/features/build/sandbox/sse.py` | craft-streaming |
@@ -308,6 +308,7 @@ covers new files that match it.
 | `web/tools/prepare-pdf-assets.cjs`, `web/src/lib/readSpreadsheetPreview.ts`, `web/src/lib/spreadsheetPreview.worker.ts`, `web/src/lib/spreadsheetPreview.ts` | craft-frontend |
 | `web/src/lib/docx/`, `web/src/lib/csv.ts` | chat-frontend, craft-frontend |
 | `web/src/app/craft/v1/tasks/` | craft-scheduled-tasks |
+| `web/src/app/app/scheduled-tasks/`, `web/src/sections/scheduledTasks/`, `web/src/lib/scheduledTasks/` | craft-scheduled-tasks |
 | `web/src/app/craft/v1/apps/`, `web/src/hooks/useUserExternalApps.ts` | craft-external-apps |
 | `web/src/app/craft/components/SkillsStaleNotice.tsx`, `web/src/app/craft/components/SkillRuntimeNotice.tsx` | skills |
 | `web/src/app/admin/skills/` | skills |

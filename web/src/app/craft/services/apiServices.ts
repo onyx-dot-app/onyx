@@ -1,4 +1,3 @@
-import type { ScheduledRunContextResponse } from "@/app/craft/v1/tasks/types";
 import { downloadFile } from "@/lib/download";
 import { FetchError } from "@/lib/fetcher";
 import {
@@ -528,45 +527,6 @@ export async function interruptMessageStream(
   }
   const result: { interrupted: boolean } = await res.json();
   return result.interrupted;
-}
-
-export async function fetchScheduledRunContext(
-  sessionId: string
-): Promise<ScheduledRunContextResponse> {
-  const res = await fetch(
-    `${BUILD_API_BASE}/sessions/${sessionId}/scheduled-run-context`
-  );
-  if (!res.ok)
-    throw new FetchError(
-      await errorDetail(res, "Failed to fetch scheduled run"),
-      res.status,
-      null
-    );
-  return res.json();
-}
-
-export async function fetchScheduledRunEventStream(
-  sessionId: string,
-  signal?: AbortSignal
-): Promise<Response> {
-  const res = await fetch(
-    `${BUILD_API_BASE}/sessions/${sessionId}/scheduled-run-events`,
-    { headers: { Accept: "text/event-stream" }, signal }
-  );
-
-  if (res.status === 409) {
-    return new Response("");
-  }
-
-  if (!res.ok) {
-    throw new FetchError(
-      `Failed to stream scheduled run: ${res.status}`,
-      res.status,
-      null
-    );
-  }
-
-  return res;
 }
 
 // =============================================================================

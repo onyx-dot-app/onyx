@@ -1,47 +1,52 @@
-# Craft Scheduled Tasks
+# Scheduled Tasks
 
-> A user schedules a Craft prompt to run on a timer. Each fire creates a new
-> headless Craft session in the owner's sandbox, runs one agent turn with
-> nobody watching, and records a run row the user can open later.
+> A user schedules a prompt to run on a timer. Each fire creates a new hidden
+> chat owned by the user, runs one chat turn of the default agent with nobody
+> watching, and records a run row that the user opens later as a chat.
 
-**Verified against:** `73e0ae3c31` (2026-10-28)
+**Verified against:** `0135795fdf` (2026-11-20)
 **Edition:** CE
 
 ---
 
 ## User experience
 
-A Craft user writes a prompt, picks a schedule (an interval, a daily or weekly
-time, or a cron expression), and chooses which connected apps the task may use.
-New tasks start with every app off. For each enabled app the user can set
-Allow, Ask or Blocked per action, within the limits the admin set.
-"Run once" fires the task at once, even when it is paused. Pause stops the
+A user opens "Scheduled Tasks" in the `/app` sidebar, writes a prompt, picks a
+schedule (an interval, a daily or weekly time, or a cron expression), and
+chooses which integrations the task may use. New tasks start with every
+integration off. For each enabled integration the user can set Allow, Ask,
+Blocked or Inherit per action, within the limits the admin set. "Run once"
+fires the task at once, even when it is paused. The "Run on schedule" switch
+on the task page (Pause or Resume in the list row menu) stops and starts the
 fires; Resume schedules the next fire from the time of resume, so missed fires
-do not run.
-Delete hides the task but keeps its runs, and a run already queued still runs.
+do not run. Delete hides the task but keeps its runs, and a run already queued
+still runs. The task list has a name search and a filter: all, Active, Paused,
+or tasks with new results.
 
-Each fire adds a row to the task's run history. A run with a session opens in
-the normal Craft session view, with a banner that names the task. A running
-run streams live in that view. Scheduled sessions do not appear in the Craft
-session sidebar. After a run ends, the user can send follow-up messages in the
-same session, but app actions from that session are blocked. The user starts a
-normal session to use personal app settings.
+Each fire adds a row to the task's run history. A run opens at
+`/app?chatId=<chat_session_id>`, with a banner that names the task. A running
+run streams in the normal chat view. Scheduled chats are not in the chat
+history list or chat search. After a run ends, the user can send follow-ups
+in the same chat; those turns use the user's normal integration settings.
 
-A blue dot marks run results the owner has not opened. It shows on each unviewed
-run in run history, on each task row with unviewed runs, on "Scheduled Tasks" in
-the Craft sidebar, and beside the Craft Beta tag in the main app sidebar. The
-sidebars poll `GET /build/scheduled-tasks/unviewed-count` every 30 seconds.
-Opening the run's session marks the run viewed. Opening the task page does not.
-"Mark all viewed" in run history marks every unviewed run of the task.
+When a run reaches an Ask action, the turn parks, the run shows "Awaiting
+approval", and the owner gets a notification. The owner approves in the chat
+and the turn continues. A run that nobody approves is cancelled at the next
+fire (which then runs) or after 24 hours. Reject skips the action and the
+turn finishes. A Stop in the chat cancels a running run, not a parked one.
 
-When a run fails in the executor, the user gets an INFO notification. It
-shows in the notification list, not in the banner queue. A run that the
-stuck-run sweeper fails, or whose task row is gone, fails with no notification
-([[#failure-paths-notify]]). A scheduled fire that overlaps
-a run still in flight, or a fire for an owner who lost Craft access, is
-recorded as skipped, and the schedule keeps going. "Run once" does not check
-for a run in flight, so a manual run can overlap a scheduled one. There are no
-automatic retries.
+A blue dot marks runs the owner has not opened: on each run, on each task row
+and on the "Scheduled Tasks" sidebar tab, which polls
+`GET /scheduled-tasks/unviewed-count` every 30 seconds. Opening the run's chat
+marks the run viewed. "Mark all viewed" marks every run of the task.
+
+A failed run sends an INFO notification. A fire that overlaps a run that still
+runs is recorded as skipped. There are no automatic retries.
+
+The Craft task pages (`/craft/v1/tasks`) read the same tasks through
+`/build/scheduled-tasks` and stay until Craft is removed. A run row there
+opens the run's chat. Runs from before the move to chat have no chat and do
+not open.
 
 ---
 
@@ -49,17 +54,16 @@ automatic retries.
 
 This component owns:
 - the task API and schedule compilation;
-- the dispatcher, the stuck-run sweeper and the headless executor;
+- the dispatcher, the sweeper and the executor;
 - task and run storage, and the run history;
-- the task pages and the per-task app settings editor.
+- the task pages in `/app` and in Craft, and the run banner.
 
 Neighbours:
-- [[craft-external-apps]]: enforces task app enablement and task choices in
-  the egress proxy, and owns the precedence rules.
-- [[craft-sessions]]: `SessionManager`, which creates and drives the session
-  the same way as an interactive one.
-- [[craft-sandboxes]]: wakes or provisions the owner's sandbox.
-- [[craft-admin]]: the access decision the dispatcher checks for each owner.
+- [[core-chat-loop]]: `run_chat_turn`, the headless turn the executor runs.
+- [[mcp-and-custom-tools]]: durable approvals, which park and resume a run.
+- [[chat-persistence]]: `ChatMessage.response_status`, the run's source of
+  truth.
+- [[craft-external-apps]]: the policy function that task settings feed.
 - [[background-jobs]]: the shared Beat and queue machinery.
 
 ---
@@ -69,229 +73,179 @@ Neighbours:
 ```
 Beat (per tenant, every 30 s, primary queue)
   dispatch_due_scheduled_tasks
+    _sync_chat_runs: interrupt ownerless responses, then
+                     sync_chat_run__no_commit for each in-flight chat run
     claim_due_scheduled_tasks            FOR UPDATE SKIP LOCKED
-    per task: owner lacks Craft      -> SKIPPED (owner_craft_disabled)
-              prior run in flight    -> SKIPPED (prior_in_flight)
-              else                   -> QUEUED run row
+    per task: cancel runs AWAITING_APPROVAL (superseded_by_next_fire)
+              run QUEUED or RUNNING     -> SKIPPED (prior_in_flight)
+              else                      -> QUEUED run row
               always advance next_run_at
-    commit, then send run_scheduled_task(run_id) on the scheduled_tasks queue
+    commit, send run_scheduled_task(run_id)
 
-run_scheduled_task -> executor.py:run_scheduled_task_logic
+run_scheduled_task -> onyx/scheduled_tasks/executor.py:run_scheduled_task_logic
   1 run must still be QUEUED (Celery may redeliver)
-  2 SessionManager.ensure_sandbox_running(owner)  failure -> FAILED
-  3 QUEUED -> RUNNING
-  4 _drive_agent: create_session(origin=SCHEDULED), save prompt as turn 0,
-    link run.session_id, commit before the first agent event
-  5 prompt_slot, yield_sandbox_events, persist_sandbox_event, until done
-    or the budget ends
-  6 SUCCEEDED with a summary, or FAILED with an error class + notification
+    owner must be active, hold WRITE_CHAT and be in budget, as a chat send
+  2 create the chat (default agent), link run.chat_session_id, RUNNING:
+    one commit, under the run's row lock
+  3 run_chat_turn(prompt, approval_mode=INTERACTIVE)  completes or parks
+  4 sync_chat_run__no_commit: the response status gives the run status
+  any exception -> FAILED (agent_exception) + notification
+
+Approval in the chat -> the turn resumes on an API server; the next dispatch
+tick moves the run to RUNNING and then to its end status.
 
 Beat (per tenant, hourly, primary queue)
-  cleanup_stuck_scheduled_runs  QUEUED too long or RUNNING past budget -> FAILED
+  cleanup_stuck_scheduled_runs  QUEUED too long -> FAILED (stuck)
+                                AWAITING_APPROVAL > 24 h -> CANCELLED
 ```
 
-**Schedules.** `backend/onyx/server/features/build/scheduled_tasks/schedule.py:compile_to_cron` turns the three
-editor modes into one 5-field cron string. Cron is stored and evaluated in
-UTC. `editor_mode` only lets the form show the input again. The user enters
-local times. The browser converts the payload to UTC with the offset of the
-save date before it sends it, and compiles cron itself for validation and the
-preview (`web/src/app/craft/v1/tasks/schedule.ts:localPayloadToUtcPayload`,
-`compileToCron`). A change to the cron rules needs both compilers.
+**Run status.** `db/scheduled_task.py:sync_chat_run__no_commit` maps the
+status of the run's first chat response (`get_run_response`):
+running → RUNNING, suspended → AWAITING_APPROVAL, complete or limit →
+SUCCEEDED with a summary, cancelled → CANCELLED, error → FAILED. It notifies
+on FAILED and AWAITING_APPROVAL. It converges, so the executor and every
+dispatch tick can call it.
 
-**Origin.** `create_session(origin=SessionOrigin.SCHEDULED)` marks the
-session. The sidebar query filters on `INTERACTIVE`
-(`db/build_session.py:get_user_build_sessions`). The
-proxy uses the origin to refuse personal policies for a scheduled session.
+**Schedules.** `backend/onyx/server/features/build/scheduled_tasks/schedule.py:compile_to_cron`
+turns the three editor modes into one 5-field cron string, stored and
+evaluated in UTC. The browser converts local times to UTC at the date of the
+next fire (`web/src/app/craft/v1/tasks/schedule.ts`). A change to the cron
+rules needs both compilers.
 
-**Live view.** `backend/onyx/server/features/build/session/api.py:get_session_scheduled_run_events` attaches the
-API server as one more reader of the sandbox's event stream for a `RUNNING`
-run. It sends keepalives until the executor stores the opencode session id, so
-a quick click on a new run does not fail.
+**Routes.** One router, `server/features/build/scheduled_tasks/api.py`, is
+mounted at `/scheduled-tasks` and under `/build` behind the Craft gate.
+`GET /scheduled-tasks/action-policies` is the new-task catalog and
+`GET /scheduled-tasks/chat-sessions/{id}/run` feeds the banner (null for a
+normal chat).
 
-**Integrations and action settings.** Task create and patch accept
-`integrations: [{integration_id, action_settings}]`.
-`integrations/craft.py:replace_task_integrations__no_commit` checks that the
-owner has access to each integration and that each action key
-is an action of it, then stores `scheduled_task__integration` rows. A stored
-link that the owner lost access to is not in the catalog, so a save keeps it.
-A run can use only these integrations, while the owner has
-access to them; the proxy blocks each other integration. Each
-action value is Allow, Ask, Blocked or Inherit (the integration setting).
-`GET /scheduled-tasks/{id}/action-policies` and the new-task catalog
-`GET /build/action-policies` return `TaskIntegrationView` rows
-(`integrations/craft.py:list_task_integration_views`), each with `enabled`
-and the stored `action_settings`. The rows leave out OpenAPI
-integrations, which Craft does not offer. Each action has the policy
-that Inherit gives, and `locked` when a task Allow keeps that policy; the
-editor does not offer Allow for a locked action. A task integration that an
-admin turned off still has a row, with `runnable` false, and the stored
-settings leave out action keys that the integration has no more, so a save of
-an unrelated edit keeps the integration and passes the action check. A session of a
-scheduled run gets the MCP servers of the task integrations in its opencode config,
-also those the owner turned off, with the task settings as disabled tools
-(`resolve_craft_mcp_servers(..., task_id)`). The executor passes the task to
-`SessionManager.create_session`, because the run row names the session only
-after creation; later rebuilds read it with
-`db/scheduled_task.py:get_scheduled_task_id_for_session`. Edits apply to the next request, including
-requests of a run in progress.
+**Integrations.** Task create and patch accept
+`integrations: [{integration_id, action_settings}]`, checked and stored by
+`integrations/craft.py:replace_task_integrations__no_commit`. While a run is
+in flight in a chat, `integrations/policy.py:chat_integrations` gives the
+chat the task's integrations with the task's settings, also those the owner
+turned off; tool construction and the approval check both read it. The
+catalog (`list_task_integration_views`) lists what chat can run: MCP and
+OpenAPI integrations, not API apps without an OpenAPI tool.
 
 ---
 
 ## Contracts and traps
 
 1. `advance-in-claim-txn` **Advance `next_run_at` in the claiming
-   transaction.** The dispatcher
-   (`db/scheduled_task.py:claim_due_scheduled_tasks`) holds `FOR UPDATE SKIP LOCKED` row locks
-   until commit. A change that advances later, or claims without the lock,
+   transaction.** `claim_due_scheduled_tasks` holds `FOR UPDATE SKIP LOCKED`
+   row locks until commit. Advancing later, or claiming without the lock,
    double-fires a tick across replicas.
-2. `enqueue-after-commit` **Enqueue only after commit.** The executor must not
-   see a run row that rolls back. If the process dies between commit and send,
-   the run stays `QUEUED` and the sweeper marks it failed later. Nothing sends
-   it again.
+2. `enqueue-after-commit` **Enqueue only after commit.**
+   The executor must not see a run row that rolls back. If the process dies
+   between commit and send, the run stays `QUEUED` and the sweeper fails it.
 3. `send-expires-and-tenant` **Every send needs `expires=` and `tenant_id`.**
-   Two places send the executor task: the dispatcher and, for manual runs,
-   `backend/onyx/server/features/build/scheduled_tasks/api.py:_enqueue_executor`. Both expire after
-   `QUEUE_RESIDENCY_SECONDS`, which is also the stuck-queued threshold, so one
-   rule reclaims a message that expires unexecuted and its row
-   (`background/celery/tasks/scheduled_tasks/tasks.py`). The `tenant_id` kwarg
-   selects the tenant schema in the executor.
-4. `link-session-before-turn` **Link the session to the run before any agent
-   turn.** The proxy finds a task's authority through
-   `ScheduledTaskRun.session_id` and a `RUNNING` status
-   (`db/scheduled_task.py:get_active_scheduled_task_context`). An unlinked or
-   finished run gives `no_active_session` for every app request. The authority
-   also ends with the run
-   ([[craft-external-apps#task-authority-ends-with-run]]). Do not add a
-   fallback to personal policies for scheduled sessions.
-5. `task-choices-default-ask` **Task choices follow the policy function in
-   [[craft-external-apps]].** An integration that the task does not have
-   blocks every action. The `action_settings` of the task are the link
-   settings: an admin Blocked stays final, and Allow does not apply when users
-   cannot save Always allow on the integration
-   (`integrations/policy.py:resolve_action_policies`). A task that the
-   migration copied has `default: ask`, as the old tables gave.
-6. `origin-filter-not-join` **Hide scheduled sessions by `BuildSession.origin`,
-   not by a join.**
-   `server/features/build/session/manager.py:SessionManager.create_session` commits the session and
-   then sets up its session workspace. The executor links the session to the
-   run only after that. A join on `scheduled_task_run.session_id` would show
-   the new session in the sidebar during that window. Slack sessions use the
-   same origin filter.
-7. `executor-never-reraises` **Do not re-raise from the executor.**
-   `server/features/build/scheduled_tasks/executor.py:run_scheduled_task_logic` turns errors into a `FAILED` row so Celery does
-   not retry. A retry would run the prompt and its side effects twice.
-8. `failure-paths-notify` **New failure paths must notify.** Executor failure
-   paths call `server/features/build/scheduled_tasks/executor.py:_notify` with `SCHEDULED_TASK_FAILED`. The `TASK_MISSING` path
-   and the stuck-run sweeper do not, so those failures are silent to the user.
+   The dispatcher and `server/features/build/scheduled_tasks/api.py:_enqueue_executor` both expire after
+   `QUEUE_RESIDENCY_SECONDS`, which is also the stuck-queued threshold.
+4. `link-session-before-turn` **The response is the run's source of truth.**
+   Write run status only through `sync_chat_run__no_commit` or a cancel.
+   The turn can end on any API server after an approval, so nothing at the
+   end of the executor alone may decide the status.
+5. `task-choices-default-ask` **Task authority lasts while the run is in
+   flight.** `chat_integrations` uses the task links only while the run is
+   RUNNING or AWAITING_APPROVAL and its response has not ended; later turns
+   use the agent. Saved Always allow choices do not apply to a task link
+   (`AgentIntegration.task_link`). The task's
+   settings are link settings: an admin Blocked stays final
+   (`integrations/policy.py:resolve_action_policies`).
+6. `run-link-hides-chat` **The run link is what hides a scheduled chat.**
+   History (`get_chat_sessions_by_user`), search and delete-all apply
+   `db/chat.py:not_a_scheduled_run_chat`. The executor creates the chat and
+   links it in one commit, so a run chat is never listed. The link has no
+   foreign key, because adding one would lock `chat_session`; the dispatcher
+   cancels a run whose chat was hard-deleted.
+7. `executor-never-reraises` **Do not re-raise from the executor.** A Celery
+   retry would run the prompt and its side effects twice.
+8. `failure-paths-notify` **New failure paths must notify.** Use
+   `notify_run_owner__no_commit`. The stuck sweep does not notify.
 9. `dispatch-on-primary` **Keep the dispatcher and sweeper on the primary
-   queue.** They are short DB work. On the `scheduled_tasks` queue, long
-   executor runs could stall dispatch for every tenant (comment in
-   `background/celery/tasks/beat_schedule.py`).
-10. `scheduled-session-may-get-port` **A scheduled session can get a Next.js
-    port later.** `create_session` skips the port for non-interactive origins.
-    When a follow-up turn must rebuild the session workspace (for example
-    after sleep), `backend/onyx/server/features/build/session/session_ready.py:ensure_session_ready` reserves a
-    port for any session that has none. Do not assume a scheduled session
-    never has one.
+   queue.** Long executor runs on `scheduled_tasks` would stall dispatch.
+10. `cancel-before-fire` **A fire cancels a parked run, not a running one.**
+    Only AWAITING_APPROVAL runs are cancelled; a run that still works makes
+    the fire SKIPPED. "Run once" cancels nothing. An approval can resume the
+    response before the run status follows, so cancel only through
+    `chat/run_store.py:cancel_parked_response`, which leaves an owned
+    response alone; `stop_response` would stop the approved work.
 11. `run-viewed-revision` **Run read state mirrors Outputs artifacts.**
-    `db/scheduled_task.py:mark_run_status` increments `ScheduledTaskRun.version`
-    when a run moves into a terminal status (`is_terminal()`). `SKIPPED` rows
-    are inserted directly by `insert_run`, so they stay at version 0.
-    `viewed_revision` only moves forward (`mark_runs_viewed` uses `greatest`).
-    A revision newer than `version` returns 409. A run is unviewed while
-    `(viewed_revision ?? 0) < version`.
+    `mark_run_status` increments `version` when a run moves into a status
+    with results (`has_results()`: terminal or AWAITING_APPROVAL). SKIPPED
+    rows stay at version 0. `viewed_revision` only moves forward. A run is
+    unviewed while `(viewed_revision ?? 0) < version`.
 
 ---
 
 ## Decisions
 
-- **A dedicated `BuildSession.origin` column** instead of a join, for the
-  sidebar race in [[#origin-filter-not-join]], and because the proxy reads it
-  on every request.
+- **One run engine.** The dispatcher sends every task, old Craft tasks too,
+  to the chat executor. Runs have no link to Craft build sessions, and Craft
+  sessions have no scheduled-task authority. The migration that moved runs to
+  chat failed the Craft runs that were still in flight.
+- **Default agent only.** A task has no agent column yet.
+- **The chat time cap.** A run has no cap of its own: it ends with its
+  response, which stops itself at the chat deadline (`CHAT_EXECUTION_TIMEOUT_S`,
+  one hour). The run then ends FAILED with `timeout`. A response whose worker
+  died is interrupted through `interrupt_ownerless_responses`.
 - **Skip, not queue, an overlapping fire.** A slow task cannot pile up runs.
-  The skipped row makes the miss visible.
-- **No retries.** A partly done run may have acted on external apps. The user
-  decides whether to run it again.
+- **No retries.** A partly done run may have acted on external integrations.
 
 ---
 
 ## Known issues
 
-- `ScheduledTaskRunStatus.AWAITING_APPROVAL` and the notification types
-  `SCHEDULED_TASK_AWAITING_APPROVAL` and `SCHEDULED_TASK_PRE_APPROVED_ACTION`
-  (`db/enums.py:ScheduledTaskRunStatus`, `configs/constants.py:NotificationType`)
-  are defined, but nothing sets or sends
-  them. The web app still handles the status
-  (`web/src/app/craft/v1/tasks/components/StatusBadge.tsx`,
-  `web/src/app/craft/hooks/useBuildSessionStore.ts`). Approvals in a scheduled
-  run use the normal proxy wait.
-- The `backend/onyx/server/features/build/scheduled_tasks/executor.py` docstrings give a 30-minute budget and a
-  `sandbox_provisioning` skip, and the `backend/onyx/background/celery/tasks/scheduled_tasks/tasks.py` module docstring gives a
-  45-minute stuck threshold. These are false leads. The code uses
-  `SCHEDULED_RUN_HARD_CAP_SECONDS` (60 minutes,
-  `server/features/build/timeouts.py`) plus `TURN_RECLAIM_SLACK_SECONDS`, and
-  marks any wake failure `FAILED`.
-- A run that dies without updating its row stays `RUNNING` until the hard cap
-  plus `TURN_RECLAIM_SLACK_SECONDS`, then up to one more hour for the sweep.
-- A daily or weekly time keeps the UTC time of the day it was saved. After a
-  daylight-saving change, the task fires one hour off in local time until the
-  user saves it again.
-- An agent `RequestPermissionRequest` ends the run as `FAILED`
-  (`agent_permission_required`). It does not pause for the user.
+- A daily or weekly time keeps the UTC time of the save. After a
+  daylight-saving change the fire is one hour off in local time; the pages
+  show the true local time of each fire.
+- After an approval, the run status follows the resumed turn only at the next
+  dispatch tick (up to 30 s late).
 
 ---
 
 ## Dependencies
 
-- [[craft-external-apps]]: proxy enforcement and policy precedence.
-- [[craft-sessions]]: `SessionManager.create_session`, `prompt_slot`,
-  `yield_sandbox_events` and `persist_sandbox_event`.
-- [[craft-sandboxes]]: `ensure_sandbox_running` for the owner.
-- [[craft-admin]]: `is_craft_enabled_for_user`, checked for each owner at
-  dispatch.
+- [[core-chat-loop]]: `run_chat_turn`.
+- [[mcp-and-custom-tools]]: durable approvals and `stop_response`.
+- [[craft-external-apps]]: policy precedence.
 - [[background-jobs]]: Beat entries, queues and the worker set.
-- [[notifications]]: `SCHEDULED_TASK_FAILED`.
+- [[notifications]]: `SCHEDULED_TASK_FAILED`, `SCHEDULED_TASK_AWAITING_APPROVAL`.
 - [[multi-tenancy]]: per-tenant Beat fan-out and the `tenant_id` kwarg.
 
 ---
 
 ## Recipes
 
-- `celery-task` **A Celery task for this feature.** Copy `cleanup_stuck_scheduled_runs` for
-  short DB work or `run_scheduled_task` for work that drives an agent; list the
-  tasks with `git grep -n '@shared_task' backend/onyx/background/celery/tasks/scheduled_tasks/`.
-  Short DB work goes on `primary` ([[#dispatch-on-primary]]); work that drives
-  an agent goes on `scheduled_tasks`. Pass `expires=` and `tenant_id`
-  ([[#send-expires-and-tenant]]).
-- `run-status-or-error-class` **A run status or error class.** Copy an existing value of
-  `ScheduledTaskRunStatus` or the closed `ScheduledTaskErrorClass` in
-  `backend/onyx/db/enums.py`. Then update `getNonClickableReason` and
-  `isScheduledRunInFlight` in `web/src/app/craft/v1/tasks/utils.ts`, and the
-  notification calls ([[#failure-paths-notify]]).
-- `investigate-task-did-not-run` **Investigate "my task did not run".** Read the task's run rows. A
-  `SKIPPED` row names the reason (`owner_craft_disabled` or
-  `prior_in_flight`). A `QUEUED` row that never starts means the
-  `scheduled_tasks` worker is not running or the message expired. No row at
-  all means the dispatcher did not claim the task: check `next_run_at` and
-  that the Beat for the tenant runs.
-- `investigate-silent-failure` **Investigate "my run failed and I got no notification".** Read the run's
-  `error_class`. `STUCK` or `TASK_MISSING` is silent by design
-  ([[#failure-paths-notify]]). A `STUCK` run with an `error_detail` of
-  `queued > N min` means the `scheduled_tasks` worker did not pick it up. For other classes, search the logs
-  for `Failed to create scheduled-task notification`. The failure notice is
-  INFO, so look for it in the notification list, not the banner queue.
-- `setup-task-policy-test` **Set up a task-policy test.** Set one task action to Allow while the
-  personal choice is Ask. Run the task: the action runs with no prompt. After
-  the run ends, send a follow-up that uses the same action: the proxy blocks
-  it.
+- `celery-task` **A Celery task for this feature.** Copy
+  `cleanup_stuck_scheduled_runs` for short DB work or `run_scheduled_task`
+  for work that runs a turn. Short DB work goes on `primary`
+  ([[#dispatch-on-primary]]). Pass `expires=` and `tenant_id`.
+- `run-status-or-error-class` **A run status or error class.** Add it to
+  `ScheduledTaskRunStatus` or `ScheduledTaskErrorClass` in
+  `backend/onyx/db/enums.py`, to `_RUN_STATUS_BY_RESPONSE_STATUS` if a
+  response status maps to it, and to the web types and status badges
+  (`web/src/sections/scheduledTasks/StatusBadges.tsx`,
+  `web/src/app/craft/v1/tasks/components/StatusBadge.tsx`).
+- `investigate-task-did-not-run` **Investigate "my task did not run".** Read
+  the task's run rows. A `SKIPPED` row names the reason. A `QUEUED` row that
+  never starts means the `scheduled_tasks` worker is not running or the
+  message expired. No row means the dispatcher did not claim the task: check
+  `next_run_at` and the tenant's Beat.
+- `investigate-silent-failure` **Investigate "my run failed and I got no
+  notification".** `STUCK` is silent by design. For other
+  classes, search the logs for `Failed to create scheduled-task notification`.
+- `setup-task-policy-test` **Set up a task-policy test.** Give the task one
+  integration with an action on Ask. Run once: the run parks as
+  AWAITING_APPROVAL. Approve in the chat: the run ends SUCCEEDED within one
+  dispatch tick. A follow-up after the run uses the user's settings.
 
 ---
 
 ## Verification
 
-- Dispatch, executor and sweeps: `backend/tests/external_dependency_unit/craft/`.
-- Task context in the proxy: `backend/tests/unit/sandbox_proxy/`.
-- Schedule compilation: `backend/tests/unit/onyx/server/features/craft/scheduled_tasks/`.
-- The API: `backend/tests/integration/tests/craft/`.
+- Dispatch, run sync, next-fire cancel, approval timeout, task authority and
+  the hidden history: `backend/tests/external_dependency_unit/scheduled_tasks/`.
+- The API: `backend/tests/integration/tests/craft/test_scheduled_tasks_api.py`.
 - Playwright: `web/tests/e2e/scheduled-tasks/` needs the `scheduled_tasks`
-  Celery worker. Without it, runs never finish and the spec times out.
+  Celery worker (the `full` ODS profile).

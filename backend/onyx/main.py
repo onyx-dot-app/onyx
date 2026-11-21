@@ -88,6 +88,9 @@ from onyx.server.features.admin_banner.api import admin_router as admin_banner_r
 from onyx.server.features.build.api import admin_router as build_admin_router
 from onyx.server.features.build.api import router as build_router
 from onyx.server.features.build.configs import SANDBOX_RUNTIME, SandboxRuntime
+from onyx.server.features.build.scheduled_tasks.api import (
+    router as scheduled_tasks_router,
+)
 from onyx.server.features.build.static_preview import (
     public_router as static_preview_router,
 )
@@ -598,6 +601,7 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
 
     include_router_with_global_prefix_prepended(application, password_router)
     include_router_with_global_prefix_prepended(application, chat_router)
+    include_router_with_global_prefix_prepended(application, scheduled_tasks_router)
     include_router_with_global_prefix_prepended(application, query_router)
     include_router_with_global_prefix_prepended(application, document_router)
     include_router_with_global_prefix_prepended(application, user_router)

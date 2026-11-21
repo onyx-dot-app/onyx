@@ -271,6 +271,27 @@ def request_response_stop(
     cache.set(_stop_key(response_id), reason, ex=STOP_TTL_SECONDS)
 
 
+def cancel_parked_response(
+    cache: CacheBackend, tenant_id: str, response_id: int
+) -> bool:
+    """Cancel a response that still waits for approval. A response that an
+    approval resumed, or that ended, stays as it is: unlike Stop, this sends
+    no stop request that a resumed owner would obey. Returns whether it
+    ended here."""
+    with _ownership_lock(cache, response_id):
+        if cache.exists(_owner_key(response_id)):
+            return False
+        with get_session_with_tenant(tenant_id=tenant_id) as session:
+            dumps = interrupt_response__no_commit(
+                session, response_id, cancelled=True, only_parked=True
+            )
+            session.commit()
+    if dumps is None:
+        return False
+    delete_files_best_effort(dumps, CHECKPOINT_DUMP_CLEANUP)
+    return True
+
+
 def stop_response(
     cache: CacheBackend,
     tenant_id: str,

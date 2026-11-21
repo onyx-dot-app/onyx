@@ -20,6 +20,8 @@ from onyx.connectors.github.models import (
 )
 from onyx.connectors.github.source_operations import GitHubApiError
 from onyx.connectors.models import ConnectorFailure, Document
+from onyx.db.models import Document as DBDocument
+from onyx.indexing.indexing_pipeline import get_docs_to_update
 from tests.unit.onyx.connectors.utils import load_everything_from_checkpoint_connector
 
 
@@ -505,3 +507,59 @@ def test_files_paginated_with_issues_enabled_no_stage_regression(
     assert len(ids) == 250
     assert len(set(ids)) == 250  # no duplicates from re-indexing page 0
     assert outputs[-1].next_checkpoint.has_more is False
+
+
+def _stored_row(doc: Document, stored_updated_at: datetime) -> MagicMock:
+    """The DB row a full index left for ``doc`` before any later poll."""
+    row = MagicMock()
+    row.id = doc.id
+    row.content_hash = doc.content_hash()
+    row.doc_updated_at = stored_updated_at
+    row.source_mime_type = None
+    row.source_size_bytes = None
+    row.external_user_emails = []
+    row.external_user_group_ids = []
+    row.is_public = False
+    return row
+
+
+def test_push_reembeds_only_changed_files(
+    build_files_connector: Callable[..., GithubConnector],
+    serve_files: Callable[..., GitHubRepository],
+) -> None:
+    """A push moves repo.pushed_at, but only files whose content changed are
+    re-embedded. Rows keep the pushed_at date that older versions stored."""
+    connector = build_files_connector()
+    first_push = datetime(2024, 1, 1, tzinfo=timezone.utc)
+    files = {"README.md": b"# Hello", "docs/guide.md": b"a guide"}
+    serve_files(files, pushed_at=first_push)
+    indexed = [
+        i
+        for i in _all_items(
+            load_everything_from_checkpoint_connector(connector, 0, time.time())
+        )
+        if isinstance(i, Document)
+    ]
+    assert len(indexed) == 2
+    stored: list[DBDocument] = [_stored_row(doc, first_push) for doc in indexed]
+
+    # A later push to any branch changes only docs/guide.md on the indexed one.
+    files["docs/guide.md"] = b"a new guide"
+    poll_start = datetime(2024, 6, 1, tzinfo=timezone.utc)
+    serve_files(files, pushed_at=datetime(2024, 6, 2, tzinfo=timezone.utc))
+    polled = [
+        i
+        for i in _all_items(
+            load_everything_from_checkpoint_connector(
+                connector, poll_start.timestamp(), time.time()
+            )
+        )
+        if isinstance(i, Document)
+    ]
+    assert len(polled) == 2
+
+    to_update, _hashes = get_docs_to_update(polled, db_docs=stored)
+
+    assert [doc.id for doc in to_update] == [
+        "https://github.com/test-org/test-repo/blob/main/docs/guide.md"
+    ]

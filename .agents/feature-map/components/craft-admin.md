@@ -19,9 +19,7 @@ on until an admin changes it) and overrides it for single users or in bulk. A
 user whose effective access is off cannot open Craft. Every route on the Craft
 user router returns 403, not only a hidden link. The shared-webapp preview does
 not check Craft access, and a static preview checks the owner's access, not
-the viewer's ([[#preview-routes-skip-access-gate]]). When the admin turns access off for the owner of a scheduled
-task, the next fire records a skipped run instead of running
-([[craft-scheduled-tasks]]).
+the viewer's ([[#preview-routes-skip-access-gate]]).
 
 **Integrations.** The admin sets up built-in apps (from a preset), custom apps
 and MCP servers as integrations on the Integrations page

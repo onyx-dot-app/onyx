@@ -10681,6 +10681,113 @@
         "saved": "{name}의 그룹 설정을 저장했습니다.",
         "saveFailed": "그룹 설정을 저장할 수 없습니다."
       }
+    },
+    "serviceStatus": {
+      "page": {
+        "description": "Onyx 인스턴스의 현재 리소스 사용량과 검색 클러스터 상태",
+        "refresh": "새로 고침",
+        "refreshFailed": "클러스터 상태를 새로 고칠 수 없습니다. 페이지에는 마지막 결과가 표시됩니다.",
+        "loadFailed": "검색 클러스터 상태를 읽을 수 없습니다. OpenSearch에 연결할 수 있는지 확인하세요."
+      },
+      "cluster": {
+        "title": "검색 클러스터 - OpenSearch",
+        "status": "클러스터 상태",
+        "version": "OpenSearch {version}",
+        "health": "상태 {health}",
+        "updated": "{time} 업데이트됨",
+        "dataNodes": "데이터 노드",
+        "shards": "샤드",
+        "shardLayout": "{primaries} × {copies}",
+        "copies": "복사본",
+        "indexSize": "인덱스 크기",
+        "chunks": "청크",
+        "healthGreen": "초록: 모든 샤드 복사본이 할당되었습니다.",
+        "healthYellow": "노랑: 일부 복제본 샤드가 할당되지 않았습니다. 검색은 동작하지만 데이터 노드를 잃으면 데이터가 손실될 수 있습니다.",
+        "healthYellowSingleNode": "노랑: 복제본 사본에는 두 번째 데이터 노드가 필요합니다. 데이터 노드가 하나인 클러스터에서는 정상이며, 검색은 작동합니다.",
+        "healthRed": "빨강: 일부 기본 샤드가 할당되지 않아 인덱스 일부를 검색할 수 없습니다."
+      },
+      "searches": {
+        "loadTitle": "검색 부하",
+        "loadUnit": "회/초",
+        "timeTitle": "검색 지연 시간",
+        "seconds": "{value}초",
+        "milliseconds": "{value}ms",
+        "loadFailed": "최근 검색을 읽을 수 없습니다.",
+        "p90Note": "(90번째 백분위수)",
+        "p90Row": "p90 {value}",
+        "p10Row": "p10 {value}",
+        "minuteLabel": "{time}: p90 {p90}, p10 {p10}",
+        "rateTooltip": "{rate}회/초",
+        "millisecondsUnit": "ms",
+        "secondsUnit": "초",
+        "failedInMinute": "{count, plural, other {#건 실패}}"
+      },
+      "nodes": {
+        "title": "데이터 노드",
+        "disk": "디스크 사용량",
+        "vector": "벡터 메모리",
+        "percent": "{value}%",
+        "usedOfTotal": "{used} / {total} {unit}",
+        "shards": "{count, plural, other {샤드 #개}}",
+        "unnamed": "노드 {number}",
+        "copyName": "OpenSearch 노드 이름 복사 ({name})"
+      },
+      "indexes": {
+        "title": "인덱스",
+        "chunks": "청크",
+        "shards": "샤드",
+        "reindex": "재인덱싱",
+        "detail": "임베딩 모델 · {dim}차원",
+        "deleted": "삭제된 청크 {percent}%",
+        "detailQuantized": "임베딩 모델 · {dim}차원 · {quantization} 벡터",
+        "reindexProgress": "현재의 {percent}%"
+      },
+      "issues": {
+        "title": "문제 및 권장 사항",
+        "none": "발견된 문제가 없습니다.",
+        "criticalCount": "심각 {count}건",
+        "warningCount": "{count, plural, other {경고 #건}}",
+        "nodeCount": "데이터 노드 {count}개",
+        "indexSettings": "인덱스 설정",
+        "sizingGuide": "용량 산정 가이드",
+        "clusterRed": {
+          "title": "클러스터 상태가 빨간색입니다",
+          "description": "일부 기본 샤드가 할당되지 않아 인덱스 일부를 검색할 수 없습니다. OpenSearch 로그를 확인하세요."
+        },
+        "unassignedShards": {
+          "title": "{value, plural, other {샤드 복사본 #개가 할당되지 않았습니다}}",
+          "description": "OpenSearch에 이를 배치할 데이터 노드가 없습니다. 데이터 노드를 추가하거나 복제본 수를 줄이세요."
+        },
+        "diskCritical": {
+          "title": "{nodes}의 디스크 {value}%",
+          "description": "OpenSearch는 85%에서 데이터 노드에 샤드 배치를 중지합니다. 스토리지 또는 데이터 노드를 추가하세요."
+        },
+        "diskWarning": {
+          "title": "{nodes}의 디스크 {value}%",
+          "description": "재인덱싱에는 두 번째 인덱스를 위한 공간이 필요합니다. 스토리지 또는 데이터 노드를 추가하세요."
+        },
+        "vectorCritical": {
+          "title": "{nodes}의 벡터 메모리 {value}%",
+          "description": "벡터가 메모리에 들어가지 않아 검색이 디스크에서 읽습니다. 메모리 또는 데이터 노드를 추가하거나 더 작은 벡터 양자화를 사용하세요."
+        },
+        "vectorWarning": {
+          "title": "{nodes}의 벡터 메모리 {value}%",
+          "description": "벡터가 메모리에 들어가지 않으면 검색이 느려집니다. 메모리 또는 데이터 노드를 추가하거나 더 작은 벡터 양자화를 사용하세요."
+        },
+        "heap": {
+          "title": "{nodes}의 JVM 힙 {value}%",
+          "description": "힙이 가득 차면 OpenSearch가 요청을 거부할 수 있습니다. 메모리 또는 데이터 노드를 추가하세요."
+        },
+        "indexMissing": {
+          "title": "검색 인덱스가 없습니다",
+          "description": "현재 검색 설정에 대한 인덱스가 OpenSearch에 없어 검색 결과가 없습니다. OpenSearch 로그를 확인한 다음 인덱스 설정에서 재인덱싱을 시작하세요."
+        },
+        "nodesUnanswered": {
+          "title": "{value, plural, other {데이터 노드 #개가 응답하지 않았습니다}}",
+          "description": "상태에는 이 노드들이 보고하지 않은 디스크와 메모리 같은 정보가 빠져 있습니다. 모든 데이터 노드가 실행 중인지 확인한 다음 새로 고치세요."
+        },
+        "dismiss": "닫기"
+      }
     }
   },
   "agents": {
@@ -13993,7 +14100,6 @@
     "chatPanel": {
       "input": {
         "continuePlaceholder": "대화를 계속하세요...",
-        "scheduledRunPlaceholder": "예약된 실행 진행 중...",
         "subagentPlaceholder": "메시지를 보내려면 메인 에이전트로 전환하세요"
       },
       "openSidebar": {
@@ -14011,8 +14117,7 @@
       },
       "toast": {
         "operationWait": "현재 작업이 완료될 때까지 기다려 주세요.",
-        "sandboxWait": "샌드박스가 초기화될 때까지 기다려 주세요",
-        "scheduledRunWait": "예약된 실행이 완료될 때까지 기다려 주세요."
+        "sandboxWait": "샌드박스가 초기화될 때까지 기다려 주세요"
       },
       "loadError": {
         "title": "세션을 불러올 수 없습니다",
@@ -14463,23 +14568,6 @@
         "button": "샌드박스 깨우기"
       }
     },
-    "scheduledRun": {
-      "badge": {
-        "label": "예약됨"
-      },
-      "startedAt": {
-        "label": "{time} 시작"
-      },
-      "status": {
-        "awaitingApproval": "이 예약된 실행은 승인 대기 중입니다. 재개되어 완료되면 후속 메시지를 보낼 수 있습니다.",
-        "running": "이 예약된 실행이 아직 진행 중입니다. 완료되면 후속 메시지를 보낼 수 있습니다.",
-        "startedBy": "이 세션은 예약된 작업 {task}에 의해 {time}에 시작되었습니다."
-      },
-      "viewTask": {
-        "ariaLabel": "예약된 작업 {task} 보기. {status}",
-        "label": "작업 보기"
-      }
-    },
     "setupCard": {
       "appFallback": {
         "label": "외부 앱 {id}"
@@ -14752,7 +14840,8 @@
         },
         "tabs": {
           "dailyWeekly": "매일 / 매주",
-          "interval": "간격"
+          "interval": "간격",
+          "advanced": "고급"
         },
         "weekdays": {
           "fri": "금",
@@ -14762,6 +14851,21 @@
           "thu": "목",
           "tue": "화",
           "wed": "수"
+        },
+        "advanced": {
+          "cronLabel": "Cron 표현식",
+          "hint": "다섯 개의 필드: 분, 시, 일, 월, 요일. 표현식은 UTC로 실행됩니다.",
+          "placeholder": "예: 0 9 * * 1-5"
+        },
+        "errors": {
+          "intervalNotPositiveInteger": "간격은 1 이상의 정수여야 합니다.",
+          "minutesIntervalTooLong": "59분을 넘는 간격에는 시간 단위를 사용하세요.",
+          "hoursIntervalTooLong": "23시간을 넘는 간격에는 매일 일정을 사용하세요.",
+          "dayIntervalTimeRequired": "일 단위 간격에는 시간을 선택하세요.",
+          "timeRequired": "시간을 선택하세요.",
+          "weekdayOutOfRange": "요일 값은 0-6(일..토)이어야 합니다.",
+          "cronRequired": "Cron 표현식을 입력하세요.",
+          "cronFieldCount": "Cron에는 정확히 5개의 필드(분 시 일 월 요일)가 있어야 합니다."
         }
       },
       "unviewedResults": "새 결과"
@@ -16150,6 +16254,9 @@
         },
         "discordBot": {
           "label": "Discord 봇"
+        },
+        "serviceStatus": {
+          "label": "서비스 상태"
         }
       },
       "sections": {
@@ -16227,6 +16334,9 @@
       },
       "customize": {
         "label": "사용자 지정"
+      },
+      "scheduledTasks": {
+        "label": "예약된 작업"
       }
     },
     "chatButton": {
@@ -17594,5 +17704,158 @@
       }
     },
     "search": "검색"
+  },
+  "scheduledTasks": {
+    "unviewedResults": "새 결과",
+    "runStatus": "{status, select, QUEUED {대기 중} RUNNING {실행 중} AWAITING_APPROVAL {승인 대기 중} SUCCEEDED {성공} FAILED {실패} CANCELLED {취소됨} SKIPPED {건너뜀} other {알 수 없음}}",
+    "taskStatus": "{status, select, ACTIVE {활성} other {일시 중지됨}}",
+    "schedule": {
+      "cron": "Cron (UTC): {cron}",
+      "everyMinutes": "{count, plural, other {#분마다}}",
+      "everyHours": "{count, plural, other {#시간마다}}",
+      "everyDays": "{count, plural, other {#일마다 {time}}}",
+      "daily": "매일 {time}",
+      "weekly": "{days} {time}"
+    },
+    "list": {
+      "title": "예약된 작업",
+      "description": "일정에 따라 프롬프트를 실행합니다. 각 실행은 읽고 이어갈 수 있는 채팅으로 열립니다.",
+      "search": "작업 검색",
+      "new": "새 작업",
+      "never": "없음",
+      "notScheduled": "예약되지 않음",
+      "loadFailed": "예약된 작업을 불러오지 못했습니다.",
+      "open": "{name} 열기",
+      "columns": {
+        "name": "이름",
+        "schedule": "일정",
+        "lastRun": "마지막 실행",
+        "nextRun": "다음 실행",
+        "status": "상태"
+      },
+      "empty": {
+        "title": "아직 예약된 작업이 없습니다",
+        "description": "작업을 만들어 일정에 따라 프롬프트를 실행하세요."
+      },
+      "noMatches": {
+        "title": "일치하는 작업이 없습니다",
+        "description": "다른 검색어나 필터를 사용해 보세요."
+      },
+      "filter": {
+        "label": "작업 필터",
+        "all": "모든 작업",
+        "unviewed": "새 결과"
+      }
+    },
+    "actions": {
+      "runNow": "한 번 실행",
+      "pause": "일시 중지",
+      "resume": "재개",
+      "edit": "편집",
+      "delete": "삭제",
+      "menu": "{name} 작업",
+      "toasts": {
+        "runQueued": "\"{name}\" 실행을 시작했습니다.",
+        "runFailed": "실행을 시작하지 못했습니다.",
+        "resumed": "작업을 재개했습니다.",
+        "paused": "작업을 일시 중지했습니다.",
+        "statusFailed": "작업 상태를 변경하지 못했습니다.",
+        "deleted": "\"{name}\"을(를) 삭제했습니다.",
+        "deleteFailed": "작업을 삭제하지 못했습니다."
+      },
+      "confirmDelete": {
+        "title": "\"{name}\"을(를) 삭제할까요?",
+        "description": "작업 실행이 중지되고 실행 기록이 삭제됩니다.",
+        "submit": "삭제"
+      }
+    },
+    "runs": {
+      "label": "실행 기록",
+      "open": "{time} 실행 열기",
+      "loading": "실행을 불러오는 중…",
+      "loadFailed": "실행 기록을 불러오지 못했습니다.",
+      "loadMore": "더 보기",
+      "markAllViewed": "모두 확인함으로 표시",
+      "markAllViewedFailed": "실행을 확인함으로 표시하지 못했습니다. 다시 시도하세요.",
+      "trigger": "{source, select, MANUAL_RUN_NOW {한 번 실행} other {일정}}",
+      "errorClass": "{errorClass, select, superseded_by_next_fire {취소됨: 누군가 승인에 응답하기 전에 다음 실행이 시작되었습니다.} approval_timeout {취소됨: 24시간 이내에 아무도 승인에 응답하지 않았습니다.} user_cancelled {사용자가 중지했습니다.} agent_permission_required {작업에 승인이 필요했습니다.} agent_exception {실패: 실행 중 오류가 발생했습니다.} stuck {실패: 실행이 제때 시작되지 않았습니다.} timeout {실패: 실행이 1시간 제한에 도달했습니다.} other {실패: {errorClass}}}",
+      "columns": {
+        "started": "시작",
+        "status": "상태",
+        "duration": "소요 시간",
+        "trigger": "트리거",
+        "detail": "세부 정보"
+      },
+      "closed": {
+        "queued": "이 실행은 아직 시작되지 않아 열 채팅이 없습니다.",
+        "skipped": "이 실행은 건너뛰어 열 채팅이 없습니다.",
+        "noChat": "이 실행에는 열 수 있는 채팅이 없습니다."
+      },
+      "empty": {
+        "title": "아직 실행이 없습니다",
+        "description": "작업이 실행될 때마다 실행 기록이 추가됩니다. 지금 시작하려면 한 번 실행을 사용하세요."
+      }
+    },
+    "detail": {
+      "title": "예약된 작업",
+      "back": "예약된 작업",
+      "loadFailed": "이 예약된 작업을 불러오지 못했습니다.",
+      "tabs": {
+        "runs": "실행",
+        "overview": "개요"
+      },
+      "overview": {
+        "prompt": "프롬프트",
+        "schedule": "일정",
+        "nextRun": "다음 실행",
+        "notScheduled": "예약되지 않음",
+        "lastRun": "마지막 실행",
+        "never": "없음"
+      },
+      "switch": {
+        "title": "일정에 따라 실행",
+        "label": "일정에 따라 {name} 실행"
+      },
+      "menu": "추가 작업"
+    },
+    "editor": {
+      "newTitle": "새 예약된 작업",
+      "editTitle": "예약된 작업 편집",
+      "description": "각 실행은 기본 에이전트와 함께 새 채팅으로 프롬프트를 보냅니다.",
+      "back": "뒤로",
+      "loadFailed": "이 예약된 작업을 불러오지 못했습니다.",
+      "save": "저장",
+      "saveAndRun": "저장하고 지금 실행",
+      "errors": {
+        "nameRequired": "이름을 입력하세요.",
+        "promptRequired": "프롬프트를 입력하세요."
+      },
+      "toasts": {
+        "created": "예약된 작업을 만들었습니다.",
+        "createdAndRun": "예약된 작업을 만들었습니다. 첫 번째 실행이 시작되었습니다.",
+        "updated": "예약된 작업을 업데이트했습니다.",
+        "saveFailed": "예약된 작업을 저장하지 못했습니다."
+      },
+      "fields": {
+        "name": {
+          "label": "이름",
+          "placeholder": "예: 주간 고객 에스컬레이션 요약"
+        },
+        "prompt": {
+          "label": "프롬프트",
+          "description": "각 실행은 이 메시지를 새 채팅으로 보냅니다.",
+          "placeholder": "각 실행에서 수행할 작업을 설명하세요"
+        },
+        "schedule": {
+          "label": "일정"
+        }
+      }
+    },
+    "banner": {
+      "title": "{task}의 예약 실행",
+      "inFlight": "{status, select, AWAITING_APPROVAL {이 실행은 아래에서 승인을 기다리고 있습니다.} other {이 실행은 진행 중입니다.}}",
+      "startedAt": "{time}에 시작됨",
+      "viewTask": "작업 보기"
+    }
   }
 }

@@ -90,6 +90,8 @@ export const SWR_KEYS = {
   // ── Health / Version ──────────────────────────────────────────────────────
   health: "/api/health",
   opensearchResourceHealth: "/api/manage/admin/opensearch-health",
+  serviceStatusOpenSearch: "/api/admin/service-status/opensearch",
+  serviceStatusSearches: "/api/admin/service-status/opensearch/searches",
   version: "/api/version",
 
   // ── Settings ──────────────────────────────────────────────────────────────
@@ -549,6 +551,26 @@ export const SWR_KEYS = {
     `/api/build/scheduled-tasks/${taskId}/runs`,
   scheduledTaskHasUnviewedRuns: (taskId: string) =>
     `/api/build/scheduled-tasks/${taskId}/runs?limit=1&unviewed=true`,
-  scheduledRunContext: (sessionId: string) =>
-    `/api/build/sessions/${sessionId}/scheduled-run-context`,
+
+  // ── Scheduled Tasks (chat) ────────────────────────────────────────────────
+  // `chatScheduledTaskRuns` is a base URL, as `scheduledTaskRuns` above.
+  chatScheduledTasks: "/api/scheduled-tasks",
+  chatScheduledTasksUnviewedCount: "/api/scheduled-tasks/unviewed-count",
+  chatScheduledTaskCatalog: "/api/scheduled-tasks/action-policies",
+  chatScheduledTask: (taskId: string) => `/api/scheduled-tasks/${taskId}`,
+  chatScheduledTaskActionPolicies: (taskId: string) =>
+    `/api/scheduled-tasks/${taskId}/action-policies`,
+  chatScheduledTaskRuns: (taskId: string) =>
+    `/api/scheduled-tasks/${taskId}/runs`,
+  chatScheduledTaskRunsPage: (
+    taskId: string,
+    limit: number,
+    cursor: string | null = null
+  ) =>
+    `/api/scheduled-tasks/${taskId}/runs?limit=${limit}` +
+    (cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""),
+  chatScheduledTaskHasUnviewedRuns: (taskId: string) =>
+    `/api/scheduled-tasks/${taskId}/runs?limit=1&unviewed=true`,
+  chatScheduledRun: (chatSessionId: string) =>
+    `/api/scheduled-tasks/chat-sessions/${chatSessionId}/run`,
 } as const;

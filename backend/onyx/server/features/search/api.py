@@ -344,6 +344,9 @@ def _run_search(
                 link=entry.get("url"),
                 source_type=entry["source_type"],
                 updated_at=entry.get("updated_at"),
+                metadata=json.loads(entry["metadata"])
+                if entry.get("metadata")
+                else None,
             )
             for entry in entries
         ],

@@ -241,7 +241,11 @@ change on tool behaviour, such as partial results or the indexed fallback.
   current clients with `git ls-files backend/onyx/tools/tool_implementations/web_search/clients/`.
   Update `provider_requires_api_key` if it needs no key, the key-sync lists in
   `server/manage/web_search/api.py` if one key serves both sides, and the admin
-  setup form in `web/src/views/admin/WebSearchPage/`. A client that fetches
+  setup form in `web/src/views/admin/WebSearchPage/`. The admin page lists a
+  provider only after its type is in `web/src/lib/webSearch/types.ts` and its
+  entries are in `web/src/lib/webSearch/utils.ts` (details with a logo from
+  `@opal/logos`, and capabilities). A search-only client that is not in the
+  key-sync lists needs no change in `server/manage/web_search/api.py`. A client that fetches
   pages from Onyx must use the SSRF guard
   ([[auth-and-identity#outbound-fetch-uses-ssrf-guard]]).
 - `no-web-search` **Investigate "the model never searches the web".** Check for an active row:

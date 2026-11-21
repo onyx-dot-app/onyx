@@ -2,12 +2,11 @@
 
 import ipaddress
 from enum import Enum
-from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict
 
 from onyx.external_apps.matching.engine import AllMatchedActions, GatedTarget
-from onyx.sandbox_proxy.sandbox_identity.models import ResolvedSandbox, SessionContext
+from onyx.sandbox_proxy.sandbox_identity.models import ResolvedSandbox
 
 IPNetwork = ipaddress.IPv4Network | ipaddress.IPv6Network
 
@@ -78,9 +77,3 @@ class McpProtocolRequest(BaseModel):
 
     model_config = ConfigDict(frozen=True)
     target: GatedTarget
-
-
-class RequestContext(SessionContext):
-    """Pin the execution that authorized a request across an approval wait."""
-
-    scheduled_context: tuple[UUID, UUID] | None = None
