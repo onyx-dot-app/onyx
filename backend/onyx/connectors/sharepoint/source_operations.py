@@ -88,6 +88,7 @@ from onyx.connectors.microsoft_utils.models import (
     SharepointRoleAssignment,
     SharepointSecurable,
 )
+from onyx.connectors.microsoft_utils.sdk_timeout import bound_sdk_requests
 from onyx.connectors.microsoft_utils.sharepoint_rest import SharepointRestReads
 from onyx.connectors.sharepoint.connector_utils import (
     tenant_domain_from_site_urls,
@@ -239,8 +240,11 @@ class SharepointSourceOperations(SourceOperations):
         one, so every read gets its own client. Tests set ``_sdk_client``."""
         if self._sdk_client is not None:
             return self._sdk_client
-        return GraphClient(
-            self._gateway().token_response, environment=self._env().environment
+        return bound_sdk_requests(
+            GraphClient(
+                self._gateway().token_response, environment=self._env().environment
+            ),
+            REQUEST_TIMEOUT_SECONDS,
         )
 
     def _tenant_domain(self) -> str:
@@ -303,8 +307,11 @@ class SharepointSourceOperations(SourceOperations):
 
         msal_app: msal.ConfidentialClientApplication = self._auth().app
         tenant_domain: str = self._tenant_domain()
-        context = ClientContext(site_url).with_access_token(
-            lambda: acquire_token_for_rest(msal_app, tenant_domain, suffix)
+        context = bound_sdk_requests(
+            ClientContext(site_url).with_access_token(
+                lambda: acquire_token_for_rest(msal_app, tenant_domain, suffix)
+            ),
+            REQUEST_TIMEOUT_SECONDS,
         )
         local.entry = (context, site_url, time.monotonic())
         return context
