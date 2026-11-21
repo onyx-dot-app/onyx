@@ -685,7 +685,10 @@ the app from the same rule
     `skills/built_in.py:_REGISTRY`, so the rows otherwise stay.
 15. `skill-dir-placeholder` **Skill paths resolve to the sandbox folder.**
     `skills/push.py:_resolve_skill_dir` replaces each `${CLAUDE_SKILL_DIR}` in
-    a skill's root SKILL.md with `/workspace/managed/skills/<name>`. Only the
+    a skill's root SKILL.md with `<root>/<name>`: `/workspace/managed/skills`
+    for Craft, `/home/sandbox/.agents/skills` for a chat VM copy. In a turn
+    with the sandbox tools, `skills/content.py:read_chat_skills_md` resolves
+    it to the same chat folder in the text the model reads. Only the
     sent bytes change. The stored bundle, its SHA-256 and other files keep the
     placeholder. A resolved SKILL.md over the per-file limit skips that whole
     Skill with a warning. The resolved bytes count in the run-time total
