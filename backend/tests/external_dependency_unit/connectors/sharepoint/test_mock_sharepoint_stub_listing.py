@@ -78,21 +78,29 @@ def test_the_listing_has_a_stub_for_each_file_and_page_and_downloads_nothing(
 
 @pytest.mark.usefixtures("ee_permission_sync")
 def test_the_listing_stores_each_download_link_encrypted(
-    mock_sharepoint: MockSharepoint, monkeypatch: pytest.MonkeyPatch
+    own_mock_sharepoint: MockSharepoint, monkeypatch: pytest.MonkeyPatch
 ) -> None:
     """Each file's stub keeps the download link that the listing read,
-    encrypted with the deployment's key: the stored stub holds no part of
-    the link. Conversion gets the link back from the stored stub."""
+    encrypted with the deployment's key: on the folder walk of a full pass,
+    its catch-up delta, and an incremental delta. The stored stub holds no
+    part of the link, and conversion gets the link back from it."""
     keys = json.dumps({"test": base64.b64encode(b"k" * 32).decode()})
     keyring = ee_encryption.build_keyring("", keys, "test")
     monkeypatch.setattr(ee_encryption, "get_keyring", lambda: keyring)
 
-    listing = list_stubs(mock_sharepoint.build_connector())
+    full = list_stubs(own_mock_sharepoint.build_connector())
+    since = time.time() - 1
+    touched = sorted(own_mock_sharepoint.supported_file_ids())[:2]
+    own_mock_sharepoint.touch(touched)
+    incremental = list_stubs(own_mock_sharepoint.build_connector(), start=since)
 
-    files = mock_sharepoint.supported_file_ids()
-    file_stubs = [stub for stub in listing.stubs if stub.id in files]
-    assert {stub.id for stub in file_stubs} == files
-    for stub in file_stubs:
+    assert own_mock_sharepoint.op_count("graph.drive.children") > 0
+    files = own_mock_sharepoint.supported_file_ids()
+    full_files = [stub for stub in full.stubs if stub.id in files]
+    incremental_files = [stub for stub in incremental.stubs if stub.id in files]
+    assert {stub.id for stub in full_files} == files
+    assert set(touched) <= {stub.id for stub in incremental_files}
+    for stub in full_files + incremental_files:
         _assert_link_stored_encrypted(stub)
 
 

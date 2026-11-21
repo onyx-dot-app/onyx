@@ -153,6 +153,19 @@ run starts the delta of a drive from a time token, as the fetching path does. Th
 the `@odata.deltaLink`: the walk drops items modified after the window end, so
 a run that continued from that link would miss them.
 
+**SharePoint full pass.** On a stub listing from the epoch, a drive with no
+configured folder is not read with one delta stream. `_start_full_pass` takes
+the delta cursor of the drive's state now (`token=latest`,
+`SharepointSourceOperations.get_latest_delta_link`). The walk then reads the
+folders with `/children`, `SHAREPOINT_LISTING_WORKERS` (8) pages at one time
+(`_read_full_pass_folders`, `get_children_page`). The checkpoint holds the
+pages still to read as a stack (`full_pass_folders`). `/children` can miss an
+item that is written or moved during the walk, so the delta from the cursor
+runs after the walk (`full_pass_catching_up`). The time window does not filter
+its items: a moved item keeps its modified time. An incremental run reads one
+delta stream for each drive. A children page costs 2 RU for each folder, so a
+drive with many small folders costs more RU on a full pass than its delta.
+
 **SharePoint conversion.** `SharepointConnector.resolve_targets` converts a
 batch of stubs in a thread pool of `SHAREPOINT_CONVERSION_WORKERS` (16). A file
 target makes one download from its listed link while the link is younger than
