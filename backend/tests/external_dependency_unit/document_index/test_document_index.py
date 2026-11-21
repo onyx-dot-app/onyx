@@ -653,3 +653,75 @@ class TestDocumentIndex:
         assert len(retrieved) == 2
         for chunk in retrieved:
             assert chunk.boost == 6
+
+    def test_leading_chunks_retrieval_reads_each_documents_start_in_one_query(
+        self,
+        opensearch_document_index: OpenSearchDocumentIndex,
+        tenant_context: None,  # noqa: ARG002
+    ) -> None:
+        """
+        Tests that leading_chunks_retrieval returns chunks 0 to max_chunk_index
+        of every requested document, a long document cannot crowd out a short
+        one, and other documents stay out.
+        """
+        # Precondition.
+        long_doc = f"test_leading_chunks_long_{uuid.uuid4().hex[:8]}"
+        short_doc = f"test_leading_chunks_short_{uuid.uuid4().hex[:8]}"
+        other_doc = f"test_leading_chunks_other_{uuid.uuid4().hex[:8]}"
+        chunks = [make_chunk(long_doc, chunk_id=i) for i in range(20)]
+        chunks += [make_chunk(short_doc, chunk_id=0), make_chunk(other_doc)]
+        metadata = make_indexing_metadata(
+            [long_doc, short_doc, other_doc],
+            old_counts=[0, 0, 0],
+            new_counts=[20, 1, 1],
+        )
+        opensearch_document_index.index(chunks=chunks, indexing_metadata=metadata)
+        # Make the new chunks searchable now instead of waiting for the refresh.
+        opensearch_document_index._client.refresh_index()
+        filters = IndexFilters(
+            access_control_list=None,
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+            attached_document_ids=[long_doc, short_doc],
+        )
+
+        # Under test.
+        retrieved = opensearch_document_index.leading_chunks_retrieval(
+            filters=filters, max_chunk_index=2
+        )
+
+        # Postcondition.
+        assert sorted((chunk.document_id, chunk.chunk_id) for chunk in retrieved) == [
+            (long_doc, 0),
+            (long_doc, 1),
+            (long_doc, 2),
+            (short_doc, 0),
+        ]
+
+    @pytest.mark.parametrize(
+        "filters",
+        [
+            IndexFilters(access_control_list=None),
+            IndexFilters(
+                access_control_list=None,
+                attached_document_ids=["a"],
+                hierarchy_node_ids=[7],
+            ),
+            IndexFilters(
+                access_control_list=None,
+                attached_document_ids=["a"],
+                document_set=["set"],
+            ),
+        ],
+        ids=["no_attached_ids", "with_hierarchy_nodes", "with_document_sets"],
+    )
+    def test_leading_chunks_retrieval_only_reads_attached_documents(
+        self,
+        document_index: DocumentIndex,
+        filters: IndexFilters,
+    ) -> None:
+        """
+        Tests that a call is refused when attached_document_ids is missing, or
+        when another knowledge filter would add documents outside the list.
+        """
+        with pytest.raises(ValueError):
+            document_index.leading_chunks_retrieval(filters=filters, max_chunk_index=2)
