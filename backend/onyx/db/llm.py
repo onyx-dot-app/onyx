@@ -1164,6 +1164,20 @@ def fetch_first_accessible_llm_provider_by_type(
     return provider
 
 
+def fetch_first_llm_provider(
+    db_session: Session, provider: str
+) -> LLMProviderModel | None:
+    """The tenant's lowest-ID setup of this provider (the `provider` column,
+    e.g. "openai"), for background work that runs for the whole tenant, not
+    for one user."""
+    return db_session.scalars(
+        select(LLMProviderModel)
+        .where(LLMProviderModel.provider == provider)
+        .order_by(LLMProviderModel.id.asc())
+        .limit(1)
+    ).first()
+
+
 def fetch_all_accessible_llm_providers(
     db_session: Session, user: User
 ) -> list[LLMProviderView]:

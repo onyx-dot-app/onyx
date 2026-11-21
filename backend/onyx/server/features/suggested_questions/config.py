@@ -1,3 +1,7 @@
+import os
+
+from onyx.llm.decisions.models import OPENAI_DECISIONS_MODEL_NAME
+
 # Questions kept in a company's pool after each merge.
 SQ_POOL_MAX = 40
 
@@ -31,3 +35,24 @@ SQ_MIN_LETTER_RATIO = 0.6
 SQ_MAX_LINK_RATIO = 0.3
 SQ_MAX_LINE_REPEATS = 2
 SQ_MAX_WORD_OVERLAP = 0.5
+
+# Triage: a decision model reads a snippet of each chunk before the writing
+# call. Models are fixed here, not taken from the admin's decision model.
+SQ_TRIAGE_OPENAI_MODEL = (
+    os.environ.get("SQ_TRIAGE_OPENAI_MODEL") or OPENAI_DECISIONS_MODEL_NAME
+)
+SQ_TRIAGE_ZOOM_MODEL = os.environ.get("SQ_TRIAGE_ZOOM_MODEL") or "zoom-decisions-pro"
+# Characters of each chunk sent to triage, about 150 tokens.
+SQ_TRIAGE_SNIPPET_CHARS = 600
+# Chunks per decision request. Each gets 4 questions; a request takes 200.
+SQ_TRIAGE_CHUNKS_PER_REQUEST = 50
+# Keep a chunk when its usable score (0 to 3) is at least this, and its
+# sensitive probability is under the second value: liberal on usefulness,
+# strict on sensitivity.
+SQ_TRIAGE_MIN_SCORE = 1.0
+SQ_TRIAGE_SENSITIVE_MAX = 0.3
+# When both decision providers fail, the rules keep only early chunks.
+SQ_RULES_MAX_CHUNK_ID = 2
+# With fewer documents than this left after triage, keep two chunks per
+# document instead of one.
+SQ_FEW_DOCUMENTS = 6
