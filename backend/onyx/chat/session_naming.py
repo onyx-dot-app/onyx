@@ -12,6 +12,7 @@ from contextlib import contextmanager
 from uuid import UUID
 
 from onyx.cache.factory import get_cache_backend
+from onyx.cache.interface import CacheLock
 from onyx.chat.chat_utils import convert_chat_history_basic
 from onyx.configs.constants import MessageType
 from onyx.db.chat import (
@@ -52,20 +53,34 @@ _NAMING_WAIT_SECONDS = 30
 
 @contextmanager
 def _naming_lock(chat_session_id: UUID, *, wait_seconds: float) -> Iterator[bool]:
-    """Hold the chat's naming lock. Yields whether it was acquired."""
-    lock = get_cache_backend().lock(
-        f"chat_session_naming:{chat_session_id}", timeout=_NAMING_LOCK_SECONDS
-    )
-    acquired = (
-        lock.acquire(blocking=True, blocking_timeout=wait_seconds)
-        if wait_seconds > 0
-        else lock.acquire(blocking=False)
-    )
+    """Hold the chat's naming lock. Yields False only when another naming holds
+    it. A cache failure yields True without the lock: the conditional save
+    still keeps a rename, and naming must not fail on the cache."""
+    lock: CacheLock | None = None
+    acquired = False
     try:
-        yield acquired
+        lock = get_cache_backend().lock(
+            f"chat_session_naming:{chat_session_id}", timeout=_NAMING_LOCK_SECONDS
+        )
+        acquired = (
+            lock.acquire(blocking=True, blocking_timeout=wait_seconds)
+            if wait_seconds > 0
+            else lock.acquire(blocking=False)
+        )
+        may_proceed = acquired or wait_seconds > 0
+    except Exception:
+        logger.warning("Chat naming lock unavailable; naming without it")
+        may_proceed = True
+    try:
+        yield may_proceed
     finally:
-        if acquired and lock.owned():
-            lock.release()
+        if acquired and lock is not None:
+            try:
+                if lock.owned():
+                    lock.release()
+            except Exception:
+                # The lock expires on its own; the name is already saved.
+                logger.warning("Could not release the chat naming lock")
 
 
 def generate_chat_session_name_or_fallback(
@@ -139,9 +154,9 @@ def name_new_chat_session(
     has a name, got one while this one was generated, or is being named by a
     naming request.
     """
-    with _naming_lock(chat_session_id, wait_seconds=0) as acquired:
+    with _naming_lock(chat_session_id, wait_seconds=0) as may_proceed:
         # A naming request already holds it and names the chat.
-        if not acquired:
+        if not may_proceed:
             return None
         with get_session_with_current_tenant() as db_session:
             chat_session = get_chat_session_by_id(
