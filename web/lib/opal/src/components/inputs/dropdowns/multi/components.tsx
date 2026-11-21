@@ -18,6 +18,7 @@ import {
   toDropdownItems,
 } from "@opal/components/inputs/dropdowns/utils";
 import type { MultiSelectFieldProps } from "../types";
+import { useInputDisabled } from "@opal/components/inputs/disabled";
 
 // ---------------------------------------------------------------------------
 // MultiSelectField
@@ -36,14 +37,18 @@ import type { MultiSelectFieldProps } from "../types";
  *
  * The `TagField` renders its own input, out of `Dropdown.Trigger`'s reach,
  * so this engine wires the trigger through the dropdown's context.
+ *
+ * Inside `InputHorizontal` or `InputVertical`, the row's `disabled` and
+ * `disabledTooltip` apply to it too. `TagField` shows `tooltip`.
  */
 function MultiSelectField(props: MultiSelectFieldProps) {
   const autoId = useId();
   const fieldId = `multi-select-${autoId}`;
+  const disabled = useInputDisabled(props.disabled);
   return (
     // Tab walks the rows from either trigger: the field keeps focus.
-    <Dropdown id={fieldId} disabled={props.disabled ?? false} tabKey="walk">
-      <MultiSelectFieldInner {...props} />
+    <Dropdown id={fieldId} disabled={disabled} tabKey="walk">
+      <MultiSelectFieldInner {...props} disabled={disabled} />
     </Dropdown>
   );
 }
@@ -57,6 +62,7 @@ function MultiSelectFieldInner(props: MultiSelectFieldProps) {
     placeholder,
     variant = "primary",
     disabled = false,
+    tooltip,
     icon,
     onClear,
     minRows,
@@ -230,6 +236,7 @@ function MultiSelectFieldInner(props: MultiSelectFieldProps) {
       placeholder={placeholder}
       variant={hasInvalidTag ? "error" : variant}
       disabled={disabled}
+      tooltip={tooltip}
       icon={icon}
       onClear={onClear}
       minRows={minRows}

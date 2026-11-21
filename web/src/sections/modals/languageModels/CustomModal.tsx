@@ -444,6 +444,7 @@ export default function CustomModal({
       <InputPadder>
         <InputVertical
           withLabel="provider"
+          disabled={!!existingLlmProvider}
           title={t("custom.providerField.title")}
           subDescription={markdown(t("custom.providerField.description"))}
         >

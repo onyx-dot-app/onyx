@@ -12,6 +12,26 @@
   @apply cursor-not-allowed;
 }
 
+/* A flex column, like the layout's Section, so the text inside lays out as
+   it does as the Section's own child. */
+.opal-input-sub-description {
+  @apply flex flex-col items-start;
+}
+
+/* A disabled row dims its text: title, tag, description. The input styles
+   itself as disabled, so it is not dimmed again. */
+.opal-input-layout[data-disabled] > .opal-content,
+.opal-input-layout[data-disabled]
+  > *
+  > :is(
+    .opal-content-action-content,
+    .opal-content-action-responsive-title,
+    .opal-content-action-responsive-description
+  ),
+.opal-input-layout[data-disabled] > .opal-input-sub-description {
+  @apply opacity-50;
+}
+
 /* A wrapping label is part of a switch's hit area, so hovering anywhere on
    the row paints the switch's hover state. */
 .opal-input-label:not([data-disabled]):hover .switch-normal {
