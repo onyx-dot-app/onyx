@@ -124,6 +124,29 @@ def test_bulk_fetch_raises_on_single_unfetchable_issue() -> None:
         _gateway(client).bulk_fetch_issues(issue_ids=["1", "bad", "2"])
 
 
+def test_bulk_fetch_raises_on_missing_issue_when_requested() -> None:
+    """A successful response that omits a requested id is an error in strict mode."""
+    client = _mock_jira_client()
+    resp = MagicMock()
+    resp.json.return_value = {"issues": [_make_raw_issue("1")]}
+    client._session.post.return_value = resp
+
+    with pytest.raises(JiraApiError, match="no issue for 1 of 2"):
+        _gateway(client).bulk_fetch_issues(issue_ids=["1", "2"], raise_on_missing=True)
+
+
+def test_bulk_fetch_keeps_the_permissive_default_for_existing_callers() -> None:
+    """Without strict mode an omitted id is still returned silently."""
+    client = _mock_jira_client()
+    resp = MagicMock()
+    resp.json.return_value = {"issues": [_make_raw_issue("1")]}
+    client._session.post.return_value = resp
+
+    issues = _gateway(client).bulk_fetch_issues(issue_ids=["1", "2"])
+
+    assert [issue["id"] for issue in issues] == ["1"]
+
+
 def test_bulk_fetch_non_json_error_propagates() -> None:
     """Non-JSONDecodeError exceptions still propagate."""
     client = _mock_jira_client()

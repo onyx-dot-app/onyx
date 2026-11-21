@@ -1106,6 +1106,67 @@ export const connectorConfigs: Record<
     ],
     advanced_values: [],
   },
+  jira_service_management: {
+    description: "connectors.jiraServiceManagement.description",
+    subtext: "connectors.jiraServiceManagement.subtext",
+    values: [
+      {
+        type: "text",
+        label: "connectors.jira.fields.jira_base_url.label",
+        name: "jira_base_url",
+        optional: false,
+        placeholder: "connectors.jira.fields.jira_base_url.placeholder",
+        subDescription: "siteUrl",
+      },
+      ATLASSIAN_SCOPED_TOKEN_FIELD,
+      {
+        type: "tab",
+        name: "indexing_scope",
+        optional: true,
+        tabs: [
+          {
+            value: "everything",
+            label:
+              "connectors.jiraServiceManagement.fields.indexing_scope.tabs.everything.label",
+            fields: [
+              {
+                type: "string_tab",
+                label:
+                  "connectors.jiraServiceManagement.fields.everything.label",
+                name: "everything",
+                description:
+                  "connectors.jiraServiceManagement.fields.everything.description",
+              },
+            ],
+          },
+          {
+            value: "project",
+            label:
+              "connectors.jiraServiceManagement.fields.indexing_scope.tabs.project.label",
+            fields: [
+              {
+                type: "text",
+                label: "connectors.jira.fields.project_key.label",
+                name: "project_key",
+                description:
+                  "connectors.jiraServiceManagement.fields.project_key.description",
+              },
+            ],
+          },
+        ],
+        defaultTab: "everything",
+      },
+      {
+        type: "list",
+        label: "connectors.jira.fields.comment_email_blacklist.label",
+        name: "comment_email_blacklist",
+        description:
+          "connectors.jira.fields.comment_email_blacklist.description",
+        optional: true,
+      },
+    ],
+    advanced_values: [],
+  },
   salesforce: {
     description: "connectors.salesforce.description",
     values: [
