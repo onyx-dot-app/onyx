@@ -15,6 +15,7 @@ from prometheus_client import REGISTRY
 
 from onyx.configs.constants import DocumentSource
 from onyx.connectors import source_api_limiter
+from onyx.connectors.microsoft_utils.request_pacer import DOWNLOAD_LIMITER_API
 from onyx.connectors.models import ConnectorStopSignal
 from onyx.connectors.source_api_limiter import (
     RedisSourceApiLimiter,
@@ -151,6 +152,23 @@ def test_a_retry_after_pauses_every_caller_on_the_app(tenant_id: str) -> None:  
         )
         or 0
     ) >= 1
+
+
+def test_a_download_lane_pause_does_not_stop_graph_calls(
+    tenant_id: str,  # noqa: ARG001
+) -> None:
+    """The download host throttles on its own. Its pause stops the link
+    downloads of every connector on the app, and no Graph call."""
+    sharepoint = _build(DocumentSource.SHAREPOINT, "sp")
+    onedrive = _build(DocumentSource.ONEDRIVE, "onedrive")
+
+    sharepoint.report_retry_after(DOWNLOAD_LIMITER_API, 1.0)
+
+    started = time.monotonic()
+    onedrive.acquire(_API, 1)
+    assert time.monotonic() - started < 0.5
+    onedrive.acquire(DOWNLOAD_LIMITER_API, 1)
+    assert 0.8 <= time.monotonic() - started < 3
 
 
 class _RecordingLogger:

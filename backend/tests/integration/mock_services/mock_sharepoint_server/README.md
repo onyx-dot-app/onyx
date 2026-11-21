@@ -146,8 +146,9 @@ code is `TooManyRequests` (`activityLimitReached` for the daily limit, `serviceN
 503). SharePoint REST calls answer the same way.
 
 The throttled call starts a pause for its app. Until the pause ends, the server refuses every
-call of that app, download URLs included, with the time that is left in `Retry-After`. The stats
-count these calls in `calls_during_pause`. A client that obeys `Retry-After` has a count of 0.
+Graph and REST call of that app with the time that is left in `Retry-After`. The stats count these
+calls in `calls_during_pause`. A client that obeys `Retry-After` has a count of 0. A download URL is
+not a Graph call: the Graph limits and the pause do not apply to it.
 
 ## Latency and faults
 

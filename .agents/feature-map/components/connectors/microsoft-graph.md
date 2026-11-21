@@ -87,18 +87,27 @@ window. A new window starts at `MICROSOFT_START_SHARE` (0.2) and learns the
 limit from 429 answers, with the cut and growth rules of [[google-drive]].
 `connectors/microsoft_utils/request_pacer.py:MicrosoftRequestPacer` takes the
 cost of each call before it goes out: `graph_call_type` reads the type from
-the URL and `RU_COSTS` gives its cost (item, delta page and download 1,
-children page 2, permission 5, SharePoint REST 5 as an estimate). The raw GET
+the URL and `RU_COSTS` gives its cost (item, delta page and `/content` 1,
+children page 2, permission 5, SharePoint REST 5 as an estimate). A fetch of a
+pre-authenticated download link (`MicrosoftCall.LINK_DOWNLOAD`), also the
+redirect target of `/content`, is not a Graph call: it costs 0 RU and takes one
+turn from a lane of its own, `DOWNLOAD_LIMITER_API` ("download"), with its own
+learned rate (`MICROSOFT_DOWNLOAD_BUDGET`, a ceiling of 6,000 fetches per
+minute from the same start share) and its own pause. `/content` does not follow
+its redirect, so the fetch of the target takes its turn from that lane. The raw GET
 (`graph_api_get_json`), the downloads in
 `connectors/microsoft_utils/drive_items.py`, and every request
 of an office365 SDK client from `prepare_sdk_client` pass through it. Each try
 of a retry takes its cost again. On a 429 or 503 with `Retry-After`, the pacer
-calls `report_retry_after`: the limiter stores the end time in
-`<tenant>:source_api_limit:microsoft:<directory id>:<client id>:blocked_until`
-(the later time wins), and every `acquire` of every worker on the app waits
-for it. The wait checks the stop signal. A 429 also counts toward a cut. The
-limiter logs "graph asked its callers to wait Ns (Retry-After); every call of
-the shared pause ... waits Ns." and counts
+calls `report_retry_after` for the lane of the call: the limiter stores the end
+time in
+`<tenant>:source_api_limit:microsoft:<directory id>:<client id>:<api>:blocked_until`
+(the later time wins), and every `acquire` of that lane by every worker on the
+app waits for it. A throttle of the download host never pauses or cuts the
+Graph lane. The wait checks the stop signal. A 429 also counts toward a cut of
+the lane. The limiter logs "graph asked its callers to wait Ns (Retry-After);
+every call of the shared pause ... waits Ns." with a hash of the key in place
+of the key, and counts
 `onyx_source_api_limiter_units_total` (RU taken),
 `onyx_source_api_limiter_pauses_total` and
 `onyx_source_api_limiter_paused_seconds_total`
