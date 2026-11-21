@@ -63,16 +63,26 @@ def documents(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     monkeypatch.setattr(
         selection,
         "get_newest_public_document_ids",
-        lambda _s, _limit, exclude: [d for d in state["public"] if d not in exclude],
+        lambda _s, _limit, exclude, censored: [
+            d
+            for d in state["public"]
+            if d not in exclude and censored == state["censored"]
+        ],
     )
     monkeypatch.setattr(
         selection,
         "get_newest_private_document_ids",
-        lambda _s, user_email, exclude_ids, **_kw: [
-            d for d in state["private"].get(user_email, []) if d not in exclude_ids
+        lambda _s, user_email, exclude_ids, censored_sources, **_kw: [
+            d
+            for d in state["private"].get(user_email, [])
+            if d not in exclude_ids and censored_sources == state["censored"]
         ],
     )
     monkeypatch.setattr(selection, "get_user_external_group_ids", lambda *_a: [])
+    state["censored"] = {DocumentSource.SALESFORCE}
+    monkeypatch.setattr(
+        selection, "get_censoring_enabled_sources", lambda: state["censored"]
+    )
     emails_by_id: dict[Any, str] = {}
     state["emails_by_id"] = emails_by_id
     monkeypatch.setattr(

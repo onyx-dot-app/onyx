@@ -9,6 +9,12 @@ SQ_PRIVATE_SHELF = 8
 # A top-up runs only while the person has this many usable private questions
 # or fewer. The ones over the 4 shown cover a refill that fails.
 SQ_PRIVATE_REFILL_AT = 6
+# A person is short of shared questions with this many unused ones or fewer.
+SQ_SHARED_REFRESH_AT = 4
+# Questions shown to a person at a time.
+SQ_SHOWN = 4
+# After a chat open asks for a run, the page shows "preparing" this long.
+SQ_PREPARING_S = 120
 
 # A person counts as active if they opened the chat within this many days.
 SQ_ACTIVE_DAYS = 7

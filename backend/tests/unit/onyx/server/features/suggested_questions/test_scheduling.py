@@ -204,6 +204,25 @@ def test_a_request_the_run_rules_refuse_is_never_sent(
     assert cache.values == {}
 
 
+def test_pool_refresh_says_whether_a_run_is_queued_and_who_asked(
+    sent: list[Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    alice = uuid4()
+
+    first = scheduling.request_pool_refresh(
+        "tenant", RefreshReason.PERSON_SHORT, requester_id=alice
+    )
+    already_queued = scheduling.request_pool_refresh("tenant", RefreshReason.FIRST_RUN)
+    monkeypatch.setattr(scheduling, "count_candidate_documents", lambda _s, _ids: 0)
+    scheduling.release_pool_flag("tenant")
+    refused = scheduling.request_pool_refresh("tenant", RefreshReason.PERSON_SHORT)
+
+    assert (first, already_queued, refused) == (True, True, False)
+    assert [kwargs for _, kwargs, _ in sent] == [
+        {"tenant_id": "tenant", "reason": "person_short", "requester_id": str(alice)}
+    ]
+
+
 def test_pool_refresh_does_nothing_when_disabled(
     sent: list[Any], monkeypatch: pytest.MonkeyPatch
 ) -> None:
@@ -223,11 +242,15 @@ def test_pool_refresh_never_raises(monkeypatch: pytest.MonkeyPatch) -> None:
 def test_topup_queues_once_and_respects_limits(sent: list[Any]) -> None:
     alice, bob = uuid4(), uuid4()
 
-    scheduling.request_user_topup("tenant", alice, UserRecord(), NOW)
-    scheduling.request_user_topup("tenant", alice, UserRecord(), NOW)
-    scheduling.request_user_topup(
-        "tenant", bob, UserRecord(topups=[NOW - timedelta(minutes=2)]), NOW
-    )
+    queued = [
+        scheduling.request_user_topup("tenant", alice, UserRecord(), NOW),
+        scheduling.request_user_topup("tenant", alice, UserRecord(), NOW),
+        scheduling.request_user_topup(
+            "tenant", bob, UserRecord(topups=[NOW - timedelta(minutes=2)]), NOW
+        ),
+    ]
+
+    assert queued == [True, True, False]  # queued, already queued, too soon
 
     assert [(kwargs["user_id"], priority) for _, kwargs, priority in sent] == [
         (str(alice), OnyxCeleryPriority.HIGH)

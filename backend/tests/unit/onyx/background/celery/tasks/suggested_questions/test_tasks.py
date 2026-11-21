@@ -64,6 +64,15 @@ def run(monkeypatch: pytest.MonkeyPatch) -> dict[str, Any]:
     set_(tasks, "save_pool", lambda pool: state.update(saved=pool))
     set_(tasks, "get_session_with_current_tenant", MagicMock())
     set_(tasks, "get_live_document_ids", lambda _s, ids: set(ids))
+    # The person who asked for a run, and what they may open: everything.
+    set_(
+        tasks,
+        "fetch_user_by_id",
+        lambda _s, user_id: User(id=user_id, email="someone@co.com", is_active=True),
+    )
+    set_(tasks, "get_user_external_group_ids", lambda *_a: [])
+    set_(tasks, "get_censoring_enabled_sources", set)
+    set_(tasks, "get_visible_document_ids", lambda _s, _u, _g, ids, _c: set(ids))
     set_(tasks, "count_candidate_documents", lambda _s, _ids: 30)
     set_(tasks, "worth_running", lambda *_a, **_kw: state["decision"])
     set_(tasks, "get_recently_active_users", lambda _s, _now: [])
@@ -121,6 +130,74 @@ def test_pool_run_saves_the_merged_pool_and_records_the_run(
     assert len(saved.runs) == 1
     assert run["search_user"] is None  # a pool run searches the whole index
     assert run["released"] == [("pool", "tenant")]
+
+
+def _pool_task_for(requester_id: str) -> None:
+    pool_task: Any = tasks.generate_suggested_questions_pool
+    pool_task.run(tenant_id="tenant", reason="person_short", requester_id=requester_id)
+
+
+def test_a_run_for_a_person_who_is_no_longer_short_is_skipped(
+    run: dict[str, Any],
+) -> None:
+    alice = uuid4()
+    run["pool"] = QuestionPool(
+        questions=[_question(f"s-{n}") for n in range(tasks.SQ_SHARED_REFRESH_AT + 1)]
+    )
+
+    _pool_task_for(str(alice))
+
+    run["triage"].assert_not_called()
+    assert run["saved"] is None
+
+
+def test_questions_the_requester_may_not_open_do_not_count(
+    run: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    run["pool"] = QuestionPool(
+        questions=[_question(f"s-{n}") for n in range(tasks.SQ_SHARED_REFRESH_AT + 1)]
+    )
+    # One question's document became private: the person is short again.
+    monkeypatch.setattr(
+        tasks,
+        "get_visible_document_ids",
+        lambda _s, _u, _g, ids, _c: set(ids) - {"s-0"},
+    )
+
+    _pool_task_for(str(uuid4()))
+
+    assert run["saved"] is not None
+
+
+def test_a_run_for_a_person_who_is_gone_is_skipped(
+    run: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    monkeypatch.setattr(tasks, "fetch_user_by_id", lambda *_a: None)
+
+    _pool_task_for(str(uuid4()))
+
+    run["triage"].assert_not_called()
+    assert run["saved"] is None
+
+
+def test_a_run_for_a_short_person_drops_their_used_questions_first(
+    run: dict[str, Any], monkeypatch: pytest.MonkeyPatch
+) -> None:
+    alice = uuid4()
+    run["pool"] = QuestionPool(questions=[_question("old")])
+    run["records"][alice] = UserRecord(used=["old"])
+    evicted: list[Any] = []
+    merge = tasks.merge_questions
+    monkeypatch.setattr(
+        tasks,
+        "merge_questions",
+        lambda *a, **kw: evicted.append(kw.get("evict_first")) or merge(*a, **kw),
+    )
+
+    _pool_task_for(str(alice))
+
+    assert evicted == [{"old"}]
+    assert run["saved"] is not None
 
 
 def test_pool_run_skipped_makes_no_model_call(run: dict[str, Any]) -> None:
@@ -324,6 +401,22 @@ def test_topup_stops_before_any_model_call(
     run["write"].assert_not_called()
     assert run["topups"] == []
     assert run["private_saved"] == {}
+
+
+def test_questions_the_person_may_not_open_do_not_count_toward_enough(
+    run: dict[str, Any], person: User, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    questions = [_question(f"mine-{n}") for n in range(tasks.SQ_PRIVATE_REFILL_AT + 1)]
+    run["records"][person.id] = UserRecord(questions=questions)
+    monkeypatch.setattr(
+        tasks,
+        "get_visible_document_ids",
+        lambda _s, _u, _g, ids, _c: set(ids) - {"mine-0"},
+    )
+
+    _topup(person)
+
+    assert run["private_saved"] == {person.id: ["new"]}
 
 
 def test_used_questions_do_not_count_toward_enough(
