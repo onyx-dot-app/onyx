@@ -191,7 +191,9 @@
   `skill` row id, with `built_in_skill_id` set.
   In the chat input, `@` at the start of a word opens a picker of these
   skills, with a **Manage skills** row that opens Customize → Skills (`lib/skills/hooks.ts:useChatSkills`, from `GET /api/skills/chat`),
-  filtered by name prefix without case. A row shows the skill's short
+  filtered by name prefix without case. In an incognito, multi-model or
+  Deep Research chat the picker leaves built-ins out (`useChatSkills({ builtIns })`).
+  A row shows the skill's short
   description when it has one, else its description. A skill change in the
   library, the skill editor, a plugin's Skills tab or a Craft app connection
   fetches the list again (`lib/skills/cache.ts:refreshSkillLists`). Other

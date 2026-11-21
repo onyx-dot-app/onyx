@@ -237,12 +237,15 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files (no tool
                                         (build/db/sandbox.py:get_or_create_sandbox); before
                                         each call: HarnessSandbox.begin_turn (an error is
                                         logged, the call still runs)
-  SandboxTurn._sync_skills              once per turn, before the first call runs (parallel
-                                        first calls wait): skills/push.py:
-                                        build_chat_built_in_files, then
+  SandboxTurn._sync_skills              before each call (calls wait on one lock): the turn
+                                        builds its built-in files once
+                                        (skills/push.py:build_chat_built_in_files), then
                                         HarnessSandbox.sync_skills shows them at /mnt/skills
-                                        (an error is logged; the last skills stay)
-  ExecCommandTool / WriteStdinTool      HarnessSandbox.exec_command / write_stdin; each
+                                        and skips a VM instance that has them (an error is
+                                        logged; the next call tries again)
+  ExecCommandTool / WriteStdinTool      HarnessSandbox.exec_command / write_stdin (each
+                                        command gets AGENT_BROWSER_SESSION=<chat session>, so
+                                        chats in one VM keep separate browsers); each
                                         ExecOutputDelta -> ToolProgress, which the tool
                                         stops at max_output_chars; the result is the exec
                                         header text (wall time, exit code or ending,
