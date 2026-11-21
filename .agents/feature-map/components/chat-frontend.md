@@ -782,9 +782,12 @@ up its own branding.
 - **A fast send after a branch switch can race.** `patchMessageToBeLatest` is
   not awaited. A send that reaches the server first can fail with "not on the
   latest mainline". This is inferred from the code, not seen in a test.
-- **Auto-naming can run twice.** `handleNewSessionNaming` names a new session
-  after its first answer, and the session controller names an untitled session
-  with two or more messages on load. A quick reload can trigger both.
+- **The server names a new chat.** It names it during the first turn and sends
+  a `chat_session_name` line, because `sendMessage` sets
+  `accepts_chat_session_name`. `handleNewSessionNaming` runs only when the
+  stream ends without that line. It and the session controller's on-load naming
+  call `PUT /chat/rename-chat-session`, which returns a saved name or waits for
+  one in progress (one naming lock per chat, `backend/onyx/chat/session_naming.py`).
 
 ---
 
