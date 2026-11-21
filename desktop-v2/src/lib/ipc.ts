@@ -21,8 +21,8 @@ export interface Prefs {
   launchAtLoginManaged: boolean;
   autoUpdateDisabled: boolean;
   notificationsDisabled: boolean;
-  // A managed policy exists but is not valid.
-  policyInvalid: boolean;
+  // Set when a managed policy exists but is not valid.
+  policyNotice: string | null;
   notifyAnswers: boolean;
 }
 
@@ -62,6 +62,9 @@ export const checkServer = (url: string): Promise<ServerInfo> =>
 
 export const saveServer = (url: string): Promise<void> =>
   invoke("save_server", { url });
+
+// Why managed policy stops the user from setting the server, or null.
+export const getServerLock = (): Promise<string | null> => invoke("get_server_lock");
 
 export interface SsoOption {
   label: string;
