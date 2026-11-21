@@ -3,6 +3,7 @@
 Secrets stay in encrypted API-key storage. Provider metadata contains no secrets.
 """
 
+import hashlib
 from typing import Protocol, TypeVar
 
 from pydantic import BaseModel, ConfigDict, SecretStr
@@ -108,6 +109,12 @@ class VertexEmbeddingAuth(EmbeddingAuth[VertexEmbeddingCredentials]):
             self._api_key.get_secret_value() if self._api_key is not None else None,
             self.config,
         )
+
+    def credentials_key(self) -> str:
+        secret = self._api_key.get_secret_value() if self._api_key is not None else ""
+        return hashlib.sha256(
+            f"{self.config.model_dump_json()}\0{secret}".encode()
+        ).hexdigest()
 
 
 CloudEmbeddingAuth = ApiKeyEmbeddingAuth | VertexEmbeddingAuth
