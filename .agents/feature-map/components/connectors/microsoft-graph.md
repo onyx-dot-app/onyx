@@ -162,9 +162,10 @@ refused link (any other request error) fall back to `/drives/{d}/items/{i}/conte
 (1 RU) in
 `connectors/microsoft_utils/drive_items.py:extract_drive_item_content`. A
 throttled link (429 or 503) does not fall back, because `/content` redirects to
-the same download host: the pacer reports its Retry-After to the shared
-limiter, so every caller on the app pauses, and the link is tried again. A link
-that stays throttled fails the document. With
+the same download host: the pacer reports its Retry-After to the download lane
+of the app, so every link download on the app pauses (Graph calls go on), and
+the link is tried again while it is fresh. A link that stays throttled fails the
+document. A link download costs 0 Graph RU. With
 permission sync, it also makes the role-assignment reads from the list ids of
 the payload. A
 page target makes one read of the page with its canvas. No target makes a
