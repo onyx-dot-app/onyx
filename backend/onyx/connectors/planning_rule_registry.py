@@ -37,6 +37,7 @@ from onyx.connectors.google_drive.config import (
 from onyx.connectors.jira.config import JiraConnectorConfig, jira_planning_rule
 from onyx.connectors.jira_service_management.config import (
     JiraServiceManagementConnectorConfig,
+    jira_service_management_planning_rule,
 )
 from onyx.connectors.notion.config import (
     NotionConnectorConfig,
@@ -84,7 +85,8 @@ PLANNING_RULES: dict[DocumentSource, PlanningRule] = {
     ),
     DocumentSource.JIRA: planning_rule(JiraConnectorConfig, jira_planning_rule),
     DocumentSource.JIRA_SERVICE_MANAGEMENT: planning_rule(
-        JiraServiceManagementConnectorConfig, jira_planning_rule
+        JiraServiceManagementConnectorConfig,
+        jira_service_management_planning_rule,
     ),
     DocumentSource.NOTION: planning_rule(NotionConnectorConfig, notion_planning_rule),
     DocumentSource.OUTLOOK: planning_rule(

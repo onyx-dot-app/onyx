@@ -1,9 +1,32 @@
 from types import SimpleNamespace
-from unittest.mock import MagicMock
+from typing import Any
+from unittest.mock import MagicMock, patch
+
+import pytest
+from jira.client import ResultList
+from jira.exceptions import JIRAError
+from jira.resources import Issue, PropertyHolder
 
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.credential_families import to_source_credential_json
+from onyx.connectors.credential_family_base import (
+    CREDENTIAL_FAMILY_KEY,
+    CredentialFamily,
+)
+from onyx.connectors.exceptions import (
+    ConnectorValidationError,
+    CredentialExpiredError,
+    InsufficientPermissionsError,
+)
+from onyx.connectors.interfaces import (
+    CheckpointedConnector,
+    CheckpointedConnectorWithPermSync,
+    SlimConnector,
+    SlimConnectorWithPermSync,
+)
 from onyx.connectors.jira_service_management.config import (
     JiraServiceManagementConnectorConfig,
+    jira_service_management_planning_rule,
 )
 from onyx.connectors.jira_service_management.connector import (
     JiraServiceManagementConnector,
@@ -11,18 +34,43 @@ from onyx.connectors.jira_service_management.connector import (
     process_jira_issue,
 )
 from onyx.connectors.jira_service_management.utils import (
+    JIRA_CLOUD_API_VERSION,
+    JIRA_CONNECT_TIMEOUT_SECONDS,
+    JIRA_READ_TIMEOUT_SECONDS,
+    JIRA_SERVER_API_VERSION,
+    build_jira_client,
     build_jira_url,
     extract_text_from_adf,
     get_comment_strs,
 )
+from onyx.connectors.models import (
+    ConnectorMissingCredentialError,
+    Document,
+    SlimDocument,
+)
+from onyx.connectors.planning_rule_registry import PLANNING_RULES
 from onyx.connectors.registry import CONNECTOR_CLASS_MAP
+from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
+
+
+def _make_property_holder(data: Any) -> Any:
+    if isinstance(data, dict):
+        holder = PropertyHolder()
+        for k, v in data.items():
+            setattr(holder, k, _make_property_holder(v))
+        return holder
+    if isinstance(data, list):
+        return [_make_property_holder(item) for item in data]
+    return data
 
 
 def _make_mock_issue(
     key: str = "JSM-101",
+    issue_id: str = "10100",
     summary: str = "VPN access request",
     description: object = "User needs corporate VPN access.",
     updated: str = "2026-11-20T12:00:00.000+0000",
+    created: str = "2026-11-19T09:00:00.000+0000",
     project_key: str = "JSM",
     status_name: str = "Waiting for support",
     labels: list[str] | None = None,
@@ -37,11 +85,13 @@ def _make_mock_issue(
             )
         )
     return SimpleNamespace(
+        id=issue_id,
         key=key,
         fields=SimpleNamespace(
             summary=summary,
             description=description,
             updated=updated,
+            created=created,
             project=SimpleNamespace(key=project_key),
             status=SimpleNamespace(name=status_name),
             issuetype=SimpleNamespace(name="Service Request"),
@@ -56,18 +106,112 @@ def _make_mock_issue(
     )
 
 
-def test_registry_registers_jira_service_management() -> None:
+class _RecordingHeartbeat(IndexingHeartbeatInterface):
+    def __init__(self, stop_after: int | None = None) -> None:
+        self.stop_after = stop_after
+        self.progress_calls: list[tuple[str, int]] = []
+
+    def should_stop(self) -> bool:
+        return (
+            self.stop_after is not None and len(self.progress_calls) >= self.stop_after
+        )
+
+    def progress(self, tag: str, amount: int) -> None:
+        self.progress_calls.append((tag, amount))
+
+
+def test_registry_and_planning_rule_registration() -> None:
     mapping = CONNECTOR_CLASS_MAP[DocumentSource.JIRA_SERVICE_MANAGEMENT]
-    assert (
-        mapping.module_path
-        == "onyx.connectors.jira_service_management.connector"
-    )
+    assert mapping.module_path == "onyx.connectors.jira_service_management.connector"
     assert mapping.class_name == "JiraServiceManagementConnector"
     assert mapping.config_class is JiraServiceManagementConnectorConfig
+    assert DocumentSource.JIRA_SERVICE_MANAGEMENT in PLANNING_RULES
+
+    # Does not claim permission sync without ACL extraction.
+    assert issubclass(JiraServiceManagementConnector, CheckpointedConnector)
+    assert issubclass(JiraServiceManagementConnector, SlimConnector)
+    assert not issubclass(
+        JiraServiceManagementConnector, CheckpointedConnectorWithPermSync
+    )
+    assert not issubclass(JiraServiceManagementConnector, SlimConnectorWithPermSync)
 
 
-def test_extract_text_from_adf_and_comments() -> None:
-    adf = {
+def test_config_rejects_order_by_and_planning_rule_ignores_project_with_jql() -> None:
+    with pytest.raises(ValueError, match="ORDER BY"):
+        JiraServiceManagementConnectorConfig(
+            jira_base_url="https://acme.atlassian.net",
+            jql_query="project = JSM ORDER BY created DESC",
+        )
+
+    old = JiraServiceManagementConnectorConfig(
+        jira_base_url="https://acme.atlassian.net",
+        project_key="JSM",
+        jql_query="project = JSM",
+    )
+    new = JiraServiceManagementConnectorConfig(
+        jira_base_url="https://acme.atlassian.net",
+        project_key="IT",
+        jql_query="project = JSM",
+    )
+    override = jira_service_management_planning_rule(old, new)
+    assert override is not None
+
+
+def test_build_jira_client_cloud_token_only_scoped_and_timeout() -> None:
+    with pytest.raises(ConnectorMissingCredentialError):
+        build_jira_client({}, "https://acme.atlassian.net")
+
+    with patch("onyx.connectors.jira_service_management.utils.JIRA") as mock_jira:
+        build_jira_client(
+            {"jira_user_email": "ops@acme.com", "jira_api_token": "tok"},
+            "https://acme.atlassian.net/",
+            scoped_token=False,
+        )
+        mock_jira.assert_called_once_with(
+            server="https://acme.atlassian.net",
+            options={"rest_api_version": JIRA_CLOUD_API_VERSION},
+            basic_auth=("ops@acme.com", "tok"),
+            timeout=(JIRA_CONNECT_TIMEOUT_SECONDS, JIRA_READ_TIMEOUT_SECONDS),
+        )
+
+    # Token-only Data Center / Server PAT credential.
+    with patch("onyx.connectors.jira_service_management.utils.JIRA") as mock_jira:
+        build_jira_client(
+            {"jira_api_token": "pat-secret"},
+            "https://jira.internal.corp/",
+            scoped_token=False,
+        )
+        mock_jira.assert_called_once_with(
+            server="https://jira.internal.corp",
+            options={"rest_api_version": JIRA_SERVER_API_VERSION},
+            token_auth="pat-secret",
+            timeout=(JIRA_CONNECT_TIMEOUT_SECONDS, JIRA_READ_TIMEOUT_SECONDS),
+        )
+
+    # Scoped Cloud token routes through Atlassian gateway URL.
+    with (
+        patch(
+            "onyx.connectors.jira_service_management.utils.scoped_url",
+            return_value="https://api.atlassian.com/ex/jira/cloud-123",
+        ) as mock_scoped,
+        patch("onyx.connectors.jira_service_management.utils.JIRA") as mock_jira,
+    ):
+        build_jira_client(
+            {"jira_user_email": "ops@acme.com", "jira_api_token": "scoped-tok"},
+            "https://acme.atlassian.net/",
+            scoped_token=True,
+        )
+        mock_scoped.assert_called_once_with("https://acme.atlassian.net", "jira")
+        mock_jira.assert_called_once_with(
+            server="https://api.atlassian.com/ex/jira/cloud-123",
+            options={"rest_api_version": JIRA_CLOUD_API_VERSION},
+            basic_auth=("ops@acme.com", "scoped-tok"),
+            timeout=(JIRA_CONNECT_TIMEOUT_SECONDS, JIRA_READ_TIMEOUT_SECONDS),
+        )
+
+
+def test_extract_text_from_adf_dict_and_property_holder() -> None:
+    adf_dict = {
         "type": "doc",
         "content": [
             {
@@ -79,17 +223,37 @@ def test_extract_text_from_adf_and_comments() -> None:
             }
         ],
     }
-    assert extract_text_from_adf(adf) == "Hello Service Desk"
+    assert extract_text_from_adf(adf_dict) == "Hello Service Desk"
 
+    # Hydrated Jira SDK PropertyHolder objects must extract identical text.
+    adf_holder = _make_property_holder(adf_dict)
+    assert isinstance(adf_holder, PropertyHolder)
+    assert extract_text_from_adf(adf_holder) == "Hello Service Desk"
+
+    comment_holder = _make_property_holder(
+        {
+            "type": "doc",
+            "content": [{"type": "text", "text": "Resolved VPN profile"}],
+        }
+    )
     issue = _make_mock_issue(
-        description=adf,
+        description=adf_holder,
         comments=[
             ("bot@example.com", "Automated triage"),
-            ("agent@example.com", {"type": "doc", "content": [{"type": "text", "text": "Resolved VPN profile"}]}),
+            ("agent@example.com", comment_holder),
         ],
     )
     filtered = get_comment_strs(issue, comment_email_blacklist=["bot@example.com"])
     assert filtered == ["Resolved VPN profile"]
+
+    doc = process_jira_issue(
+        "https://acme.atlassian.net",
+        issue,  # type: ignore[arg-type]
+    )
+    assert doc is not None
+    assert doc.sections[0].text is not None
+    assert "Hello Service Desk" in doc.sections[0].text
+    assert "Comment: Resolved VPN profile" in doc.sections[0].text
 
 
 def test_process_jira_issue_and_label_skip() -> None:
@@ -111,42 +275,313 @@ def test_process_jira_issue_and_label_skip() -> None:
     assert doc is not None
     assert doc.source == DocumentSource.JIRA_SERVICE_MANAGEMENT
     assert doc.id == "https://acme.atlassian.net/browse/JSM-101"
+    assert doc.sections[0].text is not None
     assert "User needs corporate VPN access." in doc.sections[0].text
     assert "Comment: Ticket assigned" in doc.sections[0].text
     assert doc.metadata["project"] == "JSM"
     assert doc.metadata["status"] == "Waiting for support"
 
 
-def test_connector_checkpoint_loading_and_slim_docs() -> None:
+def test_jql_uses_epoch_ms_and_deterministic_ordering() -> None:
     connector = JiraServiceManagementConnector(
         jira_base_url="https://acme.atlassian.net/",
         project_key="JSM",
-        batch_size=2,
+    )
+    jql = connector._build_jql(start=1700000000, end=1700003600, after_issue_id=500)
+    assert 'project = "JSM"' in jql
+    assert "updated >= 1700000000000" in jql
+    assert "updated <= 1700003600000" in jql
+    assert "id > 500" in jql
+    assert jql.endswith("ORDER BY id ASC")
+
+
+def test_cloud_checkpoint_and_slim_pagination_use_continuation_tokens() -> None:
+    connector = JiraServiceManagementConnector(
+        jira_base_url="https://acme.atlassian.net/",
+        project_key="JSM",
+        batch_size=500,
         labels_to_skip=["skip-me"],
     )
     mock_client = MagicMock()
-    mock_client.search_issues.return_value = [
-        _make_mock_issue(key="JSM-1", summary="First request"),
-        _make_mock_issue(key="JSM-2", summary="Skipped request", labels=["skip-me"]),
-    ]
+    mock_client.deploymentType = "Cloud"
+    # Even when page size (1) < batch_size (500), nextPageToken drives has_more.
+    page1: ResultList[Any] = ResultList(
+        [
+            _make_mock_issue(key="JSM-1", issue_id="101", summary="First request"),
+            _make_mock_issue(
+                key="JSM-2",
+                issue_id="102",
+                summary="Skipped request",
+                labels=["skip-me"],
+            ),
+        ],
+        _nextPageToken="tok-page-2",
+        _isLast=False,
+    )
+    page2: ResultList[Any] = ResultList(
+        [_make_mock_issue(key="JSM-3", issue_id="103", summary="Third request")],
+        _nextPageToken=None,
+        _isLast=True,
+    )
+    mock_client.enhanced_search_issues.side_effect = [page1, page2]
     connector._jira_client = mock_client
+    connector._is_cloud = True
 
-    checkpoint = JiraServiceManagementConnectorCheckpoint(offset=0, has_more=True)
-    gen = connector.load_from_checkpoint(1700000000, 1700003600, checkpoint)
-    yielded = []
+    cp0 = JiraServiceManagementConnectorCheckpoint(has_more=True)
+    gen1 = connector.load_from_checkpoint(1700000000, 1700003600, cp0)
+    docs1: list[Document] = []
     try:
         while True:
-            yielded.append(next(gen))
+            item = next(gen1)
+            assert isinstance(item, Document)
+            docs1.append(item)
     except StopIteration as stop:
-        next_cp = stop.value
+        cp1 = stop.value
 
-    assert len(yielded) == 1
-    assert yielded[0].id == build_jira_url("https://acme.atlassian.net", "JSM-1")
-    assert next_cp.offset == 2
-    assert next_cp.has_more is True
-
-    slim_batches = list(connector.retrieve_all_slim_docs_perm_sync())
-    assert len(slim_batches) == 1
-    assert [d.id for d in slim_batches[0]] == [
-        "https://acme.atlassian.net/browse/JSM-1"
+    assert [d.id for d in docs1] == [
+        build_jira_url("https://acme.atlassian.net", "JSM-1")
     ]
+    assert cp1.has_more is True
+    assert cp1.next_page_token == "tok-page-2"
+    assert cp1.pinned_end == 1700003600
+
+    # Even if caller passes a later end timestamp on resume, pinned_end keeps
+    # the query window fixed across checkpoint resumptions.
+    gen2 = connector.load_from_checkpoint(1700000000, 1700009999, cp1)
+    docs2: list[Document] = []
+    try:
+        while True:
+            item = next(gen2)
+            assert isinstance(item, Document)
+            docs2.append(item)
+    except StopIteration as stop:
+        cp2 = stop.value
+
+    assert [d.id for d in docs2] == [
+        build_jira_url("https://acme.atlassian.net", "JSM-3")
+    ]
+    assert cp2.has_more is False
+    assert cp2.next_page_token is None
+
+    second_call = mock_client.enhanced_search_issues.call_args_list[1].kwargs
+    assert second_call["nextPageToken"] == "tok-page-2"
+    assert "updated <= 1700003600000" in second_call["jql_str"]
+    mock_client.search_issues.assert_not_called()
+
+    # Slim listing uses enhanced_search_issues + callback heartbeat.
+    mock_client.enhanced_search_issues.reset_mock()
+    mock_client.enhanced_search_issues.side_effect = [page1, page2]
+    heartbeat = _RecordingHeartbeat()
+    slim_batches = list(
+        connector.retrieve_all_slim_docs(
+            start=1700000000, end=1700003600, callback=heartbeat
+        )
+    )
+    assert [
+        [d.id for d in batch if isinstance(d, SlimDocument)] for batch in slim_batches
+    ] == [
+        ["https://acme.atlassian.net/browse/JSM-1"],
+        ["https://acme.atlassian.net/browse/JSM-3"],
+    ]
+    assert len(heartbeat.progress_calls) == 2
+
+
+def test_server_keyset_pagination_and_metadata_has_more() -> None:
+    connector = JiraServiceManagementConnector(
+        jira_base_url="https://jira.internal.corp",
+        project_key="JSM",
+        batch_size=500,
+    )
+    mock_client = MagicMock()
+    mock_client.deploymentType = "Server"
+    # Capped page of 1 item with total=2 still sets has_more=True.
+    page1: ResultList[Any] = ResultList(
+        [_make_mock_issue(key="JSM-10", issue_id="1000")],
+        _startAt=0,
+        _maxResults=1,
+        _total=2,
+    )
+    page2: ResultList[Any] = ResultList(
+        [_make_mock_issue(key="JSM-11", issue_id="1001")],
+        _startAt=0,
+        _maxResults=1,
+        _total=1,
+    )
+    mock_client.search_issues.side_effect = [page1, page2]
+    connector._jira_client = mock_client
+    connector._is_cloud = False
+
+    cp0 = JiraServiceManagementConnectorCheckpoint(has_more=True)
+    gen1 = connector.load_from_checkpoint(1700000000, 1700003600, cp0)
+    try:
+        while True:
+            next(gen1)
+    except StopIteration as stop:
+        cp1 = stop.value
+
+    assert cp1.has_more is True
+    assert cp1.last_issue_id == 1000
+
+    gen2 = connector.load_from_checkpoint(1700000000, 1700003600, cp1)
+    try:
+        while True:
+            next(gen2)
+    except StopIteration as stop:
+        cp2 = stop.value
+
+    assert cp2.has_more is False
+    assert cp2.last_issue_id == 1001
+    second_call = mock_client.search_issues.call_args_list[1].kwargs
+    assert second_call["startAt"] == 0
+    assert "id > 1000" in second_call["jql_str"]
+
+
+def test_jira_error_translation() -> None:
+    connector = JiraServiceManagementConnector(
+        jira_base_url="https://acme.atlassian.net",
+        project_key="JSM",
+    )
+    mock_client = MagicMock()
+    mock_client.deploymentType = "Cloud"
+    connector._jira_client = mock_client
+    connector._is_cloud = True
+
+    mock_client.enhanced_search_issues.side_effect = JIRAError(
+        status_code=401, text="Unauthorized"
+    )
+    with pytest.raises(CredentialExpiredError):
+        list(
+            connector.load_from_checkpoint(
+                1700000000, 1700003600, connector.build_dummy_checkpoint()
+            )
+        )
+
+    mock_client.enhanced_search_issues.side_effect = JIRAError(
+        status_code=403, text="Forbidden"
+    )
+    with pytest.raises(InsufficientPermissionsError):
+        list(
+            connector.load_from_checkpoint(
+                1700000000, 1700003600, connector.build_dummy_checkpoint()
+            )
+        )
+
+    mock_client.project.side_effect = JIRAError(status_code=404, text="Not found")
+    with pytest.raises(ConnectorValidationError):
+        connector.validate_connector_settings()
+
+
+def test_real_hydrated_jira_issue_adf_and_token_only_family_credential() -> None:
+    raw_issue = {
+        "id": "20455",
+        "key": "JSM-204",
+        "fields": {
+            "summary": "Laptop replacement",
+            "description": {
+                "type": "doc",
+                "version": 1,
+                "content": [
+                    {
+                        "type": "paragraph",
+                        "content": [
+                            {"type": "text", "text": "Need new workstation"},
+                            {"type": "text", "text": "with Linux image"},
+                        ],
+                    }
+                ],
+            },
+            "updated": "2026-11-20T15:00:00.000+0000",
+            "project": {"key": "JSM"},
+            "status": {"name": "Open"},
+            "issuetype": {"name": "Hardware"},
+            "priority": {"name": "Medium"},
+            "creator": {
+                "displayName": "Bob Agent",
+                "emailAddress": "bob@example.com",
+            },
+            "labels": ["hardware"],
+            "comment": {
+                "comments": [
+                    {
+                        "author": {"emailAddress": "agent@example.com"},
+                        "body": {
+                            "type": "doc",
+                            "version": 1,
+                            "content": [
+                                {
+                                    "type": "paragraph",
+                                    "content": [
+                                        {"type": "text", "text": "Shipped tracking #99"}
+                                    ],
+                                }
+                            ],
+                        },
+                    }
+                ]
+            },
+        },
+    }
+    hydrated_issue = Issue(options={}, session=MagicMock(), raw=raw_issue)
+    # Confirm jira SDK hydrated fields.description into a PropertyHolder.
+    assert isinstance(hydrated_issue.fields.description, PropertyHolder)
+    assert (
+        extract_text_from_adf(hydrated_issue.fields.description)
+        == "Need new workstation with Linux image"
+    )
+
+    doc = process_jira_issue("https://acme.atlassian.net", hydrated_issue)
+    assert doc is not None
+    assert doc.sections[0].text is not None
+    assert "Need new workstation with Linux image" in doc.sections[0].text
+    assert "Comment: Shipped tracking #99" in doc.sections[0].text
+    assert doc.metadata["labels"] == ["hardware"]
+
+    # End-to-end token-only Atlassian family credential -> load_credentials -> token_auth.
+    stored_family_cred = {
+        CREDENTIAL_FAMILY_KEY: CredentialFamily.ATLASSIAN.value,
+        "token": "dc-pat-token",
+    }
+    source_cred = to_source_credential_json(
+        DocumentSource.JIRA_SERVICE_MANAGEMENT, stored_family_cred
+    )
+    assert source_cred == {"jira_api_token": "dc-pat-token"}
+
+    connector = JiraServiceManagementConnector(
+        jira_base_url="https://jira.internal.corp", project_key="JSM"
+    )
+    with patch("onyx.connectors.jira_service_management.utils.JIRA") as mock_jira:
+        connector.load_credentials(source_cred)
+        assert connector._is_cloud is False
+        mock_jira.assert_called_once_with(
+            server="https://jira.internal.corp",
+            options={"rest_api_version": JIRA_SERVER_API_VERSION},
+            token_auth="dc-pat-token",
+            timeout=(JIRA_CONNECT_TIMEOUT_SECONDS, JIRA_READ_TIMEOUT_SECONDS),
+        )
+
+
+def test_slim_docs_honors_callback_should_stop() -> None:
+    connector = JiraServiceManagementConnector(
+        jira_base_url="https://acme.atlassian.net", project_key="JSM"
+    )
+    mock_client = MagicMock()
+    mock_client.deploymentType = "Cloud"
+    mock_client.enhanced_search_issues.side_effect = [
+        ResultList(
+            [_make_mock_issue(key="JSM-1", issue_id="1")],
+            _nextPageToken="page-2",
+            _isLast=False,
+        ),
+        ResultList(
+            [_make_mock_issue(key="JSM-2", issue_id="2")],
+            _nextPageToken=None,
+            _isLast=True,
+        ),
+    ]
+    connector._jira_client = mock_client
+    connector._is_cloud = True
+
+    heartbeat = _RecordingHeartbeat(stop_after=1)
+    batches = list(connector.retrieve_all_slim_docs(callback=heartbeat))
+    assert len(batches) == 1
+    assert mock_client.enhanced_search_issues.call_count == 1
