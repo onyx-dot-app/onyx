@@ -29,7 +29,6 @@ export function TracingDeleteModal({
     setIsSubmitting(true);
     try {
       await deleteTracingProvider(target.providerType);
-      toast.success(t("toasts.deleted", { label: target.label }));
       onClose?.();
     } catch (error) {
       toast.error(

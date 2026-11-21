@@ -9086,11 +9086,7 @@
         }
       },
       "toasts": {
-        "connected": "{label} 已连接",
-        "disconnected": "{label} 已断开连接",
-        "unexpectedError": "发生意外错误。",
-        "deleted": "已删除 {label}",
-        "reconnected": "已重新连接 {label}"
+        "unexpectedError": "发生意外错误。"
       },
       "providers": {
         "braintrust": {

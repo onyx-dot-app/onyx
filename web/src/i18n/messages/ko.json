@@ -9086,11 +9086,7 @@
         }
       },
       "toasts": {
-        "connected": "{label}에 연결했습니다",
-        "disconnected": "{label} 연결을 해제했습니다",
-        "unexpectedError": "예기치 않은 오류가 발생했습니다.",
-        "deleted": "{label}이(가) 삭제되었습니다",
-        "reconnected": "{label}에 다시 연결되었습니다"
+        "unexpectedError": "예기치 않은 오류가 발생했습니다."
       },
       "providers": {
         "braintrust": {

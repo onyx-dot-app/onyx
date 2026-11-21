@@ -9086,11 +9086,7 @@
         }
       },
       "toasts": {
-        "connected": "{label} に接続しました",
-        "disconnected": "{label} を切断しました",
-        "unexpectedError": "予期しないエラーが発生しました。",
-        "deleted": "{label} を削除しました",
-        "reconnected": "{label} に再接続しました"
+        "unexpectedError": "予期しないエラーが発生しました。"
       },
       "providers": {
         "braintrust": {

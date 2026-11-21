@@ -28,7 +28,6 @@ export function TracingDisconnectModal({
     setIsSubmitting(true);
     try {
       await disconnectTracingProvider(target.providerType, target.config);
-      toast.success(t("toasts.disconnected", { label: target.label }));
       onClose?.();
     } catch (error) {
       toast.error(

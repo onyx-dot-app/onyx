@@ -9086,11 +9086,7 @@
         }
       },
       "toasts": {
-        "connected": "{label} connected",
-        "disconnected": "{label} disconnected",
-        "unexpectedError": "Unexpected error occurred.",
-        "deleted": "{label} deleted",
-        "reconnected": "{label} reconnected"
+        "unexpectedError": "Unexpected error occurred."
       },
       "providers": {
         "braintrust": {

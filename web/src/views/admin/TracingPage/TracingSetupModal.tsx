@@ -89,7 +89,6 @@ export function TracingSetupModal({ state, onSaved }: TracingSetupModalProps) {
         hasStoredKey,
         config,
       });
-      toast.success(t("toasts.connected", { label: detail.label }));
       await onSaved();
       onClose?.();
     } catch (error) {

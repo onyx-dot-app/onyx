@@ -87,7 +87,6 @@ export default function TracingPage() {
       } else {
         await deleteTracingProvider(target.providerType);
       }
-      toast.success(t("toasts.reconnected", { label: target.label }));
     } catch (reconnectError) {
       toast.error(
         reconnectError instanceof Error

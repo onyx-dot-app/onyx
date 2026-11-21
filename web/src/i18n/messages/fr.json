@@ -9086,11 +9086,7 @@
         }
       },
       "toasts": {
-        "connected": "{label} connecté",
-        "disconnected": "{label} déconnecté",
-        "unexpectedError": "Une erreur inattendue est survenue.",
-        "deleted": "{label} supprimé",
-        "reconnected": "{label} reconnecté"
+        "unexpectedError": "Une erreur inattendue est survenue."
       },
       "providers": {
         "braintrust": {

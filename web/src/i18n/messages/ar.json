@@ -9086,11 +9086,7 @@
         }
       },
       "toasts": {
-        "connected": "تم الاتصال بـ {label}",
-        "disconnected": "تم قطع الاتصال بـ {label}",
-        "unexpectedError": "حدث خطأ غير متوقع.",
-        "deleted": "تم حذف {label}",
-        "reconnected": "تمت إعادة الاتصال بـ {label}"
+        "unexpectedError": "حدث خطأ غير متوقع."
       },
       "providers": {
         "braintrust": {
