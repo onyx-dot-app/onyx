@@ -1,0 +1,24 @@
+---
+title: "Search"
+openapi: "POST /search"
+---
+
+<Info>
+  **Required permission:** Search &mdash; Read (`read:search`), which `basic` includes, so any signed-in user has it.
+  A limited [Personal Access Token](/developers/overview#personal-access-tokens) needs the Search &mdash; Read scope.
+</Info>
+
+<Note>
+  This is the endpoint to reach for when you want Onyx's search results in your own application.
+  It runs the same retrieval pipeline as the Search action in chat and returns ranked document sections,
+  without spending an LLM call on writing an answer.
+  The endpoint behind the Onyx Search UI is [Handle Send Search
+  Message](/developers/api_reference/search/handle_send_search_message), which exposes keyword expansion,
+  LLM document selection and streaming instead.
+</Note>
+
+<Warning>
+  Results are always filtered by the calling user's document permissions,
+  so the same query run by two users can return different documents. A search needs a vector database:
+  deployments running with `DISABLE_VECTOR_DB` set (Onyx Lite) answer with `501`.
+</Warning>
