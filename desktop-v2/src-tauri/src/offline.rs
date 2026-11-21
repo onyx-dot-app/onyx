@@ -35,6 +35,8 @@ pub struct OfflineStatus {
     next_retry_ms: Option<u64>,
     /// Managed policy locks the server, so Change server is hidden.
     server_locked: bool,
+    /// No automatic checks: only Retry checks again.
+    retry_by_hand: bool,
 }
 
 struct Pending {
@@ -70,6 +72,12 @@ impl Loads {
 
     fn finished(&mut self) {
         self.finished = self.finished.max(self.committed);
+    }
+
+    /// The id of the latest navigation.
+    #[cfg(any(target_os = "linux", test))]
+    fn current(&self) -> u64 {
+        self.latest
     }
 
     fn is_latest(&self, id: u64) -> bool {
@@ -143,6 +151,7 @@ fn show_with(
                         checking: false,
                         next_retry_ms: None,
                         server_locked,
+                        retry_by_hand,
                     },
                     retry_by_hand,
                 });
@@ -281,14 +290,16 @@ async fn monitor(app: AppHandle, id: u64) {
         let by_hand = take_retry_by_hand(&app, id);
         let delay = Duration::from_secs(BACKOFF_SECS[step.min(BACKOFF_SECS.len() - 1)]);
         let delay_ms = u64::try_from(delay.as_millis()).unwrap_or(u64::MAX);
+        // Made before the page can send Retry, so no wake is lost.
+        let offline = app.state::<Offline>();
+        let wake = offline.wake.notified();
         if !update(&app, Some(id), |s| {
             s.checking = false;
             s.next_retry_ms = (!by_hand).then_some(delay_ms);
+            s.retry_by_hand = by_hand;
         }) {
             return;
         }
-        let offline = app.state::<Offline>();
-        let wake = offline.wake.notified();
         let woken = if by_hand {
             wake.await;
             true
@@ -482,13 +493,17 @@ fn webview_failed(app: &AppHandle, uri: &str, known: Option<Unreachable>) {
         return;
     }
     let path = path_of(&url);
+    let load = app.state::<Offline>().loads().current();
     let app = app.clone();
     tauri::async_runtime::spawn(async move {
         let (reason, by_hand) = match known {
             Some(reason) => (reason, true),
             None => webview_failure(app.state::<AppState>().api.health(&server).await),
         };
-        if app.get_webview_window(main_window::LABEL).is_none() {
+        // A newer navigation replaced the failed page.
+        if !app.state::<Offline>().loads().is_latest(load)
+            || app.get_webview_window(main_window::LABEL).is_none()
+        {
             return;
         }
         if let Err(e) = show_with(&app, &path, reason, epoch, by_hand) {
@@ -556,6 +571,16 @@ mod tests {
         loads.committed();
         loads.finished();
         assert!(loads.has_finished(second));
+    }
+
+    #[test]
+    fn a_newer_navigation_is_no_longer_the_current_one() {
+        let mut loads = Loads::default();
+        loads.navigated();
+        let failed = loads.current();
+        assert!(loads.is_latest(failed));
+        loads.navigated();
+        assert!(!loads.is_latest(failed));
     }
 
     #[test]

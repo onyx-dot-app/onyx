@@ -71,7 +71,9 @@ impl Policy {
                 return Some(managed.clone());
             }
         }
-        saved.or_else(|| self.server_url.clone())
+        saved
+            .filter(|s| crate::api::saved_server_allowed(s))
+            .or_else(|| self.server_url.clone())
     }
 
     /// The launcher shortcut to register, or `None` if the launcher is off.

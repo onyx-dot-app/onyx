@@ -469,6 +469,19 @@ fn normalize(input: &str, allow_any_http: bool) -> Result<String, String> {
 /// DNS, which may answer with a remote address. macOS keeps the name rule.
 const LOCALHOST_SUBDOMAINS_ALLOWED: bool = cfg!(target_os = "macos");
 
+/// Whether a server saved by the user (`config.json`) is still allowed. One
+/// saved before `*.localhost` lost plain `http://` on Windows and Linux is not.
+pub fn saved_server_allowed(server: &str) -> bool {
+    let Ok(url) = Url::parse(server) else {
+        return true;
+    };
+    !(url.scheme() == "http"
+        && url
+            .host_str()
+            .is_some_and(|host| host.ends_with(".localhost"))
+        && !LOCALHOST_SUBDOMAINS_ALLOWED)
+}
+
 fn is_loopback_host(host: &str) -> bool {
     let host = host.trim_start_matches('[').trim_end_matches(']');
     host == "localhost"
@@ -512,9 +525,50 @@ fn request_failed(error: &reqwest::Error) -> Unreachable {
     Unreachable::from_reqwest(error).unwrap_or(Unreachable::Unknown)
 }
 
+/// The most of a short answer (version, sign-in settings, an error) that is
+/// read. A longer one is not from the Onyx API.
+const MAX_SHORT_BODY_BYTES: usize = 64 * 1024;
+
+/// The body of a short answer, or `None` if it is longer than
+/// `MAX_SHORT_BODY_BYTES`. Reading stops at the limit, with or without a
+/// `Content-Length`.
+async fn read_short_body(mut response: Response) -> Result<Option<String>, reqwest::Error> {
+    if response
+        .content_length()
+        .is_some_and(|len| len > MAX_SHORT_BODY_BYTES as u64)
+    {
+        return Ok(None);
+    }
+    let mut body = Vec::new();
+    while let Some(chunk) = response.chunk().await? {
+        if body.len() + chunk.len() > MAX_SHORT_BODY_BYTES {
+            return Ok(None);
+        }
+        body.extend_from_slice(&chunk);
+    }
+    Ok(Some(String::from_utf8_lossy(&body).into_owned()))
+}
+
+/// The JSON of a successful short answer. A body that does not come in is a
+/// connection error; a body that is not the expected JSON is not Onyx.
+async fn read_json<T: serde::de::DeserializeOwned>(
+    server: &str,
+    response: Response,
+) -> Result<T, String> {
+    let body = read_short_body(response)
+        .await
+        .map_err(|e| reachability::describe(server, &e))?;
+    body.and_then(|body| serde_json::from_str::<T>(&body).ok())
+        .ok_or_else(|| Unreachable::NotOnyx.message(server))
+}
+
 async fn error_detail(server: &str, response: Response) -> String {
     let status = response.status();
-    let body = response.text().await.unwrap_or_default();
+    let body = read_short_body(response)
+        .await
+        .ok()
+        .flatten()
+        .unwrap_or_default();
     if api_not_routed(status, &body) {
         return Unreachable::ApiNotRouted.message(server);
     }
@@ -592,7 +646,14 @@ impl Api {
             .await
             .map_err(|e| request_failed(&e))?;
         let status = response.status();
-        let body = response.text().await.map_err(|e| request_failed(&e))?;
+        // A 5xx is the answer, whatever its body does.
+        if let Some(reason) = Unreachable::from_status(status) {
+            return Err(reason);
+        }
+        let body = read_short_body(response)
+            .await
+            .map_err(|e| request_failed(&e))?
+            .ok_or(Unreachable::NotOnyx)?;
         parse_version(status, &body)
     }
 
@@ -610,10 +671,8 @@ impl Api {
         if !response.status().is_success() {
             return Err(error_detail(server, response).await);
         }
-        let reported = response
-            .json::<CookieNameResponse>()
-            .await
-            .map_err(|_| Unreachable::NotOnyx.message(server))?
+        let reported = read_json::<CookieNameResponse>(server, response)
+            .await?
             .auth_cookie_name;
         Ok(reported
             .filter(|name| !name.is_empty())
@@ -632,10 +691,7 @@ impl Api {
         if !response.status().is_success() {
             return Err(error_detail(server, response).await);
         }
-        let parsed = response
-            .json::<AuthTypeResponse>()
-            .await
-            .map_err(|_| Unreachable::NotOnyx.message(server))?;
+        let parsed = read_json::<AuthTypeResponse>(server, response).await?;
         Ok(AuthMethods {
             password: parsed.password_auth_enabled,
             sso: sso_options(&parsed),
@@ -677,7 +733,11 @@ impl Api {
             .await
             .map_err(|e| reachability::describe(server, &e))?;
         if response.status() == StatusCode::NOT_FOUND {
-            let body = response.text().await.unwrap_or_default();
+            let body = read_short_body(response)
+                .await
+                .ok()
+                .flatten()
+                .unwrap_or_default();
             if api_not_routed(StatusCode::NOT_FOUND, &body) {
                 return Err(Unreachable::ApiNotRouted.message(server));
             }
@@ -1099,8 +1159,8 @@ mod tests {
     use super::{
         body_chunks, file_state, is_file_id, multipart_body, normalize_managed_server_url,
         normalize_server_url, parse_agents, parse_settings, parse_version, redirect_allowed,
-        sso_options, upload_limit, upload_outcome, Agent, Api, AttachedFile, AuthTypeResponse,
-        FileState, ServerSettings, MAX_UPLOAD_BYTES,
+        saved_server_allowed, sso_options, upload_limit, upload_outcome, Agent, Api, AttachedFile,
+        AuthTypeResponse, FileState, ServerSettings, MAX_UPLOAD_BYTES,
     };
     use crate::reachability::Unreachable;
     use url::Url;
@@ -1531,6 +1591,60 @@ mod tests {
         assert_eq!(
             tauri::async_runtime::block_on(api.login(&server, "a@b.c", "pw")).unwrap_err(),
             expected
+        );
+    }
+
+    #[test]
+    fn saved_localhost_subdomains_follow_the_same_rule() {
+        assert_eq!(
+            saved_server_allowed("http://onyx.localhost:3000"),
+            cfg!(target_os = "macos")
+        );
+        assert!(saved_server_allowed("https://onyx.localhost"));
+        assert!(saved_server_allowed("http://localhost:3000"));
+        assert!(saved_server_allowed("https://cloud.onyx.app"));
+    }
+
+    #[test]
+    fn a_long_answer_is_not_onyx_and_is_not_read_to_the_end() {
+        // Chunked, so there is no Content-Length to reject it early.
+        let (server, _) = serve(|_| {
+            // Valid version JSON, made long with whitespace.
+            let json = r#"{"backend_version":"5.1.0"}"#;
+            let chunk = " ".repeat(16 * 1024);
+            let mut response = format!(
+                "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n{:x}\r\n{json}\r\n",
+                json.len()
+            );
+            for _ in 0..64 {
+                response.push_str(&format!("{:x}\r\n{chunk}\r\n", chunk.len()));
+            }
+            response.push_str("0\r\n\r\n");
+            response
+        });
+        let api = Api::new().unwrap();
+        assert_eq!(
+            tauri::async_runtime::block_on(api.health(&server)),
+            Err(Unreachable::NotOnyx)
+        );
+    }
+
+    #[test]
+    fn a_body_cut_short_is_a_connection_error_not_a_wrong_server() {
+        let (server, _) = serve(|_| {
+            "HTTP/1.1 200 OK\r\nContent-Length: 100\r\nConnection: close\r\n\r\n{\"pass".to_string()
+        });
+        let api = Api::new().unwrap();
+        let message = tauri::async_runtime::block_on(api.auth_methods(&server))
+            .err()
+            .unwrap();
+        assert!(
+            !message.contains("does not look like an Onyx server"),
+            "{message}"
+        );
+        assert_ne!(
+            tauri::async_runtime::block_on(api.health(&server)),
+            Err(Unreachable::NotOnyx)
         );
     }
 

@@ -123,7 +123,9 @@ function Offline() {
               ? "Checking the connection…"
               : seconds !== null
                 ? `Onyx tries again in ${seconds}s and opens when the server answers.`
-                : "Onyx opens when the server answers."}
+                : status?.retryByHand
+                  ? "Onyx does not try again by itself. Fix the problem, then select Retry."
+                  : "Onyx opens when the server answers."}
           </Text>
         </div>
         <ErrorText message={error} />
