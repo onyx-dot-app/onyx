@@ -414,6 +414,23 @@ def test_a_cell_whose_driver_cannot_start_ends_and_frees_its_slot(
     assert _details(Response().run("1\n")).status == "completed"
 
 
+def test_a_cell_gives_its_slot_back_to_the_budget_it_took_it_from(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    taken = cells_module._RunningCells(1)
+    monkeypatch.setattr(cells_module, "_running_cells", taken)
+    response = Response()
+    running = response.run("await tools.gate(value='x')\n", yield_time_ms=100)
+    assert _details(running).status == "running"
+    # Another budget replaces the process-wide one while the cell runs.
+    replacement = cells_module._RunningCells(1)
+    monkeypatch.setattr(cells_module, "_running_cells", replacement)
+    assert replacement.acquire("tenant")
+    response.gate.set()
+    until(lambda: taken.acquire("tenant"))
+    assert not replacement.acquire("tenant")
+
+
 def test_commits_follow_completion_order_and_saved_records_fold_to_the_same_store() -> (
     None
 ):
