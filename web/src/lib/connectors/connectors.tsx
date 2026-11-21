@@ -1106,6 +1106,50 @@ export const connectorConfigs: Record<
     ],
     advanced_values: [],
   },
+  jira_service_management: {
+    description: "connectors.jira_service_management.description",
+    values: [
+      {
+        type: "text",
+        label:
+          "connectors.jira_service_management.fields.jsm_base_url.label",
+        name: "jsm_base_url",
+        optional: false,
+        placeholder:
+          "connectors.jira_service_management.fields.jsm_base_url.placeholder",
+        subDescription: "siteUrl",
+      },
+      {
+        type: "text",
+        label:
+          "connectors.jira_service_management.fields.service_desk_id.label",
+        name: "service_desk_id",
+        optional: true,
+        description:
+          "connectors.jira_service_management.fields.service_desk_id.description",
+      },
+      {
+        type: "text",
+        label:
+          "connectors.jira_service_management.fields.request_type_id.label",
+        name: "request_type_id",
+        optional: true,
+        description:
+          "connectors.jira_service_management.fields.request_type_id.description",
+      },
+    ],
+    advanced_values: [
+      {
+        type: "number",
+        label:
+          "connectors.jira_service_management.fields.batch_size.label",
+        name: "batch_size",
+        optional: true,
+        description:
+          "connectors.jira_service_management.fields.batch_size.description",
+      },
+    ],
+  },
   salesforce: {
     description: "connectors.salesforce.description",
     values: [
