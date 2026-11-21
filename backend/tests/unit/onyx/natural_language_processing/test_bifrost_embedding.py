@@ -14,6 +14,10 @@ from onyx.natural_language_processing.embedding_rate_limit import (
     EmbeddingRateLimiter,
     EmbeddingWaitTotals,
 )
+from onyx.natural_language_processing.embedding_request_policy import (
+    EmbeddingRequestPolicy,
+    EmbeddingRetryBackoff,
+)
 from onyx.natural_language_processing.exceptions import (
     EmbeddingRequestFailedError,
     EmbeddingRequestRejectedError,
@@ -21,8 +25,6 @@ from onyx.natural_language_processing.exceptions import (
 from onyx.natural_language_processing.search_nlp_models import (
     AuthenticationError,
     CloudEmbedding,
-    EmbeddingRequestPolicy,
-    EmbeddingRetryBackoff,
 )
 from onyx.natural_language_processing.utils import (
     TiktokenTokenizer,
@@ -419,7 +421,10 @@ async def test_indexing_blocks_on_provider_rate_limits_instead_of_failing() -> N
 
     wait_totals = EmbeddingWaitTotals()
     gateway = _FakeGateway(respond=limit_b_five_times)
-    with patch(f"{_MODULE}.wait_sleeps", return_value=iter([0.0])):
+    with patch(
+        "onyx.natural_language_processing.embedding_request_policy.wait_sleeps",
+        return_value=iter([0.0]),
+    ):
         async with _bifrost(gateway, "https://bifrost.example") as embedding:
             embedding.policy = EmbeddingRequestPolicy(
                 retry_backoff=embedding.policy.retry_backoff,
