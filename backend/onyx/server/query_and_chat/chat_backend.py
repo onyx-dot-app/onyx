@@ -34,7 +34,6 @@ from onyx.chat.chat_processing_checker import (
     stop_current_turn,
 )
 from onyx.chat.chat_utils import (
-    convert_chat_history_basic,
     create_chat_session_from_request,
 )
 from onyx.chat.errors import unhandled_stream_error
@@ -64,6 +63,7 @@ from onyx.chat.run_store import (
     request_response_stop,
     stop_response,
 )
+from onyx.chat.session_naming import name_chat_session
 from onyx.chat.stop_signal_checker import request_stop
 from onyx.chat.stream_buffer import StreamChunkRead, read_stream_chunks
 from onyx.chat.tool_approvals import action_now_blocked
@@ -90,7 +90,6 @@ from onyx.db.approval_request import (
 from onyx.db.chat import (
     add_chat_session__no_commit,
     add_chats_to_session_from_slack_thread,
-    create_chat_history_chain,
     delete_all_chat_sessions_for_user,
     delete_chat_session,
     duplicate_chat_session_for_user_from_slack,
@@ -132,7 +131,6 @@ from onyx.db.engine.sql_engine import get_session, get_session_with_current_tena
 from onyx.db.enums import (
     ApprovalDecidedVia,
     ApprovalDecision,
-    LLMModelFlowType,
     Permission,
     QuestionAnsweredVia,
     QuestionOutcome,
@@ -144,7 +142,6 @@ from onyx.db.incognito import (
     mark_incognito_user_files_deleting,
 )
 from onyx.db.models import (
-    ChatMessage,
     ChatSessionSharedStatus,
     Persona,
     User,
@@ -169,7 +166,6 @@ from onyx.file_store.serving import (
 from onyx.integrations.models import ApprovalMode
 from onyx.llm.constants import LlmProviderNames
 from onyx.llm.factory import (
-    get_default_utility_llm,
     get_llm_for_persona,
     get_llm_token_counter,
 )
@@ -178,11 +174,8 @@ from onyx.llm.models import (
     ReasoningEffort,
     parse_user_selectable_reasoning_effort,
 )
-from onyx.llm.override_models import LLMOverride
 from onyx.secondary_llm_flows.chat_session_naming import (
     DEFAULT_CHAT_SESSION_NAME,
-    generate_chat_session_name,
-    get_fallback_chat_session_name,
 )
 from onyx.server.api_key_usage import check_api_key_usage
 from onyx.server.features.action_policies.models import ApprovalChoice
@@ -235,17 +228,14 @@ from onyx.server.query_and_chat.streaming_models import (
     heartbeat_packet,
 )
 from onyx.server.query_and_chat.token_limit import (
-    check_model_spend_limits,
     check_token_rate_limits,
 )
 from onyx.server.usage_limits import (
-    check_llm_cost_limit_for_provider,
     check_usage_and_raise,
     is_usage_limits_enabled,
 )
 from onyx.server.utils import get_json_line
 from onyx.tools.models import ToolOptions
-from onyx.tracing.framework.create import ChatTraceMetadata, ensure_trace
 from onyx.utils.headers import get_relevant_headers
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_string
@@ -687,66 +677,6 @@ def create_new_chat_session(
     )
 
 
-def _generate_or_fallback_chat_session_name(
-    chat_history: list[ChatMessage],
-    request: Request,
-    user: User,
-    chat_session_id: UUID,
-    persona: Persona | None,
-    llm_override: LLMOverride | None,
-) -> str:
-    user_id = user.id
-    fallback_name = get_fallback_chat_session_name(chat_history)
-    max_tokens_for_naming = 3000
-
-    try:
-        check_token_rate_limits(user)
-        additional_headers = get_relevant_headers(
-            request.headers, LITELLM_PASS_THROUGH_HEADERS
-        )
-        llm = get_default_utility_llm(
-            additional_headers=additional_headers,
-            flow_type=LLMModelFlowType.CHAT_NAMING,
-        )
-        if llm is None:
-            llm = get_llm_for_persona(
-                persona=persona,
-                user=user,
-                llm_override=llm_override,
-                additional_headers=additional_headers,
-            )
-            with get_session_with_current_tenant() as db_session:
-                check_llm_cost_limit_for_provider(
-                    db_session=db_session,
-                    tenant_id=get_current_tenant_id(),
-                    llm_provider_api_key=llm.config.api_key,
-                )
-            check_model_spend_limits(user, llm.config.model_configuration_id)
-
-        token_counter = get_llm_token_counter(llm)
-        simple_chat_history = convert_chat_history_basic(
-            chat_history=chat_history,
-            token_counter=token_counter,
-            max_individual_message_tokens=max_tokens_for_naming,
-            max_total_tokens=max_tokens_for_naming,
-        )
-        with ensure_trace(
-            "chat_session_naming",
-            group_id=str(chat_session_id),
-            metadata=ChatTraceMetadata(
-                chat_session_id=str(chat_session_id),
-                user_id=str(user_id) if user_id else None,
-            ).model_dump(),
-        ):
-            return generate_chat_session_name(
-                chat_history=simple_chat_history,
-                llm=llm,
-            )
-    except Exception as error:
-        logger.warning("Failed to generate chat session name: %s", error)
-        return fallback_name
-
-
 @router.put("/rename-chat-session")
 def rename_chat_session(
     rename_req: ChatRenameRequest,
@@ -769,42 +699,28 @@ def rename_chat_session(
         # reporting the requested one would show a rename that did not happen.
         return RenameChatSessionResponse(new_name=chat_session.description or "")
 
-    # Close the read session before the LLM's multi-second generation window.
     with get_session_with_current_tenant() as db_session:
         chat_session = get_chat_session_by_id(
             chat_session_id=chat_session_id,
             user_id=user_id,
             db_session=db_session,
-            eager_load_persona=True,
         )
         # Auto-naming derives a title from the conversation and writes it to the
         # session row. A non-persisting incognito mode keeps no content in
         # Postgres, so it keeps the fallback name and skips the LLM call.
         if not record_mode_persists_content(chat_session.incognito_record_mode):
             return RenameChatSessionResponse(new_name=DEFAULT_CHAT_SESSION_NAME)
-        full_history = create_chat_history_chain(
+
+    # Returns a saved name, including one the chat turn is still generating.
+    return RenameChatSessionResponse(
+        new_name=name_chat_session(
             chat_session_id=chat_session_id,
-            db_session=db_session,
+            user=user,
+            additional_headers=get_relevant_headers(
+                request.headers, LITELLM_PASS_THROUGH_HEADERS
+            ),
         )
-        session_override = chat_session.llm_override
-    new_name = _generate_or_fallback_chat_session_name(
-        chat_history=full_history,
-        request=request,
-        user=user,
-        chat_session_id=chat_session_id,
-        persona=chat_session.persona,
-        llm_override=session_override,
     )
-
-    with get_session_with_current_tenant() as db_session:
-        update_chat_session(
-            db_session=db_session,
-            user_id=user_id,
-            chat_session_id=chat_session_id,
-            description=new_name,
-        )
-
-    return RenameChatSessionResponse(new_name=new_name)
 
 
 @router.patch("/chat-session/{session_id}")

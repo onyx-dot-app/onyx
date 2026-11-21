@@ -11,14 +11,16 @@ Every call blocks the calling thread (agent runtime tools run in threads).
 events and read the last one, an `ExecCommandResult`, or call
 `collect_exec_result`.
 
-Exec contract (Codex `exec_command` / `write_stdin`):
+Exec contract (`exec_command` / `write_stdin`):
 - `exec_command` starts a command and waits up to `yield_time_ms`. If the
   command ended, the result has its exit code. Otherwise it has a
   `session_id` for `write_stdin`.
 - `write_stdin` with no chars polls for new output. Chars go to the
   command's stdin. "\\x03" interrupts the command.
-- Output of one call keeps at most `EXEC_CALL_OUTPUT_MAX_BYTES` (head and
-  tail); the result text keeps at most `max_output_tokens` (head and tail).
+- Output of one call keeps at most `EXEC_CALL_OUTPUT_MAX_BYTES`: the
+  result has its head and tail, and the characters dropped between them.
+  The caller cuts what its reader gets, and stops forwarding live output
+  where its cut would.
 - Exec session IDs stay valid across turns and API pods until the command's
   record is evicted, or the sandbox stops (idle stop, restore): then the call
   raises `ExecSessionEndedError`.
@@ -31,24 +33,38 @@ Exec contract (Codex `exec_command` / `write_stdin`):
 
 import abc
 import posixpath
-from collections.abc import Generator, Iterator, Sequence
+from collections.abc import Callable, Generator, Iterable, Iterator, Sequence
 from typing import IO
 from uuid import UUID
 
+from onyx.microvm.models import FileListing
 from onyx.server.features.build.sandbox.models import (
     ExecCommandResult,
     ExecEvent,
     HarnessSandboxRef,
     SandboxPathInfo,
+    SkillsBundle,
 )
 
 # Parent of each chat session's working directory in the sandbox.
 SESSION_WORKSPACE_ROOT = "/home/onyx/workspaces"
+# The directory of the chat's files in its session directory: copies of file
+# store files (tools/tool_implementations/sandbox/file_copies.py).
+CHAT_FILES_DIR = "attachments"
+# The chat's project files and its agent's files, in CHAT_FILES_DIR.
+PROJECT_FILES_DIR = f"{CHAT_FILES_DIR}/project"
+AGENT_FILES_DIR = f"{CHAT_FILES_DIR}/agent"
 
 # Parent of the files that Onyx writes outside every session directory (for
 # example large tool results). No session save keeps them; they go when the
 # sandbox stops.
 ONYX_VM_FILES_ROOT = "/tmp/onyx"  # noqa: S108 - a path in the sandbox VM.
+# Large tool results, in one directory for each chat session
+# (tools/tool_implementations/sandbox/spill.py). The purge rule: a session's
+# purge deletes its directory whenever the VM runs, also for a session that
+# never used the sandbox otherwise, and a write that lands after the purge
+# deletes the directory again and raises HarnessSandboxError.
+TOOL_RESULTS_ROOT = f"{ONYX_VM_FILES_ROOT}/tool-results"
 
 # Most exec session records per sandbox; the least recently used goes
 # first. The guest daemon caps the running commands.
@@ -70,6 +86,10 @@ INTERRUPT_CHAR = "\x03"
 
 def session_workspace(session_id: UUID) -> str:
     return f"{SESSION_WORKSPACE_ROOT}/{session_id}"
+
+
+def session_tool_results(session_id: UUID) -> str:
+    return f"{TOOL_RESULTS_ROOT}/{session_id}"
 
 
 def collect_exec_result(events: Iterator[ExecEvent]) -> ExecCommandResult:
@@ -152,6 +172,36 @@ def onyx_vm_path(path: str) -> str | None:
     return normalized if normalized.startswith(ONYX_VM_FILES_ROOT + "/") else None
 
 
+class SessionFiles(abc.ABC):
+    """File calls in one chat session's directory on one running VM
+    instance. The VM is placed and the session set up once, so each call is
+    one guest daemon call; a call fails once the instance stopped. Paths are
+    relative to the session directory. Safe to call from several threads."""
+
+    @abc.abstractmethod
+    def write(self, path: str, data: IO[bytes], *, timeout_seconds: float) -> None:
+        """write_file, mode 0644, on this instance. A write makes a missing
+        session directory; a write that finds the session purged deletes
+        that directory again and raises HarnessSandboxError."""
+
+    @abc.abstractmethod
+    def delete(self, path: str) -> bool:
+        """Delete a file or a link (not a directory) inside the session
+        directory; a link is never followed. False when nothing was at the
+        path. Never sets the session up again, so after a purge it deletes
+        nothing."""
+
+    @abc.abstractmethod
+    def list_files(self, directory: str, *, max_entries: int) -> FileListing:
+        """The entries directly in `directory`, not those of its
+        subdirectories; none for a missing directory."""
+
+    @abc.abstractmethod
+    def mark_busy(self, seconds: float | None) -> None:
+        """Keep the sandbox busy (no idle stop) for `seconds` from now, or
+        end that (None). Each SessionFiles has one such mark."""
+
+
 class HarnessSandbox(abc.ABC):
     """What the harness calls. All methods block; see the module docstring."""
 
@@ -161,6 +211,11 @@ class HarnessSandbox(abc.ABC):
         initialized. Every other call does this first."""
 
     @abc.abstractmethod
+    def sync_skills(self, ref: HarnessSandboxRef, bundle: SkillsBundle) -> None:
+        """Show the bundle's files read-only at CHAT_SKILLS_MOUNT_PATH. Skips
+        the transfer when this VM instance already shows the same bundle."""
+
+    @abc.abstractmethod
     def exec_command(
         self,
         ref: HarnessSandboxRef,
@@ -168,7 +223,6 @@ class HarnessSandbox(abc.ABC):
         *,
         workdir: str | None = None,
         yield_time_ms: int | None = None,
-        max_output_tokens: int | None = None,
     ) -> Generator[ExecEvent]:
         """Run `cmd` with bash in `workdir` (default: the session
         directory)."""
@@ -181,18 +235,18 @@ class HarnessSandbox(abc.ABC):
         chars: str = "",
         *,
         yield_time_ms: int | None = None,
-        max_output_tokens: int | None = None,
     ) -> Generator[ExecEvent]:
         """Write to a running command, or poll it with empty chars."""
 
     # Files: only what exec_command cannot do well. publish_files needs exact
     # bytes (exec output is text), and apply_patch needs exact writes of any
     # content (no shell quoting) and typed path facts. Paths are relative to
-    # the session directory, or absolute inside it; read_file also takes,
-    # and write_onyx_file only takes, an absolute path under
-    # ONYX_VM_FILES_ROOT (onyx_vm_path). Write data is
-    # bytes, or a seekable binary file (for example a file store temp file)
-    # that is streamed whole, from its start, in chunks.
+    # the session directory, or absolute inside it; read_file, write_file,
+    # delete_file and list_files also take an absolute path under
+    # ONYX_VM_FILES_ROOT (onyx_vm_path), which starts the sandbox but sets up
+    # no session. Write data is bytes, a seekable binary file (for example a
+    # file store temp file) that is streamed whole, from its start, in
+    # chunks, or the bytes in parts, which are sent without joining them.
 
     @abc.abstractmethod
     def read_file(self, ref: HarnessSandboxRef, path: str, *, max_bytes: int) -> bytes:
@@ -208,20 +262,32 @@ class HarnessSandbox(abc.ABC):
         self,
         ref: HarnessSandboxRef,
         path: str,
-        data: bytes | IO[bytes],
+        data: bytes | IO[bytes] | list[bytes],
         *,
         mode: int = 0o644,
+        timeout_seconds: float | None = None,
     ) -> None:
         """Atomic replace (a link is replaced, not followed); creates parent
-        directories. `mode`: permission bits."""
+        directories. `mode`: permission bits. The transfer ends by
+        `timeout_seconds`, if set. A write under TOOL_RESULTS_ROOT follows
+        its purge rule."""
 
     @abc.abstractmethod
-    def write_onyx_file(
-        self, ref: HarnessSandboxRef, path: str, data: bytes | IO[bytes]
+    def delete_listed_files(
+        self,
+        ref: HarnessSandboxRef,
+        directory: str,
+        select: Callable[[FileListing], Iterable[str]],
+        *,
+        max_entries: int,
     ) -> None:
-        """Atomic replace of an absolute path under ONYX_VM_FILES_ROOT, mode
-        0644; creates parent directories. Starts the sandbox if needed but
-        sets up no session. Raises SandboxPathError for another path."""
+        """List the entries below a directory, at any depth, with their size
+        and modification time, then delete the files that `select` picks from
+        the listing, on one lookup of the VM. A selected path that is not in
+        the listing is ignored. The listing has at most
+        `max_entries` (the guest daemon allows 100,000), and `truncated` when
+        more exist. Paths under ONYX_VM_FILES_ROOT are absolute, others
+        session-relative. A missing directory deletes nothing."""
 
     @abc.abstractmethod
     def stat_files(
@@ -235,6 +301,12 @@ class HarnessSandbox(abc.ABC):
     def delete_file(self, ref: HarnessSandboxRef, path: str) -> bool:
         """Delete a file or a link (not a directory). False when nothing was
         at the path."""
+
+    @abc.abstractmethod
+    def session_files(self, ref: HarnessSandboxRef) -> SessionFiles:
+        """Start the sandbox if needed, set up the chat session's directory,
+        and return file calls bound to the running VM instance. Raises
+        HarnessSandboxError for a purged session."""
 
     @abc.abstractmethod
     def touch(self, ref: HarnessSandboxRef) -> None:
@@ -255,5 +327,5 @@ class HarnessSandbox(abc.ABC):
 
     @abc.abstractmethod
     def is_busy(self, *, tenant_id: str, sandbox_id: UUID) -> bool:
-        """True while a command runs, a turn is in progress, or an approval
-        waits. Never starts the sandbox."""
+        """True while a command runs, a turn is in progress, a copy runs, or
+        an approval waits. Never starts the sandbox."""

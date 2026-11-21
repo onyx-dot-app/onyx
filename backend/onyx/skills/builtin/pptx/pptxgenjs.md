@@ -202,16 +202,16 @@ Render icons with the bundled script — all dependencies (lucide-static, @table
 ### Render an Icon PNG
 
 ```bash
-node .opencode/skills/pptx/scripts/icon.js circle-check --color FFFFFF --size 512 -o outputs/icons/check.png
+node /mnt/skills/pptx/scripts/icon.js circle-check --color FFFFFF --size 512 -o icons/check.png
 ```
 
 - `<icon-name>`: kebab-case icon file name (e.g. `circle-check`, `trending-up`, `shield-check`)
 - `--color`: hex color, `#` optional (default black). pptxgenjs option colors must still omit `#`.
 - `--size`: rasterization resolution in px (default 512 — crisp at any slide size; display size is set by `w`/`h` in inches)
-- `-o`: output path (default `outputs/icons/<icon-name>.png`)
+- `-o`: output path (default `icons/<icon-name>.png`)
 - `--set lucide|tabler`: restrict to one icon set
 
-Render each distinct (icon, color) pair **once** into `outputs/icons/`, then reuse the PNG across slides.
+Render each distinct (icon, color) pair **once** into `icons/`, then reuse the PNG across slides.
 
 **Stick to ONE set per deck** (lucide is the default lookup) — mixing sets breaks visual consistency because stroke weights and corner styles differ.
 
@@ -220,8 +220,8 @@ Render each distinct (icon, color) pair **once** into `outputs/icons/`, then reu
 Don't guess identifiers — a wrong name is the main failure mode. If unsure, search first:
 
 ```bash
-node .opencode/skills/pptx/scripts/icon.js --list "shield"               # search both sets
-node .opencode/skills/pptx/scripts/icon.js --list "chart" --set lucide   # scope to one set
+node /mnt/skills/pptx/scripts/icon.js --list "shield"               # search both sets
+node /mnt/skills/pptx/scripts/icon.js --list "chart" --set lucide   # scope to one set
 ```
 
 Two sets are available: **lucide** (~2,000 icons, clean stroke style — use as the default) and **tabler** (~6,000 icons, outline + filled — use when lucide lacks a concept).
@@ -247,7 +247,7 @@ Two sets are available: **lucide** (~2,000 icons, clean stroke style — use as 
 ```javascript
 // Icon in a colored circle (render the icon in a color that contrasts with the circle)
 slide.addShape(pres.shapes.OVAL, { x: 0.5, y: 1.0, w: 0.6, h: 0.6, fill: { color: "1E2761" } });
-slide.addImage({ path: "outputs/icons/check.png", x: 0.62, y: 1.12, w: 0.36, h: 0.36 });
+slide.addImage({ path: "icons/check.png", x: 0.62, y: 1.12, w: 0.36, h: 0.36 });
 ```
 
 ---

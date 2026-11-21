@@ -103,11 +103,6 @@ SANDBOX_FC_IDLE_TIMEOUT_SECONDS = _fc_env_int(
 SANDBOX_FC_TURN_END_SAVE_INTERVAL_SECONDS = _fc_env_int(
     "SANDBOX_FC_TURN_END_SAVE_INTERVAL_SECONDS", 300, minimum=0
 )
-# Spreads the scheduled-task runs of one beat tick, so that they do not all
-# start VMs at the same moment.
-SANDBOX_FC_SCHEDULED_RUN_JITTER_SECONDS = _fc_env_float(
-    "SANDBOX_FC_SCHEDULED_RUN_JITTER_SECONDS", 30.0, minimum=0.0
-)
 
 # Source image tag of the harness sandbox root drive (for example
 # "dev-build-craft-fc-adf9a87"). Each node names its template

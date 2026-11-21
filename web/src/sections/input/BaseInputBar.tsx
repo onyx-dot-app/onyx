@@ -70,6 +70,7 @@ export interface BaseInputBarProps {
   onPasteFiles?: (files: File[]) => void;
   onContentChange?: (text: string) => void;
   onInputCallback?: (event: SyntheticEvent<HTMLDivElement>) => void;
+  onFocus?: () => void;
 }
 
 const BaseInputBar = memo(
@@ -96,6 +97,7 @@ const BaseInputBar = memo(
         onPasteFiles,
         onContentChange,
         onInputCallback,
+        onFocus,
       },
       ref
     ) => {
@@ -296,6 +298,7 @@ const BaseInputBar = memo(
                 onCompositionStart={handleCompositionStart}
                 onCompositionEnd={handleCompositionEnd}
                 onKeyDown={handleKeyDown}
+                onFocus={onFocus}
                 onBlur={() => queueNav.setHighlightedId(null)}
                 className={cn(
                   "w-full h-full min-h-[44px] outline-hidden bg-transparent",

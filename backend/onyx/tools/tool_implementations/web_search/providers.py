@@ -20,6 +20,9 @@ from onyx.tools.tool_implementations.web_search.clients.firecrawl_client import 
 from onyx.tools.tool_implementations.web_search.clients.google_pse_client import (
     GooglePSEClient,
 )
+from onyx.tools.tool_implementations.web_search.clients.parallel_client import (
+    ParallelSearchClient,
+)
 from onyx.tools.tool_implementations.web_search.clients.searxng_client import (
     SearXNGClient,
 )
@@ -134,6 +137,19 @@ def build_search_provider_from_config(
             tbs=config.get("tbs"),
             location=config.get("location"),
             country=config.get("country"),
+        )
+    if provider_type == WebSearchProviderType.PARALLEL:
+        return ParallelSearchClient(
+            api_key=api_key,
+            num_results=num_results,
+            timeout_seconds=_parse_positive_int_config(
+                raw_value=config.get("timeout_seconds"),
+                default=30,
+                provider_name="Parallel",
+                config_key="timeout_seconds",
+            ),
+            mode=config.get("mode"),
+            location=config.get("location"),
         )
     if provider_type == WebSearchProviderType.GOOGLE_PSE:
         search_engine_id = (

@@ -12,6 +12,7 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import ExternalAppType
+from onyx.db.skill import RuntimeSkillFolder
 from onyx.external_apps.providers.zendesk import ZendeskProvider
 from onyx.skills.built_in import (
     BUILT_IN_SKILLS,
@@ -188,7 +189,9 @@ def test_static_and_rendered_files_share_source_exclusions(
     definition = BuiltInSkillDefinition(built_in_skill_id="zendesk")
 
     static: dict[str, bytes] = {}
-    _add_static_builtin(static, "zendesk", definition)
+    _add_static_builtin(
+        static, [RuntimeSkillFolder(path="", name="zendesk")], definition
+    )
     assert static == {"zendesk/helper.py": b"print('ready')"}
 
     rendered = render_external_app_files(

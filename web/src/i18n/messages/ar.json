@@ -10441,7 +10441,8 @@
             "public": "{count, plural, zero {لم يُعثر على أي أداة} one {تم العثور على أداة واحدة} two {تم العثور على أداتين} few {تم العثور على # أدوات} many {تم العثور على # أداة} other {تم العثور على # أداة}}. لا يتطلب الخادم تسجيل الدخول.",
             "oauth": "يستخدم الخادم تسجيل الدخول عبر OAuth.",
             "authUnknown": "يتطلب الخادم تسجيل الدخول. أضف ترويسة مفتاح API أو OAuth.",
-            "unreachable": "لا يستطيع Onyx الوصول إلى هذا الخادم. تحقق من عنوان URL."
+            "unreachable": "لا يستطيع Onyx الوصول إلى هذا الخادم. تحقق من عنوان URL.",
+            "forbidden": "لا يمكن إلا للمسؤول فحص هذا الخادم قبل إضافته. لا يزال بإمكانك إضافته."
           },
           "transport": {
             "title": "النقل",
@@ -10695,12 +10696,120 @@
         "saveFailed": "تعذّر حفظ إعداد التثبيت.",
         "title": "إعداد التثبيت",
         "description": "من يحصل على هذا التكامل. غير متاح يبقيه خاصًا: لا يستخدمه إلا مالكه والأشخاص الذين تمت مشاركته معهم والمجموعات التي لها إعدادها الخاص. أزل إعدادات المجموعات هذه لقصره على المالك والمشاركات.",
-        "notAvailable": "خاص. لا يستخدمه إلا المالك والأشخاص الذين تمت مشاركته معهم والمجموعات التي لها إعدادها الخاص."
+        "notAvailable": "خاص. لا يستخدمه إلا المالك والأشخاص الذين تمت مشاركته معهم والمجموعات التي لها إعدادها الخاص.",
+        "required": "يجب على الأعضاء الذين يسجّلون الدخول بحساباتهم الخاصة ربطه قبل استخدام الدردشة وCraft."
       },
       "ownedBy": "يملكه {owner}",
       "groupAccess": {
         "saved": "تم حفظ إعدادات المجموعة لـ {name}.",
         "saveFailed": "تعذّر حفظ إعداد المجموعة."
+      }
+    },
+    "serviceStatus": {
+      "page": {
+        "description": "استخدام الموارد الحالي وحالة مجموعة البحث في مثيل Onyx الخاص بك",
+        "refresh": "تحديث",
+        "refreshFailed": "تعذر تحديث حالة المجموعة. تعرض الصفحة آخر نتيجة.",
+        "loadFailed": "تعذّرت قراءة حالة مجموعة البحث. تحقّق من إمكانية الوصول إلى OpenSearch."
+      },
+      "cluster": {
+        "title": "مجموعة البحث - OpenSearch",
+        "status": "حالة المجموعة",
+        "version": "OpenSearch {version}",
+        "health": "الحالة {health}",
+        "updated": "تم التحديث {time}",
+        "dataNodes": "عُقد البيانات",
+        "shards": "الأجزاء",
+        "shardLayout": "{primaries} × {copies}",
+        "copies": "نُسخ",
+        "indexSize": "حجم الفهرس",
+        "chunks": "المقاطع",
+        "healthGreen": "أخضر: جميع نُسخ الأجزاء مُعيّنة.",
+        "healthYellow": "أصفر: بعض أجزاء النُسخ المتماثلة غير مُعيّنة. يعمل البحث، لكن فقدان عقدة بيانات قد يفقد البيانات.",
+        "healthYellowSingleNode": "أصفر: تحتاج نسخ النسخ المتماثلة إلى عقدة بيانات ثانية. هذا طبيعي في مجموعة بها عقدة بيانات واحدة، والبحث يعمل.",
+        "healthRed": "أحمر: بعض الأجزاء الأساسية غير مُعيّنة، لذلك لا يمكن البحث في جزء من الفهرس."
+      },
+      "searches": {
+        "loadTitle": "حمل البحث",
+        "loadUnit": "طلب/ث",
+        "timeTitle": "زمن استجابة البحث",
+        "seconds": "{value} ث",
+        "milliseconds": "{value} مللي ث",
+        "loadFailed": "تعذّرت قراءة عمليات البحث الأخيرة.",
+        "p90Note": "(المئين التسعون)",
+        "p90Row": "p90 {value}",
+        "p10Row": "p10 {value}",
+        "minuteLabel": "{time}: p90 {p90}، p10 {p10}",
+        "rateTooltip": "{rate} طلب/ث",
+        "millisecondsUnit": "مللي ث",
+        "secondsUnit": "ث",
+        "failedInMinute": "{count, plural, one {فشلت واحدة} other {فشلت #}}"
+      },
+      "nodes": {
+        "title": "عُقد البيانات",
+        "disk": "استخدام القرص",
+        "vector": "ذاكرة المتجهات",
+        "percent": "{value}%",
+        "usedOfTotal": "{used} / {total} {unit}",
+        "shards": "{count, plural, one {جزء واحد} other {# أجزاء}}",
+        "unnamed": "العقدة {number}",
+        "copyName": "نسخ اسم عقدة OpenSearch ({name})"
+      },
+      "indexes": {
+        "title": "الفهارس",
+        "chunks": "المقاطع",
+        "shards": "الأجزاء",
+        "reindex": "إعادة الفهرسة",
+        "detail": "نموذج التضمين · {dim} بُعدًا",
+        "deleted": "{percent}% مقاطع محذوفة",
+        "detailQuantized": "نموذج التضمين · {dim} بُعدًا · متجهات {quantization}",
+        "reindexProgress": "{percent}% من الحالي"
+      },
+      "issues": {
+        "title": "المشكلات والتوصيات",
+        "none": "لم يتم العثور على مشكلات.",
+        "criticalCount": "{count} حرجة",
+        "warningCount": "{count, plural, one {تحذير واحد} other {# تحذيرات}}",
+        "nodeCount": "{count} عُقد بيانات",
+        "indexSettings": "إعدادات الفهرس",
+        "sizingGuide": "دليل تحديد الحجم",
+        "clusterRed": {
+          "title": "حالة المجموعة حمراء",
+          "description": "بعض الأجزاء الأساسية غير مُعيّنة، لذلك لا يمكن البحث في جزء من الفهرس. راجع سجلات OpenSearch."
+        },
+        "unassignedShards": {
+          "title": "{value, plural, one {نسخة جزء واحدة غير مُعيّنة} other {# من نُسخ الأجزاء غير مُعيّنة}}",
+          "description": "لا توجد لدى OpenSearch عقدة بيانات لوضعها عليها. أضف عُقد بيانات أو قلّل عدد النُسخ المتماثلة."
+        },
+        "diskCritical": {
+          "title": "القرص عند {value}% على {nodes}",
+          "description": "يتوقف OpenSearch عن وضع الأجزاء على عقدة بيانات عند 85%. أضف مساحة تخزين أو عُقد بيانات."
+        },
+        "diskWarning": {
+          "title": "القرص عند {value}% على {nodes}",
+          "description": "تحتاج إعادة الفهرسة إلى مساحة لفهرس ثانٍ. أضف مساحة تخزين أو عُقد بيانات."
+        },
+        "vectorCritical": {
+          "title": "ذاكرة المتجهات عند {value}% على {nodes}",
+          "description": "لا تتسع المتجهات في الذاكرة، لذلك يقرأها البحث من القرص. أضف ذاكرة أو عُقد بيانات، أو استخدم تكميمًا أصغر للمتجهات."
+        },
+        "vectorWarning": {
+          "title": "ذاكرة المتجهات عند {value}% على {nodes}",
+          "description": "يتباطأ البحث عندما لا تتسع المتجهات في الذاكرة. أضف ذاكرة أو عُقد بيانات، أو استخدم تكميمًا أصغر للمتجهات."
+        },
+        "heap": {
+          "title": "ذاكرة JVM عند {value}% على {nodes}",
+          "description": "قد يرفض OpenSearch الطلبات عندما تمتلئ ذاكرة heap. أضف ذاكرة أو عُقد بيانات."
+        },
+        "indexMissing": {
+          "title": "فهرس البحث مفقود",
+          "description": "لا يحتوي OpenSearch على فهرس لإعدادات البحث الحالية، لذلك لا يعيد البحث أي نتائج. تحقق من سجلات OpenSearch، ثم ابدأ إعادة الفهرسة من إعدادات الفهرس."
+        },
+        "nodesUnanswered": {
+          "title": "{value, plural, one {عقدة بيانات واحدة لم تستجب} other {# من عقد البيانات لم تستجب}}",
+          "description": "تُغفل الحالة ما لم تُبلغ عنه هذه العقد، مثل القرص والذاكرة. تحقق من أن كل عقد البيانات تعمل، ثم حدّث الصفحة."
+        },
+        "dismiss": "تجاهل"
       }
     }
   },
@@ -12526,7 +12635,7 @@
               "between": "أُرسل {start} – {end}"
             },
             "owner": "المالك: {owner}",
-            "folder": "في المجلد {id}",
+            "folder": "في المجلد {name}",
             "nodeType": "النوع: {type}",
             "author": "من: {author}",
             "message": "الرسالة {id}",
@@ -14014,7 +14123,6 @@
     "chatPanel": {
       "input": {
         "continuePlaceholder": "تابع المحادثة...",
-        "scheduledRunPlaceholder": "التشغيل المجدول قيد التقدم...",
         "subagentPlaceholder": "بدّل إلى الوكيل الرئيسي لإرسال رسالة"
       },
       "openSidebar": {
@@ -14032,8 +14140,7 @@
       },
       "toast": {
         "operationWait": "يرجى الانتظار حتى تكتمل العملية الحالية.",
-        "sandboxWait": "يرجى الانتظار حتى تتم تهيئة بيئة الاختبار",
-        "scheduledRunWait": "يرجى الانتظار حتى ينتهي التشغيل المجدول."
+        "sandboxWait": "يرجى الانتظار حتى تتم تهيئة بيئة الاختبار"
       },
       "loadError": {
         "title": "تعذر تحميل الجلسة",
@@ -14484,23 +14591,6 @@
         "button": "إيقاظ بيئة الاختبار"
       }
     },
-    "scheduledRun": {
-      "badge": {
-        "label": "مجدولة"
-      },
-      "startedAt": {
-        "label": "بدأت {time}"
-      },
-      "status": {
-        "awaitingApproval": "هذا التشغيل المجدول في انتظار الموافقة. ستُتاح رسائل المتابعة بعد استئنافه وانتهائه.",
-        "running": "لا يزال هذا التشغيل المجدول قيد التنفيذ. ستُتاح رسائل المتابعة عند انتهائه.",
-        "startedBy": "بدأت هذه الجلسة بواسطة المهمة المجدولة {task} في {time}."
-      },
-      "viewTask": {
-        "ariaLabel": "عرض المهمة المجدولة {task}. {status}",
-        "label": "عرض المهمة"
-      }
-    },
     "setupCard": {
       "appFallback": {
         "label": "تطبيق خارجي {id}"
@@ -14773,7 +14863,8 @@
         },
         "tabs": {
           "dailyWeekly": "يومي / أسبوعي",
-          "interval": "الفاصل الزمني"
+          "interval": "الفاصل الزمني",
+          "advanced": "متقدم"
         },
         "weekdays": {
           "fri": "الجمعة",
@@ -14783,6 +14874,21 @@
           "thu": "الخميس",
           "tue": "الثلاثاء",
           "wed": "الأربعاء"
+        },
+        "advanced": {
+          "cronLabel": "تعبير cron",
+          "hint": "خمسة حقول: الدقيقة، الساعة، اليوم، الشهر، يوم الأسبوع. يعمل التعبير بتوقيت UTC.",
+          "placeholder": "على سبيل المثال، 0 9 * * 1-5"
+        },
+        "errors": {
+          "intervalNotPositiveInteger": "يجب أن يكون الفاصل الزمني عددًا صحيحًا لا يقل عن 1.",
+          "minutesIntervalTooLong": "استخدم الساعات للفواصل الزمنية التي تزيد على 59 دقيقة.",
+          "hoursIntervalTooLong": "استخدم جدولًا يوميًا للفواصل الزمنية التي تزيد على 23 ساعة.",
+          "dayIntervalTimeRequired": "اختر وقتًا من اليوم للفواصل الزمنية بالأيام.",
+          "timeRequired": "اختر وقتًا من اليوم.",
+          "weekdayOutOfRange": "يجب أن تكون قيم أيام الأسبوع بين 0 و6 (الأحد..السبت).",
+          "cronRequired": "أدخل تعبير cron.",
+          "cronFieldCount": "يجب أن يحتوي cron على 5 حقول بالضبط (الدقيقة الساعة اليوم الشهر يوم الأسبوع)."
         }
       },
       "unviewedResults": "نتائج جديدة"
@@ -16171,6 +16277,9 @@
         },
         "discordBot": {
           "label": "بوت Discord"
+        },
+        "serviceStatus": {
+          "label": "حالة الخدمة"
         }
       },
       "sections": {
@@ -16248,6 +16357,9 @@
       },
       "customize": {
         "label": "التخصيص"
+      },
+      "scheduledTasks": {
+        "label": "المهام المجدولة"
       }
     },
     "chatButton": {
@@ -16477,84 +16589,15 @@
         }
       },
       "importGithub": {
-        "cancelButton": {
-          "label": "إلغاء"
-        },
         "doneButton": {
           "label": "تم"
         },
-        "header": {
-          "chooseDescription": "اختر مهارات من {repository}.",
-          "completeDescription": "راجع ما تمت إضافته إلى مهاراتك.",
-          "completeTitle": "اكتمل الاستيراد من GitHub",
-          "description": "استورد مهارة أو أكثر من مستودع GitHub.",
-          "title": "استيراد من GitHub"
-        },
-        "importError": {
-          "message": "تعذّر استيراد المهارات.",
-          "title": "تعذّر استيراد المهارات"
-        },
-        "loadError": {
-          "message": "تعذّر تحميل المستودع.",
-          "title": "تعذّر تحميل المستودع"
-        },
-        "privateRepos": {
-          "askAdmin": "المستودعات العامة تُستورد مباشرة. اطلب من المسؤول إعداد GitHub قبل استيراد المستودعات الخاصة.",
-          "connect": "المستودعات العامة تُستورد مباشرة. اربط GitHub لاستيراد المستودعات الخاصة.",
-          "connectButton": {
-            "label": "ربط GitHub"
-          },
-          "connected": "المستودعات العامة تُستورد مباشرة. المستودعات الخاصة تستخدم اتصالك بـ GitHub.",
-          "needsConnection": "المستودعات العامة تُستورد مباشرة. المستودعات الخاصة تتطلب اتصالًا بـ GitHub.",
-          "setUp": "المستودعات العامة تُستورد مباشرة. قم بإعداد GitHub قبل استيراد المستودعات الخاصة.",
-          "setUpButton": {
-            "label": "إعداد GitHub"
-          }
-        },
-        "repositoryInput": {
-          "label": "المستودع"
-        },
-        "result": {
-          "disabledCount": "{count} استُوردت معطّلة لأن مهارة أخرى بنفس الاسم مفعّلة.",
-          "enabledCount": "{count} فُعّلت تلقائيًا.",
-          "failedCount": "{count} تعذّر استيرادها.",
-          "importedSection": {
-            "title": "المستوردة"
-          },
-          "importedTitle": "{count, plural, one {# مهارة مستوردة} other {# مهارات مستوردة}}",
-          "noneTitle": "لم يتم استيراد أي مهارات",
-          "notImportedSection": {
-            "title": "غير مستوردة"
-          },
-          "notSelectedCount": "{count} غير محددة."
-        },
-        "selectAll": {
-          "ariaLabel": "تحديد جميع المهارات القابلة للاستيراد"
-        },
-        "selection": {
-          "label": "تم تحديد {selected} من {total, plural, one {# مهارة قابلة للاستيراد} other {# مهارات قابلة للاستيراد}}"
-        },
-        "skillCheckbox": {
-          "ariaLabel": "تحديد {name}"
-        },
-        "skillTag": {
-          "disabled": "معطّلة",
-          "enabled": "مفعّلة"
-        },
         "submitButton": {
           "importLabel": "{count, plural, one {استيراد مهارة} other {استيراد # مهارات}}",
-          "importingLabel": "جارٍ الاستيراد…",
-          "searchLabel": "البحث في المستودع",
-          "searchingLabel": "جارٍ البحث…"
-        },
-        "unavailableFallback": "لا يمكن استيراد هذه المهارة.",
-        "unavailableTag": {
-          "label": "يتعذّر الاستيراد"
+          "importingLabel": "جارٍ الاستيراد…"
         },
         "sharing": {
-          "title": "الوصول إلى المهارات المستوردة",
-          "configureButton": "إعداد الوصول",
-          "description": "تنطبق إعدادات الوصول هذه على {count, plural, zero {المهارات المحددة} one {المهارة المحددة} two {المهارتين المحددتين} few {جميع المهارات المحددة وعددها #} many {جميع المهارات المحددة وعددها #} other {جميع المهارات المحددة وعددها #}}."
+          "configureButton": "إعداد الوصول"
         }
       },
       "nameConflict": {
@@ -16671,10 +16714,22 @@
           "remove": "إزالة {name}",
           "shared": "تمت المشاركة مع هذه المجموعة",
           "settingOnly": "إعداد المجموعة فقط"
+        },
+        "plugin": {
+          "installation": {
+            "description": "اختر طريقة تثبيت هذا المكوّن الإضافي لكل من لديه حق الوصول."
+          },
+          "published": {
+            "description": "منشور. يمكن لكل من في المؤسسة استخدام هذا المكوّن الإضافي."
+          },
+          "publishWarning": {
+            "description": "بعد الحفظ، يمكن لكل من في المؤسسة استخدام هذا المكوّن الإضافي. لا يمكنك جعله خاصًا مرة أخرى. لا يمكن حذفه إلا للمسؤول.",
+            "reviewDescription": "يظل المكوّن الإضافي خاصًا حتى يوافق المسؤول على الطلب. بعد الموافقة، لا يمكنك جعله خاصًا مرة أخرى."
+          },
+          "publishOff": {
+            "description": "أوقف المسؤول النشر إلى المؤسسة. اطلب من المسؤول نشر هذا المكوّن الإضافي."
+          }
         }
-      },
-      "placeholders": {
-        "githubRepository": "almalik/almustawdae أو https://github.com/almalik/almustawdae"
       },
       "tabs": {
         "details": "التفاصيل",
@@ -16686,7 +16741,8 @@
         "columns": {
           "version": "الإصدار",
           "madeBy": "أنشأها",
-          "date": "التاريخ"
+          "date": "التاريخ",
+          "manifestVersion": "plugin.json"
         },
         "versionLabel": "الإصدار {number}",
         "currentBadge": "الحالي",
@@ -16709,7 +16765,9 @@
           "back": "كل الإصدارات",
           "loadError": {
             "title": "تعذّر تحميل هذا الإصدار"
-          }
+          },
+          "skills": "المهارات · {count}",
+          "integrations": "عمليات التكامل · {count}"
         },
         "status": {
           "pending": "بانتظار المراجعة",
@@ -16721,15 +16779,14 @@
           "failedToast": "تعذّر نشر هذا التحديث.",
           "sentForReviewToast": "تم إرسال الإصدار {number} إلى مسؤول للمراجعة.",
           "offNotice": "النشر متوقف. اطلب من مسؤول نشر هذا التحديث."
-        }
+        },
+        "noManifestVersion": "لا يوجد",
+        "manifestVersion": "plugin.json {version}",
+        "locked": "تتم مزامنة هذه الإضافة من GitHub، لذلك تغيّرها في GitHub."
       }
     },
     "page": {
       "createMenu": {
-        "github": {
-          "description": "استورد مهارة واحدة أو أكثر من مستودع.",
-          "title": "استيراد من GitHub"
-        },
         "scratch": {
           "description": "اكتب التعليمات وأضف الملفات الداعمة في {appName}.",
           "title": "البدء من الصفر"
@@ -16740,6 +16797,10 @@
         "upload": {
           "description": "استورد ملف SKILL.md أو ملف ZIP أو مجلد مهارة.",
           "title": "رفع مهارة"
+        },
+        "marketplace": {
+          "title": "إضافة سوق",
+          "description": "أضف من مستودع وزامن إضافاته."
         }
       },
       "empty": {
@@ -16770,10 +16831,12 @@
         "body": "ستؤدي المتابعة إلى تعطيل المهارة المفعّلة حاليًا وتفعيل هذه المهارة.",
         "description": "يمكن تفعيل مهارة واحدة فقط باسم “{name}” في كل مرة.",
         "submit": {
-          "label": "تبديل المهارة",
+          "label": "تبديل",
           "pendingLabel": "جارٍ التبديل..."
         },
-        "title": "التبديل إلى المهارة “{name}”؟"
+        "title": "هل تريد تشغيل “{name}”؟",
+        "descriptionNamed": "يستخدم {names} بالفعل اسم مهارة يستخدمه “{name}”. يمكن تشغيل واحد منها فقط في كل مرة.",
+        "bodyNamed": "يؤدي تشغيل “{name}” إلى إيقاف {names}."
       },
       "toasts": {
         "disableFailed": "فشل تعطيل {name}",
@@ -16795,6 +16858,9 @@
         },
         "upload": {
           "label": "اسحب وأفلت أو انقر للرفع"
+        },
+        "chooseFolder": {
+          "label": "اختيار مجلد"
         }
       },
       "filesPicker": {
@@ -16818,7 +16884,8 @@
       },
       "upload": {
         "error": {
-          "readFailed": "تعذّرت قراءة الملف المرفوع."
+          "readFailed": "تعذّرت قراءة الملف المرفوع.",
+          "folderRoot": "{upload, select, plugin {يجب أن يحتوي المجلد المحدد على SKILL.md أو ملف بيان plugin.json في المستوى الأعلى.} other {يجب أن يحتوي المجلد المحدد على SKILL.md في المستوى الأعلى.}}"
         }
       }
     },
@@ -16961,7 +17028,9 @@
       "sections": {
         "organization": "مكتبة المؤسسة",
         "mine": "ملفاتي المرفوعة",
-        "shared": "تمت مشاركتها معك"
+        "shared": "تمت مشاركتها معك",
+        "marketplace": "من سوق",
+        "private": "خاص بمستخدم آخر"
       },
       "detail": {
         "title": "إضافة",
@@ -16977,19 +17046,51 @@
           "location": "الموقع",
           "owner": "المالك",
           "skills": "المهارات",
-          "description": "الوصف"
+          "description": "الوصف",
+          "version": "الإصدار في plugin.json",
+          "author": "المؤلف",
+          "homepage": "الصفحة الرئيسية",
+          "license": "الترخيص",
+          "notUsed": "غير مستخدم في Onyx",
+          "marketplace": "سوق {name}، {scope, select, personal {شخصي} other {الشركة}} ({repository})"
         },
         "skills": {
           "off": "متوقفة",
-          "invalid": "غير صالحة"
+          "invalid": "غير صالحة",
+          "read": "قراءة",
+          "readAriaLabel": "قراءة المهارة {name}",
+          "readFailed": "تعذّرت قراءة هذه المهارة.",
+          "noInstructions": "لا تحتوي هذه المهارة على تعليمات."
         },
         "switch": {
           "title": "استخدام هذا المكوّن الإضافي",
-          "description": "عند تشغيل هذا الخيار، يمكن للوكيل الافتراضي استخدام هذا المكوّن الإضافي.",
           "label": "استخدام {name}",
           "required": "جعل المسؤول هذا المكوّن الإضافي مطلوبًا. لا يمكنك إيقافه.",
           "unavailable": "لا يمكنك تشغيل هذا المكوّن الإضافي أو إيقافه.",
-          "failed": "تعذّر تغيير المكوّن الإضافي."
+          "failed": "تعذّر تغيير المكوّن الإضافي.",
+          "on": "قيد التشغيل. يمكن للوكيل الافتراضي استخدام هذا المكوّن الإضافي.",
+          "off": "متوقف. شغّله ليتمكن الوكيل الافتراضي من استخدام هذا المكوّن الإضافي.",
+          "nameHeld": "متوقف لأن {names} يستخدم اسم المهارة نفسه. شغّل هذا المكوّن الإضافي لاستخدامه بدلًا منه."
+        },
+        "actions": {
+          "share": "مشاركة",
+          "menu": "إجراءات أخرى",
+          "uploadVersion": "تحميل إصدار جديد",
+          "remove": "حذف المكوّن الإضافي"
+        },
+        "remove": {
+          "entityType": "المكوّن الإضافي",
+          "description": "سيفقده كل من يستخدم هذا المكوّن الإضافي. لا يمكن التراجع عن ذلك.",
+          "submit": "حذف",
+          "pending": "جارٍ الحذف…",
+          "done": "تم حذف {name}.",
+          "failed": "تعذّر حذف المكوّن الإضافي."
+        },
+        "syncedFrom": "تمت المزامنة من {repository}",
+        "managed": {
+          "title": "يديره سوق {name}",
+          "description": "يزامن Onyx هذه الإضافة من {repository}. غيّرها في GitHub، ثم زامن السوق.",
+          "open": "فتح الأسواق"
         }
       },
       "connection": {
@@ -17086,6 +17187,263 @@
           "label": "تم"
         }
       }
+    },
+    "needs": {
+      "intro": "لا تمنح الإضافة أبدًا وصولًا إلى أي تكامل. يعرض كل صف حالتك أنت للتكامل. تعمل الإضافة دون التكاملات غير المفعّلة.",
+      "state": {
+        "on": "مفعّل",
+        "turn_on": "متوقف",
+        "sign_in": "لم يتم تسجيل الدخول",
+        "no_access": "لا يوجد وصول",
+        "turned_off": "أوقفه المسؤول",
+        "not_added": "غير مضاف",
+        "more_than_one": "أكثر من تطابق",
+        "not_supported": "غير مدعوم"
+      },
+      "note": {
+        "askAdmin": "اسأل مسؤولًا",
+        "turnedOff": "أوقفه المسؤول لديك",
+        "moreThanOne": "يتطابق أكثر من تكامل واحد",
+        "notSupported": "غير مدعوم في Onyx"
+      },
+      "localServer": "خادم محلي",
+      "noUrl": "لا يوجد عنوان URL للخادم",
+      "turnOn": {
+        "label": "تفعيل",
+        "ariaLabel": "تفعيل {name}",
+        "failed": "تعذّر تفعيل {name}."
+      },
+      "add": {
+        "label": "إضافة تكامل",
+        "ariaLabel": "إضافة تكامل {name}"
+      },
+      "urlProblem": {
+        "variable": "يستخدم عنوان URL متغيرًا. لا يملأ Onyx المتغيرات.",
+        "credential": "يحتوي عنوان URL على بيانات اعتماد. لا يحتفظ Onyx بها.",
+        "invalid": "عنوان URL ليس عنوان http أو https صالحًا."
+      }
+    },
+    "upload": {
+      "title": "رفع إضافة",
+      "description": "ارفع مكونًا إضافيًا لـ Claude Code أو Codex. اختر ملف .zip أو اسحب مجلد المكون الإضافي إلى هنا.",
+      "reading": "جارٍ القراءة…",
+      "requirements": {
+        "title": "يستخدم Onyx هذه الأجزاء من الإضافة:",
+        "skills": "المهارات في skills/'<name>'/SKILL.md",
+        "mcp": "خوادم MCP في ‎.mcp.json أو plugin.json",
+        "other": "لا يستخدم Onyx الأوامر أو الوكلاء أو الخطافات أو الأجزاء الأخرى."
+      },
+      "skillOnly": {
+        "title": "هذا الملف المرفوع مهارة",
+        "description": "لا يحتوي على plugin.json. تابع لإضافته كمهارة.",
+        "continue": "متابعة"
+      },
+      "version": "plugin.json {version}",
+      "target": {
+        "newVersion": "يحدّث {name} إلى إصدار Onyx {version}",
+        "newPlugin": "إضافة جديدة: {name}"
+      },
+      "willBeOff": "يُحفظ المكون الإضافي متوقفًا. لدى {names} مهارة بالاسم نفسه.",
+      "saveAsNew": {
+        "label": "حفظ كإضافة جديدة",
+        "description": "أبقِ الإضافة التي تحمل هذا الاسم كما هي."
+      },
+      "sections": {
+        "skills": "المهارات · {count}",
+        "integrations": "التكاملات · {count}",
+        "unused": "غير مستخدم في Onyx",
+        "warnings": "تحذيرات"
+      },
+      "integrationsNote": "يؤدي الحفظ إلى تفعيل التكاملات التي يمكنك استخدامها بالفعل. لا تمنح الإضافة أبدًا وصولًا إلى أي تكامل.",
+      "integrationsNoteOff": "يبقى المكون الإضافي متوقفًا بعد الحفظ، لذلك لا يشغّل الحفظ أي تكامل.",
+      "unusedParts": {
+        "commands": "الأوامر",
+        "agents": "الوكلاء",
+        "hooks": "الخطافات",
+        "lsp_servers": "خوادم LSP",
+        "output_styles": "أنماط الإخراج",
+        "bin": "الملفات التنفيذية (bin)",
+        "themes": "السمات",
+        "monitors": "أدوات المراقبة"
+      },
+      "cancel": "إلغاء",
+      "save": "حفظ",
+      "saving": "جارٍ الحفظ…",
+      "readFailed": "تعذّرت قراءة الإضافة.",
+      "saveFailed": "تعذّر حفظ الإضافة.",
+      "saved": {
+        "newPlugin": "تمت إضافة {name}.",
+        "newVersion": "تم تحديث {name} إلى إصدار Onyx {version}.",
+        "unchanged": "لا توجد تغييرات. {name} بالفعل على إصدار Onyx {version}.",
+        "off": "تمت إضافة {name}. إنه متوقف لأن لدى {names} مهارة بالاسم نفسه."
+      }
+    },
+    "turnOn": {
+      "title": "{name} مفعّلة",
+      "description": "بعض التكاملات التي تحتاجها هذه الإضافة غير متاحة لك.",
+      "note": "تعمل الإضافة بدونها. لا تمنح الإضافة أبدًا وصولًا إلى أي تكامل.",
+      "done": "تم"
+    },
+    "marketplaces": {
+      "status": {
+        "ok": "جاهز",
+        "blocked": "لا يمكن التثبيت",
+        "not_supported": "غير مدعوم"
+      },
+      "scope": {
+        "personal": "شخصي",
+        "company": "الشركة"
+      },
+      "source": {
+        "repository": "المستودع",
+        "folder": "المجلد",
+        "root": "جذر المستودع",
+        "ref": "فرع أو وسم أو إيداع",
+        "defaultBranch": "الفرع الافتراضي",
+        "commit": "الإيداع"
+      },
+      "preview": {
+        "title": "{name}: {count, plural, one {# إضافة ستتم إضافتها} other {# إضافات ستتم إضافتها}}",
+        "empty": "لا توجد إدخالات في هذا السوق.",
+        "failedTitle": "لا يستطيع Onyx قراءة هذا السوق",
+        "version": "v{version}",
+        "willInstall": "سيتم تثبيتها",
+        "skills": "{count, plural, one {المهارة} other {المهارات}}: {names}",
+        "showUnusable": "{count, plural, one {إظهار # إدخال لا يمكن لـ Onyx استخدامه} other {إظهار # إدخالات لا يمكن لـ Onyx استخدامها}}",
+        "hideUnusable": "إخفاء الإدخالات التي لا يمكن لـ Onyx استخدامها",
+        "summary": "{ready} جاهز · {blocked} لا يمكن تثبيته · {unsupported} غير مدعوم"
+      },
+      "add": {
+        "menuItem": "إضافة سوق",
+        "title": "إضافة سوق",
+        "description": "أضف من مستودع. يقرأ Onyx ملف .claude-plugin/marketplace.json الخاص به، ويصبح كل إدخال إضافة.",
+        "confirmTitle": "تأكيد السوق",
+        "confirmDescription": "تأكد من أن هذا هو المصدر والإضافات التي تريدها، ثم أضف السوق.",
+        "repository": {
+          "title": "المستودع",
+          "description": "اكتب owner/repo أو عنوان URL للمستودع.",
+          "placeholder": "على سبيل المثال: anthropics/claude-plugins-official"
+        },
+        "folder": {
+          "title": "المجلد",
+          "description": "المجلد الذي يحتوي على .claude-plugin/marketplace.json. اتركه فارغًا لاستخدام جذر المستودع.",
+          "placeholder": "على سبيل المثال: plugins"
+        },
+        "ref": {
+          "title": "فرع أو وسم أو إيداع",
+          "description": "اتركه فارغًا لاستخدام الفرع الافتراضي.",
+          "placeholder": "على سبيل المثال: main"
+        },
+        "scope": {
+          "title": "نوع السوق",
+          "personalDescription": "أنت وحدك تحصل على إضافات هذا السوق.",
+          "companyDescription": "تحصل مؤسستك على إضافات هذا السوق، كما تحصل على الإضافات المنشورة."
+        },
+        "defaultAccess": {
+          "title": "الوصول الافتراضي",
+          "description": "إعداد التثبيت لكل إضافة في هذا السوق. يمكنك تغييره لاحقًا لإضافة واحدة."
+        },
+        "privateNote": "يقرأ Onyx المستودع الخاص باستخدام اتصال GitHub الخاص بك. اربط GitHub في التكاملات قبل إضافة مستودع خاص.",
+        "continue": "متابعة",
+        "previewing": "جارٍ القراءة…",
+        "back": "رجوع",
+        "submit": "إضافة سوق",
+        "adding": "جارٍ الإضافة…",
+        "cancel": "إلغاء",
+        "previewFailed": "تعذرت قراءة المستودع.",
+        "addFailed": "تعذرت إضافة السوق.",
+        "added": "تمت إضافة {name}. تظهر إضافاته بعد أول مزامنة.",
+        "duplicate": {
+          "personal": "لقد أضفت هذا السوق بالفعل.",
+          "company": "مؤسستك تحصل على هذا السوق بالفعل."
+        }
+      },
+      "sync": {
+        "now": "مزامنة الآن",
+        "requested": "بدأت مزامنة {name}.",
+        "failed": "تعذر بدء المزامنة.",
+        "lastSync": "آخر مزامنة {date}",
+        "never": "لم تتم المزامنة بعد",
+        "state": {
+          "syncing": "جارٍ المزامنة",
+          "failed": "فشلت المزامنة",
+          "not_synced": "غير متزامن",
+          "synced": "تمت المزامنة"
+        }
+      },
+      "columns": {
+        "marketplace": "السوق",
+        "sync": "المزامنة",
+        "items": "الإضافات"
+      },
+      "items": "{count, plural, one {# إضافة} other {# إضافات}}",
+      "tableLabel": "الأسواق",
+      "open": "فتح {name}",
+      "menu": "إجراءات {name}",
+      "loadFailed": "تعذر تحميل الأسواق.",
+      "empty": {
+        "title": "لا توجد أسواق بعد",
+        "description": "أضف مستودع GitHub للحصول على إضافاته."
+      },
+      "page": {
+        "title": "الأسواق",
+        "description": "مستودعات GitHub التي تحصل منها على الإضافات، مع مصدرها. زامن سوقًا للحصول على التغييرات من GitHub."
+      },
+      "attention": {
+        "failedTitle": "فشلت آخر مزامنة لـ {name}"
+      },
+      "defaultAccess": {
+        "title": "الوصول الافتراضي",
+        "description": "إعداد التثبيت لكل إضافة في {name} ليس لها إعداد خاص بها.",
+        "save": "حفظ",
+        "cancel": "إلغاء",
+        "saved": "تم حفظ الوصول الافتراضي.",
+        "failed": "تعذر حفظ الوصول الافتراضي."
+      },
+      "replaceLogin": {
+        "label": "استبدال تسجيل الدخول",
+        "description": "زامِن المستودع باسمك. يستخدم Onyx اتصال GitHub الخاص بك إن وُجد.",
+        "done": "يزامن Onyx الآن {name} باسمك.",
+        "doneWithoutGithub": "يزامن Onyx الآن {name} باسمك، لكنك لم تربط GitHub. يمكن لـ Onyx قراءة المستودعات العامة فقط. اربط GitHub في التكاملات.",
+        "failed": "تعذر استبدال تسجيل الدخول."
+      },
+      "remove": {
+        "label": "إزالة",
+        "title": "هل تريد إزالة {name}؟",
+        "description": "يؤدي هذا إلى حذف السوق و{count, plural, one {إضافته} other {إضافاته (#)}}. يفقد الأعضاء هذه الإضافات.",
+        "listLabel": "الإضافات المراد حذفها",
+        "noPlugins": "لا توجد إضافات في هذا السوق.",
+        "confirm": "إزالة",
+        "done": "تمت إزالة {name}.",
+        "failed": "تعذرت إزالة السوق.",
+        "loadFailed": "تعذّر تحميل إضافات هذا السوق.",
+        "retry": "إعادة المحاولة",
+        "personalDescription": "يؤدي هذا إلى حذف السوق و{count, plural, one {إضافته} other {إضافاته (#)}}. تفقد هذه الإضافات."
+      },
+      "detail": {
+        "title": "السوق",
+        "description": "مصدر هذا السوق ومزامنته وإدخالاته.",
+        "loadFailed": "تعذر تحميل السوق.",
+        "scope": "النوع",
+        "login": "المزامنة باسم",
+        "noLogin": "لا يوجد. استبدل تسجيل الدخول للمزامنة مرة أخرى.",
+        "lastSync": "آخر مزامنة",
+        "entries": "الإدخالات ({count})",
+        "noEntries": "لم تجد آخر مزامنة أي إدخالات.",
+        "close": "إغلاق"
+      },
+      "readOnly": "يدير المسؤول هذا السوق.",
+      "reason": {
+        "skills_and_mcp_only": "يشغّل Onyx المهارات وخوادم MCP فقط.",
+        "pastLimit": "لم يقرأ Onyx هذا المستودع.",
+        "external_repository_limit": "يزامن Onyx ما لا يزيد عن {limit} مستودعًا خارجيًا لكل سوق.",
+        "external_repository_limit_without_login": "اربط GitHub لمزامنة أكثر من {limit} مستودعًا خارجيًا.",
+        "limitTitle": "بعض المكونات الإضافية تأتي من مستودعات لم يقرأها Onyx"
+      },
+      "errors": {
+        "rateLimited": "تم بلوغ حد واجهة GitHub البرمجية. حاول مرة أخرى بعد بضع دقائق. اربط GitHub لرفع الحد.",
+        "rateLimitedUntil": "تم بلوغ حد واجهة GitHub البرمجية. تتم إعادة التعيين في {time}. اربط GitHub لرفع الحد."
+      }
     }
   },
   "integrations": {
@@ -17145,6 +17503,18 @@
         "done": "أصبح {name} متاحًا الآن للمؤسسة.",
         "failed": "تعذر نشر التكامل."
       }
+    },
+    "requiredGate": {
+      "title": "اربط أدوات عملك",
+      "description": "يطلب المسؤول هذه التكاملات. اربط كل تكامل للمتابعة.",
+      "adminDescription": "يجب على الأعضاء ربط هذه التكاملات قبل استخدام Onyx. يمكنك المتابعة دونها لأنك مسؤول.",
+      "connected": "متصل",
+      "progress": "{connected} من {total} متصلة",
+      "askAdmin": "لا يمكنك الاتصال بـ {name}؟ اطلب المساعدة من المسؤول. يمكنك التخطي الآن.",
+      "skip": "تخطي الآن",
+      "continue": "متابعة",
+      "signOut": "تسجيل الخروج",
+      "signOutFailed": "تعذر تسجيل الخروج. حاول مرة أخرى."
     }
   },
   "customize": {
@@ -17172,20 +17542,26 @@
         "label": "إضافة",
         "upload": "رفع مهارة",
         "create": "إنشاء مهارة",
-        "github": "استيراد من GitHub"
+        "uploadPlugin": "رفع إضافة",
+        "marketplace": "إضافة سوق",
+        "manageMarketplaces": "إدارة الأسواق"
       },
       "groups": {
         "mine": "أنشأتها أنت",
         "organization": "من مؤسستك",
         "shared": "تمت مشاركتها معك",
-        "builtin": "مدمجة"
+        "builtin": "مدمجة",
+        "marketplace": "من الأسواق",
+        "private": "خاصة بمستخدمين آخرين"
       },
       "source": {
         "mine": "بواسطتك",
         "organization": "من مؤسستك",
         "sharedBy": "شاركها {email}",
         "shared": "تمت مشاركتها معك",
-        "builtin": "مدمجة"
+        "builtin": "مدمجة",
+        "marketplace": "من {name} ({scope, select, personal {شخصي} other {الشركة}})",
+        "privateTo": "خاص بـ {email}"
       },
       "subtitle": "{source} · {description}",
       "tag": {
@@ -17247,13 +17623,16 @@
       },
       "empty": {
         "title": "لا توجد إضافات بعد",
-        "description": "أنشئ مهارة. كل مهارة هي إضافة."
+        "description": "ارفع إضافة، أو أضف سوقًا من GitHub، أو أنشئ مهارة. كل مهارة هي إضافة.",
+        "upload": "تحميل مكوّن إضافي"
       },
       "noMatches": {
         "title": "لا توجد إضافات مطابقة",
         "clear": "عرض كل الإضافات"
       },
-      "intro": "تجمع الإضافة المهارات التي تفعّلها معًا. تأتي كل مهارة تضيفها في إضافة خاصة بها. توجد التكاملات في علامة تبويب التكاملات."
+      "intro": "تجمع الإضافة المهارات والتكاملات التي تحتاجها. ارفع إضافة Claude Code أو Codex، أو أضف سوقًا من GitHub، أو أضف مهارة. تأتي كل مهارة تضيفها في إضافة خاصة بها.",
+      "integrations": "{available} من {needed} من التكاملات متاحة",
+      "nameHeld": "متوقف: يستخدم {names} اسم المهارة نفسه"
     },
     "skillPage": {
       "title": "مهارة",
@@ -17343,9 +17722,163 @@
     },
     "pluginPage": {
       "tabs": {
-        "skills": "المهارات · {count}"
+        "skills": "المهارات · {count}",
+        "integrations": "التكاملات · {count}"
       }
     },
     "search": "بحث"
+  },
+  "scheduledTasks": {
+    "unviewedResults": "نتائج جديدة",
+    "runStatus": "{status, select, QUEUED {في قائمة الانتظار} RUNNING {قيد التشغيل} AWAITING_APPROVAL {بانتظار الموافقة} SUCCEEDED {نجح} FAILED {فشل} CANCELLED {أُلغي} SKIPPED {تم التخطي} other {غير معروف}}",
+    "taskStatus": "{status, select, ACTIVE {نشطة} other {متوقفة مؤقتًا}}",
+    "schedule": {
+      "cron": "Cron (UTC): {cron}",
+      "everyMinutes": "{count, plural, one {كل دقيقة} other {كل # دقائق}}",
+      "everyHours": "{count, plural, one {كل ساعة} other {كل # ساعات}}",
+      "everyDays": "{count, plural, one {كل يوم في {time}} other {كل # أيام في {time}}}",
+      "daily": "كل يوم في {time}",
+      "weekly": "{days} في {time}"
+    },
+    "list": {
+      "title": "المهام المجدولة",
+      "description": "شغّل موجّهًا وفق جدول زمني. يُفتح كل تشغيل كمحادثة يمكنك قراءتها ومتابعتها.",
+      "search": "البحث في المهام",
+      "new": "مهمة جديدة",
+      "never": "أبدًا",
+      "notScheduled": "غير مجدولة",
+      "loadFailed": "تعذّر تحميل مهامك المجدولة.",
+      "open": "فتح {name}",
+      "columns": {
+        "name": "الاسم",
+        "schedule": "الجدول الزمني",
+        "lastRun": "آخر تشغيل",
+        "nextRun": "التشغيل التالي",
+        "status": "الحالة"
+      },
+      "empty": {
+        "title": "لا توجد مهام مجدولة بعد",
+        "description": "أنشئ مهمة لتشغيل موجّه وفق جدول زمني."
+      },
+      "noMatches": {
+        "title": "لا توجد مهام مطابقة",
+        "description": "جرّب بحثًا أو عامل تصفية مختلفًا."
+      },
+      "filter": {
+        "label": "تصفية المهام",
+        "all": "كل المهام",
+        "unviewed": "نتائج جديدة"
+      }
+    },
+    "actions": {
+      "runNow": "تشغيل مرة واحدة",
+      "pause": "إيقاف مؤقت",
+      "resume": "استئناف",
+      "edit": "تعديل",
+      "delete": "حذف",
+      "menu": "إجراءات {name}",
+      "toasts": {
+        "runQueued": "بدأ تشغيل «{name}».",
+        "runFailed": "تعذّر بدء التشغيل.",
+        "resumed": "تم استئناف المهمة.",
+        "paused": "تم إيقاف المهمة مؤقتًا.",
+        "statusFailed": "تعذّر تغيير حالة المهمة.",
+        "deleted": "تم حذف «{name}».",
+        "deleteFailed": "تعذّر حذف المهمة."
+      },
+      "confirmDelete": {
+        "title": "حذف «{name}»؟",
+        "description": "تتوقف المهمة عن التشغيل ويُحذف سجل تشغيلها.",
+        "submit": "حذف"
+      }
+    },
+    "runs": {
+      "label": "سجل التشغيل",
+      "open": "فتح التشغيل من {time}",
+      "loading": "جارٍ تحميل عمليات التشغيل…",
+      "loadFailed": "تعذّر تحميل سجل التشغيل.",
+      "loadMore": "تحميل المزيد",
+      "markAllViewed": "وضع علامة مقروء على الكل",
+      "markAllViewedFailed": "تعذّر وضع علامة مقروء على عمليات التشغيل. حاول مرة أخرى.",
+      "trigger": "{source, select, MANUAL_RUN_NOW {تشغيل مرة واحدة} other {الجدول الزمني}}",
+      "errorClass": "{errorClass, select, superseded_by_next_fire {أُلغي: بدأ التشغيل التالي قبل أن يرد أحد على طلب الموافقة.} approval_timeout {أُلغي: لم يرد أحد على طلب الموافقة خلال 24 ساعة.} user_cancelled {أوقفته أنت.} agent_permission_required {احتاج إجراء إلى موافقة.} agent_exception {فشل: حدث خطأ أثناء التشغيل.} stuck {فشل: لم يبدأ التشغيل في الوقت المحدد.} timeout {فشل: وصل التشغيل إلى حد الساعة الواحدة.} other {فشل: {errorClass}}}",
+      "columns": {
+        "started": "البدء",
+        "status": "الحالة",
+        "duration": "المدة",
+        "trigger": "المشغّل",
+        "detail": "التفاصيل"
+      },
+      "closed": {
+        "queued": "لم يبدأ هذا التشغيل بعد، لذا لا توجد محادثة لفتحها.",
+        "skipped": "تم تخطي هذا التشغيل، لذا لا توجد محادثة لفتحها.",
+        "noChat": "لا تحتوي هذه العملية على محادثة لفتحها."
+      },
+      "empty": {
+        "title": "لا توجد عمليات تشغيل بعد",
+        "description": "تضيف المهمة تشغيلًا في كل مرة تنطلق فيها. استخدم «تشغيل مرة واحدة» لبدء تشغيل الآن."
+      }
+    },
+    "detail": {
+      "title": "مهمة مجدولة",
+      "back": "المهام المجدولة",
+      "loadFailed": "تعذّر تحميل هذه المهمة المجدولة.",
+      "tabs": {
+        "runs": "عمليات التشغيل",
+        "overview": "نظرة عامة"
+      },
+      "overview": {
+        "prompt": "الموجّه",
+        "schedule": "الجدول الزمني",
+        "nextRun": "التشغيل التالي",
+        "notScheduled": "غير مجدولة",
+        "lastRun": "آخر تشغيل",
+        "never": "أبدًا"
+      },
+      "switch": {
+        "title": "التشغيل وفق الجدول",
+        "label": "تشغيل {name} وفق الجدول"
+      },
+      "menu": "إجراءات أخرى"
+    },
+    "editor": {
+      "newTitle": "مهمة مجدولة جديدة",
+      "editTitle": "تعديل المهمة المجدولة",
+      "description": "يرسل كل تشغيل الموجّه إلى محادثة جديدة مع الوكيل الافتراضي.",
+      "back": "رجوع",
+      "loadFailed": "تعذّر تحميل هذه المهمة المجدولة.",
+      "save": "حفظ",
+      "saveAndRun": "حفظ وتشغيل الآن",
+      "errors": {
+        "nameRequired": "أدخل اسمًا.",
+        "promptRequired": "أدخل موجّهًا."
+      },
+      "toasts": {
+        "created": "تم إنشاء المهمة المجدولة.",
+        "createdAndRun": "تم إنشاء المهمة المجدولة. بدأ التشغيل الأول.",
+        "updated": "تم تحديث المهمة المجدولة.",
+        "saveFailed": "تعذّر حفظ المهمة المجدولة."
+      },
+      "fields": {
+        "name": {
+          "label": "الاسم",
+          "placeholder": "على سبيل المثال، ملخص أسبوعي لتصعيدات العملاء"
+        },
+        "prompt": {
+          "label": "الموجّه",
+          "description": "يرسل كل تشغيل هذه الرسالة إلى محادثة جديدة.",
+          "placeholder": "صف ما يجب فعله في كل تشغيل"
+        },
+        "schedule": {
+          "label": "الجدول الزمني"
+        }
+      }
+    },
+    "banner": {
+      "title": "تشغيل مجدول لـ {task}",
+      "inFlight": "{status, select, AWAITING_APPROVAL {ينتظر هذا التشغيل موافقتك أدناه.} other {هذا التشغيل قيد التنفيذ.}}",
+      "startedAt": "بدأ {time}",
+      "viewTask": "عرض المهمة"
+    }
   }
 }

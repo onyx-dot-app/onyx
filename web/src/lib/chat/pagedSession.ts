@@ -141,9 +141,10 @@ export async function loadOlderChatMessages(sessionId: string): Promise<void> {
     // Stop loading older pages, so a failing request does not repeat while
     // the loader stays in view. Reopening the chat tries again.
     if (useChatSessionStore.getState().sessions.has(sessionId)) {
-      useChatSessionStore
-        .getState()
-        .updateSessionData(sessionId, { hasOlderMessages: false });
+      useChatSessionStore.getState().updateSessionData(sessionId, {
+        hasOlderMessages: false,
+        olderMessagesFailed: true,
+      });
     }
   } finally {
     if (useChatSessionStore.getState().sessions.has(sessionId)) {

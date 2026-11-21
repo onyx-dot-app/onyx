@@ -1,6 +1,6 @@
 import type { ExternalAppType } from "@/app/craft/v1/apps/registry";
 import type { CraftApp, CraftMcpServer } from "@/lib/integrations/craft";
-import type { SkillsList } from "@/lib/skills/types";
+import type { Skill } from "@/lib/skills/types";
 import type { CaretText } from "@/lib/contentEditable";
 import { CRAFT_APPS_TAB_PARAM } from "@/app/craft/v1/apps/connectableApps";
 import { CRAFT_APPS_PATH } from "@/app/craft/v1/constants";
@@ -47,17 +47,30 @@ export function compareByName<T extends { name: string }>(a: T, b: T): number {
   return a.name.localeCompare(b.name, undefined, { sensitivity: "base" });
 }
 
+export interface PickerSkillSources {
+  builtins?: readonly Skill[];
+  /** The custom skills the sandbox gets, one per skill of a plugin, from
+   * `useChatSkills`. */
+  customs?: readonly PickerSkill[];
+}
+
 export function toPickerSections(
-  skillsData: SkillsList | undefined,
+  skillSources: PickerSkillSources | undefined,
   externalApps: CraftApp[] | undefined,
   mcpServers?: CraftMcpServer[] | undefined
 ): PickerSections {
-  if (!skillsData && !externalApps && !mcpServers) return EMPTY_SECTIONS;
+  if (
+    !skillSources?.builtins &&
+    !skillSources?.customs &&
+    !externalApps &&
+    !mcpServers
+  )
+    return EMPTY_SECTIONS;
 
   const skills: PickerSkill[] = [];
   const apps: PickerApp[] = [];
   const mcp: PickerMcpServer[] = [];
-  for (const b of skillsData?.builtins ?? []) {
+  for (const b of skillSources?.builtins ?? []) {
     if (!b.is_available || !b.enabled) continue;
     skills.push({
       kind: "skill",
@@ -67,14 +80,9 @@ export function toPickerSections(
     });
   }
 
-  for (const c of skillsData?.customs ?? []) {
-    if (!c.enabled || c.is_valid === false) continue;
-    skills.push({
-      kind: "skill",
-      slug: c.name,
-      name: c.name,
-      description: c.description,
-    });
+  const builtinSlugs = new Set(skills.map((skill) => skill.slug));
+  for (const custom of skillSources?.customs ?? []) {
+    if (!builtinSlugs.has(custom.slug)) skills.push(custom);
   }
 
   for (const app of externalApps ?? []) {

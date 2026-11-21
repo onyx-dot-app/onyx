@@ -617,7 +617,7 @@ def test_transfer_preserves_result_budget_and_callback_boundary(
                 == RunStatus.RUNNING
             )
         result = checkpoint.run_state.messages[1]
-        assert isinstance(result, ToolResult)
+        assert isinstance(result, ToolResultMessage)
         assert isinstance(result.details, FileReadResult)
         assert result.details.file_name == "report.txt"
         return fake_agent(
@@ -1231,7 +1231,7 @@ def test_failed_child_start_can_retry_without_an_orphan_response(
         assert run.result(timeout=20).output.text == "done"
         assert run.wait_for_idle(timeout=10)
         tool_result = run.snapshot().messages[1]
-        assert isinstance(tool_result, ToolResult)
+        assert isinstance(tool_result, ToolResultMessage)
         assert not tool_result.is_error
         assert tool_result.content == "child answer"
         db_session.expire_all()

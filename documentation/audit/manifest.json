@@ -854,7 +854,7 @@
       ]
     },
     {
-      "page": "overview/core_features/craft_scheduled_tasks.mdx",
+      "page": "overview/core_features/scheduled_tasks.mdx",
       "tab": "Overview",
       "in_nav": true,
       "title": "Scheduled Tasks",
@@ -869,12 +869,7 @@
         "file-store-and-user-files",
         "agents-personas"
       ],
-      "images": [
-        {
-          "src": "/assets/overview/core_features/craft_scheduled_task_new.png",
-          "kind": "onyx-ui"
-        }
-      ]
+      "images": []
     },
     {
       "page": "overview/core_features/craft_skills.mdx",

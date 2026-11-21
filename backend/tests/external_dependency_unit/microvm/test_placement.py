@@ -17,7 +17,7 @@ from pydantic import SecretStr, ValidationError
 from onyx.cache.interface import TTL_NO_EXPIRY, CacheBackend, CacheLock
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.microvm import admission, configs, placement, registry
+from onyx.microvm import configs, placement, registry
 from onyx.microvm.agent_client import HostAgentErrorReason, new_sandboxd_key
 from onyx.microvm.models import PlacedVm, RegisteredNode, VmRequest
 from onyx.microvm.placement import place_sandbox_vm
@@ -582,17 +582,6 @@ def test_bad_number_settings_use_the_default(monkeypatch: pytest.MonkeyPatch) ->
     assert configs._fc_env_float("SANDBOX_FC_TEST_NUMBER", 10.0, minimum=1.0) == 1.0
     monkeypatch.delenv("SANDBOX_FC_TEST_NUMBER")
     assert configs._fc_env_int("SANDBOX_FC_TEST_NUMBER", 5) == 5
-
-
-def test_scheduled_run_jitter_only_with_firecracker() -> None:
-    rng = random.Random(1)
-    assert admission.scheduled_run_jitter_seconds(rng) == 0.0
-    with patch.object(admission, "FIRECRACKER_ENABLED", True):
-        delays = [admission.scheduled_run_jitter_seconds(rng) for _ in range(20)]
-    assert all(
-        0 <= d <= admission.SANDBOX_FC_SCHEDULED_RUN_JITTER_SECONDS for d in delays
-    )
-    assert len(set(delays)) > 1
 
 
 def test_registration_with_agent_address_makes_node_placeable(

@@ -33,6 +33,7 @@ from onyx.microvm.lifecycle import sandbox_daemon
 from onyx.microvm.models import (
     ExecCommand,
     ExecStarted,
+    FileListing,
     OutputStream,
     PlacedVm,
 )
@@ -41,7 +42,6 @@ from onyx.microvm.registry import get_sandbox_placement
 from onyx.server.features.build.sandbox import harness_base, harness_factory
 from onyx.server.features.build.sandbox.exec_output import (
     ExecOutputBuffer,
-    cut_to_tokens,
 )
 from onyx.server.features.build.sandbox.firecracker import (
     harness_sandbox,
@@ -54,6 +54,7 @@ from onyx.server.features.build.sandbox.firecracker.models import ExecSessionTab
 from onyx.server.features.build.sandbox.harness_base import (
     EXEC_DEFAULT_ENV,
     ONYX_VM_FILES_ROOT,
+    TOOL_RESULTS_ROOT,
     ExecCapReachedError,
     ExecSessionEndedError,
     ExecSessionNotFoundError,
@@ -63,6 +64,7 @@ from onyx.server.features.build.sandbox.harness_base import (
     SandboxPathError,
     collect_exec_result,
     session_relative_path,
+    session_tool_results,
     session_workspace,
 )
 from onyx.server.features.build.sandbox.models import (
@@ -70,6 +72,7 @@ from onyx.server.features.build.sandbox.models import (
     ExecEvent,
     ExecOutputDelta,
     HarnessSandboxRef,
+    SkillsBundle,
 )
 from tests.external_dependency_unit.microvm.conftest import (
     TENANT_ID,
@@ -120,6 +123,7 @@ def new_ref(
     for ref in refs:
         tenant_cache.delete(harness_state.EXEC_SESSIONS_PREFIX + str(ref.sandbox_id))
         tenant_cache.delete(harness_state.ACTIVITY_PREFIX + str(ref.sandbox_id))
+        tenant_cache.delete(harness_state.SKILLS_IMAGE_PREFIX + str(ref.sandbox_id))
 
 
 @pytest.fixture
@@ -139,6 +143,12 @@ def _run(events: Iterator[ExecEvent]) -> tuple[list[str], ExecCommandResult]:
             result = event
     assert result is not None
     return deltas, result
+
+
+def _output(result: ExecCommandResult) -> str:
+    """The output of a command that printed less than the byte cap."""
+    assert not result.omitted_chars
+    return result.head + result.tail
 
 
 def _session_ref(ref: HarnessSandboxRef) -> HarnessSandboxRef:
@@ -255,7 +265,7 @@ def test_a_replaced_vm_after_a_crash_is_initialized(
     node.agent.vms[str(ref.sandbox_id)].state = hostagent_pb2.VM_STATE_EXITED
 
     _, result = _run(sandbox.exec_command(ref, "echo back"))
-    assert result.output == "back\n"
+    assert _output(result) == "back\n"
     placement = get_sandbox_placement(tenant_cache, ref.sandbox_id)
     assert placement is not None and placement.attempt == 2
     assert node.agent.daemon_inits[str(ref.sandbox_id)] == placement.generation
@@ -316,7 +326,7 @@ def test_exec_command_returns_the_exit_and_output_of_a_short_command(
     assert result.exit_code == 0
     assert result.completion == "exited"
     assert result.session_id is None
-    assert result.output == "hi there\n"
+    assert _output(result) == "hi there\n"
     assert "".join(deltas) == "hi there\n"
 
     executions = node.agent.executions[str(ref.sandbox_id)].values()
@@ -325,6 +335,7 @@ def test_exec_command_returns_the_exit_and_output_of_a_short_command(
     # The daemon makes the session directory and uses it as the default cwd.
     assert command.session_id == str(ref.session_id)
     assert command.cwd == ""
+    assert command.env == {"AGENT_BROWSER_SESSION": str(ref.session_id)}
 
 
 def test_exec_command_reports_a_failed_command_and_relative_workdir(
@@ -335,7 +346,7 @@ def test_exec_command_reports_a_failed_command_and_relative_workdir(
     ref = new_ref()
     _, result = _run(sandbox.exec_command(ref, "fail 3", workdir="sub/dir"))
     assert result.exit_code == 3
-    assert result.output == "failed\n"
+    assert _output(result) == "failed\n"
     command = next(
         e
         for e in node.agent.executions[str(ref.sandbox_id)].values()
@@ -357,7 +368,7 @@ def test_a_running_command_gets_an_exec_session_that_another_pod_serves(
     started = time.monotonic()
     deltas, result = _run(pod_a.exec_command(ref, "cat", yield_time_ms=300))
     assert time.monotonic() - started >= 0.3
-    assert deltas == [] and result.output == ""
+    assert deltas == [] and _output(result) == ""
     assert result.exit_code is None and result.completion is None
     session = result.session_id
     assert session is not None
@@ -365,12 +376,12 @@ def test_a_running_command_gets_an_exec_session_that_another_pod_serves(
 
     # Another pod writes stdin and streams the new output.
     deltas, result = _run(pod_b.write_stdin(ref, session, "hello "))
-    assert "".join(deltas) == "hello " and result.output == "hello "
+    assert "".join(deltas) == "hello " and _output(result) == "hello "
     assert result.session_id == session
 
     # Only output after the last read comes back.
     _, result = _run(pod_a.write_stdin(ref, session, "world"))
-    assert result.output == "world"
+    assert _output(result) == "world"
     record_after = harness_state.get_exec_session(tenant_cache, ref.sandbox_id, session)
     assert record_after is not None and record_after.stdout_offset == len("hello world")
 
@@ -397,14 +408,14 @@ def test_an_empty_write_polls_until_the_command_ends(
     started = time.monotonic()
     _, polled = _run(sandbox.write_stdin(ref, session))
     assert time.monotonic() - started >= 0.3
-    assert polled.session_id == session and polled.output == ""
+    assert polled.session_id == session and _output(polled) == ""
 
     # The command ends between polls: the poll returns its exit at once.
     sandbox_daemon(client_factory, sandbox._place(ref)).interact(
         execution_id, data=b"bye", close_stdin=True
     )
     _, ended = _run(sandbox.write_stdin(ref, session, yield_time_ms=10_000))
-    assert ended.exit_code == 0 and ended.output == "bye"
+    assert ended.exit_code == 0 and _output(ended) == "bye"
     assert ended.session_id is None
     assert harness_state.get_exec_session(tenant_cache, ref.sandbox_id, session) is None
 
@@ -425,7 +436,7 @@ def test_a_stream_reset_at_the_agent_deadline_ends_the_yield_cleanly(
     assert harness_state.get_exec_session(tenant_cache, ref.sandbox_id, session)
 
     _, polled = _run(sandbox.write_stdin(ref, session, "hi", yield_time_ms=300))
-    assert polled.session_id == session and polled.output == "hi"
+    assert polled.session_id == session and _output(polled) == "hi"
 
 
 def test_a_character_split_between_polls_is_kept(
@@ -448,9 +459,9 @@ def test_a_character_split_between_polls_is_kept(
     daemon = sandbox_daemon(client_factory, sandbox._place(ref))
 
     daemon.interact(execution.execution_id, data="a€".encode()[:3])
-    assert _run(sandbox.write_stdin(ref, session))[1].output == "a"
+    assert _output(_run(sandbox.write_stdin(ref, session))[1]) == "a"
     daemon.interact(execution.execution_id, data="a€".encode()[3:])
-    assert _run(sandbox.write_stdin(ref, session))[1].output == "€"
+    assert _output(_run(sandbox.write_stdin(ref, session))[1]) == "€"
 
 
 @pytest.mark.usefixtures("node")
@@ -478,7 +489,7 @@ def test_the_yield_window_counts_from_the_start_and_the_write(
 
     # The default 250 ms window of a write starts after the write.
     _, echoed = _run(sandbox.write_stdin(ref, session, "hi"))
-    assert echoed.output == "hi"
+    assert _output(echoed) == "hi"
     assert echoed.wall_time_seconds >= 0.65
     _, interrupted = _run(sandbox.write_stdin(ref, session, "\x03"))
     assert interrupted.completion == "canceled"
@@ -535,7 +546,7 @@ def test_a_broken_output_stream_keeps_the_command_and_names_its_session(
 
     assert harness_state.get_exec_session(tenant_cache, ref.sandbox_id, session)
     _, polled = _run(sandbox.write_stdin(ref, session, yield_time_ms=250))
-    assert polled.session_id == session and polled.output == "hi"
+    assert polled.session_id == session and _output(polled) == "hi"
 
 
 def test_a_stop_during_a_broken_output_stream_still_kills_the_command(
@@ -641,7 +652,7 @@ def test_ctrl_c_sends_sigint_to_the_command(
     assert execution.signaled == sandboxd_pb2.CANCEL_SIGNAL_SIGINT
     assert result.completion == "canceled"
     assert result.exit_code is None and result.session_id is None
-    assert result.output == "last"
+    assert _output(result) == "last"
     assert harness_state.get_exec_session(tenant_cache, ref.sandbox_id, session) is None
 
 
@@ -697,21 +708,6 @@ def test_exec_sessions_end_when_the_vm_restarts(
     assert node.agent.create_calls == 2
 
 
-@pytest.mark.usefixtures("node")
-def test_output_is_cut_to_max_output_tokens_head_and_tail(
-    sandbox: FirecrackerHarnessSandbox,
-    new_ref: NewRef,
-) -> None:
-    ref = new_ref()
-    text = "a" * 200 + "z" * 200
-    _, result = _run(sandbox.exec_command(ref, f"echo {text}", max_output_tokens=20))
-    assert result.truncated
-    assert result.output.startswith("a" * 40)
-    assert result.output.rstrip("\n").endswith("z" * 39)
-    assert "tokens omitted" in result.output
-    assert result.original_token_count == (len(text) + 1 + 3) // 4
-
-
 def test_output_that_the_daemon_dropped_marks_the_buffer_truncated() -> None:
     buffer = ExecOutputBuffer()
     buffer.add(OutputStream.STDOUT, b"a")
@@ -725,43 +721,32 @@ def test_the_output_buffer_keeps_head_and_tail_bytes() -> None:
     assert buffer.add(OutputStream.STDOUT, b"0123") == "0123"
     assert buffer.add(OutputStream.STDOUT, b"456789abcdef") == "4"
     assert buffer.truncated
-    assert buffer.text() == "01234\n[... 6 bytes omitted ...]\n" + "bcdef"
+    assert (buffer.head, buffer.tail, buffer.omitted_chars) == ("01234", "bcdef", 6)
     # A multibyte character split across chunks streams whole.
     split = ExecOutputBuffer()
     assert split.add(OutputStream.STDERR, "é".encode()[:1]) == ""
     assert split.add(OutputStream.STDERR, "é".encode()[1:]) == "é"
-    assert cut_to_tokens("short", 10) == ("short", False)
     # A character split between the head and the tail stays whole.
     mixed = ExecOutputBuffer()
     mixed.add(OutputStream.STDOUT, "é".encode()[:1])
     mixed.add(OutputStream.STDERR, b"err")
     mixed.add(OutputStream.STDOUT, "é".encode()[1:])
-    assert mixed.text() == "erré"
+    assert mixed.head + mixed.tail == "erré"
     # A command that ends inside a character still shows the bytes.
     cut = ExecOutputBuffer()
     cut.add(OutputStream.STDOUT, b"ok\xc3")
     assert cut.finish() == "\ufffd"
-    assert cut.text() == "ok\ufffd"
+    assert cut.head + cut.tail == "ok\ufffd"
     # Bytes on each side of a gap never join into one character.
     gap = ExecOutputBuffer()
     gap.add(OutputStream.STDOUT, "é".encode()[:1])
     gap.add_gap(OutputStream.STDOUT, 5)
     gap.add(OutputStream.STDOUT, "é".encode()[1:])
-    assert "é" not in gap.text() and "5 bytes of stdout lost" in gap.text()
-    # The live preview stops at what the result can show: one token is 4
-    # bytes.
-    preview = ExecOutputBuffer(max_output_tokens=1)
-    assert preview.add(OutputStream.STDOUT, "aé".encode()) == "aé"
-    assert preview.add(OutputStream.STDOUT, b"bc") == "b"
-    assert preview.add(OutputStream.STDOUT, b"d") == ""
-    assert preview.text() == "aébcd"
-    # A character that does not fit closes the preview: no later text skips it.
-    closed = ExecOutputBuffer(max_output_tokens=1)
-    assert closed.add(OutputStream.STDOUT, "abcé".encode()) == "abc"
-    assert closed.add(OutputStream.STDOUT, b"d") == ""
+    gap_text = gap.head + gap.tail
+    assert "é" not in gap_text and "5 bytes of stdout lost" in gap_text
     boundary = ExecOutputBuffer(max_bytes=4)
     boundary.add(OutputStream.STDOUT, "aé".encode())
-    assert not boundary.truncated and boundary.text() == "aé"
+    assert not boundary.truncated and boundary.head + boundary.tail == "aé"
 
 
 # Files
@@ -860,7 +845,7 @@ def test_read_file_reads_the_session_and_the_onyx_root_and_only_regular_files(
     ref = new_ref()
     sandbox.write_file(ref, "out/report.csv", b"a,b\n")
     chart = f"{ONYX_VM_FILES_ROOT}/out/chart.svg"
-    sandbox.write_onyx_file(ref, chart, b"<svg/>")
+    sandbox.write_file(ref, chart, b"<svg/>")
     node.agent.files[(str(ref.sandbox_id), "", "/tmp/elsewhere.svg")] = b"<svg/>"
 
     assert sandbox.read_file(ref, chart, max_bytes=10) == b"<svg/>"
@@ -903,7 +888,7 @@ def test_file_store_files_stream_into_the_vm_and_its_sessions(
     vm_path = f"{ONYX_VM_FILES_ROOT}/search-files/{file_id}/big.bin"
     try:
         with store.read_file(file_id, use_tempfile=True) as content:
-            sandbox.write_onyx_file(ref, vm_path, content)
+            sandbox.write_file(ref, vm_path, content)
         with store.read_file(file_id, use_tempfile=True) as content:
             sandbox.write_file(ref, "attachments/big.bin", content)
     finally:
@@ -918,7 +903,8 @@ def test_file_store_files_stream_into_the_vm_and_its_sessions(
     assert node.agent.write_chunk_sizes[-2:] == [chunked, chunked]
 
 
-def test_write_onyx_file_sets_up_no_session(
+def test_onyx_root_file_calls_set_up_no_session(
+    monkeypatch: pytest.MonkeyPatch,
     sandbox: FirecrackerHarnessSandbox,
     node: RunningFakeAgent,
     new_ref: NewRef,
@@ -926,13 +912,56 @@ def test_write_onyx_file_sets_up_no_session(
 ) -> None:
     ref = new_ref()
     path = f"{ONYX_VM_FILES_ROOT}/tool-results/call-1.txt"
-    sandbox.write_onyx_file(ref, path, b"first")
+    sandbox.write_file(ref, path, b"first")
     # Idempotent: a second write replaces the file.
-    sandbox.write_onyx_file(
-        ref, f"{ONYX_VM_FILES_ROOT}/./tool-results/call-1.txt", b"x"
+    sandbox.write_file(ref, f"{ONYX_VM_FILES_ROOT}/./tool-results/call-1.txt", b"x")
+    sandbox.write_file(
+        ref, f"{ONYX_VM_FILES_ROOT}/tool-results/call-2.txt", [b"a", b"b"]
     )
 
     assert node.agent.files[(str(ref.sandbox_id), "", path)] == b"x"
+    listings: list[FileListing] = []
+
+    def pick(listing: FileListing) -> list[str]:
+        listings.append(listing)
+        return [entry.path for entry in listing.entries if entry.path == path]
+
+    sandbox.delete_listed_files(
+        ref, f"{ONYX_VM_FILES_ROOT}/tool-results", pick, max_entries=1
+    )
+    assert listings[-1].truncated and len(listings[-1].entries) == 1
+    sandbox.write_file(ref, path, b"x")
+    places = 0
+    place = sandbox._place
+
+    def counted_place(placed_ref: HarnessSandboxRef) -> PlacedVm:
+        nonlocal places
+        places += 1
+        return place(placed_ref)
+
+    monkeypatch.setattr(sandbox, "_place", counted_place)
+    sandbox.delete_listed_files(
+        ref, f"{ONYX_VM_FILES_ROOT}/tool-results", pick, max_entries=10
+    )
+    # One VM lookup for the listing and its deletes.
+    assert places == 1
+    assert not listings[-1].truncated
+    assert sorted((entry.path, entry.size) for entry in listings[-1].entries) == [
+        (path, 1),
+        (f"{ONYX_VM_FILES_ROOT}/tool-results/call-2.txt", 2),
+    ]
+    assert (str(ref.sandbox_id), "", path) not in node.agent.files
+    assert not sandbox.delete_file(ref, path)
+    outside = f"{ONYX_VM_FILES_ROOT}/keep.txt"
+    sandbox.write_file(ref, outside, b"keep")
+    # A selected path that the listing did not return stays.
+    sandbox.delete_listed_files(
+        ref, f"{ONYX_VM_FILES_ROOT}/tool-results", lambda _: [outside], max_entries=10
+    )
+    assert node.agent.files[(str(ref.sandbox_id), "", outside)] == b"keep"
+    sandbox.delete_listed_files(
+        ref, f"{ONYX_VM_FILES_ROOT}/missing", pick, max_entries=10
+    )
     placement = get_sandbox_placement(tenant_cache, ref.sandbox_id)
     assert placement is not None
     assert (
@@ -943,24 +972,116 @@ def test_write_onyx_file_sets_up_no_session(
     )
 
 
+def test_a_tool_result_written_after_its_session_purge_leaves_nothing(
+    sandbox: FirecrackerHarnessSandbox,
+    node: RunningFakeAgent,
+    new_ref: NewRef,
+) -> None:
+    ref = new_ref()
+    other = _session_ref(ref)
+    sandbox.write_file(other, f"{session_tool_results(other.session_id)}/a.txt", b"x")
+    sandbox.purge_session(
+        tenant_id=ref.tenant_id, sandbox_id=ref.sandbox_id, session_id=ref.session_id
+    )
+
+    # A write that the purge missed, for example one that was in flight.
+    with pytest.raises(HarnessSandboxError, match="was deleted"):
+        sandbox.write_file(
+            ref, f"{session_tool_results(ref.session_id)}/late.txt", b"late"
+        )
+
+    paths = [
+        path for (_, _, path) in node.agent.files if path.startswith(TOOL_RESULTS_ROOT)
+    ]
+    assert paths == [f"{session_tool_results(other.session_id)}/a.txt"]
+
+
+def _start_command_and_spill(
+    sandbox: FirecrackerHarnessSandbox, node: RunningFakeAgent, ref: HarnessSandboxRef
+) -> str:
+    """Start a command that keeps running and write a tool result in the
+    session; the exec session ID. The daemon's call log starts empty."""
+    _, started = _run(sandbox.exec_command(ref, "cat", yield_time_ms=250))
+    assert started.session_id is not None
+    sandbox.write_file(ref, f"{session_tool_results(ref.session_id)}/a.txt", b"x")
+    node.agent.daemon_calls.clear()
+    return started.session_id
+
+
+def _purge_calls(
+    node: RunningFakeAgent, ref: HarnessSandboxRef
+) -> list[tuple[str, str]]:
+    """The daemon calls of a purge of a session with a running command: a
+    running command could write the tool results again, so it stops first."""
+    [execution_id] = node.agent.cancel_calls
+    return [
+        ("Cancel", execution_id),
+        ("DeleteFile", session_tool_results(ref.session_id)),
+        ("DeleteFile", session_workspace(ref.session_id)),
+    ]
+
+
+def test_a_purge_cancels_the_session_commands_before_it_deletes_its_tool_results(
+    sandbox: FirecrackerHarnessSandbox, node: RunningFakeAgent, new_ref: NewRef
+) -> None:
+    ref = new_ref()
+    _start_command_and_spill(sandbox, node, ref)
+
+    sandbox.purge_session(
+        tenant_id=ref.tenant_id, sandbox_id=ref.sandbox_id, session_id=ref.session_id
+    )
+
+    assert node.agent.daemon_calls == _purge_calls(node, ref)
+
+
+def test_a_failed_record_lookup_still_runs_every_purge_step(
+    monkeypatch: pytest.MonkeyPatch,
+    tenant_cache: CacheBackend,
+    sandbox: FirecrackerHarnessSandbox,
+    node: RunningFakeAgent,
+    new_ref: NewRef,
+) -> None:
+    ref = new_ref()
+    session = _start_command_and_spill(sandbox, node, ref)
+
+    def lookup_fails(*_args: object) -> bool:
+        raise RuntimeError("cache down")
+
+    monkeypatch.setattr(harness_sandbox, "has_session_records", lookup_fails)
+
+    with pytest.raises(RuntimeError, match="cache down"):
+        sandbox.purge_session(
+            tenant_id=ref.tenant_id,
+            sandbox_id=ref.sandbox_id,
+            session_id=ref.session_id,
+        )
+
+    assert node.agent.daemon_calls == _purge_calls(node, ref)
+    assert harness_state.get_exec_session(tenant_cache, ref.sandbox_id, session) is None
+
+
 @pytest.mark.parametrize(
     "path",
     [
         ONYX_VM_FILES_ROOT,
         f"{ONYX_VM_FILES_ROOT}x/a.txt",
         f"{ONYX_VM_FILES_ROOT}/../etc/passwd",
-        "tmp/onyx/a.txt",
         "/home/onyx/workspaces/s1/a.txt",
     ],
 )
-def test_write_onyx_file_refuses_paths_outside_the_onyx_root(
+def test_file_calls_refuse_paths_outside_the_session_and_the_onyx_root(
     sandbox: FirecrackerHarnessSandbox,
     node: RunningFakeAgent,
     new_ref: NewRef,
     path: str,
 ) -> None:
+    ref = new_ref()
     with pytest.raises(SandboxPathError):
-        sandbox.write_onyx_file(new_ref(), path, b"x")
+        sandbox.write_file(ref, path, b"x")
+    with pytest.raises(SandboxPathError):
+        sandbox.delete_file(ref, path)
+    with pytest.raises(SandboxPathError):
+        sandbox.delete_listed_files(ref, path, lambda _listing: [], max_entries=10)
     # Refused before the sandbox starts.
     assert node.agent.create_calls == 0
 
@@ -1046,12 +1167,13 @@ def test_the_factory_needs_harness_sandboxes(
 
 def test_collect_exec_result_reads_the_stream_to_its_end() -> None:
     result = ExecCommandResult(
-        output="x",
+        head="x",
+        tail="",
+        omitted_chars=0,
         session_id=None,
         exit_code=0,
         completion="exited",
         wall_time_seconds=0.1,
-        original_token_count=1,
         truncated=False,
     )
     finished: list[bool] = []
@@ -1118,7 +1240,7 @@ def test_a_start_without_an_answer_adopts_the_command_if_it_started(
     assert len(commands) == 1 and commands[0].result is None
     monkeypatch.undo()
     _, result = _run(sandbox.write_stdin(ref, result.session_id, "hi"))
-    assert result.output == "hi"
+    assert _output(result) == "hi"
 
 
 @pytest.mark.usefixtures("node")
@@ -1156,4 +1278,29 @@ def test_the_least_recently_used_exec_session_record_goes_over_the_cap(
     assert first and second and third
     with pytest.raises(ExecSessionNotFoundError):
         _run(sandbox.write_stdin(ref, first, "x"))
-    assert _run(sandbox.write_stdin(ref, second, "y"))[1].output == "y"
+    assert _output(_run(sandbox.write_stdin(ref, second, "y"))[1]) == "y"
+
+
+def test_skills_go_to_each_vm_instance_once_per_change(
+    sandbox: FirecrackerHarnessSandbox, node: RunningFakeAgent, new_ref: NewRef
+) -> None:
+    ref = new_ref()
+    files = {"pptx/SKILL.md": b"# pptx", "pptx/scripts/lint.py": b"print(1)"}
+    sandbox.sync_skills(ref, SkillsBundle.from_files(files))
+    sandbox.sync_skills(
+        ref, SkillsBundle.from_files(dict(reversed(list(files.items()))))
+    )
+    assert node.agent.swap_mounts == ["skills"]
+    assert len(node.agent.managed_images) == 1
+
+    changed = SkillsBundle.from_files({**files, "pptx/SKILL.md": b"# pptx v2"})
+    sandbox.sync_skills(ref, changed)
+    assert len(node.agent.swap_mounts) == 2
+
+    vm = node.agent.vms[str(ref.sandbox_id)]
+    sandbox._client_factory.client(node.address).stop(
+        sandbox_id=str(ref.sandbox_id), attempt=vm.attempt, generation=vm.generation
+    )
+    sandbox.sync_skills(ref, changed)
+    assert len(node.agent.swap_mounts) == 3
+    assert node.agent.create_calls == 2

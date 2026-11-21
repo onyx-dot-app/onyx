@@ -31,4 +31,4 @@ def test_resource_vector_stats_request_and_response() -> None:
     assert stats.nodes
     assert isinstance(stats.circuit_breaker_triggered, bool)
     for node in stats.nodes.values():
-        assert node.graph_memory_usage_percentage >= 0
+        assert node.usage_percent >= 0

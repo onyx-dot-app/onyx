@@ -309,6 +309,12 @@ export interface MessageResponseIDInfo {
   mentions?: RecordedMention[];
 }
 
+/** The name the server gave a new chat, sent on the turn's stream once saved. */
+export interface ChatSessionNameInfo {
+  chat_session_id: string;
+  chat_session_name: string;
+}
+
 export interface ModelResponseSlot {
   message_id: number;
   model_name: string;

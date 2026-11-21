@@ -115,6 +115,7 @@ const EE_ROUTES = [
   "/admin/performance/custom-analytics",
   "/admin/standard-answer",
   "/admin/export-logs",
+  "/admin/service-status",
   "/admin/scim",
   "/admin/service-accounts",
   "/agents/stats",

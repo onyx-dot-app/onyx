@@ -11,7 +11,7 @@ Call the Google Calendar API as the connected user via the bundled helper.
 
 ## Usage
 
-    python .opencode/skills/google-calendar/gcal_api.py <command> [args]
+    python /mnt/skills/google-calendar/gcal_api.py <command> [args]
 
 Read commands auto-paginate and prune empty fields. `create-event` and
 `delete-event` are the only writes. `primary` is the user's default calendar.

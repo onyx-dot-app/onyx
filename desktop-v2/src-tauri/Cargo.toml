@@ -20,6 +20,8 @@ tauri-plugin-deep-link = "2"
 tauri-plugin-updater = "2"
 sha2 = "0.10"
 base64 = "0.22"
+# Reads the return URL in a SAML request (main_window.rs).
+flate2 = "1"
 rand = "0.8"
 tauri-plugin-window-state = "2"
 serde = { version = "1", features = ["derive"] }

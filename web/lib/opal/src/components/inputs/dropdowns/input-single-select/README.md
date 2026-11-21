@@ -115,5 +115,9 @@ leave the keyboard order.
 | `placeholder`   | `string`                            | —       | Shown while empty; always the accessible name (required)        |
 | `isError`       | `boolean`                           | —       | External error state (overrides internal validation)            |
 | `rightChildren` | `React.ReactNode`                   | —       | Extra trigger-side controls                                     |
+| `tooltip`       | `string \| RichStr`                 | —       | Shown on hover, in any state                                    |
+
+Inside `InputHorizontal` or `InputVertical`, the row's `disabled` also disables
+the field, and its `disabledTooltip` replaces `tooltip` while disabled.
 
 Formik: `InputSingleSelectField` from `@opal/form`.

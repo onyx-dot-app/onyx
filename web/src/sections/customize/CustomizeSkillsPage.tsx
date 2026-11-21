@@ -21,7 +21,7 @@ import {
 } from "@opal/icons";
 import { useNavigation } from "@opal/navigation";
 import useUserSkills from "@/hooks/useUserSkills";
-import { newSkillHref, skillHref } from "@/lib/customize/paths";
+import { newSkillHref, pluginHref, skillHref } from "@/lib/customize/paths";
 import {
   SKILL_GROUPS,
   groupSkills,
@@ -40,6 +40,7 @@ import {
   useRefreshSkillLists,
 } from "@/lib/skills/hooks";
 import type { Skill } from "@/lib/skills/types";
+import { needsAttention } from "@/lib/plugins/needs";
 import { Permission } from "@/lib/types";
 import { useUser } from "@/providers/UserProvider";
 import CustomizeLayout from "@/sections/customize/CustomizeLayout";
@@ -55,6 +56,7 @@ import { ConfirmEntityModal } from "@/sections/modals/ConfirmEntityModal";
 import SkillPreviewModal from "@/sections/modals/SkillPreviewModal";
 import ShareSkillModal from "@/sections/modals/skills/ShareSkillModal";
 import SkillSwitchModal from "@/sections/modals/skills/SkillSwitchModal";
+import PluginTurnOnModal from "@/sections/modals/plugins/PluginTurnOnModal";
 import SkillReviewRequests from "@/sections/skills/SkillReviewRequests";
 
 const RECENT_DAYS = 7;
@@ -103,15 +105,20 @@ function SkillRow({
               year: "numeric",
             });
   const source =
-    group === "mine"
-      ? t("source.mine")
-      : group === "organization"
-        ? t("source.organization")
-        : group === "builtin"
-          ? t("source.builtin")
-          : skill.owner
-            ? t("source.sharedBy", { email: skill.owner.email })
-            : t("source.shared");
+    group === "marketplace" && skill.marketplace
+      ? t("source.marketplace", {
+          name: skill.marketplace.name,
+          scope: skill.marketplace.personal ? "personal" : "company",
+        })
+      : group === "mine"
+        ? t("source.mine")
+        : group === "organization"
+          ? t("source.organization")
+          : group === "builtin"
+            ? t("source.builtin")
+            : skill.owner
+              ? t("source.sharedBy", { email: skill.owner.email })
+              : t("source.shared");
   const menu: DropdownMenuItem[] = [
     ...(skill.can_toggle
       ? [
@@ -229,7 +236,10 @@ export default function CustomizeSkillsPage() {
 
   const craftEnabled = settings.onyx_craft_enabled === true;
   const all = data ? visibleSkills(data, craftEnabled) : [];
-  const enablement = useSkillEnablement(all, refresh);
+  const [turnedOn, setTurnedOn] = useState<Skill | null>(null);
+  const enablement = useSkillEnablement(all, refresh, (skill) => {
+    if (needsAttention(skill.plugin?.needs ?? [])) setTurnedOn(skill);
+  });
   const groups = data
     ? groupSkills(data, {
         userId: user?.id ?? null,
@@ -246,6 +256,7 @@ export default function CustomizeSkillsPage() {
 
   function open(skill: Skill): void {
     if (skill.source === "builtin") setPreview(skill);
+    else if (skill.kind === "plugin") navigation.go(pluginHref(skill.id));
     else navigation.go(skillHref(skill.id));
   }
 
@@ -365,6 +376,12 @@ export default function CustomizeSkillsPage() {
       )}
 
       <SkillSwitchModal enablement={enablement} />
+      {turnedOn && (
+        <PluginTurnOnModal
+          plugin={turnedOn}
+          onClose={() => setTurnedOn(null)}
+        />
+      )}
       {shareTarget && (
         <ShareSkillModal
           mode="edit"

@@ -64,6 +64,7 @@ def _upload(
                 files=[],
                 project_id=None,
                 temp_id_map=None,
+                temp_ids=None,
                 incognito_session_id=uuid4(),
                 user=MagicMock(id=uuid4()),
                 db_session=MagicMock(),

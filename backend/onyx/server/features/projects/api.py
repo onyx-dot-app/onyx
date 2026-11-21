@@ -10,7 +10,7 @@ from fastapi import (
     Response,
     UploadFile,
 )
-from pydantic import BaseModel
+from pydantic import BaseModel, TypeAdapter, ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
@@ -63,6 +63,8 @@ logger = setup_logger()
 
 
 router = APIRouter(prefix="/user/projects")
+
+_TEMP_IDS = TypeAdapter(list[str])
 
 # `user_project.name` and `user_project.description` are both varchar(255). Longer
 # values make Postgres reject the write, which surfaces as a 500.
@@ -188,7 +190,21 @@ def upload_user_files(
     bg_tasks: BackgroundTasks,
     files: list[UploadFile] = File(...),
     project_id: int | None = Form(None),
-    temp_id_map: str | None = Form(None),  # JSON string mapping hashed key -> temp_id
+    temp_id_map: str | None = Form(
+        None,
+        description=(
+            'JSON object: maps "<size in bytes>|<first 50 characters of the file'
+            " name>\" to the client's temporary ID. Files of one name and size"
+            " share one ID. Ignored when temp_ids is given."
+        ),
+    ),
+    temp_ids: str | None = Form(
+        None,
+        description=(
+            "JSON list: the client's temporary ID for each file, in upload order;"
+            " one entry per file."
+        ),
+    ),
     incognito_session_id: UUID | None = Form(None),
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
@@ -207,6 +223,17 @@ def upload_user_files(
             raise OnyxError(
                 OnyxErrorCode.INVALID_INPUT,
                 "This incognito chat has ended.",
+            )
+    parsed_temp_ids: list[str] | None = None
+    if temp_ids:
+        try:
+            parsed_temp_ids = _TEMP_IDS.validate_json(temp_ids)
+        except ValidationError:
+            parsed_temp_ids = None
+        if parsed_temp_ids is None or len(parsed_temp_ids) != len(files):
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "temp_ids must be a JSON list of strings, one for each file.",
             )
     try:
         parsed_temp_id_map: dict[str, str] | None = None
@@ -230,6 +257,7 @@ def upload_user_files(
             db_session=db_session,
             background_tasks=bg_tasks if DISABLE_VECTOR_DB else None,
             incognito_session_id=incognito_session_id,
+            temp_ids=parsed_temp_ids,
         )
 
         return CategorizedFilesSnapshot.from_result(categorized_files_result)

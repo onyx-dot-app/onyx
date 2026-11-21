@@ -103,3 +103,31 @@ test("Turn on enables a skill that is off", async () => {
     requestBody(fetchMock, "PUT", "/api/skills/off-skill/enabled")
   ).toEqual({ enabled: true, replace_conflict: false });
 });
+
+test("a synced skill names its marketplace and whether it is personal", async () => {
+  window.history.replaceState(null, "", "/app/customize/skills");
+  mockFetch({
+    "/api/skills": {
+      builtins: [],
+      customs: [
+        customFixture({
+          id: "synced-skill",
+          name: "academy-guide",
+          owner: { id: "user-me", email: "me@example.com" },
+          marketplace: {
+            id: "m-personal",
+            name: "anthropic-agent-skills",
+            kind: "github",
+            repository: "anthropics/skills",
+            personal: true,
+          },
+        }),
+      ],
+    },
+  });
+  render(<CustomizeSkillsPage />);
+
+  expect(
+    await screen.findByText(/^from anthropic-agent-skills \(personal\)/)
+  ).toBeInTheDocument();
+});

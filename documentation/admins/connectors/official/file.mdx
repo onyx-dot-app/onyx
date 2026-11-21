@@ -35,6 +35,9 @@ Put one metadata line at the top of a text file. Use one of these formats:
 - `secondary_owners`
 - `doc_updated_at`
 
+If a file does not set `doc_updated_at`, Onyx uses the time that you uploaded the file or its metadata,
+whichever is later. When you sync again, Onyx skips the files that did not change.
+
 Any other key becomes a tag. Users can filter a search or a chat by tag,
 so that Onyx reads only documents with that tag.
 

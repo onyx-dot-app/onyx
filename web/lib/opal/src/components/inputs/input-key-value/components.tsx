@@ -78,7 +78,12 @@ import React, {
 import { cn } from "@opal/utils";
 import { InputPasswordTypeIn, InputTypeIn } from "@opal/components";
 import { Button, EmptyMessageCard } from "@opal/components";
-import type { WithoutStyles } from "@opal/types";
+import type { RichStr, WithoutStyles } from "@opal/types";
+import {
+  InputRowProvider,
+  InputTooltip,
+  useInputDisabled,
+} from "@opal/components/inputs/disabled";
 import { Text } from "@opal/components/text/components";
 import { useOpalStrings } from "@opal/strings";
 import { InputErrorText } from "@opal/layouts";
@@ -112,6 +117,7 @@ interface KeyValueInputItemProps {
   valueType: NonNullable<KeyValueInputProps["valueType"]>;
   error?: KeyValueError;
   canRemove: boolean;
+  disabled: boolean;
   index: number;
 }
 
@@ -124,6 +130,7 @@ function KeyValueInputItem({
   valueType,
   error,
   canRemove,
+  disabled,
   index,
 }: KeyValueInputItemProps) {
   const strings = useOpalStrings();
@@ -172,7 +179,7 @@ function KeyValueInputItem({
         {error?.value && <InputErrorText>{error.value}</InputErrorText>}
       </div>
       <Button
-        disabled={!canRemove}
+        disabled={!canRemove || disabled}
         prominence="tertiary"
         icon={SvgMinusCircle}
         onClick={onRemove}
@@ -219,8 +226,19 @@ export interface KeyValueInputProps extends WithoutStyles<
 
   /** Custom label for the add button (defaults to "Add Line") */
   addButtonLabel?: string;
+
+  /** Disables every field and the add and remove buttons. */
+  disabled?: boolean;
+
+  /** Shown on hover, in any state. A disabled row's reason replaces it. */
+  tooltip?: string | RichStr;
 }
 
+/**
+ * Inside `InputHorizontal` or `InputVertical`, the row's `disabled` and
+ * `disabledTooltip` apply to it too. The reason shows on the whole group,
+ * not on each field.
+ */
 export default function KeyValueInput({
   keyTitle: keyTitleProp,
   valueTitle: valueTitleProp,
@@ -233,8 +251,11 @@ export default function KeyValueInput({
   layout = "equal",
   onValidationError,
   addButtonLabel: addButtonLabelProp,
+  disabled: disabledProp,
+  tooltip,
   ...rest
 }: KeyValueInputProps) {
+  const disabled = useInputDisabled(disabledProp);
   const strings = useOpalStrings();
   const keyTitle = keyTitleProp ?? strings.keyValueKey;
   const valueTitle = valueTitleProp ?? strings.keyValueValue;
@@ -352,63 +373,73 @@ export default function KeyValueInput({
   const gridCols = GRID_COLS[layout];
 
   return (
-    <div
-      className="w-full flex flex-col gap-y-2"
-      role="group"
-      aria-label={strings.keyValueGroup(keyTitle, valueTitle)}
-      {...rest}
-    >
-      {items && items.length > 0 ? (
-        <div className={cn("grid items-start gap-1", gridCols)}>
-          {/*
+    <InputTooltip tooltip={tooltip}>
+      <div
+        className="w-full flex flex-col gap-y-2"
+        role="group"
+        aria-label={strings.keyValueGroup(keyTitle, valueTitle)}
+        {...rest}
+      >
+        {/* The fields read `disabled` from here; the row's reason shows once,
+          on the group, not on each field. */}
+        <InputRowProvider disabled={disabled} hovered={false}>
+          {items && items.length > 0 ? (
+            <div className={cn("grid items-start gap-1", gridCols)}>
+              {/*
             # NOTE (@raunakab)
             We add this space below the "title"-row to add some breathing room between the titles and the key-value items.
             Since we're using a `grid` template, the padding below *one* item in a row applies additional height to *all* items in that row.
           */}
-          <div className="pb-1">
-            <Text font="main-ui-action" color="text-05">
-              {keyTitle}
-            </Text>
-          </div>
-          <Text font="main-ui-action" color="text-05">
-            {valueTitle}
-          </Text>
-          <div aria-hidden />
+              <div className="pb-1">
+                <Text font="main-ui-action" color="text-05">
+                  {keyTitle}
+                </Text>
+              </div>
+              <Text font="main-ui-action" color="text-05">
+                {valueTitle}
+              </Text>
+              <div aria-hidden />
 
-          {items.map((item, index) => (
-            <KeyValueInputItem
-              key={
-                valueType === "password" ? `${items.length}-${index}` : index
-              }
-              item={item}
-              onChange={(next) => handleItemChange(index, next)}
-              onRemove={() => handleRemove(index)}
-              keyPlaceholder={keyPlaceholder}
-              valuePlaceholder={valuePlaceholder}
-              valueType={valueType}
-              error={errors[index]}
-              canRemove={canRemoveItems}
-              index={index}
+              {items.map((item, index) => (
+                <KeyValueInputItem
+                  key={
+                    valueType === "password"
+                      ? `${items.length}-${index}`
+                      : index
+                  }
+                  item={item}
+                  onChange={(next) => handleItemChange(index, next)}
+                  onRemove={() => handleRemove(index)}
+                  keyPlaceholder={keyPlaceholder}
+                  valuePlaceholder={valuePlaceholder}
+                  valueType={valueType}
+                  error={errors[index]}
+                  canRemove={canRemoveItems}
+                  disabled={disabled}
+                  index={index}
+                />
+              ))}
+            </div>
+          ) : (
+            <EmptyMessageCard
+              title={strings.keyValueEmpty}
+              padding={2}
+              sizePreset="secondary"
             />
-          ))}
-        </div>
-      ) : (
-        <EmptyMessageCard
-          title={strings.keyValueEmpty}
-          padding={2}
-          sizePreset="secondary"
-        />
-      )}
+          )}
+        </InputRowProvider>
 
-      <Button
-        prominence="secondary"
-        onClick={handleAdd}
-        icon={SvgPlusCircle}
-        aria-label={strings.keyValueAddPair(keyTitle, valueTitle)}
-        type="button"
-      >
-        {addButtonLabel}
-      </Button>
-    </div>
+        <Button
+          prominence="secondary"
+          disabled={disabled}
+          onClick={handleAdd}
+          icon={SvgPlusCircle}
+          aria-label={strings.keyValueAddPair(keyTitle, valueTitle)}
+          type="button"
+        >
+          {addButtonLabel}
+        </Button>
+      </div>
+    </InputTooltip>
   );
 }

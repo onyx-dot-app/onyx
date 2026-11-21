@@ -7,6 +7,7 @@ import { VoiceModeProvider } from "@/providers/VoiceModeProvider";
 import AppSidebar from "@/sections/sidebar/AppSidebar";
 import { RootLayout } from "@opal/layouts";
 import { AppChrome } from "@/layouts/chromes";
+import RequiredIntegrationGate from "@/sections/integrations/RequiredIntegrationGate";
 
 export interface LayoutProps {
   children: React.ReactNode;
@@ -32,6 +33,7 @@ export default async function Layout({ children }: LayoutProps) {
           <AppSidebar />
           <AppChrome>{children}</AppChrome>
         </RootLayout.Root>
+        <RequiredIntegrationGate />
       </VoiceModeProvider>
     </ProjectsProvider>
   );

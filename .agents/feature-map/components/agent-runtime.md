@@ -93,8 +93,8 @@ prompt holds and the compaction prompt text.
 
 ```
 Agent (history, checkpoint, tools, prepare_step / after_step,
-       before_tool_call / after_tool_call / on_finish / on_suspend /
-       on_drained hooks)
+       before_tool_call / prepare_tool_result / after_tool_call /
+       on_finish / on_suspend / on_drained hooks)
   start() -> Run (one request, step budget, own cancellation signal)
     step: prepare_step -> _compact_context -> model generation
           -> ToolBatch -> after_step: continue or finish

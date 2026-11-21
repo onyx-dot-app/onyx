@@ -35,3 +35,12 @@ INDEX.md: discord.py
 # Build outputs.
 components/desktop-widget-extensions.md: src-tauri/target/release/bundle/
 components/desktop-widget-extensions.md: dist/onyx-widget.js
+
+# Files inside an uploaded plugin zip.
+components/skills.md: .claude-plugin/plugin.json
+components/skills.md: .codex-plugin/plugin.json
+components/skills.md: plugin.json
+
+# Files inside a GitHub marketplace repository.
+components/skills.md: .claude-plugin/marketplace.json
+components/skills.md: .agents/plugins/marketplace.json

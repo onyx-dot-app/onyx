@@ -850,22 +850,30 @@ def tool_arguments(function: ToolFunction, kwargs: Mapping[str, object]) -> Json
 
 
 def program_value(function: ToolFunction, result: ToolResult) -> object:
-    """The value a program receives for a tool result; raises RuntimeError for errors."""
+    """The value a program receives for a tool result, from its full value
+    when it has one; raises RuntimeError for errors."""
     kind = function.result.kind
+    full = result.full_value
+    text = full if isinstance(full, str) else result.content
     if kind is CodeModeResultKind.TEXT and not result.is_error:
-        return result.content
+        return text
     if kind is CodeModeResultKind.DETAILS and not result.is_error:
         model = function.result.model
-        if model is None or not isinstance(result.details, model):
+        details = full if isinstance(full, BaseModel) else result.details
+        if model is None or not isinstance(details, model):
             raise RuntimeError(
                 result.content or f"{function.function_name} returned no details"
             )
-        return as_base(result.details, model).model_dump(mode="json")
-    try:
-        value: object = json.loads(result.content)
-        parsed = True
-    except ValueError:
-        value, parsed = result.content, False
+        return as_base(details, model).model_dump(mode="json")
+    value: object
+    if isinstance(full, BaseModel):
+        value, parsed = full.model_dump(mode="json"), True
+    else:
+        try:
+            value = json.loads(text)
+            parsed = True
+        except ValueError:
+            value, parsed = text, False
     if result.is_error:
         # A `{"error": text}` object raises its text.
         error = value.get("error") if isinstance(value, dict) else None

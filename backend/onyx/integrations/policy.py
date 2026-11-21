@@ -29,6 +29,7 @@ from onyx.db.integration_policy import (
     get_chat_session_persona_id,
     get_policy_rows,
     get_session_granted_actions,
+    list_in_flight_task_links,
     list_persona_integration_links,
 )
 from onyx.db.models import Integration, IntegrationAction
@@ -66,6 +67,9 @@ class AgentIntegration(BaseModel):
     # The settings of the agent link. The default agent uses an integration
     # with no link; each action then inherits.
     settings: ActionSettings = ActionSettings()
+    # A task link of a scheduled run: the owner's saved Always allow choices
+    # do not turn its Ask into Allow.
+    task_link: bool = False
 
 
 def parse_action_settings(raw: Mapping[str, object] | None) -> ActionSettings:
@@ -227,13 +231,33 @@ def agent_link_settings_by_integration(
     Another agent uses each integration of its links that the user has
     access to: the user's on/off choice does not apply. ``for_everyone_only``
     keeps only the integrations that each user has."""
-    is_default = persona_id == DEFAULT_PERSONA_ID
+    return linked_integrations(
+        db_session,
+        user_id,
+        links,
+        all_turned_on=persona_id == DEFAULT_PERSONA_ID,
+        for_everyone_only=for_everyone_only,
+    )
+
+
+def linked_integrations(
+    db_session: Session,
+    user_id: UUID,
+    links: Mapping[int, ActionSettings],
+    *,
+    all_turned_on: bool,
+    for_everyone_only: bool = False,
+    task_link: bool = False,
+) -> dict[int, AgentIntegration]:
+    """``all_turned_on``: each integration the user turned on, with the
+    settings of its link. Otherwise each linked integration the user has
+    access to, turned on or not."""
     states = {
         state.integration_id: state
         for state in load_user_integration_states(
-            [user_id], db_session, None if is_default else list(links)
+            [user_id], db_session, None if all_turned_on else list(links)
         )
-        if (state.turned_on or not is_default)
+        if (state.turned_on or not all_turned_on)
         and (state.for_everyone or not for_everyone_only)
     }
     return {
@@ -241,6 +265,7 @@ def agent_link_settings_by_integration(
             integration=integration,
             installation_policy=states[integration.id].installation_policy,
             settings=links.get(integration.id, ActionSettings()),
+            task_link=task_link,
         )
         for integration in list_integrations_by_ids(list(states), db_session)
     }
@@ -264,6 +289,44 @@ def agent_integration_ids(
             links,
             for_everyone_only=for_everyone_only,
         )
+    )
+
+
+def chat_integrations(
+    db_session: Session,
+    user_id: UUID,
+    persona_id: int,
+    persona_links: Mapping[int, ActionSettings],
+    chat_session_id: UUID | None,
+    *,
+    for_everyone_only: bool = False,
+) -> dict[int, AgentIntegration]:
+    """The integrations a chat can use. While a scheduled run is in flight in
+    the chat, these are the task's integrations with the task's settings.
+    The task's authority ends with the run; later turns use the agent."""
+    task_links = (
+        list_in_flight_task_links(db_session, chat_session_id)
+        if chat_session_id is not None
+        else None
+    )
+    if task_links is not None:
+        return linked_integrations(
+            db_session,
+            user_id,
+            {
+                link.integration_id: parse_action_settings(link.action_settings)
+                for link in task_links
+            },
+            all_turned_on=False,
+            for_everyone_only=for_everyone_only,
+            task_link=True,
+        )
+    return agent_link_settings_by_integration(
+        db_session,
+        user_id,
+        persona_id,
+        persona_links,
+        for_everyone_only=for_everyone_only,
     )
 
 
@@ -291,11 +354,12 @@ def resolve_chat_action_policy(
     so an integration the user cannot use on the agent is Blocked."""
     persona_id = get_chat_session_persona_id(db_session, chat_session_id)
     held = (
-        agent_link_settings_by_integration(
+        chat_integrations(
             db_session,
             user_id,
             persona_id,
             persona_link_settings(db_session, persona_id),
+            chat_session_id,
         ).get(integration.id)
         if persona_id is not None
         else None
@@ -305,7 +369,7 @@ def resolve_chat_action_policy(
         integration=integration,
         actions=integration_actions(integration.id, db_session),
         action_keys=[action_key],
-        user_id=user_id,
+        user_id=None if held is not None and held.task_link else user_id,
         link_settings=held.settings if held is not None else None,
         approval_mode=ApprovalMode.INTERACTIVE,
         chat_session_id=None,

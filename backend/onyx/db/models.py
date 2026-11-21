@@ -5648,8 +5648,9 @@ class Skill(Base):
 
 
 class Marketplace(Base):
-    """Where a plugin comes from: a user's "My uploads" or the tenant's
-    Organization library. A marketplace grants no access."""
+    """Where a plugin comes from: a user's "My uploads", the tenant's
+    Organization library, or a GitHub repository (personal with an owner,
+    company without). A marketplace grants no access."""
 
     __tablename__ = "plugin_marketplace"
 
@@ -5680,11 +5681,49 @@ class Marketplace(Base):
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
     )
+    # GitHub source: owner/repo, plus '' for no folder or ref.
+    repository: Mapped[str | None] = mapped_column(String, nullable=True)
+    folder: Mapped[str] = mapped_column(String, nullable=False, server_default="")
+    ref: Mapped[str] = mapped_column(String, nullable=False, server_default="")
+    login_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey(
+            "user.id", ondelete="SET NULL", name="fk_plugin_marketplace_login_user"
+        ),
+        nullable=True,
+    )
+    last_synced_revision: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    last_synced_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_sync_result: Mapped[list[dict[str, Any]] | None] = mapped_column(
+        PGJSONB(), nullable=True
+    )
 
     __table_args__ = (
         CheckConstraint(
-            "(kind = 'user_uploads') = (owner_user_id IS NOT NULL)",
-            name="ck_plugin_marketplace_owner_iff_user_uploads",
+            "(kind = 'user_uploads' AND owner_user_id IS NOT NULL) "
+            "OR (kind = 'organization_library' AND owner_user_id IS NULL) "
+            "OR (kind = 'github' AND repository IS NOT NULL)",
+            name="ck_plugin_marketplace_owner_by_kind",
+        ),
+        Index(
+            "uq_plugin_marketplace_personal_source",
+            "owner_user_id",
+            "repository",
+            "folder",
+            "ref",
+            unique=True,
+            postgresql_where=text("kind = 'github' AND owner_user_id IS NOT NULL"),
+        ),
+        Index(
+            "uq_plugin_marketplace_company_source",
+            "repository",
+            "folder",
+            "ref",
+            unique=True,
+            postgresql_where=text("kind = 'github' AND owner_user_id IS NULL"),
         ),
         Index(
             "uq_plugin_marketplace_organization_library",
@@ -5789,6 +5828,8 @@ class PluginVersion(Base):
     )
     unpacked_size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
     file_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    manifest: Mapped[dict[str, Any] | None] = mapped_column(PGJSONB(), nullable=True)
+    needs: Mapped[list[dict[str, Any]] | None] = mapped_column(PGJSONB(), nullable=True)
     created_by_user_id: Mapped[UUID | None] = mapped_column(
         PGUUID(as_uuid=True),
         ForeignKey("user.id", ondelete="SET NULL"),
@@ -8452,10 +8493,10 @@ class ActionApproval(Base):
 
 
 class ScheduledTask(Base):
-    """A user-defined recurring Craft prompt + schedule.
+    """A user-defined recurring prompt + schedule.
 
-    Each fire spawns a fresh `BuildSession` (via the executor) and records a
-    `ScheduledTaskRun` row pointing back at the session. Soft-deleted tasks
+    Each fire runs the prompt in a new hidden chat and records a
+    `ScheduledTaskRun` row that links the chat. Soft-deleted tasks
     are excluded from dispatch but retained so users can still open past
     runs.
     """
@@ -8524,10 +8565,8 @@ class ScheduledTask(Base):
 class ScheduledTaskRun(Base):
     """One firing of a ScheduledTask.
 
-    `session_id` is nullable for the brief window between the dispatcher
-    inserting this row and the executor creating the BuildSession. On
-    session delete the FK is cleared (SET NULL) so the run row survives
-    as part of the task's run history.
+    `chat_session_id` is set in the commit that creates the run's chat and
+    makes the run RUNNING. It also marks that chat as hidden from history.
     """
 
     __tablename__ = "scheduled_task_run"
@@ -8540,10 +8579,10 @@ class ScheduledTaskRun(Base):
         ForeignKey("scheduled_task.id", ondelete="CASCADE"),
         nullable=False,
     )
-    session_id: Mapped[UUID | None] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("build_session.id", ondelete="SET NULL"),
-        nullable=True,
+    # No foreign key: adding one would lock chat_session. A hard-deleted chat
+    # leaves the id, and the dispatcher cancels a run whose chat is gone.
+    chat_session_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), nullable=True
     )
 
     status: Mapped[ScheduledTaskRunStatus] = mapped_column(
@@ -8589,9 +8628,6 @@ class ScheduledTaskRun(Base):
 
     # Relationships
     task: Mapped[ScheduledTask] = relationship("ScheduledTask", back_populates="runs")
-    session: Mapped[BuildSession | None] = relationship(
-        "BuildSession", foreign_keys=[session_id]
-    )
 
     __table_args__ = (
         Index(
@@ -8600,9 +8636,7 @@ class ScheduledTaskRun(Base):
             desc("started_at"),
         ),
         Index("ix_scheduled_task_run_status", "status"),
-        # Session-view banner lookup: get_scheduled_run_context filters by
-        # session_id on every session open.
-        Index("ix_scheduled_task_run_session", "session_id"),
+        Index("ix_scheduled_task_run_chat_session", "chat_session_id"),
     )
 
 

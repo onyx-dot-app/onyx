@@ -9,6 +9,7 @@ import { ReasoningEffortOverride } from "@/lib/languageModels/types";
 import { FeedbackType } from "@/app/app/types";
 import {
   BackendMessage,
+  ChatSessionNameInfo,
   DocumentsResponse,
   FileDescriptor,
   FileChatDisplay,
@@ -152,6 +153,7 @@ export type PacketType =
   | StreamingError
   | MessageResponseIDInfo
   | MultiModelMessageResponseIDInfo
+  | ChatSessionNameInfo
   | StreamStopInfo
   | UserKnowledgeFilePacket
   | Packet;
@@ -246,6 +248,8 @@ export async function* sendMessage({
     additional_context: additionalContext ?? null,
     // The web chat shows responses that background agents start later.
     accepts_follow_ups: true,
+    // The web chat updates the sidebar when the server names a new chat.
+    accepts_chat_session_name: true,
   };
 
   const body = JSON.stringify(payload);

@@ -11,6 +11,7 @@ function entry(over: Partial<MemberPluginEntry>): MemberPluginEntry {
     description: null,
     section: "shared",
     ownerEmail: null,
+    marketplace: null,
     skills: [customFixture({ enabled: true })],
     ...over,
   };
@@ -24,6 +25,8 @@ const ENTRIES = [
     ownerEmail: "admin@example.com",
   }),
   entry({ id: "shared", section: "shared", ownerEmail: "other@example.com" }),
+  entry({ id: "synced", section: "marketplace", ownerEmail: ME }),
+  entry({ id: "private", section: "private", ownerEmail: "other@example.com" }),
   entry({
     id: "off",
     name: "reports",
@@ -44,6 +47,8 @@ function ids(options: { status?: "all" | "on" | "off"; query?: string } = {}) {
     mine: groups.mine.map((plugin) => plugin.id),
     organization: groups.organization.map((plugin) => plugin.id),
     shared: groups.shared.map((plugin) => plugin.id),
+    marketplace: groups.marketplace.map((plugin) => plugin.id),
+    private: groups.private.map((plugin) => plugin.id),
   };
 }
 
@@ -52,6 +57,8 @@ test("the user's own plugins stay in Created by you after a publish", () => {
     mine: ["mine-published"],
     organization: ["org"],
     shared: ["shared", "off"],
+    marketplace: ["synced"],
+    private: ["private"],
   });
 });
 
@@ -61,5 +68,7 @@ test("the status filter follows the switch and the search matches names", () => 
     mine: [],
     organization: [],
     shared: ["off"],
+    marketplace: [],
+    private: [],
   });
 });

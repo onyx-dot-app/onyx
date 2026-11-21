@@ -239,7 +239,11 @@ const AppInputBar = React.memo(
       (): ComposedMessage => ({ message, mentions }),
       [message, mentions]
     );
-    const chatSkills = useChatSkills();
+    // Built-ins need the sandbox tools, which these turns do not get.
+    const chatSkills = useChatSkills({
+      builtIns:
+        !deepResearchEnabled && !isMultiModelActive && !incognitoEnabled,
+    });
     // At the limit of distinct mentions, the `@` menu offers only the skills
     // already picked; a menu with no match stays closed.
     const mentionEntries = useMemo(() => {

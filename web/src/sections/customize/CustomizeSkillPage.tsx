@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { useFormatter, useTranslations } from "next-intl";
 import useSWR, { useSWRConfig } from "swr";
 import {
@@ -21,6 +21,7 @@ import useUserSkills from "@/hooks/useUserSkills";
 import {
   adminSkillHref,
   customizeTabHref,
+  pluginHref,
   skillHref,
 } from "@/lib/customize/paths";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -79,16 +80,24 @@ export default function CustomizeSkillPage({
   const enablement = useSkillEnablement(list.data?.customs ?? [], list.refresh);
   const refreshLists = useRefreshSkillLists();
   const listed = list.data?.customs.find((item) => item.id === skillId);
+  const isPlugin = listed?.kind === "plugin";
   const canEdit =
-    listed?.user_permission === "OWNER" || listed?.user_permission === "EDITOR";
+    !isPlugin &&
+    (listed?.user_permission === "OWNER" ||
+      listed?.user_permission === "EDITOR");
+  const locked = listed?.content_locked === true;
+  const canChangeContent = canEdit && !locked;
   const detail = useSWR<SkillEditableDetail>(
     canEdit ? SWR_KEYS.editableSkill(skillId) : null,
     errorHandlingFetcher
   );
   const preview = useSWR<SkillPreview>(
-    listed && !canEdit ? SWR_KEYS.userSkillPreview(skillId) : null,
+    listed && !isPlugin && !canEdit ? SWR_KEYS.userSkillPreview(skillId) : null,
     errorHandlingFetcher
   );
+  useEffect(() => {
+    if (isPlugin) navigation.go(pluginHref(skillId), { replace: true });
+  }, [isPlugin, navigation, skillId]);
   const [sharing, setSharing] = useState(false);
   const [contentsDirty, setContentsDirty] = useState(false);
   const removeModal = useCreateModal();
@@ -98,7 +107,7 @@ export default function CustomizeSkillPage({
   const instructions =
     detail.data?.instructions_markdown ?? preview.data?.instructions_markdown;
   const files = detail.data?.files ?? preview.data?.files ?? null;
-  const editing = canEdit && searchParams.get("edit") === "1";
+  const editing = canChangeContent && searchParams.get("edit") === "1";
   const unsaved = useUnsavedChangesGuard({ isDirty: editing && contentsDirty });
   const tab = editing ? "contents" : parseTab(searchParams.get("tab"));
   const listHref =
@@ -187,7 +196,7 @@ export default function CustomizeSkillPage({
 
   const menu: DropdownMenuItem[] = skill
     ? [
-        ...(canEdit
+        ...(canChangeContent
           ? [
               {
                 kind: "action" as const,
@@ -278,6 +287,7 @@ export default function CustomizeSkillPage({
               instructions={instructions}
               files={files}
               detail={detail.data}
+              locked={locked}
               editing={editing}
               onEditingChange={setEditing}
               onDirtyChange={setContentsDirty}
@@ -327,6 +337,7 @@ export default function CustomizeSkillPage({
         ) : undefined
       }
       loading={
+        isPlugin ||
         list.isLoading ||
         (canEdit && detail.isLoading) ||
         // A skill made a moment ago can be missing from a stale list.
@@ -362,7 +373,7 @@ export default function CustomizeSkillPage({
                   new URL(skillHref(skill.id), window.location.origin).href
                 }
               />,
-              ...(canEdit
+              ...(canEdit && !listed?.marketplace?.personal
                 ? [
                     <Button
                       key="share"

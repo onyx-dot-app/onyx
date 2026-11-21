@@ -6,7 +6,6 @@ from collections.abc import Collection, Sequence
 from urllib.parse import urlsplit
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, InstanceOf
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import ExternalAppType, IntegrationKind
@@ -50,45 +49,6 @@ def list_runnable_integrations(db_session: Session, user_id: UUID) -> list[Integ
             for state in load_user_integration_states([user_id], db_session)
             if state.on
         ],
-    )
-
-
-class TaskIntegrations(BaseModel):
-    """The integrations of a task that the owner still has access to, also
-    one the owner turned off, with the settings of the task for each."""
-
-    model_config = ConfigDict(frozen=True)
-
-    accessible: list[InstanceOf[Integration]]
-    settings: dict[int, ActionSettings]
-
-    def integrations(self) -> list[Integration]:
-        """The enabled integrations, in integration order."""
-        return [integration for integration in self.accessible if integration.enabled]
-
-    def link_settings(self, integration_id: int) -> ActionSettings | None:
-        """The settings of the task for the integration. None: the task
-        cannot use it."""
-        return self.settings.get(integration_id)
-
-
-def load_task_integrations(
-    db_session: Session, task_id: UUID, user_id: UUID
-) -> TaskIntegrations:
-    links = {
-        link.integration_id: parse_action_settings(link.action_settings)
-        for link in list_task_integration_links(db_session, task_id)
-    }
-    accessible = list_integrations_by_ids(
-        [
-            state.integration_id
-            for state in load_user_integration_states([user_id], db_session, links)
-        ],
-        db_session,
-    )
-    return TaskIntegrations(
-        accessible=accessible,
-        settings={integration.id: links[integration.id] for integration in accessible},
     )
 
 
@@ -150,23 +110,12 @@ def resolve_craft_action_policies(
     actions: Sequence[IntegrationAction],
     action_keys: Collection[str],
     user_id: UUID,
-    task: TaskIntegrations | None,
 ) -> dict[str, EffectivePolicy]:
-    """``actions`` are the stored actions of the integration. A scheduled run
-    uses the settings of its task, not the saved Always allow choices of its
-    owner, and blocks each action of an integration that the task does not
-    have."""
-    if task is None:
-        return _interactive_policies(
-            db_session, integration, actions, action_keys, user_id, ActionSettings()
-        )
+    """The policies of a Craft session: ``actions`` are the stored actions
+    of the integration, and the saved Always allow choices of ``user_id``
+    apply."""
     return _interactive_policies(
-        db_session,
-        integration,
-        actions,
-        action_keys,
-        None,
-        task.link_settings(integration.id),
+        db_session, integration, actions, action_keys, user_id, ActionSettings()
     )
 
 
@@ -220,7 +169,7 @@ def _integration_view(
             if settings is not None
             else None
         ),
-        runnable=integration.enabled and integration.tool_id is None,
+        runnable=_chat_runnable(integration),
         actions=[
             TaskActionView(
                 key=action.key,
@@ -238,6 +187,14 @@ def _integration_view(
     )
 
 
+def _chat_runnable(integration: Integration) -> bool:
+    """Chat runs an API integration only through its OpenAPI tool
+    (``build_integration_chat_tools``)."""
+    return integration.enabled and not (
+        integration.kind is IntegrationKind.API and integration.tool_id is None
+    )
+
+
 def _known_actions(settings: ActionSettings, keys: set[str]) -> ActionSettings:
     return settings.model_copy(
         update={
@@ -251,9 +208,9 @@ def _known_actions(settings: ActionSettings, keys: set[str]) -> ActionSettings:
 def list_task_integration_views(
     db_session: Session, user: User, task_id: UUID | None
 ) -> list[TaskIntegrationView]:
-    """Each integration, other than OpenAPI, that is on for the user, and
+    """Each integration that is on for the user and that chat can run, and
     each integration of the task that the user has access to, also one that
-    is off or that Craft cannot run, so that a save keeps its settings.
+    is off or that chat cannot run, so that a save keeps its settings.
     ``task_id`` None gives the catalog for a new task: no integration is
     enabled and each action inherits. The stored settings leave out action
     keys that the integration has no more, so a save does not send them
@@ -280,11 +237,7 @@ def list_task_integration_views(
         )
         for integration in list_integrations_by_ids(list(states), db_session)
         if integration.id in links
-        or (
-            states[integration.id].on
-            and integration.enabled
-            and integration.tool_id is None
-        )
+        or (states[integration.id].on and _chat_runnable(integration))
     ]
     return sorted(views, key=lambda view: (view.name.lower(), view.id))
 

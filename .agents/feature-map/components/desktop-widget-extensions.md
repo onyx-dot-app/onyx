@@ -55,7 +55,11 @@ It also holds desktop v2 (`desktop-v2/`), a preview native app that
 installs beside v1 and is not the default. It is built for macOS, and as
 unsigned CI previews for Windows and Linux; only macOS has a release. It signs in through
 `/api/auth/mobile/login`, hands the token to the remote web UI as the session
-cookie, and gives IPC only to its bundled windows. It has its own CI build
+cookie, and gives IPC only to its bundled windows. The main window never runs
+the web sign-in: a load of `/auth/login`, `/auth/signup`, an `/api/auth/.../authorize`
+URL, or an identity provider page whose `redirect_uri` is a server `/auth/` path
+makes v2 hand the cookie over again, or end the session and show its own
+sign-in window. A change to those paths must keep this check. It has its own CI build
 and release; v1's release does not build it. Its launcher panel (global
 shortcut) calls the chat endpoints from Rust with the bearer token:
 `POST /chat/create-chat-session`, then `POST /chat/send-chat-message`

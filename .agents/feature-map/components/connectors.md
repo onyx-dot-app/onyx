@@ -272,7 +272,12 @@ downloaded file with
    (`connectors/interfaces.py:prune_listing_honors_indexing_start`). A dated
    listing omits unchanged folders, so
    `background/celery/tasks/pruning/tasks.py:_get_live_hierarchy_node_ids` keeps the hierarchy nodes
-   above each kept document.
+   above each kept document. A source filter with only day precision must
+   filter exact times on the client. IMAP `SEARCH SINCE/BEFORE` compares
+   only the date of `INTERNALDATE`, in the server's timezone.
+   `connectors/imap/connector.py:_fetch_email_ids_in_mailbox` searches one
+   extra day on each side, then keeps messages whose `INTERNALDATE` is in
+   `[start, end)`.
 7. `one-credential-path` **Pick one credential path.**
    `connectors/factory.py:instantiate_connector` calls `set_credentials_provider` for a `CredentialsConnector` and
    `load_credentials` for the others. A connector that implements the provider

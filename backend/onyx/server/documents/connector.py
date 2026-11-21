@@ -2302,13 +2302,17 @@ def get_connectors(
 
 @router.get("/indexed-sources", tags=PUBLIC_API_TAGS)
 def get_indexed_sources(
+    include_ingestion_api: bool = False,
     # Filter vocabulary for search, not the admin connector surface — hence
     # READ_SEARCH rather than READ_CONNECTORS.
     _: User = Depends(require_permission(Permission.READ_SEARCH)),
     db_session: Session = Depends(get_session),
 ) -> IndexedSourcesResponse:
     sources = sorted(
-        fetch_unique_document_sources(db_session), key=lambda source: source.value
+        fetch_unique_document_sources(
+            db_session, include_ingestion_api=include_ingestion_api
+        ),
+        key=lambda source: source.value,
     )
     return IndexedSourcesResponse(sources=sources)
 

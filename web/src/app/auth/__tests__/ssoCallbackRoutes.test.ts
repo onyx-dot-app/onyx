@@ -124,6 +124,45 @@ describe.each([
     expect(result.headers.getSetCookie()).toEqual([PKCE_CLEANUP_COOKIE]);
   });
 
+  it.each([
+    [
+      "a desktop browser to the handoff page",
+      "Mozilla/5.0 (Macintosh; Intel Mac OS X 15_6) AppleWebKit/605.1.15 Safari/605.1.15",
+      true,
+    ],
+    [
+      "a phone's auth session straight to the deep link",
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 19_0 like Mac OS X) AppleWebKit/605.1.15 Mobile/15E148",
+      false,
+    ],
+  ])("sends %s", async (_label, userAgent, toPage) => {
+    const deepLink = "onyx://auth/callback?code=one-time&state=app-state";
+    const headers = new Headers({ location: deepLink });
+    headers.append("set-cookie", PKCE_CLEANUP_COOKIE);
+    jest
+      .spyOn(global, "fetch")
+      .mockResolvedValue(new Response(null, { status: 302, headers }));
+    const request = new NextRequest(
+      `${APP_DOMAIN}${path}?state=state-value&code=auth-code`,
+      { headers: { "user-agent": userAgent } }
+    );
+
+    const result = await handler(request);
+
+    const location = result.headers.get("location") ?? "";
+    if (toPage) {
+      const page = new URL(location);
+      expect(`${page.origin}${page.pathname}`).toBe(
+        `${APP_DOMAIN}/auth/app-handoff`
+      );
+      expect(decodeURIComponent(page.hash.slice(1))).toBe(deepLink);
+      expect(page.search).toBe("");
+    } else {
+      expect(location).toBe(deepLink);
+    }
+    expect(result.headers.getSetCookie()).toEqual([PKCE_CLEANUP_COOKIE]);
+  });
+
   it("sends a cookieless success to the error page", async () => {
     jest.spyOn(global, "fetch").mockResolvedValue(
       new Response(null, {

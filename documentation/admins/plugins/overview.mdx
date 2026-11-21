@@ -108,6 +108,18 @@ or on the **Overview** tab of the integration.
 
 Only users with the organization-wide **Manage Actions** permission can change the install setting.
 
+When an integration is **Required** and each user signs in with their own account,
+each user must connect it before they can use chat, Craft, or the Chrome extension.
+Onyx shows a **Connect your work tools** page on the next page load,
+with a **Connect** button for each Required integration. **Continue** stays off until the user connects each one.
+Admins see the same page, but they can click **Continue** without a connection.
+The page then stays hidden for the admin until they open Onyx in a new browser tab.
+If a connection fails or the user cancels it, the page asks the user to contact an admin and shows **Skip for now**.
+**Skip for now** hides the page until the user opens Onyx in a new browser tab.
+A Required integration that only an admin can connect, such as one with an organization account, does not block users.
+The page is a prompt in the Onyx web and desktop apps. The Onyx API and the mobile app do not check it.
+If Onyx cannot read the list of integrations when a page loads, it does not show the page.
+
 On the Enterprise plan, a group can have its own install setting. Set it in **Group Access** on the **Overview** tab.
 A group setting replaces the company setting for the members of the group, also when it is stricter.
 A group with no setting uses the company setting.

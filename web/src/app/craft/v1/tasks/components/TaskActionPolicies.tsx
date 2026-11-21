@@ -23,21 +23,25 @@ interface TaskActionPoliciesProps {
   taskId: string | null;
   value: TaskIntegrationLink[] | null;
   onChange: (value: TaskIntegrationLink[]) => void;
+  /** Reads the integrations from this URL instead of the Craft one. */
+  url?: string;
 }
 
 export default function TaskActionPolicies({
   taskId,
   value,
   onChange,
+  url,
 }: TaskActionPoliciesProps) {
   const t = useTranslations("craft.actionPolicies");
   const openingId = useId();
   const [catalog, setCatalog] = useState<TaskIntegrationView[] | null>(null);
   const { error, mutate } = useSWR<TaskIntegrationView[], Error>(
     [
-      taskId
-        ? SWR_KEYS.taskActionPolicies(taskId)
-        : SWR_KEYS.personalActionPolicies,
+      url ??
+        (taskId
+          ? SWR_KEYS.taskActionPolicies(taskId)
+          : SWR_KEYS.personalActionPolicies),
       openingId,
     ],
     ([url]: [string, string]) => errorHandlingFetcher(url),

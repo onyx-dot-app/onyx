@@ -4,12 +4,13 @@ from uuid import UUID, uuid4
 import pytest
 
 from onyx.db.enums import (
+    MarketplaceKind,
     Permission,
     PluginInstallationPolicy,
     SkillAccessLevel,
     SkillSharePermission,
 )
-from onyx.db.models import Plugin, User
+from onyx.db.models import Marketplace, Plugin, User
 from onyx.db.plugin_access import (
     PluginAccess,
     PluginGroupRowAccess,
@@ -52,6 +53,15 @@ class _Case:
             published=self.published,
             installation_policy=None,
             marketplace_default_policy=PluginInstallationPolicy.AVAILABLE,
+            marketplace_id=uuid4(),
+            marketplace_kind=(
+                MarketplaceKind.ORGANIZATION_LIBRARY
+                if self.published
+                else MarketplaceKind.USER_UPLOADS
+            ),
+            marketplace_name="Marketplace",
+            marketplace_repository=None,
+            marketplace_owner_user_id=None,
             required_for_anyone=False,
             current_version_id=self.skill.id,
             current_version_number=1,
@@ -61,6 +71,7 @@ class _Case:
             name=self.skill.name,
             description=self.skill.description,
             is_valid=True,
+            is_skill=True,
             user_shares=tuple(self.user_shares),
             group_rows=tuple(
                 PluginGroupRowAccess(
@@ -80,6 +91,7 @@ def _skill(author: User, *, is_public: bool = False) -> _Case:
         name=f"skill-{uuid4().hex}",
         description="Description",
         author_user_id=author.id,
+        marketplace=Marketplace(kind=MarketplaceKind.USER_UPLOADS, name="My uploads"),
     )
     return _Case(skill=skill, published=is_public)
 

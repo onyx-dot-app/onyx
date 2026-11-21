@@ -3,13 +3,16 @@
  * `backend/onyx/server/features/skill/models.py`.
  */
 
+import type { SkillMarketplace } from "@/lib/marketplaces/types";
+import type { PluginDetail } from "@/lib/plugins/types";
+
 export type SkillInstallationPolicy =
   | "AVAILABLE"
   | "DEFAULT"
   | "REQUIRED"
   | "NOT_AVAILABLE";
 
-/** A marketplace default cannot be REQUIRED. */
+/** The Organization library default cannot be REQUIRED. */
 export type OrganizationLibraryDefaultPolicy = Exclude<
   SkillInstallationPolicy,
   "REQUIRED"
@@ -86,6 +89,12 @@ export interface Skill {
   group_summaries: SkillGroupSummary[];
   public_permission: SkillSharePermission | null;
   user_permission: SkillAccessLevel | null;
+  /** False for a skill an organization-wide manager sees only through that
+   * permission. The member lists leave it out. */
+  member_visible: boolean;
+  /** The user turned the skill on, but these skills hold one of its names,
+   * so it is off. */
+  name_held_by: string[];
   /** Newest plugin version of a custom skill. Edits send it back as
    * `base_version_id`, so a save over a newer version gets a 409. */
   current_version_id: string | null;
@@ -94,6 +103,12 @@ export interface Skill {
   published_version_number: number | null;
   /** The version that waits for an admin's review. */
   pending_version_number: number | null;
+  kind: "skill" | "plugin";
+  available_count: number;
+  needed_count: number;
+  plugin: PluginDetail | null;
+  marketplace: SkillMarketplace | null;
+  content_locked: boolean;
 }
 
 export type BuiltinSkill = Skill & {
@@ -105,13 +120,15 @@ export type CustomSkill = Skill & {
   source: "custom";
 };
 
-/** A custom skill that chat agents get, at the version the user runs. */
+/** A skill that chat agents get: a custom skill at the version the user runs, or a built-in. */
 export interface ChatSkill {
   name: string;
   description: string;
   /** `metadata.short-description` in the SKILL.md frontmatter. */
   short_description: string | null;
   version_id: string;
+  /** Set for a built-in, which needs the turn's sandbox tools. */
+  built_in_skill_id: string | null;
 }
 
 export interface SkillsList {
@@ -144,11 +161,15 @@ export interface SkillVersion {
   created_by_email: string | null;
   is_current: boolean;
   review_status: SkillVersionReviewStatus;
+  /** The version in plugin.json, for a plugin version that has one. */
+  manifest_version: string | null;
 }
 
 export interface SkillVersionPreview {
   description: string;
   instructions_markdown: string;
+  /** The skills, integrations and plugin.json of a plugin version. */
+  plugin: PluginDetail | null;
 }
 
 export interface SkillReviewRequest {
@@ -173,20 +194,6 @@ export interface SkillBundleContents {
   description: string;
   instructions_markdown: string;
   files: SkillBundleFile[];
-}
-
-export interface GitHubSkillPreview {
-  path: string;
-  name: string;
-  description: string | null;
-  unavailable_reason: string | null;
-}
-
-export interface GitHubSkillsPreview {
-  repository: string;
-  revision: string;
-  subpath: string | null;
-  skills: GitHubSkillPreview[];
 }
 
 export interface GitHubImportedSkill {

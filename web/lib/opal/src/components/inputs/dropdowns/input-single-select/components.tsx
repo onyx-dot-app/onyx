@@ -9,6 +9,9 @@ import type { InputSingleSelectProps } from "@opal/components/inputs/dropdowns/t
  * focus alone does not open it. Re-picking the selected option unselects
  * it; with a `defaultOption` the select never reads as empty. The family's
  * type-in sibling is `InputSingleComboBox`.
+ *
+ * Inside `InputHorizontal` or `InputVertical`, the row's `disabled` and
+ * `disabledTooltip` apply to it too.
  */
 function InputSingleSelect(props: InputSingleSelectProps) {
   return <SingleSelectField {...props} trigger="button" />;

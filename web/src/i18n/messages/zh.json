@@ -10441,7 +10441,8 @@
             "public": "找到 {count, plural, one {# 个工具} other {# 个工具}}。该服务器无需登录。",
             "oauth": "该服务器使用 OAuth 登录。",
             "authUnknown": "该服务器需要登录。请添加 API 密钥请求头或 OAuth。",
-            "unreachable": "Onyx 无法访问此服务器。请检查 URL。"
+            "unreachable": "Onyx 无法访问此服务器。请检查 URL。",
+            "forbidden": "只有管理员可以在添加前检查此服务器。您仍然可以添加它。"
           },
           "transport": {
             "title": "传输方式",
@@ -10695,12 +10696,120 @@
         "saveFailed": "无法保存安装设置。",
         "title": "安装设置",
         "description": "谁可以使用此集成。不可用会使其保持私有：只有所有者、共享对象以及拥有自身设置的群组可以使用。要将其限制为所有者和共享对象，请移除这些群组设置。",
-        "notAvailable": "私有。只有所有者、共享对象以及拥有自身设置的群组可以使用。"
+        "notAvailable": "私有。只有所有者、共享对象以及拥有自身设置的群组可以使用。",
+        "required": "使用自己账号登录的成员必须先连接它，才能使用聊天和 Craft。"
       },
       "ownedBy": "所有者：{owner}",
       "groupAccess": {
         "saved": "已保存 {name} 的群组设置。",
         "saveFailed": "无法保存群组设置。"
+      }
+    },
+    "serviceStatus": {
+      "page": {
+        "description": "Onyx 实例当前的资源使用情况和搜索集群健康状况",
+        "refresh": "刷新",
+        "refreshFailed": "无法刷新集群状态。页面显示的是上一次的结果。",
+        "loadFailed": "无法读取搜索集群状态。请检查 OpenSearch 是否可以访问。"
+      },
+      "cluster": {
+        "title": "搜索集群 - OpenSearch",
+        "status": "集群状态",
+        "version": "OpenSearch {version}",
+        "health": "状态 {health}",
+        "updated": "{time}更新",
+        "dataNodes": "数据节点",
+        "shards": "分片",
+        "shardLayout": "{primaries} × {copies}",
+        "copies": "副本",
+        "indexSize": "索引大小",
+        "chunks": "分块",
+        "healthGreen": "绿色：所有分片副本都已分配。",
+        "healthYellow": "黄色：部分副本分片未分配。搜索正常，但丢失数据节点可能导致数据丢失。",
+        "healthYellowSingleNode": "黄色：副本需要第二个数据节点。对于只有一个数据节点的集群，这是正常状态，搜索可以正常工作。",
+        "healthRed": "红色：部分主分片未分配，因此索引的一部分无法搜索。"
+      },
+      "searches": {
+        "loadTitle": "搜索负载",
+        "loadUnit": "次/秒",
+        "timeTitle": "搜索延迟",
+        "seconds": "{value} 秒",
+        "milliseconds": "{value} 毫秒",
+        "loadFailed": "无法读取最近的搜索。",
+        "p90Note": "(第 90 百分位)",
+        "p90Row": "p90 {value}",
+        "p10Row": "p10 {value}",
+        "minuteLabel": "{time}：p90 {p90}，p10 {p10}",
+        "rateTooltip": "{rate} 次/秒",
+        "millisecondsUnit": "毫秒",
+        "secondsUnit": "秒",
+        "failedInMinute": "{count, plural, other {# 次失败}}"
+      },
+      "nodes": {
+        "title": "数据节点",
+        "disk": "磁盘使用量",
+        "vector": "向量内存",
+        "percent": "{value}%",
+        "usedOfTotal": "{used} / {total} {unit}",
+        "shards": "{count, plural, other {# 个分片}}",
+        "unnamed": "节点 {number}",
+        "copyName": "复制 OpenSearch 节点名称 ({name})"
+      },
+      "indexes": {
+        "title": "索引",
+        "chunks": "分块",
+        "shards": "分片",
+        "reindex": "重建索引",
+        "detail": "嵌入模型 · {dim} 维",
+        "deleted": "已删除分块 {percent}%",
+        "detailQuantized": "嵌入模型 · {dim} 维 · {quantization} 向量",
+        "reindexProgress": "当前的 {percent}%"
+      },
+      "issues": {
+        "title": "问题和建议",
+        "none": "未发现问题。",
+        "criticalCount": "{count} 个严重问题",
+        "warningCount": "{count, plural, other {# 个警告}}",
+        "nodeCount": "{count} 个数据节点",
+        "indexSettings": "索引设置",
+        "sizingGuide": "容量规划指南",
+        "clusterRed": {
+          "title": "集群状态为红色",
+          "description": "部分主分片未分配，因此索引的一部分无法搜索。请检查 OpenSearch 日志。"
+        },
+        "unassignedShards": {
+          "title": "{value, plural, other {# 个分片副本未分配}}",
+          "description": "OpenSearch 没有可放置它们的数据节点。请添加数据节点或减少副本数量。"
+        },
+        "diskCritical": {
+          "title": "{nodes} 的磁盘使用率为 {value}%",
+          "description": "数据节点磁盘达到 85% 时，OpenSearch 会停止在其上放置分片。请添加存储或数据节点。"
+        },
+        "diskWarning": {
+          "title": "{nodes} 的磁盘使用率为 {value}%",
+          "description": "重建索引需要为第二个索引预留空间。请添加存储或数据节点。"
+        },
+        "vectorCritical": {
+          "title": "{nodes} 的向量内存使用率为 {value}%",
+          "description": "向量无法全部放入内存，因此搜索会从磁盘读取它们。请添加内存或数据节点，或使用更小的向量量化。"
+        },
+        "vectorWarning": {
+          "title": "{nodes} 的向量内存使用率为 {value}%",
+          "description": "当向量无法全部放入内存时，搜索会变慢。请添加内存或数据节点，或使用更小的向量量化。"
+        },
+        "heap": {
+          "title": "{nodes} 的 JVM 堆使用率为 {value}%",
+          "description": "堆满时，OpenSearch 可能会拒绝请求。请添加内存或数据节点。"
+        },
+        "indexMissing": {
+          "title": "搜索索引缺失",
+          "description": "OpenSearch 中没有当前搜索设置的索引，因此搜索没有结果。请检查 OpenSearch 日志，然后在索引设置中开始重新索引。"
+        },
+        "nodesUnanswered": {
+          "title": "{value, plural, other {# 个数据节点没有响应}}",
+          "description": "状态中缺少这些节点未报告的信息，例如磁盘和内存。请确认所有数据节点都在运行，然后刷新。"
+        },
+        "dismiss": "忽略"
       }
     }
   },
@@ -12526,7 +12635,7 @@
               "between": "{start} – {end} 发送"
             },
             "owner": "所有者：{owner}",
-            "folder": "在文件夹 {id} 中",
+            "folder": "在文件夹 {name} 中",
             "nodeType": "类型：{type}",
             "author": "发送者：{author}",
             "message": "消息 {id}",
@@ -14014,7 +14123,6 @@
     "chatPanel": {
       "input": {
         "continuePlaceholder": "继续对话...",
-        "scheduledRunPlaceholder": "计划运行进行中...",
         "subagentPlaceholder": "切换到主代理以发送消息"
       },
       "openSidebar": {
@@ -14032,8 +14140,7 @@
       },
       "toast": {
         "operationWait": "请等待当前操作完成。",
-        "sandboxWait": "请等待沙箱初始化",
-        "scheduledRunWait": "请等待计划运行结束。"
+        "sandboxWait": "请等待沙箱初始化"
       },
       "loadError": {
         "title": "无法加载会话",
@@ -14484,23 +14591,6 @@
         "button": "唤醒沙箱"
       }
     },
-    "scheduledRun": {
-      "badge": {
-        "label": "已计划"
-      },
-      "startedAt": {
-        "label": "开始于 {time}"
-      },
-      "status": {
-        "awaitingApproval": "此计划运行正在等待批准。恢复并结束后即可发送后续消息。",
-        "running": "此计划运行仍在进行中。运行结束后即可发送后续消息。",
-        "startedBy": "此会话由计划任务 {task} 于 {time} 启动。"
-      },
-      "viewTask": {
-        "ariaLabel": "查看计划任务 {task}。{status}",
-        "label": "查看任务"
-      }
-    },
     "setupCard": {
       "appFallback": {
         "label": "外部应用 {id}"
@@ -14773,7 +14863,8 @@
         },
         "tabs": {
           "dailyWeekly": "每日 / 每周",
-          "interval": "间隔"
+          "interval": "间隔",
+          "advanced": "高级"
         },
         "weekdays": {
           "fri": "周五",
@@ -14783,6 +14874,21 @@
           "thu": "周四",
           "tue": "周二",
           "wed": "周三"
+        },
+        "advanced": {
+          "cronLabel": "Cron 表达式",
+          "hint": "五个字段：分钟、小时、日、月、星期。表达式按 UTC 运行。",
+          "placeholder": "例如 0 9 * * 1-5"
+        },
+        "errors": {
+          "intervalNotPositiveInteger": "间隔必须是不小于 1 的整数。",
+          "minutesIntervalTooLong": "超过 59 分钟的间隔请使用小时。",
+          "hoursIntervalTooLong": "超过 23 小时的间隔请使用每日计划。",
+          "dayIntervalTimeRequired": "请为按天的间隔选择一天中的时间。",
+          "timeRequired": "请选择一天中的时间。",
+          "weekdayOutOfRange": "星期值必须为 0-6（周日..周六）。",
+          "cronRequired": "请输入 cron 表达式。",
+          "cronFieldCount": "Cron 必须正好有 5 个字段（分钟 小时 日 月 星期）。"
         }
       },
       "unviewedResults": "新结果"
@@ -16171,6 +16277,9 @@
         },
         "discordBot": {
           "label": "Discord 机器人"
+        },
+        "serviceStatus": {
+          "label": "服务状态"
         }
       },
       "sections": {
@@ -16248,6 +16357,9 @@
       },
       "customize": {
         "label": "自定义"
+      },
+      "scheduledTasks": {
+        "label": "计划任务"
       }
     },
     "chatButton": {
@@ -16477,84 +16589,15 @@
         }
       },
       "importGithub": {
-        "cancelButton": {
-          "label": "取消"
-        },
         "doneButton": {
           "label": "完成"
         },
-        "header": {
-          "chooseDescription": "从 {repository} 中选择技能。",
-          "completeDescription": "查看已添加到您技能中的内容。",
-          "completeTitle": "GitHub 导入完成",
-          "description": "从 GitHub 仓库导入一个或多个技能。",
-          "title": "从 GitHub 导入"
-        },
-        "importError": {
-          "message": "无法导入技能。",
-          "title": "无法导入技能"
-        },
-        "loadError": {
-          "message": "无法加载仓库。",
-          "title": "无法加载仓库"
-        },
-        "privateRepos": {
-          "askAdmin": "公开仓库可直接导入。导入私有仓库前，请联系管理员设置 GitHub。",
-          "connect": "公开仓库可直接导入。连接 GitHub 即可导入私有仓库。",
-          "connectButton": {
-            "label": "连接 GitHub"
-          },
-          "connected": "公开仓库可直接导入。私有仓库将使用您的 GitHub 连接。",
-          "needsConnection": "公开仓库可直接导入。私有仓库需要 GitHub 连接。",
-          "setUp": "公开仓库可直接导入。导入私有仓库前，请先设置 GitHub。",
-          "setUpButton": {
-            "label": "设置 GitHub"
-          }
-        },
-        "repositoryInput": {
-          "label": "仓库"
-        },
-        "result": {
-          "disabledCount": "{count} 个导入后处于禁用状态，因为已有同名技能处于启用状态。",
-          "enabledCount": "{count} 个已自动启用。",
-          "failedCount": "{count} 个无法导入。",
-          "importedSection": {
-            "title": "已导入"
-          },
-          "importedTitle": "{count, plural, one {已导入 # 个技能} other {已导入 # 个技能}}",
-          "noneTitle": "未导入任何技能",
-          "notImportedSection": {
-            "title": "未导入"
-          },
-          "notSelectedCount": "{count} 个未选择。"
-        },
-        "selectAll": {
-          "ariaLabel": "选择全部可导入技能"
-        },
-        "selection": {
-          "label": "已选择 {selected} / {total, plural, one {# 个可导入技能} other {# 个可导入技能}}"
-        },
-        "skillCheckbox": {
-          "ariaLabel": "选择 {name}"
-        },
-        "skillTag": {
-          "disabled": "已禁用",
-          "enabled": "已启用"
-        },
         "submitButton": {
           "importLabel": "{count, plural, one {导入技能} other {导入 # 个技能}}",
-          "importingLabel": "正在导入…",
-          "searchLabel": "搜索仓库",
-          "searchingLabel": "正在搜索…"
-        },
-        "unavailableFallback": "无法导入此技能。",
-        "unavailableTag": {
-          "label": "无法导入"
+          "importingLabel": "正在导入…"
         },
         "sharing": {
-          "title": "导入技能的访问权限",
-          "configureButton": "配置访问权限",
-          "description": "这些访问设置适用于全部 {count, plural, one {# 个所选技能} other {# 个所选技能}}。"
+          "configureButton": "配置访问权限"
         }
       },
       "nameConflict": {
@@ -16671,10 +16714,22 @@
           "remove": "移除 {name}",
           "shared": "已与此群组共享",
           "settingOnly": "仅群组设置"
+        },
+        "plugin": {
+          "installation": {
+            "description": "选择如何为所有有权访问的人安装此插件。"
+          },
+          "published": {
+            "description": "已发布。组织中的所有人都可以使用此插件。"
+          },
+          "publishWarning": {
+            "description": "保存后，组织中的所有人都可以使用此插件。您无法再将其设为私有。只有管理员可以删除它。",
+            "reviewDescription": "在管理员批准请求之前，插件保持私有。批准后，您无法再将其设为私有。"
+          },
+          "publishOff": {
+            "description": "管理员已关闭向组织发布。请让管理员发布此插件。"
+          }
         }
-      },
-      "placeholders": {
-        "githubRepository": "suoyouzhe/cangku 或 https://github.com/suoyouzhe/cangku"
       },
       "tabs": {
         "details": "详情",
@@ -16686,7 +16741,8 @@
         "columns": {
           "version": "版本",
           "madeBy": "创建者",
-          "date": "日期"
+          "date": "日期",
+          "manifestVersion": "plugin.json"
         },
         "versionLabel": "版本 {number}",
         "currentBadge": "当前",
@@ -16709,7 +16765,9 @@
           "back": "所有版本",
           "loadError": {
             "title": "无法加载此版本"
-          }
+          },
+          "skills": "技能 · {count}",
+          "integrations": "集成 · {count}"
         },
         "status": {
           "pending": "待审核",
@@ -16721,15 +16779,14 @@
           "failedToast": "无法发布此更新。",
           "sentForReviewToast": "版本 {number} 已提交给管理员审核。",
           "offNotice": "发布已关闭。请让管理员发布此更新。"
-        }
+        },
+        "noManifestVersion": "无",
+        "manifestVersion": "plugin.json {version}",
+        "locked": "此插件从 GitHub 同步，因此请在 GitHub 中更改。"
       }
     },
     "page": {
       "createMenu": {
-        "github": {
-          "description": "从仓库导入一个或多个技能。",
-          "title": "从 GitHub 导入"
-        },
         "scratch": {
           "description": "在 {appName} 中编写说明并添加支持文件。",
           "title": "从头开始"
@@ -16740,6 +16797,10 @@
         "upload": {
           "description": "导入 SKILL.md 文件、ZIP 文件或技能文件夹。",
           "title": "上传技能"
+        },
+        "marketplace": {
+          "title": "添加市场",
+          "description": "从仓库添加并同步其插件。"
         }
       },
       "empty": {
@@ -16770,10 +16831,12 @@
         "body": "继续操作将停用当前启用的技能并启用此技能。",
         "description": "同名技能“{name}”一次只能启用一个。",
         "submit": {
-          "label": "切换技能",
+          "label": "切换",
           "pendingLabel": "正在切换..."
         },
-        "title": "切换技能“{name}”？"
+        "title": "要开启“{name}”吗？",
+        "descriptionNamed": "{names} 已在使用“{name}”也使用的技能名称。同一时间只能开启其中一个。",
+        "bodyNamed": "开启“{name}”会关闭 {names}。"
       },
       "toasts": {
         "disableFailed": "停用 {name} 失败",
@@ -16795,6 +16858,9 @@
         },
         "upload": {
           "label": "拖放文件或点击上传"
+        },
+        "chooseFolder": {
+          "label": "选择文件夹"
         }
       },
       "filesPicker": {
@@ -16818,7 +16884,8 @@
       },
       "upload": {
         "error": {
-          "readFailed": "无法读取上传的内容。"
+          "readFailed": "无法读取上传的内容。",
+          "folderRoot": "{upload, select, plugin {所选文件夹的顶层必须包含 SKILL.md 或 plugin.json 清单。} other {所选文件夹的顶层必须包含 SKILL.md。}}"
         }
       }
     },
@@ -16961,7 +17028,9 @@
       "sections": {
         "organization": "组织库",
         "mine": "我的上传",
-        "shared": "与你共享"
+        "shared": "与你共享",
+        "marketplace": "来自市场",
+        "private": "其他用户私有"
       },
       "detail": {
         "title": "插件",
@@ -16977,19 +17046,51 @@
           "location": "位置",
           "owner": "所有者",
           "skills": "技能",
-          "description": "描述"
+          "description": "描述",
+          "version": "plugin.json 中的版本",
+          "author": "作者",
+          "homepage": "主页",
+          "license": "许可证",
+          "notUsed": "Onyx 不使用的部分",
+          "marketplace": "{name} 市场，{scope, select, personal {个人} other {公司}}（{repository}）"
         },
         "skills": {
           "off": "已关闭",
-          "invalid": "无效"
+          "invalid": "无效",
+          "read": "阅读",
+          "readAriaLabel": "阅读技能 {name}",
+          "readFailed": "无法读取此技能。",
+          "noInstructions": "此技能没有说明。"
         },
         "switch": {
           "title": "使用此插件",
-          "description": "开启后，默认智能体可以使用此插件。",
           "label": "使用 {name}",
           "required": "管理员已将此插件设为必需。你无法将其关闭。",
           "unavailable": "你无法开启或关闭此插件。",
-          "failed": "无法更改插件。"
+          "failed": "无法更改插件。",
+          "on": "已开启。默认智能体可以使用此插件。",
+          "off": "已关闭。开启后，默认智能体即可使用此插件。",
+          "nameHeld": "已关闭，因为 {names} 使用了相同的技能名称。开启此插件即可改用它。"
+        },
+        "actions": {
+          "share": "分享",
+          "menu": "更多操作",
+          "uploadVersion": "上传新版本",
+          "remove": "删除插件"
+        },
+        "remove": {
+          "entityType": "插件",
+          "description": "所有使用此插件的人都将失去它。此操作无法撤销。",
+          "submit": "删除",
+          "pending": "正在删除…",
+          "done": "已删除 {name}。",
+          "failed": "无法删除插件。"
+        },
+        "syncedFrom": "同步自 {repository}",
+        "managed": {
+          "title": "由 {name} 市场管理",
+          "description": "Onyx 从 {repository} 同步此插件。请在 GitHub 中更改，然后同步市场。",
+          "open": "打开市场"
         }
       },
       "connection": {
@@ -17086,6 +17187,263 @@
           "label": "完成"
         }
       }
+    },
+    "needs": {
+      "intro": "插件从不授予集成的访问权限。每一行显示您自己对该集成的状态。即使缺少未开启的集成，插件也能工作。",
+      "state": {
+        "on": "已开启",
+        "turn_on": "已关闭",
+        "sign_in": "未登录",
+        "no_access": "无访问权限",
+        "turned_off": "管理员已关闭",
+        "not_added": "未添加",
+        "more_than_one": "多个匹配",
+        "not_supported": "不支持"
+      },
+      "note": {
+        "askAdmin": "请询问管理员",
+        "turnedOff": "已被您的管理员关闭",
+        "moreThanOne": "有多个集成匹配",
+        "notSupported": "Onyx 不支持"
+      },
+      "localServer": "本地服务器",
+      "noUrl": "无服务器 URL",
+      "turnOn": {
+        "label": "开启",
+        "ariaLabel": "开启 {name}",
+        "failed": "无法开启 {name}。"
+      },
+      "add": {
+        "label": "添加集成",
+        "ariaLabel": "添加 {name} 集成"
+      },
+      "urlProblem": {
+        "variable": "URL 使用了变量。Onyx 不会填充变量。",
+        "credential": "URL 中包含凭据。Onyx 不会保存它。",
+        "invalid": "URL 不是有效的 http 或 https URL。"
+      }
+    },
+    "upload": {
+      "title": "上传插件",
+      "description": "上传 Claude Code 或 Codex 插件。选择 .zip 文件，或将插件文件夹拖到此处。",
+      "reading": "正在读取…",
+      "requirements": {
+        "title": "Onyx 使用插件的以下部分：",
+        "skills": "skills/'<name>'/SKILL.md 中的技能",
+        "mcp": ".mcp.json 或 plugin.json 中的 MCP 服务器",
+        "other": "Onyx 不使用命令、代理、钩子或其他部分。"
+      },
+      "skillOnly": {
+        "title": "此上传是一个技能",
+        "description": "它没有 plugin.json。继续以将其添加为技能。",
+        "continue": "继续"
+      },
+      "version": "plugin.json {version}",
+      "target": {
+        "newVersion": "将 {name} 更新为 Onyx 版本 {version}",
+        "newPlugin": "新插件：{name}"
+      },
+      "willBeOff": "插件将以关闭状态保存。{names} 已有同名技能。",
+      "saveAsNew": {
+        "label": "另存为新插件",
+        "description": "保持同名插件不变。"
+      },
+      "sections": {
+        "skills": "技能 · {count}",
+        "integrations": "集成 · {count}",
+        "unused": "Onyx 不使用的部分",
+        "warnings": "警告"
+      },
+      "integrationsNote": "保存会开启您已经可以使用的集成。插件从不授予集成的访问权限。",
+      "integrationsNoteOff": "保存后插件仍为关闭状态，因此不会开启任何集成。",
+      "unusedParts": {
+        "commands": "命令",
+        "agents": "代理",
+        "hooks": "钩子",
+        "lsp_servers": "LSP 服务器",
+        "output_styles": "输出样式",
+        "bin": "可执行文件 (bin)",
+        "themes": "主题",
+        "monitors": "监视器"
+      },
+      "cancel": "取消",
+      "save": "保存",
+      "saving": "正在保存…",
+      "readFailed": "无法读取插件。",
+      "saveFailed": "无法保存插件。",
+      "saved": {
+        "newPlugin": "已添加 {name}。",
+        "newVersion": "已将 {name} 更新为 Onyx 版本 {version}。",
+        "unchanged": "没有更改。{name} 已是 Onyx 版本 {version}。",
+        "off": "已添加 {name}。由于 {names} 已有同名技能，它处于关闭状态。"
+      }
+    },
+    "turnOn": {
+      "title": "{name} 已开启",
+      "description": "此插件所需的部分集成对您不可用。",
+      "note": "没有它们插件也能工作。插件从不授予集成的访问权限。",
+      "done": "完成"
+    },
+    "marketplaces": {
+      "status": {
+        "ok": "就绪",
+        "blocked": "无法安装",
+        "not_supported": "不支持"
+      },
+      "scope": {
+        "personal": "个人",
+        "company": "公司"
+      },
+      "source": {
+        "repository": "仓库",
+        "folder": "文件夹",
+        "root": "仓库根目录",
+        "ref": "分支、标签或提交",
+        "defaultBranch": "默认分支",
+        "commit": "提交"
+      },
+      "preview": {
+        "title": "{name}：{count, plural, one {# 个待添加的插件} other {# 个待添加的插件}}",
+        "empty": "此市场没有条目。",
+        "failedTitle": "Onyx 无法读取此市场",
+        "version": "v{version}",
+        "willInstall": "将安装",
+        "skills": "{count, plural, one {技能} other {技能}}：{names}",
+        "showUnusable": "{count, plural, one {显示 # 个 Onyx 无法使用的条目} other {显示 # 个 Onyx 无法使用的条目}}",
+        "hideUnusable": "隐藏 Onyx 无法使用的条目",
+        "summary": "就绪 {ready} · 无法安装 {blocked} · 不支持 {unsupported}"
+      },
+      "add": {
+        "menuItem": "添加市场",
+        "title": "添加市场",
+        "description": "从仓库添加。Onyx 会读取其 .claude-plugin/marketplace.json 文件，每个条目都会成为一个插件。",
+        "confirmTitle": "确认市场",
+        "confirmDescription": "请确认这是你想要的来源和插件，然后添加市场。",
+        "repository": {
+          "title": "仓库",
+          "description": "输入 owner/repo 或仓库的 URL。",
+          "placeholder": "例如 anthropics/claude-plugins-official"
+        },
+        "folder": {
+          "title": "文件夹",
+          "description": "包含 .claude-plugin/marketplace.json 的文件夹。留空则使用仓库根目录。",
+          "placeholder": "例如 plugins"
+        },
+        "ref": {
+          "title": "分支、标签或提交",
+          "description": "留空则使用默认分支。",
+          "placeholder": "例如 main"
+        },
+        "scope": {
+          "title": "市场类型",
+          "personalDescription": "只有你能获得此市场的插件。",
+          "companyDescription": "你的组织会获得此市场的插件，与获得已发布插件的方式相同。"
+        },
+        "defaultAccess": {
+          "title": "默认访问权限",
+          "description": "此市场中每个插件的安装设置。你之后可以为单个插件更改。"
+        },
+        "privateNote": "Onyx 使用你的 GitHub 连接读取私有仓库。添加私有仓库之前，请先在集成中连接 GitHub。",
+        "continue": "继续",
+        "previewing": "正在读取…",
+        "back": "返回",
+        "submit": "添加市场",
+        "adding": "正在添加…",
+        "cancel": "取消",
+        "previewFailed": "无法读取仓库。",
+        "addFailed": "无法添加市场。",
+        "added": "已添加 {name}。其插件会在首次同步后显示。",
+        "duplicate": {
+          "personal": "你已添加此市场。",
+          "company": "你的组织已经在使用此市场。"
+        }
+      },
+      "sync": {
+        "now": "立即同步",
+        "requested": "已开始同步 {name}。",
+        "failed": "无法开始同步。",
+        "lastSync": "上次同步 {date}",
+        "never": "尚未同步",
+        "state": {
+          "syncing": "同步中",
+          "failed": "同步失败",
+          "not_synced": "未同步",
+          "synced": "已同步"
+        }
+      },
+      "columns": {
+        "marketplace": "市场",
+        "sync": "同步",
+        "items": "插件"
+      },
+      "items": "{count, plural, one {# 个插件} other {# 个插件}}",
+      "tableLabel": "市场",
+      "open": "打开 {name}",
+      "menu": "{name} 的操作",
+      "loadFailed": "无法加载市场。",
+      "empty": {
+        "title": "还没有市场",
+        "description": "添加 GitHub 仓库以获取其插件。"
+      },
+      "page": {
+        "title": "市场",
+        "description": "你获取插件的 GitHub 仓库及其来源。同步市场可获取 GitHub 中的更改。"
+      },
+      "attention": {
+        "failedTitle": "{name} 上次同步失败"
+      },
+      "defaultAccess": {
+        "title": "默认访问权限",
+        "description": "{name} 中没有自身设置的每个插件的安装设置。",
+        "save": "保存",
+        "cancel": "取消",
+        "saved": "已保存默认访问权限。",
+        "failed": "无法保存默认访问权限。"
+      },
+      "replaceLogin": {
+        "label": "替换登录",
+        "description": "以你的身份同步该仓库。如果你有 GitHub 连接，Onyx 会使用它。",
+        "done": "Onyx 现在以你的身份同步 {name}。",
+        "doneWithoutGithub": "Onyx 现在以你的身份同步 {name}，但你尚未连接 GitHub。Onyx 只能读取公开仓库。请在集成中连接 GitHub。",
+        "failed": "无法替换登录。"
+      },
+      "remove": {
+        "label": "移除",
+        "title": "移除 {name}？",
+        "description": "这将删除市场及{count, plural, one {其插件} other {其 # 个插件}}。成员将失去这些插件。",
+        "listLabel": "要删除的插件",
+        "noPlugins": "此市场没有插件。",
+        "confirm": "移除",
+        "done": "已移除 {name}。",
+        "failed": "无法移除市场。",
+        "loadFailed": "无法加载此插件市场的插件。",
+        "retry": "重试",
+        "personalDescription": "这将删除市场及{count, plural, one {其插件} other {其 # 个插件}}。您将失去这些插件。"
+      },
+      "detail": {
+        "title": "市场",
+        "description": "此市场的来源、同步和条目。",
+        "loadFailed": "无法加载市场。",
+        "scope": "类型",
+        "login": "同步身份",
+        "noLogin": "无。请替换登录以再次同步。",
+        "lastSync": "上次同步",
+        "entries": "条目（{count}）",
+        "noEntries": "上次同步未发现条目。",
+        "close": "关闭"
+      },
+      "readOnly": "您的管理员管理此市场。",
+      "reason": {
+        "skills_and_mcp_only": "Onyx 只运行技能和 MCP 服务器。",
+        "pastLimit": "Onyx 没有读取此仓库。",
+        "external_repository_limit": "Onyx 每个市场最多同步 {limit} 个外部仓库。",
+        "external_repository_limit_without_login": "连接 GitHub 以同步超过 {limit} 个外部仓库。",
+        "limitTitle": "部分插件来自 Onyx 未读取的仓库"
+      },
+      "errors": {
+        "rateLimited": "已达到 GitHub API 速率限制。请几分钟后重试。连接 GitHub 可提高限制。",
+        "rateLimitedUntil": "已达到 GitHub API 速率限制。将在 {time} 重置。连接 GitHub 可提高限制。"
+      }
     }
   },
   "integrations": {
@@ -17145,6 +17503,18 @@
         "done": "{name} 现已对组织可用。",
         "failed": "无法发布集成。"
       }
+    },
+    "requiredGate": {
+      "title": "连接您的工作工具",
+      "description": "您的管理员要求使用这些集成。请逐一连接后继续。",
+      "adminDescription": "成员必须先连接这些集成才能使用 Onyx。您是管理员，因此可以不连接直接继续。",
+      "connected": "已连接",
+      "progress": "已连接 {connected}/{total}",
+      "askAdmin": "无法连接 {name}？请联系管理员寻求帮助。您可以暂时跳过。",
+      "skip": "暂时跳过",
+      "continue": "继续",
+      "signOut": "退出登录",
+      "signOutFailed": "无法退出登录，请重试。"
     }
   },
   "customize": {
@@ -17172,20 +17542,26 @@
         "label": "添加",
         "upload": "上传技能",
         "create": "创建技能",
-        "github": "从 GitHub 导入"
+        "uploadPlugin": "上传插件",
+        "marketplace": "添加市场",
+        "manageMarketplaces": "管理市场"
       },
       "groups": {
         "mine": "由你创建",
         "organization": "来自你的组织",
         "shared": "与你共享",
-        "builtin": "内置"
+        "builtin": "内置",
+        "marketplace": "来自市场",
+        "private": "其他用户私有"
       },
       "source": {
         "mine": "由你",
         "organization": "来自你的组织",
         "sharedBy": "由 {email} 共享",
         "shared": "与你共享",
-        "builtin": "内置"
+        "builtin": "内置",
+        "marketplace": "来自 {name}（{scope, select, personal {个人} other {公司}}）",
+        "privateTo": "{email} 私有"
       },
       "subtitle": "{source} · {description}",
       "tag": {
@@ -17247,13 +17623,16 @@
       },
       "empty": {
         "title": "还没有插件",
-        "description": "创建技能。每个技能都是一个插件。"
+        "description": "上传插件、从 GitHub 添加市场，或创建技能。每个技能都是一个插件。",
+        "upload": "上传插件"
       },
       "noMatches": {
         "title": "没有匹配的插件",
         "clear": "显示所有插件"
       },
-      "intro": "插件将你一起开启的技能打包在一起。你添加的每个技能都有自己的插件。集成位于“集成”标签页。"
+      "intro": "插件打包了技能及其所需的集成。上传 Claude Code 或 Codex 插件、从 GitHub 添加市场，或添加技能。您添加的每个技能都在其自己的插件中。",
+      "integrations": "{needed} 个集成中有 {available} 个可用",
+      "nameHeld": "已关闭：{names} 使用了相同的技能名称"
     },
     "skillPage": {
       "title": "技能",
@@ -17343,9 +17722,163 @@
     },
     "pluginPage": {
       "tabs": {
-        "skills": "技能 · {count}"
+        "skills": "技能 · {count}",
+        "integrations": "集成 · {count}"
       }
     },
     "search": "搜索"
+  },
+  "scheduledTasks": {
+    "unviewedResults": "新结果",
+    "runStatus": "{status, select, QUEUED {排队中} RUNNING {运行中} AWAITING_APPROVAL {等待批准} SUCCEEDED {成功} FAILED {失败} CANCELLED {已取消} SKIPPED {已跳过} other {未知}}",
+    "taskStatus": "{status, select, ACTIVE {活跃} other {已暂停}}",
+    "schedule": {
+      "cron": "Cron (UTC)：{cron}",
+      "everyMinutes": "{count, plural, one {每分钟} other {每 # 分钟}}",
+      "everyHours": "{count, plural, one {每小时} other {每 # 小时}}",
+      "everyDays": "{count, plural, one {每天 {time}} other {每 # 天 {time}}}",
+      "daily": "每天 {time}",
+      "weekly": "{days} {time}"
+    },
+    "list": {
+      "title": "计划任务",
+      "description": "按计划运行提示词。每次运行都会作为一个聊天打开，您可以阅读并继续。",
+      "search": "搜索任务",
+      "new": "新建任务",
+      "never": "从未",
+      "notScheduled": "未计划",
+      "loadFailed": "无法加载您的计划任务。",
+      "open": "打开 {name}",
+      "columns": {
+        "name": "名称",
+        "schedule": "计划",
+        "lastRun": "上次运行",
+        "nextRun": "下次运行",
+        "status": "状态"
+      },
+      "empty": {
+        "title": "尚无计划任务",
+        "description": "创建任务以按计划运行提示词。"
+      },
+      "noMatches": {
+        "title": "没有匹配的任务",
+        "description": "请尝试其他搜索词或筛选条件。"
+      },
+      "filter": {
+        "label": "筛选任务",
+        "all": "所有任务",
+        "unviewed": "新结果"
+      }
+    },
+    "actions": {
+      "runNow": "运行一次",
+      "pause": "暂停",
+      "resume": "恢复",
+      "edit": "编辑",
+      "delete": "删除",
+      "menu": "{name} 的操作",
+      "toasts": {
+        "runQueued": "已开始运行“{name}”。",
+        "runFailed": "无法开始运行。",
+        "resumed": "任务已恢复。",
+        "paused": "任务已暂停。",
+        "statusFailed": "无法更改任务状态。",
+        "deleted": "已删除“{name}”。",
+        "deleteFailed": "无法删除任务。"
+      },
+      "confirmDelete": {
+        "title": "删除“{name}”？",
+        "description": "任务将停止运行，其运行历史也会被删除。",
+        "submit": "删除"
+      }
+    },
+    "runs": {
+      "label": "运行历史",
+      "open": "打开 {time} 的运行",
+      "loading": "正在加载运行…",
+      "loadFailed": "无法加载运行历史。",
+      "loadMore": "加载更多",
+      "markAllViewed": "全部标记为已查看",
+      "markAllViewedFailed": "无法将运行标记为已查看。请重试。",
+      "trigger": "{source, select, MANUAL_RUN_NOW {运行一次} other {计划}}",
+      "errorClass": "{errorClass, select, superseded_by_next_fire {已取消：在有人回应批准之前，下一次运行已开始。} approval_timeout {已取消：24 小时内无人回应批准。} user_cancelled {已由您停止。} agent_permission_required {某个操作需要批准。} agent_exception {失败：运行时出错。} stuck {失败：运行未能按时开始。} timeout {失败：运行达到了一小时的上限。} other {失败：{errorClass}}}",
+      "columns": {
+        "started": "开始时间",
+        "status": "状态",
+        "duration": "时长",
+        "trigger": "触发方式",
+        "detail": "详情"
+      },
+      "closed": {
+        "queued": "此运行尚未开始，因此没有可打开的聊天。",
+        "skipped": "此运行已被跳过，因此没有可打开的聊天。",
+        "noChat": "此运行没有可打开的聊天。"
+      },
+      "empty": {
+        "title": "尚无运行",
+        "description": "任务每次触发都会添加一次运行。使用“运行一次”可立即开始一次运行。"
+      }
+    },
+    "detail": {
+      "title": "计划任务",
+      "back": "计划任务",
+      "loadFailed": "无法加载此计划任务。",
+      "tabs": {
+        "runs": "运行",
+        "overview": "概览"
+      },
+      "overview": {
+        "prompt": "提示词",
+        "schedule": "计划",
+        "nextRun": "下次运行",
+        "notScheduled": "未计划",
+        "lastRun": "上次运行",
+        "never": "从未"
+      },
+      "switch": {
+        "title": "按计划运行",
+        "label": "按计划运行 {name}"
+      },
+      "menu": "更多操作"
+    },
+    "editor": {
+      "newTitle": "新建计划任务",
+      "editTitle": "编辑计划任务",
+      "description": "每次运行都会将提示词发送到使用默认智能体的新聊天。",
+      "back": "返回",
+      "loadFailed": "无法加载此计划任务。",
+      "save": "保存",
+      "saveAndRun": "保存并立即运行",
+      "errors": {
+        "nameRequired": "请输入名称。",
+        "promptRequired": "请输入提示词。"
+      },
+      "toasts": {
+        "created": "计划任务已创建。",
+        "createdAndRun": "计划任务已创建。第一次运行已开始。",
+        "updated": "计划任务已更新。",
+        "saveFailed": "无法保存计划任务。"
+      },
+      "fields": {
+        "name": {
+          "label": "名称",
+          "placeholder": "例如，每周客户升级问题摘要"
+        },
+        "prompt": {
+          "label": "提示词",
+          "description": "每次运行都会将此消息发送到新聊天。",
+          "placeholder": "描述每次运行时要做什么"
+        },
+        "schedule": {
+          "label": "计划"
+        }
+      }
+    },
+    "banner": {
+      "title": "{task} 的计划运行",
+      "inFlight": "{status, select, AWAITING_APPROVAL {此运行正在等待您在下方批准。} other {此运行正在进行中。}}",
+      "startedAt": "开始于 {time}",
+      "viewTask": "查看任务"
+    }
   }
 }

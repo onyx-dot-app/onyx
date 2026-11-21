@@ -7,15 +7,20 @@ from pydantic import TypeAdapter
 from sqlalchemy import (
     Integer,
     Row,
+    String,
     any_,
     bindparam,
+    case,
+    cast,
     delete,
     desc,
+    exists,
     func,
     literal,
     nullsfirst,
     or_,
     select,
+    true,
     update,
 )
 from sqlalchemy.dialects import postgresql
@@ -59,8 +64,10 @@ from onyx.db.models import (
     ChatSessionSharedStatus,
     FileRecord,
     Persona,
+    ScheduledTaskRun,
     ToolCall,
     User,
+    UserFile,
 )
 from onyx.db.models import SearchDoc as DBSearchDoc
 from onyx.db.persona import get_best_persona_id_for_user
@@ -220,6 +227,12 @@ def content_persisting_sessions_filter() -> ColumnElement[bool]:
 
 # Retrieves chat sessions by user
 # Chat sessions do not include onyxbot flows
+def not_a_scheduled_run_chat() -> ColumnElement[bool]:
+    """Excludes the hidden chat that a scheduled task run made. The history
+    list, chat search and delete-all leave those chats out."""
+    return ~exists().where(ScheduledTaskRun.chat_session_id == ChatSession.id)
+
+
 def get_chat_sessions_by_user(
     user_id: UUID | None,
     deleted: bool | None,
@@ -237,6 +250,7 @@ def get_chat_sessions_by_user(
         .where(ChatSession.user_id == user_id)
         .where(ChatSession.spawned_by_message_id.is_(None))
         .where(ChatSession.onyxbot_flow.is_(False))
+        .where(not_a_scheduled_run_chat())
         .order_by(desc(ChatSession.time_updated))
     )
 
@@ -363,7 +377,7 @@ def delete_messages_and_files_from_chat_session(
     delete_orphaned_search_docs(db_session)
 
 
-def create_chat_session(
+def create_chat_session__no_commit(
     db_session: Session,
     description: str | None,
     user_id: UUID | None,
@@ -376,6 +390,7 @@ def create_chat_session(
     incognito_record_mode: IncognitoRecordMode | None = None,
     session_id: UUID | None = None,
 ) -> ChatSession:
+    """A chat session flushed into the caller's transaction."""
     chat_session = ChatSession(
         # Caller-supplied only for incognito, where uploads name the session
         # before it exists so the server can verify them.
@@ -390,10 +405,38 @@ def create_chat_session(
         project_id=project_id,
         incognito_record_mode=incognito_record_mode,
     )
-
     db_session.add(chat_session)
-    db_session.commit()
+    db_session.flush()
+    return chat_session
 
+
+def create_chat_session(
+    db_session: Session,
+    description: str | None,
+    user_id: UUID | None,
+    persona_id: int | None,  # Can be none if temporary persona is used
+    llm_override: LLMOverride | None = None,
+    prompt_override: PromptOverride | None = None,
+    onyxbot_flow: bool = False,
+    slack_thread_id: str | None = None,
+    project_id: int | None = None,
+    incognito_record_mode: IncognitoRecordMode | None = None,
+    session_id: UUID | None = None,
+) -> ChatSession:
+    chat_session = create_chat_session__no_commit(
+        db_session,
+        description,
+        user_id,
+        persona_id,
+        llm_override=llm_override,
+        prompt_override=prompt_override,
+        onyxbot_flow=onyxbot_flow,
+        slack_thread_id=slack_thread_id,
+        project_id=project_id,
+        incognito_record_mode=incognito_record_mode,
+        session_id=session_id,
+    )
+    db_session.commit()
     return chat_session
 
 
@@ -481,6 +524,31 @@ def update_chat_session(
     return chat_session
 
 
+def save_chat_session_name_if_unnamed(
+    db_session: Session,
+    user_id: UUID | None,
+    chat_session_id: UUID,
+    name: str,
+) -> bool:
+    """Save an auto-generated name only while the chat has none, so a rename
+    made during generation wins. Returns whether the name was saved."""
+    statement = (
+        update(ChatSession)
+        .where(
+            ChatSession.id == chat_session_id,
+            ChatSession.deleted.is_(False),
+            or_(ChatSession.description.is_(None), ChatSession.description == ""),
+        )
+        .values(description=name)
+        .returning(ChatSession.id)
+    )
+    if user_id is not None:
+        statement = statement.where(ChatSession.user_id == user_id)
+    saved_id = db_session.execute(statement).scalar_one_or_none()
+    db_session.commit()
+    return saved_id is not None
+
+
 def delete_all_chat_sessions_for_user(
     user: User, db_session: Session, hard_delete: bool = HARD_DELETE_CHATS
 ) -> list[UUID]:
@@ -492,6 +560,7 @@ def delete_all_chat_sessions_for_user(
         .filter(
             ChatSession.user_id == user_id,
             ChatSession.onyxbot_flow.is_(False),
+            not_a_scheduled_run_chat(),
             ChatSession.spawned_by_message_id.is_(None),
         )
         .all()
@@ -1214,6 +1283,52 @@ def create_new_chat_message(
         db_session.commit()
 
     return new_chat_message
+
+
+_UUID_PATTERN = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+
+
+def get_chat_session_user_files(
+    chat_session_id: UUID, db_session: Session
+) -> list[UserFile]:
+    """The user files that the chat's user messages attached, on every
+    branch, in the order of their first message. Only file descriptors whose
+    `user_file_id` is the UUID of an existing user file count."""
+    descriptor = (
+        func.jsonb_array_elements(
+            case(
+                (func.jsonb_typeof(ChatMessage.files) == "array", ChatMessage.files),
+                else_=cast(literal("[]"), postgresql.JSONB),
+            )
+        )
+        .table_valued("value")
+        .lateral("descriptor")
+    )
+    raw_id = descriptor.c.value.op("->>", return_type=String)("user_file_id")
+    user_file_id = case(
+        (raw_id.op("~*")(_UUID_PATTERN), cast(raw_id, postgresql.UUID(as_uuid=True)))
+    )
+    first_messages = (
+        select(
+            user_file_id.label("user_file_id"),
+            func.min(ChatMessage.id).label("message_id"),
+        )
+        .select_from(ChatMessage)
+        .join(descriptor, true())
+        .where(
+            ChatMessage.chat_session_id == chat_session_id,
+            ChatMessage.message_type == MessageType.USER,
+        )
+        .group_by(user_file_id)
+        .subquery()
+    )
+    return list(
+        db_session.scalars(
+            select(UserFile)
+            .join(first_messages, first_messages.c.user_file_id == UserFile.id)
+            .order_by(first_messages.c.message_id, UserFile.id)
+        )
+    )
 
 
 def set_as_latest_chat_message(

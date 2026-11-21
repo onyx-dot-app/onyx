@@ -58,7 +58,7 @@ def vector_stats(usage: float = 20, tripped: bool = False) -> VectorResourceStat
         {
             "_nodes": {"failed": 0},
             "circuit_breaker_triggered": tripped,
-            "nodes": {"node-1": {"graph_memory_usage_percentage": usage}},
+            "nodes": {"node-1": {"usage_percent": usage}},
         }
     )
 
