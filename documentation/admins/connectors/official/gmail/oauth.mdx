@@ -1,0 +1,114 @@
+---
+title: "Gmail OAuth"
+description: "Set up Gmail OAuth for the connector"
+---
+
+This guide sets up the Gmail connector with an OAuth app in Google Cloud. It works with any Google account,
+with or without a paid Google Workspace.
+
+If your organization has a Google Workspace and you prefer a service account,
+follow the [Service Account guide](./service_account).
+
+### Authorization
+
+<Steps>
+  <Step title="Create a Google Cloud project">
+    Go to [https://console.cloud.google.com/projectcreate](https://console.cloud.google.com/projectcreate)
+    and create a project.
+  </Step>
+
+  <Step title="Enable the Gmail API">
+    - In the left panel, open **APIs & services** and go to **Enabled APIs and services**.
+    - Click **+ ENABLE APIS AND SERVICES**.
+    - Search for **Gmail API** and click **ENABLE**.
+  </Step>
+
+  <Step title="Set up the OAuth consent screen">
+    - Under **APIs & services**, select **OAuth consent screen**.
+    - If you do not have a Google organization, select **External** as the **User Type**.
+    - Name the app and enter the required contact emails.
+  </Step>
+
+  <Step title="Add the scopes">
+    Add the scope `.../auth/gmail.readonly` for the **Gmail API**.
+
+    <Info>
+      To use **Sync with Gmail**, or to index every mailbox in your Workspace, also:
+      - Enable the **Admin SDK API**.
+      - Add the scope `.../auth/admin.directory.user.readonly` for the **Admin SDK API**.
+      - Add the scope `.../auth/admin.directory.group.readonly` for the **Admin SDK API**.
+      - Sign in with an account that has an admin role in the Google Workspace with the **Users > Read** and
+      **Groups > Read** privileges. Set this in the Google Admin console under **Account > Admin roles**.
+    </Info>
+
+    <img className="rounded-image" src="/assets/admins/connectors/gmail/GmailScopes.webp" alt="Google Cloud OAuth consent screen with the Gmail readonly scope selected"/>
+  </Step>
+
+  <Step title="Add test users">
+    This step applies only to apps without a Google organization.
+    - Add at least one test user email. Only these accounts can run the OAuth flow.
+  </Step>
+
+  <Step title="Create the OAuth client">
+    Go to the **Credentials** tab and select **+ CREATE CREDENTIALS > OAuth client ID**.
+
+    <img className="rounded-image" src="/assets/admins/connectors/google_drive/GoogleDriveCredential.webp" alt="Creating an OAuth client ID in Google Cloud Console"/>
+
+    - Choose **Web application** and name it, for example `OnyxConnector`.
+    - Add an **Authorized JavaScript origin**:
+    - `http://localhost:3000` for a local deployment
+    - `https://<YOUR_ONYX_URL>` for a self-hosted deployment
+    - `https://cloud.onyx.app` for Onyx Cloud
+    - Add an **Authorized redirect URI**:
+    - `http://localhost:3000/admin/connectors/gmail/auth/callback` for a local deployment
+    - `https://<YOUR_ONYX_URL>/admin/connectors/gmail/auth/callback` for a self-hosted deployment
+    - `https://cloud.onyx.app/admin/connectors/gmail/auth/callback` for Onyx Cloud
+
+    <img className="rounded-image" src="/assets/admins/connectors/gmail/GmailCredentials.webp" alt="Authorized origins and redirect URIs for the Gmail OAuth client"/>
+
+    Click **CREATE**. Next to **Client secret**, download the client as JSON.
+
+    <img className="rounded-image" src="/assets/admins/connectors/google_drive/DriveDownloadCredentials.webp" alt="Download the OAuth client JSON from Google Cloud Console"/>
+  </Step>
+</Steps>
+
+### Indexing
+
+<Steps>
+  <Step title="Create the account">
+    In the Onyx admin panel, go to **Connectors** and select **Gmail**. Under **Authentication Account**,
+    click **Create New** and select **OAuth**. Upload or paste the OAuth app JSON you downloaded above.
+    Click **Authenticate with Gmail** and sign in with the Google account whose mail you want to index.
+  </Step>
+
+  <Step title="Choose document access">
+    Under **Document Access**, select who can see the indexed threads.
+    **Sync with Gmail** mirrors each user's own mailbox.
+    **Specific Groups** and **Sync with Gmail** are available on the Business and Enterprise plans and on Onyx Cloud.
+    Then click **Create Connector**.
+  </Step>
+</Steps>
+
+<Note>
+  The app JSON is stored on the account it creates, so each OAuth account carries its own app.
+  To add more connectors for the same Google account,
+  select the existing account under **Authentication Account** instead of creating a new one.
+  An instance can hold multiple Gmail accounts.
+</Note>
+
+### Using one account for Gmail and Google Drive
+
+A Google account created in Onyx is listed on both the Gmail and the Google Drive connector forms,
+so one account can index both. For this reason, the Google consent screen asks for the scopes of both connectors:
+
+| Connector    | Scopes                                                                                   |
+| ------------ | ---------------------------------------------------------------------------------------- |
+| Google Drive | `drive.readonly`, `drive.metadata.readonly`, `admin.directory.user.readonly`, `admin.directory.group.readonly` |
+| Gmail        | `gmail.readonly`, `admin.directory.user.readonly`, `admin.directory.group.readonly`       |
+
+- To use the account for both connectors, grant every scope on the consent screen. Add the scopes of both connectors
+  to your app's OAuth consent screen, and add the redirect URI of each connector form you authenticate from.
+- To use the account for Gmail only, untick the Google Drive scopes on the consent screen. The account then works only
+  for Gmail. The connector checks report the missing scopes if you select it for Google Drive.
+
+To add the other connector's scopes later, authenticate the account again and grant them.
