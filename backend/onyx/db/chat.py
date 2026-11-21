@@ -1,19 +1,22 @@
 from collections.abc import Collection, Sequence
 from datetime import datetime, timedelta, timezone
+from io import BytesIO
 from typing import NoReturn, Tuple
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from pydantic import TypeAdapter
 from sqlalchemy import (
     Integer,
     Row,
     String,
+    Text,
     any_,
     bindparam,
     case,
     cast,
     delete,
     desc,
+    event,
     exists,
     func,
     literal,
@@ -48,15 +51,22 @@ from onyx.chat.models import (
     read_message_rendering,
 )
 from onyx.configs.chat_configs import HARD_DELETE_CHATS
-from onyx.configs.constants import ANONYMOUS_USER_UUID, MessageType
+from onyx.configs.constants import (
+    ANONYMOUS_USER_UUID,
+    FileOrigin,
+    MessageType,
+)
 from onyx.context.search.models import InferenceSection, SavedSearchDoc
 from onyx.context.search.models import SearchDoc as ServerSearchDoc
 from onyx.db.document_set import require_document_set_access
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import (
     IncognitoRecordMode,
     record_mode_persists_content,
 )
 from onyx.db.models import (
+    ChatArtifact,
+    ChatArtifactVersion,
     ChatInput,
     ChatMessage,
     ChatMessage__SearchDoc,
@@ -73,12 +83,13 @@ from onyx.db.models import SearchDoc as DBSearchDoc
 from onyx.db.persona import get_best_persona_id_for_user
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.file_store.constants import (
-    AGENT_CHECKPOINT_FILE_PREFIX,
-    CHAT_ARTIFACT_FILE_PREFIX,
+from onyx.file_store.constants import AGENT_CHECKPOINT_FILE_PREFIX
+from onyx.file_store.file_store import (
+    FILE_SIZE_MISSING_SENTINEL,
+    get_default_file_store,
 )
-from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.models import FileDescriptor
+from onyx.file_store.staging import delete_files_best_effort
 from onyx.llm.models import GenerationRequestParams, TextContent, ThinkingContent
 from onyx.llm.override_models import LLMOverride, PromptOverride
 from onyx.server.query_and_chat.models import (
@@ -87,6 +98,10 @@ from onyx.server.query_and_chat.models import (
 )
 from onyx.server.query_and_chat.streaming_models import StreamingError
 from onyx.tools.models import IntegrationEntry, ToolOptions
+from onyx.tools.tool_implementations.sandbox.models import (
+    PublishedFile,
+    PublishedFileView,
+)
 from onyx.utils.logger import setup_logger
 from onyx.utils.postgres_sanitization import sanitize_string
 
@@ -324,9 +339,50 @@ def delete_orphaned_search_docs(db_session: Session) -> None:
     db_session.commit()
 
 
+def delete_chat_artifact_files(versions: Sequence[tuple[str, str | None]]) -> None:
+    """Delete the file and the thumbnail of each artifact version, the
+    thumbnail first: the file's delete cascades to its version, which links
+    the thumbnail. A failed thumbnail delete keeps its file and version, so a
+    later hard chat delete retries both. Raises the first failure after it
+    tries every version."""
+    file_store = get_default_file_store()
+    failures: list[Exception] = []
+    for file_id, thumbnail_file_id in versions:
+        try:
+            if thumbnail_file_id is not None:
+                file_store.delete_file(
+                    file_id=thumbnail_file_id, error_on_missing=False
+                )
+            file_store.delete_file(file_id=file_id, error_on_missing=False)
+        except Exception as e:
+            logger.warning(
+                "Could not delete published file %s or its thumbnail %s",
+                file_id,
+                thumbnail_file_id,
+                exc_info=True,
+            )
+            failures.append(e)
+    if failures:
+        raise failures[0]
+
+
 def delete_messages_and_files_from_chat_session(
     chat_session_id: UUID, db_session: Session
 ) -> None:
+    # The chat's published files and thumbnails go before the message files:
+    # a saved message lists a published file, whose delete would drop the
+    # link to its thumbnail. A failure stops the delete, so the next hard
+    # delete finds what is left.
+    delete_chat_artifact_files(
+        db_session.execute(
+            select(ChatArtifactVersion.file_id, ChatArtifactVersion.thumbnail_file_id)
+            .join(ChatArtifact, ChatArtifact.id == ChatArtifactVersion.artifact_id)
+            .where(ChatArtifact.chat_session_id == chat_session_id)
+        )
+        .tuples()
+        .all()
+    )
+
     descendants = session_descendants(chat_session_id)
     messages_with_files = (
         db_session.execute(
@@ -346,23 +402,16 @@ def delete_messages_and_files_from_chat_session(
                 continue
             file_store.delete_file(file_id=file_info["id"], error_on_missing=False)
 
-    # Checkpoint files, and published files that no message lists, such as
-    # those of a response that ended without its save.
-    session_files = db_session.scalars(
+    checkpoint_files = db_session.scalars(
         select(FileRecord.file_id)
         .where(
-            or_(
-                FileRecord.file_id.startswith(
-                    f"{AGENT_CHECKPOINT_FILE_PREFIX}{chat_session_id}/"
-                ),
-                FileRecord.file_id.startswith(
-                    f"{CHAT_ARTIFACT_FILE_PREFIX}{chat_session_id}-"
-                ),
+            FileRecord.file_id.startswith(
+                f"{AGENT_CHECKPOINT_FILE_PREFIX}{chat_session_id}/"
             )
         )
         .execution_options(yield_per=FILE_CLEANUP_BATCH_SIZE)
     )
-    for file_id in session_files:
+    for file_id in checkpoint_files:
         file_store.delete_file(file_id=file_id, error_on_missing=False)
 
     # Delete ChatMessage records - CASCADE constraints will automatically handle:
@@ -967,6 +1016,193 @@ def get_chat_message_page_ids(
     for message_id in page:
         page_ids.update(children_by_parent.get(message_id, []))
     return page_ids, start > 0
+
+
+def save_chat_artifact(
+    content: bytes,
+    *,
+    name: str,
+    mime_type: str,
+    chat_session_id: UUID,
+    path: str,
+    title: str | None,
+    thumbnail: bytes | None,
+) -> PublishedFile:
+    """Save a file that the model published in the root chat
+    `chat_session_id` as the next version of the chat's artifact at `path`,
+    with `thumbnail`, a JPEG of its first page, if set. The file and its
+    thumbnail get the chat's access, the chat's file list, and its hard
+    delete. A thumbnail that fails to save is left out."""
+    file_store = get_default_file_store()
+    file_id = str(uuid4())
+    thumbnail_file_id: str | None = None
+    if thumbnail is not None:
+        try:
+            thumbnail_file_id = file_store.save_file(
+                content=BytesIO(thumbnail),
+                display_name=f"{name} thumbnail",
+                file_origin=FileOrigin.CHAT_ARTIFACT_THUMBNAIL,
+                file_type="image/jpeg",
+            )
+        except Exception:
+            logger.warning(
+                "Could not save the thumbnail of published file %s",
+                file_id,
+                exc_info=True,
+            )
+    saved: list[tuple[UUID, int]] = []
+
+    def add_version(db_session: Session) -> None:
+        # The upsert locks the artifact's row until the commit, so concurrent
+        # publishes of one path take turns, and the next statement reads
+        # the versions they committed.
+        artifact_id = db_session.execute(
+            postgresql.insert(ChatArtifact)
+            .values(chat_session_id=chat_session_id, path=path)
+            .on_conflict_do_update(
+                index_elements=[ChatArtifact.chat_session_id, ChatArtifact.path],
+                set_={"updated_at": func.now()},
+            )
+            .returning(ChatArtifact.id)
+        ).scalar_one()
+        version = db_session.execute(
+            postgresql.insert(ChatArtifactVersion)
+            .from_select(
+                ["artifact_id", "version", "file_id", "title", "thumbnail_file_id"],
+                select(
+                    literal(artifact_id),
+                    func.coalesce(func.max(ChatArtifactVersion.version), 0) + 1,
+                    literal(file_id),
+                    literal(title, Text()),
+                    literal(thumbnail_file_id, String()),
+                ).where(ChatArtifactVersion.artifact_id == artifact_id),
+            )
+            .returning(ChatArtifactVersion.version)
+        ).scalar_one()
+        saved.append((artifact_id, version))
+
+    try:
+        with get_session_with_current_tenant() as db_session:
+            # save_file commits the session once, after it writes the file
+            # record. The rows go in that transaction after the record, so
+            # the upload holds no lock.
+            event.listen(db_session, "before_commit", add_version, once=True)
+            file_store.save_file(
+                content=BytesIO(content),
+                display_name=name,
+                file_origin=FileOrigin.CHAT_ARTIFACT,
+                file_type=mime_type,
+                file_id=file_id,
+                db_session=db_session,
+            )
+        if not saved:
+            raise RuntimeError(
+                f"save_file did not commit the session for published file {file_id}"
+            )
+    except BaseException:
+        if thumbnail_file_id is not None:
+            delete_files_best_effort([thumbnail_file_id], "unpublished thumbnail")
+        raise
+    [(artifact_id, version)] = saved
+    return PublishedFile(
+        file_id=file_id,
+        artifact_id=artifact_id,
+        version=version,
+        name=name,
+        title=title,
+        path=path,
+        size=len(content),
+        mime_type=mime_type,
+        thumbnail_file_id=thumbnail_file_id,
+    )
+
+
+def delete_unpublished_chat_artifacts(published: Sequence[PublishedFile]) -> None:
+    """Delete the files and thumbnails of a publish that failed
+    (delete_chat_artifact_files), then the artifacts that they leave without a
+    version, so a failed publish sets no artifact's first publish or version
+    numbers."""
+    try:
+        delete_chat_artifact_files(
+            [(file.file_id, file.thumbnail_file_id) for file in published]
+        )
+    except Exception:
+        # A kept file keeps its version, so its artifact stays below and a
+        # hard chat delete retries it.
+        logger.warning(
+            "Kept unpublished files whose delete failed: %s",
+            [file.file_id for file in published],
+        )
+    artifact_ids = sorted({file.artifact_id for file in published if file.artifact_id})
+    if not artifact_ids:
+        return
+    with get_session_with_current_tenant() as db_session:
+        # The lock waits for a concurrent publish of the path to commit, and
+        # the delete's new snapshot then sees its version.
+        db_session.execute(
+            select(ChatArtifact.id)
+            .where(ChatArtifact.id.in_(artifact_ids))
+            .order_by(ChatArtifact.id)
+            .with_for_update()
+        )
+        db_session.execute(
+            delete(ChatArtifact).where(
+                ChatArtifact.id.in_(artifact_ids),
+                ~select(ChatArtifactVersion.artifact_id)
+                .where(ChatArtifactVersion.artifact_id == ChatArtifact.id)
+                .exists(),
+            )
+        )
+        db_session.commit()
+
+
+def get_chat_published_files(
+    chat_session_id: UUID, db_session: Session
+) -> list[PublishedFileView]:
+    """The files that the model published in a chat, its subagents' files
+    included: the latest version of each artifact, by the artifact's first
+    publish. Versions whose object is missing are left out."""
+    latest = (
+        select(
+            ChatArtifact.id.label("artifact_id"),
+            ChatArtifact.path,
+            ChatArtifact.created_at,
+            ChatArtifactVersion.version,
+            ChatArtifactVersion.file_id,
+            ChatArtifactVersion.title,
+            ChatArtifactVersion.thumbnail_file_id,
+            FileRecord.display_name,
+            FileRecord.file_type,
+            FileRecord.file_size,
+        )
+        .join(ChatArtifactVersion, ChatArtifactVersion.artifact_id == ChatArtifact.id)
+        .join(FileRecord, FileRecord.file_id == ChatArtifactVersion.file_id)
+        .where(
+            ChatArtifact.chat_session_id == chat_session_id,
+            FileRecord.file_size.is_distinct_from(FILE_SIZE_MISSING_SENTINEL),
+        )
+        .distinct(ChatArtifact.id)
+        .order_by(ChatArtifact.id, ChatArtifactVersion.version.desc())
+        .subquery()
+    )
+    rows = db_session.execute(
+        select(latest).order_by(latest.c.created_at, latest.c.artifact_id)
+    ).all()
+    return [
+        PublishedFileView(
+            file_id=row.file_id,
+            artifact_id=row.artifact_id,
+            version=row.version,
+            name=row.display_name or row.file_id,
+            title=row.title,
+            path=row.path,
+            # A file without a recorded size shows as 0.
+            size=row.file_size or 0,
+            mime_type=row.file_type,
+            thumbnail_file_id=row.thumbnail_file_id,
+        )
+        for row in rows
+    ]
 
 
 def get_or_create_root_message(
