@@ -1,0 +1,72 @@
+---
+title: "ChatGPT"
+description: "Connect ChatGPT on the web and the ChatGPT desktop app to the Onyx MCP server."
+icon: "comments"
+---
+
+## ChatGPT on the web
+
+Your ChatGPT workspace must allow custom MCP servers.
+
+<Steps>
+  <Step title="Open Add custom MCP server">
+    Open **Customize > Plugins** and select **Add > Add custom MCP server**.
+
+    <img className="rounded-image" src="/assets/overview/onyx_anywhere/mcp/chatgpt_add_custom_mcp.webp" alt="ChatGPT Plugins page with the Add menu open and Add custom MCP server shown."/>
+  </Step>
+
+  <Step title="Enter the Onyx MCP URL">
+    Enter **Onyx** as the **Name** and your Onyx MCP URL as the **Server URL**.
+    Keep **OAuth** as the **Authentication**.
+
+    <img className="rounded-image" src="/assets/overview/onyx_anywhere/mcp/chatgpt_server_form.webp" alt="Add custom MCP server form with the name Onyx, an Onyx MCP server URL, OAuth authentication, and the I understand and want to continue checkbox selected."/>
+  </Step>
+
+  <Step title="Select Dynamic Client Registration">
+    Open **Advanced OAuth settings** and set **Registration method** to **Dynamic Client Registration (DCR)**.
+
+    <img className="rounded-image" src="/assets/overview/onyx_anywhere/mcp/chatgpt_oauth_dcr.webp" alt="ChatGPT OAuth advanced settings with Registration method set to Dynamic Client Registration and read:search selected under Default scopes."/>
+  </Step>
+
+  <Step title="Create the plugin and sign in">
+    Select **I understand and want to continue**, then **Create as a plugin**, then **Continue to Onyx**.
+    Sign in and select **Allow access**.
+
+    <img className="rounded-image" src="/assets/overview/onyx_anywhere/mcp/chatgpt_connect_onyx.webp" alt="ChatGPT Connect Onyx dialog with the Continue to Onyx button."/>
+
+    Onyx then shows under **Installed** on the **Plugins** page.
+
+    <img className="rounded-image" src="/assets/overview/onyx_anywhere/mcp/chatgpt_plugin_page.webp" alt="ChatGPT plugin page for Onyx with the Settings and Try in chat buttons."/>
+  </Step>
+
+  <Step title="Use Onyx in a chat">
+    Select **Try in chat**, or type `@Onyx` before your question in any chat.
+    Send the [test prompt](/overview/onyx_anywhere/mcp_server#test-the-connection) to check the connection.
+
+    <img className="rounded-image" src="/assets/overview/onyx_anywhere/mcp/chatgpt_prompt.webp" alt="ChatGPT message box with @Onyx followed by a request to search for the onboarding guide."/>
+  </Step>
+</Steps>
+
+To remove Onyx, open **Settings > Plugins**, select Onyx, and select **Delete app**.
+Then revoke access in Onyx under [Connected apps](/overview/onyx_anywhere/mcp_server#manage-connected-apps).
+
+## ChatGPT desktop
+
+The desktop app shares `~/.codex/config.toml` with [Codex](/overview/onyx_anywhere/mcp_server/codex).
+If you already added Onyx in Codex, it is already in the server list.
+
+<Steps>
+  <Step title="Add the server">
+    Open **Settings > MCP servers** and select **Add server**. Name it **Onyx**, choose **Streamable HTTP**,
+    and enter your Onyx MCP URL.
+  </Step>
+
+  <Step title="Restart and sign in">
+    Save and select **Restart**. Select **Authenticate** for Onyx, sign in, and select **Allow access**.
+  </Step>
+
+  <Step title="Check the connection">
+    Enter `/mcp` to see connected servers.
+    Send the [test prompt](/overview/onyx_anywhere/mcp_server#test-the-connection).
+  </Step>
+</Steps>

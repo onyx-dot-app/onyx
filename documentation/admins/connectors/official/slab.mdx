@@ -1,0 +1,46 @@
+---
+title: "Slab"
+description: "Access documentation from Slab"
+---
+
+## How it works
+
+Slab is a wiki tool where the pages are called posts.
+Onyx indexes the **title** and **content** of every post that the bot token can read.
+
+Onyx pulls new and changed posts on the connector's **Refresh Every** schedule. The default is **30 minutes**.
+
+## Setting up
+
+### Authorization
+
+<Steps>
+  <Step title="Get a Slab bot token">
+    Follow the video below to create a bot and copy its **Slab Bot Token**.
+
+    <video className="rounded-image" src="/assets/admins/connectors/slab/SlabBotToken.mp4" autoPlay muted loop playsInline aria-label="Creating a Slab bot and copying its token in Slab settings" />
+  </Step>
+</Steps>
+
+### Indexing
+
+<Steps>
+  <Step title="Create an authentication account">
+    In Onyx, go to **Admin Panel → Connectors** and select **Slab**. Under **Authentication Account**,
+    select **Create New**, paste the token into **Slab Bot Token**, and select **Create**.
+  </Step>
+
+  <Step title="Configure the connector">
+    Under **Connector Settings**, in **Base URL**, enter the URL of your Slab team, such as `https://onyx.slab.com/`.
+    Onyx uses it to build the link for each indexed post.
+
+    Under **Document Access**, choose who can see the indexed posts. **Specific Groups** is a paid feature:
+    the Business and Enterprise tiers on Onyx Cloud, and the Enterprise Edition when self-hosted.
+    The Slab connector does not sync Slab permissions.
+  </Step>
+
+  <Step title="Start indexing">
+    Select **Create Connector**.
+    Open **Admin Panel → Indexing Status** and select the connector to follow the first indexing run.
+  </Step>
+</Steps>

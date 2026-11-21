@@ -1,0 +1,16 @@
+---
+title: "Transfer Private Plugins"
+openapi: "POST /manage/admin/transfer-private-plugins"
+---
+
+<Info>
+  **Required permission:** Admin (`admin`).
+</Info>
+
+Moves every private Skill of a user to one new owner in one transaction.
+Use it before [Delete User](/developers/api_reference/user_management/delete_user) when the delete returns `409`.
+The `409` response lists the Skills in `private_plugins`.
+
+The new owner must be an active standard user. Shares of the moved Skills stay.
+If the new owner already has a plugin with the same name, the moved plugin gets the next free name,
+for example `deploy-2`. The response lists each rename in `renames`.

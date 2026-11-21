@@ -1,0 +1,85 @@
+---
+title: "Claude Code"
+description: "Connect Claude Code to the Onyx MCP server with OAuth, the Onyx plugin, or a personal access token."
+icon: "square-terminal"
+---
+
+## Add Onyx
+
+```bash
+claude mcp add --scope user --transport http onyx https://onyx.example.com/mcp/
+claude mcp login onyx
+```
+
+Sign in and select **Allow access**. If your version has no `claude mcp login`, enter `/mcp` in Claude Code,
+select Onyx, and choose **Authenticate**.
+Then send the [test prompt](/overview/onyx_anywhere/mcp_server#test-the-connection).
+
+### Share with a project
+
+To share Onyx with a team, put this in `.mcp.json` at the project root instead.
+Each member signs in with their own Onyx account. Use user or project configuration, not both.
+
+```json
+{
+  "mcpServers": {
+    "onyx": {
+      "type": "http",
+      "url": "https://onyx.example.com/mcp/"
+    }
+  }
+}
+```
+
+## Onyx plugin
+
+The [Onyx plugin](https://github.com/onyx-dot-app/onyx/tree/main/extensions/agent-plugin)
+tells Claude to search Onyx first for company knowledge. It needs a personal access token with `read:search`,
+from **Settings > 3rd Party Access > Access Tokens**.
+
+```
+/plugin marketplace add https://raw.githubusercontent.com/onyx-dot-app/onyx/main/extensions/agent-plugin/.claude-plugin/marketplace.json
+/plugin install onyx@onyx
+```
+
+Claude Code asks for your Onyx URL and the token. The hooks need `bun` or Node 23.6 or later.
+
+| Option | Effect |
+| --- | --- |
+| **Strict retrieval** | Blocks other search tools until Claude searches Onyx for the prompt. |
+| **Prefetch results** | Searches Onyx before each prompt and gives Claude the top results. Adds up to 3 seconds per prompt. |
+
+Administrators can require the plugin on every machine with [managed
+settings](https://code.claude.com/docs/en/plugins/org).
+
+## Personal access token
+
+To use a token instead of OAuth,
+export a [personal access token](/overview/onyx_anywhere/mcp_server#use-a-personal-access-token-instead)
+as `ONYX_TOKEN` and use this `.mcp.json` entry:
+
+```json
+{
+  "mcpServers": {
+    "onyx": {
+      "type": "http",
+      "url": "https://onyx.example.com/mcp/",
+      "headers": {
+        "Authorization": "Bearer ${ONYX_TOKEN}"
+      }
+    }
+  }
+}
+```
+
+Start `claude` from the shell that exports `ONYX_TOKEN`.
+
+## Disconnect
+
+```bash
+claude mcp logout onyx
+claude mcp remove onyx --scope user
+```
+
+For a project configuration, remove Onyx from `.mcp.json`. This does not revoke access.
+Revoke it in Onyx under [Connected apps](/overview/onyx_anywhere/mcp_server#manage-connected-apps).
