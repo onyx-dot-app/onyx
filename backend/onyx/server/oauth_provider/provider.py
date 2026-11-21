@@ -168,6 +168,7 @@ def _create_grant(
             client_id=record.authorization.client_id,
             client_name=record.authorization.client_name,
             resource=record.authorization.params.resource or "",
+            scopes=record.authorization.params.scopes or [],
             issue_refresh=issue_refresh,
         )
         session.commit()

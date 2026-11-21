@@ -14,11 +14,11 @@ from onyx.auth.constants import (
     OAUTH_PROVIDER_ACCESS_LIFETIME,
     OAUTH_PROVIDER_CLIENT_IDLE_LIFETIME,
     OAUTH_PROVIDER_GRANT_LIFETIME,
-    OAUTH_PROVIDER_SCOPES,
 )
 from onyx.auth.oauth_provider import (
     OAuthProviderTokenKind,
     generate_oauth_provider_token,
+    is_valid_oauth_provider_grant_scope,
     parse_oauth_provider_token,
 )
 from onyx.auth.pat import hash_pat
@@ -150,11 +150,15 @@ def create_oauth_provider_grant__no_commit(
     client_id: str,
     client_name: str,
     resource: str,
+    scopes: list[str],
     issue_refresh: bool,
 ) -> OAuthProviderTokenPair | None:
+    """`scopes` are the ones the user approved. A consent page opened before
+    read:chat was added approved read:search only."""
     user = session.get(User, user_id, populate_existing=True)
     if (
-        user is None
+        not is_valid_oauth_provider_grant_scope(scopes)
+        or user is None
         or not user.is_active
         or user.account_type != AccountType.STANDARD
         or not has_global_permission(user, Permission.READ_SEARCH)
@@ -167,7 +171,7 @@ def create_oauth_provider_grant__no_commit(
         client_id=client_id,
         client_name=client_name,
         resource=resource,
-        scopes=list(OAUTH_PROVIDER_SCOPES),
+        scopes=scopes,
         created_at=now,
         expires_at=now
         + (
