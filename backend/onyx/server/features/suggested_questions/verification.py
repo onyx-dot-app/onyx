@@ -46,7 +46,7 @@ logger = setup_logger()
 
 
 def run_search_test(
-    drafts: list[DraftQuestion], user: User | None
+    drafts: list[DraftQuestion], user: User | None, timeout_s: float | None = None
 ) -> list[PoolQuestion]:
     """Search each question and keep it when its document is among the first
     SQ_TOP_K_DOCS distinct documents. The searches run in parallel.
@@ -79,6 +79,9 @@ def run_search_test(
         ],
         # Each search calls the model server, shared with indexing and chat.
         max_workers=SQ_SEARCH_WORKERS,
+        # A search still running when the run's time is up counts as failed.
+        timeout=timeout_s,
+        timeout_callback=lambda *_args: None,
     )
     now = datetime.now(timezone.utc)
     passed = [
@@ -116,12 +119,20 @@ def _search_position(
 ) -> int | None:
     """Where the question's document ranks among the first SQ_TOP_K_DOCS
     distinct documents, or None when it is not there. Positions are compared,
-    not scores: hybrid scores are normalised per query."""
-    chunks = (
-        _search_as(user, acl_filters, draft.text, document_index, embedding_model)
-        if user and acl_filters
-        else _search_everything(draft.text, document_index, embedding_model)
-    )
+    not scores: hybrid scores are normalised per query. A failed search also
+    gives None, so one failure does not lose the run's other questions after
+    the model calls are paid for."""
+    try:
+        chunks = (
+            _search_as(user, acl_filters, draft.text, document_index, embedding_model)
+            if user and acl_filters
+            else _search_everything(draft.text, document_index, embedding_model)
+        )
+    except Exception:
+        logger.warning(
+            "Suggested questions: search test failed for one question", exc_info=True
+        )
+        return None
     documents = list(dict.fromkeys(chunk.document_id for chunk in chunks))
     top = documents[:SQ_TOP_K_DOCS]
     document_id = draft.chunk.document_id
