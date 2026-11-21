@@ -485,8 +485,8 @@ def _convert_pr_to_document(
                     for assignee in pull_request.assignee_logins
                 ],
                 "repo": pull_request.base_repo_full_name,
-                "num_commits": str(pull_request.commits),
-                "num_files_changed": str(pull_request.changed_files),
+                "num_commits": pull_request.commits,
+                "num_files_changed": pull_request.changed_files,
                 "labels": pull_request.label_names,
                 "created_at": _utc(pull_request.created_at),
                 "updated_at": _utc(pull_request.updated_at),
@@ -698,6 +698,10 @@ class GithubConnector(
         # Branch to index files from; None means each repo's default branch.
         self.branch = (branch or "").strip() or None
         self._source_operations: GitHubSourceOperations | None = None
+        # Pull requests GitHub refused to detail (422 "too many files
+        # changed"), so offset paging, which details each pull request in the
+        # batch and again at conversion, does not repeat the failing request.
+        self._undetailable_pull_requests: set[tuple[str, int]] = set()
         # Profiles read for the user fields of the metadata, by login. None
         # marks a profile that could not be read.
         self._user_cache: dict[str, GitHubUser | None] = {}
@@ -870,10 +874,32 @@ class GithubConnector(
     ) -> GitHubPullRequest:
         if pull_request.detailed or pull_request.base_repo_full_name is None:
             return pull_request
-        return self.source_operations.get_pull_request(
-            repo_full_name=pull_request.base_repo_full_name,
-            number=pull_request.number,
-        )
+        key = (pull_request.base_repo_full_name, pull_request.number)
+        if key in self._undetailable_pull_requests:
+            return pull_request
+        try:
+            return self.source_operations.get_pull_request(
+                repo_full_name=pull_request.base_repo_full_name,
+                number=pull_request.number,
+            )
+        except GitHubApiError as e:
+            # GitHub refuses to detail a pull request whose diff is too large
+            # ("too many files changed", HTTP 422). Failing here would fail the
+            # whole run, so a repo holding one such PR could never finish
+            # indexing; keep the listing's fields instead. Only the detail-only
+            # fields (merged, commits, changed files) are missing.
+            if e.status_code == 422 and "too many files changed" in (
+                e.github_message or str(e)
+            ):
+                logger.warning(
+                    "GitHub cannot detail %s#%s (too many files changed); "
+                    "indexing it from the listing",
+                    pull_request.base_repo_full_name,
+                    pull_request.number,
+                )
+                self._undetailable_pull_requests.add(key)
+                return pull_request
+            raise
 
     def _detailed_issue(self, issue: GitHubIssue) -> GitHubIssue:
         if issue.detailed:
