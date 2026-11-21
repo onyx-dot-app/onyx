@@ -272,7 +272,18 @@ fn popup_title(url: &Url) -> String {
 
 pub fn open_external(app: &AppHandle, url: &str) {
     if let Err(e) = app.opener().open_url(url, None::<&str>) {
-        log::warn!("could not open {}: {e}", log_safe(url));
+        log::warn!("could not open {}: {}", log_safe(url), open_error_kind(&e));
+    }
+}
+
+/// The kind of an opener error. Its message can hold the whole URL (the
+/// launcher command line), so the message is not logged.
+fn open_error_kind(error: &tauri_plugin_opener::Error) -> String {
+    match error {
+        tauri_plugin_opener::Error::Io(e) => format!("{:?}", e.kind()),
+        tauri_plugin_opener::Error::ForbiddenUrl { .. }
+        | tauri_plugin_opener::Error::ForbiddenPath { .. } => "not allowed".into(),
+        _ => "opener error".into(),
     }
 }
 
@@ -699,10 +710,23 @@ pub fn spawn_session_renewal(app: &AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::{
-        classify, classify_popup, is_web_sign_in, log_safe, return_path, server_url_join,
-        LinkAction,
+        classify, classify_popup, is_web_sign_in, log_safe, open_error_kind, return_path,
+        server_url_join, LinkAction,
     };
     use url::Url;
+
+    #[test]
+    fn opener_errors_log_no_url() {
+        let error = tauri_plugin_opener::Error::Io(std::io::Error::other(
+            "Launcher \"xdg-open\" [\"https://x.example/?token=secret\"] failed",
+        ));
+        assert_eq!(open_error_kind(&error), "Other");
+        let forbidden = tauri_plugin_opener::Error::ForbiddenUrl {
+            url: "https://x.example/?token=secret".into(),
+            with: None,
+        };
+        assert!(!open_error_kind(&forbidden).contains("secret"));
+    }
 
     const ORIGIN: &str = "http://localhost:3000";
 
