@@ -71,7 +71,10 @@ from onyx.connectors.credential_families import FAMILY_CREDENTIAL_CODECS
 from onyx.connectors.google_drive.quota import DriveQuotaApi
 from onyx.connectors.interfaces import SourceApiLimiter
 from onyx.connectors.microsoft_credential import MicrosoftCredential
-from onyx.connectors.microsoft_utils.request_pacer import GRAPH_LIMITER_API
+from onyx.connectors.microsoft_utils.request_pacer import (
+    DOWNLOAD_LIMITER_API,
+    GRAPH_LIMITER_API,
+)
 from onyx.connectors.models import ConnectorStopSignal
 
 # no-direct-redis: allow the budget is shared by every indexing and sync worker
@@ -214,10 +217,10 @@ class RedisSourceApiLimiter(SourceApiLimiter):
         self._source = source.value
         self._tenant_id = tenant_id
         self._prefix = f"{_KEY_PREFIX}:{credential_key}"
-        # The pause that this limiter reads and sets. None: it has none.
-        self._pause_key = (
-            f"{_KEY_PREFIX}:{pause_key}:blocked_until" if pause_key else None
-        )
+        # The base of the pauses that this limiter reads and sets, one for
+        # each API, so a pause of one API never stops the calls of another.
+        # None: it has none.
+        self._pause_base = f"{_KEY_PREFIX}:{pause_key}" if pause_key else None
         self._budgets = budgets
         self._should_stop = should_stop
         # Every call of a bulk worker, such as docconversion, waits after the
@@ -464,14 +467,20 @@ class RedisSourceApiLimiter(SourceApiLimiter):
             if waited_at_all:
                 record_limiter_wait(self._source, api, time.monotonic() - started)
 
+    def _pause_key(self, api: str) -> str | None:
+        if self._pause_base is None:
+            return None
+        return f"{self._pause_base}:{api}:blocked_until"
+
     def _wait_for_pause(self, api: str) -> None:
-        """Waits until the pause that the source asked for ends."""
-        if self._pause_key is None:
+        """Waits until the pause of ``api`` that the source asked for ends."""
+        pause_key = self._pause_key(api)
+        if pause_key is None:
             return
         waited = 0.0
         try:
             while True:
-                left = self._windows.pause_left(self._pause_key)
+                left = self._windows.pause_left(pause_key)
                 if left <= 0:
                     return
                 self._check_stop()
@@ -483,16 +492,17 @@ class RedisSourceApiLimiter(SourceApiLimiter):
 
     @override
     def report_retry_after(self, api: str, seconds: float) -> None:
-        if self._pause_key is None or seconds <= 0 or api not in self._budgets:
+        pause_key = self._pause_key(api)
+        if pause_key is None or seconds <= 0 or api not in self._budgets:
             return
-        left = self._windows.pause(self._pause_key, seconds)
+        left = self._windows.pause(pause_key, seconds)
         record_limiter_pause(self._source, api)
         logger.info(
             "%s asked its callers to wait %.1fs (Retry-After); every call of "
             "the shared pause %s waits %.1fs.",
             api,
             seconds,
-            _key_for_log(self._source, self._pause_key),
+            _key_for_log(self._source, pause_key),
             left,
         )
 
@@ -604,12 +614,24 @@ GOOGLE_DRIVE_BUDGETS: dict[str, SourceApiBudget] = {
 MICROSOFT_GRAPH_RU_PER_MINUTE = 6_250
 _MICROSOFT_WINDOW_SECONDS = 10.0
 MICROSOFT_START_SHARE = 0.2
+# The fetches of pre-authenticated download links in one minute, for each
+# app. Microsoft publishes no limit for the download host, so the lane learns
+# it from 429 answers, from a start share of this ceiling.
+MICROSOFT_LINK_DOWNLOADS_PER_MINUTE = 6_000
+# The learned download lane. It is apart from the Graph budget: a link fetch
+# costs no RU, and a throttle of the download host pauses and cuts only it.
+MICROSOFT_DOWNLOAD_BUDGET = SourceApiBudget(
+    per_credential=MICROSOFT_LINK_DOWNLOADS_PER_MINUTE,
+    window_seconds=_MICROSOFT_WINDOW_SECONDS,
+    start_share=MICROSOFT_START_SHARE,
+)
 MICROSOFT_GRAPH_BUDGETS: dict[str, SourceApiBudget] = {
     GRAPH_LIMITER_API: SourceApiBudget(
         per_credential=MICROSOFT_GRAPH_RU_PER_MINUTE,
         window_seconds=_MICROSOFT_WINDOW_SECONDS,
         start_share=MICROSOFT_START_SHARE,
     ),
+    DOWNLOAD_LIMITER_API: MICROSOFT_DOWNLOAD_BUDGET,
 }
 
 

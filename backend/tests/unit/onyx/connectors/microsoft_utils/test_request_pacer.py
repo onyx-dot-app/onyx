@@ -14,12 +14,16 @@ from typing_extensions import override
 
 from onyx.connectors.interfaces import SourceApiLimiter
 from onyx.connectors.microsoft_utils import graph_client as graph_client_module
-from onyx.connectors.microsoft_utils.drive_items import download_via_graph_api
+from onyx.connectors.microsoft_utils.drive_items import (
+    download_via_graph_api,
+    download_with_cap,
+)
 from onyx.connectors.microsoft_utils.graph_client import (
     GraphApiClient,
     sleep_and_retry,
 )
 from onyx.connectors.microsoft_utils.request_pacer import (
+    DOWNLOAD_LIMITER_API,
     GRAPH_LIMITER_API,
     MICROSOFT_USER_AGENT,
     RU_COSTS,
@@ -111,6 +115,7 @@ def test_the_costs_follow_microsofts_table() -> None:
         MicrosoftCall.DELTA_PAGE: 1,
         MicrosoftCall.CHILDREN_PAGE: 2,
         MicrosoftCall.DOWNLOAD: 1,
+        MicrosoftCall.LINK_DOWNLOAD: 0,
         MicrosoftCall.PERMISSION: 5,
         MicrosoftCall.REST: 5,
         MicrosoftCall.OTHER: 1,
@@ -182,6 +187,107 @@ def test_a_download_takes_one_unit_for_each_try(
     assert content == b"content"
     assert limiter.costs == [1, 1]
     assert (limiter.refusals, limiter.pauses) == (1, [2.0])
+
+
+class _LaneRecorder(SourceApiLimiter):
+    """Records each limiter call with its lane."""
+
+    def __init__(self) -> None:
+        self.acquired: list[tuple[str, int]] = []
+        self.refused: list[str] = []
+        self.paused: list[tuple[str, float]] = []
+
+    @override
+    def acquire(
+        self,
+        api: str,
+        cost: int,
+        user: str | None = None,  # noqa: ARG002
+        request_count: int = 1,  # noqa: ARG002
+        *,
+        bulk: bool = False,  # noqa: ARG002
+    ) -> None:
+        self.acquired.append((api, cost))
+
+    @override
+    def report_rate_limit(
+        self,
+        api: str,
+        user: str | None,  # noqa: ARG002
+        user_scope: bool,  # noqa: ARG002
+        count: int = 1,  # noqa: ARG002
+    ) -> None:
+        self.refused.append(api)
+
+    @override
+    def report_retry_after(self, api: str, seconds: float) -> None:
+        self.paused.append((api, seconds))
+
+
+def test_a_link_download_uses_the_download_lane_and_no_graph_ru(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The download host is not Graph. A link fetch takes one turn from the
+    download lane, and its 429 pauses and cuts that lane only."""
+    limiter = _LaneRecorder()
+    answers = iter([_stream_response(429, {"Retry-After": "3"})])
+    monkeypatch.setattr(
+        "onyx.connectors.microsoft_utils.drive_items.requests.get",
+        lambda *_args, **_kwargs: next(answers),
+    )
+
+    with pytest.raises(requests.HTTPError):
+        download_with_cap(
+            "https://host/download.aspx?tempauth=x",
+            10,
+            1000,
+            MicrosoftRequestPacer(limiter),
+        )
+
+    assert limiter.acquired == [(DOWNLOAD_LIMITER_API, 1)]
+    assert limiter.paused == [(DOWNLOAD_LIMITER_API, 3.0)]
+    assert limiter.refused == [DOWNLOAD_LIMITER_API]
+
+
+def test_the_redirect_of_content_is_a_link_download(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """/content costs 1 Graph RU. Its redirect target is a link download:
+    a 429 there pauses the download lane, and the target is tried again."""
+    limiter = _LaneRecorder()
+    redirect = _stream_response(302, {"Location": "https://host/download.aspx?t=1"})
+    answers = iter(
+        [
+            redirect,
+            _stream_response(429, {"Retry-After": "2"}),
+            _stream_response(200),
+        ]
+    )
+    requested: list[tuple[str, bool]] = []
+
+    def get(url: str, **kwargs: Any) -> requests.Response:
+        requested.append((url, kwargs.get("allow_redirects", True)))
+        return next(answers)
+
+    monkeypatch.setattr("onyx.connectors.microsoft_utils.drive_items.requests.get", get)
+    monkeypatch.setattr(
+        "onyx.connectors.microsoft_utils.drive_items.time.sleep", lambda _s: None
+    )
+
+    content = download_via_graph_api(
+        lambda: "token", "d", "i", 1000, GRAPH, MicrosoftRequestPacer(limiter)
+    )
+
+    assert content == b"content"
+    assert requested[0] == (f"{GRAPH}/drives/d/items/i/content", False)
+    assert [url for url, _ in requested[1:]] == ["https://host/download.aspx?t=1"] * 2
+    assert limiter.acquired == [
+        (GRAPH_LIMITER_API, 1),
+        (DOWNLOAD_LIMITER_API, 1),
+        (DOWNLOAD_LIMITER_API, 1),
+    ]
+    assert limiter.paused == [(DOWNLOAD_LIMITER_API, 2.0)]
+    assert limiter.refused == [DOWNLOAD_LIMITER_API]
 
 
 def test_an_sdk_client_takes_the_cost_of_each_request_and_reports_a_refusal(

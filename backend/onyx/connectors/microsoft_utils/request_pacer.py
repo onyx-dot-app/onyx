@@ -30,6 +30,10 @@ from onyx.utils.retry_after import parse_retry_after_seconds
 # The one budget of an app registration. Graph and SharePoint REST calls
 # count toward the same limit.
 GRAPH_LIMITER_API = "graph"
+# The fetches of pre-authenticated download links. The link host is not
+# Graph: a fetch costs no RU, and the host throttles on its own. So these
+# fetches have a lane of their own, with its own learned rate and pause.
+DOWNLOAD_LIMITER_API = "download"
 
 USER_AGENT_HEADER = "User-Agent"
 MICROSOFT_USER_AGENT = f"ISV|Onyx|Onyx/{__version__}"
@@ -48,8 +52,10 @@ class MicrosoftCall(str, Enum):
     DELTA_PAGE = "delta_page"
     # One page of a folder's children.
     CHILDREN_PAGE = "children_page"
-    # The content of one file.
+    # The content of one file, from Graph (`/content`).
     DOWNLOAD = "download"
+    # A fetch of a pre-authenticated download link. Not a Graph call.
+    LINK_DOWNLOAD = "link_download"
     # A Graph call that reads permissions.
     PERMISSION = "permission"
     # A SharePoint REST call. Microsoft publishes no cost for REST.
@@ -63,6 +69,7 @@ RU_COSTS: dict[MicrosoftCall, int] = {
     MicrosoftCall.DELTA_PAGE: 1,
     MicrosoftCall.CHILDREN_PAGE: 2,
     MicrosoftCall.DOWNLOAD: 1,
+    MicrosoftCall.LINK_DOWNLOAD: 0,
     MicrosoftCall.PERMISSION: 5,
     # The start estimate: a permission read is the usual REST call.
     MicrosoftCall.REST: 5,
@@ -101,23 +108,38 @@ class MicrosoftRequestPacer:
         self._limiter = limiter
 
     def acquire(self, call: MicrosoftCall) -> None:
-        """Waits until the call fits the app's budget and no pause is on.
-        Call it before each try of a request."""
+        """Waits until the call fits its lane's budget and no pause of the
+        lane is on. Call it before each try of a request. A link download
+        takes one fetch from the download lane and no Graph RU."""
+        if call is MicrosoftCall.LINK_DOWNLOAD:
+            self._limiter.acquire(DOWNLOAD_LIMITER_API, 1)
+            return
         self._limiter.acquire(GRAPH_LIMITER_API, RU_COSTS[call])
 
-    def report_response(self, status: int | None, retry_after: str | None) -> None:
-        """Reports a 429 or 503 answer. Call it from the thread that sent the
-        request, before the retry wait."""
+    def report_response(
+        self,
+        status: int | None,
+        retry_after: str | None,
+        call: MicrosoftCall | None = None,
+    ) -> None:
+        """Reports a 429 or 503 answer to the lane of ``call``: the download
+        lane for a link download, else the Graph lane. Call it from the
+        thread that sent the request, before the retry wait."""
         if status not in _THROTTLE_STATUSES:
             return
+        api = (
+            DOWNLOAD_LIMITER_API
+            if call is MicrosoftCall.LINK_DOWNLOAD
+            else GRAPH_LIMITER_API
+        )
         seconds = parse_retry_after_seconds(retry_after)
         if seconds is not None and seconds > 0:
             self._limiter.report_retry_after(
-                GRAPH_LIMITER_API,
+                api,
                 bound_server_wait(seconds, _SERVER_WAIT_SOURCE, classify=False),
             )
         if status == _RATE_LIMIT_STATUS:
-            self._limiter.report_rate_limit(GRAPH_LIMITER_API, None, user_scope=False)
+            self._limiter.report_rate_limit(api, None, user_scope=False)
 
 
 PacerSource = Callable[[], MicrosoftRequestPacer | None]
