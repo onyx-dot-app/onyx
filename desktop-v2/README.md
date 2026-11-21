@@ -70,7 +70,8 @@ Linux builds are a preview (see [Windows and Linux](#windows-and-linux)). It liv
   Click support differs by OS:
   - macOS: a click works while the notification is on screen and from Notification Center.
     In `bun run tauri dev`, macOS shows the notification as Terminal's.
-  - Windows: a click works only while the toast is on screen, not from the Action Center.
+  - Windows: a click works while the toast is on screen and from the Action Center. The toast
+    opens an `onyx://launcher/answer` link, which the running app receives (single instance).
   - Linux: a click works only if the notification server supports the `default` action
     (GNOME and KDE do). Otherwise the notification shows, and a click does nothing.
 - SSO in the system browser, where you are often signed in already. The browser runs the
@@ -387,8 +388,12 @@ How the app differs from macOS:
 
 - The launcher shortcut is `Ctrl+Alt+Space` by default (`Ctrl+Shift+Space` often switches the
   input language). The launcher is a borderless, always-on-top window with no taskbar entry. It
-  takes focus when it shows and hides when you click away or press `Esc`. In the launcher,
-  `Ctrl+Enter` opens the chat in the window and `Ctrl+N` starts a new chat.
+  opens in the center of the monitor under the pointer. It takes focus when it shows (on X11
+  it asks the window manager with a fresh X timestamp) and hides when you click away or press
+  `Esc`. In the launcher, `Ctrl+Enter` opens the chat in the window and `Ctrl+N` starts a new
+  chat.
+- On Linux, Aonyx leaves always-on-top while a file chooser of the main window is open, so it
+  does not cover the chooser's buttons.
 - The main window keeps the native title bar and has its own menu bar: **File** (New Chat
   `Ctrl+N`, Open Launcher, Preferences `Ctrl+,`, Close Window `Ctrl+W`, Quit `Ctrl+Q`), **View**
   (Reload `Ctrl+R`, Back `Alt+Left`, Forward `Alt+Right`, zoom `Ctrl+0`/`Ctrl+=`/`Ctrl+-`, Full
