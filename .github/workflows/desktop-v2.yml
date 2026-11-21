@@ -236,8 +236,23 @@ jobs:
         if: runner.os == 'Windows' && github.event.pull_request.head.repo.full_name == github.repository && vars.DESKTOP_V2_WINDOWS_SIGN_COMMAND != ''
         working-directory: ./desktop-v2/src-tauri/target/release
         shell: pwsh
+        # Tauri restores the unsigned app in target/release after each
+        # package, so the app is checked inside the installers.
         run: |
-          $files = @(Get-Item onyx-desktop-v2.exe) + @(Get-ChildItem bundle/nsis/*.exe, bundle/msi/*.msi)
+          $ErrorActionPreference = 'Stop'
+          $installers = @(Get-ChildItem bundle/nsis/*.exe, bundle/msi/*.msi)
+          $payload = Join-Path $env:RUNNER_TEMP 'signed-payload'
+          foreach ($msi in Get-ChildItem bundle/msi/*.msi) {
+            $process = Start-Process msiexec.exe -Wait -PassThru -ArgumentList @('/a', "`"$($msi.FullName)`"", '/qn', "TARGETDIR=`"$payload\msi-$($msi.BaseName)`"")
+            if ($process.ExitCode -ne 0) { throw "Could not extract $($msi.Name) (exit code $($process.ExitCode))." }
+          }
+          foreach ($nsis in Get-ChildItem bundle/nsis/*.exe) {
+            7z x $nsis.FullName "-o$payload\nsis-$($nsis.BaseName)" -y | Out-Null
+            if ($LASTEXITCODE -ne 0) { throw "Could not extract $($nsis.Name)." }
+          }
+          $apps = @(Get-ChildItem -Path $payload -Recurse -Filter onyx-desktop-v2.exe)
+          if ($apps.Count -ne $installers.Count) { throw "Found $($apps.Count) packaged apps for $($installers.Count) installers." }
+          $files = $installers + $apps
           $unsigned = $files | Where-Object { (Get-AuthenticodeSignature $_.FullName).Status -ne 'Valid' }
           foreach ($file in $unsigned) { Write-Error "No valid Authenticode signature: $($file.Name)" -ErrorAction Continue }
           if ($unsigned) { exit 1 }

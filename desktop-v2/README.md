@@ -386,7 +386,9 @@ repository variable `DESKTOP_V2_WINDOWS_SIGN_COMMAND` is set, the build passes i
 `bundle.windows.signCommand`. Tauri then runs the command for each file it signs (the app, the
 NSIS uninstaller, the NSIS installer and the MSI) and puts the file path in place of `%1`. Tauri
 splits the command at spaces, so a path in it cannot contain a space. A later step then fails
-the build if one of these files has no valid signature.
+the build if one of the installers, or the app inside the MSI or the NSIS installer, has no
+valid signature. Tauri restores the unsigned app in `target/release` after it packages each
+installer, so that copy is not checked.
 
 Release engineering must supply:
 
@@ -442,8 +444,9 @@ How the app differs from macOS:
   - Both installers refuse to install an older version over a newer one. Uninstall the newer
     version first.
   - The NSIS uninstaller option **Delete the application data** also deletes the session
-    tokens from the user's Credential Manager. A plain uninstall, and an MSI uninstall, keep
-    the app's data and the token.
+    tokens from the user's Credential Manager. It does this only when the uninstaller runs as
+    the signed-in Windows user, not when another administrator's credentials elevate it. A
+    plain uninstall, and an MSI uninstall, keep the app's data and the token.
 - On Linux the app registers `onyx://` at launch (the `.deb` also registers it), so AppImage
   builds get sign-in links too. This needs `xdg-mime`.
 
