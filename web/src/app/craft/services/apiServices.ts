@@ -713,23 +713,69 @@ export function buildArtifactUrl(sessionId: string, path: string): string {
   return `${BUILD_API_BASE}/sessions/${sessionId}/artifacts/${encodedPath}`;
 }
 
-export function downloadArtifactFile(sessionId: string, path: string): void {
-  downloadFile(path.split("/").pop() || path, {
-    url: buildArtifactUrl(sessionId, path),
+// iOS Safari treats a link to the API URL as a navigation and cancels
+// every in-flight fetch on the page ("Load failed"), which also trips the
+// health banner. Fetch the bytes and save a Blob instead; fall back to the
+// link only if the fetch itself fails.
+async function downloadViaBlob(
+  url: string,
+  fallbackName: string
+): Promise<void> {
+  let response: Response;
+  try {
+    response = await fetch(url, { cache: "no-store" });
+  } catch {
+    downloadFile(fallbackName, { url });
+    return;
+  }
+  if (!response.ok) {
+    downloadFile(fallbackName, { url });
+    return;
+  }
+  const disposition = response.headers.get("Content-Disposition") ?? "";
+  const encoded = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+  const plain = disposition.match(/filename="([^"]+)"/i)?.[1];
+  let name = plain;
+  if (encoded) {
+    try {
+      name = decodeURIComponent(encoded);
+    } catch {
+      // Malformed percent-encoding: keep the plain filename.
+    }
+  }
+  // A neutral type keeps the same-origin blob from ever being rendered,
+  // e.g. an HTML artifact opened in a tab instead of saved.
+  const bytes = await response.arrayBuffer();
+  downloadFile(name || fallbackName, {
+    content: new Blob([bytes], { type: "application/octet-stream" }),
   });
+}
+
+export function downloadArtifactFile(
+  sessionId: string,
+  path: string
+): Promise<void> {
+  return downloadViaBlob(
+    buildArtifactUrl(sessionId, path),
+    path.split("/").pop() || path
+  );
 }
 
 /**
  * Trigger a browser download for a directory as a zip file.
  */
-export function downloadDirectory(sessionId: string, path: string): void {
+export function downloadDirectory(
+  sessionId: string,
+  path: string
+): Promise<void> {
   const encodedPath = path
     .split("/")
     .map((segment) => encodeURIComponent(segment))
     .join("/");
-  downloadFile("", {
-    url: `${BUILD_API_BASE}/sessions/${sessionId}/download-directory/${encodedPath}`,
-  });
+  return downloadViaBlob(
+    `${BUILD_API_BASE}/sessions/${sessionId}/download-directory/${encodedPath}`,
+    `${path.split("/").filter(Boolean).pop() || "download"}.zip`
+  );
 }
 
 export interface FileContentResponse {

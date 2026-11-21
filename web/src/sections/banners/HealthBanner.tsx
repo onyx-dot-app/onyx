@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import useSWR from "swr";
 import { useTranslations } from "next-intl";
 import { errorHandlingFetcher, RedirectError } from "@/lib/fetcher";
@@ -10,9 +11,24 @@ import { useSettings } from "@/lib/settings/hooks";
 export default function HealthBanner() {
   const t = useTranslations("chat.banners");
   const { appName } = useSettings();
-  const { error } = useSWR(SWR_KEYS.health, errorHandlingFetcher);
+  // one failed health check is not an outage. iOS Safari aborts
+  // in-flight fetches when a file download starts ("Load failed"), so the
+  // overlay waits for a second consecutive failure once the backend has
+  // answered at least once.
+  const [failures, setFailures] = useState(0);
+  const { data, error } = useSWR(SWR_KEYS.health, errorHandlingFetcher, {
+    onSuccess: () => {
+      setFailures(0);
+    },
+    onError: () => {
+      setFailures((n) => n + 1);
+    },
+  });
 
   if (!error || error instanceof RedirectError) {
+    return null;
+  }
+  if (data !== undefined && failures < 2) {
     return null;
   }
 
