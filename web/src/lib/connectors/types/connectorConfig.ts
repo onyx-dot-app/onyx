@@ -189,6 +189,11 @@ export interface ClickupConfig {
   retrieve_task_comments: boolean;
 }
 
+export interface ClickupDocsConfig {
+  connector_type: "doc" | "list" | "folder" | "space" | "workspace";
+  connector_ids?: string[];
+}
+
 export interface GoogleSitesConfig {
   zip_path: string;
   base_url: string;
