@@ -87,12 +87,20 @@ class RejectedFile(BaseModel):
 class CategorizedFiles(BaseModel):
     acceptable: list[UploadFile] = Field(default_factory=list)
     rejected: list[RejectedFile] = Field(default_factory=list)
-    acceptable_file_to_token_count: dict[str, int] = Field(default_factory=dict)
-    # Filenames within `acceptable` that should be stored but not indexed.
-    skip_indexing: set[str] = Field(default_factory=set)
+    # The token count of each file of `acceptable`, and whether it is
+    # stored but not indexed, in order (files of one name keep their own).
+    acceptable_token_counts: list[int] = Field(default_factory=list)
+    acceptable_skip_indexing: list[bool] = Field(default_factory=list)
 
     # Allow FastAPI UploadFile instances
     model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    def accept(
+        self, upload: UploadFile, token_count: int, *, skip_indexing: bool = False
+    ) -> None:
+        self.acceptable.append(upload)
+        self.acceptable_token_counts.append(token_count)
+        self.acceptable_skip_indexing.append(skip_indexing)
 
 
 def _skip_token_threshold(extension: str) -> bool:
@@ -191,9 +199,7 @@ def _categorize_sandbox_only_file(
             )
         )
         return
-    results.acceptable.append(upload)
-    results.acceptable_file_to_token_count[filename] = token_count
-    results.skip_indexing.add(filename)
+    results.accept(upload, token_count, skip_indexing=True)
 
 
 def categorize_uploaded_files(
@@ -211,6 +217,7 @@ def categorize_uploaded_files(
     - Uses default tokenizer to compute token length.
     - If token length exceeds the admin-configured threshold, reject file.
     - If extension unsupported or text cannot be extracted, reject file.
+    - A file with no name is rejected.
     - Otherwise marked as acceptable.
     """
 
@@ -246,7 +253,13 @@ def categorize_uploaded_files(
 
     for upload in files:
         try:
-            filename = get_safe_filename(upload)
+            # `upload_files` stores no file without a name.
+            if not upload.filename:
+                results.rejected.append(
+                    RejectedFile(filename=UNKNOWN_FILENAME, reason="File has no name")
+                )
+                continue
+            filename = upload.filename
 
             # Size limit is a hard safety cap.
             if max_upload_size_bytes is not None and is_upload_too_large(
@@ -285,8 +298,7 @@ def categorize_uploaded_files(
                         )
                     )
                 else:
-                    results.acceptable.append(upload)
-                    results.acceptable_file_to_token_count[filename] = token_count
+                    results.accept(upload, token_count)
                 continue
 
             # Code and script files: kept for the Python tool, never indexed.
@@ -372,8 +384,7 @@ def categorize_uploaded_files(
                     # vision-LLM captioning path. `count` is only populated
                     # when image extraction is enabled.
                     if image_bearing_ext and count > 0:
-                        results.acceptable.append(upload)
-                        results.acceptable_file_to_token_count[filename] = 0
+                        results.accept(upload, 0)
                         try:
                             upload.file.seek(0)
                         except Exception as e:
@@ -407,9 +418,7 @@ def categorize_uploaded_files(
                     # Exempt extensions (e.g. spreadsheets) are accepted
                     # but flagged to skip indexing — only metadata is
                     # injected into the LLM context.
-                    results.acceptable.append(upload)
-                    results.acceptable_file_to_token_count[filename] = token_count
-                    results.skip_indexing.add(filename)
+                    results.accept(upload, token_count, skip_indexing=True)
                 elif exceeds_threshold:
                     results.rejected.append(
                         RejectedFile(
@@ -418,8 +427,7 @@ def categorize_uploaded_files(
                         )
                     )
                 else:
-                    results.acceptable.append(upload)
-                    results.acceptable_file_to_token_count[filename] = token_count
+                    results.accept(upload, token_count)
 
                 # Reset file pointer for subsequent upload handling
                 try:

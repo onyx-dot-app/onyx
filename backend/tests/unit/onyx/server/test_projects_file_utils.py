@@ -113,6 +113,22 @@ def test_categorize_uploaded_files_accepts_size_under_limit(
     assert len(result.rejected) == 0
 
 
+def test_categorize_uploaded_files_rejects_file_with_no_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_common_dependencies(monkeypatch, upload_size_mb=1)
+    monkeypatch.setattr(utils, "estimate_image_tokens_for_upload", lambda _upload: 10)
+
+    named = _make_upload("photo.png", size=50)
+    unnamed = _make_upload("", size=50)
+    result = utils.categorize_uploaded_files([unnamed, named], MagicMock())
+
+    assert result.acceptable == [named]
+    assert [(file.filename, file.reason) for file in result.rejected] == [
+        (utils.UNKNOWN_FILENAME, "File has no name")
+    ]
+
+
 def test_categorize_uploaded_files_uses_seek_fallback_when_upload_size_missing(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
@@ -424,7 +440,7 @@ def test_categorize_text_under_token_limit_accepted(
     result = utils.categorize_uploaded_files([upload], MagicMock())
 
     assert len(result.acceptable) == 1
-    assert result.acceptable_file_to_token_count["ok.txt"] == 500
+    assert result.acceptable_token_counts == [500]
 
 
 # --- skip-indexing vs rejection by file type ---
@@ -443,7 +459,7 @@ def test_csv_over_token_threshold_accepted_skip_indexing(
 
     assert len(result.acceptable) == 1
     assert result.acceptable[0].filename == "large.csv"
-    assert "large.csv" in result.skip_indexing
+    assert result.acceptable_skip_indexing == [True]
     assert len(result.rejected) == 0
 
 
@@ -460,7 +476,7 @@ def test_csv_under_token_threshold_accepted_and_indexed(
 
     assert len(result.acceptable) == 1
     assert result.acceptable[0].filename == "small.csv"
-    assert "small.csv" not in result.skip_indexing
+    assert result.acceptable_skip_indexing == [False]
     assert len(result.rejected) == 0
 
 
@@ -574,8 +590,8 @@ def test_code_file_accepted_and_skips_indexing(
     result = utils.categorize_uploaded_files([upload], MagicMock())
 
     assert [f.filename for f in result.acceptable] == [filename]
-    assert result.skip_indexing == {filename}
-    assert result.acceptable_file_to_token_count[filename] == len(content)
+    assert result.acceptable_skip_indexing == [True]
+    assert result.acceptable_token_counts == [len(content)]
     assert result.rejected == []
     assert upload.file.tell() == 0
 
@@ -602,5 +618,5 @@ def test_code_file_over_token_threshold_rejected(
     result = utils.categorize_uploaded_files([upload], MagicMock())
 
     assert result.acceptable == []
-    assert result.skip_indexing == set()
+    assert result.acceptable_skip_indexing == []
     assert result.rejected[0].reason == "Exceeds 1K token limit"
