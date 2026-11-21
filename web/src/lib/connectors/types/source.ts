@@ -71,6 +71,7 @@ export enum ValidSources {
   AzureDatalake = "azure_datalake",
   Canvas = "canvas",
   Zoom = "zoom",
+  Shortcut = "shortcut",
 
   // Craft-specific sources
   CraftFile = "craft_file",

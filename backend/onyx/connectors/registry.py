@@ -50,6 +50,7 @@ from onyx.connectors.outlook.config import OutlookConnectorConfig
 from onyx.connectors.productboard.config import ProductboardConnectorConfig
 from onyx.connectors.salesforce.config import SalesforceConnectorConfig
 from onyx.connectors.sharepoint.config import SharepointConnectorConfig
+from onyx.connectors.shortcut.config import ShortcutConnectorConfig
 from onyx.connectors.slab.config import SlabConnectorConfig
 from onyx.connectors.slack.config import SlackConnectorConfig
 from onyx.connectors.teams.config import TeamsConnectorConfig
@@ -365,6 +366,11 @@ CONNECTOR_CLASS_MAP = {
         module_path="onyx.connectors.azure_datalake.connector",
         class_name="AzureDataLakeConnector",
         config_class=AzureDataLakeConnectorConfig,
+    ),
+    DocumentSource.SHORTCUT: ConnectorMapping(
+        module_path="onyx.connectors.shortcut.connector",
+        class_name="ShortcutConnector",
+        config_class=ShortcutConnectorConfig,
     ),
     # just for integration tests
     DocumentSource.MOCK_CONNECTOR: ConnectorMapping(
