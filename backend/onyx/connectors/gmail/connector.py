@@ -22,7 +22,7 @@ from onyx.connectors.exceptions import (
 )
 from onyx.connectors.gmail.access import get_group_mail_access
 from onyx.connectors.gmail.collaborative_inbox import (
-    GROUPS_SETTINGS_SCOPE,
+    GROUPS_SETTINGS_SCOPE_MISSING_MESSAGE,
     CollaborativeInboxLookup,
     get_rfc_message_id,
 )
@@ -672,10 +672,7 @@ class GmailConnector(
         if not self.collaborative_inbox_groups:
             return
         if not self.group_mail.has_settings_access():
-            raise InsufficientPermissionsError(
-                "Collaborative Inbox groups need a service account whose "
-                f"domain-wide delegation grants the scope {GROUPS_SETTINGS_SCOPE}."
-            )
+            raise InsufficientPermissionsError(GROUPS_SETTINGS_SCOPE_MISSING_MESSAGE)
         unusable_groups = self.group_mail.get_groups_without_collaborative_inbox()
         if unusable_groups:
             raise ConnectorValidationError(

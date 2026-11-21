@@ -25,6 +25,10 @@ from onyx.utils.logger import setup_logger
 logger = setup_logger()
 
 GROUPS_SETTINGS_SCOPE = "https://www.googleapis.com/auth/apps.groups.settings"
+GROUPS_SETTINGS_SCOPE_MISSING_MESSAGE = (
+    "Collaborative Inbox groups need a service account whose domain-wide "
+    f"delegation grants the scope {GROUPS_SETTINGS_SCOPE}."
+)
 
 _COLLABORATIVE_INBOX_FIELD = "enableCollaborativeInbox"
 _GROUP_MEMBER_FIELDS = "nextPageToken, members(email, type)"
