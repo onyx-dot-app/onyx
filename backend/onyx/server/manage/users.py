@@ -65,27 +65,17 @@ from onyx.db.skill import transfer_private_plugins__no_commit
 from onyx.db.tenant_invite_counter import release_trial_invites, reserve_trial_invites
 from onyx.db.user_file import fetch_recent_user_files
 from onyx.db.user_preferences import (
+    UserPreferenceValues,
     activate_user,
     deactivate_user,
+    fetch_user_preferences,
     get_all_user_assistant_specific_configs,
     get_latest_access_token_for_user,
     get_memories_for_user,
     update_assistant_preferences,
-    update_user_assistant_visibility,
-    update_user_auto_scroll,
-    update_user_chat_background,
-    update_user_default_app_mode,
-    update_user_default_model,
-    update_user_interrupt_on_send,
-    update_user_language,
-    update_user_paste_as_tile,
     update_user_personalization,
-    update_user_reasoning_effort_default,
-    update_user_shortcut_enabled,
-    update_user_temperature_default,
-    update_user_temperature_override_enabled,
-    update_user_theme_preference,
     update_users_craft_enabled,
+    upsert_user_preferences__no_commit,
 )
 from onyx.db.users import (
     batch_get_last_active,
@@ -1186,8 +1176,10 @@ def verify_user_logged_in(
         for memory in get_memories_for_user(user.id, db_session)
     ]
 
+    preferences = fetch_user_preferences(user, db_session)
     user_info = UserInfo.from_model(
         user,
+        preferences,
         token_expires_at=token_expires_at,
         is_cloud_superuser=user.email in super_users_list,
         team_name=team_name,
@@ -1199,7 +1191,7 @@ def verify_user_logged_in(
         effective_permissions=sorted(p.value for p in get_effective_permissions(user)),
     )
 
-    reconcile_locale_cookie(request, response, stored_language=user.language)
+    reconcile_locale_cookie(request, response, stored_language=preferences.language)
 
     return user_info
 
@@ -1229,7 +1221,10 @@ def update_user_temperature_default_api(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    update_user_temperature_default(user.id, request.temperature_default, db_session)
+    upsert_user_preferences__no_commit(
+        db_session, user.id, temperature_default=request.temperature_default
+    )
+    db_session.commit()
 
 
 class ReasoningEffortDefaultRequest(BaseModel):
@@ -1257,9 +1252,10 @@ def update_user_reasoning_effort_default_api(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    update_user_reasoning_effort_default(
-        user.id, request.reasoning_effort_default, db_session
+    upsert_user_preferences__no_commit(
+        db_session, user.id, reasoning_effort_default=request.reasoning_effort_default
     )
+    db_session.commit()
 
 
 @router.patch("/temperature-override-enabled")
@@ -1268,9 +1264,10 @@ def update_user_temperature_override_enabled_api(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    update_user_temperature_override_enabled(
-        user.id, temperature_override_enabled, db_session
+    upsert_user_preferences__no_commit(
+        db_session, user.id, temperature_override_enabled=temperature_override_enabled
     )
+    db_session.commit()
 
 
 class ChosenDefaultModelRequest(BaseModel):
@@ -1283,7 +1280,10 @@ def update_user_shortcut_enabled_api(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    update_user_shortcut_enabled(user.id, shortcut_enabled, db_session)
+    upsert_user_preferences__no_commit(
+        db_session, user.id, shortcut_enabled=shortcut_enabled
+    )
+    db_session.commit()
 
 
 @router.patch("/paste-as-tile")
@@ -1292,7 +1292,8 @@ def update_user_paste_as_tile_api(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    update_user_paste_as_tile(user.id, paste_as_tile, db_session)
+    upsert_user_preferences__no_commit(db_session, user.id, paste_as_tile=paste_as_tile)
+    db_session.commit()
 
 
 @router.patch("/interrupt-on-send")
@@ -1301,7 +1302,10 @@ def update_user_interrupt_on_send_api(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    update_user_interrupt_on_send(user.id, interrupt_on_send, db_session)
+    upsert_user_preferences__no_commit(
+        db_session, user.id, interrupt_on_send=interrupt_on_send
+    )
+    db_session.commit()
 
 
 @router.patch("/auto-scroll")
@@ -1310,7 +1314,10 @@ def update_user_auto_scroll_api(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    update_user_auto_scroll(user.id, request.auto_scroll, db_session)
+    upsert_user_preferences__no_commit(
+        db_session, user.id, auto_scroll=request.auto_scroll
+    )
+    db_session.commit()
 
 
 @router.patch("/user/theme-preference")
@@ -1319,7 +1326,10 @@ def update_user_theme_preference_api(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    update_user_theme_preference(user.id, request.theme_preference, db_session)
+    upsert_user_preferences__no_commit(
+        db_session, user.id, theme_preference=request.theme_preference
+    )
+    db_session.commit()
 
 
 LOCALE_COOKIE_MAX_AGE_SECONDS = 365 * 24 * 60 * 60
@@ -1359,7 +1369,8 @@ def update_user_language_api(
     db_session: Session = Depends(get_session),
 ) -> None:
     language: str | None = request.language.value if request.language else None
-    update_user_language(user.id, language, db_session)
+    upsert_user_preferences__no_commit(db_session, user.id, language=language)
+    db_session.commit()
     set_locale_cookie(response, resolve_user_language(language))
 
 
@@ -1369,7 +1380,10 @@ def update_user_chat_background_api(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    update_user_chat_background(user.id, request.chat_background, db_session)
+    upsert_user_preferences__no_commit(
+        db_session, user.id, chat_background=request.chat_background
+    )
+    db_session.commit()
 
 
 @router.patch("/user/default-app-mode")
@@ -1378,7 +1392,10 @@ def update_user_default_app_mode_api(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    update_user_default_app_mode(user.id, request.default_app_mode, db_session)
+    upsert_user_preferences__no_commit(
+        db_session, user.id, default_app_mode=request.default_app_mode
+    )
+    db_session.commit()
 
 
 @router.patch("/user/default-model")
@@ -1387,7 +1404,10 @@ def update_user_default_model_api(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    update_user_default_model(user.id, request.default_model, db_session)
+    upsert_user_preferences__no_commit(
+        db_session, user.id, default_model=request.default_model
+    )
+    db_session.commit()
 
 
 @router.patch("/user/personalization")
@@ -1398,17 +1418,13 @@ def update_user_personalization_api(
 ) -> None:
     new_name = request.name if request.name is not None else user.personal_name
     new_role = request.role if request.role is not None else user.personal_role
-    current_use_memories = user.use_memories
-    new_use_memories = (
-        request.use_memories
-        if request.use_memories is not None
-        else current_use_memories
-    )
-    new_enable_memory_tool = (
-        request.enable_memory_tool
-        if request.enable_memory_tool is not None
-        else user.enable_memory_tool
-    )
+    preferences: UserPreferenceValues = {}
+    if request.use_memories is not None:
+        preferences["use_memories"] = request.use_memories
+    if request.enable_memory_tool is not None:
+        preferences["enable_memory_tool"] = request.enable_memory_tool
+    if request.user_preferences is not None:
+        preferences["instructions"] = request.user_preferences
     existing_memories = [
         MemoryItem(id=memory.id, content=memory.memory_text)
         for memory in get_memories_for_user(user.id, db_session)
@@ -1416,20 +1432,13 @@ def update_user_personalization_api(
     new_memories = (
         request.memories if request.memories is not None else existing_memories
     )
-    new_user_preferences = (
-        request.user_preferences
-        if request.user_preferences is not None
-        else user.user_preferences
-    )
 
     update_user_personalization(
         user.id,
         personal_name=new_name,
         personal_role=new_role,
-        use_memories=new_use_memories,
-        enable_memory_tool=new_enable_memory_tool,
+        preferences=preferences,
         memories=new_memories,
-        user_preferences=new_user_preferences,
         db_session=db_session,
     )
 
@@ -1483,19 +1492,26 @@ def update_user_assistant_visibility_api(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    user_preferences = UserInfo.from_model(user).preferences
+    preferences = fetch_user_preferences(user, db_session)
     updated_preferences = update_assistant_visibility(
-        user_preferences, assistant_id, show
+        UserPreferences(
+            chosen_assistants=preferences.chosen_assistants,
+            hidden_assistants=preferences.hidden_assistants,
+            visible_assistants=preferences.visible_assistants,
+        ),
+        assistant_id,
+        show,
     )
     if updated_preferences.chosen_assistants is not None:
         updated_preferences.chosen_assistants.append(assistant_id)
-    update_user_assistant_visibility(
-        user.id,
-        updated_preferences.hidden_assistants,
-        updated_preferences.visible_assistants,
-        updated_preferences.chosen_assistants,
+    upsert_user_preferences__no_commit(
         db_session,
+        user.id,
+        hidden_assistants=updated_preferences.hidden_assistants,
+        visible_assistants=updated_preferences.visible_assistants,
+        chosen_assistants=updated_preferences.chosen_assistants,
     )
+    db_session.commit()
 
 
 @router.get("/user/assistant/preferences")

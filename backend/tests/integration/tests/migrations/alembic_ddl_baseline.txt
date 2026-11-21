@@ -851,61 +851,6 @@ op.drop_constraint(op.f('usage_reports_requestor_user_id_fkey'), 'usage_reports'
 
 op.create_foreign_key(None, 'usage_reports', 'user', ['requestor_user_id'], ['id'], ondelete='CASCADE')
 
-op.alter_column('user', 'temperature_override_enabled',
-           existing_type=sa.BOOLEAN(),
-           server_default=None,
-           existing_nullable=True)
-
-op.alter_column('user', 'shortcut_enabled',
-           existing_type=sa.BOOLEAN(),
-           server_default=None,
-           existing_nullable=False)
-
-op.alter_column('user', 'default_app_mode',
-           existing_type=sa.VARCHAR(),
-           server_default=None,
-           existing_nullable=False)
-
-op.alter_column('user', 'use_memories',
-           existing_type=sa.BOOLEAN(),
-           server_default=None,
-           existing_nullable=False)
-
-op.alter_column('user', 'enable_memory_tool',
-           existing_type=sa.BOOLEAN(),
-           server_default=None,
-           existing_nullable=False)
-
-op.alter_column('user', 'visible_assistants',
-           existing_type=postgresql.JSONB(astext_type=sa.Text()),
-           server_default=None,
-           existing_nullable=False)
-
-op.alter_column('user', 'hidden_assistants',
-           existing_type=postgresql.JSONB(astext_type=sa.Text()),
-           server_default=None,
-           existing_nullable=False)
-
-op.alter_column('user', 'paste_as_tile',
-           existing_type=sa.BOOLEAN(),
-           server_default=None,
-           existing_nullable=False)
-
-op.alter_column('user', 'voice_auto_send',
-           existing_type=sa.BOOLEAN(),
-           server_default=None,
-           existing_nullable=False)
-
-op.alter_column('user', 'voice_auto_playback',
-           existing_type=sa.BOOLEAN(),
-           server_default=None,
-           existing_nullable=False)
-
-op.alter_column('user', 'voice_playback_speed',
-           existing_type=sa.DOUBLE_PRECISION(precision=53),
-           server_default=None,
-           existing_nullable=False)
-
 op.alter_column('user__external_user_group_id', 'stale',
            existing_type=sa.BOOLEAN(),
            server_default=None,
