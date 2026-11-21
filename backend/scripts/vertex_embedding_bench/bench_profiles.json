@@ -1,0 +1,17 @@
+{
+  "_comment": "Extra mock profiles for bench.py. bench.py merges these over the mock's own profiles file (profiles.json, else profiles.default.json) and starts its own mock with the result.",
+  "unlimited_300ms": {
+    "description": "No limits, no errors; ~300 ms per embedContent call (median), close to the production observation of 0.30-0.33 s per chunk.",
+    "sources": [],
+    "rpm": null,
+    "tpm": null,
+    "rpd": null,
+    "max_concurrency": null,
+    "max_inputs_per_request": 250,
+    "max_input_tokens": 8192,
+    "dsq": null,
+    "latency": {"base_ms": 290, "per_1k_tokens_ms": 30, "jitter_sigma": 0.15},
+    "transient_error_rate": 0.0,
+    "notes": "bench.py baseline profile."
+  }
+}
