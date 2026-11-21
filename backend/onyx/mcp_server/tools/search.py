@@ -3,7 +3,7 @@
 import time
 from collections.abc import Iterable
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 
 import httpx
 import pydantic_core
@@ -28,6 +28,8 @@ from onyx.mcp_server.utils import (
     require_access_token,
 )
 from onyx.server.features.search.models import (
+    PostgresQueryRequest,
+    PostgresQueryResponse,
     RawSearchRequest,
     SearchRequest,
     SearchResponse,
@@ -458,6 +460,167 @@ async def search_indexed_documents(
         record_mcp_server_tool_outcome(tool, _start, outcome)
         if result_count is not None:
             record_mcp_search_results(tool, result_count)
+
+
+@mcp_server.tool()
+async def query_metadata(
+    table: Literal[
+        "document", "hierarchy_node", "chat_session", "chat_message", "search_doc"
+    ],
+    count: bool = False,
+    group_by: Literal["source", "owner", "month"] | None = None,
+    limit: int | None = None,
+    cursor: str | None = None,
+    order_by: Literal[
+        "updated_desc",
+        "updated_asc",
+        "created_desc",
+        "created_asc",
+        "title_asc",
+        "title_desc",
+    ]
+    | None = None,
+    source_type: list[str] | None = None,
+    title_contains: list[str] | None = None,
+    updated_after: str | None = None,
+    updated_before: str | None = None,
+    owned_by: list[str] | None = None,
+    parent_hierarchy_node_id: list[int] | None = None,
+    name_contains: list[str] | None = None,
+    parent_id: list[int] | None = None,
+    node_type: list[str] | None = None,
+    description_contains: list[str] | None = None,
+    created_after: str | None = None,
+    created_before: str | None = None,
+    chat_session_id: list[str] | None = None,
+    content_contains: list[str] | None = None,
+    message_type: Literal["user", "assistant"] | None = None,
+    sent_after: str | None = None,
+    sent_before: str | None = None,
+    chat_message_id: int | None = None,
+    cited_only: bool | None = None,
+    agent: str | None = None,
+) -> dict[str, Any]:
+    """
+    Exact counts and listings over the metadata of the user's Onyx knowledge
+    base, and over the user's own Onyx chat history. Use it for questions that
+    top-k search cannot answer completely: "how many Jira tickets changed last
+    week", "list every doc with 'pricing' in the title", "the 10 oldest
+    Confluence pages", "documents by owner". It sees metadata only (titles,
+    dates, owners, sources, folders); use `search_indexed_documents` for what
+    documents say.
+
+    Tables and their filters:
+    - `document`: `source_type`, `title_contains`, `updated_after`,
+      `updated_before`, `owned_by`, `parent_hierarchy_node_id`. Listings take
+      `order_by` and return `next_cursor` when more match: pass it back as
+      `cursor` with the same filters for the next page. `group_by`: `source`
+      or `owner` (with `count`).
+    - `hierarchy_node` (folders, spaces, channels): `source_type`,
+      `name_contains`, `parent_id`, `node_type`.
+    - `chat_session`: `description_contains`, `created_after`,
+      `created_before`. `group_by`: `month`.
+    - `chat_message`: `chat_session_id`, `content_contains`, `message_type`,
+      `sent_after`, `sent_before`. `group_by`: `month`.
+    - `search_doc`: `chat_message_id` (required), `cited_only` — the
+      documents a past answer cited or retrieved.
+    The chat-history tables (`chat_session`, `chat_message`, `search_doc`)
+    need a token that allows `read:chat`; apps connected with only
+    `read:search` get an error for them.
+
+    List filters match any of their values; different filters are all
+    applied. Dates are ISO 8601 (`2026-06-01`); `*_before` bounds are
+    exclusive. `count` returns only the number of matches. `limit` is the row
+    or page size (default 25, max 100). `agent` keeps document queries inside
+    that Onyx agent's knowledge, resolved the same way as for
+    `search_indexed_documents`.
+
+    Returns ``{"result": "<rows or count as text>"}``; listed documents carry
+    their links.
+
+    Example usage:
+    ```
+    {
+        "table": "document",
+        "source_type": ["jira", "linear"],
+        "updated_after": "2026-11-01",
+        "count": true,
+        "group_by": "source"
+    }
+    ```
+    """
+    _start = time.monotonic()
+    tool = MCPServerToolName.QUERY_METADATA
+    arguments: dict[str, Any] = {
+        name: value
+        for name, value in {
+            "table": table,
+            "group_by": group_by,
+            "limit": limit,
+            "cursor": cursor,
+            "order_by": order_by,
+            "source_type": source_type,
+            "title_contains": title_contains,
+            "updated_after": updated_after,
+            "updated_before": updated_before,
+            "owned_by": owned_by,
+            "parent_hierarchy_node_id": parent_hierarchy_node_id,
+            "name_contains": name_contains,
+            "parent_id": parent_id,
+            "node_type": node_type,
+            "description_contains": description_contains,
+            "created_after": created_after,
+            "created_before": created_before,
+            "chat_session_id": chat_session_id,
+            "content_contains": content_contains,
+            "message_type": message_type,
+            "sent_after": sent_after,
+            "sent_before": sent_before,
+            "chat_message_id": chat_message_id,
+            "cited_only": cited_only,
+        }.items()
+        if value is not None
+    }
+    if count:
+        arguments["count"] = True
+    agent = (agent or "").strip() or None
+    logger.info(
+        "Onyx MCP Server: metadata query: table=%s, count=%s, agent=%s",
+        table,
+        count,
+        agent,
+    )
+
+    access_token = require_access_token()
+    outcome = MCPToolCallStatus.ERROR
+    try:
+        try:
+            persona_id = await _resolve_agent(agent, access_token) if agent else None
+        except _FilterError as err:
+            return _error_payload(str(err))
+
+        endpoint = (
+            f"{build_api_server_url_for_http_requests(respect_env_override_if_set=True)}"
+            "/search/postgres-query"
+        )
+        response = await _post_model(
+            endpoint,
+            PostgresQueryRequest(arguments=arguments, persona_id=persona_id),
+            access_token,
+        )
+        if not response.is_success:
+            return _error_payload(_extract_error_detail(response))
+        payload = PostgresQueryResponse.model_validate_json(response.content)
+        # A rejected query is a usable answer: it says how to fix the call.
+        outcome = MCPToolCallStatus.SUCCESS
+        if payload.is_error:
+            return _error_payload(payload.result)
+        return {"result": payload.result}
+    except Exception as err:
+        logger.error("Onyx MCP Server: metadata query error: %s", err, exc_info=True)
+        return _error_payload(f"Metadata query failed: {str(err)}")
+    finally:
+        record_mcp_server_tool_outcome(tool, _start, outcome)
 
 
 @mcp_server.tool()

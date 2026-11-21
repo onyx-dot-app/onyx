@@ -62,8 +62,12 @@ An empty result can be valid. Try a document that you know you can open in Onyx.
 
 ## Permissions and data access
 
-A connected app gets the `read:search` scope. It can search documents that you can access, search the web,
-and open web pages. It cannot create API keys or use other Onyx APIs. Your document permissions still apply.
+A connected app gets the `read:search` scope. It can search documents that you can access, query their metadata,
+search the web, and open web pages. It cannot read your chat history, create API keys, or use other Onyx APIs.
+Your document permissions still apply.
+
+To let your client query your chat history with `query_metadata`,
+connect with a [personal access token](#use-a-personal-access-token-instead) that has `read:search` and `read:chat`.
 
 Your AI client receives the content that Onyx returns. Use a client that your organization allows to receive it.
 
@@ -89,8 +93,11 @@ To change accounts, sign out of Onyx in your client and connect again with the o
 
 ## Use a personal access token instead
 
-If your client cannot use OAuth, create a [personal access token](/developers/overview#personal-access-tokens)
-with `read:search` under **Settings > Accounts & Access > Access Tokens**. On Onyx Cloud,
+If your client cannot use OAuth, or you want it to query your chat history,
+create a [personal access token](/developers/overview#personal-access-tokens)
+under **Settings > Accounts & Access > Access Tokens**. Select **Search > Read** (`read:search`)
+and **Chat > Read** (`read:chat`).
+A token with only `read:search` can use every tool except the chat-history tables of `query_metadata`. On Onyx Cloud,
 tokens need a paid subscription.
 
 Export the token without saving it in your shell history:
@@ -194,6 +201,43 @@ A result also includes `metadata` when its source supplies fields, such as a Jir
 Use these keys and values in `tags`. For a list value, such as `"labels": ["production", "urgent"]`,
 send one pair for each item. Results are ordered by relevance. `content` contains retrieved document text,
 which can be a selected chunk rather than the entire document. There is no `limit` parameter for this tool.
+
+### query_metadata
+
+Get exact counts and lists from the metadata of the documents that you can access, and from your own Onyx chat history.
+Use it for questions that a search cannot answer completely,
+such as "How many Jira tickets changed last week?" or "List every document with 'pricing' in the title".
+It reads titles, dates, owners, sources, and folders. It does not read document text.
+Use `search_indexed_documents` for questions about content.
+
+| Parameter | Type | Required | Description |
+| --- | --- | --- | --- |
+| `table` | string | Yes | `document`, `hierarchy_node` (folders, spaces, and channels), `chat_session`, `chat_message`, or `search_doc` (the documents that a past answer used). The last three tables hold your chat history and need a token with the `read:chat` scope. |
+| `count` | boolean | No | Defaults to `false`. Set `true` to get only the number of matches. |
+| `group_by` | string | No | With `count`: `source` or `owner` for documents, `month` for chat sessions and messages. |
+| `limit` | integer | No | Number of rows or page size. Defaults to 25. The maximum is 100. |
+| `order_by` | string | No | Document lists only: `updated_desc` (default), `updated_asc`, `created_desc`, `created_asc`, `title_asc`, or `title_desc`. |
+| `cursor` | string | No | The `next_cursor` value from the previous page of a document list. Use the same filters. |
+| `agent` | string | No | Name of an accessible Onyx agent. Document queries stay inside that agent's knowledge. |
+
+Each table has its own filters, such as `source_type`, `title_contains`, `owned_by`, and `updated_after` for documents.
+The tool description lists all of them. Filters that take a list match any of the values in the list.
+All filters in one call apply together. Dates use ISO 8601, such as `2026-06-01`.
+A `*_before` date is not included in the range.
+
+```json
+{
+  "table": "document",
+  "source_type": ["jira", "linear"],
+  "updated_after": "2026-11-01",
+  "count": true,
+  "group_by": "source"
+}
+```
+
+The response has a `result` string with the count or the rows. Listed documents include their links.
+When a document list has more pages, the result ends with a `next_cursor` value. Only document lists have pages.
+A list from another table stops at `limit` rows, so use narrower filters to see the rest.
 
 ### search_web
 
