@@ -295,7 +295,7 @@ fn watch_downloads(app: &AppHandle, view: &webkit2gtk::WebView) {
 
 /// The local path of a download's destination. WebKitGTK 4.x reports a
 /// `file://` URI; a plain path is kept as it is.
-#[cfg(any(target_os = "linux", test))]
+#[cfg(any(target_os = "linux", all(test, unix)))]
 fn download_path(destination: &str) -> std::path::PathBuf {
     Url::parse(destination)
         .ok()
@@ -893,6 +893,8 @@ mod tests {
     };
     use url::Url;
 
+    // Unix paths: only Linux reports a download as a file:// URI.
+    #[cfg(unix)]
     #[test]
     fn download_destinations_become_local_paths() {
         assert_eq!(
