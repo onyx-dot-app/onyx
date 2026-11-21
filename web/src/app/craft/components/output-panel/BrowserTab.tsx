@@ -9,7 +9,7 @@ import { cn } from "@opal/utils";
 
 import type { BuildSessionData } from "@/app/craft/hooks/useBuildSessionStore";
 import type { RegisteredWebapp, AppDiscoveryState } from "@/lib/build/types";
-import { WorkspaceHome } from "@/app/craft/components/output-panel/WorkspaceHome";
+import { WorkspaceHome } from "@/sections/output-panel/WorkspaceHome";
 
 interface BrowserTabProps {
   resourceId: string;

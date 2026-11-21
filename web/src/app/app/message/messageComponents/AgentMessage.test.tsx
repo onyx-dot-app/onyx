@@ -1450,3 +1450,97 @@ test("an auth error after an accepted user message shows its card without an ans
     view.unmount();
   }
 });
+
+describe("published files", () => {
+  const file = {
+    file_id: "file-report",
+    name: "report.md",
+    title: "Q3 report",
+    path: "/home/onyx/report.md",
+    display_path: "report.md",
+    size: 10,
+    mime_type: "text/markdown",
+    artifact_id: "artifact-report",
+    version: 1,
+  };
+  const publishStep: Packet[] = [
+    {
+      placement: { turn_index: 0 },
+      obj: {
+        type: PacketType.PUBLISH_FILES_START,
+        files: [{ path: file.path, title: file.title }],
+        description: null,
+      },
+    },
+    {
+      placement: { turn_index: 0 },
+      obj: { type: PacketType.PUBLISH_FILES_END, files: [file], error: null },
+    },
+    { placement: { turn_index: 0 }, obj: { type: PacketType.SECTION_END } },
+  ];
+  const answer = answerPackets.map((packet) => ({
+    ...packet,
+    placement: { turn_index: 1 },
+  }));
+
+  function renderAnswer(packets: Packet[]) {
+    return render(
+      <AgentMessage
+        rawPackets={packets}
+        chatState={chatState}
+        nodeId={NEW_ANSWER_NODE_ID}
+        llmManager={null}
+        hideFooter
+        disableTTS
+      />
+    );
+  }
+
+  test("show as cards after the answer, once the turn ends", async () => {
+    seedSessionAwaitingAnswer();
+    const view = renderAnswer([...publishStep, ...answer.slice(0, -1)]);
+    try {
+      await screen.findByText("A quick answer.");
+      expect(
+        screen.queryByRole("button", { name: "Preview report.md" })
+      ).toBeNull();
+
+      view.rerender(
+        <AgentMessage
+          rawPackets={[...publishStep, ...answer]}
+          chatState={chatState}
+          nodeId={NEW_ANSWER_NODE_ID}
+          llmManager={null}
+          hideFooter
+          disableTTS
+        />
+      );
+      const card = await screen.findByRole("button", {
+        name: "Preview report.md",
+      });
+      expect(
+        screen.getByText("A quick answer.").compareDocumentPosition(card)
+      ).toBe(Node.DOCUMENT_POSITION_FOLLOWING);
+    } finally {
+      view.unmount();
+    }
+  });
+
+  test("show as cards when the user stops the turn", async () => {
+    seedSessionAwaitingAnswer();
+    const view = renderAnswer([
+      ...publishStep,
+      {
+        placement: { turn_index: 1 },
+        obj: { type: PacketType.STOP, stop_reason: StopReason.USER_CANCELLED },
+      },
+    ]);
+    try {
+      expect(
+        await screen.findByRole("button", { name: "Preview report.md" })
+      ).toBeInTheDocument();
+    } finally {
+      view.unmount();
+    }
+  });
+});

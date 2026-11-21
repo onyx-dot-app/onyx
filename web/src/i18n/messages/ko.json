@@ -11774,9 +11774,6 @@
       "sessionNotFound": {
         "description": "이 채팅 세션이 없거나 삭제되었습니다.",
         "title": "채팅을 찾을 수 없음"
-      },
-      "sourcesModal": {
-        "title": "출처"
       }
     },
     "appChrome": {
@@ -13394,12 +13391,53 @@
     },
     "publishedFiles": {
       "card": {
-        "updated": {
-          "description": "업데이트된 버전 · {details}"
-        },
         "preview": {
           "ariaLabel": "{name} 미리 보기"
         }
+      },
+      "panel": {
+        "preview": {
+          "ariaLabel": "{name} 미리 보기"
+        }
+      },
+      "viewAllButton": {
+        "label": "파일 {count}개 모두 보기"
+      }
+    },
+    "rightPanel": {
+      "filesTab": {
+        "label": "파일",
+        "description": "이 채팅에서 모델이 게시한 파일",
+        "empty": "이 채팅에는 아직 파일이 없습니다",
+        "tile": {
+          "ariaLabel": "{name} 열기"
+        },
+        "search": {
+          "placeholder": "파일 검색",
+          "empty": "검색과 일치하는 파일이 없습니다"
+        }
+      },
+      "fileTab": {
+        "olderVersion": "<isolate>{name}</isolate> (v{version}/{latest})"
+      },
+      "sourcesTab": {
+        "label": "출처"
+      },
+      "toggleButton": {
+        "label": "패널 표시 전환"
+      },
+      "reloadButton": {
+        "label": "파일 새로 고침",
+        "error": "파일을 다시 불러오지 못했습니다. 다시 시도하세요."
+      },
+      "expandButton": {
+        "label": "패널 확장"
+      },
+      "restoreButton": {
+        "label": "패널 복원"
+      },
+      "resizeHandle": {
+        "label": "패널 크기 조정"
       }
     }
   },
@@ -15013,18 +15051,6 @@
       "browser": {
         "label": "앱"
       },
-      "list": {
-        "label": "출력 탭"
-      },
-      "close": {
-        "label": "{name} 닫기"
-      },
-      "reordered": {
-        "label": "탭을 {count}개 중 {position}번째 위치로 이동했습니다"
-      },
-      "open": {
-        "label": "탭 열기"
-      },
       "outputs": {
         "label": "출력"
       }
@@ -15150,8 +15176,7 @@
       "scope": {
         "turn": "턴 {turn, number} 출력",
         "all": "모든 출력"
-      },
-      "unseen": "새 항목 또는 업데이트됨"
+      }
     },
     "turnOutputs": {
       "showAll": "출력 {count}개 모두 보기",
@@ -15220,6 +15245,28 @@
       "description": "이 세션에서는 {names}을(를) 사용할 수 없습니다. 스킬은 {maxSize} 및 파일 {maxFiles, number}개 이내여야 합니다. 필요 없는 스킬을 끄고 공간을 확보하세요.",
       "manage": "스킬 관리",
       "dismiss": "닫기"
+    }
+  },
+  "outputPanel": {
+    "tabStrip": {
+      "list": {
+        "label": "출력 탭"
+      },
+      "close": {
+        "label": "{name} 닫기"
+      },
+      "reordered": {
+        "label": "탭을 {count}개 중 {position}번째 위치로 이동했습니다"
+      },
+      "open": {
+        "label": "탭 열기"
+      }
+    },
+    "tile": {
+      "download": {
+        "label": "다운로드"
+      },
+      "unseen": "새 항목 또는 업데이트됨"
     }
   },
   "knowledge": {

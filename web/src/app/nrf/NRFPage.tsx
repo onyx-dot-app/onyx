@@ -31,7 +31,8 @@ import {
   useCurrentIsStreamDraining,
   useCurrentMessageHistory,
   useChatSessionStore,
-  useDocumentSidebarVisible,
+  useSelectedNodeForDocDisplay,
+  useSourcesShown,
 } from "@/app/app/stores/useChatSessionStore";
 import ChatUI from "@/sections/chat/ChatUI";
 import { messageRowId } from "@/lib/chat/rowIds";
@@ -46,6 +47,7 @@ import { Spacer } from "@opal/components";
 import { SvgUser, SvgMenu, SvgAlertTriangle } from "@opal/icons";
 import { useAppBackground } from "@/providers/AppBackgroundProvider";
 import { MinimalOnyxDocument } from "@/lib/search/types";
+import { ChatSidePanel } from "@/sections/chat/ChatSidePanel";
 import DocumentsSidebar from "@/sections/document-sidebar/DocumentsSidebar";
 import PreviewModal from "@/sections/modals/PreviewModal";
 import { useQueryController } from "@/providers/QueryControllerProvider";
@@ -159,9 +161,11 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     useState<MinimalOnyxDocument | null>(null);
 
   // Document sidebar state (from store)
-  const documentSidebarVisible = useDocumentSidebarVisible();
-  const updateCurrentDocumentSidebarVisible = useChatSessionStore(
-    (state) => state.updateCurrentDocumentSidebarVisible
+  const sourcesPanelVisible = useSourcesShown();
+  // The message whose sources the panel shows
+  const sourcesNodeId = useSelectedNodeForDocDisplay();
+  const updateCurrentRightPanel = useChatSessionStore(
+    (state) => state.updateCurrentRightPanel
   );
   const setCurrentSession = useChatSessionStore(
     (state) => state.setCurrentSession
@@ -172,8 +176,8 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
   // Memoized callback for closing document sidebar
   const handleDocumentSidebarClose = useCallback(() => {
-    updateCurrentDocumentSidebarVisible(false);
-  }, [updateCurrentDocumentSidebarVisible]);
+    updateCurrentRightPanel({ type: "closePanel" });
+  }, [updateCurrentRightPanel]);
 
   // Initialize message from URL input parameter (for Chrome extension)
   const initializedRef = useRef(false);
@@ -638,19 +642,18 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       </Dropzone>
 
       {/* Document sidebar - shown when sources are clicked */}
-      <div
-        className={cn(
-          "absolute end-0 top-0 h-full z-20 overflow-hidden transition-all duration-300",
-          documentSidebarVisible ? "w-100" : "w-0"
-        )}
+      <ChatSidePanel
+        open={sourcesPanelVisible}
+        onEscape={handleDocumentSidebarClose}
+        shows={sourcesNodeId === null ? undefined : String(sourcesNodeId)}
+        className="absolute end-0 top-0 z-20"
       >
         <DocumentsSidebar
           setPresentingDocument={setPresentingDocument}
-          modal={false}
           closeSidebar={handleDocumentSidebarClose}
           selectedDocuments={[]}
         />
-      </div>
+      </ChatSidePanel>
 
       {/* Text/document preview modal */}
       {presentingDocument && (

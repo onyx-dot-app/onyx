@@ -14,6 +14,19 @@ interface SavedChatMessage {
   message: string;
 }
 
+/**
+ * The right panel's drawn box, the page column's width and the workspace
+ * row's box in one frame, in pixels.
+ */
+export interface PanelFrame {
+  start: number;
+  end: number;
+  width: number;
+  pageWidth: number;
+  rowStart: number;
+  rowEnd: number;
+}
+
 export class ChatPage {
   readonly page: Page;
   readonly inputBar: InputBar;
@@ -33,6 +46,9 @@ export class ChatPage {
   readonly scrollToBottomButton: Locator;
   readonly usageLimitBanner: Locator;
   readonly errorBanners: Locator;
+  /** The toggle at the header's end that opens and closes the right panel. */
+  readonly rightPanelToggle: Locator;
+  readonly publishedFilesPanel: Locator;
 
   // Model picker: the "Add Model" button, then one pill per selected model
   readonly modelSelector: Locator;
@@ -63,6 +79,12 @@ export class ChatPage {
     });
     this.usageLimitBanner = page.getByText(/you've reached the usage budget/i);
     this.errorBanners = page.getByTestId("chat-error-banner");
+    this.rightPanelToggle = page.getByRole("button", {
+      name: "Toggle panel",
+    });
+    this.publishedFilesPanel = page.getByRole("complementary", {
+      name: "Files",
+    });
     this.modelSelector = page.getByTestId("model-selector");
     this.modelPills = this.modelSelector.locator(
       "button:not([aria-label='Add Model'])"
@@ -105,6 +127,13 @@ export class ChatPage {
     return this.publishedFileCards(index).filter({ hasText: title });
   }
 
+  /** Opens all of an AI message's published files in the panel. */
+  async viewAllPublishedFiles(count: number, index = 0): Promise<void> {
+    await this.aiMessage(index)
+      .getByRole("button", { name: `View all ${count} files` })
+      .click();
+  }
+
   /** Checks a published file's card: its details and download link. */
   async expectPublishedFile(
     title: string,
@@ -124,18 +153,230 @@ export class ChatPage {
     await expect(download).toHaveAttribute("download", fileName);
   }
 
-  /** Opens a published file's preview and checks that it shows the text. */
+  /** A published file's preview in the Files panel, by its title or name. */
+  publishedFilePreview(title: string): Locator {
+    return this.publishedFilesPanel.getByRole("region", {
+      name: `Preview of ${title}`,
+    });
+  }
+
+  /** A tab of the right panel's tab strip, by its label. */
+  rightPanelTab(label: string): Locator {
+    return this.page.getByRole("tab", { name: label, exact: true });
+  }
+
+  /**
+   * Opens a reply card's file in the right panel, in its own tab, and checks
+   * that the preview shows the text. Escape closes the file's tab, back on
+   * the Files list, then closes the panel.
+   */
   async expectPublishedFilePreview(
     title: string,
     text: string,
     index = 0
   ): Promise<void> {
     await this.publishedFileCard(title, index).click();
-    const preview = this.page.getByRole("dialog");
+    const preview = this.publishedFilePreview(title);
     await expect(preview).toContainText(text);
+    await expect(this.rightPanelTab(title)).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
     await expect(preview.getByRole("link", { name: "Download" })).toBeVisible();
+    await expect(this.page.getByRole("dialog")).toHaveCount(0);
     await this.page.keyboard.press("Escape");
     await expect(preview).toBeHidden();
+    await expect(this.publishedFilesPanelCards().first()).toBeVisible();
+    await this.page.keyboard.press("Escape");
+    await expect(this.publishedFilesPanel).toBeHidden();
+  }
+
+  /** Checks the Files list's text for a chat without files. */
+  async expectNoPublishedFiles(): Promise<void> {
+    await expect(this.rightPanelTab("Files")).toHaveAttribute(
+      "aria-selected",
+      "true"
+    );
+    await expect(
+      this.publishedFilesPanel.getByText("This chat has no files yet")
+    ).toBeVisible();
+  }
+
+  /**
+   * The right panel's medium width in pixels, as its resize handle reports
+   * it: the width it goes to, not the width drawn now.
+   */
+  async rightPanelWidth(): Promise<number> {
+    return Number(
+      await this.rightPanelResizeHandle().getAttribute("aria-valuenow")
+    );
+  }
+
+  /**
+   * Drags the right panel's edge toward the chat by `distance` pixels, in
+   * `steps` pointer moves. A negative distance narrows the panel. A
+   * `clickCount` of 2 makes the press the second click of a double click.
+   */
+  async dragRightPanelEdge(
+    distance: number,
+    { steps = 10, clickCount = 1 }: { steps?: number; clickCount?: number } = {}
+  ): Promise<void> {
+    const handle = this.rightPanelResizeHandle();
+    const width = await this.rightPanelWidth();
+    const viewport = this.page.viewportSize();
+    if (!viewport) throw new Error("The page has no viewport");
+    // The panel slides open: drag once its edge is in place
+    await expect
+      .poll(async () => (await handle.boundingBox())?.x ?? Infinity)
+      .toBeLessThan(viewport.width - width + 2);
+    const box = await handle.boundingBox();
+    if (!box) throw new Error("The resize handle has no box");
+    const y = box.y + box.height / 2;
+    await this.page.mouse.move(box.x + box.width / 2, y);
+    await this.page.mouse.down({ clickCount });
+    await this.page.mouse.move(box.x - distance, y, { steps });
+    await this.page.mouse.up({ clickCount });
+  }
+
+  async expandRightPanel(): Promise<void> {
+    await this.page.getByRole("button", { name: "Expand panel" }).click();
+    await this.expectRightPanelExpanded(true);
+  }
+
+  /** Checks whether the right panel fills the workspace. */
+  async expectRightPanelExpanded(expanded: boolean): Promise<void> {
+    await expect(
+      this.page.getByRole("button", {
+        name: expanded ? "Restore panel" : "Expand panel",
+      })
+    ).toBeVisible();
+  }
+
+  /**
+   * Waits until the right panel's drawn box is `width` pixels wide (within the
+   * handle's rounding), or as wide as the workspace row.
+   */
+  async expectRightPanelSettled(width: number | "row"): Promise<void> {
+    await expect
+      .poll(async () => {
+        const [frame] = await this.rightPanelFrames(async () => {}, true);
+        return Math.abs(
+          frame!.width -
+            (width === "row" ? frame!.rowEnd - frame!.rowStart : width)
+        );
+      })
+      .toBeLessThanOrEqual(1);
+  }
+
+  /**
+   * Records the right panel's box, the page's width and the row's box now,
+   * then runs `action` and records them on each frame until the panel has
+   * moved and then kept still for 10 frames. With `once`, records only the
+   * frame before the action.
+   */
+  async rightPanelFrames(
+    action: () => Promise<void>,
+    once = false
+  ): Promise<PanelFrame[]> {
+    await this.page.evaluate((once) => {
+      const panel = document.querySelector(
+        'aside[aria-label="Files"]'
+      )?.parentElement;
+      // The panel's reserve, the app chrome's right panel slot, its row
+      const row = panel?.parentElement?.parentElement?.parentElement;
+      const pageColumn = document.querySelector("[data-app-page]");
+      if (!panel || !row || !pageColumn)
+        throw new Error("The panel is not mounted");
+      const stillFrames = 10;
+      // About 10 seconds: a panel that never moves stops recording
+      const maxFrames = 600;
+      const recorder = window as unknown as {
+        panelFrames: PanelFrame[];
+        panelSettled: boolean;
+      };
+      recorder.panelFrames = [];
+      recorder.panelSettled = false;
+      const sameBox = (a: PanelFrame, b: PanelFrame) =>
+        a.start === b.start &&
+        a.end === b.end &&
+        a.pageWidth === b.pageWidth &&
+        a.rowStart === b.rowStart &&
+        a.rowEnd === b.rowEnd;
+      const record = () => {
+        const box = panel.getBoundingClientRect();
+        const rowBox = row.getBoundingClientRect();
+        const frames = recorder.panelFrames;
+        frames.push({
+          start: Math.round(box.left),
+          end: Math.round(box.right),
+          width: Math.round(box.width),
+          pageWidth: Math.round(pageColumn.getBoundingClientRect().width),
+          rowStart: Math.round(rowBox.left),
+          rowEnd: Math.round(rowBox.right),
+        });
+        const last = frames[frames.length - 1]!;
+        const moved = frames.some((frame) => !sameBox(frame, frames[0]!));
+        const still =
+          frames.length > stillFrames &&
+          frames.slice(-stillFrames).every((frame) => sameBox(frame, last));
+        if (once || (moved && still) || frames.length >= maxFrames) {
+          recorder.panelSettled = true;
+          return;
+        }
+        requestAnimationFrame(record);
+      };
+      // The first frame is the box before the action
+      record();
+    }, once);
+    await action();
+    await expect
+      .poll(
+        () =>
+          this.page.evaluate(
+            () => (window as unknown as { panelSettled: boolean }).panelSettled
+          ),
+        { timeout: 20000 }
+      )
+      .toBe(true);
+    return this.page.evaluate(
+      () => (window as unknown as { panelFrames: PanelFrame[] }).panelFrames
+    );
+  }
+
+  private rightPanelResizeHandle(): Locator {
+    return this.page.getByRole("separator", { name: "Resize panel" });
+  }
+
+  /** The tiles of the right panel's Files list, from the top. */
+  publishedFilesPanelCards(): Locator {
+    return this.publishedFilesPanel.getByRole("button", { name: /^Open / });
+  }
+
+  /** Checks a tile of the Files list: the name it shows. */
+  async expectPublishedFilesPanelFile(
+    index: number,
+    { text }: { text: string }
+  ): Promise<void> {
+    await expect(this.publishedFilesPanelCards().nth(index)).toContainText(
+      text
+    );
+  }
+
+  /**
+   * Opens a Files tile's preview in its own tab, checks its text, and closes
+   * the file with Escape, back on the tile.
+   */
+  async expectPublishedFilesPanelPreview(
+    index: number,
+    title: string,
+    text: string
+  ): Promise<void> {
+    await this.publishedFilesPanelCards().nth(index).click();
+    const preview = this.publishedFilePreview(title);
+    await expect(preview).toContainText(text);
+    await this.page.keyboard.press("Escape");
+    await expect(preview).toBeHidden();
+    await expect(this.publishedFilesPanelCards().nth(index)).toBeFocused();
   }
 
   answerText(text: string, index = 0): Locator {

@@ -9,9 +9,13 @@ import { TooltipGroup } from "@/components/tooltip/CustomTooltip";
 import {
   useChatSessionStore,
   useCurrentMessageTree,
-  useDocumentSidebarVisible,
+  useSourcesShown,
   useSelectedNodeForDocDisplay,
 } from "@/app/app/stores/useChatSessionStore";
+import {
+  RIGHT_PANEL_SOURCES_TAB,
+  type ChatRightPanelAction,
+} from "@/lib/chat/rightPanel";
 import { messageModelName } from "@/app/app/message/multiModel";
 import { useDistinctModelsUsed } from "@/lib/multiModel/hooks";
 import { convertMarkdownTablesToTsv } from "@/app/app/message/copyingUtils";
@@ -42,8 +46,8 @@ interface SouurcesTagWrapperProps {
   documentMap: Map<string, OnyxDocument>;
   nodeId: number;
   selectedMessageForDocDisplay: number | null;
-  documentSidebarVisible: boolean;
-  updateCurrentDocumentSidebarVisible: (visible: boolean) => void;
+  sourcesPanelVisible: boolean;
+  updateCurrentRightPanel: (action: ChatRightPanelAction) => void;
   updateCurrentSelectedNodeForDocDisplay: (nodeId: number | null) => void;
 }
 
@@ -53,8 +57,8 @@ const SourcesTagWrapper = React.memo(function SourcesTagWrapper({
   documentMap,
   nodeId,
   selectedMessageForDocDisplay,
-  documentSidebarVisible,
-  updateCurrentDocumentSidebarVisible,
+  sourcesPanelVisible,
+  updateCurrentRightPanel,
   updateCurrentSelectedNodeForDocDisplay,
 }: SouurcesTagWrapperProps) {
   const t = useTranslations("chat.messages");
@@ -66,18 +70,21 @@ const SourcesTagWrapper = React.memo(function SourcesTagWrapper({
 
   // Handle click to toggle sidebar
   const handleSourceClick = useCallback(() => {
-    if (selectedMessageForDocDisplay === nodeId && documentSidebarVisible) {
-      updateCurrentDocumentSidebarVisible(false);
+    if (selectedMessageForDocDisplay === nodeId && sourcesPanelVisible) {
+      updateCurrentRightPanel({ type: "closePanel" });
       updateCurrentSelectedNodeForDocDisplay(null);
     } else {
       updateCurrentSelectedNodeForDocDisplay(nodeId);
-      updateCurrentDocumentSidebarVisible(true);
+      updateCurrentRightPanel({
+        type: "showTab",
+        tabId: RIGHT_PANEL_SOURCES_TAB,
+      });
     }
   }, [
     nodeId,
     selectedMessageForDocDisplay,
-    documentSidebarVisible,
-    updateCurrentDocumentSidebarVisible,
+    sourcesPanelVisible,
+    updateCurrentRightPanel,
     updateCurrentSelectedNodeForDocDisplay,
   ]);
 
@@ -175,10 +182,10 @@ export default function MessageToolbar({
   const incognitoEnabled =
     (useIncognitoOptional()?.incognitoEnabled ?? false) || sessionIncognito;
   // Document sidebar state - managed internally to reduce prop drilling
-  const documentSidebarVisible = useDocumentSidebarVisible();
+  const sourcesPanelVisible = useSourcesShown();
   const selectedMessageForDocDisplay = useSelectedNodeForDocDisplay();
-  const updateCurrentDocumentSidebarVisible = useChatSessionStore(
-    (state) => state.updateCurrentDocumentSidebarVisible
+  const updateCurrentRightPanel = useChatSessionStore(
+    (state) => state.updateCurrentRightPanel
   );
   const updateCurrentSelectedNodeForDocDisplay = useChatSessionStore(
     (state) => state.updateCurrentSelectedNodeForDocDisplay
@@ -428,10 +435,8 @@ export default function MessageToolbar({
                 documentMap={documentMap}
                 nodeId={nodeId}
                 selectedMessageForDocDisplay={selectedMessageForDocDisplay}
-                documentSidebarVisible={documentSidebarVisible}
-                updateCurrentDocumentSidebarVisible={
-                  updateCurrentDocumentSidebarVisible
-                }
+                sourcesPanelVisible={sourcesPanelVisible}
+                updateCurrentRightPanel={updateCurrentRightPanel}
                 updateCurrentSelectedNodeForDocDisplay={
                   updateCurrentSelectedNodeForDocDisplay
                 }

@@ -6,9 +6,11 @@ import {
 } from "@/app/app/services/streamingModels";
 import {
   useChatSessionQueue,
+  usePublishedFiles,
   useSendChatMessageFromURL,
   useToolRequests,
 } from "@/lib/chat/hooks";
+import type { Message } from "@/app/app/types";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { useToolRequestUi } from "@/lib/chat/toolApprovals";
@@ -331,5 +333,73 @@ describe("useSendChatMessageFromURL", () => {
     expect(
       update(toolConfiguration.filters).tags.map((tag) => tag.tag_value)
     ).toEqual(["eng"]);
+  });
+});
+
+describe("usePublishedFiles", () => {
+  function answer(packets: Packet[]): Message {
+    return {
+      nodeId: 2,
+      messageId: 2,
+      type: "assistant",
+      message: "",
+      files: [],
+      packets,
+      toolCall: null,
+      parentNodeId: null,
+    };
+  }
+
+  function setAnswer(packets: Packet[]) {
+    useChatSessionStore
+      .getState()
+      .updateSessionMessageTree(
+        "files-session",
+        new Map([[2, answer(packets)]])
+      );
+  }
+
+  const publishEnd: Packet = {
+    placement: { turn_index: 0, tab_index: 0 },
+    obj: {
+      type: PacketType.PUBLISH_FILES_END,
+      files: [
+        {
+          file_id: "file-1",
+          name: "report.md",
+          title: null,
+          path: "/w/report.md",
+          display_path: "/w/report.md",
+          size: 10,
+          mime_type: "text/markdown",
+          artifact_id: "artifact-1",
+          version: 1,
+        },
+      ],
+      error: null,
+    },
+  };
+
+  it("keeps the same files until a packet publishes a file", () => {
+    useChatSessionStore.setState({
+      sessions: new Map(),
+      currentSessionId: "files-session",
+    });
+    useChatSessionStore.getState().createSession("files-session");
+    setAnswer([publishEnd]);
+    const { result, rerender } = renderHook(() => usePublishedFiles("current"));
+    const first = result.current;
+    expect(first.map((file) => file.file_id)).toEqual(["file-1"]);
+
+    // A streamed answer delta replaces the packet array.
+    setAnswer([
+      publishEnd,
+      {
+        placement: { turn_index: 1, tab_index: 0 },
+        obj: { type: PacketType.MESSAGE_DELTA, content: "Done" },
+      },
+    ]);
+    rerender();
+    expect(result.current).toBe(first);
   });
 });

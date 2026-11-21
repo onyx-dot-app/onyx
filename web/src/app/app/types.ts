@@ -3,7 +3,7 @@ import {
   SearchOnyxDocument,
   StreamStopReason,
 } from "@/lib/search/types";
-import { Packet } from "./services/streamingModels";
+import { Packet, type PublishedFile } from "./services/streamingModels";
 import { ReasoningEffortOverride } from "@/lib/languageModels/types";
 import type { ChatToolOptions } from "@/lib/tools/types";
 import type { ComposedMention, RecordedMention } from "@/lib/chat/types";
@@ -242,6 +242,10 @@ export interface BackendChatSession {
   incognito?: boolean;
   // Set on a paged load when the current branch has messages before the page.
   has_older_messages?: boolean;
+  // The files published in the chat, also by its subagents: the newest
+  // version of each artifact, by the artifact's first publish. Set on a
+  // latest-page load and on a shared chat's load.
+  published_files?: PublishedFile[] | null;
   // The owner's saved tools and search filters; null means the agent's tools.
   tool_options?: ChatToolOptions | null;
   // The status route's `approvals_version` for the requests this load shows.

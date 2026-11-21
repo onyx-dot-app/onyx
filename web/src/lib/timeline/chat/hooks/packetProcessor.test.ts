@@ -1121,7 +1121,7 @@ describe("packetProcessor", () => {
       mime_type: "text/csv",
     });
 
-    test("collects every publish_files result once per file, with versions by name", () => {
+    test("collects every publish_files result once per file", () => {
       const state = createInitialState(1);
       const packets = [
         createPacket(
@@ -1144,7 +1144,6 @@ describe("packetProcessor", () => {
           PacketType.PUBLISH_FILES_END,
           { turn_index: 1, sub_turn_index: 0 },
           {
-            // Files of one name are versions of one file, whatever the path.
             files: [
               published("b", "/w/out/report.csv"),
               published("c", "/w/x.md"),
@@ -1162,15 +1161,14 @@ describe("packetProcessor", () => {
       const result = processPackets(state, packets);
 
       expect(
-        result.publishedFiles.map(({ file_id, turnIndex, version }) => ({
+        result.publishedFiles.map(({ file_id, turnIndex }) => ({
           file_id,
           turnIndex,
-          version,
         }))
       ).toEqual([
-        { file_id: "a", turnIndex: 0, version: 1 },
-        { file_id: "b", turnIndex: 1, version: 2 },
-        { file_id: "c", turnIndex: 1, version: 1 },
+        { file_id: "a", turnIndex: 0 },
+        { file_id: "b", turnIndex: 1 },
+        { file_id: "c", turnIndex: 1 },
       ]);
       expect(result.toolGroupKeys.has("0-0")).toBe(true);
       expect(result.toolGroups.map((g) => g.turn_index)).toContain(0);
