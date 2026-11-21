@@ -81,7 +81,8 @@ def _message(
 @pytest.fixture
 def group_api(monkeypatch: pytest.MonkeyPatch) -> Iterator[MagicMock]:
     """Google answers that the credential has settings access, that every
-    address is a Collaborative Inbox, and that it has two members."""
+    address is a Collaborative Inbox, and that it has two members. Runs as EE,
+    so group access resolves."""
     monkeypatch.setattr(
         "onyx.connectors.gmail.access.global_version.is_ee_version", lambda: True
     )
@@ -135,8 +136,6 @@ def test_delivering_group_needs_both_headers_to_name_a_listed_group() -> None:
     )
     assert get_delivering_group(display_name_list_id, groups) == _GROUP
 
-    # The dotted List-ID alone is ambiguous: a.b@example.com and
-    # a@b.example.com share one. X-BeenThere names the group exactly.
     other_list = _message("m1")
     other_list["payload"]["headers"][-2]["value"] = "<legal.example.com>"
     assert get_delivering_group(other_list, groups) is None
@@ -195,7 +194,7 @@ def test_settings_service_is_unavailable_without_the_delegated_scope() -> None:
     with pytest.raises(RefreshError):
         build_groups_settings_service(creds, "admin@example.com")
 
-    # An OAuth token cannot carry the scope.
+    # Onyx's OAuth consent does not request this scope.
     assert build_groups_settings_service(MagicMock(), "admin@example.com") is None
 
 
@@ -261,7 +260,8 @@ def test_every_member_copy_builds_the_same_group_document(
     group_api: MagicMock,  # noqa: ARG001
 ) -> None:
     """Gmail message and thread ids differ per mailbox. The indexing pipeline
-    skips a later copy only if its document id and content hash are the same."""
+    skips a later copy only if its id, content hash, access and timestamp
+    match the stored document."""
     lookup = _lookup()
     (from_member,) = thread_to_documents(
         {"id": "18f0aaaa", "messages": [_message("m-member")]}, _MEMBER, lookup

@@ -85,10 +85,11 @@ REINDEX_THREAD_FIELDS = f"id, messages(id, labelIds, {PAYLOAD_FIELDS})"
 # threads.list leaves out Spam and Trash unless includeSpamTrash is set, and
 # the crawl does not set it.
 _CRAWL_EXCLUDED_LABELS = frozenset({"SPAM", "TRASH"})
-# The slim listing reads only the headers that identify group mail.
+# Every header that picks the group and the document id. A header missing
+# here drops the document from the listing, and pruning deletes it.
 _GROUP_MAIL_THREAD_FIELDS = "id, messages(id, payload(headers))"
 _GROUP_MAIL_HEADERS = ["List-ID", "X-BeenThere", "Message-ID"]
-# Keeps the search query of a member of many groups inside the URL length limit.
+# Bounds the length of one threads.list query for a member of many groups.
 _GROUPS_PER_SEARCH_QUERY = 20
 
 EMAIL_FIELDS = [
@@ -235,8 +236,8 @@ def _build_mailbox_document_link(thread_id: str, user_email: str) -> str:
 
 
 def _build_group_mail_link(rfc_message_id: str) -> str:
-    """Link that opens the reader's own copy: Gmail message ids differ per
-    mailbox, so the link searches for the Message-ID header."""
+    """Gmail message ids differ per mailbox, so the link searches Gmail for the
+    Message-ID header."""
     return (
         "https://mail.google.com/mail/u/0/#search/"
         f"{quote(f'rfc822msgid:{rfc_message_id}', safe='')}"
@@ -345,7 +346,8 @@ def _group_message_to_document(
     user_email: str,
     group_mail: CollaborativeInboxLookup,
 ) -> Document | None:
-    """None when this copy of the message is not Collaborative Inbox mail."""
+    """None when this copy is not Collaborative Inbox mail, or has no Message-ID
+    to build the document id from."""
     group_email = group_mail.get_group(message, user_email)
     if group_email is None:
         return None
@@ -443,8 +445,6 @@ def _messages_to_document(
     if not semantic_identifier:
         semantic_identifier = "(no subject)"
 
-    # NOTE: we're choosing to unconditionally include perm sync info
-    # (external_access) as it doesn't cost much space
     return Document(
         id=document_id,
         semantic_identifier=semantic_identifier,
@@ -973,9 +973,7 @@ class GmailConnector(
         time_range_end: SecondsSinceUnixEpoch | None,
         callback: IndexingHeartbeatInterface | None,
     ) -> GenerateSlimDocumentOutput:
-        """The Collaborative Inbox documents this mailbox holds a copy of. Every
-        thread id stays in the thread listing, so a thread document that was
-        indexed before its group mail was split out is not pruned."""
+        """The Collaborative Inbox documents this mailbox holds a copy of."""
         group_emails = self.group_mail.get_groups_of_member(user_email)
         if not group_emails:
             return
@@ -986,7 +984,8 @@ class GmailConnector(
 
         def list_thread_ids() -> Iterator[str]:
             for group_email_batch in chunked(group_emails, _GROUPS_PER_SEARCH_QUERY):
-                # Gmail matches `list:` against the List-ID header.
+                # Gmail's `list:` takes the group address and matches the dotted
+                # List-ID.
                 group_query = " OR ".join(
                     f"list:{email}" for email in group_email_batch
                 )

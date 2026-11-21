@@ -10,14 +10,12 @@ from onyx.connectors.field_policy import FieldClass, FieldPolicy
 class GmailConnectorConfig(ConnectorConfig):
     batch_size: Annotated[int, FieldPolicy(FieldClass.COSMETIC)] = INDEX_BATCH_SIZE
     # Addresses of Google Groups with Collaborative Inbox turned on. The mail
-    # they deliver is indexed once for the group, not once per member. Only a
-    # from-beginning run rewrites the mail that is already indexed.
+    # they deliver is indexed once for the group, not once per member.
     collaborative_inbox_groups: Annotated[
         list[str] | None, FieldPolicy(FieldClass.BEHAVIOR)
     ] = None
 
-    # The edit planner diffs this list, so it is trimmed, lowercased, deduped
-    # and sorted, and blank entries are dropped.
+    # Normalized so that a reorder or a case change is not a config change.
     @field_validator("collaborative_inbox_groups", mode="before")
     @classmethod
     def _normalize_collaborative_inbox_groups(cls, value: Any) -> Any:

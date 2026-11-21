@@ -42,7 +42,7 @@ def build_groups_settings_service(
 ) -> GroupsSettingsService | None:
     """A Groups Settings client that acts as the primary admin. None when the
     credential cannot get the Groups settings scope."""
-    # An OAuth token holds only the scopes of its consent, and this is not one.
+    # Onyx's OAuth consent does not request this scope.
     if not isinstance(creds, ServiceAccountCredentials):
         return None
 
@@ -86,7 +86,8 @@ def is_collaborative_inbox(
 def list_group_member_emails(
     admin_service: AdminService, group_email: str
 ) -> Iterator[str]:
-    """The lowercased addresses of the group's users, nested groups included."""
+    """The lowercased addresses of the users in the group, direct or through a
+    nested group."""
     for member in execute_paginated_retrieval(
         retrieval_function=admin_service.members().list,  # ty: ignore[unresolved-attribute]
         list_key="members",
@@ -119,8 +120,9 @@ def get_rfc_message_id(message: dict[str, Any]) -> str | None:
 def get_delivering_group(
     message: dict[str, Any], group_emails: frozenset[str]
 ) -> str | None:
-    """Which of `group_emails` delivered this copy. Google Groups puts the
-    group's address in X-BeenThere and its dotted form in List-ID."""
+    """Which of the lowercase `group_emails` delivered this copy. Google Groups
+    puts the group's address in X-BeenThere and its dotted form in List-ID. The
+    dotted form alone is ambiguous: a.b@example.com and a@b.example.com share it."""
     list_ids = {
         match.group(1).lower()
         for value in _header_values(message, "list-id")
@@ -150,7 +152,8 @@ class CollaborativeInboxLookup:
         self._settings_service: GroupsSettingsService | None = None
         self._is_settings_service_built = False
         self._admin_service: AdminService | None = None
-        # None for an address that is not a Collaborative Inbox group.
+        # None when the address is not a Collaborative Inbox group, or when the
+        # credential cannot read group settings.
         self._member_emails_by_group: dict[str, frozenset[str] | None] = {}
 
     def has_settings_access(self) -> bool:
@@ -158,7 +161,8 @@ class CollaborativeInboxLookup:
 
     def get_group(self, message: dict[str, Any], mailbox_email: str) -> str | None:
         """The Collaborative Inbox group that delivered this copy of the
-        message, when the mailbox belongs to the group. None otherwise."""
+        message, when the mailbox belongs to the group. Any sender can set the
+        headers, so they alone do not make a copy group mail."""
         if not self._group_emails:
             return None
         group_email = get_delivering_group(message, self._group_emails)
@@ -170,7 +174,6 @@ class CollaborativeInboxLookup:
         return group_email
 
     def get_groups_of_member(self, mailbox_email: str) -> list[str]:
-        """The Collaborative Inbox groups the mailbox belongs to."""
         return [
             group_email
             for group_email in sorted(self._group_emails)
