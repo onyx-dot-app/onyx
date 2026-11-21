@@ -37,14 +37,15 @@ from onyx.db.models import Document as DbDocument
 from onyx.db.models import Tag as TagRow
 from onyx.db.postgres_tool import (
     DocumentGroupBy,
+    PostgresToolQueryTimeoutError,
     _count_hierarchy_nodes,
     _query_hierarchy_nodes,
-    begin_tool_transaction,
     count_documents_for_tool,
     count_documents_grouped_for_tool,
     count_hierarchy_nodes_for_tool,
     query_documents_for_tool,
     query_hierarchy_nodes_for_tool,
+    tool_transaction,
 )
 from onyx.db.postgres_tool import (
     _hierarchy_node_access_filter as mit_hierarchy_filter,
@@ -503,15 +504,24 @@ def test_ordering_and_limit(db_session: Session, doc_env: DocEnv) -> None:
 
 def test_tool_transaction_reads_one_snapshot_under_the_timeout() -> None:
     with get_session_with_current_tenant() as db_session:
-        begin_tool_transaction(db_session)
-        settings = db_session.execute(
-            text(
-                "SELECT current_setting('transaction_isolation'), "
-                "current_setting('statement_timeout')"
-            )
-        ).one()
+        with tool_transaction(db_session):
+            settings = db_session.execute(
+                text(
+                    "SELECT current_setting('transaction_isolation'), "
+                    "current_setting('statement_timeout')"
+                )
+            ).one()
         db_session.rollback()
     assert tuple(settings) == ("repeatable read", "10s")
+
+
+def test_tool_transaction_converts_a_timeout_in_any_statement() -> None:
+    with get_session_with_current_tenant() as db_session:
+        with pytest.raises(PostgresToolQueryTimeoutError):
+            with tool_transaction(db_session):
+                db_session.execute(text("SET LOCAL statement_timeout = '10ms'"))
+                db_session.execute(text("SELECT pg_sleep(1)"))
+        db_session.rollback()
 
 
 # ============================== Paging ==============================

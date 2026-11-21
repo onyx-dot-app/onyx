@@ -102,17 +102,23 @@ def _timeouts_as_tool_errors() -> Iterator[None]:
         raise
 
 
-def begin_tool_transaction(db_session: Session) -> None:
-    """Start a tool call's read. One snapshot covers the access pairs that a
+@contextmanager
+def tool_transaction(db_session: Session) -> Iterator[None]:
+    """Run a tool call's read. One snapshot covers the access pairs that a
     document query resolves first and the rows they then filter, so a pair
     revoked in between cannot grant. The statement timeout covers every
-    statement, the pair lookups included."""
-    db_session.connection(execution_options={"isolation_level": "REPEATABLE READ"})
-    db_session.execute(
-        select(
-            func.set_config("statement_timeout", _POSTGRES_TOOL_STATEMENT_TIMEOUT, True)
+    statement, the access lookups included, and each timeout raises
+    PostgresToolQueryTimeoutError."""
+    with _timeouts_as_tool_errors():
+        db_session.connection(execution_options={"isolation_level": "REPEATABLE READ"})
+        db_session.execute(
+            select(
+                func.set_config(
+                    "statement_timeout", _POSTGRES_TOOL_STATEMENT_TIMEOUT, True
+                )
+            )
         )
-    )
+        yield
 
 
 def _execute_with_timeout(db_session: Session, stmt: Select) -> Result:
