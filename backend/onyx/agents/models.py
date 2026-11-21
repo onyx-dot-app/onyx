@@ -13,7 +13,13 @@ from pydantic import (
 )
 
 from onyx.agents.execution_records import messages_for_model
-from onyx.agents.tools import ChildRunWait, HumanToolAnswer, PendingToolInput
+from onyx.agents.tools import (
+    ChildRunWait,
+    HumanToolAnswer,
+    NestedInputRequest,
+    NestedInputWait,
+    PendingToolInput,
+)
 from onyx.llm.cancellation import CancelReason
 from onyx.llm.models import (
     AssistantMessage,
@@ -96,7 +102,6 @@ def cancellation_failure(reason: CancelReason) -> RunFailure | None:
 class AgentCompletion(BaseModel):
     """A background agent's saved terminal result, ready for its parent to receive."""
 
-    agent_id: str
     agent_path: str
     run_id: str
     status: RunStatus
@@ -274,6 +279,25 @@ class ToolCallContext(BaseModel):
     messages: list[Message]
 
 
+class ToolResultContext(BaseModel):
+    """A result that the run has not recorded yet; see
+    `Agent.prepare_tool_result`. The fields reference the run's objects, not
+    copies, because results can be large: read them, and return a new result
+    to replace `result`."""
+
+    # The step's assistant message.
+    message_id: str
+    # The calls that share the result: one, or a merged batch.
+    calls: tuple[ToolCall, ...]
+    result: ToolResult
+    # The other results of this step that the run recorded. Empty for an
+    # amendment: amendments do not count toward a step budget.
+    step_results: tuple[ToolResultMessage, ...]
+    # A release hook's amendment (see `on_finish`), which replaces a result
+    # that this hook may already have prepared.
+    amended: bool = False
+
+
 class StepResult(BaseModel):
     step: AgentStep
     message: AssistantMessage
@@ -358,6 +382,8 @@ class RunProgress(BaseModel):
     model_config = ConfigDict(extra="forbid")
 
     step_index: int = 0
+    # Can be raised or lowered so that one extra step is the run's last step;
+    # see "Preparing and completing steps" in the agents README.
     step_limit: int = Field(gt=0)
     # Absolute UTC deadline includes time spent suspended or between execution owners.
     deadline_at: datetime | None = None
@@ -365,17 +391,38 @@ class RunProgress(BaseModel):
     options: GenerationOptions | None = None
     tools: list[ToolDefinition] = Field(default_factory=list)
     allowed_tool_names: frozenset[str] | None = None
-    tool_configuration_digest: str
     previous_options: GenerationOptions | None = None
     finalized_tool_call_ids: set[str] = Field(default_factory=set)
     feature_state: dict[str, JsonValue] | None = None
-    pending_tool_calls: dict[str, PendingToolInput | ChildRunWait] = Field(
-        default_factory=dict
+    pending_tool_calls: dict[str, PendingToolInput | ChildRunWait | NestedInputWait] = (
+        Field(default_factory=dict)
     )
+    # Requests that tools opened for the calls they make for the model, by
+    # request ID, while no NestedInputWait holds them; see NestedCallGate.
+    open_inputs: dict[str, NestedInputRequest] = Field(default_factory=dict)
     human_tool_answers: dict[str, HumanToolAnswer] = Field(default_factory=dict)
     child_run_ids: list[str] = Field(default_factory=list)
     observed_child_run_ids: list[str] = Field(default_factory=list)
     outcome: RunStatus | None = None
+
+    @property
+    def input_requests(self) -> list[PendingToolInput]:
+        """The saved input requests: of direct calls, and of calls that tools
+        made for the model, open or held in a NestedInputWait."""
+        return [
+            *(
+                request
+                for pending in self.pending_tool_calls.values()
+                for request in (
+                    [pending]
+                    if isinstance(pending, PendingToolInput)
+                    else [nested.request for nested in pending.requests]
+                    if isinstance(pending, NestedInputWait)
+                    else []
+                )
+            ),
+            *(nested.request for nested in self.open_inputs.values()),
+        ]
 
     @field_serializer("allowed_tool_names", when_used="json")
     def serialize_allowed_tool_names(

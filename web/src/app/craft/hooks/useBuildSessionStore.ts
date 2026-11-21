@@ -1,5 +1,11 @@
 "use client";
 
+import {
+  closePanelTab,
+  movePanelTab,
+  openPanelTab,
+  panelTabHistory,
+} from "@/lib/outputPanel/tabs";
 import type { TextPartUpdate } from "@/app/craft/utils/packetTypes";
 
 import type { BuildLlmSelection } from "@/app/craft/onboarding/constants";
@@ -26,6 +32,10 @@ import {
   type OutputFile,
   type OutputInventory,
 } from "@/app/craft/types/streamingTypes";
+import { craftPacketToEvents } from "@/lib/timeline/craft/events";
+import { cancelLatestRunningCall } from "@/lib/timeline/craft/stop";
+import type { TimelineEvent } from "@/lib/timeline/events";
+import { reduceTimelineEvents } from "@/lib/timeline/reducer";
 
 import {
   StreamItem,
@@ -33,13 +43,13 @@ import {
   TodoListState,
   type ContextUsage,
   type PanelTab,
-  type OutputPanelMode,
   normalizePanelPath,
   panelTabId,
   type SubagentState,
   type SubagentStatus,
   type SubagentTurn,
 } from "@/app/craft/types/displayTypes";
+import type { OutputPanelMode } from "@/lib/outputPanel/layout";
 
 import { MAX_QUEUED_MESSAGES } from "@/app/app/types";
 
@@ -52,7 +62,6 @@ import {
   fetchMessages,
   fetchActiveTurn,
   fetchKnownTurn,
-  fetchScheduledRunContext,
   fetchArtifacts,
   fetchOutputInventory,
   fetchWebappInfo,
@@ -60,6 +69,7 @@ import {
 } from "@/app/craft/services/apiServices";
 
 import { isAuthStatusError, isNotFoundError } from "@/lib/fetcher";
+import type { SkillLimitNotice } from "@/lib/skills/limits";
 
 import { genId } from "@/app/craft/utils/streamItemHelpers";
 import { parsePacket } from "@/app/craft/utils/parsePacket";
@@ -254,7 +264,52 @@ function emptyTurn(prompt = ""): SubagentTurn {
     thinking: null,
     response: null,
     streamItems: [],
+    timelineEvents: [],
   };
+}
+
+/**
+ * Sets a subagent turn's final response. The response joins the text of every
+ * message in the turn, so only the last message takes the part after the
+ * earlier messages; a turn whose messages already hold the response is left
+ * as is, and a turn with no message gets one.
+ */
+function withResponseEvent(
+  turn: SubagentTurn,
+  response: string | null | undefined
+): SubagentTurn {
+  if (!response) return turn;
+  const messages = reduceTimelineEvents(turn.timelineEvents).entries.filter(
+    (entry) => entry.payload.kind === "message"
+  );
+  const texts = messages.map((entry) =>
+    entry.payload.kind === "message"
+      ? entry.payload.content
+          .map((block) => (block.type === "text" ? block.text : ""))
+          .join("")
+      : ""
+  );
+  if (texts.join("") === response) return turn;
+  const earlier = texts.slice(0, -1).join("");
+  // The child rows own the transcript; a response that does not extend it
+  // cannot be placed.
+  if (!response.startsWith(earlier)) return turn;
+  const text = response.slice(earlier.length);
+  const lastMessage = messages.at(-1);
+  const partId = lastMessage?.id.startsWith("part:")
+    ? lastMessage.id.slice("part:".length)
+    : undefined;
+  const event: TimelineEvent = {
+    type: "update",
+    update: {
+      sessionUpdate: "agent_message_chunk",
+      content: { type: "text", text },
+      ...(lastMessage && {
+        _meta: { onyx: { snapshotText: text, partId } },
+      }),
+    },
+  };
+  return { ...turn, timelineEvents: [...turn.timelineEvents, event] };
 }
 
 function isPlaceholderSubagentLabel(value: string): boolean {
@@ -423,9 +478,13 @@ function buildSubagentsFromMessages(
         const sa = ensure(packet.sessionId);
         const turns = sa.turns.length > 0 ? [...sa.turns] : [emptyTurn()];
         const last = turns[turns.length - 1] ?? emptyTurn();
+        const childEvents = craftPacketToEvents(metadata, {
+          subagentSessionId: packet.sessionId,
+        });
         if (packet.type === "text_chunk") {
           turns[turns.length - 1] = {
             ...last,
+            timelineEvents: [...last.timelineEvents, ...childEvents],
             response: (last.response ?? "") + packet.text,
             streamItems: settleStreamItems(
               appendStreamingChunk(
@@ -439,6 +498,7 @@ function buildSubagentsFromMessages(
         } else {
           turns[turns.length - 1] = {
             ...last,
+            timelineEvents: [...last.timelineEvents, ...childEvents],
             thinking: (last.thinking ?? "") + packet.text,
             streamItems: settleStreamItems(
               appendStreamingChunk(
@@ -462,10 +522,20 @@ function buildSubagentsFromMessages(
     if (cls.kind === "child") {
       const sa = ensure(cls.subagentSessionId);
       const toolCall = toolCallStateFromProgress(packet);
-      subagents.set(cls.subagentSessionId, {
-        ...sa,
-        turns: appendToolCallToLastTurn(sa, toolCall),
-      });
+      const turns = appendToolCallToLastTurn(sa, toolCall);
+      const last = turns[turns.length - 1];
+      if (last) {
+        turns[turns.length - 1] = {
+          ...last,
+          timelineEvents: [
+            ...last.timelineEvents,
+            ...craftPacketToEvents(metadata, {
+              subagentSessionId: cls.subagentSessionId,
+            }),
+          ],
+        };
+      }
+      subagents.set(cls.subagentSessionId, { ...sa, turns });
     } else if (cls.kind === "parentTask") {
       const sa = ensure(cls.subagentSessionId);
       const status: SubagentStatus =
@@ -482,7 +552,7 @@ function buildSubagentsFromMessages(
           ? firstTurn.response
           : (firstTurn.response ?? cleanTaskOutput(packet.taskOutput));
       turns[0] = {
-        ...firstTurn,
+        ...withResponseEvent(firstTurn, response),
         prompt: firstTurn.prompt || packet.command,
         response,
         // Child rows own the transcript; response can contain several parts.
@@ -541,6 +611,9 @@ function consolidateMessagesIntoTurns(
     if (currentAgentPackets.length === 0) return;
 
     const streamItems = convertMessagesToStreamItems(currentAgentPackets);
+    const timelineEvents = currentAgentPackets.flatMap((message) =>
+      craftPacketToEvents(message.message_metadata)
+    );
     const textContent = streamItems
       .filter((item) => item.type === "text")
       .map((item) => item.content)
@@ -556,6 +629,7 @@ function consolidateMessagesIntoTurns(
         message_metadata: {
           streamItems,
         },
+        timelineEvents,
       });
     }
     currentAgentPackets = [];
@@ -590,12 +664,17 @@ function consolidateMessagesIntoTurns(
 function splitActiveTurnTranscript(
   messages: BuildMessage[],
   activeTurnIndex: number | null
-): { messages: BuildMessage[]; streamItems: StreamItem[] } {
+): {
+  messages: BuildMessage[];
+  streamItems: StreamItem[];
+  timelineEvents: TimelineEvent[];
+} {
   if (activeTurnIndex === null) {
-    return { messages, streamItems: [] };
+    return { messages, streamItems: [], timelineEvents: [] };
   }
 
   const activeStreamItems: StreamItem[] = [];
+  const activeTimelineEvents: TimelineEvent[] = [];
   const settledMessages: BuildMessage[] = [];
 
   for (const message of messages) {
@@ -607,12 +686,17 @@ function splitActiveTurnTranscript(
       if (Array.isArray(streamItems)) {
         activeStreamItems.push(...(streamItems as StreamItem[]));
       }
+      activeTimelineEvents.push(...(message.timelineEvents ?? []));
       continue;
     }
     settledMessages.push(message);
   }
 
-  return { messages: settledMessages, streamItems: activeStreamItems };
+  return {
+    messages: settledMessages,
+    streamItems: activeStreamItems,
+    timelineEvents: activeTimelineEvents,
+  };
 }
 
 function mapApiSessionStatus(
@@ -684,9 +768,7 @@ export interface FilesTabState {
   scrollTop: number;
 }
 
-export type CompletionOwner =
-  | { kind: "interactive"; turnId: string | null }
-  | { kind: "scheduled"; runId: string };
+export type CompletionOwner = { kind: "interactive"; turnId: string | null };
 
 export type TurnSettlement = {
   owner: CompletionOwner;
@@ -717,6 +799,8 @@ export interface BuildSessionData {
    * Rendered directly without transformation.
    */
   streamItems: StreamItem[];
+  /** The current agent turn's timeline events, in arrival order. */
+  timelineEvents: TimelineEvent[];
   /**
    * Messages typed while a response is streaming. Auto-sent FIFO once the
    * session confirms completion and its stream owner claims the queue head.
@@ -751,6 +835,8 @@ export interface BuildSessionData {
   skillsStale: boolean;
   /** Incremented only with skillsStale so async refreshes can reject stale responses. */
   skillsStaleRevision: number;
+  /** Skills the run-time limit left out of the user's sandbox. */
+  skillOmissions: SkillLimitNotice | null;
   origin: SessionOrigin;
   abortController: AbortController;
   lastAccessed: Date;
@@ -825,7 +911,7 @@ function reconcileCompletedTranscript(
   completion?: CompletedInteractiveTurn
 ): Promise<void> {
   const owner = started.turnSettlement?.owner;
-  const requestKey = `${sessionId}:${started.instanceId}:${started.turnGeneration}:${owner?.kind}:${owner?.kind === "interactive" ? owner.turnId : owner?.runId}`;
+  const requestKey = `${sessionId}:${started.instanceId}:${started.turnGeneration}:${owner?.turnId}`;
   const existing = completedTranscriptReads.get(requestKey);
   if (existing) return existing;
   // Final discovery supersedes reads started before the completion boundary.
@@ -865,20 +951,10 @@ function reconcileCompletedTranscript(
         if (!ownsCompletion()) return;
         if (!owner) return;
         let waiting = false;
-        let approvalPause = false;
-        let scheduledFailure = false;
         let interactiveFailure: string | null = null;
         let interactiveFailed = false;
         let successor: Awaited<ReturnType<typeof fetchActiveTurn>> = null;
-        if (owner.kind === "scheduled") {
-          const run = await fetchScheduledRunContext(sessionId);
-          if (!ownsCompletion()) return;
-          if (run.run_id !== owner.runId) return;
-          scheduledFailure =
-            run.status === "FAILED" || run.status === "SKIPPED";
-          waiting = run.status === "RUNNING" || run.status === "QUEUED";
-          approvalPause = run.status === "AWAITING_APPROVAL";
-        } else if (!completion) {
+        if (!completion) {
           const activeTurn = await fetchActiveTurn(sessionId);
           if (!ownsCompletion()) return;
           successor =
@@ -892,7 +968,7 @@ function reconcileCompletedTranscript(
           await new Promise<void>((resolve) => setTimeout(resolve, retryDelay));
           continue;
         }
-        if (owner.kind === "interactive" && owner.turnId !== null) {
+        if (owner.turnId !== null) {
           const completedTurn =
             completion ?? (await fetchKnownTurn(sessionId, owner.turnId));
           if (!ownsCompletion()) return;
@@ -922,23 +998,21 @@ function reconcileCompletedTranscript(
         });
         let messages = await fetchMessages(sessionId);
         if (!ownsCompletion()) return;
-        if (owner.kind === "interactive") {
-          const historyTurnId = successor?.turn_id;
-          const activeTurn = await fetchActiveTurn(sessionId);
+        const historyTurnId = successor?.turn_id;
+        const activeTurn = await fetchActiveTurn(sessionId);
+        if (!ownsCompletion()) return;
+        if (activeTurn) {
+          if (activeTurn.turn_id === owner.turnId) {
+            await new Promise<void>((resolve) =>
+              setTimeout(resolve, retryDelay)
+            );
+            continue;
+          }
+          successor = activeTurn;
+        }
+        if (successor && successor.turn_id !== historyTurnId) {
+          messages = await fetchMessages(sessionId);
           if (!ownsCompletion()) return;
-          if (activeTurn) {
-            if (activeTurn.turn_id === owner.turnId) {
-              await new Promise<void>((resolve) =>
-                setTimeout(resolve, retryDelay)
-              );
-              continue;
-            }
-            successor = activeTurn;
-          }
-          if (successor && successor.turn_id !== historyTurnId) {
-            messages = await fetchMessages(sessionId);
-            if (!ownsCompletion()) return;
-          }
         }
         const restored = splitActiveTurnTranscript(
           consolidateMessagesIntoTurns(messages),
@@ -950,11 +1024,12 @@ function reconcileCompletedTranscript(
         useBuildSessionStore.getState().updateSessionData(sessionId, {
           messages: restored.messages,
           streamItems: restored.streamItems,
+          timelineEvents: restored.timelineEvents,
           subagents: buildSubagentsFromMessages(messages),
           contextUsage: deriveContextUsage(messages),
           status: successor
             ? "running"
-            : scheduledFailure || interactiveFailed
+            : interactiveFailed
               ? "failed"
               : "active",
           error:
@@ -971,7 +1046,7 @@ function reconcileCompletedTranscript(
             wasInterrupted: false,
           }),
           turnSettlement:
-            successor || approvalPause || scheduledFailure || interactiveFailed
+            successor || interactiveFailed
               ? null
               : { ...current.turnSettlement, phase: "ready" },
         });
@@ -1037,17 +1112,6 @@ function compareOutputInventory(
   return { files, added, changed };
 }
 
-function panelTabHistory(
-  tabs: PanelTab[],
-  active: string | null,
-  history: readonly string[] = []
-): string[] {
-  const openIds = new Set(tabs.map(panelTabId));
-  return [...new Set(active ? [active, ...history] : history)].filter((id) =>
-    openIds.has(id)
-  );
-}
-
 function selectOutputTarget(
   session: Pick<BuildSessionData, "panelTabs" | "panelTabHistory">,
   target: PanelTab
@@ -1055,14 +1119,15 @@ function selectOutputTarget(
   BuildSessionData,
   "panelTabs" | "activePanelTabId" | "panelTabHistory"
 > {
-  const id = panelTabId(target);
-  const panelTabs = session.panelTabs.some((tab) => panelTabId(tab) === id)
-    ? session.panelTabs
-    : [...session.panelTabs, target];
+  const opened = openPanelTab(
+    { tabs: session.panelTabs, history: session.panelTabHistory ?? [] },
+    target,
+    panelTabId
+  );
   return {
-    activePanelTabId: id,
-    panelTabs,
-    panelTabHistory: panelTabHistory(panelTabs, id, session.panelTabHistory),
+    activePanelTabId: opened.activeId,
+    panelTabs: opened.tabs,
+    panelTabHistory: opened.history,
   };
 }
 
@@ -1183,6 +1248,7 @@ interface BuildSessionStore {
     todoList: TodoListState
   ) => void;
   clearStreamItems: (sessionId: string) => void;
+  appendTimelineEvents: (sessionId: string, events: TimelineEvent[]) => void;
 
   // Actions - Queued Messages
   enqueueMessage: (
@@ -1332,6 +1398,12 @@ interface BuildSessionStore {
     text: string,
     part?: TextPartUpdate
   ) => void;
+  /** Append timeline events to the subagent's LAST turn. */
+  appendSubagentTimelineEvents: (
+    sessionId: string,
+    subagentSessionId: string,
+    events: TimelineEvent[]
+  ) => void;
 }
 
 // =============================================================================
@@ -1373,6 +1445,7 @@ const createInitialSessionData = (
     activeTurnIndex: null,
     activeTurnLocalOwner: false,
     streamItems: [],
+    timelineEvents: [],
     queuedMessages: [],
     isInterrupting: false,
     wasInterrupted: false,
@@ -1386,6 +1459,7 @@ const createInitialSessionData = (
     agentModel: null,
     skillsStale: false,
     skillsStaleRevision: 0,
+    skillOmissions: null,
     origin: "INTERACTIVE",
     abortController: new AbortController(),
     lastAccessed: new Date(),
@@ -1424,7 +1498,8 @@ const createInitialSessionData = (
     panelTabHistory: panelTabHistory(
       panelTabs,
       activePanelTabId,
-      initialData.panelTabHistory
+      initialData.panelTabHistory ?? [],
+      panelTabId
     ),
   };
 };
@@ -1866,6 +1941,10 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
 
       if (latestInFlightIndex === -1) return state;
 
+      const timelineEvents = [
+        ...session.timelineEvents,
+        ...cancelLatestRunningCall(session.timelineEvents),
+      ];
       const streamItems = session.streamItems.map((item, index): StreamItem => {
         if (index === latestInFlightIndex && item.type === "tool_call") {
           return {
@@ -1879,10 +1958,25 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       const updatedSession: BuildSessionData = {
         ...session,
         streamItems,
+        timelineEvents,
         lastAccessed: new Date(),
       };
       const newSessions = new Map(state.sessions);
       newSessions.set(sessionId, updatedSession);
+      return { sessions: newSessions };
+    });
+  },
+
+  appendTimelineEvents: (sessionId: string, events: TimelineEvent[]) => {
+    if (events.length === 0) return;
+    set((state) => {
+      const session = state.sessions.get(sessionId);
+      if (!session) return state;
+      const newSessions = new Map(state.sessions);
+      newSessions.set(sessionId, {
+        ...session,
+        timelineEvents: [...session.timelineEvents, ...events],
+      });
       return { sessions: newSessions };
     });
   },
@@ -1944,6 +2038,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       const updatedSession: BuildSessionData = {
         ...session,
         streamItems: [],
+        timelineEvents: [],
         lastAccessed: new Date(),
       };
       const newSessions = new Map(state.sessions);
@@ -2027,8 +2122,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
   beginTurnSettlement: async (sessionId, owner, generation, completion) => {
     if (
       completion &&
-      (owner.kind !== "interactive" ||
-        completion.session_id !== sessionId ||
+      (completion.session_id !== sessionId ||
         completion.turn_id !== owner.turnId)
     )
       return;
@@ -2041,10 +2135,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       session.turnSettlement
     )
       return;
-    if (owner.kind === "scheduled") {
-      if (session.activeTurnLocalOwner || session.activeTurnId !== null) return;
-    } else if (session.status !== "running" && session.status !== "creating")
-      return;
+    if (session.status !== "running" && session.status !== "creating") return;
     get().updateSessionData(sessionId, {
       status: "running",
       activeTurnId: null,
@@ -2250,6 +2341,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
           : {
               messages: persistedMessages,
               streamItems: currentSession!.streamItems,
+              timelineEvents: currentSession!.timelineEvents,
             };
       const resolvedMessages: BuildMessage[] = restoredActiveTurn.messages;
       const streamItems: StreamItem[] = restoredActiveTurn.streamItems;
@@ -2264,6 +2356,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
           status,
           messages: resolvedMessages,
           streamItems,
+          timelineEvents: restoredActiveTurn.timelineEvents,
           subagents,
           activeTurnId: resolvedActiveTurnId,
           turnSettlement: currentSession!.turnSettlement,
@@ -2316,6 +2409,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         isLoaded: true,
         loadError: null,
         ...(canApplySkillsStale() && { skillsStale: sessionData.skills_stale }),
+        skillOmissions: sessionData.skill_omissions,
         origin: sessionData.origin,
       });
       if (!needsRestore) {
@@ -2368,6 +2462,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
             skillsStaleRevisionBeforeRestore && {
             skillsStale: sessionData.skills_stale,
           }),
+          skillOmissions: sessionData.skill_omissions,
           filesNeedsRefresh:
             (get().sessions.get(sessionId)?.filesNeedsRefresh ?? 0) + 1,
           webappNeedsRefresh:
@@ -3035,10 +3130,8 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       ? state.sessions.get(sessionId)?.panelTabs
       : state.noSessionPanelTabs;
     if (!tabs) return;
-    const tab = tabs.find((item) => panelTabId(item) === tabId);
-    if (!tab) return;
-    const panelTabs = tabs.filter((item) => panelTabId(item) !== tabId);
-    panelTabs.splice(Math.max(0, Math.min(panelTabs.length, index)), 0, tab);
+    if (!tabs.some((item) => panelTabId(item) === tabId)) return;
+    const panelTabs = movePanelTab(tabs, tabId, index, panelTabId);
     if (sessionId)
       state.updateSessionData(sessionId, {
         panelTabs,
@@ -3052,35 +3145,33 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
     const session = sessionId ? state.sessions.get(sessionId) : undefined;
     if (sessionId && !session) return;
     const tabs = session?.panelTabs ?? state.noSessionPanelTabs;
-    const index = tabs.findIndex((tab) => panelTabId(tab) === tabId);
-    if (index < 0) return;
-    const panelTabs = tabs.filter((tab) => panelTabId(tab) !== tabId);
-    const active = session
-      ? session.activePanelTabId
-      : state.noSessionActivePanelTabId;
-    const history = panelTabHistory(
-      panelTabs,
-      null,
-      session?.panelTabHistory ?? state.noSessionPanelTabHistory
+    if (!tabs.some((tab) => panelTabId(tab) === tabId)) return;
+    const closed = closePanelTab(
+      {
+        tabs,
+        activeId: session
+          ? session.activePanelTabId
+          : state.noSessionActivePanelTabId,
+        history:
+          (session
+            ? session.panelTabHistory
+            : state.noSessionPanelTabHistory) ?? [],
+      },
+      tabId,
+      panelTabId
     );
-    const neighbor = panelTabs[Math.max(0, index - 1)];
-    const activePanelTabId =
-      active === tabId
-        ? (history[0] ?? (neighbor ? panelTabId(neighbor) : null))
-        : active;
-    const nextHistory = panelTabHistory(panelTabs, activePanelTabId, history);
     if (sessionId)
       state.updateSessionData(sessionId, {
-        panelTabs,
-        activePanelTabId,
-        panelTabHistory: nextHistory,
+        panelTabs: closed.tabs,
+        activePanelTabId: closed.activeId,
+        panelTabHistory: closed.history,
         outputSelectionLocked: true,
       });
     else
       set({
-        noSessionPanelTabs: panelTabs,
-        noSessionActivePanelTabId: activePanelTabId,
-        noSessionPanelTabHistory: nextHistory,
+        noSessionPanelTabs: closed.tabs,
+        noSessionActivePanelTabId: closed.activeId,
+        noSessionPanelTabHistory: closed.history,
       });
   },
 
@@ -3095,7 +3186,8 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
           noSessionPanelTabHistory: panelTabHistory(
             state.noSessionPanelTabs,
             tabId,
-            state.noSessionPanelTabHistory
+            state.noSessionPanelTabHistory,
+            panelTabId
           ),
         }));
       return;
@@ -3317,7 +3409,7 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
         turns = existing.turns.length > 0 ? [...existing.turns] : [emptyTurn()];
         const last = turns[turns.length - 1] ?? emptyTurn();
         turns[turns.length - 1] = {
-          ...last,
+          ...withResponseEvent(last, response),
           response,
           streamItems: replaceOrAppendSettledTextItem(
             last.streamItems,
@@ -3401,6 +3493,47 @@ export const useBuildSessionStore = create<BuildSessionStore>()((set, get) => ({
       };
       const newSessions = new Map(state.sessions);
       newSessions.set(sessionId, updatedSession);
+      return { sessions: newSessions };
+    });
+  },
+
+  appendSubagentTimelineEvents: (
+    sessionId: string,
+    subagentSessionId: string,
+    events: TimelineEvent[]
+  ) => {
+    if (events.length === 0) return;
+    set((state) => {
+      const session = state.sessions.get(sessionId);
+      if (!session) return state;
+
+      const existing = session.subagents.get(subagentSessionId);
+      const base: SubagentState = existing ?? {
+        sessionId: subagentSessionId,
+        parentToolCallId: "",
+        subagentType: null,
+        name: "",
+        status: "running",
+        turns: [emptyTurn()],
+        startedAt: Date.now(),
+        completedAt: null,
+      };
+
+      const turns = base.turns.length > 0 ? [...base.turns] : [emptyTurn()];
+      const last = turns[turns.length - 1] ?? emptyTurn();
+      turns[turns.length - 1] = {
+        ...last,
+        timelineEvents: [...last.timelineEvents, ...events],
+      };
+
+      const subagents = new Map(session.subagents);
+      subagents.set(subagentSessionId, { ...base, turns });
+      const newSessions = new Map(state.sessions);
+      newSessions.set(sessionId, {
+        ...session,
+        subagents,
+        lastAccessed: new Date(),
+      });
       return { sessions: newSessions };
     });
   },
@@ -3499,6 +3632,7 @@ type ChatSessionData = Pick<
   | "isLoaded"
   | "messages"
   | "streamItems"
+  | "timelineEvents"
   | "webappNeedsRefresh"
   | "skillsStale"
 >;
@@ -3525,6 +3659,7 @@ export const useChatSession = (): ChatSessionData | null =>
         isLoaded,
         messages,
         streamItems,
+        timelineEvents,
         webappNeedsRefresh,
         skillsStale,
       } = session;
@@ -3542,6 +3677,7 @@ export const useChatSession = (): ChatSessionData | null =>
         isLoaded,
         messages,
         streamItems,
+        timelineEvents,
         webappNeedsRefresh,
         skillsStale,
       };

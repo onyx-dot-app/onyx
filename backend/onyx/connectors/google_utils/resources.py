@@ -1,7 +1,6 @@
 from enum import Enum
 from typing import Literal, overload
 
-from google.auth.transport.requests import AuthorizedSession
 from google.oauth2.credentials import Credentials as OAuthCredentials
 from google.oauth2.service_account import Credentials as ServiceAccountCredentials
 from googleapiclient.discovery import Resource, build
@@ -71,7 +70,13 @@ def get_google_service(
     creds: ServiceAccountCredentials | OAuthCredentials,
     user_email: str | None = None,
 ) -> GoogleDriveService | GoogleDocsService | AdminService | GmailService:
-    creds = get_impersonated_creds(creds, user_email)
+    return build_google_service(service, get_impersonated_creds(creds, user_email))
+
+
+def build_google_service(
+    service: GoogleService, creds: ServiceAccountCredentials | OAuthCredentials
+) -> GoogleDriveService | GoogleDocsService | AdminService | GmailService:
+    """A client that uses `creds` as given: impersonate before calling this."""
     service_name, service_version = service.value
     resource: Resource = build(service_name, service_version, credentials=creds)
     return resource  # ty: ignore[invalid-return-type]
@@ -87,13 +92,3 @@ def get_impersonated_creds(
         # https://developers.google.com/identity/protocols/oauth2/service-account#error-codes
         return creds.with_subject(user_email)
     return creds
-
-
-def get_google_authorized_session(
-    creds: ServiceAccountCredentials | OAuthCredentials,
-    user_email: str | None = None,
-) -> AuthorizedSession:
-    """Raw authorized HTTP session for Google REST endpoints the typed service
-    builders don't cover (e.g. streaming a response under a byte cap). Caller owns
-    the session and must close it."""
-    return AuthorizedSession(get_impersonated_creds(creds, user_email))

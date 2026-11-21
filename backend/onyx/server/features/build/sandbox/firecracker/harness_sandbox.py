@@ -9,21 +9,26 @@ durable cache records (`harness_state`), so any API pod can serve
 a user's sandbox keeps (Onyx delete hooks call them through `purge`).
 """
 
-import mimetypes
 import posixpath
 import random
 import secrets
 import time
-from collections.abc import Iterator
-from io import BytesIO
-from uuid import UUID
+from collections.abc import Callable, Generator, Iterable, Sequence
+from contextlib import nullcontext
+from typing import IO
+from uuid import UUID, uuid4
+
+import grpc
 
 from onyx.cache.factory import get_cache_backend, get_shared_cache_backend
 from onyx.cache.interface import CacheBackend
-from onyx.configs.constants import FileOrigin
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.file_store.file_store import get_default_file_store
+from onyx.llm.cancellation import (
+    CancellationSignal,
+    check_cancelled,
+    current_cancellation,
+)
 from onyx.microvm.agent_client import (
     HostAgentClientFactory,
     HostAgentError,
@@ -32,6 +37,8 @@ from onyx.microvm.agent_client import (
 )
 from onyx.microvm.configs import SANDBOX_FC_TURN_END_SAVE_INTERVAL_SECONDS
 from onyx.microvm.daemon_client import (
+    STAT_FILES_MAX_PATH_BYTES,
+    STAT_FILES_MAX_PATHS,
     SandboxDaemonClient,
     SandboxDaemonError,
     SandboxDaemonErrorReason,
@@ -55,8 +62,13 @@ from onyx.microvm.models import (
     ExecGap,
     ExecOutput,
     ExecResult,
+    ExecStarted,
+    FileListing,
+    FileType,
     OutputStream,
+    PathStat,
     PlacedVm,
+    StatError,
     VmInstance,
     VmRequest,
 )
@@ -71,23 +83,32 @@ from onyx.microvm.registry import (
     touch_sandbox_placement,
 )
 from onyx.server.features.build.sandbox.exec_output import (
+    EXEC_DEFAULT_YIELD_MS,
+    EXEC_MAX_YIELD_MS,
+    EXEC_MIN_YIELD_MS,
+    POLL_MAX_YIELD_MS,
+    POLL_MIN_YIELD_MS,
+    WRITE_STDIN_DEFAULT_YIELD_MS,
+    WRITE_STDIN_MAX_YIELD_MS,
     ExecOutputBuffer,
-    cut_to_tokens,
-    estimate_tokens,
+)
+from onyx.server.features.build.sandbox.file_copy_state import (
+    COPY_STATE_SECONDS,
+    copy_generation_key,
 )
 from onyx.server.features.build.sandbox.firecracker.harness_state import (
-    ARTIFACTS_PREFIX,
     EXEC_SESSIONS_PREFIX,
     SANDBOX_STATE_PREFIXES,
     SAVED_SESSIONS_PREFIX,
     SESSION_INSTANCES_PREFIX,
-    add_id,
     forget_session_on_instances,
     get_exec_session,
     get_ids,
     get_session_save,
+    get_skills_image,
     has_marks,
-    is_sandbox_purged,
+    has_session_records,
+    is_purged,
     last_attempt,
     mark_purged,
     mark_session_on_instance,
@@ -95,14 +116,15 @@ from onyx.server.features.build.sandbox.firecracker.harness_state import (
     put_exec_session,
     record_attempt,
     remove_exec_session,
-    remove_id,
     sessions_on_instance,
     set_mark,
+    set_skills_image,
 )
 from onyx.server.features.build.sandbox.firecracker.models import (
     ExecSessionRecord,
     ExecSessionTable,
     SessionInstanceTable,
+    SkillsImage,
 )
 from onyx.server.features.build.sandbox.firecracker.session_saves import (
     BackgroundIdleStop,
@@ -117,31 +139,38 @@ from onyx.server.features.build.sandbox.firecracker.session_saves import (
     tenant_scope,
 )
 from onyx.server.features.build.sandbox.harness_base import (
-    DEFAULT_MAX_OUTPUT_TOKENS,
     EXEC_DEFAULT_ENV,
-    EXEC_DEFAULT_YIELD_MS,
-    EXEC_MAX_YIELD_MS,
-    EXEC_MIN_YIELD_MS,
     INTERRUPT_CHAR,
-    POLL_MAX_YIELD_MS,
-    POLL_MIN_YIELD_MS,
-    WRITE_STDIN_DEFAULT_YIELD_MS,
-    WRITE_STDIN_MAX_YIELD_MS,
+    ONYX_VM_FILES_ROOT,
+    RENDER_FIRST_PAGE_MAX_OUTPUT_BYTES,
+    RENDER_FIRST_PAGE_ROOT,
+    RENDER_FIRST_PAGE_SIZE_PX,
+    RENDER_FIRST_PAGE_SUFFIXES,
     ExecCapReachedError,
     ExecSessionEndedError,
     ExecSessionNotFoundError,
     HarnessSandbox,
     HarnessSandboxError,
+    SandboxFileNotFoundError,
     SandboxFileTooLargeError,
     SandboxPathError,
-    session_workspace,
+    SessionFiles,
+    onyx_vm_path,
+    session_relative_path,
+    session_tool_results,
 )
 from onyx.server.features.build.sandbox.models import (
     ExecCommandResult,
+    ExecCompletionName,
     ExecEvent,
     ExecOutputDelta,
     HarnessSandboxRef,
+    SandboxFileType,
+    SandboxPathFault,
+    SandboxPathInfo,
     SandboxProvisionContentionError,
+    SkillsBundle,
+    session_workspace,
 )
 from onyx.utils.logger import setup_logger
 
@@ -157,8 +186,6 @@ WAKE_RETRY_SECONDS = 10.0
 TURN_LEASE_SECONDS = 15 * 60.0
 # A parked approval keeps the sandbox busy for at most this long.
 APPROVAL_PARK_SECONDS = 24 * 3600.0
-# Largest session file that publish_artifact copies to the file store.
-PUBLISH_MAX_BYTES = 100 << 20
 # One Init per VM instance across API pods: a second Init resets egress
 # connections that a command of the first may already use.
 _INIT_LOCK_PREFIX = "sandbox_fc_harness_init:"
@@ -167,8 +194,35 @@ _INIT_LOCK_SECONDS = 30.0
 # covers a restore at the agent's 15 min transfer deadline.
 _SESSION_SETUP_LOCK_PREFIX = "sandbox_fc:session_setup:"
 _SESSION_SETUP_LOCK_SECONDS = 30 * 60.0
+_SKILLS_SYNC_LOCK_PREFIX = "sandbox_fc:skills_sync:"
+_SKILLS_SYNC_LOCK_SECONDS = 5 * 60.0
 # Client token on each started command, to find it when Start gets no answer.
 _START_LABEL = "onyx_start_id"
+# The daemon refuses Start and Run with these while it keeps its most commands.
+_EXEC_CAP_REASONS = frozenset(
+    {
+        SandboxDaemonErrorReason.EXECUTION_CAP_REACHED,
+        SandboxDaemonErrorReason.TOO_MANY_EXECUTIONS,
+    }
+)
+_COMPLETION_NAMES: dict[ExecCompletion, ExecCompletionName] = {
+    ExecCompletion.EXITED: "exited",
+    ExecCompletion.SIGNALED: "signaled",
+    ExecCompletion.CANCELED: "canceled",
+    ExecCompletion.DEADLINE_EXCEEDED: "deadline_exceeded",
+}
+_SANDBOX_FILE_TYPES: dict[FileType, SandboxFileType] = {
+    FileType.REGULAR: "file",
+    FileType.DIRECTORY: "directory",
+    FileType.OTHER: "other",
+}
+# The tail of a failed render command's output that its log keeps.
+_RENDER_LOG_OUTPUT_BYTES = 2000
+_STAT_ERRORS: dict[StatError, SandboxPathFault] = {
+    StatError.ESCAPES: "escapes",
+    StatError.LOOP: "loop",
+    StatError.OTHER: "other",
+}
 
 
 def _find_started(
@@ -186,25 +240,6 @@ def _find_started(
 def _clamp_ms(value: int | None, default: int, low: int, high: int) -> float:
     ms = default if value is None else value
     return min(max(ms, low), high) / 1000.0
-
-
-def session_relative_path(ref: HarnessSandboxRef, path: str) -> str:
-    """The session-relative form of `path` ("" = the session directory).
-    Accepts a relative path or an absolute path in the session directory."""
-    root = session_workspace(ref.session_id)
-    normalized = posixpath.normpath(path or ".")
-    if posixpath.isabs(normalized):
-        if normalized == root:
-            return ""
-        if not normalized.startswith(root + "/"):
-            raise SandboxPathError(
-                f"{path!r} is outside the session directory {root}; use "
-                "exec_command elsewhere"
-            )
-        return normalized[len(root) + 1 :]
-    if normalized == ".." or normalized.startswith("../"):
-        raise SandboxPathError(f"{path!r} leaves the session directory")
-    return "" if normalized == "." else normalized
 
 
 class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
@@ -231,6 +266,41 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
     def ensure_running(self, ref: HarnessSandboxRef) -> None:
         self._place(ref)
 
+    def sync_skills(self, ref: HarnessSandboxRef, bundle: SkillsBundle) -> None:
+        placed = self._place(ref)
+        tenant_cache = get_cache_backend(tenant_id=ref.tenant_id)
+        image = SkillsImage(
+            instance=(placed.vm.attempt, placed.vm.generation),
+            image_id=bundle.image_id,
+        )
+        if get_skills_image(tenant_cache, ref.sandbox_id) == image:
+            return
+        # One swap and its record at a time, so the record names the drive.
+        with tenant_cache.lock(
+            f"{_SKILLS_SYNC_LOCK_PREFIX}{ref.sandbox_id}",
+            timeout=_SKILLS_SYNC_LOCK_SECONDS,
+        ):
+            if get_skills_image(tenant_cache, ref.sandbox_id) == image:
+                return
+            agent = self._client_factory.client(placed.node.address)
+            put = agent.put_managed_image(bundle.zip_bytes)
+            swap = agent.swap_managed(
+                image_id=put.image.image_id,
+                targets=[
+                    VmInstance(
+                        sandbox_id=placed.vm.sandbox_id,
+                        attempt=placed.vm.attempt,
+                        generation=placed.vm.generation,
+                        sandboxd_key=placed.sandboxd_key,
+                    )
+                ],
+            )[0]
+            if not swap.ok:
+                raise HarnessSandboxError(
+                    f"The skills drive did not change: {swap.reason}: {swap.message}"
+                )
+            set_skills_image(tenant_cache, ref.sandbox_id, image)
+
     def _place(self, ref: HarnessSandboxRef) -> PlacedVm:
         """The running, initialized VM. Init runs only when the daemon is not
         initialized: a new boot, a VM adopted from a reservation, or a VM that
@@ -239,10 +309,12 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
         tenant_cache = get_cache_backend(tenant_id=ref.tenant_id)
         # A stop that saves this sandbox now gives way to this call.
         note_wanted(tenant_cache, ref.sandbox_id)
+        # The sandbox's attempt record (last_attempt) fences VMs: a placed VM
+        # serves any attempt, and a new VM starts past the last one.
         request = VmRequest(
             tenant_id=ref.tenant_id,
             sandbox_id=ref.sandbox_id,
-            attempt=ref.attempt,
+            attempt=1,
             template=self._template,
         )
         give_up_at = time.monotonic() + WAKE_RETRY_SECONDS
@@ -558,21 +630,28 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
         *,
         workdir: str | None = None,
         yield_time_ms: int | None = None,
-        max_output_tokens: int | None = None,
-    ) -> Iterator[ExecEvent]:
+    ) -> Generator[ExecEvent]:
         """Starts the command when the iterator is first read."""
-        started_at = time.monotonic()
+        buffer = ExecOutputBuffer()
         yield_seconds = _clamp_ms(
-            yield_time_ms, EXEC_DEFAULT_YIELD_MS, EXEC_MIN_YIELD_MS, EXEC_MAX_YIELD_MS
+            yield_time_ms,
+            EXEC_DEFAULT_YIELD_MS,
+            EXEC_MIN_YIELD_MS,
+            EXEC_MAX_YIELD_MS,
         )
         placed, daemon = self._session_vm(ref)
         start_label = {_START_LABEL: secrets.token_hex(16)}
+        # A Stop that came during the wake starts no command.
+        if (cancellation := current_cancellation()) is not None:
+            cancellation.check()
         try:
             # The daemon makes the session directory, the default cwd.
             execution_id = daemon.start(
                 ExecCommand(
                     argv=["bash", "-c", cmd],
                     cwd=workdir or "",
+                    # Each chat session drives its own browser in the shared VM.
+                    env={"AGENT_BROWSER_SESSION": str(ref.session_id)},
                     stdin=True,
                     deadline_seconds=EXEC_DEADLINE_SECONDS,
                     labels=start_label,
@@ -580,7 +659,7 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
                 )
             ).execution_id
         except SandboxDaemonError as e:
-            if e.reason is SandboxDaemonErrorReason.EXECUTION_CAP_REACHED:
+            if e.reason in _EXEC_CAP_REASONS:
                 raise ExecCapReachedError() from e
             raise
         except HostAgentError:
@@ -596,6 +675,9 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
             generation=placed.vm.generation,
             last_used=time.time(),
         )
+        # The yield window counts from the start, not from the call: a wake
+        # and the Start take time that the command did not get.
+        until = time.monotonic() + yield_seconds
         tenant_cache = get_cache_backend(tenant_id=ref.tenant_id)
         try:
             put_exec_session(tenant_cache, ref.sandbox_id, record)
@@ -604,13 +686,7 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
             daemon.cancel(record.execution_id)
             raise
         yield from self._collect(
-            tenant_cache,
-            ref,
-            daemon,
-            record,
-            until=started_at + yield_seconds,
-            started_at=started_at,
-            max_output_tokens=max_output_tokens or DEFAULT_MAX_OUTPUT_TOKENS,
+            tenant_cache, ref, daemon, record, until=until, buffer=buffer
         )
 
     def write_stdin(
@@ -620,10 +696,9 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
         chars: str = "",
         *,
         yield_time_ms: int | None = None,
-        max_output_tokens: int | None = None,
-    ) -> Iterator[ExecEvent]:
+    ) -> Generator[ExecEvent]:
         """Writes when the iterator is first read."""
-        started_at = time.monotonic()
+        buffer = ExecOutputBuffer()
         if chars:
             yield_seconds = _clamp_ms(
                 yield_time_ms,
@@ -633,7 +708,10 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
             )
         else:
             yield_seconds = _clamp_ms(
-                yield_time_ms, POLL_MIN_YIELD_MS, POLL_MIN_YIELD_MS, POLL_MAX_YIELD_MS
+                yield_time_ms,
+                POLL_MIN_YIELD_MS,
+                POLL_MIN_YIELD_MS,
+                POLL_MAX_YIELD_MS,
             )
         tenant_cache = get_cache_backend(tenant_id=ref.tenant_id)
         record = get_exec_session(tenant_cache, ref.sandbox_id, exec_session_id)
@@ -649,6 +727,9 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
             raise ExecSessionEndedError(exec_session_id)
         daemon = sandbox_daemon(self._client_factory, placed)
         text, interrupt, _ = chars.partition(INTERRUPT_CHAR)
+        # A Stop that came before the write writes nothing.
+        if (cancellation := current_cancellation()) is not None:
+            cancellation.check()
         try:
             if text:
                 daemon.interact(record.execution_id, data=text.encode())
@@ -666,9 +747,9 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
             ref,
             daemon,
             record,
-            until=started_at + yield_seconds,
-            started_at=started_at,
-            max_output_tokens=max_output_tokens or DEFAULT_MAX_OUTPUT_TOKENS,
+            # From the write, as for exec_command.
+            until=time.monotonic() + yield_seconds,
+            buffer=buffer,
         )
 
     def _collect(
@@ -679,23 +760,29 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
         record: ExecSessionRecord,
         *,
         until: float,
-        started_at: float,
-        max_output_tokens: int,
-    ) -> Iterator[ExecEvent]:
-        """Stream new output until the command ends or `until` passes, then
-        yield the result and save the read offsets."""
-        buffer = ExecOutputBuffer()
+        buffer: ExecOutputBuffer,
+    ) -> Generator[ExecEvent]:
+        """Stream new output into `buffer` until the command ends or `until`
+        passes, then yield the result and save the read offsets. A cancel of
+        the current signal (a Stop, or the end of the calling code mode cell)
+        ends the wait and kills the command, however the wait ends (also when
+        the consumer drops this iterator), then raises AgentCancelled."""
+        buffer.session_id = record.exec_session_id
         offsets = {
             OutputStream.STDOUT: record.stdout_offset,
             OutputStream.STDERR: record.stderr_offset,
         }
         result: ExecResult | None = None
+        stream_error: SandboxDaemonError | HostAgentError | None = None
+        cancellation = current_cancellation()
+        stopped = False
         try:
             for event in daemon.stream(
                 record.execution_id,
                 stdout_offset=offsets[OutputStream.STDOUT],
                 stderr_offset=offsets[OutputStream.STDERR],
                 window_seconds=max(until - time.monotonic(), 0.001),
+                on_cancel=None if cancellation is None else cancellation.on_cancel,
             ):
                 text = ""
                 if isinstance(event, ExecOutput):
@@ -718,8 +805,29 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
                 remove_exec_session(
                     tenant_cache, ref.sandbox_id, record.exec_session_id
                 )
+                buffer.session_id = None
                 raise ExecSessionEndedError(record.exec_session_id) from e
-            raise
+            stream_error = e
+        except HostAgentError as e:
+            stream_error = e
+        finally:
+            # Also when the stream failed meanwhile or the consumer stopped
+            # reading.
+            stopped = result is None and self._kill_if_stopped(
+                tenant_cache, ref, daemon, record, buffer, cancellation
+            )
+        if stopped and cancellation is not None:
+            cancellation.check()
+        if isinstance(stream_error, HostAgentError):
+            # The connection broke, not the command: it keeps running, and
+            # its record (with the last saved offsets) stays.
+            raise HarnessSandboxError(
+                f"Lost the output stream of the command ({stream_error}). It "
+                f"may still run: poll it with write_stdin and session ID "
+                f"{record.exec_session_id}."
+            ) from stream_error
+        if stream_error is not None:
+            raise stream_error
         if result is None:
             # The next call reads an incomplete character again.
             put_exec_session(
@@ -737,30 +845,90 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
             )
         else:
             remove_exec_session(tenant_cache, ref.sandbox_id, record.exec_session_id)
+            buffer.session_id = None
             if text := buffer.finish():
                 yield ExecOutputDelta(text=text)
-        full = buffer.text()
-        output, cut = cut_to_tokens(full, max_output_tokens)
         exited = result is not None and result.completion is ExecCompletion.EXITED
         yield ExecCommandResult(
-            output=output,
-            exec_session_id=None if result is not None else record.exec_session_id,
+            head=buffer.head,
+            tail=buffer.tail,
+            omitted_chars=buffer.omitted_chars,
+            session_id=buffer.session_id,
             exit_code=result.exit_code if result is not None and exited else None,
-            completion=result.completion.value.lower() if result is not None else None,
-            wall_time_seconds=time.monotonic() - started_at,
-            original_token_count=estimate_tokens(full),
-            truncated=cut or buffer.truncated,
+            completion=None
+            if result is None
+            else _COMPLETION_NAMES.get(result.completion),
+            wall_time_seconds=time.monotonic() - buffer.started_at,
+            truncated=buffer.truncated,
         )
 
-    # Files (paths relative to the session directory)
+    def _kill_if_stopped(
+        self,
+        tenant_cache: CacheBackend,
+        ref: HarnessSandboxRef,
+        daemon: SandboxDaemonClient,
+        record: ExecSessionRecord,
+        buffer: ExecOutputBuffer,
+        cancellation: CancellationSignal | None,
+    ) -> bool:
+        """If the current signal stopped the call, kill its command and drop
+        its record; returns whether it stopped. A failed kill keeps the
+        record (and the buffer's session ID), so write_stdin can still reach
+        the command."""
+        if cancellation is None or not cancellation.cancelled:
+            return False
+        try:
+            daemon.cancel(record.execution_id)
+            remove_exec_session(tenant_cache, ref.sandbox_id, record.exec_session_id)
+            buffer.session_id = None
+        except Exception:
+            logger.warning(
+                "sandbox_fc_stop_kill_failed sandbox=%s execution=%s",
+                ref.sandbox_id,
+                record.execution_id,
+                exc_info=True,
+            )
+        return True
+
+    # Files (paths relative to the session directory, or under
+    # ONYX_VM_FILES_ROOT)
+
+    def _file_target(
+        self, ref: HarnessSandboxRef, path: str
+    ) -> tuple[SandboxDaemonClient, str, str]:
+        """The daemon, session ID and path of a file call. A path under
+        ONYX_VM_FILES_ROOT goes with no session ID: the daemon takes it
+        absolute, and no session is restored. Any other path is
+        session-relative ("" = the session directory), checked before the
+        sandbox starts."""
+        onyx_path = onyx_vm_path(path)
+        if onyx_path is not None:
+            return sandbox_daemon(self._client_factory, self._place(ref)), "", onyx_path
+        rel = session_relative_path(ref, path)
+        return self._session_vm(ref)[1], str(ref.session_id), rel
 
     def read_file(self, ref: HarnessSandboxRef, path: str, *, max_bytes: int) -> bytes:
-        rel = session_relative_path(ref, path)
-        _, daemon = self._session_vm(ref)
+        try:
+            daemon, session_id, target = self._file_target(ref, path)
+        except SandboxPathError as e:
+            raise SandboxPathError(
+                f"{path!r} is not in the working directory or under "
+                f"{ONYX_VM_FILES_ROOT}; copy the file into the working "
+                "directory first"
+            ) from e
         # Dropping the chunk iterator unread cancels the stream.
-        info, chunks = daemon.read_file(
-            session_id=str(ref.session_id), path=rel, length=max_bytes + 1
-        )
+        try:
+            info, chunks = daemon.read_file(
+                session_id=session_id, path=target, length=max_bytes + 1
+            )
+        except SandboxDaemonError as e:
+            if e.reason is SandboxDaemonErrorReason.FILE_NOT_FOUND:
+                raise SandboxFileNotFoundError(path) from e
+            if e.reason is SandboxDaemonErrorReason.INVALID_ARGUMENT:
+                # Not a regular file, a link out of its root, or a denied
+                # path; the daemon's message names the path.
+                raise HarnessSandboxError(e.message) from e
+            raise
         data = b"" if info.size > max_bytes else b"".join(chunks)
         if info.size > max_bytes or len(data) > max_bytes:
             raise SandboxFileTooLargeError(
@@ -768,83 +936,348 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
             )
         return data
 
-    def write_file(self, ref: HarnessSandboxRef, path: str, data: bytes) -> None:
-        rel = session_relative_path(ref, path)
-        if not rel:
-            raise SandboxPathError("cannot write the session directory itself")
-        self._session_vm(ref)[1].write_file(
-            session_id=str(ref.session_id), path=rel, data=data
-        )
-
-    def publish_artifact(
-        self, ref: HarnessSandboxRef, path: str, *, display_name: str | None = None
-    ) -> str:
-        rel = session_relative_path(ref, path)
-        data = self.read_file(ref, rel, max_bytes=PUBLISH_MAX_BYTES)
-        name = display_name or posixpath.basename(rel)
-        # The file store keys and records the file under the context tenant.
-        with tenant_scope(ref.tenant_id):
-            file_id = get_default_file_store().save_file(
-                content=BytesIO(data),
-                display_name=name,
-                file_origin=FileOrigin.OTHER,
-                file_type=mimetypes.guess_type(name)[0] or "application/octet-stream",
-                file_metadata={
-                    "source": "craft_sandbox",
-                    "session_id": str(ref.session_id),
-                    "path": rel,
-                },
+    def write_file(
+        self,
+        ref: HarnessSandboxRef,
+        path: str,
+        data: bytes | IO[bytes] | list[bytes],
+        *,
+        mode: int = 0o644,
+        timeout_seconds: float | None = None,
+    ) -> None:
+        if not mode & 0o7777:
+            # The guest daemon reads mode 0 as "not set" and writes 0644.
+            raise HarnessSandboxError(
+                f"cannot write {path!r} with mode 000; change its mode with "
+                "exec_command first"
             )
-        # A session delete keeps artifacts; a sandbox purge deletes them.
-        tenant_cache = get_cache_backend(tenant_id=ref.tenant_id)
+        daemon, session_id, target = self._file_target(ref, path)
+        _write(daemon, session_id, target, data, mode, timeout_seconds)
+        tool_results = session_tool_results(ref.session_id)
+        if target.startswith(tool_results + "/") and is_purged(
+            get_cache_backend(tenant_id=ref.tenant_id), ref.sandbox_id, ref.session_id
+        ):
+            # The purge marks the session before it deletes the directory, so
+            # a write that it missed sees the mark.
+            daemon.delete_file(session_id="", path=tool_results, recursive=True)
+            raise HarnessSandboxError(f"session {ref.session_id} was deleted")
+
+    def delete_listed_files(
+        self,
+        ref: HarnessSandboxRef,
+        directory: str,
+        select: Callable[[FileListing], Iterable[str]],
+        *,
+        max_entries: int,
+    ) -> None:
+        daemon, session_id, target = self._file_target(ref, directory)
         try:
-            add_id(tenant_cache, ARTIFACTS_PREFIX, ref.sandbox_id, file_id)
+            listing = daemon.list_files(
+                session_id=session_id,
+                path=target,
+                recursive=True,
+                max_entries=max_entries,
+            )
+        except SandboxDaemonError as e:
+            if e.reason is SandboxDaemonErrorReason.FILE_NOT_FOUND:
+                return
+            raise
+        listed = {entry.path for entry in listing.entries}
+        for path in select(listing):
+            if path in listed:
+                daemon.delete_file(session_id=session_id, path=path)
+
+    def stat_files(
+        self, ref: HarnessSandboxRef, paths: Sequence[str]
+    ) -> list[SandboxPathInfo]:
+        rels = [session_relative_path(ref, path) or "." for path in paths]
+        _, daemon = self._session_vm(ref)
+        # Batches within the daemon's caps of paths and path bytes.
+        batches: list[list[str]] = [[]]
+        size = 0
+        for rel in rels:
+            if len(batches[-1]) == STAT_FILES_MAX_PATHS or (
+                batches[-1] and size + len(rel.encode()) > STAT_FILES_MAX_PATH_BYTES
+            ):
+                batches.append([])
+                size = 0
+            batches[-1].append(rel)
+            size += len(rel.encode())
+        stats: list[PathStat] = []
+        try:
+            for batch in batches:
+                if batch:
+                    stats += daemon.stat_files(
+                        session_id=str(ref.session_id), paths=batch
+                    )
+        except (HostAgentError, SandboxDaemonError) as e:
+            if e.code is grpc.StatusCode.UNIMPLEMENTED:
+                raise HarnessSandboxError(
+                    "This sandbox runs an older image without file checks; it "
+                    "updates after the sandbox restarts."
+                ) from e
+            raise
+        return [
+            SandboxPathInfo(
+                exists=found.exists,
+                is_link=found.type is FileType.SYMLINK,
+                link_target=found.link_target
+                if found.type is FileType.SYMLINK
+                else None,
+                type=_SANDBOX_FILE_TYPES.get(found.target_type)
+                if found.target_error is None
+                else None,
+                mode=found.target_mode if found.target_error is None else None,
+                identity=(found.device, found.inode)
+                if found.target_error is None
+                else None,
+                error=_STAT_ERRORS.get(found.target_error)
+                if found.target_error is not None
+                else None,
+            )
+            for found in stats
+        ]
+
+    def delete_file(self, ref: HarnessSandboxRef, path: str) -> bool:
+        return _delete(*self._file_target(ref, path))
+
+    def session_files(self, ref: HarnessSandboxRef) -> SessionFiles:
+        tenant_cache = get_cache_backend(tenant_id=ref.tenant_id)
+        if is_purged(tenant_cache, ref.sandbox_id, ref.session_id):
+            raise HarnessSandboxError("This chat session was deleted.")
+        _, daemon = self._session_vm(ref)
+        return _SessionFiles(daemon, tenant_cache, ref)
+
+    # Renders
+
+    def render_first_page(
+        self, ref: HarnessSandboxRef, path: str, *, until: float
+    ) -> bytes | None:
+        suffix = posixpath.splitext(path)[1].lower()
+        if suffix not in RENDER_FIRST_PAGE_SUFFIXES:
+            return None
+        cancellation = current_cancellation()
+        try:
+            daemon, session_id, target = self._file_target(ref, path)
         except Exception:
-            # The file is saved; only a later sandbox purge misses it.
+            # A failure after a Stop is the Stop.
+            check_cancelled()
             logger.warning(
-                "sandbox_fc_artifact_index_failed sandbox=%s file=%s",
+                "sandbox_fc_render_failed sandbox=%s path=%r",
                 ref.sandbox_id,
-                file_id,
+                path,
                 exc_info=True,
             )
-        # A sandbox purge that read the index before this publish ended.
-        if is_sandbox_purged(tenant_cache, ref.sandbox_id):
-            with tenant_scope(ref.tenant_id):
-                get_default_file_store().delete_file(file_id, error_on_missing=False)
-            remove_id(tenant_cache, ARTIFACTS_PREFIX, ref.sandbox_id, file_id)
-            raise HarnessSandboxError("The sandbox was deleted.")
-        return file_id
+            return None
+        source = (
+            posixpath.join(session_workspace(ref.session_id), target)
+            if session_id
+            else target
+        )
+        scratch = f"{RENDER_FIRST_PAGE_ROOT}/{secrets.token_hex(16)}"
+        steps: list[tuple[list[str], dict[str, str]]] = [(["mkdir", "-p", scratch], {})]
+        if suffix != ".pdf":
+            steps.append(
+                (
+                    [
+                        "soffice",
+                        # A profile of its own, so renders run side by side.
+                        f"-env:UserInstallation=file://{scratch}/profile",
+                        "--headless",
+                        "--convert-to",
+                        "pdf",
+                        "--outdir",
+                        scratch,
+                        source,
+                    ],
+                    {"SAL_USE_VCLPLUGIN": "svp"},
+                )
+            )
+            # LibreOffice names the PDF after the source, without its suffix.
+            stem = posixpath.splitext(posixpath.basename(source))[0]
+            source = f"{scratch}/{stem}.pdf"
+        steps.append(
+            (
+                [
+                    "pdftoppm",
+                    "-jpeg",
+                    "-f",
+                    "1",
+                    "-l",
+                    "1",
+                    "-scale-to",
+                    str(RENDER_FIRST_PAGE_SIZE_PX),
+                    "-singlefile",
+                    source,
+                    f"{scratch}/page",
+                ],
+                {},
+            )
+        )
+        # The execution ID of the step that runs, once it started.
+        running: list[str] = []
+
+        def kill() -> None:
+            if running:
+                daemon.cancel(running[0])
+
+        try:
+            for argv, env in steps:
+                check_cancelled()
+                remaining = until - time.monotonic()
+                if remaining <= 0:
+                    logger.warning(
+                        "sandbox_fc_render_failed sandbox=%s path=%r step=%s: "
+                        "the render budget is spent",
+                        ref.sandbox_id,
+                        path,
+                        argv[0],
+                    )
+                    return None
+                running.clear()
+                result: ExecResult | None = None
+                output = b""
+                try:
+                    with (
+                        nullcontext()
+                        if cancellation is None
+                        else cancellation.on_cancel(kill)
+                    ):
+                        for event in daemon.run(
+                            ExecCommand(
+                                argv=argv,
+                                env=env,
+                                deadline_seconds=remaining,
+                                session_id=session_id,
+                            )
+                        ):
+                            if isinstance(event, ExecStarted):
+                                running.append(event.execution_id)
+                                # A cancel before the start found nothing to
+                                # kill: the step's clean-up below kills it.
+                                if cancellation is not None and cancellation.cancelled:
+                                    break
+                            elif isinstance(event, ExecOutput):
+                                output = (output + event.data)[
+                                    -_RENDER_LOG_OUTPUT_BYTES:
+                                ]
+                            elif isinstance(event, ExecResult):
+                                result = event
+                finally:
+                    # A step without a result may still run: kill it, so it
+                    # writes nothing in the scratch directory after its delete.
+                    if result is None:
+                        try:
+                            kill()
+                        except Exception:
+                            logger.warning(
+                                "sandbox_fc_render_kill_failed sandbox=%s execution=%s",
+                                ref.sandbox_id,
+                                running,
+                                exc_info=True,
+                            )
+                check_cancelled()
+                if (
+                    result is None
+                    or result.completion is not ExecCompletion.EXITED
+                    or result.exit_code != 0
+                ):
+                    logger.warning(
+                        "sandbox_fc_render_failed sandbox=%s path=%r step=%s: %s",
+                        ref.sandbox_id,
+                        path,
+                        argv[0],
+                        "the command ended without a result"
+                        if result is None
+                        else f"{result.completion.value} with exit code "
+                        f"{result.exit_code}: "
+                        f"{output.decode(errors='replace').strip()}",
+                    )
+                    return None
+            return self.read_file(
+                ref, f"{scratch}/page.jpg", max_bytes=RENDER_FIRST_PAGE_MAX_OUTPUT_BYTES
+            )
+        except Exception:
+            check_cancelled()
+            logger.warning(
+                "sandbox_fc_render_failed sandbox=%s path=%r",
+                ref.sandbox_id,
+                path,
+                exc_info=True,
+            )
+            return None
+        finally:
+            try:
+                daemon.delete_file(session_id="", path=scratch, recursive=True)
+            except Exception:
+                logger.warning(
+                    "sandbox_fc_render_cleanup_failed sandbox=%s dir=%s",
+                    ref.sandbox_id,
+                    scratch,
+                    exc_info=True,
+                )
 
     # Purge (delete hooks). Each step runs even when an earlier one failed;
     # the call raises at the end if any step failed.
 
     def purge_session(
-        self, *, tenant_id: str, sandbox_id: UUID, session_id: UUID
+        self,
+        *,
+        tenant_id: str,
+        sandbox_id: UUID,
+        session_id: UUID,
+        retention: bool = False,
     ) -> None:
-        """Delete a chat session's save, its directory on the running VM and
-        its exec records. Its published artifacts stay."""
+        """Delete a chat session's save, its working directory on the running
+        VM, its tool results (the purge rule at TOOL_RESULTS_ROOT) and its exec
+        records. A session that never used the sandbox costs a few cache reads
+        and, while the VM runs, one delete. `retention`: see `mark_purged`."""
         tenant_cache = get_cache_backend(tenant_id=tenant_id)
-        mark_purged(tenant_cache, session_id=session_id)
+        mark_purged(tenant_cache, session_id=session_id, retention=retention)
         errors: list[Exception] = []
+        try:
+            # Copies of the chat stop before its directory goes.
+            tenant_cache.incr(copy_generation_key(session_id), ex=COPY_STATE_SECONDS)
+        except Exception as e:
+            errors.append(e)
         placed: PlacedVm | None = None
         try:
             placed = self._placed_if_running(tenant_cache, sandbox_id)
         except Exception as e:
             errors.append(e)
         try:
-            # Before the directory delete: a command can write it again.
+            # Before the directory deletes: a command can write them again.
             self._drop_session_commands(tenant_cache, placed, sandbox_id, session_id)
         except Exception as e:
             errors.append(e)
+        # The purge rule at TOOL_RESULTS_ROOT: no record shows a spill.
+        # VM-wide paths: a session-relative call cannot delete a session
+        # directory itself.
         try:
             if placed is not None:
-                # The VM-wide path: a session-relative call cannot delete
-                # the session directory itself.
+                sandbox_daemon(self._client_factory, placed).delete_file(
+                    session_id="", path=session_tool_results(session_id), recursive=True
+                )
+        except Exception as e:
+            # The directory goes with the VM at its next stop.
+            errors.append(e)
+        # A session gets a working directory only on a VM instance that
+        # records it; its save has records too. A failed lookup counts as
+        # records, so every step runs.
+        try:
+            recorded = has_session_records(tenant_cache, sandbox_id, session_id)
+        except Exception as e:
+            errors.append(e)
+            recorded = True
+        if not recorded:
+            _raise_first(errors, f"session {session_id}")
+            return
+        try:
+            if placed is not None:
                 sandbox_daemon(self._client_factory, placed).delete_file(
                     session_id="", path=session_workspace(session_id), recursive=True
                 )
         except Exception as e:
-            # The directory goes with the VM at its next stop.
             errors.append(e)
         try:
             forget_session_on_instances(tenant_cache, sandbox_id, session_id)
@@ -898,8 +1331,8 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
         session_ids: list[UUID] | None = None,
     ) -> None:
         """Stop the sandbox's VM (the agent deletes its disk) and delete
-        every save, artifact and record of the sandbox. `session_ids` adds
-        sessions that the saved-session index may not name."""
+        every save and record of the sandbox. `session_ids` adds sessions
+        that the saved-session index may not name."""
         tenant_cache = get_cache_backend(tenant_id=tenant_id)
         mark_purged(tenant_cache, sandbox_id=sandbox_id)
         # A stop that saves the sandbox now gives way to the purge.
@@ -923,17 +1356,9 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
                     )
                 except Exception as e:
                     errors.append(e)
-            for file_id in get_ids(tenant_cache, ARTIFACTS_PREFIX, sandbox_id):
-                try:
-                    get_default_file_store().delete_file(
-                        file_id, error_on_missing=False
-                    )
-                    remove_id(tenant_cache, ARTIFACTS_PREFIX, sandbox_id, file_id)
-                except Exception as e:
-                    errors.append(e)
         clear_sandbox_reservation(tenant_cache, sandbox_id)
         clear_sandbox_daemon_key(tenant_cache, sandbox_id)
-        # The saved-session and artifact indexes keep what failed, for a retry.
+        # The saved-session index keeps what failed, for a retry.
         for prefix in SANDBOX_STATE_PREFIXES:
             tenant_cache.delete(prefix + str(sandbox_id))
         _raise_first(errors, f"sandbox {sandbox_id}")
@@ -992,3 +1417,85 @@ def _raise_first(errors: list[Exception], what: str) -> None:
         for e in errors[1:]:
             logger.warning("sandbox_fc_purge_step_failed %s: %s", what, e)
         raise errors[0]
+
+
+def _write(
+    daemon: SandboxDaemonClient,
+    session_id: str,
+    target: str,
+    data: bytes | IO[bytes] | list[bytes],
+    mode: int,
+    timeout_seconds: float | None,
+) -> None:
+    """The write of write_file and SessionFiles.write."""
+    if not target:
+        raise SandboxPathError("cannot write the session directory itself")
+    daemon.write_file(
+        session_id=session_id,
+        path=target,
+        data=data,
+        mode=mode,
+        timeout_seconds=timeout_seconds,
+    )
+
+
+def _delete(daemon: SandboxDaemonClient, session_id: str, target: str) -> bool:
+    """The delete of delete_file and SessionFiles.delete."""
+    if not target:
+        raise SandboxPathError("cannot delete the session directory itself")
+    return daemon.delete_file(session_id=session_id, path=target)
+
+
+class _SessionFiles(SessionFiles):
+    def __init__(
+        self,
+        daemon: SandboxDaemonClient,
+        tenant_cache: CacheBackend,
+        ref: HarnessSandboxRef,
+    ) -> None:
+        self._daemon = daemon
+        self._cache = tenant_cache
+        self._ref = ref
+        self._mark = f"copy:{uuid4().hex}"
+
+    def write(self, path: str, data: IO[bytes], *, timeout_seconds: float) -> None:
+        session_id = self._ref.session_id
+        _write(
+            self._daemon,
+            str(session_id),
+            session_relative_path(self._ref, path),
+            data,
+            0o644,
+            timeout_seconds,
+        )
+        if is_purged(self._cache, self._ref.sandbox_id, session_id):
+            # The purge marks the session before it deletes the directory, so
+            # a write that it missed sees the mark.
+            self._daemon.delete_file(
+                session_id="", path=session_workspace(session_id), recursive=True
+            )
+            raise HarnessSandboxError(f"session {session_id} was deleted")
+
+    def delete(self, path: str) -> bool:
+        # The daemon opens the session directory without creating it.
+        return _delete(
+            self._daemon,
+            str(self._ref.session_id),
+            session_relative_path(self._ref, path),
+        )
+
+    def list_files(self, directory: str, *, max_entries: int) -> FileListing:
+        try:
+            return self._daemon.list_files(
+                session_id=str(self._ref.session_id),
+                path=session_relative_path(self._ref, directory),
+                skip_hidden=True,
+                max_entries=max_entries,
+            )
+        except SandboxDaemonError as e:
+            if e.reason is SandboxDaemonErrorReason.FILE_NOT_FOUND:
+                return FileListing(entries=[], truncated=False)
+            raise
+
+    def mark_busy(self, seconds: float | None) -> None:
+        set_mark(self._cache, self._ref.sandbox_id, self._mark, seconds)

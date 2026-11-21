@@ -9,9 +9,8 @@ from prometheus_client import CollectorRegistry
 from prometheus_fastapi_instrumentator import Instrumentator
 from starlette.requests import Request
 
-from onyx.auth.schemas import AuthBackend
 from onyx.configs import app_configs
-from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
+from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME, AuthBackend
 from onyx.db.enums import AccountType
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode

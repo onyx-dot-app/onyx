@@ -146,7 +146,10 @@ def opensearch_index(
         embedding_dim=EMBEDDING_DIM,
     )
 
-    yield opensearch_idx
+    try:
+        yield opensearch_idx
+    finally:
+        opensearch_idx._client.delete_index()
 
 
 @pytest.fixture

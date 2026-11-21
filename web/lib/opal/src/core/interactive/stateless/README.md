@@ -16,6 +16,7 @@ Stateless interactive surface primitive for buttons, links, and cards. Applies v
 | `passive`     | `boolean`                                              | `false`     | Keeps the resting colours but drops hover, focus and pressed states; children stay interactive (unlike HTML `inert`) |
 | `href`        | `string`                                               | —           | URL for link behavior                                                                                                |
 | `target`      | `string`                                               | —           | Link target (e.g. `"_blank"`)                                                                                        |
+| `download`    | `string \| true`                                       | —           | Saves the `href` target as a file: a file name, or `true` for the server's name                                      |
 
 ## CSS custom properties
 

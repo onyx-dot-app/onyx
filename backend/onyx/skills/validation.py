@@ -4,7 +4,8 @@ from __future__ import annotations
 
 import zipfile
 from contextlib import closing
-from dataclasses import dataclass
+
+from pydantic import BaseModel, ConfigDict
 
 from onyx.db.file_record import FileRecordNotFoundError
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -12,6 +13,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore
 from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.bundle import (
+    SKILL_BUNDLE_LAYOUT,
     SKILL_MD_NAME,
     STORED_ZIP_MAX_BYTES,
     NormalizedSkillBundle,
@@ -20,11 +22,16 @@ from onyx.skills.bundle import (
     read_bundle_file,
 )
 from onyx.skills.metadata import parse_skill_document
-from onyx.skills.models import SKILL_NAME_MAX_LENGTH, SKILL_NAME_PATTERN
+from onyx.skills.models import (
+    SKILL_NAME_MAX_LENGTH,
+    SKILL_NAME_PATTERN,
+    BundleLayout,
+)
 
 
-@dataclass(frozen=True)
-class SkillValidationResult:
+class SkillValidationResult(BaseModel):
+    model_config = ConfigDict(frozen=True, strict=True)
+
     is_valid: bool | None
     normalized_bundle: bytes | None
     detail: str | None = None
@@ -38,9 +45,10 @@ def read_stored_bundle_bytes(bundle_file_id: str, file_store: FileStore) -> byte
 def load_stored_custom_skill_bundle(
     bundle_file_id: str,
     file_store: FileStore,
+    layout: BundleLayout = SKILL_BUNDLE_LAYOUT,
 ) -> NormalizedSkillBundle:
     bundle_bytes = read_stored_bundle_bytes(bundle_file_id, file_store)
-    return normalize_stored_bundle(bundle_bytes)
+    return normalize_stored_bundle(bundle_bytes, layout)
 
 
 def _is_missing_file_error(exc: Exception) -> bool:

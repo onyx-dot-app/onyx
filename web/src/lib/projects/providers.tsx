@@ -66,7 +66,7 @@ const generateTempId = () => {
 const createOptimisticFile = (
   file: File,
   projectId: number | null = null
-): ProjectFile => {
+): ProjectFile & { temp_id: string } => {
   const tempId = generateTempId();
   return {
     id: tempId, // Use temp ID as the actual ID initially
@@ -84,11 +84,6 @@ const createOptimisticFile = (
     temp_id: tempId, // Store temp_id for mapping later
   };
 };
-
-function buildFileKey(file: File): string {
-  const namePrefix = (file.name ?? "").slice(0, 50);
-  return `${file.size}|${namePrefix}`;
-}
 
 interface ProjectsContextType {
   projects: Project[];
@@ -320,17 +315,6 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
     await mutateRecentFiles();
   }, [mutateRecentFiles]);
 
-  const getTempIdMap = (files: File[], optimisticFiles: ProjectFile[]) => {
-    const tempIdMap = new Map<string, string>();
-    for (const f of files) {
-      const tempId = optimisticFiles.find((o) => o.name === f.name)?.temp_id;
-      if (tempId) {
-        tempIdMap.set(buildFileKey(f), tempId);
-      }
-    }
-    return tempIdMap;
-  };
-
   const removeOptimisticFilesByTempIds = useCallback(
     (optimisticTempIds: Set<string>, projectId?: number | null) => {
       // Remove from recent optimistic list
@@ -395,10 +379,12 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
         return [];
       }
 
+      // One optimistic file for each file, in order, so files of one name
+      // keep their own temporary IDs.
       const optimisticFiles = validFiles.map((f) =>
         createOptimisticFile(f, projectId)
       );
-      const tempIdMap = getTempIdMap(validFiles, optimisticFiles);
+      const tempIds = optimisticFiles.map((f) => f.temp_id);
       if (!incognitoUploadsEnabled) {
         setAllRecentFiles((prev) => [...optimisticFiles, ...prev]);
       }
@@ -406,7 +392,7 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
         setAllCurrentProjectFiles((prev) => [...optimisticFiles, ...prev]);
         projectToUploadFilesMapRef.current.set(projectId, optimisticFiles);
       }
-      svcUploadFiles(validFiles, projectId, tempIdMap, incognitoSessionId)
+      svcUploadFiles(validFiles, projectId, tempIds, incognitoSessionId)
         .then((uploaded) => {
           const uploadedFiles = uploaded.user_files || [];
           const tempIdToUploadedFileMap = new Map(
@@ -457,15 +443,9 @@ export function ProjectsProvider({ children }: ProjectsProviderProps) {
               })
             );
 
-            const failedNameSet = new Set<string>(
-              rejected_files.map((file) => file.file_name)
-            );
-            const failedTempIds = Array.from(
-              new Set(
-                optimisticFiles
-                  .filter((f) => f.temp_id && failedNameSet.has(f.name))
-                  .map((f) => f.temp_id as string)
-              )
+            // A file that the server did not return was rejected.
+            const failedTempIds = tempIds.filter(
+              (tempId) => !tempIdToUploadedFileMap.has(tempId)
             );
             removeOptimisticFilesByTempIds(new Set(failedTempIds), projectId);
             if (failedTempIds.length > 0) {

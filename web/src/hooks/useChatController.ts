@@ -3,7 +3,6 @@
 import { useNavigation, usePathname, useSearchParams } from "@opal/navigation";
 import {
   buildChatUrl,
-  getAvailableContextTokens,
   nameChatSession,
   setPreferredResponse,
   updateLlmOverrideForChatSession,
@@ -14,8 +13,6 @@ import {
   getMostVisibleResponseId,
   getUnresolvedMultiModelTurn,
 } from "@/app/app/message/multiModel";
-import { getMaxSelectedDocumentTokens } from "@/lib/projects/svc";
-import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
 import { StreamStopInfo } from "@/lib/search/types";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { Route } from "next";
@@ -35,6 +32,7 @@ import {
   BackendMessage,
   ChatFileType,
   CitationMap,
+  ChatStream,
   FileChatDisplay,
   FileDescriptor,
   Message,
@@ -77,20 +75,22 @@ import {
 import { Packet, MessageStart } from "@/app/app/services/streamingModels";
 import { SelectedModel } from "@/sections/model-selector/MultiModelSelector";
 import type { ToolConfigurationHandle } from "@/lib/tools/hooks";
-import {
-  effectiveChatPreferredToolId,
-  enabledChatToolIds,
-} from "@/lib/plugins/chat";
-import type { MemberPlugin } from "@/lib/plugins/member";
+import { effectiveChatPreference } from "@/lib/tools/chat";
 import { ProjectFile, useProjectsContext } from "@/lib/projects/providers";
 import { useIncognito } from "@/providers/IncognitoProvider";
 import { projectFilesToFileDescriptors } from "@/lib/projects/utils";
-import { settleChatSession } from "@/lib/chat/settleChatSession";
+import {
+  claimStreamReader,
+  releaseStreamReader,
+  writesAnswer,
+  settleChatSession,
+} from "@/lib/chat/settleChatSession";
 import type { ComposedMessage, UnsentMessage } from "@/lib/chat/types";
 import {
   stopChatSession,
   STOP_BEFORE_DISPATCH,
 } from "@/lib/chat/stopChatSession";
+import { useShowPendingRequest } from "@/lib/chat/hooks";
 
 const SYSTEM_MESSAGE_ID = -3;
 
@@ -126,7 +126,6 @@ interface UseChatControllerProps {
   /** Owned by the surface, so the input bar and this read the same one. */
   toolConfiguration: ToolConfigurationHandle;
   activeAgent: MinimalAgent | undefined;
-  memberPlugins?: readonly MemberPlugin[];
   availableAgents: MinimalAgent[];
   existingChatSessionId: string | null;
   selectedDocuments: OnyxDocument[];
@@ -141,7 +140,6 @@ export default function useChatController({
   toolConfiguration,
   availableAgents,
   activeAgent,
-  memberPlugins,
   existingChatSessionId,
   selectedDocuments,
   resetInputBar,
@@ -207,6 +205,7 @@ export default function useChatController({
   const currentMessageTree = useCurrentMessageTree();
   const currentMessageHistory = useCurrentMessageHistory();
   const tReadiness = useTranslations("chat.readiness");
+  const showPendingRequest = useShowPendingRequest();
 
   const navigatingAway = useRef(false);
 
@@ -813,6 +812,8 @@ export default function useChatController({
       let packetsVersion = 0;
 
       let newUserMessageId: number | null = null;
+      // The server names a new chat while it answers and sends the name here.
+      let serverNamedChat = false;
       let newAgentMessageId: number | null = null;
       // What the saved question mentioned, as the server recorded it.
       let recordedMentions = initialUserNode.mentions;
@@ -980,10 +981,24 @@ export default function useChatController({
           ];
         }
 
+        writeAnswers(messagesToUpsert);
+      }
+
+      /** Merges the send's updates into the chat's current tree. An answer
+       *  that a newer stream writes, such as its continuation, keeps its
+       *  rows, and rows that others added stay. */
+      function writeAnswers(messages: Message[]) {
+        const streamId = claimedStream?.stream_id ?? null;
         currentMessageTreeLocal = upsertToCompleteMessageTree({
-          messages: messagesToUpsert,
-          completeMessageTreeOverride: currentMessageTreeLocal,
-          chatSessionId: frozenSessionId!,
+          messages: messages.filter(
+            (message) =>
+              message.type === "user" ||
+              writesAnswer(streamId, message.messageId)
+          ),
+          completeMessageTreeOverride:
+            useChatSessionStore.getState().sessions.get(frozenSessionId)
+              ?.messageTree ?? currentMessageTreeLocal,
+          chatSessionId: frozenSessionId,
         });
       }
 
@@ -1015,6 +1030,10 @@ export default function useChatController({
       const readerFinished = new Promise<void>((resolve) => {
         resolveReaderFinished = resolve;
       });
+      // The send reads its own stream, so a decision that names it as the
+      // continuation does not start a second reader.
+      let claimedStream: ChatStream | null = null;
+      let readerDone = false;
 
       try {
         // Selection-time override writes are best-effort. Await confirmation
@@ -1038,13 +1057,13 @@ export default function useChatController({
           }
         }
 
-        const effectivePreferredToolId = deepResearch
+        const effectivePreference = deepResearch
           ? null
-          : effectiveChatPreferredToolId({
+          : effectiveChatPreference({
               requestedToolId: toolConfiguration.preferredToolId,
+              requestedAction: toolConfiguration.preferredAction,
               agent: activeAgent,
-              plugins: memberPlugins ?? [],
-              incognito,
+              isIntegrationEnabled: toolConfiguration.isIntegrationEnabled,
             });
 
         // Determine origin for telemetry tracking (also used for frontend PostHog tracking below)
@@ -1058,6 +1077,13 @@ export default function useChatController({
           sendAcknowledged: stack.acknowledged,
           readerFinished,
         });
+        stack.acknowledged.then(
+          (stream) => {
+            if (stream && !readerDone && claimStreamReader(stream))
+              claimedStream = stream;
+          },
+          () => {}
+        );
         updateCurrentMessageFIFO(stack, {
           signal: controller.signal,
           message: currMessage,
@@ -1073,7 +1099,11 @@ export default function useChatController({
             return parentId === SYSTEM_MESSAGE_ID ? null : parentId;
           })(),
           chatSessionId: currChatSessionId,
-          filters: searchFilters,
+          toolOptions: {
+            allowed: activeAgent ? toolConfiguration.allowed : null,
+            preferred: effectivePreference,
+            internal_search_filters: searchFilters,
+          },
           modelProvider: isMultiModel
             ? undefined
             : modelOverride?.name || llmManager.currentLlm.name || undefined,
@@ -1094,15 +1124,6 @@ export default function useChatController({
             ? llmManager.temperature
             : undefined,
           deepResearch,
-          // Only sent when something is actually disabled. To the backend an
-          // explicit list is a whitelist, and this one is built from the tools
-          // the frontend can see — which excludes those marked
-          // `expose_to_frontend=False`. Sending it always would quietly
-          // withhold tools nobody chose to disable.
-          enabledToolIds: activeAgent
-            ? enabledChatToolIds(activeAgent.tools, toolConfiguration)
-            : undefined,
-          preferredToolId: effectivePreferredToolId,
           origin: messageOrigin,
           additionalContext,
           llmOverrides: isMultiModel
@@ -1155,6 +1176,14 @@ export default function useChatController({
                 ?.streamingStartTime
             ) {
               setStreamingStartTime(frozenSessionId, Date.now());
+            }
+
+            if (Object.hasOwn(packet, "chat_session_name")) {
+              // The turn's stream only carries the name of its own chat.
+              serverNamedChat = true;
+              void refreshChatSessions();
+              void fetchProjects();
+              continue;
             }
 
             if ((packet as MessageResponseIDInfo).user_message_id) {
@@ -1259,22 +1288,18 @@ export default function useChatController({
                   });
                   erroredModelIndices.add(errorModelIndex);
                   dirtyModelIndices.delete(errorModelIndex);
-                  currentMessageTreeLocal = upsertToCompleteMessageTree({
-                    messages: [
-                      {
-                        ...buildAssistantNodeUpdate(errorModelIndex),
-                        errorMessage: streamingError.error,
-                        type: "error",
-                        stackTrace: streamingError.stack_trace || null,
-                        errorCode: streamingError.error_code || null,
-                        isRetryable: streamingError.is_retryable ?? true,
-                        errorDetails: streamingError.details || null,
-                        is_generating: false,
-                      },
-                    ],
-                    completeMessageTreeOverride: currentMessageTreeLocal,
-                    chatSessionId: frozenSessionId!,
-                  });
+                  writeAnswers([
+                    {
+                      ...buildAssistantNodeUpdate(errorModelIndex),
+                      errorMessage: streamingError.error,
+                      type: "error",
+                      stackTrace: streamingError.stack_trace || null,
+                      errorCode: streamingError.error_code || null,
+                      isRetryable: streamingError.is_retryable ?? true,
+                      errorDetails: streamingError.details || null,
+                      is_generating: false,
+                    },
+                  ]);
                 } else {
                   // Error without model_index in multi-model — can't route
                   // to a specific panel. Log and continue; the stream loop
@@ -1408,12 +1433,17 @@ export default function useChatController({
         // could get stranded in local state.
         flushPendingUpdates();
 
-        // Surface FIFO errors (e.g. 429 before any packets arrive) so the
-        // catch block replaces the thinking placeholder with an error message.
-        if (stack.error) {
-          throw new Error(stack.error);
+        if (stack.approvalPending) {
+          restoreTreeBeforeSend();
+          showPendingRequest();
+        } else {
+          // Surface FIFO errors (e.g. 429 before any packets arrive) so the
+          // catch block replaces the thinking placeholder with an error message.
+          if (stack.error) {
+            throw new Error(stack.error);
+          }
+          streamSucceeded = true;
         }
-        streamSucceeded = true;
       } catch (e: any) {
         if (controller.signal.aborted || !ownsStream()) return;
         console.log("Error:", e);
@@ -1433,6 +1463,8 @@ export default function useChatController({
             stackTrace,
           };
         } else {
+          // Without a server error, the server can still run the turn.
+          const lostOutputs = new Set<Packet[]>();
           for (const output of isMultiModel
             ? packetsPerModel.filter(
                 (_, index) => !erroredModelIndices.has(index)
@@ -1443,6 +1475,7 @@ export default function useChatController({
                 placement: { turn_index: 0, tab_index: 0 },
                 obj: { type: "stop" },
               });
+              if (error === null) lostOutputs.add(output);
             }
           }
           // Keep the live question node: a regenerated question keeps its
@@ -1468,7 +1501,10 @@ export default function useChatController({
                 isRetryable,
                 errorDetails,
                 is_generating: false,
-              })
+              }).map((node) => ({
+                ...node,
+                streamLost: lostOutputs.has(node.packets),
+              }))
             : [
                 {
                   ...(currentMessageTreeLocal.get(initialAgentNode.nodeId) ??
@@ -1485,6 +1521,7 @@ export default function useChatController({
                   is_generating: false,
                   packets,
                   packetCount: packets.length,
+                  streamLost: lostOutputs.has(packets),
                   stackTrace: stackTrace,
                   errorCode: errorCode,
                   isRetryable: isRetryable,
@@ -1492,11 +1529,7 @@ export default function useChatController({
                 },
               ];
 
-          currentMessageTreeLocal = upsertToCompleteMessageTree({
-            messages: [userErrorNode, ...errorAssistantNodes],
-            completeMessageTreeOverride: currentMessageTreeLocal,
-            chatSessionId: frozenSessionId,
-          });
+          writeAnswers([userErrorNode, ...errorAssistantNodes]);
         }
       } finally {
         try {
@@ -1506,14 +1539,12 @@ export default function useChatController({
             initialAssistantNodes.length > 0 &&
             streamSucceeded
           ) {
-            upsertToCompleteMessageTree({
-              messages: buildNonErroredNodes({ is_generating: false }),
-              completeMessageTreeOverride: currentMessageTreeLocal,
-              chatSessionId: frozenSessionId,
-            });
+            writeAnswers(buildNonErroredNodes({ is_generating: false }));
           }
         } finally {
           controller.signal.removeEventListener("abort", discardUnsentTurn);
+          readerDone = true;
+          if (claimedStream !== null) releaseStreamReader(claimedStream);
           resolveReaderFinished();
         }
       }
@@ -1539,8 +1570,10 @@ export default function useChatController({
         setUncaughtError(frozenSessionId, rejectedSendError);
       }
 
-      // Name the chat now that we have the first AI response (navigation already happened before streaming)
-      if (shouldAutoNameChatSessionAfterResponse) {
+      // The server names a new chat while it answers. If its name did not
+      // arrive on the stream, ask for it; the server returns a saved name
+      // rather than generating another.
+      if (shouldAutoNameChatSessionAfterResponse && !serverNamedChat) {
         handleNewSessionNaming(currChatSessionId);
       }
     },
@@ -1553,13 +1586,13 @@ export default function useChatController({
       llmManager.persistOverrides,
       // Others that affect logic
       activeAgent,
-      memberPlugins,
       availableAgents,
       existingChatSessionId,
       selectedDocuments,
       searchParams,
       resetInputBar,
       restoreInputBar,
+      showPendingRequest,
       t,
       updateSelectedNodeForDocDisplay,
       currentMessageTree,
@@ -1666,64 +1699,6 @@ export default function useChatController({
     handleSlackChatRedirect();
   }, [searchParams, navigation]);
 
-  // Available context tokens: if a chat session exists, fetch from the session
-  // API (dynamic per session/model). Otherwise derive from the persona's max
-  // document tokens. The backend already accounts for system prompt, tools,
-  // and user-message reservations.
-  const [availableContextTokens, setAvailableContextTokens] = useState<number>(
-    DEFAULT_CONTEXT_TOKENS
-  );
-
-  useEffect(() => {
-    if (!llmManager.hasAnyProvider) return;
-
-    let cancelled = false;
-
-    const setIfActive = (tokens: number) => {
-      if (!cancelled) setAvailableContextTokens(tokens);
-    };
-
-    // Prefer the Zustand session ID, but fall back to the URL-derived prop
-    // so we don't incorrectly take the persona path while the store is
-    // still initialising on navigation to an existing chat.
-    const sessionId = currentSessionId || existingChatSessionId;
-
-    (async () => {
-      try {
-        if (sessionId) {
-          const available = await getAvailableContextTokens(
-            sessionId,
-            llmManager.currentLlm.modelConfigurationId
-          );
-          setIfActive(available ?? DEFAULT_CONTEXT_TOKENS);
-          return;
-        }
-
-        const personaId = activeAgent?.id;
-        if (personaId == null) {
-          setIfActive(DEFAULT_CONTEXT_TOKENS);
-          return;
-        }
-
-        const maxTokens = await getMaxSelectedDocumentTokens(personaId);
-        setIfActive(maxTokens ?? DEFAULT_CONTEXT_TOKENS);
-      } catch (e) {
-        console.error("Failed to fetch available context tokens:", e);
-        setIfActive(DEFAULT_CONTEXT_TOKENS);
-      }
-    })();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [
-    currentSessionId,
-    existingChatSessionId,
-    activeAgent?.id,
-    llmManager.hasAnyProvider,
-    llmManager.currentLlm.modelConfigurationId,
-  ]);
-
   // check if there's an image file in the message history so that we know
   // which LLMs are available to use
   const imageFileInMessageHistory = useMemo(() => {
@@ -1751,7 +1726,5 @@ export default function useChatController({
     onSubmit,
     stopGenerating,
     handleMessageSpecificFileUpload,
-    // data
-    availableContextTokens,
   };
 }

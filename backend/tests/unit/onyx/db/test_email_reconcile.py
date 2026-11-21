@@ -117,7 +117,7 @@ def test_reconcile_locks_and_rekeys_email_state_without_committing() -> None:
     query.populate_existing.return_value.with_for_update.assert_called_once_with(
         of=User
     )
-    assert db_session.execute.call_count == 2
+    assert db_session.execute.call_count == 1
     db_session.commit.assert_not_called()
 
 
@@ -139,4 +139,4 @@ def test_reconcile_adopts_an_external_permission_shadow() -> None:
     assert result == ("old@example.com", ["old@example.com"])
     db_session.delete.assert_called_once_with(shadow_user)
     db_session.flush.assert_called_once_with()
-    assert db_session.execute.call_count == 4
+    assert db_session.execute.call_count == 3

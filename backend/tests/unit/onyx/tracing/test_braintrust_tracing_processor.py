@@ -41,3 +41,20 @@ def test_function_spans_log_their_metadata() -> None:
     )
     data = BraintrustTracingProcessor()._function_log_data(span)
     assert data["metadata"] == {"code_mode.call_id": "code:0", "code_mode.index": 0}
+
+
+def test_generation_starts_with_its_own_flow_and_root_attribution() -> None:
+    processor = BraintrustTracingProcessor()
+    root = MagicMock()
+    processor._spans["root"] = root
+    processor._trace_metadata["root"] = {"flow": "parent", "tenant_id": "tenant"}
+    span = MagicMock()
+    span.trace_id = "root"
+    span.parent_id = None
+    span.started_at = None
+    span.span_data = GenerationSpanData(model_config={"flow": "chat_response"})
+    processor.on_span_start(span)
+    kwargs = root.start_span.call_args.kwargs
+    assert kwargs["name"] == "chat_response"
+    assert kwargs["metadata"] == {"flow": "chat_response", "tenant_id": "tenant"}
+    assert processor._trace_metadata["root"]["flow"] == "parent"

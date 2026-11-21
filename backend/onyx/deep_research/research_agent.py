@@ -29,12 +29,10 @@ from onyx.deep_research.models import (
     ResearchPhase,
 )
 from onyx.deep_research.tool_definitions import (
+    GENERATE_REPORT_TOOL_DESCRIPTION,
     GENERATE_REPORT_TOOL_NAME,
-    THINK_TOOL_RESPONSE_MESSAGE,
-    get_research_agent_additional_tool_definitions,
 )
 from onyx.llm.interfaces import LLM, GenerationContext, LLMUserIdentity
-from onyx.llm.model_capabilities import model_is_reasoning_model
 from onyx.llm.models import (
     GenerationOptions,
     Message,
@@ -47,13 +45,11 @@ from onyx.llm.models import (
 )
 from onyx.prompts.deep_research.dr_tool_prompts import (
     OPEN_URLS_TOOL_DESCRIPTION,
-    OPEN_URLS_TOOL_DESCRIPTION_REASONING,
     WEB_SEARCH_TOOL_DESCRIPTION,
 )
 from onyx.prompts.deep_research.research_agent import (
     OPEN_URL_REMINDER_RESEARCH_AGENT,
     RESEARCH_AGENT_PROMPT,
-    RESEARCH_AGENT_PROMPT_REASONING,
     RESEARCH_REPORT_PROMPT,
     USER_REPORT_QUERY,
 )
@@ -109,9 +105,6 @@ class ResearchAgent(Agent, RestorableFeature):
         )
         self.search_context = SearchContext()
         self.started = time.monotonic()
-        self.is_reasoning_model = model_is_reasoning_model(
-            llm.config.model_name, llm.config.model_provider
-        )
         self.token_counter = token_counter
         self.language_section = language_section
         self.reasoning_effort = reasoning_effort
@@ -125,23 +118,16 @@ class ResearchAgent(Agent, RestorableFeature):
         self.citation_mapping = {
             number: document.document_id for number, document in (sources or {}).items()
         }
-        control_tools = [
-            AgentTool(
-                definition=definition,
-                execute=lambda _invocation, name=definition.name: ToolResult(
-                    content="Ready to produce the research report."
-                    if name == GENERATE_REPORT_TOOL_NAME
-                    else THINK_TOOL_RESPONSE_MESSAGE
-                ),
-            )
-            for definition in get_research_agent_additional_tool_definitions(
-                not self.is_reasoning_model
-            )
-        ]
+        report_tool = AgentTool(
+            definition=GENERATE_REPORT_TOOL_DESCRIPTION,
+            execute=lambda _invocation: ToolResult(
+                content="Ready to produce the research report."
+            ),
+        )
         super().__init__(
             llm,
             tools=[tool.bind(self._tool_context) for tool in self.application_tools]
-            + control_tools,
+            + [report_tool],
             agent_id=agent_id,
             previous_run_id=previous_run_id,
             state=AgentState(
@@ -239,26 +225,19 @@ class ResearchAgent(Agent, RestorableFeature):
         else:
             tool_names = {tool.name for tool in self.application_tools}
             has_open_url = OpenURLTool.NAME in tool_names
-            template = (
-                RESEARCH_AGENT_PROMPT_REASONING
-                if self.is_reasoning_model
-                else RESEARCH_AGENT_PROMPT
-            )
-            system_prompt = template.format(
+            system_prompt = RESEARCH_AGENT_PROMPT.format(
                 available_tools=generate_tools_description(self.application_tools),
                 current_datetime=get_current_llm_day_time(full_sentence=False),
                 current_cycle_count=step.index,
-                optional_internal_search_tool_description=INTERNAL_SEARCH_GUIDANCE
+                optional_internal_search_tool_description=INTERNAL_SEARCH_GUIDANCE.format(
+                    name=SearchTool.NAME
+                )
                 if SearchTool.NAME in tool_names
                 else "",
                 optional_web_search_tool_description=WEB_SEARCH_TOOL_DESCRIPTION
                 if WebSearchTool.NAME in tool_names
                 else "",
-                optional_open_url_tool_description=(
-                    OPEN_URLS_TOOL_DESCRIPTION_REASONING
-                    if self.is_reasoning_model
-                    else OPEN_URLS_TOOL_DESCRIPTION
-                )
+                optional_open_url_tool_description=OPEN_URLS_TOOL_DESCRIPTION
                 if has_open_url
                 else "",
             )
@@ -278,7 +257,6 @@ class ResearchAgent(Agent, RestorableFeature):
             }
         )
         output_metadata = ResearchMessageMetadata(
-            is_reasoning_model=self.is_reasoning_model,
             phase=ResearchPhase.REPORT if is_final_step else ResearchPhase.RESEARCH,
             is_intermediate=True,
             sources=dict(self.citation_processor.citation_to_doc),
@@ -311,11 +289,8 @@ class ResearchAgent(Agent, RestorableFeature):
         )
         for tool_result in result.tool_results:
             self._update_sources(tool_result)
-        if result.options.tool_choice != ToolChoiceOptions.NONE:
-            return True
-        if not result.message.text:
-            raise ValueError("Model failed to produce a research report")
-        return False
+        # Research steps continue; the runtime ends the report step.
+        return True
 
     def _update_sources(self, result: ToolResultMessage) -> None:
         if isinstance(result.details, SearchDocsResponse):

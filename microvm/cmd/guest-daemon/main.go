@@ -59,6 +59,7 @@ func main() {
 	certutil := flag.String("certutil", sysops.DefaultCAPaths.Certutil, "NSS certutil program")
 	var fc files.Config
 	flag.StringVar(&fc.SessionsRoot, "sessions-root", files.DefaultSessionsRoot, "directory with one directory per session (file calls, capture, restore)")
+	flag.StringVar(&fc.OnyxRoot, "onyx-root", files.DefaultOnyxRoot, "directory of the files Onyx writes outside every session; file calls with no session ID never follow a link out of it")
 	readLinks := flag.String("read-link-roots", "/mnt/skills,/mnt/user-uploads,/mnt/spaces", "comma-separated directories that a top-level session link may point into for ReadFile, ListFiles and ZipFiles")
 	flag.Int64Var(&fc.MaxFileBytes, "max-file-bytes", files.GiB, "largest ReadFile, WriteFile or UploadFile")
 	flag.Int64Var(&fc.MaxZipBytes, "max-zip-bytes", files.GiB, "largest total file size of one ZipFiles")
@@ -68,7 +69,7 @@ func main() {
 	flag.Int64Var(&fc.Limits.ExpandedBytes, "capture-max-expanded-bytes", files.DefaultLimits.ExpandedBytes, "largest total file size of a session archive")
 	flag.Int64Var(&fc.Limits.Entries, "capture-max-entries", files.DefaultLimits.Entries, "most files and directories in a session archive")
 	zlevel := flag.String("capture-zstd-level", "fastest", "zstd level of CaptureSession: fastest, default, better or best")
-	fileOwner := flag.String("file-owner", files.DefaultOwner, "uid:gid that gets the files and directories that WriteFile, UploadFile and RestoreSession make in the sessions root (the image's sandbox user); empty: they stay root's")
+	fileOwner := flag.String("file-owner", files.DefaultOwner, "uid:gid that gets the files and directories that WriteFile, UploadFile and RestoreSession make in the sessions root and the onyx root (the image's sandbox user); empty: they stay root's")
 	cmdUser := flag.String("command-user", files.DefaultOwner, "uid:gid that runs every command (the image's sandbox user); empty: commands run as root")
 	flag.Parse()
 	var ok bool

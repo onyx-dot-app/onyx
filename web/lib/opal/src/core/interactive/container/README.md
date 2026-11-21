@@ -2,7 +2,7 @@
 
 **Import:** `import { Interactive } from "@opal/core";` — use as `Interactive.Container`.
 
-Structural container shared by both `Interactive.Stateless` and `Interactive.Stateful`. Provides consistent height, rounding, padding, and optional border. Renders a `<div>` by default, or a `<button>` when `type` is provided.
+Structural container shared by both `Interactive.Stateless` and `Interactive.Stateful`. Provides consistent height, rounding, padding, and optional border. Renders a `<div>` by default, a `<button>` when `type` is provided, or a link when its parent passes `href`. A link with `download` is a plain `<a>`, so the router never prefetches or renders the file.
 
 ## Props
 

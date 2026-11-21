@@ -3,7 +3,7 @@ import pathlib
 import pytest
 
 import onyx.file_processing.html_utils as html_utils
-from onyx.file_processing.enums import HtmlBasedConnectorTransformLinksStrategy
+from onyx.configs.constants import HtmlBasedConnectorTransformLinksStrategy
 from onyx.file_processing.html_utils import parse_html_page_basic
 
 

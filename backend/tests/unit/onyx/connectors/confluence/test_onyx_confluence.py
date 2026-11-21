@@ -1582,7 +1582,7 @@ def test_token_refresh_keeps_the_oauth_site(monkeypatch: pytest.MonkeyPatch) -> 
     redis_client = mock.MagicMock()
     redis_client.get.return_value = None
     monkeypatch.setattr(
-        source_operations_module, "get_redis_client", lambda **_: redis_client
+        source_operations_module, "get_cache_backend", lambda **_: redis_client
     )
     monkeypatch.setattr(
         source_operations_module, "OAUTH_CONFLUENCE_CLOUD_CLIENT_ID", "id"

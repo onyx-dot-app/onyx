@@ -2,8 +2,8 @@
 
 import json
 from collections.abc import Sequence
+from typing import NamedTuple
 
-from onyx.agents.compaction import count_tokens, head_and_tail_tokens
 from onyx.tools.tool_implementations.code_mode.models import (
     CellClosing,
     CellWindow,
@@ -18,6 +18,7 @@ from onyx.tools.tool_implementations.code_mode.models import (
 )
 from onyx.tools.tool_implementations.code_mode.sandbox import (
     IMPORTABLE_MODULES,
+    TOOLS_NAMESPACE,
 )
 from onyx.tools.tool_implementations.code_mode.store import (
     JSON_TYPES_TEXT,
@@ -30,7 +31,10 @@ from onyx.tools.tool_implementations.images.models import (
     FinalImageGenerationResponse,
     ImageResult,
 )
-from onyx.tools.tool_implementations.utils import truncate_output
+from onyx.tools.tool_implementations.utils import (
+    truncate_output,
+    truncation_marker,
+)
 
 # Characters of the notes after the output; they are never cut by the budget.
 MAX_NOTES_CHARS = 10_000
@@ -46,14 +50,15 @@ def _limits_text(limits: SandboxLimits) -> str:
 
 def _deferred_note(stubs: ToolStubs) -> str:
     groups = [
-        *(f"the MCP server `{namespace}`" for namespace in stubs.deferred_namespaces),
+        *(f"the tool group `{namespace}`" for namespace in stubs.deferred_namespaces),
         *(["other tools"] if stubs.has_deferred_functions_without_namespace else []),
     ]
     return (
         f"\n- More functions are available than the ones listed below: those of "
         f"{', '.join(groups)}. Find them with `await tool_search(query)`; each match has "
         "the function's name, description and stub. Read the stub before you call "
-        "a function, then call it like a listed one, in this program or a later one."
+        f"a function, then call it like a listed one, as `await {TOOLS_NAMESPACE}.<name>(...)`, "
+        "in this program or a later one."
     )
 
 
@@ -62,15 +67,15 @@ def code_mode_description(stubs: ToolStubs, limits: SandboxLimits) -> str:
     deferred_note = _deferred_note(stubs) if stubs.tool_index is not None else ""
     return f"""Run a Python program that calls the tools listed below. Use it to combine tool calls in one step, run independent calls in parallel, and filter large results before you read them.
 
-- The program runs in Monty, a sandboxed Python interpreter, not CPython. It has no file system, network, environment, or subprocess access. Get outside data only through the tool functions.
-- Each tool is an async Python function. Call it with keyword arguments only and `await` the result, for example `result = await tool_name(argument=value)`. Top-level `await` works; do not call `asyncio.run()`.
+- The program runs in Monty, a sandboxed Python interpreter, not CPython. The program is for calling and combining the tools below. It has no files, processes or network of its own; anything outside the program comes from a tool.
+- Each tool is an async Python function of the `{TOOLS_NAMESPACE}` namespace, which every program has. Call it as `{TOOLS_NAMESPACE}.<name>` with keyword arguments only and `await` the result, for example `result = await {TOOLS_NAMESPACE}.tool_name(argument=value)`. These functions exist only inside programs: you cannot call them as tools yourself. Top-level `await` works; do not call `asyncio.run()`.
 - Await every call; calls that are not awaited are cancelled when the program ends.
-- Run independent calls in parallel with `asyncio.gather`, for example `a, b = await asyncio.gather(f(x=1), g(y=2))`. Make a call that needs an earlier result after that result is available.
+- Run independent calls in parallel with `asyncio.gather`, for example `a, b = await asyncio.gather({TOOLS_NAMESPACE}.f(x=1), {TOOLS_NAMESPACE}.g(y=2))`. Make a call that needs an earlier result after that result is available.
 - `asyncio.gather` takes no keyword arguments, so `return_exceptions=True` is not available, and one failed call fails the whole gather. To keep the other results, wrap each call:
   `async def attempt(call):`
   `    try: return await call`
   `    except Exception as e: return {{"error": str(e)}}`
-  `results = await asyncio.gather(*(attempt(f(x=v)) for v in values))`
+  `results = await asyncio.gather(*(attempt({TOOLS_NAMESPACE}.f(x=v)) for v in values))`
 - Only text that the program prints and the value of the last expression come back to you; that value must be JSON data ({JSON_TYPES_TEXT}). Tool results stay inside the program until you print them. Print only the fields you need, such as titles, document numbers, URLs, and short excerpts. Do not print whole results.
 - A tool error raises an exception in the program. To continue after an error, use `try:` / `except Exception as e:`. An uncaught exception stops the program and returns its traceback with the output printed before it.
 - Each `execute_code` call starts a fresh interpreter: variables, functions, and imports from earlier calls are gone. To keep a value for a later call, `store(key, value)` it, then `load(key)` it in the later call. `load` returns None for a missing key. `store`, `load` and `yield_control` are plain functions: do not `await` them.
@@ -82,7 +87,7 @@ def code_mode_description(stubs: ToolStubs, limits: SandboxLimits) -> str:
 - The program is type-checked before it runs. A wrong argument name or type in a tool call stops the program before any tool runs.
 - Search results have a `document` number. To cite a result in your answer, print its `document` number and write [n] in the answer, where n is that number.{deferred_note}
 
-Functions (already defined in every program; call them directly, no import needed):
+Functions (already defined in every program, no import needed; call the tool functions as `await {TOOLS_NAMESPACE}.<name>(...)`):
 ```python
 {stubs.listed_text.rstrip()}
 ```"""
@@ -95,10 +100,17 @@ WAIT_CODE_DESCRIPTION = """Waits on a running `execute_code` cell and returns ne
 - If the cell has already finished, `wait_code` returns the completed result and closes the cell."""
 
 
-def program_function_operation(name: str, *, deferred: bool) -> str:
+# The result of a call of a code mode function as a tool of its own.
+INNER_CALL_MESSAGE = (
+    "`{name}` is available only inside `execute_code` programs. Call it there: "
+    "`await {called_name}({arguments})`."
+)
+
+
+def program_function_operation(called_name: str, *, deferred: bool) -> str:
     """How a tool preference names a function of `execute_code` programs."""
     found = "; find its stub with `await tool_search(query)`" if deferred else ""
-    return f"{name} (a function in `execute_code` programs{found})"
+    return f"{called_name} (a function in `execute_code` programs{found})"
 
 
 # How each status reads in a sentence about the cell.
@@ -204,6 +216,35 @@ def closing_heading(cell_id: int, closing: CellClosing) -> str:
     return f"Cell {cell_id} stopped when {event}."
 
 
+def closed_cell_text(
+    cell_id: int, closing: CellClosing | None, *, returned_end: bool
+) -> str:
+    """What `wait_code` returns for a closed cell: how the cell's saved results
+    report its end. `closing` is the cell's closing record; `returned_end` says
+    that an observation reported the end."""
+    if closing is not None and closing.reason == "interrupted":
+        return (
+            f"Cell {cell_id} was interrupted when the server stopped. Start a new "
+            "execute_code call."
+        )
+    if closing is not None:
+        event = (
+            "the run paused" if closing.reason == "suspended" else "the response ended"
+        )
+        if closing.status in _ENDED:
+            return (
+                f"Cell {cell_id} {_STATUS_TEXT[closing.status]} before {event}; its "
+                "output and result are in its earlier result."
+            )
+        return f"Cell {cell_id} stopped when {event}. Start a new execute_code call."
+    if returned_end:
+        return f"Cell {cell_id} already returned its final result."
+    return (
+        f"Cell {cell_id} stopped when its response ended or its run paused. Start "
+        "a new execute_code call."
+    )
+
+
 def continues_note(cell_id: int) -> str:
     return (
         f"Cell {cell_id} continues. Call wait_code(cell_id={cell_id}) for more output, "
@@ -211,24 +252,13 @@ def continues_note(cell_id: int) -> str:
     )
 
 
-def token_budget(text: str, max_tokens: int, *, elided_chars: int = 0) -> str:
-    """`text` within `max_tokens`, cut in the middle with a warning that gives
-    the original token count.
+class CellContent(NamedTuple):
+    """The text that the model reads for one window of a cell."""
 
-    `elided_chars` were already cut from the middle of `text`; the count
-    estimates their tokens at the ratio of `text`.
-    """
-    head, tail, count = head_and_tail_tokens(text, max_tokens)
-    if count <= max_tokens:
-        return text
-    if elided_chars:
-        count += round(elided_chars * count / max(1, len(text)))
-    lines = text.count("\n") + 1
-    return (
-        f"Warning: truncated output (original token count: {count})\n"
-        f"Total output lines: {lines}\n\n"
-        f"{head}…{count - max_tokens} tokens truncated…{tail}"
-    )
+    text: str
+    # When the budget cut text from the sections after the heading (the
+    # printed output, the result, the error): those sections, uncut.
+    full_value: str | None
 
 
 def format_content(
@@ -238,12 +268,12 @@ def format_content(
     status: CodeModeStatus,
     cell_id: int,
     cell_calls: Sequence[CodeModeCall],
-    max_tokens: int,
+    max_chars: int,
     end: SandboxResult | None,
     discarded: DiscardedWrites | None,
     elided_chars: int,
     lost_store_writes: LostStoreWrites | None = None,
-) -> str:
+) -> CellContent:
     """The text the model reads for one window of a cell: an observation, or
     the closing record after the last one. `heading` is its first line.
 
@@ -251,9 +281,11 @@ def format_content(
     window that reports a program that did not complete lists them, since they
     may have had effects. `end` and `discarded` (store() writes that did not
     commit) are set when the window reports the program's end. The output
-    sections share `max_tokens` with the notes after them and are cut once.
-    `elided_chars` were cut from the middle of the printed text before this.
-    `lost_store_writes` are earlier commits that the store dropped.
+    sections share `max_chars` with the notes after them and are cut once in
+    the middle, with a warning that gives the original character count.
+    `elided_chars` were cut from the middle of the printed text before this;
+    the count includes them. `lost_store_writes` are earlier commits that the
+    store dropped.
     """
     completed = status == "completed"
     running = status == "running"
@@ -285,9 +317,22 @@ def format_content(
     note_text = truncate_output(
         note_text, MAX_NOTES_CHARS, label="code mode notes", keep_tail=True
     )
-    text = token_budget(
-        "\n\n".join(sections),
-        max(0, max_tokens - (count_tokens(note_text) if note_text else 0)),
-        elided_chars=elided_chars,
+    text = "\n\n".join(sections)
+    max_text_chars = max(0, max_chars - len(note_text))
+    full_value = None
+    if len(text) > max_text_chars:
+        count = len(text) + elided_chars
+        head_chars = max_text_chars // 2
+        tail_start = len(text) - (max_text_chars - head_chars)
+        # The sections after the heading start after its "\n\n" separator.
+        if tail_start > len(heading) + 2:
+            full_value = "\n\n".join(sections[1:])
+        text = (
+            f"Warning: truncated output (original character count: {count})\n"
+            f"Total output lines: {text.count('\n') + 1}\n\n"
+            f"{text[:head_chars]}{truncation_marker(count - max_text_chars)}"
+            f"{text[tail_start:]}"
+        )
+    return CellContent(
+        text=f"{text}\n\n{note_text}" if note_text else text, full_value=full_value
     )
-    return f"{text}\n\n{note_text}" if note_text else text

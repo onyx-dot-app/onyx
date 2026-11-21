@@ -30,3 +30,13 @@ Glyph sizes follow the spec (12 at secondary, 16 at main-ui and main-content, 24
 ```
 
 Default glyph color ascends with the size preset (`text-02` at secondary, `text-03` at main-ui and main-content, `text-04` at section and sub-headline). Uploaded-image avatars are not in the Figma spec and are out of scope. The avatar renders an initial or an icon only.
+
+## Tinted icons
+
+`tintedIcon(Icon, tint)` returns `Icon` drawn in a quiet theme colour: one of `ICON_TINTS` (`blue`,
+`green`, `purple`, `amber`, `cyan`, `magenta`, `orange`, `sky`), half mixed with the neutral icon
+colour. Pass the result anywhere an icon component goes, such as `Content` or `LineItemButton`.
+
+```tsx
+<Content icon={tintedIcon(SvgServer, "cyan")} title="sql-helper" />
+```

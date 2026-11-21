@@ -150,6 +150,11 @@ celery_worker_docfetching:
   replicaCount: 2
 celery_worker_docprocessing:
   replicaCount: 2
+# For a very large Google Drive, turn on the conversion stage and scale its
+# worker on queue depth (documentation: deployment/production/conversion_stage).
+# celery_worker_docconversion:
+#   enabled: true
+#   replicaCount: 3
   resources:
     requests: {cpu: 500m, memory: 2Gi}
     limits: {cpu: 1000m, memory: 18Gi}
@@ -170,7 +175,7 @@ opensearch:
   resources:
     requests: {cpu: 2000m, memory: 12Gi}
     limits: {cpu: 4000m, memory: 16Gi}
-  opensearchJavaOpts: "-Xmx6g -Xms6g"
+  opensearchJavaOpts: "-Xmx6g -Xms6g -XX:-UseBASE64Intrinsics"
   persistence:
     size: 512Gi
   # Pin the index to the dedicated document-index node group created by the

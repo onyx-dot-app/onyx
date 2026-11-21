@@ -37,6 +37,31 @@ func TestArgv(t *testing.T) {
 	}
 }
 
+func TestSliceMemoryMax(t *testing.T) {
+	for _, c := range []struct {
+		total   uint64
+		percent uint
+		want    uint64
+	}{
+		{65536, 85, 55705 << 20},
+		{16384, 100, 16384 << 20},
+		{15995, 85, 13595 << 20},
+	} {
+		if got := SliceMemoryMax(c.total, c.percent); got != c.want {
+			t.Errorf("SliceMemoryMax(%d, %d) = %d, want %d", c.total, c.percent, got, c.want)
+		}
+	}
+	c := Command{Slice: "fcvms.slice", HostMountNS: true}
+	want := []string{"nsenter", "-t", "1", "-m", "--", "systemctl", "set-property", "--runtime", "fcvms.slice", "MemoryMax=58410926080"}
+	if got := c.SliceMemoryMaxArgv(55705 << 20); !slices.Equal(got, want) {
+		t.Fatalf("argv\n got %q\nwant %q", got, want)
+	}
+	want[len(want)-1] = "MemoryMax=infinity"
+	if got := c.SliceMemoryMaxArgv(0); !slices.Equal(got, want) {
+		t.Fatalf("argv\n got %q\nwant %q", got, want)
+	}
+}
+
 func TestVMLimits(t *testing.T) {
 	for _, c := range []struct {
 		vcpus, mem, over uint32

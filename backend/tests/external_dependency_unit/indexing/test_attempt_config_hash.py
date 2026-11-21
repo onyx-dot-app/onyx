@@ -199,6 +199,7 @@ def test_checkpoint_reused_only_with_matching_config(
             window_end=window_end,
             connector=connector,
             connector_config_hash=compute_connector_config_hash(_CONFIG),
+            uses_conversion_stage=False,
         )
 
     assert resuming is expect_resume
@@ -210,6 +211,64 @@ def test_checkpoint_reused_only_with_matching_config(
     else:
         assert checkpoint is dummy_checkpoint
         mock_load_checkpoint.assert_not_called()
+
+
+@pytest.mark.parametrize(
+    "candidate_lists, run_lists",
+    [(True, True), (True, False), (False, True), (False, False)],
+)
+def test_checkpoint_reused_only_by_a_run_of_the_same_mode(
+    db_session: Session,
+    cc_pair: ConnectorCredentialPair,
+    candidate_lists: bool,
+    run_lists: bool,
+) -> None:
+    """A listing checkpoint cannot continue a fetch, and a fetch checkpoint
+    cannot continue a listing. Each candidate is checked: an attempt of the
+    run's mode with no checkpoint must not let an older one of the other mode
+    through."""
+    search_settings_id = get_current_search_settings(db_session).id
+    window_start = datetime(2026, 1, 1, tzinfo=timezone.utc)
+    window_end = window_start + timedelta(days=1)
+    candidate = _add_finished_attempt(
+        db_session,
+        cc_pair_id=cc_pair.id,
+        search_settings_id=search_settings_id,
+        connector_config_hash=compute_connector_config_hash(_CONFIG),
+        poll_range_start=window_start,
+        poll_range_end=window_end,
+    )
+    candidate.uses_conversion_stage = candidate_lists
+    no_checkpoint = _add_finished_attempt(
+        db_session,
+        cc_pair_id=cc_pair.id,
+        search_settings_id=search_settings_id,
+        connector_config_hash=compute_connector_config_hash(_CONFIG),
+        poll_range_start=window_start,
+        poll_range_end=window_end,
+    )
+    no_checkpoint.uses_conversion_stage = run_lists
+    no_checkpoint.checkpoint_pointer = None
+    db_session.commit()
+    connector = MagicMock()
+    connector.build_dummy_checkpoint.return_value = ConnectorCheckpoint(has_more=True)
+
+    with patch(
+        "onyx.background.indexing.checkpointing_utils.load_checkpoint",
+        return_value=ConnectorCheckpoint(has_more=True),
+    ):
+        _, resuming = get_latest_valid_checkpoint(
+            db_session=db_session,
+            cc_pair_id=cc_pair.id,
+            search_settings_id=search_settings_id,
+            window_start=window_start,
+            window_end=window_end,
+            connector=connector,
+            connector_config_hash=compute_connector_config_hash(_CONFIG),
+            uses_conversion_stage=run_lists,
+        )
+
+    assert resuming is (candidate_lists == run_lists)
 
 
 @pytest.mark.parametrize(
@@ -230,11 +289,11 @@ def test_checkpoint_reused_only_with_matching_config(
 @patch(f"{_RUN_DOCFETCHING}.get_redis_client")
 @patch(f"{_RUN_DOCFETCHING}.ensure_source_node_exists")
 @patch(f"{_RUN_DOCFETCHING}.get_source_node_id_from_cache")
-@patch(f"{_RUN_DOCFETCHING}.get_node_id_from_raw_id")
+@patch(f"{_RUN_DOCFETCHING}.resolve_parent_node_ids")
 @patch(f"{_RUN_DOCFETCHING}.cache_hierarchy_nodes_batch")
 def test_window_and_checkpoint_reused_only_with_matching_config(
     mock_cache_hierarchy_nodes_batch: MagicMock,  # noqa: ARG001
-    mock_get_node_id_from_raw_id: MagicMock,
+    mock_resolve_parent_node_ids: MagicMock,
     mock_get_source_node_id_from_cache: MagicMock,
     mock_ensure_source_node_exists: MagicMock,
     mock_get_redis_client: MagicMock,
@@ -274,7 +333,7 @@ def test_window_and_checkpoint_reused_only_with_matching_config(
     mock_get_redis_client.return_value = MagicMock()
     mock_ensure_source_node_exists.return_value = 1
     mock_get_source_node_id_from_cache.return_value = 1
-    mock_get_node_id_from_raw_id.return_value = (None, False)
+    mock_resolve_parent_node_ids.return_value = {}
     mock_get_last_successful_attempt_poll_range_end.return_value = 0
     mock_get_latest_valid_checkpoint.return_value = (MagicMock(has_more=True), False)
 

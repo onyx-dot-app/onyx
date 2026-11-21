@@ -1,0 +1,426 @@
+import type {
+  AcpContentBlock,
+  AcpMeta,
+  AcpPlanEntry,
+  AcpStopReason,
+  AcpToolCallContent,
+  AcpToolCallLocation,
+  AcpToolCallProgress,
+  AcpToolCallStart,
+  AcpToolCallStatus,
+  AcpToolKind,
+} from "@/lib/timeline/acp";
+import type { RateLimitDetails } from "@/app/app/types";
+import type { OnyxNotification, TimelineEvent } from "@/lib/timeline/events";
+import type { TimelineEntry, TimelineEntryStatus } from "@/lib/timeline/types";
+
+/** A tool call with every ACP field resolved. */
+export interface AcpToolCall {
+  toolCallId: string;
+  title: string;
+  kind: AcpToolKind | null;
+  status: AcpToolCallStatus;
+  content: AcpToolCallContent[];
+  locations: AcpToolCallLocation[];
+  rawInput: unknown;
+  rawOutput: unknown;
+  _meta: AcpMeta | null;
+}
+
+export type AcpTimelinePayload =
+  /** Agent message content. Adjacent text chunks are joined. */
+  | { kind: "message"; content: AcpContentBlock[] }
+  | { kind: "thinking"; text: string }
+  | { kind: "tool"; toolCall: AcpToolCall }
+  /** An Onyx notice shown between steps. */
+  | { kind: "notice"; notice: TimelineNotice };
+
+/** Notices render inline, in arrival order, outside the steps. */
+export type TimelineNotice =
+  | { type: "compaction"; summary: string | null }
+  | { type: "timed_out" }
+  | {
+      type: "connect_app_request";
+      requestId: string;
+      externalAppId: number;
+      reason: string | null;
+    }
+  | { type: "error"; message: string; rateLimit?: RateLimitDetails };
+
+export type AcpTimelineEntry = TimelineEntry<AcpTimelinePayload>;
+
+export interface TimelineState {
+  /** Messages, thinking blocks, tool calls and notices, in arrival order. */
+  entries: AcpTimelineEntry[];
+  /** The latest plan. */
+  plan: AcpPlanEntry[];
+  /** Set when the turn ends. */
+  stopReason: AcpStopReason | null;
+}
+
+export const INITIAL_TIMELINE_STATE: TimelineState = {
+  entries: [],
+  plan: [],
+  stopReason: null,
+};
+
+type ChunkKind = "message" | "thinking";
+
+function isChunkEntry(entry: AcpTimelineEntry): boolean {
+  return entry.payload.kind === "message" || entry.payload.kind === "thinking";
+}
+
+/** Ends every open message or thinking entry, except `keepId`. */
+function settleChunks(
+  entries: AcpTimelineEntry[],
+  keepId: string | null = null
+): AcpTimelineEntry[] {
+  if (!entries.some((e) => e.status === "streaming" && isChunkEntry(e))) {
+    return entries;
+  }
+  return entries.map((entry) =>
+    entry.status === "streaming" && isChunkEntry(entry) && entry.id !== keepId
+      ? { ...entry, status: "done" }
+      : entry
+  );
+}
+
+function toolEntryStatus(toolCall: AcpToolCall): TimelineEntryStatus {
+  // A call that completes after a Stop request completed; the request may
+  // have failed while the turn went on.
+  if (toolCall.status === "completed") return "done";
+  if (toolCall._meta?.onyx?.cancelled) return "stopped";
+  switch (toolCall.status) {
+    case "failed":
+      return "error";
+    case "pending":
+    case "in_progress":
+      return "streaming";
+  }
+}
+
+function toolEntry(toolCall: AcpToolCall): AcpTimelineEntry {
+  return {
+    id: toolCall.toolCallId,
+    status: toolEntryStatus(toolCall),
+    // The timeline is linear: concurrent tool calls are separate entries.
+    groupId: null,
+    payload: { kind: "tool", toolCall },
+  };
+}
+
+function mergeMeta(
+  current: AcpMeta | null,
+  next: AcpMeta | null | undefined
+): AcpMeta | null {
+  if (!next) return current;
+  if (!current) return next;
+  return { ...current, ...next, onyx: { ...current.onyx, ...next.onyx } };
+}
+
+/**
+ * Applies the fields an update sets. A field that is left out or `null` keeps
+ * its value: the wire sends unset ACP fields as `null`.
+ */
+function applyToolUpdate(
+  toolCall: AcpToolCall,
+  update: AcpToolCallStart | AcpToolCallProgress
+): AcpToolCall {
+  return {
+    toolCallId: toolCall.toolCallId,
+    title: update.title ?? toolCall.title,
+    kind: update.kind ?? toolCall.kind,
+    status: update.status ?? toolCall.status,
+    content: update.content ?? toolCall.content,
+    locations: update.locations ?? toolCall.locations,
+    rawInput: update.rawInput ?? toolCall.rawInput,
+    rawOutput: update.rawOutput ?? toolCall.rawOutput,
+    _meta: mergeMeta(toolCall._meta, update._meta),
+  };
+}
+
+function newToolCall(toolCallId: string): AcpToolCall {
+  return {
+    toolCallId,
+    title: "",
+    kind: null,
+    status: "pending",
+    content: [],
+    locations: [],
+    rawInput: null,
+    rawOutput: null,
+    _meta: null,
+  };
+}
+
+/**
+ * `id`, or a variant of it that no entry has yet. A tool call's id and a
+ * generated message or thinking id can be equal; entry ids must stay unique.
+ */
+function unusedId(entries: AcpTimelineEntry[], id: string): string {
+  let candidate = id;
+  for (let n = 1; entries.some((entry) => entry.id === candidate); n++) {
+    candidate = `${id}~${n}`;
+  }
+  return candidate;
+}
+
+/**
+ * Starts or updates a tool call. An update for an unknown id adds the call,
+ * because a client can attach to a stream after the call started.
+ */
+function upsertToolCall(
+  entries: AcpTimelineEntry[],
+  update: AcpToolCallStart | AcpToolCallProgress
+): AcpTimelineEntry[] {
+  const index = entries.findIndex(
+    (entry) =>
+      entry.payload.kind === "tool" &&
+      entry.payload.toolCall.toolCallId === update.toolCallId
+  );
+  const existing = entries[index];
+  if (!existing || existing.payload.kind !== "tool") {
+    const created = toolEntry(
+      applyToolUpdate(newToolCall(update.toolCallId), update)
+    );
+    return [...entries, { ...created, id: unusedId(entries, created.id) }];
+  }
+  const next = {
+    ...toolEntry(applyToolUpdate(existing.payload.toolCall, update)),
+    id: existing.id,
+  };
+  return entries.map((entry, i) => (i === index ? next : entry));
+}
+
+function chunkPayload(
+  kind: ChunkKind,
+  content: AcpContentBlock[]
+): AcpTimelinePayload {
+  if (kind === "message") return { kind, content };
+  const text = content
+    .map((block) => (block.type === "text" ? block.text : ""))
+    .join("");
+  return { kind, text };
+}
+
+function chunkContent(entry: AcpTimelineEntry): AcpContentBlock[] {
+  switch (entry.payload.kind) {
+    case "message":
+      return entry.payload.content;
+    case "thinking":
+      return [{ type: "text", text: entry.payload.text }];
+    case "tool":
+    case "notice":
+      return [];
+  }
+}
+
+/** Adds a block, joining it to the last block when both are text. */
+function appendBlock(
+  content: AcpContentBlock[],
+  block: AcpContentBlock
+): AcpContentBlock[] {
+  const last = content[content.length - 1];
+  if (last?.type === "text" && block.type === "text") {
+    return [...content.slice(0, -1), { ...last, text: last.text + block.text }];
+  }
+  return [...content, block];
+}
+
+/**
+ * Adds a message or thought chunk. A chunk with a part id updates that part's
+ * entry, and its snapshot text replaces the text received so far. A chunk
+ * without one continues the last entry of the same kind while it streams.
+ */
+function appendChunk(
+  entries: AcpTimelineEntry[],
+  kind: ChunkKind,
+  block: AcpContentBlock,
+  meta: AcpMeta | undefined
+): AcpTimelineEntry[] {
+  const partId = meta?.onyx?.partId;
+  const snapshot = meta?.onyx?.snapshotText;
+  // Thoughts are text; other block types carry nothing to show.
+  if (kind === "thinking" && block.type !== "text" && snapshot === undefined) {
+    return entries;
+  }
+
+  const index = partId
+    ? entries.findIndex((e) => e.id === `part:${partId}`)
+    : entries.length - 1;
+  const target = entries[index];
+  const continues =
+    target !== undefined &&
+    target.payload.kind === kind &&
+    (partId !== undefined || target.status === "streaming");
+
+  if (!continues) {
+    const content: AcpContentBlock[] =
+      snapshot !== undefined ? [{ type: "text", text: snapshot }] : [block];
+    const id = partId
+      ? `part:${partId}`
+      : unusedId(entries, `${kind}-${entries.length}`);
+    return [
+      ...settleChunks(entries),
+      {
+        id,
+        status: "streaming",
+        groupId: null,
+        payload: chunkPayload(kind, content),
+      },
+    ];
+  }
+
+  const content =
+    snapshot !== undefined
+      ? [{ type: "text" as const, text: snapshot }]
+      : appendBlock(chunkContent(target), block);
+  const updated: AcpTimelineEntry = {
+    ...target,
+    payload: chunkPayload(kind, content),
+  };
+  const next = entries.map((entry, i) => (i === index ? updated : entry));
+  // A snapshot that repairs a settled part changes only that part; the part
+  // that still streams goes on.
+  return target.status === "streaming" ? settleChunks(next, updated.id) : next;
+}
+
+function noticeEntry(id: string, notice: TimelineNotice): AcpTimelineEntry {
+  return {
+    id,
+    status: notice.type === "error" ? "error" : "done",
+    groupId: null,
+    payload: { kind: "notice", notice },
+  };
+}
+
+/** Adds an extension notification as a notice. */
+function appendNotification(
+  entries: AcpTimelineEntry[],
+  notification: OnyxNotification
+): AcpTimelineEntry[] {
+  const settled = settleChunks(entries);
+  switch (notification.method) {
+    case "_onyx/compaction":
+      return [
+        ...settled,
+        noticeEntry(unusedId(entries, `compaction-${entries.length}`), {
+          type: "compaction",
+          summary: notification.params.summary,
+        }),
+      ];
+    case "_onyx/timed_out":
+      return [
+        ...settled,
+        noticeEntry(unusedId(entries, `timed-out-${entries.length}`), {
+          type: "timed_out",
+        }),
+      ];
+    case "_onyx/connect_app_request": {
+      // A request is shown once, even when the stream repeats it. A repeat
+      // changes nothing, so open text goes on.
+      const { requestId } = notification.params;
+      const repeated = entries.some(
+        (entry) =>
+          entry.payload.kind === "notice" &&
+          entry.payload.notice.type === "connect_app_request" &&
+          entry.payload.notice.requestId === requestId
+      );
+      if (repeated) return entries;
+      return [
+        ...settled,
+        noticeEntry(unusedId(entries, `connect:${requestId}`), {
+          type: "connect_app_request",
+          ...notification.params,
+        }),
+      ];
+    }
+  }
+}
+
+/** Applies one event. Pure: returns a new state and never mutates `state`. */
+export function reduceTimeline(
+  state: TimelineState,
+  event: TimelineEvent
+): TimelineState {
+  if (event.type === "stop") {
+    return {
+      ...state,
+      entries: settleChunks(state.entries),
+      stopReason: event.stopReason,
+    };
+  }
+  if (event.type === "error") {
+    // The same error right after itself is shown once.
+    const last = state.entries[state.entries.length - 1];
+    if (
+      !event.rateLimit &&
+      last?.payload.kind === "notice" &&
+      last.payload.notice.type === "error" &&
+      !last.payload.notice.rateLimit &&
+      last.payload.notice.message === event.message
+    ) {
+      return state;
+    }
+    return {
+      ...state,
+      entries: [
+        ...settleChunks(state.entries),
+        noticeEntry(unusedId(state.entries, `error-${state.entries.length}`), {
+          type: "error",
+          message: event.message,
+          ...(event.rateLimit && { rateLimit: event.rateLimit }),
+        }),
+      ],
+    };
+  }
+  if (event.type === "ext") {
+    return {
+      ...state,
+      entries: appendNotification(state.entries, event.notification),
+    };
+  }
+
+  const { update } = event;
+  switch (update.sessionUpdate) {
+    case "agent_thought_chunk":
+      return {
+        ...state,
+        entries: appendChunk(
+          state.entries,
+          "thinking",
+          update.content,
+          update._meta
+        ),
+      };
+    case "agent_message_chunk":
+      return {
+        ...state,
+        entries: appendChunk(
+          state.entries,
+          "message",
+          update.content,
+          update._meta
+        ),
+      };
+    case "tool_call":
+    case "tool_call_update":
+      return {
+        ...state,
+        entries: upsertToolCall(settleChunks(state.entries), update),
+      };
+    case "plan":
+      return {
+        ...state,
+        entries: settleChunks(state.entries),
+        plan: update.entries,
+      };
+  }
+}
+
+/** Applies events in order, starting from an empty timeline. */
+export function reduceTimelineEvents(
+  events: readonly TimelineEvent[]
+): TimelineState {
+  return events.reduce(reduceTimeline, INITIAL_TIMELINE_STATE);
+}

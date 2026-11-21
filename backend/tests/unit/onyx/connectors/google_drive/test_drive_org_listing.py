@@ -1,0 +1,503 @@
+"""Service account retrieval against an in-memory tenant.
+
+The tenant covers the cases the redesign exists for: a limited-access folder
+only a drive organizer sees, an organizer reached through a group, a drive with
+no organizer, a drive nobody can list, shortcuts into covered scopes, a file
+shared with several users, and a user whose impersonation fails.
+
+Every scenario runs on the shard engine, the one listing of the connector.
+"""
+
+import json
+from collections import Counter
+from typing import Any
+from unittest.mock import patch
+
+import pytest
+
+from onyx.connectors.google_drive import connector as connector_mod
+from onyx.connectors.google_drive import parallel_listing
+from onyx.connectors.google_drive.connector import (
+    GoogleDriveConnector,
+    UnreachableTargetsError,
+)
+from onyx.connectors.google_drive.drive_access import (
+    DriveMember,
+    DriveRole,
+    PrincipalType,
+)
+from onyx.connectors.google_drive.models import (
+    ImpersonationError,
+    RetrievedDriveFile,
+)
+from onyx.connectors.google_drive.source_operations import GoogleDriveHttpError
+from onyx.connectors.models import SlimDocument
+from tests.unit.onyx.connectors.google_drive.fake_drive import (
+    DOMAIN,
+    FakeTenant,
+    Folder,
+    SharedDrive,
+    drive_file,
+    make_service_account_connector,
+    run_one_call,
+    run_to_completion,
+)
+
+ADMIN = f"admin@{DOMAIN}"
+ALICE = f"alice@{DOMAIN}"
+BOB = f"bob@{DOMAIN}"
+CAROL = f"carol@{DOMAIN}"
+GROUP = f"managers@{DOMAIN}"
+EXTERNAL = "someone@other.com"
+
+
+def _member(email: str, role: DriveRole, kind: PrincipalType) -> DriveMember:
+    return DriveMember(email=email, principal_type=kind, role=role)
+
+
+def _org_tenant() -> FakeTenant:
+    user = PrincipalType.USER
+    return FakeTenant(
+        users=[ADMIN, ALICE, BOB, CAROL],
+        groups={GROUP: [BOB]},
+        broken_users={CAROL},
+        shared_drives={
+            # r1 sits in a limited-access folder: only the organizer sees it.
+            "d1": SharedDrive(
+                members=[
+                    _member(ALICE, DriveRole.ORGANIZER, user),
+                    _member(BOB, DriveRole.READER, user),
+                ],
+                files=["d1f1", "d1f2", "d1f3", "d1f4", "d1f5"],
+                restricted_files=["r1"],
+                # A shortcut to a file in the same drive.
+                shortcuts=[drive_file("d1f3", drive_id="d1", shortcut_id="s1")],
+            ),
+            # Organizer is a group; bob is its only member.
+            "d2": SharedDrive(
+                members=[_member(GROUP, DriveRole.ORGANIZER, PrincipalType.GROUP)],
+                files=["d2f1", "d2f2", "d2f3"],
+                # A shortcut into d1, which was listed in full before d2.
+                shortcuts=[drive_file("d1f4", drive_id="d1", shortcut_id="s2")],
+            ),
+            # No organizer: listed by a reader, so it stays incomplete.
+            "d3": SharedDrive(
+                members=[_member(BOB, DriveRole.READER, user)],
+                files=["d3f1", "d3f2"],
+            ),
+            # Managed only from outside the domain: nobody here can list it.
+            "d4": SharedDrive(
+                members=[_member(EXTERNAL, DriveRole.ORGANIZER, user)],
+                files=["d4f1"],
+            ),
+        },
+        my_drive={
+            ADMIN: [drive_file("adm1", owner=ADMIN)],
+            ALICE: [
+                drive_file("a1", owner=ALICE),
+                drive_file("a2", owner=ALICE),
+                drive_file("a3", owner=ALICE),
+                # Shortcut targets: into a covered drive, to bob's file, and
+                # to alice's own file.
+                drive_file("d1f1", drive_id="d1", shortcut_id="s3"),
+                drive_file("b1", owner=BOB, shortcut_id="s4"),
+                drive_file("a1", owner=ALICE, shortcut_id="s5"),
+                drive_file("a4", owner=ALICE),
+            ],
+            BOB: [drive_file("b1", owner=BOB), drive_file("b2", owner=BOB)],
+            CAROL: [drive_file("c1", owner=CAROL)],
+        },
+        shared_with={
+            ADMIN: [drive_file("x2", owner=EXTERNAL)],
+            ALICE: [
+                drive_file("b1", owner=BOB),
+                drive_file("c1", owner=CAROL),
+                drive_file("x1", owner=EXTERNAL),
+                drive_file("d3f1", drive_id="d3"),
+                drive_file("d1f2", drive_id="d1"),
+            ],
+            BOB: [
+                drive_file("a1", owner=ALICE),
+                drive_file("x1", owner=EXTERNAL),
+                drive_file("c1", owner=CAROL),
+            ],
+        },
+    )
+
+
+_EXPECTED_ORG_FILES = {
+    *("d1f1", "d1f2", "d1f3", "d1f4", "d1f5", "r1"),
+    *("d2f1", "d2f2", "d2f3"),
+    *("d3f1", "d3f2"),
+    *("adm1", "a1", "a2", "a3", "a4", "b1", "b2"),
+    # carol's own pass failed, so her file arrives through a share.
+    "c1",
+    *("x1", "x2"),
+}
+
+
+def _full_org_connector() -> GoogleDriveConnector:
+    return make_service_account_connector(
+        include_shared_drives=True,
+        include_my_drives=True,
+        include_files_shared_with_me=True,
+    )
+
+
+@pytest.mark.parametrize(
+    ("pages_per_call", "partitions_per_call"),
+    [(1, 1), (1, 3), (2, 4), (100, 100)],
+)
+def test_each_file_is_yielded_exactly_once(
+    pages_per_call: int, partitions_per_call: int
+) -> None:
+    """The yielded set is the same however often the run checkpoints, and
+    every checkpoint survives a JSON round trip between calls."""
+    tenant = _org_tenant()
+    connector = _full_org_connector()
+
+    with (
+        tenant.patch(connector),
+        # Files per page, and files per inline call.
+        patch.object(parallel_listing, "LISTING_PAGE_SIZE", pages_per_call),
+        patch.object(parallel_listing, "INLINE_CALL_BUDGET_FILES", partitions_per_call),
+    ):
+        result = run_to_completion(connector)
+
+    duplicates = {
+        file_id: count
+        for file_id, count in Counter(result.file_ids).items()
+        if count > 1
+    }
+    assert duplicates == {}
+    assert set(result.file_ids) == _EXPECTED_ORG_FILES
+    assert [error.user_email for error in result.errors] == [CAROL]
+    assert isinstance(result.errors[0].error, ImpersonationError)
+
+
+def test_restricted_folder_is_listed_by_the_organizer() -> None:
+    tenant = _org_tenant()
+    connector = _full_org_connector()
+
+    with tenant.patch(connector):
+        result = run_to_completion(connector)
+
+    final = result.checkpoints[-1]
+    assert "r1" in result.file_ids
+    assert final.organizer_email_by_drive_id["d1"] == ALICE
+    # Reached through the group, and complete because the group is organizer.
+    assert final.organizer_email_by_drive_id["d2"] == BOB
+    assert final.incomplete_drive_ids == {"d3", "d4"}
+    assert "d4" not in final.organizer_email_by_drive_id
+    assert final.failed_impersonation_emails == {CAROL}
+
+
+def test_interrupted_call_loses_nothing() -> None:
+    """A call that dies mid-stream never saves its checkpoint. Retrying from
+    the last saved one must still reach every file."""
+    tenant = _org_tenant()
+    connector = _full_org_connector()
+    seen: set[str] = set()
+
+    with (
+        tenant.patch(connector),
+        patch.object(parallel_listing, "LISTING_PAGE_SIZE", 1),
+        patch.object(parallel_listing, "INLINE_CALL_BUDGET_FILES", 1),
+    ):
+        checkpoint = connector.build_dummy_checkpoint()
+        for _ in range(200):
+            saved_json = checkpoint.model_dump_json()
+            # First attempt: take one item, then crash before the checkpoint
+            # is returned.
+            output = connector.load_from_checkpoint(0, 2_000_000_000, checkpoint)
+            first = next(output, None)
+            # Conversion is patched out, so the stream carries retrieved files.
+            if isinstance(first, RetrievedDriveFile) and first.error is None:
+                seen.add(first.drive_file["id"])
+            output.close()
+
+            retry = connector.validate_checkpoint_json(saved_json)
+            items, checkpoint = run_one_call(connector, retry)
+            seen.update(item.drive_file["id"] for item in items if item.error is None)
+            checkpoint = connector.validate_checkpoint_json(
+                checkpoint.model_dump_json()
+            )
+            if not checkpoint.has_more:
+                break
+
+    assert seen == _EXPECTED_ORG_FILES
+
+
+def test_checkpoint_size_does_not_grow_with_document_count() -> None:
+    """The regression the redesign exists for: exact partitions keep no
+    per-document state, so ten times the files leaves the checkpoint flat."""
+
+    def _largest_checkpoint(num_files: int) -> int:
+        tenant = FakeTenant(
+            users=[ADMIN, ALICE],
+            shared_drives={
+                "d1": SharedDrive(
+                    members=[_member(ALICE, DriveRole.ORGANIZER, PrincipalType.USER)],
+                    files=[f"d1-{i}" for i in range(num_files)],
+                )
+            },
+            my_drive={
+                ALICE: [drive_file(f"a-{i}", owner=ALICE) for i in range(num_files)]
+            },
+        )
+        connector = make_service_account_connector(
+            include_shared_drives=True, include_my_drives=True
+        )
+        with (
+            tenant.patch(connector),
+            patch.object(parallel_listing, "LISTING_PAGE_SIZE", 50),
+            patch.object(parallel_listing, "INLINE_CALL_BUDGET_FILES", 50),
+            # The tenant gives every file one modifiedTime, so a shard keeps
+            # ids up to this cap.
+            patch.object(parallel_listing, "MAX_FRONTIER_IDS", 10),
+        ):
+            result = run_to_completion(connector, max_calls=5_000)
+        assert len(result.file_ids) == 2 * num_files
+        return max(len(cp.model_dump_json()) for cp in result.checkpoints)
+
+    small = _largest_checkpoint(100)
+    large = _largest_checkpoint(1_000)
+
+    # Page tokens carry an offset, so allow a few bytes of digits.
+    assert large - small < 50
+
+
+def test_owner_pass_suppresses_shared_copies_but_not_a_failed_owners() -> None:
+    tenant = _org_tenant()
+    connector = _full_org_connector()
+
+    with tenant.patch(connector):
+        result = run_to_completion(connector)
+
+    sources = Counter(result.file_ids)
+    # b1 is shared with alice and reached by her shortcut; bob's pass owns it.
+    assert sources["b1"] == 1
+    # carol could not be impersonated, so alice's share is the one that counts.
+    assert sources["c1"] == 1
+
+
+# Checkpoints that main's serial listing wrote, in its JSON format. Their
+# claims cover every file, so a listing that kept them would yield nothing.
+_MAIN_STAGE_CHECKPOINT: dict[str, Any] = {
+    "has_more": True,
+    "retrieved_folder_and_drive_ids": ["d1"],
+    "completion_stage": "my_drive_files",
+    "completion_map": {
+        ALICE: {
+            "stage": "shared_drive_files",
+            "completed_until": 1717200000.0,
+            "current_folder_or_drive_id": "d1",
+            "next_page_token": "token-from-the-old-loop",
+        }
+    },
+    "retrieved_drive_file_ids": sorted(_EXPECTED_ORG_FILES),
+    "drive_ids_to_retrieve": ["d1"],
+    "folder_ids_to_retrieve": [],
+    "user_emails": [ADMIN, ALICE],
+    "seen_hierarchy_node_raw_ids": [],
+    "fully_walked_hierarchy_node_raw_ids": [],
+    "failed_folder_ids_by_email": {},
+}
+_MAIN_PHASED_CHECKPOINT: dict[str, Any] = {
+    **_MAIN_STAGE_CHECKPOINT,
+    "completion_stage": "start",
+    "completion_map": {},
+    "drive_ids_to_retrieve": ["d1", "d2", "d3", "d4"],
+    "user_emails": [ADMIN, ALICE, BOB, CAROL],
+    "phase_progress": {
+        "phase": "my_drives",
+        "partition_keys": [ADMIN, ALICE, BOB, CAROL],
+        "partition_index": 1,
+        "next_page_token": "token-from-the-phased-engine",
+        "completed_until": 0,
+    },
+    "organizer_email_by_drive_id": {"d1": ALICE},
+    "incomplete_drive_ids": ["d3"],
+    "crawled_target_ids": ["f1"],
+    "unreachable_target_ids": ["f2"],
+}
+
+
+@pytest.mark.parametrize(
+    "old_json",
+    [_MAIN_STAGE_CHECKPOINT, _MAIN_PHASED_CHECKPOINT],
+    ids=["stage", "phased"],
+)
+def test_a_checkpoint_from_main_parses_and_lists_again(
+    old_json: dict[str, Any],
+) -> None:
+    """The serial listing's keys are ignored, and the attempt lists again
+    from its window start with the shard engine."""
+    tenant = _org_tenant()
+    connector = _full_org_connector()
+    old = connector.validate_checkpoint_json(json.dumps(old_json))
+    assert old.listing is None
+
+    with tenant.patch(connector):
+        result = run_to_completion(connector, checkpoint=old)
+
+    assert Counter(result.file_ids) == Counter(_EXPECTED_ORG_FILES)
+    final = result.checkpoints[-1]
+    assert final.listing is not None and final.listing.is_done
+    assert final.unreachable_target_ids == set()
+    dumped = final.model_dump()
+    for key in ("completion_stage", "completion_map", "phase_progress"):
+        assert key not in dumped
+
+
+def test_a_checkpoint_from_main_sends_its_folder_nodes_again() -> None:
+    """main's serial listing could send a folder with no parent, and its
+    checkpoint has no record to repair it. The restart forgets the nodes it
+    sent, so the new listing sends each folder node again, with its parent.
+    A restart for a new window start keeps the nodes sent."""
+    tenant = _org_tenant()
+    connector = _full_org_connector()
+    old = connector.validate_checkpoint_json(
+        json.dumps(
+            {
+                **_MAIN_STAGE_CHECKPOINT,
+                "seen_hierarchy_node_raw_ids": ["sent_without_parent"],
+            }
+        )
+    )
+
+    with tenant.patch(connector):
+        connector._plan_listing(old, 0, 1_000)
+    assert "sent_without_parent" not in old.seen_hierarchy_node_raw_ids
+
+    old.seen_hierarchy_node_raw_ids.add("sent_in_this_attempt")
+    with tenant.patch(connector):
+        connector._plan_listing(old, 500, 1_000)
+    assert old.listing is not None and old.listing.window_t0 == 500_000
+    assert "sent_in_this_attempt" in old.seen_hierarchy_node_raw_ids
+
+
+# --- requested folders -------------------------------------------------------
+
+
+def _folder_tenant() -> FakeTenant:
+    return FakeTenant(
+        users=[ADMIN, ALICE, BOB],
+        folders={
+            # Externally owned: each user sees a different limited subfolder,
+            # so only the union of both crawls is complete.
+            "fext": Folder(
+                owner=EXTERNAL,
+                drive_id=None,
+                visible_files={ALICE: ["e1", "e2"], BOB: ["e2", "e3"]},
+                permission_emails=[ALICE, BOB, EXTERNAL],
+            ),
+            # In bob's My Drive: bob as owner sees everything.
+            "fbob": Folder(
+                owner=BOB,
+                drive_id=None,
+                visible_files={BOB: ["fb1", "fb2"], ALICE: ["fb1"]},
+            ),
+            # Nested inside fbob and requested too.
+            "fsub": Folder(
+                owner=BOB,
+                drive_id=None,
+                visible_files={BOB: ["fb2"]},
+            ),
+        },
+    )
+
+
+def _folder_url(folder_id: str) -> str:
+    return f"https://drive.google.com/drive/folders/{folder_id}"
+
+
+def test_requested_folders_use_owner_or_union() -> None:
+    tenant = _folder_tenant()
+    connector = make_service_account_connector(
+        shared_folder_urls=",".join(_folder_url(f) for f in ("fext", "fbob", "fsub"))
+    )
+
+    with tenant.patch(connector):
+        result = run_to_completion(connector)
+
+    assert Counter(result.file_ids) == Counter(
+        {"e1": 1, "e2": 1, "e3": 1, "fb1": 1, "fb2": 1}
+    )
+    assert result.checkpoints[-1].unreachable_target_ids == set()
+
+
+def test_unreachable_target_blocks_pruning_but_not_perm_sync() -> None:
+    tenant = _folder_tenant()
+    connector = make_service_account_connector(
+        shared_folder_urls=",".join(_folder_url(f) for f in ("fbob", "fgone"))
+    )
+
+    with (
+        tenant.patch(connector),
+        patch.object(
+            connector_mod,
+            "build_slim_document",
+            side_effect=lambda _creds, file, *_args, **_kwargs: SlimDocument(
+                id=file["id"]
+            ),
+        ),
+    ):
+        with pytest.raises(UnreachableTargetsError, match="fgone"):
+            list(connector.retrieve_all_slim_docs())
+
+        batches = list(connector.retrieve_all_slim_docs_perm_sync())
+
+    slim_ids = {
+        doc.id for batch in batches for doc in batch if isinstance(doc, SlimDocument)
+    }
+    assert slim_ids == {"fb1", "fb2"}
+
+
+def test_specific_user_emails_limit_who_is_impersonated() -> None:
+    """With specific_user_emails set, the connector acts only as those users:
+    not the admin, and not an organizer outside the list."""
+    tenant = _org_tenant()
+    tenant.users = [BOB]
+    tenant.folders["fadmin"] = Folder(
+        owner=ADMIN, drive_id=None, visible_files={ADMIN: ["secret"]}
+    )
+    connector = make_service_account_connector(
+        shared_drive_urls="https://drive.google.com/drive/folders/d1",
+        shared_folder_urls=_folder_url("fadmin"),
+        specific_user_emails=BOB,
+    )
+
+    with tenant.patch(connector):
+        result = run_to_completion(connector)
+
+    final = result.checkpoints[-1]
+    # bob is only a reader of d1, so the organizer-only file stays hidden.
+    assert set(result.file_ids) == {"d1f1", "d1f2", "d1f3", "d1f4", "d1f5"}
+    assert final.organizer_email_by_drive_id["d1"] == BOB
+    assert final.incomplete_drive_ids == {"d1"}
+    assert final.unreachable_target_ids == {"fadmin"}
+
+
+def test_server_error_on_member_read_fails_the_run() -> None:
+    """A 500 is not evidence the drive has no members. Skipping the drive would
+    let a prune delete everything indexed from it, so the run must fail."""
+    tenant = _org_tenant()
+    tenant.failing_member_reads = {"d1"}
+    connector = _full_org_connector()
+
+    with tenant.patch(connector), pytest.raises(GoogleDriveHttpError):
+        run_to_completion(connector)
+
+
+def test_target_whose_principals_all_fail_blocks_pruning() -> None:
+    tenant = _folder_tenant()
+    # fext is planned for alice and bob; both fail at the impersonation gate.
+    tenant.broken_users = {ALICE, BOB}
+    connector = make_service_account_connector(shared_folder_urls=_folder_url("fext"))
+
+    with tenant.patch(connector):
+        result = run_to_completion(connector)
+
+    assert result.file_ids == []
+    assert result.checkpoints[-1].unreachable_target_ids == {"fext"}

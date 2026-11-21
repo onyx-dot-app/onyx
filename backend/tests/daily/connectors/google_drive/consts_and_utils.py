@@ -306,6 +306,9 @@ ADMIN_SHORTCUT_FIXTURE_FOLDER_IDS = (
     SHORTCUTTED_FOLDER_ID,
     SHORTCUTTED_2_FOLDER_ID,
 )
+# Holds only a shortcut to a file in shortcutted2, so no indexed file has it as
+# a parent. Only the shard engine's folder listing yields it as a node.
+SHORTCUTTED_3_FOLDER_ID = "1L2sMWfaJfO7sJZf3fLLPbL3SlxQV8ebA"
 
 PADDING_DRIVE_URLS = [
     "0AOorXE6AfJRAUk9PVA",
@@ -464,6 +467,12 @@ EXPECTED_SHORTCUTTED_2_FOLDER = _node(
     HierarchyNodeType.FOLDER,
     SHORTCUTS_GALORE_FOLDER_ID,
 )
+EXPECTED_SHORTCUTTED_3_FOLDER = _node(
+    SHORTCUTTED_3_FOLDER_ID,
+    "shortcutted3",
+    HierarchyNodeType.FOLDER,
+    SHORTCUTS_GALORE_FOLDER_ID,
+)
 EXPECTED_EXTERNAL_SHARED_FOLDER = _node(
     EXTERNAL_SHARED_FOLDER_ID, "Onyx-test", HierarchyNodeType.FOLDER
 )
@@ -523,6 +532,7 @@ ALL_EXPECTED_HIERARCHY_NODES: dict[str, ExpectedHierarchyNode] = {
     SHORTCUTS_GALORE_FOLDER_ID: EXPECTED_SHORTCUTS_GALORE_FOLDER,
     SHORTCUTTED_FOLDER_ID: EXPECTED_SHORTCUTTED_FOLDER,
     SHORTCUTTED_2_FOLDER_ID: EXPECTED_SHORTCUTTED_2_FOLDER,
+    SHORTCUTTED_3_FOLDER_ID: EXPECTED_SHORTCUTTED_3_FOLDER,
     EXTERNAL_SHARED_FOLDER_ID: EXPECTED_EXTERNAL_SHARED_FOLDER,
     EXTERNAL_ONLY_USER_1_FOLDER_ID: EXPECTED_EXTERNAL_ONLY_USER_1_FOLDER,
     EXTERNAL_ONLY_ADMIN_FOLDER_ID: EXPECTED_EXTERNAL_ONLY_ADMIN_FOLDER,
@@ -901,11 +911,17 @@ def get_expected_hierarchy_for_test_user_1_shared_with_me_only() -> dict[
 ]:
     """Expected hierarchy nodes when test_user_1 runs with include_files_shared_with_me=True only.
 
-    Only the external root appears, not the branch inside it that test_user_1 holds a
-    direct grant on: this run surfaces the shared ancestor, not each shared descendant.
+    The folder listing of this run returns every folder that test_user_1 sees
+    and does not own. That includes the branch inside the external root that
+    test_user_1 holds a direct grant on, though no listed file is in it.
     """
     return _clear_parents(
-        _pick(FOLDER_3_ID, TEST_USER_1_EXTRA_FOLDER_ID, EXTERNAL_SHARED_FOLDER_ID),
+        _pick(
+            FOLDER_3_ID,
+            TEST_USER_1_EXTRA_FOLDER_ID,
+            EXTERNAL_SHARED_FOLDER_ID,
+            EXTERNAL_ONLY_USER_1_FOLDER_ID,
+        ),
         FOLDER_3_ID,
     )
 

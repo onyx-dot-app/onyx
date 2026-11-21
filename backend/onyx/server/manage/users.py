@@ -6,10 +6,9 @@ from uuid import UUID
 
 import jwt
 from email_validator import EmailNotValidError, EmailUndeliverableError, validate_email
-from fastapi import APIRouter, Body, Depends, HTTPException, Query, Request, Response
+from fastapi import APIRouter, Body, Depends, Query, Request, Response
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, field_validator
-from sqlalchemy import select
 from sqlalchemy.orm import Session
 
 from onyx.auth.anonymous_user import fetch_anonymous_user_info
@@ -29,6 +28,7 @@ from onyx.auth.session_tokens import (
     SessionRejection,
     build_session_rejection_error,
     classify_session_token_value,
+    clear_unrecognized_session_cookie,
 )
 from onyx.auth.users import (
     anonymous_user_enabled,
@@ -36,6 +36,7 @@ from onyx.auth.users import (
     optional_user,
     scope_exempt,
 )
+from onyx.cache.factory import get_cache_backend
 from onyx.configs.app_configs import (
     AUTH_BACKEND,
     DEV_MODE,
@@ -57,10 +58,12 @@ from onyx.configs.constants import (
 from onyx.db.api_key import is_api_key_email_address
 from onyx.db.auth import get_live_users_count
 from onyx.db.engine.sql_engine import get_session, get_session_with_shared_schema
-from onyx.db.enums import AccountType, Permission, UserFileStatus
-from onyx.db.models import User, UserFile
+from onyx.db.enums import AccountType, Permission
+from onyx.db.models import User
 from onyx.db.pinned_personas import set_pinned_personas
+from onyx.db.skill import transfer_private_plugins__no_commit
 from onyx.db.tenant_invite_counter import release_trial_invites, reserve_trial_invites
+from onyx.db.user_file import fetch_recent_user_files
 from onyx.db.user_preferences import (
     activate_user,
     deactivate_user,
@@ -88,6 +91,7 @@ from onyx.db.users import (
     batch_get_last_active,
     batch_get_user_groups,
     delete_user_from_db,
+    fetch_scim_synced_user_ids,
     get_all_accepted_users,
     get_all_users,
     get_page_of_filtered_users,
@@ -101,7 +105,9 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.key_value_store.factory import get_kv_store
 from onyx.llm.models import ReasoningEffort, parse_user_selectable_reasoning_effort
-from onyx.redis.redis_pool import get_raw_redis_client, get_redis_client
+
+# no-direct-redis: allow session store for AUTH_BACKEND=redis
+from onyx.redis.redis_pool import get_raw_redis_client
 from onyx.server.documents.models import PaginatedReturn
 from onyx.server.features.projects.models import UserFileSnapshot
 from onyx.server.manage.invite_rate_limit import (
@@ -121,6 +127,8 @@ from onyx.server.manage.models import (
     TenantInfo,
     TenantSnapshot,
     ThemePreferenceRequest,
+    TransferPrivatePluginsRequest,
+    TransferPrivatePluginsResponse,
     UserAdminAccessUpdateRequest,
     UserByEmail,
     UserCraftAccessUpdateRequest,
@@ -140,6 +148,7 @@ from onyx.server.security.store import get_security_settings
 from onyx.server.settings.store import resolve_user_language
 from onyx.server.usage_limits import is_tenant_on_trial_fn
 from onyx.server.utils import BasicAuthenticationError
+from onyx.skills.push import push_skills_and_commit
 from onyx.utils.audit import (
     AuditAction,
     AuditOutcome,
@@ -318,12 +327,7 @@ def list_accepted_users(
     # Batch-fetch SCIM mappings to mark synced users
     scim_synced_ids: set[UUID] = set()
     try:
-        from onyx.db.models import ScimUserMapping
-
-        scim_mappings = db_session.scalars(
-            select(ScimUserMapping.user_id).where(ScimUserMapping.user_id.in_(user_ids))
-        ).all()
-        scim_synced_ids = set(scim_mappings)
+        scim_synced_ids = fetch_scim_synced_user_ids(db_session, user_ids)
     except Exception:
         logger.warning(
             "Failed to fetch SCIM mappings; marking all users as non-synced",
@@ -367,12 +371,7 @@ def list_all_accepted_users(
     # Batch-fetch SCIM mappings to mark synced users
     scim_synced_ids: set[UUID] = set()
     try:
-        from onyx.db.models import ScimUserMapping
-
-        scim_mappings = db_session.scalars(
-            select(ScimUserMapping.user_id).where(ScimUserMapping.user_id.in_(user_ids))
-        ).all()
-        scim_synced_ids = set(scim_mappings)
+        scim_synced_ids = fetch_scim_synced_user_ids(db_session, user_ids)
     except Exception:
         logger.warning(
             "Failed to fetch SCIM mappings; marking all users as non-synced",
@@ -606,9 +605,9 @@ def bulk_invite_users(
             new_invited_emails.append(email_info.normalized)
 
     except (EmailUndeliverableError, EmailNotValidError) as e:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Invalid email address: {email} - {str(e)}",  # ty: ignore[possibly-unresolved-reference]
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST,
+            f"Invalid email address: {email} - {str(e)}",  # ty: ignore[possibly-unresolved-reference]
         )
 
     # Count only new users (not already invited or existing) that need seats
@@ -649,7 +648,7 @@ def bulk_invite_users(
                 shared_session.commit()
                 trial_invite_reservation = num_new_invites
         enforce_invite_rate_limit(
-            redis_client=get_redis_client(tenant_id=tenant_id),
+            cache=get_cache_backend(tenant_id=tenant_id),
             admin_user_id=current_user.id,
             num_invites=len(emails_needing_seats),
             tenant_id=tenant_id,
@@ -775,7 +774,7 @@ def remove_invited_user(
     tenant_id = get_current_tenant_id()
     if MULTI_TENANT and is_tenant_on_trial_fn(tenant_id):
         enforce_remove_invited_rate_limit(
-            redis_client=get_redis_client(tenant_id=tenant_id),
+            cache=get_cache_backend(tenant_id=tenant_id),
             admin_user_id=current_user.id,
         )
     if MULTI_TENANT:
@@ -808,14 +807,14 @@ def deactivate_user_api(
     db_session: Session = Depends(get_session),
 ) -> None:
     if current_user.email == user_email.user_email:
-        raise HTTPException(status_code=400, detail="You cannot deactivate yourself")
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, "You cannot deactivate yourself")
 
     user_to_deactivate = get_user_by_email(
         email=user_email.user_email, db_session=db_session
     )
 
     if not user_to_deactivate:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "User not found")
 
     if user_to_deactivate.is_active is False:
         logger.warning("%s is already deactivated", user_to_deactivate.email)
@@ -851,12 +850,12 @@ async def delete_user(
         email=user_email.user_email, db_session=db_session
     )
     if not user_to_delete:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "User not found")
 
     if user_to_delete.is_active is True:
         logger.warning("%s must be deactivated before deleting", user_to_delete.email)
-        raise HTTPException(
-            status_code=400, detail="User must be deactivated before deleting"
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST, "User must be deactivated before deleting"
         )
 
     # Capture identifiers before the row is detached/deleted below.
@@ -890,10 +889,34 @@ async def delete_user(
                 "onyx.db.license", "invalidate_license_cache", None
             )()
 
+    except OnyxError:
+        db_session.rollback()
+        raise
     except Exception as e:
         db_session.rollback()
         logger.error("Error deleting user %s: %s", user_to_delete.email, str(e))
-        raise HTTPException(status_code=500, detail="Error deleting user")
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, "Error deleting user")
+
+
+@router.post("/manage/admin/transfer-private-plugins", tags=PUBLIC_API_TAGS)
+def transfer_private_plugins(
+    transfer_req: TransferPrivatePluginsRequest,
+    _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> TransferPrivatePluginsResponse:
+    user = get_user_by_email(email=transfer_req.user_email, db_session=db_session)
+    if user is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "User not found")
+    result = transfer_private_plugins__no_commit(
+        user_id=user.id,
+        new_owner_user_id=transfer_req.new_owner_user_id,
+        db_session=db_session,
+    )
+    db_session.commit()
+    push_skills_and_commit(result.affected_user_ids, db_session)
+    return TransferPrivatePluginsResponse(
+        plugin_ids=result.plugin_ids, renames=result.renames
+    )
 
 
 @router.patch("/manage/admin/activate-user", tags=PUBLIC_API_TAGS)
@@ -908,7 +931,7 @@ def activate_user_api(
         email=user_email.user_email, db_session=db_session
     )
     if not user_to_activate:
-        raise HTTPException(status_code=404, detail="User not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "User not found")
 
     if user_to_activate.is_active is True:
         logger.warning("%s is already activated", user_to_activate.email)
@@ -988,6 +1011,7 @@ def get_current_auth_token_expiry_redis(
             logger.debug("No auth token cookie found")
             return None
 
+        # no-direct-redis: allow session store for AUTH_BACKEND=redis
         redis = get_raw_redis_client()
         redis_key = REDIS_AUTH_KEY_PREFIX + token
         raw_value = redis.get(redis_key)
@@ -1098,6 +1122,7 @@ def verify_user_logged_in(
             # A browser that still carries a signed-out user's cookie follows
             # the workspace default like any other anonymous visitor.
             reconcile_locale_cookie(request, response, stored_language=None)
+            clear_unrecognized_session_cookie(response)
             return fetch_anonymous_user_info(store)
         session_rejection_error = build_session_rejection_error()
         if session_rejection_error is not None:
@@ -1484,7 +1509,8 @@ def get_user_assistant_preferences(
     )
     return {
         config.assistant_id: UserSpecificAssistantPreference(
-            disabled_tool_ids=config.disabled_tool_ids
+            disabled_tool_ids=config.disabled_tool_ids,
+            disabled_integration_ids=config.disabled_integration_ids,
         )
         for config in assistant_specific_configs
     }
@@ -1509,15 +1535,6 @@ def get_recent_files(
     db_session: Session = Depends(get_session),
 ) -> list[UserFileSnapshot]:
     user_id = user.id
-    user_files = (
-        db_session.query(UserFile)
-        .filter(UserFile.user_id == user_id)
-        .filter(UserFile.status != UserFileStatus.FAILED)
-        .filter(UserFile.status != UserFileStatus.DELETING)
-        # Incognito uploads live only inside their session, never in recents.
-        .filter(UserFile.incognito.is_(False))
-        .order_by(UserFile.last_accessed_at.desc())
-        .all()
-    )
+    user_files = fetch_recent_user_files(db_session, user_id)
 
     return [UserFileSnapshot.from_model(user_file) for user_file in user_files]

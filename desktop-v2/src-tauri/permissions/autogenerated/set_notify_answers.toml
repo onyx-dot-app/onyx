@@ -1,0 +1,11 @@
+# Automatically generated - DO NOT EDIT!
+
+[[permission]]
+identifier = "allow-set-notify-answers"
+description = "Enables the set_notify_answers command without any pre-configured scope."
+commands.allow = ["set_notify_answers"]
+
+[[permission]]
+identifier = "deny-set-notify-answers"
+description = "Denies the set_notify_answers command without any pre-configured scope."
+commands.deny = ["set_notify_answers"]

@@ -1,7 +1,9 @@
 """Code mode results render live and on replay, save, and change the offered tools."""
 
+import json
 from typing import Any
 from unittest.mock import MagicMock
+from uuid import uuid4
 
 import pytest
 from pydantic import BaseModel
@@ -16,7 +18,7 @@ from onyx.agents.models import (
 from onyx.chat.agent import ChatAgent
 from onyx.chat.checkpoint import CHECKPOINT_PAYLOAD_TYPES, CheckpointSerializer
 from onyx.chat.presentation import project_response
-from onyx.chat.prompt_utils import build_system_prompt
+from onyx.chat.prompt_utils import build_system_prompt, calculate_reserved_tokens
 from onyx.chat.renderer import tool_renderer
 from onyx.configs.chat_configs import CODE_MODE_MAX_LLM_CYCLES, MAX_LLM_CYCLES
 from onyx.context.search.models import SearchDocsResponse
@@ -38,6 +40,7 @@ from onyx.llm.models import (
 from onyx.prompts.tool_prompts import (
     CODE_MODE_GUIDANCE,
     INTERNAL_SEARCH_GUIDANCE,
+    MEMORY_GUIDANCE,
     TOOL_DESCRIPTION_SEARCH_GUIDANCE,
 )
 from onyx.server.query_and_chat import streaming_models as packets
@@ -45,6 +48,7 @@ from onyx.server.query_and_chat.placement import Placement
 from onyx.tools.constants import FILE_READER_TOOL_NAME, WAIT_CODE_TOOL_NAME
 from onyx.tools.interface import Tool
 from onyx.tools.models import (
+    CapabilityEntry,
     CodeModeExposure,
     CustomToolCallSummary,
     LlmPythonExecutionResult,
@@ -63,13 +67,21 @@ from onyx.tools.tool_implementations.code_mode.models import (
     CodeModeStdout,
     StoreCommit,
 )
+from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
+from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
+    ApplyPatchTool,
+    ExecCommandTool,
+    WriteStdinTool,
+    sandbox_tools_for_model,
+)
+from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.utils.postgres_sanitization import sanitize_json_like
 from tests.unit.onyx.agents.fakes import EchoTool, ScriptedLLM, run_agent
 from tests.unit.onyx.tools.code_mode.fakes import search_doc
 
 PLACEMENT = Placement(turn_index=1, tab_index=0)
-CODE = "r = await internal_search(queries=['q'])\nprint(r)"
+CODE = "r = await tools.internal_search(queries=['q'])\nprint(r)"
 
 
 DOC_A = search_doc("alpha")
@@ -318,15 +330,53 @@ def test_direct_search_prompt_has_no_code_mode_guidance() -> None:
     search.name = SearchTool.NAME
     direct = build_system_prompt("base", tools=[search], include_user_info=False)
     assert CODE_MODE_GUIDANCE not in direct
-    assert INTERNAL_SEARCH_GUIDANCE in direct
+    assert INTERNAL_SEARCH_GUIDANCE.format(name=SearchTool.NAME) in direct
     assert TOOL_DESCRIPTION_SEARCH_GUIDANCE in direct
+
+
+@pytest.mark.parametrize("code_mode", [False, True])
+def test_tool_sections_name_a_tool_as_the_model_calls_it(code_mode: bool) -> None:
+    memory: list[Tool] = [MemoryTool(tool_id=1, llm=MagicMock())]
+    offered = with_code_mode(memory)[0] if code_mode else memory
+    prompt = build_system_prompt("base", tools=offered, include_user_info=False)
+    name = "tools.add_memory" if code_mode else "add_memory"
+    assert MEMORY_GUIDANCE.format(name=name) in prompt
+
+
+@pytest.mark.parametrize("code_mode", [False, True])
+def test_the_sandbox_section_names_the_turn_s_sandbox_tools(code_mode: bool) -> None:
+    def prompt(tools: list[Tool]) -> str:
+        offered = with_code_mode(tools)[0] if code_mode else tools
+        return build_system_prompt("base", tools=offered, include_user_info=False)
+
+    turn = SandboxTurn(
+        tenant_id="t",
+        user_id=uuid4(),
+        chat_session_id=uuid4(),
+        vm_chat_files=[],
+        copy_vm_chat_files=False,
+    )
+    prefix = "tools." if code_mode else ""
+    assert "## Sandbox" not in prompt([EchoTool()])
+    assert (
+        f"Run commands with `{prefix}exec_command`, use `{prefix}write_stdin` for "
+        f"commands that are still running and edit files with `{prefix}apply_patch`."
+    ) in prompt([ExecCommandTool(turn), WriteStdinTool(turn), ApplyPatchTool(turn)])
+    only_exec = prompt([ExecCommandTool(turn)])
+    assert f"Run commands with `{prefix}exec_command`." in only_exec
+    assert "apply_patch" not in only_exec
+    assert ("Call them from `execute_code` programs." in only_exec) is code_mode
 
 
 def test_the_token_reservation_counts_code_mode_guidance() -> None:
     reserved = build_system_prompt(
-        "base", include_all_guidance=True, include_user_info=False
+        "base",
+        include_all_guidance=True,
+        include_user_info=False,
+        all_guidance_sandbox_tools=sandbox_tools_for_model(["gpt-5.1"]),
     )
     assert CODE_MODE_GUIDANCE in reserved
+    assert "## Sandbox" in reserved
 
 
 class _DirectOnlyTool(EchoTool):
@@ -408,7 +458,7 @@ def _offered(request: dict[str, Any]) -> list[str]:
     ("preferred_tool_id", "operation"),
     [
         # A function runs only inside programs, so the preference names it so.
-        (EchoTool().id, "echo (a function in `execute_code` programs)"),
+        (EchoTool().id, "tools.echo (a function in `execute_code` programs)"),
         (_DirectOnlyTool().id, "send_email"),
     ],
 )
@@ -426,8 +476,7 @@ def test_code_mode_names_preferred_tools_without_changing_definitions(
         persona=None,
         user_memory_context=None,
         llm=llm,
-        token_counter=len,
-        preferred_tool_id=preferred_tool_id,
+        preferred_tool=CapabilityEntry(tool_id=preferred_tool_id),
     )
     run_agent(agent, messages=[UserMessage(content="Find")], max_steps=3)
 
@@ -464,7 +513,6 @@ def test_code_mode_keeps_identical_tool_definitions_on_the_final_step() -> None:
         persona=None,
         user_memory_context=None,
         llm=llm,
-        token_counter=len,
     )
     run_agent(agent, messages=[UserMessage(content="Find")], max_steps=2)
 
@@ -476,6 +524,55 @@ def test_code_mode_keeps_identical_tool_definitions_on_the_final_step() -> None:
         WAIT_CODE_TOOL_NAME,
     ]
     assert final["tool_choice"] == ToolChoiceOptions.NONE
+
+
+def test_the_next_run_of_the_same_agent_starts_new_cells() -> None:
+    """A message to an idle child starts a new run of the loaded agent."""
+
+    def program(call_id: str, code: str) -> Delta:
+        return Delta(
+            tool_calls=[
+                ChatCompletionDeltaToolCall(
+                    index=0,
+                    id=call_id,
+                    function=ResponseFunctionCall(
+                        name=CodeModeTool.NAME, arguments=json.dumps({"code": code})
+                    ),
+                )
+            ]
+        )
+
+    llm = ScriptedLLM(
+        [
+            program("call-0", 'store("answer", 41)\nprint(42)'),
+            Delta(content="One."),
+            # The next run reads what the first run stored for this chat.
+            program("call-1", 'print(load("answer") + 1)'),
+            Delta(content="Two."),
+        ]
+    )
+    agent = ChatAgent(
+        messages=[],
+        tools=[EchoTool()],
+        code_mode=True,
+        custom_agent_prompt=None,
+        base_system_prompt="",
+        context_files=_context_files(),
+        persona=None,
+        user_memory_context=None,
+        llm=llm,
+    )
+    run_agent(agent, messages=[UserMessage(content="First")], max_steps=3)
+    run_agent(agent, messages=[UserMessage(content="Again")], max_steps=3)
+
+    first, second = [
+        message
+        for message in agent.state.messages
+        if isinstance(message, ToolResultMessage)
+    ]
+    assert "cell 1" in first.content and "42" in first.content
+    assert not second.is_error
+    assert "cell 2" in second.content and "42" in second.content
 
 
 @pytest.mark.parametrize(
@@ -500,7 +597,6 @@ def test_the_code_mode_step_cap_applies_when_code_mode_does(
         persona=None,
         user_memory_context=None,
         llm=ScriptedLLM([]),
-        token_counter=len,
     )
     assert agent.max_steps == step_cap
     assert CODE_MODE_MAX_LLM_CYCLES >= MAX_LLM_CYCLES
@@ -524,7 +620,6 @@ def test_the_file_notice_names_a_tool_that_runs_inside_programs() -> None:
         persona=None,
         user_memory_context=None,
         llm=llm,
-        token_counter=len,
         all_injected_file_metadata={
             "file-1": FileToolMetadata(
                 file_id="file-1", filename="report.pdf", approx_char_count=90_000
@@ -580,3 +675,31 @@ def test_live_stdout_cut_at_the_limit_is_replaced_by_the_saved_stdout() -> None:
     )
     assert isinstance(replayed, packets.CodeModeDelta)
     assert (replayed.stdout, replayed.replace_stdout) == (saved, False)
+
+
+@pytest.mark.parametrize(
+    ("model_name", "named", "unnamed"),
+    [
+        ("claude-opus-4-5", ["`edit`", "`write`"], "`apply_patch`"),
+        ("gpt-5.1", ["`apply_patch`"], "`edit`"),
+    ],
+)
+def test_the_token_estimate_names_the_model_s_sandbox_tools(
+    model_name: str, named: list[str], unnamed: str
+) -> None:
+    prompts: list[str] = []
+
+    def count(text: str) -> int:
+        prompts.append(text)
+        return len(text)
+
+    calculate_reserved_tokens(
+        db_session=MagicMock(),
+        persona_system_prompt="",
+        base_system_prompt="base",
+        token_counter=count,
+        sandbox_tools=sandbox_tools_for_model([model_name]),
+    )
+    [estimate] = prompts
+    assert all(name in estimate for name in named)
+    assert unnamed not in estimate

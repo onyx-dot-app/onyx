@@ -1,21 +1,18 @@
-"""Skill/external-app table snapshot helpers for Craft tests."""
+"""Skill, plugin and external-app table snapshot helpers for Craft tests."""
 
 from __future__ import annotations
 
 from typing import Any
 
-from sqlalchemy import delete, select
+from sqlalchemy import select
 from sqlalchemy.orm import Session, class_mapper
 
 from onyx.db.models import (
     ExternalApp,
-    ExternalAppUserCredential,
     GatedApp,
+    Marketplace,
     Plugin,
     Skill,
-    Skill__User,
-    Skill__UserGroup,
-    WorkspaceActionPolicy,
 )
 
 # Parent -> child order (FKs all point child -> parent). Restore/insert in this
@@ -24,10 +21,8 @@ _SKILL_ISOLATION_MODELS: tuple[type[Any], ...] = (
     Skill,
     ExternalApp,
     GatedApp,
-    Skill__User,
-    Skill__UserGroup,
-    WorkspaceActionPolicy,
-    ExternalAppUserCredential,
+    Marketplace,
+    Plugin,
 )
 
 
@@ -80,9 +75,4 @@ def restore_skill_tables(
         for row in snapshot[model]:
             session.merge(model(**row))
         session.flush()
-
-    # A plugin shares its skill's id. Drop the plugins of deleted skills.
-    session.execute(
-        delete(Plugin).where(~select(Skill.id).where(Skill.id == Plugin.id).exists())
-    )
     session.commit()

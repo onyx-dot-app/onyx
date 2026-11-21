@@ -17,9 +17,11 @@ combined with a real PostgreSQL database for verifying persistence.
 from collections.abc import Iterator
 from typing import Any
 
+import pytest
 from sqlalchemy.orm import Session
 
 from onyx.access.models import ExternalAccess
+from onyx.access.utils import build_ext_group_name_for_onyx
 from onyx.background.celery.celery_utils import extract_ids_from_runnable_connector
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.interfaces import (
@@ -334,7 +336,9 @@ def test_pruning_upserts_hierarchy_nodes_to_db(db_session: Session) -> None:
     # Channel C is public and has a group
     assert channel_c.is_public is True
     assert channel_c.external_user_group_ids is not None
-    assert set(channel_c.external_user_group_ids) == {"eng-team"}
+    assert set(channel_c.external_user_group_ids) == {
+        build_ext_group_name_for_onyx("eng-team", TEST_SOURCE)
+    }
 
 
 def test_pruning_upserts_hierarchy_nodes_public_connector(
@@ -490,8 +494,38 @@ def test_pruning_hierarchy_node_upsert_preserves_unspecified_access(
     db_node = get_hierarchy_node_by_raw_id(db_session, CHANNEL_A_ID, TEST_SOURCE)
     assert db_node is not None
     assert db_node.external_user_emails == ["user@example.com"]
-    assert db_node.external_user_group_ids == ["external_group"]
+    assert db_node.external_user_group_ids == [
+        build_ext_group_name_for_onyx("external_group", TEST_SOURCE)
+    ]
     assert db_node.is_public is False
+
+
+@pytest.mark.parametrize("is_connector_public", [False, True])
+def test_hierarchy_node_upsert_creates_node_without_read_access(
+    db_session: Session,
+    is_connector_public: bool,
+) -> None:
+    """A new node with no read access is private, except on a PUBLIC pair."""
+    _cleanup_test_data(db_session)
+    ensure_source_node_exists(db_session, TEST_SOURCE, commit=True)
+    node = PydanticHierarchyNode(
+        raw_node_id=CHANNEL_A_ID,
+        display_name=CHANNEL_A_NAME,
+        node_type=HierarchyNodeType.CHANNEL,
+    )
+    upsert_hierarchy_nodes_batch(
+        db_session,
+        [node],
+        TEST_SOURCE,
+        commit=True,
+        is_connector_public=is_connector_public,
+    )
+
+    db_node = get_hierarchy_node_by_raw_id(db_session, CHANNEL_A_ID, TEST_SOURCE)
+    assert db_node is not None
+    assert db_node.is_public is is_connector_public
+    assert db_node.external_user_emails is None
+    assert db_node.external_user_group_ids is None
 
 
 # ---------------------------------------------------------------------------

@@ -14,6 +14,7 @@ from onyx.agents.models import (
     StepResult,
     ToolCallContext,
     ToolResultAmendment,
+    ToolResultContext,
 )
 from onyx.agents.runtime import Agent, RestorableFeature
 from onyx.chat.citation_processor import DynamicCitationProcessor
@@ -51,8 +52,8 @@ from onyx.configs.chat_configs import (
 )
 from onyx.context.models import UserMemoryContext
 from onyx.file_store.models import ExtractedContextFiles, FileToolMetadata
-from onyx.llm.factory import get_llm_token_counter
 from onyx.llm.interfaces import LLM, GenerationContext, LLMUserIdentity
+from onyx.llm.model_request import estimate_text_tokens
 from onyx.llm.models import (
     AssistantMessage,
     GenerationOptions,
@@ -72,8 +73,16 @@ from onyx.prompts.chat_prompts import (
 from onyx.tools.constants import PYTHON_TOOL_NAME
 from onyx.tools.file_snapshot import SavedChatFile, SavedContextFiles
 from onyx.tools.interface import Tool
-from onyx.tools.models import ChatFile, ToolContext
-from onyx.tools.tool_implementations.code_mode.code_mode_tool import with_code_mode
+from onyx.tools.models import ChatFile, ToolContext, ToolPreference
+from onyx.tools.tool_implementations.code_mode.code_mode_tool import (
+    CodeModeTool,
+    WaitCodeTool,
+    with_code_mode,
+)
+from onyx.tools.tool_implementations.question.question_tool import QuestionTool
+from onyx.tools.tool_implementations.sandbox.sandbox_tools import SandboxTool
+from onyx.tools.tool_implementations.sandbox.spill import spill_large_result
+from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
 from onyx.tools.tool_implementations.search.models import SearchContext
 from onyx.tools.tool_implementations.search.search_tool import (
     SearchTool,
@@ -91,6 +100,15 @@ from onyx.tools.tool_implementations.web_search.utils import extract_url_snippet
 from onyx.tracing.flows import LLMFlow
 
 
+def _offered_preference(
+    preference: ToolPreference | None, tools: list[Tool]
+) -> ToolPreference | None:
+    # A run saved before tool options can prefer an old MCP or custom tool id.
+    if preference is None or not any(tool.matches(preference) for tool in tools):
+        return None
+    return preference
+
+
 class ChatAgent(Agent, RestorableFeature):
     """Chat step preparation and result handling for the shared runtime."""
 
@@ -104,8 +122,7 @@ class ChatAgent(Agent, RestorableFeature):
         persona: PersonaPromptConfig | None,
         user_memory_context: UserMemoryContext | None,
         llm: LLM,
-        token_counter: Callable[[str], int],
-        preferred_tool_id: int | None = None,
+        preferred_tool: ToolPreference | None = None,
         user_identity: LLMUserIdentity | None = None,
         chat_files: list[ChatFile] | None = None,
         reasoning_effort: ReasoningEffort = ReasoningEffort.AUTO,
@@ -121,7 +138,12 @@ class ChatAgent(Agent, RestorableFeature):
         is_subagent: bool = False,
         create_subagent: Callable[[], Agent] | None = None,
         can_spawn: bool = True,
+        on_drained: Callable[[], None] | None = None,
+        question_tool: QuestionTool | None = None,
     ) -> None:
+        """`on_drained`: see Agent; a root agent's runs end per-run tool state
+        there (subagents share the root's tools and pass none). Only a root
+        agent gets `question_tool`."""
         # The fixed system block for the agent's role: a subagent, or a root
         # that can start agents.
         self.agent_instructions = (
@@ -134,7 +156,6 @@ class ChatAgent(Agent, RestorableFeature):
         self.custom_agent_prompt = custom_agent_prompt
         self.additional_context = additional_context
         self.context_files = context_files.model_copy(deep=True)
-        self.token_counter = token_counter
         self.file_metadata = all_injected_file_metadata
         # The tools the chat is configured with; restored and child agents receive
         # them, and code mode applies per agent.
@@ -143,7 +164,8 @@ class ChatAgent(Agent, RestorableFeature):
             self.configured_tools, llm.config.max_input_tokens
         )
         self.code_mode = code_mode
-        # Each agent instance has its own cells, so a restored run has none open.
+        # Each agent instance has its own cells, so a restored run has none open;
+        # a later run of this instance reopens them at its first step.
         self.application_tools, self.code_cells = (
             with_code_mode(self.configured_tools)
             if code_mode
@@ -159,7 +181,7 @@ class ChatAgent(Agent, RestorableFeature):
         self.inject_memories = inject_memories_in_prompt
         self.search_context = SearchContext()
         self.started = time.monotonic()
-        self.preferred_tool_id = preferred_tool_id
+        self.preferred_tool = _offered_preference(preferred_tool, self.configured_tools)
         self.chat_files = list(chat_files or [])
         # Only the Python tool reads the files of found documents.
         self.stages_files = any(
@@ -218,6 +240,30 @@ class ChatAgent(Agent, RestorableFeature):
                     ]
                 ),
             ]
+        if question_tool is not None and not is_subagent:
+            self.application_tools = [*self.application_tools, question_tool]
+        # Restored agents and subagents receive the configured tools, so the
+        # sandbox tools give each of them the chat's sandbox turn.
+        sandbox_turn = next(
+            (
+                tool.turn
+                for tool in self.configured_tools
+                if isinstance(tool, SandboxTool)
+            ),
+            None,
+        )
+        # The root agent's sandbox and code mode results end with the file
+        # copy status line when it changed. Subagents and the calls inside a
+        # code mode program never read it, so they cannot use it up.
+        self._file_status_tools = (
+            frozenset(
+                tool.name
+                for tool in self.application_tools
+                if isinstance(tool, (SandboxTool, CodeModeTool, WaitCodeTool))
+            )
+            if sandbox_turn is not None and not is_subagent
+            else frozenset()
+        )
         super().__init__(
             llm,
             tools=[tool.bind(self._tool_context) for tool in self.application_tools],
@@ -234,8 +280,35 @@ class ChatAgent(Agent, RestorableFeature):
                 flow=LLMFlow.CHAT_RESPONSE, user_identity=user_identity
             ),
             after_tool_call=self._finalize_tool,
+            # In a chat with a sandbox, large results go to a file in the VM.
+            prepare_tool_result=partial(self._prepare_sandbox_result, sandbox_turn)
+            if sandbox_turn is not None
+            else None,
             on_finish=None if self.code_cells is None else self._finished_cells,
             on_suspend=None if self.code_cells is None else self._suspended_cells,
+            on_drained=on_drained,
+        )
+
+    def _prepare_sandbox_result(
+        self, turn: SandboxTurn, context: ToolResultContext
+    ) -> ToolResult:
+        """Spill a large result, then add the file copy status line to a
+        successful result that the root model gets. An amendment or a failed
+        result gets no status line; the line waits for the next result."""
+        result = spill_large_result(
+            turn, context, code_mode=self.code_cells is not None
+        )
+        if (
+            context.amended
+            or result.is_error
+            or not any(call.name in self._file_status_tools for call in context.calls)
+        ):
+            return result
+        line = None if turn.file_copies is None else turn.file_copies.status.line()
+        if line is None:
+            return result
+        return result.model_copy(
+            update={"content": f"{result.content}\n\n{line}", "estimated_tokens": None}
         )
 
     def capture_state(self) -> ChatFeatureState:
@@ -247,7 +320,7 @@ class ChatAgent(Agent, RestorableFeature):
             reasoning_effort=self.reasoning_effort,
             include_citations=self.include_citations,
             inject_memories=self.inject_memories,
-            preferred_tool_id=self.preferred_tool_id,
+            preferred_tool=self.preferred_tool,
             code_mode=self.code_mode,
             base_prompt=self.base_system_prompt,
             custom_prompt=self.custom_agent_prompt,
@@ -260,6 +333,7 @@ class ChatAgent(Agent, RestorableFeature):
             chat_files=[SavedChatFile.capture(file) for file in self.chat_files],
             has_called_search_tool=self.has_called_search_tool,
             search_context=self.search_context,
+            code_cells=self.code_cells.saved() if self.code_cells is not None else [],
         )
 
     def restore_state(self, state: Mapping[str, JsonValue]) -> None:
@@ -272,7 +346,8 @@ class ChatAgent(Agent, RestorableFeature):
             or saved.reasoning_effort != self.reasoning_effort
             or saved.include_citations != self.include_citations
             or saved.inject_memories != self.inject_memories
-            or saved.preferred_tool_id != self.preferred_tool_id
+            or _offered_preference(saved.preferred_tool, self.configured_tools)
+            != self.preferred_tool
             or saved.code_mode != self.code_mode
             or saved.base_prompt != self.base_system_prompt
             or saved.custom_prompt != self.custom_agent_prompt
@@ -287,6 +362,8 @@ class ChatAgent(Agent, RestorableFeature):
         self.gathered_documents = saved.gathered_documents
         self.chat_files = [file.restore() for file in saved.chat_files]
         self.has_called_search_tool = saved.has_called_search_tool
+        if self.code_cells is not None:
+            self.code_cells.restore(saved.code_cells)
 
     def _update_tool_context(self, responses: list[ToolResultMessage]) -> None:
         """Apply accepted tool results to the next request's context policy."""
@@ -325,6 +402,8 @@ class ChatAgent(Agent, RestorableFeature):
     def _prepare_step(self, state: StepInput) -> PreparedStep:
         previous = state.previous
         if previous is None:
+            if self.code_cells is not None:
+                self.code_cells.reopen()
             self.search_context = SearchContext()
             self.started = time.monotonic()
             self.gathered_documents = list(self.initial_citations.values())
@@ -376,7 +455,7 @@ class ChatAgent(Agent, RestorableFeature):
             previous_results=previous.tool_results if previous else [],
             is_last_step=state.step.is_last,
             has_history_citations=bool(self.citation_processor.citation_to_doc),
-            preferred_tool_id=self.preferred_tool_id,
+            preferred_tool=self.preferred_tool,
         )
         return PreparedStep(
             input_messages=received.messages,
@@ -411,7 +490,7 @@ class ChatAgent(Agent, RestorableFeature):
                     doc.document_id: number
                     for number, doc in self.initial_citations.items()
                 },
-                token_counter=self.token_counter,
+                token_counter=estimate_text_tokens,
                 all_injected_file_metadata=dict(self.file_metadata)
                 if self.file_metadata
                 else None,
@@ -426,8 +505,16 @@ class ChatAgent(Agent, RestorableFeature):
             [part for item in result.tool_results for part in tool_result_parts(item)],
         )
         self._update_tool_context(result.tool_results)
-        if not result.message.tool_calls or result.step.is_last:
-            self._validate_answer(result)
+        if not result.message.tool_calls and not result.message.text:
+            raise build_empty_llm_response_error(
+                llm=self.llm,
+                message=result.message,
+                tool_choice=(
+                    ToolChoiceOptions.REQUIRED
+                    if isinstance(result.options.tool_choice, NamedToolChoice)
+                    else result.options.tool_choice
+                ),
+            )
         return bool(result.message.tool_calls)
 
     def _finalize_tool(
@@ -456,8 +543,8 @@ class ChatAgent(Agent, RestorableFeature):
     def _suspended_cells(
         self, results: list[ToolResultMessage]
     ) -> list[ToolResultAmendment]:
-        """Stop the response's open cells when the run pauses, and save their final
-        records."""
+        """Close the response's cells when the run pauses, and save their final
+        records; see CodeCells.suspend."""
         if self.code_cells is None:
             return []
         return self._staged_release(partial(self.code_cells.suspend, results))
@@ -480,23 +567,6 @@ class ChatAgent(Agent, RestorableFeature):
             for amendment in amendments
         ]
 
-    def _validate_answer(self, result: StepResult) -> None:
-        if not result.message.text and not result.message.tool_calls:
-            raise build_empty_llm_response_error(
-                llm=self.llm,
-                message=result.message,
-                tool_choice=(
-                    ToolChoiceOptions.REQUIRED
-                    if isinstance(result.options.tool_choice, NamedToolChoice)
-                    else result.options.tool_choice
-                ),
-            )
-        if not result.message.text:
-            raise RuntimeError(
-                "The model did not return a final answer after tool execution."
-            )
-        return None
-
 
 def build_chat_agent(
     state: AgentState,
@@ -508,10 +578,12 @@ def build_chat_agent(
     tools: list[Tool],
     inject_memories: bool,
     with_subagents: bool,
-    preferred_tool_id: int | None = None,
+    preferred_tool: ToolPreference | None = None,
     additional_context: str | None = None,
     is_subagent: bool = False,
     depth: int = 0,
+    on_drained: Callable[[], None] | None = None,
+    question_tool: QuestionTool | None = None,
 ) -> ChatAgent:
     """Build a chat conversation independently of the current root's feature.
 
@@ -544,14 +616,15 @@ def build_chat_agent(
         base_system_prompt=setup.base_system_prompt,
         user_memory_context=setup.user_memory_context,
         llm=llm,
-        token_counter=get_llm_token_counter(llm),
-        preferred_tool_id=preferred_tool_id,
+        preferred_tool=preferred_tool,
         user_identity=setup.user_identity,
         chat_files=setup.chat_files_for_tools,
         reasoning_effort=setup.reasoning_effort,
         include_citations=setup.new_msg_req.include_citations,
         all_injected_file_metadata=setup.all_injected_file_metadata,
         inject_memories_in_prompt=inject_memories,
+        on_drained=on_drained,
+        question_tool=question_tool,
     )
 
 

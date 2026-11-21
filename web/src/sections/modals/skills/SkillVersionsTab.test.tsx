@@ -50,6 +50,7 @@ function version(overrides: Partial<SkillVersion> = {}): SkillVersion {
     created_by_email: "owner@example.com",
     is_current: false,
     review_status: "draft",
+    manifest_version: null,
     ...overrides,
   };
 }
@@ -139,15 +140,6 @@ describe("SkillVersionsTab", () => {
     expect(mockToast.error).not.toHaveBeenCalled();
   });
 
-  it("turns Restore off while the open editor has unsaved changes", async () => {
-    renderTab({ restoreBlocked: true });
-
-    expect(
-      await screen.findByRole("button", { name: "Restore version 2" })
-    ).toBeDisabled();
-    expect(screen.getByText("Save your changes first")).toBeVisible();
-  });
-
   it("opens a preview of a version from its row", async () => {
     const user = setupUser();
     renderTab();
@@ -160,6 +152,55 @@ describe("SkillVersionsTab", () => {
     expect(screen.getByText("Older description")).toBeVisible();
     await user.click(screen.getByRole("button", { name: "All versions" }));
     expect(await screen.findByText("Version 3")).toBeVisible();
+  });
+
+  it("opens a plugin version with its skills, integrations and plugin.json version", async () => {
+    mockFetch.mockImplementation(async (url: string) => {
+      if (url === "/api/skills/custom/skill-1/versions")
+        return [
+          version({ id: "v2", version_number: 2, is_current: true }),
+          version({ id: "v1", version_number: 1, manifest_version: "1.0.0" }),
+        ];
+      if (url === "/api/skills/custom/skill-1/versions/v1")
+        return {
+          description: "First kit",
+          instructions_markdown: "",
+          plugin: {
+            manifest: null,
+            skills: [
+              { path: "skills/plan", name: "plan", description: "Plan." },
+            ],
+            needs: [
+              {
+                kind: "mcp",
+                name: "linear",
+                url: "https://mcp.linear.app/mcp",
+                transport: "http",
+                url_problem: null,
+                supported: true,
+                state: "not_added",
+                integration_id: null,
+              },
+            ],
+          },
+        };
+      if (url === "/api/integrations") return [];
+      throw new Error(`unexpected ${url}`);
+    });
+    const user = setupUser();
+    renderTab();
+
+    expect(
+      await screen.findByRole("columnheader", { name: "plugin.json" })
+    ).toBeVisible();
+    await user.click(screen.getByRole("row", { name: "Preview version 1" }));
+
+    expect(await screen.findByText("plan")).toBeVisible();
+    expect(screen.getByText("linear")).toBeVisible();
+    expect(screen.getByText("plugin.json 1.0.0")).toBeVisible();
+    expect(
+      screen.queryByText("No instructions found.")
+    ).not.toBeInTheDocument();
   });
 
   it("shows the current, in-review and published states as badges on the version", async () => {

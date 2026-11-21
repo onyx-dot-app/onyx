@@ -21,15 +21,24 @@ type ProjectOptions struct {
 	// Force stops a stack that still runs in an existing worktree.
 	Force bool
 	// Volumes also removes the Compose volumes.
-	Volumes  bool
-	Discover DiscoverOptions
+	Volumes bool
+	// IdleCutoff, when set, stops the stack only if it still has no activity
+	// since the cutoff after the locks are held. Otherwise CleanupRow returns
+	// ErrNotIdle.
+	IdleCutoff time.Time
+	Discover   DiscoverOptions
 }
+
+// ErrNotIdle reports that a stack selected as idle had activity before it
+// was stopped.
+var ErrNotIdle = errors.New("the stack is no longer idle")
 
 // ProjectResult reports what a project stop or down changed.
 type ProjectResult struct {
 	Row             StackRow
 	StoppedServices int
 	ComposeDown     bool
+	RemovedVolumes  bool
 	ReleasedLeases  int
 	RemovedOwner    bool
 }
@@ -111,6 +120,9 @@ func CleanupRow(ctx context.Context, registry *Registry, row StackRow, compose C
 		}
 		defer release()
 	}
+	if !opts.IdleCutoff.IsZero() && stack == nil {
+		return nil, ErrNotIdle
+	}
 	infra := compose != nil && row.Mode != Frontend && row.Project != ""
 	if lockDir := projectLockDir(registry, row, infra); lockDir != "" {
 		lock := &Stack{StateDir: lockDir}
@@ -128,6 +140,24 @@ func CleanupRow(ctx context.Context, registry *Registry, row StackRow, compose C
 		}
 		if st != nil && st.Project != row.Project {
 			return nil, fmt.Errorf("the state in %s now records project %s; run 'ods stack ls' again", row.StateDir, st.Project)
+		}
+		if !opts.IdleCutoff.IsZero() {
+			if st == nil {
+				return nil, ErrNotIdle
+			}
+			agents, err := AgentDirs()
+			if err != nil {
+				return nil, err
+			}
+			fresh := row
+			fresh.state = st
+			last, err := LastActivity(fresh, agents, time.Now())
+			if err != nil {
+				return nil, err
+			}
+			if !last.Before(opts.IdleCutoff) {
+				return nil, ErrNotIdle
+			}
 		}
 		if st != nil {
 			if !opts.Force && liveInWorktree(st) {
@@ -155,6 +185,7 @@ func CleanupRow(ctx context.Context, registry *Registry, row StackRow, compose C
 	if compose == nil {
 		return result, nil
 	}
+	var volumeErr error
 	elsewhere := false
 	if infra {
 		var err error
@@ -167,9 +198,25 @@ func CleanupRow(ctx context.Context, registry *Registry, row StackRow, compose C
 			return result, err
 		}
 		result.ComposeDown = true
+		if opts.Volumes {
+			// Compose exits 0 when Docker keeps a volume that a container uses.
+			listVolumes := opts.Discover.ListVolumes
+			if listVolumes == nil {
+				listVolumes = docker.ListComposeVolumes
+			}
+			left, err := listVolumes()
+			switch {
+			case err != nil:
+				volumeErr = fmt.Errorf("project %s: cannot check that its volumes were deleted: %w", row.Project, err)
+			case left[row.Project] > 0:
+				volumeErr = fmt.Errorf("project %s: Docker kept %d volume(s) that a container still uses; stop that container and run 'ods stack prune --volumes' again", row.Project, left[row.Project])
+			default:
+				result.RemovedVolumes = true
+			}
+		}
 	}
 	if registry == nil {
-		return result, nil
+		return result, volumeErr
 	}
 	if row.LeaseRoot != "" {
 		if err := registry.Release(row.LeaseRoot); err != nil {
@@ -177,14 +224,16 @@ func CleanupRow(ctx context.Context, registry *Registry, row StackRow, compose C
 		}
 		result.ReleasedLeases = len(row.Leases)
 	}
-	if row.Status == StatusOrphaned && (row.Project != "" || row.OwnerRecord != "") {
+	// The owner record is the only link from a removed worktree to its
+	// volumes, so it stays until the volumes are deleted.
+	if row.Status == StatusOrphaned && (row.Project != "" || row.OwnerRecord != "") && (result.RemovedVolumes || (row.Volumes == 0 && !row.volumesUnknown)) {
 		removed, err := removeOrphanOwner(registry, row)
 		if err != nil {
 			return result, err
 		}
 		result.RemovedOwner = removed
 	}
-	return result, nil
+	return result, volumeErr
 }
 
 // liveInWorktree reports whether st has a live service under a checkout

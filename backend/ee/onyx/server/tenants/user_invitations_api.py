@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 
 from ee.onyx.db.user_tenant_mapping import (
     accept_user_invite,
@@ -122,7 +122,7 @@ async def accept_invite(
         )
     except Exception as e:
         logger.exception("Failed to accept invite: %s", str(e))
-        raise HTTPException(status_code=500, detail="Failed to accept invitation")
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, "Failed to accept invitation")
 
 
 @router.post("/users/invite/deny")
@@ -137,4 +137,4 @@ async def deny_invite(
         deny_user_invite(user.email, invite_request.tenant_id)
     except Exception as e:
         logger.exception("Failed to deny invite: %s", str(e))
-        raise HTTPException(status_code=500, detail="Failed to deny invitation")
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, "Failed to deny invitation")

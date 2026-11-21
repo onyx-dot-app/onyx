@@ -37,6 +37,11 @@ def _write_codex_config(codex_home: str, provider: DATestLLMProvider) -> None:
 model_provider = "{_PROVIDER_KEY}"
 model = "{model}"
 
+# Codex syncs the curated plugin marketplace into CODEX_HOME/.tmp with git
+# subprocesses that outlive `codex exec`, which races the temp dir cleanup.
+[features]
+plugins = false
+
 [model_providers.{_PROVIDER_KEY}]
 name = "Onyx Gateway"
 base_url = "{API_SERVER_URL}/gateway/v1"

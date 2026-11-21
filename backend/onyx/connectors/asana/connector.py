@@ -87,7 +87,7 @@ class AsanaConnector(LoadConnector, PollConnector):
         start: SecondsSinceUnixEpoch,
         end: SecondsSinceUnixEpoch | None,  # noqa: ARG002
     ) -> GenerateDocumentsOutput:
-        start_time = datetime.datetime.fromtimestamp(start).isoformat()
+        start_time = datetime.datetime.fromtimestamp(start, tz=datetime.UTC).isoformat()
         logger.info("Starting Asana poll from %s", start_time)
         asana = asana_api.AsanaAPI(
             ops=self.ops,

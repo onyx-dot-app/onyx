@@ -8,7 +8,6 @@ import io
 import json
 import threading
 import zipfile
-from collections.abc import Generator
 from dataclasses import dataclass
 from typing import Any
 from uuid import UUID, uuid4
@@ -17,37 +16,24 @@ import httpx
 import pytest
 from sqlalchemy import select
 
-from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import MarketplaceKind
 from onyx.db.models import (
     Marketplace,
     Plugin,
     PluginSkill,
     PluginVersion,
-    Skill,
     User,
 )
 from onyx.db.plugin import version_is_skill
 from onyx.server.features.skill.response_helpers import skill_response_for_user
 from onyx.skills.bundle import SKILL_MD_MAX_BYTES
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
-from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
 
 _ORGANIZATION_LIBRARY_ID = UUID("00000000-0000-4000-8000-00000000011b")
-
-
-@pytest.fixture(autouse=True)
-def _db_access() -> Generator[None, None, None]:
-    SqlEngine.init_engine(pool_size=10, max_overflow=5)
-    token = CURRENT_TENANT_ID_CONTEXTVAR.set(POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
-    try:
-        yield
-    finally:
-        CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
 
 @pytest.fixture
@@ -220,11 +206,6 @@ class _State:
     current_version_id: UUID
     published_version_id: UUID | None
     versions: list[_Version]
-    skill_bundle_file_id: str | None
-    skill_bundle_sha256: str | None
-    skill_name: str
-    skill_description: str
-    skill_is_valid: bool | None
 
     @property
     def current(self) -> _Version:
@@ -235,8 +216,6 @@ def _state(skill_id: str | UUID) -> _State:
     with get_session_with_current_tenant() as db_session:
         plugin = db_session.get(Plugin, UUID(str(skill_id)))
         assert plugin is not None
-        skill = db_session.get(Skill, plugin.id)
-        assert skill is not None
         marketplace = db_session.get(Marketplace, plugin.marketplace_id)
         assert marketplace is not None
         versions = []
@@ -278,25 +257,11 @@ def _state(skill_id: str | UUID) -> _State:
             current_version_id=plugin.current_version_id,
             published_version_id=plugin.published_version_id,
             versions=versions,
-            skill_bundle_file_id=skill.bundle_file_id,
-            skill_bundle_sha256=skill.bundle_sha256,
-            skill_name=skill.name,
-            skill_description=skill.description,
-            skill_is_valid=skill.is_valid,
         )
 
 
 def _user_uploads_id(user_id: str) -> UUID:
     return UUID(hashlib.md5(f"user_uploads:{user_id}".encode()).hexdigest())
-
-
-def _assert_legacy_matches_current(state: _State) -> None:
-    current = state.current
-    assert state.skill_bundle_file_id == current.bundle_file_id
-    assert state.skill_bundle_sha256 == current.bundle_sha256
-    assert state.skill_is_valid == current.is_valid
-    assert state.skill_name == current.skills[0][1]
-    assert state.skill_description == state.plugin_description
 
 
 # --- Tests -------------------------------------------------------------------
@@ -337,7 +302,6 @@ def test_upload_creates_plugin_version_1(user: DATestUser) -> None:
             {"name": name, "description": "Uploaded description"},
         )
     ]
-    _assert_legacy_matches_current(state)
 
 
 def test_editor_and_batch_create_make_plugins(user: DATestUser) -> None:
@@ -347,7 +311,6 @@ def test_editor_and_batch_create_make_plugins(user: DATestUser) -> None:
     assert [v.number for v in state.versions] == [1]
     assert state.current.skills[0][1] == editor_name
     assert state.current.file_manifest is not None
-    _assert_legacy_matches_current(state)
 
     names = [f"batch-{uuid4().hex[:8]}" for _ in range(2)]
     response = client.post(
@@ -372,7 +335,6 @@ def test_editor_and_batch_create_make_plugins(user: DATestUser) -> None:
         batch_state = _state(item["skill"]["id"])
         assert [v.number for v in batch_state.versions] == [1]
         assert batch_state.marketplace_id == _user_uploads_id(user.id)
-        _assert_legacy_matches_current(batch_state)
 
 
 def test_each_file_change_adds_one_version(user: DATestUser) -> None:
@@ -387,7 +349,6 @@ def test_each_file_change_adds_one_version(user: DATestUser) -> None:
     assert str(state.current_version_id) == edited.json()["current_version_id"]
     assert state.plugin_description == "Second"
     assert state.current.skills[0][3] == {"name": name, "description": "Second"}
-    _assert_legacy_matches_current(state)
 
     _add_file(user, skill_id, "notes.txt", b"notes").raise_for_status()
     state = _state(skill_id)
@@ -409,7 +370,6 @@ def test_each_file_change_adds_one_version(user: DATestUser) -> None:
     state = _state(skill_id)
     assert [v.number for v in state.versions] == [1, 2, 3, 4, 5]
     assert state.plugin_description == "Third"
-    _assert_legacy_matches_current(state)
 
     # Every version keeps its own bundle, and the skill id never changed.
     bundle_ids = [v.bundle_file_id for v in state.versions]
@@ -432,7 +392,6 @@ def test_unchanged_editor_save_adds_no_version(user: DATestUser) -> None:
     again.raise_for_status()
     second = _state(skill_id)
     assert second.versions == first.versions
-    assert second.skill_bundle_file_id == first.skill_bundle_file_id
     assert again.json()["current_version_id"] == str(first.current_version_id)
 
     _add_file(user, skill_id, "notes.txt", b"notes").raise_for_status()
@@ -450,7 +409,6 @@ def test_same_zip_upload_adds_a_version(user: DATestUser) -> None:
     state = _state(skill["id"])
     assert [v.number for v in state.versions] == [1, 2, 3]
     assert len({v.bundle_sha256 for v in state.versions}) == 1
-    _assert_legacy_matches_current(state)
 
 
 def test_stale_base_version_gets_409(user: DATestUser) -> None:
@@ -486,18 +444,17 @@ def test_stale_base_version_gets_409(user: DATestUser) -> None:
     state = _state(skill_id)
     assert [v.number for v in state.versions] == [1, 2, 3]
     assert str(state.current_version_id) == third_version
-    assert state.skill_description == "v2"
-    _assert_legacy_matches_current(state)
+    assert state.current.skills[0][3]["description"] == "v2"
 
 
 def test_response_version_id_matches_the_fields_it_shows(user: DATestUser) -> None:
     """A response reads the version id with the name and description, from
-    the plugin, so a stale legacy row cannot pair old fields with a new base."""
+    the plugin, so the response cannot pair old fields with a new base."""
     name = f"snapshot-{uuid4().hex[:8]}"
     skill = _upload(user, _bundle({"SKILL.md": _skill_md(name, "v1")}), name=name)
 
     with get_session_with_current_tenant() as db_session:
-        loaded = db_session.get(Skill, UUID(skill["id"]))
+        loaded = db_session.get(Plugin, UUID(skill["id"]))
         db_user = db_session.get(User, UUID(user.id))
         assert loaded is not None and db_user is not None
         _patch(user, skill["id"], {"description": "v2"}).raise_for_status()
@@ -692,7 +649,6 @@ def test_second_skill_with_a_used_name_gets_a_free_plugin_name(
     second_state = _state(second["id"])
     assert first_state.plugin_name == name
     assert second_state.plugin_name == f"{name}-2"
-    assert second_state.skill_name == name
     assert second_state.current.skills[0][1] == name
     assert second_state.marketplace_id == first_state.marketplace_id
 
@@ -751,61 +707,3 @@ def test_delete_removes_the_plugin(user: DATestUser) -> None:
             )
             is None
         )
-
-
-def _drop_plugin(skill_id: str) -> None:
-    """Leave the skill with no plugin row, as an older server or a user
-    delete of a stale copy does."""
-    with get_session_with_current_tenant() as db_session:
-        plugin = db_session.get(Plugin, UUID(skill_id))
-        assert plugin is not None
-        db_session.delete(plugin)
-        db_session.commit()
-
-
-@pytest.mark.parametrize("change", ["patch", "replace", "add_file"])
-def test_save_on_skill_without_plugin_row_converges(
-    user: DATestUser, admin_user: DATestUser, change: str
-) -> None:
-    """Only an admin sees a skill with no plugin row. Its save makes version 1
-    from the legacy row first."""
-    name = f"no-plugin-{uuid4().hex[:8]}"
-    skill = _upload(user, _bundle({"SKILL.md": _skill_md(name, "Before")}), name=name)
-    legacy_bundle = _state(skill["id"]).skill_bundle_file_id
-    _drop_plugin(skill["id"])
-
-    if change == "patch":
-        response = _patch(admin_user, skill["id"], {"description": "After"})
-    elif change == "replace":
-        response = _replace(
-            admin_user, skill["id"], _bundle({"SKILL.md": _skill_md(name, "After")})
-        )
-    else:
-        response = _add_file(admin_user, skill["id"], "notes.txt", b"notes")
-    response.raise_for_status()
-
-    state = _state(skill["id"])
-    assert [v.number for v in state.versions] == [1, 2]
-    legacy_version, new_version = state.versions
-    assert legacy_version.bundle_file_id == legacy_bundle
-    assert legacy_version.file_manifest is None
-    assert legacy_version.skills[0][1] == name
-    assert state.current_version_id == new_version.id
-    assert new_version.file_manifest is not None
-    assert response.json()["current_version_id"] == str(new_version.id)
-    assert state.marketplace_id == _user_uploads_id(user.id)
-    _assert_legacy_matches_current(state)
-
-
-def test_unchanged_save_on_skill_without_plugin_row_adds_only_version_1(
-    user: DATestUser, admin_user: DATestUser
-) -> None:
-    name = f"no-plugin-same-{uuid4().hex[:8]}"
-    skill = _upload(user, _bundle({"SKILL.md": _skill_md(name, "Same")}), name=name)
-    _patch(user, skill["id"], {"description": "Same"}).raise_for_status()
-    _drop_plugin(skill["id"])
-
-    _patch(admin_user, skill["id"], {"description": "Same"}).raise_for_status()
-    state = _state(skill["id"])
-    assert [v.number for v in state.versions] == [1]
-    assert state.current.bundle_file_id == state.skill_bundle_file_id

@@ -56,7 +56,10 @@ jobs:
         run: git fetch --no-tags origin +refs/heads/main:refs/remotes/origin/main
 
       - name: Require chart version and release description updates
-        uses: j178/prek-action@4e14d07f9231acabce116ccfca13b13dd9755ece
+        uses: j178/prek-action@44924fe9ef4a6f88253c4b6b1bf11c689d3ce53d # ratchet:j178/prek-action@v3.1.0
         with:
-          prek-version: '0.3.4'
+          # Same version as the prek group in pyproject.toml. sha256 is the
+          # release's prek-x86_64-unknown-linux-gnu.tar.gz.
+          prek-version: '0.5.10'
+          sha256: 5c832a9ccd0855b7c054320d8921d90165a37459d3ac175923bdf121ff1aa9b1
           extra-args: helm-release --all-files

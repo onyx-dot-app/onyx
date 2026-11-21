@@ -3,7 +3,10 @@
 import { apiFetch } from "@/api/client";
 
 export interface AgentPreference {
+  // Built-in tools switched off.
   disabled_tool_ids: number[];
+  // Plugins switched off; an OpenAPI or MCP tool is on or off through its plugins.
+  disabled_plugin_ids?: string[];
 }
 
 // Backend types this `dict[int, ...]`, but JSON keys are strings: index with `String(agentId)`.
@@ -17,13 +20,17 @@ export function getAgentPreferences(
   });
 }
 
-// Replaces the row wholesale, and the field is required — always send the full array.
+// Replaces both lists, so always send the full arrays.
 export function patchAgentPreferences(
   agentId: number,
   disabledToolIds: number[],
+  disabledPluginIds: string[],
 ): Promise<void> {
   return apiFetch<void>(`/user/assistant/${agentId}/preferences`, {
     method: "PATCH",
-    body: { disabled_tool_ids: disabledToolIds },
+    body: {
+      disabled_tool_ids: disabledToolIds,
+      disabled_plugin_ids: disabledPluginIds,
+    },
   });
 }

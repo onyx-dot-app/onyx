@@ -6,27 +6,23 @@ moves ``plugin.current_version_id``. The organization keeps the version in
 
 Access is on the plugin: shares, the install setting, the user choice and
 publishing. ``apply_plugin_access_change__no_commit`` is the one write path
-for shares, publishing and install settings, with one set of rules. Until the
-legacy skill tables are dropped, it also writes the legacy skill rows of a
-plugin that has one, in the same transaction.
+for shares, publishing and install settings, with one set of rules.
 
 Published means: in the Organization library. Publishing is one-way.
 
-Lock order: a caller that also writes the legacy skill row locks that row
-first, then these functions lock the plugin row. Many plugins are locked in id
-order.
+Many plugins are locked in id order.
 
 Functions here flush and never commit.
 """
 
 import hashlib
 from collections.abc import Callable, Collection, Iterable, Mapping
-from dataclasses import dataclass
 from enum import Enum
 from typing import Literal
 from uuid import UUID, uuid4
 
-from sqlalchemy import and_, delete, func, select
+from pydantic import BaseModel, ConfigDict
+from sqlalchemy import Select, and_, case, delete, func, select, tuple_
 from sqlalchemy.dialects.postgresql import insert
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
@@ -38,7 +34,6 @@ from onyx.db.enums import (
     Permission,
     PluginInstallationPolicy,
     PluginPublishingPolicy,
-    SkillInstallationPolicy,
     SkillSharePermission,
 )
 from onyx.db.models import (
@@ -48,16 +43,15 @@ from onyx.db.models import (
     Plugin__UserGroup,
     PluginSkill,
     PluginVersion,
-    Skill,
-    Skill__User,
-    Skill__UserGroup,
     User,
     UserPluginPreference,
-    UserSkillPreference,
 )
 from onyx.db.plugin_access import (
     affected_user_ids_for_plugins,
-    plugin_visible_to_user,
+    holds_one_root_skill,
+    plugin_editable_by_user,
+    seen_by_organization,
+    visible_plugin_ids,
 )
 from onyx.db.user_group import assert_not_shared_with_default_group
 from onyx.db.utils import (
@@ -72,7 +66,8 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.server.settings.store import load_settings
 from onyx.skills.models import (
     PluginFileEntry,
-    PluginSkillContent,
+    PluginManifest,
+    PluginNeed,
     PluginVersionContent,
 )
 
@@ -82,6 +77,7 @@ ORGANIZATION_LIBRARY_ID = UUID("00000000-0000-4000-8000-00000000011b")
 _PLUGIN_NAME_INDEX = "uq_plugin_marketplace_name"
 
 NameClashAction = Literal["raise", "rename"]
+SkillKey = tuple[UUID, str]
 _RENAME_ATTEMPTS = 3
 
 
@@ -127,6 +123,15 @@ def get_or_create_user_uploads__no_commit(user_id: UUID, db_session: Session) ->
     ).one()
 
 
+def get_user_uploads_id(user_id: UUID, db_session: Session) -> UUID | None:
+    return db_session.scalar(
+        select(Marketplace.id).where(
+            Marketplace.kind == MarketplaceKind.USER_UPLOADS,
+            Marketplace.owner_user_id == user_id,
+        )
+    )
+
+
 def get_or_create_organization_library__no_commit(db_session: Session) -> UUID:
     db_session.execute(
         insert(Marketplace)
@@ -144,6 +149,67 @@ def get_or_create_organization_library__no_commit(db_session: Session) -> UUID:
             Marketplace.kind == MarketplaceKind.ORGANIZATION_LIBRARY
         )
     ).one()
+
+
+def get_organization_library_default(db_session: Session) -> PluginInstallationPolicy:
+    """The default install setting of the Organization library: the setting of
+    each published plugin that has none of its own. AVAILABLE before the
+    library exists."""
+    policy = db_session.scalar(
+        select(Marketplace.default_installation_policy).where(
+            Marketplace.kind == MarketplaceKind.ORGANIZATION_LIBRARY
+        )
+    )
+    return policy or PluginInstallationPolicy.AVAILABLE
+
+
+def set_marketplace_default__no_commit(
+    marketplace_id: UUID, policy: PluginInstallationPolicy, db_session: Session
+) -> set[UUID]:
+    """Set a marketplace default and return the users with a running sandbox
+    who could see a plugin that follows it, before or after. A company GitHub
+    marketplace can be REQUIRED, as in Claude; the Organization library
+    cannot, because one switch would force every published plugin on."""
+    if marketplace_id == ORGANIZATION_LIBRARY_ID:
+        if policy == PluginInstallationPolicy.REQUIRED:
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                "The Organization library default cannot be Required.",
+            )
+        get_or_create_organization_library__no_commit(db_session)
+    marketplace = db_session.scalars(
+        select(Marketplace).where(Marketplace.id == marketplace_id).with_for_update()
+    ).one_or_none()
+    if marketplace is None:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Marketplace not found.")
+    affected_ids = list(
+        db_session.scalars(
+            select(Plugin.id).where(
+                Plugin.marketplace_id == marketplace_id,
+                Plugin.installation_policy.is_(None),
+            )
+        )
+    )
+    before = affected_user_ids_for_plugins(affected_ids, db_session)
+    marketplace.default_installation_policy = policy
+    db_session.flush()
+    return before | affected_user_ids_for_plugins(affected_ids, db_session)
+
+
+SYNCED_PLUGIN_LOCKED = "Change this plugin in GitHub."
+
+
+def is_synced(plugin: Plugin) -> bool:
+    return plugin.marketplace.kind == MarketplaceKind.GITHUB
+
+
+def is_personal_synced(plugin: Plugin) -> bool:
+    return is_synced(plugin) and plugin.marketplace.owner_user_id is not None
+
+
+def refuse_if_synced(plugin: Plugin) -> None:
+    if is_synced(plugin):
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, SYNCED_PLUGIN_LOCKED)
 
 
 def free_plugin_name(
@@ -194,6 +260,19 @@ def _add_version_rows(
         ),
         unpacked_size_bytes=content.unpacked_size_bytes,
         file_count=content.file_count,
+        manifest=(
+            content.manifest.model_dump(mode="json")
+            if content.manifest is not None
+            else None
+        ),
+        needs=(
+            [
+                need.model_dump(mode="json", exclude={"supported"})
+                for need in content.needs
+            ]
+            if content.needs is not None
+            else None
+        ),
         created_by_user_id=created_by.id if created_by is not None else None,
         created_by_email=created_by.email if created_by is not None else None,
     )
@@ -248,6 +327,17 @@ def check_base_version(plugin: Plugin, base_version_id: UUID | None) -> None:
         )
 
 
+def next_version_number(plugin_id: UUID, db_session: Session) -> int:
+    return (
+        db_session.scalar(
+            select(func.max(PluginVersion.version_number)).where(
+                PluginVersion.plugin_id == plugin_id
+            )
+        )
+        or 0
+    ) + 1
+
+
 def add_plugin_version__no_commit(
     *,
     plugin: Plugin,
@@ -290,27 +380,28 @@ def add_plugin_version__no_commit(
     if skip_if_unchanged and _manifest_matches(current, content, previous_manifest):
         return None
 
-    next_number = (
-        db_session.scalar(
-            select(func.max(PluginVersion.version_number)).where(
-                PluginVersion.plugin_id == plugin.id
-            )
-        )
-        or 0
-    ) + 1
     version = _add_version_rows(
         version_id=uuid4(),
         plugin_id=plugin.id,
-        version_number=next_number,
+        version_number=next_version_number(plugin.id, db_session),
         content=content,
         created_by=created_by,
         db_session=db_session,
     )
     plugin.current_version_id = version.id
-    if is_skill_version(skill.path for skill in content.skills):
-        plugin.description = content.skills[0].description
+    description = version_description(content)
+    if description is not None:
+        plugin.description = description
     db_session.flush()
     return version
+
+
+def version_description(content: PluginVersionContent) -> str | None:
+    if is_skill_version(skill.path for skill in content.skills):
+        return content.skills[0].description
+    if content.manifest is not None:
+        return content.manifest.description or ""
+    return None
 
 
 def list_plugin_versions(
@@ -348,10 +439,11 @@ def get_plugin_version(
     return version
 
 
-@dataclass(frozen=True)
-class StoredVersionContent:
+class StoredVersionContent(BaseModel):
     """What the database holds of one version's content. ``file_manifest`` and
     ``skill_md`` are None for a version copied from a legacy skill row."""
+
+    model_config = ConfigDict(strict=True, frozen=True, arbitrary_types_allowed=True)
 
     bundle_file_id: str | None
     # Name and description in the frontmatter of the skill at the bundle root.
@@ -397,40 +489,86 @@ def get_stored_version_content(
     )
 
 
-@dataclass(frozen=True)
-class StoredSkillMd:
+class StoredSkillMd(BaseModel):
     """The raw root SKILL.md of a version, None where the version stores no
     text (over 256 KiB or not yet repaired), and the bundle that holds it."""
+
+    model_config = ConfigDict(strict=True, frozen=True, arbitrary_types_allowed=True)
 
     bundle_file_id: str | None
     skill_md: str | None
 
 
 def get_visible_versions_skill_md(
-    version_ids: Collection[UUID], user_id: UUID, db_session: Session
-) -> dict[UUID, StoredSkillMd]:
-    """The SKILL.md of each version whose plugin the user can see now, in one
-    query. A version that is gone or hidden from the user is left out."""
+    skills: Collection[SkillKey], user_id: UUID, db_session: Session
+) -> dict[SkillKey, StoredSkillMd]:
     rows = db_session.execute(
-        select(PluginVersion.id, PluginVersion.bundle_file_id, PluginSkill.skill_md)
-        .join(Plugin, Plugin.id == PluginVersion.plugin_id)
-        .join(Marketplace, Marketplace.id == Plugin.marketplace_id)
-        .outerjoin(
-            PluginSkill,
-            and_(
-                PluginSkill.plugin_version_id == PluginVersion.id,
-                PluginSkill.path == "",
-            ),
+        select(
+            PluginVersion.id,
+            PluginSkill.path,
+            PluginVersion.bundle_file_id,
+            PluginSkill.skill_md,
         )
+        .join(PluginSkill, PluginSkill.plugin_version_id == PluginVersion.id)
         .where(
-            PluginVersion.id.in_(version_ids),
-            plugin_visible_to_user(Plugin, Marketplace, user_id),
+            tuple_(PluginVersion.id, PluginSkill.path).in_(list(skills)),
+            PluginVersion.plugin_id.in_(visible_plugin_ids(user_id)),
         )
     )
     return {
-        version_id: StoredSkillMd(bundle_file_id=bundle_file_id, skill_md=skill_md)
-        for version_id, bundle_file_id, skill_md in rows
+        (version_id, path): StoredSkillMd(
+            bundle_file_id=bundle_file_id, skill_md=skill_md
+        )
+        for version_id, path, bundle_file_id, skill_md in rows
     }
+
+
+def get_versions_needs(
+    version_ids: Iterable[UUID], db_session: Session
+) -> dict[UUID, list[PluginNeed]]:
+    ids = sorted(set(version_ids))
+    if not ids:
+        return {}
+    return {
+        version_id: [PluginNeed.model_validate(need) for need in needs or ()]
+        for version_id, needs in db_session.execute(
+            select(PluginVersion.id, PluginVersion.needs).where(
+                PluginVersion.id.in_(ids), PluginVersion.needs.is_not(None)
+            )
+        ).tuples()
+    }
+
+
+def get_version_manifest(
+    version_id: UUID, db_session: Session
+) -> PluginManifest | None:
+    manifest = db_session.scalar(
+        select(PluginVersion.manifest).where(PluginVersion.id == version_id)
+    )
+    return PluginManifest.model_validate(manifest) if manifest is not None else None
+
+
+class VersionSkill(BaseModel):
+    model_config = ConfigDict(frozen=True)
+
+    path: str
+    name: str
+    description: str
+
+
+def list_version_skills(version_id: UUID, db_session: Session) -> list[VersionSkill]:
+    return [
+        VersionSkill(path=path, name=name, description=description)
+        for path, name, description in db_session.execute(
+            select(
+                PluginSkill.path,
+                PluginSkill.frontmatter["name"].astext,
+                PluginSkill.frontmatter["description"].astext,
+            )
+            .where(PluginSkill.plugin_version_id == version_id)
+            .order_by(PluginSkill.path)
+        ).tuples()
+    ]
 
 
 def get_plugin_current_version_id(plugin_id: UUID, db_session: Session) -> UUID | None:
@@ -449,116 +587,36 @@ def get_current_version_bundle_file_id(
     )
 
 
-def get_plugin_version_validity(
-    plugin_ids: Iterable[UUID],
-    pointer: Literal["current", "organization"],
-    db_session: Session,
-) -> dict[UUID, bool | None]:
-    """``is_valid`` of one version of each plugin: the current version, or the
-    version the organization runs (published, else current)."""
-    ids = set(plugin_ids)
-    if not ids:
-        return {}
-    version_id = (
-        Plugin.current_version_id
-        if pointer == "current"
-        else func.coalesce(Plugin.published_version_id, Plugin.current_version_id)
-    )
-    rows = db_session.execute(
-        select(Plugin.id, PluginVersion.is_valid)
-        .join(PluginVersion, PluginVersion.id == version_id)
-        .where(Plugin.id.in_(ids))
-    ).tuples()
-    return dict(rows.all())
-
-
 # --- Skill plugins and their access ----------------------------------------
 
 
-def plugin_installation_policy(
-    policy: SkillInstallationPolicy,
-) -> PluginInstallationPolicy | None:
-    """Legacy AVAILABLE maps to NULL, so the plugin follows its marketplace
-    default. DEFAULT and REQUIRED map as they are."""
-    if policy == SkillInstallationPolicy.AVAILABLE:
-        return None
-    return PluginInstallationPolicy(policy.value)
-
-
-def legacy_skill_version_content(skill: Skill) -> PluginVersionContent:
-    """Version 1 of a plugin made from a legacy skill row, as the plugin
-    backfill makes it: the row's bundle, with no file list or SKILL.md text."""
-    if skill.bundle_file_id is None:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            f"Skill '{skill.name}' has no bundle.",
-        )
-    return PluginVersionContent(
-        bundle_file_id=skill.bundle_file_id,
-        bundle_sha256=skill.bundle_sha256,
-        is_valid=skill.is_valid,
-        file_manifest=None,
-        unpacked_size_bytes=None,
-        file_count=None,
-        skills=[
-            PluginSkillContent(
-                path="",
-                skill_md=None,
-                frontmatter={"name": skill.name, "description": skill.description},
-            )
-        ],
-    )
-
-
-def create_skill_plugin__no_commit(
-    skill: Skill,
+def create_plugin__no_commit(
+    plugin_id: UUID,
+    name: str,
     content: PluginVersionContent,
-    created_by: User | None,
+    author: User,
     db_session: Session,
 ) -> Plugin:
-    """Add the plugin of a custom skill with ``content`` as version 1 and its
-    plugin_skill rows. A public or author-less skill goes to the Organization
-    library, published; others go to the author's "My uploads". Same placement
-    as the plugin backfill. A used name takes the next free name. A plugin that
-    takes the same name at the same time gets SKILL_NAME_CONFLICT."""
-    author_user_id = skill.author_user_id
-    publish = skill.public_permission is not None or author_user_id is None
-    if author_user_id is None or publish:
-        marketplace_id = get_or_create_organization_library__no_commit(db_session)
-    else:
-        marketplace_id = get_or_create_user_uploads__no_commit(
-            author_user_id, db_session
-        )
-    description = (
-        content.skills[0].description
-        if is_skill_version(entry.path for entry in content.skills)
-        else ""
-    )
+    marketplace_id = get_or_create_user_uploads__no_commit(author.id, db_session)
     version_id = uuid4()
     try:
         with db_session.begin_nested():
             plugin = Plugin(
-                id=skill.id,
-                name=free_plugin_name(marketplace_id, skill.name, db_session),
-                description=description,
+                id=plugin_id,
+                name=free_plugin_name(marketplace_id, name, db_session),
+                description=version_description(content) or "",
                 marketplace_id=marketplace_id,
-                author_user_id=author_user_id,
-                installation_policy=plugin_installation_policy(
-                    skill.installation_policy
-                ),
-                # Both pointer foreign keys are checked at the commit, after
-                # the version exists.
+                author_user_id=author.id,
                 current_version_id=version_id,
-                published_version_id=version_id if publish else None,
             )
             db_session.add(plugin)
             db_session.flush()
             _add_version_rows(
                 version_id=version_id,
-                plugin_id=skill.id,
+                plugin_id=plugin_id,
                 version_number=1,
                 content=content,
-                created_by=created_by,
+                created_by=author,
                 db_session=db_session,
             )
     except IntegrityError as exc:
@@ -566,79 +624,69 @@ def create_skill_plugin__no_commit(
             raise
         raise OnyxError(
             OnyxErrorCode.SKILL_NAME_CONFLICT,
-            f"Another skill named '{skill.name}' was saved at the same time. "
-            "Try again.",
+            f"Another skill named '{name}' was saved at the same time. Try again.",
         ) from exc
     return plugin
 
 
-def lock_skill_plugin__no_commit(skill: Skill, db_session: Session) -> Plugin:
-    """Lock and return the plugin of a custom skill. The caller holds the skill
-    row lock, or the skill is new in this transaction.
-
-    A skill can have no plugin: an older server made it, or a user delete
-    removed a stale copy. It first gets one copied from its legacy rows, as the
-    plugin backfill does: version 1 with the current bundle, the placement,
-    owner, install setting, shares and choices. Call this before any change to
-    the legacy rows, so the copy is the state before the change."""
-    plugin = lock_plugin(skill.id, db_session)
-    if plugin is not None:
-        return plugin
-    try:
-        with db_session.begin_nested():
-            create_skill_plugin__no_commit(
-                skill, legacy_skill_version_content(skill), skill.author, db_session
-            )
-            db_session.execute(
-                insert(Plugin__User)
-                .from_select(
-                    ["plugin_id", "user_id", "permission"],
-                    select(
-                        Skill__User.skill_id,
-                        Skill__User.user_id,
-                        Skill__User.permission,
-                    )
-                    .where(Skill__User.skill_id == skill.id)
-                    .order_by(Skill__User.user_id),
-                )
-                .on_conflict_do_nothing()
-            )
-            db_session.execute(
-                insert(Plugin__UserGroup)
-                .from_select(
-                    ["plugin_id", "user_group_id", "permission"],
-                    select(
-                        Skill__UserGroup.skill_id,
-                        Skill__UserGroup.user_group_id,
-                        Skill__UserGroup.permission,
-                    )
-                    .where(Skill__UserGroup.skill_id == skill.id)
-                    .order_by(Skill__UserGroup.user_group_id),
-                )
-                .on_conflict_do_nothing()
-            )
-            db_session.execute(
-                insert(UserPluginPreference)
-                .from_select(
-                    ["user_id", "plugin_id", "enabled"],
-                    select(
-                        UserSkillPreference.user_id,
-                        UserSkillPreference.skill_id,
-                        UserSkillPreference.enabled,
-                    )
-                    .where(UserSkillPreference.skill_id == skill.id)
-                    .order_by(UserSkillPreference.user_id),
-                )
-                .on_conflict_do_nothing()
-            )
-    except IntegrityError as exc:
-        # Another transaction made the plugin first. Use that one.
-        if not is_unique_violation(exc, "plugin_pkey"):
-            raise
-    plugin = lock_plugin(skill.id, db_session)
-    if plugin is None:
-        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, "Plugin was not saved.")
+def create_synced_plugin__no_commit(
+    marketplace: Marketplace,
+    name: str,
+    content: PluginVersionContent,
+    created_by: User | None,
+    db_session: Session,
+) -> Plugin:
+    if content.manifest is None:
+        raise RuntimeError("Bug: a synced plugin has a manifest.")
+    plugin_id = uuid4()
+    version_id = uuid4()
+    plugin = Plugin(
+        id=plugin_id,
+        name=name,
+        description=version_description(content) or "",
+        marketplace_id=marketplace.id,
+        author_user_id=marketplace.owner_user_id,
+        current_version_id=version_id,
+        published_version_id=version_id if marketplace.owner_user_id is None else None,
+    )
+    db_session.add(plugin)
+    db_session.flush()
+    _add_version_rows(
+        version_id=version_id,
+        plugin_id=plugin_id,
+        version_number=1,
+        content=content,
+        created_by=created_by,
+        db_session=db_session,
+    )
     return plugin
+
+
+def find_upload_target(name: str, user_id: UUID, db_session: Session) -> Plugin | None:
+    """The plugin an upload of ``name`` adds a version to: one the user can
+    edit, in the user's uploads, then in another user's uploads (an EDITOR
+    share), then in the organization library."""
+    return db_session.scalars(
+        select(Plugin)
+        .join(Marketplace, Marketplace.id == Plugin.marketplace_id)
+        .where(
+            Plugin.name == name,
+            Marketplace.kind.in_(
+                (MarketplaceKind.USER_UPLOADS, MarketplaceKind.ORGANIZATION_LIBRARY)
+            ),
+            plugin_editable_by_user(Plugin, user_id),
+            ~holds_one_root_skill(Plugin.current_version_id.expression),
+        )
+        .order_by(
+            case(
+                (Marketplace.owner_user_id == user_id, 0),
+                (Marketplace.kind == MarketplaceKind.USER_UPLOADS, 1),
+                else_=2,
+            ),
+            Plugin.id,
+        )
+        .limit(1)
+    ).one_or_none()
 
 
 def _move_plugin__no_commit(
@@ -692,6 +740,20 @@ def _move_plugin__no_commit(
                 raise OnyxError(OnyxErrorCode.CONFLICT, clash_detail(name)) from exc
 
 
+def private_plugins_blocking_user_delete(user_id: UUID) -> Select[tuple[Plugin]]:
+    """The plugins in the user's "My uploads". A user delete does not release
+    them."""
+    return (
+        select(Plugin)
+        .join(Marketplace, Marketplace.id == Plugin.marketplace_id)
+        .where(
+            Marketplace.kind == MarketplaceKind.USER_UPLOADS,
+            Marketplace.owner_user_id == user_id,
+        )
+        .order_by(Plugin.name, Plugin.id)
+    )
+
+
 def publish_plugin__no_commit(
     plugin_id: UUID,
     on_name_clash: NameClashAction,
@@ -707,6 +769,7 @@ def publish_plugin__no_commit(
     plugin = lock_plugin(plugin_id, db_session)
     if plugin is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Plugin not found.")
+    refuse_if_synced(plugin)
     library_id = get_or_create_organization_library__no_commit(db_session)
     if plugin.marketplace_id == library_id:
         return
@@ -727,7 +790,6 @@ def publish_plugin__no_commit(
 
 def publish_or_request_review__no_commit(
     plugin: Plugin,
-    skill: Skill | None,
     version_id: UUID,
     actor: User | None,
     on_name_clash: NameClashAction,
@@ -738,6 +800,7 @@ def publish_or_request_review__no_commit(
     ``actor``; OFF raises. The one place the setting applies. ``actor`` None
     is a system or approved publish and always publishes. An organization-wide
     plugin manager always publishes. A publish clears the pending request."""
+    refuse_if_synced(plugin)
     if actor is not None and not has_global_permission(
         actor, Permission.MANAGE_PLUGINS
     ):
@@ -753,9 +816,6 @@ def publish_or_request_review__no_commit(
             plugin.pending_version_id = version_id
             db_session.flush()
             return
-    if skill is not None and skill.public_permission is None:
-        skill.public_permission = SkillSharePermission.VIEWER
-        db_session.flush()
     publish_plugin__no_commit(plugin.id, on_name_clash, db_session)
     plugin.published_version_id = version_id
     plugin.pending_version_id = None
@@ -766,10 +826,12 @@ def transfer_plugin__no_commit(
     plugin_id: UUID,
     new_author_user_id: UUID,
     db_session: Session,
+    on_name_clash: NameClashAction = "raise",
 ) -> None:
     """Set the plugin's author. A private plugin also moves to the new owner's
-    "My uploads"; a name clash there is refused with CONFLICT. A published
-    plugin stays in the Organization library."""
+    "My uploads". On a name clash there, "raise" refuses with CONFLICT and
+    "rename" takes the next free name. A published plugin stays in the
+    Organization library."""
     plugin = lock_plugin(plugin_id, db_session)
     if plugin is None:
         raise OnyxError(OnyxErrorCode.NOT_FOUND, "Plugin not found.")
@@ -782,7 +844,7 @@ def transfer_plugin__no_commit(
             marketplace_id=get_or_create_user_uploads__no_commit(
                 new_author_user_id, db_session
             ),
-            on_name_clash="raise",
+            on_name_clash=on_name_clash,
             clash_detail=lambda name: (
                 f"The new owner already has a skill named '{name}'. "
                 "Ask them to delete or rename it first."
@@ -793,10 +855,11 @@ def transfer_plugin__no_commit(
     db_session.flush()
 
 
-@dataclass(frozen=True)
-class PluginGroupRow:
+class PluginGroupRow(BaseModel):
     """The state of one plugin__user_group row. No permission: the row holds
     only a group install setting and grants no access."""
+
+    model_config = ConfigDict(strict=True, frozen=True, arbitrary_types_allowed=True)
 
     permission: SkillSharePermission | None
     installation_policy: PluginInstallationPolicy | None
@@ -808,8 +871,8 @@ def set_plugin_preferences__no_commit(
     enabled: bool,
     db_session: Session,
 ) -> None:
-    """Mirror of the legacy user on/off choice. enabled_at is set each time the
-    user turns a plugin on."""
+    """Write the user's on/off choice. enabled_at is set each time the user
+    turns a plugin on."""
     ids = sorted(set(plugin_ids))
     if not ids:
         return
@@ -841,25 +904,6 @@ def set_plugin_preferences__no_commit(
     )
 
 
-def delete_plugin_preferences__no_commit(
-    plugin_ids: Iterable[UUID],
-    db_session: Session,
-    *,
-    user_id: UUID | None = None,
-    enabled_only: bool = False,
-) -> None:
-    """Mirror of a legacy delete of user choices."""
-    ids = sorted(set(plugin_ids))
-    if not ids:
-        return
-    stmt = delete(UserPluginPreference).where(UserPluginPreference.plugin_id.in_(ids))
-    if user_id is not None:
-        stmt = stmt.where(UserPluginPreference.user_id == user_id)
-    if enabled_only:
-        stmt = stmt.where(UserPluginPreference.enabled.is_(True))
-    db_session.execute(stmt)
-
-
 # --- Access changes ----------------------------------------------------------
 
 
@@ -872,42 +916,59 @@ class PluginAccessMode(str, Enum):
     ADD_ONLY = "add_only"
 
 
-@dataclass(frozen=True)
-class PluginUserGrant:
+class PluginUserGrant(BaseModel):
+    model_config = ConfigDict(strict=True, frozen=True, arbitrary_types_allowed=True)
+
     user_id: UUID
     permission: SkillSharePermission
 
 
-@dataclass(frozen=True)
-class PluginGroupGrant:
+class PluginGroupGrant(BaseModel):
+    """A group share. The group keeps its install setting."""
+
+    model_config = ConfigDict(strict=True, frozen=True, arbitrary_types_allowed=True)
+
     group_id: int
     permission: SkillSharePermission
-    # UNSET keeps the group's install setting. None removes it.
-    installation_policy: PluginInstallationPolicy | None | UnsetType = UNSET
 
 
-@dataclass(frozen=True)
-class PluginAccessChange:
+class PluginGroupSetting(BaseModel):
+    """A group install setting with no change to the group's share. A group
+    with no row gets a setting-only row. None removes the setting, and a row
+    with no permission is then deleted."""
+
+    model_config = ConfigDict(frozen=True)
+
+    group_id: int
+    installation_policy: PluginInstallationPolicy | None
+
+
+class PluginAccessChange(BaseModel):
     """One access change for one or more plugins. A field at its default does
     not change anything.
 
     ``company_installation_policy``: UNSET keeps it, None means "use the
-    marketplace default", and a value sets that value. ``on_name_clash``
-    applies when ``publish`` moves a plugin to the Organization library."""
+    marketplace default", and a value sets that value. ``group_settings`` apply
+    after ``group_grants``. ``on_name_clash`` applies when ``publish`` moves a
+    plugin to the Organization library."""
+
+    model_config = ConfigDict(strict=True, frozen=True, arbitrary_types_allowed=True)
 
     user_grants: tuple[PluginUserGrant, ...] | None = None
     group_grants: tuple[PluginGroupGrant, ...] | None = None
+    group_settings: tuple[PluginGroupSetting, ...] | None = None
     publish: bool = False
     on_name_clash: NameClashAction = "raise"
     company_installation_policy: PluginInstallationPolicy | None | UnsetType = UNSET
     mode: PluginAccessMode = PluginAccessMode.REPLACE
 
 
-@dataclass(frozen=True)
-class PluginAccessResult:
+class PluginAccessResult(BaseModel):
     """``affected_user_ids``: users with a running sandbox who could see one
     of the plugins before or after the change. ``failures``: plugins whose
     change was refused or failed and rolled back."""
+
+    model_config = ConfigDict(strict=True, frozen=True, arbitrary_types_allowed=True)
 
     affected_user_ids: set[UUID]
     failures: dict[UUID, OnyxError]
@@ -917,39 +978,33 @@ class PluginAccessResult:
             raise self.failures[plugin_id]
 
 
-@dataclass
-class _LockedPlugin:
-    plugin: Plugin
-    # The legacy skill row with the same id, while the skill tables exist.
-    skill: Skill | None
+class AccessRows(BaseModel):
+    """The grants of one plugin or one integration, now and after a change."""
+
+    model_config = ConfigDict(strict=True, arbitrary_types_allowed=True)
+
+    # For an integration: its company setting is above NOT_AVAILABLE.
     published: bool
     user_grants: dict[UUID, SkillSharePermission]
     group_rows: dict[int, PluginGroupRow]
+    # The grants and rows after the change; None when they do not change.
+    new_user_grants: dict[UUID, SkillSharePermission] | None = None
+    new_group_rows: dict[int, PluginGroupRow] | None = None
+
+
+class _LockedPlugin(AccessRows):
+    plugin: Plugin
 
 
 def _lock_for_access_change(
-    ids: list[UUID], db_session: Session
+    ids: list[UUID], change: PluginAccessChange, db_session: Session
 ) -> tuple[dict[UUID, _LockedPlugin], dict[UUID, OnyxError]]:
-    """Lock the legacy skill rows, then the plugins, each in id order, and
-    read their current grants. A skill with no plugin gets one first."""
-    skills = {
-        skill.id: skill
-        for skill in db_session.scalars(
-            select(Skill)
-            .where(Skill.id.in_(ids), Skill.built_in_skill_id.is_(None))
-            .order_by(Skill.id)
-            .with_for_update(of=Skill)
-        )
-    }
+    """Lock the plugins in id order, and read their current grants and the
+    grants after ``change``."""
     plugins: dict[UUID, Plugin] = {}
     missing: dict[UUID, OnyxError] = {}
     for plugin_id in ids:
-        skill = skills.get(plugin_id)
-        plugin = (
-            lock_skill_plugin__no_commit(skill, db_session)
-            if skill is not None
-            else lock_plugin(plugin_id, db_session)
-        )
+        plugin = lock_plugin(plugin_id, db_session)
         if plugin is None:
             missing[plugin_id] = OnyxError(OnyxErrorCode.NOT_FOUND, "Plugin not found.")
         else:
@@ -959,10 +1014,7 @@ def _lock_for_access_change(
         db_session.scalars(
             select(Plugin.id)
             .join(Marketplace, Marketplace.id == Plugin.marketplace_id)
-            .where(
-                Plugin.id.in_(found),
-                Marketplace.kind == MarketplaceKind.ORGANIZATION_LIBRARY,
-            )
+            .where(Plugin.id.in_(found), seen_by_organization(Marketplace))
         )
     )
     user_grants: dict[UUID, dict[UUID, SkillSharePermission]] = {}
@@ -986,46 +1038,79 @@ def _lock_for_access_change(
         group_rows.setdefault(plugin_id, {})[group_id] = PluginGroupRow(
             permission=permission, installation_policy=policy
         )
-    return {
+    locked = {
         plugin_id: _LockedPlugin(
             plugin=plugin,
-            skill=skills.get(plugin_id),
             published=plugin_id in published,
             user_grants=user_grants.get(plugin_id, {}),
             group_rows=group_rows.get(plugin_id, {}),
         )
         for plugin_id, plugin in plugins.items()
-    }, missing
+    }
+    for item in locked.values():
+        item.new_user_grants = _new_user_grants(item, change)
+        item.new_group_rows = new_group_rows(item.group_rows, change)
+    return locked, missing
 
 
-def _new_group_rows(
+def _new_user_grants(
     locked: _LockedPlugin, change: PluginAccessChange
+) -> dict[UUID, SkillSharePermission] | None:
+    """The user grants after the change, or None when they do not change. The
+    author never has a grant."""
+    if change.user_grants is None:
+        return None
+    requested = {grant.user_id: grant.permission for grant in change.user_grants}
+    return {
+        user_id: permission
+        for user_id, permission in (
+            requested
+            if change.mode == PluginAccessMode.REPLACE
+            else locked.user_grants | requested
+        ).items()
+        if user_id != locked.plugin.author_user_id
+    }
+
+
+def new_group_rows(
+    current_rows: Mapping[int, PluginGroupRow], change: PluginAccessChange
 ) -> dict[int, PluginGroupRow] | None:
     """The group rows after the change, or None when they do not change. A
-    group keeps its install setting unless the grant sets one. On REPLACE, a
-    group left out loses its permission but keeps its row if it has a
-    setting."""
-    if change.group_grants is None:
+    group keeps its install setting unless a group setting sets one. On
+    REPLACE, a group left out of the grants loses its permission but keeps its
+    row if it has a setting. A row with neither is deleted."""
+    if change.group_grants is None and change.group_settings is None:
         return None
     rows: dict[int, PluginGroupRow] = {}
-    for group_id, row in locked.group_rows.items():
-        if change.mode == PluginAccessMode.ADD_ONLY:
-            rows[group_id] = row
-        elif row.installation_policy is not None:
-            rows[group_id] = PluginGroupRow(
-                permission=None, installation_policy=row.installation_policy
+    if change.group_grants is None:
+        rows = dict(current_rows)
+    else:
+        for group_id, row in current_rows.items():
+            if change.mode == PluginAccessMode.ADD_ONLY:
+                rows[group_id] = row
+            elif row.installation_policy is not None:
+                rows[group_id] = PluginGroupRow(
+                    permission=None, installation_policy=row.installation_policy
+                )
+        for grant in change.group_grants:
+            current = current_rows.get(grant.group_id)
+            rows[grant.group_id] = PluginGroupRow(
+                permission=grant.permission,
+                installation_policy=(
+                    current.installation_policy if current is not None else None
+                ),
             )
-    for grant in change.group_grants:
-        current = locked.group_rows.get(grant.group_id)
-        rows[grant.group_id] = PluginGroupRow(
-            permission=grant.permission,
-            installation_policy=(
-                grant.installation_policy
-                if is_set(grant.installation_policy)
-                else (current.installation_policy if current is not None else None)
-            ),
+    for setting in change.group_settings or ():
+        current = rows.get(setting.group_id)
+        rows[setting.group_id] = PluginGroupRow(
+            permission=current.permission if current is not None else None,
+            installation_policy=setting.installation_policy,
         )
-    return rows
+    return {
+        group_id: row
+        for group_id, row in rows.items()
+        if row.permission is not None or row.installation_policy is not None
+    }
 
 
 def _group_shares(
@@ -1038,68 +1123,89 @@ def _group_shares(
     }
 
 
-def _check_access_change(
-    plugins: Mapping[UUID, _LockedPlugin],
+def check_access_change(
+    items: Collection[AccessRows],
     change: PluginAccessChange,
     actor: User | None,
     db_session: Session,
+    manage_permission: Permission = Permission.MANAGE_PLUGINS,
 ) -> None:
-    """The checks that apply to the whole set. They raise before any write."""
-    if (
-        actor is not None
-        and is_set(change.company_installation_policy)
-        and not has_global_permission(actor, Permission.MANAGE_PLUGINS)
-    ):
-        raise OnyxError(
-            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-            "Only an organization-wide skill manager can change the install setting.",
+    """The checks that apply to the whole set of plugins or integrations.
+    They raise before any write. ``manage_permission`` is MANAGE_ACTIONS for
+    integrations."""
+    is_global_manager = actor is not None and has_global_permission(
+        actor, manage_permission
+    )
+    subject, manager, a_manager = (
+        ("integration", "action manager", "an action manager")
+        if manage_permission is Permission.MANAGE_ACTIONS
+        else ("skill", "skill manager", "a skill manager")
+    )
+    if actor is not None and not is_global_manager:
+        if is_set(change.company_installation_policy):
+            raise OnyxError(
+                OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+                f"Only an organization-wide {manager} can change the install setting.",
+            )
+        if change.group_settings is not None:
+            raise OnyxError(
+                OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+                f"Only an organization-wide {manager} can set a group install setting.",
+            )
+        # With the admin Sharing setting off, only an organization-wide manager
+        # adds a share or changes its level. Removing a share stays allowed.
+        adds_share = any(
+            locked.user_grants.get(user_id) != permission
+            for locked in items
+            for user_id, permission in (locked.new_user_grants or {}).items()
+        ) or any(
+            _group_shares(locked.group_rows).get(group_id) != permission
+            for locked in items
+            for group_id, permission in _group_shares(
+                locked.new_group_rows or {}
+            ).items()
         )
-    if change.group_grants is None:
+        if adds_share:
+            check_sharing_allowed(subject)
+    if change.group_grants is None and change.group_settings is None:
         return
-    requested_group_ids = sorted({grant.group_id for grant in change.group_grants})
-    assert_not_shared_with_default_group(db_session, requested_group_ids)
-
-    any_published = change.publish or any(
-        locked.published for locked in plugins.values()
+    requested_group_ids = sorted(
+        {grant.group_id for grant in change.group_grants or ()}
     )
     setting_group_ids = sorted(
-        {
-            grant.group_id
-            for grant in change.group_grants
-            if is_set(grant.installation_policy)
-        }
+        {setting.group_id for setting in change.group_settings or ()}
     )
-    if setting_group_ids:
-        if actor is not None:
-            if any_published:
-                if not has_global_permission(actor, Permission.MANAGE_PLUGINS):
-                    raise OnyxError(
-                        OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
-                        "Only an organization-wide skill manager can set a "
-                        "group install setting on a published skill.",
-                    )
-            else:
-                assert_within_scope(
-                    actor,
-                    db_session,
-                    permission=Permission.MANAGE_PLUGINS,
-                    current_group_ids=[],
-                    requested_group_ids=setting_group_ids,
-                    is_non_public=True,
+    assert_not_shared_with_default_group(
+        db_session, sorted(set(requested_group_ids) | set(setting_group_ids))
+    )
+    for locked in items:
+        for group_id, row in (locked.new_group_rows or {}).items():
+            if (
+                row.permission is None
+                or row.installation_policy != PluginInstallationPolicy.NOT_AVAILABLE
+            ):
+                continue
+            current = locked.group_rows.get(group_id)
+            if current is not None and current.permission is not None:
+                raise OnyxError(
+                    OnyxErrorCode.INVALID_INPUT,
+                    "A group with a share cannot be Not available. Remove the "
+                    "group's share first.",
                 )
-        # The legacy group table has no install setting column.
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "Group install settings are not available yet.",
-        )
+            raise OnyxError(
+                OnyxErrorCode.INVALID_INPUT,
+                f"This {subject} is Not available to one of the groups. Ask "
+                f"{a_manager} to change that group's access before you share "
+                "with it.",
+            )
 
-    # A change to a plugin's group shares is a MANAGE_PLUGINS action. The
+    # A change to group shares is a ``manage_permission`` action. The
     # current shares come from the database, never the request, so a
     # reassignment cannot escape scope. Re-sending the current set is no change.
     changed = [
         locked
-        for locked in plugins.values()
-        if _group_shares(_new_group_rows(locked, change) or {})
+        for locked in items
+        if _group_shares(locked.new_group_rows or {})
         != _group_shares(locked.group_rows)
     ]
     if actor is None or not changed:
@@ -1107,7 +1213,7 @@ def _check_access_change(
     assert_within_scope(
         actor,
         db_session,
-        permission=Permission.MANAGE_PLUGINS,
+        permission=manage_permission,
         current_group_ids=sorted(
             {
                 group_id
@@ -1121,50 +1227,26 @@ def _check_access_change(
     )
 
 
-def _write_user_grants__no_commit(
-    locked: _LockedPlugin, change: PluginAccessChange, db_session: Session
-) -> None:
-    """Write the user grants after the change, unless they do not change. The
-    author never has a grant. A kept share keeps its created_at."""
-    if change.user_grants is None:
+def check_sharing_allowed(subject: str = "skill") -> None:
+    """With the admin Sharing setting off, refuse a new share by someone who is
+    not an organization-wide manager. The caller checks the actor."""
+    if not load_settings(raise_on_error=True).plugin_sharing:
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            "Sharing with people and groups is turned off. Ask an admin to "
+            f"share this {subject}.",
+        )
+
+
+def _write_user_grants__no_commit(locked: _LockedPlugin, db_session: Session) -> None:
+    """Write the user grants after the change, unless they do not change. A
+    kept share keeps its created_at."""
+    grants = locked.new_user_grants
+    if grants is None:
         return
-    requested = {grant.user_id: grant.permission for grant in change.user_grants}
-    grants = {
-        user_id: permission
-        for user_id, permission in (
-            requested
-            if change.mode == PluginAccessMode.REPLACE
-            else locked.user_grants | requested
-        ).items()
-        if user_id != locked.plugin.author_user_id
-    }
     plugin_id = locked.plugin.id
     try:
         with db_session.begin_nested():
-            if locked.skill is not None:
-                db_session.execute(
-                    delete(Skill__User).where(
-                        Skill__User.skill_id == plugin_id,
-                        Skill__User.user_id.notin_(list(grants)),
-                    )
-                )
-                if grants:
-                    stmt = insert(Skill__User).values(
-                        [
-                            {
-                                "skill_id": plugin_id,
-                                "user_id": user_id,
-                                "permission": permission,
-                            }
-                            for user_id, permission in sorted(grants.items())
-                        ]
-                    )
-                    db_session.execute(
-                        stmt.on_conflict_do_update(
-                            index_elements=[Skill__User.skill_id, Skill__User.user_id],
-                            set_={"permission": stmt.excluded.permission},
-                        )
-                    )
             db_session.execute(
                 delete(Plugin__User).where(
                     Plugin__User.plugin_id == plugin_id,
@@ -1195,8 +1277,6 @@ def _write_user_grants__no_commit(
                 "One or more user share targets do not exist.",
             ) from exc
         raise
-    if locked.skill is not None:
-        db_session.expire(locked.skill, ["user_shares"])
 
 
 def _write_group_rows__no_commit(
@@ -1207,36 +1287,8 @@ def _write_group_rows__no_commit(
     """Make the plugin's group rows equal ``rows``. A kept row keeps its
     created_at."""
     plugin_id = locked.plugin.id
-    shares = _group_shares(rows)
     try:
         with db_session.begin_nested():
-            if locked.skill is not None:
-                db_session.execute(
-                    delete(Skill__UserGroup).where(
-                        Skill__UserGroup.skill_id == plugin_id,
-                        Skill__UserGroup.user_group_id.notin_(list(shares)),
-                    )
-                )
-                if shares:
-                    stmt = insert(Skill__UserGroup).values(
-                        [
-                            {
-                                "skill_id": plugin_id,
-                                "user_group_id": group_id,
-                                "permission": permission,
-                            }
-                            for group_id, permission in sorted(shares.items())
-                        ]
-                    )
-                    db_session.execute(
-                        stmt.on_conflict_do_update(
-                            index_elements=[
-                                Skill__UserGroup.skill_id,
-                                Skill__UserGroup.user_group_id,
-                            ],
-                            set_={"permission": stmt.excluded.permission},
-                        )
-                    )
             db_session.execute(
                 delete(Plugin__UserGroup).where(
                     Plugin__UserGroup.plugin_id == plugin_id,
@@ -1274,8 +1326,6 @@ def _write_group_rows__no_commit(
                 "One or more group share targets do not exist.",
             ) from exc
         raise
-    if locked.skill is not None:
-        db_session.expire(locked.skill, ["group_shares"])
 
 
 def _apply_to_plugin__no_commit(
@@ -1285,7 +1335,6 @@ def _apply_to_plugin__no_commit(
     db_session: Session,
 ) -> None:
     plugin = locked.plugin
-    skill = locked.skill
     if change.publish:
         if (
             actor is not None
@@ -1299,7 +1348,6 @@ def _apply_to_plugin__no_commit(
         if plugin.published_version_id is None:
             publish_or_request_review__no_commit(
                 plugin,
-                skill,
                 plugin.current_version_id,
                 actor,
                 change.on_name_clash,
@@ -1307,35 +1355,12 @@ def _apply_to_plugin__no_commit(
             )
 
     if is_set(change.company_installation_policy):
-        policy = change.company_installation_policy
-        if skill is not None:
-            if policy == PluginInstallationPolicy.NOT_AVAILABLE:
-                raise OnyxError(
-                    OnyxErrorCode.INVALID_INPUT,
-                    "A skill cannot be set to Not available yet.",
-                )
-            try:
-                with db_session.begin_nested():
-                    skill.installation_policy = (
-                        SkillInstallationPolicy(policy.value)
-                        if policy is not None
-                        else SkillInstallationPolicy.AVAILABLE
-                    )
-                    db_session.flush()
-            except IntegrityError as exc:
-                if not is_unique_violation(exc, "uq_skill_automatic_name"):
-                    raise
-                raise OnyxError(
-                    OnyxErrorCode.SKILL_NAME_CONFLICT,
-                    "Another automatically installed skill already uses this name.",
-                ) from exc
-        plugin.installation_policy = policy
+        plugin.installation_policy = change.company_installation_policy
         db_session.flush()
 
-    _write_user_grants__no_commit(locked, change, db_session)
-    group_rows = _new_group_rows(locked, change)
-    if group_rows is not None:
-        _write_group_rows__no_commit(locked, group_rows, db_session)
+    _write_user_grants__no_commit(locked, db_session)
+    if locked.new_group_rows is not None:
+        _write_group_rows__no_commit(locked, locked.new_group_rows, db_session)
 
 
 def apply_plugin_access_change__no_commit(
@@ -1346,19 +1371,19 @@ def apply_plugin_access_change__no_commit(
 ) -> PluginAccessResult:
     """The one write path for shares, publishing and install settings.
 
-    Locks the legacy skill rows, then the plugins, in id order. Checks the
-    rules once for the set and raises before any write when one fails. Then
-    writes each plugin in its own savepoint, with its legacy skill rows: a
-    refusal or failure on one plugin rolls back that plugin only and lands in
+    Locks the plugins in id order. Checks the rules once for the set and
+    raises before any write when one fails. Then writes each plugin in its own
+    savepoint: a refusal or failure on one plugin rolls back that plugin only and lands in
     ``failures``. The affected users are read for the whole set before and
     after the writes. The caller commits, then pushes once.
 
     Rules: a company install setting needs organization-wide MANAGE_PLUGINS. A
-    group install setting needs MANAGE_PLUGINS for that group on a private
-    plugin, and organization-wide MANAGE_PLUGINS on a published one; it is
-    refused after these checks until the legacy group table is gone. A change
-    to group shares must stay within the actor's managed scope. Publishing
-    needs the author or organization-wide MANAGE_PLUGINS.
+    group install setting (``group_settings``) needs organization-wide
+    MANAGE_PLUGINS too. A group row with a permission cannot be
+    NOT_AVAILABLE. A change
+    to group shares must stay within the actor's managed scope. With the admin
+    Sharing setting off, only organization-wide MANAGE_PLUGINS adds shares.
+    Publishing needs the author or organization-wide MANAGE_PLUGINS.
 
     ``actor`` None is a system write that the caller authorized, such as an
     ownership transfer. The permission checks are skipped; the other rules
@@ -1366,8 +1391,8 @@ def apply_plugin_access_change__no_commit(
     ids = sorted(set(plugin_ids))
     if not ids:
         return PluginAccessResult(affected_user_ids=set(), failures={})
-    plugins, failures = _lock_for_access_change(ids, db_session)
-    _check_access_change(plugins, change, actor, db_session)
+    plugins, failures = _lock_for_access_change(ids, change, db_session)
+    check_access_change(plugins.values(), change, actor, db_session)
 
     before = affected_user_ids_for_plugins(plugins, db_session)
     for plugin_id, locked in plugins.items():

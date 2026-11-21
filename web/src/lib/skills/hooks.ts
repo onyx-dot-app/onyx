@@ -6,8 +6,12 @@ import {
   useState,
   type SyntheticEvent,
 } from "react";
-import useSWR from "swr";
-import { errorHandlingFetcher } from "@/lib/fetcher";
+import useSWR, { useSWRConfig, type KeyedMutator } from "swr";
+import {
+  errorHandlingFetcher,
+  FetchError,
+  fetchErrorDetail,
+} from "@/lib/fetcher";
 import { getTextAroundCursor, type CaretText } from "@/lib/contentEditable";
 import {
   flattenSections,
@@ -21,13 +25,38 @@ import {
   reduceOnInput,
   type PickerSession,
 } from "@/lib/skills/pickerSession";
-import type { ChatSkill } from "@/lib/skills/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import { useFormatBytes } from "@/hooks/useFormatBytes";
+import { useTranslations } from "next-intl";
+import {
+  useCreateModal,
+  type ModalCreationInterface,
+  type SelectOption,
+} from "@opal/components";
+import { toast } from "@opal/layouts";
+import {
+  isSkillNameConflict,
+  setSkillEnabled,
+  skillNameConflictNames,
+} from "@/lib/skills/api";
+import { refreshSkillListsChecked } from "@/lib/skills/cache";
 import { usePermissionAuthority } from "@/lib/permissions/hooks";
 import { useUser } from "@/providers/UserProvider";
 import { useSettings } from "@/lib/settings/hooks";
 import { PluginPublishingPolicy } from "@/lib/settings/types";
 import { Permission } from "@/lib/types";
+import {
+  INHERIT,
+  INSTALLATION_POLICIES,
+  type InheritOption,
+} from "@/lib/skills/installationPolicy";
+import { skillLimitOf } from "@/lib/skills/limits";
+import type {
+  ChatSkill,
+  Skill,
+  SkillInstallationPolicy,
+  SkillsList,
+} from "@/lib/skills/types";
 
 export type PublishAction = "publish" | "review" | "off";
 
@@ -54,11 +83,15 @@ export interface ChatSkillEntries {
   onInputFocus: () => void;
 }
 
-/** The custom skills that the user's chat agents get (`GET /api/skills/chat`).
+/** The skills that the user's chat agents get (`GET /api/skills/chat`).
  * Skill changes made in this app fetch them again (`lib/skills/cache.ts`).
  * Changes from elsewhere show after the chat input gains focus; a window
  * focus does not fetch them. */
-export function useChatSkills(): ChatSkillEntries {
+export function useChatSkills({
+  builtIns,
+}: {
+  builtIns: boolean;
+}): ChatSkillEntries {
   const { user } = useUser();
   // When the last fetch started, from any trigger.
   const lastFetchRef = useRef(0);
@@ -77,18 +110,20 @@ export function useChatSkills(): ChatSkillEntries {
   }, [mutate]);
   const entries = useMemo(
     (): PickerSections => ({
-      skills: (data ?? []).map(
-        (skill): PickerSkill => ({
-          kind: "skill",
-          slug: skill.name,
-          name: skill.name,
-          description: skill.short_description ?? skill.description,
-        })
-      ),
+      skills: (data ?? [])
+        .filter((skill) => builtIns || skill.built_in_skill_id === null)
+        .map(
+          (skill): PickerSkill => ({
+            kind: "skill",
+            slug: skill.name,
+            name: skill.name,
+            description: skill.short_description ?? skill.description,
+          })
+        ),
       apps: [],
       mcpServers: [],
     }),
-    [data]
+    [data, builtIns]
   );
   return { entries, onInputFocus };
 }
@@ -304,5 +339,251 @@ export function useEntryPicker({
     onEscape,
     reset,
     onInput,
+  };
+}
+/** Sharing with people and groups is allowed for the current user: the admin
+ * Sharing setting is on, or the user is an organization-wide skill manager. */
+export function useSharingAllowed(): boolean {
+  const { isGlobalHolder } = usePermissionAuthority(Permission.MANAGE_PLUGINS);
+  const { plugin_sharing: sharing } = useSettings();
+  return isGlobalHolder || sharing !== false;
+}
+
+/** The one set of level labels and help text. ``null`` is "no own setting":
+ * a group uses the Organization setting, and a skill uses Default access
+ * (``inherit.policy``, when known, is the level it stands for). */
+export function useInstallationPolicyCopy() {
+  const t = useTranslations("skills.installationPolicy");
+  return {
+    label: (
+      policy: SkillInstallationPolicy | null,
+      inherit: InheritOption = { scope: "skill", policy: null }
+    ) => {
+      if (policy !== null) return t(`${policy}.label`);
+      if (inherit.policy === null)
+        return t("inherit.label", { scope: inherit.scope });
+      return t("inherit.labelWithPolicy", {
+        scope: inherit.scope,
+        policy: t(`${inherit.policy}.label`),
+      });
+    },
+    description: (
+      policy: SkillInstallationPolicy | null,
+      scope: InheritOption["scope"] = "skill"
+    ) =>
+      policy === null
+        ? t("inherit.description", { scope })
+        : t(`${policy}.description`),
+  };
+}
+
+interface PolicyOptionsConfig {
+  levels?: readonly SkillInstallationPolicy[];
+  inherit?: InheritOption;
+}
+
+/** The select options of an install setting, with an optional "no own
+ * setting" option first. */
+export function usePolicyOptions({
+  levels = INSTALLATION_POLICIES,
+  inherit,
+}: PolicyOptionsConfig = {}): SelectOption[] {
+  const copy = useInstallationPolicyCopy();
+  const options: SelectOption[] = levels.map((policy) => ({
+    value: policy,
+    title: copy.label(policy),
+    description: copy.description(policy),
+  }));
+  if (!inherit) return options;
+  return [
+    {
+      value: INHERIT,
+      title: copy.label(null, inherit),
+      description: copy.description(null, inherit.scope),
+    },
+    ...options,
+  ];
+}
+
+export interface SkillLimitCopy {
+  /** The refusal of a 413 SKILL_LIMIT_EXCEEDED error, else the server's
+   * detail, else `fallback`. */
+  describeError: (error: unknown, fallback: string) => string;
+}
+
+export function useSkillLimitCopy(): SkillLimitCopy {
+  const t = useTranslations("skills.limit");
+  const formatBytes = useFormatBytes();
+  const describeError = useCallback(
+    (error: unknown, fallback: string) => {
+      const limit = skillLimitOf(error);
+      if (limit !== null)
+        return t("refused", {
+          maxSize: formatBytes(limit.max_bytes),
+          maxFiles: limit.max_files,
+        });
+      if (error instanceof FetchError)
+        return fetchErrorDetail(error) ?? fallback;
+      return error instanceof Error && error.message ? error.message : fallback;
+    },
+    [t, formatBytes]
+  );
+  return { describeError };
+}
+
+export interface SkillToggleTarget {
+  id: string;
+  name: string;
+  enabled: boolean;
+}
+
+export interface SkillEnablement {
+  setEnabled: (
+    item: SkillToggleTarget,
+    enabled: boolean,
+    replaceConflict?: boolean
+  ) => Promise<void>;
+  isPending: (id: string) => boolean;
+  /** The state to show: an in-flight change wins over the loaded one. */
+  enabledOf: (item: SkillToggleTarget) => boolean;
+  /** A skill whose name another enabled skill holds, waiting for a confirm. */
+  switchTarget: SkillToggleTarget | null;
+  /** The skills that the switch turns off. */
+  switchConflicts: string[];
+  switchModal: ModalCreationInterface;
+}
+
+/** Turns skills on and off. Only one enabled skill holds a name, so turning
+ * on a skill whose name is taken asks first, then replaces the other one.
+ * `onEnabled` gets the skill as the server returns it after a turn on. */
+export function useSkillEnablement(
+  items: readonly SkillToggleTarget[],
+  refresh: KeyedMutator<SkillsList>,
+  onEnabled?: (skill: Skill) => void
+): SkillEnablement {
+  const t = useTranslations("skills");
+  const { describeError } = useSkillLimitCopy();
+  const { mutate, cache } = useSWRConfig();
+  const switchModal = useCreateModal();
+  const [pending, setPending] = useState<ReadonlySet<string>>(new Set());
+  const [optimistic, setOptimistic] = useState<ReadonlyMap<string, boolean>>(
+    new Map()
+  );
+  const [switchTarget, setSwitchTarget] = useState<SkillToggleTarget | null>(
+    null
+  );
+  const [switchConflicts, setSwitchConflicts] = useState<string[]>([]);
+
+  function askToSwitch(item: SkillToggleTarget, conflicts: string[]) {
+    setSwitchTarget(item);
+    setSwitchConflicts(conflicts);
+    switchModal.toggle(true);
+  }
+
+  async function setEnabled(
+    item: SkillToggleTarget,
+    enabled: boolean,
+    replaceConflict = false
+  ): Promise<void> {
+    const holders = items.filter(
+      (candidate) =>
+        candidate.id !== item.id &&
+        candidate.name === item.name &&
+        candidate.enabled
+    );
+    if (enabled && !replaceConflict && holders.length > 0) {
+      // A holder found here has the same name, so the dialog names nothing.
+      askToSwitch(item, []);
+      return;
+    }
+    const affected =
+      enabled && replaceConflict
+        ? items.filter(
+            (candidate) =>
+              candidate.id === item.id ||
+              (candidate.name === item.name && candidate.enabled)
+          )
+        : [item];
+    const affectedIds = new Set(affected.map(({ id }) => id));
+    setPending((current) => new Set([...current, ...affectedIds]));
+    setOptimistic((current) => {
+      const next = new Map(current);
+      if (enabled)
+        affected.forEach((candidate) =>
+          next.set(candidate.id, candidate.id === item.id)
+        );
+      else next.set(item.id, false);
+      return next;
+    });
+    try {
+      const updated = await setSkillEnabled(item.id, enabled, replaceConflict);
+      if (replaceConflict) switchModal.toggle(false);
+      if (enabled) onEnabled?.(updated);
+      await refresh(
+        (current) => {
+          if (!current) return current;
+          const apply = (skill: Skill): Skill =>
+            skill.id === updated.id
+              ? updated
+              : enabled && skill.name === updated.name
+                ? { ...skill, enabled: false }
+                : skill;
+          return {
+            builtins: current.builtins.map(apply),
+            customs: current.customs.map(apply),
+          };
+        },
+        { revalidate: false }
+      );
+      void refreshSkillListsChecked(mutate, cache).then((ok) => {
+        if (!ok)
+          toast.error(t("page.toasts.refreshFailed", { name: item.name }));
+      });
+    } catch (error) {
+      if (enabled && !replaceConflict && isSkillNameConflict(error)) {
+        askToSwitch(item, skillNameConflictNames(error));
+        return;
+      }
+      toast.error(
+        describeError(
+          error,
+          t(
+            enabled ? "page.toasts.enableFailed" : "page.toasts.disableFailed",
+            { name: item.name }
+          )
+        )
+      );
+    } finally {
+      setOptimistic((current) => {
+        const next = new Map(current);
+        affectedIds.forEach((id) => next.delete(id));
+        return next;
+      });
+      setPending((current) => {
+        const next = new Set(current);
+        affectedIds.forEach((id) => next.delete(id));
+        return next;
+      });
+    }
+  }
+
+  return {
+    setEnabled,
+    isPending: (id) => pending.has(id),
+    enabledOf: (item) => optimistic.get(item.id) ?? item.enabled,
+    switchTarget,
+    switchConflicts,
+    switchModal,
+  };
+}
+
+/** Refreshes the skill lists after a change, and reports a failed refresh. */
+export function useRefreshSkillLists(): () => void {
+  const t = useTranslations("skills");
+  const { mutate, cache } = useSWRConfig();
+  return () => {
+    void refreshSkillListsChecked(mutate, cache).then((ok) => {
+      if (!ok) toast.error(t("page.toasts.listRefreshFailed"));
+    });
   };
 }

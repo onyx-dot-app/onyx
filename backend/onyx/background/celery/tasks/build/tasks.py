@@ -15,19 +15,21 @@ from onyx.cache.interface import CacheLock, CacheLockLostError
 from onyx.configs.constants import OnyxCeleryTask, OnyxRedisLocks
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.engine.tenant_utils import get_all_tenant_ids
-from onyx.redis.redis_pool import get_redis_client
+from onyx.db.sandbox import (
+    get_latest_snapshot_for_session,
+    get_running_sandboxes,
+    user_has_stale_active_session,
+)
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
 from onyx.server.features.build.configs import (
     ENABLE_CRAFT,
     SANDBOX_IDLE_TIMEOUT_SECONDS,
 )
-from onyx.server.features.build.db.sandbox import (
-    get_latest_snapshot_for_session,
-    get_running_sandboxes,
-    user_has_stale_active_session,
-)
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
+from onyx.server.features.build.sandbox.firecracker.purge import (
+    purge_expired_harness_sessions,
+)
 from onyx.server.features.build.session.resource_cleanup import (
     delete_unknown_tenant_resources,
     fail_stale_provisioning_sandboxes,
@@ -37,6 +39,7 @@ from onyx.server.features.build.timeouts import (
     SANDBOX_CLEANUP_DEADLINE_SECONDS as TIMEOUT_SECONDS,
 )
 from onyx.server.features.build.timeouts import SESSION_FLOW_LOCK_LEASE_SECONDS
+from onyx.server.settings.store import load_settings
 from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
@@ -46,6 +49,8 @@ from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 SNAPSHOT_INTERVAL_DIVISOR = 4
 RUNNING_SANDBOX_BATCH_SIZE = 100
 RUNNING_SANDBOX_CURSOR_KEY = "sandbox_cleanup_running_cursor"
+# Saves purged per retention run; the hourly chain end takes the rest.
+HARNESS_RETENTION_PURGE_BATCH_SIZE = 100
 
 
 def _check_cleanup_lease(lock: CacheLock, deadline: float) -> None:
@@ -73,6 +78,49 @@ def cleanup_idle_sandboxes_task(self: Task, *, tenant_id: str) -> None:  # noqa:
     _sweep_tenant_sandboxes(
         tenant_id, time.monotonic() + TIMEOUT_SECONDS, reconcile_resources=False
     )
+
+
+@shared_task(  # ty: ignore[invalid-argument-type]
+    name=OnyxCeleryTask.PURGE_EXPIRED_HARNESS_SESSIONS,
+    soft_time_limit=TIMEOUT_SECONDS,
+    bind=True,
+    ignore_result=True,
+)
+def purge_expired_harness_sessions_task(
+    self: Task,  # noqa: ARG001
+    *,
+    tenant_id: str,  # noqa: ARG001
+) -> None:
+    """Firecracker session saves that chat retention no longer keeps. Sent
+    by the EE chat retention chain; uses the window set now."""
+    retention_days = load_settings().maximum_chat_retention_days
+    if retention_days is None:
+        return
+    purge_expired_harness_sessions(
+        retention_days,
+        HARNESS_RETENTION_PURGE_BATCH_SIZE,
+        time.monotonic() + TIMEOUT_SECONDS,
+    )
+
+
+@shared_task(  # ty: ignore[invalid-argument-type]
+    name=OnyxCeleryTask.PUSH_SKILLS_TO_USERS,
+    soft_time_limit=TIMEOUT_SECONDS,
+    bind=True,
+    ignore_result=True,
+)
+def push_skills_to_users_task(
+    self: Task,  # noqa: ARG001
+    *,
+    user_ids: list[str],
+    tenant_id: str,  # noqa: ARG001
+) -> None:
+    """Push skills to the users' running sandboxes, out of the request that
+    changed their access (``onyx.skills.push.enqueue_skill_push``)."""
+    from onyx.skills.push import push_skills_and_commit
+
+    with get_session_with_current_tenant() as db_session:
+        push_skills_and_commit({UUID(user_id) for user_id in user_ids}, db_session)
 
 
 @shared_task(  # ty: ignore[invalid-argument-type]
@@ -183,7 +231,6 @@ def _sweep_tenant_sandboxes(
 
     task_logger.info(f"Sandbox sweep starting for tenant {tenant_id}")
 
-    redis_client = get_redis_client(tenant_id=tenant_id)
     cache = get_cache_backend(tenant_id=tenant_id)
     lock = cache.lock(
         OnyxRedisLocks.CLEANUP_IDLE_SANDBOXES_BEAT_LOCK,
@@ -240,7 +287,7 @@ def _sweep_tenant_sandboxes(
                             db_session, sandbox, now
                         ):
                             session_creation_lock = get_session_creation_lock(
-                                redis_client, sandbox.user_id
+                                tenant_id, sandbox.user_id
                             )
                             sleep_sandbox(
                                 db_session=db_session,
@@ -263,7 +310,7 @@ def _sweep_tenant_sandboxes(
                             continue
 
                         session_creation_lock = get_session_creation_lock(
-                            redis_client, sandbox.user_id
+                            tenant_id, sandbox.user_id
                         )
                         if not session_creation_lock.acquire(blocking=False):
                             task_logger.info(

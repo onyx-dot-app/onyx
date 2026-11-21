@@ -5,8 +5,6 @@ from collections.abc import Iterable
 import pytest
 
 from onyx.access.models import ExternalAccess
-from onyx.access.utils import build_ext_group_name_for_onyx
-from onyx.configs.constants import DocumentSource
 from onyx.connectors.microsoft_utils.graph_auth import MicrosoftAuthMethod
 from onyx.connectors.models import (
     ConnectorFailure,
@@ -253,9 +251,7 @@ def test_reindex_with_permissions(
         assert docs_by_id[state.files[path].id].external_access == access
     group_access = docs_by_id[group_target.id].external_access
     assert group_access is not None
-    assert group_access.external_user_group_ids == {
-        build_ext_group_name_for_onyx(state.visible_group.id, DocumentSource.ONEDRIVE)
-    }
+    assert group_access.external_user_group_ids == {state.visible_group.id}
     nodes_by_id = {node.raw_node_id: node for node in nodes}
     assert (
         nodes_by_id[drive_root_id(state.drive.id)].external_access

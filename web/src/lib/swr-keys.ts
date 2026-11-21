@@ -90,6 +90,8 @@ export const SWR_KEYS = {
   // ── Health / Version ──────────────────────────────────────────────────────
   health: "/api/health",
   opensearchResourceHealth: "/api/manage/admin/opensearch-health",
+  serviceStatusOpenSearch: "/api/admin/service-status/opensearch",
+  serviceStatusSearches: "/api/admin/service-status/opensearch/searches",
   version: "/api/version",
 
   // ── Settings ──────────────────────────────────────────────────────────────
@@ -100,10 +102,16 @@ export const SWR_KEYS = {
   adminSecuritySettings: "/api/admin/security",
   adminSecurityPinnedFields: "/api/admin/security/pinned-fields",
   incognitoAvailability: "/api/chat/incognito-availability",
+  // A chat file's preview data, not a URL: see `useChatFilePreview`
+  chatFilePreview: (fileId: string) => `chat-file-preview:${fileId}`,
+  // The start of a text file, for its tile in the chat's Files list
+  chatFileTileText: (fileId: string) => `chat-file-tile-text:${fileId}`,
   chatSessionStatus: (sessionId: string) =>
     `/api/chat/chat-session/${sessionId}/status`,
   pendingChatMessages: (sessionId: string) =>
     `/api/chat/chat-session/${sessionId}/pending-messages`,
+  maxSelectedDocumentTokens: (personaId: number) =>
+    `/api/chat/max-selected-document-tokens?persona_id=${personaId}`,
   adminSsoProviders: "/api/admin/sso/provider",
   adminSsoProviderHandoff: (providerId: number) =>
     `/api/admin/sso/provider/${providerId}/handoff`,
@@ -155,6 +163,7 @@ export const SWR_KEYS = {
   documentSets: "/api/manage/document-set",
   documentSetsEditable: "/api/manage/document-set?get_editable=true",
   tags: "/api/query/valid-tags",
+  hierarchyNode: (nodeId: number) => `/api/hierarchy-nodes/${nodeId}`,
   connectorStatus: "/api/manage/connector-status",
 
   // ── Credentials & Connectors ──────────────────────────────────────────────
@@ -258,28 +267,50 @@ export const SWR_KEYS = {
   scimToken: "/api/admin/enterprise-settings/scim/token",
 
   // ── MCP Servers ───────────────────────────────────────────────────────────
-  adminMcpServers: "/api/admin/mcp/servers",
-  adminMcpServerToolSnapshots: (serverId: number) =>
-    `/api/admin/mcp/server/${serverId}/tools/snapshots?source=db`,
-  mcpServers: "/api/mcp/servers",
-  mcpServersCraft: "/api/mcp/servers/craft",
-  agentMcpServers: (agentId: number) => `/api/mcp/servers/persona/${agentId}`,
+
+  // ── Integrations ──────────────────────────────────────────────────────────
+  agentIntegrationCatalog: "/api/integrations/agent-catalog",
+  adminIntegrations: "/api/admin/integrations",
+  adminIntegrationPresets: "/api/admin/integrations/presets",
+  adminIntegration: (integrationId: number) =>
+    `/api/admin/integrations/${integrationId}`,
+  adminIntegrationActions: (integrationId: number) =>
+    `/api/admin/integrations/${integrationId}/actions`,
+  adminIntegrationInstallationPolicy: (integrationId: number) =>
+    `/api/admin/integrations/${integrationId}/installation-policy`,
+  adminIntegrationGroupSettings: (integrationId: number) =>
+    `/api/admin/integrations/${integrationId}/group-settings`,
+  integrations: "/api/integrations",
+  integration: (integrationId: number) => `/api/integrations/${integrationId}`,
+  agentIntegrationIds: (agentId: number) =>
+    `/api/integrations/agents/${agentId}`,
+  integrationAccess: (integrationId: number) =>
+    `/api/integrations/${integrationId}/access`,
+  integrationActionPolicies: (integrationId: number) =>
+    `/api/action-policies/integration/${integrationId}`,
+  assistantPreferences: "/api/user/assistant/preferences",
 
   // ── Skills ────────────────────────────────────────────────────────────────
   userSkills: "/api/skills",
   chatSkills: "/api/skills/chat",
+  userSkill: (skillId: string) => `/api/skills/${skillId}`,
   userSkillPreview: (skillId: string) => `/api/skills/${skillId}/preview`,
+  pluginSkill: (pluginId: string, path: string) =>
+    `/api/skills/${pluginId}/plugin-skill?path=${encodeURIComponent(path)}`,
   skillSharing: (skillId: string) => `/api/skills/custom/${skillId}/share`,
   editableSkill: (skillId: string) => `/api/skills/custom/${skillId}/edit`,
   skillReviewRequests: "/api/skills/review-requests",
+  skillLimitUsers: "/api/skills/users-over-limit",
+  organizationLibraryDefaultAccess:
+    "/api/skills/organization-library/default-access",
   skillVersions: (skillId: string) => `/api/skills/custom/${skillId}/versions`,
   skillVersion: (skillId: string, versionId: string) =>
     `/api/skills/custom/${skillId}/versions/${versionId}`,
+  marketplaces: "/api/marketplaces",
+  marketplace: (marketplaceId: string) => `/api/marketplaces/${marketplaceId}`,
 
   // ── Tools ─────────────────────────────────────────────────────────────────
   tools: "/api/tool",
-  openApiTools: "/api/tool/openapi",
-  oauthTokenStatus: "/api/user-oauth-token/status",
   adminOAuthTestClaims: "/api/admin/oauth-test/claims",
 
   // ── Voice ─────────────────────────────────────────────────────────────────
@@ -307,9 +338,6 @@ export const SWR_KEYS = {
     `craft-output-thumbnail:${sessionId}:${filePath}`,
   buildSessionPptxPreview: (sessionId: string, filePath: string) =>
     `/api/build/sessions/${sessionId}/pptx-preview/${filePath}`,
-  buildExternalApps: "/api/build/apps",
-  buildExternalAppsAdmin: "/api/build/admin/apps",
-  buildExternalAppsBuiltInOptions: "/api/build/admin/apps/built-in/options",
   buildBaseInstructions: "/api/build/admin/base-instructions",
   buildSessionApprovalStatus: (sessionId: string) =>
     `/api/build/approvals/sessions/${sessionId}/status`,
@@ -323,6 +351,7 @@ export const SWR_KEYS = {
 
   // ── Usage Reports ─────────────────────────────────────────────────────────
   usageReport: "/api/admin/usage-report",
+  usageReportJobs: "/api/admin/usage-report-jobs",
 
   // ── Web Search ────────────────────────────────────────────────────────────
   webSearchContentProviders: "/api/admin/web-search/content-providers",
@@ -361,11 +390,6 @@ export const SWR_KEYS = {
   // ── Query History (EE) ────────────────────────────────────────────────────
   adminChatSessionHistory: "/api/admin/chat-session-history",
   adminChatSession: (id: string) => `/api/admin/chat-session-history/${id}`,
-
-  // ── MCP Server (per-ID) ───────────────────────────────────────────────────
-  adminMcpServer: (id: number) => `/api/admin/mcp/servers/${id}`,
-  adminMcpOAuthDiscovery: (id: number) =>
-    ["admin-mcp-oauth-discovery", id] as const,
 
   // ── Document Processing ───────────────────────────────────────────────────
   unstructuredApiKeySet: "/api/search-settings/unstructured-api-key-set",
@@ -522,11 +546,6 @@ export const SWR_KEYS = {
   // `?limit=…` / `?cursor=…` for pagination. Invalidate from elsewhere with
   // a prefix predicate so every paginated variant gets refreshed at once.
   personalActionPolicies: "/api/build/action-policies",
-  appActionPolicies: (
-    kind: "external_app" | "mcp_server",
-    targetId: number,
-    admin = false
-  ) => `/api/build/${admin ? "admin/" : ""}action-policies/${kind}/${targetId}`,
   taskActionPolicies: (taskId: string) =>
     `/api/build/scheduled-tasks/${taskId}/action-policies`,
   scheduledTasks: "/api/build/scheduled-tasks",
@@ -536,6 +555,26 @@ export const SWR_KEYS = {
     `/api/build/scheduled-tasks/${taskId}/runs`,
   scheduledTaskHasUnviewedRuns: (taskId: string) =>
     `/api/build/scheduled-tasks/${taskId}/runs?limit=1&unviewed=true`,
-  scheduledRunContext: (sessionId: string) =>
-    `/api/build/sessions/${sessionId}/scheduled-run-context`,
+
+  // ── Scheduled Tasks (chat) ────────────────────────────────────────────────
+  // `chatScheduledTaskRuns` is a base URL, as `scheduledTaskRuns` above.
+  chatScheduledTasks: "/api/scheduled-tasks",
+  chatScheduledTasksUnviewedCount: "/api/scheduled-tasks/unviewed-count",
+  chatScheduledTaskCatalog: "/api/scheduled-tasks/action-policies",
+  chatScheduledTask: (taskId: string) => `/api/scheduled-tasks/${taskId}`,
+  chatScheduledTaskActionPolicies: (taskId: string) =>
+    `/api/scheduled-tasks/${taskId}/action-policies`,
+  chatScheduledTaskRuns: (taskId: string) =>
+    `/api/scheduled-tasks/${taskId}/runs`,
+  chatScheduledTaskRunsPage: (
+    taskId: string,
+    limit: number,
+    cursor: string | null = null
+  ) =>
+    `/api/scheduled-tasks/${taskId}/runs?limit=${limit}` +
+    (cursor ? `&cursor=${encodeURIComponent(cursor)}` : ""),
+  chatScheduledTaskHasUnviewedRuns: (taskId: string) =>
+    `/api/scheduled-tasks/${taskId}/runs?limit=1&unviewed=true`,
+  chatScheduledRun: (chatSessionId: string) =>
+    `/api/scheduled-tasks/chat-sessions/${chatSessionId}/run`,
 } as const;

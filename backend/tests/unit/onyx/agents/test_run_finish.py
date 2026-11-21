@@ -23,15 +23,19 @@ from onyx.agents.models import (
     RunStatus,
     ToolCallContext,
     ToolResultAmendment,
+    ToolResultContext,
 )
 from onyx.agents.runtime import Agent, Run
 from onyx.agents.tools import (
     AgentTool,
+    ChildRunWait,
+    HumanToolAnswer,
+    InputDecision,
     InputMode,
     PendingToolInput,
     ToolInvocation,
 )
-from onyx.llm.cancellation import AgentCancelled, CancellationSignal
+from onyx.llm.cancellation import AgentCancelled, CancellationSignal, check_cancelled
 from onyx.llm.interfaces import GenerationContext
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
@@ -628,3 +632,355 @@ def test_a_suspend_hook_failure_fails_the_run_unless_the_user_stopped_it(
     finally:
         assert run.wait_for_idle(3)
         assert coordinator.close(3)
+
+
+def test_the_on_drained_hook_of_a_stopped_run_waits_for_its_tool_thread() -> None:
+    """A Stop ends the run while a tool thread still runs; the on_drained hook
+    runs once that thread returns."""
+    cancellation = CancellationSignal()
+    running = threading.Event()
+    leave = threading.Event()
+    returned = threading.Event()
+    drained: list[bool] = []
+
+    def execute(_invocation: ToolInvocation) -> ToolResult:
+        running.set()
+        # Ignores the Stop, as a tool that cannot end its work at once does.
+        leave.wait(10)
+        returned.set()
+        return ToolResult(content="late")
+
+    agent = Agent(
+        FakeModelClient(_call_then(_answer)),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(name="cell", description="", parameters={}),
+                execute=execute,
+            )
+        ],
+        on_drained=lambda: drained.append(returned.is_set()),
+    )
+    threading.Thread(
+        target=lambda: running.wait(10) and cancellation.cancel(), daemon=True
+    ).start()
+    run = agent.start(max_steps=2, cancellation=cancellation)
+    try:
+        run.wait_for_completion(timeout=10)
+        assert run.status == RunStatus.CANCELLED
+        assert not run.wait_for_idle(timeout=0.2)
+        assert drained == []
+    finally:
+        leave.set()
+    assert run.wait_for_idle(timeout=10)
+    assert drained == [True]
+
+
+@pytest.mark.parametrize(
+    "error",
+    [AgentCancelled(), RuntimeError("the cache is unavailable")],
+    ids=["cancelled", "error"],
+)
+def test_a_failing_on_drained_hook_still_leaves_the_run_idle_and_reusable(
+    error: BaseException,
+) -> None:
+    """A finished run becomes idle and its agent starts again; a suspended run
+    becomes idle too."""
+    drained: list[bool] = []
+
+    def on_drained() -> None:
+        drained.append(True)
+        raise error
+
+    def gate(context: ToolCallContext) -> PendingToolInput | None:
+        if context.call.name != "approve":
+            return None
+        return PendingToolInput(
+            request_id="permission", prompt="Proceed?", mode=InputMode.EXECUTE
+        )
+
+    def reply(
+        request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        if any(
+            isinstance(message, UserMessage) and message.text == "approve"
+            for message in request.messages
+        ):
+            return AssistantMessage(
+                content=[ToolCall(id="approve", name="approve", arguments={})]
+            )
+        return _answer()
+
+    agent = Agent(
+        FakeModelClient(reply),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(
+                    name="approve", description="", parameters={}
+                ),
+                execute=lambda _invocation: ToolResult(content="approved"),
+            )
+        ],
+        before_tool_call=gate,
+        on_drained=on_drained,
+    )
+    for _ in range(2):
+        run = agent.start(max_steps=2)
+        run.wait_for_completion(timeout=10)
+        assert run.status == RunStatus.COMPLETE
+        assert run.wait_for_idle(timeout=10)
+    coordinator = AgentCoordinator()
+    run = agent.start(
+        messages=[UserMessage(content="approve")],
+        max_steps=2,
+        coordinator=coordinator,
+    )
+    try:
+        assert run.wait_until_settled(3).status == RunStatus.SUSPENDED
+        assert run.wait_for_idle(3)
+    finally:
+        run.cancel()
+        assert run.wait_for_idle(3)
+        assert coordinator.close(3)
+    # Two finishes, the suspension, and the finish of the cancelled run.
+    assert len(drained) == 4
+
+
+def test_the_on_drained_hook_of_a_suspension_waits_for_foreground_children() -> None:
+    """A run that suspends while its foreground child works calls the hook
+    only once the child's work has drained too."""
+    child_working, child_release = threading.Event(), threading.Event()
+    drained: list[bool] = []
+
+    def child_reply(
+        _request: GenerationRequest, signal: CancellationSignal
+    ) -> AssistantMessage:
+        child_working.set()
+        while not child_release.wait(0.01):
+            signal.check()
+        return _answer()
+
+    def delegate(invocation: ToolInvocation) -> ChildRunWait:
+        spawned = invocation.agents.spawn_agent(
+            Agent(
+                FakeModelClient(child_reply),
+                generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+            ),
+            name="helper",
+            description="",
+            messages=[],
+            max_steps=1,
+        )
+        return ChildRunWait(run_ids=[spawned.run_id])
+
+    agent = Agent(
+        FakeModelClient(_call_then(_answer)),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(name="cell", description="", parameters={}),
+                execute=delegate,
+                result_from_children=lambda _invocation, _states: ToolResult(
+                    content="done"
+                ),
+            )
+        ],
+        on_drained=lambda: drained.append(child_release.is_set()),
+    )
+    coordinator = AgentCoordinator()
+    run = agent.start(max_steps=2, coordinator=coordinator)
+    try:
+        assert child_working.wait(3)
+        assert run.wait_until_settled(3).status == RunStatus.SUSPENDED
+        assert run.wait_for_idle(3)
+        assert drained == []
+        child_release.set()
+        run.result(3)
+        assert run.wait_for_idle(3)
+        assert drained == [True]
+    finally:
+        child_release.set()
+        assert coordinator.close(3)
+
+
+def test_the_on_drained_hook_of_a_suspension_waits_for_a_parked_child() -> None:
+    """A foreground child that waits for input still belongs to the run: the
+    hook runs at the run's end, after the child's answer and work."""
+    drained: list[bool] = []
+    answered = threading.Event()
+    child_tool = AgentTool(
+        definition=ToolDefinition(name="ask", description="", parameters={}),
+        execute=lambda _invocation: PendingToolInput(
+            request_id="answer", prompt="Continue?", mode=InputMode.RESULT
+        ),
+    )
+
+    def child_reply(
+        request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        if request.messages and isinstance(request.messages[-1], ToolResultMessage):
+            return _answer()
+        return AssistantMessage(content=[ToolCall(id="ask", name="ask", arguments={})])
+
+    spawned: list[str] = []
+
+    def delegate(invocation: ToolInvocation) -> ChildRunWait:
+        spawned.append(
+            invocation.agents.spawn_agent(
+                Agent(
+                    FakeModelClient(child_reply),
+                    generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+                    tools=[child_tool],
+                ),
+                name="helper",
+                description="",
+                messages=[],
+                max_steps=2,
+            ).run_id
+        )
+        return ChildRunWait(run_ids=spawned)
+
+    agent = Agent(
+        FakeModelClient(_call_then(_answer)),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(name="cell", description="", parameters={}),
+                execute=delegate,
+                result_from_children=lambda _invocation, _states: ToolResult(
+                    content="done"
+                ),
+            )
+        ],
+        on_drained=lambda: drained.append(answered.is_set()),
+    )
+    coordinator = AgentCoordinator()
+    run = agent.start(max_steps=2, coordinator=coordinator)
+    try:
+        assert run.wait_until_settled(3).status == RunStatus.SUSPENDED
+        child = coordinator.run(spawned[0])
+        assert child.wait_until_settled(3).status == RunStatus.SUSPENDED
+        assert run.wait_for_idle(3)
+        assert drained == []
+        answered.set()
+        child.submit(
+            HumanToolAnswer(
+                request_id="answer",
+                decision=InputDecision.RESULT,
+                result=ToolResult(content="yes"),
+            )
+        )
+        run.result(3)
+        assert run.wait_for_idle(3)
+        assert drained == [True]
+    finally:
+        assert coordinator.close(3)
+
+
+def test_amended_and_recorded_results_go_through_prepare_tool_result() -> None:
+    prepared: list[tuple[str, bool, int]] = []
+
+    def prepare(context: ToolResultContext) -> ToolResult:
+        prepared.append(
+            (context.result.text, context.amended, len(context.step_results))
+        )
+        return context.result.model_copy(
+            update={"content": f"prepared {context.result.text}"}
+        )
+
+    agent = Agent(
+        FakeModelClient(_call_then(_answer)),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(name="cell", description="", parameters={}),
+                execute=lambda _invocation: ToolResult(content="running"),
+            )
+        ],
+        on_finish=FinishHook(),
+        prepare_tool_result=prepare,
+    )
+    run, events, saved = _run(agent)
+
+    # Amendments do not count toward a step budget.
+    assert prepared == [("running", False, 0), ("closed", True, 0)]
+    amended = [event for event in events if isinstance(event, ToolResultAmendedEvent)]
+    assert [event.result.text for event in amended] == ["prepared closed"]
+    for state in (saved[0], run.snapshot()):
+        result = state.steps[0].tools[CALL_ID].result
+        assert result is not None and result.text == "prepared closed"
+
+
+@pytest.mark.parametrize("error", [AgentCancelled, RuntimeError])
+def test_an_amendment_whose_preparation_fails_applies_as_the_hook_made_it(
+    error: type[BaseException],
+) -> None:
+    def prepare(context: ToolResultContext) -> ToolResult:
+        if context.amended:
+            raise error()
+        return context.result
+
+    agent = Agent(
+        FakeModelClient(_call_then(_answer)),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(name="cell", description="", parameters={}),
+                execute=lambda _invocation: ToolResult(content="running"),
+            )
+        ],
+        on_finish=FinishHook(),
+        prepare_tool_result=prepare,
+    )
+    run, events, saved = _run(agent)
+
+    assert run.status == RunStatus.COMPLETE
+    amended = [event for event in events if isinstance(event, ToolResultAmendedEvent)]
+    assert [event.result.text for event in amended] == ["closed"]
+    for state in (saved[-1], run.snapshot()):
+        result = state.steps[0].tools[CALL_ID].result
+        assert result is not None and result.text == "closed"
+
+
+def test_a_stopped_run_applies_its_amendments_without_preparing_them() -> None:
+    # A preparation that does slow work (a spill) checks the run's signal, so
+    # a Stop reaches it after the run's loop ended.
+    cancellation = CancellationSignal()
+
+    def prepare(context: ToolResultContext) -> ToolResult:
+        if context.amended:
+            check_cancelled()
+        return context.result.model_copy(
+            update={"content": f"prepared {context.result.text}"}
+        )
+
+    def reply(
+        request: GenerationRequest, signal: CancellationSignal
+    ) -> AssistantMessage:
+        if request.messages and isinstance(request.messages[-1], ToolResultMessage):
+            cancellation.cancel()
+            signal.check()
+        return AssistantMessage(
+            content=[ToolCall(id=CALL_ID, name="cell", arguments={})]
+        )
+
+    agent = Agent(
+        FakeModelClient(reply),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(name="cell", description="", parameters={}),
+                execute=lambda _invocation: ToolResult(content="running"),
+            )
+        ],
+        on_finish=FinishHook(),
+        prepare_tool_result=prepare,
+    )
+    run, events, saved = _run(agent, cancellation=cancellation)
+
+    assert run.status == RunStatus.CANCELLED
+    amended = [event for event in events if isinstance(event, ToolResultAmendedEvent)]
+    assert [event.result.text for event in amended] == ["closed"]
+    result = saved[-1].steps[0].tools[CALL_ID].result
+    assert result is not None and result.text == "closed"

@@ -15,6 +15,8 @@ export enum PacketType {
   STOP = "stop",
   SECTION_END = "section_end",
   TOP_LEVEL_BRANCHING = "top_level_branching",
+  // Ends the replayed prefix of a continuation stream.
+  REPLAY_END = "replay_end",
   ERROR = "error",
 
   SEARCH_TOOL_START = "search_tool_start",
@@ -59,15 +61,15 @@ export enum PacketType {
   INTERMEDIATE_REPORT_DELTA = "intermediate_report_delta",
   INTERMEDIATE_REPORT_CITED_DOCS = "intermediate_report_cited_docs",
 
-  CODING_AGENT_START = "coding_agent_start",
-  CODING_AGENT_THINKING_DELTA = "coding_agent_thinking_delta",
-  CODING_AGENT_FINAL = "coding_agent_final",
-
-  BASH_TOOL_START = "bash_tool_start",
-  BASH_TOOL_DELTA = "bash_tool_delta",
-
   CODE_MODE_START = "code_mode_start",
   CODE_MODE_DELTA = "code_mode_delta",
+
+  // A tool call waits for the user's decision; they never name a timeline step.
+  TOOL_APPROVAL_REQUEST = "tool_approval_request",
+  TOOL_APPROVAL_RESOLVED = "tool_approval_resolved",
+  // A question call waits for the user's answers; they never name a timeline step.
+  TOOL_QUESTION_REQUEST = "tool_question_request",
+  TOOL_QUESTION_RESOLVED = "tool_question_resolved",
 }
 
 export const CODE_INTERPRETER_TOOL_TYPES = {
@@ -99,6 +101,9 @@ export enum StopReason {
   USER_CANCELLED = "user_cancelled",
   // The turn reached its execution deadline.
   TIMED_OUT = "timed_out",
+  // The stream ends while the response waits for the user's approval
+  // decisions or answers.
+  AWAITING_USER = "awaiting_user",
 }
 
 export interface Stop extends BaseObj {
@@ -113,6 +118,10 @@ export interface SectionEnd extends BaseObj {
 export interface TopLevelBranching extends BaseObj {
   type: "top_level_branching";
   num_parallel_branches: number;
+}
+
+export interface ReplayEnd extends BaseObj {
+  type: "replay_end";
 }
 
 export interface PacketError extends BaseObj {
@@ -313,35 +322,6 @@ export interface IntermediateReportCitedDocs extends BaseObj {
   cited_docs: SearchDoc[] | null;
 }
 
-export interface CodingAgentStart extends BaseObj {
-  type: "coding_agent_start";
-  query: string;
-  repo: string | null;
-}
-
-export interface CodingAgentThinkingDelta extends BaseObj {
-  type: "coding_agent_thinking_delta";
-  content: string;
-}
-
-export interface CodingAgentFinal extends BaseObj {
-  type: "coding_agent_final";
-  answer: string;
-}
-
-export interface BashToolStart extends BaseObj {
-  type: "bash_tool_start";
-  cmd: string;
-}
-
-export interface BashToolDelta extends BaseObj {
-  type: "bash_tool_delta";
-  stdout: string;
-  stderr: string;
-  exit_code: number | null;
-  timed_out: boolean;
-}
-
 export type CodeModeStatus =
   "running" | "completed" | "failed" | "timed_out" | "terminated" | "cancelled";
 
@@ -376,6 +356,69 @@ export type SearchToolObj =
   | SearchToolDocumentsDelta
   | SectionEnd
   | PacketError;
+
+export interface ToolApprovalRequest extends BaseObj {
+  type: "tool_approval_request";
+  approval_id: string;
+  tool_call_id: string;
+  tool_name: string;
+  display_name: string;
+  arguments: Record<string, unknown>;
+  // The subagent that asks; null or absent for the root agent's own request.
+  agent_name?: string | null;
+}
+
+export interface ToolApprovalResolved extends BaseObj {
+  type: "tool_approval_resolved";
+  approval_id: string;
+  // "approved_for_chat": approved by a grant for the chat's later calls of the tool.
+  // "disabled": an approval found the tool disabled, so the call did not run.
+  outcome:
+    "approved" | "approved_for_chat" | "rejected" | "disabled" | "cancelled";
+}
+
+export type ToolApprovalObj = ToolApprovalRequest | ToolApprovalResolved;
+
+export interface ToolQuestionOption {
+  label: string;
+  description: string;
+}
+
+export interface ToolQuestionItem {
+  // The snake_case ID that the answers name.
+  id: string;
+  // A short label, at most 12 characters.
+  header: string;
+  question: string;
+  options: ToolQuestionOption[];
+}
+
+export interface ToolQuestionAnswer {
+  question_id: string;
+  // A listed option, a note, or both.
+  option_label?: string | null;
+  user_note?: string | null;
+}
+
+export interface ToolQuestionRequest extends BaseObj {
+  type: "tool_question_request";
+  question_request_id: string;
+  tool_call_id: string;
+  questions: ToolQuestionItem[];
+}
+
+// Answered on the card (`answers`) or by a message that the user typed in the chat (`message`), or
+// cancelled because the run stopped first.
+export interface ToolQuestionResolved extends BaseObj {
+  type: "tool_question_resolved";
+  question_request_id: string;
+  outcome: "answered" | "cancelled";
+  answered_via?: "card" | "message" | null;
+  answers?: ToolQuestionAnswer[] | null;
+  message?: string | null;
+}
+
+export type ToolQuestionObj = ToolQuestionRequest | ToolQuestionResolved;
 
 export type ImageGenerationToolObj =
   | ImageGenerationToolStart
@@ -435,15 +478,6 @@ export type ResearchAgentObj =
   | IntermediateReportCitedDocs
   | SectionEnd;
 
-export type CodingAgentObj =
-  | CodingAgentStart
-  | CodingAgentThinkingDelta
-  | CodingAgentFinal
-  | BashToolStart
-  | BashToolDelta
-  | SectionEnd
-  | PacketError;
-
 export type ObjTypes =
   | ChatObj
   | NewToolObj
@@ -452,12 +486,14 @@ export type ObjTypes =
   | ChatHeartbeat
   | SectionEnd
   | TopLevelBranching
+  | ReplayEnd
   | CitationObj
   | DeepResearchPlanObj
   | ResearchAgentObj
-  | CodingAgentObj
   | CodeModeStart
   | CodeModeDelta
+  | ToolApprovalObj
+  | ToolQuestionObj
   | PacketError;
 
 export interface Placement {

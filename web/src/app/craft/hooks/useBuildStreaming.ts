@@ -17,8 +17,6 @@ import {
   interruptMessageStream,
   processSSEStream,
   fetchSession,
-  fetchScheduledRunEventStream,
-  fetchScheduledRunContext,
   RateLimitedError,
 } from "@/app/craft/services/apiServices";
 import { CRAFT_GATEWAY_PROVIDER } from "@/app/craft/onboarding/constants";
@@ -34,6 +32,11 @@ import { StreamItem, ToolCallState } from "@/app/craft/types/displayTypes";
 
 import { genId } from "@/app/craft/utils/streamItemHelpers";
 import { parsePacket } from "@/app/craft/utils/parsePacket";
+import {
+  craftChildSessionId,
+  craftPacketToEvents,
+} from "@/lib/timeline/craft/events";
+import { cancelIncomingRunningCalls } from "@/lib/timeline/craft/stop";
 import {
   classifySubagentEvent,
   toolCallStateFromProgress,
@@ -177,6 +180,12 @@ export function useBuildStreaming({
   );
   const cancelLatestInFlightToolCallStreamItem = useBuildSessionStore(
     (state) => state.cancelLatestInFlightToolCallStreamItem
+  );
+  const appendTimelineEvents = useBuildSessionStore(
+    (state) => state.appendTimelineEvents
+  );
+  const appendSubagentTimelineEvents = useBuildSessionStore(
+    (state) => state.appendSubagentTimelineEvents
   );
   const upsertTodoListStreamItem = useBuildSessionStore(
     (state) => state.upsertTodoListStreamItem
@@ -414,6 +423,38 @@ export function useBuildStreaming({
           if (currentTurnId !== options.expectedTurnId) {
             return;
           }
+        }
+
+        // The timeline receives the same packets, with the same rules: a
+        // completion for another turn is ignored, an error is dropped while
+        // a Stop is in flight, and a call still running then is cancelled.
+        const otherTurnCompleted =
+          parsed.type === "turn_completed" &&
+          (parsed.turn.session_id !== sessionId ||
+            parsed.turn.turn_id !== options.expectedTurnId);
+        const stopping = Boolean(
+          useBuildSessionStore.getState().sessions.get(sessionId)
+            ?.isInterrupting
+        );
+        const childSessionId = craftChildSessionId(rawPacket);
+        if (childSessionId) {
+          appendSubagentTimelineEvents(
+            sessionId,
+            childSessionId,
+            craftPacketToEvents(rawPacket, {
+              subagentSessionId: childSessionId,
+            })
+          );
+        }
+        if (!otherTurnCompleted && !(stopping && parsed.type === "error")) {
+          const events = craftPacketToEvents(rawPacket);
+          const previous =
+            useBuildSessionStore.getState().sessions.get(sessionId)
+              ?.timelineEvents ?? [];
+          appendTimelineEvents(sessionId, [
+            ...events,
+            ...(stopping ? cancelIncomingRunningCalls(previous, events) : []),
+          ]);
         }
 
         switch (parsed.type) {
@@ -825,10 +866,20 @@ export function useBuildStreaming({
                 message_metadata: {
                   streamItems: savedStreamItems,
                 },
+                timelineEvents: session.timelineEvents.filter(
+                  (event) =>
+                    !(
+                      event.type === "ext" &&
+                      event.notification.method === "_onyx/connect_app_request"
+                    )
+                ),
               });
             }
 
-            updateSessionData(sessionId, { streamItems: [] });
+            updateSessionData(sessionId, {
+              streamItems: [],
+              timelineEvents: [],
+            });
             if (parsed.type === "turn_completed")
               options.onTurnCompleted?.(parsed.turn);
             else options.onPromptResponse?.();
@@ -909,6 +960,8 @@ export function useBuildStreaming({
       updateLastStreamingThinking,
       updateToolCallStreamItem,
       cancelLatestInFlightToolCallStreamItem,
+      appendTimelineEvents,
+      appendSubagentTimelineEvents,
       upsertTodoListStreamItem,
       addArtifactToSession,
       appendMessageToSession,
@@ -1215,6 +1268,9 @@ export function useBuildStreaming({
             content: err.message,
             rateLimit: err.details,
           });
+          appendTimelineEvents(sessionId, [
+            { type: "error", message: err.message, rateLimit: err.details },
+          ]);
           updateSessionData(sessionId, {
             status: "active",
             error: err.message,
@@ -1252,6 +1308,7 @@ export function useBuildStreaming({
       updateSessionData,
       appendStreamItem,
       appendMessageToSession,
+      appendTimelineEvents,
       clearStreamItems,
       streamTurnEvents,
       requestStop,
@@ -1329,118 +1386,13 @@ export function useBuildStreaming({
     [requestStop, cancelLatestInFlightToolCallStreamItem]
   );
 
-  const streamScheduledRunEvents = useCallback(
-    async (
-      sessionId: string,
-      runId: string,
-      signal: AbortSignal,
-      onSettled?: () => void
-    ): Promise<void> => {
-      const owner = useBuildSessionStore.getState().sessions.get(sessionId);
-      if (!owner || signal.aborted) return;
-      const ownsScheduledStream = (): boolean => {
-        const current = useBuildSessionStore.getState().sessions.get(sessionId);
-        return (
-          !signal.aborted &&
-          current?.instanceId === owner.instanceId &&
-          current.turnGeneration === owner.turnGeneration
-        );
-      };
-      // A scheduled run owns one session; reattaching does not start a new turn.
-      updateSessionData(sessionId, { status: "running" });
-      clearStreamItems(sessionId);
-      let settledFromTerminalPacket = false;
-      const settleFromTerminalPacket = (): void => {
-        if (!ownsScheduledStream()) return;
-        settledFromTerminalPacket = true;
-        void useBuildSessionStore
-          .getState()
-          .beginTurnSettlement(
-            sessionId,
-            { kind: "scheduled", runId },
-            owner.turnGeneration
-          );
-        onSettled?.();
-      };
-      const processor = createStreamPacketProcessor(sessionId, {
-        signal,
-        onPromptResponse: settleFromTerminalPacket,
-        onTerminalError: settleFromTerminalPacket,
-      });
-
-      try {
-        while (ownsScheduledStream()) {
-          try {
-            const response = await fetchScheduledRunEventStream(
-              sessionId,
-              signal
-            );
-            if (!ownsScheduledStream()) return;
-            await processSSEStream(response, processor.processPacket);
-          } catch (error) {
-            if (
-              signal.aborted ||
-              (error instanceof Error && error.name === "AbortError")
-            )
-              return;
-            if (isAuthStatusError(error) || isNotFoundError(error)) throw error;
-            console.warn("[Streaming] Scheduled run stream error:", error);
-          }
-          if (!ownsScheduledStream() || settledFromTerminalPacket) return;
-          let run: Awaited<ReturnType<typeof fetchScheduledRunContext>>;
-          try {
-            run = await fetchScheduledRunContext(sessionId);
-          } catch (error) {
-            if (!ownsScheduledStream()) return;
-            if (isAuthStatusError(error) || isNotFoundError(error)) throw error;
-            console.warn("[Streaming] Failed to check scheduled run:", error);
-            await sleep(STREAM_RECONNECT_INTERVAL_MS);
-            continue;
-          }
-          if (!ownsScheduledStream() || run.run_id !== runId) return;
-          if (run.status !== "RUNNING" && run.status !== "QUEUED") {
-            await useBuildSessionStore
-              .getState()
-              .beginTurnSettlement(
-                sessionId,
-                { kind: "scheduled", runId },
-                owner.turnGeneration
-              );
-            return;
-          }
-          await sleep(STREAM_RECONNECT_INTERVAL_MS);
-        }
-      } catch (error) {
-        if (ownsScheduledStream())
-          updateSessionData(sessionId, {
-            status: "failed",
-            loadError: error instanceof Error ? error.message : String(error),
-            activeTurnId: null,
-            activeTurnIndex: null,
-            activeTurnLocalOwner: false,
-          });
-      } finally {
-        processor.cancelOutputs();
-        if (ownsScheduledStream() && !settledFromTerminalPacket) onSettled?.();
-      }
-    },
-    [updateSessionData, clearStreamItems, createStreamPacketProcessor]
-  );
-
   return useMemo(
     () => ({
       streamMessage,
       retryQueuedMessage,
       interruptStreaming,
-      streamScheduledRunEvents,
       streamTurnEvents,
     }),
-    [
-      streamMessage,
-      retryQueuedMessage,
-      interruptStreaming,
-      streamScheduledRunEvents,
-      streamTurnEvents,
-    ]
+    [streamMessage, retryQueuedMessage, interruptStreaming, streamTurnEvents]
   );
 }

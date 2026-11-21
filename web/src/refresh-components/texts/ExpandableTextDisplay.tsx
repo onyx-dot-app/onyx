@@ -2,6 +2,7 @@
 
 import { useState, useMemo, useRef, useEffect, useLayoutEffect } from "react";
 import { useTranslations } from "next-intl";
+import { useFormatBytes } from "@/hooks/useFormatBytes";
 import * as DialogPrimitive from "@radix-ui/react-dialog";
 import { Text, Modal } from "@opal/components";
 import { CopyButton } from "@opal/components";
@@ -29,17 +30,8 @@ export interface ExpandableTextDisplayProps {
   renderContent?: (content: string, isExpanded: boolean) => React.ReactNode;
   /** When true, shows last N lines with top-truncation (ellipsis at top) instead of bottom-truncation */
   isStreaming?: boolean;
-}
-
-type ExpandableTextTranslator = ReturnType<
-  typeof useTranslations<"common.expandableText">
->;
-
-/** Calculate content size in human-readable format */
-function getContentSize(text: string, t: ExpandableTextTranslator): string {
-  const bytes = new Blob([text]).size;
-  if (bytes < 1024) return t("size.bytes", { count: bytes });
-  return t("size.kilobytes", { size: (bytes / 1024).toFixed(2) });
+  /** Renders plain text (without `renderContent`) in the monospace font, e.g. for command output */
+  monospace?: boolean;
 }
 
 /** Count lines in text */
@@ -49,22 +41,28 @@ function getLineCount(text: string): number {
 
 /** Extract the last N lines from text for streaming display.
  * When truncated, returns (maxLines - 1) lines to leave room for ellipsis.
+ * Scans back from the end, so the cost follows the lines shown, not the text
+ * length.
  */
 function getLastLines(
   text: string,
   maxLines: number
 ): { lines: string; hasTruncation: boolean } {
-  const allLines = text.split("\n");
-  if (allLines.length <= maxLines) {
-    return { lines: text, hasTruncation: false };
-  }
-  // Reserve one line for ellipsis, show last (maxLines - 1) content lines
-  const linesToShow = maxLines - 1;
-  if (linesToShow <= 0) {
-    return { lines: "", hasTruncation: true };
+  let searchFrom = text.length - 1;
+  let shownStart = 0;
+  for (let newlines = 1; newlines <= maxLines; newlines++) {
+    const newline = searchFrom < 0 ? -1 : text.lastIndexOf("\n", searchFrom);
+    if (newline === -1) {
+      return { lines: text, hasTruncation: false };
+    }
+    // Reserve one line for ellipsis, show last (maxLines - 1) content lines
+    if (newlines === maxLines - 1) {
+      shownStart = newline + 1;
+    }
+    searchFrom = newline - 1;
   }
   return {
-    lines: allLines.slice(-linesToShow).join("\n"),
+    lines: maxLines > 1 ? text.slice(shownStart) : "",
     hasTruncation: true,
   };
 }
@@ -122,32 +120,55 @@ export default function ExpandableTextDisplay({
   className,
   renderContent,
   isStreaming = false,
+  monospace = false,
 }: ExpandableTextDisplayProps) {
   const t = useTranslations("common.expandableText");
+  const formatBytes = useFormatBytes();
   const [isModalOpen, setIsModalOpen] = useState(false);
-  const [isTruncated, setIsTruncated] = useState(false);
+  const [isMeasuredTruncated, setIsMeasuredTruncated] = useState(false);
   const scrollRef = useRef<HTMLDivElement>(null);
   const contentInnerRef = useRef<HTMLDivElement>(null);
+  const plainTextFont = monospace ? "secondary-mono" : "main-ui-muted";
+  const hasRenderContent = renderContent !== undefined;
 
-  const lineCount = useMemo(() => getLineCount(content), [content]);
-  const contentSize = useMemo(() => getContentSize(content, t), [content, t]);
+  // Only the modal shows these, so streamed text is not re-measured per update.
+  const lineCount = useMemo(
+    () => (isModalOpen ? getLineCount(content) : 0),
+    [isModalOpen, content]
+  );
+  const contentSize = useMemo(
+    () => (isModalOpen ? formatBytes(new Blob([content]).size) : ""),
+    [isModalOpen, content, formatBytes]
+  );
   const displaySubtitle = subtitle ?? contentSize;
 
-  // Truncation detection (read-only, doesn't need to block paint)
+  const plainStreamingTail = useMemo(
+    () =>
+      isStreaming && !hasRenderContent
+        ? getLastLines(displayContent ?? content, maxLines)
+        : null,
+    [isStreaming, hasRenderContent, displayContent, content, maxLines]
+  );
+  const isTruncated = plainStreamingTail
+    ? plainStreamingTail.hasTruncation
+    : isMeasuredTruncated;
+
+  // Truncation detection (read-only, doesn't need to block paint). The end of
+  // a stream swaps the container, so isStreaming re-runs the measure.
   useEffect(() => {
-    if (renderContent && scrollRef.current) {
-      setIsTruncated(
-        scrollRef.current.scrollHeight > scrollRef.current.clientHeight
-      );
-    } else if (isStreaming) {
-      const textToCheck = displayContent ?? content;
-      setIsTruncated(getLineCount(textToCheck) > maxLines);
-    } else if (scrollRef.current) {
-      setIsTruncated(
+    if (!plainStreamingTail && scrollRef.current) {
+      setIsMeasuredTruncated(
         scrollRef.current.scrollHeight > scrollRef.current.clientHeight
       );
     }
-  }, [isStreaming, renderContent, content, displayContent, maxLines]);
+  }, [
+    plainStreamingTail,
+    isStreaming,
+    renderContent,
+    content,
+    displayContent,
+    maxLines,
+  ]);
 
   // Shift content upward during streaming for renderContent mode,
   // snapping to element boundaries so blocks are never partially clipped.
@@ -270,25 +291,23 @@ export default function ExpandableTextDisplay({
   };
 
   // Render plain text streaming (top-truncation with last N lines)
-  const renderPlainTextStreaming = () => {
-    const textToDisplay = displayContent ?? content;
-    const { lines, hasTruncation } = getLastLines(textToDisplay, maxLines);
-
-    return (
-      <div ref={scrollRef} className="overflow-hidden">
-        {hasTruncation && (
-          <Text as="span" font="main-ui-muted" color="text-03">
-            {"…\n"}
-          </Text>
-        )}
-        <div className="whitespace-pre-wrap">
-          <Text as="p" font="main-ui-muted" color="text-03">
-            {lines}
-          </Text>
-        </div>
+  const renderPlainTextStreaming = ({
+    lines,
+    hasTruncation,
+  }: ReturnType<typeof getLastLines>) => (
+    <div ref={scrollRef} className="overflow-hidden">
+      {hasTruncation && (
+        <Text as="span" font={plainTextFont} color="text-03">
+          {"…\n"}
+        </Text>
+      )}
+      <div className="whitespace-pre-wrap">
+        <Text as="p" font={plainTextFont} color="text-03">
+          {lines}
+        </Text>
       </div>
-    );
-  };
+    </div>
+  );
 
   // Render plain text static (CSS line-clamp + scroll-based truncation detection)
   const renderPlainTextStatic = () => (
@@ -296,7 +315,8 @@ export default function ExpandableTextDisplay({
       ref={scrollRef}
       className={cn("overflow-hidden whitespace-pre-wrap", lineClampClass)}
     >
-      <Text as="span" font="main-ui-muted" color="text-03">
+      {/* A block: the padding of an inline span would indent only the first line */}
+      <Text as="p" font={plainTextFont} color="text-03">
         {displayContent ?? content}
       </Text>
     </div>
@@ -309,8 +329,8 @@ export default function ExpandableTextDisplay({
         <div className="flex-1 min-w-0">
           {renderContent
             ? renderContentWithRef()
-            : isStreaming
-              ? renderPlainTextStreaming()
+            : plainStreamingTail
+              ? renderPlainTextStreaming(plainStreamingTail)
               : renderPlainTextStatic()}
         </div>
 
@@ -362,7 +382,7 @@ export default function ExpandableTextDisplay({
               renderContent(content, true)
             ) : (
               <div className="whitespace-pre-wrap">
-                <Text as="p" font="main-ui-muted" color="text-03">
+                <Text as="p" font={plainTextFont} color="text-03">
                   {content}
                 </Text>
               </div>

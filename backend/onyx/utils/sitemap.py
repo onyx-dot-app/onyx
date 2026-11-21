@@ -1,8 +1,9 @@
 import re
 import xml.etree.ElementTree as ET
-from dataclasses import dataclass, field
 from typing import Set
 from urllib.parse import urljoin
+
+from pydantic import BaseModel, ConfigDict, Field
 
 from onyx.utils.logger import setup_logger
 from onyx.utils.url import ssrf_safe_get
@@ -13,9 +14,10 @@ MAX_SITEMAP_INDEX_DEPTH = 3
 MAX_SITEMAPS_FETCHED = 50
 
 
-@dataclass
-class _SitemapCrawl:
-    visited: set[str] = field(default_factory=set)
+class _SitemapCrawl(BaseModel):
+    model_config = ConfigDict(strict=True)
+
+    visited: set[str] = Field(default_factory=set)
     skipped: int = 0
 
 

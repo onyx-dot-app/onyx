@@ -33,6 +33,11 @@ class SessionInstanceTable(BaseModel):
     sessions: dict[str, tuple[int, int]] = {}
 
 
+class SkillsImage(BaseModel):
+    instance: tuple[int, int]
+    image_id: str
+
+
 class SessionSave(BaseModel):
     """The committed save of one chat session's directory."""
 
@@ -48,6 +53,6 @@ class SessionSave(BaseModel):
 
 
 class IdSet(BaseModel):
-    """A set of IDs kept in one cache record (saved sessions, artifacts)."""
+    """A set of IDs kept in one cache record (saved sessions)."""
 
     ids: list[str] = []

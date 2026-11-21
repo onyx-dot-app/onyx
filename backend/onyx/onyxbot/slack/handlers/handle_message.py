@@ -79,7 +79,7 @@ def schedule_feedback_reminder(
         logger.error("Unable to generate the feedback reminder permalink: %s", e)
         return None
 
-    now = datetime.datetime.now()
+    now = datetime.datetime.now(datetime.UTC)
     future = now + datetime.timedelta(minutes=ONYX_BOT_FEEDBACK_REMINDER)
 
     try:

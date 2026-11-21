@@ -5,7 +5,6 @@ import { createAgent } from "@tests/e2e/utils/agentUtils";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 
 const MAX_SETTING_SAVE_ATTEMPTS = 5;
-const SETTING_SAVE_RETRY_DELAY_MS = 750;
 
 /**
  * Expand the "Advanced Options" collapsible section on the Chat Preferences page.
@@ -70,8 +69,6 @@ async function setDisableDefaultAssistantSetting(
     );
     await switchEl.click();
     expect((await saved).ok()).toBeTruthy();
-
-    await page.waitForTimeout(SETTING_SAVE_RETRY_DELAY_MS);
 
     // Verify persistence after reload
     await page.reload();

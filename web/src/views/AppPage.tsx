@@ -24,14 +24,6 @@ import { useSendChatMessageFromURL } from "@/lib/chat/hooks";
 import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/types";
 import { useToolConfiguration } from "@/lib/tools/hooks";
-import { useMemberPlugins } from "@/lib/plugins/member";
-import {
-  applyChatPluginIntent,
-  chatPluginIntentLoadState,
-  chatPluginsForAgent,
-  parseChatPluginIntent,
-  withoutChatPluginIntent,
-} from "@/lib/plugins/chat";
 import { useSettings } from "@/lib/settings/hooks";
 import Dropzone from "react-dropzone";
 import AppInputBar, { AppInputBarHandle } from "@/sections/input/AppInputBar";
@@ -44,10 +36,14 @@ import { useUser } from "@/providers/UserProvider";
 import { useCurrentUser } from "@/lib/users/hooks";
 import { NoAgentModal } from "@/lib/agents/components";
 import PreviewModal from "@/sections/modals/PreviewModal";
-import { Modal } from "@opal/components";
 import { useSendMessageToParent } from "@/lib/extension/hooks";
 import { FederatedConnectorDetail } from "@/lib/types";
 import DocumentsSidebar from "@/sections/document-sidebar/DocumentsSidebar";
+import {
+  CHAT_FILES_PANEL,
+  CurrentChatRightPanel,
+} from "@/sections/chat/ChatRightPanel";
+import { PublishedFilesPanelContext } from "@/sections/chat/PublishedFileCards";
 import useChatController from "@/hooks/useChatController";
 import useMultiModelChat from "@/hooks/useMultiModelChat";
 import MultiModelSelector from "@/sections/model-selector/MultiModelSelector";
@@ -66,13 +62,17 @@ import {
   useCurrentChatState,
   useIsReady,
   useIsFetchingChatMessages,
-  useDocumentSidebarVisible,
+  useSourcesShown,
   useCurrentIsStreamDraining,
+  useFilesShown,
+  useSelectedNodeForDocDisplay,
 } from "@/app/app/stores/useChatSessionStore";
 import FederatedOAuthModal from "@/components/chat/FederatedOAuthModal";
+import { messageRowId } from "@/lib/chat/rowIds";
+import { useScrollToNewTurn } from "@/lib/chatScroll/hooks";
 import ChatScrollContainer, {
   ChatScrollContainerHandle,
-} from "@/sections/chat/ChatScrollContainer";
+} from "@/lib/chatScroll/components/ChatScrollContainer";
 import {
   ProjectContextPanel,
   ProjectChatSessionList,
@@ -87,7 +87,7 @@ import { OnboardingFlow } from "@/lib/onboarding/components";
 import { OnboardingStep } from "@/lib/onboarding/types";
 import { STEP_CONFIG } from "@/lib/onboarding/constants";
 import { useShowOnboarding } from "@/lib/onboarding/hooks";
-import { SvgChevronDown, SvgFileText } from "@opal/icons";
+import { SvgChevronDown } from "@opal/icons";
 import { Button, Presence, ShadowDiv, Spacer } from "@opal/components";
 import { ChatMessageLoader } from "@opal/loaders";
 import {
@@ -104,7 +104,9 @@ import useScreenSize from "@/hooks/useScreenSize";
 import { useSidebarState } from "@opal/layouts";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import WelcomeMessage from "@/app/app/components/WelcomeMessage";
-import ChatUI, { FULL_WIDTH_TRANSITION } from "@/sections/chat/ChatUI";
+import ChatUI from "@/sections/chat/ChatUI";
+import ScheduledRunBanner from "@/sections/scheduledTasks/ScheduledRunBanner";
+import { FULL_WIDTH_TRANSITION } from "@/lib/chat/layout";
 import { useFullWidthChat } from "@/providers/FullWidthChatProvider";
 import { paidTierGated } from "@/ce";
 import EESearchUI from "@/ee/sections/SearchUI";
@@ -219,65 +221,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   }, [searchParams, navigation]);
 
   const toolConfiguration = useToolConfiguration();
-  const pluginCopy = useTranslations("actions.memberPlugins");
-  const memberPlugins = useMemberPlugins({
-    agentId: activeAgent?.id,
-    surface: "chat",
-  });
-  const handledPluginIntent = useRef<string | null>(null);
-
-  useEffect(() => {
-    const params = new URLSearchParams(searchParams?.toString() ?? "");
-    if (!params.has("pluginKind") && !params.has("pluginId")) {
-      handledPluginIntent.current = null;
-      return;
-    }
-    const reference = parseChatPluginIntent(params);
-    const intentLoadState = reference
-      ? chatPluginIntentLoadState(reference, memberPlugins)
-      : null;
-    if (!toolConfiguration.ready) return;
-    if (
-      reference &&
-      (!activeAgent ||
-        isLoadingAgents ||
-        isLoadingChatSessions ||
-        intentLoadState === "loading")
-    ) {
-      return;
-    }
-    const intentKey = `${pathname}?${params}`;
-    if (handledPluginIntent.current === intentKey) return;
-    handledPluginIntent.current = intentKey;
-    if (!reference) {
-      toast.error(pluginCopy("chat.intent.invalid"));
-    } else if (
-      !activeAgent ||
-      intentLoadState === "error" ||
-      !applyChatPluginIntent(
-        reference,
-        chatPluginsForAgent(memberPlugins.plugins, activeAgent),
-        toolConfiguration
-      )
-    ) {
-      toast.error(pluginCopy("chat.intent.unavailable"));
-    }
-    const remaining = withoutChatPluginIntent(params).toString();
-    navigation.go(remaining ? `/app?${remaining}` : "/app", {
-      replace: true,
-      scroll: false,
-    });
-  }, [
-    activeAgent,
-    isLoadingAgents,
-    isLoadingChatSessions,
-    memberPlugins,
-    pathname,
-    pluginCopy,
-    navigation,
-    searchParams,
-    toolConfiguration,
-  ]);
 
   const { deepResearchEnabled, toggleDeepResearch } = useDeepResearchToggle({
     chatSessionId: currentChatSessionId,
@@ -378,10 +321,12 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   // Access chat state directly from the store
   const currentChatState = useCurrentChatState();
   const isReady = useIsReady();
-  const documentSidebarVisible = useDocumentSidebarVisible();
-  const updateCurrentDocumentSidebarVisible = useChatSessionStore(
-    (state) => state.updateCurrentDocumentSidebarVisible
+  const sourcesPanelVisible = useSourcesShown();
+  const updateCurrentRightPanel = useChatSessionStore(
+    (state) => state.updateCurrentRightPanel
   );
+  const selectedNodeForDocDisplay = useSelectedNodeForDocDisplay();
+  const publishedFilesPanelOpen = useFilesShown();
   const messageHistory = useCurrentMessageHistory();
   const messageTree = useCurrentMessageTree();
   // A chat opened for the first time has nothing to show until its fetch
@@ -438,7 +383,17 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   // Determine anchor: second-to-last message (last user message before current response)
   const anchorMessage = messageHistory.at(-2) ?? messageHistory[0];
   const anchorNodeId = anchorMessage?.nodeId;
-  const anchorSelector = anchorNodeId ? `#message-${anchorNodeId}` : undefined;
+  // The row keeps the id it was first shown with (see messageRowId).
+  const anchorSelector = anchorMessage
+    ? `#${messageRowId(anchorMessage)}`
+    : undefined;
+  // A send glides to the new turn: its message at the top.
+  useScrollToNewTurn(
+    scrollContainerRef,
+    storeSessionId,
+    anchorSelector,
+    currentChatState === "loading"
+  );
 
   // Auto-scroll preference from user settings. Pause while the
   // typewriter is running its post-finish adaptive drain — the user is
@@ -446,7 +401,11 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   // is jarring.
   const autoScrollPreference = user?.preferences?.auto_scroll !== false;
   const isStreamDraining = useCurrentIsStreamDraining();
-  const autoScrollEnabled = autoScrollPreference && !isStreamDraining;
+  // The setting decides whether a running reply is followed. With nothing
+  // running, growth is layout settling (an action row, a card growing in),
+  // so a view at the end keeps to it, and a reopened chat lands at the end.
+  const autoScrollEnabled =
+    autoScrollPreference || currentChatState === "input";
   const isStreaming = currentChatState === "streaming";
 
   const multiModel = useMultiModelChat(llmManager);
@@ -510,23 +469,18 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     }
   }, [multiModel.selectedModels]);
 
-  const {
-    onSubmit,
-    stopGenerating,
-    handleMessageSpecificFileUpload,
-    availableContextTokens,
-  } = useChatController({
-    llmManager,
-    toolConfiguration,
-    availableAgents: agents,
-    activeAgent,
-    memberPlugins: memberPlugins.plugins,
-    existingChatSessionId: currentChatSessionId,
-    selectedDocuments,
-    searchParams,
-    resetInputBar,
-    restoreInputBar,
-  });
+  const { onSubmit, stopGenerating, handleMessageSpecificFileUpload } =
+    useChatController({
+      llmManager,
+      toolConfiguration,
+      availableAgents: agents,
+      activeAgent,
+      existingChatSessionId: currentChatSessionId,
+      selectedDocuments,
+      searchParams,
+      resetInputBar,
+      restoreInputBar,
+    });
 
   const { onMessageSelection, sessionFetchError, queue } =
     useChatSessionController({
@@ -561,14 +515,14 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   // left behind by the previous agent.
   useEffect(() => {
     // Already closed.
-    if (!documentSidebarVisible) return;
+    if (!sourcesPanelVisible) return;
 
     // Retrieval is not known yet. Closing now would need a reopen later.
     if (retrievalEnabled === null) return;
 
     // Not reading a conversation, so there are no sources to show.
     if (!appPosition.isChattable()) {
-      updateCurrentDocumentSidebarVisible(false);
+      updateCurrentRightPanel({ type: "hideSources" });
       return;
     }
 
@@ -578,13 +532,13 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     // The user picked documents by hand.
     if (selectedDocuments.length > 0) return;
 
-    updateCurrentDocumentSidebarVisible(false);
+    updateCurrentRightPanel({ type: "hideSources" });
   }, [
-    documentSidebarVisible,
+    sourcesPanelVisible,
     appPosition,
     retrievalEnabled,
     selectedDocuments,
-    updateCurrentDocumentSidebarVisible,
+    updateCurrentRightPanel,
   ]);
 
   const handleResubmitLastMessage = useCallback(() => {
@@ -737,14 +691,40 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     ]
   );
 
-  // Memoized callbacks for DocumentsSidebar
-  const handleMobileDocumentSidebarClose = useCallback(() => {
-    updateCurrentDocumentSidebarVisible(false);
-  }, [updateCurrentDocumentSidebarVisible]);
+  // A stable element, so the panel's memo holds while messages stream
+  const sourcesView = useMemo(
+    () =>
+      retrievalEnabled ? (
+        /* IMPORTANT: this is a memoized component, and it's very important
+        for performance reasons that this stays true. MAKE SURE that all
+        function props are wrapped in useCallback. */
+        <DocumentsSidebar
+          setPresentingDocument={setPresentingDocument}
+          selectedDocuments={selectedDocuments}
+        />
+      ) : null,
+    [retrievalEnabled, selectedDocuments]
+  );
 
-  const handleDesktopDocumentSidebarClose = useCallback(() => {
-    setTimeout(() => updateCurrentDocumentSidebarVisible(false), 300);
-  }, [updateCurrentDocumentSidebarVisible]);
+  const sourcesHaveContent =
+    !!retrievalEnabled &&
+    selectedNodeForDocDisplay !== null &&
+    (messageTree?.get(selectedNodeForDocDisplay)?.documents?.length ?? 0) > 0;
+
+  // A stable element: the app chrome's slot renders again only when one of
+  // these inputs changes, not on each streamed packet or panel change
+  const rightPanelOpen =
+    (!!retrievalEnabled && sourcesPanelVisible) || publishedFilesPanelOpen;
+  const rightPanel = useMemo(
+    () => (
+      <CurrentChatRightPanel
+        open={rightPanelOpen}
+        sources={sourcesView}
+        hasSources={sourcesHaveContent}
+      />
+    ),
+    [rightPanelOpen, sourcesView, sourcesHaveContent]
+  );
 
   // When no chat session exists but a project is selected, fetch the
   // total tokens for the project's files so upload UX can compare
@@ -842,7 +822,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   if (!isReady) return <OnyxInitializingLoader />;
 
   return (
-    <>
+    <PublishedFilesPanelContext.Provider value={CHAT_FILES_PANEL}>
       <AppPopup />
 
       {presentingDocument && (
@@ -854,50 +834,13 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
       <FederatedOAuthModal />
 
-      {retrievalEnabled &&
-        (isMobile ? (
-          documentSidebarVisible && (
-            <Modal
-              open
-              onOpenChange={() => updateCurrentDocumentSidebarVisible(false)}
-            >
-              <Modal.Content>
-                <Modal.Header
-                  icon={SvgFileText}
-                  title={t("sourcesModal.title")}
-                  onClose={() => updateCurrentDocumentSidebarVisible(false)}
-                />
-                <Modal.Body>
-                  {/* IMPORTANT: this is a memoized component, and it's very important
-                for performance reasons that this stays true. MAKE SURE that all function
-                props are wrapped in useCallback. */}
-                  <DocumentsSidebar
-                    setPresentingDocument={setPresentingDocument}
-                    modal
-                    closeSidebar={handleMobileDocumentSidebarClose}
-                    selectedDocuments={selectedDocuments}
-                  />
-                </Modal.Body>
-              </Modal.Content>
-            </Modal>
-          )
-        ) : (
-          <RootLayout.RightPanel>
-            <div
-              className={cn(
-                "overflow-hidden transition-all duration-300 ease-in-out h-full",
-                documentSidebarVisible ? "w-100" : "w-0"
-              )}
-            >
-              <DocumentsSidebar
-                setPresentingDocument={setPresentingDocument}
-                modal={false}
-                closeSidebar={handleDesktopDocumentSidebarClose}
-                selectedDocuments={selectedDocuments}
-              />
-            </div>
-          </RootLayout.RightPanel>
-        ))}
+      {/* Mounted whenever the chat loads, so a reply card opens its file
+          whatever the Files list holds. Closed, the panel takes no room and
+          renders only when its state or files change. A chat that failed to
+          load shows no panel. */}
+      <RootLayout.RightPanel>
+        {sessionFetchError === null && rightPanel}
+      </RootLayout.RightPanel>
 
       <div className="w-full h-full overflow-hidden">
         {/* noPaste: the input bar already uploads pasted files itself. Without
@@ -940,6 +883,11 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     height="full"
                   >
                     <Section justifyContent="start" gap={0}>
+                      {currentChatSessionId && (
+                        <ScheduledRunBanner
+                          chatSessionId={currentChatSessionId}
+                        />
+                      )}
                       {/* The store's session, not the URL's: the store takes
                           the URL's chat one effect late, and the scroll reset
                           must see the messages of the chat it opens. */}
@@ -948,6 +896,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         sessionId={storeSessionId ?? undefined}
                         anchorSelector={anchorSelector}
                         autoScroll={autoScrollEnabled}
+                        pauseFollowing={isStreamDraining}
                         isStreaming={isStreaming}
                         onScrollButtonVisibilityChange={setShowScrollButton}
                         fullWidth={fullWidthActive}
@@ -1068,7 +1017,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     <div className="w-full max-h-[50vh] overflow-y-auto overscroll-y-none px-2 sm:px-4">
                       <ProjectContextPanel
                         projectTokenCount={projectContextTokenCount}
-                        availableContextTokens={availableContextTokens}
+                        agentId={activeAgent?.id}
+                        hasAnyProvider={llmManager.hasAnyProvider}
                         setPresentingDocument={setPresentingDocument}
                       />
                     </div>
@@ -1198,7 +1148,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       <AppInputBar
                         queue={queue}
                         toolConfiguration={toolConfiguration}
-                        memberPlugins={memberPlugins.plugins}
                         ref={chatInputBarRef}
                         deepResearchEnabled={
                           deepResearchEnabledForCurrentWorkflow
@@ -1286,6 +1235,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
           )}
         </Dropzone>
       </div>
-    </>
+    </PublishedFilesPanelContext.Provider>
   );
 }

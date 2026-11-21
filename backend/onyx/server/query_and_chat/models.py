@@ -1,6 +1,6 @@
 from datetime import datetime
 from enum import Enum
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -9,19 +9,28 @@ from onyx.agents.models import MessageDelivery, RunStatus
 from onyx.chat.mention_models import Mentions, RecordedMention
 from onyx.configs.constants import DocumentSource, MessageType, SessionType
 from onyx.context.search.models import BaseFilters, SavedSearchDoc, SearchDoc, Tag
-from onyx.db.enums import ChatSessionSharedStatus
+from onyx.db.enums import (
+    ApprovalDecidedVia,
+    ApprovalDecision,
+    ChatSessionSharedStatus,
+)
 from onyx.db.models import ChatSession
 from onyx.file_store.models import FileDescriptor
 from onyx.llm.models import GenerationRequestParams
 from onyx.llm.override_models import LLMOverride
+from onyx.server.features.action_policies.models import DecisionBody
 from onyx.server.query_and_chat.streaming_models import Packet, StreamingError
-from onyx.tools.models import ChatToolSelection
+from onyx.tools.models import ToolOptions
+from onyx.tools.tool_implementations.question.models import ToolQuestionAnswer
+from onyx.tools.tool_implementations.sandbox.models import PublishedFileView
+from onyx.utils.postgres_sanitization import sanitize_string
 
 AUTO_PLACE_AFTER_LATEST_MESSAGE = -1
 
 
 class MessageOrigin(str, Enum):
-    """Origin of a chat message for telemetry tracking."""
+    """Origin of a chat message, for telemetry. The Slack and Discord bot
+    origins also keep the sandbox tools out of the turn."""
 
     WEBAPP = "webapp"
     CHROME_EXTENSION = "chrome_extension"
@@ -136,18 +145,9 @@ class SendMessageRequest(BaseModel):
     # When provided with >1 entry, triggers multi-model streaming.
     llm_overrides: list[LLMOverride] | None = None
 
-    allowed_tool_ids: list[int] | None = None
-    preferred_tool_id: int | None = None
-
-    @model_validator(mode="before")
-    @classmethod
-    def reject_forced_action(cls, data: Any) -> Any:
-        if isinstance(data, dict) and data.get("forced_tool_id") is not None:
-            raise ValueError(
-                "forced_tool_id is no longer supported. Use preferred_tool_id for "
-                "an optional Action preference; invocation is not guaranteed."
-            )
-        return data
+    # The tools, plugins and search filters for this turn; None uses each
+    # tool and plugin of the agent.
+    tool_options: ToolOptions | None = None
 
     file_descriptors: list[FileDescriptor] = []
 
@@ -161,8 +161,6 @@ class SendMessageRequest(BaseModel):
             "message text never tags anything."
         ),
     )
-
-    internal_search_filters: BaseFilters | None = None
 
     deep_research: bool = False
 
@@ -182,6 +180,15 @@ class SendMessageRequest(BaseModel):
         ),
     )
 
+    accepts_chat_session_name: bool = Field(
+        default=False,
+        description=(
+            "Set to true to receive a `chat_session_name` line when the server "
+            "names a new chat. The server names a new chat from its first "
+            "question while it answers, whether or not this is set."
+        ),
+    )
+
     # Placement information for the message in the conversation tree:
     # - -1: auto-place after latest message in chain
     # - null: regeneration from root (first message)
@@ -197,6 +204,10 @@ class SendMessageRequest(BaseModel):
     # When False, returns ChatFullResponse with complete data
     stream: bool = True
 
+    # The streamed wire format. 1 (default): chat's packets. 2: ACP updates
+    # (see acp_stream.py). Single-model streams only; others stay on 1.
+    protocol_version: Literal[1, 2] = 1
+
     # When False, disables citation generation:
     # - Citation markers like [1], [2] are removed from response text
     # - No CitationInfo packets are emitted during streaming
@@ -207,10 +218,57 @@ class SendMessageRequest(BaseModel):
     # the current tab URL when "Read this tab" is enabled.
     additional_context: str | None = None
 
+    @model_validator(mode="before")
+    @classmethod
+    def reject_removed_tool_fields(cls, data: Any) -> Any:
+        if not isinstance(data, dict):
+            return data
+        if data.get("forced_tool_id") is not None:
+            raise ValueError(
+                "forced_tool_id is no longer supported. Use tool_options.preferred "
+                "for an optional Action preference; invocation is not guaranteed."
+            )
+        for field in ("allowed_tool_ids", "preferred_tool_id"):
+            if data.get(field) is not None:
+                raise ValueError(
+                    f"{field} is no longer supported. Use tool_options: "
+                    "tool_options.allowed narrows the Actions and "
+                    "tool_options.preferred sets an optional preference."
+                )
+        # The filters were a field of their own before tool_options.
+        if "internal_search_filters" not in data:
+            return data
+        data = dict(data)
+        filters = data.pop("internal_search_filters")
+        if filters is None:
+            return data
+        options = data.get("tool_options") or {}
+        if isinstance(options, ToolOptions):
+            options = options.model_dump()
+        if not isinstance(options, dict):
+            raise ValueError("tool_options must be an object")
+        if options.get("internal_search_filters") is not None:
+            raise ValueError(
+                "Send internal_search_filters in tool_options or at the top "
+                "level, not in both"
+            )
+        data["tool_options"] = {**options, "internal_search_filters": filters}
+        return data
+
+    @property
+    def internal_search_filters(self) -> BaseFilters | None:
+        return self.tool_options.internal_search_filters if self.tool_options else None
+
     @model_validator(mode="after")
     def check_preference_supported(self) -> "SendMessageRequest":
-        if self.deep_research and self.preferred_tool_id is not None:
-            raise ValueError("preferred_tool_id is not supported with deep_research")
+        if (
+            self.deep_research
+            and self.tool_options is not None
+            and self.tool_options.preferred is not None
+        ):
+            raise ValueError(
+                "tool_options.preferred is not supported with deep_research"
+            )
         return self
 
     @model_validator(mode="after")
@@ -304,6 +362,61 @@ class StopChatResponse(BaseModel):
     message: str
 
 
+class ChatApprovalDecisionRequest(DecisionBody):
+    # Headers for the MCP servers that the response's continuation calls;
+    # they are not saved.
+    mcp_headers: dict[str, str] | None = None
+
+
+class CurrentStreamInfo(BaseModel):
+    """Unfinished response available for stream reconnection."""
+
+    stream_id: int
+    # The responses that the stream writes. A stream that continues a response
+    # after its approvals has an ID that no message has.
+    response_ids: list[int] = Field(default_factory=list)
+
+
+class ApprovalDecisionResponse(BaseModel):
+    approval_id: UUID
+    decision: Literal[ApprovalDecision.APPROVED, ApprovalDecision.REJECTED]
+    decided_via: ApprovalDecidedVia
+    # The stream that continues the request's response, when the decision
+    # started it or found it running; None while the response still waits, or
+    # for a background agent's request, which continues without a stream.
+    continuation: CurrentStreamInfo | None = None
+
+
+class ChatQuestionAnswersRequest(BaseModel):
+    """The user's answers to a question request's questions, from its card, or
+    a message that the user typed in the chat instead, which answers every
+    question of the response that waits."""
+
+    model_config = ConfigDict(extra="forbid")
+
+    answers: list[ToolQuestionAnswer] | None = None
+    message: str | None = None
+    # Headers for the MCP servers that the response's continuation calls;
+    # they are not saved.
+    mcp_headers: dict[str, str] | None = None
+
+    @model_validator(mode="after")
+    def require_one_answer(self) -> "ChatQuestionAnswersRequest":
+        if (self.answers is None) == (self.message is None):
+            raise ValueError("Give either answers or a message")
+        # The message counts by the text that the answer saves.
+        if self.message is not None and not sanitize_string(self.message).strip():
+            raise ValueError("A message must contain text")
+        return self
+
+
+class QuestionAnswersResponse(BaseModel):
+    question_request_id: UUID
+    # The stream that continues the question's response, when the answer
+    # started it or found it running; None while the response still waits.
+    continuation: CurrentStreamInfo | None = None
+
+
 class StopSubagentsResponse(BaseModel):
     # The running agent runs that were interrupted.
     stopped_count: int
@@ -382,12 +495,6 @@ class SetPreferredResponseRequest(BaseModel):
     preferred_response_id: int
 
 
-class CurrentStreamInfo(BaseModel):
-    """Unfinished response available for stream reconnection."""
-
-    stream_id: int
-
-
 class ChatSessionProcessingStatus(BaseModel):
     is_processing: bool
     # Background agents are active on the selected branch, or their queued work waits.
@@ -397,6 +504,11 @@ class ChatSessionProcessingStatus(BaseModel):
     # The newest response on the selected branch.
     latest_response_id: int | None = None
     current_stream: CurrentStreamInfo | None = None
+    # Changes when an approval request of the chat opens, is decided or is
+    # removed; reload the session to show the requests. Opaque, and empty
+    # while the chat has no request: a client that loaded nothing compares
+    # against the empty version.
+    approvals_version: str = ""
 
 
 class ChatSessionDetailResponse(BaseModel):
@@ -423,8 +535,15 @@ class ChatSessionDetailResponse(BaseModel):
     incognito: bool = False
     # Set on a paged load when the current branch has messages before the page.
     has_older_messages: bool = False
-    # The owner's saved tools and search filters; NULL means the agent's tools.
-    tool_selection: ChatToolSelection | None = None
+    # The files published in the chat, also by its subagents: the latest
+    # version of each artifact, by first publish
+    # (db/chat.py:get_chat_published_files).
+    # Set on a latest-page load and on a shared chat's load.
+    published_files: list[PublishedFileView] | None = None
+    # The owner's saved tool options; NULL means the agent's tools.
+    tool_options: ToolOptions | None = None
+    # The status route's `approvals_version` for the requests this load shows.
+    approvals_version: str = ""
 
 
 class AdminSearchRequest(BaseModel):

@@ -484,6 +484,31 @@
     },
   },
   {
+    "label": "run: celery docconversion",
+    "command": "$ZED_WORKTREE_ROOT/.venv/bin/python",
+    "args": [
+      "$ZED_WORKTREE_ROOT/.zed/dotenv_launch.py",
+      ".vscode/.env",
+      "--program",
+      "$ZED_WORKTREE_ROOT/backend/scripts/dev_celery_reload.py",
+      "-A",
+      "onyx.background.celery.versioned_apps.docconversion",
+      "worker",
+      "--pool=threads",
+      "--prefetch-multiplier=1",
+      "--loglevel=INFO",
+      "--hostname=docconversion@%n",
+      "-Q",
+      "docconversion",
+    ],
+    "cwd": "$ZED_WORKTREE_ROOT/backend",
+    "env": {
+      "LOG_LEVEL": "DEBUG",
+      "PYTHONUNBUFFERED": "1",
+      "PYTHONPATH": ".",
+    },
+  },
+  {
     "label": "run: celery docprocessing",
     "command": "$ZED_WORKTREE_ROOT/.venv/bin/python",
     "args": [

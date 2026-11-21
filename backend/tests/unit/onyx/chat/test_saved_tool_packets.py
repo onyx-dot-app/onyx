@@ -3,7 +3,7 @@
 from datetime import datetime, timezone
 
 import pytest
-from pydantic import BaseModel, JsonValue
+from pydantic import BaseModel, JsonValue, ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.agents.models import (
@@ -13,7 +13,13 @@ from onyx.agents.models import (
     StepRecord,
     ToolExecutionRecord,
 )
-from onyx.chat.models import ChatSearchResult, ToolReplayData
+from onyx.chat.checkpoint import CHECKPOINT_PAYLOAD_TYPES, CheckpointSerializer
+from onyx.chat.models import (
+    ChatSearchResult,
+    PresentationMode,
+    ToolReplayData,
+    read_message_rendering,
+)
 from onyx.chat.presentation import _collect_tool_history, replay_response
 from onyx.chat.renderer import ToolRenderer
 from onyx.chat.response import response_record
@@ -33,8 +39,11 @@ from onyx.server.query_and_chat.streaming_models import (
     MemoryToolNoAccess,
     OverallStop,
     PacketException,
+    PublishFilesEnd,
+    PublishFilesStart,
     ReasoningDelta,
     SearchToolDocumentsDelta,
+    SectionEnd,
 )
 from onyx.tools.models import (
     ChatFile,
@@ -45,6 +54,7 @@ from onyx.tools.models import (
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
+from onyx.tools.tool_implementations.sandbox.sandbox_tools import PublishFilesTool
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 
 
@@ -299,6 +309,30 @@ def test_image_failure_renders_error_at_tool_placement(display_error: bool) -> N
         )
 
 
+@pytest.mark.parametrize(
+    "arguments",
+    [{}, {"files": "report.csv"}, {"files": [{"name": "report.csv"}]}],
+)
+def test_a_publish_with_invalid_arguments_renders_an_empty_publish_card(
+    arguments: dict[str, JsonValue],
+) -> None:
+    call = ModelToolCall(id="publish", name=PublishFilesTool.NAME, arguments=arguments)
+    result = ToolResultMessage(
+        tool_call_id=call.id,
+        tool_name=call.name,
+        content="Invalid tool arguments: files: Field required",
+        is_error=True,
+    )
+
+    packets = ToolRenderer(call, Placement(turn_index=0)).complete(result)
+
+    assert [packet.obj for packet in packets] == [
+        PublishFilesStart(),
+        PublishFilesEnd(error="Invalid tool arguments: files: Field required"),
+        SectionEnd(),
+    ]
+
+
 def test_memory_failure_does_not_claim_access_was_denied() -> None:
     call = ModelToolCall(id="memory", name="add_memory", arguments={})
     result = ToolResultMessage(
@@ -378,7 +412,10 @@ def test_legacy_thinking_precedes_tool_groups_and_final_answer(
     )
     with Session() as session:
         packets = translate_assistant_message_to_packets(
-            response, {1: Tool(name="lookup", display_name="Lookup")}, session
+            response,
+            {1: Tool(name="lookup", display_name="Lookup")},
+            session,
+            child_responses={},
         )
 
     assert [
@@ -393,3 +430,45 @@ def test_legacy_thinking_precedes_tool_groups_and_final_answer(
     ] == [("Final answer", final_turn)]
     assert isinstance(packets[-1].obj, OverallStop)
     assert packets[-1].placement.turn_index == final_turn
+
+
+def test_unknown_saved_display_mode_stays_hidden_and_cannot_resume() -> None:
+    raw: dict[str, JsonValue] = {"mode": "unavailable"}
+    assert read_message_rendering(raw).mode == PresentationMode.SILENT
+    with pytest.raises(ValidationError):
+        CheckpointSerializer(CHECKPOINT_PAYLOAD_TYPES).decode_payload(
+            {"tag": "chat.rendering.v1", "value": raw}
+        )
+    with pytest.raises(ValidationError):
+        read_message_rendering({**raw, "citation_mode": "invalid"})
+
+
+def test_legacy_deleted_tool_keeps_only_the_final_answer() -> None:
+    response = ChatMessage(
+        message="Saved answer",
+        message_type=MessageType.ASSISTANT,
+        tool_calls=[
+            ToolCall(
+                tool_id=1,
+                tool_call_id="call",
+                turn_number=0,
+                tab_index=0,
+                tool_call_arguments={"input": "sensitive input"},
+                result=StoredToolResult(
+                    tool_call_id="call",
+                    tool_name="removed",
+                    content="sensitive model result",
+                    is_error=True,
+                ),
+                legacy_response="sensitive legacy text",
+            )
+        ],
+    )
+    with Session() as session:
+        packets = translate_assistant_message_to_packets(
+            response, {}, session, child_responses={}
+        )
+    assert [
+        p.obj.content for p in packets if isinstance(p.obj, AgentResponseDelta)
+    ] == ["Saved answer"]
+    assert not any("sensitive" in p.model_dump_json() for p in packets)

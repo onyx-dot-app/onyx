@@ -84,12 +84,3 @@ func TestCraftDev_keepsTheCallerDirectoryForRelativePaths(t *testing.T) {
 		t.Fatalf("expected %q, got %q", want, got)
 	}
 }
-
-func TestCraftDev_execNeedsACommand(t *testing.T) {
-	cmd := NewCraftDevCommand()
-	cmd.SetArgs([]string{"exec"})
-	cmd.SilenceUsage, cmd.SilenceErrors = true, true
-	if err := cmd.Execute(); err == nil {
-		t.Fatal("expected an error without a command")
-	}
-}

@@ -144,8 +144,9 @@ jobs:
           PREVIEW_BRANCH: ${{ steps.config.outputs.branch }}
         run: |
           api="https://api.mintlify.com/v1/project"
-          # Only members of the Onyx Mintlify organization can open the preview.
-          body="$(jq -n --arg branch "$PREVIEW_BRANCH" '{branch: $branch, auth: {type: "mintlify"}}')"
+          # No "auth" field: access control on previews needs the Mintlify Enterprise plan, and
+          # Mintlify rejects the request with 403 without it. Previews are public.
+          body="$(jq -n --arg branch "$PREVIEW_BRANCH" '{branch: $branch}')"
           response="$(curl -fsS -X POST -H "Authorization: Bearer $MINTLIFY_API_KEY" \
             -H "Content-Type: application/json" -d "$body" "$api/preview/$MINTLIFY_PROJECT_ID")"
           status_id="$(jq -r '.statusId' <<<"$response")"
@@ -186,7 +187,7 @@ jobs:
           fi
           marker="<!-- docs-preview -->"
           comment="$marker
-          **Docs Preview** (Mintlify, visible to the Onyx Mintlify organization)
+          <img src='https://github.com/mintlify.png?size=40' width='16' height='16' alt='Mintlify'> **Docs Preview**
 
           | Status | Preview | Commit | Updated |
           | --- | --- | --- | --- |

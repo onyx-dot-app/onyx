@@ -34,10 +34,10 @@ from ee.onyx.server.query_history.api import router as query_history_router
 from ee.onyx.server.reporting.usage_export_api import router as usage_export_router
 from ee.onyx.server.scim.api import register_scim_exception_handlers, scim_router
 from ee.onyx.server.seeding import seed_db
+from ee.onyx.server.service_status.api import router as service_status_router
 from ee.onyx.server.spending_limits.api import router as spending_limits_router
 from ee.onyx.server.tenants.api import router as tenants_router
 from ee.onyx.server.user_group.api import router as user_group_router
-from ee.onyx.utils.encryption import test_encryption
 from onyx.auth.users import auth_backend, create_onyx_oauth_router
 from onyx.configs.app_configs import (
     GOOGLE_LOGIN_BASE_SCOPES,
@@ -57,7 +57,7 @@ from onyx.main import lifespan as lifespan_base
 from onyx.server.query_and_chat.query_backend import basic_router as query_router
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import global_version
-from shared_configs.configs import MULTI_TENANT
+from shared_configs.configs import IS_PLAYGROUND, MULTI_TENANT
 
 logger = setup_logger()
 
@@ -80,8 +80,6 @@ def get_application() -> FastAPI:
     # Anything that happens at import time is not guaranteed to be running ee-version
     # Anything after the server startup will be running ee version
     global_version.set_ee()
-
-    test_encryption()
 
     application = get_application_base(lifespan_override=lifespan)
 
@@ -148,6 +146,7 @@ def get_application() -> FastAPI:
     )
     # Spending limit settings
     include_router_with_global_prefix_prepended(application, spending_limits_router)
+    include_router_with_global_prefix_prepended(application, service_status_router)
     include_router_with_global_prefix_prepended(application, enterprise_settings_router)
     include_router_with_global_prefix_prepended(application, usage_export_router)
     # Admin log export
@@ -155,9 +154,10 @@ def get_application() -> FastAPI:
     # License management
     include_router_with_global_prefix_prepended(application, license_router)
 
-    # Unified billing API - always registered in EE.
-    # Each endpoint is protected by admin permission checks.
-    include_router_with_global_prefix_prepended(application, billing_router)
+    # Unified billing API. Each endpoint is protected by admin permission checks.
+    # Not mounted on the playground, which has no Stripe.
+    if not IS_PLAYGROUND:
+        include_router_with_global_prefix_prepended(application, billing_router)
 
     if MULTI_TENANT:
         # Tenant management

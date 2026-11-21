@@ -2,8 +2,16 @@ import ipaddress
 import socket
 import unicodedata
 from collections.abc import Iterator
-from typing import Any
-from urllib.parse import parse_qs, urlencode, urlparse, urlunparse
+from typing import Any, Literal
+from urllib.parse import (
+    parse_qs,
+    parse_qsl,
+    urlencode,
+    urlparse,
+    urlsplit,
+    urlunparse,
+    urlunsplit,
+)
 
 import requests
 from requests.adapters import HTTPAdapter
@@ -611,6 +619,63 @@ def normalize_url(url: str) -> str:
     )
 
     return normalized
+
+
+_DEFAULT_PORTS = {"http": 80, "https": 443}
+
+
+McpUrlProblem = Literal["variable", "credential", "invalid"]
+
+_CREDENTIAL_QUERY_KEYS = frozenset(
+    {"key", "apikey", "token", "auth", "secret", "password", "sig", "signature"}
+)
+_CREDENTIAL_QUERY_SUFFIXES = ("_key", "_token", "_secret", "_password")
+
+
+def _is_credential_query_key(key: str) -> bool:
+    key = key.lower().replace("-", "_")
+    return key in _CREDENTIAL_QUERY_KEYS or key.endswith(_CREDENTIAL_QUERY_SUFFIXES)
+
+
+def mcp_server_url_problem(url: str) -> McpUrlProblem | None:
+    """Why an MCP server URL cannot be a match key. Each viewer of a plugin
+    sees the key, so a URL with a credential (user info or a query value such
+    as ``api_key``) is refused."""
+    if "${" in url:
+        return "variable"
+    try:
+        parts = urlsplit(url.strip())
+        _ = parts.port
+    except ValueError:
+        return "invalid"
+    if parts.scheme.lower() not in _DEFAULT_PORTS or not parts.hostname:
+        return "invalid"
+    if "@" in parts.netloc or any(
+        _is_credential_query_key(key)
+        for key, _ in parse_qsl(parts.query, keep_blank_values=True)
+    ):
+        return "credential"
+    return None
+
+
+def normalize_mcp_server_url(url: str) -> str | None:
+    """The match key of an MCP server URL, or None when
+    ``mcp_server_url_problem`` gives a problem."""
+    if mcp_server_url_problem(url) is not None:
+        return None
+    parts = urlsplit(url.strip())
+    scheme = parts.scheme.lower()
+    host = parts.hostname
+    if host is None:
+        raise RuntimeError("Bug: a URL without a problem has a host.")
+    if ":" in host:
+        host = f"[{host}]"
+    port = parts.port
+    if port is not None and port != _DEFAULT_PORTS[scheme]:
+        host = f"{host}:{port}"
+    return urlunsplit(
+        (scheme, host, parts.path.removesuffix("/"), parts.query, parts.fragment)
+    )
 
 
 def add_url_params(url: str, params: dict) -> str:

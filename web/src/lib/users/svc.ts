@@ -3,6 +3,7 @@ import { User, UserPersonalization } from "@/lib/types";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { CustomRefreshTokenResponse } from "@/lib/users/types";
 import { clearOutputThumbnailCache } from "@/app/craft/services/outputThumbnailCache";
+import { CHAT_PANEL_STORAGE_PREFIX } from "@/lib/chat/rightPanel";
 
 export function checkUserIsNoAuthUser(userId: string): boolean {
   return userId === "__no_auth_user__";
@@ -38,7 +39,8 @@ export async function logout(): Promise<Response> {
         const key = storage.key(index);
         if (
           key?.startsWith("onyx:craft:") ||
-          key?.startsWith("onyx:draft:craft:")
+          key?.startsWith("onyx:draft:craft:") ||
+          key?.startsWith(CHAT_PANEL_STORAGE_PREFIX)
         ) {
           storage.removeItem(key);
         }

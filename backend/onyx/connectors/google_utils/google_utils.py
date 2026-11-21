@@ -10,10 +10,11 @@ from typing import Any
 from googleapiclient.errors import HttpError
 
 from onyx.connectors.cross_connector_utils.server_wait import bound_server_wait
-from onyx.connectors.google_drive.models import GoogleDriveFileType
+from onyx.connectors.google_utils.shared_constants import GoogleDriveFileType
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_after import parse_retry_after_seconds
 from onyx.utils.retry_wrapper import retry_builder
+from onyx.utils.threadpool_concurrency import record_pushback
 
 logger = setup_logger()
 
@@ -87,8 +88,8 @@ def _execute_with_retry(request: Any) -> Any:
             attempt += 1
 
             if _is_rate_limit_error(error):
-                # Attempt to get 'Retry-After' from headers
-                retry_after = parse_retry_after_seconds(error.resp.get("Retry-After"))
+                # httplib2 stores header names in lowercase.
+                retry_after = parse_retry_after_seconds(error.resp.get("retry-after"))
                 if retry_after is not None:
                     sleep_time = bound_server_wait(retry_after, "google")
                 else:
@@ -115,6 +116,7 @@ def _execute_with_retry(request: Any) -> Any:
                         sleep_time = 60
 
                 sleep_time += 3  # Add a buffer to be safe
+                record_pushback()
 
                 logger.info(
                     "Rate limit exceeded. Attempt %s/%s. Sleeping for %s seconds.",
@@ -125,6 +127,9 @@ def _execute_with_retry(request: Any) -> Any:
                 time.sleep(sleep_time)
 
             else:
+                if error.resp.status >= 500:
+                    # The caller may retry it, so count it as pushback here.
+                    record_pushback()
                 raise
 
     # If we've exhausted all attempts
@@ -184,6 +189,8 @@ def _execute_single_retrieval(
         results = retrieval_function(**request_kwargs).execute()
     except HttpError as e:
         if e.resp.status >= 500:
+            # A server error under load is pushback as much as a rate limit.
+            record_pushback()
             results = add_retries(
                 lambda: retrieval_function(**request_kwargs).execute()
             )()
@@ -206,6 +213,7 @@ def _execute_single_retrieval(
             logger.error("Error executing request: %s", e)
             raise e
         elif _is_rate_limit_error(e):
+            record_pushback()
             results = _execute_with_retry(retrieval_function(**request_kwargs))
         elif e.resp.status == 404 or e.resp.status == 403:
             if continue_on_404_or_403:

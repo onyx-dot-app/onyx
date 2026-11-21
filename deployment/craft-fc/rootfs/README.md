@@ -288,7 +288,17 @@ At boot, init:
 
 1. Mounts `/proc`, `/sys`, `/dev`, `/dev/pts`, `/dev/shm`, cgroup2 on
    `/sys/fs/cgroup` (all controllers on in `cgroup.subtree_control`), and
-   tmpfs on `/run` and `/tmp`.
+   tmpfs on `/run` and `/tmp`. It makes the Onyx directories
+   `/tmp/onyx/tool-results`, `/tmp/onyx/search-files` and `/tmp/onyx/artifacts`,
+   owned by the sandbox user (uid 1000). The template boot makes them and the
+   template snapshot keeps them, so every VM restored from it has them.
+   Then it sets kernel sysctls: `io_uring_disabled=2`, `kptr_restrict=2`,
+   `dmesg_restrict=1`, `sysrq=0`, `kexec_load_disabled=1` and
+   `modules_disabled=1`. Guest root cannot set the last two back before a
+   reboot. The guest has no kernel modules and no program in it needs
+   io_uring. It also sets `fs.protected_hardlinks=1` and
+   `fs.protected_symlinks=1`, so links that the sandbox user makes in `/tmp`
+   do not redirect root.
 2. Sets the host name to `sandbox` and starts the loopback interface.
 3. Stops here, without services, if `/craft-fc` is on a writable mount. Only
    then does it read `init.conf`.
@@ -380,6 +390,10 @@ you change `craft-init`, `attach.sh` or the drive layout, boot the result on a
 KVM host (see `../README.md`, "Boot test") and check:
 
 - `/proc/mounts` has the overlays and the read-only managed drive;
+- `/tmp` is a tmpfs, and `/tmp/onyx` and its directories `tool-results`,
+  `search-files` and `artifacts` are owned by uid 1000. A command (uid 1000)
+  can make and delete files in them. `TestRootfsDeliveryKVM` (full KVM lane)
+  checks this;
 - commands run as uid 1000; with `--daemon-cmd "/craft-fc/bin/guest-daemon --command-user="`
   (commands as root), `apt-get install`, `pip install` and `npm install -g` work;
 - writes to `/mnt/skills`, `/mnt/user-uploads` and `/mnt/spaces` fail, also

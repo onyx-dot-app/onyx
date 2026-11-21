@@ -26,27 +26,7 @@ from sqlalchemy.orm import Session as DBSession
 from onyx.cache.factory import get_cache_backend
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import MessageType
-from onyx.db.enums import (
-    BuildSessionStatus,
-    LLMModelFlowType,
-    SandboxStatus,
-    SessionOrigin,
-)
-from onyx.db.external_app import get_connectable_apps_for_user
-from onyx.db.llm import (
-    fetch_all_accessible_llm_providers,
-    fetch_default_model,
-)
-from onyx.db.models import BuildMessage, BuildSession, Sandbox, User
-from onyx.db.users import fetch_user_by_id
-from onyx.error_handling.error_codes import OnyxErrorCode
-from onyx.error_handling.exceptions import OnyxError
-from onyx.file_store.file_store import get_default_file_store
-from onyx.server.features.build.configs import (
-    MAX_TOTAL_UPLOAD_SIZE_BYTES,
-    MAX_UPLOAD_FILES_PER_SESSION,
-)
-from onyx.server.features.build.db.build_session import (
+from onyx.db.build_session import (
     create_build_session__no_commit,
     create_message,
     delete_build_session__no_commit,
@@ -60,10 +40,30 @@ from onyx.server.features.build.db.build_session import (
     session_runtime_stale,
     update_session_activity,
 )
-from onyx.server.features.build.db.sandbox import (
+from onyx.db.enums import (
+    BuildSessionStatus,
+    LLMModelFlowType,
+    SandboxStatus,
+    SessionOrigin,
+)
+from onyx.db.llm import (
+    fetch_all_accessible_llm_providers,
+    fetch_default_model,
+)
+from onyx.db.models import BuildMessage, BuildSession, Sandbox, User
+from onyx.db.sandbox import (
     get_sandbox_by_user_id,
     get_snapshots_for_session,
     update_sandbox_heartbeat,
+)
+from onyx.db.users import fetch_user_by_id
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from onyx.file_store.file_store import get_default_file_store
+from onyx.integrations.craft import list_connectable_apps
+from onyx.server.features.build.configs import (
+    MAX_TOTAL_UPLOAD_SIZE_BYTES,
+    MAX_UPLOAD_FILES_PER_SESSION,
 )
 from onyx.server.features.build.interactive_turns.state import (
     acquire_active_turn_lock,
@@ -236,7 +236,7 @@ class SessionManager:
             fetch_default_model(self._db_session, LLMModelFlowType.CHAT),
         ]
         configured_defaults = [
-            GatewaySelection(model.llm_provider_id, model.name)
+            GatewaySelection(provider_id=model.llm_provider_id, model_name=model.name)
             for model in configured_default_models
             if model is not None
         ]
@@ -377,7 +377,7 @@ class SessionManager:
             agent_model=llm_config.model_name,
             nextjs_port=session.nextjs_port,
             connectable_apps_section=build_connectable_apps_list(
-                get_connectable_apps_for_user(self._db_session, user)
+                list_connectable_apps(self._db_session, user)
             ),
             user_name=user.personal_name,
             llm_config=llm_config,
@@ -503,7 +503,7 @@ class SessionManager:
                         agent_model=session.agent_model,
                         nextjs_port=session.nextjs_port,
                         connectable_apps_section=build_connectable_apps_list(
-                            get_connectable_apps_for_user(self._db_session, user)
+                            list_connectable_apps(self._db_session, user)
                         ),
                         user_name=user.personal_name,
                         llm_config=llm_config,
@@ -538,8 +538,8 @@ class SessionManager:
     ) -> Sandbox:
         """Ensure the user has a RUNNING sandbox, creating/waking as needed.
 
-        Headless entry point for flows (e.g. scheduled tasks) that need the
-        sandbox up but aren't going through ``create_session``.
+        Headless entry point for flows that need the sandbox up but aren't
+        going through ``create_session``.
 
         Behavior by current sandbox status:
         - No sandbox row: creates one and provisions it.
@@ -605,8 +605,8 @@ class SessionManager:
             user_id: The user ID
             name: Optional session name
             origin: Provenance of the session. INTERACTIVE (default) sessions
-                appear in the Craft sidebar; SCHEDULED (scheduled-tasks
-                executor) and SLACK (Slack bot) sessions are excluded.
+                appear in the Craft sidebar; SCHEDULED and SLACK (Slack bot)
+                sessions are excluded.
 
         Raises:
             ValueError: If the user is missing
@@ -777,7 +777,7 @@ class SessionManager:
         session_id = session.id
         try:
             connectable_apps_section = build_connectable_apps_list(
-                get_connectable_apps_for_user(self._db_session, user)
+                list_connectable_apps(self._db_session, user)
             )
             mcp_servers = resolve_craft_mcp_servers(self._db_session, user)
             nextjs_port = session.nextjs_port
@@ -1175,10 +1175,11 @@ class SessionManager:
     ) -> Generator[str, None, None]:
         """Attach to an existing opencode session and stream translated ACP SSE.
 
-        Used by scheduled-run viewers: the Celery executor is already driving
-        the prompt, so this path only subscribes to the pod-wide event stream and
-        filters by the session's persisted opencode session id. It deliberately
-        does not persist events because the executor remains the durable writer.
+        Used by live-stream viewers: the interactive turn executor is already
+        driving the prompt, so this path only subscribes to the pod-wide event
+        stream and filters by the session's persisted opencode session id. It
+        deliberately does not persist events because the executor remains the
+        durable writer.
         """
         session = get_build_session(session_id, user_id, self._db_session)
         if session is None:
@@ -1215,14 +1216,12 @@ class SessionManager:
             for acp_event in raw_events:
                 yield _streaming.event_to_sse(acp_event)
 
-    # ----- Persistence helpers (shared with the headless scheduled-tasks executor) -----
+    # ----- Persistence helpers -----
     #
     # `yield_sandbox_events` is a thin wrapper around the sandbox manager that drives
     # the agent to completion and yields raw sandbox events. It does NO database
-    # writes, no SSE formatting — making it composable: the SSE endpoint wraps
-    # it with `persist_sandbox_event` + an SSE formatter, and the headless
-    # scheduled-tasks executor reuses `persist_sandbox_event` directly so the
-    # persisted transcript is identical to an interactive run.
+    # writes, no SSE formatting — making it composable: the interactive turn
+    # executor wraps it with `persist_sandbox_event`.
 
     def prompt_slot(
         self,

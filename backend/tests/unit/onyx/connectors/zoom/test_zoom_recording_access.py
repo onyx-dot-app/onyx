@@ -63,7 +63,7 @@ ANYONE_SIGNED_IN_TO_ZOOM = recording_settings(
 _LINK_ACCESS_ROWS = [
     (PRIVATE_TO_ME, False, set()),
     (ONLY_PEOPLE_WITH_ACCESS, False, set()),
-    (ANYONE_IN_DOMAIN_RULE, False, {"zoom_domain:onyx.app", "zoom_domain:partner.com"}),
+    (ANYONE_IN_DOMAIN_RULE, False, {"domain:onyx.app", "domain:partner.com"}),
     (ANYONE_IN_MY_ACCOUNT, True, set()),
     (ANYONE_SIGNED_IN_TO_ZOOM, True, set()),
     (ANYONE_WITH_THE_LINK, True, set()),
@@ -94,7 +94,6 @@ def _resolve(
     box_on: bool = True,
     rule_grant: Callable[[str], RuleGrant | None] = _RULE_GRANTS.get,
     owner: str | None = _OWNER,
-    add_prefix: bool = True,
 ):
     return resolve_recording_access(
         client,
@@ -102,7 +101,6 @@ def _resolve(
         treat_link_access_as_public=box_on,
         rule_grant=rule_grant,
         owner_email=owner,
-        add_prefix=add_prefix,
     )
 
 
@@ -118,15 +116,6 @@ class TestTheLinkAccessTable:
         assert access.external_user_emails == {_OWNER}
         assert access.is_public is public
         assert access.external_user_group_ids == groups
-
-    def test_the_doc_sync_gets_bare_group_ids(self) -> None:
-        # upsert_document_external_perms adds the source prefix itself.
-        access = _resolve(_client(ANYONE_IN_DOMAIN_RULE), add_prefix=False)
-
-        assert access.external_user_group_ids == {
-            "domain:onyx.app",
-            "domain:partner.com",
-        }
 
     @pytest.mark.parametrize(
         "settings", [row[0] for row in _LINK_ACCESS_ROWS], ids=_LINK_ACCESS_IDS

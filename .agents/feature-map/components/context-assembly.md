@@ -31,8 +31,8 @@
   Project images stay beside project text in the fixed preamble. A project that is too
   large is searched instead ([[projects]]).
 - **Long chats** keep working. When a request reaches about 85% of the model's
-  usable input, older history is summarized before the model call. Research and
-  coding child agents do the same. The user does not see the summary.
+  usable input, older history is summarized before the model call. Research child agents
+  do the same. The user does not see the summary.
 - **Admins** edit the default system prompt, which is the default assistant's
   `system_prompt`. An agent can replace the base prompt fully.
 - **Images and model switches.** When a chat has images and the user switches
@@ -87,7 +87,7 @@ compaction candidate. The list on each model call:
 ```
 [system]                    base prompt, shared user-information framing, tool guidance   stable
 [user information]          SYSTEM message: per-user block                                stable
-[skills catalog]            SYSTEM message: the user's custom skills                      stable
+[skills catalog]            SYSTEM message: the user's chat skills                        stable
 [custom agent prompt]       USER message, fixed before conversation history               stable
 [project files and images]  USER message, JSON documents and image content blocks          stable
 [conversation summary]      SYSTEM message, when a compaction checkpoint applies          stable
@@ -182,9 +182,10 @@ or an agent that replaces the base prompt.
 **Tool definitions.** Action preferences keep the full tool definitions and order.
 The selected Action appears in a request-only trailing reminder, outside the cached
 prefix. When project files replace retrieval, preparation omits an enabled,
-configured, allowed Search preference and its reminder. Final steps use `NONE`; providers that cannot enforce it omit definitions.
-Those provider exceptions can invalidate cache reuse. The shared policy lives in
-`llm/model_capabilities.py` and `llm/multi_llm.py`.
+configured, allowed Search preference and its reminder. Chat's final step uses `NONE` and
+keeps the same tool definitions and system prompt; the cache effect depends on the
+provider ([[llm-providers#none-tool-choice-keeps-tools]]). Research agents change
+their system prompt on the final step, so their prefix changes there.
 
 **Custom agent prompt.** `chat/process_message.py:prepare_chat_turn` labels
 project and agent instructions when both exist, and tells the model to follow
@@ -217,8 +218,10 @@ replacement and agent prompts, and the files attached to the new message. Then
 smallest model of the turn, to decide whether project files go inline
 ([[projects]]). On each model call, the runtime counts the whole assembled
 request, tool definitions included, against `agents/compaction.py:context_budget`.
-That count uses `cl100k_base` and a fixed estimate per image
-(`agents/compaction.py:request_tokens`), not the model's tokenizer. It caps the output with `llm/token_budget.py:resolve_token_budget`
+When the run has no cached counts, a byte upper bound can prove the request
+fits below the compaction trigger with full output capacity. Otherwise the
+runtime counts text with `cl100k_base`. Both paths include a fixed estimate
+per image and cap output with `llm/token_budget.py:resolve_token_budget`
 ([[agent-runtime]]).
 
 **Compaction.** The runtime summarizes or truncates older history before a model
@@ -284,7 +287,11 @@ counts what is sent, not the stored token counts.
    `agents/compaction.py:ContextLimitError` when the rest does not fit. That
    error is a `ValueError`, so `llm/exceptions.py:litellm_exception_to_safe_error`
    reports it as `UNKNOWN_ERROR`, not `CONTEXT_TOO_LONG`. A new large fixed
-   element makes this error more frequent.
+   element makes this error more frequent. In a chat with a sandbox, large
+   tool results go to a file in the VM before they reach the history
+   ([[code-execution]], `tools/tool_implementations/sandbox/spill.py`). This
+   makes the error less likely but does not prevent it: the limits count
+   characters, not tokens, and some tools are exempt from them.
 6. `forgotten-files-need-metadata` **A forgotten-files notice needs file
    metadata.** `chat/process_message.py:prepare_chat_turn` clears the metadata
    map when the persona has no file reader tool. Then a file that compaction or
@@ -292,17 +299,16 @@ counts what is sent, not the stored token counts.
    every attached file whose message is not in the working history.
 7. `file-notice-names-offered-tools` **A file notice names only tools the model
    has this step.** `chat/prompt_utils.py:_create_file_tool_metadata_message`
-   prefers `read_file`, then internal search, then the Python tool (only when
-   every file was staged for it). A notice that names a missing tool makes the
-   model guess or search the web.
+   prefers `read_file`, then internal search (only for files with
+   `FileToolMetadata.indexed`; `SKIPPED` uploads such as code files are not),
+   then the Python tool (only for files staged for it). A notice that names a
+   missing tool, or search for an unindexed file, makes the model guess or
+   search the web.
 8. `history-builder-callers` **`chat/prompt_utils.py:prepare_prompt` has
-   several callers.** `ChatAgent`, `DeepResearchAgent`, `ResearchAgent` and
-   `CodingAgent` call it with their own arguments, such as no custom agent
+   several callers.** `ChatAgent`, `DeepResearchAgent` and `ResearchAgent`
+   call it with their own arguments, such as no custom agent
    prompt. Only `ChatAgent` passes `available_tool_names`, so a deep research
-   file notice names no tool. The coding agent's final-step reminder has no
-   `is_reminder` flag, so it is sent as a plain user message without the
-   `<system-reminder>` wrap. Check all callers after you change the signature or
-   order.
+   file notice names no tool. Check all callers after you change the signature or order.
 9. `replace-base-drops-user-block` **Replacing the base prompt drops the
    per-user block.** With `replace_base_system_prompt`, or with an empty default
    prompt, `build_chat_prompt` builds no user-information message, so memories
@@ -368,6 +374,18 @@ counts what is sent, not the stored token counts.
   Full results remain available while the runtime manages the context budget.
 - **Attached files stay where they were attached.** User attachments remain
   beside their question; project files and images remain in the preamble.
+  In a turn with the sandbox, each attachment's file message names its copy
+  in the VM with an "In the VM: attachments/<id prefix>-<name>" line, counted in the
+  message's tokens (`chat/files.py:build_file_context`), and the images of a
+  message get one more message with a line for each image
+  (`chat/chat_utils.py:convert_chat_history`). A path depends on its file
+  alone (`chat/files.py:place_chat_files`), so a message keeps its lines
+  and the prefix stays cacheable. The `exec_command` description gains the
+  layout of `attachments/` once, when the chat gets its first file.
+  Only user attachments enter the prompt as text, so turn preparation
+  extracts text only for the files of user messages
+  (`chat/process_message.py:prepare_chat_turn`, `text_file_ids`). Files of
+  assistant messages, such as published files, reach tools as bytes only.
   Changes to project content, configuration, image limits, or a compaction
   checkpoint can intentionally invalidate cache prefixes.
 

@@ -45,7 +45,7 @@ opensearch:
     limits:
       cpu: 2
       memory: 4Gi
-  opensearchJavaOpts: "-Xmx1g -Xms1g"
+  opensearchJavaOpts: "-Xmx1g -Xms1g -XX:-UseBASE64Intrinsics"
 
 minio:
   persistence:

@@ -15,11 +15,17 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from onyx.cache.factory import get_cache_backend
+from onyx.db import action_approval
+from onyx.db.action_approval import (
+    get_action_approval,
+    get_action_approval_for_user,
+    insert_action_approval,
+    try_record_decision,
+)
 from onyx.db.enums import (
     ActionPolicy,
     ApprovalDecidedVia,
     ApprovalDecision,
-    GatedAppKind,
 )
 from onyx.db.models import ActionApproval, BuildSession
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -35,17 +41,11 @@ from onyx.server.features.build.approvals.api import (
     submit_decision,
 )
 from onyx.server.features.build.configs import SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
-from onyx.server.features.build.db import action_approval
-from onyx.server.features.build.db.action_approval import (
-    get_action_approval,
-    get_action_approval_for_user,
-    insert_action_approval,
-    try_record_decision,
-)
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.common.craft.payloads import action_entry
 from tests.common.craft.payloads import default_action_entries as _default_actions
 from tests.external_dependency_unit.craft.db_helpers import (
+    app_integration_id,
     force_approval_created_at,
     make_external_app,
     make_skill,
@@ -368,7 +368,7 @@ def test_submit_session_grant_approves_matching_pending_rows(
         actions=[ask_send, always_read],
         app_name="Slack",
         payload={"text": "current"},
-        target=(GatedAppKind.EXTERNAL_APP, app.id),
+        integration_id=app_integration_id(db_session, app),
     )
     matching = insert_action_approval(
         db_session,
@@ -376,7 +376,7 @@ def test_submit_session_grant_approves_matching_pending_rows(
         actions=[ask_send],
         app_name="Slack",
         payload={"text": "matching"},
-        target=(GatedAppKind.EXTERNAL_APP, app.id),
+        integration_id=app_integration_id(db_session, app),
     )
     broader = insert_action_approval(
         db_session,
@@ -384,7 +384,7 @@ def test_submit_session_grant_approves_matching_pending_rows(
         actions=[ask_send, ask_upload],
         app_name="Slack",
         payload={"text": "broader"},
-        target=(GatedAppKind.EXTERNAL_APP, app.id),
+        integration_id=app_integration_id(db_session, app),
     )
     other = insert_action_approval(
         db_session,
@@ -392,7 +392,7 @@ def test_submit_session_grant_approves_matching_pending_rows(
         actions=[ask_send],
         app_name="Other",
         payload={"text": "other"},
-        target=(GatedAppKind.EXTERNAL_APP, other_app.id),
+        integration_id=app_integration_id(db_session, other_app),
     )
     db_session.commit()
 
@@ -408,13 +408,13 @@ def test_submit_session_grant_approves_matching_pending_rows(
     grant_reads = 0
 
     def read_grants_once(
-        db_session: Session, session_id: UUID, *, gated_app_id: int | None
+        db_session: Session, session_id: UUID, *, integration_id: int | None
     ) -> list[ActionApproval]:
         nonlocal grant_reads
         grant_reads += 1
         if grant_reads > 1:
             raise RuntimeError("Database unavailable after the decision commits")
-        return read_grants(db_session, session_id, gated_app_id=gated_app_id)
+        return read_grants(db_session, session_id, integration_id=integration_id)
 
     monkeypatch.setattr(
         action_approval, "list_session_grant_action_approvals", read_grants_once
@@ -429,6 +429,7 @@ def test_submit_session_grant_approves_matching_pending_rows(
 
     assert response.approval_id == current.approval_id
     assert response.decision == ApprovalDecision.APPROVED
+    assert response.decided_via == ApprovalDecidedVia.SESSION_GRANT
 
     db_session.refresh(current)
     db_session.refresh(matching)
@@ -448,15 +449,13 @@ def test_submit_session_grant_approves_matching_pending_rows(
     cache = get_cache_backend(tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE)
     assert approval_cache.cached_session_grants_cover(
         session_id=session.id,
-        kind=GatedAppKind.EXTERNAL_APP,
-        target_id=app.id,
+        integration_id=app_integration_id(db_session, app),
         action_types=["slack.chat.post"],
         cache=cache,
     )
     assert not approval_cache.cached_session_grants_cover(
         session_id=session.id,
-        kind=GatedAppKind.EXTERNAL_APP,
-        target_id=app.id,
+        integration_id=app_integration_id(db_session, app),
         action_types=["slack.files.upload"],
         cache=cache,
     )
@@ -622,7 +621,7 @@ def test_session_decision_retry_cannot_change_scope(
         actions=_default_actions(),
         app_name="Slack",
         payload={},
-        target=(GatedAppKind.EXTERNAL_APP, app.id),
+        integration_id=app_integration_id(db_session, app),
     )
     db_session.commit()
     body = DecisionBody(decision=ApprovalChoice.APPROVE_SESSION)
@@ -718,7 +717,7 @@ def test_unknown_external_action_can_only_be_approved_once(
         actions=[action_entry("unspecified")],
         app_name="Custom",
         payload={},
-        target=(GatedAppKind.EXTERNAL_APP, app.id),
+        integration_id=app_integration_id(db_session, app),
     )
     db_session.commit()
     view = list_session_approvals(session.id, user, db_session).items[0]
@@ -778,8 +777,8 @@ def test_concurrent_session_approvals_do_not_deadlock(
     monkeypatch: pytest.MonkeyPatch,
     build_session_with_user: Callable[..., BuildSession],
 ) -> None:
+    from onyx.db import action_approval
     from onyx.db.models import User
-    from onyx.server.features.build.db import action_approval
     from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
     user = make_user(db_session, email_prefix="concurrent_grants")
@@ -792,7 +791,7 @@ def test_concurrent_session_approvals_do_not_deadlock(
             actions=[action_entry("slack.chat.post")],
             app_name="Slack",
             payload={},
-            target=(GatedAppKind.EXTERNAL_APP, app.id),
+            integration_id=app_integration_id(db_session, app),
         ).approval_id
         for _ in range(2)
     ]
@@ -841,7 +840,7 @@ def test_status_poll_omits_payloads_and_reports_expiry(
 ) -> None:
     from sqlalchemy import inspect
 
-    from onyx.server.features.build.db.action_approval import (
+    from onyx.db.action_approval import (
         list_session_action_approvals,
     )
 

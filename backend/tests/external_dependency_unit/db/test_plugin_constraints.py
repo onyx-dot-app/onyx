@@ -184,7 +184,7 @@ def test_database_refuses_invalid_marketplaces(
                     name="My uploads",
                 )
             ),
-            "ck_plugin_marketplace_owner_iff_user_uploads",
+            "ck_plugin_marketplace_owner_by_kind",
         )
         _refused(
             db_session,
@@ -196,7 +196,7 @@ def test_database_refuses_invalid_marketplaces(
                     owner_user_id=owner.id,
                 )
             ),
-            "ck_plugin_marketplace_owner_iff_user_uploads",
+            "ck_plugin_marketplace_owner_by_kind",
         )
     finally:
         db_session.rollback()

@@ -102,7 +102,7 @@ func TestStackProvider_infraPortsAndEnv(t *testing.T) {
 	for _, r := range app {
 		names = append(names, r.Name)
 	}
-	if !reflect.DeepEqual(names, []string{"web", "api", "mcp", "model", "celery-primary-metrics", "celery-light-metrics", "celery-docfetching-metrics", "celery-docprocessing-metrics", "celery-heavy-metrics", "celery-scheduled_tasks-metrics"}) {
+	if !reflect.DeepEqual(names, []string{"web", "api", "mcp", "model", "celery-primary-metrics", "celery-light-metrics", "celery-docfetching-metrics", "celery-docconversion-metrics", "celery-docprocessing-metrics", "celery-heavy-metrics", "celery-scheduled_tasks-metrics"}) {
 		t.Errorf("app ports %v", names)
 	}
 }
@@ -369,5 +369,19 @@ func TestModelServerImageEnv(t *testing.T) {
 		if got := modelServerImageEnv(env(chosen)); got != nil {
 			t.Errorf("env with %v = %v, want nil", chosen, got)
 		}
+	}
+}
+
+func TestProjectInCheckoutMatchesTheRecordedProject(t *testing.T) {
+	_, _ = stackTestRepo(t)
+	stack, _ := openStack(nil)
+	if projectInCheckout(stack.Project) {
+		t.Fatal("a checkout without state matched the project")
+	}
+	if err := stack.WriteState(&devstack.State{Phase: devstack.PhaseStopped}); err != nil {
+		t.Fatal(err)
+	}
+	if !projectInCheckout(stack.Project) || projectInCheckout("another-project") {
+		t.Fatal("project selection does not follow the checkout's state")
 	}
 }

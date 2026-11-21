@@ -13,12 +13,17 @@ Visual states are driven by a `variant` prop; all border, background, and focus 
 | `leftChildren`  | `ReactNode`             | —           | Content before the text, after the leading icon (e.g. a chosen value shown as a tag)         |
 | `icon`          | `"search" \| IconFunctionComponent` | — | Leading icon. `"search"` shows the search icon and renders a native `type="search"` field; a component shows that icon (a select's chosen option icon) |
 | `rightChildren` | `ReactNode`             | —           | Custom content rendered to the right of the input; suppresses the built-in clear button      |
+| `tooltip`       | `string \| RichStr`     | —           | Shown on hover, in any state                                                                 |
 | `clearButton`   | `boolean`               | `false`     | Show the clear (×) button when the field has a value; suppressed when `rightChildren` is set |
 | `open`          | `boolean`               | `false`     | The list the field opens is open: keeps the focused border while focus is in the list        |
 | `value`         | `string`                | —           | Controlled value                                                                             |
 | `onChange`      | `ChangeEventHandler`    | —           | Change handler                                                                               |
 
 `InputTypeIn` also forwards all standard `<input>` attributes (except `disabled` and `readOnly` — use `variant="disabled"` / `variant="readOnly"` instead).
+
+Inside `InputHorizontal` or `InputVertical`, the row's `disabled` sets the
+`"disabled"` variant, and its `disabledTooltip` replaces `tooltip` while
+disabled.
 
 ## Variants
 

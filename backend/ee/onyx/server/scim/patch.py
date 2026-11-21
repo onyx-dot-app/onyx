@@ -16,10 +16,9 @@ from __future__ import annotations
 
 import logging
 import re
-from dataclasses import dataclass, field
 from typing import Any, TypeVar
 
-from pydantic import BaseModel, ValidationError
+from pydantic import BaseModel, ConfigDict, Field, SkipValidation, ValidationError
 
 from ee.onyx.server.scim.models import (
     SCIM_ENTERPRISE_USER_SCHEMA,
@@ -104,13 +103,14 @@ def _validate_patched(model: type[_ResourceT], data: dict[str, Any]) -> _Resourc
         raise ScimPatchError(f"Invalid PATCH value: {e.errors()[0]['msg']}") from e
 
 
-@dataclass
-class _UserPatchCtx:
+class _UserPatchCtx(BaseModel):
     """Bundles the mutable state for user PATCH operations."""
 
-    data: dict[str, Any]
-    name_data: dict[str, Any]
-    ent_data: dict[str, str | None] = field(default_factory=dict)
+    model_config = ConfigDict(strict=True, arbitrary_types_allowed=True)
+
+    data: SkipValidation[dict[str, Any]]
+    name_data: SkipValidation[dict[str, Any]]
+    ent_data: dict[str, str | None] = Field(default_factory=dict)
 
 
 # ---------------------------------------------------------------------------

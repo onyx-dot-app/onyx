@@ -90,8 +90,11 @@
 .opal-presence[data-presence-grow][data-presence-phase="collapsing"] {
   grid-template-rows: 0fr;
 }
+/* A grid item's automatic minimum is its min-content size, so without
+   min-width: 0 wide content (a table, a long line) widens the whole box. */
 .opal-presence[data-presence-grow] > .opal-presence-motion {
   min-height: 0;
+  min-width: 0;
 }
 .opal-presence[data-presence-grow]
   > .opal-presence-motion[data-presence-phase="entering"] {

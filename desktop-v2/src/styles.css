@@ -1,0 +1,41 @@
+@import "../../web/lib/opal/dist/root.css";
+@config "./tailwind.config.cjs";
+@source "../../web/lib/opal/src";
+
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  background: var(--background-neutral-00);
+  color: var(--text-04);
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  -webkit-user-select: none;
+  overflow: hidden;
+}
+
+input,
+textarea,
+.selectable {
+  user-select: text;
+  -webkit-user-select: text;
+}
+
+/* Drag region for frameless and overlay-titlebar windows. */
+.drag-region {
+  -webkit-app-region: drag;
+}
+
+/* A drag region swallows clicks on everything inside it; controls stay clickable. */
+.drag-region button {
+  -webkit-app-region: no-drag;
+}
+
+body.launcher,
+body.aonyx {
+  background: transparent;
+}

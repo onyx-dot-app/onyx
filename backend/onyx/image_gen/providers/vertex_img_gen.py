@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import base64
 import json
-from datetime import datetime
+import time
 from typing import TYPE_CHECKING, Any
 
 from pydantic import BaseModel
@@ -218,7 +218,7 @@ class VertexImageGenerationProvider(ImageGenerationProvider):
             raise RuntimeError("No image data returned from Vertex AI.")
 
         return ImageResponse(
-            created=int(datetime.now().timestamp()),
+            created=int(time.time()),
             data=generated_data,
         )
 

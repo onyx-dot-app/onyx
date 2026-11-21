@@ -22,18 +22,8 @@ import { Button, Text } from "@opal/components";
 import { cn } from "@opal/utils";
 import { fetchChatFile } from "@/lib/chat/svc";
 
-const SPREADSHEET_EXTENSIONS = [".xlsx", ".xlsm"];
-
 // Matches the guard CsvContent applies when rendering raw CSV bodies.
 const MAX_RAW_CSV_SIZE_MB = 5;
-
-export function isSpreadsheetFileName(
-  fileName: string | null | undefined
-): boolean {
-  if (!fileName) return false;
-  const lowered = fileName.toLowerCase();
-  return SPREADSHEET_EXTENSIONS.some((ext) => lowered.endsWith(ext));
-}
 
 interface SheetTableProps {
   sheet: SpreadsheetSheet;
@@ -47,7 +37,7 @@ function SheetTable({ sheet }: SheetTableProps) {
   if (parseError) {
     return (
       <div role="alert" className="py-8">
-        <Text font="main-ui-body" color="text-03">
+        <Text as="p" font="main-ui-body" color="text-03">
           {t("error.title")}
         </Text>
       </div>
@@ -113,7 +103,7 @@ interface SpreadsheetSheetsViewProps {
   className?: string;
 }
 
-export function SpreadsheetSheetsView({
+function SpreadsheetSheetsView({
   sheets,
   className,
 }: SpreadsheetSheetsViewProps) {

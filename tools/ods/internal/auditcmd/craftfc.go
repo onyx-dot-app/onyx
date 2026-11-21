@@ -32,7 +32,7 @@ A package scanner cannot read a bare vmlinux or the Firecracker binaries, so
 this command matches the versions pinned in deployment/craft-fc/Dockerfile.artifacts
 against their advisory feeds:
 
-  - the guest kernel (an Amazon Linux microvm-kernel tag) against the Amazon
+  - the guest kernel (an amazonlinux/linux kernel tag) against the Amazon
     Linux 2023 advisories (ALAS) of the same kernel series, reporting each
     advisory fixed in a newer package than the pin;
   - Firecracker against the GitHub security advisories of

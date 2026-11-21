@@ -10,6 +10,7 @@ import { waitForChatResponseEnd } from "@/lib/chat/sessionReadiness";
 
 jest.mock("@/app/app/services/lib", () => ({
   ChatSendRejectedError: class extends Error {},
+  ApprovalPendingError: class extends Error {},
   sendMessage: jest.fn(),
   processRawChatHistory: jest.fn(() => new Map()),
 }));
@@ -27,7 +28,11 @@ const params = {
   message: "Question",
   parentMessageId: null,
   chatSessionId: "session",
-  filters: null,
+  toolOptions: {
+    allowed: null,
+    preferred: null,
+    internal_search_filters: null,
+  },
 };
 const errorMessage = "Cannot confirm completion";
 const fetchMock = jest.fn<ReturnType<typeof fetch>, Parameters<typeof fetch>>();
@@ -63,7 +68,7 @@ test.each([false, true])(
   async (multiModel) => {
     const admitted = Promise.withResolvers<void>();
     const provider = Promise.withResolvers<void>();
-    const idle = Promise.withResolvers<number | null>();
+    const idle = Promise.withResolvers<null>();
     const pollingStarted = Promise.withResolvers<void>();
     jest.mocked(waitForChatResponseEnd).mockImplementation(() => {
       pollingStarted.resolve();
@@ -131,7 +136,7 @@ test("a rejected send finishes without stopping another session turn", async () 
   await stopChatSession("session", errorMessage);
   await sending;
   expect(fetchMock).not.toHaveBeenCalled();
-  expect(waitForChatResponseEnd).toHaveBeenCalledWith("session", null);
+  expect(waitForChatResponseEnd).toHaveBeenCalledWith("session", undefined);
 });
 
 test("a connection failure before admission cannot release input through either completion path", async () => {
@@ -194,7 +199,7 @@ test("a failed Stop can be sent again before the reader finishes", async () => {
   const reader = Promise.withResolvers<void>();
   useChatSessionStore.getState().updateSessionData("session", {
     chatState: "streaming",
-    sendAcknowledged: Promise.resolve(42),
+    sendAcknowledged: Promise.resolve({ stream_id: 42, response_ids: [42] }),
     readerFinished: reader.promise,
   });
   fetchMock.mockRejectedValueOnce(new TypeError("Network unavailable"));
@@ -225,10 +230,12 @@ test("Stop after the accepted stream ended stops the queued turn that followed i
   // seen that turn yet, so the session still shows the finished stream.
   useChatSessionStore.getState().updateSessionData("session", {
     chatState: "streaming",
-    sendAcknowledged: Promise.resolve(42),
+    sendAcknowledged: Promise.resolve({ stream_id: 42, response_ids: [42] }),
     readerFinished: Promise.resolve(),
   });
-  jest.mocked(waitForChatResponseEnd).mockResolvedValue(43);
+  jest
+    .mocked(waitForChatResponseEnd)
+    .mockResolvedValue({ stream_id: 43, response_ids: [43] });
   await stopChatSession("session", errorMessage);
   expect(fetchMock).toHaveBeenCalledWith(
     "/api/chat/stop-chat-session/session",

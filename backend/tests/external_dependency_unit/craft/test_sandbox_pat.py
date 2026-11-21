@@ -19,7 +19,7 @@ from onyx.db.engine.async_sql_engine import get_async_session_context_manager
 from onyx.db.enums import PatType, Permission, SandboxStatus
 from onyx.db.models import OAuthAccount, PersonalAccessToken, Sandbox, User
 from onyx.db.pat import create_pat, list_user_pats
-from onyx.server.features.build.db.sandbox import (
+from onyx.db.sandbox import (
     ensure_sandbox_pat,
     has_active_craft_pat,
 )

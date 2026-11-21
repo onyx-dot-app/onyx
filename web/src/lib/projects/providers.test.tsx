@@ -204,6 +204,94 @@ describe("ProjectsContext beginUpload size precheck", () => {
   });
 });
 
+describe("ProjectsContext beginUpload with files of one name", () => {
+  function serverFile(id: string, tempId: string | undefined): ProjectFile {
+    return {
+      id,
+      name: "notes.txt",
+      project_id: null,
+      user_id: null,
+      file_id: `store-${id}`,
+      created_at: "2026-01-01T00:00:00Z",
+      status: UserFileStatus.PROCESSING,
+      file_type: "text/plain",
+      last_accessed_at: "2026-01-01T00:00:00Z",
+      chat_file_type: ChatFileType.PLAIN_TEXT,
+      token_count: null,
+      chunk_count: null,
+      temp_id: tempId,
+    };
+  }
+
+  beforeEach(() => {
+    mockUploadFiles.mockReset();
+    mockGetRecentFiles.mockReset();
+    mockToastWarning.mockReset();
+    mockGetRecentFiles.mockResolvedValue([]);
+    mockGetUserFileStatuses.mockResolvedValue([]);
+  });
+
+  it("gives each file its own server file by temporary ID", async () => {
+    const { result } = renderHook(() => useProjectsContext(), { wrapper });
+    const first = new File(["one"], "notes.txt", { type: "text/plain" });
+    const second = new File(["two"], "notes.txt", { type: "text/plain" });
+    // The server answers in another order.
+    mockUploadFiles.mockImplementation(
+      async (_files: File[], _projectId: unknown, tempIds: string[]) => ({
+        user_files: [
+          serverFile("server-second", tempIds[1]),
+          serverFile("server-first", tempIds[0]),
+        ],
+        rejected_files: [],
+      })
+    );
+
+    let optimisticFiles: ProjectFile[] = [];
+    await act(async () => {
+      optimisticFiles = await result.current.beginUpload([first, second], null);
+    });
+
+    const tempIds = optimisticFiles.map((f) => f.temp_id);
+    expect(new Set(tempIds).size).toBe(2);
+    expect(mockUploadFiles.mock.calls[0]?.[2]).toEqual(tempIds);
+    await waitFor(() =>
+      expect(
+        tempIds.map(
+          (tempId) =>
+            result.current.allRecentFiles.find((f) => f.temp_id === tempId)?.id
+        )
+      ).toEqual(["server-first", "server-second"])
+    );
+  });
+
+  it("fails only the file that the server rejected", async () => {
+    const { result } = renderHook(() => useProjectsContext(), { wrapper });
+    const first = new File(["one"], "notes.txt", { type: "text/plain" });
+    const second = new File(["two"], "notes.txt", { type: "text/plain" });
+    mockUploadFiles.mockImplementation(
+      async (_files: File[], _projectId: unknown, tempIds: string[]) => ({
+        user_files: [serverFile("server-second", tempIds[1])],
+        rejected_files: [{ file_name: "notes.txt", reason: "Unsupported" }],
+      })
+    );
+    const onFailure = jest.fn();
+
+    let optimisticFiles: ProjectFile[] = [];
+    await act(async () => {
+      optimisticFiles = await result.current.beginUpload(
+        [first, second],
+        null,
+        undefined,
+        onFailure
+      );
+    });
+
+    await waitFor(() =>
+      expect(onFailure).toHaveBeenCalledWith([optimisticFiles[0]?.temp_id])
+    );
+  });
+});
+
 describe("ProjectsContext attached file status polling", () => {
   beforeEach(() => {
     mockGetRecentFiles.mockReset();

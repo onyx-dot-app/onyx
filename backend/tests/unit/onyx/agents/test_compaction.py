@@ -17,7 +17,6 @@ from onyx.agents.compaction import (
     compact_history,
     context_budget,
     count_tokens,
-    head_and_tail_tokens,
     history_boundaries,
     request_tokens,
     working_messages,
@@ -157,7 +156,7 @@ class ContextModel(LLM):
 def test_rebuilt_prompts_reuse_counts_and_recount_changed_content() -> None:
     evidence = "Retrieved evidence from search. " * 20
     revised_evidence = evidence + "New information. " * 10
-    system = "Use the evidence to answer."
+    system = "Use the evidence to answer." * 40
     tokenizer = tiktoken.get_encoding("cl100k_base")
     sdk_encoder = Mock(wraps=tokenizer)
     provider_inputs: list[str] = []
@@ -245,11 +244,35 @@ def test_rebuilt_prompts_reuse_counts_and_recount_changed_content() -> None:
         assert sdk_inputs.count(request.tools[0].model_dump_json()) == 2
 
 
+@pytest.mark.parametrize("text", ["small request", "短い質問🙂"])
+def test_small_requests_skip_encoding_with_full_output_allowance(
+    monkeypatch: pytest.MonkeyPatch, text: str
+) -> None:
+    output = TokenBudget(max_output_tokens=200, context_tokens=1200, safety_tokens=64)
+    monkeypatch.setattr("onyx.agents.runtime.resolve_token_budget", lambda _: output)
+    run = Run(
+        RunState(run_id="run", agent_id="agent", status=RunStatus.RUNNING),
+        CancellationSignal(),
+    )
+    with patch(
+        "onyx.agents.compaction._encoder", side_effect=AssertionError("encoded")
+    ):
+        request = _compact_context(
+            run,
+            ContextModel(),
+            [UserMessage(content=text)],
+            PreparedStep(),
+            GenerationContext(),
+        )
+    assert request.options.max_tokens == 200
+    assert request.messages[0].text == text
+
+
 def test_long_requests_reuse_counts_and_release_removed_history() -> None:
     class LargeContextModel(ContextModel):
         @property
         def config(self) -> LLMConfig:
-            return super().config.model_copy(update={"max_input_tokens": 128000})
+            return super().config.model_copy(update={"max_input_tokens": 64000})
 
     source: list[Message] = [UserMessage(content="Compare these sources.")]
     for index in range(350):
@@ -389,6 +412,7 @@ def test_summary_cutoff_survives_next_user_turn(long_question: bool) -> None:
     source = convert_chat_history(
         [old_answer, question],
         files=[],
+        vm_paths={},
     ).messages
     checkpoint = compact_history(model, source, None, GenerationContext())
     assert checkpoint.covered_through_message_id == "old-answer"
@@ -397,6 +421,7 @@ def test_summary_cutoff_survives_next_user_turn(long_question: bool) -> None:
     reloaded = convert_chat_history(
         [old_answer, question, next_question],
         files=[],
+        vm_paths={},
     ).messages
     restored_checkpoint = CompactionCheckpoint.model_validate_json(
         checkpoint.model_dump_json()
@@ -522,16 +547,6 @@ def test_compaction_within_task_preserves_tool_effects_and_prepared_steps() -> N
         "Conversation summary:" in message.text
         for message in model.generations[-1].messages
     )
-
-
-@pytest.mark.parametrize("max_tokens", [1, 3, 4, 7])
-def test_head_and_tail_tokens_keep_whole_characters(max_tokens: int) -> None:
-    text = "お誕生日おめでとう 🎉" * 4
-    head, tail, count = head_and_tail_tokens(text, max_tokens)
-    assert count == count_tokens(text) > max_tokens
-    assert "\ufffd" not in head + tail
-    assert text.startswith(head) and text.endswith(tail)
-    assert count_tokens(head) + count_tokens(tail) <= max_tokens
 
 
 def test_amending_a_summarized_result_drops_the_summary() -> None:
@@ -856,6 +871,7 @@ def test_image_replay_cost_controls_compaction_and_output_allowance(
             ),
         ],
         files=[image],
+        vm_paths={},
     ).messages
     original = [message.model_copy(deep=True) for message in history]
     model = ImageBudgetModel()
@@ -1036,7 +1052,7 @@ def test_compaction_drops_skill_messages_and_keeps_the_question_as_the_task() ->
         response_messages=[],
     )
     history: list[Message] = [
-        *convert_chat_history([question], files=[]).messages,
+        *convert_chat_history([question], files=[], vm_paths={}).messages,
         AssistantMessage(
             id="work", content=[TextContent(text="Earlier research context. " * 300)]
         ),

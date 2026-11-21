@@ -5,11 +5,11 @@ import io
 import json
 import os
 from collections.abc import Awaitable, MutableMapping
-from dataclasses import dataclass, field
 from typing import Any
 
 import numpy as np
 from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from onyx.auth.users import current_user_from_websocket
@@ -299,17 +299,18 @@ async def _receive_client_message(
         return None
 
 
-@dataclass
-class _ClientStreamState:
+class _ClientStreamState(BaseModel):
     """Progress of the client-facing side of a streaming session."""
+
+    model_config = ConfigDict(strict=True, arbitrary_types_allowed=True)
 
     chunk_count: int = 0
     total_bytes: int = 0
     transcriber_closed: bool = False
     client_ended: bool = False
     # Kept for the fallback path, and bounded by WS_MAX_TOTAL_BYTES.
-    streamed_audio: bytearray = field(default_factory=bytearray)
-    provider_failed: asyncio.Event = field(default_factory=asyncio.Event)
+    streamed_audio: bytearray = Field(default_factory=bytearray)
+    provider_failed: asyncio.Event = Field(default_factory=asyncio.Event)
 
 
 async def _forward_transcripts(

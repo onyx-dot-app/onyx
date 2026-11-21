@@ -1,26 +1,36 @@
 import abc
 import traceback
-from collections.abc import Callable
+from collections.abc import Callable, Collection
 from functools import cache, partial
 from typing import TYPE_CHECKING, final
 
 from pydantic import BaseModel, JsonValue, TypeAdapter, ValidationError
 from sqlalchemy.orm import Session
 
-from onyx.agents.tools import AgentTool, ToolExecutionMode, ToolInvocation, ToolOutcome
+from onyx.agents.tools import (
+    AgentTool,
+    NestedInputAnswer,
+    ToolExecutionMode,
+    ToolInvocation,
+    ToolOutcome,
+)
 from onyx.chat.prompt_formatting import prompt_metadata
 from onyx.configs.constants import MessageType
 from onyx.llm.models import Message, ToolDefinition, ToolResult
 from onyx.tools.models import (
     DEFAULT_CODE_MODE_RESULT,
+    CapabilityEntry,
     ChatMinimalTextMessage,
     CodeModeExposure,
     CodeModeFunctionName,
     CodeModeResultSpec,
+    IntegrationActionRef,
+    ToolApprovalScope,
     ToolCallException,
     ToolContext,
     ToolExecutionError,
     ToolExecutionException,
+    ToolPreference,
 )
 from onyx.tracing.framework.create import function_span
 from onyx.tracing.framework.spans import SpanError
@@ -169,17 +179,33 @@ def _invoke_tool[T: ToolOutcome](
 ToolResultFromChildren = Callable[
     [ToolInvocation, ToolContext, list["RunState"]], ToolResult
 ]
+ToolResumeWithInput = Callable[
+    [ToolInvocation, ToolContext, list[NestedInputAnswer]], ToolOutcome
+]
+ToolContinueOpenInput = Callable[
+    [ToolInvocation, ToolContext, list[NestedInputAnswer]], Collection[str]
+]
 
 
 class Tool(abc.ABC):
     """An application tool with context, tracing, and an SDK binding."""
 
     result_from_children: ToolResultFromChildren | None = None
+    # Continues a call that returned NestedInputWait; see AgentTool.
+    resume_with_input: ToolResumeWithInput | None = None
+    # Continues calls whose open requests have answers; see AgentTool.
+    continue_open_input: ToolContinueOpenInput | None = None
     # Set by tools that must not run twice: the saved result of a call that
     # stopped before it finished. See AgentTool.
     interrupted_result: ToolResult | None = None
     merge_list_argument: str | None = None
     merge_list_limit: int | None = None
+    # SEQUENTIAL tools of one group take turns, as calls of one tool do.
+    sequence_group: str | None = None
+    # Set on tools whose calls follow an action policy; see onyx/chat/tool_approvals.py.
+    approval: ToolApprovalScope | None = None
+    # Set on the tool of an integration action; a preference names it.
+    integration_action: IntegrationActionRef | None = None
 
     @property
     def execution_mode(self) -> ToolExecutionMode:
@@ -190,9 +216,23 @@ class Tool(abc.ABC):
         """Tools that run inside this tool's calls, such as code mode functions."""
         return []
 
-    def operation_names(self, tool_id: int) -> list[str]:
-        """How the model calls the configured tool `tool_id` through this tool."""
-        return [self.name] if self.id == tool_id else []
+    def matches(self, preference: ToolPreference) -> bool:
+        if isinstance(preference, CapabilityEntry):
+            return self.id == preference.tool_id
+        return (
+            self.integration_action is not None
+            and self.integration_action.integration_id == preference.integration_id
+            and self.integration_action.action == preference.action
+        )
+
+    def operation_names(self, preference: ToolPreference) -> list[str]:
+        """How the model calls the preferred tool through this tool."""
+        return [self.name] if self.matches(preference) else []
+
+    def inner_call_hint(self, name: str) -> str | None:  # noqa: ARG002
+        """For a call of `name` as a tool of its own: how to call it through
+        this tool instead; None when `name` is none of its inner tools."""
+        return None
 
     @property
     @abc.abstractmethod
@@ -275,10 +315,34 @@ class Tool(abc.ABC):
                     lambda: convert_child_results(invocation, context, children),
                 )
 
+        continue_with_input = self.resume_with_input
+        resume_with_input = None
+        if continue_with_input is not None:
+
+            def resume_with_input(
+                invocation: ToolInvocation, answers: list[NestedInputAnswer]
+            ) -> ToolOutcome:
+                context = get_context()
+                return _invoke_tool(
+                    self.name,
+                    invocation,
+                    lambda: continue_with_input(invocation, context, answers),
+                )
+
+        take_open_input = self.continue_open_input
+        continue_open_input = None
+        if take_open_input is not None:
+
+            def continue_open_input(
+                invocation: ToolInvocation, answers: list[NestedInputAnswer]
+            ) -> Collection[str]:
+                return take_open_input(invocation, get_context(), answers)
+
         return AgentTool(
             definition=self.tool_definition(),
             execute=lambda invocation: self.run(invocation, get_context()),
             execution_mode=self.execution_mode,
+            sequence_group=self.sequence_group,
             merge_arguments=partial(
                 merge_tool_arguments,
                 field=self.merge_list_argument,
@@ -287,8 +351,16 @@ class Tool(abc.ABC):
             if self.merge_list_argument is not None
             else None,
             result_from_children=result_from_children,
+            resume_with_input=resume_with_input,
+            continue_open_input=continue_open_input,
             interrupted_result=self.interrupted_result,
             display_name=self.display_name,
+            approval_required=[
+                tool.name
+                for tool in (self, *self.inner_tools)
+                if tool.approval is not None
+            ],
+            inner_call_hint=self.inner_call_hint,
         )
 
 

@@ -35,7 +35,6 @@ class ResearchMessageMetadata(BaseModel):
 
     phase: ResearchPhase
     is_intermediate: bool = False
-    is_reasoning_model: bool
     sources: dict[int, SearchDoc] = Field(default_factory=dict)
     elapsed_seconds: float = 0
 

@@ -13,6 +13,8 @@ on:
     # avoids the dual-workflow skip pattern where a `paths-ignore`'d skip
     # workflow can race the real workflow's same-named status check under
     # branch protection.
+    # A draft skips the slow suites, so they run again when the draft state changes.
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   push:
     paths-ignore:
       - "documentation/**"
@@ -69,15 +71,15 @@ jobs:
       contents: read
       pull-requests: read
     outputs:
-      integration: ${{ steps.filter.outputs.integration || 'true' }}
+      # A draft PR, or a PR with an open, ready child PR, skips the suite (see
+      # .github/actions/stack-position). The path filters of a stacked tip
+      # see every change in its stack.
+      skip_reason: ${{ steps.stack.outputs.skip_reason }}
+      integration: ${{ github.event_name != 'pull_request' && 'true' || steps.stack.outputs.skip_reason != '' && 'false' || (steps.filter.outputs.integration == 'true' || steps.backend_src.outputs.backend == 'true') && 'true' || 'false' }}
       gateway: ${{ steps.filter.outputs.gateway || 'true' }}
-      # The live Slack suite shares its workspaces' rate limits across all CI runs,
-      # so PRs run it only for related changes. Main and tag runs include it
-      # whenever the integration suite runs.
-      slack: ${{ github.event_name == 'pull_request' && steps.filter.outputs.slack || 'true' }}
-      # The live OneDrive suite indexes one shared Microsoft tenant, and Graph
-      # throttles it when many PRs run at once. Same rule as Slack.
-      onedrive: ${{ github.event_name == 'pull_request' && steps.filter.outputs.onedrive || 'true' }}
+      # Live connector suites that this run skips. See the "Pick live connector
+      # suites" step.
+      skipped_connector_suites: ${{ steps.connectors.outputs.skipped }}
       # The reindex port suite is slow (each test waits for a full re-embed and
       # swap). PRs run it only for related changes, and main runs skip it; the
       # daily run and tag runs always include it.
@@ -88,13 +90,36 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # ratchet:actions/checkout@v6
         with:
           persist-credentials: false
+      - name: Find the PR's place in a stack
+        id: stack
+        if: github.event_name == 'pull_request'
+        uses: ./.github/actions/stack-position
+      - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706
+        id: backend_src
+        if: github.event_name == 'pull_request'
+        with:
+          # A stacked PR diffs against the base of its whole stack: without a
+          # token, paths-filter runs git diff from `base`. See stack-position.
+          token: ${{ steps.stack.outputs.stack_base == '' && github.token || '' }}
+          base: ${{ steps.stack.outputs.stack_base }}
+          # `every`: a file matches only if it matches all patterns, so a PR
+          # that changes only unit or external-dependency tests skips this suite.
+          predicate-quantifier: every
+          filters: |
+            backend:
+              - 'backend/**'
+              - '!backend/tests/unit/**'
+              - '!backend/tests/external_dependency_unit/**'
       - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706
         id: filter
         if: github.event_name == 'pull_request'
         with:
+          # A stacked PR diffs against the base of its whole stack: without a
+          # token, paths-filter runs git diff from `base`. See stack-position.
+          token: ${{ steps.stack.outputs.stack_base == '' && github.token || '' }}
+          base: ${{ steps.stack.outputs.stack_base }}
           filters: |
             integration:
-              - 'backend/**'
               - 'cli/**'
               - 'deployment/docker_compose/**'
               - '.devcontainer/**'
@@ -108,8 +133,10 @@ jobs:
             gateway:
               - 'backend/onyx/server/gateway/**'
               - 'backend/tests/integration/tests/gateway_clients/**'
-            slack:
-              - 'backend/onyx/connectors/slack/**'
+            # The live connector suites call real third-party APIs, so they are
+            # slow and share rate limits across all CI runs. PRs run each one
+            # only for related changes. Main and tag runs include all of them.
+            connector_shared: &connector_shared
               - 'backend/onyx/connectors/*.py'
               - 'backend/onyx/connectors/capability_checks/**'
               - 'backend/onyx/utils/retry_after.py'
@@ -117,29 +144,55 @@ jobs:
               - 'backend/onyx/access/**'
               - 'backend/ee/onyx/access/**'
               - 'backend/ee/onyx/external_permissions/*.py'
-              - 'backend/ee/onyx/external_permissions/slack/**'
               - 'backend/ee/onyx/background/celery/tasks/doc_permission_syncing/**'
               - 'backend/ee/onyx/background/celery/tasks/external_group_syncing/**'
-              - 'backend/tests/integration/connector_job_tests/slack/**'
+              - 'backend/tests/integration/common_utils/managers/cc_pair.py'
+              - 'backend/tests/integration/common_utils/document_acl.py'
               - '.github/workflows/pr-integration-tests.yml'
-            onedrive:
-              - 'backend/onyx/connectors/onedrive/**'
+            connector_microsoft: &connector_microsoft
               - 'backend/onyx/connectors/microsoft_utils/**'
               - 'backend/onyx/connectors/microsoft_credential.py'
-              - 'backend/onyx/connectors/*.py'
-              - 'backend/onyx/connectors/capability_checks/**'
-              - 'backend/onyx/utils/retry_after.py'
-              - 'backend/ee/onyx/db/external_perm.py'
-              - 'backend/onyx/access/**'
-              - 'backend/ee/onyx/access/**'
-              - 'backend/ee/onyx/external_permissions/*.py'
-              - 'backend/ee/onyx/external_permissions/onedrive/**'
               - 'backend/ee/onyx/external_permissions/microsoft_utils/**'
-              - 'backend/ee/onyx/background/celery/tasks/doc_permission_syncing/**'
-              - 'backend/ee/onyx/background/celery/tasks/external_group_syncing/**'
+            azure_datalake:
+              - *connector_shared
+              - *connector_microsoft
+              - 'backend/onyx/connectors/azure_datalake/**'
+              - 'backend/ee/onyx/external_permissions/azure_datalake/**'
+              - 'backend/tests/integration/connector_job_tests/azure_datalake/**'
+            github:
+              - *connector_shared
+              - 'backend/onyx/connectors/github/**'
+              - 'backend/ee/onyx/external_permissions/github/**'
+              - 'backend/tests/integration/connector_job_tests/github/**'
+            google:
+              - *connector_shared
+              - 'backend/onyx/connectors/google_drive/**'
+              - 'backend/onyx/connectors/google_utils/**'
+              - 'backend/ee/onyx/external_permissions/google_drive/**'
+              - 'backend/tests/integration/connector_job_tests/google/**'
+            jira:
+              - *connector_shared
+              - 'backend/onyx/connectors/jira/**'
+              - 'backend/ee/onyx/external_permissions/jira/**'
+              - 'backend/tests/integration/connector_job_tests/jira/**'
+            onedrive:
+              - *connector_shared
+              - *connector_microsoft
+              - 'backend/onyx/connectors/onedrive/**'
+              - 'backend/ee/onyx/external_permissions/onedrive/**'
               - 'backend/tests/integration/connector_job_tests/onedrive/**'
-              - 'backend/tests/integration/common_utils/managers/cc_pair.py'
-              - '.github/workflows/pr-integration-tests.yml'
+              - 'backend/tests/utils/onedrive_fixture.py'
+            sharepoint:
+              - *connector_shared
+              - *connector_microsoft
+              - 'backend/onyx/connectors/sharepoint/**'
+              - 'backend/ee/onyx/external_permissions/sharepoint/**'
+              - 'backend/tests/integration/connector_job_tests/sharepoint/**'
+            slack:
+              - *connector_shared
+              - 'backend/onyx/connectors/slack/**'
+              - 'backend/ee/onyx/external_permissions/slack/**'
+              - 'backend/tests/integration/connector_job_tests/slack/**'
             reindex_port:
               - 'backend/onyx/background/celery/tasks/port/**'
               - 'backend/onyx/background/celery/tasks/docprocessing/**'
@@ -155,6 +208,22 @@ jobs:
               - 'backend/onyx/indexing/**'
               - 'backend/tests/integration/tests/reindex_port/**'
               - '.github/workflows/pr-integration-tests.yml'
+
+      - name: Pick live connector suites
+        id: connectors
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          FILTER_OUTPUTS: ${{ toJSON(steps.filter.outputs) }}
+        run: |
+          skipped=""
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            for suite in azure_datalake github google jira onedrive sharepoint slack; do
+              if [[ "$(jq -r --arg suite "$suite" '.[$suite] // "false"' <<< "$FILTER_OUTPUTS")" != "true" ]]; then
+                skipped="$skipped $suite"
+              fi
+            done
+          fi
+          echo "skipped=${skipped# }" >> "$GITHUB_OUTPUT"
 
   discover-test-dirs:
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
@@ -175,8 +244,7 @@ jobs:
         id: set-matrix
         env:
           GATEWAY_CHANGED: ${{ needs.changes.outputs.gateway }}
-          SLACK_CHANGED: ${{ needs.changes.outputs.slack }}
-          ONEDRIVE_CHANGED: ${{ needs.changes.outputs.onedrive }}
+          SKIPPED_CONNECTOR_SUITES: ${{ needs.changes.outputs.skipped_connector_suites }}
           REINDEX_PORT_CHANGED: ${{ needs.changes.outputs.reindex_port }}
           EVENT_NAME: ${{ github.event_name }}
         run: |
@@ -189,16 +257,15 @@ jobs:
           if [[ "$REINDEX_PORT_CHANGED" == "true" ]]; then
             tests_dirs="$tests_dirs reindex_port"
           fi
-          connector_dirs=$(find backend/tests/integration/connector_job_tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" ! -name "slack" ! -name "onedrive" -exec basename {} \; | sort)
-          if [[ "$SLACK_CHANGED" == "true" ]]; then
-            connector_dirs="$connector_dirs slack"
-          fi
-          if [[ "$ONEDRIVE_CHANGED" == "true" ]]; then
-            connector_dirs="$connector_dirs onedrive"
-          fi
+          connector_dirs=""
+          for dir in $(find backend/tests/integration/connector_job_tests -mindepth 1 -maxdepth 1 -type d ! -name "__pycache__" -exec basename {} \; | sort); do
+            if [[ " $SKIPPED_CONNECTOR_SUITES " != *" $dir "* ]]; then
+              connector_dirs="$connector_dirs $dir"
+            fi
+          done
           # The chat suites run a second time with code mode on, where the model
           # calls most tools from `execute_code` programs.
-          code_mode_dirs="chat llm_workflows streaming_endpoints tools mcp_oauth"
+          code_mode_dirs="chat llm_workflows streaming_endpoints tools"
           # The daily run covers only the suites that PRs skip by default.
           if [[ "$EVENT_NAME" == "schedule" || "$EVENT_NAME" == "workflow_dispatch" ]]; then
             tests_dirs="reindex_port"
@@ -206,10 +273,23 @@ jobs:
             code_mode_dirs=""
           fi
 
+          # These suites would outlast the slowest connector suite in one job,
+          # so pytest-split runs each one across this many jobs. It balances
+          # the jobs with backend/tests/integration/.test_durations; refresh
+          # that file with `pytest --store-durations` after a suite changes.
+          declare -A splits=([usergroup]=2 [connector]=2 [indexing]=2 [permissions_membership]=2 [reindex_port]=3 [skills]=3 [llm_provider]=2 [query_history]=2)
+
           # Create JSON array with directory info
           all_dirs=""
           for dir in $tests_dirs; do
-            all_dirs="$all_dirs{\"path\":\"tests/$dir\",\"name\":\"tests-$dir\"},"
+            count=${splits[$dir]:-1}
+            if [ "$count" -eq 1 ]; then
+              all_dirs="$all_dirs{\"path\":\"tests/$dir\",\"name\":\"tests-$dir\"},"
+              continue
+            fi
+            for group in $(seq 1 "$count"); do
+              all_dirs="$all_dirs{\"path\":\"tests/$dir\",\"name\":\"tests-$dir-$group\",\"splits\":$count,\"group\":$group},"
+            done
           done
           for dir in $code_mode_dirs; do
             all_dirs="$all_dirs{\"path\":\"tests/$dir\",\"name\":\"tests-$dir-code-mode\",\"code_mode\":true},"
@@ -235,6 +315,9 @@ jobs:
   build-model-server-image:
     needs: changes
     if: needs.changes.outputs.integration == 'true'
+    permissions:
+      actions: read
+      contents: read
     outputs:
       digest: ${{ steps.build.outputs.digest }}
     runs-on:
@@ -267,12 +350,16 @@ jobs:
           docker-token: ${{ secrets.DOCKER_TOKEN }}
           # A PR test image does not ship; build on the public bases if dhi.io is down.
           dhi-required: "false"
+          persist-pr-digest: "true"
 
   build-devcontainer-image:
     needs: changes
     if: needs.changes.outputs.integration == 'true'
+    permissions:
+      actions: read
+      contents: read
     outputs:
-      digest: ${{ steps.build.outputs.digest }}
+      digest: ${{ steps.prebuilt.outputs.digest || steps.build.outputs.digest }}
     runs-on:
       [
         runs-on,
@@ -296,17 +383,33 @@ jobs:
         with:
           ecr-registry: ${{ vars.ECR_REGISTRY }}
 
+      - name: Find a prebuilt Devcontainer image
+        id: prebuilt
+        uses: ./.github/actions/prebuilt-image
+        with:
+          name: integration-devcontainer
+          context: .devcontainer
+          dockerfile: .devcontainer/Dockerfile
+          build-config: |
+            target=integration-tests
+            BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
+          extra-paths: .github/workflows/pr-integration-tests.yml
+          image-repo: ${{ env.RUNS_ON_ECR_CACHE }}
+          persist-pr-digest: "true"
+
       - name: Build and push Devcontainer Docker image
         id: build
+        if: steps.prebuilt.outputs.digest == ''
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a
         with:
           context: .devcontainer
           file: .devcontainer/Dockerfile
+          target: integration-tests
           # Push by digest: the devcontainer image is content-stable, so
           # per-run tags accumulated on a single ECR image digest until they
           # hit the 1000-tags-per-image cap. Downstream jobs pull
           # <repo>@<digest> via this job's `digest` output instead.
-          outputs: type=image,name=${{ env.RUNS_ON_ECR_CACHE }},push=true,push-by-digest=true
+          outputs: type=image,name=${{ env.RUNS_ON_ECR_CACHE }},push=true,push-by-digest=true,compression=gzip,compression-level=1
           build-args: |
             BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
           # Attestations attach as ECR referrers to the image digest, which is
@@ -316,13 +419,22 @@ jobs:
           # Any pull_request job can push to the RunsOn ECR cache, so only fork PR runs,
           # which get no secrets, import it. Other runs import only the published image.
           cache-from: |
-            ${{ github.event.pull_request.head.repo.fork && format('type=registry,ref={0}:devcontainer-cache-{1}', env.RUNS_ON_ECR_CACHE, runner.arch) || '' }}
-            ${{ github.event.pull_request.head.repo.fork && format('type=registry,ref={0}:devcontainer-cache', env.RUNS_ON_ECR_CACHE) || '' }}
+            ${{ github.event.pull_request.head.repo.fork && format('type=registry,ref={0}:integration-devcontainer-cache-{1}', env.RUNS_ON_ECR_CACHE, runner.arch) || '' }}
+            ${{ github.event.pull_request.head.repo.fork && format('type=registry,ref={0}:integration-devcontainer-cache', env.RUNS_ON_ECR_CACHE) || '' }}
             type=registry,ref=${{ env.BASE_IMAGE_REGISTRY }}/onyxdotapp/onyx-devcontainer:latest
           # Bound cache tags per architecture, even when many PRs build the same digest.
           cache-to: |
-            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:devcontainer-cache-${{ runner.arch }},mode=max
+            type=registry,ref=${{ env.RUNS_ON_ECR_CACHE }}:integration-devcontainer-cache-${{ runner.arch }},mode=max,compression=gzip,compression-level=1
           no-cache: ${{ vars.DOCKER_NO_CACHE == 'true' }}
+
+      - name: Save the Devcontainer image digest
+        if: steps.build.outcome == 'success'
+        uses: ./.github/actions/prebuilt-image
+        with:
+          name: integration-devcontainer
+          save-key: ${{ steps.prebuilt.outputs.save-key }}
+          save-digest: ${{ steps.build.outputs.digest }}
+          persist-pr-digest: "true"
 
   integration-tests:
     needs:
@@ -421,17 +533,14 @@ jobs:
       # same image with the same routes (INDEXING_ONLY only changes the log
       # request-id prefix), so the tests point both hosts at the one container
       # and skip a second load of the embedding model.
-      - name: Start Docker containers
-        run: |
-          cd deployment/docker_compose
-          docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d \
-            --wait --wait-timeout 300 \
-            relational_db \
-            opensearch \
-            cache \
-            object-store \
-            inference_model_server
-        id: start_docker
+      - name: Install Python deps and start Docker services
+        uses: ./.github/actions/install-python-deps
+        env:
+          COMPOSE_FILE: docker-compose.yml:docker-compose.dev.yml
+        with:
+          compose-services: relational_db opensearch cache object-store inference_model_server
+          devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}@${{ needs.build-devcontainer-image.outputs.digest }}
+          save-cache: ${{ strategy.job-index == 0 }}
 
       - name: Start Mock Services
         if: matrix.test-dir.path == 'tests/indexing'
@@ -453,13 +562,8 @@ jobs:
           cd cli
           GOARCH=arm64 GOOS=linux go build -o ${{ github.workspace }}/onyx-cli-test .
 
-      - name: Install Python deps
-        uses: ./.github/actions/install-python-deps
-        with:
-          devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}@${{ needs.build-devcontainer-image.outputs.digest }}
-          save-cache: ${{ strategy.job-index == 0 }}
-
       - name: Run Integration Tests (${{ matrix.edition }}) for ${{ matrix.test-dir.name }}
+        id: integration-tests
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # ratchet:nick-fields/retry@v4.0.0
         with:
           timeout_minutes: 20
@@ -472,7 +576,7 @@ jobs:
             # TCP api_server; run one inside the test container and make every
             # missing prerequisite a hard failure instead of a skip.
             GATEWAY_CLIENTS_STRICT=""
-            RUN_CMD="uv run --no-sync pytest -v --tb=short -rs tests/integration/${{ matrix.test-dir.path }}"
+            RUN_CMD="uv run --no-sync pytest -v --durations=5 --tb=short -rs tests/integration/${{ matrix.test-dir.path }} ${{ matrix.test-dir.splits && format('--splits {0} --group {1} --durations-path tests/integration/.test_durations', matrix.test-dir.splits, matrix.test-dir.group) || '' }}"
             if [ "${{ matrix.test-dir.path }}" = "tests/gateway_clients" ]; then
               GATEWAY_CLIENTS_STRICT="true"
               RUN_CMD="bash tests/integration/tests/gateway_clients/run_with_server.sh"
@@ -488,6 +592,7 @@ jobs:
             docker run --rm --network onyx_default \
               --name test-runner \
               --env-file deployment/docker_compose/.env \
+              -e CELERY_BEAT_SCHEDULER="${{ startsWith(matrix.test-dir.path, 'connector_job_tests/') && 'tests.integration.common_utils.beat_scheduler:ConnectorTestScheduler' || '' }}" \
               -v ${{ github.workspace }}:/workspace \
               -w /workspace/backend \
               $CLI_VOLUME \
@@ -541,6 +646,13 @@ jobs:
               $RUN_CMD
 
       # ------------------------------------------------------------
+      - name: Report integration retry pass
+        if: ${{ steps.integration-tests.outcome == 'success' && fromJSON(steps.integration-tests.outputs.total_attempts || '0') > 1 }}
+        env:
+          ATTEMPTS: ${{ steps.integration-tests.outputs.total_attempts }}
+        run: |
+          printf '## Integration tests passed on attempt %s\n' "$ATTEMPTS" >> "$GITHUB_STEP_SUMMARY"
+
       # Always gather logs BEFORE "down". The test-runner container's
       # stdout (in-process api_server logs from pytest) is captured
       # directly in the workflow log for the "Run Integration Tests" step.
@@ -618,20 +730,16 @@ jobs:
       # The api_server runs in-process inside pytest via FastAPI TestClient
       # (see tests/integration/conftest.py); only Postgres is needed from
       # compose for Onyx Lite.
-      - name: Start Docker containers (onyx-lite)
-        run: |
-          cd deployment/docker_compose
-          docker compose -f docker-compose.yml -f docker-compose.onyx-lite.yml -f docker-compose.dev.yml up -d \
-            --wait --wait-timeout 300 \
-            relational_db
-        id: start_docker_onyx_lite
-
-      - name: Install Python deps
+      - name: Install Python deps and start Docker services
         uses: ./.github/actions/install-python-deps
+        env:
+          COMPOSE_FILE: docker-compose.yml:docker-compose.onyx-lite.yml:docker-compose.dev.yml
         with:
+          compose-services: relational_db
           devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}@${{ needs.build-devcontainer-image.outputs.digest }}
 
       - name: Run Onyx Lite Integration Tests
+        id: integration-tests
         uses: nick-fields/retry@ad984534de44a9489a53aefd81eb77f87c70dc60 # ratchet:nick-fields/retry@v4.0.0
         with:
           timeout_minutes: 8
@@ -662,6 +770,13 @@ jobs:
               -e ONYX_DEV_LICENSE \
               ${{ env.RUNS_ON_ECR_CACHE }}@${{ needs.build-devcontainer-image.outputs.digest }} \
               uv run --no-sync pytest -v --tb=short -rs tests/integration/tests/no_vectordb
+
+      - name: Report integration retry pass
+        if: ${{ steps.integration-tests.outcome == 'success' && fromJSON(steps.integration-tests.outputs.total_attempts || '0') > 1 }}
+        env:
+          ATTEMPTS: ${{ steps.integration-tests.outputs.total_attempts }}
+        run: |
+          printf '## Integration tests passed on attempt %s\n' "$ATTEMPTS" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Dump all-container logs (onyx-lite)
         if: always()
@@ -723,21 +838,12 @@ jobs:
 
       # NOTE: `indexing_model_server` is intentionally not started. See the
       # integration-tests job above.
-      - name: Start Docker containers for multi-tenant tests
-        run: |
-          cd deployment/docker_compose
-          docker compose -f docker-compose.yml -f docker-compose.dev.yml up -d \
-            --wait --wait-timeout 300 \
-            relational_db \
-            opensearch \
-            cache \
-            object-store \
-            inference_model_server
-        id: start_docker_multi_tenant
-
-      - name: Install Python deps
+      - name: Install Python deps and start Docker services
         uses: ./.github/actions/install-python-deps
+        env:
+          COMPOSE_FILE: docker-compose.yml:docker-compose.dev.yml
         with:
+          compose-services: relational_db opensearch cache object-store inference_model_server
           devcontainer-image: ${{ env.RUNS_ON_ECR_CACHE }}@${{ needs.build-devcontainer-image.outputs.digest }}
 
       - name: Run Multi-Tenant Integration Tests
@@ -831,6 +937,7 @@ jobs:
       - name: Check job status
         env:
           CHANGES_RESULT: ${{ needs.changes.result }}
+          SKIP_REASON: ${{ needs.changes.outputs.skip_reason }}
           RUN_TESTS: ${{ needs.changes.outputs.integration }}
           INTEGRATION_RESULT: ${{ needs.integration-tests.result }}
           LITE_RESULT: ${{ needs.onyx-lite-tests.result }}
@@ -844,6 +951,10 @@ jobs:
           if [ "${CHANGES_RESULT}" != "success" ]; then
             echo "changes job did not succeed (result: ${CHANGES_RESULT})"
             exit 1
+          fi
+          if [ -n "${SKIP_REASON}" ]; then
+            echo "${SKIP_REASON}"
+            exit 0
           fi
           if [ "${RUN_TESTS}" != "true" ]; then
             echo "No relevant paths changed — required check passes."
@@ -868,6 +979,7 @@ jobs:
       - name: Record tested base
         if: >-
           github.event_name == 'pull_request' &&
+          needs.changes.outputs.skip_reason == '' &&
           github.event.pull_request.head.repo.full_name == github.repository &&
           github.actor != 'dependabot[bot]'
         env:

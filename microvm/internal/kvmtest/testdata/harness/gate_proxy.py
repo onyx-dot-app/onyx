@@ -8,7 +8,9 @@ fixed user id once the placement record matches), the pod-IP lookup, the
 credential evaluators and resolvers.
 
 Env: the usual Onyx env (SANDBOX_RUNTIME=firecracker, CACHE_BACKEND=redis,
-REDIS_HOST, MULTI_TENANT=false), HARNESS_PROXY_PORT, HARNESS_CONFDIR.
+REDIS_HOST, MULTI_TENANT=false), SANDBOX_PROXY_LISTEN_PORT, HARNESS_CONFDIR. With
+SANDBOX_PROXY_RELAY_TLS_PORT and its files, the real relay mTLS listener
+also runs, as in the sandbox-proxy pod.
 """
 
 import asyncio
@@ -44,6 +46,7 @@ from onyx.sandbox_proxy.sandbox_identity.signed_lookups import (
     CachedNodeSigningKeyLookup,
     CacheReplayGuard,
 )
+from onyx.sandbox_proxy.server import build_relay_tls_listener
 
 OWNER = UUID("7c9e6679-7425-40de-944b-e07fc1f90ae7")
 log = logging.getLogger("harness")
@@ -123,11 +126,13 @@ def main() -> None:
         signed_identity=verifier,
     )
 
+    relay_tls = build_relay_tls_listener()
+
     async def run() -> None:
         master = DumpMaster(
             options=Options(
                 listen_host="127.0.0.1",
-                listen_port=int(os.environ.get("HARNESS_PROXY_PORT", "8099")),
+                listen_port=int(os.environ.get("SANDBOX_PROXY_LISTEN_PORT", "8099")),
                 confdir=os.environ.get("HARNESS_CONFDIR", "/opt/proxy/confdir"),
                 mode=["regular"],
                 ssl_insecure=False,
@@ -137,6 +142,8 @@ def main() -> None:
             with_dumper=False,
         )
         master.addons.add(gate)
+        if relay_tls is not None:
+            await relay_tls.start()
         await master.run()
 
     asyncio.run(run(), loop_factory=UpstreamEventLoop)

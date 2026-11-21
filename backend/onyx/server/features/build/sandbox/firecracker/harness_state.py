@@ -10,9 +10,10 @@
 - Session saves (no TTL): per chat session, the committed archive in the
   file store. A new save is committed before the old file is deleted.
 - Last attempt (no TTL): an agent never creates a stopped attempt again.
-- Saved sessions and artifacts (no TTL): per sandbox, the chat sessions
-  with a committed save and the published artifact file IDs. A purge
-  deletes their files.
+- Skills image (no TTL): per sandbox, the skills image that a VM instance
+  shows. A new instance gets the push again.
+- Saved sessions (no TTL): per sandbox, the chat sessions with a committed
+  save. A purge deletes their files.
 - Wanted (expires): when a call last asked for the sandbox. A stop that
   saves gives way to it (cancel on resume).
 - Purge marks (expire): a deleted session or sandbox. A save in progress
@@ -39,6 +40,7 @@ from onyx.server.features.build.sandbox.firecracker.models import (
     IdSet,
     SessionInstanceTable,
     SessionSave,
+    SkillsImage,
 )
 
 EXEC_SESSIONS_PREFIX = "sandbox_fc:exec_sessions:"
@@ -46,22 +48,24 @@ ACTIVITY_PREFIX = "sandbox_fc:harness_activity:"
 SESSION_INSTANCES_PREFIX = "sandbox_fc:session_instances:"
 SESSION_SAVE_PREFIX = "sandbox_fc:session_save:"
 LAST_ATTEMPT_PREFIX = "sandbox_fc:last_attempt:"
+SKILLS_IMAGE_PREFIX = "sandbox_fc:skills_image:"
 SAVED_SESSIONS_PREFIX = "sandbox_fc:saved_sessions:"
-ARTIFACTS_PREFIX = "sandbox_fc:artifacts:"
 WANTED_PREFIX = "sandbox_fc:wanted:"
 PURGED_SESSION_PREFIX = "sandbox_fc:purged_session:"
 PURGED_SANDBOX_PREFIX = "sandbox_fc:purged_sandbox:"
 SESSION_SAVE_LOCK_PREFIX = "sandbox_fc:session_save_lock:"
 # Longer than any save in progress (one session takes 35 min at most).
 PURGE_MARK_SECONDS = 24 * 3600
+_RETENTION_MARK = "retention"
 WANTED_SECONDS = 600
 # Per-sandbox records that a sandbox purge deletes at its end (the
-# saved-session and artifact indexes empty as their files go).
+# saved-session index empties as its files go).
 SANDBOX_STATE_PREFIXES = (
     EXEC_SESSIONS_PREFIX,
     ACTIVITY_PREFIX,
     SESSION_INSTANCES_PREFIX,
     LAST_ATTEMPT_PREFIX,
+    SKILLS_IMAGE_PREFIX,
     WANTED_PREFIX,
 )
 _CAS_TRIES = 16
@@ -99,6 +103,15 @@ def _update(
         elif payload.encode() == raw or cache.replace_if_value(key, raw, payload):
             return
     raise StateContentionError(key)
+
+
+def get_skills_image(cache: CacheBackend, sandbox_id: UUID) -> SkillsImage | None:
+    raw = cache.get(SKILLS_IMAGE_PREFIX + str(sandbox_id))
+    return None if raw is None else SkillsImage.model_validate_json(raw)
+
+
+def set_skills_image(cache: CacheBackend, sandbox_id: UUID, image: SkillsImage) -> None:
+    cache.set(SKILLS_IMAGE_PREFIX + str(sandbox_id), image.model_dump_json())
 
 
 def get_exec_session(
@@ -184,6 +197,27 @@ def mark_session_on_instance(
     )
 
 
+def has_session_records(
+    cache: CacheBackend, sandbox_id: UUID, session_id: UUID
+) -> bool:
+    """Whether the harness recorded anything of the session: a save, a
+    saved-session index entry, a VM instance that set it up, or a command."""
+    return (
+        get_session_save(cache, session_id) is not None
+        or str(session_id) in get_ids(cache, SAVED_SESSIONS_PREFIX, sandbox_id)
+        or str(session_id)
+        in _read(
+            cache, SESSION_INSTANCES_PREFIX + str(sandbox_id), SessionInstanceTable
+        ).sessions
+        or any(
+            record.chat_session_id == str(session_id)
+            for record in _read(
+                cache, EXEC_SESSIONS_PREFIX + str(sandbox_id), ExecSessionTable
+            ).sessions.values()
+        )
+    )
+
+
 def forget_session_on_instances(
     cache: CacheBackend, sandbox_id: UUID, session_id: UUID
 ) -> None:
@@ -262,15 +296,25 @@ def mark_purged(
     *,
     sandbox_id: UUID | None = None,
     session_id: UUID | None = None,
+    retention: bool = False,
 ) -> None:
+    """`retention`: a retention purge, whose session mark goes again after
+    the purge (`clear_retention_mark`). It never replaces a delete's mark;
+    a delete replaces it."""
     if sandbox_id is not None:
         cache.set(PURGED_SANDBOX_PREFIX + str(sandbox_id), "1", ex=PURGE_MARK_SECONDS)
     if session_id is not None:
-        cache.set(PURGED_SESSION_PREFIX + str(session_id), "1", ex=PURGE_MARK_SECONDS)
+        key = PURGED_SESSION_PREFIX + str(session_id)
+        if retention:
+            cache.set_if_absent(key, _RETENTION_MARK, ex=PURGE_MARK_SECONDS)
+        else:
+            cache.set(key, "1", ex=PURGE_MARK_SECONDS)
 
 
-def is_sandbox_purged(cache: CacheBackend, sandbox_id: UUID) -> bool:
-    return cache.get(PURGED_SANDBOX_PREFIX + str(sandbox_id)) is not None
+def clear_retention_mark(cache: CacheBackend, session_id: UUID) -> None:
+    cache.delete_if_value(
+        PURGED_SESSION_PREFIX + str(session_id), _RETENTION_MARK.encode()
+    )
 
 
 def is_purged(cache: CacheBackend, sandbox_id: UUID, session_id: UUID) -> bool:

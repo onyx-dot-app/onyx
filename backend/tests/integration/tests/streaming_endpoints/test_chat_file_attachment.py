@@ -1,6 +1,7 @@
 import mimetypes
 from typing import Any
 
+from onyx.file_store.models import FileDescriptor
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.chat import ChatSessionManager
@@ -173,3 +174,44 @@ def test_txt_over_token_threshold_rejected(
         assert "token limit" in result["rejected_files"][0]["reason"].lower()
     finally:
         _set_token_threshold(admin_user, threshold_k=200)
+
+
+def test_code_file_attached_but_not_indexed(admin_user: DATestUser) -> None:
+    """A code file is a usable chat attachment that is never indexed."""
+    LLMProviderManager.create(user_performing_action=admin_user)
+    content = b'MARKER = "violet-otter-42"\nprint(MARKER)\n'
+    result = _upload_raw("analyze.py", content, admin_user)
+
+    assert result["rejected_files"] == []
+    assert len(result["user_files"]) == 1
+    uploaded = result["user_files"][0]
+    assert uploaded["status"] == "SKIPPED"
+    assert uploaded["chunk_count"] is None
+
+    # SKIPPED is terminal: the indexing worker never picks the file up.
+    response = client.post(
+        f"{API_SERVER_URL}/user/projects/file/statuses",
+        json={"file_ids": [uploaded["id"]]},
+        headers=admin_user.headers,
+    )
+    response.raise_for_status()
+    assert [(f["status"], f["chunk_count"]) for f in response.json()] == [
+        ("SKIPPED", None)
+    ]
+
+    file_descriptor: FileDescriptor = {
+        "id": uploaded["file_id"],
+        "type": uploaded["chat_file_type"],
+        "name": uploaded["name"],
+        "user_file_id": uploaded["id"],
+    }
+    chat_session = ChatSessionManager.create(user_performing_action=admin_user)
+    chat_response = ChatSessionManager.send_message(
+        chat_session_id=chat_session.id,
+        message="What is the value of MARKER in the attached file?",
+        user_performing_action=admin_user,
+        file_descriptors=[file_descriptor],
+    )
+
+    assert chat_response.error is None
+    assert "violet-otter-42" in chat_response.full_message.lower()

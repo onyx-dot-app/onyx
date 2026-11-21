@@ -6,6 +6,8 @@ from typing import Any
 import requests
 from fastapi import HTTPException
 
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.tools.tool_implementations.web_search.models import (
     WebSearchProvider,
     WebSearchResult,
@@ -131,11 +133,11 @@ class GooglePSEClient(WebSearchProvider):
         try:
             test_results = self.search("test")
             if not test_results or not any(result.link for result in test_results):
-                raise HTTPException(
-                    status_code=400,
-                    detail="Google PSE validation failed: search returned no results.",
+                raise OnyxError(
+                    OnyxErrorCode.BAD_REQUEST,
+                    "Google PSE validation failed: search returned no results.",
                 )
-        except HTTPException:
+        except (HTTPException, OnyxError):
             raise
         except Exception as e:
             error_msg = str(e)
@@ -144,13 +146,12 @@ class GooglePSEClient(WebSearchProvider):
                 or "key" in error_msg.lower()
                 or "auth" in error_msg.lower()
             ):
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Invalid Google PSE API key: {error_msg}",
+                raise OnyxError(
+                    OnyxErrorCode.BAD_REQUEST,
+                    f"Invalid Google PSE API key: {error_msg}",
                 ) from e
-            raise HTTPException(
-                status_code=400,
-                detail=f"Google PSE validation failed: {error_msg}",
+            raise OnyxError(
+                OnyxErrorCode.BAD_REQUEST, f"Google PSE validation failed: {error_msg}"
             ) from e
 
         logger.info("Web search provider test succeeded for Google PSE.")

@@ -1,7 +1,8 @@
 import os
 import re
-from dataclasses import dataclass
 from typing import Any
+
+from pydantic import BaseModel, ConfigDict
 
 NAME_FIELD = "Name"
 MODIFIED_FIELD = "LastModifiedDate"
@@ -41,8 +42,9 @@ def validate_sf_identifier(name: str) -> str:
     return name
 
 
-@dataclass
-class SalesforceObject:
+class SalesforceObject(BaseModel):
+    model_config = ConfigDict(strict=True)
+
     id: str
     type: str
     data: dict[str, Any]

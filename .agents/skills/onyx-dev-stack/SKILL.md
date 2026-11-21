@@ -158,9 +158,14 @@ Normal shutdown preserves volumes. Delete database, index, or object-store data 
 
 After shutdown, inspect status to confirm the targeted stack stopped. Check that another running worktree remains available when testing isolation.
 
+When your task is complete, run `"$ODS" --isolated stack down` for an isolated stack you started. Each isolated stack keeps about 4 GB of memory for OpenSearch and the model servers, even after `stack stop`. Do not stop a shared stack, because other worktrees use it.
+
 ## Find and stop old stacks
 
 Run `"$ODS" stack ls` from any directory. It lists every stack on the machine and prints the command that stops each one. Add `--all` for stopped stacks, `--json` for the same rows with a `next` field. Run `"$ODS" stack ls --help` for the statuses.
 
 Stop `orphaned` stacks; no worktree owns them. Run the printed command, or confirm with the user before you stop a stack that another agent may still use.
-Do not add `--force`, `prune --yes`, or `prune --volumes` unless the user asks.
+An orphan whose `next` is `ods stack prune --volumes` has only Docker volumes left. Deleting them deletes its data, so ask the user first.
+
+`"$ODS" stack prune --idle 6h` also stops isolated stacks whose worktree had no Git operation, file edit, or running coding agent for 6 hours. It stops stacks of other worktrees, so run it only when the user asks.
+Do not add `--force`, `--idle`, `prune --yes`, or `prune --volumes` unless the user asks.

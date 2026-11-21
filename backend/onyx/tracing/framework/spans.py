@@ -346,6 +346,9 @@ class SpanImpl(Span[TSpanData]):
         if exc_type is GeneratorExit:
             reset_current = False
 
+        if exc_type is not None and self.error is None:
+            self.set_error({"message": exc_type.__name__, "data": None})
+
         self.finish(reset_current=reset_current)
 
     def set_error(self, error: SpanError) -> None:

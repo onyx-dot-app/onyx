@@ -1,28 +1,8 @@
 import type { useTranslations } from "next-intl";
-import type { IconFunctionComponent } from "@opal/types";
-import {
-  CustomToolStart,
-  Packet,
-  PacketType,
-  SearchToolPacket,
-} from "@/app/app/services/streamingModels";
-import { constructCurrentSearchState } from "@/app/app/message/messageComponents/timeline/renderers/search/searchStateUtils";
-import { isGroupEndPacket } from "@/app/app/message/messageComponents/timeline/packetHelpers";
-import {
-  SvgListCheck,
-  SvgGlobe,
-  SvgSearchMenu,
-  SvgTerminal,
-  SvgLink,
-  SvgImage,
-  SvgUser,
-  SvgCircle,
-  SvgBookOpen,
-  SvgSlowTime,
-  SvgXCircle,
-  SvgCode,
-  SvgWrench,
-} from "@opal/icons";
+import { Packet, PacketType } from "@/app/app/services/streamingModels";
+import { isGroupEndPacket } from "@/lib/timeline/chat/packetHelpers";
+import { isDisplayPacket, isToolPacket } from "@/app/app/services/packetUtils";
+import { SvgXCircle } from "@opal/icons";
 
 /**
  * Check if a packet group contains an ERROR packet (tool failed)
@@ -61,82 +41,16 @@ export function parseToolKey(key: string): {
   };
 }
 
+/**
+ * The packet that names a step's activity. Debug and approval packets share
+ * the step's placement but never name it.
+ */
+export function firstActivityPacket(packets: Packet[]): Packet | undefined {
+  return packets.find(
+    (packet) => isToolPacket(packet, false) || isDisplayPacket(packet)
+  );
+}
+
 export type TimelineTranslate = ReturnType<
   typeof useTranslations<"chat.messages.timeline">
 >;
-
-export function getToolName(packets: Packet[], t: TimelineTranslate): string {
-  const firstPacket = packets[0];
-  if (!firstPacket) return t("toolNames.tool");
-
-  switch (firstPacket.obj.type) {
-    case PacketType.SEARCH_TOOL_START: {
-      const searchState = constructCurrentSearchState(
-        packets as SearchToolPacket[]
-      );
-      return searchState.isInternetSearch
-        ? t("toolNames.webSearch")
-        : t("toolNames.internalSearch");
-    }
-    case PacketType.PYTHON_TOOL_START:
-      return t("toolNames.codeInterpreter");
-    case PacketType.FETCH_TOOL_START:
-      return t("toolNames.openUrls");
-    case PacketType.CUSTOM_TOOL_START: {
-      return (
-        (firstPacket.obj as CustomToolStart).display_name ||
-        t("toolNames.customTool")
-      );
-    }
-    case PacketType.IMAGE_GENERATION_TOOL_START:
-      return t("toolNames.generateImage");
-    case PacketType.DEEP_RESEARCH_PLAN_START:
-      return t("toolNames.generatePlan");
-    case PacketType.RESEARCH_AGENT_START:
-      return t("toolNames.researchAgent");
-    case PacketType.CODING_AGENT_START:
-      return t("toolNames.codingAgent");
-    case PacketType.REASONING_START:
-      return t("toolNames.thinking");
-    case PacketType.MEMORY_TOOL_START:
-    case PacketType.MEMORY_TOOL_NO_ACCESS:
-      return t("toolNames.memory");
-    default:
-      return t("toolNames.tool");
-  }
-}
-
-export function getToolIcon(packets: Packet[]): IconFunctionComponent {
-  const firstPacket = packets[0];
-  if (!firstPacket) return SvgCircle;
-
-  switch (firstPacket.obj.type) {
-    case PacketType.SEARCH_TOOL_START: {
-      const searchState = constructCurrentSearchState(
-        packets as SearchToolPacket[]
-      );
-      return searchState.isInternetSearch ? SvgGlobe : SvgSearchMenu;
-    }
-    case PacketType.PYTHON_TOOL_START:
-      return SvgTerminal;
-    case PacketType.FETCH_TOOL_START:
-      return SvgLink;
-    case PacketType.CUSTOM_TOOL_START:
-      return SvgWrench;
-    case PacketType.IMAGE_GENERATION_TOOL_START:
-      return SvgImage;
-    case PacketType.DEEP_RESEARCH_PLAN_START:
-      return SvgListCheck;
-    case PacketType.RESEARCH_AGENT_START:
-      return SvgUser;
-    case PacketType.CODING_AGENT_START:
-      return SvgCode;
-    case PacketType.REASONING_START:
-      return SvgSlowTime;
-    case PacketType.MEMORY_TOOL_START:
-    case PacketType.MEMORY_TOOL_NO_ACCESS:
-      return SvgBookOpen;
-    default:
-      return SvgCircle;
-  }
-}

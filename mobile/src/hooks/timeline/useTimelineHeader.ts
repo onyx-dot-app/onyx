@@ -13,6 +13,14 @@ import { isDisplayPacket, isToolPacket } from "@/chat/timeline/packetUtils";
 import { customToolLabel } from "@/chat/timeline/toolDisplay";
 import { TurnGroup } from "@/chat/timeline/transformers";
 
+// What a waiting response waits for from the user.
+export type AwaitingUser = "approval" | "answer";
+
+const AWAITING_HEADER: Record<AwaitingUser, string> = {
+  approval: "Waiting for your approval",
+  answer: "Waiting for your answer",
+};
+
 export interface TimelineHeaderResult {
   headerText: string;
   hasPackets: boolean;
@@ -23,10 +31,19 @@ export function useTimelineHeader(
   turnGroups: TurnGroup[],
   stopReason?: StopReason,
   codeModeWorking = false,
+  awaitingUser: AwaitingUser | null = null,
 ): TimelineHeaderResult {
   return useMemo(() => {
     const hasPackets = turnGroups.length > 0;
     const userStopped = stopReason === StopReason.USER_CANCELLED;
+
+    if (awaitingUser !== null) {
+      return {
+        headerText: AWAITING_HEADER[awaitingUser],
+        hasPackets,
+        userStopped,
+      };
+    }
 
     if (codeModeWorking) {
       return { headerText: "Working", hasPackets, userStopped };
@@ -105,5 +122,5 @@ export function useTimelineHeader(
     }
 
     return { headerText: "Thinking...", hasPackets, userStopped };
-  }, [turnGroups, stopReason, codeModeWorking]);
+  }, [turnGroups, stopReason, codeModeWorking, awaitingUser]);
 }

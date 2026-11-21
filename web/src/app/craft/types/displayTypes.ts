@@ -1,3 +1,4 @@
+import type { OnyxSearch } from "@/lib/timeline/acp";
 /**
  * Display Types
  *
@@ -6,6 +7,7 @@
  */
 
 import type { RateLimitDetails } from "@/app/app/types";
+import type { TimelineEvent } from "@/lib/timeline/events";
 
 export type ToolCallKind =
   | "search"
@@ -75,6 +77,10 @@ export interface ToolCallState {
   command: string; // "ls outputs/" or task prompt for task kind
   status: ToolCallStatus;
   rawOutput: string; // Full output for expanded view
+  /** A web search's structured queries and results, from `_meta.onyx`. */
+  onyxSearch?: OnyxSearch;
+  /** A shell command's exit code, from `_meta.onyx`. */
+  exitCode?: number;
   /** For task tool calls: the subagent type (e.g., "explore", "plan") */
   subagentType?: string;
   /** For task tool calls: the subagent's final output once completed */
@@ -138,8 +144,6 @@ export type PanelTab =
   | { kind: "file"; path: string; fileName: string }
   | { kind: "browser"; id: string; appId: string | null; appName?: string };
 
-export type OutputPanelMode = "closed" | "medium" | "full";
-
 export function normalizePanelPath(path: string): string {
   const segments: string[] = [];
   for (const segment of path.split("/")) {
@@ -182,8 +186,10 @@ export interface SubagentTurn {
   thinking: string | null;
   /** The subagent's response for this turn (null until complete). */
   response: string | null;
-  /** FIFO stream items rendered with the same BuildMessageList path as parent chat. */
+  /** FIFO stream items, kept for settlement; the view renders `timelineEvents`. */
   streamItems: StreamItem[];
+  /** This turn's timeline events, from the subagent's own packets. */
+  timelineEvents: TimelineEvent[];
 }
 
 export interface SubagentState {

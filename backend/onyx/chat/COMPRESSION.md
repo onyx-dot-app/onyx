@@ -1,6 +1,6 @@
 # Chat history compaction
 
-The shared Agent compacts context during execution. Chat, coding, research, and child agents use the same stage.
+The shared Agent compacts context during execution. Chat and research agents, including their children, use the same stage.
 See [the runtime guide](../agents/README.md#compaction) for its behavior.
 
 Each checkpoint records summary text and the ID of the last covered message.

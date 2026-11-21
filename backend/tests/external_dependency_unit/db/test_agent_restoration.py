@@ -3,6 +3,7 @@
 from functools import partial
 from uuid import uuid4
 
+import pytest
 from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
@@ -289,7 +290,11 @@ def test_research_restores_across_request_contexts(db_session: Session) -> None:
         coordinator = run_store.bind(
             AgentCoordinator(),
             build_agent=partial(
-                restore_chat_agent, llm=research_llm, tools=[], user_identity=identity
+                restore_chat_agent,
+                llm=research_llm,
+                tools=[],
+                user_identity=identity,
+                subagent_factory=lambda _depth: pytest.fail("No agent tools"),
             ),
         )
         for info in run_store.list_agents():
@@ -418,6 +423,7 @@ def test_saved_tools_survive_replay_and_request_preparation(
         history = convert_chat_history(
             capture_chat_history([saved_question, saved_response], {}, len),
             files=[],
+            vm_paths={},
         ).messages
         original_messages = [message.model_dump() for message in history]
         history.append(UserMessage(content="Next question"))

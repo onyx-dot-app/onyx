@@ -13,7 +13,7 @@ the wire, so never pass credentials yourself.
 
 ## Usage
 
-    python .opencode/skills/hubspot/hubspot_api.py <command> [args]
+    python /mnt/skills/hubspot/hubspot_api.py <command> [args]
 
 `<object>` is one of `contacts`, `companies`, or `deals`. Read commands
 auto-paginate and prune empty fields. `create` and `update` are the only

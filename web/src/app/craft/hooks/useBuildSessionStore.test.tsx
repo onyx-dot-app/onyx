@@ -700,64 +700,49 @@ describe("Output resources and inventory", () => {
     expect(session()?.activePanelTabId).toBeNull();
   });
 
-  it.each(["SUCCEEDED", "FAILED", "AWAITING_APPROVAL"] as const)(
-    "supersedes pending passive discovery when a scheduled run is %s",
-    async (status) => {
-      await refresh([]);
-      const passiveResponse = deferred<OutputInventory>();
-      jest
-        .mocked(fetchOutputInventory)
-        .mockReturnValueOnce(passiveResponse.promise);
-      const passive = store().refreshOutputInventory(sessionId, {
-        silent: true,
-      });
-      const history = deferred<Awaited<ReturnType<typeof api.fetchMessages>>>();
-      jest.mocked(api.fetchMessages).mockReturnValueOnce(history.promise);
-      jest.mocked(api.fetchScheduledRunContext).mockResolvedValue({
-        run_id: "scheduled-run",
-        task_id: "task",
-        task_name: "Report",
-        revision: 0,
-        viewed_revision: null,
-        status,
-        started_at: "2026-10-10T00:00:00Z",
-        finished_at:
-          status === "AWAITING_APPROVAL" ? null : "2026-10-10T00:01:00Z",
-      });
-      jest.mocked(fetchOutputInventory).mockResolvedValue({
-        files: [slides],
-        complete: true,
-      });
-      const settling = store().beginTurnSettlement(
-        sessionId,
-        { kind: "scheduled", runId: "scheduled-run" },
-        session()?.turnGeneration ?? 0
-      );
-      await store().refreshOutputInventory(sessionId, { silent: true });
-      expect(fetchOutputInventory).toHaveBeenCalledTimes(2);
-      history.resolve([]);
-      await settling;
-      // Final discovery proceeds before the old request returns.
-      await waitFor(() =>
-        expect(session()).toMatchObject({
-          outputInventory: { [slides.path]: slides },
-          activePanelTabId: status === "FAILED" ? null : `file:${slides.path}`,
-        })
-      );
-      expect(fetchOutputInventory).toHaveBeenCalledTimes(3);
-      expect(session()?.turnSettlement).toEqual(
-        status === "SUCCEEDED"
-          ? expect.objectContaining({ phase: "ready" })
-          : null
-      );
-      passiveResponse.resolve({ files: [oldFile], complete: true });
-      await passive;
+  it("supersedes pending passive discovery when a turn settles", async () => {
+    await refresh([]);
+    const passiveResponse = deferred<OutputInventory>();
+    jest
+      .mocked(fetchOutputInventory)
+      .mockReturnValueOnce(passiveResponse.promise);
+    const passive = store().refreshOutputInventory(sessionId, {
+      silent: true,
+    });
+    const history = deferred<Awaited<ReturnType<typeof api.fetchMessages>>>();
+    jest.mocked(api.fetchMessages).mockReturnValueOnce(history.promise);
+    jest.mocked(api.fetchActiveTurn).mockResolvedValue(null);
+    jest.mocked(fetchOutputInventory).mockResolvedValue({
+      files: [slides],
+      complete: true,
+    });
+    const settling = store().beginTurnSettlement(
+      sessionId,
+      { kind: "interactive", turnId: null },
+      session()?.turnGeneration ?? 0
+    );
+    await store().refreshOutputInventory(sessionId, { silent: true });
+    expect(fetchOutputInventory).toHaveBeenCalledTimes(2);
+    history.resolve([]);
+    await settling;
+    // Final discovery proceeds before the old request returns.
+    await waitFor(() =>
       expect(session()).toMatchObject({
         outputInventory: { [slides.path]: slides },
-        activePanelTabId: status === "FAILED" ? null : `file:${slides.path}`,
-      });
-    }
-  );
+        activePanelTabId: `file:${slides.path}`,
+      })
+    );
+    expect(fetchOutputInventory).toHaveBeenCalledTimes(3);
+    expect(session()?.turnSettlement).toEqual(
+      expect.objectContaining({ phase: "ready" })
+    );
+    passiveResponse.resolve({ files: [oldFile], complete: true });
+    await passive;
+    expect(session()).toMatchObject({
+      outputInventory: { [slides.path]: slides },
+      activePanelTabId: `file:${slides.path}`,
+    });
+  });
 
   it("coalesces repeated silent reads of the same runtime", async () => {
     let resolveRead: ((inventory: OutputInventory) => void) | undefined;
@@ -1271,6 +1256,7 @@ describe("Session loading and restoration", () => {
       agent_provider: null,
       agent_model: null,
       skills_stale: false,
+      skill_omissions: null,
       nextjs_port: null,
       session_loaded_in_sandbox: false,
       sandbox: {
@@ -2849,136 +2835,6 @@ describe("Session loading and restoration", () => {
       }
     });
 
-    it.each(["FAILED", "SKIPPED"] as const)(
-      "hydrates %s scheduled history without permitting queued work",
-      async (status) => {
-        const store = useBuildSessionStore.getState();
-        store.updateSessionData(SESSION_ID, {
-          activeTurnId: null,
-          activeTurnLocalOwner: false,
-          messages: [user],
-        });
-        store.enqueueMessage(SESSION_ID, "next prompt", []);
-        mockedApi.fetchScheduledRunContext.mockResolvedValue({
-          run_id: "scheduled-run",
-          task_id: "task",
-          task_name: "Report",
-          revision: 0,
-          viewed_revision: null,
-          status,
-          started_at: "2026-10-10T00:00:00Z",
-          finished_at: "2026-10-10T00:01:00Z",
-        });
-        mockedApi.fetchMessages.mockResolvedValue([user, answer]);
-        await store.beginTurnSettlement(
-          SESSION_ID,
-          { kind: "scheduled", runId: "scheduled-run" },
-          0
-        );
-        expect(mockedApi.fetchMessages).toHaveBeenCalledTimes(1);
-        expect(mockedApi.fetchActiveTurn).not.toHaveBeenCalled();
-        expect(
-          useBuildSessionStore.getState().sessions.get(SESSION_ID)
-        ).toMatchObject({
-          messages: [user, answer],
-          status: "failed",
-          turnSettlement: null,
-        });
-        expect(store.claimQueuedMessage(SESSION_ID)).toBeNull();
-      }
-    );
-
-    it("retains failed scheduled history recovery until its canonical read succeeds", async () => {
-      const store = useBuildSessionStore.getState();
-      store.updateSessionData(SESSION_ID, {
-        activeTurnId: null,
-        activeTurnLocalOwner: false,
-        messages: [user],
-      });
-      store.enqueueMessage(SESSION_ID, "next prompt", []);
-      mockedApi.fetchScheduledRunContext.mockResolvedValue({
-        run_id: "scheduled-run",
-        task_id: "task",
-        task_name: "Report",
-        revision: 0,
-        viewed_revision: null,
-        status: "FAILED",
-        started_at: "2026-10-10T00:00:00Z",
-        finished_at: "2026-10-10T00:01:00Z",
-      });
-      mockedApi.fetchMessages.mockRejectedValueOnce(
-        new Error("History unavailable")
-      );
-      await store.beginTurnSettlement(
-        SESSION_ID,
-        { kind: "scheduled", runId: "scheduled-run" },
-        0
-      );
-      expect(
-        useBuildSessionStore.getState().sessions.get(SESSION_ID)
-      ).toMatchObject({
-        messages: [user],
-        turnSettlement: { phase: "failed", error: "History unavailable" },
-      });
-      expect(store.claimQueuedMessage(SESSION_ID)).toBeNull();
-      mockedApi.fetchMessages.mockResolvedValue([user, answer]);
-      await store.retryTurnSettlement(SESSION_ID);
-      expect(
-        useBuildSessionStore.getState().sessions.get(SESSION_ID)
-      ).toMatchObject({
-        messages: [user, answer],
-        status: "failed",
-        turnSettlement: null,
-      });
-      expect(store.claimQueuedMessage(SESSION_ID)).toBeNull();
-    });
-
-    it("waits for the scheduled worker to commit completion before reading history", async () => {
-      jest.useFakeTimers();
-      try {
-        const run = {
-          run_id: "scheduled-run",
-          task_id: "task",
-          task_name: "Daily report",
-          revision: 0,
-          viewed_revision: null,
-          status: "RUNNING" as const,
-          started_at: "2026-10-10T00:00:00Z",
-          finished_at: null,
-        };
-        useBuildSessionStore.getState().updateSessionData(SESSION_ID, {
-          activeTurnId: null,
-          activeTurnLocalOwner: false,
-        });
-        const owner = { kind: "scheduled" as const, runId: run.run_id };
-        mockedApi.fetchScheduledRunContext.mockResolvedValue(run);
-        const settling = useBuildSessionStore
-          .getState()
-          .beginTurnSettlement(SESSION_ID, owner, 0);
-        await jest.advanceTimersByTimeAsync(0);
-        expect(mockedApi.fetchActiveTurn).not.toHaveBeenCalled();
-        expect(mockedApi.fetchMessages).not.toHaveBeenCalled();
-        expect(
-          useBuildSessionStore.getState().sessions.get(SESSION_ID)?.messages
-        ).toEqual([user, answer]);
-        mockedApi.fetchScheduledRunContext.mockResolvedValue({
-          ...run,
-          status: "SUCCEEDED",
-          finished_at: "2026-10-10T00:01:00Z",
-        });
-        await jest.advanceTimersByTimeAsync(1000);
-        await settling;
-        expect(mockedApi.fetchMessages).toHaveBeenCalledTimes(1);
-        expect(mockedApi.fetchActiveTurn).not.toHaveBeenCalled();
-        expect(
-          useBuildSessionStore.getState().sessions.get(SESSION_ID)
-            ?.turnSettlement
-        ).toEqual({ owner, turnGeneration: 0, phase: "ready" });
-      } finally {
-        jest.useRealTimers();
-      }
-    });
-
     it("rechecks completion after 250ms and preserves the message during transcript loading", async () => {
       jest.useFakeTimers();
       const messages =
@@ -3540,6 +3396,7 @@ describe("session history races and discarded queued starts", () => {
       agent_provider: null,
       agent_model: null,
       skills_stale: false,
+      skill_omissions: null,
       session_loaded_in_sandbox: true,
     });
   });
@@ -4074,6 +3931,7 @@ describe("Session naming", () => {
     agent_provider: null,
     agent_model: null,
     skills_stale: false,
+    skill_omissions: null,
   };
   beforeEach(() => {
     useBuildSessionStore.setState({

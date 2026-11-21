@@ -15,6 +15,7 @@ from onyx.server.query_and_chat.models import (
     SendMessageRequest,
 )
 from onyx.server.query_and_chat.streaming_models import StreamingType
+from onyx.tools.models import ToolOptions
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.test_models import (
@@ -111,8 +112,7 @@ class ChatSessionManager:
         user_performing_action: DATestUser,
         parent_message_id: int | None = None,
         file_descriptors: list[FileDescriptor] | None = None,
-        allowed_tool_ids: list[int] | None = None,
-        preferred_tool_id: int | None = None,
+        tool_options: ToolOptions | None = None,
         chat_session: DATestChatSession | None = None,
         deep_research: bool = False,
         accepts_follow_ups: bool = False,
@@ -128,8 +128,7 @@ class ChatSessionManager:
                 else AUTO_PLACE_AFTER_LATEST_MESSAGE
             ),
             file_descriptors=file_descriptors or [],
-            allowed_tool_ids=allowed_tool_ids,
-            preferred_tool_id=preferred_tool_id,
+            tool_options=tool_options,
             deep_research=deep_research,
             accepts_follow_ups=accepts_follow_ups,
             llm_override=llm_override,
@@ -173,8 +172,7 @@ class ChatSessionManager:
         disconnect_after_packets: int = 0,
         parent_message_id: int | None = None,
         file_descriptors: list[FileDescriptor] | None = None,
-        allowed_tool_ids: list[int] | None = None,
-        preferred_tool_id: int | None = None,
+        tool_options: ToolOptions | None = None,
         deep_research: bool = False,
         llm_override: LLMOverride | None = None,
     ) -> None:
@@ -202,8 +200,7 @@ class ChatSessionManager:
                 else AUTO_PLACE_AFTER_LATEST_MESSAGE
             ),
             file_descriptors=file_descriptors or [],
-            allowed_tool_ids=allowed_tool_ids,
-            preferred_tool_id=preferred_tool_id,
+            tool_options=tool_options,
             deep_research=deep_research,
             llm_override=llm_override,
         )

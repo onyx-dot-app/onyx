@@ -15,13 +15,13 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import has_global_permission, require_permission
 from onyx.cache.factory import get_shared_cache_backend
+from onyx.db.build_session import get_build_session
 from onyx.db.engine.sql_engine import get_session, get_session_with_tenant
 from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.db.users import fetch_user_by_id
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.server.features.build.db.build_session import get_build_session
 from onyx.server.features.build.models import StaticPreviewGrant, StaticPreviewResponse
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.features.build.utils import is_craft_enabled_for_user

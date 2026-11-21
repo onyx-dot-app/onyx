@@ -172,7 +172,6 @@ def _flush_batch(
         db_session=db_session,
         tenant_id=tenant_id,
         document_batch=documents,
-        request_id=metadata.request_id,
         adapter=adapter,
         skip_spreadsheet_content=SKIP_SPREADSHEET_CONTENT,
         written_search_settings_id=search_settings.id,

@@ -19,7 +19,6 @@ from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
 from onyx.auth.pkce import generate_pkce_pair
-from onyx.auth.schemas import AuthBackend
 from onyx.auth.users import (
     SingleTenantJWTStrategy,
     TenantAwareRedisStrategy,
@@ -28,7 +27,7 @@ from onyx.auth.users import (
     get_redis_strategy,
 )
 from onyx.configs import app_configs
-from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
+from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME, AuthBackend
 from onyx.db.engine.async_sql_engine import reset_sqlalchemy_async_engine
 from onyx.db.engine.sql_engine import get_catalog_session
 from onyx.db.enums import Permission

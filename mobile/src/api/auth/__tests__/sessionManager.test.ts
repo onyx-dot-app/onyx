@@ -16,6 +16,7 @@ import { runBrowserSso } from "@/api/auth/browserSso";
 import type { ProviderDescriptor } from "@/api/auth/providers";
 import { apiFetch, type ApiFetchInit } from "@/api/client";
 import { ApiError } from "@/api/errors";
+import { useToolQuestionUi } from "@/chat/toolQuestions";
 import { persister, queryClient } from "@/query/client";
 
 // babel-jest hoists `jest.mock` above the imports, so these can sit below the import block.
@@ -184,8 +185,12 @@ describe("register", () => {
 });
 
 describe("logout", () => {
-  it("revokes server-side, then wipes the token + query cache", async () => {
+  it("revokes server-side, then wipes the token, query cache and answers", async () => {
     mockApiFetch.mockResolvedValue(undefined);
+    useToolQuestionUi.getState().recordStatuses(["question-1"], {
+      outcome: "answered",
+      message: "secret",
+    });
 
     await logout();
 
@@ -195,6 +200,7 @@ describe("logout", () => {
     expect(mockSetToken).toHaveBeenCalledWith(null);
     expect(mockClear).toHaveBeenCalledTimes(1);
     expect(mockRemoveClient).toHaveBeenCalledTimes(1);
+    expect(useToolQuestionUi.getState().localStatuses.size).toBe(0);
   });
 
   it("logs, then still wipes locally, when server revocation fails", async () => {

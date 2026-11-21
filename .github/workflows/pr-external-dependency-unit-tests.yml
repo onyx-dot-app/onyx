@@ -5,16 +5,10 @@ concurrency:
 
 on:
   pull_request:
-    paths:
-      - "backend/**"
-      - "pyproject.toml"
-      - "uv.lock"
-      - ".github/workflows/pr-external-dependency-unit-tests.yml"
-      - ".github/actions/setup-python-and-install-dependencies/**"
-      - ".github/actions/login-ecr-pullthrough-cache/**"
-      - "deployment/docker_compose/docker-compose.yml"
-      - "deployment/docker_compose/docker-compose.dev.yml"
-      - "deployment/helm/**"
+    # No `paths:` filter: a stacked tip must see every change in its stack, so
+    # the `relevant` filter in discover-test-dirs decides. A draft skips the
+    # slow suites, so they run again when the draft state changes.
+    types: [opened, synchronize, reopened, ready_for_review, converted_to_draft]
   push:
     tags:
       - "v*.*.*"
@@ -62,7 +56,15 @@ jobs:
     # NOTE: Github-hosted runners have about 20s faster queue times and are preferred here.
     runs-on: ubuntu-slim
     timeout-minutes: 5
+    # paths-filter needs pull-requests:read to list PR files on private repos (no-op on public).
+    permissions:
+      contents: read
+      pull-requests: read
     outputs:
+      # A draft PR, or a PR with an open, ready child PR, skips the tests (see
+      # .github/actions/stack-position).
+      skip_reason: ${{ steps.stack.outputs.skip_reason }}
+      relevant: ${{ steps.filter.outputs.relevant || 'true' }}
       test-dirs: ${{ steps.set-matrix.outputs.test-dirs }}
     steps:
       - name: Checkout code
@@ -70,15 +72,88 @@ jobs:
         with:
           persist-credentials: false
 
+      - name: Find the PR's place in a stack
+        id: stack
+        if: github.event_name == 'pull_request'
+        uses: ./.github/actions/stack-position
+
+      - uses: dorny/paths-filter@7b450fff21473bca461d4b92ce414b9d0420d706
+        id: filter
+        if: github.event_name == 'pull_request'
+        with:
+          # A stacked PR diffs against the base of its whole stack: without a
+          # token, paths-filter runs git diff from `base`. See stack-position.
+          token: ${{ steps.stack.outputs.stack_base == '' && github.token || '' }}
+          base: ${{ steps.stack.outputs.stack_base }}
+          list-files: json
+          filters: |
+            changed:
+              - '**'
+            relevant:
+              - 'backend/**'
+              - 'pyproject.toml'
+              - 'uv.lock'
+              - '.github/workflows/pr-external-dependency-unit-tests.yml'
+              - '.github/actions/setup-python-and-install-dependencies/**'
+              - '.github/actions/stack-position/**'
+              - '.github/actions/login-ecr-pullthrough-cache/**'
+              - 'deployment/docker_compose/docker-compose.yml'
+              - 'deployment/docker_compose/docker-compose.dev.yml'
+              - 'deployment/helm/**'
+
       - name: Discover test directories
         id: set-matrix
+        env:
+          CHANGED_FILES: ${{ steps.filter.outputs.changed_files || '[]' }}
         run: |
-          # Find all subdirectories in backend/tests/external_dependency_unit
-          dirs=$(find backend/tests/external_dependency_unit -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sort | jq -R -s -c 'split("\n")[:-1]')
+          root=backend/tests/external_dependency_unit
+          all=$(find "$root" -mindepth 1 -maxdepth 1 -type d -exec basename {} \; | sort)
+          # A PR that changes only the Helm chart or Python files inside test
+          # directories runs only the directories it can affect: the changed
+          # directory and every directory that imports the changed module.
+          # Only craft_helm reads the chart. Any other change (or a tag push)
+          # runs every directory.
+          selected=""
+          scope_all=false
+          [ "$(jq length <<<"$CHANGED_FILES")" -gt 0 ] || scope_all=true
+          while IFS= read -r f; do
+            [ -n "$f" ] || continue
+            if [[ "$f" == deployment/helm/* ]]; then
+              selected+="craft_helm"$'\n'
+            elif [[ "$f" =~ ^$root/([^/]+)/(.+)\.py$ ]]; then
+              dir="${BASH_REMATCH[1]}"
+              mod="${BASH_REMATCH[2]//\//.}"
+              mod="${mod%.__init__}"
+              pkg="tests.external_dependency_unit.$dir.$mod"
+              parent="${pkg%.*}"
+              selected+="$dir"$'\n'
+              # Importers by full module path, or by `from <parent> import`.
+              users=$(grep -rlE --include='*.py' \
+                -e "${pkg//./\\.}([^a-zA-Z0-9_]|$)" \
+                -e "from ${parent//./\\.} import" "$root" || true)
+              for u in $users; do
+                rel="${u#"$root"/}"
+                # A file at the root (a shared conftest or helper) is not a directory.
+                [[ "$rel" == */* ]] && selected+="${rel%%/*}"$'\n'
+              done
+            else
+              scope_all=true
+            fi
+          done < <(jq -r '.[]' <<<"$CHANGED_FILES")
+          if [ "$scope_all" = true ]; then
+            selected="$all"
+          else
+            selected=$(comm -12 <(echo "$all") <(echo "$selected" | sort -u))
+            # A PR that only deletes test directories still needs a matrix.
+            [ -n "$selected" ] || selected="$all"
+          fi
+          dirs=$(echo "$selected" | jq -R -s -c 'split("\n") | map(select(length > 0))')
+          echo "Test directories: $dirs"
           echo "test-dirs=$dirs" >> "$GITHUB_OUTPUT"
 
   external-dependency-unit-tests:
     needs: discover-test-dirs
+    if: needs.discover-test-dirs.outputs.skip_reason == '' && needs.discover-test-dirs.outputs.relevant == 'true'
     # Use larger runner with more resources for OpenSearch
     runs-on:
       - runs-on

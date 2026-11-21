@@ -7,7 +7,6 @@ wake just falls back to the proxy's wait timeout.
 """
 
 from datetime import datetime, timedelta, timezone
-from enum import StrEnum
 from typing import Any
 from uuid import UUID
 
@@ -18,8 +17,15 @@ from sqlalchemy.orm import Session
 from onyx.auth.permissions import require_permission
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CACHE_TRANSIENT_ERRORS, CacheBackend
+from onyx.db import action_approval
+from onyx.db.build_session import get_build_session
 from onyx.db.engine.sql_engine import get_session
-from onyx.db.enums import ApprovalDecidedVia, ApprovalDecision, GatedAppKind, Permission
+from onyx.db.enums import (
+    ApprovalDecidedVia,
+    ApprovalDecision,
+    IntegrationKind,
+    Permission,
+)
 from onyx.db.models import ActionApproval, User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -30,9 +36,8 @@ from onyx.external_apps.matching.engine import (
 )
 from onyx.external_apps.presentation.decode import decode_payload
 from onyx.sandbox_proxy import approval_cache
+from onyx.server.features.action_policies.models import ApprovalChoice, DecisionBody
 from onyx.server.features.build.configs import SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
-from onyx.server.features.build.db import action_approval
-from onyx.server.features.build.db.build_session import get_build_session
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -40,17 +45,6 @@ logger = setup_logger()
 
 
 router = APIRouter(prefix="/approvals")
-
-
-class ApprovalChoice(StrEnum):
-    APPROVE_ONCE = "approve_once"
-    APPROVE_SESSION = "approve_session"
-    REJECT = "reject"
-
-
-class DecisionBody(BaseModel):
-    model_config = ConfigDict(extra="forbid")
-    decision: ApprovalChoice
 
 
 class ApprovalView(BaseModel):
@@ -65,17 +59,20 @@ class ApprovalView(BaseModel):
     created_at: datetime
     decision: ApprovalDecision | None
     decided_at: datetime | None
-    target_kind: GatedAppKind | None = Field(
-        default=None, validation_alias=AliasPath("gated_app", "kind"), exclude=True
+    decided_via: ApprovalDecidedVia | None
+    integration_kind: IntegrationKind | None = Field(
+        default=None, validation_alias=AliasPath("integration", "kind"), exclude=True
     )
 
     @computed_field
     @property
     def can_approve_for_session(self) -> bool:
-        if self.target_kind is None or not actions_requiring_approval(self.actions):
+        if self.integration_kind is None or not actions_requiring_approval(
+            self.actions
+        ):
             return False
         return not (
-            self.target_kind == GatedAppKind.EXTERNAL_APP
+            self.integration_kind is IntegrationKind.API
             and any(a.action_type == WHOLE_DOMAIN_ACTION_TYPE for a in self.actions)
         )
 
@@ -113,12 +110,6 @@ class ApprovalStatusView(BaseModel):
 
 class ApprovalListResponse(BaseModel):
     items: list[ApprovalView]
-
-
-def _row_target(row: ActionApproval) -> tuple[GatedAppKind, int] | None:
-    """The gated target ``(kind, id)`` a row is attributed to, or ``None`` when
-    its ``gated_app`` was cleared (parent app/server deleted — SET NULL)."""
-    return row.gated_app.target_key if row.gated_app is not None else None
 
 
 def _existing_decision_response(
@@ -232,7 +223,7 @@ def submit_decision(
     if current.created_at < cutoff:
         raise OnyxError(OnyxErrorCode.CONFLICT, "approval request is no longer live")
 
-    target = _row_target(current) if for_session else None
+    target = current.integration_id if for_session else None
     if for_session and not ApprovalView.model_validate(current).can_approve_for_session:
         raise OnyxError(
             OnyxErrorCode.INVALID_INPUT, "approval request has no grantable actions"
@@ -257,7 +248,9 @@ def submit_decision(
     grant_source_rows: list[ActionApproval] = []
     if target is not None:
         grant_source_rows = action_approval.list_session_grant_action_approvals(
-            db_session, session_id=current.session_id, gated_app_id=current.gated_app_id
+            db_session,
+            session_id=current.session_id,
+            integration_id=current.integration_id,
         )
         granted_actions = {
             action
@@ -270,7 +263,7 @@ def submit_decision(
         for row in pending_rows:
             required = set(actions_requiring_approval(row.actions))
             if (
-                _row_target(row) != target
+                row.integration_id != target
                 or not required
                 or not required.issubset(granted_actions)
             ):
@@ -297,8 +290,7 @@ def submit_decision(
             )
         approval_cache.hydrate_session_grants(
             session_id=current.session_id,
-            kind=target[0],
-            target_id=target[1],
+            integration_id=target,
             rows=grant_source_rows,
             cache=cache,
         )

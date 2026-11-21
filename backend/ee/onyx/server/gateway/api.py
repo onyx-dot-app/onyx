@@ -1063,7 +1063,7 @@ def _anthropic_thinking_content_blocks(
     for block in thinking_blocks or []:
         if isinstance(block, RedactedThinkingBlock):
             blocks.append(AnthropicRedactedThinkingBlock.create(data=block.data))
-        elif block.thinking or block.signature:
+        elif isinstance(block, ThinkingBlock) and (block.thinking or block.signature):
             blocks.append(
                 AnthropicThinkingBlock.create(
                     thinking=block.thinking, signature=block.signature or ""
@@ -1197,6 +1197,10 @@ def _anthropic_stream_worker(
                         )
                     ) or not emit(AnthropicContentBlockStopEvent.create(index=index)):
                         return False
+                    continue
+                if not isinstance(block, ThinkingBlock):
+                    # OpenAI reasoning items carry no Anthropic-shaped thinking;
+                    # their summary already streamed as reasoning_content.
                     continue
                 if not ensure_block_open("thinking"):
                     return False

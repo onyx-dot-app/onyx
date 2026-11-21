@@ -6,7 +6,7 @@ import { FetchError } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { useTranslations } from "next-intl";
 import { Text } from "@opal/components";
-import { WorkspaceHome } from "@/app/craft/components/output-panel/WorkspaceHome";
+import { WorkspaceHome } from "@/sections/output-panel/WorkspaceHome";
 import dynamic from "next/dynamic";
 import {
   buildArtifactUrl,

@@ -28,7 +28,10 @@ for the usage report, log export, query history and workspace analytics.
 - **A user** sees their own token and cost usage, and their budget, in
   Settings > Usage. **An admin** sees usage per user and for system work such
   as contextual RAG, resets a user's usage, and sets per-model prices. On EE,
-  an admin downloads a usage report ZIP with CSVs and a PDF.
+  an admin downloads a usage report ZIP with CSVs and a PDF. Pending and
+  failed manual report jobs remain visible after a reload. The hourly export
+  cleanup fails lost or stalled jobs and keeps failures for 24 hours. An admin
+  starts a new report to retry.
 - **A security team** reads audit events (logins, permission changes,
   credential access, denied scoped writes) as JSON lines on the `onyx.audit`
   logger and ships them to a SIEM. Onyx has no page or API to read them
@@ -115,6 +118,13 @@ function span per tool call, with `ToolInvocation.trace_metadata` as the span's
 `code_mode_cell` span, the parent of its nested tool spans
 ([[code-execution]]).
 
+**Indexing attribution.** An enrichment batch opens a metadata-only root after prepare selects documents
+for indexing and there is no active trace. Retries share that batch root. Filter batch roots by `tenant_id` and `attempt_id`
+to follow a connector indexing attempt across workers. `batch_num` identifies
+the batch and `request_id` distinguishes executions. Other indexing paths may
+have no connector attempt. Braintrust generation spans carry their own
+`metadata.flow` at start, including when a worker never reports completion.
+
 **Usage and cost.** `UserUsageTracingProcessor` takes each generation span with
 token usage, and each image generation span. It prices the span with `llm/cost.py:compute_cost_cents`, and upserts additive
 rows in `user_usage` from a background drain thread. A span with
@@ -180,8 +190,10 @@ and starts the Kubernetes collection in a thread. Each piece has 90 s.
    processor must mask and must drop incognito traces.** Braintrust masks
    through `tracing/dynamic_processor.py:_build_braintrust_processor`, which
    calls `braintrust.set_masking_function`. Langfuse masks in
-   `tracing/langfuse_tracing_processor.py:LangfuseTracingProcessor._mask_if_enabled`,
-   on by default. At trace start each processor calls
+   `tracing/langfuse_tracing_processor.py:LangfuseTracingProcessor._bound_and_mask`,
+   always. Both use `tracing/masking.py:bound_trace_data`, which masks each
+   whole string before it cuts it to `MASKING_LENGTH`. At trace start each
+   processor calls
    `tracing/incognito.py:suppresses_external_traces`. When it is true, the
    processor drops the whole trace, spans included. Only a `USAGE_ONLY`
    incognito turn makes it true. A new destination must do both.
@@ -235,7 +247,9 @@ and starts the Kubernetes collection in a thread. Each piece has 90 s.
 12. `redact-span-errors` **Redact a span error first.**
     `llm/multi_llm.py:LitellmLLM.invoke` and `stream` pass the error through
     `redact_error` before `span.set_error`, so no provider credential reaches a
-    trace backend. Do the same in a new span.
+    trace backend. Do the same in a new span. On exceptional exit,
+    `SpanImpl.__exit__` records the exception type before ending the span if
+    the caller has not set an error. It does not record the exception text.
 
 ---
 

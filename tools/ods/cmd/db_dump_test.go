@@ -70,11 +70,9 @@ func TestRunDBDump_reportsFailures(t *testing.T) {
 		behaviour string
 		wantErr   string
 		wantExecs int
-		// wantCleanup says whether the dump left in the container is removed.
-		wantCleanup bool
 	}{
-		{"pg_dump fails", `if [ "$1" = exec ]; then exit 2; fi`, "Failed to run pg_dump: exit status 2", 2, true},
-		{"copy fails", `if [ "$1" = cp ]; then exit 4; fi`, "Failed to copy dump file: exit status 4", 3, true},
+		{"pg_dump fails", `if [ "$1" = exec ]; then exit 2; fi`, "Failed to run pg_dump: exit status 2", 2},
+		{"copy fails", `if [ "$1" = cp ]; then exit 4; fi`, "Failed to copy dump file: exit status 4", 3},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -89,9 +87,6 @@ func TestRunDBDump_reportsFailures(t *testing.T) {
 			execs := dbDockerExecs(calls())
 			if len(execs) != c.wantExecs {
 				t.Fatalf("expected %d docker calls, got:\n%s", c.wantExecs, dbFormatCalls(execs))
-			}
-			if !c.wantCleanup {
-				return
 			}
 			want := []string{"exec", "-i", container, "rm", "-f", "/tmp/onyx_dump_tmp"}
 			if last := execs[len(execs)-1]; !slices.Equal(last, want) {

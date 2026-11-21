@@ -33,6 +33,7 @@ from ee.onyx.server.scim.filtering import ScimFilter, ScimFilterOperator
 from ee.onyx.server.scim.models import ScimMappingFields
 from onyx.db.dal import DAL
 from onyx.db.enums import AccountType, GrantSource, Permission
+from onyx.db.integration_connection import delete_connections_for_user__no_commit
 from onyx.db.models import (
     PermissionGrant,
     ScimGroupMapping,
@@ -292,9 +293,11 @@ class ScimDAL(DAL):
             user.is_verified = True
 
     def deactivate_user(self, user: User) -> None:
-        """Mark a user as inactive and hand their agents to the admins."""
+        """Mark a user as inactive, hand their agents to the admins and delete
+        their integration connections."""
         user.is_active = False
         release_personas_owned_by_user__no_commit(self._session, user.id)
+        delete_connections_for_user__no_commit(self._session, user.id)
 
     def list_users(
         self,

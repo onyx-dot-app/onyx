@@ -7,7 +7,9 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import type {
   ChatSearchFilters,
-  ChatToolSelection,
+  ChatToolOptions,
+  ActionPreference,
+  ToolOptionsEntry,
   ToolSnapshot,
   ToolState,
 } from "@/lib/tools/types";
@@ -17,11 +19,13 @@ import type { MinimalAgent } from "@/lib/agents/types";
 import { useAppPosition } from "@/lib/navigation/hooks";
 import { useActiveAgent } from "@/lib/agents/hooks";
 import { toast } from "@opal/layouts";
-import { enabledChatToolIds } from "@/lib/plugins/chat";
+import {
+  useAgentIntegrationIds,
+  useAgentIntegrationPreferences,
+} from "@/lib/integrations/hooks";
 import { useUser } from "@/providers/UserProvider";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import {
-  CODING_AGENT_TOOL_ID,
   FILE_READER_TOOL_ID,
   IMAGE_GENERATION_TOOL_ID,
   KNOWLEDGE_GRAPH_TOOL_ID,
@@ -73,10 +77,22 @@ export function useAvailableTools() {
 // Sending a message preserves the selection.
 
 type ToolConfiguration = Readonly<Record<number, ToolState>>;
+/** The integrations switched off, by integration id. One not listed is on. */
+type IntegrationConfiguration = Readonly<Record<number, "disabled">>;
+/**
+ * The action keys that saved options keep for an integration, by integration
+ * id. One not listed keeps each action. No control edits them; they come from
+ * options another client saved and go back unchanged.
+ */
+type IntegrationActions = Readonly<Record<number, readonly string[]>>;
 
 /** Everything a chat's next message is configured with. */
 interface ChatConfiguration {
   tools: ToolConfiguration;
+  integrations: IntegrationConfiguration;
+  integrationActions: IntegrationActions;
+  /** Applies only while no built-in tool is preferred. */
+  preferredAction: ActionPreference | null;
   filters: ChatSearchFilters;
 }
 
@@ -89,6 +105,9 @@ const NEUTRAL_FILTERS: ChatSearchFilters = {
 
 const NEUTRAL: ChatConfiguration = {
   tools: {},
+  integrations: {},
+  integrationActions: {},
+  preferredAction: null,
   filters: NEUTRAL_FILTERS,
 };
 
@@ -104,29 +123,32 @@ function isNeutralFilters(filters: ChatSearchFilters): boolean {
 function isNeutralConfiguration(configuration: ChatConfiguration): boolean {
   return (
     Object.keys(configuration.tools).length === 0 &&
+    Object.keys(configuration.integrations).length === 0 &&
+    Object.keys(configuration.integrationActions).length === 0 &&
+    configuration.preferredAction === null &&
     isNeutralFilters(configuration.filters)
   );
 }
 
 const STORAGE_PREFIX = "onyx:tools";
 
-const EMPTY_SELECTION: ChatToolSelection = {
-  allowed_tool_ids: null,
-  preferred_tool_id: null,
+const EMPTY_OPTIONS: ChatToolOptions = {
+  allowed: null,
+  preferred: null,
   internal_search_filters: null,
 };
-// The halves of a selection that change together: the tool controls own the
-// first, the search filters the second. A save sends only the halves the user
-// changed, so a change to one never rewrites the other.
-const SELECTION_HALVES: readonly (readonly (keyof ChatToolSelection)[])[] = [
-  ["allowed_tool_ids", "preferred_tool_id"],
+// The halves of the options that change together: the tool and integration
+// controls own the first, the search filters the second. A save sends only the
+// halves the user changed, so a change to one never rewrites the other.
+const OPTION_HALVES: readonly (readonly (keyof ChatToolOptions)[])[] = [
+  ["allowed", "preferred"],
   ["internal_search_filters"],
 ];
 
 // One save loop per chat, shared by every composer: it sends the chat's
 // unsaved edits, then any made while that request ran, so the server ends with
 // the latest choice and requests never overlap.
-const toolSelectionSaves = new Map<string, Promise<void>>();
+const toolOptionsSaves = new Map<string, Promise<void>>();
 // The configuration a send chose for the chat it created, picked up once by
 // the composer that moves onto that chat.
 const handedOffConfigurations = new Map<string, ChatConfiguration>();
@@ -142,7 +164,7 @@ function isChatKey(key: string): boolean {
 
 /**
  * Applies the one rule a map cannot state: a single tool is preferred at a time,
- * because a message carries a single `preferred_tool_id`. That a tool is preferred,
+ * because a message carries a single preferred tool. That a tool is preferred,
  * disabled or neutral and never two of those comes free, since a key holds one
  * value.
  *
@@ -247,6 +269,36 @@ function parseTools(entries: Record<string, unknown>): ToolConfiguration {
   return configuration;
 }
 
+/** The integration half of {@link parseConfiguration}, on an already-checked
+ * object. A key that is not an integration id goes. */
+function parseIntegrations(
+  entries: Record<string, unknown>
+): IntegrationConfiguration {
+  const integrations: Record<number, "disabled"> = {};
+  for (const key of Object.keys(entries)) {
+    if (/^\d+$/.test(key) && entries[key] === "disabled")
+      integrations[Number(key)] = "disabled";
+  }
+  return integrations;
+}
+
+/** The preferred action of {@link parseConfiguration}, on an already-checked object. */
+function parsePreferredAction(
+  entries: Record<string, unknown>
+): ActionPreference | null {
+  const value = entries.preferredAction;
+  return isRecord(value) &&
+    value.type === "action" &&
+    typeof value.integration_id === "number" &&
+    typeof value.action === "string"
+    ? {
+        type: "action",
+        integration_id: value.integration_id,
+        action: value.action,
+      }
+    : null;
+}
+
 /**
  * Reads a configuration back from untrusted text.
  *
@@ -271,6 +323,11 @@ function parseConfiguration(raw: string): ChatConfiguration {
   if (isRecord(value.tools)) {
     return {
       tools: parseTools(value.tools),
+      integrations: isRecord(value.integrations)
+        ? parseIntegrations(value.integrations)
+        : {},
+      integrationActions: {},
+      preferredAction: parsePreferredAction(value),
       filters: isRecord(value.filters)
         ? parseFilters(value.filters)
         : NEUTRAL_FILTERS,
@@ -278,6 +335,9 @@ function parseConfiguration(raw: string): ChatConfiguration {
   }
   return {
     tools: parseTools(value),
+    integrations: {},
+    integrationActions: {},
+    preferredAction: null,
     filters: NEUTRAL_FILTERS,
   };
 }
@@ -330,34 +390,77 @@ function writeConfiguration(key: string, configuration: ChatConfiguration) {
   }
 }
 
-/** The selection a chat runs with: the server's copy under unsaved edits. */
-function effectiveSelection(
-  saved: ChatToolSelection | null | undefined,
-  edits: Partial<ChatToolSelection> | undefined
-): ChatToolSelection | undefined {
+/** The options a chat runs with: the server's copy under unsaved edits. */
+function effectiveOptions(
+  saved: ChatToolOptions | null | undefined,
+  edits: Partial<ChatToolOptions> | undefined
+): ChatToolOptions | undefined {
   if (saved === undefined && edits === undefined) return undefined;
-  return { ...EMPTY_SELECTION, ...saved, ...edits };
+  return { ...EMPTY_OPTIONS, ...saved, ...edits };
 }
 
-/** Reads a saved selection as the composer's tool states and filters. */
+/**
+ * Reads saved options as the composer's tool and integration states and
+ * filters. `integrationIds` is every integration the composer knows: one that
+ * `allowed` leaves out is off.
+ */
 function configurationFrom(
-  selection: ChatToolSelection,
-  agentTools: readonly ToolSnapshot[]
+  options: ChatToolOptions,
+  agentTools: readonly ToolSnapshot[],
+  integrationIds: readonly number[],
+  preferredIntegrations: IntegrationConfiguration
 ): ChatConfiguration {
   const tools: Record<number, ToolState> = {};
-  const allowed = selection.allowed_tool_ids;
+  const integrations: Record<number, "disabled"> =
+    options.allowed === null ? { ...preferredIntegrations } : {};
+  const integrationActions: Record<number, string[] | null> = {};
+  const allowed = options.allowed;
   if (allowed !== null) {
+    for (const entry of allowed) {
+      if (entry.type !== "integration") continue;
+      const kept = integrationActions[entry.integration_id];
+      integrationActions[entry.integration_id] =
+        entry.actions == null || kept === null
+          ? null
+          : [...new Set([...(kept ?? []), ...entry.actions])];
+    }
     for (const tool of agentTools) {
-      if (!allowed.includes(tool.id)) tools[tool.id] = "disabled";
+      if (
+        tool.in_code_tool_id &&
+        !allowed.some(
+          (entry) => entry.type === "capability" && entry.tool_id === tool.id
+        )
+      ) {
+        tools[tool.id] = "disabled";
+      }
+    }
+    for (const integrationId of integrationIds) {
+      if (
+        !allowed.some(
+          (entry) =>
+            entry.type === "integration" &&
+            entry.integration_id === integrationId
+        )
+      ) {
+        integrations[integrationId] = "disabled";
+      }
     }
   }
-  if (selection.preferred_tool_id !== null) {
-    tools[selection.preferred_tool_id] = "preferred";
+  if (options.preferred?.type === "capability") {
+    tools[options.preferred.tool_id] = "preferred";
   }
-  const filters = selection.internal_search_filters;
+  const filters = options.internal_search_filters;
   const rangeStart = filters?.updated_at_range?.start ?? null;
+  const limited: Record<number, readonly string[]> = {};
+  for (const [integrationId, actions] of Object.entries(integrationActions)) {
+    if (actions !== null) limited[Number(integrationId)] = actions;
+  }
   return {
     tools,
+    integrations,
+    integrationActions: limited,
+    preferredAction:
+      options.preferred?.type === "action" ? options.preferred : null,
     filters: {
       selectedSources: filters?.source_type ?? null,
       documentSets: filters?.document_set ?? [],
@@ -371,21 +474,100 @@ function configurationFrom(
 }
 
 /**
- * The tool half of a selection, as the user chose it. A preferred tool that
- * is unavailable right now, such as a plugin whose catalog has not loaded, is
- * kept: a send drops it, and a turn the server starts drops it too.
+ * The allowed tools and integrations, or null when nothing is off. Only sent then:
+ * to the server a list is a whitelist, and this one holds only the built-in
+ * tools and the integrations that the frontend knows.
+ */
+function allowedEntries(
+  tools: ToolConfiguration,
+  integrations: IntegrationConfiguration,
+  integrationActions: IntegrationActions,
+  agent: MinimalAgent,
+  integrationIds: readonly number[]
+): ToolOptionsEntry[] | null {
+  if (
+    !Object.values(tools).includes("disabled") &&
+    Object.keys(integrations).length === 0 &&
+    Object.keys(integrationActions).length === 0
+  ) {
+    return null;
+  }
+  return [
+    ...agent.tools
+      .filter((tool) => tool.in_code_tool_id && tools[tool.id] !== "disabled")
+      .map(
+        (tool): ToolOptionsEntry => ({
+          type: "capability",
+          tool_id: tool.id,
+        })
+      ),
+    ...integrationIds
+      .filter((integrationId) => integrations[integrationId] !== "disabled")
+      .map((integrationId): ToolOptionsEntry => {
+        const actions = integrationActions[integrationId];
+        return actions === undefined
+          ? { type: "integration", integration_id: integrationId }
+          : {
+              type: "integration",
+              integration_id: integrationId,
+              actions: [...actions],
+            };
+      }),
+  ];
+}
+
+function preferredToolIdOf(tools: ToolConfiguration): number | null {
+  return (
+    Object.keys(tools)
+      .map(Number)
+      .find((id) => tools[id] === "preferred") ?? null
+  );
+}
+
+/**
+ * Preferring a built-in tool releases a preferred action, because a message
+ * carries one preference.
+ */
+function withTools(
+  configuration: ChatConfiguration,
+  tools: ToolConfiguration
+): ChatConfiguration {
+  return {
+    ...configuration,
+    tools,
+    preferredAction:
+      preferredToolIdOf(tools) === null ? configuration.preferredAction : null,
+  };
+}
+
+/**
+ * The tool half of the options, as the user chose it. A preferred tool or
+ * action that is unavailable right now is kept: a send drops it, and a turn
+ * the server starts drops it too.
  */
 function toolFields(
-  tools: ToolConfiguration,
-  agent: MinimalAgent
-): Pick<ChatToolSelection, "allowed_tool_ids" | "preferred_tool_id"> {
-  const ids = Object.keys(tools).map(Number);
+  configuration: Pick<
+    ChatConfiguration,
+    "tools" | "integrations" | "integrationActions" | "preferredAction"
+  >,
+  agent: MinimalAgent,
+  integrationIds: readonly number[]
+): Pick<ChatToolOptions, "allowed" | "preferred"> {
+  const { tools, integrations, integrationActions, preferredAction } =
+    configuration;
+  const preferred = preferredToolIdOf(tools);
   return {
-    allowed_tool_ids:
-      enabledChatToolIds(agent.tools, {
-        disabledToolIds: ids.filter((id) => tools[id] === "disabled"),
-      }) ?? null,
-    preferred_tool_id: ids.find((id) => tools[id] === "preferred") ?? null,
+    allowed: allowedEntries(
+      tools,
+      integrations,
+      integrationActions,
+      agent,
+      integrationIds
+    ),
+    preferred:
+      preferred === null
+        ? preferredAction
+        : { type: "capability", tool_id: preferred },
   };
 }
 
@@ -396,7 +578,7 @@ function toolFields(
  */
 function filterFields(
   filters: ChatSearchFilters
-): Pick<ChatToolSelection, "internal_search_filters"> {
+): Pick<ChatToolOptions, "internal_search_filters"> {
   return {
     internal_search_filters: {
       source_type:
@@ -418,17 +600,17 @@ function filterFields(
  * user changed them again meanwhile; a failed half falls back to the server's
  * copy.
  */
-function settleToolSelectionSave(
+function settleToolOptionsSave(
   chatSessionId: string,
-  sent: Partial<ChatToolSelection>,
-  stored: ChatToolSelection | null | undefined
+  sent: Partial<ChatToolOptions>,
+  stored: ChatToolOptions | null | undefined
 ): void {
   const store = useChatSessionStore.getState();
   const session = store.sessions.get(chatSessionId);
-  const edits: Partial<ChatToolSelection> = {
-    ...session?.toolSelectionEdits,
+  const edits: Partial<ChatToolOptions> = {
+    ...session?.toolOptionsEdits,
   };
-  for (const half of SELECTION_HALVES) {
+  for (const half of OPTION_HALVES) {
     if (
       half.every(
         (field) =>
@@ -440,23 +622,23 @@ function settleToolSelectionSave(
     }
   }
   store.updateSessionData(chatSessionId, {
-    toolSelectionEdits: Object.keys(edits).length > 0 ? edits : undefined,
+    toolOptionsEdits: Object.keys(edits).length > 0 ? edits : undefined,
     ...(stored !== undefined && {
-      toolSelection: stored ?? {
-        ...EMPTY_SELECTION,
-        ...session?.toolSelection,
+      toolOptions: stored ?? {
+        ...EMPTY_OPTIONS,
+        ...session?.toolOptions,
         ...sent,
       },
-      toolSelectionVersion: (session?.toolSelectionVersion ?? 0) + 1,
+      toolOptionsVersion: (session?.toolOptionsVersion ?? 0) + 1,
     }),
   });
 }
 
-function saveToolSelectionEdits(
+function saveToolOptionsEdits(
   chatSessionId: string,
   onFailure: () => void
 ): Promise<void> {
-  const running = toolSelectionSaves.get(chatSessionId);
+  const running = toolOptionsSaves.get(chatSessionId);
   if (running !== undefined) return running;
   const run = (async () => {
     // Lets the entry below register before the first read.
@@ -465,12 +647,12 @@ function saveToolSelectionEdits(
       for (;;) {
         const sent = useChatSessionStore
           .getState()
-          .sessions.get(chatSessionId)?.toolSelectionEdits;
+          .sessions.get(chatSessionId)?.toolOptionsEdits;
         if (sent === undefined) return;
-        let stored: ChatToolSelection | null;
+        let stored: ChatToolOptions | null;
         try {
           const response = await fetch(
-            `/api/chat/chat-session/${chatSessionId}/tool-selection`,
+            `/api/chat/chat-session/${chatSessionId}/tool-options`,
             {
               method: "PATCH",
               headers: { "Content-Type": "application/json" },
@@ -482,27 +664,27 @@ function saveToolSelectionEdits(
           if (!response.ok) throw new Error(`HTTP ${response.status}`);
           stored = await response.json();
         } catch (error: unknown) {
-          console.error("Could not save the chat's tool selection", error);
+          console.error("Could not save the chat's tool options", error);
           onFailure();
-          settleToolSelectionSave(chatSessionId, sent, undefined);
+          settleToolOptionsSave(chatSessionId, sent, undefined);
           return;
         }
-        settleToolSelectionSave(chatSessionId, sent, stored);
+        settleToolOptionsSave(chatSessionId, sent, stored);
       }
     } finally {
-      toolSelectionSaves.delete(chatSessionId);
+      toolOptionsSaves.delete(chatSessionId);
     }
   })();
-  toolSelectionSaves.set(chatSessionId, run);
+  toolOptionsSaves.set(chatSessionId, run);
   return run;
 }
 
 /**
- * Resolves once the chat's tool-selection save has finished, so a turn the
+ * Resolves once the chat's tool-options save has finished, so a turn the
  * server starts next reads the user's latest choice.
  */
-export function flushToolSelection(chatSessionId: string): Promise<void> {
-  return toolSelectionSaves.get(chatSessionId) ?? Promise.resolve();
+export function flushToolOptions(chatSessionId: string): Promise<void> {
+  return toolOptionsSaves.get(chatSessionId) ?? Promise.resolve();
 }
 
 export interface ToolConfigurationHandle {
@@ -535,8 +717,22 @@ export interface ToolConfigurationHandle {
   clearPreferredTool: () => void;
   /** The preferred tool for this chat, if any. */
   preferredToolId: number | null;
-  /** The tools the model may not use in this chat. */
+  /** The preferred integration action, saved by another client; the tool wins. */
+  preferredAction: ActionPreference | null;
+  /** The built-in tools the model may not use in this chat. */
   disabledToolIds: number[];
+  /** Whether an integration is on for this chat. */
+  isIntegrationEnabled: (integrationId: number) => boolean;
+  /** Switches integrations on or off for this chat. */
+  setIntegrationEnabled: (
+    integrationIds: readonly number[],
+    enabled: boolean
+  ) => void;
+  /**
+   * The tools and integrations a send allows, or null for every tool and
+   * integration of the agent.
+   */
+  allowed: ToolOptionsEntry[] | null;
 
   /**
    * Whether writes land yet: the composer's key has resolved and its
@@ -546,6 +742,13 @@ export interface ToolConfigurationHandle {
    * deep-link send — must wait for this.
    */
   ready: boolean;
+
+  /**
+   * False while an existing chat's saved options, the integrations a new
+   * chat starts with turned off, or the agent's integrations have not
+   * loaded. A send then would carry a wrong allow-list.
+   */
+  optionsLoaded: boolean;
 
   /**
    * The search filters this chat sends with. Orthogonal to the tool states:
@@ -580,7 +783,7 @@ export interface ToolConfigurationHandle {
  * The tools and search filters this chat will send its next message with.
  *
  * Only a chat that exists keeps its configuration, and the server owns it: the
- * chat-session detail returns it, and the tool-selection PATCH is its only
+ * chat-session detail returns it, and the tool-options PATCH is its only
  * writer. A send never changes it, so a one-message choice such as Deep
  * Research cannot leak into the chat. The server keeps nothing for a chat that
  * stores no content, so this tab holds that chat's only copy. What is chosen
@@ -607,6 +810,7 @@ export function useToolConfiguration(
 ): ToolConfigurationHandle {
   const appPosition = useAppPosition();
   const activeAgent = useActiveAgent();
+  const t = useTranslations("actions");
 
   const key = useMemo(() => {
     // A composer for a chat that the URL does not describe says which agent it
@@ -630,23 +834,59 @@ export function useToolConfiguration(
   }, [newChatWithAgentId, appPosition, activeAgent]);
 
   const { user } = useUser();
+  const signedIn = user !== null && !user.is_anonymous_user;
+  // The integrations the user turned off for this agent. A chat that does not
+  // exist yet starts with them; a switch in any chat saves them.
+  const preferences = useAgentIntegrationPreferences(signedIn);
+  // The agent whose integrations this composer reads and saves: the agent viewer
+  // names its own.
+  const configAgentId = newChatWithAgentId ?? activeAgent?.id;
+  const preferredOff =
+    configAgentId === undefined
+      ? null
+      : preferences.disabledIntegrationIds(configAgentId);
+  const preferredOffKey = preferredOff === null ? null : preferredOff.join(",");
+  const preferredIntegrations = useMemo((): IntegrationConfiguration | null => {
+    if (preferredOffKey === null) return null;
+    const integrations: Record<number, "disabled"> = {};
+    for (const id of preferredOffKey.split(",")) {
+      if (id !== "") integrations[Number(id)] = "disabled";
+    }
+    return integrations;
+  }, [preferredOffKey]);
   const chatSessionId =
     newChatWithAgentId === undefined ? appPosition.chat() : null;
-  // The server's copy of an existing chat's selection, undefined until its
+  // The server's copy of an existing chat's options, undefined until its
   // details load, and the user's edits that the server has not confirmed.
   // The store holds both for every composer, so a remount or a chat switch
   // never loses a choice whose save is still running.
-  const savedSelection = useChatSessionStore((state) =>
+  const savedOptions = useChatSessionStore((state) =>
     chatSessionId === null
       ? undefined
-      : state.sessions.get(chatSessionId)?.toolSelection
+      : state.sessions.get(chatSessionId)?.toolOptions
   );
-  const selectionEdits = useChatSessionStore((state) =>
+  const optionsEdits = useChatSessionStore((state) =>
     chatSessionId === null
       ? undefined
-      : state.sessions.get(chatSessionId)?.toolSelectionEdits
+      : state.sessions.get(chatSessionId)?.toolOptionsEdits
   );
   const agentTools = activeAgent?.tools;
+  // Every integration of the agent, null until it loads. Saved options name
+  // integrations in an allow-list, so one unknown here would be left out.
+  const agentIntegrationIds =
+    useAgentIntegrationIds(configAgentId).integrationIds;
+  const integrationIdsKey =
+    agentIntegrationIds === null ? null : agentIntegrationIds.join(",");
+  const integrationIds = useMemo(
+    () =>
+      integrationIdsKey === null
+        ? null
+        : integrationIdsKey
+            .split(",")
+            .filter((id) => id !== "")
+            .map(Number),
+    [integrationIdsKey]
+  );
 
   // A chat that does not exist yet keeps its configuration here, tagged with
   // the key it was read for, so a write cannot land on the entry the composer
@@ -672,36 +912,72 @@ export function useToolConfiguration(
   // A configuration handed to the chat a send just created becomes that
   // chat's edits, which its composer then saves.
   useEffect(() => {
-    if (key === null || chatSessionId === null || activeAgent === undefined) {
+    if (
+      key === null ||
+      chatSessionId === null ||
+      activeAgent === undefined ||
+      integrationIds === null
+    ) {
       return;
     }
     const handedOff = handedOffConfigurations.get(key);
     if (handedOff === undefined) return;
     handedOffConfigurations.delete(key);
     useChatSessionStore.getState().updateSessionData(chatSessionId, {
-      toolSelectionEdits: {
-        ...toolFields(handedOff.tools, activeAgent),
+      toolOptionsEdits: {
+        ...toolFields(handedOff, activeAgent, integrationIds),
         ...filterFields(handedOff.filters),
       },
     });
-  }, [key, chatSessionId, activeAgent]);
+  }, [key, chatSessionId, activeAgent, integrationIds]);
 
-  const chatConfiguration = useMemo(() => {
-    const selection = effectiveSelection(savedSelection, selectionEdits);
-    return selection === undefined || agentTools === undefined
-      ? null
-      : configurationFrom(selection, agentTools);
-  }, [savedSelection, selectionEdits, agentTools]);
+  const chatOptions = useMemo(
+    () => effectiveOptions(savedOptions, optionsEdits),
+    [savedOptions, optionsEdits]
+  );
+  // Until the integration catalogs load, the tools and filters come from the saved
+  // options and a send carries the saved allow-list as it is.
+  const chatConfiguration = useMemo(
+    () =>
+      chatOptions === undefined || agentTools === undefined
+        ? null
+        : configurationFrom(
+            chatOptions,
+            agentTools,
+            integrationIds ?? [],
+            preferredIntegrations ?? {}
+          ),
+    [chatOptions, agentTools, integrationIds, preferredIntegrations]
+  );
 
   const isChat = key !== null && isChatKey(key);
+  const newChatConfiguration = useMemo(
+    () =>
+      entry.key !== key
+        ? NEUTRAL
+        : signedIn
+          ? {
+              ...entry.configuration,
+              integrations: preferredIntegrations ?? {},
+            }
+          : entry.configuration,
+    [entry, key, signedIn, preferredIntegrations]
+  );
   const configuration = isChat
     ? (chatConfiguration ?? NEUTRAL)
-    : entry.key === key
-      ? entry.configuration
-      : NEUTRAL;
+    : newChatConfiguration;
   const ready = isChat
-    ? chatConfiguration !== null
-    : key !== null && entry.key === key;
+    ? chatConfiguration !== null &&
+      integrationIds !== null &&
+      (chatOptions?.allowed !== null || preferredIntegrations !== null)
+    : key !== null &&
+      entry.key === key &&
+      integrationIds !== null &&
+      preferredIntegrations !== null;
+  const savedAllowed =
+    isChat && integrationIds === null && chatOptions !== undefined
+      ? chatOptions.allowed
+      : undefined;
 
   // An edit in an existing chat updates the store's edits from the store's
   // current state, so edits made back to back each see the one before.
@@ -709,23 +985,36 @@ export function useToolConfiguration(
   // would overwrite the saved choice.
   const editChat = useCallback(
     (
-      change: (current: ChatConfiguration) => Partial<ChatToolSelection> | null
+      change: (current: ChatConfiguration) => Partial<ChatToolOptions> | null
     ) => {
-      if (chatSessionId === null || activeAgent === undefined) return;
+      if (
+        chatSessionId === null ||
+        activeAgent === undefined ||
+        integrationIds === null
+      ) {
+        return;
+      }
       const store = useChatSessionStore.getState();
       const session = store.sessions.get(chatSessionId);
-      const selection = effectiveSelection(
-        session?.toolSelection,
-        session?.toolSelectionEdits
+      const options = effectiveOptions(
+        session?.toolOptions,
+        session?.toolOptionsEdits
       );
-      if (selection === undefined) return;
-      const fields = change(configurationFrom(selection, activeAgent.tools));
+      if (options === undefined) return;
+      const fields = change(
+        configurationFrom(
+          options,
+          activeAgent.tools,
+          integrationIds,
+          preferredIntegrations ?? {}
+        )
+      );
       if (fields === null) return;
       store.updateSessionData(chatSessionId, {
-        toolSelectionEdits: { ...session?.toolSelectionEdits, ...fields },
+        toolOptionsEdits: { ...session?.toolOptionsEdits, ...fields },
       });
     },
-    [chatSessionId, activeAgent]
+    [chatSessionId, activeAgent, integrationIds, preferredIntegrations]
   );
 
   const setToolState = useCallback(
@@ -737,9 +1026,15 @@ export function useToolConfiguration(
       if (isChatKey(key)) {
         editChat((current) => {
           const tools = withToolState(current.tools, toolId, change);
-          return tools === current.tools || activeAgent === undefined
+          return tools === current.tools ||
+            activeAgent === undefined ||
+            integrationIds === null
             ? null
-            : toolFields(tools, activeAgent);
+            : toolFields(
+                withTools(current, tools),
+                activeAgent,
+                integrationIds
+              );
         });
         return;
       }
@@ -754,10 +1049,68 @@ export function useToolConfiguration(
         // behind. A new one every time is a change to everything reading it,
         // and a caller that writes what it reads would never settle.
         if (tools === current.tools) return previous;
-        return { key, configuration: { ...current, tools } };
+        return { key, configuration: withTools(current, tools) };
       });
     },
-    [key, editChat, activeAgent]
+    [key, editChat, activeAgent, integrationIds]
+  );
+
+  const { setIntegrationsDisabled } = preferences;
+  const setIntegrationEnabled = useCallback(
+    (ids: readonly number[], enabled: boolean) => {
+      if (key === null || configAgentId === undefined) return;
+      if (signedIn)
+        setIntegrationsDisabled(configAgentId, ids, !enabled).catch(() =>
+          toast.error(t("toolsPopover.selectionSaveFailed"))
+        );
+      const change = (
+        current: IntegrationConfiguration
+      ): IntegrationConfiguration => {
+        if (ids.every((id) => (current[id] === "disabled") !== enabled)) {
+          return current;
+        }
+        const next: Record<number, "disabled"> = { ...current };
+        for (const id of ids) {
+          if (enabled) delete next[id];
+          else next[id] = "disabled";
+        }
+        return next;
+      };
+      if (isChatKey(key)) {
+        editChat((current) => {
+          const integrations = change(current.integrations);
+          return integrations === current.integrations ||
+            activeAgent === undefined ||
+            integrationIds === null
+            ? null
+            : toolFields(
+                { ...current, integrations },
+                activeAgent,
+                integrationIds
+              );
+        });
+        return;
+      }
+      // A signed-in user's new chat reads the saved choice instead.
+      if (signedIn) return;
+      setEntry((previous) => {
+        if (previous.key !== key) return previous;
+        const current = previous.configuration;
+        const integrations = change(current.integrations);
+        if (integrations === current.integrations) return previous;
+        return { key, configuration: { ...current, integrations } };
+      });
+    },
+    [
+      key,
+      editChat,
+      activeAgent,
+      configAgentId,
+      integrationIds,
+      signedIn,
+      setIntegrationsDisabled,
+      t,
+    ]
   );
 
   const setFilters = useCallback(
@@ -802,8 +1155,7 @@ export function useToolConfiguration(
 
   const handle = useMemo(() => {
     const ids = Object.keys(configuration.tools).map(Number);
-    const preferredToolId =
-      ids.find((toolId) => configuration.tools[toolId] === "preferred") ?? null;
+    const preferredToolId = preferredToolIdOf(configuration.tools);
     return {
       stateOf: (toolId: number) => configuration.tools[toolId] ?? null,
       setToolState,
@@ -817,10 +1169,34 @@ export function useToolConfiguration(
         }
       },
       preferredToolId,
+      preferredAction: configuration.preferredAction,
       disabledToolIds: ids.filter(
         (toolId) => configuration.tools[toolId] === "disabled"
       ),
+      // An integration removed from the agent is off, so a saved action of it is
+      // not sent.
+      isIntegrationEnabled: (integrationId: number) =>
+        (integrationIds === null || integrationIds.includes(integrationId)) &&
+        configuration.integrations[integrationId] !== "disabled",
+      setIntegrationEnabled,
+      allowed:
+        activeAgent === undefined
+          ? null
+          : savedAllowed !== undefined
+            ? savedAllowed
+            : allowedEntries(
+                configuration.tools,
+                configuration.integrations,
+                configuration.integrationActions,
+                activeAgent,
+                integrationIds ?? []
+              ),
       ready,
+      // The allow-list names the agent's integrations, so a send also waits
+      // for them: without them it would leave each integration out.
+      optionsLoaded:
+        (isChat ? chatConfiguration !== null : preferences.loaded) &&
+        (activeAgent === undefined || integrationIds !== null),
       filters: configuration.filters,
       setFilters,
       handOffTo,
@@ -829,7 +1205,14 @@ export function useToolConfiguration(
   }, [
     configuration,
     ready,
+    isChat,
+    chatConfiguration,
+    preferences.loaded,
+    savedAllowed,
+    activeAgent,
+    integrationIds,
     setToolState,
+    setIntegrationEnabled,
     setFilters,
     handOffTo,
     handOffToNewChatWith,
@@ -837,16 +1220,14 @@ export function useToolConfiguration(
 
   // Edits in an existing chat are saved on the server at once, which decides
   // whether the chat keeps them. Only a signed-in user saves.
-  const t = useTranslations("actions");
-  const signedIn = user !== null && !user.is_anonymous_user;
   useEffect(() => {
-    if (chatSessionId === null || !signedIn || selectionEdits === undefined) {
+    if (chatSessionId === null || !signedIn || optionsEdits === undefined) {
       return;
     }
-    void saveToolSelectionEdits(chatSessionId, () =>
+    void saveToolOptionsEdits(chatSessionId, () =>
       toast.error(t("toolsPopover.selectionSaveFailed"))
     );
-  }, [chatSessionId, signedIn, selectionEdits, t]);
+  }, [chatSessionId, signedIn, optionsEdits, t]);
 
   return handle;
 }
@@ -874,7 +1255,6 @@ export function useBuiltInToolNames(): Record<string, string> {
       [PYTHON_TOOL_ID]: t("toolNames.codeInterpreter.label"),
       [FILE_READER_TOOL_ID]: t("toolNames.fileReader.label"),
       [MEMORY_TOOL_ID]: t("toolNames.addMemory.label"),
-      [CODING_AGENT_TOOL_ID]: t("toolNames.codingAgent.label"),
     }),
     [t]
   );

@@ -11,9 +11,10 @@ import zlib
 from collections.abc import Callable, Iterable
 from contextlib import ExitStack
 from copy import copy
-from dataclasses import dataclass
 from itertools import pairwise
 from typing import IO, Final, Literal
+
+from pydantic import BaseModel, ConfigDict
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -29,6 +30,7 @@ from onyx.skills.metadata import (
     split_skill_md,
 )
 from onyx.skills.models import (
+    BundleLayout,
     CustomSkillBundleContents,
     PluginFileEntry,
     SkillBundleFile,
@@ -68,8 +70,29 @@ _IGNORED_BUNDLE_FILE_NAMES: Final[frozenset[str]] = frozenset(
 )
 
 
-@dataclass(frozen=True)
-class NormalizedSkillBundle:
+SKILL_BUNDLE_LAYOUT: Final = BundleLayout(
+    markers=(SKILL_MD_NAME,),
+    missing_detail="SKILL.md missing at bundle root or directly inside one "
+    "top-level directory",
+    outside_detail="bundle contains files outside the directory containing SKILL.md",
+)
+PLUGIN_MANIFEST_PATHS: Final = (
+    ".claude-plugin/plugin.json",
+    ".codex-plugin/plugin.json",
+    "plugin.json",
+)
+PLUGIN_BUNDLE_LAYOUT: Final = BundleLayout(
+    markers=PLUGIN_MANIFEST_PATHS,
+    missing_detail="The plugin has no .claude-plugin/plugin.json, "
+    ".codex-plugin/plugin.json or plugin.json at the zip root or directly "
+    "inside one top-level folder.",
+    outside_detail="The zip contains files outside the folder that holds plugin.json.",
+)
+
+
+class NormalizedSkillBundle(BaseModel):
+    model_config = ConfigDict(frozen=True, strict=True)
+
     content: bytes
     source_directory: str | None
 
@@ -218,11 +241,21 @@ def custom_bundle_contents_from_stored(
     return CustomSkillBundleContents(
         instructions_markdown=strip_skill_md_frontmatter(skill_md),
         files=[
-            SkillBundleFile(path=entry.path, size=entry.size)
-            for entry in sorted(file_manifest, key=lambda entry: entry.path)
-            if entry.path != SKILL_MD_NAME and not _is_ignored_bundle_path(entry.path)
+            file
+            for file in bundle_files_from_manifest(file_manifest)
+            if file.path != SKILL_MD_NAME
         ],
     )
+
+
+def bundle_files_from_manifest(
+    file_manifest: Iterable[PluginFileEntry],
+) -> list[SkillBundleFile]:
+    return [
+        SkillBundleFile(path=entry.path, size=entry.size)
+        for entry in sorted(file_manifest, key=lambda entry: entry.path)
+        if not _is_ignored_bundle_path(entry.path)
+    ]
 
 
 def read_custom_bundle_instructions(zip_bytes: bytes) -> str:
@@ -415,35 +448,27 @@ def _is_ignored_bundle_path(path: str) -> bool:
     )
 
 
-def _bundle_wrapper_prefix(file_paths: list[str]) -> str | None:
-    """Identify an optional single directory wrapped around a skill bundle."""
+def _bundle_wrapper_prefix(file_paths: list[str], layout: BundleLayout) -> str | None:
     meaningful_paths = [
         path for path in file_paths if not _is_ignored_bundle_path(path)
     ]
-    if SKILL_MD_NAME in meaningful_paths:
+    if any(path in layout.markers for path in meaningful_paths):
         return None
 
-    wrapped_skill_md_paths = [
-        path
-        for path in meaningful_paths
-        if len(path.split("/")) == 2 and path.endswith(f"/{SKILL_MD_NAME}")
-    ]
-    if len(wrapped_skill_md_paths) != 1:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "SKILL.md missing at bundle root or directly inside one "
-            "top-level directory",
-        )
+    wrappers = {
+        wrapper
+        for wrapper, _, rest in (path.partition("/") for path in meaningful_paths)
+        if rest in layout.markers
+    }
+    if len(wrappers) != 1:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, layout.missing_detail)
 
-    wrapper_prefix = wrapped_skill_md_paths[0].split("/", maxsplit=1)[0]
+    wrapper_prefix = wrappers.pop()
     unexpected_paths = [
         path for path in meaningful_paths if not path.startswith(f"{wrapper_prefix}/")
     ]
     if unexpected_paths:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "bundle contains files outside the directory containing SKILL.md",
-        )
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, layout.outside_detail)
     return wrapper_prefix
 
 
@@ -519,6 +544,7 @@ def normalize_custom_bundle(
     max_directory_bytes: int = ZIP_DIRECTORY_MAX_BYTES,
     per_file_max_bytes: int = DEFAULT_PER_FILE_MAX_BYTES,
     total_max_bytes: int = DEFAULT_TOTAL_MAX_BYTES,
+    layout: BundleLayout = SKILL_BUNDLE_LAYOUT,
 ) -> NormalizedSkillBundle:
     """Validate a custom bundle and remove one optional wrapper directory.
 
@@ -545,7 +571,7 @@ def normalize_custom_bundle(
             normalized for info, normalized in normalized_infos if not info.is_dir()
         ]
         _check_bundle_file_count(len(file_paths), max_file_count)
-        wrapper_prefix = _bundle_wrapper_prefix(file_paths)
+        wrapper_prefix = _bundle_wrapper_prefix(file_paths, layout)
         needs_rewrite = wrapper_prefix is not None or any(
             _is_ignored_bundle_path(path) for path in file_paths
         )
@@ -585,7 +611,7 @@ def normalize_custom_bundle(
             else None
         )
         total = 0
-        saw_skill_md = False
+        saw_marker = False
         try:
             for info, normalized in normalized_infos:
                 if info.is_dir() or _is_ignored_bundle_path(normalized):
@@ -610,8 +636,8 @@ def normalize_custom_bundle(
                     total_max_bytes=total_max_bytes,
                 )
 
-                if output_path == SKILL_MD_NAME:
-                    saw_skill_md = True
+                if output_path in layout.markers:
+                    saw_marker = True
         finally:
             if target_zip is not None:
                 active_exception = sys.exception()
@@ -624,19 +650,17 @@ def normalize_custom_bundle(
                             f"cannot finish normalized bundle: {exc}",
                         ) from exc
 
-    if not saw_skill_md:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "SKILL.md missing at bundle root or directly inside one "
-            "top-level directory",
-        )
+    if not saw_marker:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, layout.missing_detail)
     content = output.getvalue() if needs_rewrite else zip_bytes
     if zip_max_bytes is not None and len(content) > zip_max_bytes:
         raise _zip_too_large_error(zip_max_bytes)
     return NormalizedSkillBundle(content=content, source_directory=wrapper_prefix)
 
 
-def normalize_stored_bundle(zip_bytes: bytes) -> NormalizedSkillBundle:
+def normalize_stored_bundle(
+    zip_bytes: bytes, layout: BundleLayout = SKILL_BUNDLE_LAYOUT
+) -> NormalizedSkillBundle:
     """Normalize a saved bundle, or an edit that cannot add files to one.
 
     Saved bundles can predate the ZIP-size and file-count limits, so these
@@ -648,6 +672,7 @@ def normalize_stored_bundle(zip_bytes: bytes) -> NormalizedSkillBundle:
         zip_max_bytes=STORED_ZIP_MAX_BYTES,
         max_file_count=None,
         max_directory_bytes=STORED_ZIP_DIRECTORY_MAX_BYTES,
+        layout=layout,
     )
 
 
@@ -674,8 +699,6 @@ def update_custom_bundle_files(
             OnyxErrorCode.INVALID_INPUT,
             "provide exactly one file upload or path to remove",
         )
-    if is_upload and not filename:
-        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "upload is missing a filename")
 
     output = io.BytesIO()
     with ExitStack() as archives:
@@ -683,7 +706,10 @@ def update_custom_bundle_files(
         upload_infos: list[tuple[zipfile.ZipInfo, str]] = []
         changed_paths: set[str]
         if upload_bytes is not None:
-            assert filename is not None
+            if not filename:
+                raise OnyxError(
+                    OnyxErrorCode.INVALID_INPUT, "upload is missing a filename"
+                )
             if (
                 filename.lower().endswith(".zip")
                 and len(upload_bytes) > DEFAULT_ZIP_MAX_BYTES
@@ -742,7 +768,8 @@ def update_custom_bundle_files(
                 )
             changed_paths = set(upload_file_paths)
         else:
-            assert remove_path is not None
+            if remove_path is None:
+                raise RuntimeError("Bug: no upload and no path to remove.")
             normalized_remove_path = _validated_bundle_path(
                 zipfile.ZipInfo(remove_path)
             )

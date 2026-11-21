@@ -14,8 +14,6 @@ import {
   fetchKnownTurn,
   fetchArtifacts,
   fetchOutputInventory,
-  fetchScheduledRunEventStream,
-  fetchScheduledRunContext,
   fetchMessages,
   fetchSession,
   fetchWebappInfo,
@@ -44,8 +42,6 @@ jest.mock("@/app/craft/services/apiServices", () => ({
   fetchArtifacts: jest.fn(),
   fetchOutputInventory: jest.fn(),
   fetchMessages: jest.fn(),
-  fetchScheduledRunEventStream: jest.fn(),
-  fetchScheduledRunContext: jest.fn(),
   fetchSession: jest.fn(),
   fetchWebappInfo: jest.fn(),
   fetchTurnEventStream: jest.fn(),
@@ -92,16 +88,6 @@ describe("useBuildStreaming thinking packets", () => {
       status: "SUCCEEDED",
       turn_index: 0,
     }));
-    jest.mocked(fetchScheduledRunContext).mockResolvedValue({
-      run_id: "scheduled-run",
-      task_id: "task",
-      task_name: "Task",
-      revision: 0,
-      viewed_revision: null,
-      status: "SUCCEEDED",
-      started_at: "2026-10-10T00:00:00Z",
-      finished_at: null,
-    });
     jest
       .mocked(fetchMessages)
       .mockImplementation(
@@ -943,36 +929,6 @@ describe("useBuildStreaming thinking packets", () => {
     }
   );
 
-  it("preserves a manual output choice when reattaching to a scheduled run", async () => {
-    useBuildSessionStore.getState().openFilesTab(sessionId);
-    jest.mocked(fetchScheduledRunEventStream).mockResolvedValue({} as Response);
-    jest.mocked(fetchOutputInventory).mockResolvedValue({
-      complete: true,
-      files: [{ path: "outputs/scheduled.pptx", revision: "1", size: 100 }],
-    });
-    completeOutputTurn();
-    const { result } = renderHook(() => useBuildStreaming());
-    await act(async () => {
-      await result.current.streamScheduledRunEvents(
-        sessionId,
-        "scheduled-run",
-        new AbortController().signal
-      );
-    });
-    expect(
-      useBuildSessionStore.getState().sessions.get(sessionId)
-    ).toMatchObject({
-      activePanelTabId: "files",
-      outputInventory: {
-        "outputs/scheduled.pptx": {
-          path: "outputs/scheduled.pptx",
-          revision: "1",
-          size: 100,
-        },
-      },
-    });
-  });
-
   it("respects dismissal during its task and opens outputs in the next task", async () => {
     const store = () => useBuildSessionStore.getState();
     store().setCurrentSession(sessionId);
@@ -1700,47 +1656,6 @@ describe("useBuildStreaming thinking packets", () => {
       });
       expect(fetchActiveTurn).toHaveBeenCalledTimes(1);
       expect(fetchMessages).not.toHaveBeenCalled();
-      controller.abort();
-      await act(async () => {
-        await jest.advanceTimersByTimeAsync(1000);
-        await watching;
-      });
-    }
-  );
-
-  it.each(["stream", "status"])(
-    "ends scheduled observation after permanent %s rejection",
-    async (source) => {
-      const error = new FetchError("Permission revoked", 403, null);
-      if (source === "stream")
-        jest.mocked(fetchScheduledRunEventStream).mockRejectedValue(error);
-      else {
-        jest
-          .mocked(fetchScheduledRunEventStream)
-          .mockRejectedValue(new Error("Disconnected"));
-        jest.mocked(fetchScheduledRunContext).mockRejectedValue(error);
-      }
-      const { result } = renderHook(() => useBuildStreaming());
-      const controller = new AbortController();
-      let watching: Promise<void> | undefined;
-      act(() => {
-        watching = result.current.streamScheduledRunEvents(
-          sessionId,
-          "scheduled-run",
-          controller.signal
-        );
-      });
-      await act(async () => {
-        await jest.advanceTimersByTimeAsync(5000);
-      });
-      expect(
-        useBuildSessionStore.getState().sessions.get(sessionId)
-      ).toMatchObject({
-        status: "failed",
-        loadError: "Permission revoked",
-        error: null,
-      });
-      expect(fetchScheduledRunEventStream).toHaveBeenCalledTimes(1);
       controller.abort();
       await act(async () => {
         await jest.advanceTimersByTimeAsync(1000);
@@ -2868,61 +2783,6 @@ describe("useBuildStreaming thinking packets", () => {
     expect(fetchMessages).not.toHaveBeenCalled();
   });
 
-  it.each(["aborted", "successor"] as const)(
-    "ignores a late scheduled transport error after %s ownership",
-    async (change) => {
-      let reject: ((error: Error) => void) | undefined;
-      jest.mocked(fetchScheduledRunEventStream).mockImplementationOnce(
-        () =>
-          new Promise((_resolve, rejectPromise) => {
-            reject = rejectPromise;
-          })
-      );
-      const controller = new AbortController();
-      const settled = jest.fn();
-      const { result } = renderHook(() => useBuildStreaming());
-      let streaming: Promise<void> | undefined;
-      act(() => {
-        streaming = result.current.streamScheduledRunEvents(
-          sessionId,
-          "scheduled-run",
-          controller.signal,
-          settled
-        );
-      });
-      act(() => {
-        if (change === "aborted") {
-          controller.abort();
-          useBuildSessionStore
-            .getState()
-            .updateSessionData(sessionId, { status: "active" });
-        } else {
-          useBuildSessionStore.getState().updateSessionData(sessionId, {
-            status: "running",
-            turnGeneration: 1,
-            activeTurnId: "interactive-successor",
-            activeTurnLocalOwner: true,
-          });
-        }
-      });
-      await act(async () => {
-        reject?.(new Error("Late proxy rejection"));
-        await streaming;
-      });
-      expect(
-        useBuildSessionStore.getState().sessions.get(sessionId)
-      ).toMatchObject({
-        status: change === "aborted" ? "active" : "running",
-        error: null,
-        turnGeneration: change === "aborted" ? 0 : 1,
-        activeTurnId: change === "aborted" ? null : "interactive-successor",
-        turnSettlement: null,
-      });
-      expect(settled).not.toHaveBeenCalled();
-      expect(fetchScheduledRunContext).not.toHaveBeenCalled();
-    }
-  );
-
   it("keeps output discovery alive across a nonterminal EOF", async () => {
     jest.mocked(fetchActiveTurn).mockResolvedValue({
       session_id: sessionId,
@@ -3267,157 +3127,6 @@ describe("useBuildStreaming thinking packets", () => {
       );
     }
   );
-  it.each(["SUCCEEDED", "FAILED"] as const)(
-    "reconciles worker %s after a scheduled transport failure",
-    async (workerStatus) => {
-      jest
-        .mocked(fetchScheduledRunEventStream)
-        .mockRejectedValueOnce(new Error("Transient proxy failure"));
-      const run = {
-        run_id: "scheduled-run",
-        task_id: "task",
-        task_name: "Task",
-        revision: 0,
-        viewed_revision: null,
-        started_at: "2026-10-10T00:00:00Z",
-        finished_at: null,
-      };
-      jest
-        .mocked(fetchScheduledRunContext)
-        .mockResolvedValueOnce({ ...run, status: "RUNNING" })
-        .mockResolvedValue({ ...run, status: workerStatus });
-      const saved = [
-        {
-          id: "saved-result",
-          type: "assistant" as const,
-          content: "Saved worker result",
-          timestamp: new Date(),
-          message_metadata: {
-            type: "agent_message",
-            content: {
-              type: "text",
-              text: "Saved worker result",
-            },
-          },
-        },
-      ];
-      jest.mocked(fetchMessages).mockResolvedValue(saved);
-      const { result } = renderHook(() => useBuildStreaming());
-      let streaming: Promise<void> | undefined;
-      act(() => {
-        streaming = result.current.streamScheduledRunEvents(
-          sessionId,
-          "scheduled-run",
-          new AbortController().signal
-        );
-      });
-      await act(async () => {});
-      expect(
-        useBuildSessionStore.getState().sessions.get(sessionId)
-      ).toMatchObject({
-        status: "running",
-        error: null,
-        turnSettlement: null,
-      });
-      await act(async () => {
-        await jest.advanceTimersByTimeAsync(1000);
-        await streaming;
-      });
-      const session = useBuildSessionStore.getState().sessions.get(sessionId);
-      expect(session?.error).toBeNull();
-      if (workerStatus === "SUCCEEDED") {
-        expect(session?.turnSettlement?.phase).toBe("ready");
-        expect(session?.messages).toEqual([
-          expect.objectContaining({ content: "Saved worker result" }),
-        ]);
-      } else {
-        expect(session?.status).toBe("failed");
-        expect(session?.turnSettlement).toBeNull();
-        expect(fetchMessages).toHaveBeenCalledTimes(1);
-        expect(session?.messages).toEqual([
-          expect.objectContaining({ content: "Saved worker result" }),
-        ]);
-      }
-    }
-  );
-  it.each(["RUNNING", "QUEUED"] as const)(
-    "reconnects a scheduled worker that remains %s beyond thirty seconds",
-    async (status) => {
-      const run = {
-        run_id: "scheduled-run",
-        task_id: "task",
-        task_name: "Task",
-        revision: 0,
-        viewed_revision: null,
-        started_at: "2026-10-12",
-        finished_at: null,
-      };
-      jest
-        .mocked(fetchScheduledRunContext)
-        .mockResolvedValue({ ...run, status });
-      let progress: (() => void) | undefined;
-      let complete: (() => void) | undefined;
-      jest
-        .mocked(processSSEStream)
-        .mockRejectedValueOnce(new Error("Scheduled proxy disconnected"))
-        .mockImplementationOnce(async (_response, onPacket) => {
-          await new Promise<void>((resolve) => {
-            const progressPacket = {
-              type: "agent_message",
-              content: { type: "text", text: "Worker progress" },
-              _meta: { partId: "worker-part" },
-            };
-            progress = () => onPacket(progressPacket);
-            complete = () => {
-              onPacket({ type: "prompt_response" });
-              resolve();
-            };
-          });
-        });
-      const { result } = renderHook(() => useBuildStreaming());
-      let streaming: Promise<void> | undefined;
-      act(() => {
-        streaming = result.current.streamScheduledRunEvents(
-          sessionId,
-          "scheduled-run",
-          new AbortController().signal
-        );
-      });
-      await act(async () => {
-        await jest.advanceTimersByTimeAsync(1000);
-      });
-      expect(fetchScheduledRunEventStream).toHaveBeenCalledTimes(2);
-      await act(async () => {
-        await jest.advanceTimersByTimeAsync(31000);
-      });
-      act(() => progress?.());
-      expect(
-        useBuildSessionStore.getState().sessions.get(sessionId)
-      ).toMatchObject({ status: "running", turnSettlement: null });
-      expect(
-        useBuildSessionStore.getState().sessions.get(sessionId)?.streamItems
-      ).toEqual([
-        expect.objectContaining({
-          partId: "worker-part",
-          content: "Worker progress",
-        }),
-      ]);
-      expect(fetchMessages).not.toHaveBeenCalled();
-      jest
-        .mocked(fetchScheduledRunContext)
-        .mockResolvedValue({ ...run, status: "SUCCEEDED" });
-      await act(async () => {
-        complete?.();
-        await streaming;
-      });
-      expect(
-        useBuildSessionStore.getState().sessions.get(sessionId)?.turnSettlement
-          ?.phase
-      ).toBe("ready");
-      expect(createTurn).not.toHaveBeenCalled();
-    }
-  );
-
   it.each(["aborted", "superseded"] as const)(
     "ends reconnect retry when the observer is %s",
     async (ending) => {
@@ -3485,6 +3194,7 @@ describe("useBuildStreaming thinking packets", () => {
         agent_provider: null,
         agent_model: null,
         skills_stale: false,
+        skill_omissions: null,
         session_loaded_in_sandbox: true,
       });
       jest.mocked(fetchArtifacts).mockResolvedValue([]);
@@ -3595,6 +3305,7 @@ describe("useBuildStreaming thinking packets", () => {
         agent_provider: null,
         agent_model: null,
         skills_stale: false,
+        skill_omissions: null,
         session_loaded_in_sandbox: true,
       });
       jest.mocked(fetchArtifacts).mockResolvedValue([]);
@@ -3870,81 +3581,5 @@ describe("useBuildStreaming thinking packets", () => {
       await result.current.interruptStreaming(sessionId);
     });
     expect(interruptMessageStream).not.toHaveBeenCalled();
-  });
-  it("reconciles a scheduled in-band error through its worker before reading partial history", async () => {
-    jest.useFakeTimers();
-    try {
-      const run = {
-        run_id: "scheduled-run",
-        task_id: "task",
-        task_name: "Task",
-        revision: 0,
-        viewed_revision: null,
-        started_at: "2026-10-12T00:00:00Z",
-        finished_at: null,
-      };
-      jest
-        .mocked(fetchScheduledRunContext)
-        .mockResolvedValueOnce({ ...run, status: "RUNNING" })
-        .mockResolvedValue({ ...run, status: "FAILED" });
-      const saved = [
-        {
-          id: "partial-result",
-          type: "assistant" as const,
-          content: "Persisted partial result",
-          timestamp: new Date(),
-          message_metadata: {
-            type: "agent_message",
-            content: { type: "text", text: "Persisted partial result" },
-          },
-        },
-      ];
-      jest.mocked(fetchMessages).mockResolvedValue(saved);
-      jest
-        .mocked(processSSEStream)
-        .mockImplementationOnce(async (_response, onPacket) => {
-          const packet = { type: "error", message: "Worker failed" };
-          onPacket(packet);
-        });
-      useBuildSessionStore
-        .getState()
-        .enqueueMessage(sessionId, "waiting prompt", []);
-      const { result } = renderHook(() => useBuildStreaming());
-      await act(async () => {
-        await result.current.streamScheduledRunEvents(
-          sessionId,
-          "scheduled-run",
-          new AbortController().signal
-        );
-      });
-      expect(fetchMessages).not.toHaveBeenCalled();
-      expect(
-        useBuildSessionStore.getState().sessions.get(sessionId)
-      ).toMatchObject({
-        status: "running",
-        error: null,
-        turnSettlement: { phase: "reconciling" },
-      });
-      await act(async () => {
-        await jest.advanceTimersByTimeAsync(1000);
-      });
-      expect(fetchActiveTurn).not.toHaveBeenCalled();
-      expect(
-        useBuildSessionStore.getState().sessions.get(sessionId)
-      ).toMatchObject({
-        status: "failed",
-        error: null,
-        turnSettlement: null,
-        messages: [
-          expect.objectContaining({ content: "Persisted partial result" }),
-        ],
-      });
-      expect(createTurn).not.toHaveBeenCalled();
-      expect(
-        useBuildSessionStore.getState().sessions.get(sessionId)?.queuedMessages
-      ).toHaveLength(1);
-    } finally {
-      jest.useRealTimers();
-    }
   });
 });

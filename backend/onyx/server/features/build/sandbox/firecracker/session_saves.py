@@ -70,7 +70,10 @@ from onyx.server.features.build.sandbox.firecracker.harness_state import (
     wanted_since,
 )
 from onyx.server.features.build.sandbox.firecracker.models import SessionSave
-from onyx.server.features.build.sandbox.harness_base import HarnessSandboxError
+from onyx.server.features.build.sandbox.harness_base import (
+    CHAT_FILES_DIR,
+    HarnessSandboxError,
+)
 from onyx.server.features.build.sandbox.models import HarnessSandboxRef
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
@@ -78,9 +81,11 @@ from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 logger = setup_logger()
 
 # Top-level names never saved. The daemon also skips its own excludes
-# (node_modules, venvs, caches) at any depth inside each root.
+# (node_modules, venvs, caches) at any depth inside each root. Chat files are
+# copies of file store files, copied again after a restart.
 SAVE_EXCLUDED_ROOTS: frozenset[str] = frozenset(
     {
+        CHAT_FILES_DIR,
         "node_modules",
         ".venv",
         "venv",

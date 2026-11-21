@@ -5,7 +5,6 @@ runs release through the run store, whose release event dispatches the root's
 follow-up.
 """
 
-import re
 import time
 from collections.abc import Callable, Generator
 from threading import Event
@@ -20,6 +19,7 @@ from sqlalchemy.orm import Session
 from onyx.agents.models import InputSource, MessageDelivery, RunStatus
 from onyx.cache.factory import get_cache_backend
 from onyx.chat import execution, run_store
+from onyx.chat.chat_processing_checker import ChatTurnAdmission
 from onyx.chat.execution import chat_turn_work
 from onyx.chat.process_message import handle_stream_message_objects
 from onyx.chat.run_store import RESPONSE_OWNER_KEY_PREFIX, stop_response
@@ -47,7 +47,6 @@ from onyx.llm.models import (
     GenerationRequest,
     TextContent,
     ToolCall,
-    ToolResultMessage,
 )
 from onyx.server.query_and_chat import chat_backend
 from onyx.server.query_and_chat.models import SendMessageRequest
@@ -129,7 +128,7 @@ class Workers:
         ]
         if len(self.root_requests) == 1:
             if self.spawn_and_wait:
-                return AssistantMessage(content=[*spawns, self._wait_call(request)])
+                return AssistantMessage(content=[*spawns, self._wait_call()])
             return AssistantMessage(content=spawns)
         if not self.first_turn_done:
             self.first_turn_done = True
@@ -140,26 +139,18 @@ class Workers:
             if not self.wait:
                 return _text(WAITING)
             return AssistantMessage(
-                content=[TextContent(text=WAITING), self._wait_call(request)]
+                content=[TextContent(text=WAITING), self._wait_call()]
             )
         seen = [name for name in self.names if f"Result {name}" in str(texts)]
         return _text(f"Answer with {', '.join(seen) or 'nothing'}")
 
-    def _wait_call(self, request: GenerationRequest) -> ToolCall:
+    def _wait_call(self) -> ToolCall:
         if self.wait_for is None:
             return ToolCall(id="wait", name=WAIT_AGENTS_TOOL_NAME, arguments={})
-        agent_ids = {
-            match[1]: match[2]
-            for message in request.messages
-            if isinstance(message, ToolResultMessage)
-            and (
-                match := re.search(r"/root/(\w+) \(agent_id: ([\w-]+)\)", message.text)
-            )
-        }
         return ToolCall(
             id="wait",
             name=WAIT_AGENTS_TOOL_NAME,
-            arguments={"agent_ids": [agent_ids[name] for name in self.wait_for]},
+            arguments={"targets": [f"/root/{name}" for name in self.wait_for]},
         )
 
 
@@ -208,7 +199,7 @@ def _start(
 ) -> None:
     """Run the root's first turn; it ends while every worker still runs."""
     # Agent tools come from the chat agent; persona tools play no part here.
-    monkeypatch.setattr("onyx.chat.execution.construct_tools", lambda **_kwargs: {})
+    monkeypatch.setattr("onyx.chat.execution.construct_tools", lambda **_kwargs: [])
     model = ScriptedLLM(workers.generate)
     monkeypatch.setattr(
         "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: model
@@ -399,12 +390,15 @@ def _drop_dispatches(monkeypatch: pytest.MonkeyPatch) -> _DroppedDispatches:
     dropped = _DroppedDispatches()
     dispatch = execution.ChatTurnExecution._dispatch_after_release
 
-    def dispatch_unless_dropped(self: execution.ChatTurnExecution) -> None:
+    def dispatch_unless_dropped(
+        self: execution.ChatTurnExecution,
+        admission: ChatTurnAdmission | None = None,
+    ) -> None:
         try:
             if dropped.dropping.is_set():
                 dropped.dropped += 1
                 return
-            dispatch(self)
+            dispatch(self, admission)
         finally:
             dropped.callbacks += 1
 

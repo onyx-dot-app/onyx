@@ -6,14 +6,15 @@ scope=ScopeInclude(empty_means_all=True))] = None``. The policy tells a config
 edit what work it needs (re-index, prune, scoped backfill). This module must
 stay light to import: every connector config module imports it.
 
-The policy types are frozen dataclasses, not BaseModels: pydantic treats a
-BaseModel instance in ``Annotated`` metadata as a schema for the field.
+Keep FieldPolicy as plain metadata. Pydantic uses a model in
+``Annotated`` metadata to build the field schema.
 """
 
-from dataclasses import dataclass
+import dataclasses
 from enum import Enum
 from typing import Any
 
+from pydantic import BaseModel, ConfigDict
 from pydantic.fields import FieldInfo
 
 
@@ -36,8 +37,7 @@ class ScopeDirection(str, Enum):
     UNKNOWN = "unknown"
 
 
-@dataclass(frozen=True)
-class ScopeInclude:
+class ScopeInclude(BaseModel):
     """Items to fetch. Values are a list, None, or a comma-separated string.
 
     With ``empty_means_all``, an empty value fetches everything. With
@@ -47,53 +47,59 @@ class ScopeInclude:
     folder path).
     """
 
+    model_config = ConfigDict(strict=True, frozen=True)
+
     empty_means_all: bool
     empty_list_means_none: bool = False
     split_on_commas: bool = True
 
-    def __post_init__(self) -> None:
+    def model_post_init(self, __context: Any) -> None:
         if self.empty_list_means_none and not self.empty_means_all:
             raise ValueError("empty_list_means_none needs empty_means_all")
 
 
-@dataclass(frozen=True)
-class ScopeExclude:
+class ScopeExclude(BaseModel):
     """Items to skip. Values are a list, None, or a comma-separated string.
 
     ``split_on_commas`` works as on ``ScopeInclude``.
     """
 
+    model_config = ConfigDict(strict=True, frozen=True)
+
     split_on_commas: bool = True
 
 
-@dataclass(frozen=True)
-class ScopeToggle:
+class ScopeToggle(BaseModel):
     """A bool that fetches more documents when it is ``widens_when``."""
+
+    model_config = ConfigDict(strict=True, frozen=True)
 
     widens_when: bool
 
 
-@dataclass(frozen=True)
-class ScopeOrdered:
+class ScopeOrdered(BaseModel):
     """A limit or a date floor. A larger value fetches more documents when
     ``widens_when_larger``, fewer otherwise. ``unbounded`` lists the values
     that mean no limit (the widest scope). ``none_means`` is the value the
     connector uses when the field is None."""
+
+    model_config = ConfigDict(strict=True, frozen=True)
 
     widens_when_larger: bool
     unbounded: tuple[Any, ...] = ()
     none_means: Any = None
 
 
-@dataclass(frozen=True)
-class ScopeOpaque:
+class ScopeOpaque(BaseModel):
     """A scope field whose change direction cannot be derived from its values."""
+
+    model_config = ConfigDict(strict=True, frozen=True)
 
 
 ScopeDescriptor = ScopeInclude | ScopeExclude | ScopeToggle | ScopeOrdered | ScopeOpaque
 
 
-@dataclass(frozen=True)
+@dataclasses.dataclass(frozen=True)  # noqa: TID251 - FieldPolicy is Annotated metadata. Pydantic model metadata replaces the field schema.
 class FieldPolicy:
     """``depends_on`` names mode fields: if one of them changes, a change to
     this field has an unknown direction."""

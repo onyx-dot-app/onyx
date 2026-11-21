@@ -9,6 +9,7 @@ from pydantic import BaseModel, ConfigDict
 from typing_extensions import TypedDict  # noreorder
 
 from onyx.configs.constants import FileOrigin
+from onyx.db.enums import UserFileStatus
 
 
 class _LazyContent:
@@ -100,12 +101,16 @@ class UserFileMetadata(BaseModel):
     name: str
     file_type: str
     token_count: int | None
+    # SKIPPED files are kept but never indexed, so search cannot find them.
+    status: UserFileStatus | None = None
 
 
 class ChatFileInput(BaseModel):
     descriptor: FileDescriptor
     token_count: int
     content_pending: bool
+    # False for SKIPPED user files, which search cannot find.
+    indexed: bool = True
 
 
 class InMemoryChatFile(BaseModel):
@@ -180,6 +185,8 @@ class ChatLoadedFile(InMemoryChatFile):
     # True while the user-file worker is still processing the file — its
     # canonical plaintext (e.g. including image captions) doesn't exist yet.
     content_pending: bool = False
+    # False for SKIPPED user files, which search cannot find.
+    indexed: bool = True
 
     @classmethod
     def lazy_loaded(
@@ -192,6 +199,7 @@ class ChatLoadedFile(InMemoryChatFile):
         token_count: int,
         loader: Callable[[], bytes],
         content_pending: bool = False,
+        indexed: bool = True,
     ) -> "ChatLoadedFile":
         """Keep supplied text and token counts; load bytes on first content access."""
         inst = cls(
@@ -202,6 +210,7 @@ class ChatLoadedFile(InMemoryChatFile):
             content_text=content_text,
             token_count=token_count,
             content_pending=content_pending,
+            indexed=indexed,
         )
         install_lazy_content_loader(inst, loader)
         return inst
@@ -231,6 +240,9 @@ class FileToolMetadata(BaseModel):
     # Summary-truncated attachments are listed for the LLM but never staged;
     # listing them must not promise Python access to bytes it does not have.
     staged_for_tools: bool = True
+
+    # Whether internal search can find the file's contents.
+    indexed: bool = True
 
 
 class ExtractedContextFiles(BaseModel):

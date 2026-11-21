@@ -35,9 +35,11 @@ from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.interfaces import GenerationContext
 from onyx.llm.models import (
     AssistantMessage,
+    GenerationOptions,
     GenerationRequest,
     TextContent,
     ToolCall,
+    ToolChoiceOptions,
     ToolDefinition,
     ToolResult,
     ToolResultMessage,
@@ -46,6 +48,7 @@ from onyx.llm.models import (
 from onyx.tracing.flows import LLMFlow
 from tests.unit.onyx.agents.checkpoint_storage import CheckpointStorage
 from tests.unit.onyx.agents.fakes import FakeModelClient, FakeRunOwnership, FakeRunStore
+from tests.unit.onyx.tools.code_mode.fakes import until
 
 
 def _approve(request_id: str = "permission") -> HumanToolAnswer:
@@ -161,7 +164,6 @@ def test_prepared_tool_selection_survives_json_handoff_without_repreparation() -
 def test_handoff_release_failure_settles_waiters_after_saving() -> None:
     saved: list[ExecutionCheckpoint] = []
     released: list[str] = []
-    finished = threading.Event()
     failure = RuntimeError("Ownership release failed")
 
     def release(run_id: str) -> None:
@@ -184,13 +186,12 @@ def test_handoff_release_failure_settles_waiters_after_saving() -> None:
     try:
         assert run.wait_until_settled(3).status == RunStatus.SUSPENDED
         assert run.wait_for_idle(3)
-        run.add_done_callback(finished.set)
         with pytest.raises(RuntimeError) as raised:
             run.handoff(save=saved.append)
         assert raised.value is failure
         assert released == [run.id]
         assert len(saved) == 1 and saved[0].run_state.status == RunStatus.SUSPENDED
-        assert finished.is_set() and run.is_done
+        assert run.is_done
         assert coordinator.newest_run(agent.id) is None
         with pytest.raises(RuntimeError) as result_error:
             run.result(0)
@@ -430,6 +431,42 @@ def test_cold_question_resume_uses_answer_without_repeating_tool() -> None:
         assert resumed.wait_for_idle(3)
 
 
+def test_stopped_run_keeps_a_supplied_result_as_the_calls_result() -> None:
+    """A Stop that supplies a waiting call's result before it cancels leaves
+    the call with that result, so later runs see it."""
+    agent = Agent(
+        _model([ToolCall(id="question", name="question", arguments={})]),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        agent_id="question-agent",
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(
+                    name="question", description="", parameters={}
+                ),
+                execute=lambda _invocation: PendingToolInput(
+                    request_id="question", prompt="Which?", mode=InputMode.RESULT
+                ),
+            )
+        ],
+    )
+    run = agent.start(max_steps=2)
+    assert run.wait_until_settled(3).status == RunStatus.SUSPENDED
+    with run.execution_lock:
+        run.submit(
+            HumanToolAnswer(
+                request_id="question",
+                decision=InputDecision.RESULT,
+                result=ToolResult(content="stopped before answering"),
+            )
+        )
+        run.cancel("user")
+    assert run.wait_for_idle(3)
+    snapshot = run.snapshot()
+    assert snapshot.status == RunStatus.CANCELLED
+    result = snapshot.steps[0].tools["question"].result
+    assert result is not None and result.text == "stopped before answering"
+
+
 def test_cold_resume_retains_consumed_answer_identity_and_rejects_conflict() -> None:
     effects: list[str] = []
 
@@ -506,6 +543,85 @@ def test_cold_resume_retains_consumed_answer_identity_and_rejects_conflict() -> 
             resumed.submit(
                 HumanToolAnswer(request_id="permission", decision=InputDecision.DENY)
             )
+        resumed.submit(
+            HumanToolAnswer(
+                request_id="question",
+                decision=InputDecision.RESULT,
+                result=ToolResult(content="selected"),
+            )
+        )
+        assert resumed.result(timeout=3).output.text == "done"
+        assert effects == ["sent"]
+    finally:
+        resumed.cancel()
+        assert resumed.wait_for_idle(3)
+
+
+def test_an_answer_that_changes_only_standing_applies_on_resume() -> None:
+    """The user approves, then approves for the chat, before the run resumes
+    with the saved decision."""
+    effects: list[str] = []
+
+    def make_agent(state: AgentState) -> Agent:
+        def effect(_invocation: ToolInvocation) -> ToolResult:
+            effects.append("sent")
+            return ToolResult(content="sent")
+
+        return Agent(
+            _model(
+                [
+                    ToolCall(id="effect", name="effect", arguments={}),
+                    ToolCall(id="question", name="question", arguments={}),
+                ]
+            ),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+            agent_id="agent",
+            state=state,
+            tools=[
+                AgentTool(
+                    definition=ToolDefinition(
+                        name="effect", description="", parameters={}
+                    ),
+                    execute=effect,
+                ),
+                AgentTool(
+                    definition=ToolDefinition(
+                        name="question", description="", parameters={}
+                    ),
+                    execute=lambda _invocation: PendingToolInput(
+                        request_id="question", prompt="Which?", mode=InputMode.RESULT
+                    ),
+                ),
+            ],
+            before_tool_call=_gate,
+        )
+
+    run = make_agent(AgentState()).start(max_steps=3)
+    assert run.wait_until_settled(3).status == RunStatus.SUSPENDED
+    run.submit(_approve())
+    until(lambda: effects == ["sent"])
+    assert run.wait_until_settled(3).status == RunStatus.SUSPENDED
+    assert run.wait_for_idle(3)
+    captured = run.capture()
+
+    standing = _approve().model_copy(update={"standing": True})
+    resumed = make_agent(captured.agent_state).resume(
+        captured.run_state, answers=[standing]
+    )
+    try:
+        assert resumed.wait_until_settled(3).status == RunStatus.SUSPENDED
+        progress = resumed.snapshot().progress
+        assert progress is not None
+        assert progress.human_tool_answers["permission"] == standing
+        # A stale answer without `standing` repeats the recorded one. The lock
+        # keeps the run's own revisions out of the comparison.
+        with resumed.execution_lock:
+            revision = resumed.snapshot().revision
+            resumed.submit(_approve())
+            snapshot = resumed.snapshot()
+        assert snapshot.revision == revision
+        assert snapshot.progress is not None
+        assert snapshot.progress.human_tool_answers["permission"] == standing
         resumed.submit(
             HumanToolAnswer(
                 request_id="question",
@@ -900,7 +1016,9 @@ def test_run_can_capture_and_release_without_its_creating_agent() -> None:
 @pytest.mark.parametrize(
     "change", ["order", "extra", "inactive_phase", "schema_order", "same"]
 )
-def test_handoff_preserves_complete_tool_configuration(change: str) -> None:
+def test_handoff_resumes_when_other_tool_configuration_changes(change: str) -> None:
+    """A waiting call resumes while its tool keeps its parameters, whatever
+    else of the tool configuration changed, such as key order in its schema."""
     effects: list[str] = []
 
     def execute(_invocation: ToolInvocation) -> ToolResult:
@@ -955,11 +1073,6 @@ def test_handoff_preserves_complete_tool_configuration(change: str) -> None:
     saved = run.handoff().model_dump(mode="json")
     checkpoint = ExecutionCheckpoint.model_validate(saved)
     rebuilt = make_agent(checkpoint.agent_state, restored=True)
-    if change in {"order", "extra", "inactive_phase", "schema_order"}:
-        with pytest.raises(ValueError, match="Restored tool configuration"):
-            rebuilt.resume(checkpoint.run_state)
-        assert effects == []
-        return
     resumed = rebuilt.resume(checkpoint.run_state)
     try:
         assert resumed.wait_until_settled(3).status == RunStatus.SUSPENDED
@@ -971,3 +1084,77 @@ def test_handoff_preserves_complete_tool_configuration(change: str) -> None:
     finally:
         resumed.cancel()
         assert resumed.wait_for_idle(3)
+
+
+def test_resume_at_the_extra_step_does_not_take_another() -> None:
+    entered = threading.Event()
+    release = threading.Event()
+    requests: list[GenerationRequest] = []
+    lookup = AgentTool(
+        definition=ToolDefinition(name="lookup", description="", parameters={}),
+        execute=lambda _: pytest.fail("A denied call must not run"),
+    )
+
+    def no_tools(_state: StepInput) -> PreparedStep:
+        return PreparedStep(
+            allowed_tool_names=frozenset(),
+            options=GenerationOptions(tool_choice=ToolChoiceOptions.NONE),
+        )
+
+    def calls(
+        request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        requests.append(request)
+        return AssistantMessage(
+            content=[ToolCall(id=f"call-{len(requests)}", name="lookup", arguments={})]
+        )
+
+    def complete(_result: StepResult) -> bool:
+        entered.set()
+        assert release.wait(2)
+        return True
+
+    agent = Agent(
+        FakeModelClient(calls),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        tools=[lookup],
+        prepare_step=no_tools,
+        after_step=complete,
+    )
+    run = agent.start(max_steps=1)
+    try:
+        assert entered.wait(2)
+        run.suspend()
+        release.set()
+        assert run.wait_until_settled(2).status == RunStatus.SUSPENDED
+        captured = run.handoff()
+        progress = captured.run_state.progress
+        assert progress is not None
+        assert (progress.step_index, progress.step_limit) == (1, 2)
+        restored = CheckpointStorage({}).load(
+            CheckpointStorage({}).save(
+                captured.run_state,
+                captured.agent_state,
+                CheckpointBinding(
+                    tenant_id="tenant", response_id=captured.run_state.run_id
+                ),
+            )
+        )
+        replacement = Agent(
+            FakeModelClient(calls),
+            generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+            state=restored.agent_state,
+            agent_id=restored.run_state.agent_id,
+            tools=[lookup],
+            prepare_step=no_tools,
+            after_step=lambda _: True,
+        )
+        resumed = replacement.resume(restored.run_state)
+        with pytest.raises(RunFailed):
+            resumed.result(2)
+        assert resumed.wait_for_idle(2)
+        assert len(requests) == 2
+    finally:
+        release.set()
+        run.cancel()
+        assert run.wait_for_idle(2)

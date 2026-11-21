@@ -13,6 +13,7 @@ from sqlalchemy.orm import Session
 from onyx.chat.models import AnswerStreamPart
 from onyx.chat.process_message import handle_stream_message_objects
 from onyx.db.models import ToolCall, User
+from onyx.file_store.models import FileDescriptor
 from onyx.llm.cancellation import check_cancelled, current_cancellation
 from onyx.llm.model_request import ChatCompletionMessage, ToolMessage
 from onyx.llm.model_response import (
@@ -21,12 +22,16 @@ from onyx.llm.model_response import (
     ModelResponseStream,
     ResponseFunctionCall,
 )
-from onyx.server.query_and_chat.models import SendMessageRequest
+from onyx.server.query_and_chat.models import (
+    AUTO_PLACE_AFTER_LATEST_MESSAGE,
+    SendMessageRequest,
+)
 from onyx.server.query_and_chat.streaming_models import (
     CodeModeDelta,
     CodeModeStart,
     Packet,
 )
+from onyx.tools.models import ToolOptions
 from onyx.tools.tool_implementations.code_mode.models import CodeModeExecutionResult
 from tests.unit.onyx.agents.fakes import ScriptedLLM
 
@@ -104,8 +109,13 @@ def send(
     *,
     code_mode: bool = True,
     on_part: Callable[[AnswerStreamPart], None] = lambda _part: None,
+    tool_options: ToolOptions | None = None,
+    file_descriptors: Sequence[FileDescriptor] = (),
+    parent_message_id: int | None = AUTO_PLACE_AFTER_LATEST_MESSAGE,
 ) -> list[AnswerStreamPart]:
-    """Send a message and read its stream; `on_part` sees each part as it arrives."""
+    """Send a message and read its stream; `on_part` sees each part as it arrives.
+    `tool_options` limits the agent's tools; `file_descriptors` attaches
+    files; `parent_message_id` picks the message to answer (a branch)."""
     parts: list[AnswerStreamPart] = []
     with (
         patch("onyx.chat.agent.CODE_MODE_ENABLED", code_mode),
@@ -117,7 +127,12 @@ def send(
     ):
         for part in handle_stream_message_objects(
             new_msg_req=SendMessageRequest(
-                message=message, chat_session_id=chat_session_id, stream=True
+                message=message,
+                chat_session_id=chat_session_id,
+                stream=True,
+                tool_options=tool_options,
+                file_descriptors=list(file_descriptors),
+                parent_message_id=parent_message_id,
             ),
             user=user,
         ):

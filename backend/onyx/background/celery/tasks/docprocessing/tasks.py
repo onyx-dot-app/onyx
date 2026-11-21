@@ -2,15 +2,13 @@ import gc
 import os
 import time
 import traceback
-from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from typing import Any
 
 from celery import Celery, Task, current_app, shared_task
 from celery.exceptions import SoftTimeLimitExceeded
-from pydantic import BaseModel
+from pydantic import BaseModel, ConfigDict
 from redis.lock import Lock as RedisLock
-from sqlalchemy import exists, select
 from sqlalchemy.orm import Session
 
 from onyx.background.celery.apps.app_base import task_logger
@@ -45,6 +43,10 @@ from onyx.background.indexing.checkpointing_utils import (
     cleanup_checkpoint,
     get_index_attempts_with_old_checkpoints,
 )
+from onyx.background.indexing.conversion_recovery import (
+    ConversionChainState,
+    check_conversion_chain,
+)
 from onyx.background.indexing.index_attempt_utils import (
     cleanup_index_attempts,
     get_old_index_attempt_ids,
@@ -55,7 +57,9 @@ from onyx.configs.app_configs import (
     SKIP_SPREADSHEET_CONTENT,
 )
 from onyx.configs.constants import (
+    CELERY_CHECKPOINT_CLEANUP_TASK_EXPIRES,
     CELERY_GENERIC_BEAT_LOCK_TIMEOUT,
+    CELERY_INDEX_ATTEMPT_CLEANUP_TASK_EXPIRES,
     DocumentSource,
     MilestoneRecordType,
     NotificationType,
@@ -99,13 +103,18 @@ from onyx.db.enums import (
     IndexingStatus,
     SwitchoverType,
 )
+from onyx.db.hierarchy import remove_unfilled_stub_hierarchy_nodes_for_cc_pair
 from onyx.db.index_attempt import (
     cc_pair_has_dispatched_index_attempts,
     create_index_attempt_error,
+    get_active_index_attempts,
     get_active_index_attempts_without_task,
+    get_in_progress_index_attempts_with_task,
     get_index_attempt,
     get_stale_not_started_index_attempts,
     get_waiting_index_attempt,
+    has_active_index_attempt,
+    index_attempt_has_errors_without_document,
     mark_attempt_canceled,
     mark_attempt_failed,
     mark_attempt_partially_succeeded,
@@ -126,6 +135,7 @@ from onyx.db.search_settings import (
     port_reindex_in_progress,
 )
 from onyx.db.swap_index import check_and_perform_index_swap
+from onyx.db.targeted_reindex import fail_stale_targeted_reindex_jobs
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.document_batch_storage import (
     DocumentBatchStorage,
@@ -133,7 +143,12 @@ from onyx.file_store.document_batch_storage import (
 )
 from onyx.file_store.staging import cleanup_staged_files_for_attempt
 from onyx.redis.redis_connector import RedisConnector
-from onyx.redis.redis_docprocessing import RedisDocprocessing
+from onyx.redis.redis_docprocessing import (
+    RedisDocprocessing,
+    incr_conversion_recovery_misses,
+    reset_conversion_recovery_misses,
+)
+from onyx.redis.redis_hierarchy import invalidate_hierarchy_cache_for_source
 from onyx.redis.redis_pool import (
     SCAN_ITER_COUNT_DEFAULT,
     get_redis_client,
@@ -161,6 +176,7 @@ from shared_configs.configs import (
 from shared_configs.contextvars import (
     CURRENT_TENANT_ID_CONTEXTVAR,
     INDEX_ATTEMPT_INFO_CONTEXTVAR,
+    get_current_tenant_id,
 )
 
 logger = setup_logger()
@@ -168,6 +184,9 @@ logger = setup_logger()
 # Heartbeat timeout: if no heartbeat received for 30 minutes, consider it dead.
 # This should be much longer than INDEXING_WORKER_HEARTBEAT_INTERVAL (30s).
 HEARTBEAT_TIMEOUT_SECONDS = 30 * 60  # 30 minutes
+# The watchdog fails an attempt with a stuck conversion chain after this many
+# runs in a row in which a restart sent nothing.
+CONVERSION_RECOVERY_MAX_MISSES = 2
 # How long a NOT_STARTED attempt must sit before we scan the broker.
 # After this window we check Redis directly — if the task is still there we
 # leave it alone, so this threshold does not cause false positives for
@@ -207,21 +226,9 @@ def validate_active_indexing_attempts(
     logger.info("Validating active indexing attempts")
 
     with get_session_with_current_tenant() as db_session:
+        fail_stale_targeted_reindex_jobs(db_session)
         # Find all active indexing attempts
-        active_attempts = (
-            db_session.execute(
-                select(IndexAttempt).where(
-                    IndexAttempt.status.in_([IndexingStatus.IN_PROGRESS]),
-                    IndexAttempt.celery_task_id.isnot(None),
-                    # Synthetic attempts spawned by the targeted-reindex flow
-                    # have their own lifecycle owner and do not increment
-                    # the docprocessing heartbeat counter.
-                    IndexAttempt.targeted_reindex_job_id.is_(None),
-                )
-            )
-            .scalars()
-            .all()
-        )
+        active_attempts = get_in_progress_index_attempts_with_task(db_session)
 
         for attempt in active_attempts:
             lock_beat.reacquire()
@@ -233,6 +240,27 @@ def validate_active_indexing_attempts(
             fresh_attempt = get_index_attempt(db_session, attempt.id)
             if not fresh_attempt or fresh_attempt.status.is_terminal():
                 continue
+
+            # A conversion chain that broke is started again here. The
+            # restart counts as a heartbeat.
+            chain_state = ConversionChainState.IDLE
+            if fresh_attempt.uses_conversion_stage:
+                try:
+                    chain_state = check_conversion_chain(
+                        current_app,
+                        celery_get_broker_client(current_app),
+                        index_attempt_id=fresh_attempt.id,
+                        tenant_id=get_current_tenant_id(),
+                    )
+                    if chain_state != ConversionChainState.STUCK:
+                        reset_conversion_recovery_misses(
+                            get_redis_client(), fresh_attempt.id
+                        )
+                except Exception:
+                    task_logger.exception(
+                        f"Failed to check the conversion chain of attempt {fresh_attempt.id}"
+                    )
+                db_session.refresh(fresh_attempt)
 
             # Check if this attempt has been updated with heartbeat tracking
             if fresh_attempt.last_heartbeat_time is None:
@@ -280,6 +308,26 @@ def validate_active_indexing_attempts(
                 )
                 continue
 
+            if chain_state in (
+                ConversionChainState.HEALTHY,
+                ConversionChainState.BUSY,
+            ):
+                # The task that sends the next stub batches still exists, or
+                # a conversion task of the attempt runs or waits in a queue.
+                continue
+            if chain_state == ConversionChainState.STUCK:
+                # Stub batches wait and a restart sent nothing. Fail only
+                # when that repeats, so one bad read does not end the attempt.
+                misses = incr_conversion_recovery_misses(
+                    get_redis_client(), fresh_attempt.id
+                )
+                if misses < CONVERSION_RECOVERY_MAX_MISSES:
+                    task_logger.warning(
+                        f"Conversion chain of attempt {fresh_attempt.id} is stuck: "
+                        f"miss {misses} of {CONVERSION_RECOVERY_MAX_MISSES}"
+                    )
+                    continue
+
             # Heartbeat is stale. If docfetching has finished (total_batches is
             # set), use the Redis counters to decide whether to invalidate:
             #
@@ -289,12 +337,22 @@ def validate_active_indexing_attempts(
             #
             # If total_batches is not set yet, docfetching is still running;
             # fall through to immediate invalidation (base timeout elapsed).
-            if fresh_attempt.total_batches is not None:
+            #
+            # The conversion chain check above judges the conversion stage
+            # by its live entries and queued tasks. Its counters can be left
+            # by killed workers or expired tasks, so they do not count here.
+            if chain_state == ConversionChainState.STUCK:
+                # The restarts sent nothing in each try. A pending count that
+                # an expired task left must not keep the attempt waiting.
+                failure_reason = (
+                    f"Heartbeat stale for {heartbeat_timeout_seconds}s and the "
+                    f"conversion chain could not be restarted"
+                )
+            elif fresh_attempt.total_batches is not None:
                 in_flight = 0
                 pending = 0
                 try:
-                    r = get_redis_client()
-                    rd = RedisDocprocessing(fresh_attempt.id, r)
+                    rd = RedisDocprocessing(fresh_attempt.id, get_redis_client())
                     in_flight = rd.in_flight()
                     pending = rd.pending()
                 except Exception:
@@ -527,6 +585,62 @@ def monitor_indexing_attempt_progress(
             logger.exception("Failed to cleanup storage after monitoring failure")
 
 
+def _remove_unfilled_stub_nodes(
+    db_session: Session, cc_pair: ConnectorCredentialPair
+) -> None:
+    """After an attempt whose listing completed, a STUB parent that is still
+    not filled will not be filled: its folder is not in the source, or the
+    connector cannot see it. Move what is under it to the source root and
+    remove it, so nothing stays hidden from the tree. A failed or canceled
+    attempt, or one with a listing failure, keeps its STUBs, because the
+    next attempt can still fill them. A STUB that a failed cleanup keeps is
+    removed by the next attempt that completes its listing. So is a STUB that
+    the cleanup keeps because another attempt of the pair is not finished."""
+    source = cc_pair.connector.source
+    # The attempt is complete. A cleanup error must not undo that.
+    try:
+        removed = remove_unfilled_stub_hierarchy_nodes_for_cc_pair(
+            db_session, source, cc_pair.connector_id, cc_pair.credential_id
+        )
+        failed = False
+    except Exception:
+        db_session.rollback()
+        logger.exception(
+            "Could not remove the unfilled STUB hierarchy nodes of cc_pair %s",
+            cc_pair.id,
+        )
+        removed = []
+        failed = True
+    if removed:
+        logger.info(
+            "Removed %s unfilled STUB hierarchy nodes of cc_pair %s",
+            len(removed),
+            cc_pair.id,
+        )
+    if not removed and not failed:
+        return
+    try:
+        # Cached parent chains can go through a removed STUB. Batches commit
+        # one at a time, so a failed cleanup can also have removed some.
+        invalidate_hierarchy_cache_for_source(get_redis_client(), source)
+    except Exception:
+        logger.exception(
+            "Could not invalidate the hierarchy cache of source %s", source
+        )
+
+
+def _attempt_listed_every_parent(db_session: Session, attempt: IndexAttempt) -> bool:
+    """Whether the attempt's listing completed, so a STUB that is still not
+    filled will not be filled. Failures of single documents do not change
+    that. A failure that names no document (a listing, a partition or a
+    batch) can mean a parent was not seen."""
+    if attempt.status == IndexingStatus.SUCCESS:
+        return True
+    if attempt.status != IndexingStatus.COMPLETED_WITH_ERRORS:
+        return False
+    return not index_attempt_has_errors_without_document(attempt.id, db_session)
+
+
 def check_indexing_completion(
     index_attempt_id: int,
     coordination_status: CoordinationStatus,
@@ -591,6 +705,13 @@ def check_indexing_completion(
             raise RuntimeError(
                 f"CC pair {attempt.connector_credential_pair_id} not found in database"
             )
+
+        # A backfill can run with a partial config, so it does not list
+        # every parent.
+        if not attempt.is_backfill and _attempt_listed_every_parent(
+            db_session, attempt
+        ):
+            _remove_unfilled_stub_nodes(db_session, cc_pair)
 
         source = cc_pair.connector.source.value
         connector_name = cc_pair.connector.name or f"cc_pair_{cc_pair.id}"
@@ -726,20 +847,11 @@ def active_indexing_attempt(
 
     Returns True if there's an active indexing attempt, False otherwise.
     """
-    active_indexing_attempt = db_session.execute(
-        select(
-            exists().where(
-                IndexAttempt.connector_credential_pair_id == cc_pair_id,
-                IndexAttempt.search_settings_id == search_settings_id,
-                IndexAttempt.status.in_(
-                    [
-                        IndexingStatus.NOT_STARTED,
-                        IndexingStatus.IN_PROGRESS,
-                    ]
-                ),
-            )
-        )
-    ).scalar()
+    active_indexing_attempt = has_active_index_attempt(
+        db_session=db_session,
+        cc_pair_id=cc_pair_id,
+        search_settings_id=search_settings_id,
+    )
 
     if active_indexing_attempt:
         task_logger.debug(
@@ -747,12 +859,13 @@ def active_indexing_attempt(
             f"cc_pair={cc_pair_id} search_settings={search_settings_id}"
         )
 
-    return bool(active_indexing_attempt)
+    return active_indexing_attempt
 
 
-@dataclass
-class _KickoffResult:
+class _KickoffResult(BaseModel):
     """Tracks diagnostic counts from a _kickoff_indexing_tasks run."""
+
+    model_config = ConfigDict(strict=True)
 
     created: int = 0
     skipped_active: int = 0
@@ -1425,18 +1538,7 @@ def check_for_indexing(self: Task, *, tenant_id: str) -> int | None:
         with get_session_with_current_tenant() as db_session:
             # Monitor all active indexing attempts directly from the database
             # This replaces the Redis fence-based monitoring
-            active_attempts = (
-                db_session.execute(
-                    select(IndexAttempt).where(
-                        IndexAttempt.status.in_(
-                            [IndexingStatus.NOT_STARTED, IndexingStatus.IN_PROGRESS]
-                        ),
-                        IndexAttempt.targeted_reindex_job_id.is_(None),
-                    )
-                )
-                .scalars()
-                .all()
-            )
+            active_attempts = get_active_index_attempts(db_session)
 
             for attempt in active_attempts:
                 try:
@@ -1522,6 +1624,7 @@ def check_for_checkpoint_cleanup(self: Task, *, tenant_id: str) -> None:
                     },
                     queue=OnyxCeleryQueues.CHECKPOINT_CLEANUP,
                     priority=OnyxCeleryPriority.MEDIUM,
+                    expires=CELERY_CHECKPOINT_CLEANUP_TASK_EXPIRES,
                 )
     except Exception:
         task_logger.exception("Unexpected exception during checkpoint cleanup")
@@ -1611,6 +1714,7 @@ def check_for_index_attempt_cleanup(self: Task, *, tenant_id: str) -> None:
                     },
                     queue=OnyxCeleryQueues.INDEX_ATTEMPT_CLEANUP,
                     priority=OnyxCeleryPriority.MEDIUM,
+                    expires=CELERY_INDEX_ATTEMPT_CLEANUP_TASK_EXPIRES,
                 )
     except Exception:
         task_logger.exception("Unexpected exception during index attempt cleanup check")
@@ -1958,6 +2062,32 @@ def _docprocessing_task(
         safe_record_single_event(
             IndexAttemptStage.BATCH_LOAD, index_attempt_id, batch_load_ms
         )
+        if documents is not None and not documents:
+            # The conversion stage stores a batch that gave no document, so a
+            # stopped worker loses no batch. Count it complete. The count
+            # comes first, as for a batch with documents: the stored batch is
+            # the durable record until the count commits, so a stop before
+            # the count leaves it to be sent again. A delete error after the
+            # count must not count the batch again, so it is only logged; the
+            # attempt's cleanup removes the batch.
+            with get_session_with_current_tenant() as db_session:
+                IndexingCoordination.update_batch_completion_and_docs(
+                    db_session=db_session,
+                    index_attempt_id=index_attempt_id,
+                    total_docs_indexed=0,
+                    new_docs_indexed=0,
+                    total_chunks=0,
+                )
+            try:
+                storage.delete_batch_by_num(batch_num)
+            except Exception:
+                task_logger.warning(
+                    "Could not delete the empty batch %s of attempt %s",
+                    batch_num,
+                    index_attempt_id,
+                    exc_info=True,
+                )
+            return
         if not documents:
             task_logger.error(f"No documents found for batch {batch_num}")
             return
@@ -2077,7 +2207,6 @@ def _docprocessing_task(
             index_to_secondary=index_to_secondary,
             tenant_id=tenant_id,
             document_batch=documents,
-            request_id=index_attempt_metadata.request_id,
             adapter=adapter,
             from_beginning=from_beginning,
             skip_spreadsheet_content=SKIP_SPREADSHEET_CONTENT,

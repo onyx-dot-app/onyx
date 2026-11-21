@@ -163,6 +163,96 @@ export function buildMockImageGenStream({
   return serializePackets(packets);
 }
 
+export interface MockPublishedFile {
+  fileId: string;
+  name: string;
+  title: string | null;
+  path: string;
+  // The path the backend shows, relative to the chat's working directory
+  displayPath: string;
+  size: number;
+  mimeType: string;
+  // Null for a file saved without an artifact
+  artifactId: string | null;
+  version: number | null;
+  // The JPEG of a document's first page; none when it did not render
+  thumbnailFileId?: string;
+}
+
+/** The packets of one publish_files call, the same live and on replay. */
+export function publishFilesPackets(
+  turnIndex: number,
+  files: MockPublishedFile[]
+): Record<string, unknown>[] {
+  const placement = { turn_index: turnIndex, tab_index: 0 };
+  return [
+    {
+      placement,
+      obj: {
+        type: "publish_files_start",
+        files: files.map((file) => ({ path: file.path, title: file.title })),
+        description: null,
+      },
+    },
+    {
+      placement,
+      obj: {
+        type: "publish_files_end",
+        files: files.map((file) => ({
+          file_id: file.fileId,
+          name: file.name,
+          title: file.title,
+          path: file.path,
+          display_path: file.displayPath,
+          size: file.size,
+          mime_type: file.mimeType,
+          artifact_id: file.artifactId,
+          version: file.version,
+          thumbnail_file_id: file.thumbnailFileId ?? null,
+        })),
+        error: null,
+      },
+    },
+    { placement, obj: { type: "section_end" } },
+  ];
+}
+
+/** A reply that publishes files, then answers. */
+export function buildMockPublishFilesStream(
+  files: MockPublishedFile[],
+  message: string
+): string {
+  const { userMessageId, agentMessageId } = nextMessageIds();
+  const answer = { turn_index: 1, tab_index: 0 };
+  const packets = [
+    {
+      user_message_id: userMessageId,
+      reserved_assistant_message_id: agentMessageId,
+    },
+    ...publishFilesPackets(0, files),
+    {
+      placement: answer,
+      obj: {
+        type: "message_start",
+        id: `mock-${agentMessageId}`,
+        content: message,
+        final_documents: null,
+      },
+    },
+    { placement: answer, obj: { type: "stop", stop_reason: "finished" } },
+    {
+      message_id: agentMessageId,
+      citations: {},
+      files: files.map((file) => ({
+        id: file.fileId,
+        type: "document",
+        name: file.name,
+      })),
+    },
+  ];
+  return serializePackets(packets);
+}
+
 export interface CodeModeCellStreamOptions {
   code: string;
   /** The custom tool the program calls; the call outlives the first observation. */

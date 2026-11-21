@@ -4,6 +4,7 @@ from unittest.mock import MagicMock
 import pytest
 from fastapi import UploadFile
 
+from onyx.file_processing.file_types import OnyxFileExtensions, is_indexable_file_type
 from onyx.natural_language_processing import utils as nlp_utils
 from onyx.natural_language_processing.utils import BaseTokenizer, count_tokens
 from onyx.server.features.projects import projects_file_utils as utils
@@ -110,6 +111,22 @@ def test_categorize_uploaded_files_accepts_size_under_limit(
 
     assert len(result.acceptable) == 1
     assert len(result.rejected) == 0
+
+
+def test_categorize_uploaded_files_rejects_file_with_no_name(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_common_dependencies(monkeypatch, upload_size_mb=1)
+    monkeypatch.setattr(utils, "estimate_image_tokens_for_upload", lambda _upload: 10)
+
+    named = _make_upload("photo.png", size=50)
+    unnamed = _make_upload("", size=50)
+    result = utils.categorize_uploaded_files([unnamed, named], MagicMock())
+
+    assert result.acceptable == [named]
+    assert [(file.filename, file.reason) for file in result.rejected] == [
+        (utils.UNKNOWN_FILENAME, "File has no name")
+    ]
 
 
 def test_categorize_uploaded_files_uses_seek_fallback_when_upload_size_missing(
@@ -423,7 +440,7 @@ def test_categorize_text_under_token_limit_accepted(
     result = utils.categorize_uploaded_files([upload], MagicMock())
 
     assert len(result.acceptable) == 1
-    assert result.acceptable_file_to_token_count["ok.txt"] == 500
+    assert result.acceptable_token_counts == [500]
 
 
 # --- skip-indexing vs rejection by file type ---
@@ -442,7 +459,7 @@ def test_csv_over_token_threshold_accepted_skip_indexing(
 
     assert len(result.acceptable) == 1
     assert result.acceptable[0].filename == "large.csv"
-    assert "large.csv" in result.skip_indexing
+    assert result.acceptable_skip_indexing == [True]
     assert len(result.rejected) == 0
 
 
@@ -459,7 +476,7 @@ def test_csv_under_token_threshold_accepted_and_indexed(
 
     assert len(result.acceptable) == 1
     assert result.acceptable[0].filename == "small.csv"
-    assert "small.csv" not in result.skip_indexing
+    assert result.acceptable_skip_indexing == [False]
     assert len(result.rejected) == 0
 
 
@@ -546,3 +563,60 @@ def test_no_text_rejected_with_image_processing_disabled_reason(
     assert result.acceptable == []
     assert len(result.rejected) == 1
     assert "image processing is disabled" in result.rejected[0].reason
+
+
+# --- sandbox-only code files ---
+
+
+def test_sandbox_only_extensions_are_not_indexable() -> None:
+    assert not (
+        OnyxFileExtensions.SANDBOX_ONLY_EXTENSIONS
+        & OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS
+    )
+    for extension in OnyxFileExtensions.SANDBOX_ONLY_EXTENSIONS:
+        assert not is_indexable_file_type(f"file{extension}", None, True)
+
+
+@pytest.mark.parametrize(
+    "filename", ["script.py", "app.ts", "run.sh", "main.go", "__init__.py"]
+)
+def test_code_file_accepted_and_skips_indexing(
+    monkeypatch: pytest.MonkeyPatch, filename: str
+) -> None:
+    _patch_common_dependencies(monkeypatch, upload_size_mb=1000, token_threshold_k=1)
+    content = b"" if filename == "__init__.py" else b"print('hello')\n"
+
+    upload = _make_upload(filename, size=len(content), content=content)
+    result = utils.categorize_uploaded_files([upload], MagicMock())
+
+    assert [f.filename for f in result.acceptable] == [filename]
+    assert result.acceptable_skip_indexing == [True]
+    assert result.acceptable_token_counts == [len(content)]
+    assert result.rejected == []
+    assert upload.file.tell() == 0
+
+
+def test_binary_code_extension_rejected(monkeypatch: pytest.MonkeyPatch) -> None:
+    # .ts is also the MPEG transport stream extension.
+    _patch_common_dependencies(monkeypatch, upload_size_mb=1000, token_threshold_k=1)
+    content = b"\x47\x00\x01\x02\xff\xfe"
+
+    upload = _make_upload("video.ts", size=len(content), content=content)
+    result = utils.categorize_uploaded_files([upload], MagicMock())
+
+    assert result.acceptable == []
+    assert result.rejected[0].reason == "Unsupported file contents"
+
+
+def test_code_file_over_token_threshold_rejected(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    _patch_common_dependencies(monkeypatch, upload_size_mb=1000, token_threshold_k=1)
+    content = b"x" * 2000
+
+    upload = _make_upload("big.py", size=len(content), content=content)
+    result = utils.categorize_uploaded_files([upload], MagicMock())
+
+    assert result.acceptable == []
+    assert result.acceptable_skip_indexing == []
+    assert result.rejected[0].reason == "Exceeds 1K token limit"

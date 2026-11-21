@@ -29,6 +29,9 @@ from onyx.db.llm import (
     fetch_existing_llm_provider,
     fetch_user_group_ids,
 )
+from onyx.db.model_configuration import (
+    fetch_model_configuration_by_provider_id_and_name,
+)
 from onyx.db.models import Persona, User
 from onyx.db.persona import get_persona_by_id
 from onyx.db.search_settings import get_current_search_settings
@@ -101,7 +104,9 @@ def search(
     persona, persona_search_info = _load_persona(request.persona_id, user, db_session)
 
     if request.provider:
-        provider_model = fetch_existing_llm_provider(request.provider, db_session)
+        provider_model = fetch_existing_llm_provider(
+            request.provider, db_session, include_model_configurations=False
+        )
         if not provider_model:
             raise OnyxError(
                 OnyxErrorCode.NOT_FOUND,
@@ -116,10 +121,16 @@ def search(
         ):
             raise OnyxError(OnyxErrorCode.UNAUTHORIZED)
 
-        llm_provider_view = LLMProviderView.from_model(provider_model)
+        model_name = cast(str, request.model)
+        model_config = fetch_model_configuration_by_provider_id_and_name(
+            db_session, provider_model.id, model_name
+        )
         llm = llm_from_provider(
-            model_name=cast(str, request.model),
-            llm_provider=llm_provider_view,
+            model_name=model_name,
+            llm_provider=LLMProviderView.from_model(
+                provider_model,
+                model_configurations=[model_config] if model_config else [],
+            ),
         )
     elif persona is not None:
         llm = get_llm_for_persona(persona, user)
@@ -333,6 +344,9 @@ def _run_search(
                 link=entry.get("url"),
                 source_type=entry["source_type"],
                 updated_at=entry.get("updated_at"),
+                metadata=json.loads(entry["metadata"])
+                if entry.get("metadata")
+                else None,
             )
             for entry in entries
         ],

@@ -20,7 +20,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.types import Lifespan
 
 from onyx import __version__
-from onyx.auth.schemas import AuthBackend, UserCreate, UserRead, UserUpdate
+from onyx.auth.schemas import UserCreate, UserRead, UserUpdate
 from onyx.auth.users import (
     auth_backend,
     create_onyx_oauth_router,
@@ -29,7 +29,6 @@ from onyx.auth.users import (
     verify_auth_setting,
     verify_user_auth_secret,
 )
-from onyx.cache.interface import CacheBackendType
 from onyx.chat.execution import chat_turn_work
 from onyx.configs.app_configs import (
     API_SERVER_THREADPOOL_SIZE,
@@ -55,7 +54,7 @@ from onyx.configs.app_configs import (
     WEB_DOMAIN,
 )
 from onyx.configs.chat_configs import CHAT_EXECUTION_TIMEOUT_S
-from onyx.configs.constants import POSTGRES_WEB_APP_NAME
+from onyx.configs.constants import POSTGRES_WEB_APP_NAME, AuthBackend, CacheBackendType
 from onyx.db.engine.async_sql_engine import (
     get_sqlalchemy_async_engine,
     reset_sqlalchemy_async_engine,
@@ -89,6 +88,9 @@ from onyx.server.features.admin_banner.api import admin_router as admin_banner_r
 from onyx.server.features.build.api import admin_router as build_admin_router
 from onyx.server.features.build.api import router as build_router
 from onyx.server.features.build.configs import SANDBOX_RUNTIME, SandboxRuntime
+from onyx.server.features.build.scheduled_tasks.api import (
+    router as scheduled_tasks_router,
+)
 from onyx.server.features.build.static_preview import (
     public_router as static_preview_router,
 )
@@ -103,14 +105,21 @@ from onyx.server.features.input_prompt.api import (
     admin_router as admin_input_prompt_router,
 )
 from onyx.server.features.input_prompt.api import basic_router as input_prompt_router
+from onyx.server.features.integrations.admin_api import (
+    router as admin_integrations_router,
+)
+from onyx.server.features.integrations.api import (
+    action_policies_router,
+    mobile_plugins_router,
+)
+from onyx.server.features.integrations.api import router as integrations_router
+from onyx.server.features.integrations.connections_api import (
+    router as integration_connections_router,
+)
 from onyx.server.features.mcp.api import admin_router as mcp_admin_router
 from onyx.server.features.mcp.api import router as mcp_router
 from onyx.server.features.microvm.api import router as microvm_router
 from onyx.server.features.notifications.api import router as notification_router
-from onyx.server.features.oauth_config.api import (
-    admin_router as admin_oauth_config_router,
-)
-from onyx.server.features.oauth_config.api import router as oauth_config_router
 from onyx.server.features.password.api import router as password_router
 from onyx.server.features.persona.api import admin_agents_router, agents_router
 from onyx.server.features.persona.api import admin_router as admin_persona_router
@@ -118,11 +127,13 @@ from onyx.server.features.persona.api import basic_router as persona_router
 from onyx.server.features.projects.api import router as projects_router
 from onyx.server.features.search.api import router as search_api_router
 from onyx.server.features.skill.api import user_router as skill_router
+from onyx.server.features.skill.marketplace_api import (
+    router as marketplace_router,
+)
 from onyx.server.features.tool.api import admin_router as admin_tool_router
 from onyx.server.features.tool.api import router as tool_router
 from onyx.server.features.usage.api import admin_usage_router, user_usage_router
 from onyx.server.features.usage.api import router as cost_override_router
-from onyx.server.features.user_oauth_token.api import router as user_oauth_token_router
 from onyx.server.features.web_search.api import router as web_search_router
 from onyx.server.federated.api import router as federated_router
 from onyx.server.kg.api import admin_router as kg_admin_router
@@ -176,8 +187,10 @@ from onyx.server.settings.api import basic_router as settings_router
 from onyx.server.sso_discovery import router as sso_discovery_router
 from onyx.server.utils import BasicAuthenticationError
 from onyx.setup import setup_multitenant_onyx, setup_onyx
+from onyx.tools.tool_implementations.sandbox.file_copies import shutdown_file_copies
 from onyx.tracing.setup import setup_tracing
 from onyx.utils.client_ip import ClientIPMiddleware
+from onyx.utils.encryption import validate_encryption_configuration
 from onyx.utils.fleet_telemetry import start_telemetry
 from onyx.utils.logger import setup_logger, setup_uvicorn_logger
 from onyx.utils.middleware import (
@@ -466,6 +479,11 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
         except Exception:
             logger.exception("Failed to drain chat turns on shutdown")
 
+        try:
+            shutdown_file_copies()
+        except Exception:
+            logger.exception("Failed to stop chat file copies on shutdown")
+
         # Flush buffered per-user usage before disposing the DB engines its drain
         # thread writes through.
         from onyx.tracing.setup import shutdown_tracing
@@ -545,6 +563,7 @@ def log_http_error(request: Request, exc: Exception) -> JSONResponse:
 
 
 def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
+    validate_encryption_configuration()
     application = FastAPI(
         title="Onyx Backend",
         version=__version__,
@@ -562,26 +581,33 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     )
     if SENTRY_DSN:
         from onyx.configs.sentry import init_sentry
+        from onyx.utils.telemetry import get_or_generate_uuid
 
         init_sentry(
             traces_sample_rate=SENTRY_TRACES_SAMPLE_RATE,
             integrations=[StarletteIntegration(), FastApiIntegration()],
+            instance_id_resolver=get_or_generate_uuid,
         )
     else:
         logger.debug("Sentry DSN not provided, skipping Sentry initialization")
 
-    application.add_exception_handler(status.HTTP_400_BAD_REQUEST, log_http_error)
-    application.add_exception_handler(status.HTTP_401_UNAUTHORIZED, log_http_error)
-    application.add_exception_handler(status.HTTP_403_FORBIDDEN, log_http_error)
-    application.add_exception_handler(status.HTTP_404_NOT_FOUND, log_http_error)
-    application.add_exception_handler(
-        status.HTTP_500_INTERNAL_SERVER_ERROR, log_http_error
+    # http-exception: allow these register the handler that gives an
+    # HTTPException from FastAPI or a library the OnyxError body.
+    legacy_statuses = (
+        status.HTTP_400_BAD_REQUEST,
+        status.HTTP_401_UNAUTHORIZED,
+        status.HTTP_403_FORBIDDEN,
+        status.HTTP_404_NOT_FOUND,
+        status.HTTP_500_INTERNAL_SERVER_ERROR,
     )
+    for legacy_status in legacy_statuses:
+        application.add_exception_handler(legacy_status, log_http_error)
 
     register_onyx_exception_handlers(application)
 
     include_router_with_global_prefix_prepended(application, password_router)
     include_router_with_global_prefix_prepended(application, chat_router)
+    include_router_with_global_prefix_prepended(application, scheduled_tasks_router)
     include_router_with_global_prefix_prepended(application, query_router)
     include_router_with_global_prefix_prepended(application, document_router)
     include_router_with_global_prefix_prepended(application, user_router)
@@ -625,9 +651,6 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, admin_banner_router)
     include_router_with_global_prefix_prepended(application, tool_router)
     include_router_with_global_prefix_prepended(application, admin_tool_router)
-    include_router_with_global_prefix_prepended(application, oauth_config_router)
-    include_router_with_global_prefix_prepended(application, admin_oauth_config_router)
-    include_router_with_global_prefix_prepended(application, user_oauth_token_router)
     include_router_with_global_prefix_prepended(application, state_router)
     include_router_with_global_prefix_prepended(application, onyx_api_router)
     include_router_with_global_prefix_prepended(application, settings_router)
@@ -659,7 +682,15 @@ def get_application(lifespan_override: Lifespan | None = None) -> FastAPI:
     include_router_with_global_prefix_prepended(application, federated_router)
     include_router_with_global_prefix_prepended(application, mcp_router)
     include_router_with_global_prefix_prepended(application, mcp_admin_router)
+    include_router_with_global_prefix_prepended(application, integrations_router)
+    include_router_with_global_prefix_prepended(application, admin_integrations_router)
+    include_router_with_global_prefix_prepended(
+        application, integration_connections_router
+    )
+    include_router_with_global_prefix_prepended(application, action_policies_router)
+    include_router_with_global_prefix_prepended(application, mobile_plugins_router)
     include_router_with_global_prefix_prepended(application, skill_router)
+    include_router_with_global_prefix_prepended(application, marketplace_router)
 
     include_router_with_global_prefix_prepended(application, pat_router)
     include_router_with_global_prefix_prepended(application, captcha_router)
