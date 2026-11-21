@@ -101,6 +101,17 @@ async def test_verified_email_is_returned() -> None:
 
 
 @pytest.mark.asyncio
+@pytest.mark.parametrize("required", [False, True])
+async def test_cognito_string_true_claim_accepted(required: bool) -> None:
+    # Amazon Cognito's userinfo endpoint returns email_verified as a string.
+    client = _build_client(_discovery(), require_verified_email=required)
+    _with_userinfo(
+        client, {"sub": "s1", "email": "bob@companyb.com", "email_verified": "true"}
+    )
+    assert await client.get_id_email("tok") == ("s1", "bob@companyb.com")
+
+
+@pytest.mark.asyncio
 async def test_explicitly_unverified_email_rejected() -> None:
     client = _build_client(_discovery())
     _with_userinfo(
@@ -127,7 +138,7 @@ async def test_absent_verified_claim_rejected_when_required() -> None:
 
 @pytest.mark.asyncio
 @pytest.mark.parametrize("required", [False, True])
-@pytest.mark.parametrize("claim", [False, "true", "false", 1, None])
+@pytest.mark.parametrize("claim", [False, "false", "True", "1", 1, None])
 async def test_present_non_true_claim_rejected_in_both_modes(
     required: bool, claim: Any
 ) -> None:
