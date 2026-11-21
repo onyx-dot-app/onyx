@@ -41,7 +41,7 @@ _PAGING_PROGRAM_ID = "call_pg_paging_program"
 
 def _search_tool_id(admin_user: DATestUser) -> int:
     """postgres_query comes with internal search, which is offered only when a
-    non-default connector exists."""
+    non-default connector exists. Call it after the test creates its own."""
     tool = ToolManager.get_by_in_code_id(
         "SearchTool", user_performing_action=admin_user
     )
@@ -71,13 +71,13 @@ def test_postgres_tool_counts_documents(
     admin_user: DATestUser, mock_llm: MockLLMScript
 ) -> None:
     tag = uuid4().hex[:8]
-    search_tool_id = _search_tool_id(admin_user)
 
     api_key = APIKeyManager.create(user_performing_action=admin_user)
     cc_pair = CCPairManager.create_from_scratch(
         source=DocumentSource.INGESTION_API,
         user_performing_action=admin_user,
     )
+    search_tool_id = _search_tool_id(admin_user)
     for i in range(2):
         # Doc ids surface in the title: "Test Document pgtool-<tag>-<i>"
         DocumentManager.seed_doc_with_content(
@@ -114,10 +114,10 @@ def test_postgres_tool_counts_documents(
 def test_postgres_tool_chat_history_is_user_scoped(
     admin_user: DATestUser, basic_user: DATestUser, mock_llm: MockLLMScript
 ) -> None:
-    search_tool_id = _search_tool_id(admin_user)
     CCPairManager.create_from_scratch(
         source=DocumentSource.INGESTION_API, user_performing_action=admin_user
     )
+    search_tool_id = _search_tool_id(admin_user)
     secret = f"zanzibar-{uuid4().hex[:8]}"
     codeword_message = f"Note this codeword for later: {secret}"
     history_query: dict[str, str | bool] = {
@@ -180,7 +180,6 @@ def test_postgres_tool_respects_agent_document_sets(
 ) -> None:
     """An agent limited to a document set counts only the documents in it."""
     tag = uuid4().hex[:8]
-    search_tool_id = _search_tool_id(admin_user)
 
     api_key = APIKeyManager.create(user_performing_action=admin_user)
     cc_pairs = [
@@ -190,6 +189,7 @@ def test_postgres_tool_respects_agent_document_sets(
         )
         for _ in range(2)
     ]
+    search_tool_id = _search_tool_id(admin_user)
     for i, cc_pair in enumerate(cc_pairs):
         DocumentManager.seed_doc_with_content(
             cc_pair=cc_pair,
@@ -253,13 +253,13 @@ def test_postgres_tool_pages_through_every_document_in_a_program(
     admin_user: DATestUser, mock_llm: MockLLMScript
 ) -> None:
     tag = uuid4().hex[:8]
-    search_tool_id = _search_tool_id(admin_user)
 
     api_key = APIKeyManager.create(user_performing_action=admin_user)
     cc_pair = CCPairManager.create_from_scratch(
         source=DocumentSource.INGESTION_API,
         user_performing_action=admin_user,
     )
+    search_tool_id = _search_tool_id(admin_user)
     for i in range(3):
         DocumentManager.seed_doc_with_content(
             cc_pair=cc_pair,
