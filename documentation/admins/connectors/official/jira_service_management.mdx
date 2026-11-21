@@ -1,0 +1,63 @@
+---
+title: "Jira Service Management"
+description: "Access customer requests, incidents, and tickets from Jira Service Management"
+---
+
+## How it works
+
+The Jira Service Management (JSM) connector indexes customer requests, incidents, service changes, and problems from the service desk projects you select.
+Onyx checks Jira Service Management for new and updated tickets on the connector's refresh schedule.
+
+For every Jira Service Management ticket, this connector pulls:
+
+- Request Summary / Title
+- Description and request details
+- Status, Priority, and Request Type
+- Reporter, Assignee, and Organizations
+- Public comments and internal work notes
+
+The connector indexes only the content that its service desk account can access.
+An API token or Personal Access Token (PAT) inherits the permissions of the configured account.
+
+## Jira Cloud setup
+
+Jira Cloud sites are hosted by Atlassian with URLs ending in `atlassian.net`.
+Jira Cloud uses the modern `/rest/api/3/search/jql` search endpoint with cursor-based `nextPageToken` pagination.
+
+### 1. Choose a connector account
+
+Use a dedicated service account with access to the Jira Service Management project or portal.
+Ensure the account has permissions to view customer requests in your service desk queues.
+
+### 2. Generate an Atlassian API Token
+
+1. Sign in to [Atlassian API Tokens](https://id.atlassian.com/manage-profile/security/api-tokens) with the connector account.
+2. Select **Create API token**.
+3. Label the token (e.g. `Onyx JSM Connector`) and copy the token value.
+
+### 3. Configure the Connector in Onyx
+
+Provide the following configuration values:
+
+- **Jira Base URL**: Your Cloud site URL (e.g., `https://your-company.atlassian.net`).
+- **User Email**: The email address of the Atlassian account that generated the token.
+- **API Token**: The API token generated in the previous step.
+- **Project Key**: The service desk project key (e.g., `ITSM`, `HELP`, `OPS`).
+- **Optional JQL Filter**: Optional JQL expression to refine indexed tickets (e.g., `statusCategory != Done`).
+
+## Jira Data Center / Server setup
+
+For self-hosted Jira Data Center or Server instances, the connector communicates via `/rest/api/2/search` with offset pagination.
+
+### 1. Generate a Personal Access Token (PAT)
+
+1. In your Jira Data Center instance, select your profile avatar in the upper right and choose **Profile**.
+2. Select **Personal Access Tokens**.
+3. Select **Create token**, label it `Onyx Connector`, and copy the token.
+
+### 2. Configure the Connector in Onyx
+
+- **Jira Base URL**: Your instance URL (e.g., `https://jira.yourdomain.com`).
+- **Personal Access Token**: Enter the PAT in the API token field.
+- **User Email**: Leave empty for Bearer token authentication.
+- **Project Key**: The target service desk project key.
