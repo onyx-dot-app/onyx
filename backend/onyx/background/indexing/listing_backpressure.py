@@ -6,7 +6,9 @@ download link expires after about one hour), and the backlog fills the stub
 store. So, at an interval, the listing compares the backlog of its attempt
 with the rate at which conversion drained it recently. When the backlog needs
 more than ``LISTING_BACKPRESSURE_TARGET_SECONDS`` to drain, the listing pauses
-for the difference, at most ``LISTING_BACKPRESSURE_MAX_PAUSE_SECONDS``.
+in steps of the check interval. After each step it measures again, and the
+pause ends when the drain time is under the target, or after
+``LISTING_BACKPRESSURE_MAX_PAUSE_SECONDS`` in all.
 
 It pauses only when conversion is fast: at or above
 ``LISTING_BACKPRESSURE_MIN_DRAIN_DOCS_PER_MINUTE``. Slow conversion usually
@@ -14,7 +16,8 @@ means that other connectors load the conversion workers. Then the extra source
 calls of stale stubs (for SharePoint, 1 RU for each Graph ``/content``
 fallback) are few, and a pause only makes the run longer. It also pauses only
 after conversion converted ``LISTING_BACKPRESSURE_WARMUP_BATCHES`` batches of
-the attempt, so a cold start gives no rate.
+the attempt. The rate counts only the batches converted after that point, so
+the slow start of conversion is not in the rate.
 
 The pause is flow control, not a time limit. The docfetching heartbeat runs in
 its own thread, so the watchdog sees the attempt alive during a pause, and the
@@ -29,7 +32,10 @@ from onyx.configs.app_configs import INDEX_BATCH_SIZE
 from onyx.configs.constants import DocumentSource
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.indexing_coordination import IndexingCoordination, StubBatchProgress
-from onyx.server.metrics.listing_backpressure_metrics import record_listing_pause
+from onyx.server.metrics.listing_backpressure_metrics import (
+    record_listing_pause,
+    record_listing_paused_seconds,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -77,7 +83,7 @@ class ListingBackpressure:
         self._samples: deque[tuple[float, int]] = deque()
 
     def maybe_pause(self, raise_if_stopped: Callable[[], None]) -> float:
-        """Checks the backlog when the interval has passed, and pauses when
+        """Checks the backlog when the interval has passed, and pauses while
         conversion is far behind. Returns the seconds paused.
         ``raise_if_stopped`` raises when the attempt must stop; a pause calls
         it at each poll and lets its exception through."""
@@ -88,7 +94,33 @@ class ListingBackpressure:
         ):
             return 0.0
         self._last_check = now
+        over_target = self._seconds_over_target(now)
+        if over_target <= 0:
+            return 0.0
 
+        record_listing_pause(self._source.value)
+        paused = 0.0
+        while over_target > 0 and paused < LISTING_BACKPRESSURE_MAX_PAUSE_SECONDS:
+            step = min(
+                LISTING_BACKPRESSURE_CHECK_INTERVAL_SECONDS,
+                over_target,
+                LISTING_BACKPRESSURE_MAX_PAUSE_SECONDS - paused,
+            )
+            paused += self._pause(step, raise_if_stopped)
+            over_target = self._seconds_over_target(time.monotonic())
+        logger.info(
+            "Listing paused for conversion: attempt=%s source=%s paused_s=%.0f",
+            self._index_attempt_id,
+            self._source.value,
+            paused,
+        )
+        # The next check is one interval after the pause.
+        self._last_check = time.monotonic()
+        return paused
+
+    def _seconds_over_target(self, now: float) -> float:
+        """Reads the attempt's progress and returns how much longer than the
+        target the backlog needs to drain, or 0 for no pause."""
         progress = _read_stub_batch_progress(self._index_attempt_id)
         stored, converted = progress.stored, progress.converted
         if self._first_converted is None:
@@ -96,6 +128,10 @@ class ListingBackpressure:
         if self._first_stored is None:
             self._first_stored = (stored, progress.stored_documents)
         first_stored, first_documents = self._first_stored
+        if converted - self._first_converted < LISTING_BACKPRESSURE_WARMUP_BATCHES:
+            return 0.0
+        # The first sample after the warm-up is the baseline, so the batches
+        # of the warm-up are not in the rate.
         self._samples.append((now, converted))
         # The baseline is the newest sample at or before the window start,
         # so a check after a long step still has a rate.
@@ -108,12 +144,7 @@ class ListingBackpressure:
         elapsed = now - first_time
         drained = converted - first_converted
         backlog = stored - converted
-        if (
-            converted - self._first_converted < LISTING_BACKPRESSURE_WARMUP_BATCHES
-            or elapsed <= 0
-            or drained <= 0
-            or backlog <= 0
-        ):
+        if elapsed <= 0 or drained <= 0 or backlog <= 0:
             return 0.0
 
         drain_rate = drained / elapsed
@@ -134,37 +165,25 @@ class ListingBackpressure:
         ):
             return 0.0
         drain_seconds = backlog / drain_rate
-        if drain_seconds <= LISTING_BACKPRESSURE_TARGET_SECONDS:
-            return 0.0
-        pause = min(
-            drain_seconds - LISTING_BACKPRESSURE_TARGET_SECONDS,
-            LISTING_BACKPRESSURE_MAX_PAUSE_SECONDS,
-        )
-        logger.info(
-            "Listing paused for conversion: attempt=%s source=%s "
-            "backlog_batches=%s drain_batches_per_min=%.2f drain_min=%.1f "
-            "pause_s=%.0f",
+        logger.debug(
+            "Listing backlog: attempt=%s backlog_batches=%s "
+            "drain_batches_per_min=%.2f drain_min=%.1f",
             self._index_attempt_id,
-            self._source.value,
             backlog,
             drain_rate * 60,
             drain_seconds / 60,
-            pause,
         )
-        paused = self._pause(pause, raise_if_stopped)
-        # The next check is one interval after the pause.
-        self._last_check = time.monotonic()
-        return paused
+        return max(0.0, drain_seconds - LISTING_BACKPRESSURE_TARGET_SECONDS)
 
     def _pause(self, seconds: float, raise_if_stopped: Callable[[], None]) -> float:
-        start = time.monotonic()
-        try:
-            while True:
-                raise_if_stopped()
-                remaining = seconds - (time.monotonic() - start)
-                if remaining <= 0:
-                    break
-                time.sleep(min(LISTING_BACKPRESSURE_POLL_SECONDS, remaining))
-        finally:
-            record_listing_pause(self._source.value, time.monotonic() - start)
-        return time.monotonic() - start
+        """Sleeps for one step and adds each poll's time to the metric. The
+        polls add up to the step, so the step always ends."""
+        slept = 0.0
+        while True:
+            raise_if_stopped()
+            if slept >= seconds:
+                return slept
+            poll = min(LISTING_BACKPRESSURE_POLL_SECONDS, seconds - slept)
+            time.sleep(poll)
+            slept += poll
+            record_listing_paused_seconds(self._source.value, poll)

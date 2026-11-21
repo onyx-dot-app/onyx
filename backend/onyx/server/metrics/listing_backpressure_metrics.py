@@ -20,7 +20,12 @@ LISTING_BACKPRESSURE_PAUSED_SECONDS = Counter(
 )
 
 
-def record_listing_pause(source: str, seconds: float) -> None:
+def record_listing_pause(source: str) -> None:
+    """Counts one pause, when it starts."""
     LISTING_BACKPRESSURE_PAUSES.labels(source=source).inc()
+
+
+def record_listing_paused_seconds(source: str, seconds: float) -> None:
+    """Adds paused time as the pause goes, so a long pause shows at once."""
     if seconds > 0:
         LISTING_BACKPRESSURE_PAUSED_SECONDS.labels(source=source).inc(seconds)
