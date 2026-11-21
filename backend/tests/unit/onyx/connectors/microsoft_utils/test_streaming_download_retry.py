@@ -28,6 +28,7 @@ from onyx.connectors.microsoft_utils.drive_items import (
     redact_url_for_logging,
     scrub_url_credentials,
 )
+from onyx.connectors.microsoft_utils.request_pacer import MicrosoftCall
 
 CAP = 10 * 1024 * 1024  # 10 MiB cap; well above the byte payloads used in tests
 
@@ -452,7 +453,11 @@ def test_a_throttled_download_url_reports_waits_and_retries_the_link(
         for call in mock_get.call_args_list
     )
     assert mock_time.sleep.call_args.args == (9,)
-    assert pacer.report_response.call_args_list[0].args == (status, "9")
+    assert pacer.report_response.call_args_list[0].args == (
+        status,
+        "9",
+        MicrosoftCall.LINK_DOWNLOAD,
+    )
 
 
 @patch("onyx.connectors.microsoft_utils.drive_items.time")
