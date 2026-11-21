@@ -147,7 +147,10 @@ pub fn open(app: &AppHandle, server: &str) -> Result<(), String> {
                 return;
             }
             let Some(window) = app.get_webview_window(LABEL) else {
-                return; // closed by the user
+                // Closed by the user, also before the close listener was in place.
+                #[cfg(not(target_os = "macos"))]
+                show_login(&app);
+                return;
             };
             let Ok(cookie_name) = state.cookie_name(&server).await else {
                 continue; // retried on the next poll

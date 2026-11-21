@@ -203,7 +203,7 @@ pub fn route_to(app: &AppHandle, path: &str) {
         return;
     };
     let Some(token) = state.token(&server) else {
-        let _ = open_login(app);
+        show_sign_in(app);
         return;
     };
     let app = app.clone();
@@ -282,13 +282,50 @@ pub(crate) fn show_offline(
 }
 
 /// Dock click, tray "Open Onyx" and second launches.
+/// The windows that `show_primary` brings forward, first match wins. The main
+/// window is hidden while the offline window shows. Off macOS, the web sign-in
+/// window stands in for the login window, which it hides.
+#[cfg(target_os = "macos")]
+const PRIMARY: [&str; 4] = [OFFLINE, main_window::LABEL, ONBOARDING, LOGIN];
+#[cfg(not(target_os = "macos"))]
+const PRIMARY: [&str; 5] = [
+    OFFLINE,
+    main_window::LABEL,
+    ONBOARDING,
+    crate::sso::LABEL,
+    LOGIN,
+];
+
+/// Brings the login window forward, or off macOS the web sign-in window that
+/// hides it.
+fn show_sign_in(app: &AppHandle) {
+    #[cfg(not(target_os = "macos"))]
+    if let Some(window) = app.get_webview_window(crate::sso::LABEL) {
+        bring_forward(app, &window);
+        return;
+    }
+    let _ = open_login(app);
+}
+
 pub fn show_primary(app: &AppHandle) {
-    // The main window is hidden while the offline window shows.
-    for label in [OFFLINE, main_window::LABEL, ONBOARDING, LOGIN] {
+    for label in PRIMARY {
         if let Some(window) = app.get_webview_window(label) {
             bring_forward(app, &window);
             return;
         }
     }
     route(app);
+}
+
+#[cfg(all(test, not(target_os = "macos")))]
+mod tests {
+    use super::{LOGIN, PRIMARY};
+
+    #[test]
+    fn reopening_shows_the_web_sign_in_window_before_login() {
+        let position = |label: &str| PRIMARY.iter().position(|l| *l == label);
+        let web = position(crate::sso::LABEL).expect("the web sign-in window is primary");
+        let login = position(LOGIN).expect("login is primary");
+        assert!(web < login);
+    }
 }
