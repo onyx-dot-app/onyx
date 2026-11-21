@@ -1,6 +1,6 @@
 import re
 from collections.abc import Iterator
-from typing import Any, cast
+from typing import Any
 
 from google.auth.exceptions import RefreshError
 from google.auth.transport.requests import Request
@@ -16,8 +16,8 @@ from onyx.connectors.google_utils.resources import (
     AdminService,
     GoogleService,
     GroupsSettingsService,
-    build_google_service,
     get_google_service,
+    get_impersonated_creds,
 )
 from onyx.connectors.google_utils.shared_constants import MISSING_SCOPES_ERROR_STR
 from onyx.utils.logger import setup_logger
@@ -44,20 +44,16 @@ def build_groups_settings_service(
 
     # Requested alone: Google rejects a whole token request when domain-wide
     # delegation lacks one of its scopes.
-    settings_creds = creds.with_scopes([GROUPS_SETTINGS_SCOPE]).with_subject(
-        primary_admin_email
-    )
+    settings_creds = creds.with_scopes([GROUPS_SETTINGS_SCOPE])
     try:
-        settings_creds.refresh(Request())
+        get_impersonated_creds(settings_creds, primary_admin_email).refresh(Request())
     except RefreshError as e:
         if MISSING_SCOPES_ERROR_STR not in str(e):
             raise
         return None
 
-    # googleapiclient is untyped, so the client's type is asserted here.
-    return cast(
-        GroupsSettingsService,
-        build_google_service(GoogleService.GROUPS_SETTINGS, settings_creds),
+    return get_google_service(
+        GoogleService.GROUPS_SETTINGS, settings_creds, primary_admin_email
     )
 
 

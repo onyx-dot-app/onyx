@@ -181,6 +181,7 @@ def test_lookup_makes_no_google_call_without_listed_groups(
 
 def test_settings_service_is_unavailable_without_the_delegated_scope() -> None:
     creds = MagicMock(spec=ServiceAccountCredentials)
+    creds.with_scopes.return_value = MagicMock(spec=ServiceAccountCredentials)
     scoped_creds = creds.with_scopes.return_value.with_subject.return_value
 
     scoped_creds.refresh.side_effect = RefreshError(

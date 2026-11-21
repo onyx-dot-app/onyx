@@ -14,6 +14,7 @@ from onyx.connectors.google_utils.resources import GoogleService, get_google_ser
         (GoogleService.DRIVE, "drive", "v3"),
         (GoogleService.ADMIN, "admin", "directory_v1"),
         (GoogleService.GMAIL, "gmail", "v1"),
+        (GoogleService.GROUPS_SETTINGS, "groupssettings", "v1"),
     ],
 )
 @pytest.mark.parametrize("service_account", [False, True])
