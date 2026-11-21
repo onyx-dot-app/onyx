@@ -96,7 +96,7 @@ export default function ScheduleTaskForm({
   const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
   const { data: skillsData } = useUserSkills();
   const { entries: chatSkills, onInputFocus: onChatSkillsFocus } =
-    useChatSkills();
+    useChatSkills({ builtIns: false });
   const { data: externalAppsData } = useUserExternalApps();
   const { data: craftMcpData } = useCraftMcpServers();
   const pickerSections = useMemo(

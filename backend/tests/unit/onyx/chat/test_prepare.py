@@ -280,7 +280,9 @@ def _mock_chat_preparation(
         "onyx.chat.process_message.get_default_base_system_prompt",
         lambda *_args: "System",
     )
-    monkeypatch.setattr("onyx.chat.process_message.list_chat_skills", lambda *_args: [])
+    monkeypatch.setattr(
+        "onyx.chat.process_message.list_chat_skills", lambda *_args, **_kwargs: []
+    )
     monkeypatch.setattr(
         "onyx.chat.process_message.calculate_reserved_tokens", lambda **_kwargs: 100
     )

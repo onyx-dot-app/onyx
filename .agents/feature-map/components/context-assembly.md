@@ -87,7 +87,7 @@ compaction candidate. The list on each model call:
 ```
 [system]                    base prompt, shared user-information framing, tool guidance   stable
 [user information]          SYSTEM message: per-user block                                stable
-[skills catalog]            SYSTEM message: the user's custom skills                      stable
+[skills catalog]            SYSTEM message: the user's chat skills                        stable
 [custom agent prompt]       USER message, fixed before conversation history               stable
 [project files and images]  USER message, JSON documents and image content blocks          stable
 [conversation summary]      SYSTEM message, when a compaction checkpoint applies          stable

@@ -1,5 +1,9 @@
 """Pydantic models for sandbox module communication."""
 
+import hashlib
+import io
+import stat
+import zipfile
 from datetime import datetime
 from enum import Enum
 from typing import Literal, TypeAlias
@@ -14,6 +18,9 @@ from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
 from onyx.server.gateway.models import GatewayModelDescriptor
 
 FileSet: TypeAlias = dict[str, bytes]
+
+# Fixed zip entry times keep a skills bundle's bytes stable.
+_ZIP_EPOCH = (1980, 1, 1, 0, 0, 0)
 
 
 class SandboxResourceKind(str, Enum):
@@ -144,6 +151,27 @@ class HarnessSandboxRef(BaseModel):
     tenant_id: str
     sandbox_id: UUID
     session_id: UUID
+
+
+class SkillsBundle(BaseModel):
+    """Skill files (`<skill>/<path>` to bytes) as a zip, and its sha256."""
+
+    model_config = ConfigDict(frozen=True)
+
+    zip_bytes: bytes
+    image_id: str
+
+    @classmethod
+    def from_files(cls, files: FileSet) -> "SkillsBundle":
+        buffer = io.BytesIO()
+        with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+            for path in sorted(files):
+                info = zipfile.ZipInfo(path, _ZIP_EPOCH)
+                info.compress_type = zipfile.ZIP_DEFLATED
+                info.external_attr = (stat.S_IFREG | 0o644) << 16
+                zf.writestr(info, files[path])
+        zip_bytes = buffer.getvalue()
+        return cls(zip_bytes=zip_bytes, image_id=hashlib.sha256(zip_bytes).hexdigest())
 
 
 SandboxFileType = Literal["file", "directory", "other"]

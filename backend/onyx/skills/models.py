@@ -257,7 +257,8 @@ class CustomSkillBundleContents(BaseModel):
 
 
 class ChatSkill(BaseModel):
-    """A custom skill the user runs, at the version the user runs. Each
+    """A skill that chat offers the user: a custom skill at the version the
+    user runs, or a built-in, whose ``version_id`` is its Skill row id. Each
     description is one line: runs of whitespace become one space."""
 
     model_config = ConfigDict(frozen=True)
@@ -269,6 +270,7 @@ class ChatSkill(BaseModel):
     short_description: str | None = None
     version_id: UUID
     path: str = ""
+    built_in_skill_id: str | None = None
 
     @field_validator("description")
     @classmethod

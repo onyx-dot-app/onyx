@@ -165,7 +165,7 @@ def test_skills_list_shows_the_full_description_capped() -> None:
             return_value=skills,
         ),
     ):
-        result = SkillsListTool(User(id=uuid4()))._run(
+        result = SkillsListTool(User(id=uuid4()), built_ins=False)._run(
             ToolInvocation(
                 call_id="list",
                 arguments={},
@@ -214,7 +214,7 @@ def test_picked_skills_are_recorded_with_their_skill_messages_from_one_read() ->
     tokenizer = Mock()
     tokenizer.encode.side_effect = list
     with (
-        patch("onyx.skills.chat.read_versions_skill_md", read),
+        patch("onyx.skills.chat.read_chat_skills_md", read),
         patch("onyx.skills.chat.get_tokenizer", return_value=tokenizer),
     ):
         accepted = accept_picked_skills(
@@ -236,9 +236,9 @@ def test_picked_skills_are_recorded_with_their_skill_messages_from_one_read() ->
     # One read serves every message.
     read.assert_called_once()
     assert read.call_args.args[0] == {
-        (triage.version_id, ""),
-        (report.version_id, ""),
-        (unreadable.version_id, ""),
+        triage,
+        report,
+        unreadable,
     }
     # A repeat counts once; a skill the user cannot use or read is left out.
     assert [

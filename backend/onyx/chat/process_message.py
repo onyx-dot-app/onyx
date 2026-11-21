@@ -543,6 +543,7 @@ def prepare_chat_turn(
                 not in (MessageOrigin.SLACKBOT, MessageOrigin.DISCORDBOT)
                 and chat_session.incognito_record_mode is None
                 and len(selected_models) == 1
+                and not new_msg_req.deep_research
             )
             # The root agent can ask the user questions where approval
             # requests can wait: a signed-in user's saved, single-model turn
@@ -559,7 +560,7 @@ def prepare_chat_turn(
             )
             # One read serves the catalog's context reservation and the skills
             # that an accepted question picked.
-            chat_skills = list_chat_skills(db_session, user)
+            chat_skills = list_chat_skills(db_session, user, built_ins=sandbox_tools)
             # A question records its picks when it is accepted, after the
             # checks that can reject it; regeneration reuses the record.
             accepts_question = queued_turn is not None or (

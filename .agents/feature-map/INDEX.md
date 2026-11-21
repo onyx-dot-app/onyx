@@ -121,7 +121,7 @@ The product that runs a coding agent in a sandbox for each user.
 | [craft-webapp-proxy](components/craft-webapp-proxy.md) | Lets a user see, inside Onyx, the web app that their Craft session builds and the static HTML files it writes; it is the trust boundary between code that an LLM wrote and the viewer's browser. |
 | [craft-external-apps](components/craft-external-apps.md) | The egress proxy that every outbound request from a Craft sandbox goes through, and the external apps it gates. A request to a connected app or MCP server gets an action policy check, an approval wait for Ask actions, and the real credential; other public traffic goes out with no policy check. |
 | [craft-scheduled-tasks](components/craft-scheduled-tasks.md) | A user schedules a prompt to run on a timer. Each fire creates a new hidden chat owned by the user, runs one chat turn of the default agent with nobody watching, and records a run row that the user opens later as a chat. |
-| [skills](components/skills.md) | Agent Skills: instruction bundles that Onyx renders for each user and pushes into that user's Craft sandbox, and that chat agents list and read as custom skills. This component owns skill sharing, installation policy, per-user rendering, the hashed push and the chat skill tools. |
+| [skills](components/skills.md) | Agent Skills: instruction bundles that Onyx renders for each user and pushes into that user's Craft sandbox, and that chat agents list and read (custom skills, and on a deployment with chat VMs the chat built-ins). This component owns skill sharing, installation policy, per-user rendering, the hashed push and the chat skill tools. |
 
 ---
 

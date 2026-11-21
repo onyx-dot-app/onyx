@@ -78,9 +78,9 @@ jest.mock("@/lib/skills/hooks", () => {
     );
   return {
     ...actual,
-    useChatSkills: () =>
+    useChatSkills: (options: { builtIns: boolean }) =>
       mockChatSkills === null
-        ? actual.useChatSkills()
+        ? actual.useChatSkills(options)
         : { entries: mockChatSkills, onInputFocus: () => undefined },
   };
 });
@@ -430,6 +430,7 @@ describe("`@` skill mentions", () => {
           description: "Review code",
           short_description: null,
           version_id: "v1",
+          built_in_skill_id: null,
         },
       ];
       await act(async () => {
@@ -474,7 +475,7 @@ describe("`@` skill mentions", () => {
       .spyOn(global, "fetch")
       .mockImplementation(() => response.promise);
     try {
-      const { result } = renderHook(() => useChatSkills(), {
+      const { result } = renderHook(() => useChatSkills({ builtIns: true }), {
         wrapper: ({ children }) => (
           <SWRConfig value={{ provider: () => new Map() }}>
             {children}
@@ -500,12 +501,14 @@ describe("`@` skill mentions", () => {
         description: "Review code for bugs, style and missing tests",
         short_description: "Review code",
         version_id: "v1",
+        built_in_skill_id: null,
       },
       {
         name: "commit-message",
         description: "Write a commit message",
         short_description: null,
         version_id: "v2",
+        built_in_skill_id: null,
       },
     ];
     const fetchSpy = jest
@@ -528,6 +531,50 @@ describe("`@` skill mentions", () => {
       fetchSpy.mockRestore();
     }
   });
+
+  test.each([
+    [false, true],
+    [true, false],
+  ])(
+    "with incognito %s, the picker offers built-ins: %s",
+    async (incognito, offersBuiltIns) => {
+      mockChatSkills = null;
+      mockIncognitoEnabled = incognito;
+      const skills: ChatSkill[] = [
+        {
+          name: "pptx",
+          description: "Make decks",
+          short_description: null,
+          version_id: "b1",
+          built_in_skill_id: "pptx",
+        },
+        {
+          name: "plan",
+          description: "Plan work",
+          short_description: null,
+          version_id: "v1",
+          built_in_skill_id: null,
+        },
+      ];
+      const fetchSpy = jest
+        .spyOn(global, "fetch")
+        .mockImplementation(async () => new Response(JSON.stringify(skills)));
+      try {
+        render(<Composer />);
+        const user = setupUser();
+        await user.type(screen.getByRole("textbox"), "use @p");
+
+        await screen.findByTestId("skill-picker-row-plan");
+        if (offersBuiltIns) {
+          expect(screen.getByTestId("skill-picker-row-pptx")).toBeVisible();
+        } else {
+          expect(screen.queryByTestId("skill-picker-row-pptx")).toBeNull();
+        }
+      } finally {
+        fetchSpy.mockRestore();
+      }
+    }
+  );
 
   test("at the mention limit, it offers only the skills already picked", async () => {
     const names = Array.from(

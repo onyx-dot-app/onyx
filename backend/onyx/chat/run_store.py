@@ -139,6 +139,7 @@ from onyx.skills.chat import accept_picked_skills
 from onyx.tools.constants import QUESTION_TOOL_NAMES, SPAWN_AGENT_TOOL_NAME
 from onyx.tools.interface import Tool
 from onyx.tools.models import ToolApprovalScope, ToolOptions
+from onyx.tools.tool_implementations.sandbox.sandbox_tools import SandboxTool
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 
@@ -452,6 +453,7 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
         self._capped_runs: set[str] = set()
         # Saved child tool calls link to these tool rows by name.
         self._tool_ids = {tool.name: tool.id for tool in tools}
+        self._sandbox_tools = any(isinstance(tool, SandboxTool) for tool in tools)
         self.chat_session_id = chat_session_id
         self.response_id = response_id
         # Branch IDs stay newest first, as the branch queries order them.
@@ -693,7 +695,12 @@ class ChatRunStore(RunStore, RunOwnership, AgentDirectory, ToolApprovals):
             ]
             accepted = (
                 accept_picked_skills(
-                    picks, list_chat_skills(session, self._user), self._user.id, session
+                    picks,
+                    list_chat_skills(
+                        session, self._user, built_ins=self._sandbox_tools
+                    ),
+                    self._user.id,
+                    session,
                 )
                 if any(picks)
                 else [AcceptedPicks() for _ in received]

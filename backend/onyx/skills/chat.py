@@ -21,7 +21,7 @@ from onyx.prompts.skill_prompts import (
     SKILLS_CATALOG_PROMPT,
     SKILLS_OMITTED_LINE,
 )
-from onyx.skills.content import read_versions_skill_md
+from onyx.skills.content import read_chat_skills_md
 from onyx.skills.models import ChatSkill
 
 # Codex limits: the catalog's skill lines use at most 2% of the context
@@ -153,9 +153,9 @@ def accept_picked_skills(
     read, is left out, so the message does not apply it; a repeated pick
     counts once."""
     by_name = {skill.name: skill for skill in skills}
-    readable = read_versions_skill_md(
+    readable = read_chat_skills_md(
         {
-            (by_name[mention.name].version_id, by_name[mention.name].path)
+            by_name[mention.name]
             for mentions in picks
             for mention in mentions
             if mention.name in by_name

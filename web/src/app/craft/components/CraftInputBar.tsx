@@ -149,7 +149,7 @@ const CraftInputBar = memo(
 
       const { data: skillsData } = useUserSkills();
       const { entries: chatSkills, onInputFocus: onChatSkillsFocus } =
-        useChatSkills();
+        useChatSkills({ builtIns: false });
       const { data: appsData } = useUserExternalApps();
       const { data: craftMcpData } = useCraftMcpServers();
       const pickerSections = useMemo(

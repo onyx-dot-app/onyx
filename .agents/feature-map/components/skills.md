@@ -1,6 +1,6 @@
 # Skills
 
-> Agent Skills: instruction bundles that Onyx renders for each user and pushes into that user's Craft sandbox, and that chat agents list and read as custom skills. This component owns skill sharing, installation policy, per-user rendering, the hashed push and the chat skill tools.
+> Agent Skills: instruction bundles that Onyx renders for each user and pushes into that user's Craft sandbox, and that chat agents list and read (custom skills, and on a deployment with chat VMs the chat built-ins). This component owns skill sharing, installation policy, per-user rendering, the hashed push and the chat skill tools.
 
 **Verified against:** `73e0ae3c31` (2026-10-28)
 **Edition:** CE. Group shares need the EE group tables.
@@ -13,8 +13,8 @@
   `sections/customize/CustomizeSkillsPage.tsx`; Craft is not needed, and
   `/craft/v1/skills*` redirect here with their query). The groups are Created by
   you (owner is the user), From your organization (published), Shared with you,
-  and Built-in, which shows only with Craft on, as `list_chat_skills` leaves
-  built-ins out of chat (`lib/customize/skills.ts:groupSkills`). A row has the
+  and Built-in, which shows only with Craft on
+  (`lib/customize/skills.ts:groupSkills`). A row has the
   tag Disabled, Required, Pending review or Unpublished changes, the date, Turn
   on, and a menu (Turn on/off, Share, Remove). Add has Upload skill and Create a
   skill (`/app/customize/skills/new`); GitHub skills come in through a
@@ -164,7 +164,9 @@
   of sharing settings for the selection. The single-skill editor accepts
   sharing before creation. These use the same sharing checks as later edits.
 - **In chat**, the agent sees the names and descriptions of the user's
-  enabled custom skills. In this catalog, a skill's
+  enabled custom skills and, when the turn has the sandbox tools, the
+  available chat built-ins (`skills/built_in.py:CHAT_BUILT_IN_SKILL_IDS`:
+  pptx, and browser with `ENABLE_BROWSER`). In this catalog, a skill's
   `metadata.short-description` replaces its description when it has one;
   `skills_list` shows the full description. The agent reads a skill's
   SKILL.md with `skills_read` when the task matches. Deep Research and its
@@ -174,11 +176,24 @@
   accepted, at the version the user ran. A SKILL.md over 8,000 bytes is cut
   there, with a note that tells the model to continue with `skills_read`. History keeps that text, so a later edit, a deletion or lost access
   does not change what earlier turns see. A skill that cannot be read when
-  the message is accepted is not applied. Built-in skills
-  do not reach chat, because they need the Craft sandbox. Chat cannot open a skill's other files or run its scripts.
+  the message is accepted is not applied. A chat built-in's SKILL.md
+  starts with a `Skill files:` line that names its folder in the chat VM
+  (`/mnt/skills/<name>/`, read-only and noexec), where the model reads its
+  other files and runs its scripts through their interpreter with the
+  sandbox tools ([[craft-sandboxes]]). Chat cannot open the other files of a
+  custom skill or run its scripts. App built-ins, company-search,
+  image-generation and craft-documentation stay out of chat.
+  A built-in is a built-in plugin in code (`BuiltInSkillDefinition.skills`):
+  one skill with SKILL.md at its root, or one skill per
+  `skills/<name>/SKILL.md`, as in an uploaded plugin version. Each skill of a
+  built-in plugin is one chat skill, and the push puts each skill in its own
+  folder. Built-ins have no plugin rows; their `ChatSkill.version_id` is the
+  `skill` row id, with `built_in_skill_id` set.
   In the chat input, `@` at the start of a word opens a picker of these
   skills, with a **Manage skills** row that opens Customize → Skills (`lib/skills/hooks.ts:useChatSkills`, from `GET /api/skills/chat`),
-  filtered by name prefix without case. A row shows the skill's short
+  filtered by name prefix without case. In an incognito, multi-model or
+  Deep Research chat the picker leaves built-ins out (`useChatSkills({ builtIns })`).
+  A row shows the skill's short
   description when it has one, else its description. A skill change in the
   library, the skill editor, a plugin's Skills tab or a Craft app connection
   fetches the list again (`lib/skills/cache.ts:refreshSkillLists`). Other
@@ -324,7 +339,7 @@ plugin required for the user, then a published one, then the user's own,
 then a shared one. The older plugin (`plugin.created_at`, then id) wins a
 tie. It returns the one set of plugins that lose a name: they do not load and
 show as off. Only skills that can run take part, and the names of the
-built-in skills the user gets are reserved. The toggle and the auto-enable
+built-in skills the user gets, and of their nested skills, are reserved. The toggle and the auto-enable
 count a conflict by the same rule (`db/skill.py:_UserSkillSelection.other_skills_named`).
 
 **Two hashes.** `compute_skill_runtime_hash` is a SHA-256 over every rendered
@@ -349,8 +364,9 @@ chat gets: the custom skills the sandbox loads for the user
 (`_UserSkillSelection.loaded`, the same selection as
 `list_runtime_skills_for_user`: install settings, the user's choice, the name
 order and a version that is not invalid), with the name, description,
-`metadata.short-description` and id of the version the user runs. Anonymous
-users get none. `chat/process_message.py:prepare_chat_turn` reads it for the
+`metadata.short-description` and id of the version the user runs. With
+`built_ins`, it also lists `list_chat_built_in_skills`, the same rows the
+sandbox mounts; they do not depend on the user. Anonymous users get none. `chat/process_message.py:prepare_chat_turn` reads it for the
 turn's picks and reservation, each agent reads it once when it is built (for
 its catalog), each skill tool call reads it, and so does each accepted
 mid-run message with picks. The `@` picker reads it through

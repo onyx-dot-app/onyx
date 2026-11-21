@@ -2,6 +2,7 @@
 
 import hashlib
 from collections.abc import Iterable
+from functools import cache
 from typing import Literal
 from uuid import UUID
 
@@ -24,6 +25,7 @@ from onyx.db.skill import (
     RuntimeSkill,
     RuntimeSkillFolder,
     SkillValidityUpdate,
+    list_chat_built_in_skills,
     list_runtime_skills_for_user,
     persist_skill_validity,
 )
@@ -35,7 +37,7 @@ from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.image.sandbox_daemon.extract import (
     MAX_FILE_BYTES,
 )
-from onyx.server.features.build.sandbox.models import FileSet
+from onyx.server.features.build.sandbox.models import FileSet, SkillsBundle
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     build_connectable_apps_list,
 )
@@ -128,15 +130,18 @@ class UserSkillsPayload(BaseModel):
 
 
 def _add_static_builtin(
-    files: FileSet, name: str, definition: BuiltInSkillDefinition
+    files: FileSet,
+    folders: Iterable[RuntimeSkillFolder],
+    definition: BuiltInSkillDefinition,
 ) -> None:
     source_dir = definition.source_dir
     for path in iter_builtin_skill_files(source_dir):
         # Template sources are rendered separately; never ship them raw.
         if path.suffix == TEMPLATE_SUFFIX:
             continue
-        rel = path.relative_to(source_dir)
-        files[f"{name}/{rel.as_posix()}"] = path.read_bytes()
+        sandbox_path = _sandbox_path(path.relative_to(source_dir).as_posix(), folders)
+        if sandbox_path is not None:
+            files[sandbox_path] = path.read_bytes()
 
 
 def _render_template(
@@ -369,7 +374,7 @@ def _assemble_skills(
                     runtime_skill.built_in_skill_id,
                 )
                 continue
-            _add_static_builtin(skill_files, runtime_skill.name, definition)
+            _add_static_builtin(skill_files, folders, definition)
             if definition.has_template:
                 _render_template(
                     skill_files, runtime_skill, definition, db_session, user
@@ -438,6 +443,35 @@ def build_user_skills_payload(user: User, db_session: Session) -> UserSkillsPayl
 def build_skills_fileset_for_user(user: User, db_session: Session) -> FileSet:
     """Return the skill files a sandbox of the user gets."""
     return build_user_skills_payload(user, db_session).files
+
+
+def build_chat_built_ins_bundle(db_session: Session) -> SkillsBundle | None:
+    """The chat built-ins as one bundle, or None when none is available."""
+    skills = list_chat_built_in_skills(db_session)
+    if not skills:
+        return None
+    return _chat_built_ins_bundle(
+        tuple(
+            (skill.built_in_skill_id or "", skill.name, skill.plugin_skills)
+            for skill in skills
+        )
+    )
+
+
+@cache
+def _chat_built_ins_bundle(
+    skills: tuple[tuple[str, str, tuple[RuntimeSkillFolder, ...]], ...],
+) -> SkillsBundle:
+    # Keyed without row ids, so tenants with the same built-ins share one
+    # bundle. Chat built-ins have no template, so no file depends on the user.
+    files: FileSet = {}
+    for built_in_skill_id, name, folders in skills:
+        _add_static_builtin(
+            files,
+            folders or (RuntimeSkillFolder(path="", name=name),),
+            BUILT_IN_SKILLS[built_in_skill_id],
+        )
+    return SkillsBundle.from_files(files)
 
 
 def push_skill_to_affected_sandboxes(skill: Plugin, db_session: Session) -> None:

@@ -11,7 +11,7 @@ Call Linear as the connected user via the bundled helper.
 
 ## Usage
 
-    python .opencode/skills/linear/linear_api.py <command> [args]
+    python /mnt/skills/linear/linear_api.py <command> [args]
 
 Read commands auto-paginate and prune empty fields. `create-issue` and
 `comment` are the only writes. Use `--raw` to skip empty-field pruning;

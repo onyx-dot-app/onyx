@@ -24,6 +24,8 @@ from onyx.skills.models import (
     SkillMetadata,
 )
 
+SKILLS_DIR: Final = "skills"
+
 _FRONTMATTER_REGEX: Final[re.Pattern[str]] = re.compile(
     r"\A---[ \t]*\r?\n(?P<frontmatter>.*?)(?:\r?\n)---[ \t]*(?:\r?\n|\Z)",
     re.DOTALL,

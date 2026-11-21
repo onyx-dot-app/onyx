@@ -1033,7 +1033,10 @@ def create_chat_agent(
         # user's current skills. Restored and child agents receive them with
         # the other configured tools.
         if setup.has_chat_skills:
-            tools += [SkillsListTool(user), SkillsReadTool(user)]
+            tools += [
+                SkillsListTool(user, built_ins=setup.sandbox_tools),
+                SkillsReadTool(user, built_ins=setup.sandbox_tools),
+            ]
 
         preferred_tool = setup.preferred_tool
         if preferred_tool is not None and not any(
