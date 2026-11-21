@@ -33,6 +33,7 @@ from onyx.file_store.file_store import get_default_file_store
 from onyx.skills.built_in import CHAT_BUILT_IN_SKILL_IDS
 from onyx.skills.content import read_chat_skills_md, read_versions_skill_md
 from onyx.skills.ingest import delete_bundle_blob, ingest_skill_bundle
+from onyx.skills.push import build_chat_built_ins_bundle
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.craft.db_helpers import (
     add_user_to_group,
@@ -307,3 +308,11 @@ def test_chat_built_ins_need_the_sandbox_and_name_their_vm_folder(
     ]
     assert skill_md.startswith("Skill files: /mnt/skills/pptx/")
     assert "python /mnt/skills/pptx/scripts/lint.py" in skill_md
+
+    # Each mounted folder is a listed skill; the bundle is built once.
+    bundle = build_chat_built_ins_bundle(db_session)
+    assert bundle is not None
+    assert build_chat_built_ins_bundle(db_session) is bundle
+    with zipfile.ZipFile(io.BytesIO(bundle.zip_bytes)) as zf:
+        folders = {name.split("/", 1)[0] for name in zf.namelist()}
+    assert folders == set(built_ins)

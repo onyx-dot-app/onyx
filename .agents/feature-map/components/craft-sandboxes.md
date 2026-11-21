@@ -267,8 +267,9 @@ the stored token on each request, so a new token takes effect at once.
 - `backend/onyx/microvm/agent_client.py`: a typed mTLS client for the host
   agent, with session saves (capture, upload, discard, restore) and the
   managed drive (put, swap). Chat's built-ins use the skills drive:
-  `FirecrackerHarnessSandbox.sync_skills` zips the files with fixed entry
-  times (same files, same image ID), and, under the per-sandbox lock
+  `FirecrackerHarnessSandbox.sync_skills` takes a `SkillsBundle` (a zip
+  with fixed entry times, so the same files give the same image ID), and,
+  under the per-sandbox lock
   `sandbox_fc:skills_sync:<sandbox>`, puts and swaps the image only when
   the `sandbox_fc:skills_image:<sandbox>` cache record names another VM
   instance `(attempt, generation)` or another image. A woken or replaced VM is a

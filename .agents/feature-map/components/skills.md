@@ -364,8 +364,9 @@ chat gets: the custom skills the sandbox loads for the user
 (`_UserSkillSelection.loaded`, the same selection as
 `list_runtime_skills_for_user`: install settings, the user's choice, the name
 order and a version that is not invalid), with the name, description,
-`metadata.short-description` and id of the version the user runs. Anonymous
-users get none. `chat/process_message.py:prepare_chat_turn` reads it for the
+`metadata.short-description` and id of the version the user runs. With
+`built_ins`, it also lists `list_chat_built_in_skills`, the same rows the
+sandbox mounts; they do not depend on the user. Anonymous users get none. `chat/process_message.py:prepare_chat_turn` reads it for the
 turn's picks and reservation, each agent reads it once when it is built (for
 its catalog), each skill tool call reads it, and so does each accepted
 mid-run message with picks. The `@` picker reads it through

@@ -238,8 +238,9 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files (no tool
                                         each call: HarnessSandbox.begin_turn (an error is
                                         logged, the call still runs)
   SandboxTurn._sync_skills              before each call (calls wait on one lock): the turn
-                                        builds its built-in files once
-                                        (skills/push.py:build_chat_built_in_files), then
+                                        reads the available chat built-ins once
+                                        (skills/push.py:build_chat_built_ins_bundle; the
+                                        zip is built once per process for each set), then
                                         HarnessSandbox.sync_skills shows them at /mnt/skills
                                         and skips a VM instance that has them (an error is
                                         logged; the next call tries again)

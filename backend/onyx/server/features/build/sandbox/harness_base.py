@@ -41,9 +41,9 @@ from onyx.microvm.models import FileListing
 from onyx.server.features.build.sandbox.models import (
     ExecCommandResult,
     ExecEvent,
-    FileSet,
     HarnessSandboxRef,
     SandboxPathInfo,
+    SkillsBundle,
 )
 
 # Parent of each chat session's working directory in the sandbox.
@@ -175,10 +175,9 @@ class HarnessSandbox(abc.ABC):
         initialized. Every other call does this first."""
 
     @abc.abstractmethod
-    def sync_skills(self, ref: HarnessSandboxRef, files: FileSet) -> None:
-        """Show `files` (`<skill>/<path>` to bytes) read-only at
-        CHAT_SKILLS_MOUNT_PATH. Skips the transfer when this VM instance
-        already shows the same files."""
+    def sync_skills(self, ref: HarnessSandboxRef, bundle: SkillsBundle) -> None:
+        """Show the bundle's files read-only at CHAT_SKILLS_MOUNT_PATH. Skips
+        the transfer when this VM instance already shows the same bundle."""
 
     @abc.abstractmethod
     def exec_command(

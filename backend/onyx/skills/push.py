@@ -2,6 +2,7 @@
 
 import hashlib
 from collections.abc import Iterable
+from functools import cache
 from typing import Literal
 from uuid import UUID
 
@@ -24,6 +25,7 @@ from onyx.db.skill import (
     RuntimeSkill,
     RuntimeSkillFolder,
     SkillValidityUpdate,
+    list_chat_built_in_skills,
     list_runtime_skills_for_user,
     persist_skill_validity,
 )
@@ -35,14 +37,13 @@ from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.image.sandbox_daemon.extract import (
     MAX_FILE_BYTES,
 )
-from onyx.server.features.build.sandbox.models import FileSet
+from onyx.server.features.build.sandbox.models import FileSet, SkillsBundle
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     build_connectable_apps_list,
 )
 from onyx.server.features.build.timeouts import QUEUE_RESIDENCY_SECONDS
 from onyx.skills.built_in import (
     BUILT_IN_SKILLS,
-    CHAT_BUILT_IN_SKILL_IDS,
     COMPANY_SEARCH,
     EXTERNAL_APP_SKILL_ID_TO_APP_TYPE,
     BuiltInSkillDefinition,
@@ -444,16 +445,33 @@ def build_skills_fileset_for_user(user: User, db_session: Session) -> FileSet:
     return build_user_skills_payload(user, db_session).files
 
 
-def build_chat_built_in_files(user: User, db_session: Session) -> FileSet:
-    return _assemble_fileset(
-        [
-            skill
-            for skill in list_runtime_skills_for_user(user=user, db_session=db_session)
-            if skill.built_in_skill_id in CHAT_BUILT_IN_SKILL_IDS
-        ],
-        user,
-        db_session,
+def build_chat_built_ins_bundle(db_session: Session) -> SkillsBundle | None:
+    """The chat built-ins as one bundle, or None when none is available."""
+    skills = list_chat_built_in_skills(db_session)
+    if not skills:
+        return None
+    return _chat_built_ins_bundle(
+        tuple(
+            (skill.built_in_skill_id or "", skill.name, skill.plugin_skills)
+            for skill in skills
+        )
     )
+
+
+@cache
+def _chat_built_ins_bundle(
+    skills: tuple[tuple[str, str, tuple[RuntimeSkillFolder, ...]], ...],
+) -> SkillsBundle:
+    # Keyed without row ids, so tenants with the same built-ins share one
+    # bundle. Chat built-ins have no template, so no file depends on the user.
+    files: FileSet = {}
+    for built_in_skill_id, name, folders in skills:
+        _add_static_builtin(
+            files,
+            folders or (RuntimeSkillFolder(path="", name=name),),
+            BUILT_IN_SKILLS[built_in_skill_id],
+        )
+    return SkillsBundle.from_files(files)
 
 
 def push_skill_to_affected_sandboxes(skill: Plugin, db_session: Session) -> None:

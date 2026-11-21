@@ -292,7 +292,8 @@ def built_in_skills_usage() -> SkillUsage:
     )
 
 
-# Each must run in the chat VM without Onyx API access.
+# Each must run in the chat VM without Onyx API access and have no template:
+# every chat VM gets the same files.
 CHAT_BUILT_IN_SKILL_IDS: Final[frozenset[str]] = frozenset({"pptx", "browser"})
 CHAT_SKILLS_MOUNT_PATH: Final = "/mnt/skills"
 

@@ -9,13 +9,9 @@ durable cache records (`harness_state`), so any API pod can serve
 a user's sandbox keeps (Onyx delete hooks call them through `purge`).
 """
 
-import hashlib
-import io
 import random
 import secrets
-import stat
 import time
-import zipfile
 from collections.abc import Callable, Generator, Iterable, Sequence
 from typing import IO
 from uuid import UUID
@@ -153,12 +149,12 @@ from onyx.server.features.build.sandbox.models import (
     ExecCompletionName,
     ExecEvent,
     ExecOutputDelta,
-    FileSet,
     HarnessSandboxRef,
     SandboxFileType,
     SandboxPathFault,
     SandboxPathInfo,
     SandboxProvisionContentionError,
+    SkillsBundle,
 )
 from onyx.utils.logger import setup_logger
 
@@ -186,8 +182,6 @@ _SKILLS_SYNC_LOCK_PREFIX = "sandbox_fc:skills_sync:"
 _SKILLS_SYNC_LOCK_SECONDS = 5 * 60.0
 # Client token on each started command, to find it when Start gets no answer.
 _START_LABEL = "onyx_start_id"
-# Fixed zip entry times keep a skills bundle's bytes stable.
-_ZIP_EPOCH = (1980, 1, 1, 0, 0, 0)
 # The daemon refuses Start and Run with these while it keeps its most commands.
 _EXEC_CAP_REASONS = frozenset(
     {
@@ -254,13 +248,12 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
     def ensure_running(self, ref: HarnessSandboxRef) -> None:
         self._place(ref)
 
-    def sync_skills(self, ref: HarnessSandboxRef, files: FileSet) -> None:
-        bundle = _skills_bundle(files)
+    def sync_skills(self, ref: HarnessSandboxRef, bundle: SkillsBundle) -> None:
         placed = self._place(ref)
         tenant_cache = get_cache_backend(tenant_id=ref.tenant_id)
         image = SkillsImage(
             instance=(placed.vm.attempt, placed.vm.generation),
-            image_id=hashlib.sha256(bundle).hexdigest(),
+            image_id=bundle.image_id,
         )
         if get_skills_image(tenant_cache, ref.sandbox_id) == image:
             return
@@ -272,7 +265,7 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
             if get_skills_image(tenant_cache, ref.sandbox_id) == image:
                 return
             agent = self._client_factory.client(placed.node.address)
-            put = agent.put_managed_image(bundle)
+            put = agent.put_managed_image(bundle.zip_bytes)
             swap = agent.swap_managed(
                 image_id=put.image.image_id,
                 targets=[
@@ -1229,17 +1222,6 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
                 attempt=placement.attempt,
                 generation=placement.generation,
             )
-
-
-def _skills_bundle(files: FileSet) -> bytes:
-    buffer = io.BytesIO()
-    with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
-        for path in sorted(files):
-            info = zipfile.ZipInfo(path, _ZIP_EPOCH)
-            info.compress_type = zipfile.ZIP_DEFLATED
-            info.external_attr = (stat.S_IFREG | 0o644) << 16
-            zf.writestr(info, files[path])
-    return buffer.getvalue()
 
 
 def _raise_first(errors: list[Exception], what: str) -> None:
