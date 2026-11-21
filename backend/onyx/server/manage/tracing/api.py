@@ -23,6 +23,7 @@ from onyx.tracing.provider_config import (
     BraintrustConfig,
     EffectiveTracingConfig,
     LangfuseConfig,
+    env_tracing_configured,
     resolve_effective_tracing_config,
 )
 from onyx.tracing.validation import validate_tracing_credentials
@@ -71,6 +72,7 @@ def _build_view(
         is_connected = effective.langfuse is not None
     else:
         is_connected = False
+    env_configured = env_tracing_configured(provider_type)
     if row is not None:
         return TracingProviderView(
             provider_type=provider_type,
@@ -78,6 +80,7 @@ def _build_view(
             source="db",
             enabled=row.enabled,
             config=row.config or {},
+            env_configured=env_configured,
             masked_api_key=(
                 row.api_key.get_value(apply_mask=True) if row.api_key else None
             ),
@@ -88,6 +91,7 @@ def _build_view(
             connected=True,
             source="env",
             enabled=True,
+            env_configured=env_configured,
             config=_env_config_for(provider_type, effective),
         )
     return TracingProviderView(
@@ -95,6 +99,7 @@ def _build_view(
         connected=False,
         source="none",
         enabled=False,
+        env_configured=env_configured,
     )
 
 

@@ -8100,6 +8100,13 @@
         },
         "setDefaultButton": {
           "label": "기본값으로 설정"
+        },
+        "deleteButton": {
+          "ariaLabel": "{title} 삭제",
+          "tooltip": "삭제"
+        },
+        "reconnectButton": {
+          "label": "다시 연결"
         }
       }
     },
@@ -9059,6 +9066,9 @@
       "provider": {
         "connected": {
           "label": "연결됨"
+        },
+        "disconnected": {
+          "suffix": "(연결 해제됨)"
         }
       },
       "setupModal": {
@@ -9076,8 +9086,6 @@
         }
       },
       "toasts": {
-        "connected": "{label}에 연결했습니다",
-        "disconnected": "{label} 연결을 해제했습니다",
         "unexpectedError": "예기치 않은 오류가 발생했습니다."
       },
       "providers": {
@@ -9118,6 +9126,15 @@
             }
           }
         }
+      },
+      "deleteModal": {
+        "body": "**{label}**의 API 키와 설정이 삭제됩니다. 다시 트레이스를 보내려면 처음부터 설정하세요.",
+        "description": "이 공급자의 API 키와 설정을 삭제합니다.",
+        "submit": {
+          "label": "삭제"
+        },
+        "title": "{label} 삭제",
+        "envBody": "**{label}**의 API 키와 설정이 삭제됩니다. 트레이싱은 꺼진 상태로 유지됩니다. 환경 변수 설정으로 다시 트레이스를 보내려면 다시 연결하세요."
       }
     },
     "usage": {

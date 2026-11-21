@@ -8100,6 +8100,13 @@
         },
         "setDefaultButton": {
           "label": "Definir como padrão"
+        },
+        "deleteButton": {
+          "ariaLabel": "Excluir {title}",
+          "tooltip": "Excluir"
+        },
+        "reconnectButton": {
+          "label": "Reconectar"
         }
       }
     },
@@ -9059,6 +9066,9 @@
       "provider": {
         "connected": {
           "label": "Conectado"
+        },
+        "disconnected": {
+          "suffix": "(desconectado)"
         }
       },
       "setupModal": {
@@ -9076,8 +9086,6 @@
         }
       },
       "toasts": {
-        "connected": "{label} conectado",
-        "disconnected": "{label} desconectado",
         "unexpectedError": "Ocorreu um erro inesperado."
       },
       "providers": {
@@ -9118,6 +9126,15 @@
             }
           }
         }
+      },
+      "deleteModal": {
+        "body": "A chave de API e as configurações de **{label}** serão excluídas. Para enviar traces novamente, configure-o do início.",
+        "description": "Remove a chave de API e as configurações deste provedor.",
+        "submit": {
+          "label": "Excluir"
+        },
+        "title": "Excluir {label}",
+        "envBody": "A chave de API e as configurações de **{label}** serão excluídas. O rastreamento continua desativado. Para enviar traces novamente com a configuração das variáveis de ambiente, reconecte-o."
       }
     },
     "usage": {

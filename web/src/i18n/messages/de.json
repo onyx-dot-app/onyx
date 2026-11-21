@@ -8100,6 +8100,13 @@
         },
         "setDefaultButton": {
           "label": "Als Standard festlegen"
+        },
+        "deleteButton": {
+          "ariaLabel": "{title} löschen",
+          "tooltip": "Löschen"
+        },
+        "reconnectButton": {
+          "label": "Erneut verbinden"
         }
       }
     },
@@ -9059,6 +9066,9 @@
       "provider": {
         "connected": {
           "label": "Verbunden"
+        },
+        "disconnected": {
+          "suffix": "(getrennt)"
         }
       },
       "setupModal": {
@@ -9076,8 +9086,6 @@
         }
       },
       "toasts": {
-        "connected": "{label} verbunden",
-        "disconnected": "{label} getrennt",
         "unexpectedError": "Ein unerwarteter Fehler ist aufgetreten."
       },
       "providers": {
@@ -9118,6 +9126,15 @@
             }
           }
         }
+      },
+      "deleteModal": {
+        "body": "Der API-Schlüssel und die Einstellungen für **{label}** werden gelöscht. Um wieder Traces zu senden, richten Sie den Anbieter neu ein.",
+        "description": "API-Schlüssel und Einstellungen dieses Anbieters entfernen.",
+        "submit": {
+          "label": "Löschen"
+        },
+        "title": "{label} löschen",
+        "envBody": "Der API-Schlüssel und die Einstellungen für **{label}** werden gelöscht. Tracing bleibt aus. Um wieder Traces mit der Konfiguration aus den Umgebungsvariablen zu senden, verbinden Sie den Anbieter erneut."
       }
     },
     "usage": {
