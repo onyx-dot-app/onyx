@@ -1,7 +1,7 @@
 from typing import Any
 from uuid import UUID
 
-from sqlalchemy import Select, and_, delete, or_, select
+from sqlalchemy import Select, and_, delete, or_, select, true
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session, aliased
 
@@ -189,7 +189,9 @@ def find_tags(
         user_id=user_id,
         prior_emails=prior_emails,
     )
-    query = select(Tag).where(accessible_documents.exists())
+    # LATERAL + LIMIT 1 probes one tag at a time and stops at `limit`. EXISTS can
+    # become a semi-join that hashes every accessible document-tag pair.
+    query = select(Tag).join(accessible_documents.limit(1).lateral(), true())
 
     if tag_key_prefix or tag_value_prefix:
         conditions = []
