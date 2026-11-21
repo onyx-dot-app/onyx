@@ -56,6 +56,9 @@ This prompts for your Onyx server URL and personal access token (PAT), tests the
 and saves config to `~/.config/onyx-cli/config.json` (or `$XDG_CONFIG_HOME/onyx-cli/config.json` if set).
 To reconfigure later, use the `/configure` slash command inside the TUI.
 
+If the config file cannot be decoded, the CLI prints a warning and uses default values.
+Environment variables still override those defaults.
+
 ### Generating an Access Token
 
 Navigate to **Settings > Accounts & Access > Access Tokens** (`/app/settings/accounts-access`)

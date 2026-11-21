@@ -124,6 +124,7 @@ func LoadFromDisk() OnyxCliConfig {
 	if err == nil {
 		if jsonErr := json.Unmarshal(data, &cfg); jsonErr != nil {
 			fmt.Fprintf(os.Stderr, "warning: config file %s is malformed: %v (using defaults)\n", ConfigFilePath(), jsonErr)
+			return DefaultConfig()
 		}
 	}
 
