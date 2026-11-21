@@ -6,7 +6,7 @@
       "account": "Angemeldet als {email}",
       "workspace": "Arbeitsbereich: {workspaceName}",
       "appAddress": "App-Adresse: {origin}",
-      "access": "Suchergebnisse aus Dokumenten lesen, auf die Sie Zugriff haben. Die Websuche nutzen und Webseiten öffnen.",
+      "access": "Suchergebnisse aus Dokumenten lesen, auf die Sie Zugriff haben. Die Websuche nutzen und Webseiten öffnen. Ihren Chatverlauf lesen.",
       "allow": "Zugriff erlauben",
       "deny": "Ablehnen",
       "pending": "Auswahl wird gespeichert...",

@@ -284,8 +284,8 @@ def postgres_query(
             OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
             "Querying chat history needs the read:chat permission. Only the "
             "'document' and 'hierarchy_node' tables are available. To query chat "
-            "history, connect with a personal access token that has read:search "
-            "and read:chat.",
+            "history, reconnect the app to Onyx, or use a personal access token "
+            "with read:search and read:chat.",
         )
     _, persona_search_info = _load_persona(request.persona_id, user, db_session)
     tool = PostgresTool(

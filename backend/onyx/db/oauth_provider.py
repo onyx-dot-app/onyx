@@ -14,7 +14,7 @@ from onyx.auth.constants import (
     OAUTH_PROVIDER_ACCESS_LIFETIME,
     OAUTH_PROVIDER_CLIENT_IDLE_LIFETIME,
     OAUTH_PROVIDER_GRANT_LIFETIME,
-    OAUTH_PROVIDER_SCOPE,
+    OAUTH_PROVIDER_SCOPES,
 )
 from onyx.auth.oauth_provider import (
     OAuthProviderTokenKind,
@@ -167,7 +167,7 @@ def create_oauth_provider_grant__no_commit(
         client_id=client_id,
         client_name=client_name,
         resource=resource,
-        scopes=[OAUTH_PROVIDER_SCOPE],
+        scopes=list(OAUTH_PROVIDER_SCOPES),
         created_at=now,
         expires_at=now
         + (

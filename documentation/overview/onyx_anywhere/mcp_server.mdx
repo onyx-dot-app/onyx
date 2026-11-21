@@ -62,12 +62,12 @@ An empty result can be valid. Try a document that you know you can open in Onyx.
 
 ## Permissions and data access
 
-A connected app gets the `read:search` scope. It can search documents that you can access, query their metadata,
-search the web, and open web pages. It cannot read your chat history, create API keys, or use other Onyx APIs.
-Your document permissions still apply.
+A connected app gets the `read:search` and `read:chat` scopes. It can search documents that you can access,
+query their metadata and your chat history, search the web, and open web pages.
+It cannot create API keys or use other Onyx APIs. Your document permissions still apply.
 
-To let your client query your chat history with `query_metadata`,
-connect with a [personal access token](#use-a-personal-access-token-instead) that has `read:search` and `read:chat`.
+An app that you connected before Onyx added `read:chat` has only `read:search`, and it cannot query your chat history.
+To give it full access, disconnect the app and connect it again.
 
 Your AI client receives the content that Onyx returns. Use a client that your organization allows to receive it.
 
@@ -93,8 +93,7 @@ To change accounts, sign out of Onyx in your client and connect again with the o
 
 ## Use a personal access token instead
 
-If your client cannot use OAuth, or you want it to query your chat history,
-create a [personal access token](/developers/overview#personal-access-tokens)
+If your client cannot use OAuth, create a [personal access token](/developers/overview#personal-access-tokens)
 under **Settings > Accounts & Access > Access Tokens**. Select **Search > Read** (`read:search`)
 and **Chat > Read** (`read:chat`).
 A token with only `read:search` can use every tool except the chat-history tables of `query_metadata`. On Onyx Cloud,
