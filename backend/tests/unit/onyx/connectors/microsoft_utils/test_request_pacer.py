@@ -229,23 +229,27 @@ def test_a_link_download_uses_the_download_lane_and_no_graph_ru(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
     """The download host is not Graph. A link fetch takes one turn from the
-    download lane, and its 429 pauses and cuts that lane only."""
+    download lane, and its 429 pauses and cuts that lane only. The link is
+    tried again after the pause."""
     limiter = _LaneRecorder()
-    answers = iter([_stream_response(429, {"Retry-After": "3"})])
+    answers = iter([_stream_response(429, {"Retry-After": "3"}), _stream_response(200)])
     monkeypatch.setattr(
         "onyx.connectors.microsoft_utils.drive_items.requests.get",
         lambda *_args, **_kwargs: next(answers),
     )
+    monkeypatch.setattr(
+        "onyx.connectors.microsoft_utils.drive_items.time.sleep", lambda _s: None
+    )
 
-    with pytest.raises(requests.HTTPError):
-        download_with_cap(
-            "https://host/download.aspx?tempauth=x",
-            10,
-            1000,
-            MicrosoftRequestPacer(limiter),
-        )
+    content = download_with_cap(
+        "https://host/download.aspx?tempauth=x",
+        10,
+        1000,
+        MicrosoftRequestPacer(limiter),
+    )
 
-    assert limiter.acquired == [(DOWNLOAD_LIMITER_API, 1)]
+    assert content == b"content"
+    assert limiter.acquired == [(DOWNLOAD_LIMITER_API, 1)] * 2
     assert limiter.paused == [(DOWNLOAD_LIMITER_API, 3.0)]
     assert limiter.refused == [DOWNLOAD_LIMITER_API]
 
