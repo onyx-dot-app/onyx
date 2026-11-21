@@ -326,7 +326,10 @@ its background task end ([[#pure-asgi-middleware]]).
    `model_index`.
 5. `not-every-line-is-a-packet` **Not every line is a packet, and heartbeats are
    the consumer's job.** Clients must check for `obj` before they read it, as
-   `web/src/hooks/useChatSessionController.ts` does on resume. On web, the name
+   `web/src/hooks/useChatSessionController.ts` does on resume. A
+   `ChatSessionNameInfo` line has no `obj` either; the server sends it only
+   when the request sets `accepts_chat_session_name`, so older readers such as
+   the widget never see it. On web, the name
    `PacketType` means two things: the enum of type strings in
    `web/src/app/app/services/streamingModels.ts`, and the union of line shapes in
    `web/src/app/app/services/lib.tsx`. `web/src/app/app/services/lib.tsx:sendMessage`

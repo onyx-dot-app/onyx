@@ -52,6 +52,7 @@ covers new files that match it.
 | `backend/onyx/server/query_and_chat/streaming_models.py`, `backend/onyx/server/query_and_chat/placement.py`, `backend/onyx/server/query_and_chat/acp_stream.py` | streaming-protocol |
 | `backend/onyx/server/query_and_chat/token_limit.py` | rate-and-usage-limits |
 | `backend/onyx/secondary_llm_flows/chat_session_naming.py` | chat-persistence |
+| `backend/onyx/chat/session_naming.py` | chat-persistence, core-chat-loop |
 | `backend/onyx/secondary_llm_flows/memory_update.py` | chat-preferences |
 
 ## Backend: tools
