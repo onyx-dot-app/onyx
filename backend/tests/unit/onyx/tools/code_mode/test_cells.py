@@ -429,6 +429,9 @@ def test_a_cell_gives_its_slot_back_to_the_budget_it_took_it_from(
     response.gate.set()
     until(lambda: taken.acquire("tenant"))
     assert not replacement.acquire("tenant")
+    # The slots set the process-wide CELLS_RUNNING gauge; later tests expect 0.
+    taken.release("tenant", 0.0)
+    replacement.release("tenant", 0.0)
 
 
 def test_commits_follow_completion_order_and_saved_records_fold_to_the_same_store() -> (
