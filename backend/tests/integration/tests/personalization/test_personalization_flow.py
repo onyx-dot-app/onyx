@@ -144,3 +144,25 @@ def test_profile_only_update_keeps_memories(
     assert personalization["name"] == "Jane Doe"
     assert personalization["role"] == "Data engineer"
     assert personalization["memories"] == memories_before
+
+
+def test_preferred_name_is_separate_from_full_name(
+    user_factory: Callable[[], DATestUser],
+) -> None:
+    user = user_factory()
+    headers, cookies = _get_auth_headers(user)
+
+    _patch_personalization(
+        headers, cookies, {"name": "Jonathan Smith", "preferred_name": " Jon "}
+    )
+    me = _get_me(headers, cookies)
+    assert me["personalization"]["name"] == "Jonathan Smith"
+    assert me["personalization"]["preferred_name"] == "Jon"
+
+    # Omitting the field keeps it; an empty string clears it.
+    _patch_personalization(headers, cookies, {"role": "Engineering"})
+    assert _get_me(headers, cookies)["personalization"]["preferred_name"] == "Jon"
+    _patch_personalization(headers, cookies, {"preferred_name": ""})
+    me = _get_me(headers, cookies)
+    assert me["personalization"]["preferred_name"] == ""
+    assert me["personalization"]["name"] == "Jonathan Smith"

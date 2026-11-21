@@ -12,9 +12,19 @@ chat retention needs Enterprise. The settings API enforces these tiers.
 
 ## User experience
 
-- **A user** enters a name and a role in Settings > Account, and free-text
-  instructions ("I prefer short answers") in Settings > Chat Preferences. The next message in any chat,
-  including the open one, uses them. Nobody else sees them.
+- **A user** sets a full name, a preferred name (the name Onyx calls the
+  user) and a work role in Settings > Account, and free-text instructions ("I
+  prefer short answers") in Settings > Chat Preferences. The next message in any chat,
+  including the open one, uses them. Onboarding also sets the preferred name.
+  The prompt and `{{user.name}}` use `User.addressed_name`: the preferred name,
+  else the full name. The prompt also gives a different full name on its own
+  line. The work role select offers `web/src/lib/users/workRoles.ts`; any other
+  stored text shows as "Other" with its text.
+- **A user** uploads a profile photo in Settings > Account, crops it in a
+  dialog, and can later replace or remove it from the avatar's menu. Every
+  avatar of that user shows it, else the initials. Anonymous visitors cannot set one, and deleting
+  the user deletes it. The tab also shows the user's organization role and, on
+  multi-tenant deployments, the tenant ID.
 - **A user** lets the assistant remember facts. With the memory tool on, the
   assistant saves or updates a memory during a chat when it decides to, and the
   user sees a memory event in the answer. The user can edit or delete memories
@@ -201,7 +211,7 @@ paths read it; find them with `git grep -n load_settings backend`.
 5. `personalization-replaces-memory-set` **A personalization save replaces the
    whole memory set.** `PATCH /user/personalization` with a `memories` list
    deletes every row whose id is not in the list
-   (`db/user_preferences.py:update_user_personalization`).
+   (`db/user_preferences.py:replace_user_memories__no_commit`).
    A request without `memories` keeps them.
    `web/src/hooks/useUserPersonalization.ts` sends only the fields that a save
    changes, so only a memory edit sends the list.

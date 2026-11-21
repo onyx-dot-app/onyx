@@ -16102,8 +16102,68 @@
       },
       "workRole": {
         "description": "Compartilhe seu cargo para personalizar melhor as respostas.",
-        "placeholder": "Seu cargo",
-        "title": "Cargo"
+        "placeholder": "Escolha um cargo",
+        "title": "O que melhor descreve seu trabalho?",
+        "other": {
+          "placeholder": "Digite seu cargo",
+          "title": "Seu trabalho"
+        }
+      },
+      "photo": {
+        "errors": {
+          "tooLarge": "Escolha uma imagem de até 10 MB.",
+          "invalidType": "Escolha uma imagem PNG, JPEG ou WebP."
+        },
+        "description": "PNG, JPEG ou WebP, até 10 MB.",
+        "toasts": {
+          "updateFailed": "Não foi possível atualizar sua foto do perfil. Tente novamente."
+        },
+        "title": "Foto do perfil",
+        "editButton": {
+          "ariaLabel": "Alterar foto do perfil"
+        },
+        "uploadButton": {
+          "ariaLabel": "Enviar uma foto do perfil"
+        },
+        "menu": {
+          "label": "Opções da foto do perfil",
+          "replace": {
+            "label": "Substituir foto"
+          },
+          "remove": {
+            "label": "Remover"
+          }
+        },
+        "cropModal": {
+          "title": "Recortar foto",
+          "description": "Arraste ou use as teclas de seta para reposicionar. Use o controle deslizante ou a rolagem para ampliar.",
+          "area": {
+            "ariaLabel": "Área de recorte"
+          },
+          "zoom": {
+            "ariaLabel": "Zoom"
+          },
+          "zoomIn": {
+            "ariaLabel": "Ampliar"
+          },
+          "zoomOut": {
+            "ariaLabel": "Reduzir"
+          },
+          "reset": {
+            "label": "Redefinir"
+          },
+          "cancel": {
+            "label": "Cancelar"
+          },
+          "save": {
+            "label": "Salvar"
+          }
+        }
+      },
+      "preferredName": {
+        "description": "O {appName} usa este nome quando fala com você.",
+        "placeholder": "Adicione um nome",
+        "title": "Como o {appName} deve chamar você?"
       }
     },
     "promptShortcuts": {
@@ -16205,6 +16265,21 @@
     },
     "interactions": {
       "title": "Interações"
+    },
+    "organization": {
+      "role": {
+        "groupManager": "Gerente do grupo",
+        "description": "Seu nível de acesso neste espaço de trabalho.",
+        "admin": "Administrador",
+        "basic": "Usuário básico",
+        "title": "Sua função"
+      },
+      "tenantId": {
+        "description": "Compartilhe este ID com o suporte ao pedir ajuda.",
+        "copyTooltip": "Copiar ID do locatário",
+        "title": "ID do locatário"
+      },
+      "title": "Organização"
     }
   },
   "sidebar": {
@@ -17939,6 +18014,49 @@
       "inFlight": "{status, select, AWAITING_APPROVAL {Esta execução aguarda sua aprovação abaixo.} other {Esta execução está em andamento.}}",
       "startedAt": "Iniciada {time}",
       "viewTask": "Ver tarefa"
+    }
+  },
+  "profile": {
+    "workRole": {
+      "marketing": {
+        "label": "Marketing"
+      },
+      "finance": {
+        "label": "Finanças"
+      },
+      "other": {
+        "label": "Outro"
+      },
+      "engineering": {
+        "label": "Engenharia"
+      },
+      "customerSupportSuccess": {
+        "label": "Suporte e sucesso do cliente"
+      },
+      "peopleHr": {
+        "label": "Pessoas e RH"
+      },
+      "dataAnalytics": {
+        "label": "Dados e análise"
+      },
+      "legal": {
+        "label": "Jurídico"
+      },
+      "design": {
+        "label": "Design"
+      },
+      "product": {
+        "label": "Produto"
+      },
+      "operations": {
+        "label": "Operações"
+      },
+      "sales": {
+        "label": "Vendas"
+      },
+      "leadership": {
+        "label": "Liderança"
+      }
     }
   }
 }

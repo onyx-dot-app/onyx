@@ -5,6 +5,7 @@ import { MemoryItem, User, UserPersonalization } from "@/lib/types";
 
 const DEFAULT_PERSONALIZATION: UserPersonalization = {
   name: "",
+  preferred_name: "",
   role: "",
   memories: [],
   use_memories: true,
@@ -19,6 +20,7 @@ function derivePersonalizationFromUser(user: User | null): UserPersonalization {
 
   return {
     name: user.personalization.name ?? "",
+    preferred_name: user.personalization.preferred_name ?? "",
     role: user.personalization.role ?? "",
     memories: [...(user.personalization.memories ?? [])],
     use_memories:
@@ -119,7 +121,7 @@ export default function useUserPersonalization(
   }, [basePersonalization]);
 
   const updatePersonalizationField = useCallback(
-    (field: "name" | "role", value: string) => {
+    (field: "name" | "preferred_name" | "role", value: string) => {
       setPersonalizationValues((prev) => ({
         ...prev,
         [field]: value,

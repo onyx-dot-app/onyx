@@ -16102,8 +16102,68 @@
       },
       "workRole": {
         "description": "شارك دورك الوظيفي لتخصيص الإجابات بشكل أفضل.",
-        "placeholder": "دورك الوظيفي",
-        "title": "الدور الوظيفي"
+        "placeholder": "اختر دورًا وظيفيًا",
+        "title": "ما الذي يصف عملك على أفضل وجه؟",
+        "other": {
+          "placeholder": "أدخل دورك الوظيفي",
+          "title": "عملك"
+        }
+      },
+      "photo": {
+        "errors": {
+          "tooLarge": "اختر صورة بحجم 10 ميغابايت أو أقل.",
+          "invalidType": "اختر صورة بتنسيق PNG أو JPEG أو WebP."
+        },
+        "description": "PNG أو JPEG أو WebP، بحد أقصى 10 ميغابايت.",
+        "toasts": {
+          "updateFailed": "تعذّر تحديث صورة ملفك الشخصي. حاول مرة أخرى."
+        },
+        "title": "صورة الملف الشخصي",
+        "editButton": {
+          "ariaLabel": "تغيير صورة الملف الشخصي"
+        },
+        "uploadButton": {
+          "ariaLabel": "تحميل صورة للملف الشخصي"
+        },
+        "menu": {
+          "label": "خيارات صورة الملف الشخصي",
+          "replace": {
+            "label": "استبدال الصورة"
+          },
+          "remove": {
+            "label": "إزالة"
+          }
+        },
+        "cropModal": {
+          "title": "قص الصورة",
+          "description": "اسحب الصورة أو استخدم مفاتيح الأسهم لتغيير موضعها. استخدم شريط التمرير أو عجلة الماوس للتكبير.",
+          "area": {
+            "ariaLabel": "منطقة القص"
+          },
+          "zoom": {
+            "ariaLabel": "التكبير"
+          },
+          "zoomIn": {
+            "ariaLabel": "تكبير"
+          },
+          "zoomOut": {
+            "ariaLabel": "تصغير"
+          },
+          "reset": {
+            "label": "إعادة تعيين"
+          },
+          "cancel": {
+            "label": "إلغاء"
+          },
+          "save": {
+            "label": "حفظ"
+          }
+        }
+      },
+      "preferredName": {
+        "description": "يستخدم {appName} هذا الاسم عندما يتحدث إليك.",
+        "placeholder": "أضف اسمًا",
+        "title": "بماذا يجب أن يناديك {appName}؟"
       }
     },
     "promptShortcuts": {
@@ -16205,6 +16265,21 @@
     },
     "interactions": {
       "title": "التفاعلات"
+    },
+    "organization": {
+      "role": {
+        "groupManager": "مدير مجموعة",
+        "description": "مستوى وصولك في مساحة العمل هذه.",
+        "admin": "مسؤول",
+        "basic": "مستخدم أساسي",
+        "title": "دورك"
+      },
+      "tenantId": {
+        "description": "شارك هذا المعرّف مع الدعم عند طلب المساعدة.",
+        "copyTooltip": "نسخ معرّف المستأجر",
+        "title": "معرّف المستأجر"
+      },
+      "title": "المؤسسة"
     }
   },
   "sidebar": {
@@ -17939,6 +18014,49 @@
       "inFlight": "{status, select, AWAITING_APPROVAL {ينتظر هذا التشغيل موافقتك أدناه.} other {هذا التشغيل قيد التنفيذ.}}",
       "startedAt": "بدأ {time}",
       "viewTask": "عرض المهمة"
+    }
+  },
+  "profile": {
+    "workRole": {
+      "marketing": {
+        "label": "التسويق"
+      },
+      "finance": {
+        "label": "المالية"
+      },
+      "other": {
+        "label": "أخرى"
+      },
+      "engineering": {
+        "label": "الهندسة"
+      },
+      "customerSupportSuccess": {
+        "label": "دعم العملاء ونجاحهم"
+      },
+      "peopleHr": {
+        "label": "الموارد البشرية"
+      },
+      "dataAnalytics": {
+        "label": "البيانات والتحليلات"
+      },
+      "legal": {
+        "label": "الشؤون القانونية"
+      },
+      "design": {
+        "label": "التصميم"
+      },
+      "product": {
+        "label": "المنتج"
+      },
+      "operations": {
+        "label": "العمليات"
+      },
+      "sales": {
+        "label": "المبيعات"
+      },
+      "leadership": {
+        "label": "القيادة"
+      }
     }
   }
 }

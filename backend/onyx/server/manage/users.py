@@ -6,7 +6,7 @@ from uuid import UUID
 
 import jwt
 from email_validator import EmailNotValidError, EmailUndeliverableError, validate_email
-from fastapi import APIRouter, Body, Depends, Query, Request, Response
+from fastapi import APIRouter, Body, Depends, Query, Request, Response, UploadFile
 from fastapi.responses import StreamingResponse
 from pydantic import BaseModel, field_validator
 from sqlalchemy.orm import Session
@@ -54,26 +54,27 @@ from onyx.configs.constants import (
     FASTAPI_USERS_AUTH_COOKIE_NAME,
     NEXT_LOCALE_COOKIE_NAME,
     PUBLIC_API_TAGS,
+    FileOrigin,
 )
 from onyx.db.api_key import is_api_key_email_address
 from onyx.db.auth import get_live_users_count
 from onyx.db.engine.sql_engine import get_session, get_session_with_shared_schema
 from onyx.db.enums import AccountType, Permission
+from onyx.db.file_record import get_filerecord_by_file_id_optional
 from onyx.db.models import User
 from onyx.db.pinned_personas import set_pinned_personas
 from onyx.db.skill import transfer_private_plugins__no_commit
 from onyx.db.tenant_invite_counter import release_trial_invites, reserve_trial_invites
 from onyx.db.user_file import fetch_recent_user_files
 from onyx.db.user_preferences import (
-    UserPreferenceValues,
     activate_user,
     deactivate_user,
     fetch_user_preferences,
     get_all_user_assistant_specific_configs,
     get_latest_access_token_for_user,
     get_memories_for_user,
+    replace_user_memories__no_commit,
     update_assistant_preferences,
-    update_user_personalization,
     update_users_craft_enabled,
     upsert_user_preferences__no_commit,
 )
@@ -82,17 +83,27 @@ from onyx.db.users import (
     batch_get_user_groups,
     delete_user_from_db,
     fetch_scim_synced_user_ids,
+    fetch_user_by_id,
     get_all_accepted_users,
     get_all_users,
     get_page_of_filtered_users,
     get_total_filtered_users_count,
     get_user_by_email,
     get_user_counts_by_account_type_and_status,
+    replace_user_profile_image_file_id,
     set_user_admin_access,
+    update_user_profile__no_commit,
     user_is_admin,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.file_store.file_store import get_default_file_store
+from onyx.file_store.serving import (
+    INLINE_SAFE_IMAGE_MIME_TYPES,
+    RESPONSE_POLICY_VERSION,
+    resolve_inline_disposition,
+)
+from onyx.file_store.staging import delete_files_best_effort
 from onyx.key_value_store.factory import get_kv_store
 from onyx.llm.models import ReasoningEffort, parse_user_selectable_reasoning_effort
 
@@ -125,8 +136,14 @@ from onyx.server.manage.models import (
     UserInfo,
     UserPermissionsResponse,
     UserPreferences,
+    UserProfileImageResponse,
     UserSpecificAssistantPreference,
     UserSpecificAssistantPreferences,
+)
+from onyx.server.manage.profile_image import (
+    MAX_PROFILE_IMAGE_UPLOAD_BYTES,
+    PROFILE_IMAGE_MIME_TYPE,
+    normalize_profile_image,
 )
 from onyx.server.models import (
     FullUserSnapshot,
@@ -146,6 +163,7 @@ from onyx.utils.audit import (
     emit_audit_event,
 )
 from onyx.utils.csv_utils import sanitize_csv_cell
+from onyx.utils.file import read_upload_within_limit
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import (
     fetch_ee_implementation_or_noop,
@@ -1183,6 +1201,7 @@ def verify_user_logged_in(
         token_expires_at=token_expires_at,
         is_cloud_superuser=user.email in super_users_list,
         team_name=team_name,
+        tenant_id=tenant_id if MULTI_TENANT else None,
         tenant_info=TenantInfo(
             new_tenant=new_tenant,
             invitation=tenant_invitation,
@@ -1416,30 +1435,104 @@ def update_user_personalization_api(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
 ) -> None:
-    new_name = request.name if request.name is not None else user.personal_name
-    new_role = request.role if request.role is not None else user.personal_role
-    preferences: UserPreferenceValues = {}
-    if request.use_memories is not None:
-        preferences["use_memories"] = request.use_memories
-    if request.enable_memory_tool is not None:
-        preferences["enable_memory_tool"] = request.enable_memory_tool
-    if request.user_preferences is not None:
-        preferences["instructions"] = request.user_preferences
-    existing_memories = [
-        MemoryItem(id=memory.id, content=memory.memory_text)
-        for memory in get_memories_for_user(user.id, db_session)
-    ]
-    new_memories = (
-        request.memories if request.memories is not None else existing_memories
+    profile = request.model_dump(
+        include={"name", "preferred_name", "role"}, by_alias=True, exclude_none=True
     )
-
-    update_user_personalization(
+    if "preferred_name" in profile:
+        profile["preferred_name"] = profile["preferred_name"].strip() or None
+    # Runs first: it rejects the shared anonymous account before any write.
+    upsert_user_preferences__no_commit(
+        db_session,
         user.id,
-        personal_name=new_name,
-        personal_role=new_role,
-        preferences=preferences,
-        memories=new_memories,
-        db_session=db_session,
+        **request.model_dump(
+            include={"use_memories", "enable_memory_tool", "user_preferences"},
+            by_alias=True,
+            exclude_none=True,
+        ),
+    )
+    update_user_profile__no_commit(db_session, user.id, **profile)
+    if request.memories is not None:
+        replace_user_memories__no_commit(db_session, user.id, request.memories)
+    db_session.commit()
+
+
+@router.post("/user/profile-image")
+def upload_user_profile_image(
+    file: UploadFile,
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> UserProfileImageResponse:
+    upload = read_upload_within_limit(
+        file, MAX_PROFILE_IMAGE_UPLOAD_BYTES, "Profile photo"
+    )
+    file_id = get_default_file_store().save_file(
+        content=io.BytesIO(normalize_profile_image(upload)),
+        display_name=f"profile-image-{user.id}",
+        file_origin=FileOrigin.USER_PROFILE_IMAGE,
+        file_type=PROFILE_IMAGE_MIME_TYPE,
+    )
+    try:
+        previous_file_id = replace_user_profile_image_file_id(
+            user.id, file_id, db_session
+        )
+    except Exception:
+        delete_files_best_effort([file_id], "profile photo upload")
+        raise
+    if previous_file_id:
+        delete_files_best_effort([previous_file_id], "profile photo upload")
+    return UserProfileImageResponse(profile_image_file_id=file_id)
+
+
+@router.delete("/user/profile-image")
+def delete_user_profile_image(
+    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> None:
+    previous_file_id = replace_user_profile_image_file_id(user.id, None, db_session)
+    if previous_file_id:
+        delete_files_best_effort([previous_file_id], "profile photo delete")
+
+
+@router.get("/user/{user_id}/profile-image")
+def get_user_profile_image(
+    user_id: UUID,
+    request: Request,
+    _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
+    db_session: Session = Depends(get_session),
+) -> Response:
+    # Every failure is a 404, so callers cannot probe which users exist.
+    profile_user = fetch_user_by_id(db_session, user_id)
+    file_id = profile_user.profile_image_file_id if profile_user else None
+    if not file_id:
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Profile photo not found")
+
+    # Serve only files that the upload route stored.
+    file_record = get_filerecord_by_file_id_optional(file_id, db_session)
+    if file_record is None or file_record.file_origin != FileOrigin.USER_PROFILE_IMAGE:
+        logger.warning(
+            "User %s references profile photo %s with no matching profile file record",
+            user_id,
+            file_id,
+        )
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Profile photo not found")
+
+    # The client URL carries the file id, so a new photo is a new URL.
+    etag = f'"{file_id}-{RESPONSE_POLICY_VERSION}"'
+    cache_headers = {
+        "Cache-Control": "private, max-age=31536000, immutable",
+        "ETag": etag,
+        "Vary": "Cookie",
+    }
+    if request.headers.get("if-none-match") == etag:
+        return Response(status_code=304, headers=cache_headers)
+
+    media_type, security_headers = resolve_inline_disposition(
+        file_record.file_type, inline_types=INLINE_SAFE_IMAGE_MIME_TYPES
+    )
+    return StreamingResponse(
+        get_default_file_store().read_file(file_id, mode="b"),
+        media_type=media_type,
+        headers={**cache_headers, **security_headers},
     )
 
 

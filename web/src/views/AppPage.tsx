@@ -8,6 +8,7 @@ import {
 } from "@opal/navigation";
 import { SourceMetadata, ValidSources } from "@/lib/connectors/types/source";
 import { loginPath } from "@/lib/auth/paths";
+import { getUserAddressedName } from "@/lib/users/svc";
 import { endIncognitoSession } from "@/app/app/services/lib";
 import {
   useCallback,
@@ -759,7 +760,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const onboardingVisible =
     isWelcomeFocus &&
-    (showOnboarding || !user?.personalization?.name) &&
+    (showOnboarding || !getUserAddressedName(user)) &&
     !onboardingDismissed;
 
   // While onboarding is open, the bottom row keeps the height it had when

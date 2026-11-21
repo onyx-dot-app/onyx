@@ -48,7 +48,11 @@ export interface MemoryItem {
 }
 
 export interface UserPersonalization {
+  /** Full name. SCIM provisioning keeps it in sync with the IdP. */
   name: string;
+  /** The name Onyx calls the user. Empty means it uses the full name. */
+  preferred_name: string;
+  /** Work role. See `WORK_ROLE_OPTIONS` for the values the web app offers. */
   role: string;
   memories: MemoryItem[];
   use_memories: boolean;
@@ -120,6 +124,10 @@ export interface User {
   token_expires_at?: string;
   is_cloud_superuser?: boolean;
   team_name: string | null;
+  /** The workspace of this session. Set only on multi-tenant deployments. */
+  tenant_id?: string | null;
+  /** Null when the user has no profile photo. See `buildUserProfileImageUrl`. */
+  profile_image_file_id?: string | null;
   is_anonymous_user?: boolean;
   // If user does not have a configured password
   // (i.e.) they are using an oauth flow

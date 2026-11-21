@@ -156,7 +156,7 @@ covers new files that match it.
 | `backend/onyx/auth/`, `backend/ee/onyx/auth/`, `backend/onyx/server/auth/`, `backend/onyx/server/saml*.py`, `backend/onyx/server/oidc_multi.py`, `backend/onyx/server/sso_discovery.py`, `backend/onyx/server/manage/sso/`, `backend/onyx/server/manage/oauth_test.py` | auth-and-identity |
 | `backend/onyx/server/auth/mobile.py`, `backend/onyx/auth/mobile_sso/` | mobile-app, auth-and-identity |
 | `backend/ee/onyx/server/scim/`, `backend/ee/onyx/db/saml.py`, `backend/ee/onyx/db/scim.py`, `backend/ee/onyx/db/tenant_sso_domain.py`, `backend/ee/onyx/background/celery/tasks/sso_domain_revalidation/` | auth-and-identity |
-| `backend/onyx/db/users.py`, `backend/onyx/db/auth.py`, `backend/onyx/db/api_key.py`, `backend/onyx/db/pat.py`, `backend/onyx/db/saml.py`, `backend/onyx/db/sso_provider.py`, `backend/onyx/server/api_key/`, `backend/onyx/server/pat/`, `backend/onyx/server/manage/users.py` | auth-and-identity |
+| `backend/onyx/db/users.py`, `backend/onyx/db/auth.py`, `backend/onyx/db/api_key.py`, `backend/onyx/db/pat.py`, `backend/onyx/db/saml.py`, `backend/onyx/db/sso_provider.py`, `backend/onyx/server/api_key/`, `backend/onyx/server/pat/`, `backend/onyx/server/manage/users.py`, `backend/onyx/server/manage/profile_image.py` | auth-and-identity |
 | `backend/onyx/oauth/` | auth-and-identity |
 | `backend/onyx/oauth_provider/`, `backend/onyx/db/oauth_provider.py`, `backend/onyx/server/oauth_provider/` | auth-and-identity |
 | `backend/onyx/server/security/`, `backend/onyx/db/security_settings.py`, `backend/onyx/server/features/password/` | auth-and-identity |

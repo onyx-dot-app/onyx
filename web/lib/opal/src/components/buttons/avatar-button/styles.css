@@ -1,0 +1,38 @@
+@reference "#reference.css";
+
+.opal-avatar-button {
+  @apply relative shrink-0 overflow-hidden rounded-full;
+}
+
+.opal-avatar-button:focus-visible {
+  outline: 0.125rem solid var(--border-05);
+  outline-offset: 0.125rem;
+}
+
+.opal-avatar-button:is(:disabled, [aria-disabled="true"]) {
+  @apply cursor-not-allowed opacity-50;
+}
+
+.opal-avatar-button-overlay svg {
+  width: 40%;
+  height: 40%;
+}
+
+.opal-avatar-button-overlay {
+  @apply pointer-events-none absolute inset-0 flex items-center justify-center bg-mask-03 text-text-light-05 opacity-0 transition-opacity duration-150;
+}
+
+/* An open menu keeps the overlay, as touch screens without hover always do. */
+.opal-avatar-button:is(:hover, :focus-visible, [aria-expanded="true"]):not(
+    :disabled,
+    [aria-disabled="true"]
+  )
+  .opal-avatar-button-overlay {
+  @apply opacity-100;
+}
+
+@media (hover: none) {
+  .opal-avatar-button-overlay {
+    @apply opacity-100;
+  }
+}

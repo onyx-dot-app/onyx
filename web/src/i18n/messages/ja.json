@@ -16102,8 +16102,68 @@
       },
       "workRole": {
         "description": "役割を入力すると、応答をより適切に調整できます。",
-        "placeholder": "あなたの役割",
-        "title": "職務"
+        "placeholder": "役割を選択",
+        "title": "あなたの仕事に最も近いものは？",
+        "other": {
+          "placeholder": "役割を入力",
+          "title": "あなたの仕事"
+        }
+      },
+      "photo": {
+        "errors": {
+          "tooLarge": "10 MB 以下の画像を選択してください。",
+          "invalidType": "PNG、JPEG、WebP の画像を選択してください。"
+        },
+        "description": "PNG、JPEG、WebP（最大 10 MB）。",
+        "toasts": {
+          "updateFailed": "プロフィール写真を更新できませんでした。もう一度お試しください。"
+        },
+        "title": "プロフィール写真",
+        "editButton": {
+          "ariaLabel": "プロフィール写真を変更"
+        },
+        "uploadButton": {
+          "ariaLabel": "プロフィール写真をアップロード"
+        },
+        "menu": {
+          "label": "プロフィール写真のオプション",
+          "replace": {
+            "label": "写真を置き換える"
+          },
+          "remove": {
+            "label": "削除"
+          }
+        },
+        "cropModal": {
+          "title": "写真を切り抜く",
+          "description": "ドラッグするか矢印キーで位置を調整します。スライダーまたはスクロールでズームします。",
+          "area": {
+            "ariaLabel": "切り抜き範囲"
+          },
+          "zoom": {
+            "ariaLabel": "ズーム"
+          },
+          "zoomIn": {
+            "ariaLabel": "拡大"
+          },
+          "zoomOut": {
+            "ariaLabel": "縮小"
+          },
+          "reset": {
+            "label": "リセット"
+          },
+          "cancel": {
+            "label": "キャンセル"
+          },
+          "save": {
+            "label": "保存"
+          }
+        }
+      },
+      "preferredName": {
+        "description": "{appName} はこの名前であなたに話しかけます。",
+        "placeholder": "名前を入力",
+        "title": "{appName} にどう呼ばれたいですか？"
       }
     },
     "promptShortcuts": {
@@ -16205,6 +16265,21 @@
     },
     "interactions": {
       "title": "操作"
+    },
+    "organization": {
+      "role": {
+        "groupManager": "グループマネージャー",
+        "description": "このワークスペースでのアクセス レベルです。",
+        "admin": "管理者",
+        "basic": "一般ユーザー",
+        "title": "あなたのロール"
+      },
+      "tenantId": {
+        "description": "サポートに問い合わせる際はこの ID を伝えてください。",
+        "copyTooltip": "テナント ID をコピー",
+        "title": "テナント ID"
+      },
+      "title": "組織"
     }
   },
   "sidebar": {
@@ -17939,6 +18014,49 @@
       "inFlight": "{status, select, AWAITING_APPROVAL {この実行は下であなたの承認を待っています。} other {この実行は進行中です。}}",
       "startedAt": "{time} に開始",
       "viewTask": "タスクを表示"
+    }
+  },
+  "profile": {
+    "workRole": {
+      "marketing": {
+        "label": "マーケティング"
+      },
+      "finance": {
+        "label": "財務"
+      },
+      "other": {
+        "label": "その他"
+      },
+      "engineering": {
+        "label": "エンジニアリング"
+      },
+      "customerSupportSuccess": {
+        "label": "カスタマーサポート・サクセス"
+      },
+      "peopleHr": {
+        "label": "人事"
+      },
+      "dataAnalytics": {
+        "label": "データ・分析"
+      },
+      "legal": {
+        "label": "法務"
+      },
+      "design": {
+        "label": "デザイン"
+      },
+      "product": {
+        "label": "プロダクト"
+      },
+      "operations": {
+        "label": "オペレーション"
+      },
+      "sales": {
+        "label": "営業"
+      },
+      "leadership": {
+        "label": "経営"
+      }
     }
   }
 }
