@@ -1,7 +1,7 @@
 from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import Select, select
+from sqlalchemy import Select, String, cast, func, select
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import KV_SUGGESTED_QUESTIONS_USER_KEY
@@ -99,6 +99,52 @@ def get_recent_user_file_ids(
         for user_file_id in user_file_ids
         if user_file_id not in exclude_ids
     ][:limit]
+
+
+def count_new_documents_since(db_session: Session, since: datetime) -> int:
+    """Documents that reached the index, and uploads that finished, after
+    `since`. Deletions do not lower it, so additions on one connector and
+    deletions on another cannot cancel out."""
+    documents = db_session.scalar(
+        select(func.count())
+        .select_from(Document)
+        .where(Document.last_synced > since, Document.hidden.is_(False))
+    )
+    uploads = db_session.scalar(
+        select(func.count())
+        .select_from(UserFile)
+        .where(
+            UserFile.status == UserFileStatus.COMPLETED,
+            UserFile.incognito.is_(False),
+            UserFile.last_project_sync_at > since,
+        )
+    )
+    return (documents or 0) + (uploads or 0)
+
+
+def count_candidate_documents(db_session: Session, exclude_ids: set[str]) -> int:
+    """Indexed documents and finished uploads that are not in `exclude_ids`,
+    the documents that already have a question."""
+    excluded = list(exclude_ids)
+    documents = db_session.scalar(
+        select(func.count())
+        .select_from(Document)
+        .where(
+            Document.last_synced.is_not(None),
+            Document.hidden.is_(False),
+            Document.id.not_in(excluded),
+        )
+    )
+    uploads = db_session.scalar(
+        select(func.count())
+        .select_from(UserFile)
+        .where(
+            UserFile.status == UserFileStatus.COMPLETED,
+            UserFile.incognito.is_(False),
+            cast(UserFile.id, String).not_in(excluded),
+        )
+    )
+    return (documents or 0) + (uploads or 0)
 
 
 def load_user_record_values(
