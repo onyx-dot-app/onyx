@@ -345,6 +345,71 @@ function confluencePageId(entry: string): string {
   return match?.[1] ?? match?.[2] ?? trimmed;
 }
 
+function buildJiraConnectorValues(everythingDescription: string) {
+  return [
+    {
+      type: "text" as const,
+      label: "connectors.jira.fields.jira_base_url.label",
+      name: "jira_base_url",
+      optional: false,
+      placeholder: "connectors.jira.fields.jira_base_url.placeholder",
+      subDescription: "siteUrl" as const,
+    },
+    ATLASSIAN_SCOPED_TOKEN_FIELD,
+    {
+      type: "tab" as const,
+      name: "indexing_scope",
+      optional: true,
+      tabs: [
+        {
+          value: "everything",
+          label: "connectors.jira.fields.indexing_scope.tabs.everything.label",
+          fields: [
+            {
+              type: "string_tab" as const,
+              label: "connectors.jira.fields.everything.label",
+              name: "everything",
+              description: everythingDescription,
+            },
+          ],
+        },
+        {
+          value: "project",
+          label: "connectors.jira.fields.indexing_scope.tabs.project.label",
+          fields: [
+            {
+              type: "text" as const,
+              label: "connectors.jira.fields.project_key.label",
+              name: "project_key",
+              description: "connectors.jira.fields.project_key.description",
+            },
+          ],
+        },
+        {
+          value: "jql",
+          label: "connectors.jira.fields.indexing_scope.tabs.jql.label",
+          fields: [
+            {
+              type: "text" as const,
+              label: "connectors.jira.fields.jql_query.label",
+              name: "jql_query",
+              description: "connectors.jira.fields.jql_query.description",
+            },
+          ],
+        },
+      ],
+      defaultTab: "everything",
+    },
+    {
+      type: "list" as const,
+      label: "connectors.jira.fields.comment_email_blacklist.label",
+      name: "comment_email_blacklist",
+      description: "connectors.jira.fields.comment_email_blacklist.description",
+      optional: true,
+    },
+  ];
+}
+
 export const connectorConfigs: Record<
   ConfigurableSources,
   ConnectionConfiguration
@@ -1040,70 +1105,17 @@ export const connectorConfigs: Record<
   jira: {
     description: "connectors.jira.description",
     subtext: "connectors.jira.subtext",
-    values: [
-      {
-        type: "text",
-        label: "connectors.jira.fields.jira_base_url.label",
-        name: "jira_base_url",
-        optional: false,
-        placeholder: "connectors.jira.fields.jira_base_url.placeholder",
-        subDescription: "siteUrl",
-      },
-      ATLASSIAN_SCOPED_TOKEN_FIELD,
-      {
-        type: "tab",
-        name: "indexing_scope",
-        optional: true,
-        tabs: [
-          {
-            value: "everything",
-            label:
-              "connectors.jira.fields.indexing_scope.tabs.everything.label",
-            fields: [
-              {
-                type: "string_tab",
-                label: "connectors.jira.fields.everything.label",
-                name: "everything",
-                description: "connectors.jira.fields.everything.description",
-              },
-            ],
-          },
-          {
-            value: "project",
-            label: "connectors.jira.fields.indexing_scope.tabs.project.label",
-            fields: [
-              {
-                type: "text",
-                label: "connectors.jira.fields.project_key.label",
-                name: "project_key",
-                description: "connectors.jira.fields.project_key.description",
-              },
-            ],
-          },
-          {
-            value: "jql",
-            label: "connectors.jira.fields.indexing_scope.tabs.jql.label",
-            fields: [
-              {
-                type: "text",
-                label: "connectors.jira.fields.jql_query.label",
-                name: "jql_query",
-                description: "connectors.jira.fields.jql_query.description",
-              },
-            ],
-          },
-        ],
-        defaultTab: "everything",
-      },
-      {
-        type: "list",
-        label: "connectors.jira.fields.comment_email_blacklist.label",
-        name: "comment_email_blacklist",
-        description:
-          "connectors.jira.fields.comment_email_blacklist.description",
-        optional: true,
-      },
-    ],
+    values: buildJiraConnectorValues(
+      "connectors.jira.fields.everything.description"
+    ),
+    advanced_values: [],
+  },
+  jira_service_management: {
+    description: "connectors.jira_service_management.description",
+    subtext: "connectors.jira.subtext",
+    values: buildJiraConnectorValues(
+      "connectors.jira_service_management.fields.everything.description"
+    ),
     advanced_values: [],
   },
   salesforce: {
