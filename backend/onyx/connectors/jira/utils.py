@@ -128,15 +128,95 @@ def extract_jira_project(url: str) -> tuple[str, str]:
 
 
 def get_comment_strs(
-    issue: dict[str, Any], comment_email_blacklist: tuple[str, ...] = ()
+    issue: dict[str, Any],
+    comment_email_blacklist: tuple[str, ...] = (),
+    skip_restricted: bool = False,
+    skip_jsm_internal: bool = False,
 ) -> list[str]:
+    """Extract comment text from a Jira issue.
+
+    Args:
+        issue: Raw Jira issue dict
+        comment_email_blacklist: Email addresses whose comments to skip
+        skip_restricted: When True, skip comments with visibility restrictions
+        skip_jsm_internal: When True, skip JSM internal comments. Checks both
+            jsdPublic field and sd.public.comment property. Handles properties
+            as dict or list, and boolean values as bool or string ("true"/"false").
+            Fails closed (skips comment) when JSM markers cannot be determined.
+
+    Returns:
+        List of comment text strings
+    """
     comment_field: dict[str, Any] = get_issue_field(issue, "comment") or {}
     comment_strs: list[str] = []
     for comment in comment_field.get("comments", []):
         try:
             author: dict[str, Any] = comment.get("author") or {}
             if author.get("emailAddress") in comment_email_blacklist:
-                continue  # Skip adding comment if author's email is in blacklist
+                continue
+
+            if skip_restricted and comment.get("visibility") is not None:
+                continue
+
+            if skip_jsm_internal:
+                # Check jsdPublic field (handles bool and string representations)
+                jsd_public = comment.get("jsdPublic")
+                if jsd_public is not None:
+                    # Handle string representations like "false"/"true"
+                    if isinstance(jsd_public, str):
+                        jsd_public_normalized = jsd_public.lower() == "true"
+                    else:
+                        jsd_public_normalized = bool(jsd_public)
+                    if not jsd_public_normalized:
+                        continue
+
+                # Check properties field (can be dict or list of property objects)
+                properties: Any = comment.get("properties")
+                should_skip = False
+                
+                # Handle properties as dict
+                if isinstance(properties, dict):
+                    sd_public_comment = properties.get("sd.public.comment")
+                    if isinstance(sd_public_comment, dict):
+                        internal_value = sd_public_comment.get("internal")
+                        if internal_value is None:
+                            logger.warning(
+                                "JSM comment has sd.public.comment property but internal value is missing; skipping for safety"
+                            )
+                            should_skip = True
+                        else:
+                            # Handle string representations like "false"/"true"
+                            if isinstance(internal_value, str):
+                                internal_normalized = internal_value.lower() == "true"
+                            else:
+                                internal_normalized = bool(internal_value)
+                            if internal_normalized:
+                                should_skip = True
+                
+                # Handle properties as list
+                elif isinstance(properties, list):
+                    for prop in properties:
+                        if isinstance(prop, dict) and prop.get("key") == "sd.public.comment":
+                            prop_value = prop.get("value")
+                            if isinstance(prop_value, dict):
+                                internal_value = prop_value.get("internal")
+                                if internal_value is None:
+                                    logger.warning(
+                                        "JSM comment has sd.public.comment property but internal value is missing; skipping for safety"
+                                    )
+                                    should_skip = True
+                                else:
+                                    # Handle string representations like "false"/"true"
+                                    if isinstance(internal_value, str):
+                                        internal_normalized = internal_value.lower() == "true"
+                                    else:
+                                        internal_normalized = bool(internal_value)
+                                    if internal_normalized:
+                                        should_skip = True
+                            break
+                
+                if should_skip:
+                    continue
 
             comment_strs.append(rich_text(comment.get("body")))
         except Exception as e:
