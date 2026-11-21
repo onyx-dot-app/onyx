@@ -228,3 +228,123 @@ def test_the_drive_limiter_has_no_pause(tenant_id: str) -> None:  # noqa: ARG001
     started = time.monotonic()
     limiter.acquire("drive", 1, "a@x.com")
     assert time.monotonic() - started < 1
+
+
+# A connector with its own RU per minute.
+
+
+def _build_with_value(
+    cc_pair_id: int, ru_per_minute: int, client_id: str = _CLIENT
+) -> RedisSourceApiLimiter:
+    limiter = build_source_api_limiter(
+        DocumentSource.SHAREPOINT,
+        credential_id=int(uuid4().int % 1_000_000_000),
+        load_credential_json=lambda: _credential("sp", client_id),
+        cc_pair_id=cc_pair_id,
+        connector_specific_config={"ru_per_minute": ru_per_minute},
+    )
+    assert isinstance(limiter, RedisSourceApiLimiter)
+    return limiter
+
+
+def test_a_connector_with_a_value_has_its_own_window_at_the_full_value(
+    tenant_id: str,  # noqa: ARG001
+) -> None:
+    first = _build_with_value(cc_pair_id=1, ru_per_minute=600)
+    same_pair_other_pod = _build_with_value(cc_pair_id=1, ru_per_minute=600)
+    second = _build_with_value(cc_pair_id=2, ru_per_minute=600)
+    learned = _build(DocumentSource.SHAREPOINT, "sp")
+
+    # 600 RU a minute is 100 in each 10 s window, with no start share.
+    assert first.try_acquire(_API, 100) == 0
+    assert same_pair_other_pod.try_acquire(_API, 1) > 0
+    # The other connectors on the app keep their budgets.
+    assert second.try_acquire(_API, 100) == 0
+    assert learned.try_acquire(_API, 1) == 0
+
+
+def test_a_value_needs_the_pair(tenant_id: str) -> None:  # noqa: ARG001
+    """With no pair to key the budget by, the connector shares the learned
+    budget of the app."""
+    limiter = build_source_api_limiter(
+        DocumentSource.SHAREPOINT,
+        credential_id=1,
+        load_credential_json=lambda: _credential("sp"),
+        connector_specific_config={"ru_per_minute": 600},
+    )
+    assert isinstance(limiter, RedisSourceApiLimiter)
+    assert limiter.credential_window(_API) == _build(
+        DocumentSource.SHAREPOINT, "sp"
+    ).credential_window(_API)
+
+
+def test_a_connector_with_a_value_obeys_the_pause_of_the_app(
+    tenant_id: str,  # noqa: ARG001
+) -> None:
+    with_value = _build_with_value(cc_pair_id=3, ru_per_minute=600)
+    learned = _build(DocumentSource.TEAMS, "teams")
+
+    # A 429 for the connector with a value pauses every connector on the app.
+    with_value.report_retry_after(_API, 1.0)
+
+    started = time.monotonic()
+    learned.acquire(_API, 1)
+    assert time.monotonic() - started >= 0.8
+    # The pause is over for both.
+    with_value.acquire(_API, 1)
+    assert time.monotonic() - started < 3
+
+
+def test_a_refusal_cuts_the_window_of_a_connector_with_a_value(
+    tenant_id: str,  # noqa: ARG001
+) -> None:
+    limiter = _build_with_value(cc_pair_id=4, ru_per_minute=6000)
+    for _ in range(100):
+        limiter.acquire(_API, 1)
+    limiter.report_rate_limit(_API, None, user_scope=False, count=50)
+
+    window = limiter.credential_window(_API)
+    assert window is not None
+    shares = limiter._windows.try_acquire_with_shares([window], cost=0).shares
+    assert shares[0] <= 0.5
+
+
+def test_the_day_budget_is_960_times_the_value(
+    tenant_id: str, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    budgets = source_api_limiter.microsoft_connector_budgets(1250)[_API]
+    assert budgets.per_credential_per_day == 1_200_000
+
+    # A small day budget, so that the test can fill it.
+    monkeypatch.setattr(source_api_limiter, "RU_PER_DAY_FACTOR", 1)
+    monkeypatch.setattr(source_api_limiter, "_DAY_RETRY_SECONDS", 0.2)
+    stop = threading.Event()
+    limiter = build_source_api_limiter(
+        DocumentSource.SHAREPOINT,
+        credential_id=1,
+        should_stop=stop.is_set,
+        load_credential_json=lambda: _credential("sp"),
+        cc_pair_id=5,
+        connector_specific_config={"ru_per_minute": 60},
+    )
+    assert isinstance(limiter, RedisSourceApiLimiter)
+    # 60 RU a minute is 10 in each 10 s window, and here 60 in the day.
+    client = get_redis_client(tenant_id=tenant_id)
+    for _ in range(6):
+        limiter.acquire(_API, 10)
+        # Empty the short windows: only the day budget stays.
+        for key in client.scan_iter("*cc_pair:5*"):
+            name = key.decode() if isinstance(key, bytes) else str(key)
+            if not name.endswith(":day"):
+                client.delete(key)
+
+    # The day is full. The call waits until the stop signal.
+    threading.Timer(0.5, stop.set).start()
+    started = time.monotonic()
+    with pytest.raises(ConnectorStopSignal):
+        limiter.acquire(_API, 10)
+    assert 0.3 <= time.monotonic() - started < 5
+    # The refused call took nothing: one more unit still does not fit 60.
+    day_key = "source_api_limit:microsoft:cc_pair:5:graph:all:day"
+    assert limiter._windows.try_take_from_day(day_key, 1, 60) > 0
+    assert limiter._windows.try_take_from_day(day_key, 1, 61) == 0

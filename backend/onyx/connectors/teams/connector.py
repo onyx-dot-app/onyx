@@ -167,6 +167,8 @@ class TeamsConnector(
         # Off by default: a meeting's chat needs Chat.Read.All. Walked through
         # the same organizers as the transcripts.
         include_meeting_chats: bool = False,
+        # Read by the limiter factory from the stored config, not here.
+        ru_per_minute: int | None = None,  # noqa: ARG002
     ) -> None:
         TeamsSession.__init__(self, graph_api_host, authority_host)
         if max_workers <= 0:

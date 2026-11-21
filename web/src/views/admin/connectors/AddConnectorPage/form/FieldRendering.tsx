@@ -49,6 +49,8 @@ import {
 } from "@/lib/connectors/checks/hooks";
 import type { ListOption } from "@/lib/connectors/types/form";
 import { escapeMarkdown, markdown } from "@opal/utils";
+import { MICROSOFT_RU_PER_MINUTE_FIELD_NAME } from "@/lib/connectors/connectors";
+import MicrosoftRateBudgetNote from "@/views/admin/connectors/AddConnectorPage/form/MicrosoftRateBudgetNote";
 
 // Define a general type for form values
 type FormValues = Record<string, any>;
@@ -595,34 +597,39 @@ export const RenderField: FC<RenderFieldProps> = ({
           onChange={(selected) => setFieldValue(field.name, selected)}
         />
       ) : field.type === "number" ? (
-        <InputVertical
-          withLabel={field.name}
-          disabled={disabled}
-          title={label}
-          subDescription={richDescription}
-          suffix={optionalSuffix}
-        >
-          <FormikField<number | undefined>
-            name={field.name}
-            render={(formikField, helper, _meta, status) => (
-              <InputNumber
-                id={field.name}
-                value={formikField.value ?? null}
-                onChange={(value) => {
-                  // InputNumber has no blur callback, so touch on change to
-                  // show the field's validation error.
-                  void helper.setTouched(true, false);
-                  void helper.setValue(value ?? undefined);
-                }}
-                // Some sources take -1 for "no limit", such as a recursion
-                // depth.
-                min={-1}
-                variant={status === "error" ? "error" : "primary"}
-                disabled={disabled}
-              />
-            )}
-          />
-        </InputVertical>
+        <>
+          <InputVertical
+            withLabel={field.name}
+            disabled={disabled}
+            title={label}
+            subDescription={richDescription}
+            suffix={optionalSuffix}
+          >
+            <FormikField<number | undefined>
+              name={field.name}
+              render={(formikField, helper, _meta, status) => (
+                <InputNumber
+                  id={field.name}
+                  value={formikField.value ?? null}
+                  onChange={(value) => {
+                    // InputNumber has no blur callback, so touch on change to
+                    // show the field's validation error.
+                    void helper.setTouched(true, false);
+                    void helper.setValue(value ?? undefined);
+                  }}
+                  // Some sources take -1 for "no limit", such as a recursion
+                  // depth.
+                  min={-1}
+                  variant={status === "error" ? "error" : "primary"}
+                  disabled={disabled}
+                />
+              )}
+            />
+          </InputVertical>
+          {field.name === MICROSOFT_RU_PER_MINUTE_FIELD_NAME && (
+            <MicrosoftRateBudgetNote scope={reportScope} />
+          )}
+        </>
       ) : field.type === "checkbox" && field.tabLabels ? (
         <CheckboxTabsField option={field} label={label} disabled={disabled} />
       ) : field.type === "checkbox" && field.asCheckbox ? (

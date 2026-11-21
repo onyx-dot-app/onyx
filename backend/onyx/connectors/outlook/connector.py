@@ -704,6 +704,8 @@ class OutlookConnector(
         authority_host: str = DEFAULT_AUTHORITY_HOST,
         graph_api_host: str = DEFAULT_GRAPH_API_HOST,
         batch_size: int = INDEX_BATCH_SIZE,
+        # Read by the limiter factory from the stored config, not here.
+        ru_per_minute: int | None = None,  # noqa: ARG002
     ) -> None:
         # Addresses, then Entra groups by display name or object id whose
         # members are walked. Both empty means every mailbox the app may open.

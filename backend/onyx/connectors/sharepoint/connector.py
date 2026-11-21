@@ -750,6 +750,8 @@ class SharepointConnector(
         graph_api_host: str = DEFAULT_GRAPH_API_HOST,
         sharepoint_domain_suffix: str = DEFAULT_SHAREPOINT_DOMAIN_SUFFIX,
         exhaustive_ad_enumeration: bool = SHAREPOINT_EXHAUSTIVE_AD_ENUMERATION,
+        # Read by the limiter factory from the stored config, not here.
+        ru_per_minute: int | None = None,  # noqa: ARG002
     ) -> None:
         if excluded_paths is None:
             excluded_paths = []

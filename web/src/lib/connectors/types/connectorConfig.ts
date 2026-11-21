@@ -60,6 +60,7 @@ export interface OneDriveConfig {
   treat_organization_link_as_public: boolean;
   authority_host: string;
   graph_api_host: string;
+  ru_per_minute?: number;
 }
 
 export interface GmailConfig {}
@@ -97,6 +98,7 @@ export interface SharepointConfig {
   authority_host?: string;
   graph_api_host?: string;
   sharepoint_domain_suffix?: string;
+  ru_per_minute?: number;
 }
 
 export interface TeamsConfig {
@@ -108,6 +110,7 @@ export interface TeamsConfig {
   meeting_organizers?: string[];
   authority_host?: string;
   graph_api_host?: string;
+  ru_per_minute?: number;
 }
 
 export interface DiscourseConfig {
