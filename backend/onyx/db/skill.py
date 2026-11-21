@@ -355,8 +355,6 @@ def list_skills(*, db_session: Session, user: User) -> list[StoredSkill]:
 def _built_in_skill_folders(
     definition: BuiltInSkillDefinition,
 ) -> tuple[RuntimeSkillFolder, ...]:
-    """The skill folders of a built-in plugin; none for a one-skill built-in,
-    as for a custom skill version."""
     if is_skill_version(skill.path for skill in definition.skills):
         return ()
     return tuple(
@@ -438,8 +436,7 @@ def list_runtime_skills_for_user(
 def list_chat_skills(
     db_session: Session, user: User, *, built_ins: bool
 ) -> list[ChatSkill]:
-    """``built_ins``: also the available built-ins of
-    ``CHAT_BUILT_IN_SKILL_IDS``, which need the chat VM's sandbox tools."""
+    """``built_ins``: only when the turn has the sandbox tools."""
     if user.is_anonymous:
         return []
     skills: list[ChatSkill] = []

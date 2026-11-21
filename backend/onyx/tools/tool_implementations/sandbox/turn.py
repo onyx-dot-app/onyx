@@ -76,8 +76,6 @@ class SandboxTurn:
         return ref
 
     def _sync_skills(self, ref: HarnessSandboxRef) -> None:
-        """Show the user's chat built-ins in the sandbox once per turn, before
-        the turn's first call runs. After a failure the next call tries again."""
         # Deferred: the skills push stack loads only when a tool runs.
         from onyx.skills.push import build_chat_built_in_files
 

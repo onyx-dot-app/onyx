@@ -1,6 +1,3 @@
-"""A built-in plugin with skills in `skills/<name>/` is read and pushed as
-an uploaded plugin version is: one skill and one sandbox folder per skill."""
-
 from pathlib import Path
 
 import pytest

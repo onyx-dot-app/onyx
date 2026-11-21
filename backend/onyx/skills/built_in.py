@@ -57,9 +57,7 @@ def _always_available(_: Session) -> bool:
 
 
 class BuiltInPluginSkill(BaseModel):
-    """One skill of a built-in plugin. ``path`` is "" when the built-in is one
-    skill with SKILL.md at its root, else ``skills/<folder>``, as in an
-    uploaded plugin version."""
+    """``path`` is "" for a one-skill built-in, else ``skills/<folder>``."""
 
     model_config = ConfigDict(frozen=True)
 
@@ -125,7 +123,6 @@ class BuiltInSkillDefinition(BaseModel):
 
     @property
     def skills(self) -> tuple[BuiltInPluginSkill, ...]:
-        """The skills of this built-in plugin, read once from disk."""
         return _plugin_skills(self.source_dir)
 
     @computed_field
@@ -295,10 +292,8 @@ def built_in_skills_usage() -> SkillUsage:
     )
 
 
-# The built-ins that chat offers when its turn has the sandbox tools. They run
-# from the chat VM's skills drive and need no Onyx API access from the VM.
+# Each must run in the chat VM without Onyx API access.
 CHAT_BUILT_IN_SKILL_IDS: Final[frozenset[str]] = frozenset({"pptx", "browser"})
-# Where the chat VM shows the built-ins, one folder for each skill.
 CHAT_SKILLS_MOUNT_PATH: Final = "/mnt/skills"
 
 

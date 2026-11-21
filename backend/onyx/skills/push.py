@@ -133,8 +133,6 @@ def _add_static_builtin(
     folders: Iterable[RuntimeSkillFolder],
     definition: BuiltInSkillDefinition,
 ) -> None:
-    """Each skill folder of a built-in plugin goes in a folder named by its
-    skill, and no other file of the plugin, as for a custom plugin."""
     source_dir = definition.source_dir
     for path in iter_builtin_skill_files(source_dir):
         # Template sources are rendered separately; never ship them raw.
@@ -447,7 +445,6 @@ def build_skills_fileset_for_user(user: User, db_session: Session) -> FileSet:
 
 
 def build_chat_built_in_files(user: User, db_session: Session) -> FileSet:
-    """The files of the built-ins that chat offers the user, one folder each."""
     return _assemble_fileset(
         [
             skill

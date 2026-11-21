@@ -1285,7 +1285,6 @@ def test_skills_go_to_each_vm_instance_once_per_change(
     ref = new_ref()
     files = {"pptx/SKILL.md": b"# pptx", "pptx/scripts/lint.py": b"print(1)"}
     sandbox.sync_skills(ref, files)
-    # The same files in another order are the same image: no new swap.
     sandbox.sync_skills(ref, dict(reversed(list(files.items()))))
     assert node.agent.swap_mounts == ["skills"]
     assert len(node.agent.managed_images) == 1
@@ -1293,7 +1292,6 @@ def test_skills_go_to_each_vm_instance_once_per_change(
     sandbox.sync_skills(ref, {**files, "pptx/SKILL.md": b"# pptx v2"})
     assert len(node.agent.swap_mounts) == 2
 
-    # A new VM instance shows no skills until a turn pushes them again.
     vm = node.agent.vms[str(ref.sandbox_id)]
     sandbox._client_factory.client(node.address).stop(
         sandbox_id=str(ref.sandbox_id), attempt=vm.attempt, generation=vm.generation

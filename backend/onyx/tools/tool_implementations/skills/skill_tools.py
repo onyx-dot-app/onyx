@@ -53,7 +53,6 @@ class _SkillTool(Tool):
     arguments: ClassVar[type[BaseModel]]
 
     def __init__(self, user: User, *, built_ins: bool) -> None:
-        """``built_ins``: the turn has the sandbox tools, which built-ins need."""
         self.user = user
         self.built_ins = built_ins
 

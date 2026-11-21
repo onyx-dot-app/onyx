@@ -34,8 +34,6 @@ class SessionInstanceTable(BaseModel):
 
 
 class SkillsImage(BaseModel):
-    """The skills image on the managed drive of one VM instance."""
-
     instance: tuple[int, int]
     image_id: str
 

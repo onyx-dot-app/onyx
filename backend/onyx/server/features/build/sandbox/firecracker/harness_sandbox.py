@@ -1221,8 +1221,6 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
 
 
 def _skills_bundle(files: FileSet) -> bytes:
-    """A managed bundle zip of `files`. The same files give the same bytes,
-    so the same image ID."""
     buffer = io.BytesIO()
     with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
         for path in sorted(files):

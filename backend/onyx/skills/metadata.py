@@ -24,7 +24,6 @@ from onyx.skills.models import (
     SkillMetadata,
 )
 
-# The folder of a plugin that holds its skills, one `<name>/SKILL.md` each.
 SKILLS_DIR: Final = "skills"
 
 _FRONTMATTER_REGEX: Final[re.Pattern[str]] = re.compile(

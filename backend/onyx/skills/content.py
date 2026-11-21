@@ -37,7 +37,6 @@ logger = setup_logger()
 def read_builtin_skill_instructions(
     definition: BuiltInSkillDefinition, path: str = ""
 ) -> str:
-    """``path``: the skill's folder in the built-in plugin."""
     source_dir = definition.source_dir / path
     source_path = source_dir / SKILL_MD_NAME
     if not source_path.is_file():
@@ -130,9 +129,6 @@ def read_versions_skill_md(
 def read_chat_skills_md(
     skills: Collection[ChatSkill], user_id: UUID, db_session: Session
 ) -> dict[SkillKey, str]:
-    """The SKILL.md of each chat skill that can be read, by
-    ``(version_id, path)``. A built-in's starts with the folder of its files
-    in the chat VM."""
     skill_md = read_versions_skill_md(
         {
             (skill.version_id, skill.path)
