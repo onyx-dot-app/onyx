@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import { Section } from "@opal/layouts";
 import { ShadowDiv, Text } from "@opal/components";
+import { richNodes } from "@opal/utils";
 import { RenderType } from "@/app/app/message/messageComponents/types";
 
 interface SandboxCallContentProps {
@@ -40,7 +41,7 @@ export function SandboxCallError({ error }: SandboxCallErrorProps) {
   return (
     <div className="whitespace-pre-wrap wrap-break-word">
       <Text as="p" font="secondary-body" color="status-error-05">
-        {error}
+        {richNodes(<span dir="ltr">{error}</span>)}
       </Text>
     </div>
   );

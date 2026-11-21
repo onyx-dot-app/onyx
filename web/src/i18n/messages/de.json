@@ -12682,25 +12682,6 @@
         "toggleRow": {
           "ariaLabel": "Zeitleiste umschalten"
         },
-        "toolNames": {
-          "codeInterpreter": "Code-Interpreter",
-          "customTool": "Benutzerdefiniertes Werkzeug",
-          "generateImage": "Bild generieren",
-          "generatePlan": "Plan erstellen",
-          "internalSearch": "Interne Suche",
-          "knowledgeBaseQuery": "Wissensdatenbank-Abfrage",
-          "memory": "Erinnerung",
-          "openUrls": "URLs öffnen",
-          "researchAgent": "Recherche-Agent",
-          "thinking": "Nachdenken",
-          "tool": "Werkzeug",
-          "webSearch": "Websuche",
-          "terminal": "Terminal",
-          "applyPatch": "Patch anwenden",
-          "editFile": "Datei bearbeiten",
-          "writeFile": "Datei schreiben",
-          "publishFiles": "Dateien veröffentlichen"
-        },
         "webSearch": {
           "searching": {
             "status": "Durchsucht das Web"
@@ -12717,7 +12698,10 @@
             }
           },
           "stdin": {
-            "status": "{kind, select, send {{phase, select, running {Eingabe wird an Sitzung {sessionId} gesendet} failed {Eingabe an Sitzung {sessionId} konnte nicht gesendet werden} canceled {Abgebrochen} done {Eingabe an Sitzung {sessionId} gesendet} other {Eingabe an Sitzung {sessionId} gesendet}}} check {{phase, select, running {Sitzung {sessionId} wird geprüft} failed {Sitzung {sessionId} konnte nicht geprüft werden} canceled {Abgebrochen} done {Sitzung {sessionId} geprüft} other {Sitzung {sessionId} geprüft}}} other {Sitzung {sessionId}}}"
+            "status": "{kind, select, send {{phase, select, running {Eingabe wird an Sitzung {sessionId} gesendet} failed {Eingabe an Sitzung {sessionId} konnte nicht gesendet werden} canceled {Abgebrochen} done {Eingabe an Sitzung {sessionId} gesendet} other {Eingabe an Sitzung {sessionId} gesendet}}} check {{phase, select, running {Sitzung {sessionId} wird geprüft} failed {Sitzung {sessionId} konnte nicht geprüft werden} canceled {Abgebrochen} done {Sitzung {sessionId} geprüft} other {Sitzung {sessionId} geprüft}}} other {Sitzung {sessionId}}}",
+            "noSession": {
+              "status": "{kind, select, send {{phase, select, running {Eingabe wird an die Sitzung gesendet} failed {Eingabe an die Sitzung konnte nicht gesendet werden} canceled {Abgebrochen} done {Eingabe an die Sitzung gesendet} other {Eingabe an die Sitzung gesendet}}} check {{phase, select, running {Sitzung wird geprüft} failed {Sitzung konnte nicht geprüft werden} canceled {Abgebrochen} done {Sitzung geprüft} other {Sitzung geprüft}}} other {Sitzung}}"
+            }
           },
           "output": {
             "title": "Ausgabe"
@@ -12744,7 +12728,18 @@
             "failed": {
               "status": "Bearbeitung fehlgeschlagen"
             },
-            "title": "Patch"
+            "title": "Patch",
+            "progress": {
+              "named": {
+                "status": "{tool, select, write {Schreibe {path}…} other {Bearbeite {path}…}}"
+              },
+              "unnamed": {
+                "status": "{tool, select, write {Schreibe eine Datei…} other {Bearbeite eine Datei…}}"
+              },
+              "patching": {
+                "status": "{count, plural, =0 {Patche Dateien…} one {Patche # Datei…} other {Patche # Dateien…}}"
+              }
+            }
           },
           "stopped": {
             "status": "Gestoppt"

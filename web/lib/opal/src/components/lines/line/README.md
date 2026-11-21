@@ -20,6 +20,7 @@ layout.
 | `padding`         | `0 \| 1`                | `1`         | The outer padding, as a spacing step (`N / 4` rem). `0` for a line inside a container that pads it already          |
 | `icon`            | `IconFunctionComponent` | —           | Shown at 1rem with 0.125rem padding                                                                                 |
 | `title`           | `string \| RichStr`     | —           | `secondary-action` in `text-03`. Fills the row, on one line, cut with an ellipsis and shown in full in a tooltip     |
+| `titleKey`        | `React.Key`             | title text  | The title's identity. A new key swaps the title; a new title with the same key updates in place                     |
 | `rightChildren`   | `ReactNode`             | —           | Trailing content at the very end (a tag, actions, a fold chevron), outside the line's inner padding; not padded     |
 | `onClick`         | `() => void`            | —           | Makes the row a `Collapsible.Header` with a chevron; a click on the row calls it                         |
 | `expandable`      | `true`                  | —           | Enables `expanded` and `expandedContent`                                                                            |

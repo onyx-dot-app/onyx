@@ -12682,25 +12682,6 @@
         "toggleRow": {
           "ariaLabel": "تبديل الخط الزمني"
         },
-        "toolNames": {
-          "codeInterpreter": "مفسر الأكواد",
-          "customTool": "أداة مخصصة",
-          "generateImage": "توليد صورة",
-          "generatePlan": "توليد خطة",
-          "internalSearch": "بحث داخلي",
-          "knowledgeBaseQuery": "استعلام قاعدة المعرفة",
-          "memory": "الذاكرة",
-          "openUrls": "فتح عناوين URL",
-          "researchAgent": "وكيل البحث",
-          "thinking": "التفكير",
-          "tool": "أداة",
-          "webSearch": "البحث في الويب",
-          "terminal": "الطرفية",
-          "applyPatch": "تطبيق التصحيح",
-          "editFile": "تعديل ملف",
-          "writeFile": "كتابة ملف",
-          "publishFiles": "نشر الملفات"
-        },
         "webSearch": {
           "searching": {
             "status": "جارٍ البحث في الويب"
@@ -12717,7 +12698,10 @@
             }
           },
           "stdin": {
-            "status": "{kind, select, send {{phase, select, running {جارٍ إرسال إدخال إلى الجلسة {sessionId}} failed {تعذر إرسال إدخال إلى الجلسة {sessionId}} canceled {أُلغي} done {تم إرسال إدخال إلى الجلسة {sessionId}} other {تم إرسال إدخال إلى الجلسة {sessionId}}}} check {{phase, select, running {جارٍ فحص الجلسة {sessionId}} failed {تعذر فحص الجلسة {sessionId}} canceled {أُلغي} done {تم فحص الجلسة {sessionId}} other {تم فحص الجلسة {sessionId}}}} other {الجلسة {sessionId}}}"
+            "status": "{kind, select, send {{phase, select, running {جارٍ إرسال إدخال إلى الجلسة {sessionId}} failed {تعذر إرسال إدخال إلى الجلسة {sessionId}} canceled {أُلغي} done {تم إرسال إدخال إلى الجلسة {sessionId}} other {تم إرسال إدخال إلى الجلسة {sessionId}}}} check {{phase, select, running {جارٍ فحص الجلسة {sessionId}} failed {تعذر فحص الجلسة {sessionId}} canceled {أُلغي} done {تم فحص الجلسة {sessionId}} other {تم فحص الجلسة {sessionId}}}} other {الجلسة {sessionId}}}",
+            "noSession": {
+              "status": "{kind, select, send {{phase, select, running {جارٍ إرسال إدخال إلى الجلسة} failed {تعذر إرسال إدخال إلى الجلسة} canceled {أُلغي} done {تم إرسال إدخال إلى الجلسة} other {تم إرسال إدخال إلى الجلسة}}} check {{phase, select, running {جارٍ فحص الجلسة} failed {تعذر فحص الجلسة} canceled {أُلغي} done {تم فحص الجلسة} other {تم فحص الجلسة}}} other {الجلسة}}"
+            }
           },
           "output": {
             "title": "المخرجات"
@@ -12744,7 +12728,18 @@
             "failed": {
               "status": "فشل التعديل"
             },
-            "title": "التصحيح"
+            "title": "التصحيح",
+            "progress": {
+              "named": {
+                "status": "{tool, select, write {جارٍ كتابة {path}…} other {جارٍ تعديل {path}…}}"
+              },
+              "unnamed": {
+                "status": "{tool, select, write {جارٍ كتابة ملف…} other {جارٍ تعديل ملف…}}"
+              },
+              "patching": {
+                "status": "{count, plural, =0 {جارٍ تصحيح الملفات…} one {جارٍ تصحيح ملف واحد…} two {جارٍ تصحيح ملفين…} few {جارٍ تصحيح # ملفات…} many {جارٍ تصحيح # ملفًا…} other {جارٍ تصحيح # ملف…}}"
+              }
+            }
           },
           "stopped": {
             "status": "تم الإيقاف"

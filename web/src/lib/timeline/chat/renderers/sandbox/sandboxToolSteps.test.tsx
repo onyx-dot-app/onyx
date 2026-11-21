@@ -1,7 +1,8 @@
-import { act, render, screen } from "@tests/setup/test-utils";
+import { act, render, screen, waitFor } from "@tests/setup/test-utils";
 import { Message } from "@/app/app/types";
 import { upsertMessages } from "@/app/app/services/messageTree";
 import {
+  FileToolName,
   ObjTypes,
   Packet,
   PacketType,
@@ -53,6 +54,14 @@ const at =
   (obj: ObjTypes): Packet => ({ placement, obj });
 
 const sectionEnd: ObjTypes = { type: PacketType.SECTION_END };
+
+/** Matches the element whose whole text, its children's included, is `text`:
+ * a status names its path in a code element. */
+function wholeText(text: string) {
+  return (_content: string, element: Element | null) =>
+    element?.textContent === text &&
+    Array.from(element.children).every((child) => child.textContent !== text);
+}
 
 function answer(turn_index: number): Packet[] {
   const packet = at({ turn_index, tab_index: 0 });
@@ -287,6 +296,35 @@ test("session input shows typed keys, and polls show the session state", async (
   }
 });
 
+// Renderer contract: the backend renderer starts a write_stdin call whose
+// arguments are wrong-typed with an empty session ID.
+test("a session call without a session ID leaves the session out", async () => {
+  const call = at({ turn_index: 0, tab_index: 0 });
+  const view = render(
+    renderMessage([
+      call({ type: PacketType.WRITE_STDIN_START, session_id: "", chars: "" }),
+      call({
+        type: PacketType.EXEC_END,
+        exit_code: null,
+        wall_time_seconds: null,
+        truncated: false,
+        output: null,
+        completion: null,
+        session_id: null,
+        error: "session_id: Input should be a valid string",
+      }),
+      call(sectionEnd),
+      ...answer(1),
+    ])
+  );
+  try {
+    await expandTimeline();
+    expect(screen.getByText("Could not check the session")).toBeInTheDocument();
+  } finally {
+    view.unmount();
+  }
+});
+
 test("a patch lists the files it changed, and a failed patch says why", async () => {
   const applied = at({ turn_index: 0, tab_index: 0 });
   const rejected = at({ turn_index: 1, tab_index: 0 });
@@ -324,7 +362,9 @@ test("a patch lists the files it changed, and a failed patch says why", async ()
     await expandTimeline();
     expect(screen.getByText("Edited 2 files")).toBeInTheDocument();
     expect(screen.getByText("new.py")).toBeInTheDocument();
-    expect(screen.getByText("old.py → moved.py")).toBeInTheDocument();
+    expect(
+      screen.getByText(wholeText("old.py → moved.py"))
+    ).toBeInTheDocument();
     // The card lays out only the head of each patch.
     expect(screen.getAllByText(/\+print\('hi'\)/)).toHaveLength(2);
     expect(screen.queryByText(/\+a = 2/)).not.toBeInTheDocument();
@@ -332,6 +372,332 @@ test("a patch lists the files it changed, and a failed patch says why", async ()
     expect(
       screen.getByText("Failed to find expected lines in old.py")
     ).toBeInTheDocument();
+  } finally {
+    view.unmount();
+  }
+});
+
+function fileProgress(tool_name: FileToolName, paths: string[]): ObjTypes {
+  return { type: PacketType.FILE_TOOL_PROGRESS, tool_name, paths };
+}
+
+/** The text of a message's steps, from `from` on: the run header measures
+ * the live thinking time, which the steps do not depend on. */
+async function stepsText(packets: Packet[], from: string): Promise<string> {
+  const view = render(renderMessage(packets));
+  try {
+    await openRun();
+    await screen.findAllByText(from);
+    const text = view.container.textContent ?? "";
+    return text.slice(text.indexOf(from));
+  } finally {
+    view.unmount();
+  }
+}
+
+test("a write shows its progress while it streams, then the replayed card", async () => {
+  const call = at({ turn_index: 0, tab_index: 0 });
+  const streaming = [
+    call(fileProgress("write", [])),
+    call(fileProgress("write", ["report.md"])),
+  ];
+  const finished = [
+    call({
+      type: PacketType.APPLY_PATCH_START,
+      patch:
+        "*** Begin Patch\n*** Add File: report.md\n+# Report\n*** End Patch",
+      tool_name: "write",
+    }),
+    call({
+      type: PacketType.APPLY_PATCH_END,
+      files: [{ path: "report.md", change: "add", move_path: null }],
+      error: null,
+    }),
+    call(sectionEnd),
+    ...answer(1),
+  ];
+  const replayed = await stepsText(finished, "Edited 1 file");
+
+  const view = render(renderMessage(streaming));
+  try {
+    const progress = wholeText("Writing report.md…");
+    expect((await screen.findAllByText(progress)).length).toBeGreaterThan(0);
+    // The run header names the activity before the start packet arrives.
+    expect(screen.getAllByText("Editing files").length).toBeGreaterThan(0);
+
+    // The start packet alone replaces the progress line.
+    view.rerender(renderMessage([...streaming, ...finished.slice(0, 1)]));
+    await openRun();
+    expect(view.container).not.toHaveTextContent("Writing");
+  } finally {
+    view.unmount();
+  }
+  expect(await stepsText([...streaming, ...finished], "Edited 1 file")).toBe(
+    replayed
+  );
+});
+
+test("a patch names its files while it streams, then matches its replay", async () => {
+  const call = at({ turn_index: 0, tab_index: 0 });
+  const streaming = [
+    call(fileProgress("apply_patch", [])),
+    call(fileProgress("apply_patch", ["new.py", "old.py"])),
+  ];
+  const finished = [
+    call({
+      type: PacketType.APPLY_PATCH_START,
+      patch: PATCH,
+      tool_name: "apply_patch",
+    }),
+    call({
+      type: PacketType.APPLY_PATCH_END,
+      files: [
+        { path: "new.py", change: "add", move_path: null },
+        { path: "old.py", change: "update", move_path: "moved.py" },
+      ],
+      error: null,
+    }),
+    call(sectionEnd),
+    ...answer(1),
+  ];
+  const view = render(renderMessage(streaming));
+  try {
+    await screen.findAllByText("Patching 2 files…");
+    await openRun();
+    expect(screen.getByText("new.py")).toBeInTheDocument();
+    expect(screen.getByText("old.py")).toBeInTheDocument();
+  } finally {
+    view.unmount();
+  }
+  expect(await stepsText([...streaming, ...finished], "Edited 2 files")).toBe(
+    await stepsText(finished, "Edited 2 files")
+  );
+});
+
+test("an edit names its file", async () => {
+  const view = render(
+    renderMessage([
+      at({ turn_index: 0, tab_index: 0 })(fileProgress("edit", ["src/app.py"])),
+    ])
+  );
+  try {
+    expect(
+      (await screen.findAllByText(wholeText("Editing src/app.py…"))).length
+    ).toBeGreaterThan(0);
+  } finally {
+    view.unmount();
+  }
+});
+
+/** Turns motion on, which jsdom's setup reduces, so a title that swaps
+ * through an animation would keep its old text and element. */
+function allowMotion() {
+  return jest.spyOn(window, "matchMedia").mockImplementation(
+    (query) =>
+      ({
+        matches: false,
+        media: query,
+        addEventListener: jest.fn(),
+        removeEventListener: jest.fn(),
+      }) as unknown as MediaQueryList
+  );
+}
+
+test("a call names its file once the path arrives, in the same title element", async () => {
+  const motion = allowMotion();
+  const call = at({ turn_index: 0, tab_index: 0 });
+  const view = render(renderMessage([call(fileProgress("edit", []))]));
+  try {
+    const titles = await screen.findAllByText("Editing a file…");
+    // A remounted title would restart its animation.
+    view.rerender(renderMessage([call(fileProgress("edit", ["src/app.py"]))]));
+    for (const title of titles) {
+      await waitFor(() =>
+        expect(title).toHaveTextContent("Editing src/app.py…")
+      );
+      expect(title).toBeInTheDocument();
+    }
+  } finally {
+    view.unmount();
+    motion.mockRestore();
+  }
+});
+
+test("the run header keeps its shimmer element when its activity changes", async () => {
+  const motion = allowMotion();
+  const edit = [at({ turn_index: 0, tab_index: 0 })(fileProgress("edit", []))];
+  const view = render(renderMessage(edit));
+  try {
+    const shimmer = (await screen.findByText("Editing files")).closest(
+      ".opal-text-loader-wave"
+    );
+    expect(shimmer).not.toBeNull();
+    view.rerender(
+      renderMessage([
+        ...edit,
+        at({ turn_index: 1, tab_index: 0 })({
+          type: PacketType.EXEC_COMMAND_START,
+          cmd: "ls",
+          workdir: null,
+        }),
+      ])
+    );
+    await waitFor(() => expect(shimmer).toHaveTextContent("Running command"));
+    expect(shimmer).toBeInTheDocument();
+  } finally {
+    view.unmount();
+    motion.mockRestore();
+  }
+});
+
+test("sandbox text is isolated in markup, and paths show without bidi controls", async () => {
+  // A path that closes an isolate early, then overrides the direction.
+  const path = "a\u2069\u202Eb.py";
+  const streaming = at({ turn_index: 0, tab_index: 0 });
+  const patched = at({ turn_index: 1, tab_index: 0 });
+  const published = at({ turn_index: 2, tab_index: 0 });
+  const view = render(
+    renderMessage([
+      patched({
+        type: PacketType.APPLY_PATCH_START,
+        patch: `*** Begin Patch\n*** Add File: ${path}\n+x\n*** End Patch`,
+        tool_name: "apply_patch",
+      }),
+      patched({
+        type: PacketType.APPLY_PATCH_END,
+        files: [{ path, change: "add", move_path: null }],
+        error: `Could not write ${path}`,
+      }),
+      patched(sectionEnd),
+      published({
+        type: PacketType.PUBLISH_FILES_START,
+        files: [{ path: `out/${path}`, title: "\u202Bnotes" }],
+        description: null,
+      }),
+      streaming(fileProgress("write", [path])),
+    ])
+  );
+  try {
+    // Displayed paths and labels drop their bidi controls, and markup
+    // isolates them, so copied text has no hidden characters.
+    expect(
+      (await screen.findAllByText(wholeText("Writing ab.py…"))).length
+    ).toBeGreaterThan(0);
+    for (const code of screen.getAllByText("ab.py", { selector: "code" })) {
+      expect(code).toHaveAttribute("dir", "ltr");
+    }
+    await openRun();
+    expect(screen.getByText("ab.py", { selector: "span" })).toHaveAttribute(
+      "dir",
+      "ltr"
+    );
+    expect(screen.getByText("out/ab.py")).toHaveAttribute("dir", "ltr");
+    expect(screen.getByText("notes")).toHaveAttribute("dir", "auto");
+    // The patch and the error keep the sandbox's text, inside an isolate.
+    expect(
+      screen.getByText(`*** Add File: ${path}`).closest("[dir]")
+    ).toHaveAttribute("dir", "ltr");
+    const error = screen.getByText(`Could not write ${path}`);
+    expect(error).toHaveAttribute("dir", "ltr");
+    // The error's paragraph keeps the page's direction.
+    expect(error.closest("p")).not.toHaveAttribute("dir");
+  } finally {
+    view.unmount();
+  }
+});
+
+test("a patch stopped while it streams shows only that it stopped, as on replay", async () => {
+  const call = at({ turn_index: 0, tab_index: 0 });
+  const stop = at({ turn_index: 1, tab_index: 0 })({
+    type: PacketType.STOP,
+    stop_reason: StopReason.USER_CANCELLED,
+  });
+  const progress = call(fileProgress("apply_patch", ["new.py"]));
+  // A stop before the call's start: the live card keeps no partial progress.
+  const view = render(renderMessage([progress, stop]));
+  try {
+    await openRun();
+    expect((await screen.findAllByText("Stopped")).length).toBeGreaterThan(0);
+    expect(screen.queryByText("new.py")).not.toBeInTheDocument();
+    expect(screen.queryByText(/Patching/)).not.toBeInTheDocument();
+  } finally {
+    view.unmount();
+  }
+  // The stopped call's start and end follow its progress live; replay sends
+  // them alone.
+  const stopped = [
+    call({
+      type: PacketType.APPLY_PATCH_START,
+      patch: "*** Begin Patch\n*** Add File: new.py\n+x",
+      tool_name: "apply_patch",
+    }),
+    call(sectionEnd),
+    stop,
+  ];
+  expect(await stepsText([progress, ...stopped], "Stopped")).toBe(
+    await stepsText(stopped, "Stopped")
+  );
+});
+
+test("a patch whose call fails after its progress shows only the error", async () => {
+  const call = at({ turn_index: 0, tab_index: 0 });
+  const view = render(
+    renderMessage([
+      call(fileProgress("apply_patch", ["new.py", "old.py"])),
+      call({
+        type: PacketType.APPLY_PATCH_START,
+        patch: PATCH,
+        tool_name: "apply_patch",
+      }),
+      call({
+        type: PacketType.APPLY_PATCH_END,
+        files: [],
+        error: "Permission denied",
+      }),
+      call(sectionEnd),
+      ...answer(1),
+    ])
+  );
+  try {
+    await expandTimeline();
+    expect(screen.getByText("Edit failed")).toBeInTheDocument();
+    expect(screen.getByText("Permission denied")).toBeInTheDocument();
+    // The progress file list is gone.
+    expect(screen.queryByText("new.py")).not.toBeInTheDocument();
+    expect(screen.queryByText("old.py")).not.toBeInTheDocument();
+  } finally {
+    view.unmount();
+  }
+});
+
+// Renderer contract: the backend renderer starts an edit whose arguments are
+// wrong-typed with an empty patch, and ends it with the validation error.
+test("an edit with wrong-typed arguments shows only that it failed and why", async () => {
+  const call = at({ turn_index: 0, tab_index: 0 });
+  const view = render(
+    renderMessage([
+      call({
+        type: PacketType.APPLY_PATCH_START,
+        patch: "",
+        tool_name: "edit",
+      }),
+      call({
+        type: PacketType.APPLY_PATCH_END,
+        files: [],
+        error: "file_path: Input should be a valid string",
+      }),
+      call(sectionEnd),
+      ...answer(1),
+    ])
+  );
+  try {
+    await expandTimeline();
+    expect(screen.getByText("Edit failed")).toBeInTheDocument();
+    expect(
+      screen.getByText("file_path: Input should be a valid string")
+    ).toBeInTheDocument();
+    expect(view.container).not.toHaveTextContent("*** Add File:");
+    expect(screen.queryByText("Patch")).not.toBeInTheDocument();
   } finally {
     view.unmount();
   }
@@ -684,7 +1050,8 @@ test("published files show in the timeline and as download cards after the answe
       }),
       first({
         type: PacketType.PUBLISH_FILES_END,
-        files: [report("file-1", "Q3 report")],
+        // The card shows the title without its bidi controls.
+        files: [report("file-1", "\u202EQ3 report")],
         error: null,
       }),
       first(sectionEnd),

@@ -1006,6 +1006,41 @@ describe("packetProcessor", () => {
         createPythonToolStartPacket("print(1)", { turn_index: 0 }),
       ]);
       expect(result.finalAnswerComing).toBe(false);
+      // The call is still running: the message did not end its section.
+      expect(
+        result.groupedPacketsMap
+          .get("0-0")
+          ?.some((p) => p.obj.type === PacketType.SECTION_END)
+      ).toBe(false);
+    });
+
+    test("a file tool whose progress streamed before the message resets it when it starts", () => {
+      const state = createInitialState(1);
+      const packets = [
+        createPacket(
+          PacketType.FILE_TOOL_PROGRESS,
+          { turn_index: 0 },
+          { tool_name: "write", paths: ["a.md"] }
+        ),
+        createMessageStartPacket({ turn_index: 1 }),
+      ];
+      expect(processPackets(state, packets).finalAnswerComing).toBe(true);
+
+      const result = processPackets(state, [
+        ...packets,
+        createPacket(
+          PacketType.APPLY_PATCH_START,
+          { turn_index: 0 },
+          { patch: "", tool_name: "write" }
+        ),
+      ]);
+      expect(result.finalAnswerComing).toBe(false);
+      // The call is still running: the message did not end its section.
+      expect(
+        result.groupedPacketsMap
+          .get("0-0")
+          ?.some((p) => p.obj.type === PacketType.SECTION_END)
+      ).toBe(false);
     });
   });
 

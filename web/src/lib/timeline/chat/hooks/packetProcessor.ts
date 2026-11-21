@@ -197,8 +197,16 @@ const CONTENT_PACKET_TYPES_SET = new Set<PacketType>([
   PacketType.RESEARCH_AGENT_START,
   PacketType.EXEC_COMMAND_START,
   PacketType.WRITE_STDIN_START,
+  PacketType.FILE_TOOL_PROGRESS,
   PacketType.APPLY_PATCH_START,
   PacketType.PUBLISH_FILES_START,
+]);
+
+// Packets that open a call before its start packet: the pre-start rule in
+// .agents/feature-map/components/streaming-protocol.md.
+const PRE_START_PACKET_TYPES = new Set<PacketType>([
+  PacketType.TOOL_CALL_ARGUMENT_DELTA,
+  PacketType.FILE_TOOL_PROGRESS,
 ]);
 
 function hasContentPackets(packets: Packet[]): boolean {
@@ -239,7 +247,14 @@ function handleTurnTransition(state: ProcessorState, packet: Packet): void {
   // If we see a new turn_index (not just tab_index), inject SECTION_END for previous groups
   if (isNewTurnIndex && state.seenGroupKeys.size > 0) {
     state.seenGroupKeys.forEach((prevGroupKey) => {
-      if (!state.groupKeysWithSectionEnd.has(prevGroupKey)) {
+      // A call that has only streamed its arguments has not started yet; its
+      // start and end come after the provider stream ends.
+      const notStarted =
+        !state.startedToolGroupKeys.has(prevGroupKey) &&
+        (state.groupedPacketsMap.get(prevGroupKey) ?? []).every((p) =>
+          PRE_START_PACKET_TYPES.has(p.obj.type as PacketType)
+        );
+      if (!state.groupKeysWithSectionEnd.has(prevGroupKey) && !notStarted) {
         injectSectionEnd(state, prevGroupKey);
       }
     });
@@ -426,7 +441,7 @@ function handleToolAfterMessagePacket(
   ) {
     state.finalAnswerComing = false;
   }
-  if (packet.obj.type !== PacketType.TOOL_CALL_ARGUMENT_DELTA) {
+  if (!PRE_START_PACKET_TYPES.has(packet.obj.type as PacketType)) {
     state.startedToolGroupKeys.add(groupKey);
   }
 }

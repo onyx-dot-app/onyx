@@ -387,7 +387,8 @@ unchanged call, so memoized renderers of finished calls do not redraw.
 `ResearchAgentRenderer` draws each entry of `nestedCalls` with the renderer of its tool.
 After the answer starts, a tool packet of a group whose tool has not started
 is a new tool call and sets `finalAnswerComing` back to false. The tool starts
-with its first tool packet other than a streamed argument, so a call whose
+with its first tool packet other than a pre-start packet
+([[streaming-protocol]]), so a call whose
 arguments streamed before the answer also counts when it starts. A later
 packet of a started tool, such as a code mode closing record, joins its group,
 and the answer stays shown. The stop packet sets `finalAnswerComing` again

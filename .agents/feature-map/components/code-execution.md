@@ -51,7 +51,9 @@
   per agent, and users cannot pick or force them. Commands run in the user's
   private VM, in the chat's session directory, whose files stay for later
   turns. The user sees each command and its output as it streams, and the
-  files that each patch, edit or write changed, on the same patch card. Every
+  files that each patch, edit or write changed, on the same patch card. While
+  the model writes a `write` or `edit` call, the card names the file; an
+  `apply_patch` card names the files and counts them. Every
   model also gets `publish_files`, which gives files from the VM to the user
   as download cards; owners and viewers of a shared chat can download them,
   and a hard chat delete deletes them.

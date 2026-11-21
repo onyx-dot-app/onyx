@@ -12682,25 +12682,6 @@
         "toggleRow": {
           "ariaLabel": "Basculer la chronologie"
         },
-        "toolNames": {
-          "codeInterpreter": "Interpréteur de code",
-          "customTool": "Outil personnalisé",
-          "generateImage": "Générer une image",
-          "generatePlan": "Générer un plan",
-          "internalSearch": "Recherche interne",
-          "knowledgeBaseQuery": "Requête de la base de connaissances",
-          "memory": "Mémoire",
-          "openUrls": "Ouvrir des URL",
-          "researchAgent": "Agent de recherche",
-          "thinking": "Réflexion",
-          "tool": "Outil",
-          "webSearch": "Recherche web",
-          "terminal": "Terminal",
-          "applyPatch": "Appliquer le correctif",
-          "editFile": "Modifier le fichier",
-          "writeFile": "Écrire le fichier",
-          "publishFiles": "Publier des fichiers"
-        },
         "webSearch": {
           "searching": {
             "status": "Recherche sur le web"
@@ -12717,7 +12698,10 @@
             }
           },
           "stdin": {
-            "status": "{kind, select, send {{phase, select, running {Envoi de la saisie à la session {sessionId}} failed {Impossible d'envoyer la saisie à la session {sessionId}} canceled {Annulé} done {Saisie envoyée à la session {sessionId}} other {Saisie envoyée à la session {sessionId}}}} check {{phase, select, running {Vérification de la session {sessionId}} failed {Impossible de vérifier la session {sessionId}} canceled {Annulé} done {Session {sessionId} vérifiée} other {Session {sessionId} vérifiée}}} other {Session {sessionId}}}"
+            "status": "{kind, select, send {{phase, select, running {Envoi de la saisie à la session {sessionId}} failed {Impossible d'envoyer la saisie à la session {sessionId}} canceled {Annulé} done {Saisie envoyée à la session {sessionId}} other {Saisie envoyée à la session {sessionId}}}} check {{phase, select, running {Vérification de la session {sessionId}} failed {Impossible de vérifier la session {sessionId}} canceled {Annulé} done {Session {sessionId} vérifiée} other {Session {sessionId} vérifiée}}} other {Session {sessionId}}}",
+            "noSession": {
+              "status": "{kind, select, send {{phase, select, running {Envoi de la saisie à la session} failed {Impossible d'envoyer la saisie à la session} canceled {Annulé} done {Saisie envoyée à la session} other {Saisie envoyée à la session}}} check {{phase, select, running {Vérification de la session} failed {Impossible de vérifier la session} canceled {Annulé} done {Session vérifiée} other {Session vérifiée}}} other {Session}}"
+            }
           },
           "output": {
             "title": "Sortie"
@@ -12744,7 +12728,18 @@
             "failed": {
               "status": "Échec de la modification"
             },
-            "title": "Correctif"
+            "title": "Correctif",
+            "progress": {
+              "named": {
+                "status": "{tool, select, write {Écriture de {path}…} other {Modification de {path}…}}"
+              },
+              "unnamed": {
+                "status": "{tool, select, write {Écriture d’un fichier…} other {Modification d’un fichier…}}"
+              },
+              "patching": {
+                "status": "{count, plural, =0 {Application du correctif…} one {Application du correctif à # fichier…} other {Application du correctif à # fichiers…}}"
+              }
+            }
           },
           "stopped": {
             "status": "Arrêté"

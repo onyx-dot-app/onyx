@@ -3,6 +3,7 @@ import { useTranslations } from "next-intl";
 import { Section } from "@opal/layouts";
 import { Text } from "@opal/components";
 import { SvgFiles } from "@opal/icons";
+import { stripBidiControls } from "@opal/utils";
 import {
   PacketType,
   PublishFilesEnd,
@@ -95,16 +96,17 @@ export function PublishFilesToolRenderer({
               gap={0.5}
               height="fit"
             >
-              <Text font="secondary-action" color="text-04">
-                {row.label}
+              <Text dir="auto" font="secondary-action" color="text-04">
+                {stripBidiControls(row.label)}
               </Text>
               {row.path !== row.label && (
                 <Text
+                  dir="ltr"
                   font="secondary-mono"
                   color="text-03"
                   wordWrap="break-all"
                 >
-                  {row.path}
+                  {stripBidiControls(row.path)}
                 </Text>
               )}
             </Section>

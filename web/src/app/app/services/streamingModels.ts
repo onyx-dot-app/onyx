@@ -73,6 +73,7 @@ export enum PacketType {
   WRITE_STDIN_START = "write_stdin_start",
   EXEC_OUTPUT_DELTA = "exec_output_delta",
   EXEC_END = "exec_end",
+  FILE_TOOL_PROGRESS = "file_tool_progress",
   APPLY_PATCH_START = "apply_patch_start",
   APPLY_PATCH_END = "apply_patch_end",
   PUBLISH_FILES_START = "publish_files_start",
@@ -444,6 +445,15 @@ export interface ExecEnd extends BaseObj {
 // The names of the backend's file tools (sandbox_tools.py)
 export type FileToolName = "apply_patch" | "edit" | "write";
 
+// What a file tool call's arguments hold while the model streams them; the
+// call's start packet follows
+export interface FileToolProgress extends BaseObj {
+  type: "file_tool_progress";
+  tool_name: FileToolName;
+  // The files the arguments name so far, in order
+  paths: string[];
+}
+
 export interface ApplyPatchStart extends BaseObj {
   type: "apply_patch_start";
   patch: string;
@@ -607,6 +617,7 @@ export type ExecToolObj =
   | SectionEnd
   | PacketError;
 export type ApplyPatchToolObj =
+  | FileToolProgress
   | ApplyPatchStart
   | ApplyPatchEnd
   | SectionEnd

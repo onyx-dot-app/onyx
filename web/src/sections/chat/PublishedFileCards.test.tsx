@@ -9,10 +9,12 @@ jest.mock("@/lib/chat/svc", () => ({
 
 const HTML = "<h1>Quarterly report</h1>";
 
-function htmlResponse(): Response {
+function htmlResponse(
+  contentDisposition = 'attachment; filename="report.html"'
+): Response {
   const headers: Record<string, string> = {
     "Content-Type": "text/html",
-    "Content-Disposition": 'attachment; filename="report.html"',
+    "Content-Disposition": contentDisposition,
   };
   const response: Pick<Response, "headers" | "blob" | "body"> = {
     headers: { get: (name: string) => headers[name] ?? null } as Headers,
@@ -103,4 +105,35 @@ test("an HTML file previews as source, not as a rendered page", async () => {
   expect(await within(dialog).findByText(/Quarterly report/)).toBeVisible();
   expect(dialog).toHaveTextContent(HTML);
   expect(view.container.ownerDocument.querySelector("iframe")).toBeNull();
+});
+
+test("a card and its preview show the name without its bidi controls", async () => {
+  jest
+    .mocked(fetchChatFile)
+    .mockResolvedValue(
+      htmlResponse("attachment; filename*=UTF-8''photo.%E2%80%AEgpj")
+    );
+  render(
+    <PublishedFileCards
+      files={[
+        {
+          file_id: "file-1",
+          name: "photo.\u202Egpj",
+          title: null,
+          path: "/home/onyx/photo.gpj",
+          size: 512,
+          mime_type: "image/jpeg",
+          version: 1,
+        },
+      ]}
+    />
+  );
+
+  expect(screen.getByText(/^GPJ · 512/)).toBeInTheDocument();
+  await act(async () => {
+    screen.getByRole("button", { name: "Preview photo.gpj" }).click();
+  });
+  const dialog = await screen.findByRole("dialog");
+  expect(dialog).toHaveTextContent("photo.gpj");
+  expect(dialog.textContent).not.toContain("\u202E");
 });

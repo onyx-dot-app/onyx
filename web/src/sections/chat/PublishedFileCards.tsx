@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { useTranslations } from "next-intl";
 import { AttachmentItemButton, Card, useCreateModal } from "@opal/components";
 import { Section } from "@opal/layouts";
+import { stripBidiControls } from "@opal/utils";
 import type { PublishedFile } from "@/app/app/services/streamingModels";
 import { buildImgUrl } from "@/app/app/components/files/images/utils";
 import PreviewModal from "@/sections/modals/PreviewModal";
@@ -21,7 +22,8 @@ interface PublishedFileCardsProps {
   files: PublishedFileVersion[];
 }
 
-function fileTypeLabel(name: string): string {
+function fileTypeLabel(fileName: string): string {
+  const name = stripBidiControls(fileName);
   const dot = name.lastIndexOf(".");
   return dot > 0 && dot < name.length - 1
     ? name.slice(dot + 1).toUpperCase()
@@ -68,13 +70,16 @@ export function PublishedFileCards({ files }: PublishedFileCardsProps) {
               <Card padding={0} border="solid">
                 <AttachmentItemButton
                   icon={getFileIcon(file.name)}
-                  title={file.title ?? file.name}
+                  // A flex item: stripped, not isolated.
+                  title={stripBidiControls(file.title ?? file.name)}
                   description={
                     file.version > 1
                       ? t("card.updated.description", { details })
                       : details
                   }
-                  aria-label={t("card.preview.ariaLabel", { name: file.name })}
+                  aria-label={t("card.preview.ariaLabel", {
+                    name: stripBidiControls(file.name),
+                  })}
                   onClick={() => {
                     setPreviewing(file);
                     previewModal.toggle(true);
