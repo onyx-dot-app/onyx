@@ -14,7 +14,7 @@ import secrets
 import time
 from collections.abc import Callable, Generator, Iterable, Sequence
 from typing import IO
-from uuid import UUID
+from uuid import UUID, uuid4
 
 import grpc
 
@@ -85,6 +85,10 @@ from onyx.server.features.build.sandbox.exec_output import (
     WRITE_STDIN_MAX_YIELD_MS,
     ExecOutputBuffer,
 )
+from onyx.server.features.build.sandbox.file_copy_state import (
+    COPY_STATE_SECONDS,
+    copy_generation_key,
+)
 from onyx.server.features.build.sandbox.firecracker.harness_state import (
     EXEC_SESSIONS_PREFIX,
     SANDBOX_STATE_PREFIXES,
@@ -139,6 +143,7 @@ from onyx.server.features.build.sandbox.harness_base import (
     SandboxFileNotFoundError,
     SandboxFileTooLargeError,
     SandboxPathError,
+    SessionFiles,
     onyx_vm_path,
     session_relative_path,
     session_tool_results,
@@ -934,15 +939,7 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
                 "exec_command first"
             )
         daemon, session_id, target = self._file_target(ref, path)
-        if not target:
-            raise SandboxPathError("cannot write the session directory itself")
-        daemon.write_file(
-            session_id=session_id,
-            path=target,
-            data=data,
-            mode=mode,
-            timeout_seconds=timeout_seconds,
-        )
+        _write(daemon, session_id, target, data, mode, timeout_seconds)
         tool_results = session_tool_results(ref.session_id)
         if target.startswith(tool_results + "/") and is_purged(
             get_cache_backend(tenant_id=ref.tenant_id), ref.sandbox_id, ref.session_id
@@ -1029,10 +1026,14 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
         ]
 
     def delete_file(self, ref: HarnessSandboxRef, path: str) -> bool:
-        daemon, session_id, target = self._file_target(ref, path)
-        if not target:
-            raise SandboxPathError("cannot delete the session directory itself")
-        return daemon.delete_file(session_id=session_id, path=target)
+        return _delete(*self._file_target(ref, path))
+
+    def session_files(self, ref: HarnessSandboxRef) -> SessionFiles:
+        tenant_cache = get_cache_backend(tenant_id=ref.tenant_id)
+        if is_purged(tenant_cache, ref.sandbox_id, ref.session_id):
+            raise HarnessSandboxError("This chat session was deleted.")
+        _, daemon = self._session_vm(ref)
+        return _SessionFiles(daemon, tenant_cache, ref)
 
     # Purge (delete hooks). Each step runs even when an earlier one failed;
     # the call raises at the end if any step failed.
@@ -1052,6 +1053,11 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
         tenant_cache = get_cache_backend(tenant_id=tenant_id)
         mark_purged(tenant_cache, session_id=session_id, retention=retention)
         errors: list[Exception] = []
+        try:
+            # Copies of the chat stop before its directory goes.
+            tenant_cache.incr(copy_generation_key(session_id), ex=COPY_STATE_SECONDS)
+        except Exception as e:
+            errors.append(e)
         placed: PlacedVm | None = None
         try:
             placed = self._placed_if_running(tenant_cache, sandbox_id)
@@ -1229,3 +1235,85 @@ def _raise_first(errors: list[Exception], what: str) -> None:
         for e in errors[1:]:
             logger.warning("sandbox_fc_purge_step_failed %s: %s", what, e)
         raise errors[0]
+
+
+def _write(
+    daemon: SandboxDaemonClient,
+    session_id: str,
+    target: str,
+    data: bytes | IO[bytes] | list[bytes],
+    mode: int,
+    timeout_seconds: float | None,
+) -> None:
+    """The write of write_file and SessionFiles.write."""
+    if not target:
+        raise SandboxPathError("cannot write the session directory itself")
+    daemon.write_file(
+        session_id=session_id,
+        path=target,
+        data=data,
+        mode=mode,
+        timeout_seconds=timeout_seconds,
+    )
+
+
+def _delete(daemon: SandboxDaemonClient, session_id: str, target: str) -> bool:
+    """The delete of delete_file and SessionFiles.delete."""
+    if not target:
+        raise SandboxPathError("cannot delete the session directory itself")
+    return daemon.delete_file(session_id=session_id, path=target)
+
+
+class _SessionFiles(SessionFiles):
+    def __init__(
+        self,
+        daemon: SandboxDaemonClient,
+        tenant_cache: CacheBackend,
+        ref: HarnessSandboxRef,
+    ) -> None:
+        self._daemon = daemon
+        self._cache = tenant_cache
+        self._ref = ref
+        self._mark = f"copy:{uuid4().hex}"
+
+    def write(self, path: str, data: IO[bytes], *, timeout_seconds: float) -> None:
+        session_id = self._ref.session_id
+        _write(
+            self._daemon,
+            str(session_id),
+            session_relative_path(self._ref, path),
+            data,
+            0o644,
+            timeout_seconds,
+        )
+        if is_purged(self._cache, self._ref.sandbox_id, session_id):
+            # The purge marks the session before it deletes the directory, so
+            # a write that it missed sees the mark.
+            self._daemon.delete_file(
+                session_id="", path=session_workspace(session_id), recursive=True
+            )
+            raise HarnessSandboxError(f"session {session_id} was deleted")
+
+    def delete(self, path: str) -> bool:
+        # The daemon opens the session directory without creating it.
+        return _delete(
+            self._daemon,
+            str(self._ref.session_id),
+            session_relative_path(self._ref, path),
+        )
+
+    def list_files(self, directory: str, *, max_entries: int) -> FileListing:
+        try:
+            return self._daemon.list_files(
+                session_id=str(self._ref.session_id),
+                path=session_relative_path(self._ref, directory),
+                skip_hidden=True,
+                max_entries=max_entries,
+            )
+        except SandboxDaemonError as e:
+            if e.reason is SandboxDaemonErrorReason.FILE_NOT_FOUND:
+                return FileListing(entries=[], truncated=False)
+            raise
+
+    def mark_busy(self, seconds: float | None) -> None:
+        set_mark(self._cache, self._ref.sandbox_id, self._mark, seconds)

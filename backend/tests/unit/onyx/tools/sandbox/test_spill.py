@@ -61,7 +61,11 @@ class _FakeVMTurn(SandboxTurn):
     def __init__(self) -> None:
         self.chat_session_id = uuid4()
         super().__init__(
-            tenant_id="t", user_id=uuid4(), chat_session_id=self.chat_session_id
+            tenant_id="t",
+            user_id=uuid4(),
+            chat_session_id=self.chat_session_id,
+            vm_chat_files=[],
+            copy_vm_chat_files=False,
         )
         self.files: dict[str, bytes] = {}
         self.times: dict[str, datetime | None] = {}

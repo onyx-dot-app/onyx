@@ -48,6 +48,12 @@ from onyx.server.features.build.sandbox.models import (
 
 # Parent of each chat session's working directory in the sandbox.
 SESSION_WORKSPACE_ROOT = "/home/onyx/workspaces"
+# The directory of the chat's files in its session directory: copies of file
+# store files (tools/tool_implementations/sandbox/file_copies.py).
+CHAT_FILES_DIR = "attachments"
+# The chat's project files and its agent's files, in CHAT_FILES_DIR.
+PROJECT_FILES_DIR = f"{CHAT_FILES_DIR}/project"
+AGENT_FILES_DIR = f"{CHAT_FILES_DIR}/agent"
 
 # Parent of the files that Onyx writes outside every session directory (for
 # example large tool results). No session save keeps them; they go when the
@@ -166,6 +172,36 @@ def onyx_vm_path(path: str) -> str | None:
     return normalized if normalized.startswith(ONYX_VM_FILES_ROOT + "/") else None
 
 
+class SessionFiles(abc.ABC):
+    """File calls in one chat session's directory on one running VM
+    instance. The VM is placed and the session set up once, so each call is
+    one guest daemon call; a call fails once the instance stopped. Paths are
+    relative to the session directory. Safe to call from several threads."""
+
+    @abc.abstractmethod
+    def write(self, path: str, data: IO[bytes], *, timeout_seconds: float) -> None:
+        """write_file, mode 0644, on this instance. A write makes a missing
+        session directory; a write that finds the session purged deletes
+        that directory again and raises HarnessSandboxError."""
+
+    @abc.abstractmethod
+    def delete(self, path: str) -> bool:
+        """Delete a file or a link (not a directory) inside the session
+        directory; a link is never followed. False when nothing was at the
+        path. Never sets the session up again, so after a purge it deletes
+        nothing."""
+
+    @abc.abstractmethod
+    def list_files(self, directory: str, *, max_entries: int) -> FileListing:
+        """The entries directly in `directory`, not those of its
+        subdirectories; none for a missing directory."""
+
+    @abc.abstractmethod
+    def mark_busy(self, seconds: float | None) -> None:
+        """Keep the sandbox busy (no idle stop) for `seconds` from now, or
+        end that (None). Each SessionFiles has one such mark."""
+
+
 class HarnessSandbox(abc.ABC):
     """What the harness calls. All methods block; see the module docstring."""
 
@@ -267,6 +303,12 @@ class HarnessSandbox(abc.ABC):
         at the path."""
 
     @abc.abstractmethod
+    def session_files(self, ref: HarnessSandboxRef) -> SessionFiles:
+        """Start the sandbox if needed, set up the chat session's directory,
+        and return file calls bound to the running VM instance. Raises
+        HarnessSandboxError for a purged session."""
+
+    @abc.abstractmethod
     def touch(self, ref: HarnessSandboxRef) -> None:
         """Record activity for the idle stop. Never starts the sandbox."""
 
@@ -285,5 +327,5 @@ class HarnessSandbox(abc.ABC):
 
     @abc.abstractmethod
     def is_busy(self, *, tenant_id: str, sandbox_id: UUID) -> bool:
-        """True while a command runs, a turn is in progress, or an approval
-        waits. Never starts the sandbox."""
+        """True while a command runs, a turn is in progress, a copy runs, or
+        an approval waits. Never starts the sandbox."""
