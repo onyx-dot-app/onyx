@@ -77,9 +77,10 @@ Beat (per tenant, every 30 s, primary queue)
                      sync_chat_run__no_commit for each in-flight chat run
     claim_due_scheduled_tasks            FOR UPDATE SKIP LOCKED
     per task: cancel runs AWAITING_APPROVAL (superseded_by_next_fire)
-              run QUEUED or RUNNING     -> SKIPPED (prior_in_flight)
+              run QUEUED                -> started_at = now, send it again
+              run RUNNING               -> SKIPPED (prior_in_flight)
               else                      -> QUEUED run row
-              always advance next_run_at
+              always advance next_run_at (cron fire + per-task offset)
     commit, send run_scheduled_task(run_id)
 
 run_scheduled_task -> onyx/scheduled_tasks/executor.py:run_scheduled_task_logic
@@ -140,7 +141,13 @@ OpenAPI integrations, not API apps without an OpenAPI tool.
    between commit and send, the run stays `QUEUED` and the sweeper fails it.
 3. `send-expires-and-tenant` **Every send needs `expires=` and `tenant_id`.**
    The dispatcher and `server/features/build/scheduled_tasks/api.py:_enqueue_executor` both expire after
-   `QUEUE_RESIDENCY_SECONDS`, which is also the stuck-queued threshold.
+   `SCHEDULED_RUN_QUEUE_RESIDENCY_SECONDS` (3 h), which is also the
+   stuck-queued threshold of `cleanup_stuck_scheduled_runs`. While a run is
+   QUEUED, `started_at` is its queue clock: a fire that sends it again resets
+   it. `_start_run` sets it to the real start, and `_sync_chat_runs` fails a
+   started run with no chat response after `NO_RESPONSE_OLDER_THAN` (15 min).
+   `find_stuck_runs` locks its candidates (`SKIP LOCKED`), so a sweep cannot
+   fail a run that a fire requeues at the same time.
 4. `link-session-before-turn` **The response is the run's source of truth.**
    Write run status only through `sync_chat_run__no_commit` or a cancel.
    The turn can end on any API server after an approval, so nothing at the
@@ -165,8 +172,10 @@ OpenAPI integrations, not API apps without an OpenAPI tool.
 9. `dispatch-on-primary` **Keep the dispatcher and sweeper on the primary
    queue.** Long executor runs on `scheduled_tasks` would stall dispatch.
 10. `cancel-before-fire` **A fire cancels a parked run, not a running one.**
-    Only AWAITING_APPROVAL runs are cancelled; a run that still works makes
-    the fire SKIPPED. "Run once" cancels nothing. An approval can resume the
+    Only AWAITING_APPROVAL runs are cancelled; a RUNNING run makes the fire
+    SKIPPED, and a QUEUED run takes the fire and is sent again. Two messages
+    for one run are safe: `_start_run` starts only a QUEUED run, under its
+    row lock. "Run once" cancels nothing. An approval can resume the
     response before the run status follows, so cancel only through
     `chat/run_store.py:cancel_parked_response`, which leaves an owned
     response alone; `stop_response` would stop the approved work.

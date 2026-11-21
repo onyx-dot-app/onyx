@@ -1204,12 +1204,17 @@ CELERY_WORKER_USER_FILE_PROCESSING_CONCURRENCY = int(
     os.environ.get("CELERY_WORKER_USER_FILE_PROCESSING_CONCURRENCY") or 2
 )
 
-# Concurrency for the dedicated Craft scheduled-tasks worker. Each thread can
-# run one headless agent fire at a time, so this caps simultaneous in-flight
-# scheduled runs per pod. Default is intentionally modest because each fire
-# can be long-running (LLM + tool calls in a sandbox).
+# Threads of the scheduled-tasks worker: the scheduled runs that one pod runs
+# at the same time. A run is a chat turn that mostly waits on LLM and tool I/O.
 CELERY_WORKER_SCHEDULED_TASKS_CONCURRENCY = int(
-    os.environ.get("CELERY_WORKER_SCHEDULED_TASKS_CONCURRENCY") or 4
+    os.environ.get("CELERY_WORKER_SCHEDULED_TASKS_CONCURRENCY") or 32
+)
+
+# Each task fires a fixed number of seconds (from its id) inside this window
+# after its cron time, so tasks with the same schedule do not all start at
+# once. 0 turns the offset off.
+SCHEDULED_TASK_FIRE_WINDOW_SECONDS = max(
+    0, int(os.environ.get("SCHEDULED_TASK_FIRE_WINDOW_SECONDS") or 300)
 )
 
 # The maximum number of tasks that can be queued up to sync to the document index

@@ -14,23 +14,35 @@ from sqlalchemy.orm import Session
 
 from onyx.agents.models import RunFailure, RunFailureKind, RunStatus
 from onyx.background.celery.tasks.scheduled_tasks.tasks import (
+    NO_RESPONSE_OLDER_THAN,
+    RUN_EXPIRES_SECONDS,
     _cancel_parked_runs,
+    _sync_chat_runs,
     cleanup_stuck_scheduled_runs,
     dispatch_due_scheduled_tasks,
 )
 from onyx.cache.factory import get_cache_backend
 from onyx.chat.run_store import _owner_key
-from onyx.configs.constants import DEFAULT_PERSONA_ID, MessageType, NotificationType
+from onyx.configs.constants import (
+    DEFAULT_PERSONA_ID,
+    MessageType,
+    NotificationType,
+    OnyxCeleryPriority,
+    OnyxCeleryQueues,
+    OnyxCeleryTask,
+)
 from onyx.db.chat import (
     create_chat_session,
     delete_chat_session,
     get_chat_sessions_by_user,
 )
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import (
     IntegrationActionPolicyValue,
     PluginInstallationPolicy,
     ScheduledTaskErrorClass,
     ScheduledTaskRunStatus,
+    ScheduledTaskSkipReason,
     ScheduledTaskStatus,
     ScheduledTaskTriggerSource,
 )
@@ -44,15 +56,17 @@ from onyx.db.models import (
 )
 from onyx.db.scheduled_task import (
     create_scheduled_task,
+    find_stuck_runs,
     insert_run,
     mark_run_status,
+    requeue_queued_run__no_commit,
     sync_chat_run__no_commit,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.integrations.models import ActionSettings, EffectivePolicy
 from onyx.integrations.policy import chat_integrations, resolve_chat_action_policy
-from onyx.scheduled_tasks.executor import run_scheduled_task_logic
+from onyx.scheduled_tasks.executor import _start_run, run_scheduled_task_logic
 from onyx.tools.models import IntegrationLinkConfiguration
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.conftest import MakeTestUser
@@ -229,8 +243,8 @@ def _dispatch_with_fake_broker() -> list[dict[str, Any]]:
     sent: list[dict[str, Any]] = []
 
     class _FakeApp:
-        def send_task(self, *args: Any, **kwargs: Any) -> None:  # noqa: ARG002
-            sent.append(kwargs["kwargs"])
+        def send_task(self, name: str, **kwargs: Any) -> None:
+            sent.append({"name": name, **kwargs})
 
     task_instance = dispatch_due_scheduled_tasks.run.__self__
     with patch.object(
@@ -263,7 +277,7 @@ def test_the_next_fire_cancels_a_run_that_waits_for_approval(
     assert runs[parked.id].error_class == "superseded_by_next_fire"
     [new_run] = [run for run_id, run in runs.items() if run_id != parked.id]
     assert new_run.status == ScheduledTaskRunStatus.QUEUED
-    assert [UUID(kwargs["run_id"]) for kwargs in sent] == [new_run.id]
+    assert [UUID(message["kwargs"]["run_id"]) for message in sent] == [new_run.id]
     db_session.refresh(response)
     assert response.response_status == RunStatus.CANCELLED
 
@@ -578,3 +592,201 @@ def test_a_turn_stopped_at_the_chat_deadline_fails_its_run(
     assert run.status == ScheduledTaskRunStatus.FAILED
     assert run.error_class == "timeout"
     assert _notifications(db_session, owner) == [NotificationType.SCHEDULED_TASK_FAILED]
+
+
+def _task_runs(db_session: Session, task: ScheduledTask) -> list[ScheduledTaskRun]:
+    db_session.expire_all()
+    return list(
+        db_session.scalars(
+            select(ScheduledTaskRun).where(ScheduledTaskRun.task_id == task.id)
+        )
+    )
+
+
+def test_a_queued_run_fails_only_after_the_scheduled_residency(
+    db_session: Session,
+    owner: User,
+    cleanup: list[int],  # noqa: ARG001
+) -> None:
+    task = _task(db_session, owner)
+    now = datetime.now(timezone.utc)
+    waiting = insert_run(
+        db_session=db_session,
+        task_id=task.id,
+        trigger_source=ScheduledTaskTriggerSource.SCHEDULED,
+    )
+    waiting.started_at = now - timedelta(minutes=30)
+    stuck = insert_run(
+        db_session=db_session,
+        task_id=task.id,
+        trigger_source=ScheduledTaskTriggerSource.SCHEDULED,
+    )
+    stuck.started_at = now - timedelta(seconds=RUN_EXPIRES_SECONDS + 60)
+    db_session.commit()
+
+    cleanup_stuck_scheduled_runs.run(
+        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE  # ty: ignore[invalid-argument-type]
+    )
+
+    db_session.expire_all()
+    assert waiting.status == ScheduledTaskRunStatus.QUEUED
+    assert stuck.status == ScheduledTaskRunStatus.FAILED
+    assert stuck.error_class == ScheduledTaskErrorClass.STUCK
+
+
+def test_a_fire_sends_a_queued_prior_run_again(
+    db_session: Session,
+    owner: User,
+    cleanup: list[int],  # noqa: ARG001
+) -> None:
+    task = _task(db_session, owner, due=True)
+    queued = insert_run(
+        db_session=db_session,
+        task_id=task.id,
+        trigger_source=ScheduledTaskTriggerSource.SCHEDULED,
+    )
+    old_started_at = datetime.now(timezone.utc) - timedelta(minutes=20)
+    queued.started_at = old_started_at
+    db_session.commit()
+
+    sent = _dispatch_with_fake_broker()
+
+    runs = _task_runs(db_session, task)
+    assert [run.id for run in runs] == [queued.id]
+    assert runs[0].status == ScheduledTaskRunStatus.QUEUED
+    assert runs[0].started_at > old_started_at + timedelta(minutes=19)
+    assert task.next_run_at is not None
+    assert task.next_run_at > datetime.now(timezone.utc)
+    assert len(sent) == 1
+    message = sent[0]
+    assert message["name"] == OnyxCeleryTask.SCHEDULED_TASKS_RUN
+    assert message["kwargs"] == {
+        "run_id": str(queued.id),
+        "tenant_id": POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+    }
+    assert message["queue"] == OnyxCeleryQueues.SCHEDULED_TASKS
+    assert message["priority"] == OnyxCeleryPriority.MEDIUM
+    assert message["expires"] == RUN_EXPIRES_SECONDS
+
+
+def test_a_fire_skips_while_a_prior_run_is_running(
+    db_session: Session,
+    owner: User,
+    cleanup: list[int],  # noqa: ARG001
+) -> None:
+    task = _task(db_session, owner, due=True)
+    running, response = _run_with_response(db_session, task, RunStatus.RUNNING)
+    # A live worker owns the response.
+    cache = get_cache_backend()
+    cache.set(_owner_key(response.id), "{}", ex=60)
+    try:
+        sent = _dispatch_with_fake_broker()
+    finally:
+        cache.delete(_owner_key(response.id))
+
+    runs = {run.id: run for run in _task_runs(db_session, task)}
+    assert runs.pop(running.id).status == ScheduledTaskRunStatus.RUNNING
+    [skipped] = runs.values()
+    assert skipped.status == ScheduledTaskRunStatus.SKIPPED
+    assert skipped.skip_reason == ScheduledTaskSkipReason.PRIOR_IN_FLIGHT
+    assert sent == []
+
+
+def test_the_stuck_sweep_skips_a_run_that_a_fire_is_requeuing(
+    db_session: Session,
+    owner: User,
+    cleanup: list[int],  # noqa: ARG001
+) -> None:
+    task = _task(db_session, owner)
+    run = insert_run(
+        db_session=db_session,
+        task_id=task.id,
+        trigger_source=ScheduledTaskTriggerSource.SCHEDULED,
+    )
+    run.started_at = datetime.now(timezone.utc) - timedelta(
+        seconds=RUN_EXPIRES_SECONDS + 60
+    )
+    db_session.commit()
+    stuck_after = timedelta(seconds=RUN_EXPIRES_SECONDS)
+
+    # A dispatch tick holds the run's lock while it requeues it.
+    with get_session_with_current_tenant() as dispatch_session:
+        requeue_queued_run__no_commit(
+            dispatch_session, task.id, datetime.now(timezone.utc)
+        )
+        stuck = find_stuck_runs(db_session=db_session, queued_older_than=stuck_after)
+        assert run.id not in {candidate.id for candidate in stuck}
+        db_session.rollback()
+        dispatch_session.commit()
+
+    stuck = find_stuck_runs(db_session=db_session, queued_older_than=stuck_after)
+    assert run.id not in {candidate.id for candidate in stuck}
+    db_session.rollback()
+
+
+def test_a_run_counts_its_time_from_its_start_not_its_queue_time(
+    db_session: Session,
+    owner: User,
+    cleanup: list[int],  # noqa: ARG001
+) -> None:
+    task = _task(db_session, owner)
+    run = insert_run(
+        db_session=db_session,
+        task_id=task.id,
+        trigger_source=ScheduledTaskTriggerSource.SCHEDULED,
+    )
+    run.started_at = datetime.now(timezone.utc) - timedelta(hours=2)
+    db_session.commit()
+
+    before_start = datetime.now(timezone.utc)
+    assert _start_run(run.id) is not None
+    db_session.expire_all()
+    # The response does not exist yet: the turn has not begun.
+    _sync_chat_runs(
+        db_session, POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, datetime.now(timezone.utc)
+    )
+    db_session.commit()
+
+    db_session.expire_all()
+    assert run.status == ScheduledTaskRunStatus.RUNNING
+    assert run.started_at >= before_start
+
+
+def test_a_started_run_without_a_response_fails_after_the_start_limit(
+    db_session: Session,
+    owner: User,
+    cleanup: list[int],  # noqa: ARG001
+) -> None:
+    task = _task(db_session, owner)
+    now = datetime.now(timezone.utc)
+    runs: list[ScheduledTaskRun] = []
+    for age in (timedelta(minutes=1), NO_RESPONSE_OLDER_THAN + timedelta(minutes=1)):
+        chat = create_chat_session(
+            db_session,
+            description=task.name,
+            user_id=task.user_id,
+            persona_id=DEFAULT_PERSONA_ID,
+        )
+        run = insert_run(
+            db_session=db_session,
+            task_id=task.id,
+            trigger_source=ScheduledTaskTriggerSource.SCHEDULED,
+        )
+        mark_run_status(
+            db_session=db_session,
+            run_id=run.id,
+            status=ScheduledTaskRunStatus.RUNNING,
+            chat_session_id=chat.id,
+            started_at=now - age,
+        )
+        runs.append(run)
+    db_session.commit()
+
+    _sync_chat_runs(db_session, POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE, now)
+    db_session.commit()
+
+    db_session.expire_all()
+    fresh, stuck = runs
+    assert fresh.status == ScheduledTaskRunStatus.RUNNING
+    assert stuck.status == ScheduledTaskRunStatus.FAILED
+    assert stuck.error_class == ScheduledTaskErrorClass.STUCK

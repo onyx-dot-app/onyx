@@ -14,7 +14,7 @@ from __future__ import annotations
 
 from collections.abc import Collection
 from datetime import datetime, timedelta, timezone
-from uuid import UUID
+from uuid import UUID, uuid4
 
 from sqlalchemy import and_, case, desc, func, literal, select, update
 from sqlalchemy.orm import Session, selectinload
@@ -41,7 +41,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.integrations.craft import replace_task_integrations__no_commit
 from onyx.server.features.build.scheduled_tasks.schedule import (
     EditorMode,
-    compute_next_run_at,
+    compute_next_dispatch_at,
 )
 from onyx.tools.models import IntegrationLinkConfiguration
 from onyx.utils.logger import setup_logger
@@ -78,11 +78,13 @@ def create_scheduled_task(
         OnyxError(INVALID_INPUT): if the cron is invalid.
     """
     now = now or datetime.now(tz=timezone.utc)
+    task_id = uuid4()
     next_run_at: datetime | None = None
     if status == ScheduledTaskStatus.ACTIVE:
-        next_run_at = compute_next_run_at(cron_expression, now)
+        next_run_at = compute_next_dispatch_at(cron_expression, now, task_id)
 
     task = ScheduledTask(
+        id=task_id,
         user_id=user_id,
         name=name,
         prompt=prompt,
@@ -193,9 +195,11 @@ def update_scheduled_task(
             task.next_run_at = None
         else:
             # Becoming ACTIVE — recompute from now regardless of schedule change.
-            task.next_run_at = compute_next_run_at(task.cron_expression, now)
+            task.next_run_at = compute_next_dispatch_at(
+                task.cron_expression, now, task.id
+            )
     elif schedule_changed and task.status == ScheduledTaskStatus.ACTIVE:
-        task.next_run_at = compute_next_run_at(task.cron_expression, now)
+        task.next_run_at = compute_next_dispatch_at(task.cron_expression, now, task.id)
 
     if integrations is not None:
         user = db_session.get(User, user_id)
@@ -299,7 +303,9 @@ def advance_next_run_at(
 
     Returns the new ``next_run_at`` (UTC).
     """
-    next_run_at = compute_next_run_at(task.cron_expression, now)
+    next_run_at = compute_next_dispatch_at(
+        task.cron_expression, now, task.id, handled_dispatch_at=task.next_run_at
+    )
     task.next_run_at = next_run_at
     db_session.flush()
     return next_run_at
@@ -317,9 +323,9 @@ def has_in_flight_run_for_task(
 ) -> bool:
     """Return True if ``task_id`` has a run currently QUEUED or RUNNING.
 
-    Used by the dispatcher to enforce SKIP_IF_RUNNING: when a prior fire is
-    still in flight, the new claim writes a ``skipped`` run row instead of
-    enqueuing the executor.
+    The dispatcher writes a ``skipped`` run row for a fire while a prior run
+    is RUNNING. A QUEUED prior run takes the fire instead
+    (``requeue_queued_run__no_commit``).
     """
     stmt = (
         select(literal(1))
@@ -335,6 +341,28 @@ def has_in_flight_run_for_task(
         .limit(1)
     )
     return db_session.execute(stmt).first() is not None
+
+
+def requeue_queued_run__no_commit(
+    db_session: Session, task_id: UUID, now: datetime
+) -> UUID | None:
+    """Give a new fire to the task's QUEUED run, if it has one: its queue age
+    starts again at ``now``. Returns the run id to send again."""
+    run = db_session.scalars(
+        select(ScheduledTaskRun)
+        .where(
+            ScheduledTaskRun.task_id == task_id,
+            ScheduledTaskRun.status == ScheduledTaskRunStatus.QUEUED,
+        )
+        .order_by(desc(ScheduledTaskRun.started_at))
+        .limit(1)
+        .with_for_update()
+    ).first()
+    if run is None:
+        return None
+    run.started_at = now
+    db_session.flush()
+    return run.id
 
 
 def insert_run(
@@ -372,8 +400,12 @@ def mark_run_status(
     error_class: ScheduledTaskErrorClass | None = None,
     error_detail: str | None = None,
     summary: str | None = None,
+    started_at: datetime | None = None,
 ) -> ScheduledTaskRun:
     """Update a run row's status + optional fields.
+
+    A QUEUED run's ``started_at`` is its queue clock; the move to RUNNING
+    passes ``started_at`` so it becomes the real start.
 
     Terminal statuses get ``finished_at = now()``. A move into a status
     with results (``has_results``) advances ``version``.
@@ -399,6 +431,8 @@ def mark_run_status(
         run.error_detail = error_detail
     if summary is not None:
         run.summary = summary
+    if started_at is not None:
+        run.started_at = started_at
     if status.is_terminal():
         run.finished_at = datetime.now(tz=timezone.utc)
     db_session.flush()
@@ -539,14 +573,18 @@ def find_stuck_runs(
     now: datetime | None = None,
 ) -> list[ScheduledTaskRun]:
     """QUEUED runs older than ``queued_older_than``: the worker died between
-    dispatch and pick-up, or the message expired."""
+    dispatch and pick-up, or the message expired. Locked, so a dispatch tick
+    cannot requeue a run between this read and its failure; a run that a tick
+    holds is left for the next sweep."""
     cutoff = (now or datetime.now(tz=timezone.utc)) - queued_older_than
     return list(
         db_session.scalars(
-            select(ScheduledTaskRun).where(
+            select(ScheduledTaskRun)
+            .where(
                 ScheduledTaskRun.status == ScheduledTaskRunStatus.QUEUED,
                 ScheduledTaskRun.started_at < cutoff,
             )
+            .with_for_update(skip_locked=True)
         )
     )
 
