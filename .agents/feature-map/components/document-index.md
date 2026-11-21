@@ -39,7 +39,9 @@ different shard settings on AWS-managed OpenSearch.
   current and reindex indexes, and the issues with their severity. The result is
   shared for 60 seconds. Multi-tenant Cloud refuses it. A second route
   (`/admin/service-status/opensearch/searches`) returns the last 30 minutes of
-  searches: per minute the count, failures and the p10 and p90 of the
+  main search queries (hybrid, keyword and semantic, one per user search; the
+  ID fetches that follow are left out): per minute the count, failures and the
+  p10 and p90 of the
   successful searches, the window's p90, the slow p90 threshold (700 ms), each
   slow or failed search, and up to 20 random other searches per minute. The
   current minute reports its elapsed seconds, so its rate is not understated.
@@ -296,8 +298,10 @@ it deletes the old one.
   (`document_index/opensearch/search_samples.py`). A daemon thread flushes it
   every 5 seconds as one member of a per-minute set in the shared cache, so a
   search pays no cache round trip. Prometheus keeps only latency buckets per
-  pod. The read returns per-minute percentiles of the successful searches
-  and lists the latest 1,000 slow or failed searches. It also lists up to 20
+  pod. Every OpenSearch search request is recorded, but the read counts only
+  the main search queries, since one user search also makes about 16 cheap ID
+  fetches that would hide a slow query. It returns per-minute percentiles of
+  the successful ones and lists the latest 1,000 slow or failed searches. It also lists up to 20
   other searches per minute, picked at random with the minute as the seed, so
   a refresh shows the same ones.
   Multi-tenant deployments record nothing.
