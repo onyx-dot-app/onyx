@@ -72,7 +72,7 @@ def jira_planning_rule(
     old: JiraConnectorConfig, new: JiraConnectorConfig
 ) -> ConnectorChangeOverride | None:
     # The connector ignores the project key while a JQL query is set.
-    if old.jql_query and new.jql_query:
+    if (old.jql_query or "").strip() and (new.jql_query or "").strip():
         return ConnectorChangeOverride(
             scope_directions={_PROJECT_KEY: ScopeDirection.NONE}
         )

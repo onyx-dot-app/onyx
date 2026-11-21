@@ -175,6 +175,7 @@ def build_jql_query(
     jql_query: str | None,
     start: SecondsSinceUnixEpoch,
     end: SecondsSinceUnixEpoch,
+    default_scope_clause: str | None = None,
 ) -> str:
     """JQL for the configured project/query plus the poll window.
 
@@ -183,10 +184,21 @@ def build_jql_query(
     https://support.atlassian.com/jira-software-cloud/docs/jql-fields/#Updated
     """
     time_jql: str = f"updated >= {int(start * 1000)} AND updated <= {int(end * 1000)}"
-    return scope_jql(project_key=project_key, jql_query=jql_query, clause=time_jql)
+    return scope_jql(
+        project_key=project_key,
+        jql_query=jql_query,
+        clause=time_jql,
+        default_scope_clause=default_scope_clause,
+    )
 
 
-def scope_jql(*, project_key: str | None, jql_query: str | None, clause: str) -> str:
+def scope_jql(
+    *,
+    project_key: str | None,
+    jql_query: str | None,
+    clause: str,
+    default_scope_clause: str | None = None,
+) -> str:
     """JQL that limits ``clause`` to the configured project or query."""
     # If custom JQL query is provided, use it and combine with the clause
     if jql_query:
@@ -195,6 +207,9 @@ def scope_jql(*, project_key: str | None, jql_query: str | None, clause: str) ->
     # Otherwise, use project key if provided. Quote it to handle reserved words.
     if project_key:
         return f'project = "{project_key}" AND {clause}'
+
+    if default_scope_clause:
+        return f"{default_scope_clause} AND {clause}"
 
     return clause
 
@@ -473,6 +488,7 @@ class JiraConnector(
     Resolver,
 ):
     slim_listing_honors_indexing_start = True
+    source_type: DocumentSource = DocumentSource.JIRA
 
     def __init__(
         self,
@@ -633,7 +649,7 @@ class JiraConnector(
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:
         self._source_operations = JiraSourceOperations(
             credentials_provider=OnyxStaticCredentialsProvider(
-                None, DocumentSource.JIRA.value, credentials
+                None, self.source_type.value, credentials
             ),
             connector_specific_config={
                 "jira_base_url": self.jira_base,
@@ -759,6 +775,19 @@ class JiraConnector(
 
         return new_checkpoint
 
+    def _process_issue(
+        self,
+        issue: JiraIssue,
+        parent_hierarchy_raw_node_id: str | None,
+    ) -> Document | None:
+        return process_jira_issue(
+            jira_base_url=self.jira_base,
+            issue=issue,
+            comment_email_blacklist=self.comment_email_blacklist,
+            labels_to_skip=self.labels_to_skip,
+            parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
+        )
+
     def _issue_to_items(
         self,
         issue: JiraIssue,
@@ -797,11 +826,8 @@ class JiraConnector(
             else None
         )
 
-        if document := process_jira_issue(
-            jira_base_url=self.jira_base,
+        if document := self._process_issue(
             issue=issue,
-            comment_email_blacklist=self.comment_email_blacklist,
-            labels_to_skip=self.labels_to_skip,
             parent_hierarchy_raw_node_id=parent_hierarchy_raw_node_id,
         ):
             # Add permission information to the document if requested

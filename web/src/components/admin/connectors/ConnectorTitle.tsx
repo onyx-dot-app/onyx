@@ -5,6 +5,7 @@ import type {
   GithubConfig,
   GitlabConfig,
   JiraConfig,
+  JiraServiceManagementConfig,
   SlackConfig,
   ZulipConfig,
 } from "@/lib/connectors/types";
@@ -71,6 +72,13 @@ export const ConnectorTitle = ({
     additionalMetadata.set(
       t("jiraProjectUrl"),
       typedConnector.connector_specific_config.jira_project_url
+    );
+  } else if (connector.source === "jira_service_management") {
+    const typedConnector =
+      connector as Connector<JiraServiceManagementConfig>;
+    additionalMetadata.set(
+      t("jiraSiteUrl"),
+      typedConnector.connector_specific_config.jira_base_url
     );
   } else if (connector.source === "slack") {
     const typedConnector = connector as Connector<SlackConfig>;
