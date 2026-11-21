@@ -30,6 +30,7 @@ from onyx.connectors.confluence.source_operations import (
     ConfluenceRestSpacePermissionsNotAvailableError,
     ConfluenceSpacePermissionsVariant,
 )
+from onyx.connectors.dealcloud.models import DealCloudEntryType
 from onyx.connectors.egnyte.models import (
     EgnyteFile,
     EgnyteFolder,
@@ -415,6 +416,16 @@ def _configure_asana_spy(spy: MagicMock) -> None:
     )
 
 
+def _configure_dealcloud_spy(spy: MagicMock) -> None:
+    """One object holding one entry, so the checks reach the row read."""
+    spy.list_entry_types.return_value = [
+        DealCloudEntryType(
+            id=2014, api_name="Company", plural_name="Companies", entry_list_type=1
+        )
+    ]
+    spy.list_entry_ids.return_value = [7]
+
+
 def _configure_egnyte_spy(spy: MagicMock) -> None:
     """A folder holding one file, so the files check reaches the download."""
     folder = EgnyteFolder(name="Docs", path="/Shared/Docs", folder_id="f1")
@@ -459,6 +470,7 @@ _SPY_CONFIGURATIONS: dict[DocumentSource, list[Callable[[MagicMock], None]]] = {
     DocumentSource.YOUTRACK: [_configure_youtrack_spy],
     DocumentSource.AZURE_DATALAKE: [_configure_azure_datalake_spy],
     DocumentSource.EGNYTE: [_configure_egnyte_spy],
+    DocumentSource.DEALCLOUD: [_configure_dealcloud_spy],
 }
 
 # The connector config the checks read, per source (default: empty). Every
@@ -490,6 +502,9 @@ _CONNECTOR_CONFIGS: dict[DocumentSource, list[dict[str, Any]]] = {
         {"account_name": "onyxtest", "container_name": "docs", "path_prefix": "docs"}
     ],
     DocumentSource.EGNYTE: [{"folder_path": "/Shared/Docs"}],
+    DocumentSource.DEALCLOUD: [
+        {"base_url": "https://example.dealcloud.com", "entry_types": ["Company"]}
+    ],
 }
 
 
