@@ -28,7 +28,7 @@ test("interface font applies at once and renders from the server after a reload"
   await settingsPage.expectInterfaceLetterSpacing(DEFAULT_LETTER_SPACING);
   const defaultWidth = await settingsPage.interfaceFontTitleWidth();
 
-  await settingsPage.chooseFont(
+  await settingsPage.chooseAppearanceOption(
     settingsPage.interfaceFontSelect,
     "OpenDyslexic"
   );
@@ -41,7 +41,10 @@ test("interface font applies at once and renders from the server after a reload"
 
   // The save refreshed the appearance cookie, so the server layout renders
   // the font on first paint.
-  await settingsPage.expectServerRenderedInterfaceFont("opendyslexic");
+  await settingsPage.expectServerRenderedAppearance(
+    "data-interface-font",
+    "opendyslexic"
+  );
   await settingsPage.reload();
   await settingsPage.expectInterfaceFont("opendyslexic", OPENDYSLEXIC_FAMILY);
 });
@@ -51,11 +54,14 @@ test("the response font applies to answers in a chat", async ({ page }) => {
 
   const settingsPage = new SettingsAppearancePage(page);
   await settingsPage.goto();
-  await settingsPage.chooseFont(
+  await settingsPage.chooseAppearanceOption(
     settingsPage.interfaceFontSelect,
     "OpenDyslexic"
   );
-  await settingsPage.chooseFont(settingsPage.responseFontSelect, "Default");
+  await settingsPage.chooseAppearanceOption(
+    settingsPage.responseFontSelect,
+    "Default"
+  );
 
   const chatPage = new ChatPage(page);
   await chatPage.goto();

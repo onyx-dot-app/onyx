@@ -15747,7 +15747,8 @@
       "scrollRight": "Desplazar pestañas a la derecha"
     },
     "toast": {
-      "moreCount": "+{count} más"
+      "moreCount": "+{count} más",
+      "closeAll": "Cerrar todo"
     },
     "sidebar": {
       "open": "Abrir barra lateral",
@@ -15912,6 +15913,27 @@
         "atkinson": "Atkinson Hyperlegible Next",
         "system": "Sistema",
         "placeholder": "Selecciona una fuente"
+      },
+      "accessibility": {
+        "title": "Accesibilidad"
+      },
+      "motion": {
+        "title": "Movimiento",
+        "description": "Sigue la configuración de movimiento de tu sistema o reduce las animaciones en toda la aplicación.",
+        "placeholder": "Selecciona un ajuste de movimiento",
+        "system": "Sistema",
+        "reduced": "Reducido"
+      },
+      "popupDismissal": {
+        "title": "Notificaciones",
+        "description": "Elige si las notificaciones se cierran solas o permanecen hasta que las cierres.",
+        "placeholder": "Selecciona cuándo se cierran las notificaciones",
+        "auto_dismiss": "Cerrar automáticamente",
+        "stay_on_screen": "Mantener en pantalla"
+      },
+      "dynamicConversations": {
+        "title": "Conversaciones dinámicas",
+        "description": "Carga y descarga mensajes al desplazarte por conversaciones largas. Esto mejora el rendimiento, pero los lectores de pantalla no pueden acceder a los mensajes descargados. Desactívalo para mantener todos los mensajes cargados."
       }
     },
     "chats": {

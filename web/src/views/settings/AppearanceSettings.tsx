@@ -18,8 +18,10 @@ import { type Locale } from "@/i18n/config";
 import { LanguageSelect } from "@/lib/app/components";
 import { ThemePreference } from "@/lib/types";
 import {
-  DEFAULT_APPEARANCE_PREFERENCES,
+  DEFAULT_APPEARANCE_SETTINGS,
   INTERFACE_FONTS,
+  MOTIONS,
+  POPUP_DISMISSALS,
   RESPONSE_FONTS,
 } from "@/lib/appearance/preferences";
 import useScreenSize from "@/hooks/useScreenSize";
@@ -58,6 +60,8 @@ const APPEARANCE_SELECT_VALUES = {
   transcriptWidth: ["standard", "wide"],
   interfaceFont: INTERFACE_FONTS,
   responseFont: RESPONSE_FONTS,
+  motion: MOTIONS,
+  popupDismissal: POPUP_DISMISSALS,
 } as const;
 
 type AppearanceSelectPreference = keyof typeof APPEARANCE_SELECT_VALUES;
@@ -139,12 +143,17 @@ export default function AppearanceSettings() {
     ["night", tBg("night.label")],
   ]);
 
+  const preferences = user?.preferences;
   const interfaceFont =
-    user?.preferences?.interface_font ??
-    DEFAULT_APPEARANCE_PREFERENCES.interface_font;
+    preferences?.interface_font ?? DEFAULT_APPEARANCE_SETTINGS.interface_font;
   const responseFont =
-    user?.preferences?.response_font ??
-    DEFAULT_APPEARANCE_PREFERENCES.response_font;
+    preferences?.response_font ?? DEFAULT_APPEARANCE_SETTINGS.response_font;
+  const motion = preferences?.motion ?? DEFAULT_APPEARANCE_SETTINGS.motion;
+  const popupDismissal =
+    preferences?.popup_dismissal ?? DEFAULT_APPEARANCE_SETTINGS.popup_dismissal;
+  const dynamicConversations =
+    preferences?.dynamic_conversations ??
+    DEFAULT_APPEARANCE_SETTINGS.dynamic_conversations;
 
   return (
     <Section gap={8}>
@@ -318,6 +327,46 @@ export default function AppearanceSettings() {
             );
           }}
         />
+      </SettingsSection>
+
+      <SettingsSection title={t("appearance.accessibility.title")}>
+        <AppearanceSelect
+          preference="motion"
+          value={motion}
+          onValueChange={(selected) => {
+            void updatePreferences(
+              { motion: selected },
+              "/api/user/appearance"
+            );
+          }}
+        />
+
+        <AppearanceSelect
+          preference="popupDismissal"
+          value={popupDismissal}
+          onValueChange={(selected) => {
+            void updatePreferences(
+              { popup_dismissal: selected },
+              "/api/user/appearance"
+            );
+          }}
+        />
+
+        <InputHorizontal
+          title={t("appearance.dynamicConversations.title")}
+          description={t("appearance.dynamicConversations.description")}
+          withLabel
+        >
+          <InputSwitch
+            checked={dynamicConversations}
+            onCheckedChange={(checked) => {
+              void updatePreferences(
+                { dynamic_conversations: checked },
+                "/api/user/appearance"
+              );
+            }}
+          />
+        </InputHorizontal>
       </SettingsSection>
     </Section>
   );

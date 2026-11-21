@@ -1418,6 +1418,7 @@ def set_appearance_cookie(
             {
                 "interface_font": preferences.interface_font.value,
                 "response_font": preferences.response_font.value,
+                "motion": preferences.motion.value,
             }
         )
     )
