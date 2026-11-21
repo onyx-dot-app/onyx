@@ -182,6 +182,8 @@ _INIT_LOCK_SECONDS = 30.0
 # covers a restore at the agent's 15 min transfer deadline.
 _SESSION_SETUP_LOCK_PREFIX = "sandbox_fc:session_setup:"
 _SESSION_SETUP_LOCK_SECONDS = 30 * 60.0
+_SKILLS_SYNC_LOCK_PREFIX = "sandbox_fc:skills_sync:"
+_SKILLS_SYNC_LOCK_SECONDS = 5 * 60.0
 # Client token on each started command, to find it when Start gets no answer.
 _START_LABEL = "onyx_start_id"
 # Fixed zip entry times keep a skills bundle's bytes stable.
@@ -262,24 +264,31 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
         )
         if get_skills_image(tenant_cache, ref.sandbox_id) == image:
             return
-        agent = self._client_factory.client(placed.node.address)
-        put = agent.put_managed_image(bundle)
-        swap = agent.swap_managed(
-            image_id=put.image.image_id,
-            targets=[
-                VmInstance(
-                    sandbox_id=placed.vm.sandbox_id,
-                    attempt=placed.vm.attempt,
-                    generation=placed.vm.generation,
-                    sandboxd_key=placed.sandboxd_key,
+        # One swap and its record at a time, so the record names the drive.
+        with tenant_cache.lock(
+            f"{_SKILLS_SYNC_LOCK_PREFIX}{ref.sandbox_id}",
+            timeout=_SKILLS_SYNC_LOCK_SECONDS,
+        ):
+            if get_skills_image(tenant_cache, ref.sandbox_id) == image:
+                return
+            agent = self._client_factory.client(placed.node.address)
+            put = agent.put_managed_image(bundle)
+            swap = agent.swap_managed(
+                image_id=put.image.image_id,
+                targets=[
+                    VmInstance(
+                        sandbox_id=placed.vm.sandbox_id,
+                        attempt=placed.vm.attempt,
+                        generation=placed.vm.generation,
+                        sandboxd_key=placed.sandboxd_key,
+                    )
+                ],
+            )[0]
+            if not swap.ok:
+                raise HarnessSandboxError(
+                    f"The skills drive did not change: {swap.reason}: {swap.message}"
                 )
-            ],
-        )[0]
-        if not swap.ok:
-            raise HarnessSandboxError(
-                f"The skills drive did not change: {swap.reason}: {swap.message}"
-            )
-        set_skills_image(tenant_cache, ref.sandbox_id, image)
+            set_skills_image(tenant_cache, ref.sandbox_id, image)
 
     def _place(self, ref: HarnessSandboxRef) -> PlacedVm:
         """The running, initialized VM. Init runs only when the daemon is not

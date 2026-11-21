@@ -801,24 +801,24 @@ STATE_FILE="./auth-state.json"
 
 # Try loading existing state
 if [[ -f "$STATE_FILE" ]]; then
-    browser state load "$STATE_FILE"
-    browser open https://app.example.com/dashboard
+    agent-browser state load "$STATE_FILE"
+    agent-browser open https://app.example.com/dashboard
 
     # Check if session is still valid
     URL=$(agent-browser get url)
     if [[ "$URL" == *"/login"* ]]; then
         echo "Session expired, re-authenticating..."
         # Perform fresh login
-        browser snapshot -i
-        browser fill @e1 "$USERNAME"
-        browser fill @e2 "$PASSWORD"
-        browser click @e3
-        browser wait --url "**/dashboard"
-        browser state save "$STATE_FILE"
+        agent-browser snapshot -i
+        agent-browser fill @e1 "$USERNAME"
+        agent-browser fill @e2 "$PASSWORD"
+        agent-browser click @e3
+        agent-browser wait --url "**/dashboard"
+        agent-browser state save "$STATE_FILE"
     fi
 else
     # First-time login
-    browser open https://app.example.com/login
+    agent-browser open https://app.example.com/login
     # ... login flow ...
 fi
 ```
@@ -832,22 +832,22 @@ fi
 
 2. **Use environment variables for credentials**
    ```bash
-   browser fill @e1 "$APP_USERNAME"
-   browser fill @e2 "$APP_PASSWORD"
+   agent-browser fill @e1 "$APP_USERNAME"
+   agent-browser fill @e2 "$APP_PASSWORD"
    ```
 
 3. **Clean up after automation**
    ```bash
-   browser cookies clear
+   agent-browser cookies clear
    rm -f ./auth-state.json
    ```
 
 4. **Use short-lived sessions for CI/CD**
    ```bash
    # Don't persist state in CI
-   browser open https://app.example.com/login
+   agent-browser open https://app.example.com/login
    # ... login and perform actions ...
-   browser close  # Session ends, nothing persisted
+   agent-browser close  # Session ends, nothing persisted
    ```
 
 --- references/commands.md ---
@@ -1529,9 +1529,9 @@ for proxy in "${PROXIES[@]}"; do
     region=$(echo "$proxy" | grep -oP '^\w+-\w+')
     echo "Testing from: $region"
 
-    browser --session "$region" open https://example.com
-    browser --session "$region" screenshot "./screenshots/$region.png"
-    browser --session "$region" close
+    agent-browser --session "$region" open https://example.com
+    agent-browser --session "$region" screenshot "./screenshots/$region.png"
+    agent-browser --session "$region" close
 done
 ```
 
@@ -1558,9 +1558,9 @@ for i in "${!URLS[@]}"; do
     export HTTP_PROXY="${PROXY_LIST[$proxy_index]}"
     export HTTPS_PROXY="${PROXY_LIST[$proxy_index]}"
 
-    browser open "${URLS[$i]}"
-    browser get text body > "output-$i.txt"
-    browser close
+    agent-browser open "${URLS[$i]}"
+    agent-browser get text body > "output-$i.txt"
+    agent-browser close
 
     sleep 1  # Polite delay
 done
@@ -1807,7 +1807,7 @@ rm /tmp/auth-state.json
 
 ```bash
 # Set timeout for automated scripts
-timeout 60 browser --session long-task get text body
+timeout 60 agent-browser --session long-task get text body
 ```
 
 --- references/snapshot-refs.md ---
@@ -2145,7 +2145,7 @@ agent-browser record start ./debug-$(date +%Y%m%d-%H%M%S).webm
 agent-browser snapshot -i
 agent-browser click @e1 || {
     echo "Click failed - check recording"
-    browser record stop
+    agent-browser record stop
     exit 1
 }
 
@@ -2224,8 +2224,8 @@ agent-browser record start ./recordings/checkout-test-run-42.webm
 set -e
 
 cleanup() {
-    browser record stop 2>/dev/null || true
-    browser close 2>/dev/null || true
+    agent-browser record stop 2>/dev/null || true
+    agent-browser close 2>/dev/null || true
 }
 trap cleanup EXIT
 
@@ -2269,7 +2269,7 @@ agent-browser record stop
 #
 # RECOMMENDED: Use the auth vault instead of this template:
 #   echo "<pass>" | agent-browser auth save myapp --url <login-url> --username <user> --password-stdin
-#   browser auth login myapp
+#   agent-browser auth login myapp
 # The auth vault stores credentials securely and the LLM never sees passwords.
 #
 # Environment variables:
@@ -2298,17 +2298,17 @@ echo "Authentication workflow: $LOGIN_URL"
 # ================================================================
 if [[ -f "$STATE_FILE" ]]; then
     echo "Loading saved state from $STATE_FILE..."
-    if browser --state "$STATE_FILE" open "$LOGIN_URL" 2>/dev/null; then
-        browser wait --load networkidle
+    if agent-browser --state "$STATE_FILE" open "$LOGIN_URL" 2>/dev/null; then
+        agent-browser wait --load networkidle
 
         CURRENT_URL=$(agent-browser get url)
         if [[ "$CURRENT_URL" != *"login"* ]] && [[ "$CURRENT_URL" != *"signin"* ]]; then
             echo "Session restored successfully"
-            browser snapshot -i
+            agent-browser snapshot -i
             exit 0
         fi
         echo "Session expired, performing fresh login..."
-        browser close 2>/dev/null || true
+        agent-browser close 2>/dev/null || true
     else
         echo "Failed to load state, re-authenticating..."
     fi
@@ -2343,30 +2343,30 @@ exit 0
 # : "${APP_USERNAME:?Set APP_USERNAME environment variable}"
 # : "${APP_PASSWORD:?Set APP_PASSWORD environment variable}"
 #
-# browser open "$LOGIN_URL"
-# browser wait --load networkidle
-# browser snapshot -i
+# agent-browser open "$LOGIN_URL"
+# agent-browser wait --load networkidle
+# agent-browser snapshot -i
 #
 # # Fill credentials (update refs to match your form)
-# browser fill @e1 "$APP_USERNAME"
-# browser fill @e2 "$APP_PASSWORD"
-# browser click @e3
-# browser wait --load networkidle
+# agent-browser fill @e1 "$APP_USERNAME"
+# agent-browser fill @e2 "$APP_PASSWORD"
+# agent-browser click @e3
+# agent-browser wait --load networkidle
 #
 # # Verify login succeeded
 # FINAL_URL=$(agent-browser get url)
 # if [[ "$FINAL_URL" == *"login"* ]] || [[ "$FINAL_URL" == *"signin"* ]]; then
 #     echo "Login failed - still on login page"
-#     browser screenshot /tmp/login-failed.png
-#     browser close
+#     agent-browser screenshot /tmp/login-failed.png
+#     agent-browser close
 #     exit 1
 # fi
 #
 # # Save state for future runs
 # echo "Saving state to $STATE_FILE"
-# browser state save "$STATE_FILE"
+# agent-browser state save "$STATE_FILE"
 # echo "Login successful"
-# browser snapshot -i
+# agent-browser snapshot -i
 
 --- templates/capture-workflow.sh ---
 
@@ -2394,7 +2394,7 @@ mkdir -p "$OUTPUT_DIR"
 # Optional: Load authentication state
 # if [[ -f "./auth-state.json" ]]; then
 #     echo "Loading authentication state..."
-#     browser state load "./auth-state.json"
+#     agent-browser state load "./auth-state.json"
 # fi
 
 # Navigate to target
@@ -2424,14 +2424,14 @@ agent-browser pdf "$OUTPUT_DIR/page.pdf"
 echo "Saved: $OUTPUT_DIR/page.pdf"
 
 # Optional: Extract specific elements using refs from structure
-# browser get text @e5 > "$OUTPUT_DIR/main-content.txt"
+# agent-browser get text @e5 > "$OUTPUT_DIR/main-content.txt"
 
 # Optional: Handle infinite scroll pages
 # for i in {1..5}; do
-#     browser scroll down 1000
-#     browser wait 1000
+#     agent-browser scroll down 1000
+#     agent-browser wait 1000
 # done
-# browser screenshot --full "$OUTPUT_DIR/page-scrolled.png"
+# agent-browser screenshot --full "$OUTPUT_DIR/page-scrolled.png"
 
 # Cleanup
 agent-browser close
@@ -2473,23 +2473,23 @@ agent-browser snapshot -i
 # Step 3: Fill form fields (customize these refs based on snapshot output)
 #
 # Common field types:
-#   browser fill @e1 "John Doe"           # Text input
-#   browser fill @e2 "user@example.com"   # Email input
-#   browser fill @e3 "SecureP@ss123"      # Password input
-#   browser select @e4 "Option Value"     # Dropdown
-#   browser check @e5                     # Checkbox
-#   browser click @e6                     # Radio button
-#   browser fill @e7 "Multi-line text"   # Textarea
-#   browser upload @e8 /path/to/file.pdf # File upload
+#   agent-browser fill @e1 "John Doe"           # Text input
+#   agent-browser fill @e2 "user@example.com"   # Email input
+#   agent-browser fill @e3 "SecureP@ss123"      # Password input
+#   agent-browser select @e4 "Option Value"     # Dropdown
+#   agent-browser check @e5                     # Checkbox
+#   agent-browser click @e6                     # Radio button
+#   agent-browser fill @e7 "Multi-line text"   # Textarea
+#   agent-browser upload @e8 /path/to/file.pdf # File upload
 #
 # Uncomment and modify:
-# browser fill @e1 "Test User"
-# browser fill @e2 "test@example.com"
-# browser click @e3  # Submit button
+# agent-browser fill @e1 "Test User"
+# agent-browser fill @e2 "test@example.com"
+# agent-browser click @e3  # Submit button
 
 # Step 4: Wait for submission
-# browser wait --load networkidle
-# browser wait --url "**/success"  # Or wait for redirect
+# agent-browser wait --load networkidle
+# agent-browser wait --url "**/success"  # Or wait for redirect
 
 # Step 5: Verify result
 echo ""
