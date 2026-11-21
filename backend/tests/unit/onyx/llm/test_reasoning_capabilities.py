@@ -388,6 +388,8 @@ def test_parse_gemini_version(
         ("gemini-3.8-flash", True),
         ("vertex_ai/gemini-3.8-flash", True),
         ("gemini-3.7-flash", True),
+        ("gemini-4-argon", True),
+        ("vertex_ai/gemini-4-argon", True),
         ("gemini-3.6-flash", False),
         ("gemini-3.5-flash", False),
         ("gemini-3.5-flash-lite", False),
@@ -406,7 +408,9 @@ def test_gemini_lowest_thinking_level_is_low(model_name: str, expected: bool) ->
     [
         (LlmProviderNames.VERTEX_AI, "gemini-3.8-flash", False),
         (LlmProviderNames.OPENROUTER, "google/gemini-3.8-flash", False),
+        (LlmProviderNames.VERTEX_AI, "gemini-4-argon", False),
         (LlmProviderNames.VERTEX_AI, "gemini-3.5-flash", True),
+        (LlmProviderNames.VERTEX_AI, "gemini-3.5-flash-lite", True),
         (LlmProviderNames.VERTEX_AI, "gemini-3.1-pro-preview", True),
     ],
 )
