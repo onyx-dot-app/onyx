@@ -229,6 +229,10 @@ export const getOfflineStatus = (): Promise<OfflineStatus | null> =>
 
 export const retryConnection = (): Promise<void> => invoke("retry_connection");
 
+// Windows and Linux: sizes this local window to `contentHeight` logical pixels, inside the screen.
+export const fitWindow = (contentHeight: number): Promise<void> =>
+  invoke("fit_window", { contentHeight });
+
 export function errorMessage(error: unknown): string {
   if (typeof error === "string") return error;
   if (error instanceof Error) return error.message;

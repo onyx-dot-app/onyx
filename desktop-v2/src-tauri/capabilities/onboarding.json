@@ -7,6 +7,7 @@
   "permissions": [
     "core:window:allow-start-dragging",
     "core:window:allow-set-size",
+    "allow-fit-window",
     "allow-check-server",
     "allow-save-server"
   ]
