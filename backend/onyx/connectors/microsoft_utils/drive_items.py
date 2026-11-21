@@ -526,7 +526,8 @@ def download_with_cap(
     - Otherwise streams the body in chunks and stops once `cap` is surpassed.
     - Retries transport errors (e.g. mid-stream connection drops), and a
       throttled answer (429 or 503) after its Retry-After. The pacer reports
-      the throttle, so every caller on the app pauses. Any other refusal is
+      the throttle to the download lane, so every link download on the app
+      pauses, and Graph calls go on. Any other refusal is
       final: the caller's Graph `/content` fallback is its second chance.
     - Raises `SizeCapExceeded` when the cap would be exceeded.
     - Returns the full bytes if the content fits within `cap`.

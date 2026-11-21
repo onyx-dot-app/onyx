@@ -2,6 +2,7 @@
 server: every entry point makes the same documents with the same access, and
 conversion makes only the calls it needs."""
 
+import threading
 import time
 from collections.abc import Iterator
 from datetime import timedelta
@@ -9,12 +10,16 @@ from typing import Any
 from uuid import uuid4
 
 import pytest
+from prometheus_client import REGISTRY
 
 from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors import source_api_limiter
 from onyx.connectors.load_all import load_all_from_connector
-from onyx.connectors.microsoft_utils.request_pacer import GRAPH_LIMITER_API
+from onyx.connectors.microsoft_utils.request_pacer import (
+    DOWNLOAD_LIMITER_API,
+    GRAPH_LIMITER_API,
+)
 from onyx.connectors.models import (
     ConnectorFailure,
     Document,
@@ -36,6 +41,7 @@ from onyx.connectors.source_api_limiter import (
     build_source_api_limiter,
 )
 from onyx.redis.redis_pool import get_redis_client
+from onyx.redis.redis_rate_window import RedisRateWindows
 from shared_configs.contextvars import CURRENT_TENANT_ID_CONTEXTVAR
 from tests.external_dependency_unit.connectors.sharepoint.conftest import (
     MockSharepoint,
@@ -193,21 +199,20 @@ def _with_shared_limiter(
     mock: MockSharepoint,
     connector: SharepointConnector,
     monkeypatch: pytest.MonkeyPatch,
-) -> list[float]:
+) -> list[tuple[str, float]]:
     """Gives the connector the limiter of its app, as the factory does, and
-    returns the list of the Retry-After waits that it reports."""
+    returns the list of the (lane, Retry-After) pauses that it reports."""
     limiter = build_source_api_limiter(
         DocumentSource.SHAREPOINT,
         credential_id=int(uuid4().int % 1_000_000_000),
         load_credential_json=mock.credentials,
     )
     assert isinstance(limiter, RedisSourceApiLimiter)
-    reported: list[float] = []
+    reported: list[tuple[str, float]] = []
     report = limiter.report_retry_after
 
     def record(api: str, seconds: float) -> None:
-        if api == GRAPH_LIMITER_API:
-            reported.append(seconds)
+        reported.append((api, seconds))
         report(api, seconds)
 
     monkeypatch.setattr(limiter, "report_retry_after", record)
@@ -215,46 +220,95 @@ def _with_shared_limiter(
     return reported
 
 
-@pytest.mark.usefixtures("limiter_tenant")
-def test_a_throttled_listed_link_pauses_and_is_tried_again(
-    own_mock_sharepoint: MockSharepoint, monkeypatch: pytest.MonkeyPatch
+def _pause_left(tenant: str, api: str) -> float:
+    client = get_redis_client(tenant_id=tenant)
+    windows = RedisRateWindows(client)
+    return max(
+        (
+            windows.pause_left(key.decode())
+            for key in client.scan_iter(f"*:{api}:blocked_until")
+        ),
+        default=0.0,
+    )
+
+
+def _units(api: str) -> float:
+    return (
+        REGISTRY.get_sample_value(
+            "onyx_source_api_limiter_units_total",
+            {"source": DocumentSource.SHAREPOINT.value, "api": api},
+        )
+        or 0.0
+    )
+
+
+def test_a_throttled_listed_link_pauses_only_the_download_lane(
+    own_mock_sharepoint: MockSharepoint,
+    monkeypatch: pytest.MonkeyPatch,
+    limiter_tenant: str,
 ) -> None:
     """The download host answers 429 with Retry-After. /content redirects to
-    the same host, so conversion does not fall back: the shared limiter gets
-    the pause, and the fresh link is tried again."""
+    the same host, so conversion does not fall back. The download lane of
+    the app pauses, a Graph call in the pause is not delayed, and the fresh
+    link is tried again. A link download takes no Graph RU."""
     mock = own_mock_sharepoint
     connector = mock.build_connector(include_site_pages=False)
     stubs = list_stubs(connector).stubs
     reported = _with_shared_limiter(mock, connector, monkeypatch)
+    retry_after = 3
     mock.patch_config(
         {
             "faults": {
-                "download_url_throttled_calls": 2,
-                "download_url_retry_after_seconds": _LINK_RETRY_AFTER_SECONDS,
+                "download_url_throttled_calls": 1,
+                "download_url_retry_after_seconds": retry_after,
             }
         }
     )
     mock.reset_stats()
+    graph_units = _units(GRAPH_LIMITER_API)
+    download_units = _units(DOWNLOAD_LIMITER_API)
+    converted: dict[str, Document] = {}
 
-    converted = _convert(connector, stubs)
+    def convert() -> None:
+        converted.update(_convert(connector, stubs))
 
+    runner = threading.Thread(target=convert, daemon=True)
+    runner.start()
+    deadline = time.monotonic() + 30
+    while _pause_left(limiter_tenant, DOWNLOAD_LIMITER_API) <= 0:
+        assert time.monotonic() < deadline, "no download pause was set"
+        time.sleep(0.05)  # test-flakes: allow the test polls Redis for the pause
+    graph_units_in_pause = _units(GRAPH_LIMITER_API)
+    started = time.monotonic()
+    assert connector.ops.list_site_urls().site_urls
+    graph_call_seconds = time.monotonic() - started
+    runner.join(timeout=60)
+    assert not runner.is_alive()
+
+    assert graph_call_seconds < retry_after / 2
+    assert _units(GRAPH_LIMITER_API) > graph_units_in_pause
     files = mock.supported_file_ids()
     assert set(converted) == files
     stats = mock.stats()
     assert "graph.item.content" not in stats["ops"]
     assert stats["item_downloads"] == dict.fromkeys(files, 1)
-    assert stats["ops"]["download_url.get"]["errors"] == 2
-    assert stats["ops"]["download_url.get"]["count"] == len(files) + 2
-    assert reported == [_LINK_RETRY_AFTER_SECONDS] * 2
+    assert stats["ops"]["download_url.get"]["errors"] == 1
+    assert stats["ops"]["download_url.get"]["count"] == len(files) + 1
+    assert reported == [(DOWNLOAD_LIMITER_API, retry_after)]
+    # The link downloads before the pause took no Graph RU, and every link
+    # download took one turn from the download lane.
+    assert graph_units_in_pause == graph_units
+    assert _units(DOWNLOAD_LIMITER_API) - download_units == len(files) + 1
 
 
 @pytest.mark.usefixtures("limiter_tenant")
-def test_a_throttled_redirect_of_content_pauses_the_app(
+def test_a_throttled_redirect_of_content_pauses_the_download_lane(
     own_mock_sharepoint: MockSharepoint, monkeypatch: pytest.MonkeyPatch
 ) -> None:
-    """With an old link, conversion reads /content, which redirects to the
-    download host. A 429 there reaches the shared limiter too, and /content
-    is read again."""
+    """With an old link, conversion reads /content (1 Graph RU), which
+    redirects to the download host. The fetch of the target is a link
+    download: a 429 there pauses the download lane, and only the target is
+    read again."""
     mock = own_mock_sharepoint
     connector = mock.build_connector(include_site_pages=False)
     stubs = _file_stubs(list_stubs(connector).stubs)
@@ -279,9 +333,10 @@ def test_a_throttled_redirect_of_content_pauses_the_app(
     files = mock.supported_file_ids()
     assert set(converted) == files
     stats = mock.stats()
-    assert stats["ops"]["graph.item.content"]["count"] == len(files) + 1
+    assert stats["ops"]["graph.item.content"]["count"] == len(files)
     assert stats["ops"]["download_url.get"]["errors"] == 1
-    assert reported == [_LINK_RETRY_AFTER_SECONDS]
+    assert stats["ops"]["download_url.get"]["count"] == len(files) + 1
+    assert reported == [(DOWNLOAD_LIMITER_API, _LINK_RETRY_AFTER_SECONDS)]
 
 
 @pytest.mark.usefixtures("ee_permission_sync")
