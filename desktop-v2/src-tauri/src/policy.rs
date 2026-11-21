@@ -25,8 +25,8 @@ const DISABLE_LAUNCHER: &str = "DisableLauncher";
 const LAUNCH_AT_LOGIN: &str = "LaunchAtLogin";
 const DISABLE_NOTIFICATIONS: &str = "DisableNotifications";
 
-pub const POLICY_INVALID: &str =
-    "Your organization's Onyx policy is invalid. Some settings are locked. Contact your IT team.";
+const POLICY_LOCKED: &str = "Your organization's Onyx policy is invalid. Some settings are locked.";
+const CONTACT_IT: &str = "Contact your IT team.";
 
 /// How often the app reads the policy again while it runs.
 const REFRESH_INTERVAL: Duration = Duration::from_secs(5 * 60);
@@ -89,17 +89,22 @@ impl Policy {
 
     /// What the app tells the user about a policy that is not valid.
     pub fn notice(&self) -> Option<String> {
+        let mut parts: Vec<String> = Vec::new();
         if self.fail_closed {
-            return Some(POLICY_INVALID.into());
+            parts.push(POLICY_LOCKED.into());
         }
-        if self.ignored.is_empty() {
+        if !self.ignored.is_empty() {
+            let names: Vec<&str> = self.ignored.iter().map(|key| key_label(key)).collect();
+            parts.push(format!(
+                "Onyx ignored a setting in your organization's policy that is not valid: {}.",
+                names.join(", ")
+            ));
+        }
+        if parts.is_empty() {
             return None;
         }
-        let names: Vec<&str> = self.ignored.iter().map(|key| key_label(key)).collect();
-        Some(format!(
-            "Onyx ignored a setting in your organization's policy that is not valid: {}. Contact your IT team.",
-            names.join(", ")
-        ))
+        parts.push(CONTACT_IT.into());
+        Some(parts.join(" "))
     }
 
     /// The server to use: a locked managed server, else the saved one, else
@@ -352,17 +357,24 @@ fn read_windows() -> Policy {
     })
 }
 
-/// Reads a policy file only if no untrusted user can have written it. The
-/// file, every directory above it and above each symlink on the way must
-/// belong to a trusted owner and not be writable by group or others. A sticky
-/// directory (such as /tmp) may be writable: its users cannot replace a
-/// trusted owner's file.
+/// Reads a policy file only if no untrusted user can have written it or
+/// redirected the path to it. The path is resolved one component at a time:
+/// every directory and symlink on the way, and the file, must belong to a
+/// trusted owner, and no directory or file may be writable by group or
+/// others. A sticky directory (such as /tmp) may be writable: its users
+/// cannot replace a trusted owner's entry. `trusted` says whether the owner
+/// `uid` of `path` is trusted.
 #[cfg(unix)]
 #[cfg_attr(not(target_os = "linux"), allow(dead_code))]
-fn read_trusted(path: &std::path::Path, trusted: impl Fn(u32) -> bool) -> std::io::Result<String> {
+fn read_trusted(
+    path: &std::path::Path,
+    trusted: impl Fn(&std::path::Path, u32) -> bool,
+) -> std::io::Result<String> {
+    use std::collections::VecDeque;
+    use std::ffi::OsString;
     use std::io::{Error, ErrorKind, Read};
     use std::os::unix::fs::MetadataExt;
-    use std::path::Path;
+    use std::path::{Component, Path, PathBuf};
     const MAX_LINKS: usize = 16;
     const GROUP_OR_OTHER_WRITE: u32 = 0o022;
     const STICKY: u32 = 0o1000;
@@ -372,47 +384,75 @@ fn read_trusted(path: &std::path::Path, trusted: impl Fn(u32) -> bool) -> std::i
             format!("{} {why}; the policy is not trusted", what.display()),
         )
     };
-    let check = |what: &Path, meta: &std::fs::Metadata, sticky_ok: bool| {
-        if !trusted(meta.uid()) {
-            return Err(untrusted(what, "is not owned by root"));
+    let check_owner = |what: &Path, meta: &std::fs::Metadata| {
+        if trusted(what, meta.uid()) {
+            Ok(())
+        } else {
+            Err(untrusted(what, "is not owned by root"))
         }
+    };
+    let check = |what: &Path, meta: &std::fs::Metadata, sticky_ok: bool| {
+        check_owner(what, meta)?;
         let writable = meta.mode() & GROUP_OR_OTHER_WRITE != 0;
         if writable && !(sticky_ok && meta.mode() & STICKY != 0) {
             return Err(untrusted(what, "is writable by other users"));
         }
         Ok(())
     };
-    let check_dirs_above = |file: &Path| -> std::io::Result<()> {
-        let parent = match file.parent() {
-            Some(p) if !p.as_os_str().is_empty() => p,
-            _ => Path::new("."),
-        };
-        for dir in std::fs::canonicalize(parent)?.ancestors() {
-            check(dir, &std::fs::metadata(dir)?, true)?;
+    // Components still to resolve; a symlink puts its target's in front.
+    let mut todo: VecDeque<OsString> = VecDeque::new();
+    let mut resolved = PathBuf::from("/");
+    let push_front = |todo: &mut VecDeque<OsString>, resolved: &mut PathBuf, p: &Path| {
+        let mut parts: Vec<OsString> = Vec::new();
+        for component in p.components() {
+            match component {
+                Component::RootDir => {
+                    parts.clear();
+                    *resolved = PathBuf::from("/");
+                }
+                Component::CurDir | Component::Prefix(_) => {}
+                Component::ParentDir => parts.push("..".into()),
+                Component::Normal(name) => parts.push(name.to_os_string()),
+            }
         }
-        Ok(())
+        for part in parts.into_iter().rev() {
+            todo.push_front(part);
+        }
     };
-    let mut current = path.to_path_buf();
+    let start = if path.is_absolute() {
+        path.to_path_buf()
+    } else {
+        std::env::current_dir()?.join(path)
+    };
+    push_front(&mut todo, &mut resolved, &start);
+    check(&resolved, &std::fs::symlink_metadata(&resolved)?, true)?;
     let mut hops = 0;
-    loop {
-        check_dirs_above(&current)?;
-        if !std::fs::symlink_metadata(&current)?
-            .file_type()
-            .is_symlink()
-        {
-            break;
+    while let Some(part) = todo.pop_front() {
+        if part == ".." {
+            // `resolved` has no symlinks, so its parent is the real one.
+            resolved.pop();
+            continue;
         }
-        hops += 1;
-        if hops > MAX_LINKS {
-            return Err(untrusted(path, "has too many symlinks"));
+        let candidate = resolved.join(&part);
+        let meta = std::fs::symlink_metadata(&candidate)?;
+        if meta.file_type().is_symlink() {
+            // Whoever owns a link can point it elsewhere.
+            check_owner(&candidate, &meta)?;
+            hops += 1;
+            if hops > MAX_LINKS {
+                return Err(untrusted(path, "has too many symlinks"));
+            }
+            let target = std::fs::read_link(&candidate)?;
+            push_front(&mut todo, &mut resolved, &target);
+            continue;
         }
-        let target = std::fs::read_link(&current)?;
-        current = match current.parent() {
-            Some(parent) => parent.join(target),
-            None => target,
-        };
+        if meta.is_dir() {
+            check(&candidate, &meta, true)?;
+        }
+        resolved = candidate;
     }
     // The owner and mode come from the open file, not from the path.
+    let current = resolved;
     let mut file = std::fs::File::open(&current)?;
     let meta = file.metadata()?;
     if !meta.is_file() {
@@ -438,7 +478,7 @@ pub fn read(app: &AppHandle) -> Policy {
     #[cfg(target_os = "linux")]
     {
         let _ = app;
-        let root = |uid: u32| uid == 0;
+        let root = |_: &std::path::Path, uid: u32| uid == 0;
         match read_trusted(std::path::Path::new("/etc/onyx-desktop/policy.json"), root) {
             Ok(raw) => parse_json(&raw),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Policy::default(),
@@ -455,11 +495,12 @@ pub fn read(app: &AppHandle) -> Policy {
     }
 }
 
-/// Saves a valid policy's server as the last valid managed server. An invalid
-/// policy without a server uses that saved one instead.
+/// Saves a valid managed server as the last valid one, also when another
+/// value is not valid. An invalid policy without a server uses the saved one;
+/// a valid policy without a server forgets it.
 pub fn with_remembered_server(policy: Policy, config: &ConfigStore) -> Policy {
     let last = config.get().managed_server_url;
-    if policy.invalid() {
+    if policy.server_url.is_none() && policy.invalid() {
         return policy.with_last_managed_server(last);
     }
     if last != policy.server_url {
@@ -770,13 +811,22 @@ mod tests {
         let empty = policy(&[(LAUNCHER_SHORTCUT, s(""))]);
         assert!(empty.notice().unwrap().contains("launcher shortcut"));
 
+        let locked_only = format!("{POLICY_LOCKED} {CONTACT_IT}");
         let locked = policy(&[(LOCK_SERVER_URL, RawValue::Bool(true))]);
-        assert_eq!(locked.notice().as_deref(), Some(POLICY_INVALID));
-        assert_eq!(
-            Policy::unreadable().notice().as_deref(),
-            Some(POLICY_INVALID)
-        );
+        assert_eq!(locked.notice(), Some(locked_only.clone()));
+        assert_eq!(Policy::unreadable().notice(), Some(locked_only));
         assert_eq!(Policy::default().notice(), None);
+
+        // Both kinds at once: the locked warning and the ignored names.
+        let mixed = policy(&[
+            (SERVER_URL, s("ftp://onyx.example.com")),
+            (DISABLE_AUTO_UPDATE, s("maybe")),
+        ])
+        .notice()
+        .expect("a notice");
+        assert!(mixed.starts_with(POLICY_LOCKED), "{mixed}");
+        assert!(mixed.contains("server URL"), "{mixed}");
+        assert!(mixed.ends_with(CONTACT_IT), "{mixed}");
     }
 
     fn scratch_dir(name: &str) -> std::path::PathBuf {
@@ -824,6 +874,26 @@ mod tests {
             Some("https://onyx.example.com")
         );
 
+        // A valid server is saved even when another value was ignored.
+        let other = "https://other.example.com";
+        let mixed = with_remembered_server(
+            policy(&[
+                (SERVER_URL, s(other)),
+                (LOCK_SERVER_URL, RawValue::Bool(true)),
+                (LAUNCHER_SHORTCUT, s("Foo+Bar")),
+            ]),
+            &config,
+        );
+        assert!(mixed.invalid());
+        assert_eq!(mixed.server_url.as_deref(), Some(other));
+        assert_eq!(config.get().managed_server_url.as_deref(), Some(other));
+        assert_eq!(
+            with_remembered_server(Policy::unreadable(), &config)
+                .server(None)
+                .as_deref(),
+            Some(other)
+        );
+
         // A valid policy without a server forgets it.
         assert_eq!(
             with_remembered_server(Policy::default(), &config),
@@ -847,7 +917,7 @@ mod tests {
         let dir = scratch_dir("trust");
         let me = std::fs::metadata(&dir).unwrap().uid();
         // Root stands in for the test's own user, who owns the scratch files.
-        let trusted = |uid: u32| uid == 0 || uid == me;
+        let trusted = |_: &std::path::Path, uid: u32| uid == 0 || uid == me;
         let read = |path: &std::path::Path| read_trusted(path, trusted);
         let denied = |path: &std::path::Path| {
             let result = read(path);
@@ -873,7 +943,7 @@ mod tests {
 
         // Not owned by a trusted user.
         if me != 0 {
-            let root_only = read_trusted(&file, |uid| uid == 0);
+            let root_only = read_trusted(&file, |_, uid| uid == 0);
             assert_eq!(
                 root_only.unwrap_err().kind(),
                 std::io::ErrorKind::PermissionDenied
@@ -926,6 +996,35 @@ mod tests {
         symlink(etc.join("b.json"), &loop_a).unwrap();
         symlink(&loop_a, etc.join("b.json")).unwrap();
         denied(&loop_a);
+
+        // Links that another user owns, in a sticky directory, can be
+        // pointed elsewhere: a file link, and a directory link on the way.
+        set_mode(&shared, 0o1777);
+        let user_link = shared.join("user-link.json");
+        symlink(&file, &user_link).unwrap();
+        let via_user_link = etc.join("via-user-link.json");
+        symlink(&user_link, &via_user_link).unwrap();
+        let user_dir_link = shared.join("user-dir");
+        symlink(&etc, &user_dir_link).unwrap();
+        let via_user_dir = etc.join("via-user-dir.json");
+        symlink(user_dir_link.join("policy.json"), &via_user_dir).unwrap();
+        // The same links count as trusted when a trusted user owns them.
+        assert_eq!(read(&via_user_link).unwrap(), "{}");
+        assert_eq!(read(&via_user_dir).unwrap(), "{}");
+        let other_user = |path: &std::path::Path, uid: u32| {
+            let user_owned = path
+                .file_name()
+                .is_some_and(|name| name.to_string_lossy().starts_with("user-"));
+            trusted(path, uid) && !user_owned
+        };
+        for path in [&via_user_link, &via_user_dir] {
+            assert_eq!(
+                read_trusted(path, other_user).unwrap_err().kind(),
+                std::io::ErrorKind::PermissionDenied,
+                "{}",
+                path.display()
+            );
+        }
 
         let _ = std::fs::remove_dir_all(&dir);
     }
