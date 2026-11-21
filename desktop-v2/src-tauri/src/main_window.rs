@@ -225,7 +225,7 @@ fn open_new_window(
                 .on_new_window(move |url, features| {
                     open_new_window(&child_app, url, features, &child_origin)
                 })
-                .on_download(|webview, event| handle_download(webview.app_handle(), event))
+                .on_download(|_webview, event| handle_download(event))
                 .on_page_load(|window, payload| {
                     if matches!(payload.event(), tauri::webview::PageLoadEvent::Finished) {
                         let _ = window.set_title(&popup_title(payload.url()));
@@ -249,23 +249,51 @@ fn open_new_window(
 }
 
 /// Downloads from any app window ask where to save, like a browser. On Linux
-/// they save to the Downloads folder, and a notification tells where.
-fn handle_download(_app: &AppHandle, event: DownloadEvent) -> bool {
+/// they save to the Downloads folder, and a notification tells where
+/// (`watch_downloads`).
+fn handle_download(event: DownloadEvent) -> bool {
     match event {
         DownloadEvent::Requested { destination, .. } => choose_download_path(destination),
-        DownloadEvent::Finished { url, success, path } => {
+        DownloadEvent::Finished { url, success, .. } => {
             log::info!(
                 "download of {} finished (success: {success})",
                 log_safe(url.as_str())
             );
-            #[cfg(target_os = "linux")]
-            notify_download(_app, path.as_deref(), success);
-            #[cfg(not(target_os = "linux"))]
-            let _ = path;
             true
         }
         _ => true,
     }
+}
+
+/// Notifies once for each finished download. wry adds its download handler
+/// to the web context that all windows share, once for each window it
+/// builds, so `handle_download` runs several times for one download on Linux.
+#[cfg(target_os = "linux")]
+fn watch_downloads(app: &AppHandle, view: &webkit2gtk::WebView) {
+    use std::cell::Cell;
+    use std::rc::Rc;
+    use webkit2gtk::{DownloadExt, WebContextExt, WebViewExt};
+
+    static WATCHING: std::sync::Once = std::sync::Once::new();
+    WATCHING.call_once(|| {
+        let Some(context) = view.context() else {
+            return;
+        };
+        let app = app.clone();
+        context.connect_download_started(move |_, download| {
+            let failed = Rc::new(Cell::new(false));
+            download.connect_failed({
+                let failed = failed.clone();
+                move |_, _| failed.set(true)
+            });
+            let app = app.clone();
+            download.connect_finished(move |download| {
+                let success = !failed.get();
+                let path = download.destination().map(std::path::PathBuf::from);
+                notify_download(&app, path.as_deref(), success);
+            });
+        });
+    });
 }
 
 /// The notification text for a finished download.
@@ -420,8 +448,10 @@ fn choose_download_path(_destination: &mut std::path::PathBuf) -> bool {
 fn configure_webkit(window: &tauri::WebviewWindow) {
     use webkit2gtk::{ContextMenuExt, ContextMenuItemExt, SettingsExt, WebViewExt};
 
-    let result = window.with_webview(|webview| {
+    let app = window.app_handle().clone();
+    let result = window.with_webview(move |webview| {
         let view = webview.inner();
+        watch_downloads(&app, &view);
         if let Some(settings) = WebViewExt::settings(&view) {
             settings.set_javascript_can_access_clipboard(true);
         }
@@ -487,11 +517,14 @@ fn forward_menu_keys(window: &tauri::WebviewWindow) {
             if let Some(id) = crate::menu::key_action(key, modifiers) {
                 // SAFETY: as above.
                 unsafe { args.SetHandled(true)? };
-                // Out of the WebView2 callback: an item can close the window.
+                // After the WebView2 callback returns: an item can build or
+                // close a web view. `run_on_main_thread` runs at once when called
+                // on the main thread, so it is called from another thread.
                 let app = app.clone();
-                let _ = app
-                    .clone()
-                    .run_on_main_thread(move || crate::menu::handle(&app, id));
+                tauri::async_runtime::spawn(async move {
+                    let handle = app.clone();
+                    let _ = app.run_on_main_thread(move || crate::menu::handle(&handle, id));
+                });
             }
             Ok(())
         }));
@@ -611,7 +644,7 @@ pub async fn open_url(
         .on_new_window(move |url, features| {
             open_new_window(&popup_app, url, features, &popup_origin)
         })
-        .on_download(|webview, event| handle_download(webview.app_handle(), event));
+        .on_download(|_webview, event| handle_download(event));
 
     // Overlay title bar: the traffic lights float over the web UI's sidebar.
     // Other platforms keep the native title bar and the page's own layout.
