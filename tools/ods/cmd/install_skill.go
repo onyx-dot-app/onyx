@@ -141,7 +141,12 @@ onyx-llm-context repo still work.`,
 					return err
 				}
 			} else if !noPull {
-				pullSource(cmd, source)
+				if err := checkWorkspaceSetupSource(source, ""); err != nil {
+					return err
+				}
+				if err := pullSource(cmd, source); err != nil {
+					return err
+				}
 			}
 
 			repoRoot, err := paths.GitRoot()
@@ -225,11 +230,12 @@ func cloneAgentContext(cmd *cobra.Command, url, dest string) error {
 // overwrite uncommitted changes. Any pull that cannot run (those cases,
 // offline, no upstream) warns and installs from the local state, since a
 // stale install is better than none. Local edits that do not conflict
-// survive the update.
-func pullSource(cmd *cobra.Command, source string) {
+// survive the update. A workspace-setup migration is rejected before merge,
+// while existing symlink and instruction-import targets still work.
+func pullSource(cmd *cobra.Command, source string) error {
 	// Not a git checkout (an exported copy, say): nothing to update.
 	if _, err := os.Stat(filepath.Join(source, ".git")); os.IsNotExist(err) {
-		return
+		return nil
 	} else if err != nil {
 		_, _ = fmt.Fprintf(
 			cmd.ErrOrStderr(),
@@ -237,21 +243,35 @@ func pullSource(cmd *cobra.Command, source string) {
 			source,
 			err,
 		)
-		return
+		return nil
 	}
-	gitCmd := exec.Command("git", "-C", source, "pull", "--ff-only")
-	out, err := gitCmd.CombinedOutput()
+	warn := func(output []byte) {
+		_, _ = fmt.Fprintf(cmd.ErrOrStderr(),
+			"Warning: could not update %s; installing from the local state.\n%s", source, output)
+	}
+	out, err := exec.Command("git", "-C", source, "fetch").CombinedOutput()
 	if err != nil {
-		_, _ = fmt.Fprintf(
-			cmd.ErrOrStderr(),
-			"Warning: could not update %s; installing from the local state.\n%s",
-			source,
-			out,
-		)
-		return
+		warn(out)
+		return nil
+	}
+	out, err = exec.Command("git", "-C", source, "rev-parse", "--verify", "@{upstream}^{commit}").CombinedOutput()
+	if err != nil {
+		warn(out)
+		return nil
+	}
+	revision := strings.TrimSpace(string(out))
+	if err := checkWorkspaceSetupSource(source, revision); err != nil {
+		return err
+	}
+	// Merge the inspected commit, not a ref that another fetch could move.
+	out, err = exec.Command("git", "-C", source, "merge", "--ff-only", revision).CombinedOutput()
+	if err != nil {
+		warn(out)
+		return nil
 	}
 	summary, _, _ := strings.Cut(strings.TrimSpace(string(out)), "\n")
 	_, _ = fmt.Fprintf(cmd.OutOrStdout(), "Pulled  %s (%s)\n", source, summary)
+	return nil
 }
 
 // resolveAgents maps the --agent values to installers, in the given order and
