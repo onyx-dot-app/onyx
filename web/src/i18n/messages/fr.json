@@ -1523,16 +1523,6 @@
     "codeInterpreter": {
       "card": {
         "description": "Environnement d'exécution Python intégré",
-        "disconnectButton": {
-          "tooltip": "Déconnecter"
-        },
-        "disconnectedTitle": "Interpréteur de code (déconnecté)",
-        "reconnectButton": {
-          "label": "Reconnecter"
-        },
-        "refreshButton": {
-          "tooltip": "Actualiser"
-        },
         "title": "Interpréteur de code"
       },
       "disconnectModal": {
@@ -8100,13 +8090,35 @@
         },
         "setDefaultButton": {
           "label": "Définir par défaut"
+        }
+      },
+      "integrationCard": {
+        "connectButton": {
+          "label": "Connecter"
+        },
+        "connected": {
+          "label": "Connecté"
         },
         "deleteButton": {
           "ariaLabel": "Supprimer {title}",
           "tooltip": "Supprimer"
         },
+        "disconnectButton": {
+          "ariaLabel": "Déconnecter {title}",
+          "tooltip": "Déconnecter"
+        },
+        "disconnected": {
+          "suffix": "(déconnecté)"
+        },
+        "editButton": {
+          "ariaLabel": "Modifier {title}",
+          "tooltip": "Modifier"
+        },
         "reconnectButton": {
           "label": "Reconnecter"
+        },
+        "refreshButton": {
+          "tooltip": "Actualiser"
         }
       }
     },
@@ -9062,14 +9074,6 @@
       },
       "page": {
         "description": "Connectez des plateformes d'observabilité pour surveiller et évaluer les appels LLM."
-      },
-      "provider": {
-        "connected": {
-          "label": "Connecté"
-        },
-        "disconnected": {
-          "suffix": "(déconnecté)"
-        }
       },
       "setupModal": {
         "cancel": {

@@ -1523,16 +1523,6 @@
     "codeInterpreter": {
       "card": {
         "description": "Built-in Python runtime",
-        "disconnectButton": {
-          "tooltip": "Disconnect"
-        },
-        "disconnectedTitle": "Code Interpreter (Disconnected)",
-        "reconnectButton": {
-          "label": "Reconnect"
-        },
-        "refreshButton": {
-          "tooltip": "Refresh"
-        },
         "title": "Code Interpreter"
       },
       "disconnectModal": {
@@ -8100,13 +8090,35 @@
         },
         "setDefaultButton": {
           "label": "Set as Default"
+        }
+      },
+      "integrationCard": {
+        "connectButton": {
+          "label": "Connect"
+        },
+        "connected": {
+          "label": "Connected"
         },
         "deleteButton": {
           "ariaLabel": "Delete {title}",
           "tooltip": "Delete"
         },
+        "disconnectButton": {
+          "ariaLabel": "Disconnect {title}",
+          "tooltip": "Disconnect"
+        },
+        "disconnected": {
+          "suffix": "(Disconnected)"
+        },
+        "editButton": {
+          "ariaLabel": "Edit {title}",
+          "tooltip": "Edit"
+        },
         "reconnectButton": {
           "label": "Reconnect"
+        },
+        "refreshButton": {
+          "tooltip": "Refresh"
         }
       }
     },
@@ -9062,14 +9074,6 @@
       },
       "page": {
         "description": "Connect observability platforms to monitor and evaluate LLM calls."
-      },
-      "provider": {
-        "connected": {
-          "label": "Connected"
-        },
-        "disconnected": {
-          "suffix": "(Disconnected)"
-        }
       },
       "setupModal": {
         "cancel": {

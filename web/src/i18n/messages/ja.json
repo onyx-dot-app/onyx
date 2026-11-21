@@ -1523,16 +1523,6 @@
     "codeInterpreter": {
       "card": {
         "description": "組み込みの Python ランタイム",
-        "disconnectButton": {
-          "tooltip": "接続を解除"
-        },
-        "disconnectedTitle": "コードインタープリター (接続解除済み)",
-        "reconnectButton": {
-          "label": "再接続"
-        },
-        "refreshButton": {
-          "tooltip": "更新"
-        },
         "title": "コードインタープリター"
       },
       "disconnectModal": {
@@ -8100,13 +8090,35 @@
         },
         "setDefaultButton": {
           "label": "デフォルトに設定"
+        }
+      },
+      "integrationCard": {
+        "connectButton": {
+          "label": "接続"
+        },
+        "connected": {
+          "label": "接続済み"
         },
         "deleteButton": {
           "ariaLabel": "{title} を削除",
           "tooltip": "削除"
         },
+        "disconnectButton": {
+          "ariaLabel": "{title} を切断",
+          "tooltip": "切断"
+        },
+        "disconnected": {
+          "suffix": "(接続解除済み)"
+        },
+        "editButton": {
+          "ariaLabel": "{title} を編集",
+          "tooltip": "編集"
+        },
         "reconnectButton": {
           "label": "再接続"
+        },
+        "refreshButton": {
+          "tooltip": "更新"
         }
       }
     },
@@ -9062,14 +9074,6 @@
       },
       "page": {
         "description": "オブザーバビリティプラットフォームを接続して、LLM 呼び出しを監視・評価します。"
-      },
-      "provider": {
-        "connected": {
-          "label": "接続済み"
-        },
-        "disconnected": {
-          "suffix": "(接続解除済み)"
-        }
       },
       "setupModal": {
         "cancel": {

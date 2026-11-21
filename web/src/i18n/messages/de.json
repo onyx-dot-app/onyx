@@ -1523,16 +1523,6 @@
     "codeInterpreter": {
       "card": {
         "description": "Integrierte Python-Laufzeitumgebung",
-        "disconnectButton": {
-          "tooltip": "Trennen"
-        },
-        "disconnectedTitle": "Code-Interpreter (getrennt)",
-        "reconnectButton": {
-          "label": "Erneut verbinden"
-        },
-        "refreshButton": {
-          "tooltip": "Aktualisieren"
-        },
         "title": "Code-Interpreter"
       },
       "disconnectModal": {
@@ -8100,13 +8090,35 @@
         },
         "setDefaultButton": {
           "label": "Als Standard festlegen"
+        }
+      },
+      "integrationCard": {
+        "connectButton": {
+          "label": "Verbinden"
+        },
+        "connected": {
+          "label": "Verbunden"
         },
         "deleteButton": {
           "ariaLabel": "{title} löschen",
           "tooltip": "Löschen"
         },
+        "disconnectButton": {
+          "ariaLabel": "{title} trennen",
+          "tooltip": "Trennen"
+        },
+        "disconnected": {
+          "suffix": "(getrennt)"
+        },
+        "editButton": {
+          "ariaLabel": "{title} bearbeiten",
+          "tooltip": "Bearbeiten"
+        },
         "reconnectButton": {
           "label": "Erneut verbinden"
+        },
+        "refreshButton": {
+          "tooltip": "Aktualisieren"
         }
       }
     },
@@ -9062,14 +9074,6 @@
       },
       "page": {
         "description": "Verbinden Sie Observability-Plattformen, um LLM-Aufrufe zu überwachen und auszuwerten."
-      },
-      "provider": {
-        "connected": {
-          "label": "Verbunden"
-        },
-        "disconnected": {
-          "suffix": "(getrennt)"
-        }
       },
       "setupModal": {
         "cancel": {

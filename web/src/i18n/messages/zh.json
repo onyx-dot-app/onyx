@@ -1523,16 +1523,6 @@
     "codeInterpreter": {
       "card": {
         "description": "内置 Python 运行时",
-        "disconnectButton": {
-          "tooltip": "断开连接"
-        },
-        "disconnectedTitle": "代码解释器（已断开连接）",
-        "reconnectButton": {
-          "label": "重新连接"
-        },
-        "refreshButton": {
-          "tooltip": "刷新"
-        },
         "title": "代码解释器"
       },
       "disconnectModal": {
@@ -8100,13 +8090,35 @@
         },
         "setDefaultButton": {
           "label": "设为默认"
+        }
+      },
+      "integrationCard": {
+        "connectButton": {
+          "label": "连接"
+        },
+        "connected": {
+          "label": "已连接"
         },
         "deleteButton": {
           "ariaLabel": "删除 {title}",
           "tooltip": "删除"
         },
+        "disconnectButton": {
+          "ariaLabel": "断开 {title} 的连接",
+          "tooltip": "断开连接"
+        },
+        "disconnected": {
+          "suffix": "（已断开连接）"
+        },
+        "editButton": {
+          "ariaLabel": "编辑 {title}",
+          "tooltip": "编辑"
+        },
         "reconnectButton": {
           "label": "重新连接"
+        },
+        "refreshButton": {
+          "tooltip": "刷新"
         }
       }
     },
@@ -9062,14 +9074,6 @@
       },
       "page": {
         "description": "连接可观测性平台，以监控和评估 LLM 调用。"
-      },
-      "provider": {
-        "connected": {
-          "label": "已连接"
-        },
-        "disconnected": {
-          "suffix": "（已断开连接）"
-        }
       },
       "setupModal": {
         "cancel": {

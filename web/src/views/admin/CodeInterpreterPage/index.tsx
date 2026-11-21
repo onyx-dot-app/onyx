@@ -5,25 +5,17 @@ import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import { SettingsLayouts, toast, Section } from "@opal/layouts";
 import {
-  SvgArrowExchange,
   SvgCheckCircle,
-  SvgRefreshCw,
   SvgTerminal,
   SvgUnplug,
   SvgXOctagon,
 } from "@opal/icons";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import {
-  Button,
-  Popover,
-  SelectCard,
-  Text,
-  useCreateModal,
-} from "@opal/components";
-import { Card, Content, ContentAction, ReverseContent } from "@opal/layouts";
-import { Hoverable } from "@opal/core";
+import { Popover, Text, useCreateModal } from "@opal/components";
+import { Content, ReverseContent } from "@opal/layouts";
 import { richNodes } from "@opal/utils";
-import { ConfirmationModalLayout } from "@opal/layouts";
+import { IntegrationCard } from "@/sections/admin/IntegrationCard";
+import { IntegrationConfirmModal } from "@/sections/admin/IntegrationConfirmModal";
 import useCodeInterpreter, {
   type CodeInterpreterHealthStatus,
 } from "@/hooks/useCodeInterpreter";
@@ -155,54 +147,6 @@ function ConnectionStatus({
   );
 }
 
-interface CardActionsProps {
-  disabled: boolean;
-  isReconnecting: boolean;
-  onDisconnect: () => void;
-  onReconnect: () => void;
-}
-
-/** The card's disconnect and refresh (reconnect) buttons. */
-function CardActions({
-  disabled,
-  isReconnecting,
-  onDisconnect,
-  onReconnect,
-}: CardActionsProps) {
-  const t = useTranslations("admin.codeInterpreter");
-
-  return (
-    <div className="px-1 pb-1">
-      <Section flexDirection="row" justifyContent="end" gap={1}>
-        <Hoverable.Item group="code-interpreter/Card">
-          <Button
-            disabled={disabled}
-            prominence="tertiary"
-            size="md"
-            icon={SvgUnplug}
-            onClick={(event) => {
-              event.stopPropagation();
-              onDisconnect();
-            }}
-            tooltip={t("card.disconnectButton.tooltip")}
-          />
-        </Hoverable.Item>
-        <Button
-          disabled={disabled}
-          prominence="tertiary"
-          size="md"
-          icon={isReconnecting ? IconLoader : SvgRefreshCw}
-          onClick={(event) => {
-            event.stopPropagation();
-            onReconnect();
-          }}
-          tooltip={t("card.refreshButton.tooltip")}
-        />
-      </Section>
-    </div>
-  );
-}
-
 // ---------------------------------------------------------------------------
 // Page
 // ---------------------------------------------------------------------------
@@ -241,26 +185,26 @@ export default function CodeInterpreterPage() {
     }, 1000);
   }
 
-  // Every card click and the refresh button reconnect: they re-enable the
+  // A card click and the refresh button both reconnect: they re-enable the
   // server and check it again.
-  async function handleToggle(enabled: boolean) {
-    if (enabled && isReconnecting) return;
-    setIsReconnecting(enabled);
+  async function handleReconnect() {
+    if (isReconnecting) return;
+    setIsReconnecting(true);
     try {
-      const response = await updateCodeInterpreter({ enabled });
+      const response = await updateCodeInterpreter({ enabled: true });
       if (!response.ok) {
-        toast.error(
-          enabled
-            ? t("toggleError.reconnect.message")
-            : t("toggleError.disconnect.message")
-        );
+        toast.error(t("toggleError.reconnect.message"));
         return;
       }
-      disconnectModal.toggle(false);
       await refetch();
     } finally {
       setIsReconnecting(false);
     }
+  }
+
+  async function handleDisconnect() {
+    const response = await updateCodeInterpreter({ enabled: false });
+    if (!response.ok) throw new Error(t("toggleError.disconnect.message"));
   }
 
   return (
@@ -275,46 +219,29 @@ export default function CodeInterpreterPage() {
       <SettingsLayouts.Body>
         {isEnabled || isLoading ? (
           <Popover open={hasError && isErrorOpen} onOpenChange={setIsErrorOpen}>
-            <Hoverable.Root
-              group="code-interpreter/Card"
-              interaction={disconnectModal.isOpen ? "hover" : "rest"}
-            >
-              {/* The error popover opens under the whole card, not the status. */}
-              <Popover.Anchor>
-                <SelectCard
-                  state={isConnectionLost ? "empty" : "filled"}
-                  padding={2}
-                  rounding={4}
-                  onClick={isLoading ? undefined : () => handleToggle(true)}
-                >
-                  <Card.Header>
-                    <ContentAction
-                      font="main-ui-action"
-                      icon={SvgTerminal}
-                      title={t("card.title")}
-                      strikethrough={isConnectionLost}
-                      description={t("card.description")}
-                      padding={2}
-                      rightChildren={
-                        <Section alignItems="end" gap={0}>
-                          <ConnectionStatus
-                            status={status}
-                            isLoading={isLoading}
-                            onErrorHover={handleErrorHover}
-                          />
-                          <CardActions
-                            disabled={isLoading || isReconnecting}
-                            isReconnecting={isReconnecting}
-                            onDisconnect={() => disconnectModal.toggle(true)}
-                            onReconnect={() => void handleToggle(true)}
-                          />
-                        </Section>
-                      }
-                    />
-                  </Card.Header>
-                </SelectCard>
-              </Popover.Anchor>
-            </Hoverable.Root>
+            {/* The error popover opens under the whole card, not the status. */}
+            <Popover.Anchor>
+              <IntegrationCard
+                icon={SvgTerminal}
+                title={t("card.title")}
+                description={t("card.description")}
+                state="connected"
+                broken={isConnectionLost}
+                status={
+                  <ConnectionStatus
+                    status={status}
+                    isLoading={isLoading}
+                    onErrorHover={handleErrorHover}
+                  />
+                }
+                busy={isLoading || isReconnecting}
+                refreshing={isReconnecting}
+                clickDisabled={isLoading}
+                onRefresh={() => void handleReconnect()}
+                onDisconnect={() => disconnectModal.toggle(true)}
+                holdHover={disconnectModal.isOpen}
+              />
+            </Popover.Anchor>
             <Popover.Content
               align="end"
               width={60}
@@ -341,60 +268,28 @@ export default function CodeInterpreterPage() {
             </Popover.Content>
           </Popover>
         ) : (
-          <Hoverable.Root group="code-interpreter/Card" interaction="rest">
-            <SelectCard
-              state="empty"
-              padding={2}
-              rounding={4}
-              onClick={() => handleToggle(true)}
-            >
-              <ContentAction
-                font="main-ui-action"
-                icon={SvgTerminal}
-                title={t("card.disconnectedTitle")}
-                description={t("card.description")}
-                padding={2}
-                rightChildren={
-                  isReconnecting ? (
-                    <Section alignItems="end" gap={0}>
-                      <CheckingStatus />
-                      {/* "Checking…" already shows the loader. */}
-                      <CardActions
-                        disabled
-                        isReconnecting={false}
-                        onDisconnect={() => disconnectModal.toggle(true)}
-                        onReconnect={() => void handleToggle(true)}
-                      />
-                    </Section>
-                  ) : (
-                    <Button
-                      prominence="tertiary"
-                      rightIcon={SvgArrowExchange}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        void handleToggle(true);
-                      }}
-                    >
-                      {t("card.reconnectButton.label")}
-                    </Button>
-                  )
-                }
-              />
-            </SelectCard>
-          </Hoverable.Root>
+          <IntegrationCard
+            icon={SvgTerminal}
+            title={t("card.title")}
+            description={t("card.description")}
+            state="disconnected"
+            busy={isReconnecting}
+            status={<CheckingStatus />}
+            onReconnect={() => void handleReconnect()}
+            onDisconnect={() => disconnectModal.toggle(true)}
+            onRefresh={() => void handleReconnect()}
+          />
         )}
       </SettingsLayouts.Body>
 
       <disconnectModal.Provider>
-        <ConfirmationModalLayout
+        <IntegrationConfirmModal
           icon={SvgUnplug}
           title={t("disconnectModal.header.title")}
-          onClose={() => disconnectModal.toggle(false)}
-          submit={
-            <Button variant="danger" onClick={() => handleToggle(false)}>
-              {t("disconnectModal.submitButton.label")}
-            </Button>
-          }
+          submitLabel={t("disconnectModal.submitButton.label")}
+          errorMessage={t("toggleError.disconnect.message")}
+          onConfirm={handleDisconnect}
+          onSettled={refetch}
         >
           <Text as="p" color="text-03">
             {richNodes(
@@ -407,7 +302,7 @@ export default function CodeInterpreterPage() {
               })
             )}
           </Text>
-        </ConfirmationModalLayout>
+        </IntegrationConfirmModal>
       </disconnectModal.Provider>
     </SettingsLayouts.Root>
   );

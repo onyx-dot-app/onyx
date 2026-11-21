@@ -1523,16 +1523,6 @@
     "codeInterpreter": {
       "card": {
         "description": "내장 Python 런타임",
-        "disconnectButton": {
-          "tooltip": "연결 해제"
-        },
-        "disconnectedTitle": "코드 인터프리터(연결 해제됨)",
-        "reconnectButton": {
-          "label": "다시 연결"
-        },
-        "refreshButton": {
-          "tooltip": "새로 고침"
-        },
         "title": "코드 인터프리터"
       },
       "disconnectModal": {
@@ -8100,13 +8090,35 @@
         },
         "setDefaultButton": {
           "label": "기본값으로 설정"
+        }
+      },
+      "integrationCard": {
+        "connectButton": {
+          "label": "연결"
+        },
+        "connected": {
+          "label": "연결됨"
         },
         "deleteButton": {
           "ariaLabel": "{title} 삭제",
           "tooltip": "삭제"
         },
+        "disconnectButton": {
+          "ariaLabel": "{title} 연결 해제",
+          "tooltip": "연결 해제"
+        },
+        "disconnected": {
+          "suffix": "(연결 해제됨)"
+        },
+        "editButton": {
+          "ariaLabel": "{title} 편집",
+          "tooltip": "편집"
+        },
         "reconnectButton": {
           "label": "다시 연결"
+        },
+        "refreshButton": {
+          "tooltip": "새로 고침"
         }
       }
     },
@@ -9062,14 +9074,6 @@
       },
       "page": {
         "description": "관측 플랫폼을 연결하여 LLM 호출을 모니터링하고 평가하세요."
-      },
-      "provider": {
-        "connected": {
-          "label": "연결됨"
-        },
-        "disconnected": {
-          "suffix": "(연결 해제됨)"
-        }
       },
       "setupModal": {
         "cancel": {

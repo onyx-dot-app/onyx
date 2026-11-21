@@ -1523,16 +1523,6 @@
     "codeInterpreter": {
       "card": {
         "description": "بيئة تشغيل Python مدمجة",
-        "disconnectButton": {
-          "tooltip": "قطع الاتصال"
-        },
-        "disconnectedTitle": "مفسر الأكواد (غير متصل)",
-        "reconnectButton": {
-          "label": "إعادة الاتصال"
-        },
-        "refreshButton": {
-          "tooltip": "تحديث"
-        },
         "title": "مفسر الأكواد"
       },
       "disconnectModal": {
@@ -8100,13 +8090,35 @@
         },
         "setDefaultButton": {
           "label": "تعيين كافتراضي"
+        }
+      },
+      "integrationCard": {
+        "connectButton": {
+          "label": "ربط"
+        },
+        "connected": {
+          "label": "متصل"
         },
         "deleteButton": {
           "ariaLabel": "حذف {title}",
           "tooltip": "حذف"
         },
+        "disconnectButton": {
+          "ariaLabel": "قطع الاتصال بـ {title}",
+          "tooltip": "قطع الاتصال"
+        },
+        "disconnected": {
+          "suffix": "(غير متصل)"
+        },
+        "editButton": {
+          "ariaLabel": "تعديل {title}",
+          "tooltip": "تعديل"
+        },
         "reconnectButton": {
           "label": "إعادة الاتصال"
+        },
+        "refreshButton": {
+          "tooltip": "تحديث"
         }
       }
     },
@@ -9062,14 +9074,6 @@
       },
       "page": {
         "description": "اربط منصات المراقبة لرصد استدعاءات LLM وتقييمها."
-      },
-      "provider": {
-        "connected": {
-          "label": "متصل"
-        },
-        "disconnected": {
-          "suffix": "(غير متصل)"
-        }
       },
       "setupModal": {
         "cancel": {

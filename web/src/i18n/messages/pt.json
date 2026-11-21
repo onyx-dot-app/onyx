@@ -1523,16 +1523,6 @@
     "codeInterpreter": {
       "card": {
         "description": "Runtime Python integrado",
-        "disconnectButton": {
-          "tooltip": "Desconectar"
-        },
-        "disconnectedTitle": "Interpretador de código (desconectado)",
-        "reconnectButton": {
-          "label": "Reconectar"
-        },
-        "refreshButton": {
-          "tooltip": "Atualizar"
-        },
         "title": "Interpretador de código"
       },
       "disconnectModal": {
@@ -8100,13 +8090,35 @@
         },
         "setDefaultButton": {
           "label": "Definir como padrão"
+        }
+      },
+      "integrationCard": {
+        "connectButton": {
+          "label": "Conectar"
+        },
+        "connected": {
+          "label": "Conectado"
         },
         "deleteButton": {
           "ariaLabel": "Excluir {title}",
           "tooltip": "Excluir"
         },
+        "disconnectButton": {
+          "ariaLabel": "Desconectar {title}",
+          "tooltip": "Desconectar"
+        },
+        "disconnected": {
+          "suffix": "(desconectado)"
+        },
+        "editButton": {
+          "ariaLabel": "Editar {title}",
+          "tooltip": "Editar"
+        },
         "reconnectButton": {
           "label": "Reconectar"
+        },
+        "refreshButton": {
+          "tooltip": "Atualizar"
         }
       }
     },
@@ -9062,14 +9074,6 @@
       },
       "page": {
         "description": "Conecte plataformas de observabilidade para monitorar e avaliar as chamadas de LLM."
-      },
-      "provider": {
-        "connected": {
-          "label": "Conectado"
-        },
-        "disconnected": {
-          "suffix": "(desconectado)"
-        }
       },
       "setupModal": {
         "cancel": {

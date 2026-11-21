@@ -3,10 +3,13 @@
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useState, type ReactNode } from "react";
 import { useTranslations } from "next-intl";
-import { SettingsLayouts, toast } from "@opal/layouts";
-import ProviderCard from "@/sections/admin/ProviderCard";
+import { Section, SettingsLayouts, toast } from "@opal/layouts";
+import { IntegrationCard } from "@/sections/admin/IntegrationCard";
+import { IntegrationConfirmModal } from "@/sections/admin/IntegrationConfirmModal";
 import { FetchError } from "@/lib/fetcher";
-import { useCreateModal } from "@opal/components";
+import { Text, useCreateModal } from "@opal/components";
+import { SvgTrash, SvgUnplug } from "@opal/icons";
+import { markdown } from "@opal/utils";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { useTracingProviders } from "@/lib/tracing/hooks";
 import {
@@ -19,14 +22,13 @@ import type {
 } from "@/lib/tracing/types";
 import {
   deleteTracingProvider,
+  disconnectTracingProvider,
   reconnectTracingProvider,
 } from "@/lib/tracing/svc";
 import {
   TracingSetupModal,
   type TracingSetupModalState,
 } from "@/views/admin/TracingPage/TracingSetupModal";
-import { TracingDisconnectModal } from "@/views/admin/TracingPage/TracingDisconnectModal";
-import { TracingDeleteModal } from "@/views/admin/TracingPage/TracingDeleteModal";
 
 const route = ADMIN_ROUTES.TRACING;
 
@@ -121,50 +123,42 @@ export default function TracingPage() {
             };
 
             return (
-              <ProviderCard
+              <IntegrationCard
                 key={providerType}
                 icon={detail.logo}
                 title={detail.label}
-                titleSuffix={
-                  disconnected ? t("provider.disconnected.suffix") : undefined
-                }
                 description={t(detail.descriptionKey)}
-                status={connected ? "connected" : "disconnected"}
-                connectedLabel={t("provider.connected.label")}
-                onConnect={openSetup}
-                onReconnect={
-                  disconnected
-                    ? () => void handleReconnect(target, provider)
-                    : undefined
-                }
-                onEdit={connected || disconnected ? openSetup : undefined}
-                onDisconnect={
+                state={
                   connected
-                    ? () => {
-                        setDisconnectTarget(target);
-                        disconnectModal.toggle(true);
-                      }
-                    : undefined
+                    ? "connected"
+                    : disconnected
+                      ? "disconnected"
+                      : "not_set_up"
                 }
+                onConnect={openSetup}
+                onConfigure={openSetup}
+                onDisconnect={() => {
+                  setDisconnectTarget(target);
+                  disconnectModal.toggle(true);
+                }}
+                onReconnect={() => void handleReconnect(target, provider)}
                 // Only saved credentials can be deleted. A row with no key just
                 // switched off an env-var config.
                 onDelete={
-                  disconnected && provider?.masked_api_key
+                  provider?.masked_api_key
                     ? () => {
                         setDeleteTarget(target);
                         deleteModal.toggle(true);
                       }
                     : undefined
                 }
-                disconnectModalOpen={
+                holdHover={
                   (disconnectModal.isOpen &&
                     disconnectTarget?.providerType === providerType) ||
                   (deleteModal.isOpen &&
-                    deleteTarget?.providerType === providerType)
-                }
-                setupModalOpen={
-                  setupModal.isOpen &&
-                  activeProvider?.providerType === providerType
+                    deleteTarget?.providerType === providerType) ||
+                  (setupModal.isOpen &&
+                    activeProvider?.providerType === providerType)
                 }
               />
             );
@@ -185,23 +179,54 @@ export default function TracingPage() {
 
       {deleteTarget && (
         <deleteModal.Provider>
-          <TracingDeleteModal
-            target={deleteTarget}
-            onDeleted={async () => {
+          <IntegrationConfirmModal
+            icon={SvgTrash}
+            title={t("deleteModal.title", { label: deleteTarget.label })}
+            description={t("deleteModal.description")}
+            submitLabel={t("deleteModal.submit.label")}
+            errorMessage={t("toasts.unexpectedError")}
+            onConfirm={() => deleteTracingProvider(deleteTarget.providerType)}
+            onSettled={async () => {
               await mutateProviders();
             }}
-          />
+          >
+            <Section alignItems="start" gap={2}>
+              <Text color="text-03">
+                {markdown(t("deleteModal.body", { label: deleteTarget.label }))}
+              </Text>
+            </Section>
+          </IntegrationConfirmModal>
         </deleteModal.Provider>
       )}
 
       {disconnectTarget && (
         <disconnectModal.Provider>
-          <TracingDisconnectModal
-            target={disconnectTarget}
-            onDisconnected={async () => {
+          <IntegrationConfirmModal
+            icon={SvgUnplug}
+            title={t("disconnectModal.title", {
+              label: disconnectTarget.label,
+            })}
+            description={t("disconnectModal.description")}
+            submitLabel={t("disconnectModal.submit.label")}
+            errorMessage={t("toasts.unexpectedError")}
+            onConfirm={() =>
+              disconnectTracingProvider(
+                disconnectTarget.providerType,
+                disconnectTarget.config
+              )
+            }
+            onSettled={async () => {
               await mutateProviders();
             }}
-          />
+          >
+            <Section alignItems="start" gap={2}>
+              <Text color="text-03">
+                {markdown(
+                  t("disconnectModal.body", { label: disconnectTarget.label })
+                )}
+              </Text>
+            </Section>
+          </IntegrationConfirmModal>
         </disconnectModal.Provider>
       )}
     </>
