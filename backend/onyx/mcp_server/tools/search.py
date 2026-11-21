@@ -525,8 +525,8 @@ async def query_metadata(
     - `search_doc`: `chat_message_id` (required), `cited_only` — the
       documents a past answer cited or retrieved.
     The chat-history tables (`chat_session`, `chat_message`, `search_doc`)
-    need a token that allows `read:chat`; apps connected with only
-    `read:search` get an error for them.
+    need a token that allows `read:chat`. Apps connected before Onyx added
+    `read:chat`, and tokens with only `read:search`, get an error for them.
 
     List filters take one value or a list, and a list matches any of its
     values; different filters are all applied. Dates are ISO 8601 (`2026-06-01`); `*_before` bounds are

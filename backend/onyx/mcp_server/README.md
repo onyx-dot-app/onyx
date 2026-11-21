@@ -31,7 +31,7 @@ Apply the database migrations first. Cloud deployments need both the catalog and
 
 Onyx supports public clients using authorization codes with S256 PKCE. Clients can register dynamically or use an HTTPS client metadata document. Client-secret and private-key authentication are not supported. Redirect URLs must match the registered URL exactly. HTTPS and loopback HTTP callbacks are accepted. Wildcards are not accepted.
 
-Approval requires `read:search` and `create:user_api_keys` permissions. The granted scope is `read:search`. The app can search documents the user can access, use web search, and open web pages. Existing document permissions and workspace policy still apply. The token cannot create API keys, approve other apps, or call unrelated Onyx APIs.
+Approval requires `read:search` and `create:user_api_keys` permissions. Every grant carries `read:search` and `read:chat`, whatever scope the client requests. The app can search documents the user can access, query their metadata and the user's chat history, use web search, and open web pages. Grants made before `read:chat` was added keep `read:search` only until the user reconnects. Existing document permissions and workspace policy still apply. The token cannot create API keys, approve other apps, or call unrelated Onyx APIs.
 
 Consent requires a signed-in standard user, not a service account, PAT, or API key. Cloud users must remain active members of the approving workspace.
 

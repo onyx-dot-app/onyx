@@ -6,7 +6,7 @@
       "account": "当前登录账号：{email}",
       "workspace": "工作区：{workspaceName}",
       "appAddress": "应用地址：{origin}",
-      "access": "读取你有权访问的文档的搜索结果。使用网页搜索并打开网页。",
+      "access": "读取你有权访问的文档的搜索结果。使用网页搜索并打开网页。读取你的聊天记录。",
       "allow": "允许访问",
       "deny": "拒绝",
       "pending": "正在保存你的选择...",

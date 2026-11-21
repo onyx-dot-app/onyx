@@ -80,7 +80,32 @@ async def test_oauth_verifier_preserves_validated_identity(
 
 
 @pytest.mark.asyncio
-@pytest.mark.parametrize("field", ["resource", "scopes", "expires_at", "client_id"])
+@pytest.mark.parametrize(
+    "scopes",
+    [
+        ["read:search", "read:chat"],
+        # Grants made before read:chat was added.
+        ["read:search"],
+    ],
+)
+async def test_oauth_verifier_accepts_current_and_legacy_grants(
+    introspection_backend: AsyncMock,
+    introspection: OAuthProviderIntrospection,
+    scopes: list[str],
+) -> None:
+    introspection.scopes = scopes
+    introspection_backend.get.return_value = httpx.Response(
+        200, json=introspection.model_dump(mode="json")
+    )
+    verified = await mcp_auth.OnyxTokenVerifier().verify_token(_OAUTH_ACCESS_TOKEN)
+    assert verified is not None
+    assert verified.scopes == scopes
+
+
+@pytest.mark.asyncio
+@pytest.mark.parametrize(
+    "field", ["resource", "scopes", "chat_only", "expires_at", "client_id"]
+)
 async def test_oauth_verifier_rejects_incorrect_claims(
     introspection_backend: AsyncMock,
     introspection: OAuthProviderIntrospection,
@@ -90,6 +115,8 @@ async def test_oauth_verifier_rejects_incorrect_claims(
         introspection.resource = "https://other.example/mcp/"
     elif field == "scopes":
         introspection.scopes = ["read:search", "write:admin"]
+    elif field == "chat_only":
+        introspection.scopes = ["read:chat"]
     elif field == "expires_at":
         introspection.expires_at = 1000
     else:
@@ -280,7 +307,7 @@ async def test_insufficient_scope_has_discovery_challenge(
     assert {"www-authenticate", "mcp-session-id"} <= exposed
     challenge = response.headers["www-authenticate"]
     assert 'error="insufficient_scope"' in challenge
-    assert 'scope="read:search"' in challenge
+    assert 'scope="read:search read:chat"' in challenge
     assert (
         'resource_metadata="http://localhost:3000/.well-known/oauth-protected-resource/mcp/"'
         in challenge

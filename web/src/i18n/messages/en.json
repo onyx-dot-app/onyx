@@ -6,7 +6,7 @@
       "account": "Signed in as {email}",
       "workspace": "Workspace: {workspaceName}",
       "appAddress": "App address: {origin}",
-      "access": "Read search results from documents you can access. Use web search and open web pages.",
+      "access": "Read search results from documents you can access. Use web search and open web pages. Read your chat history.",
       "allow": "Allow access",
       "deny": "Deny",
       "pending": "Saving your choice...",

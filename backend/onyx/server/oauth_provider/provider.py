@@ -28,9 +28,10 @@ from starlette.concurrency import run_in_threadpool
 
 from onyx.auth.constants import (
     OAUTH_PROVIDER_MAX_URL_LENGTH,
-    OAUTH_PROVIDER_SCOPE,
+    OAUTH_PROVIDER_SCOPES,
     OAUTH_PROVIDER_SECRET_PATTERN,
 )
+from onyx.auth.oauth_provider import is_supported_oauth_provider_scope_request
 from onyx.db.engine.async_sql_engine import get_async_session_context_manager
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.oauth_provider import (
@@ -68,6 +69,7 @@ from onyx.oauth_provider.models import (
 from shared_configs.contextvars import get_current_tenant_id
 
 _PKCE_CHALLENGE = re.compile(OAUTH_PROVIDER_SECRET_PATTERN)
+_UNSUPPORTED_SCOPE = "Only read:search and read:chat access are supported"
 
 
 def _matches_loopback_redirect(requested: AnyUrl, registered: list[AnyUrl]) -> bool:
@@ -144,8 +146,10 @@ def validate_public_oauth_client(client: OAuthClientInformationFull) -> None:
         or "code" not in client.response_types
     ):
         raise ValueError("The client must support the authorization code flow")
-    if client.scope is not None and set(client.scope.split()) != {OAUTH_PROVIDER_SCOPE}:
-        raise ValueError("Only read:search access is supported")
+    if client.scope is not None and not is_supported_oauth_provider_scope_request(
+        client.scope.split()
+    ):
+        raise ValueError(_UNSUPPORTED_SCOPE)
 
 
 def _create_grant(
@@ -219,8 +223,8 @@ class OnyxOAuthProvider(OAuthProvider):
             base_url=settings.issuer_url,
             client_registration_options=ClientRegistrationOptions(
                 enabled=True,
-                valid_scopes=[OAUTH_PROVIDER_SCOPE],
-                default_scopes=[OAUTH_PROVIDER_SCOPE],
+                valid_scopes=list(OAUTH_PROVIDER_SCOPES),
+                default_scopes=list(OAUTH_PROVIDER_SCOPES),
             ),
             revocation_options=RevocationOptions(enabled=True),
         )
@@ -262,7 +266,7 @@ class OnyxOAuthProvider(OAuthProvider):
                 redirect_uris=redirect_uris,
                 grant_types=document.grant_types,
                 response_types=document.response_types,
-                scope=document.scope or OAUTH_PROVIDER_SCOPE,
+                scope=document.scope or " ".join(OAUTH_PROVIDER_SCOPES),
                 token_endpoint_auth_method="none",
             )
             validate_public_oauth_client(client)
@@ -300,11 +304,10 @@ class OnyxOAuthProvider(OAuthProvider):
             )
         except ValueError as error:
             raise AuthorizeError("invalid_request", "Invalid resource") from error
-        scopes = params.scopes or [OAUTH_PROVIDER_SCOPE]
-        if set(scopes) != {OAUTH_PROVIDER_SCOPE}:
-            raise AuthorizeError(
-                "invalid_scope", "Only read:search access is supported"
-            )
+        if params.scopes and not is_supported_oauth_provider_scope_request(
+            params.scopes
+        ):
+            raise AuthorizeError("invalid_scope", _UNSUPPORTED_SCOPE)
         if _PKCE_CHALLENGE.fullmatch(params.code_challenge) is None:
             raise AuthorizeError(
                 "invalid_request", "A valid S256 PKCE challenge is required"
@@ -312,7 +315,7 @@ class OnyxOAuthProvider(OAuthProvider):
         if not client.client_id:
             raise AuthorizeError("invalid_request", "Client identifier is required")
         normalized = params.model_copy(
-            update={"resource": resource, "scopes": [OAUTH_PROVIDER_SCOPE]}
+            update={"resource": resource, "scopes": list(OAUTH_PROVIDER_SCOPES)}
         )
         request_id = await run_in_threadpool(
             store_authorization_request,
@@ -403,8 +406,8 @@ class OnyxOAuthProvider(OAuthProvider):
         scopes: list[str],
     ) -> OAuthToken:
         client_id = client.client_id
-        if not client_id or set(scopes) != {OAUTH_PROVIDER_SCOPE}:
-            raise TokenError("invalid_scope", "Only read:search access is supported")
+        if not client_id or not is_supported_oauth_provider_scope_request(scopes):
+            raise TokenError("invalid_scope", _UNSUPPORTED_SCOPE)
         pair = await run_in_threadpool(
             lambda: _with_authorized_refresh(
                 rotate_oauth_provider_refresh__no_commit,
