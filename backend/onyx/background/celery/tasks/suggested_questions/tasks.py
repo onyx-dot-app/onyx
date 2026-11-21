@@ -39,6 +39,7 @@ from onyx.server.features.suggested_questions.config import (
     SQ_RUN_RETRY_DELAY_S,
     SQ_RUN_WINDOW_HOURS,
     SQ_SAVE_MARGIN_S,
+    SQ_SEARCH_TEST_RESERVE_S,
     SQ_SHARED_REFRESH_AT,
 )
 from onyx.server.features.suggested_questions.models import (
@@ -332,7 +333,11 @@ def _write_and_test(
     chunks.sort(key=lambda chunk: rank.get(chunk.document_id, len(rank)))
     clock.check()
     drafts = write_questions(
-        chunks, build_writing_llms(), load_settings().company_name, roles
+        chunks,
+        build_writing_llms(),
+        load_settings().company_name,
+        roles,
+        timeout_s=max(0.0, clock.remaining() - SQ_SEARCH_TEST_RESERVE_S),
     )
     clock.check()
     return run_search_test(drafts, user=user, timeout_s=clock.remaining())

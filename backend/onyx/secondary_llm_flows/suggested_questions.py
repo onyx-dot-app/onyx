@@ -90,13 +90,14 @@ def write_questions(
     llms: list[LLM],
     company: str | None,
     roles: list[str],
+    timeout_s: float | None = None,
 ) -> list[DraftQuestion]:
     """Questions about the first SQ_PASSAGES_MAX chunks, at most one per
     document. The documents are dealt out in turn to up to SQ_WRITING_CALLS
     calls that run at the same time, so every call gets a mix and a
-    document's passages stay together. A call that fails on every LLM only
-    loses its own questions; raises when every call fails, so the run can
-    retry."""
+    document's passages stay together. A call that fails on every LLM, or is
+    still running after `timeout_s`, only loses its own questions; raises
+    when every call fails, so the run can retry."""
     passages = chunks[:SQ_PASSAGES_MAX]
     if not passages:
         return []
@@ -126,7 +127,11 @@ def write_questions(
                     ),
                 )
                 for group in groups
-            ]
+            ],
+            # A call still running when the time is up counts as failed, so
+            # one slow call cannot use up the run and lose the others.
+            timeout=timeout_s,
+            timeout_callback=lambda *_args: None,
         )
     )
     done = [result for result in results if result is not None]
