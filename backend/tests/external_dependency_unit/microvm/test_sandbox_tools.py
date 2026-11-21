@@ -11,7 +11,7 @@ import json
 import threading
 import time
 import zipfile
-from collections.abc import Callable, Generator, Iterator, Sequence
+from collections.abc import Callable, Generator, Iterable, Iterator, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from contextvars import copy_context
 from typing import Any
@@ -176,6 +176,7 @@ from onyx.tools.constants import (
     CODE_MODE_TOOL_NAME,
     INTERNAL_SEARCH_TOOL_NAME,
     POSTGRES_TOOL_NAME,
+    SKILLS_READ_TOOL_NAME,
     SPAWN_AGENT_TOOL_NAME,
 )
 from onyx.tools.interface import Tool
@@ -357,7 +358,7 @@ def make_tools(db_session: Session, user: User) -> MakeTools:
         session_id = chat_session_id or uuid4()
         turn = SandboxTurn(
             tenant_id=TENANT_ID,
-            user_id=user.id,
+            user=user,
             chat_session_id=session_id,
             vm_chat_files=[],
             copy_vm_chat_files=False,
@@ -673,16 +674,10 @@ def gated_integration(db_session: Session) -> Generator[int, None, None]:
     delete_integrations(db_session, [integration_id])
 
 
-@pytest.mark.usefixtures("node")
-def test_a_turn_that_parks_for_approval_and_its_resumed_root_each_end_the_turn(
-    monkeypatch: pytest.MonkeyPatch,
-    db_session: Session,
-    sandbox: FirecrackerHarnessSandbox,
-    chat: SandboxChat,
-    gated_integration: int,
-) -> None:
-    ended = _ended_turns(monkeypatch, sandbox)
-    sent: list[str] = []
+def _with_gated_tool(
+    monkeypatch: pytest.MonkeyPatch, gated_integration: int, sent: list[str]
+) -> FakeMCPTool:
+    """Add a tool that needs approval to the chat's tools."""
     gated = _gated(gated_integration, sent)
     real_construct_tools = construct_tools
 
@@ -690,26 +685,13 @@ def test_a_turn_that_parks_for_approval_and_its_resumed_root_each_end_the_turn(
         return [*real_construct_tools(**kwargs), gated]
 
     monkeypatch.setattr("onyx.chat.execution.construct_tools", with_gated_tool)
-    llm = ChatLLM(
-        [
-            tool_step(ExecCommandTool.NAME, "exec", {"cmd": "echo hi"}),
-            tool_step(gated.name, "send", {"value": "team"}),
-            tool_step(ExecCommandTool.NAME, "again", {"cmd": "echo again"}),
-            Delta(content="Done."),
-        ]
-    )
-    # The resumed response runs after the send returns.
-    monkeypatch.setattr(
-        "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: llm
-    )
-    parts = chat.send(llm)
+    return gated
 
-    ref = chat.ref(db_session)
-    assert _stops(parts) == [packets.AWAITING_USER]
-    assert ended == [ref]
 
-    # The approval resumes the root from its saved state with new agent and
-    # tool objects, as another API pod does; its release ends the turn again.
+def _approve_and_finish(db_session: Session, chat: SandboxChat) -> ApprovalRequest:
+    """Approve the chat's request, which resumes the root from its saved state
+    with new agent and tool objects, as another API pod does, and wait for the
+    response to complete."""
     approval = db_session.scalars(
         select(ApprovalRequest).where(
             ApprovalRequest.chat_session_id == chat.chat_session_id
@@ -733,10 +715,95 @@ def test_a_turn_that_parks_for_approval_and_its_resumed_root_each_end_the_turn(
     _wait_until(completed)
     assert chat_turn_work.wait_idle(timeout=30)
     db_session.refresh(approval)
+    return approval
+
+
+@pytest.mark.usefixtures("node")
+def test_a_turn_that_parks_for_approval_and_its_resumed_root_each_end_the_turn(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    sandbox: FirecrackerHarnessSandbox,
+    chat: SandboxChat,
+    gated_integration: int,
+) -> None:
+    ended = _ended_turns(monkeypatch, sandbox)
+    sent: list[str] = []
+    gated = _with_gated_tool(monkeypatch, gated_integration, sent)
+    llm = ChatLLM(
+        [
+            tool_step(ExecCommandTool.NAME, "exec", {"cmd": "echo hi"}),
+            tool_step(gated.name, "send", {"value": "team"}),
+            tool_step(ExecCommandTool.NAME, "again", {"cmd": "echo again"}),
+            Delta(content="Done."),
+        ]
+    )
+    # The resumed response runs after the send returns.
+    monkeypatch.setattr(
+        "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: llm
+    )
+    parts = chat.send(llm)
+
+    ref = chat.ref(db_session)
+    assert _stops(parts) == [packets.AWAITING_USER]
+    assert ended == [ref]
+
+    # The resumed root's release ends the turn again.
+    approval = _approve_and_finish(db_session, chat)
     assert approval.decision is ApprovalDecision.APPROVED
     assert sent == ["team"]
     assert len(llm.requests) == 4
     assert ended == [ref, ref]
+
+
+@pytest.mark.usefixtures("node")
+def test_a_program_resumed_after_approval_has_the_skills_read_before_it(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    chat: SandboxChat,
+    gated_integration: int,
+) -> None:
+    wanted: dict[int, set[str]] = {}
+    wanted_at_call: list[set[str]] = []
+    real_want_skills = SandboxTurn.want_skills
+    real_start_call = SandboxTurn.start_call
+
+    def record_wanted(turn: SandboxTurn, names: Iterable[str]) -> None:
+        names = set(names)
+        wanted.setdefault(id(turn), set()).update(names)
+        real_want_skills(turn, names)
+
+    def record_call(turn: SandboxTurn) -> HarnessSandboxRef:
+        wanted_at_call.append(set(wanted.get(id(turn), set())))
+        return real_start_call(turn)
+
+    monkeypatch.setattr(SandboxTurn, "want_skills", record_wanted)
+    monkeypatch.setattr(SandboxTurn, "start_call", record_call)
+    sent: list[str] = []
+    _with_gated_tool(monkeypatch, gated_integration, sent)
+    program = (
+        "[match] = await tool_search('send email', limit=1)\n"
+        "await getattr(tools, match['name'])(value='team')\n"
+        "await tools.exec_command(cmd='echo again')\n"
+    )
+    llm = ChatLLM(
+        [
+            tool_step(SKILLS_READ_TOOL_NAME, "read", {"name": "pptx"}),
+            code_step("code", program),
+            Delta(content="Done."),
+        ]
+    )
+    monkeypatch.setattr(
+        "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: llm
+    )
+    parts = chat.send(llm, code_mode=True)
+    assert _stops(parts) == [packets.AWAITING_USER]
+    assert wanted_at_call == []
+
+    _approve_and_finish(db_session, chat)
+    assert sent == ["team"]
+    # The resumed program's first sandbox call, before any model step of the
+    # resumed run, already wants the skill that the parked run read.
+    assert wanted_at_call == [{"pptx"}]
 
 
 def _running(node: RunningFakeAgent, ref: HarnessSandboxRef, cmd: str) -> list[str]:

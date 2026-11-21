@@ -273,7 +273,12 @@ the stored token on each request, so a new token takes effect at once.
   `sandbox_fc:skills_sync:<sandbox>`, puts and swaps the image only when
   the `sandbox_fc:skills_image:<sandbox>` cache record names another VM
   instance `(attempt, generation)` or another image. A woken or replaced VM is a
-  new instance, so its first chat turn pushes again. Stubs in `backend/onyx/microvm/generated/`; the
+  new instance, so its first chat turn pushes again. Custom skills do not
+  use the drive: `install_skills` writes one skill's zip to
+  `/tmp/onyx/skills/`, then a `python3` command unzips it to
+  `/home/sandbox/.agents/skills/<name>/`. The
+  `sandbox_fc:installed_skills:<sandbox>` record (name to version key, per
+  instance) skips a skill that the instance already has. Stubs in `backend/onyx/microvm/generated/`; the
   `microvm-python-stubs` pre-commit hook fails when they differ from
   `microvm/proto` (`regenerate.sh --check`).
 - `backend/onyx/microvm/daemon_client.py`: the guest daemon client, through

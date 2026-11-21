@@ -1,19 +1,22 @@
 """The skills a chat agent can use: their catalog in its prompt, and the
 skills a message picks."""
 
-from collections.abc import Sequence
+import re
+from collections.abc import Iterable, Sequence
 from itertools import accumulate
 from typing import Final
 from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from onyx.agents.compaction import is_input_context
 from onyx.chat.mention_models import (
     AcceptedPicks,
     Mention,
     PickedSkillMessage,
     RecordedSkillMention,
 )
+from onyx.llm.models import AssistantMessage, Message, UserMessage
 from onyx.natural_language_processing.utils import get_tokenizer
 from onyx.prompts.skill_prompts import (
     MENTIONED_SKILL_PROMPT,
@@ -23,6 +26,7 @@ from onyx.prompts.skill_prompts import (
 )
 from onyx.skills.content import read_chat_skills_md
 from onyx.skills.models import ChatSkill
+from onyx.tools.constants import SKILLS_READ_TOOL_NAME
 
 # Codex limits: the catalog's skill lines use at most 2% of the context
 # window, at four UTF-8 bytes a token counted for each line with its newline;
@@ -141,6 +145,8 @@ def accept_picked_skills(
     skills: Sequence[ChatSkill],
     user_id: UUID,
     db_session: Session,
+    *,
+    sandbox: bool,
 ) -> list[AcceptedPicks]:
     """Resolve the skills that each message picked, from one read with the
     user's current access.
@@ -162,6 +168,7 @@ def accept_picked_skills(
         },
         user_id,
         db_session,
+        sandbox=sandbox,
     )
     # Stored counts use one tokenizer, as question counts do.
     tokenizer = get_tokenizer(None, None)
@@ -199,3 +206,21 @@ def accept_picked_skills(
             )
         accepted.append(message)
     return accepted
+
+
+_PICKED_SKILL_NAME: Final = re.compile(r"\A<skill>\n<name>(.+?)</name>\n")
+
+
+def used_skill_names(messages: Iterable[Message]) -> set[str]:
+    """The skills that `messages` read with `skills_read` or picked."""
+    names: set[str] = set()
+    for message in messages:
+        if isinstance(message, AssistantMessage):
+            for call in message.tool_calls:
+                name = call.arguments.get("name")
+                if call.name == SKILLS_READ_TOOL_NAME and isinstance(name, str):
+                    names.add(name)
+        elif isinstance(message, UserMessage) and is_input_context(message):
+            if match := _PICKED_SKILL_NAME.match(message.text):
+                names.add(match.group(1))
+    return names

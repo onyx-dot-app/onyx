@@ -4,8 +4,12 @@ daemon behind its pass-through."""
 import hashlib
 import io
 import itertools
+import os
 import posixpath
 import shlex
+import subprocess
+import sys
+import tempfile
 import threading
 import time
 import zipfile
@@ -895,6 +899,7 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
             "mkdir",
             "true",
             "seq",
+            "python3",
             "soffice",
             "pdftoppm",
         ):
@@ -932,6 +937,9 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
         elif argv[0] == "fail":
             execution.stderr = b"failed\n"
             execution.end(sandboxd_pb2.EXITED, int(argv[1]))
+        elif argv[0] == "python3":
+            code, execution.stderr = self._run_python(sandbox_id, argv[1:])
+            execution.end(sandboxd_pb2.EXITED, code)
         elif argv[0] == "soffice":
             # Like LibreOffice: exit 0 even when the source does not load.
             outdir = argv[argv.index("--outdir") + 1]
@@ -954,6 +962,49 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
             execution
         )
         return execution
+
+    def _run_python(self, sandbox_id: str, args: list[str]) -> tuple[int, bytes]:
+        """`-I -c <code> <file> <dir> ...`: runs the code with real Python on a
+        local copy of the VM file and directory, then copies the results back.
+        Call with the lock held."""
+        flag, dash_c, code, src, root, *rest = args
+        if (flag, dash_c) != ("-I", "-c"):
+            return 2, b"unsupported python3 call\n"
+        with tempfile.TemporaryDirectory() as tmp:
+            local_src = posixpath.join(tmp, "src")
+            local_root = posixpath.join(tmp, "root")
+            src_key = (sandbox_id, "", src)
+            if src_key in self.agent.files:
+                with open(local_src, "wb") as f:
+                    f.write(self.agent.files[src_key])
+            under_root = [
+                key
+                for key in self.agent.files
+                if key[0] == sandbox_id
+                and key[1] == ""
+                and key[2].startswith(root + "/")
+            ]
+            for key in under_root:
+                local = posixpath.join(local_root, key[2].removeprefix(root + "/"))
+                os.makedirs(posixpath.dirname(local), exist_ok=True)
+                with open(local, "wb") as f:
+                    f.write(self.agent.files[key])
+            proc = subprocess.run(
+                [sys.executable, "-I", "-c", code, local_src, local_root, *rest],
+                capture_output=True,
+                timeout=60,
+            )
+            for key in under_root:
+                del self.agent.files[key]
+            for directory, _, names in os.walk(local_root):
+                for name in names:
+                    local = posixpath.join(directory, name)
+                    rel = posixpath.relpath(local, local_root)
+                    with open(local, "rb") as f:
+                        self.agent.files[(sandbox_id, "", f"{root}/{rel}")] = f.read()
+            if not os.path.exists(local_src):
+                self.agent.files.pop(src_key, None)
+        return proc.returncode, proc.stderr
 
     def _stat(self, key: tuple[str, str, str]) -> sandboxd_pb2.PathStat:
         """The canned facts of a path, else those of its own entry. Call

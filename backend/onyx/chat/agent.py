@@ -70,6 +70,7 @@ from onyx.prompts.chat_prompts import (
     ROOT_AGENT_INSTRUCTIONS,
     SUBAGENT_INSTRUCTIONS,
 )
+from onyx.skills.chat import used_skill_names
 from onyx.tools.constants import PYTHON_TOOL_NAME
 from onyx.tools.file_snapshot import SavedChatFile, SavedContextFiles
 from onyx.tools.interface import Tool
@@ -252,6 +253,7 @@ class ChatAgent(Agent, RestorableFeature):
             ),
             None,
         )
+        self._sandbox_turn = sandbox_turn
         # The root agent's sandbox and code mode results end with the file
         # copy status line when it changed. Subagents and the calls inside a
         # code mode program never read it, so they cannot use it up.
@@ -279,6 +281,11 @@ class ChatAgent(Agent, RestorableFeature):
             generation_context=GenerationContext(
                 flow=LLMFlow.CHAT_RESPONSE, user_identity=user_identity
             ),
+            # Before each call, also a call on a resume or in a program, the
+            # skills in the model's window copy to the sandbox.
+            before_tool_call=self._want_used_skills
+            if sandbox_turn is not None
+            else None,
             after_tool_call=self._finalize_tool,
             # In a chat with a sandbox, large results go to a file in the VM.
             prepare_tool_result=partial(self._prepare_sandbox_result, sandbox_turn)
@@ -398,6 +405,10 @@ class ChatAgent(Agent, RestorableFeature):
             url_snippet_map=extract_url_snippet_map(self.gathered_documents),
             inject_memories_in_prompt=self.inject_memories,
         )
+
+    def _want_used_skills(self, context: ToolCallContext) -> None:
+        if self._sandbox_turn is not None:
+            self._sandbox_turn.want_skills(used_skill_names(context.messages))
 
     def _prepare_step(self, state: StepInput) -> PreparedStep:
         previous = state.previous

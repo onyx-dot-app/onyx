@@ -1,13 +1,16 @@
 """The sandbox that the sandbox tools of one chat session share during a run."""
 
 import threading
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from uuid import UUID
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
+from onyx.db.models import User
 from onyx.db.sandbox import get_or_create_sandbox
+from onyx.db.skill import list_chat_skills
 from onyx.server.features.build.sandbox.harness_base import HarnessSandbox
 from onyx.server.features.build.sandbox.models import HarnessSandboxRef, SkillsBundle
+from onyx.skills.models import ChatSkill
 from onyx.tools.tool_implementations.sandbox.file_copies import TurnFileCopies
 from onyx.tools.tool_implementations.sandbox.models import VmChatFile
 from onyx.utils.logger import setup_logger
@@ -39,13 +42,13 @@ class SandboxTurn:
         self,
         *,
         tenant_id: str,
-        user_id: UUID,
+        user: User,
         chat_session_id: UUID,
         vm_chat_files: Sequence[VmChatFile],
         copy_vm_chat_files: bool,
     ) -> None:
         self._tenant_id = tenant_id
-        self._user_id = user_id
+        self._user = user
         self._chat_session_id = chat_session_id
         self.vm_chat_files = vm_chat_files
         self._copy_vm_chat_files = copy_vm_chat_files
@@ -55,6 +58,18 @@ class SandboxTurn:
         self._skills_loaded = False
         self._skills_bundle: SkillsBundle | None = None
         self.file_copies: TurnFileCopies | None = None
+        # Custom skills the model read or the user picked, by name; resolved
+        # to the user's current version once per turn.
+        self._wanted: set[str] = set()
+        self._resolved: set[str] = set()
+        self._custom: dict[str, ChatSkill] = {}
+        self._custom_bundles: dict[str, SkillsBundle | None] = {}
+
+    def want_skills(self, names: Iterable[str]) -> None:
+        """Copy these custom skills to the VM before the next call."""
+        # Not the skills lock: a step does not wait for a copy in progress.
+        with self._lock:
+            self._wanted.update(names)
 
     @property
     def sandbox(self) -> HarnessSandbox:
@@ -74,7 +89,7 @@ class SandboxTurn:
         if ref is None:
             # Outside the lock: concurrent first calls get the same row.
             with get_session_with_tenant(tenant_id=self._tenant_id) as db_session:
-                sandbox_id = get_or_create_sandbox(db_session, self._user_id).id
+                sandbox_id = get_or_create_sandbox(db_session, self._user.id).id
             with self._lock:
                 if self._ref is None:
                     self._ref = HarnessSandboxRef(
@@ -129,6 +144,50 @@ class SandboxTurn:
                     ref.sandbox_id,
                     ref.session_id,
                 )
+            try:
+                self._install_custom_skills(ref)
+            except Exception:
+                logger.exception(
+                    "sandbox_skills_install_failed sandbox=%s session=%s",
+                    ref.sandbox_id,
+                    ref.session_id,
+                )
+
+    def _install_custom_skills(self, ref: HarnessSandboxRef) -> None:
+        # Deferred: the skills push stack loads only when a tool runs.
+        from onyx.skills.push import build_chat_custom_skill_bundle
+
+        with self._lock:
+            unresolved = self._wanted - self._resolved
+        if unresolved:
+            with get_session_with_tenant(tenant_id=self._tenant_id) as db_session:
+                skills = list_chat_skills(db_session, self._user, built_ins=True)
+            # The first skill of a name, as skills_read picks. A built-in is on
+            # the skills drive already.
+            for name in unresolved:
+                skill = next((s for s in skills if s.name == name), None)
+                if skill is not None and skill.built_in_skill_id is None:
+                    self._custom[name] = skill
+            self._resolved |= unresolved
+        if not self._custom:
+            return
+
+        def load(name: str) -> SkillsBundle | None:
+            if name not in self._custom_bundles:
+                with get_session_with_tenant(tenant_id=self._tenant_id) as db_session:
+                    self._custom_bundles[name] = build_chat_custom_skill_bundle(
+                        self._custom[name], self._user, db_session
+                    )
+            return self._custom_bundles[name]
+
+        self.sandbox.install_skills(
+            ref,
+            {
+                name: f"{skill.version_id}:{skill.path}"
+                for name, skill in self._custom.items()
+            },
+            load,
+        )
 
     def end(self) -> None:
         """End the turn if a call started one. Never raises."""

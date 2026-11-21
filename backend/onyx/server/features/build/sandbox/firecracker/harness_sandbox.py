@@ -13,8 +13,8 @@ import posixpath
 import random
 import secrets
 import time
-from collections.abc import Callable, Generator, Iterable, Sequence
-from contextlib import nullcontext
+from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
+from contextlib import nullcontext, suppress
 from typing import IO
 from uuid import UUID, uuid4
 
@@ -101,6 +101,7 @@ from onyx.server.features.build.sandbox.firecracker.harness_state import (
     SANDBOX_STATE_PREFIXES,
     SAVED_SESSIONS_PREFIX,
     SESSION_INSTANCES_PREFIX,
+    add_installed_skill,
     forget_session_on_instances,
     get_exec_session,
     get_ids,
@@ -108,6 +109,7 @@ from onyx.server.features.build.sandbox.firecracker.harness_state import (
     get_skills_image,
     has_marks,
     has_session_records,
+    installed_skills,
     is_purged,
     last_attempt,
     mark_purged,
@@ -172,6 +174,7 @@ from onyx.server.features.build.sandbox.models import (
     SkillsBundle,
     session_workspace,
 )
+from onyx.skills.built_in import CHAT_CUSTOM_SKILLS_PATH
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -196,6 +199,34 @@ _SESSION_SETUP_LOCK_PREFIX = "sandbox_fc:session_setup:"
 _SESSION_SETUP_LOCK_SECONDS = 30 * 60.0
 _SKILLS_SYNC_LOCK_PREFIX = "sandbox_fc:skills_sync:"
 _SKILLS_SYNC_LOCK_SECONDS = 5 * 60.0
+_SKILLS_INSTALL_LOCK_PREFIX = "sandbox_fc:skills_install:"
+_SKILL_INSTALL_DEADLINE_SECONDS = 120.0
+# Unzips a skill's folder next to the old copy, then swaps the two with
+# renames, so a failed copy leaves the old one whole. The old copy is deleted
+# after the swap. Deletes the zip in all cases.
+_INSTALL_SKILL_SCRIPT = """
+import os, shutil, sys, tempfile, zipfile
+src, root, name = sys.argv[1:]
+os.makedirs(root, exist_ok=True)
+tmp = tempfile.mkdtemp(prefix=".copy-", dir=root)
+try:
+    with zipfile.ZipFile(src) as zf:
+        zf.extractall(tmp)
+    dest = os.path.join(root, name)
+    old = os.path.join(tmp, ".old")
+    moved = os.path.lexists(dest)
+    if moved:
+        os.rename(dest, old)
+    try:
+        os.rename(os.path.join(tmp, name), dest)
+    except BaseException:
+        if moved:
+            os.rename(old, dest)
+        raise
+finally:
+    shutil.rmtree(tmp, ignore_errors=True)
+    os.unlink(src)
+"""
 # Client token on each started command, to find it when Start gets no answer.
 _START_LABEL = "onyx_start_id"
 # The daemon refuses Start and Run with these while it keeps its most commands.
@@ -300,6 +331,98 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
                     f"The skills drive did not change: {swap.reason}: {swap.message}"
                 )
             set_skills_image(tenant_cache, ref.sandbox_id, image)
+
+    def install_skills(
+        self,
+        ref: HarnessSandboxRef,
+        versions: Mapping[str, str],
+        load: Callable[[str], SkillsBundle | None],
+    ) -> None:
+        if not versions:
+            return
+        placed = self._place(ref)
+        tenant_cache = get_cache_backend(tenant_id=ref.tenant_id)
+        instance = (placed.vm.attempt, placed.vm.generation)
+
+        def missing() -> dict[str, str]:
+            have = installed_skills(tenant_cache, ref.sandbox_id, instance)
+            return {
+                name: version
+                for name, version in versions.items()
+                if have.get(name) != version
+            }
+
+        if not missing():
+            return
+        # One copy of a skill at a time: chat sessions share the VM.
+        with tenant_cache.lock(
+            f"{_SKILLS_INSTALL_LOCK_PREFIX}{ref.sandbox_id}",
+            timeout=_SKILLS_SYNC_LOCK_SECONDS,
+        ):
+            daemon = sandbox_daemon(self._client_factory, placed)
+            for name, version in sorted(missing().items()):
+                if posixpath.basename(name) != name or name.startswith("."):
+                    logger.warning("sandbox_skill_bad_name name=%r", name)
+                    continue
+                try:
+                    bundle = load(name)
+                    if bundle is None:
+                        continue
+                    self._install_skill(daemon, name, bundle)
+                    add_installed_skill(
+                        tenant_cache, ref.sandbox_id, instance, name, version
+                    )
+                except Exception:
+                    logger.exception(
+                        "sandbox_skill_install_failed sandbox=%s skill=%s",
+                        ref.sandbox_id,
+                        name,
+                    )
+
+    @staticmethod
+    def _install_skill(
+        daemon: SandboxDaemonClient, name: str, bundle: SkillsBundle
+    ) -> None:
+        zip_path = f"{ONYX_VM_FILES_ROOT}/skills/{secrets.token_hex(8)}.zip"
+        daemon.write_file(session_id="", path=zip_path, data=bundle.zip_bytes)
+        try:
+            result: ExecResult | None = None
+            stderr = b""
+            for event in daemon.run(
+                ExecCommand(
+                    argv=[
+                        "python3",
+                        "-I",
+                        "-c",
+                        _INSTALL_SKILL_SCRIPT,
+                        zip_path,
+                        CHAT_CUSTOM_SKILLS_PATH,
+                        name,
+                    ],
+                    deadline_seconds=_SKILL_INSTALL_DEADLINE_SECONDS,
+                )
+            ):
+                if (
+                    isinstance(event, ExecOutput)
+                    and event.stream is OutputStream.STDERR
+                ):
+                    stderr += event.data
+                elif isinstance(event, ExecResult):
+                    result = event
+            if (
+                result is None
+                or result.completion is not ExecCompletion.EXITED
+                or result.exit_code != 0
+            ):
+                raise HarnessSandboxError(
+                    f"copying skill {name!r} failed: "
+                    f"{stderr[-2000:].decode(errors='replace')}"
+                )
+        except Exception:
+            # A command that did not start or did not end leaves the zip.
+            with suppress(Exception):
+                daemon.delete_file(session_id="", path=zip_path)
+            raise
 
     def _place(self, ref: HarnessSandboxRef) -> PlacedVm:
         """The running, initialized VM. Init runs only when the daemon is not

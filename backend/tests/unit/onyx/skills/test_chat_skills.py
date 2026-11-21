@@ -3,15 +3,18 @@ from uuid import uuid4
 
 from onyx.agents.tools import ToolInvocation
 from onyx.chat.mention_models import SkillMention
+from onyx.chat.models import PromptMetadata
 from onyx.db.models import User
 from onyx.llm.cancellation import CancellationSignal
-from onyx.prompts.skill_prompts import SKILLS_OMITTED_LINE
+from onyx.llm.models import AssistantMessage, TextContent, ToolCall, UserMessage
+from onyx.prompts.skill_prompts import MENTIONED_SKILL_PROMPT, SKILLS_OMITTED_LINE
 from onyx.server.query_and_chat.models import SendMessageRequest
 from onyx.skills.chat import (
     MAX_CATALOG_DESCRIPTION_CHARS,
     MAX_SKILL_PROMPT_BYTES,
     accept_picked_skills,
     render_skills_catalog,
+    used_skill_names,
 )
 from onyx.skills.models import ChatSkill
 from onyx.tools.models import ToolContext
@@ -231,6 +234,7 @@ def test_picked_skills_are_recorded_with_their_skill_messages_from_one_read() ->
             [triage, report, unreadable],
             uuid4(),
             Mock(),
+            sandbox=False,
         )
 
     # One read serves every message.
@@ -274,3 +278,30 @@ def test_send_request_accepts_a_recorded_mention_on_resend() -> None:
     )
 
     assert request.mentions == [SkillMention(name="report")]
+
+
+def test_used_skill_names_come_from_skills_read_calls_and_picks() -> None:
+    def pick(name: str, *, context: bool = True) -> UserMessage:
+        return UserMessage(
+            content=MENTIONED_SKILL_PROMPT.format(name=name, instructions="Do it."),
+            metadata=PromptMetadata(is_input_context=context),
+        )
+
+    def read(name: str | int) -> AssistantMessage:
+        return AssistantMessage(
+            content=[
+                TextContent(text=""),
+                ToolCall(id=str(uuid4()), name="skills_read", arguments={"name": name}),
+                ToolCall(id=str(uuid4()), name="skills_list", arguments={"name": "x"}),
+            ]
+        )
+
+    assert used_skill_names(
+        [
+            pick("report"),
+            read("triage"),
+            read(3),
+            # A user who types a skill block picks nothing.
+            pick("typed", context=False),
+        ]
+    ) == {"report", "triage"}

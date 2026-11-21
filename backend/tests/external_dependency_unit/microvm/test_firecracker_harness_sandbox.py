@@ -4,10 +4,13 @@ busy signals."""
 
 import io
 import os
+import subprocess
+import sys
 import threading
 import time
 from collections.abc import Callable, Generator, Iterator
 from concurrent.futures import ThreadPoolExecutor
+from pathlib import Path
 from typing import Any
 from uuid import uuid4
 
@@ -48,6 +51,7 @@ from onyx.server.features.build.sandbox.firecracker import (
     harness_state,
 )
 from onyx.server.features.build.sandbox.firecracker.harness_sandbox import (
+    _INSTALL_SKILL_SCRIPT,
     FirecrackerHarnessSandbox,
 )
 from onyx.server.features.build.sandbox.firecracker.models import ExecSessionTable
@@ -74,6 +78,7 @@ from onyx.server.features.build.sandbox.models import (
     SkillsBundle,
     session_workspace,
 )
+from onyx.skills.built_in import CHAT_CUSTOM_SKILLS_PATH
 from tests.external_dependency_unit.microvm.conftest import (
     TENANT_ID,
     AddNode,
@@ -1304,3 +1309,104 @@ def test_skills_go_to_each_vm_instance_once_per_change(
     sandbox.sync_skills(ref, changed)
     assert len(node.agent.swap_mounts) == 3
     assert node.agent.create_calls == 2
+
+
+def test_custom_skills_copy_to_each_vm_instance_once_per_version(
+    sandbox: FirecrackerHarnessSandbox, node: RunningFakeAgent, new_ref: NewRef
+) -> None:
+    ref = new_ref()
+    sandbox_id = str(ref.sandbox_id)
+    root = CHAT_CUSTOM_SKILLS_PATH
+    bundles = {
+        "report": SkillsBundle.from_files(
+            {"report/SKILL.md": b"# report", "report/scripts/run.py": b"print(1)"}
+        ),
+        "gone": None,
+    }
+    loads: list[str] = []
+
+    def load(name: str) -> SkillsBundle | None:
+        loads.append(name)
+        return bundles[name]
+
+    def copied() -> dict[str, bytes]:
+        return {
+            path.removeprefix(root + "/"): data
+            for (sid, session, path), data in node.agent.files.items()
+            if sid == sandbox_id and session == "" and path.startswith(root + "/")
+        }
+
+    sandbox.install_skills(ref, {"report": "v1", "gone": "v1"}, load)
+    assert copied() == {
+        "report/SKILL.md": b"# report",
+        "report/scripts/run.py": b"print(1)",
+    }
+    # The staged zip is gone.
+    assert not any(
+        path.startswith(f"{ONYX_VM_FILES_ROOT}/skills/")
+        for sid, _, path in node.agent.files
+        if sid == sandbox_id
+    )
+
+    loads.clear()
+    sandbox.install_skills(ref, {"report": "v1"}, load)
+    assert loads == []
+
+    bundles["report"] = SkillsBundle.from_files({"report/SKILL.md": b"# report v2"})
+    sandbox.install_skills(ref, {"report": "v2"}, load)
+    assert copied() == {"report/SKILL.md": b"# report v2"}
+
+    vm = node.agent.vms[sandbox_id]
+    sandbox._client_factory.client(node.address).stop(
+        sandbox_id=sandbox_id, attempt=vm.attempt, generation=vm.generation
+    )
+    loads.clear()
+    sandbox.install_skills(ref, {"report": "v2"}, load)
+    assert loads == ["report"]
+    assert copied() == {"report/SKILL.md": b"# report v2"}
+
+    # A copy that cannot start keeps the old copy and leaves no zip.
+    node.agent.max_running_executions = 0
+    bundles["report"] = SkillsBundle.from_files({"report/SKILL.md": b"# report v3"})
+    sandbox.install_skills(ref, {"report": "v3"}, load)
+    assert copied() == {"report/SKILL.md": b"# report v2"}
+    assert not any(
+        path.startswith(f"{ONYX_VM_FILES_ROOT}/skills/")
+        for sid, _, path in node.agent.files
+        if sid == sandbox_id
+    )
+
+
+def test_a_skill_copy_replaces_an_old_copy_that_cannot_be_deleted(
+    tmp_path: Path,
+) -> None:
+    """A skill script can leave a folder that the copy cannot delete. The new
+    copy still takes its place, and the zip is gone."""
+    root = tmp_path / "skills"
+    locked = root / "report" / "cache"
+    locked.mkdir(parents=True)
+    (locked / "data").write_bytes(b"x")
+    locked.chmod(0o500)
+    src = tmp_path / "report.zip"
+    src.write_bytes(
+        SkillsBundle.from_files({"report/SKILL.md": b"# report v2"}).zip_bytes
+    )
+    try:
+        result = subprocess.run(
+            [
+                sys.executable,
+                "-I",
+                "-c",
+                _INSTALL_SKILL_SCRIPT,
+                str(src),
+                str(root),
+                "report",
+            ],
+            capture_output=True,
+        )
+        assert result.returncode == 0, result.stderr
+        assert sorted(os.listdir(root / "report")) == ["SKILL.md"]
+        assert not src.exists()
+    finally:
+        for path in root.rglob("cache"):
+            path.chmod(0o700)
