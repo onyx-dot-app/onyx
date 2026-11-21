@@ -1365,6 +1365,17 @@ def test_custom_skills_copy_to_each_vm_instance_once_per_version(
     assert loads == ["report"]
     assert copied() == {"report/SKILL.md": b"# report v2"}
 
+    # A copy that cannot start keeps the old copy and leaves no zip.
+    node.agent.max_running_executions = 0
+    bundles["report"] = SkillsBundle.from_files({"report/SKILL.md": b"# report v3"})
+    sandbox.install_skills(ref, {"report": "v3"}, load)
+    assert copied() == {"report/SKILL.md": b"# report v2"}
+    assert not any(
+        path.startswith(f"{ONYX_VM_FILES_ROOT}/skills/")
+        for sid, _, path in node.agent.files
+        if sid == sandbox_id
+    )
+
 
 def test_a_skill_copy_replaces_an_old_copy_that_cannot_be_deleted(
     tmp_path: Path,

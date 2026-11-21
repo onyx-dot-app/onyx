@@ -14,7 +14,7 @@ import random
 import secrets
 import time
 from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
-from contextlib import nullcontext
+from contextlib import nullcontext, suppress
 from typing import IO
 from uuid import UUID, uuid4
 
@@ -385,35 +385,44 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
     ) -> None:
         zip_path = f"{ONYX_VM_FILES_ROOT}/skills/{secrets.token_hex(8)}.zip"
         daemon.write_file(session_id="", path=zip_path, data=bundle.zip_bytes)
-        result: ExecResult | None = None
-        stderr = b""
-        for event in daemon.run(
-            ExecCommand(
-                argv=[
-                    "python3",
-                    "-I",
-                    "-c",
-                    _INSTALL_SKILL_SCRIPT,
-                    zip_path,
-                    CHAT_CUSTOM_SKILLS_PATH,
-                    name,
-                ],
-                deadline_seconds=_SKILL_INSTALL_DEADLINE_SECONDS,
-            )
-        ):
-            if isinstance(event, ExecOutput) and event.stream is OutputStream.STDERR:
-                stderr += event.data
-            elif isinstance(event, ExecResult):
-                result = event
-        if (
-            result is None
-            or result.completion is not ExecCompletion.EXITED
-            or result.exit_code != 0
-        ):
-            raise HarnessSandboxError(
-                f"copying skill {name!r} failed: "
-                f"{stderr[-2000:].decode(errors='replace')}"
-            )
+        try:
+            result: ExecResult | None = None
+            stderr = b""
+            for event in daemon.run(
+                ExecCommand(
+                    argv=[
+                        "python3",
+                        "-I",
+                        "-c",
+                        _INSTALL_SKILL_SCRIPT,
+                        zip_path,
+                        CHAT_CUSTOM_SKILLS_PATH,
+                        name,
+                    ],
+                    deadline_seconds=_SKILL_INSTALL_DEADLINE_SECONDS,
+                )
+            ):
+                if (
+                    isinstance(event, ExecOutput)
+                    and event.stream is OutputStream.STDERR
+                ):
+                    stderr += event.data
+                elif isinstance(event, ExecResult):
+                    result = event
+            if (
+                result is None
+                or result.completion is not ExecCompletion.EXITED
+                or result.exit_code != 0
+            ):
+                raise HarnessSandboxError(
+                    f"copying skill {name!r} failed: "
+                    f"{stderr[-2000:].decode(errors='replace')}"
+                )
+        except Exception:
+            # A command that did not start or did not end leaves the zip.
+            with suppress(Exception):
+                daemon.delete_file(session_id="", path=zip_path)
+            raise
 
     def _place(self, ref: HarnessSandboxRef) -> PlacedVm:
         """The running, initialized VM. Init runs only when the daemon is not
