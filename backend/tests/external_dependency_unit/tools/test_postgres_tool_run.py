@@ -283,6 +283,31 @@ def _next_cursor(text: str) -> str | None:
     return last_line[len(prefix) :] if last_line.startswith(prefix) else None
 
 
+def test_list_filters(tool_env: ToolEnv) -> None:
+    tag = tool_env.tag
+    tool = tool_env.tool
+    both = _run(
+        tool,
+        table="document",
+        title_contains=[f"Runbook 0 {tag}", f"Runbook 1 {tag}"],
+    )
+    assert "2 matching documents" in both
+    # One value still works without a list.
+    one = _run(tool, table="document", title_contains=f"Runbook 1 {tag}")
+    assert "1 matching documents" in one
+
+    assert "must not be an empty list" in _run_error(
+        tool, table="document", title_contains=[]
+    )
+    assert "at most 20 values" in _run_error(
+        tool, table="document", title_contains=[str(i) for i in range(21)]
+    )
+    # Each value is checked like a single one.
+    assert "Invalid source_type" in _run_error(
+        tool, table="document", source_type=["web", "not-a-source"]
+    )
+
+
 def test_document_order_by(tool_env: ToolEnv) -> None:
     tag = tool_env.tag
     tool = tool_env.tool
