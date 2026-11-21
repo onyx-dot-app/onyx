@@ -14,6 +14,7 @@ from onyx.agents.models import (
     StepResult,
     ToolCallContext,
     ToolResultAmendment,
+    ToolResultContext,
 )
 from onyx.agents.runtime import Agent, RestorableFeature
 from onyx.chat.citation_processor import DynamicCitationProcessor
@@ -73,10 +74,15 @@ from onyx.tools.constants import PYTHON_TOOL_NAME
 from onyx.tools.file_snapshot import SavedChatFile, SavedContextFiles
 from onyx.tools.interface import Tool
 from onyx.tools.models import ChatFile, ToolContext, ToolPreference
-from onyx.tools.tool_implementations.code_mode.code_mode_tool import with_code_mode
+from onyx.tools.tool_implementations.code_mode.code_mode_tool import (
+    CodeModeTool,
+    WaitCodeTool,
+    with_code_mode,
+)
 from onyx.tools.tool_implementations.question.question_tool import QuestionTool
 from onyx.tools.tool_implementations.sandbox.sandbox_tools import SandboxTool
 from onyx.tools.tool_implementations.sandbox.spill import spill_large_result
+from onyx.tools.tool_implementations.sandbox.turn import SandboxTurn
 from onyx.tools.tool_implementations.search.models import SearchContext
 from onyx.tools.tool_implementations.search.search_tool import (
     SearchTool,
@@ -246,6 +252,18 @@ class ChatAgent(Agent, RestorableFeature):
             ),
             None,
         )
+        # The root agent's sandbox and code mode results end with the file
+        # copy status line when it changed. Subagents and the calls inside a
+        # code mode program never read it, so they cannot use it up.
+        self._file_status_tools = (
+            frozenset(
+                tool.name
+                for tool in self.application_tools
+                if isinstance(tool, (SandboxTool, CodeModeTool, WaitCodeTool))
+            )
+            if sandbox_turn is not None and not is_subagent
+            else frozenset()
+        )
         super().__init__(
             llm,
             tools=[tool.bind(self._tool_context) for tool in self.application_tools],
@@ -263,16 +281,34 @@ class ChatAgent(Agent, RestorableFeature):
             ),
             after_tool_call=self._finalize_tool,
             # In a chat with a sandbox, large results go to a file in the VM.
-            prepare_tool_result=partial(
-                spill_large_result,
-                sandbox_turn,
-                code_mode=self.code_cells is not None,
-            )
+            prepare_tool_result=partial(self._prepare_sandbox_result, sandbox_turn)
             if sandbox_turn is not None
             else None,
             on_finish=None if self.code_cells is None else self._finished_cells,
             on_suspend=None if self.code_cells is None else self._suspended_cells,
             on_drained=on_drained,
+        )
+
+    def _prepare_sandbox_result(
+        self, turn: SandboxTurn, context: ToolResultContext
+    ) -> ToolResult:
+        """Spill a large result, then add the file copy status line to a
+        successful result that the root model gets. An amendment or a failed
+        result gets no status line; the line waits for the next result."""
+        result = spill_large_result(
+            turn, context, code_mode=self.code_cells is not None
+        )
+        if (
+            context.amended
+            or result.is_error
+            or not any(call.name in self._file_status_tools for call in context.calls)
+        ):
+            return result
+        line = None if turn.file_copies is None else turn.file_copies.status.line()
+        if line is None:
+            return result
+        return result.model_copy(
+            update={"content": f"{result.content}\n\n{line}", "estimated_tokens": None}
         )
 
     def capture_state(self) -> ChatFeatureState:

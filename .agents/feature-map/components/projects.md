@@ -61,7 +61,8 @@ Neighbours own the rest:
 
 ```
 prepare_chat_turn                        chat/process_message.py
-  resolve_context_user_files             project files + custom agent files, deduped by UserFile.id
+  resolve_context_user_files             project files and custom agent files, apart
+                                         (ContextUserFiles); a file in both is the agent's
   capture_user_file_metadata             db/user_file.py: copies rows before the DB session closes
   custom prompt                          project + agent instructions, built inline
   calculate_reserved_tokens
@@ -116,10 +117,14 @@ get tool metadata.
 
 1. `one-file-selection` **Choose context files in one place.**
    `chat/process_message.py:prepare_chat_turn` calls
-   `chat/files.py:resolve_context_user_files` once, and the result
-   feeds prompt loading, the `read_file` id list and the Python tool's file
-   staging. A path that collects project or agent files on its own can drop a
-   source or count a file twice.
+   `chat/files.py:resolve_context_user_files` once. It returns the
+   project's files and the custom agent's files apart (a file in both is the
+   agent's), and the result feeds prompt loading, the `read_file` id list,
+   the Python tool's file staging and, in a turn with the sandbox, the
+   background copy into the chat's VM (`chat/files.py:place_chat_files`:
+   the chat's attachments/project/ and attachments/agent/, [[code-execution]]). A
+   path that collects project or agent files on its own can drop a source or
+   count a file twice.
 2. `never-truncated` **Project files are never dropped by truncation.** Below
    the limit they stay in context for every turn ([[context-assembly]]). A
    change that lets them compete with chat history for space breaks the
@@ -195,8 +200,8 @@ get tool metadata.
 ## Recipes
 
 - `add-context-file-source` **Add a new source of context files**, such as
-  files from another container. Extend `resolve_context_user_files`, which combines project files
-  with custom agent files, so that every consumer gets the new source
+  files from another container. Extend `resolve_context_user_files`, which returns project files
+  and custom agent files, so that every consumer gets the new source
   ([[#one-file-selection]]). If the files must be searchable on overflow,
   extend `determine_search_params` and the filter in [[internal-search]].
 - `investigate-project-file-answer` **Investigate "the answer ignored (or used) a project file".** Find which

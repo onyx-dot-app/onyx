@@ -1929,6 +1929,7 @@ def test_old_rows_keep_the_legacy_reader(
     history = convert_chat_history(
         chat_history=capture_chat_history([response], {}, len),
         files=[],
+        vm_paths={},
     ).messages
     assert [message.text for message in history] == ["Existing answer"]
 

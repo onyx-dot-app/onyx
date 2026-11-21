@@ -43,7 +43,7 @@ from onyx.db.enums import (
     QuestionAnsweredVia,
     QuestionOutcome,
 )
-from onyx.db.models import SAVED_TOOL_RESULT_TYPES, SavedToolResultDetails
+from onyx.db.models import SAVED_TOOL_RESULT_TYPES, SavedToolResultDetails, UserFile
 from onyx.deep_research.models import ResearchConfiguration
 from onyx.file_store.models import (
     ChatLoadedFile,
@@ -93,7 +93,7 @@ from onyx.tools.tool_implementations.question.models import (
     ToolQuestion,
     ToolQuestionAnswer,
 )
-from onyx.tools.tool_implementations.sandbox.models import PublishedFile
+from onyx.tools.tool_implementations.sandbox.models import PublishedFile, VmChatFile
 from onyx.tools.tool_implementations.search.models import SearchContext
 from onyx.tools.tool_implementations.subagents.models import ChatConfiguration
 
@@ -198,6 +198,24 @@ def accepted_input_messages(
         ),
         *picked_skill_messages(message_id, mentions, skill_messages),
     ]
+
+
+class ContextUserFiles(BaseModel):
+    """The user files of a chat's context: its project's files and its
+    custom agent's files. A file in both is the agent's."""
+
+    model_config = ConfigDict(arbitrary_types_allowed=True)
+
+    project: list[UserFile]
+    agent: list[UserFile]
+
+
+class PlacedChatFiles(BaseModel):
+    """The chat files in the chat's sandbox (files.place_chat_files)."""
+
+    files: list[VmChatFile]
+    # By file store ID: the paths of the chat's uploads.
+    upload_paths: dict[str, str]
 
 
 class FileContextResult(BaseModel):
@@ -922,6 +940,11 @@ class ChatTurnSetup(BaseModel):
     tool_configuration: PersonaToolConfiguration
     # The turn offers the sandbox tools (sandbox_tools.py:sandbox_tools_for_model).
     sandbox_tools: bool
+    # The chat's files in its sandbox (chat/files.py:place_chat_files); none
+    # without the sandbox tools.
+    vm_chat_files: list[VmChatFile]
+    # The turn's first sandbox call copies them (SandboxTurn).
+    copy_vm_chat_files: bool
     # The root agent gets the question tool (question_tool.py).
     question_tool: bool = False
     research_tool_id: int | None

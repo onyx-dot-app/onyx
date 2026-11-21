@@ -2,8 +2,9 @@
 against FirecrackerHarnessSandbox with a fake host agent: chat turns through the chat flow (streamed and
 replayed packets, code mode values, approvals, Stop, turns that offer no
 sandbox), the tools' model text and file effects, published files (access,
-the message's files, the chat delete), the turn lifecycle, the Sandbox row
-and the chat delete purge."""
+the message's files, the chat delete), chat files in attachments/ (the
+paths in file messages, late uploads, branch switches, project and agent
+files), the turn lifecycle, the Sandbox row and the chat delete purge."""
 
 import io
 import json
@@ -20,11 +21,11 @@ from uuid import UUID, uuid4
 import pytest
 from fastapi import Request
 from pydantic import BaseModel, ConfigDict, JsonValue
-from sqlalchemy import select, update
+from sqlalchemy import delete, select, update
 from sqlalchemy.orm import Session
 
 from onyx.access.access import user_can_access_chat_file
-from onyx.agents.models import RunStatus
+from onyx.agents.models import InputSource, MessageDelivery, RunStatus
 from onyx.agents.runtime import Agent, Run
 from onyx.agents.tools import ToolInvocation, ToolProgress
 from onyx.auth.users import get_anonymous_user
@@ -37,6 +38,7 @@ from onyx.chat.chat_processing_checker import get_processing_stream
 from onyx.chat.execution import chat_turn_work
 from onyx.chat.incognito_context import teardown_incognito_session
 from onyx.chat.process_message import (
+    dispatch_pending_chat_messages,
     handle_multi_model_stream,
     handle_stream_message_objects,
     run_chat_turn,
@@ -69,14 +71,20 @@ from onyx.db.enums import (
     IncognitoRecordMode,
     PluginInstallationPolicy,
     SandboxStatus,
+    UserFileStatus,
 )
 from onyx.db.models import (
     ApprovalRequest,
+    ChatInput,
     ChatMessage,
     ChatSession,
     FileRecord,
+    Persona__UserFile,
+    Project__UserFile,
     Sandbox,
     User,
+    UserFile,
+    UserProject,
 )
 from onyx.db.models import ToolCall as ToolCallRecord
 from onyx.db.persona import upsert_persona
@@ -91,6 +99,7 @@ from onyx.deep_research.agent import DeepResearchAgent
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.constants import CHAT_ARTIFACT_FILE_PREFIX
 from onyx.file_store.file_store import get_default_file_store
+from onyx.file_store.models import ChatFileType, FileDescriptor
 from onyx.file_store.utils import plaintext_file_name_for_id
 from onyx.integrations.models import ApprovalMode
 from onyx.llm.cancellation import (
@@ -99,6 +108,7 @@ from onyx.llm.cancellation import (
     cancellation_scope,
 )
 from onyx.llm.interfaces import LLMConfig
+from onyx.llm.model_request import UserMessage as PromptUserMessage
 from onyx.llm.model_response import (
     ChatCompletionDeltaToolCall,
     Delta,
@@ -108,6 +118,7 @@ from onyx.llm.models import (
     AssistantMessage,
     GenerationRequest,
     TextContent,
+    TextContentPart,
     ToolCall,
     ToolResult,
     ToolResultMessage,
@@ -115,9 +126,11 @@ from onyx.llm.models import (
 from onyx.llm.override_models import LLMOverride
 from onyx.microvm.daemon_client import SandboxDaemonErrorReason
 from onyx.microvm.generated.sandboxd.v1 import sandboxd_pb2
+from onyx.prompts.sandbox_tools import ATTACHMENTS_NOT_SAVED_NOTE, CHAT_FILES_LAYOUT
 from onyx.server.features.action_policies.models import ApprovalChoice
 from onyx.server.features.build.sandbox import harness_factory
 from onyx.server.features.build.sandbox.exec_output import EXEC_CALL_OUTPUT_MAX_BYTES
+from onyx.server.features.build.sandbox.file_copy_state import copy_generation_key
 from onyx.server.features.build.sandbox.firecracker import (
     harness_sandbox,
     harness_state,
@@ -151,6 +164,7 @@ from onyx.server.query_and_chat.chat_backend import (
     get_chat_session,
 )
 from onyx.server.query_and_chat.models import (
+    AUTO_PLACE_AFTER_LATEST_MESSAGE,
     ChatApprovalDecisionRequest,
     MessageOrigin,
     SendMessageRequest,
@@ -183,7 +197,8 @@ from onyx.tools.tool_implementations.open_url.open_url_tool import (
     OpenedPage,
     OpenURLTool,
 )
-from onyx.tools.tool_implementations.sandbox import sandbox_tools, spill
+from onyx.tools.tool_implementations.sandbox import file_copies, sandbox_tools, spill
+from onyx.tools.tool_implementations.sandbox.file_copies import CopyStatus
 from onyx.tools.tool_implementations.sandbox.models import (
     PUBLISH_FILES_MAX_FILES,
     ApplyPatchFileChange,
@@ -440,8 +455,11 @@ class SandboxChat(BaseModel):
         code_mode: bool = False,
         on_part: Callable[[object], None] = lambda _part: None,
         tool_ids: Sequence[int] = (),
+        file_descriptors: Sequence[FileDescriptor] = (),
+        parent_message_id: int | None = AUTO_PLACE_AFTER_LATEST_MESSAGE,
     ) -> list[object]:
-        """Send a message; the agent's tools in `tool_ids` join the sandbox
+        """Send a message with `file_descriptors` attached, under
+        `parent_message_id`; the agent's tools in `tool_ids` join the sandbox
         tools. `code_mode` stays set until the test ends, so a resume after
         the send restores the run with the same code mode."""
         self.monkeypatch.setattr("onyx.chat.agent.CODE_MODE_ENABLED", code_mode)
@@ -456,6 +474,8 @@ class SandboxChat(BaseModel):
                 tool_options=ToolOptions(
                     allowed=[CapabilityEntry(tool_id=tool_id) for tool_id in tool_ids]
                 ),
+                file_descriptors=file_descriptors,
+                parent_message_id=parent_message_id,
             )
         )
 
@@ -3107,6 +3127,212 @@ def test_a_cell_that_closes_after_a_large_observation_spills_both_records(
     assert last_tool_text(follow_up, "start") == closing.content
 
 
+# The file copy status line
+
+
+def _scripted_status(monkeypatch: pytest.MonkeyPatch) -> list[str]:
+    """Each read of the file copy status gives a new line; returns the lines
+    given, in order."""
+    given: list[str] = []
+
+    def line(_status: CopyStatus) -> str:
+        given.append(f"[files] Copying: attachments/{len(given)}.txt.")
+        return given[-1]
+
+    monkeypatch.setattr(CopyStatus, "line", line)
+    return given
+
+
+@pytest.mark.usefixtures("node")
+def test_root_sandbox_results_end_with_the_file_status_and_errors_do_not(
+    monkeypatch: pytest.MonkeyPatch, db_session: Session, chat: SandboxChat
+) -> None:
+    given = _scripted_status(monkeypatch)
+    llm = ChatLLM(
+        [
+            tool_step(ExecCommandTool.NAME, "ok", {"cmd": "echo hi"}),
+            tool_step(WriteStdinTool.NAME, "bad", {"session_id": "nope"}),
+            tool_step(ApplyPatchTool.NAME, "patch", {"input": "not a patch"}),
+            Delta(content="Done."),
+        ]
+    )
+    chat.send(llm)
+
+    ok, bad, patch = (last_tool_text(llm, call) for call in ("ok", "bad", "patch"))
+    # Failed calls do not read the status; it waits for the next result.
+    assert given == ["[files] Copying: attachments/0.txt."]
+    assert ok.endswith(f"Output:\nhi\n\n\n{given[0]}")
+    assert bad == str(ExecSessionNotFoundError("nope"))
+    assert "[files]" not in patch
+    # The history keeps what the model got.
+    assert [
+        saved.content for saved in _saved_results(db_session, chat.chat_session_id)
+    ] == [ok, bad, patch]
+
+
+@pytest.mark.usefixtures("node")
+def test_the_file_status_follows_a_spilled_result(
+    monkeypatch: pytest.MonkeyPatch, chat: SandboxChat
+) -> None:
+    given = _scripted_status(monkeypatch)
+    llm = ChatLLM(
+        [
+            code_step("big", _ROWS_PROGRAM, max_output_chars=5_000),
+            Delta(content="Done."),
+        ]
+    )
+    chat.send(llm, code_mode=True)
+
+    shown = last_tool_text(llm, "big")
+    assert "<persisted-output path=" in shown
+    assert shown.endswith(f"</persisted-output>\n\n{given[0]}")
+    assert len(given) == 1
+
+
+@pytest.mark.usefixtures("node")
+def test_the_file_status_follows_a_spilled_exec_result(
+    monkeypatch: pytest.MonkeyPatch, db_session: Session, chat: SandboxChat
+) -> None:
+    given = _scripted_status(monkeypatch)
+    llm = ChatLLM(
+        [
+            tool_step(ExecCommandTool.NAME, "seq", {"cmd": "seq 20000"}),
+            Delta(content="Done."),
+        ]
+    )
+    parts = chat.send(llm)
+
+    # The model gets the exec result with the spill note, then the status
+    # line.
+    shown = last_tool_text(llm, "seq")
+    assert "<persisted-output path=" in shown
+    assert given == ["[files] Copying: attachments/0.txt."]
+    assert shown.endswith(f"</persisted-output>\n\n{given[0]}")
+    [saved] = _saved_results(db_session, chat.chat_session_id)
+    assert saved.content == shown
+    # The card shows the spilled output, not the status.
+    assert _exec_end(parts).output == _card(_seq(20_000))
+
+
+@pytest.mark.usefixtures("node")
+def test_a_code_cell_gets_the_file_status_and_its_calls_do_not_read_it(
+    monkeypatch: pytest.MonkeyPatch, chat: SandboxChat
+) -> None:
+    given = _scripted_status(monkeypatch)
+    program = (
+        "for _ in range(2):\n"
+        "    print((await tools.exec_command(cmd='echo hi'))['output'])\n"
+        f"print(await tools.apply_patch(input={ADD_A!r}))\n"
+    )
+    llm = ChatLLM([code_step("code", program), Delta(content="Done.")])
+    chat.send(llm, code_mode=True)
+
+    # One read, for the cell's result; the program's calls read none.
+    assert given == ["[files] Copying: attachments/0.txt."]
+    text = last_tool_text(llm, "code")
+    assert text.endswith(f"\n\n{given[0]}")
+    assert text.count("[files]") == 1
+
+
+@pytest.mark.usefixtures("node")
+def test_a_closed_cell_keeps_one_file_status_line(
+    monkeypatch: pytest.MonkeyPatch, db_session: Session, chat: SandboxChat
+) -> None:
+    given = _scripted_status(monkeypatch)
+    amended: list[ToolResult] = []
+    apply_amendments = Run._apply_amendments
+
+    def captured(run: Run, amendments: Sequence[Any]) -> None:
+        amended.extend(amendment.result for amendment in amendments)
+        apply_amendments(run, amendments)
+
+    monkeypatch.setattr(Run, "_apply_amendments", captured)
+    # The cell's sandbox call starts the copy. The cell yields its
+    # observation, runs on, and the end of the response closes it with an
+    # amendment that starts from the recorded observation.
+    program = (
+        "await tools.exec_command(cmd='echo hi')\n"
+        "print('started')\nyield_control()\nawait asyncio.sleep(60)\n"
+    )
+    llm = ChatLLM(
+        [code_step("start", "import asyncio\n" + program), Delta(content="Started.")]
+    )
+    chat.send(llm, code_mode=True)
+
+    observed = last_tool_text(llm, "start")
+    assert observed.endswith(f"\n\n{given[0]}")
+    [closing] = amended
+    assert closing.content.startswith(observed)
+    assert closing.content.count("[files]") == 1
+    assert given == ["[files] Copying: attachments/0.txt."]
+    [saved] = _saved_results(db_session, chat.chat_session_id)
+    assert saved.content == closing.content
+
+
+@pytest.mark.usefixtures("node")
+def test_subagent_sandbox_results_do_not_read_the_file_status(
+    monkeypatch: pytest.MonkeyPatch, chat: SandboxChat
+) -> None:
+    given = _scripted_status(monkeypatch)
+    monkeypatch.setattr("onyx.chat.agent.CODE_MODE_ENABLED", False)
+    helper_results: list[str] = []
+
+    def generate(
+        request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        texts = [message.text for message in request.messages]
+        results = [
+            message.text
+            for message in request.messages
+            if isinstance(message, ToolResultMessage)
+        ]
+        if "Task helper" in texts:
+            if results:
+                helper_results.extend(results)
+                return AssistantMessage(content=[TextContent(text="Helped.")])
+            return AssistantMessage(
+                content=[
+                    ToolCall(
+                        id="child-exec",
+                        name=ExecCommandTool.NAME,
+                        arguments={"cmd": "echo child"},
+                    )
+                ]
+            )
+        if results:
+            return AssistantMessage(content=[TextContent(text="Done.")])
+        return AssistantMessage(
+            content=[
+                ToolCall(
+                    id="spawn",
+                    name=SPAWN_AGENT_TOOL_NAME,
+                    arguments={"name": "helper", "instruction": "Task helper"},
+                )
+            ]
+        )
+
+    model = WaitAgentsLLM(generate)
+    monkeypatch.setattr(
+        "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: model
+    )
+    for _part in handle_stream_message_objects(
+        new_msg_req=SendMessageRequest(
+            message="Work in the sandbox.",
+            chat_session_id=chat.chat_session_id,
+            tool_options=ToolOptions(allowed=[]),
+            accepts_follow_ups=True,
+        ),
+        user=chat.user,
+    ):
+        pass
+    assert chat_turn_work.wait_idle(timeout=30)
+
+    [child_result] = helper_results
+    assert "child" in child_result
+    assert "[files]" not in child_result
+    assert given == []
+
+
 @pytest.mark.usefixtures("node")
 def test_a_chat_without_a_sandbox_keeps_a_large_result_whole(
     monkeypatch: pytest.MonkeyPatch,
@@ -3474,6 +3700,465 @@ def test_a_program_that_prints_a_mebibyte_of_command_output_spills_its_cell(
     shown = last_tool_text(llm, "big")
     assert shown.startswith("Warning: truncated output")
     assert len(shown) < 42_000
+
+
+# Chat files in attachments/
+
+# A 1x1 PNG.
+_PNG = bytes.fromhex(
+    "89504e470d0a1a0a0000000d4948445200000001000000010806000000"
+    "1f15c4890000000d49444154789c6360000002000154a24f5d0000000049454e44ae426082"
+)
+
+Attach = Callable[..., FileDescriptor]
+
+
+def _user_file(
+    db_session: Session,
+    user: User,
+    name: str,
+    data: bytes,
+    file_type: str = "text/plain",
+) -> UserFile:
+    """A processed user file, committed on its own so that each has its own
+    upload time."""
+    user_file = UserFile(
+        id=uuid4(),
+        user_id=user.id,
+        file_id=get_default_file_store().save_file(
+            content=io.BytesIO(data),
+            display_name=name,
+            file_origin=FileOrigin.USER_FILE,
+            file_type=file_type,
+        ),
+        name=name,
+        file_type=file_type,
+        status=UserFileStatus.COMPLETED,
+        token_count=len(data),
+    )
+    db_session.add(user_file)
+    db_session.commit()
+    return user_file
+
+
+@pytest.fixture
+def attach(db_session: Session, user: User) -> Attach:
+    """Upload a file as the user; returns its chat attachment descriptor."""
+
+    def upload(
+        name: str, data: bytes, file_type: ChatFileType = ChatFileType.PLAIN_TEXT
+    ) -> FileDescriptor:
+        user_file = _user_file(
+            db_session,
+            user,
+            name,
+            data,
+            "image/png" if file_type is ChatFileType.IMAGE else "text/plain",
+        )
+        return FileDescriptor(
+            id=user_file.file_id,
+            type=file_type,
+            name=name,
+            user_file_id=str(user_file.id),
+        )
+
+    return upload
+
+
+def _exec_turn() -> ChatLLM:
+    return ChatLLM(
+        [
+            tool_step(ExecCommandTool.NAME, "exec", {"cmd": "echo hi"}),
+            Delta(content="Done."),
+        ]
+    )
+
+
+def _user_texts(llm: ScriptedLLM) -> list[str]:
+    """The user message texts of the model's first request."""
+    return [
+        message.content
+        if isinstance(message.content, str)
+        else "".join(
+            part.text for part in message.content if isinstance(part, TextContentPart)
+        )
+        for message in llm.requests[0]["prompt"]
+        if isinstance(message, PromptUserMessage)
+    ]
+
+
+def _attachments(node: RunningFakeAgent, ref: HarnessSandboxRef) -> dict[str, bytes]:
+    return {
+        path: data
+        for path, data in _files(node, ref).items()
+        if path.startswith("attachments/")
+    }
+
+
+def _vm_name(file_id: str, name: str) -> str:
+    """A chat file's name in the VM: its file store ID (a UUID) starts it."""
+    return f"{file_id[:8]}-{name}"
+
+
+@pytest.mark.usefixtures("initialize_file_store")
+def test_a_late_upload_gets_its_path_in_its_message_and_reaches_the_vm(
+    db_session: Session, node: RunningFakeAgent, chat: SandboxChat, attach: Attach
+) -> None:
+    first = attach("report.txt", b"first report")
+    first_path = f"attachments/{_vm_name(first['id'], 'report.txt')}"
+    chat.send(_exec_turn(), file_descriptors=[first])
+    ref = chat.ref(db_session)
+    _wait_until(lambda: _attachments(node, ref) == {first_path: b"first report"})
+
+    # Later in the chat: a file with the same name, and an image.
+    late = attach("report.txt", b"late report")
+    late_path = f"attachments/{_vm_name(late['id'], 'report.txt')}"
+    image = attach("chart.png", _PNG, ChatFileType.IMAGE)
+    image_path = f"attachments/{_vm_name(image['id'], 'chart.png')}"
+    llm = _exec_turn()
+    chat.send(llm, file_descriptors=[late, image])
+    _wait_until(
+        lambda: (
+            _attachments(node, ref)
+            == {
+                first_path: b"first report",
+                late_path: b"late report",
+                image_path: _PNG,
+            }
+        )
+    )
+    _wait_until(file_copies.file_copy_pool().idle)
+    # The earlier file is in place, so it is not copied again.
+    assert node.agent.write_paths.count(first_path) == 1
+
+    # Each message names its files' paths.
+    texts = _user_texts(llm)
+    assert (
+        f"File: report.txt\nIn the VM: {first_path}\nfirst report\nEnd of File"
+    ) in texts
+    assert (
+        f"File: report.txt\nIn the VM: {late_path}\nlate report\nEnd of File"
+    ) in texts
+    assert f"Image: chart.png\nIn the VM: {image_path}" in texts
+
+
+@pytest.mark.usefixtures("initialize_file_store")
+def test_a_branch_switch_keeps_the_uploads_of_every_branch(
+    db_session: Session, node: RunningFakeAgent, chat: SandboxChat, attach: Attach
+) -> None:
+    """The VM keeps the uploads of every branch; the prompt names the
+    uploads of the branch that it answers."""
+    a = attach("a.txt", b"a")
+    chat.send(_exec_turn(), file_descriptors=[a])
+    [first_answer] = db_session.scalars(
+        select(ChatMessage.id).where(
+            ChatMessage.chat_session_id == chat.chat_session_id,
+            ChatMessage.message_type == MessageType.ASSISTANT,
+        )
+    )
+    b = attach("b.txt", b"b")
+    chat.send(_exec_turn(), file_descriptors=[b])
+    ref = chat.ref(db_session)
+    paths = {
+        f"attachments/{_vm_name(a['id'], 'a.txt')}": b"a",
+        f"attachments/{_vm_name(b['id'], 'b.txt')}": b"b",
+    }
+    _wait_until(lambda: _attachments(node, ref) == paths)
+
+    # An edit of the second message: a new branch after the first answer,
+    # with another file of the same name.
+    new_b = attach("b.txt", b"new b")
+    new_b_path = f"attachments/{_vm_name(new_b['id'], 'b.txt')}"
+    llm = _exec_turn()
+    chat.send(llm, file_descriptors=[new_b], parent_message_id=first_answer)
+    _wait_until(lambda: _attachments(node, ref) == {**paths, new_b_path: b"new b"})
+    texts = "\n".join(_user_texts(llm))
+    assert f"File: b.txt\nIn the VM: {new_b_path}\nnew b\nEnd of File" in texts
+    assert _vm_name(b["id"], "b.txt") not in texts
+
+
+@pytest.mark.usefixtures("initialize_file_store", "sandbox")
+def test_project_and_agent_files_are_copied_and_follow_their_changes(
+    db_session: Session,
+    node: RunningFakeAgent,
+    user: User,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    plan = _user_file(db_session, user, "plan.md", b"old plan")
+    newer_plan = _user_file(db_session, user, "plan.md", b"new plan")
+    handbook = _user_file(db_session, user, "handbook.txt", b"handbook")
+    faq = _user_file(db_session, user, "faq.txt", b"faq")
+    shared = _user_file(db_session, user, "shared.txt", b"shared")
+    project = UserProject(name=f"sandbox {uuid4().hex[:8]}", user_id=user.id)
+    db_session.add(project)
+    db_session.flush()
+    db_session.add_all(
+        [
+            Project__UserFile(project_id=project.id, user_file_id=user_file.id)
+            for user_file in (plan, newer_plan, shared)
+        ]
+    )
+    persona = upsert_persona(
+        user=user,
+        name=f"files {uuid4().hex[:8]}",
+        description="",
+        starter_messages=None,
+        system_prompt=None,
+        task_prompt=None,
+        datetime_aware=None,
+        is_public=False,
+        tool_ids=[],
+        user_file_ids=[handbook.id, faq.id, shared.id],
+        db_session=db_session,
+    )
+    chat = SandboxChat(
+        user=user,
+        chat_session_id=create_chat_session(
+            db_session,
+            "sandbox files",
+            user.id,
+            persona_id=persona.id,
+            project_id=project.id,
+        ).id,
+        monkeypatch=monkeypatch,
+    )
+    try:
+        chat.send(_exec_turn())
+        ref = chat.ref(db_session)
+
+        def path(directory: str, user_file: UserFile) -> str:
+            return (
+                f"attachments/{directory}/{_vm_name(user_file.file_id, user_file.name)}"
+            )
+
+        # Two files of one name keep both, and a file of both the project
+        # and the agent is the agent's.
+        _wait_until(
+            lambda: (
+                _attachments(node, ref)
+                == {
+                    path("project", plan): b"old plan",
+                    path("project", newer_plan): b"new plan",
+                    path("agent", handbook): b"handbook",
+                    path("agent", faq): b"faq",
+                    path("agent", shared): b"shared",
+                }
+            )
+        )
+
+        # Project and agent files are read at each turn; a file that left
+        # goes.
+        db_session.execute(
+            delete(Project__UserFile).where(Project__UserFile.user_file_id == plan.id)
+        )
+        db_session.execute(
+            delete(Persona__UserFile).where(Persona__UserFile.user_file_id == faq.id)
+        )
+        db_session.commit()
+        chat.send(_exec_turn())
+        _wait_until(
+            lambda: (
+                _attachments(node, ref)
+                == {
+                    path("project", newer_plan): b"new plan",
+                    path("agent", handbook): b"handbook",
+                    path("agent", shared): b"shared",
+                }
+            )
+        )
+    finally:
+        db_session.rollback()
+        db_session.execute(
+            delete(Persona__UserFile).where(Persona__UserFile.persona_id == persona.id)
+        )
+        db_session.execute(
+            delete(Project__UserFile).where(Project__UserFile.project_id == project.id)
+        )
+        db_session.commit()
+
+
+@pytest.mark.usefixtures("node")
+def test_a_turn_without_a_sandbox_call_copies_nothing(
+    db_session: Session, node: RunningFakeAgent, chat: SandboxChat, attach: Attach
+) -> None:
+    chat.send(ChatLLM([Delta(content="Hi.")]), file_descriptors=[attach("a.txt", b"a")])
+    assert chat_turn_work.wait_idle(timeout=30)
+    assert str(chat.ref(db_session).sandbox_id) not in node.agent.vms
+    assert (
+        get_cache_backend(tenant_id=TENANT_ID).get(
+            copy_generation_key(chat.chat_session_id)
+        )
+        is None
+    )
+
+
+@pytest.mark.usefixtures("initialize_file_store")
+def test_a_hosted_agent_run_copies_the_chat_files(
+    monkeypatch: pytest.MonkeyPatch,
+    db_session: Session,
+    node: RunningFakeAgent,
+    chat: SandboxChat,
+    attach: Attach,
+) -> None:
+    """An agent host runs a worker whose sandbox call copies the chat's
+    files, so a worker on a VM that lost them gets them again. Its
+    exec_command describes the chat's files as the root's does."""
+    monkeypatch.setattr("onyx.chat.agent.CODE_MODE_ENABLED", False)
+    exec_descriptions: dict[str, str] = {}
+
+    def generate(
+        request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        texts = [message.text for message in request.messages]
+        [description] = [
+            tool.description
+            for tool in request.tools
+            if tool.name == ExecCommandTool.NAME
+        ]
+        if "Initial task" in texts:
+            if "Follow up" in texts and not isinstance(
+                request.messages[-1], ToolResultMessage
+            ):
+                exec_descriptions["hosted"] = description
+                return AssistantMessage(
+                    content=[
+                        ToolCall(
+                            id="hosted-exec",
+                            name=ExecCommandTool.NAME,
+                            arguments={"cmd": "echo hosted"},
+                        )
+                    ]
+                )
+            return AssistantMessage(content=[TextContent(text="Worker done.")])
+        if any(isinstance(message, ToolResultMessage) for message in request.messages):
+            return AssistantMessage(content=[TextContent(text="Started.")])
+        exec_descriptions["root"] = description
+        return AssistantMessage(
+            content=[
+                ToolCall(
+                    id="root-exec",
+                    name=ExecCommandTool.NAME,
+                    arguments={"cmd": "echo root"},
+                ),
+                ToolCall(
+                    id="spawn",
+                    name=SPAWN_AGENT_TOOL_NAME,
+                    arguments={"name": "worker", "instruction": "Initial task"},
+                ),
+            ]
+        )
+
+    model = WaitAgentsLLM(generate)
+    monkeypatch.setattr(
+        "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: model
+    )
+    a = attach("a.txt", b"a")
+    for _part in handle_stream_message_objects(
+        new_msg_req=SendMessageRequest(
+            message="Start a worker.",
+            chat_session_id=chat.chat_session_id,
+            tool_options=ToolOptions(allowed=[]),
+            accepts_follow_ups=True,
+            file_descriptors=[a],
+        ),
+        user=chat.user,
+    ):
+        pass
+    assert chat_turn_work.wait_idle(timeout=30)
+    ref = chat.ref(db_session)
+    copied = {f"attachments/{_vm_name(a['id'], 'a.txt')}": b"a"}
+    _wait_until(lambda: _attachments(node, ref) == copied)
+    cache = get_cache_backend(tenant_id=TENANT_ID)
+    generation = cache.get(copy_generation_key(chat.chat_session_id))
+    assert generation is not None
+    # The VM loses the file, as a restored VM would.
+    [path] = copied
+    del node.agent.files[(str(ref.sandbox_id), str(ref.session_id), path)]
+
+    # A message for the idle worker, which an agent host runs.
+    spawn = db_session.scalars(
+        select(ToolCallRecord).where(
+            ToolCallRecord.chat_session_id == chat.chat_session_id,
+            ToolCallRecord.tool_call_id == "spawn",
+        )
+    ).one()
+    worker = db_session.scalars(
+        select(ChatSession).where(
+            ChatSession.spawned_by_message_id == spawn.parent_chat_message_id
+        )
+    ).one()
+    finished = db_session.scalars(
+        select(ChatMessage).where(
+            ChatMessage.chat_session_id == worker.id,
+            ChatMessage.message_type == MessageType.ASSISTANT,
+        )
+    ).one()
+    db_session.add(
+        ChatInput(
+            recipient_session_id=worker.id,
+            message_id=str(uuid4()),
+            source=InputSource.AGENT,
+            invoking_tool_call_id=spawn.id,
+            source_response_id=spawn.parent_chat_message_id,
+            target_response_id=finished.id,
+            root_response_id=spawn.parent_chat_message_id,
+            delivery=MessageDelivery.QUEUE,
+            content="Follow up",
+            max_steps=2,
+        )
+    )
+    db_session.commit()
+    dispatch_pending_chat_messages(chat.chat_session_id, chat.user.id)
+
+    def hosted_exec_ran() -> bool:
+        db_session.expire_all()
+        return (
+            db_session.scalars(
+                select(ToolCallRecord).where(
+                    ToolCallRecord.chat_session_id == worker.id,
+                    ToolCallRecord.tool_call_id == "hosted-exec",
+                )
+            ).first()
+            is not None
+        )
+
+    _wait_until(hosted_exec_ran)
+    assert chat_turn_work.wait_idle(timeout=30)
+    _wait_until(lambda: _attachments(node, ref) == copied)
+    hosted_generation = cache.get(copy_generation_key(chat.chat_session_id))
+    assert hosted_generation is not None
+    assert int(hosted_generation) > int(generation)
+    assert exec_descriptions["root"].endswith(CHAT_FILES_LAYOUT)
+    assert exec_descriptions["hosted"] == exec_descriptions["root"]
+
+
+@pytest.mark.usefixtures("sandbox", "node")
+@pytest.mark.parametrize("tool", ["write", "edit", "apply_patch"])
+def test_a_change_to_an_attachment_says_that_it_is_not_saved(
+    make_tools: MakeTools, tool: str
+) -> None:
+    tools = make_tools()
+    _run(tools.write, {"file_path": "attachments/a.txt", "content": "x\n"})
+    _run(tools.write, {"file_path": "notes.txt", "content": "x\n"})
+    run = {"write": tools.write, "edit": tools.edit, "apply_patch": tools.apply_patch}
+
+    def changed(path: str) -> str:
+        arguments: dict[str, JsonValue] = (
+            {"file_path": path, "content": "y\n"}
+            if tool == "write"
+            else {"file_path": path, "old_string": "x", "new_string": "y"}
+            if tool == "edit"
+            else {
+                "input": f"*** Begin Patch\n*** Update File: {path}\n@@\n-x\n+y\n"
+                "*** End Patch"
+            }
+        )
+        result, _ = _run(run[tool], arguments)
+        assert not result.is_error, result.content
+        return result.content
+
+    assert changed("attachments/a.txt").endswith(f"\n\n{ATTACHMENTS_NOT_SAVED_NOTE}")
+    assert ATTACHMENTS_NOT_SAVED_NOTE not in changed("notes.txt")
 
 
 # open_url
