@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import update
+from sqlalchemy import text, update
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.postgres_tool import (
@@ -23,6 +23,7 @@ from ee.onyx.db.postgres_tool import (
 )
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import Tag, TimeRange
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType, HierarchyNodeType
 from onyx.db.models import (
     ConnectorCredentialPair,
@@ -36,6 +37,7 @@ from onyx.db.models import Document as DbDocument
 from onyx.db.models import Tag as TagRow
 from onyx.db.postgres_tool import (
     DocumentGroupBy,
+    PostgresToolQueryTimeoutError,
     _count_hierarchy_nodes,
     _query_hierarchy_nodes,
     count_documents_for_tool,
@@ -43,6 +45,7 @@ from onyx.db.postgres_tool import (
     count_hierarchy_nodes_for_tool,
     query_documents_for_tool,
     query_hierarchy_nodes_for_tool,
+    tool_transaction,
 )
 from onyx.db.postgres_tool import (
     _hierarchy_node_access_filter as mit_hierarchy_filter,
@@ -497,6 +500,28 @@ def test_ordering_and_limit(db_session: Session, doc_env: DocEnv) -> None:
         db_session, None, [], title_contains=tag, limit=0
     ).rows
     assert len(clamped) == 1
+
+
+def test_tool_transaction_reads_one_snapshot_under_the_timeout() -> None:
+    with get_session_with_current_tenant() as db_session:
+        with tool_transaction(db_session):
+            settings = db_session.execute(
+                text(
+                    "SELECT current_setting('transaction_isolation'), "
+                    "current_setting('statement_timeout')"
+                )
+            ).one()
+        db_session.rollback()
+    assert tuple(settings) == ("repeatable read", "10s")
+
+
+def test_tool_transaction_converts_a_timeout_in_any_statement() -> None:
+    with get_session_with_current_tenant() as db_session:
+        with pytest.raises(PostgresToolQueryTimeoutError):
+            with tool_transaction(db_session):
+                db_session.execute(text("SET LOCAL statement_timeout = '10ms'"))
+                db_session.execute(text("SELECT pg_sleep(1)"))
+        db_session.rollback()
 
 
 # ============================== Paging ==============================
