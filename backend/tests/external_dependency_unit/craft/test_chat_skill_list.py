@@ -332,7 +332,9 @@ def test_a_custom_chat_skill_copies_its_folder_and_names_it(
     output = io.BytesIO()
     with zipfile.ZipFile(output, "w") as bundle_zip:
         bundle_zip.writestr(
-            "SKILL.md", f"---\nname: {name}\ndescription: Copy\n---\n\nRun it.\n"
+            "SKILL.md",
+            f"---\nname: {name}\ndescription: Copy\n---\n\n"
+            "Run python ${CLAUDE_SKILL_DIR}/scripts/run.py.\n",
         )
         bundle_zip.writestr("scripts/run.py", "print(1)\n")
     ingested = ingest_skill_bundle(
@@ -350,13 +352,16 @@ def test_a_custom_chat_skill_copies_its_folder_and_names_it(
 
     bundle = build_chat_custom_skill_bundle(skill, author, db_session)
     assert bundle is not None
+    folder = f"{CHAT_CUSTOM_SKILLS_PATH}/{name}"
     with zipfile.ZipFile(io.BytesIO(bundle.zip_bytes)) as zf:
         assert sorted(zf.namelist()) == [f"{name}/SKILL.md", f"{name}/scripts/run.py"]
+        copied_md = zf.read(f"{name}/SKILL.md").decode()
 
+    # The text the model reads and the copy name the same script path.
     key = (skill.version_id, skill.path)
     with_sandbox = read_chat_skills_md([skill], author.id, db_session, sandbox=True)
-    assert with_sandbox[key].startswith(
-        f"Skill files: {CHAT_CUSTOM_SKILLS_PATH}/{name}/. "
-    )
+    assert with_sandbox[key].startswith(f"Skill files: {folder}/. ")
+    assert f"Run python {folder}/scripts/run.py." in with_sandbox[key]
+    assert f"Run python {folder}/scripts/run.py." in copied_md
     without = read_chat_skills_md([skill], author.id, db_session, sandbox=False)
     assert without[key].startswith(f"---\nname: {name}\n")

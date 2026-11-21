@@ -201,8 +201,9 @@ _SKILLS_SYNC_LOCK_PREFIX = "sandbox_fc:skills_sync:"
 _SKILLS_SYNC_LOCK_SECONDS = 5 * 60.0
 _SKILLS_INSTALL_LOCK_PREFIX = "sandbox_fc:skills_install:"
 _SKILL_INSTALL_DEADLINE_SECONDS = 120.0
-# Unzips a skill's folder next to the old copy, then swaps it in, so a
-# failed copy leaves the old one. Deletes the zip in all cases.
+# Unzips a skill's folder next to the old copy, then swaps the two with
+# renames, so a failed copy leaves the old one whole. The old copy is deleted
+# after the swap. Deletes the zip in all cases.
 _INSTALL_SKILL_SCRIPT = """
 import os, shutil, sys, tempfile, zipfile
 src, root, name = sys.argv[1:]
@@ -212,8 +213,16 @@ try:
     with zipfile.ZipFile(src) as zf:
         zf.extractall(tmp)
     dest = os.path.join(root, name)
-    shutil.rmtree(dest, ignore_errors=True)
-    os.rename(os.path.join(tmp, name), dest)
+    old = os.path.join(tmp, ".old")
+    moved = os.path.lexists(dest)
+    if moved:
+        os.rename(dest, old)
+    try:
+        os.rename(os.path.join(tmp, name), dest)
+    except BaseException:
+        if moved:
+            os.rename(old, dest)
+        raise
 finally:
     shutil.rmtree(tmp, ignore_errors=True)
     os.unlink(src)

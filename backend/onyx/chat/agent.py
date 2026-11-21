@@ -5,7 +5,6 @@ from functools import partial
 from pydantic import JsonValue
 
 from onyx.agents.agent_coordination import MAX_CHILD_DEPTH
-from onyx.agents.compaction import CheckpointMismatchError, working_messages
 from onyx.agents.models import (
     AgentState,
     CompactionCheckpoint,
@@ -255,9 +254,6 @@ class ChatAgent(Agent, RestorableFeature):
             None,
         )
         self._sandbox_turn = sandbox_turn
-        # The compaction at the run's start bounds the skills that copy to
-        # the sandbox to those the model still sees.
-        self._skills_checkpoint = checkpoint
         # The root agent's sandbox and code mode results end with the file
         # copy status line when it changed. Subagents and the calls inside a
         # code mode program never read it, so they cannot use it up.
@@ -285,6 +281,11 @@ class ChatAgent(Agent, RestorableFeature):
             generation_context=GenerationContext(
                 flow=LLMFlow.CHAT_RESPONSE, user_identity=user_identity
             ),
+            # Before each call, also a call on a resume or in a program, the
+            # skills in the model's window copy to the sandbox.
+            before_tool_call=self._want_used_skills
+            if sandbox_turn is not None
+            else None,
             after_tool_call=self._finalize_tool,
             # In a chat with a sandbox, large results go to a file in the VM.
             prepare_tool_result=partial(self._prepare_sandbox_result, sandbox_turn)
@@ -405,23 +406,11 @@ class ChatAgent(Agent, RestorableFeature):
             inject_memories_in_prompt=self.inject_memories,
         )
 
-    def _prepare_step(self, state: StepInput) -> PreparedStep:
+    def _want_used_skills(self, context: ToolCallContext) -> None:
         if self._sandbox_turn is not None:
-            source = [
-                *state.history,
-                *state.input_messages,
-                *state.messages,
-                *state.received_inputs,
-            ]
-            try:
-                window = working_messages(
-                    source,
-                    self._skills_checkpoint,
-                    input_start=len(state.history) if state.input_messages else None,
-                )
-            except CheckpointMismatchError:
-                window = source
-            self._sandbox_turn.want_skills(used_skill_names(window))
+            self._sandbox_turn.want_skills(used_skill_names(context.messages))
+
+    def _prepare_step(self, state: StepInput) -> PreparedStep:
         previous = state.previous
         if previous is None:
             if self.code_cells is not None:

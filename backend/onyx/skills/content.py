@@ -32,6 +32,7 @@ from onyx.skills.bundle import (
     strip_skill_md_frontmatter,
 )
 from onyx.skills.models import ChatSkill, CustomSkillBundleContents
+from onyx.skills.rendering import resolve_skill_dir_placeholder
 from onyx.skills.validation import read_stored_bundle_bytes
 from onyx.utils.logger import setup_logger
 
@@ -138,7 +139,8 @@ def read_chat_skills_md(
     sandbox: bool,
 ) -> dict[SkillKey, str]:
     """``sandbox``: the turn has the sandbox tools, so a custom skill's text
-    names the folder that its files copy to."""
+    names the folder that its files copy to, with ``${CLAUDE_SKILL_DIR}``
+    resolved to it as in the copy."""
     skill_md = read_versions_skill_md(
         {
             (skill.version_id, skill.path)
@@ -153,12 +155,10 @@ def read_chat_skills_md(
         if definition is None:
             key = (skill.version_id, skill.path)
             if sandbox and key in skill_md:
-                skill_md[key] = (
-                    CUSTOM_SKILL_FILES_LINE.format(
-                        folder=f"{CHAT_CUSTOM_SKILLS_PATH}/{skill.name}"
-                    )
-                    + skill_md[key]
-                )
+                folder = f"{CHAT_CUSTOM_SKILLS_PATH}/{skill.name}"
+                skill_md[key] = CUSTOM_SKILL_FILES_LINE.format(
+                    folder=folder
+                ) + resolve_skill_dir_placeholder(skill_md[key], folder)
             continue
         try:
             instructions = read_builtin_skill_instructions(definition, skill.path)
