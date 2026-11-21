@@ -1,5 +1,6 @@
+import type { ReactNode } from "react";
+import { Section } from "@opal/layouts";
 import { cn } from "@opal/utils";
-import { ReactNode } from "react";
 
 interface FloatingFooterProps {
   left?: ReactNode;
@@ -7,33 +8,32 @@ interface FloatingFooterProps {
   codeBackground?: boolean;
 }
 
+/** A preview's actions, over the bottom of its content on a fading background. */
 export default function FloatingFooter({
   left,
   right,
   codeBackground,
 }: FloatingFooterProps) {
   return (
-    <div
+    <Section
+      flexDirection="row"
+      justifyContent="between"
+      height="auto"
+      padding={4}
       className={cn(
-        "absolute bottom-0 start-0 end-0",
-        "flex items-center justify-between",
-        "p-4 pointer-events-none w-full"
+        "absolute bottom-0 start-0 end-0 pointer-events-none",
+        "bg-linear-to-t from-40% to-transparent",
+        codeBackground
+          ? "from-background-code-01"
+          : "from-background-neutral-00"
       )}
-      style={{
-        background: `linear-gradient(to top, var(--background-${
-          codeBackground ? "code-01" : "tint-01"
-        }) 40%, transparent)`,
-      }}
     >
-      {/* Left slot */}
       <div className="pointer-events-auto">{left}</div>
-
-      {/* Right slot */}
       {right ? (
         <div className="pointer-events-auto rounded-12 bg-background-tint-00 p-1 shadow-lg">
           {right}
         </div>
       ) : null}
-    </div>
+    </Section>
   );
 }

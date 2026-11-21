@@ -505,6 +505,9 @@ export interface PublishedFile {
   artifact_id: string | null;
   // The publish's number in its artifact, from 1. Null with artifact_id.
   version: number | null;
+  // A JPEG of the first page of a PDF, PowerPoint or Word file that rendered
+  // when it was published, from /api/chat/file/{thumbnail_file_id}
+  thumbnail_file_id: string | null;
 }
 
 export interface PublishFilesEnd extends BaseObj {

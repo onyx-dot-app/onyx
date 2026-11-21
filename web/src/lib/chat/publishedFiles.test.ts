@@ -31,6 +31,7 @@ function published(
     mime_type: "text/markdown",
     artifact_id: `artifact${path}`,
     version,
+    thumbnail_file_id: null,
   };
 }
 

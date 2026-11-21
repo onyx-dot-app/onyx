@@ -374,6 +374,7 @@ describe("usePublishedFiles", () => {
           mime_type: "text/markdown",
           artifact_id: "artifact-1",
           version: 1,
+          thumbnail_file_id: null,
         },
       ],
       error: null,
