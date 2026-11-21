@@ -1,0 +1,84 @@
+---
+title: "Jira Service Management"
+description: "Access service requests from Jira Service Management"
+---
+
+## How it works
+
+The Jira Service Management connector indexes the requests (tickets) of one
+service project. Onyx checks for new and changed requests on the connector's
+refresh schedule.
+
+For every request, this connector pulls:
+
+- Summary
+- Description
+- Public comments (internal, agent-only comments are excluded unless the
+  connector is configured to include them)
+- [Request metadata](#indexed-metadata)
+
+The connector can index only the requests that its Atlassian account can
+access. An API token does not give its owner additional permissions.
+
+## Setup
+
+### 1. Choose a connector account
+
+Use a dedicated Atlassian account for the connector. The account needs to be
+able to view the requests of the service project you want to index: add it
+to the project as a service desk agent, or give it access through the
+project's customer permissions if it only needs to read requests it can see
+as a customer.
+
+### 2. Create the API token
+
+For Jira Cloud, create an API token from the connector account.
+Follow Atlassian's [API token
+instructions](https://support.atlassian.com/atlassian-account/docs/manage-api-tokens-for-your-atlassian-account/).
+
+For Jira Service Management on Data Center, create a personal access token
+instead and leave the email field empty when you configure the credential in
+Onyx.
+
+## Configure the connector
+
+<Steps>
+  <Step title="Provide credentials">
+    Go to **Admin Panel → Connectors** and select **Jira Service
+    Management**. Select **New Jira Service Management Account**. For Cloud,
+    enter the connector account's email address and API token. For Data
+    Center, leave the email field empty and enter the personal access token.
+
+    Select **Create**.
+  </Step>
+
+  <Step title="Configure the source">
+    Enter the site in **Site URL**. For Cloud, the URL is usually
+    `https://your-domain.atlassian.net`.
+
+    Enter the **Project Key** of the service project to index, such as
+    `ITSM`. The connector indexes all requests from that one project.
+
+    Enable **Include Internal Comments** only if agent-only comments should
+    be indexed as well. They are excluded by default.
+  </Step>
+
+  <Step title="Create the connector">
+    Select **Create Connector**. It is enabled when the required checks pass.
+  </Step>
+</Steps>
+
+### Indexed metadata
+
+```
+- Request Key
+- Request Type
+- Status
+- Priority
+- Reporter
+- Assignee
+- Project Name
+- Project Key
+- Created
+- Updated
+```

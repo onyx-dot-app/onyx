@@ -474,6 +474,9 @@
         "jira": {
           "description": "Atlassian 이슈 트래커"
         },
+        "jiraServiceManagement": {
+          "description": "Atlassian service desk requests"
+        },
         "productboard": {
           "description": "제품 관리"
         },
@@ -3314,6 +3317,24 @@
             "comment_email_blacklist": {
               "label": "댓글 이메일 차단 목록",
               "description": "특정 봇을 무시할 때 유용합니다. 댓글을 인덱싱하지 않을 사용자의 이메일을 추가하세요."
+            }
+          }
+        },
+        "jira_service_management": {
+          "description": "Configure Jira Service Management connector",
+          "subtext": "Configure which Jira Service Management content to index. Onyx indexes the requests of one service project.",
+          "fields": {
+            "jira_base_url": {
+              "label": "Site URL",
+              "placeholder": "https://your-domain.atlassian.net"
+            },
+            "project_key": {
+              "label": "Project Key",
+              "description": "The key of the service project to index (e.g., 'ITSM')."
+            },
+            "include_internal_comments": {
+              "label": "Include Internal Comments",
+              "description": "Index internal (agent-only) comments in addition to public comments."
             }
           }
         },
