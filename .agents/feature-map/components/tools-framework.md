@@ -167,8 +167,9 @@ and `skills_read` (`tools/tool_implementations/skills/skill_tools.py`) to the
 chat agent's configured tools when the turn's user has a chat skill
 ([[skills]]): the agent's tools and the request's tool options do not
 remove them. Restored and child agents receive them with the other configured
-tools. The tools hold only the user and read the user's current chat skills
-on each call; `skills_read` checks that the user can still see the skill and
+tools. The tools hold the user and `built_ins` (the turn's `sandbox_tools`;
+chat built-ins need the VM) and read the user's current chat skills on each
+call; `skills_read` checks that the user can still see the skill and
 returns its SKILL.md, frontmatter included, up to 32,000 characters per call
 (`SKILL_READ_MAX_CHARS`). A longer text ends with a note that gives the
 `start_char` offset of the next call. The Deep Research orchestrator binds
@@ -183,8 +184,8 @@ a short JSON summary, not the SKILL.md text.
 `ChatTurnSetup.sandbox_tools` is set. `chat/process_message.py:prepare_chat_turn`
 sets it in one expression: harness sandboxes run
 (`microvm/configs.py:HARNESS_SANDBOX_ENABLED`), the user is not anonymous, the
-chat is not incognito, the turn has one response, and no Slack or Discord bot
-sent it (`SendMessageRequest.origin`). The agent's tools and
+chat is not incognito, the turn has one response and is not Deep Research,
+and no Slack or Discord bot sent it (`SendMessageRequest.origin`). The agent's tools and
 `allowed_tool_ids` do not remove them. They have no tool catalog rows, so no
 admin switch, picker entry or forced-tool request reaches them.
 
