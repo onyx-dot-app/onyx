@@ -257,20 +257,6 @@
   /* Preserves whitespace and wraps text */
 }
 
-.collapsible {
-  max-height: 300px;
-  transition:
-    max-height 0.5s ease-in-out,
-    opacity 0.5s ease-in-out;
-  opacity: 1;
-}
-
-.collapsible-closed {
-  max-height: 0;
-  opacity: 0;
-  overflow: hidden;
-}
-
 .prevent-scroll {
   overscroll-behavior-y: none;
 }
