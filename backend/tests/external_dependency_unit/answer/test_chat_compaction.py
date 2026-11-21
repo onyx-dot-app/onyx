@@ -302,6 +302,9 @@ def test_chat_compaction_preserves_current_files_and_compacts_them_after_answeri
 ) -> None:
     user = create_test_user(db_session, "attachment-compaction")
     session = create_chat_session(db_session, user)
+    # A named chat is not auto-named, so `summarize` counts only summaries.
+    session.description = "File comparison"
+    db_session.commit()
     file_store = get_default_file_store()
     files: list[UserFile] = []
     bodies = [
@@ -454,6 +457,9 @@ def test_shorter_question_recovers_after_oversized_input(
 ) -> None:
     user = create_test_user(db_session, "oversized-chat")
     session = create_chat_session(db_session, user)
+    # A named chat is not auto-named, so `summarize` counts only summaries.
+    session.description = "Oversized input"
+    db_session.commit()
     oversized = "Oversized input. " * 10000
     model = ScriptedLLM([Delta(content="Hello")], max_input_tokens=8000)
     try:
@@ -522,6 +528,10 @@ def test_compacted_chat_reloads_continues_and_regenerates_selected_branch(
 ) -> None:
     user = create_test_user(db_session, "compacted-chat")
     session = create_chat_session(db_session, user)
+    # A named chat is not auto-named, so naming makes no `invoke` call on the
+    # chat's model, and `summarize` counts only summaries.
+    session.description = "Kiwi project"
+    db_session.commit()
     original_input = "The project is called Kiwi. " + "historical detail " * 10000
     summary = (
         ""
