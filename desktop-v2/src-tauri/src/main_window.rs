@@ -286,11 +286,22 @@ fn watch_downloads(app: &AppHandle, view: &webkit2gtk::WebView) {
             let app = app.clone();
             download.connect_finished(move |download| {
                 let success = !failed.get();
-                let path = download.destination().map(std::path::PathBuf::from);
+                let path = download.destination().map(|d| download_path(&d));
                 notify_download(&app, path.as_deref(), success);
             });
         });
     });
+}
+
+/// The local path of a download's destination. WebKitGTK 4.x reports a
+/// `file://` URI; a plain path is kept as it is.
+#[cfg(any(target_os = "linux", test))]
+fn download_path(destination: &str) -> std::path::PathBuf {
+    Url::parse(destination)
+        .ok()
+        .filter(|url| url.scheme() == "file")
+        .and_then(|url| url.to_file_path().ok())
+        .unwrap_or_else(|| std::path::PathBuf::from(destination))
 }
 
 /// The notification text for a finished download.
@@ -877,10 +888,22 @@ pub fn spawn_session_renewal(app: &AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::{
-        classify, classify_popup, download_notice, is_web_sign_in, return_path, server_url_join,
-        LinkAction,
+        classify, classify_popup, download_notice, download_path, is_web_sign_in, return_path,
+        server_url_join, LinkAction,
     };
     use url::Url;
+
+    #[test]
+    fn download_destinations_become_local_paths() {
+        assert_eq!(
+            download_path("file:///home/me/Downloads/report%20(1).csv"),
+            std::path::PathBuf::from("/home/me/Downloads/report (1).csv")
+        );
+        assert_eq!(
+            download_path("/home/me/Downloads/a.csv"),
+            std::path::PathBuf::from("/home/me/Downloads/a.csv")
+        );
+    }
 
     #[test]
     fn a_finished_download_says_where_it_is() {
