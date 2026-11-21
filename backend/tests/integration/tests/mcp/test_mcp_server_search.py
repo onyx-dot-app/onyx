@@ -6,6 +6,7 @@ import asyncio
 import json
 import os
 from collections.abc import Awaitable, Callable
+from contextlib import ExitStack
 from typing import Any
 
 import pytest
@@ -18,14 +19,17 @@ from onyx.db.enums import AccessType, Permission
 from tests.integration.common_utils.constants import MCP_SERVER_URL
 from tests.integration.common_utils.managers.api_key import APIKeyManager
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
-from tests.integration.common_utils.managers.document import DocumentManager
+from tests.integration.common_utils.managers.document import (
+    DocumentManager,
+    IngestionManager,
+)
 from tests.integration.common_utils.managers.document_set import DocumentSetManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.pat import PATManager
 from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
-from tests.integration.common_utils.test_models import DATestUser
+from tests.integration.common_utils.test_models import DATestCCPair, DATestUser
 
 # Constants
 MCP_SEARCH_TOOL = "search_indexed_documents"
@@ -423,17 +427,45 @@ def test_mcp_search_scopes_to_agent(
     )
 
 
+def _pat_headers_with_cleanup(
+    cleanup: ExitStack,
+    user: DATestUser,
+    name: str,
+    scopes: list[Permission] | None = None,
+) -> dict[str, str]:
+    pat = PATManager.create(
+        name=name, expiration_days=7, user_performing_action=user, scopes=scopes
+    )
+    cleanup.callback(PATManager.revoke, pat.id, user)
+    return {"Authorization": f"Bearer {pat.token}"}
+
+
+def _cc_pair_cleanup(cc_pair: DATestCCPair, user: DATestUser) -> None:
+    CCPairManager.pause_cc_pair(cc_pair=cc_pair, user_performing_action=user)
+    CCPairManager.delete(cc_pair=cc_pair, user_performing_action=user)
+
+
 def test_mcp_query_metadata_counts_and_lists_documents(
     admin_user: DATestUser,
 ) -> None:
     """The metadata tool reaches the Postgres query layer through the API."""
+    with ExitStack() as cleanup:
+        _query_metadata_counts_and_lists_documents(admin_user, cleanup)
+
+
+def _query_metadata_counts_and_lists_documents(
+    admin_user: DATestUser, cleanup: ExitStack
+) -> None:
     api_key = APIKeyManager.create(user_performing_action=admin_user)
+    cleanup.callback(APIKeyManager.delete, api_key, admin_user)
     cc_pair = CCPairManager.create_from_scratch(user_performing_action=admin_user)
+    cleanup.callback(_cc_pair_cleanup, cc_pair, admin_user)
     tag = os.urandom(4).hex()
     doc = DocumentManager.seed_doc_with_content(
         cc_pair, f"metadata query {tag}", api_key, document_id=f"mcp-meta-{tag}"
     )
-    headers = _auth_headers(admin_user, name="mcp-query-metadata")
+    cleanup.callback(IngestionManager.delete, doc.id, api_key)
+    headers = _pat_headers_with_cleanup(cleanup, admin_user, "mcp-query-metadata")
 
     async def _action(session: ClientSession) -> list[CallToolResult]:
         await session.initialize()
@@ -468,12 +500,18 @@ def test_mcp_query_metadata_counts_and_lists_documents(
 def test_mcp_query_metadata_needs_read_chat_for_chat_history(
     admin_user: DATestUser,
 ) -> None:
-    """A connected app holds read:search only: no chat history through it."""
-    headers = _auth_headers(
-        admin_user,
-        name="mcp-query-metadata-search-only",
-        scopes=[Permission.READ_SEARCH],
-    )
+    """A token with read:search only gets no chat history."""
+    with ExitStack() as cleanup:
+        headers = _pat_headers_with_cleanup(
+            cleanup,
+            admin_user,
+            "mcp-query-metadata-search-only",
+            scopes=[Permission.READ_SEARCH],
+        )
+        _query_chat_history_with_search_only_token(headers)
+
+
+def _query_chat_history_with_search_only_token(headers: dict[str, str]) -> None:
 
     async def _action(session: ClientSession) -> list[CallToolResult]:
         await session.initialize()

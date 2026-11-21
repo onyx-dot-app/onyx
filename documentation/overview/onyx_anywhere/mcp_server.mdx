@@ -203,8 +203,8 @@ which can be a selected chunk rather than the entire document. There is no `limi
 
 ### query_metadata
 
-Get exact counts and complete lists from the metadata of the documents that you can access,
-and from your own Onyx chat history. Use it for questions that a search cannot answer completely,
+Get exact counts and lists from the metadata of the documents that you can access, and from your own Onyx chat history.
+Use it for questions that a search cannot answer completely,
 such as "How many Jira tickets changed last week?" or "List every document with 'pricing' in the title".
 It reads titles, dates, owners, sources, and folders. It does not read document text.
 Use `search_indexed_documents` for questions about content.
@@ -235,7 +235,8 @@ A `*_before` date is not included in the range.
 ```
 
 The response has a `result` string with the count or the rows. Listed documents include their links.
-When a document list has more pages, the result ends with a `next_cursor` value.
+When a document list has more pages, the result ends with a `next_cursor` value. Only document lists have pages.
+A list from another table stops at `limit` rows, so use narrower filters to see the rest.
 
 ### search_web
 
