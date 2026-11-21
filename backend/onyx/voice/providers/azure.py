@@ -23,13 +23,14 @@ for API reference.
 
 import asyncio
 import re
-from collections.abc import AsyncIterator
+from collections.abc import AsyncGenerator
 from typing import Any
 from urllib.parse import urlparse
 from xml.sax.saxutils import escape, quoteattr
 
 import aiohttp
 
+from onyx.llm.cancellation import isolated_async_context
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.llm_utils import traced_llm_call
 from onyx.utils.logger import setup_logger
@@ -631,9 +632,10 @@ class AzureVoiceProvider(VoiceProviderInterface):
         display_text = result.get("DisplayText", "")
         return display_text if isinstance(display_text, str) else ""
 
+    @isolated_async_context
     async def synthesize_stream(
         self, text: str, voice: str | None = None, speed: float = 1.0
-    ) -> AsyncIterator[bytes]:
+    ) -> AsyncGenerator[bytes, None]:
         """
         Convert text to audio using Azure TTS with streaming.
 
