@@ -11818,7 +11818,6 @@
       },
       "incognitoStart": {
         "ariaLabel": "بدء محادثة تخفٍ",
-        "lockedTooltip": "لا يمكن تفعيل التخفي إلا قبل بدء المحادثة",
         "tooltip": "محادثة تخفٍ"
       },
       "mode": {
