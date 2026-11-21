@@ -8100,6 +8100,13 @@
         },
         "setDefaultButton": {
           "label": "设为默认"
+        },
+        "deleteButton": {
+          "ariaLabel": "删除 {title}",
+          "tooltip": "删除"
+        },
+        "reconnectButton": {
+          "label": "重新连接"
         }
       }
     },
@@ -9059,6 +9066,9 @@
       "provider": {
         "connected": {
           "label": "已连接"
+        },
+        "disconnected": {
+          "title": "{label}（已断开连接）"
         }
       },
       "setupModal": {
@@ -9078,7 +9088,9 @@
       "toasts": {
         "connected": "{label} 已连接",
         "disconnected": "{label} 已断开连接",
-        "unexpectedError": "发生意外错误。"
+        "unexpectedError": "发生意外错误。",
+        "deleted": "已删除 {label}",
+        "reconnected": "已重新连接 {label}"
       },
       "providers": {
         "braintrust": {
@@ -9118,6 +9130,14 @@
             }
           }
         }
+      },
+      "deleteModal": {
+        "body": "**{label}** 的 API 密钥和设置将被删除。如需再次发送追踪,请重新进行设置。",
+        "description": "删除此提供商的 API 密钥和设置。",
+        "submit": {
+          "label": "删除"
+        },
+        "title": "删除 {label}"
       }
     },
     "usage": {

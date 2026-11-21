@@ -8100,6 +8100,13 @@
         },
         "setDefaultButton": {
           "label": "Definir como padrão"
+        },
+        "deleteButton": {
+          "ariaLabel": "Excluir {title}",
+          "tooltip": "Excluir"
+        },
+        "reconnectButton": {
+          "label": "Reconectar"
         }
       }
     },
@@ -9059,6 +9066,9 @@
       "provider": {
         "connected": {
           "label": "Conectado"
+        },
+        "disconnected": {
+          "title": "{label} (desconectado)"
         }
       },
       "setupModal": {
@@ -9078,7 +9088,9 @@
       "toasts": {
         "connected": "{label} conectado",
         "disconnected": "{label} desconectado",
-        "unexpectedError": "Ocorreu um erro inesperado."
+        "unexpectedError": "Ocorreu um erro inesperado.",
+        "deleted": "{label} excluído",
+        "reconnected": "{label} reconectado"
       },
       "providers": {
         "braintrust": {
@@ -9118,6 +9130,14 @@
             }
           }
         }
+      },
+      "deleteModal": {
+        "body": "A chave de API e as configurações de **{label}** serão excluídas. Para enviar traces novamente, configure-o do início.",
+        "description": "Remove a chave de API e as configurações deste provedor.",
+        "submit": {
+          "label": "Excluir"
+        },
+        "title": "Excluir {label}"
       }
     },
     "usage": {

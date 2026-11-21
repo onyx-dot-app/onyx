@@ -8100,6 +8100,13 @@
         },
         "setDefaultButton": {
           "label": "Définir par défaut"
+        },
+        "deleteButton": {
+          "ariaLabel": "Supprimer {title}",
+          "tooltip": "Supprimer"
+        },
+        "reconnectButton": {
+          "label": "Reconnecter"
         }
       }
     },
@@ -9059,6 +9066,9 @@
       "provider": {
         "connected": {
           "label": "Connecté"
+        },
+        "disconnected": {
+          "title": "{label} (déconnecté)"
         }
       },
       "setupModal": {
@@ -9078,7 +9088,9 @@
       "toasts": {
         "connected": "{label} connecté",
         "disconnected": "{label} déconnecté",
-        "unexpectedError": "Une erreur inattendue est survenue."
+        "unexpectedError": "Une erreur inattendue est survenue.",
+        "deleted": "{label} supprimé",
+        "reconnected": "{label} reconnecté"
       },
       "providers": {
         "braintrust": {
@@ -9118,6 +9130,14 @@
             }
           }
         }
+      },
+      "deleteModal": {
+        "body": "La clé API et les paramètres de **{label}** seront supprimés. Pour envoyer de nouveau des traces, reconfigurez-le depuis le début.",
+        "description": "Supprime la clé API et les paramètres de ce fournisseur.",
+        "submit": {
+          "label": "Supprimer"
+        },
+        "title": "Supprimer {label}"
       }
     },
     "usage": {

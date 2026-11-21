@@ -8100,6 +8100,13 @@
         },
         "setDefaultButton": {
           "label": "Als Standard festlegen"
+        },
+        "deleteButton": {
+          "ariaLabel": "{title} löschen",
+          "tooltip": "Löschen"
+        },
+        "reconnectButton": {
+          "label": "Erneut verbinden"
         }
       }
     },
@@ -9059,6 +9066,9 @@
       "provider": {
         "connected": {
           "label": "Verbunden"
+        },
+        "disconnected": {
+          "title": "{label} (getrennt)"
         }
       },
       "setupModal": {
@@ -9078,7 +9088,9 @@
       "toasts": {
         "connected": "{label} verbunden",
         "disconnected": "{label} getrennt",
-        "unexpectedError": "Ein unerwarteter Fehler ist aufgetreten."
+        "unexpectedError": "Ein unerwarteter Fehler ist aufgetreten.",
+        "deleted": "{label} gelöscht",
+        "reconnected": "{label} erneut verbunden"
       },
       "providers": {
         "braintrust": {
@@ -9118,6 +9130,14 @@
             }
           }
         }
+      },
+      "deleteModal": {
+        "body": "Der API-Schlüssel und die Einstellungen für **{label}** werden gelöscht. Um wieder Traces zu senden, richten Sie den Anbieter neu ein.",
+        "description": "API-Schlüssel und Einstellungen dieses Anbieters entfernen.",
+        "submit": {
+          "label": "Löschen"
+        },
+        "title": "{label} löschen"
       }
     },
     "usage": {

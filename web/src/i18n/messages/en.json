@@ -8100,6 +8100,13 @@
         },
         "setDefaultButton": {
           "label": "Set as Default"
+        },
+        "deleteButton": {
+          "ariaLabel": "Delete {title}",
+          "tooltip": "Delete"
+        },
+        "reconnectButton": {
+          "label": "Reconnect"
         }
       }
     },
@@ -9059,6 +9066,9 @@
       "provider": {
         "connected": {
           "label": "Connected"
+        },
+        "disconnected": {
+          "title": "{label} (Disconnected)"
         }
       },
       "setupModal": {
@@ -9078,7 +9088,9 @@
       "toasts": {
         "connected": "{label} connected",
         "disconnected": "{label} disconnected",
-        "unexpectedError": "Unexpected error occurred."
+        "unexpectedError": "Unexpected error occurred.",
+        "deleted": "{label} deleted",
+        "reconnected": "{label} reconnected"
       },
       "providers": {
         "braintrust": {
@@ -9118,6 +9130,14 @@
             }
           }
         }
+      },
+      "deleteModal": {
+        "body": "The **{label}** API key and settings will be deleted. To send traces to it again, set it up from the start.",
+        "description": "Remove this provider's API key and settings.",
+        "submit": {
+          "label": "Delete"
+        },
+        "title": "Delete {label}"
       }
     },
     "usage": {
