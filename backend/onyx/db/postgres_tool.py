@@ -129,16 +129,18 @@ def tool_transaction(db_session: Session) -> Iterator[None]:
         yield
 
 
-def _execute_with_timeout(
-    db_session: Session, stmt: Select, timeout: str = _POSTGRES_TOOL_STATEMENT_TIMEOUT
-) -> Result:
+def _execute_with_timeout(db_session: Session, stmt: Select) -> Result:
     """Execute under the tool's statement timeout.
 
     The timeout is transaction-local and stays in effect for the rest of the
     transaction — callers are expected to use a session dedicated to the tool
     query.
     """
-    db_session.execute(select(func.set_config("statement_timeout", timeout, True)))
+    db_session.execute(
+        select(
+            func.set_config("statement_timeout", _POSTGRES_TOOL_STATEMENT_TIMEOUT, True)
+        )
+    )
     try:
         return db_session.execute(stmt)
     except OperationalError as e:
@@ -601,26 +603,31 @@ def try_count_documents_for_tool(
     scope: DocumentScope | None = None,
 ) -> int | None:
     """`count_documents_for_tool` under a short timeout, or None when it runs
-    out. A savepoint keeps the session usable after the cancel."""
-    stmt = _count_documents_stmt(
-        db_session,
-        user_email,
-        external_group_ids,
-        user_id=user_id,
-        prior_emails=prior_emails,
-        source_type=source_type,
-        title_contains=title_contains,
-        updated_after=updated_after,
-        updated_before=updated_before,
-        owned_by=owned_by,
-        parent_hierarchy_node_id=parent_hierarchy_node_id,
-        scope=scope,
-    )
+    out. A savepoint keeps the session usable after the cancel. The timeout
+    also covers the access lookups that build the statement."""
     savepoint = db_session.begin_nested()
     try:
-        count = _execute_with_timeout(
-            db_session, stmt, _OPTIONAL_COUNT_TIMEOUT
-        ).scalar_one()
+        with _timeouts_as_tool_errors():
+            db_session.execute(
+                select(
+                    func.set_config("statement_timeout", _OPTIONAL_COUNT_TIMEOUT, True)
+                )
+            )
+            stmt = _count_documents_stmt(
+                db_session,
+                user_email,
+                external_group_ids,
+                user_id=user_id,
+                prior_emails=prior_emails,
+                source_type=source_type,
+                title_contains=title_contains,
+                updated_after=updated_after,
+                updated_before=updated_before,
+                owned_by=owned_by,
+                parent_hierarchy_node_id=parent_hierarchy_node_id,
+                scope=scope,
+            )
+            count = db_session.execute(stmt).scalar_one()
     except PostgresToolQueryTimeoutError:
         savepoint.rollback()
         return None

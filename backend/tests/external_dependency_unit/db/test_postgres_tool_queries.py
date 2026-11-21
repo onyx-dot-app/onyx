@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import func, select, text, update
+from sqlalchemy import Select, func, select, text, update
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.postgres_tool import (
@@ -643,15 +643,19 @@ def test_every_order_pages_through_each_document_once(
     assert [doc_id for page in pages for doc_id in page] == expected
 
 
+@pytest.mark.parametrize("slow", ["statement", "preparation"])
 def test_optional_count_gives_up_and_keeps_the_session(
-    db_session: Session, monkeypatch: pytest.MonkeyPatch
+    db_session: Session, monkeypatch: pytest.MonkeyPatch, slow: str
 ) -> None:
+    def count_stmt(session: Session, *_args: object, **_kwargs: object) -> Select:
+        if slow == "preparation":
+            # As the access-pair lookup that builds the statement.
+            session.execute(select(func.pg_sleep(1)))
+            return select(func.count())
+        return select(func.pg_sleep(1))
+
     monkeypatch.setattr(postgres_tool_db, "_OPTIONAL_COUNT_TIMEOUT", "100ms")
-    monkeypatch.setattr(
-        postgres_tool_db,
-        "_count_documents_stmt",
-        lambda *_args, **_kwargs: select(func.pg_sleep(1)),
-    )
+    monkeypatch.setattr(postgres_tool_db, "_count_documents_stmt", count_stmt)
     assert try_count_documents_for_tool(db_session, None, []) is None
     # The cancel rolled back only the savepoint, with its shorter timeout.
     assert db_session.execute(text("SELECT 1")).scalar_one() == 1
