@@ -9068,7 +9068,7 @@
           "label": "Verbunden"
         },
         "disconnected": {
-          "title": "{label} (getrennt)"
+          "suffix": "(getrennt)"
         }
       },
       "setupModal": {

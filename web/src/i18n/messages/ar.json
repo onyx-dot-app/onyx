@@ -9068,7 +9068,7 @@
           "label": "متصل"
         },
         "disconnected": {
-          "title": "{label} (غير متصل)"
+          "suffix": "(غير متصل)"
         }
       },
       "setupModal": {

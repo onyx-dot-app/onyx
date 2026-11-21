@@ -9068,7 +9068,7 @@
           "label": "已连接"
         },
         "disconnected": {
-          "title": "{label}（已断开连接）"
+          "suffix": "（已断开连接）"
         }
       },
       "setupModal": {

@@ -9068,7 +9068,7 @@
           "label": "Connected"
         },
         "disconnected": {
-          "title": "{label} (Disconnected)"
+          "suffix": "(Disconnected)"
         }
       },
       "setupModal": {

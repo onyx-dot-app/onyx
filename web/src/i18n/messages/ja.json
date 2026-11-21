@@ -9068,7 +9068,7 @@
           "label": "接続済み"
         },
         "disconnected": {
-          "title": "{label} (接続解除済み)"
+          "suffix": "(接続解除済み)"
         }
       },
       "setupModal": {

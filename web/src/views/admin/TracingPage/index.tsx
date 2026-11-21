@@ -124,10 +124,9 @@ export default function TracingPage() {
               <ProviderCard
                 key={providerType}
                 icon={detail.logo}
-                title={
-                  disconnected
-                    ? t("provider.disconnected.title", { label: detail.label })
-                    : detail.label
+                title={detail.label}
+                titleSuffix={
+                  disconnected ? t("provider.disconnected.suffix") : undefined
                 }
                 description={t(detail.descriptionKey)}
                 status={connected ? "connected" : "disconnected"}

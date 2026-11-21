@@ -58,6 +58,8 @@ type ProviderStatus = "disconnected" | "connected" | "selected";
 interface ProviderCardProps {
   icon: IconFunctionComponent;
   title: string;
+  /** Lighter text after the title, e.g. "(Disconnected)". */
+  titleSuffix?: string;
   description: string;
   status: ProviderStatus;
   onConnect?: () => void;
@@ -95,6 +97,7 @@ const STATUS_TO_STATE = {
 export default function ProviderCard({
   icon,
   title,
+  titleSuffix,
   description,
   status,
   onConnect,
@@ -145,6 +148,7 @@ export default function ProviderCard({
           font="main-ui-action"
           icon={icon}
           title={title}
+          suffix={titleSuffix}
           description={description}
           padding={2}
           rightChildren={
