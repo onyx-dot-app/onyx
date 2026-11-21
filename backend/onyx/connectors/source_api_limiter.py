@@ -703,13 +703,16 @@ def microsoft_app_key(
 def microsoft_connector_budgets(ru_per_minute: int) -> dict[str, SourceApiBudget]:
     """The budgets of a connector whose admin set its RU per minute: the
     full value from the start, and Microsoft's limit for 24 hours at the
-    same tier. A 429 answer still cuts the window."""
+    same tier. A 429 answer still cuts the window. The value is for Graph
+    RU only: link downloads keep the learned download lane, whose pause the
+    connector shares with the app."""
     return {
         GRAPH_LIMITER_API: SourceApiBudget(
             per_credential=ru_per_minute,
             window_seconds=_MICROSOFT_WINDOW_SECONDS,
             per_credential_per_day=ru_per_minute * RU_PER_DAY_FACTOR,
-        )
+        ),
+        DOWNLOAD_LIMITER_API: MICROSOFT_DOWNLOAD_BUDGET,
     }
 
 
