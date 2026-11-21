@@ -60,7 +60,12 @@ from onyx.db.models import (
     SearchDoc,
 )
 from onyx.db.models import Tag as TagRow
-from onyx.db.postgres_tool_models import DocumentCursor, DocumentScope, GroupCount
+from onyx.db.postgres_tool_models import (
+    DocumentCursor,
+    DocumentOrder,
+    DocumentScope,
+    GroupCount,
+)
 from onyx.document_index.opensearch.constants import ASSUMED_DOCUMENT_AGE_DAYS
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 
@@ -71,6 +76,9 @@ POSTGRES_TOOL_MAX_LIMIT = 100
 # the tool runs synchronously in the chat loop, so a runaway query must die
 # rather than stall the response.
 _POSTGRES_TOOL_STATEMENT_TIMEOUT = "10s"
+# A listing's total is extra information; it must not make a cheap first page
+# slow or fail it.
+_OPTIONAL_COUNT_TIMEOUT = "2s"
 
 
 class PostgresToolQueryTimeoutError(Exception):
@@ -412,18 +420,37 @@ class DocumentPage(BaseModel):
     next_cursor: DocumentCursor | None
 
 
-def _after_document_cursor(cursor: DocumentCursor) -> ColumnElement[bool]:
-    """Documents after `cursor` in the listing order: `doc_updated_at` DESC
-    NULLS LAST, then `id` DESC."""
-    if cursor.updated_at is None:
-        return and_(Document.doc_updated_at.is_(None), Document.id < cursor.document_id)
+def _order_column(
+    order: DocumentOrder,
+) -> InstrumentedAttribute[datetime | None] | InstrumentedAttribute[str]:
+    if order in (DocumentOrder.UPDATED_DESC, DocumentOrder.UPDATED_ASC):
+        return Document.doc_updated_at
+    if order in (DocumentOrder.CREATED_DESC, DocumentOrder.CREATED_ASC):
+        return Document.doc_created_at
+    return Document.semantic_id
+
+
+def _after_document_cursor(
+    cursor: DocumentCursor, order: DocumentOrder
+) -> ColumnElement[bool]:
+    """Documents after `cursor` in `order`: the ordered column with NULLS
+    LAST, then `id` in the same direction."""
+    column = _order_column(order)
+    descending = order.is_descending
+    id_after = (
+        Document.id < cursor.document_id
+        if descending
+        else Document.id > cursor.document_id
+    )
+    if cursor.sort_value is None:
+        return and_(column.is_(None), id_after)
+    value_after = (
+        column < cursor.sort_value if descending else column > cursor.sort_value
+    )
     return or_(
-        Document.doc_updated_at < cursor.updated_at,
-        and_(
-            Document.doc_updated_at == cursor.updated_at,
-            Document.id < cursor.document_id,
-        ),
-        Document.doc_updated_at.is_(None),
+        value_after,
+        and_(column == cursor.sort_value, id_after),
+        column.is_(None),
     )
 
 
@@ -441,18 +468,23 @@ def query_documents_for_tool(
     owned_by: str | None = None,
     parent_hierarchy_node_id: int | None = None,
     scope: DocumentScope | None = None,
+    order: DocumentOrder = DocumentOrder.UPDATED_DESC,
     after: DocumentCursor | None = None,
     limit: int = POSTGRES_TOOL_DEFAULT_LIMIT,
 ) -> DocumentPage:
     """One page of accessible documents matching the filters, with their
-    connector source, newest first. `after` continues from the previous
-    page's `next_cursor`. Keyset paging: documents indexed between pages
-    cannot shift the pages. A document whose source timestamp changes between
-    pages moves in the order, so it can be skipped or repeated."""
+    connector source, in `order`. `after` continues from the previous page's
+    `next_cursor`, which must come from the same order. Keyset paging:
+    documents indexed between pages cannot shift the pages. A document whose
+    ordered value changes between pages moves in the order, so it can be
+    skipped or repeated. Only the newest-updated order (and its reverse) can
+    read its rows from an index; the other orders sort the matching
+    documents."""
+    column = _order_column(order)
     # One row per document even when cc_pairs of two sources grant access.
-    # The ordered timestamp is selected as a column too: the cursor must not
-    # read it from a Document the session loaded earlier.
-    stmt = select(Document, func.min(Connector.source), Document.doc_updated_at)
+    # The ordered value is selected as a column too: the cursor must not read
+    # it from a Document the session loaded earlier.
+    stmt = select(Document, func.min(Connector.source), column)
     stmt = _apply_document_filters(
         db_session,
         stmt,
@@ -470,22 +502,55 @@ def query_documents_for_tool(
         ensure_connector_join=True,
     )
     if after is not None:
-        stmt = stmt.where(_after_document_cursor(after))
+        stmt = stmt.where(_after_document_cursor(after, order))
     page_size = _clamp_limit(limit)
+    if order.is_descending:
+        order_by = (column.desc().nulls_last(), Document.id.desc())
+    else:
+        order_by = (column.asc().nulls_last(), Document.id.asc())
     # One extra row tells whether another page exists.
-    stmt = (
-        stmt.group_by(Document.id)
-        .order_by(Document.doc_updated_at.desc().nulls_last(), Document.id.desc())
-        .limit(page_size + 1)
-    )
+    stmt = stmt.group_by(Document.id).order_by(*order_by).limit(page_size + 1)
     result = list(_execute_with_timeout(db_session, stmt).tuples().all())
     rows = [(doc, source) for doc, source, _ in result[:page_size]]
     if len(result) <= page_size:
         return DocumentPage(rows=rows, next_cursor=None)
-    last_doc, _, last_updated_at = result[page_size - 1]
+    last_doc, _, last_value = result[page_size - 1]
     return DocumentPage(
         rows=rows,
-        next_cursor=DocumentCursor(updated_at=last_updated_at, document_id=last_doc.id),
+        next_cursor=DocumentCursor(sort_value=last_value, document_id=last_doc.id),
+    )
+
+
+def _count_documents_stmt(
+    db_session: Session,
+    user_email: str | None,
+    external_group_ids: list[str],
+    *,
+    user_id: UUID | None,
+    prior_emails: list[str] | None,
+    source_type: DocumentSource | None,
+    title_contains: str | None,
+    updated_after: datetime | None,
+    updated_before: datetime | None,
+    owned_by: str | None,
+    parent_hierarchy_node_id: int | None,
+    scope: DocumentScope | None,
+) -> Select:
+    stmt = select(func.count(distinct(Document.id))).select_from(Document)
+    return _apply_document_filters(
+        db_session,
+        stmt,
+        user_email,
+        external_group_ids,
+        user_id=user_id,
+        prior_emails=prior_emails,
+        source_type=source_type,
+        title_contains=title_contains,
+        updated_after=updated_after,
+        updated_before=updated_before,
+        owned_by=owned_by,
+        parent_hierarchy_node_id=parent_hierarchy_node_id,
+        scope=scope,
     )
 
 
@@ -505,10 +570,8 @@ def count_documents_for_tool(
     scope: DocumentScope | None = None,
 ) -> int:
     """Exact count of accessible documents matching the filters."""
-    stmt = select(func.count(distinct(Document.id))).select_from(Document)
-    stmt = _apply_document_filters(
+    stmt = _count_documents_stmt(
         db_session,
-        stmt,
         user_email,
         external_group_ids,
         user_id=user_id,
@@ -522,6 +585,55 @@ def count_documents_for_tool(
         scope=scope,
     )
     return _execute_with_timeout(db_session, stmt).scalar_one()
+
+
+def try_count_documents_for_tool(
+    db_session: Session,
+    user_email: str | None,
+    external_group_ids: list[str],
+    *,
+    user_id: UUID | None = None,
+    prior_emails: list[str] | None = None,
+    source_type: DocumentSource | None = None,
+    title_contains: str | None = None,
+    updated_after: datetime | None = None,
+    updated_before: datetime | None = None,
+    owned_by: str | None = None,
+    parent_hierarchy_node_id: int | None = None,
+    scope: DocumentScope | None = None,
+) -> int | None:
+    """`count_documents_for_tool` under a short timeout, or None when it runs
+    out. A savepoint keeps the session usable after the cancel. The timeout
+    also covers the access lookups that build the statement."""
+    savepoint = db_session.begin_nested()
+    try:
+        with _timeouts_as_tool_errors():
+            db_session.execute(
+                select(
+                    func.set_config("statement_timeout", _OPTIONAL_COUNT_TIMEOUT, True)
+                )
+            )
+            stmt = _count_documents_stmt(
+                db_session,
+                user_email,
+                external_group_ids,
+                user_id=user_id,
+                prior_emails=prior_emails,
+                source_type=source_type,
+                title_contains=title_contains,
+                updated_after=updated_after,
+                updated_before=updated_before,
+                owned_by=owned_by,
+                parent_hierarchy_node_id=parent_hierarchy_node_id,
+                scope=scope,
+            )
+            count = db_session.execute(stmt).scalar_one()
+    except PostgresToolQueryTimeoutError:
+        savepoint.rollback()
+        return None
+    # Also ends the savepoint's shorter timeout.
+    savepoint.rollback()
+    return count
 
 
 def count_documents_grouped_for_tool(

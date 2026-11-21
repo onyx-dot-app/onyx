@@ -52,8 +52,14 @@ from onyx.db.postgres_tool import (
     query_hierarchy_nodes_for_tool,
     query_search_docs_for_tool,
     tool_transaction,
+    try_count_documents_for_tool,
 )
-from onyx.db.postgres_tool_models import DocumentCursor, DocumentScope, GroupCount
+from onyx.db.postgres_tool_models import (
+    DocumentCursor,
+    DocumentOrder,
+    DocumentScope,
+    GroupCount,
+)
 from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.tools.constants import POSTGRES_TOOL_NAME
 from onyx.tools.interface import CITATIONS_PER_TOOL_CALL, Tool
@@ -150,7 +156,9 @@ _DATE_FIELDS = frozenset(
     }
 )
 
-_GENERAL_FIELDS = frozenset({"table", "count", "group_by", "limit", "cursor"})
+_GENERAL_FIELDS = frozenset(
+    {"table", "count", "group_by", "limit", "cursor", "order_by"}
+)
 
 
 def _prop(
@@ -168,7 +176,8 @@ _PARAMETER_SCHEMA: dict[str, dict[str, Any]] = {
     "count": _prop("boolean", "Return only the number of matching rows (default false)."),
     "group_by": _prop("string", "Only with count=true: break the count down. document: 'source' or 'owner'; chat_session/chat_message: 'month'.", ["source", "owner", "month"]),
     "limit": _prop("integer", f"Max rows to return (default {POSTGRES_TOOL_DEFAULT_LIMIT}, max {POSTGRES_TOOL_MAX_LIMIT}). For document listings, the page size."),
-    "cursor": _prop("string", "document listings only: the next_cursor value from the previous page, to get the next page. Use the same filters as that call."),
+    "cursor": _prop("string", "document listings only: the next_cursor value from the previous page, to get the next page. Use the same filters and order_by as that call."),
+    "order_by": _prop("string", "document listings only: row order (default 'updated_desc', newest first). With limit, gives the first N in that order in one call, e.g. the 10 oldest docs. Docs with no value sort last.", [o.value for o in DocumentOrder]),
     "source_type": _prop("string", "document/hierarchy_node: connector source id, e.g. 'confluence', 'google_drive', 'slack', 'web'."),
     "title_contains": _prop("string", "document: case-insensitive title substring, matched literally (% and _ are not wildcards; do not escape them)."),
     "updated_after": _prop("string", "document: ISO date lower bound on when the doc changed at its source. Docs with unknown source timestamps never match date filters."),
@@ -325,6 +334,18 @@ def _parse_args(llm_kwargs: dict[str, Any]) -> PostgresQueryArgs:
                 "'cursor' must be the next_cursor string from a previous page."
             )
 
+    order_by = DocumentOrder.UPDATED_DESC
+    if "order_by" in llm_kwargs:
+        if table != PostgresToolTable.DOCUMENT or count:
+            raise _reject("'order_by' applies only to document listings (count=false).")
+        try:
+            order_by = DocumentOrder(llm_kwargs["order_by"])
+        except ValueError:
+            raise _reject(
+                f"Invalid order_by {llm_kwargs['order_by']!r}. Valid values: "
+                f"{[o.value for o in DocumentOrder]}."
+            )
+
     limit = llm_kwargs.get("limit", POSTGRES_TOOL_DEFAULT_LIMIT)
     if isinstance(limit, bool) or not isinstance(limit, int):
         raise _reject("'limit' must be an integer.")
@@ -337,6 +358,7 @@ def _parse_args(llm_kwargs: dict[str, Any]) -> PostgresQueryArgs:
         "group_by": group_by,
         "limit": limit,
         "cursor": cursor,
+        "order_by": order_by,
     }
 
     for field in set(llm_kwargs) & allowed:
@@ -362,6 +384,7 @@ def _document_query_key(args: PostgresQueryArgs, scope: DocumentScope) -> str:
     """Identifies the filters and scope that a cursor belongs to."""
     query = {
         "filters": _table_filters(args),
+        "order_by": args.order_by.value,
         "scope": scope.model_dump(mode="json"),
     }
     encoded = json.dumps(query, sort_keys=True, default=str).encode()
@@ -369,8 +392,9 @@ def _document_query_key(args: PostgresQueryArgs, scope: DocumentScope) -> str:
 
 
 def _encode_cursor(cursor: DocumentCursor, query_key: str) -> str:
+    value = cursor.sort_value
     payload = {
-        "u": cursor.updated_at.isoformat() if cursor.updated_at else None,
+        "u": value.isoformat() if isinstance(value, datetime) else value,
         "i": cursor.document_id,
         "q": query_key,
     }
@@ -378,14 +402,16 @@ def _encode_cursor(cursor: DocumentCursor, query_key: str) -> str:
     return token.rstrip("=")
 
 
-def _decode_cursor(token: str, query_key: str) -> DocumentCursor:
+def _decode_cursor(token: str, query_key: str, order: DocumentOrder) -> DocumentCursor:
     try:
         padded = token + "=" * (-len(token) % 4)
         payload = json.loads(base64.urlsafe_b64decode(padded.encode()))
-        cursor = DocumentCursor(
-            updated_at=(datetime.fromisoformat(payload["u"]) if payload["u"] else None),
-            document_id=payload["i"],
-        )
+        value = payload["u"]
+        if value is not None and order.is_date:
+            value = datetime.fromisoformat(value)
+        elif value is not None and not isinstance(value, str):
+            raise TypeError("A title cursor value must be a string.")
+        cursor = DocumentCursor(sort_value=value, document_id=payload["i"])
         cursor_query_key = payload["q"]
     except (ValueError, TypeError, KeyError) as e:
         raise _reject(_INVALID_CURSOR_MESSAGE) from e
@@ -522,14 +548,26 @@ def _format_group_counts(groups: list[GroupCount], noun: str, group_by: str) -> 
     return header + "\n" + "\n".join(lines)
 
 
+_ORDER_LABELS: dict[DocumentOrder, str] = {
+    DocumentOrder.UPDATED_DESC: "newest first",
+    DocumentOrder.UPDATED_ASC: "oldest first",
+    DocumentOrder.CREATED_DESC: "newest created first",
+    DocumentOrder.CREATED_ASC: "oldest created first",
+    DocumentOrder.TITLE_ASC: "by title A-Z",
+    DocumentOrder.TITLE_DESC: "by title Z-A",
+}
+
+
 def _format_document_page(
     lines: list[str],
     *,
     total: int | None,
     continued: bool,
     next_cursor: str | None,
+    order: DocumentOrder,
 ) -> str:
-    """`total` is set on a first page that has more pages after it."""
+    """`total` is set on a first page that has more pages after it, when the
+    count finished in time."""
     if not lines:
         if continued:
             return "No more matching documents."
@@ -541,14 +579,19 @@ def _format_document_page(
             else f"{len(lines)} matching documents:"
         )
         return header + "\n" + "\n".join(lines)
-    header = (
-        f"The next {len(lines)} matching documents, newest first:"
-        if continued
-        else f"Showing {len(lines)} of {total} matching documents, newest first:"
-    )
+    label = _ORDER_LABELS[order]
+    if continued:
+        header = f"The next {len(lines)} matching documents, {label}:"
+    elif total is None:
+        header = (
+            f"The first {len(lines)} matching documents, {label} (more match; "
+            "use count=true for the total):"
+        )
+    else:
+        header = f"Showing {len(lines)} of {total} matching documents, {label}:"
     footer = (
         "More documents match. To get the next page, call again with the same "
-        "filters and cursor set to this next_cursor value.\n"
+        "filters, order_by and cursor set to this next_cursor value.\n"
         f"next_cursor: {next_cursor}"
     )
     return header + "\n" + "\n".join(lines) + "\n" + footer
@@ -743,7 +786,9 @@ class PostgresTool(Tool):
             )
         query_key = _document_query_key(args, self._scope)
         after = (
-            _decode_cursor(args.cursor, query_key) if args.cursor is not None else None
+            _decode_cursor(args.cursor, query_key, args.order_by)
+            if args.cursor is not None
+            else None
         )
         page = query_documents_for_tool(
             db_session,
@@ -751,13 +796,14 @@ class PostgresTool(Tool):
             external_group_ids,
             user_id=self._user.id,
             prior_emails=self._user.prior_emails,
+            order=args.order_by,
             after=after,
             limit=args.limit,
             **filters,
         )
         total = None
         if after is None and page.next_cursor is not None:
-            total = count_documents_for_tool(
+            total = try_count_documents_for_tool(
                 db_session,
                 user_email,
                 external_group_ids,
@@ -777,6 +823,7 @@ class PostgresTool(Tool):
                 total=total,
                 continued=after is not None,
                 next_cursor=next_cursor,
+                order=args.order_by,
             ),
             context,
             call_index,
