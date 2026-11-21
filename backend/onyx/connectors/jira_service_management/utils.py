@@ -16,6 +16,26 @@ JIRA_SERVER_API_VERSION = os.environ.get("JIRA_SERVER_API_VERSION") or "2"
 JIRA_CLOUD_API_VERSION = os.environ.get("JIRA_CLOUD_API_VERSION") or "3"
 JIRA_CONNECT_TIMEOUT_SECONDS = 10
 JIRA_READ_TIMEOUT_SECONDS = REQUEST_TIMEOUT_SECONDS
+_COMMENT_PAGE_SIZE = 50
+
+_ADF_BLOCK_NODE_TYPES = frozenset(
+    {
+        "doc",
+        "paragraph",
+        "heading",
+        "bulletList",
+        "orderedList",
+        "listItem",
+        "blockquote",
+        "codeBlock",
+        "panel",
+        "table",
+        "tableRow",
+        "tableCell",
+        "tableHeader",
+        "rule",
+    }
+)
 
 
 def is_cloud_credential(credentials: Mapping[str, Any]) -> bool:
@@ -61,6 +81,11 @@ def build_jira_url(base_url: str, issue_key: str) -> str:
     return f"{base_url.rstrip('/')}/browse/{issue_key}"
 
 
+def build_jsm_document_id(base_url: str, issue_key: str) -> str:
+    """Return a JSM-scoped document ID distinct from the Jira connector's browse URL."""
+    return f"jira_service_management:{build_jira_url(base_url, issue_key)}"
+
+
 def _node_as_mapping(node: Any) -> Mapping[str, Any] | None:
     if isinstance(node, Mapping):
         return node
@@ -79,14 +104,23 @@ def _node_as_mapping(node: Any) -> Mapping[str, Any] | None:
 
 
 def extract_text_from_adf(adf_content: Any) -> str:
-    """Extract plain text from Atlassian Document Format (ADF dicts or SDK PropertyHolder)."""
+    """Extract plain text from Atlassian Document Format (ADF dicts or SDK PropertyHolder).
+
+    Adjacent inline text nodes inside the same block are concatenated directly so
+    tokens like ``JSM-`` + bold ``101`` remain ``JSM-101``. Block boundaries and
+    explicit ``hardBreak`` nodes emit line breaks.
+    """
     if not adf_content:
         return ""
     if isinstance(adf_content, str):
         return adf_content
 
-    text_parts: list[str] = []
+    chunks: list[str] = []
     visited: set[int] = set()
+
+    def _append_break() -> None:
+        if chunks and not chunks[-1].endswith("\n"):
+            chunks.append("\n")
 
     def _traverse(node: Any) -> None:
         if node is None or isinstance(node, (str, bytes, int, float, bool)):
@@ -106,23 +140,35 @@ def extract_text_from_adf(adf_content: Any) -> str:
         if node_map is None:
             return
 
-        if node_map.get("type") == "text":
+        node_type = node_map.get("type")
+        if node_type == "text":
             text_val = node_map.get("text")
             if text_val:
-                text_parts.append(str(text_val))
+                chunks.append(str(text_val))
+            return
+
+        if node_type == "hardBreak":
+            _append_break()
+            return
+
+        is_block = isinstance(node_type, str) and node_type in _ADF_BLOCK_NODE_TYPES
+        if is_block:
+            _append_break()
 
         content = node_map.get("content")
         if content is not None:
             _traverse(content)
-            return
+        else:
+            for key, value in node_map.items():
+                if key in ("type", "text", "marks"):
+                    continue
+                _traverse(value)
 
-        for key, value in node_map.items():
-            if key in ("type", "text", "marks"):
-                continue
-            _traverse(value)
+        if is_block:
+            _append_break()
 
     _traverse(adf_content)
-    return " ".join(text_parts)
+    return "".join(chunks).strip()
 
 
 def _raw_issue_fields(issue: Any) -> Mapping[str, Any] | None:
@@ -175,31 +221,89 @@ def _comment_body(comment: Any) -> Any:
         return ""
 
 
-def get_comment_strs(
-    issue: Any,
-    comment_email_blacklist: list[str] | set[str] | None = None,
-) -> list[str]:
-    comments: list[str] = []
-    blacklist = set(comment_email_blacklist or [])
-
-    raw_comments: Any = None
+def _embedded_comments_and_total(issue: Any) -> tuple[list[Any], int | None]:
     raw_fields = _raw_issue_fields(issue)
     if raw_fields is not None:
         raw_comment_obj = raw_fields.get("comment")
         if isinstance(raw_comment_obj, Mapping):
             raw_comments = raw_comment_obj.get("comments")
+            raw_total = raw_comment_obj.get("total")
+            total = (
+                raw_total
+                if isinstance(raw_total, int) and not isinstance(raw_total, bool)
+                else None
+            )
+            return (list(raw_comments) if raw_comments else [], total)
 
-    if raw_comments is None:
-        try:
-            comment_obj = issue.fields.comment
-            raw_comments = comment_obj.comments if comment_obj is not None else []
-        except AttributeError:
-            raw_comments = []
+    try:
+        comment_obj = issue.fields.comment
+    except AttributeError:
+        return ([], None)
+    if comment_obj is None:
+        return ([], None)
 
-    if not raw_comments:
-        return comments
+    try:
+        embedded = list(comment_obj.comments or [])
+    except AttributeError:
+        embedded = []
 
-    for comment in raw_comments:
+    try:
+        raw_total = comment_obj.total
+    except AttributeError:
+        raw_total = None
+    total = (
+        raw_total
+        if isinstance(raw_total, int) and not isinstance(raw_total, bool)
+        else None
+    )
+    return (embedded, total)
+
+
+def _fetch_remaining_comments(
+    jira_client: JIRA,
+    issue_key: str,
+    start_at: int,
+    total: int,
+) -> list[Any]:
+    fetched: list[Any] = []
+    cursor = start_at
+    while cursor < total:
+        page = jira_client.comments(
+            issue_key,
+            start_at=cursor,
+            max_results=_COMMENT_PAGE_SIZE,
+        )
+        if not page:
+            break
+        fetched.extend(page)
+        cursor += len(page)
+        if len(page) < _COMMENT_PAGE_SIZE:
+            break
+    return fetched
+
+
+def get_comment_strs(
+    issue: Any,
+    comment_email_blacklist: list[str] | set[str] | None = None,
+    *,
+    jira_client: JIRA | None = None,
+) -> list[str]:
+    comments: list[str] = []
+    blacklist = set(comment_email_blacklist or [])
+
+    embedded, total = _embedded_comments_and_total(issue)
+    all_comments = list(embedded)
+    if jira_client is not None and total is not None and total > len(embedded):
+        all_comments.extend(
+            _fetch_remaining_comments(
+                jira_client,
+                str(issue.key),
+                start_at=len(embedded),
+                total=total,
+            )
+        )
+
+    for comment in all_comments:
         author_email = _comment_author_email(comment)
         if author_email and author_email in blacklist:
             continue

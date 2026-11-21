@@ -77,8 +77,8 @@ def jira_service_management_planning_rule(
     old: JiraServiceManagementConnectorConfig,
     new: JiraServiceManagementConnectorConfig,
 ) -> ConnectorChangeOverride | None:
-    # The connector ignores the project key while a JQL query is set.
-    if old.jql_query and new.jql_query:
+    # The connector ignores the project key while a non-blank JQL query is set.
+    if (old.jql_query or "").strip() and (new.jql_query or "").strip():
         return ConnectorChangeOverride(
             scope_directions={_PROJECT_KEY: ScopeDirection.NONE}
         )

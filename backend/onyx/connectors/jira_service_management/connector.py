@@ -28,6 +28,7 @@ from onyx.connectors.interfaces import (
 from onyx.connectors.jira_service_management.utils import (
     build_jira_client,
     build_jira_url,
+    build_jsm_document_id,
     extract_text_from_adf,
     get_comment_strs,
     is_cloud_credential,
@@ -35,8 +36,10 @@ from onyx.connectors.jira_service_management.utils import (
 from onyx.connectors.models import (
     BasicExpertInfo,
     ConnectorCheckpoint,
+    ConnectorFailure,
     ConnectorMissingCredentialError,
     Document,
+    DocumentFailure,
     HierarchyNode,
     SlimDocument,
     TextSection,
@@ -66,6 +69,12 @@ def _is_cloud_client(jira_client: JIRA, default_is_cloud: bool) -> bool:
         deployment_type = None
     if isinstance(deployment_type, str) and deployment_type:
         return deployment_type == "Cloud"
+    try:
+        sdk_is_cloud = jira_client._is_cloud
+    except AttributeError:
+        sdk_is_cloud = None
+    if isinstance(sdk_is_cloud, bool):
+        return sdk_is_cloud
     return default_is_cloud
 
 
@@ -128,11 +137,16 @@ def _read_start_at(raw_result: Any, default_start: int) -> int:
     return val if isinstance(val, int) and not isinstance(val, bool) else default_start
 
 
-def _cloud_page_result(raw_result: Any) -> _JqlPageResult:
+def _cloud_page_result(raw_result: Any, *, request_token: str | None) -> _JqlPageResult:
     issues = list(raw_result)
     returned_token = _read_optional_str_token(raw_result)
     is_last = _read_optional_bool_is_last(raw_result)
     has_more = bool(returned_token) and is_last is not True
+    if has_more and request_token is not None and returned_token == request_token:
+        raise RuntimeError(
+            "Jira Service Management Cloud pagination did not advance: "
+            "response repeated request nextPageToken."
+        )
     return _JqlPageResult(
         issues=issues,
         next_page_token=returned_token if has_more else None,
@@ -193,10 +207,15 @@ def _perform_jql_search(
         raise
 
     if raw_result is None:
+        if use_cloud:
+            raise RuntimeError(
+                "Jira Service Management Cloud search returned no result; "
+                "verify that the Jira instance is Cloud and reports deploymentType='Cloud'."
+            )
         return _JqlPageResult(issues=[], next_page_token=None, has_more=False)
 
     if use_cloud:
-        return _cloud_page_result(raw_result)
+        return _cloud_page_result(raw_result, request_token=next_page_token)
     return _server_page_result(raw_result, start=start, max_results=max_results)
 
 
@@ -388,6 +407,8 @@ def process_jira_issue(
     issue: Issue,
     comment_email_blacklist: list[str] | None = None,
     labels_to_skip: list[str] | None = None,
+    *,
+    jira_client: JIRA | None = None,
 ) -> Document | None:
     issue_labels = _issue_labels(issue)
     if labels_to_skip and issue_labels.intersection(labels_to_skip):
@@ -398,12 +419,17 @@ def process_jira_issue(
         raw_desc if isinstance(raw_desc, str) else extract_text_from_adf(raw_desc)
     )
 
-    comments = get_comment_strs(issue, comment_email_blacklist=comment_email_blacklist)
+    comments = get_comment_strs(
+        issue,
+        comment_email_blacklist=comment_email_blacklist,
+        jira_client=jira_client,
+    )
     comment_block = "\n".join(f"Comment: {c}" for c in comments if c)
     content = (
         f"{description}\n{comment_block}".strip() if comment_block else description
     )
 
+    doc_id = build_jsm_document_id(jira_base_url, issue.key)
     page_url = build_jira_url(jira_base_url, issue.key)
 
     expert = _person_info(_issue_creator_or_reporter(issue))
@@ -427,7 +453,7 @@ def process_jira_issue(
     updated_str = _issue_timestamp(issue, "updated")
 
     return Document(
-        id=page_url,
+        id=doc_id,
         sections=[TextSection(link=page_url, text=content)],
         source=DocumentSource.JIRA_SERVICE_MANAGEMENT,
         semantic_identifier=f"{issue.key}: {summary}",
@@ -470,7 +496,7 @@ class JiraServiceManagementConnector(
         jira_base_url: str,
         project_key: str | None = None,
         comment_email_blacklist: list[str] | None = None,
-        labels_to_skip: list[str] | None = None,
+        labels_to_skip: list[str] = JIRA_CONNECTOR_LABELS_TO_SKIP,
         jql_query: str | None = None,
         batch_size: int = INDEX_BATCH_SIZE,
         scoped_token: bool = False,
@@ -478,11 +504,7 @@ class JiraServiceManagementConnector(
         self.jira_base = jira_base_url.rstrip("/")
         self.project_key = (project_key or "").strip() or None
         self.comment_email_blacklist = comment_email_blacklist or []
-        self.labels_to_skip = (
-            labels_to_skip
-            if labels_to_skip is not None
-            else JIRA_CONNECTOR_LABELS_TO_SKIP
-        )
+        self.labels_to_skip = list(labels_to_skip)
         self.jql_query = (jql_query or "").strip() or None
         self.batch_size = batch_size or _JIRA_FULL_PAGE_SIZE
         self.scoped_token = scoped_token
@@ -535,6 +557,15 @@ class JiraServiceManagementConnector(
             return f"{filter_jql} ORDER BY id ASC"
         return "ORDER BY id ASC"
 
+    def _can_use_server_keyset(self) -> bool:
+        """Restrict Data Center ``id >`` keyset filtering to single-project queries.
+
+        Atlassian documents that ``id >`` filters can return incomplete results across
+        multi-project Data Center JQL queries; multi-project Server/DC scans therefore
+        use pinned-window offset pagination with ``ORDER BY id ASC``.
+        """
+        return self.project_key is not None and self.jql_query is None
+
     @override
     def load_from_checkpoint(
         self,
@@ -550,6 +581,7 @@ class JiraServiceManagementConnector(
 
         page_size = self.batch_size or _JIRA_FULL_PAGE_SIZE
         use_cloud = _is_cloud_client(self.jira_client, self._is_cloud)
+        use_keyset = not use_cloud and self._can_use_server_keyset()
 
         if use_cloud:
             jql = self._build_jql(start=start, end=effective_end)
@@ -561,30 +593,42 @@ class JiraServiceManagementConnector(
                 max_results=page_size,
             )
         else:
-            using_keyset = new_checkpoint.last_issue_id is not None
+            after_id = new_checkpoint.last_issue_id if use_keyset else None
             jql = self._build_jql(
                 start=start,
                 end=effective_end,
-                after_issue_id=new_checkpoint.last_issue_id,
+                after_issue_id=after_id,
             )
             page = _perform_jql_search(
                 self.jira_client,
                 jql,
                 is_cloud=False,
-                start=0 if using_keyset else new_checkpoint.offset,
+                start=0 if after_id is not None else new_checkpoint.offset,
                 max_results=page_size,
             )
 
         max_seen_id = new_checkpoint.last_issue_id
         for issue in page.issues:
-            doc = process_jira_issue(
-                self.jira_base,
-                issue,
-                comment_email_blacklist=self.comment_email_blacklist,
-                labels_to_skip=self.labels_to_skip,
-            )
-            if doc is not None:
-                yield doc
+            try:
+                doc = process_jira_issue(
+                    self.jira_base,
+                    issue,
+                    comment_email_blacklist=self.comment_email_blacklist,
+                    labels_to_skip=self.labels_to_skip,
+                    jira_client=self.jira_client,
+                )
+                if doc is not None:
+                    yield doc
+            except Exception as e:
+                issue_key = str(issue.key)
+                yield ConnectorFailure(
+                    failed_document=DocumentFailure(
+                        document_id=build_jsm_document_id(self.jira_base, issue_key),
+                        document_link=build_jira_url(self.jira_base, issue_key),
+                    ),
+                    failure_message=f"Failed to process Jira Service Management issue: {e}",
+                    exception=e,
+                )
 
             issue_id = _extract_issue_id(issue)
             if issue_id is not None and (max_seen_id is None or issue_id > max_seen_id):
@@ -594,7 +638,7 @@ class JiraServiceManagementConnector(
             new_checkpoint.next_page_token = page.next_page_token
             new_checkpoint.has_more = page.has_more
         else:
-            if max_seen_id is not None:
+            if use_keyset and max_seen_id is not None:
                 new_checkpoint.last_issue_id = max_seen_id
                 new_checkpoint.offset = 0
             else:
@@ -615,6 +659,7 @@ class JiraServiceManagementConnector(
             end if end is not None else (time.time() + _SLIM_END_BUFFER_SECONDS)
         )
         use_cloud = _is_cloud_client(self.jira_client, self._is_cloud)
+        use_keyset = not use_cloud and self._can_use_server_keyset()
 
         next_page_token: str | None = None
         last_issue_id: int | None = None
@@ -635,23 +680,20 @@ class JiraServiceManagementConnector(
                     fields="id,key,labels,created",
                 )
             else:
-                using_keyset = last_issue_id is not None
+                after_id = last_issue_id if use_keyset else None
                 jql = self._build_jql(
                     start=effective_start,
                     end=effective_end,
-                    after_issue_id=last_issue_id,
+                    after_issue_id=after_id,
                 )
                 page = _perform_jql_search(
                     self.jira_client,
                     jql,
                     is_cloud=False,
-                    start=0 if using_keyset else offset,
+                    start=0 if after_id is not None else offset,
                     max_results=_JIRA_SLIM_PAGE_SIZE,
                     fields="id,key,labels,created",
                 )
-
-            if not page.issues:
-                break
 
             slim_batch: list[SlimDocument | HierarchyNode] = []
             max_seen_id = last_issue_id
@@ -670,7 +712,7 @@ class JiraServiceManagementConnector(
                 created_str = _issue_timestamp(issue, "created")
                 slim_batch.append(
                     SlimDocument(
-                        id=build_jira_url(self.jira_base, issue.key),
+                        id=build_jsm_document_id(self.jira_base, issue.key),
                         doc_created_at=(
                             time_str_to_utc(created_str) if created_str else None
                         ),
@@ -690,7 +732,7 @@ class JiraServiceManagementConnector(
 
             if use_cloud:
                 next_page_token = page.next_page_token
-            elif max_seen_id is not None:
+            elif use_keyset and max_seen_id is not None:
                 last_issue_id = max_seen_id
                 offset = 0
             else:
