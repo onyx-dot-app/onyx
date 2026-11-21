@@ -7,11 +7,11 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import type { PersonSuggestions } from "@/lib/suggestedQuestions/types";
 
 /** How often to check again while the server is preparing questions. */
-const POLL_INTERVAL_MS = 30_000;
+const POLL_INTERVAL_MS = 10_000;
 /** Stop checking after this long. It is one check longer than the server's
  * SQ_PREPARING_S (120 s), so the last check sees the server end "preparing"
  * and the page never keeps a stale "preparing". */
-const POLL_FOR_MS = 150_000;
+const POLL_FOR_MS = 120_000 + POLL_INTERVAL_MS;
 
 // Module state lives as long as the page, so every caller shares it: the
 // questions stay put while the page is open and change on reload.
