@@ -63,7 +63,7 @@ from onyx.chat.run_store import (
     request_response_stop,
     stop_response,
 )
-from onyx.chat.session_naming import generate_chat_session_name_or_fallback
+from onyx.chat.session_naming import name_chat_session
 from onyx.chat.stop_signal_checker import request_stop
 from onyx.chat.stream_buffer import StreamChunkRead, read_stream_chunks
 from onyx.chat.tool_approvals import action_now_blocked
@@ -90,7 +90,6 @@ from onyx.db.approval_request import (
 from onyx.db.chat import (
     add_chat_session__no_commit,
     add_chats_to_session_from_slack_thread,
-    create_chat_history_chain,
     delete_all_chat_sessions_for_user,
     delete_chat_session,
     duplicate_chat_session_for_user_from_slack,
@@ -700,48 +699,28 @@ def rename_chat_session(
         # reporting the requested one would show a rename that did not happen.
         return RenameChatSessionResponse(new_name=chat_session.description or "")
 
-    # Close the read session before the LLM's multi-second generation window.
     with get_session_with_current_tenant() as db_session:
         chat_session = get_chat_session_by_id(
             chat_session_id=chat_session_id,
             user_id=user_id,
             db_session=db_session,
-            eager_load_persona=True,
         )
         # Auto-naming derives a title from the conversation and writes it to the
         # session row. A non-persisting incognito mode keeps no content in
         # Postgres, so it keeps the fallback name and skips the LLM call.
         if not record_mode_persists_content(chat_session.incognito_record_mode):
             return RenameChatSessionResponse(new_name=DEFAULT_CHAT_SESSION_NAME)
-        # The chat turn names a new chat while its answer streams; a client
-        # that asks afterwards gets that name, not a second generation.
-        if chat_session.description:
-            return RenameChatSessionResponse(new_name=chat_session.description)
-        full_history = create_chat_history_chain(
+
+    # Returns a saved name, including one the chat turn is still generating.
+    return RenameChatSessionResponse(
+        new_name=name_chat_session(
             chat_session_id=chat_session_id,
-            db_session=db_session,
+            user=user,
+            additional_headers=get_relevant_headers(
+                request.headers, LITELLM_PASS_THROUGH_HEADERS
+            ),
         )
-        session_override = chat_session.llm_override
-    new_name = generate_chat_session_name_or_fallback(
-        chat_history=full_history,
-        user=user,
-        chat_session_id=chat_session_id,
-        persona=chat_session.persona,
-        llm_override=session_override,
-        additional_headers=get_relevant_headers(
-            request.headers, LITELLM_PASS_THROUGH_HEADERS
-        ),
     )
-
-    with get_session_with_current_tenant() as db_session:
-        update_chat_session(
-            db_session=db_session,
-            user_id=user_id,
-            chat_session_id=chat_session_id,
-            description=new_name,
-        )
-
-    return RenameChatSessionResponse(new_name=new_name)
 
 
 @router.patch("/chat-session/{session_id}")

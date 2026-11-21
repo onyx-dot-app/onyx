@@ -2,12 +2,16 @@
 
 A new chat is named from its first question while the answer streams
 (`name_new_chat_session`, started by `chat/execution.py:start_chat_turn`).
-`PUT /chat/rename-chat-session` with no name uses the same generation for a
-chat that still has none.
+`PUT /chat/rename-chat-session` with no name (`name_chat_session`) names a chat
+that still has none. One cache lock per chat keeps the two from generating a
+name twice, and both save only while the chat is unnamed, so a rename wins.
 """
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from uuid import UUID
 
+from onyx.cache.factory import get_cache_backend
 from onyx.chat.chat_utils import convert_chat_history_basic
 from onyx.configs.constants import MessageType
 from onyx.db.chat import (
@@ -40,6 +44,28 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 
 _MAX_TOKENS_FOR_NAMING = 3000
+# Generating a name takes seconds; the lock outlives it if its holder dies.
+_NAMING_LOCK_SECONDS = 60
+# How long a naming request waits for a name the chat turn is generating.
+_NAMING_WAIT_SECONDS = 30
+
+
+@contextmanager
+def _naming_lock(chat_session_id: UUID, *, wait_seconds: float) -> Iterator[bool]:
+    """Hold the chat's naming lock. Yields whether it was acquired."""
+    lock = get_cache_backend().lock(
+        f"chat_session_naming:{chat_session_id}", timeout=_NAMING_LOCK_SECONDS
+    )
+    acquired = (
+        lock.acquire(blocking=True, blocking_timeout=wait_seconds)
+        if wait_seconds > 0
+        else lock.acquire(blocking=False)
+    )
+    try:
+        yield acquired
+    finally:
+        if acquired and lock.owned():
+            lock.release()
 
 
 def generate_chat_session_name_or_fallback(
@@ -110,45 +136,103 @@ def name_new_chat_session(
     """Name a chat from its first question and save the name.
 
     Returns the saved name, or None when the chat keeps no content, already
-    has a name, or got one while this one was generated.
+    has a name, got one while this one was generated, or is being named by a
+    naming request.
     """
-    with get_session_with_current_tenant() as db_session:
-        chat_session = get_chat_session_by_id(
-            chat_session_id=chat_session_id,
-            user_id=user.id,
-            db_session=db_session,
-            eager_load_persona=True,
-        )
-        if chat_session.description or not record_mode_persists_content(
-            chat_session.incognito_record_mode
-        ):
+    with _naming_lock(chat_session_id, wait_seconds=0) as acquired:
+        # A naming request already holds it and names the chat.
+        if not acquired:
             return None
-        first_question = [
-            message
-            for message in create_chat_history_chain(
+        with get_session_with_current_tenant() as db_session:
+            chat_session = get_chat_session_by_id(
+                chat_session_id=chat_session_id,
+                user_id=user.id,
+                db_session=db_session,
+                eager_load_persona=True,
+            )
+            if chat_session.description or not record_mode_persists_content(
+                chat_session.incognito_record_mode
+            ):
+                return None
+            first_question = [
+                message
+                for message in create_chat_history_chain(
+                    chat_session_id=chat_session_id,
+                    db_session=db_session,
+                )
+                if message.message_type == MessageType.USER
+            ][:1]
+            persona = chat_session.persona
+            llm_override = chat_session.llm_override
+        if not first_question:
+            return None
+
+        name = generate_chat_session_name_or_fallback(
+            chat_history=first_question,
+            user=user,
+            chat_session_id=chat_session_id,
+            persona=persona,
+            llm_override=llm_override,
+            additional_headers=additional_headers,
+        )
+        with get_session_with_current_tenant() as db_session:
+            saved = save_chat_session_name_if_unnamed(
+                db_session=db_session,
+                user_id=user.id,
+                chat_session_id=chat_session_id,
+                name=name,
+            )
+        return name if saved else None
+
+
+def name_chat_session(
+    *,
+    chat_session_id: UUID,
+    user: User,
+    additional_headers: dict[str, str] | None,
+) -> str:
+    """Name a chat from its whole history unless it has a name, and return
+    the chat's name. A name the chat turn is still generating is awaited and
+    returned, not generated a second time."""
+    with _naming_lock(chat_session_id, wait_seconds=_NAMING_WAIT_SECONDS):
+        with get_session_with_current_tenant() as db_session:
+            chat_session = get_chat_session_by_id(
+                chat_session_id=chat_session_id,
+                user_id=user.id,
+                db_session=db_session,
+                eager_load_persona=True,
+            )
+            if chat_session.description:
+                return chat_session.description
+            chat_history = create_chat_history_chain(
                 chat_session_id=chat_session_id,
                 db_session=db_session,
             )
-            if message.message_type == MessageType.USER
-        ][:1]
-        persona = chat_session.persona
-        llm_override = chat_session.llm_override
-    if not first_question:
-        return None
+            persona = chat_session.persona
+            llm_override = chat_session.llm_override
 
-    name = generate_chat_session_name_or_fallback(
-        chat_history=first_question,
-        user=user,
-        chat_session_id=chat_session_id,
-        persona=persona,
-        llm_override=llm_override,
-        additional_headers=additional_headers,
-    )
-    with get_session_with_current_tenant() as db_session:
-        saved = save_chat_session_name_if_unnamed(
-            db_session=db_session,
-            user_id=user.id,
+        name = generate_chat_session_name_or_fallback(
+            chat_history=chat_history,
+            user=user,
             chat_session_id=chat_session_id,
-            name=name,
+            persona=persona,
+            llm_override=llm_override,
+            additional_headers=additional_headers,
         )
-    return name if saved else None
+        with get_session_with_current_tenant() as db_session:
+            if save_chat_session_name_if_unnamed(
+                db_session=db_session,
+                user_id=user.id,
+                chat_session_id=chat_session_id,
+                name=name,
+            ):
+                return name
+            # Renamed while this name was generated: the rename stands.
+            return (
+                get_chat_session_by_id(
+                    chat_session_id=chat_session_id,
+                    user_id=user.id,
+                    db_session=db_session,
+                ).description
+                or name
+            )

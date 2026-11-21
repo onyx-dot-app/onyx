@@ -276,7 +276,8 @@ def _name_new_chat_session(
     except Exception:
         logger.exception("Could not name the new chat session")
         return
-    if name is not None:
+    # Only a client that asked for it reads this line.
+    if name is not None and setup.new_msg_req.accepts_chat_session_name:
         delivery.publish(
             ChatSessionNameInfo(
                 chat_session_id=setup.chat_session_id, chat_session_name=name

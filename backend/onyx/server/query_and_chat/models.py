@@ -179,6 +179,15 @@ class SendMessageRequest(BaseModel):
         ),
     )
 
+    accepts_chat_session_name: bool = Field(
+        default=False,
+        description=(
+            "Set to true to receive a `chat_session_name` line when the server "
+            "names a new chat. The server names a new chat from its first "
+            "question while it answers, whether or not this is set."
+        ),
+    )
+
     # Placement information for the message in the conversation tree:
     # - -1: auto-place after latest message in chain
     # - null: regeneration from root (first message)
