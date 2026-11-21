@@ -12731,7 +12731,7 @@
             "title": "패치",
             "progress": {
               "named": {
-                "status": "{tool, select, write {{path} 쓰는 중… {lines, plural, one {#줄} other {#줄}}} other {{path} 편집 중… {lines, plural, one {#줄} other {#줄}}}}"
+                "status": "{tool, select, write {{path} 쓰는 중…} other {{path} 편집 중…}}"
               },
               "unnamed": {
                 "status": "{tool, select, write {파일 쓰는 중…} other {파일 편집 중…}}"

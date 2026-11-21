@@ -592,9 +592,7 @@ def test_a_chat_turn_streams_saves_and_replays_its_sandbox_calls(
         end,
         packets.SectionEnd(),
         # The streamed arguments report their progress live only.
-        packets.FileToolProgress(
-            tool_name=ApplyPatchTool.NAME, paths=["a.txt"], lines=4
-        ),
+        packets.FileToolProgress(tool_name=ApplyPatchTool.NAME, paths=["a.txt"]),
         *patched,
     ]
     # A reload sends the saved output with the end, without deltas.
@@ -1696,7 +1694,7 @@ def test_edit_and_write_calls_render_patch_cards_live_and_on_replay(
     ]
     # The streamed arguments report their progress live only, before each start.
     progress = [
-        packets.FileToolProgress(tool_name=name, paths=["a.py"], lines=1)
+        packets.FileToolProgress(tool_name=name, paths=["a.py"])
         for name in (WriteTool.NAME, EditTool.NAME, WriteTool.NAME, EditTool.NAME)
     ]
     assert _sandbox_packets(parts) == [

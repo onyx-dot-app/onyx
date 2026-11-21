@@ -12731,7 +12731,7 @@
             "title": "パッチ",
             "progress": {
               "named": {
-                "status": "{tool, select, write {{path} を書き込み中… {lines, plural, one {# 行} other {# 行}}} other {{path} を編集中… {lines, plural, one {# 行} other {# 行}}}}"
+                "status": "{tool, select, write {{path} を書き込み中…} other {{path} を編集中…}}"
               },
               "unnamed": {
                 "status": "{tool, select, write {ファイルを書き込み中…} other {ファイルを編集中…}}"

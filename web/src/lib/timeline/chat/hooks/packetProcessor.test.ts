@@ -1020,7 +1020,7 @@ describe("packetProcessor", () => {
         createPacket(
           PacketType.FILE_TOOL_PROGRESS,
           { turn_index: 0 },
-          { tool_name: "write", paths: ["a.md"], lines: 2 }
+          { tool_name: "write", paths: ["a.md"] }
         ),
         createMessageStartPacket({ turn_index: 1 }),
       ];

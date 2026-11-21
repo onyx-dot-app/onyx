@@ -194,7 +194,6 @@ export function ApplyPatchToolRenderer({
                   t("sandbox.patch.progress.named.status", {
                     tool: liveProgress.tool_name,
                     path: pathCode,
-                    lines: liveProgress.lines,
                   })
                 );
 

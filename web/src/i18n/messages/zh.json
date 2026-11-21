@@ -12731,7 +12731,7 @@
             "title": "补丁",
             "progress": {
               "named": {
-                "status": "{tool, select, write {正在写入 {path}… {lines, plural, one {# 行} other {# 行}}} other {正在编辑 {path}… {lines, plural, one {# 行} other {# 行}}}}"
+                "status": "{tool, select, write {正在写入 {path}…} other {正在编辑 {path}…}}"
               },
               "unnamed": {
                 "status": "{tool, select, write {正在写入文件…} other {正在编辑文件…}}"

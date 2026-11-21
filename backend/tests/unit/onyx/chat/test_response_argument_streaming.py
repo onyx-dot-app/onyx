@@ -296,7 +296,7 @@ def test_an_invalid_call_shows_every_fragment_it_streamed(name: str) -> None:
         assert live.code() == "a\nbc"
     else:
         assert live.progress()[-1] == FileToolProgress(
-            tool_name="write", paths=["a.md"], lines=2
+            tool_name="write", paths=["a.md"]
         )
 
 
@@ -408,7 +408,7 @@ PATCH_TEXT = "\n".join(
         (
             "write",
             {"file_path": "réport 😀.md", "content": '# Title\nsnowman ☃\n"q"\nlast'},
-            FileToolProgress(tool_name="write", paths=["réport 😀.md"], lines=4),
+            FileToolProgress(tool_name="write", paths=["réport 😀.md"]),
         ),
         (
             "apply_patch",
@@ -416,7 +416,6 @@ PATCH_TEXT = "\n".join(
             FileToolProgress(
                 tool_name="apply_patch",
                 paths=["réport 😀.md", "src/app.py", "old.txt"],
-                lines=9,
             ),
         ),
     ],
@@ -440,39 +439,22 @@ def test_file_progress_survives_arbitrary_fragment_boundaries(
     shown = live.progress()
     assert shown[-1] == expected
     for report in shown:
-        # A path shows only once whole, and the line count only grows.
+        # A path shows only once whole.
         assert report.paths == expected.paths[: len(report.paths)]
-    assert [report.lines for report in shown] == sorted(
-        report.lines for report in shown
-    )
+    # Each report names a new set of files.
+    assert all(before != after for before, after in zip(shown, shown[1:], strict=False))
 
 
-def test_file_reports_are_throttled_and_merge_the_text_between_them(
-    monkeypatch: pytest.MonkeyPatch,
-) -> None:
-    use_clock(monkeypatch, 0)
+@pytest.mark.usefixtures("clock")
+def test_a_file_call_reports_only_when_its_files_change() -> None:
     live = Live()
     live.add('{"file_path": "a.txt", "content": "', name="write")
     for _ in range(1000):
         live.add("x\\n", name="write")
     live.add('"}', name="write")
     live.end()
-    assert live.progress() == [
-        FileToolProgress(tool_name="write", paths=["a.txt"], lines=0),
-        FileToolProgress(tool_name="write", paths=["a.txt"], lines=1000),
-    ]
-    assert len(live.packets) == 2
-
-
-@pytest.mark.usefixtures("clock")
-def test_a_report_that_changes_nothing_sends_no_packet() -> None:
-    live = Live()
-    for fragment in ['{"file_path": "a.txt", "content": "x', "y", "z", '"}']:
-        live.add(fragment, name="write")
-    live.end()
-    assert live.progress() == [
-        FileToolProgress(tool_name="write", paths=["a.txt"], lines=1)
-    ]
+    assert live.progress() == [FileToolProgress(tool_name="write", paths=["a.txt"])]
+    assert len(live.packets) == 1
 
 
 @pytest.mark.usefixtures("clock")
@@ -493,8 +475,8 @@ def test_parallel_file_calls_report_their_own_progress() -> None:
         assert isinstance(packet.obj, FileToolProgress)
         last[packet.placement.tab_index] = packet.obj
     assert last == {
-        0: FileToolProgress(tool_name="write", paths=["a.md"], lines=3),
-        1: FileToolProgress(tool_name="edit", paths=["b.py"], lines=1),
+        0: FileToolProgress(tool_name="write", paths=["a.md"]),
+        1: FileToolProgress(tool_name="edit", paths=["b.py"]),
     }
 
 
@@ -505,9 +487,7 @@ def test_invalid_file_arguments_stop_progress() -> None:
     for fragment in ['{"file_path": "a.txt", "content": "a', "\nb", 'c"}']:
         live.add(fragment, name="write")
     live.end()
-    assert live.progress() == [
-        FileToolProgress(tool_name="write", paths=["a.txt"], lines=1)
-    ]
+    assert live.progress() == [FileToolProgress(tool_name="write", paths=["a.txt"])]
     assert live.accumulator.message.tool_calls[0].argument_error is not None
 
 
@@ -519,13 +499,11 @@ def test_an_interrupted_file_call_reports_its_last_fragments(
     live = Live()
     for fragment in ['{"input": "*** Begin Patch\\n', "*** Add File: a.md\\n+x"]:
         live.add(fragment, name="apply_patch")
-    assert live.progress() == [
-        FileToolProgress(tool_name="apply_patch", paths=[], lines=1)
-    ]
+    assert live.progress() == [FileToolProgress(tool_name="apply_patch", paths=[])]
     # The interrupted message has no end event; its completion reports.
     live.interrupt(how)
     assert live.progress()[-1] == FileToolProgress(
-        tool_name="apply_patch", paths=["a.md"], lines=3
+        tool_name="apply_patch", paths=["a.md"]
     )
 
 
@@ -602,14 +580,6 @@ def test_patch_paths_come_from_whole_header_lines(
     text: str, complete: bool, paths: list[str]
 ) -> None:
     assert file_tool_progress("apply_patch", {"input": text}, complete).paths == paths
-
-
-@pytest.mark.parametrize(
-    "text,lines", [("", 0), ("a", 1), ("a\n", 1), ("a\nb", 2), ("\n\n", 2)]
-)
-def test_lines_count_a_last_unfinished_line(text: str, lines: int) -> None:
-    progress = file_tool_progress("write", {"file_path": "a", "content": text}, True)
-    assert progress.lines == lines
 
 
 @pytest.mark.parametrize(

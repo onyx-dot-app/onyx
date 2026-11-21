@@ -186,15 +186,14 @@ def is_file_tool(name: str) -> TypeGuard[FileToolName]:
 def file_tool_progress(
     tool_name: FileToolName, arguments: dict[str, JsonValue], complete: bool
 ) -> packets.FileToolProgress:
-    """What a file tool call's arguments hold, parsed so far or `complete`.
+    """The files a file tool call's arguments name, parsed so far or `complete`.
 
     A partial parse can cut off its last string, so a patch header counts once
     its line ends, and the path argument once a later key follows it.
     """
     text_key, path_key = FILE_TOOL_ARGUMENTS[tool_name]
-    text = _string_argument(arguments, text_key)
     if path_key is None:
-        lines = text.split("\n")
+        lines = _string_argument(arguments, text_key).split("\n")
         headers = (line.strip() for line in (lines if complete else lines[:-1]))
         # Two hunks of one file name it once.
         paths = list(
@@ -209,12 +208,7 @@ def file_tool_progress(
         path = _string_argument(arguments, path_key)
         whole = complete or next(reversed(arguments), None) != path_key
         paths = [path] if path and whole else []
-    return packets.FileToolProgress(
-        tool_name=tool_name,
-        paths=paths,
-        # A text that does not end with a newline ends with a partial line.
-        lines=text.count("\n") + (1 if text and not text.endswith("\n") else 0),
-    )
+    return packets.FileToolProgress(tool_name=tool_name, paths=paths)
 
 
 class _ArgumentStream:
@@ -222,7 +216,8 @@ class _ArgumentStream:
 
     It holds the fragments between reports and reports at most once per
     ARGUMENT_REPORT_INTERVAL_SECONDS. A report is what changed since the last
-    one: the appended text of each string argument, or a file tool's progress.
+    one: the appended text of each string argument, or the files that a file
+    tool call names, once they change.
     """
 
     def __init__(
@@ -241,7 +236,8 @@ class _ArgumentStream:
         # The fragments that arrived after the last report.
         self.held: list[str] = []
         self.reported_at = float("-inf")
-        # The last progress a file tool call sent.
+        # The last progress a file tool call sent; it sends a new one only
+        # when its files change.
         self.progress: packets.FileToolProgress | None = None
         # Set when the arguments cannot be the start of a JSON object.
         self.stopped = False

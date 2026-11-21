@@ -25,7 +25,7 @@ def test_file_tool_progress_opens_the_call_that_its_start_continues() -> None:
         packet = Packet(placement=Placement(turn_index=0), obj=obj)
         return list(translator.translate(packet.model_dump(mode="json")))
 
-    [opened] = translate(FileToolProgress(tool_name="write", paths=["a.md"], lines=1))
+    [opened] = translate(FileToolProgress(tool_name="write", paths=[]))
     assert {
         key: opened[key] for key in ("sessionUpdate", "kind", "title", "status")
     } == {
@@ -37,7 +37,7 @@ def test_file_tool_progress_opens_the_call_that_its_start_continues() -> None:
     call_id = opened["toolCallId"]
 
     # Later progress updates the open call; only the start names it again.
-    [progress] = translate(FileToolProgress(tool_name="write", paths=["a.md"], lines=2))
+    [progress] = translate(FileToolProgress(tool_name="write", paths=["a.md"]))
     assert progress["sessionUpdate"] == "tool_call_update"
     assert progress["toolCallId"] == call_id
     assert "title" not in progress

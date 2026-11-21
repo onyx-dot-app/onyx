@@ -452,8 +452,6 @@ export interface FileToolProgress extends BaseObj {
   tool_name: FileToolName;
   // The files the arguments name so far, in order
   paths: string[];
-  // The lines of the file text or patch so far
-  lines: number;
 }
 
 export interface ApplyPatchStart extends BaseObj {

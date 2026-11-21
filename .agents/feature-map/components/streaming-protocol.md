@@ -223,11 +223,11 @@ message (`ToolCallEndEvent`). It reports the complete arguments, or, for
 invalid arguments, what the fragments parse to. A stream that stops without an
 end reports the held fragments when its message completes or its agent ends
 (`MessageRenderer.complete`, `MessageRenderer.finish`). The file tools (`write`, `edit`, `apply_patch`)
-report `file_tool_progress` instead of their arguments: `tool_name`, the whole
-`paths` so far without repeats, and the `lines` of the file text or patch
-(`chat/renderer.py:file_tool_progress`). The `FileToolProgress` docstring in
-`server/query_and_chat/streaming_models.py` says which fields each card shows.
-A report that changes nothing sends no packet. Replay sends no progress.
+report `file_tool_progress` instead of their arguments: `tool_name` and the
+whole `paths` so far without repeats (`chat/renderer.py:file_tool_progress`).
+The `FileToolProgress` docstring in `server/query_and_chat/streaming_models.py`
+says what each card shows. A report sends a packet only when its `paths`
+change, so the file text sends no packets. Replay sends no progress.
 
 Pre-start packets: `tool_call_argument_delta` and `file_tool_progress` open a
 call before its start packet, and clients do not count them as its start

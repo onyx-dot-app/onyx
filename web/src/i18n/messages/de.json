@@ -12731,7 +12731,7 @@
             "title": "Patch",
             "progress": {
               "named": {
-                "status": "{tool, select, write {Schreibe {path}… {lines, plural, one {# Zeile} other {# Zeilen}}} other {Bearbeite {path}… {lines, plural, one {# Zeile} other {# Zeilen}}}}"
+                "status": "{tool, select, write {Schreibe {path}…} other {Bearbeite {path}…}}"
               },
               "unnamed": {
                 "status": "{tool, select, write {Schreibe eine Datei…} other {Bearbeite eine Datei…}}"

@@ -12731,7 +12731,7 @@
             "title": "Parche",
             "progress": {
               "named": {
-                "status": "{tool, select, write {Escribiendo {path}… {lines, plural, one {# línea} other {# líneas}}} other {Editando {path}… {lines, plural, one {# línea} other {# líneas}}}}"
+                "status": "{tool, select, write {Escribiendo {path}…} other {Editando {path}…}}"
               },
               "unnamed": {
                 "status": "{tool, select, write {Escribiendo un archivo…} other {Editando un archivo…}}"

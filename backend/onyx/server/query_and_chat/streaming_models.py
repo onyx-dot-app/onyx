@@ -354,19 +354,16 @@ class ToolCallArgumentDelta(BaseObj):
 
 
 class FileToolProgress(BaseObj):
-    """What a file tool call's arguments hold while the model streams them;
-    the call's start packet follows.
-
-    `lines` counts the lines of the file text or patch so far. A `write` or
-    `edit` card shows it; an `apply_patch` card shows the count and list of
-    files in `paths`, not `lines`.
+    """The files a file tool call's arguments name while the model streams
+    them; the call's start packet follows. A call sends one only when the
+    files change. A `write` or `edit` card names its file; an `apply_patch`
+    card shows the count and list of files.
     """
 
     type: Literal["file_tool_progress"] = StreamingType.FILE_TOOL_PROGRESS.value
     tool_name: FileToolName
     # The files the arguments name so far, in order.
     paths: list[str]
-    lines: int
 
 
 ################################################

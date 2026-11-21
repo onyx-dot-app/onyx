@@ -12731,7 +12731,7 @@
             "title": "التصحيح",
             "progress": {
               "named": {
-                "status": "{tool, select, write {جارٍ كتابة {path}… {lines, plural, zero {# سطر} one {سطر واحد} two {سطران} few {# أسطر} many {# سطرًا} other {# سطر}}} other {جارٍ تعديل {path}… {lines, plural, zero {# سطر} one {سطر واحد} two {سطران} few {# أسطر} many {# سطرًا} other {# سطر}}}}"
+                "status": "{tool, select, write {جارٍ كتابة {path}…} other {جارٍ تعديل {path}…}}"
               },
               "unnamed": {
                 "status": "{tool, select, write {جارٍ كتابة ملف…} other {جارٍ تعديل ملف…}}"

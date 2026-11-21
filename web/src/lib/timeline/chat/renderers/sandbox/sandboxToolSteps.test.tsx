@@ -377,12 +377,8 @@ test("a patch lists the files it changed, and a failed patch says why", async ()
   }
 });
 
-function fileProgress(
-  tool_name: FileToolName,
-  paths: string[],
-  lines: number
-): ObjTypes {
-  return { type: PacketType.FILE_TOOL_PROGRESS, tool_name, paths, lines };
+function fileProgress(tool_name: FileToolName, paths: string[]): ObjTypes {
+  return { type: PacketType.FILE_TOOL_PROGRESS, tool_name, paths };
 }
 
 /** The text of a message's steps, from `from` on: the run header measures
@@ -402,8 +398,8 @@ async function stepsText(packets: Packet[], from: string): Promise<string> {
 test("a write shows its progress while it streams, then the replayed card", async () => {
   const call = at({ turn_index: 0, tab_index: 0 });
   const streaming = [
-    call(fileProgress("write", [], 0)),
-    call(fileProgress("write", ["report.md"], 120)),
+    call(fileProgress("write", [])),
+    call(fileProgress("write", ["report.md"])),
   ];
   const finished = [
     call({
@@ -424,7 +420,7 @@ test("a write shows its progress while it streams, then the replayed card", asyn
 
   const view = render(renderMessage(streaming));
   try {
-    const progress = wholeText("Writing report.md… 120 lines");
+    const progress = wholeText("Writing report.md…");
     expect((await screen.findAllByText(progress)).length).toBeGreaterThan(0);
     // The run header names the activity before the start packet arrives.
     expect(screen.getAllByText("Editing files").length).toBeGreaterThan(0);
@@ -444,8 +440,8 @@ test("a write shows its progress while it streams, then the replayed card", asyn
 test("a patch names its files while it streams, then matches its replay", async () => {
   const call = at({ turn_index: 0, tab_index: 0 });
   const streaming = [
-    call(fileProgress("apply_patch", [], 1)),
-    call(fileProgress("apply_patch", ["new.py", "old.py"], 7)),
+    call(fileProgress("apply_patch", [])),
+    call(fileProgress("apply_patch", ["new.py", "old.py"])),
   ];
   const finished = [
     call({
@@ -478,18 +474,15 @@ test("a patch names its files while it streams, then matches its replay", async 
   );
 });
 
-test("an edit names its file and the lines of its new text", async () => {
+test("an edit names its file", async () => {
   const view = render(
     renderMessage([
-      at({ turn_index: 0, tab_index: 0 })(
-        fileProgress("edit", ["src/app.py"], 3)
-      ),
+      at({ turn_index: 0, tab_index: 0 })(fileProgress("edit", ["src/app.py"])),
     ])
   );
   try {
     expect(
-      (await screen.findAllByText(wholeText("Editing src/app.py… 3 lines")))
-        .length
+      (await screen.findAllByText(wholeText("Editing src/app.py…"))).length
     ).toBeGreaterThan(0);
   } finally {
     view.unmount();
@@ -499,7 +492,7 @@ test("an edit names its file and the lines of its new text", async () => {
 test("a call names its file only once the path arrives", async () => {
   const view = render(
     renderMessage([
-      at({ turn_index: 0, tab_index: 0 })(fileProgress("edit", [], 0)),
+      at({ turn_index: 0, tab_index: 0 })(fileProgress("edit", [])),
     ])
   );
   try {
@@ -535,14 +528,14 @@ test("sandbox text is isolated in markup, and paths show without bidi controls",
         files: [{ path: `out/${path}`, title: "\u202Bnotes" }],
         description: null,
       }),
-      streaming(fileProgress("write", [path], 1)),
+      streaming(fileProgress("write", [path])),
     ])
   );
   try {
     // Displayed paths and labels drop their bidi controls, and markup
     // isolates them, so copied text has no hidden characters.
     expect(
-      (await screen.findAllByText(wholeText("Writing ab.py… 1 line"))).length
+      (await screen.findAllByText(wholeText("Writing ab.py…"))).length
     ).toBeGreaterThan(0);
     for (const code of screen.getAllByText("ab.py", { selector: "code" })) {
       expect(code).toHaveAttribute("dir", "ltr");
@@ -573,7 +566,7 @@ test("a patch stopped while it streams shows only that it stopped, as on replay"
     type: PacketType.STOP,
     stop_reason: StopReason.USER_CANCELLED,
   });
-  const progress = call(fileProgress("apply_patch", ["new.py"], 3));
+  const progress = call(fileProgress("apply_patch", ["new.py"]));
   // A stop before the call's start: the live card keeps no partial progress.
   const view = render(renderMessage([progress, stop]));
   try {
@@ -604,7 +597,7 @@ test("a patch whose call fails after its progress shows only the error", async (
   const call = at({ turn_index: 0, tab_index: 0 });
   const view = render(
     renderMessage([
-      call(fileProgress("apply_patch", ["new.py", "old.py"], 7)),
+      call(fileProgress("apply_patch", ["new.py", "old.py"])),
       call({
         type: PacketType.APPLY_PATCH_START,
         patch: PATCH,

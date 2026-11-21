@@ -12731,7 +12731,7 @@
             "title": "Correctif",
             "progress": {
               "named": {
-                "status": "{tool, select, write {Écriture de {path}… {lines, plural, one {# ligne} other {# lignes}}} other {Modification de {path}… {lines, plural, one {# ligne} other {# lignes}}}}"
+                "status": "{tool, select, write {Écriture de {path}…} other {Modification de {path}…}}"
               },
               "unnamed": {
                 "status": "{tool, select, write {Écriture d’un fichier…} other {Modification d’un fichier…}}"
