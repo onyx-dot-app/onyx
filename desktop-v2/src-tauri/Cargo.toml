@@ -54,6 +54,13 @@ objc2-app-kit = { version = "0.3", default-features = false, features = ["std", 
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.56"
+# Menu keys while WebView2 has focus (main_window.rs); the versions wry uses.
+webview2-com = "0.39"
+windows = { version = "0.62", features = ["Win32_UI_Input_KeyboardAndMouse"] }
+
+# Web view settings and the context menu (main_window.rs); the version wry uses.
+[target.'cfg(target_os = "linux")'.dependencies]
+webkit2gtk = { version = "2.0", features = ["v2_38"] }
 
 [features]
 default = ["custom-protocol"]
