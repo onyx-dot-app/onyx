@@ -121,17 +121,34 @@ fn open_answer(app: &AppHandle, answer: Answer) {
 const ANSWER_LINK: &str = "onyx://launcher/answer";
 
 #[cfg(any(windows, test))]
-fn answer_link(answer: Answer) -> String {
+const RUN_KEY: &str = "run";
+
+/// Answer and session counters start again in each run, and Action Center
+/// keeps a toast after the app quits; a toast opens only the run that showed it.
+#[cfg(windows)]
+fn this_run() -> u64 {
+    static RUN: std::sync::OnceLock<u64> = std::sync::OnceLock::new();
+    *RUN.get_or_init(rand::random)
+}
+
+#[cfg(any(windows, test))]
+fn answer_link(answer: Answer, run: u64) -> String {
     format!(
-        "{ANSWER_LINK}?{ANSWER_KEY}={}&{EPOCH_KEY}={}",
+        "{ANSWER_LINK}?{ANSWER_KEY}={}&{EPOCH_KEY}={}&{RUN_KEY}={run}",
         answer.id, answer.epoch
     )
 }
 
-/// The answer of an `onyx://launcher/answer` link.
+/// Whether `url` is an `onyx://launcher/answer` link, from this run or not.
 #[cfg(any(windows, test))]
-fn linked_answer(url: &url::Url) -> Option<Answer> {
-    if url.scheme() != "onyx" || url.host_str() != Some("launcher") || url.path() != "/answer" {
+fn is_answer_route(url: &url::Url) -> bool {
+    url.scheme() == "onyx" && url.host_str() == Some("launcher") && url.path() == "/answer"
+}
+
+/// The answer of an `onyx://launcher/answer` link from run `run`.
+#[cfg(any(windows, test))]
+fn linked_answer(url: &url::Url, run: u64) -> Option<Answer> {
+    if !is_answer_route(url) {
         return None;
     }
     let param = |key: &str| {
@@ -139,6 +156,9 @@ fn linked_answer(url: &url::Url) -> Option<Answer> {
             .find(|(k, _)| k == key)
             .and_then(|(_, v)| v.parse::<u64>().ok())
     };
+    if param(RUN_KEY)? != run {
+        return None;
+    }
     Some(Answer {
         id: param(ANSWER_KEY)?,
         epoch: param(EPOCH_KEY)?,
@@ -146,15 +166,16 @@ fn linked_answer(url: &url::Url) -> Option<Answer> {
 }
 
 /// Whether a launch argument is a notification click (see `ANSWER_LINK`).
+/// A toast from an earlier run counts too: it must not open the main window.
 #[cfg(windows)]
 pub fn is_answer_link(arg: &str) -> bool {
-    url::Url::parse(arg).is_ok_and(|url| linked_answer(&url).is_some())
+    url::Url::parse(arg).is_ok_and(|url| is_answer_route(&url))
 }
 
 /// Handles `onyx://launcher/answer?..` from a clicked toast.
 #[cfg(windows)]
 pub fn handle_link(app: &AppHandle, url: &url::Url) {
-    if let Some(answer) = linked_answer(url) {
+    if let Some(answer) = linked_answer(url, this_run()) {
         open_answer(app, answer);
     }
 }
@@ -198,7 +219,11 @@ fn show_toast(app: &AppHandle, title: &str, body: &str, answer: Answer) -> Resul
     };
     let show = || -> windows::core::Result<()> {
         let xml = XmlDocument::new()?;
-        xml.LoadXml(&HSTRING::from(toast_xml(title, body, &answer_link(answer))))?;
+        xml.LoadXml(&HSTRING::from(toast_xml(
+            title,
+            body,
+            &answer_link(answer, this_run()),
+        )))?;
         let toast = ToastNotification::CreateToastNotification(&xml)?;
         ToastNotificationManager::CreateToastNotifierWithId(&HSTRING::from(app_id))?.Show(&toast)
     };
@@ -368,13 +393,27 @@ mod tests {
     #[test]
     fn a_toast_link_carries_the_answer_and_its_session() {
         let answer = Answer { id: 7, epoch: 2 };
-        let link = url::Url::parse(&answer_link(answer)).expect("a valid link");
-        assert_eq!(linked_answer(&link), Some(answer));
-        let parse = |s: &str| linked_answer(&url::Url::parse(s).unwrap());
-        assert_eq!(parse("onyx://auth/callback?answer=7&epoch=2"), None);
-        assert_eq!(parse("onyx://launcher/answer?answer=7"), None);
-        assert_eq!(parse("onyx://launcher/answer?answer=x&epoch=2"), None);
-        assert_eq!(parse("https://launcher/answer?answer=7&epoch=2"), None);
+        let link = url::Url::parse(&answer_link(answer, 9)).expect("a valid link");
+        assert_eq!(linked_answer(&link, 9), Some(answer));
+        let parse = |s: &str| linked_answer(&url::Url::parse(s).unwrap(), 9);
+        assert_eq!(parse("onyx://auth/callback?answer=7&epoch=2&run=9"), None);
+        assert_eq!(parse("onyx://launcher/answer?answer=7&run=9"), None);
+        assert_eq!(parse("onyx://launcher/answer?answer=x&epoch=2&run=9"), None);
+        assert_eq!(
+            parse("https://launcher/answer?answer=7&epoch=2&run=9"),
+            None
+        );
+    }
+
+    #[test]
+    fn a_toast_from_an_earlier_run_opens_nothing() {
+        let answer = Answer { id: 1, epoch: 0 };
+        let old = url::Url::parse(&answer_link(answer, 4)).unwrap();
+        assert_eq!(linked_answer(&old, 5), None);
+        // Still an answer link, so the main window does not open for it.
+        assert!(is_answer_route(&old));
+        let no_run = url::Url::parse("onyx://launcher/answer?answer=1&epoch=0").unwrap();
+        assert_eq!(linked_answer(&no_run, 5), None);
     }
 
     #[test]
