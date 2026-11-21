@@ -865,9 +865,15 @@ def update_connector_files(
     }
     final_zip_metadata.update(new_zip_metadata)
 
-    # Save merged metadata to file store if we have any metadata
+    # Keep the current metadata file when the metadata did not change. A new
+    # file dates every file later, so the next run would re-embed them all.
+    # Compare the JSON text: Python treats 1, 1.0 and True as equal.
     final_zip_metadata_file_id: str | None = None
-    if final_zip_metadata:
+    if json.dumps(final_zip_metadata, sort_keys=True) == json.dumps(
+        current_zip_metadata, sort_keys=True
+    ):
+        final_zip_metadata_file_id = current_zip_metadata_file_id
+    elif final_zip_metadata:
         final_zip_metadata_file_id = file_store.save_file(
             content=BytesIO(json.dumps(final_zip_metadata).encode("utf-8")),
             display_name=ONYX_METADATA_FILENAME,
