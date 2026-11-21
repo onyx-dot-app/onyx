@@ -218,6 +218,10 @@ interface ConnectorValidationMessages {
   confluenceScopeRequired?: string;
   /** Confluence's CQL Query tab with no query. */
   confluenceCqlRequired?: string;
+  /** Jira Service Management's Project tab with no project key. */
+  jiraServiceManagementProjectKeyRequired?: string;
+  /** Jira Service Management's JQL tab with no query. */
+  jiraServiceManagementJqlRequired?: string;
   /** Sync with Restrict on and no group picked. */
   restrictionGroupsRequired?: string;
   /** A string-pair row with an empty left key. */
@@ -404,6 +408,30 @@ export function createConnectorValidationSchema(
         schema
           .trim()
           .required(messages.confluenceCqlRequired ?? "Add a CQL query."),
+    });
+  }
+
+  if (connector === ValidSources.JiraServiceManagement) {
+    // A blank project key or JQL query would index every service desk.
+    fieldSchemas.project_key = Yup.string().when("indexing_scope", {
+      is: "project",
+      then: (schema) =>
+        schema
+          .trim()
+          .required(
+            messages.jiraServiceManagementProjectKeyRequired ??
+              "Project key cannot be blank."
+          ),
+    });
+    fieldSchemas.jql_query = Yup.string().when("indexing_scope", {
+      is: "jql",
+      then: (schema) =>
+        schema
+          .trim()
+          .required(
+            messages.jiraServiceManagementJqlRequired ??
+              "JQL query cannot be blank."
+          ),
     });
   }
 

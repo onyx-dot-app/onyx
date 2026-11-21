@@ -306,8 +306,8 @@ const zoomWebinarIdsOption: ListOption = {
 };
 
 /**
- * Whether an Atlassian API token (Confluence, Jira) has scopes. It sits below
- * the site URL in both connectors.
+ * Whether an Atlassian API token (Confluence, Jira, Jira Service Management)
+ * has scopes. It sits below the site URL.
  */
 const ATLASSIAN_SCOPED_TOKEN_FIELD: BooleanOption = {
   type: "checkbox",
@@ -1101,6 +1101,85 @@ export const connectorConfigs: Record<
         name: "comment_email_blacklist",
         description:
           "connectors.jira.fields.comment_email_blacklist.description",
+        optional: true,
+      },
+    ],
+    advanced_values: [],
+  },
+  jira_service_management: {
+    description: "connectors.jiraServiceManagement.description",
+    subtext: "connectors.jiraServiceManagement.subtext",
+    values: [
+      {
+        type: "text",
+        label: "connectors.jiraServiceManagement.fields.jira_base_url.label",
+        name: "jira_base_url",
+        optional: false,
+        placeholder:
+          "connectors.jiraServiceManagement.fields.jira_base_url.placeholder",
+        subDescription: "siteUrl",
+      },
+      ATLASSIAN_SCOPED_TOKEN_FIELD,
+      {
+        type: "tab",
+        name: "indexing_scope",
+        optional: true,
+        tabs: [
+          {
+            value: "everything",
+            label:
+              "connectors.jiraServiceManagement.fields.indexing_scope.tabs.everything.label",
+            fields: [
+              {
+                type: "string_tab",
+                label:
+                  "connectors.jiraServiceManagement.fields.everything.label",
+                name: "everything",
+                description:
+                  "connectors.jiraServiceManagement.fields.everything.description",
+              },
+            ],
+          },
+          {
+            value: "project",
+            label:
+              "connectors.jiraServiceManagement.fields.indexing_scope.tabs.project.label",
+            fields: [
+              {
+                type: "text",
+                label:
+                  "connectors.jiraServiceManagement.fields.project_key.label",
+                name: "project_key",
+                description:
+                  "connectors.jiraServiceManagement.fields.project_key.description",
+              },
+            ],
+          },
+          {
+            value: "jql",
+            label:
+              "connectors.jiraServiceManagement.fields.indexing_scope.tabs.jql.label",
+            fields: [
+              {
+                type: "text",
+                label:
+                  "connectors.jiraServiceManagement.fields.jql_query.label",
+                name: "jql_query",
+                description:
+                  "connectors.jiraServiceManagement.fields.jql_query.description",
+              },
+            ],
+          },
+        ],
+        defaultTab: "everything",
+      },
+      {
+        type: "list",
+        label:
+          "connectors.jiraServiceManagement.fields.comment_email_blacklist.label",
+        name: "comment_email_blacklist",
+        description:
+          "connectors.jiraServiceManagement.fields.comment_email_blacklist.description",
         optional: true,
       },
     ],

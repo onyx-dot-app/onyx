@@ -417,6 +417,7 @@ def test_scoped_and_window_backfills_together() -> None:
         (DocumentSource.SLACK, {}, False),
         (DocumentSource.CONFLUENCE, _CONFLUENCE_SITE, True),
         (DocumentSource.JIRA, _JIRA_SITE, True),
+        (DocumentSource.JIRA_SERVICE_MANAGEMENT, _JIRA_SITE, True),
     ],
 )
 def test_credential_change_offers_a_choice(

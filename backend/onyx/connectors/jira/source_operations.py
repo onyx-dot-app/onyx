@@ -346,6 +346,54 @@ class JiraSourceOperations(SourceOperations):
 
     @source_operation(
         capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.CREDENTIAL,
+        untested=(
+            "The Jira Service Management connector reads the field catalog "
+            "while indexing, to map site-specific custom field ids. No "
+            "capability check lists fields."
+        ),
+    )
+    def list_fields(self, *, fast: bool = False) -> list[dict[str, Any]]:
+        """Returns the site's fields (``GET /field``), including schema."""
+        with _translate_errors(fast=fast):
+            fields: Any = self._client(fast=fast).fields()
+        if not isinstance(fields, list):
+            raise RuntimeError("Jira fields response is not a list")
+        raw_fields: list[dict[str, Any]] = []
+        for field in fields:
+            if not isinstance(field, dict):
+                raise RuntimeError("Jira fields response holds a non-object field")
+            raw_fields.append(field)
+        return raw_fields
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
+        consumes=OperationConsumes.BOTH,
+        untested=(
+            "Used only when an issue's embedded comments are truncated. "
+            "Capability checks read one issue and do not page its comments."
+        ),
+    )
+    def list_issue_comments(
+        self,
+        *,
+        issue_key: str,
+        start_at: int,
+        max_results: int,
+        fast: bool = False,
+    ) -> dict[str, Any]:
+        """One page of comments on an issue (``issue/{key}/comment``)."""
+        with _translate_errors(fast=fast):
+            page: Any = self._client(fast=fast)._get_json(
+                f"issue/{issue_key}/comment",
+                params={"startAt": start_at, "maxResults": max_results},
+            )
+        if not isinstance(page, dict):
+            raise RuntimeError("Jira comment page is not an object")
+        return page
+
+    @source_operation(
+        capabilities={CredentialCapability.INDEXING},
         consumes=OperationConsumes.BOTH,
     )
     def search_issues(
