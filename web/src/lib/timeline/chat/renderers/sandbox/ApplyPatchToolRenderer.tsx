@@ -237,6 +237,9 @@ export function ApplyPatchToolRenderer({
     {
       icon: STEP_ICONS.edit,
       status,
+      // The live progress updates in place; only the end of the call swaps
+      // the title.
+      statusKey: liveProgress === null ? undefined : "progress",
       supportsCollapsible: true,
       content,
     },

@@ -45,6 +45,12 @@ export interface RendererResult {
   status: string | RichStr | null;
   /** The header once the step is done. Defaults to `status`. */
   doneStatus?: string | RichStr | null;
+  /**
+   * The header's identity: a new key swaps the header through an animation,
+   * and a new header with the same key updates in place. Defaults to the
+   * header's text; a live header that changes often keeps one key.
+   */
+  statusKey?: string;
   content: JSX.Element;
 
   // can be used to override the look on the "expanded" view

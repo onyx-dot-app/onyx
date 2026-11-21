@@ -1,4 +1,4 @@
-import { act, render, screen } from "@tests/setup/test-utils";
+import { act, render, screen, waitFor } from "@tests/setup/test-utils";
 import { Message } from "@/app/app/types";
 import { upsertMessages } from "@/app/app/services/messageTree";
 import {
@@ -489,18 +489,64 @@ test("an edit names its file", async () => {
   }
 });
 
-test("a call names its file only once the path arrives", async () => {
-  const view = render(
-    renderMessage([
-      at({ turn_index: 0, tab_index: 0 })(fileProgress("edit", [])),
-    ])
+/** Turns motion on, which jsdom's setup reduces, so a title that swaps
+ * through an animation would keep its old text and element. */
+function allowMotion() {
+  return jest.spyOn(window, "matchMedia").mockImplementation(
+    (query) =>
+      ({
+        matches: false,
+        media: query,
+        addEventListener: jest.fn(),
+        removeEventListener: jest.fn(),
+      }) as unknown as MediaQueryList
   );
+}
+
+test("a call names its file once the path arrives, in the same title element", async () => {
+  const motion = allowMotion();
+  const call = at({ turn_index: 0, tab_index: 0 });
+  const view = render(renderMessage([call(fileProgress("edit", []))]));
   try {
-    expect(
-      (await screen.findAllByText("Editing a file…")).length
-    ).toBeGreaterThan(0);
+    const titles = await screen.findAllByText("Editing a file…");
+    // A remounted title would restart its animation.
+    view.rerender(renderMessage([call(fileProgress("edit", ["src/app.py"]))]));
+    for (const title of titles) {
+      await waitFor(() =>
+        expect(title).toHaveTextContent("Editing src/app.py…")
+      );
+      expect(title).toBeInTheDocument();
+    }
   } finally {
     view.unmount();
+    motion.mockRestore();
+  }
+});
+
+test("the run header keeps its shimmer element when its activity changes", async () => {
+  const motion = allowMotion();
+  const edit = [at({ turn_index: 0, tab_index: 0 })(fileProgress("edit", []))];
+  const view = render(renderMessage(edit));
+  try {
+    const shimmer = (await screen.findByText("Editing files")).closest(
+      ".opal-text-loader-wave"
+    );
+    expect(shimmer).not.toBeNull();
+    view.rerender(
+      renderMessage([
+        ...edit,
+        at({ turn_index: 1, tab_index: 0 })({
+          type: PacketType.EXEC_COMMAND_START,
+          cmd: "ls",
+          workdir: null,
+        }),
+      ])
+    );
+    await waitFor(() => expect(shimmer).toHaveTextContent("Running command"));
+    expect(shimmer).toBeInTheDocument();
+  } finally {
+    view.unmount();
+    motion.mockRestore();
   }
 });
 
