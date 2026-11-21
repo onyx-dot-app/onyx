@@ -106,6 +106,10 @@ class HuggingFaceTokenizer(BaseTokenizer):
 
 _TOKENIZER_CACHE: dict[tuple[EmbeddingProvider | None, str | None], BaseTokenizer] = {}
 
+# Only successful resolutions are cached, so a failed lookup (e.g. while
+# offline) is retried on the next call instead of being pinned forever.
+_MODEL_TOKENIZER_CACHE: dict[str, BaseTokenizer] = {}
+
 
 def _check_tokenizer_cache(
     model_provider: EmbeddingProvider | None, model_name: str | None
@@ -182,18 +186,104 @@ def _get_default_tokenizer() -> BaseTokenizer:
 
 
 def get_tokenizer(
-    model_name: str | None, provider_type: EmbeddingProvider | str | None
+    model_name: str | None,
+    provider_type: EmbeddingProvider | str | None,
+    deployment_name: str | None = None,
+    resolve_from_model: bool = False,
 ) -> BaseTokenizer:
+    if resolve_from_model:
+        # Generation call sites pass this flag: names like "azure" are both
+        # generation and embedding providers, so the embedding-tokenizer cache
+        # path below would hand generation calls the wrong (embedding) budget.
+        # Resolve from the model that is actually sent on the wire instead.
+        tokenizer = _resolve_tokenizer_for_model(model_name, deployment_name)
+        if tokenizer is not None:
+            return tokenizer
+        logger.warning(
+            "Could not resolve a tokenizer for generation model %s; falling back to the default tokenizer.",
+            deployment_name or model_name,
+        )
+        return _get_default_tokenizer()
     if isinstance(provider_type, str):
         try:
             provider_type = EmbeddingProvider(provider_type)
         except ValueError:
-            logger.debug(
-                "Invalid provider_type '%s'. Falling back to default tokenizer.",
-                provider_type,
+            # Generation providers such as litellm_proxy are not embedding
+            # providers. Resolve the tokenizer from the model that is sent on
+            # the wire instead of silently counting with the default tokenizer.
+            tokenizer = _resolve_tokenizer_for_model(model_name, deployment_name)
+            if tokenizer is not None:
+                return tokenizer
+            logger.warning(
+                "Could not resolve a tokenizer for generation model %s; falling back to the default tokenizer.",
+                deployment_name or model_name,
             )
             return _get_default_tokenizer()
     return _check_tokenizer_cache(provider_type, model_name)
+
+
+def _resolve_tokenizer_for_model(
+    model_name: str | None, deployment_name: str | None = None
+) -> BaseTokenizer | None:
+    """Resolve a tokenizer from the model that is sent on the wire.
+
+    Tiktoken is tried for every candidate name: the deployment alias, the
+    model name, and the model name stripped of a "provider/" prefix
+    ("openai/gpt-4o" -> "gpt-4o"), since tiktoken only knows bare model names.
+    HuggingFace is only tried for real model names — a deployment alias is a
+    routing label, not something the HuggingFace loader can serve. Only
+    successful resolutions are cached; failures are retried on the next call.
+    """
+    model_name = (model_name or "").strip() or None
+    deployment_name = (deployment_name or "").strip() or None
+    if not model_name and not deployment_name:
+        return None
+
+    def _strip_provider_prefix(name: str) -> str:
+        return name.split("/", 1)[1] if "/" in name else name
+
+    bare_model = _strip_provider_prefix(model_name) if model_name else None
+
+    tiktoken_candidates: list[str] = []
+    for candidate in (deployment_name, model_name, bare_model):
+        if candidate and candidate not in tiktoken_candidates:
+            tiktoken_candidates.append(candidate)
+
+    hf_candidates: list[str] = []
+    for candidate in (model_name, bare_model):
+        if candidate and candidate not in hf_candidates:
+            hf_candidates.append(candidate)
+
+    for candidate in tiktoken_candidates:
+        if candidate in _MODEL_TOKENIZER_CACHE:
+            return _MODEL_TOKENIZER_CACHE[candidate]
+        try:
+            tokenizer: BaseTokenizer = TiktokenTokenizer(candidate)
+            _MODEL_TOKENIZER_CACHE[candidate] = tokenizer
+            return tokenizer
+        except Exception as tiktoken_error:
+            logger.debug(
+                "TiktokenTokenizer not available for model %s: %s",
+                candidate,
+                tiktoken_error,
+            )
+
+    for candidate in hf_candidates:
+        if candidate in _MODEL_TOKENIZER_CACHE:
+            return _MODEL_TOKENIZER_CACHE[candidate]
+        try:
+            tokenizer: BaseTokenizer = HuggingFaceTokenizer(candidate)
+            _MODEL_TOKENIZER_CACHE[candidate] = tokenizer
+            return tokenizer
+        except Exception as hf_error:
+            logger.debug(
+                "HuggingFaceTokenizer not available for model %s: %s",
+                candidate,
+                hf_error,
+            )
+
+    return None
+
 
 
 # Max characters per encode() call.
