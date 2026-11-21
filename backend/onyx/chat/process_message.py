@@ -36,6 +36,7 @@ from onyx.chat.files import (
     extract_context_files,
     load_chat_files,
     load_context_user_files_for_tools,
+    place_chat_files,
     resolve_context_user_files,
 )
 from onyx.chat.history_store import RedisChatHistoryStore
@@ -80,6 +81,7 @@ from onyx.db.chat import (
     create_new_chat_message,
     find_summary_for_branch,
     get_chat_session_by_id,
+    get_chat_session_user_files,
     load_message_branch,
     reserve_chat_response_ids,
     reserve_stream_id,
@@ -535,7 +537,8 @@ def prepare_chat_turn(
             # One sandbox serves one user, and anonymous visitors share one
             # user. Incognito cleanup does not reach the sandbox's files. Two
             # models must not change one session directory at once. Bots
-            # get no sandbox until they have service-account sandboxes.
+            # get no sandbox until they have service-account sandboxes. Deep
+            # research gets no sandbox.
             sandbox_tools = (
                 HARNESS_SANDBOX_ENABLED
                 and not user.is_anonymous
@@ -677,10 +680,19 @@ def prepare_chat_turn(
                 if results_turn or agent_host or resumed_response_id is not None
                 else response_parent_id
             )
+            context_files = resolve_context_user_files(
+                persona, chat_session.project_id, user.id, db_session
+            )
             context_user_files = capture_user_file_metadata(
-                resolve_context_user_files(
-                    persona, chat_session.project_id, user.id, db_session
+                [*context_files.project, *context_files.agent]
+            )
+            placed_chat_files = (
+                place_chat_files(
+                    get_chat_session_user_files(chat_session.id, db_session),
+                    context_files,
                 )
+                if sandbox_tools
+                else None
             )
             # Collect file IDs for the file reader tool *before* summary truncation so
             # that files attached to older (summarized-away) messages are still accessible
@@ -842,6 +854,9 @@ def prepare_chat_turn(
         history = convert_chat_history(
             chat_history=captured_history,
             files=loaded_files,
+            vm_paths={}
+            if placed_chat_files is None
+            else placed_chat_files.upload_paths,
         )
         if not any(
             tool.in_code_tool_id == FILE_READER_TOOL_ID
@@ -930,6 +945,8 @@ def prepare_chat_turn(
             base_system_prompt=base_system_prompt,
             tool_configuration=tool_configuration,
             sandbox_tools=sandbox_tools,
+            vm_chat_files=[] if placed_chat_files is None else placed_chat_files.files,
+            copy_vm_chat_files=placed_chat_files is not None,
             question_tool=question_tool,
             research_tool_id=research_tool_id,
             checkpoint=checkpoint,

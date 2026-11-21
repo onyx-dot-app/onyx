@@ -392,7 +392,9 @@ are plain `AgentTool` objects with no `Tool` row, and
    the finalized result into the run record that chat saves, and publishes
    `ToolEndEvent`. Before `Run.record_tool_results` records and streams a
    result, `Agent.prepare_tool_result` can replace it, one result at a time in
-   completion order; chat's sandbox spill uses it ([[code-execution]]). After a
+   completion order; chat's sandbox spill uses it, and then adds the file copy
+   status line to the root agent's sandbox and code mode results
+   ([[code-execution]]). After a
    cancel between `Run.record_tool_results` and `finish_tool`, the saved
    result is the recorded result, before `after_tool_call`, and no
    `ToolEndEvent` is sent. A tool whose calls must not overlap

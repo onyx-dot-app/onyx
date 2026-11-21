@@ -370,16 +370,46 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files (no tool
                                         AgentCancelled. Calls inside a program skip the
                                         hook; the program gets the full value
                                         (stubs.py:program_value)
+  ChatAgent._prepare_sandbox_result     Wraps the spill. After it, the root agent's
+                                        successful sandbox and code mode results end
+                                        with the turn's TurnFileCopies.status.line() when
+                                        it changed; failed results, amendments,
+                                        subagents and calls inside a program never get
+                                        it
   TurnFileCopies (sandbox/file_copies)  SandboxTurn.file_copies: the turn's background copy
                                         of chat files into the chat's attachments/, and
                                         the [files] status line (in memory, per turn).
-                                        In a turn that copies them, the turn's first
-                                        sandbox call starts it with the SandboxTurn's
-                                        vm_chat_files; the caller authorizes each file.
-                                        The module docstring has the rules; its
-                                        FileCopyPool holds the pod's threads, shared by
-                                        the chats of each VM, and main.py stops it at
-                                        API shutdown
+                                        The turn's first sandbox call starts it with the
+                                        chat files that turn setup chose
+                                        (process_message: ChatTurnSetup.vm_chat_files,
+                                        from chat/files.py:place_chat_files): the
+                                        chat's uploads on every branch (the user
+                                        messages' file descriptors,
+                                        db/chat.py:get_chat_session_user_files) in
+                                        attachments/, and the project's and the
+                                        agent's files in attachments/project/ and
+                                        attachments/agent/. A name is the first 8 hex
+                                        digits of the file store ID and the file's
+                                        name, so a path never holds another file;
+                                        the file messages of the branch name their
+                                        paths in "In the VM:" lines
+                                        (chat_utils.convert_chat_history). Each
+                                        copy lists the three directories, writes
+                                        the files that are not there at their
+                                        size, and deletes the project and agent
+                                        files that left; a per-chat generation
+                                        lets the newest turn win.
+                                        Agent-host turns copy too, so an agent
+                                        resumed on a restored VM has its files; deep
+                                        research has no sandbox. The module docstring
+                                        has the rules; its FileCopyPool holds the pod's
+                                        threads, shared by the chats of each VM, and
+                                        main.py stops it at API shutdown. In a chat
+                                        with chat files, the exec_command description
+                                        gives the layout (CHAT_FILES_LAYOUT), in
+                                        agent-host turns too; edits to
+                                        attachments/ get ATTACHMENTS_NOT_SAVED_NOTE
+                                        (sandbox_tools.py), and session saves skip it
   Agent.on_drained (root ChatAgent)     SandboxTurn.end: create_chat_agent passes it to the
                                         root chat agent only (bind_run_store: also to a
                                         restored root), not to subagents or deep research

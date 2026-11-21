@@ -412,6 +412,7 @@ def test_summary_cutoff_survives_next_user_turn(long_question: bool) -> None:
     source = convert_chat_history(
         [old_answer, question],
         files=[],
+        vm_paths={},
     ).messages
     checkpoint = compact_history(model, source, None, GenerationContext())
     assert checkpoint.covered_through_message_id == "old-answer"
@@ -420,6 +421,7 @@ def test_summary_cutoff_survives_next_user_turn(long_question: bool) -> None:
     reloaded = convert_chat_history(
         [old_answer, question, next_question],
         files=[],
+        vm_paths={},
     ).messages
     restored_checkpoint = CompactionCheckpoint.model_validate_json(
         checkpoint.model_dump_json()
@@ -869,6 +871,7 @@ def test_image_replay_cost_controls_compaction_and_output_allowance(
             ),
         ],
         files=[image],
+        vm_paths={},
     ).messages
     original = [message.model_copy(deep=True) for message in history]
     model = ImageBudgetModel()
@@ -1049,7 +1052,7 @@ def test_compaction_drops_skill_messages_and_keeps_the_question_as_the_task() ->
         response_messages=[],
     )
     history: list[Message] = [
-        *convert_chat_history([question], files=[]).messages,
+        *convert_chat_history([question], files=[], vm_paths={}).messages,
         AssistantMessage(
             id="work", content=[TextContent(text="Earlier research context. " * 300)]
         ),

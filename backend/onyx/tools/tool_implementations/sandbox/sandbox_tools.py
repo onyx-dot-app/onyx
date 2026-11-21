@@ -28,6 +28,8 @@ from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.prompts.sandbox_tools import (
     APPLY_PATCH_DESCRIPTION,
     APPLY_PATCH_USE,
+    ATTACHMENTS_NOT_SAVED_NOTE,
+    CHAT_FILES_LAYOUT,
     EDIT_DESCRIPTION,
     EDIT_USE,
     EXEC_COMMAND_DESCRIPTION,
@@ -41,6 +43,7 @@ from onyx.prompts.sandbox_tools import (
     WRITE_USE,
 )
 from onyx.server.features.build.sandbox.harness_base import (
+    CHAT_FILES_DIR,
     HarnessSandbox,
     HarnessSandboxError,
     SandboxPathError,
@@ -262,6 +265,12 @@ class ExecCommandTool(SandboxTool):
     display_name = "Terminal"
 
     @property
+    def description(self) -> str:
+        if self._turn.vm_chat_files:
+            return f"{self.DESCRIPTION} {CHAT_FILES_LAYOUT}"
+        return self.DESCRIPTION
+
+    @property
     def code_mode_result(self) -> CodeModeResultSpec:
         return _EXEC_RESULT
 
@@ -430,6 +439,20 @@ def _change_file(
         invocation.cancellation.check()
         _write_file(sandbox, ref, path, data, info)
     return ApplyPatchFileChange(path=path, change="add" if created else "update")
+
+
+def _noted(content: str, changes: Sequence[ApplyPatchFileChange]) -> str:
+    """The result text of file changes; a later turn can put back the
+    original chat files in attachments/."""
+    changed = [
+        path
+        for change in changes
+        for path in (change.path, change.move_path)
+        if path is not None
+    ]
+    if any(path.startswith(CHAT_FILES_DIR + "/") for path in changed):
+        return f"{content}\n\n{ATTACHMENTS_NOT_SAVED_NOTE}"
+    return content
 
 
 class ApplyPatchTool(_FileTool):
@@ -608,20 +631,17 @@ class ApplyPatchTool(_FileTool):
                     )
                     raise ToolCallException(message, message) from error
                 changed.append(path)
+        changes = [
+            ApplyPatchFileChange(
+                path=hunk.path,
+                change=_CHANGES[type(hunk)],
+                move_path=hunk.move_path if isinstance(hunk, UpdateFile) else None,
+            )
+            for hunk in hunks
+        ]
         return ToolResult(
-            content=summarize(hunks),
-            details=ApplyPatchResult(
-                files=[
-                    ApplyPatchFileChange(
-                        path=hunk.path,
-                        change=_CHANGES[type(hunk)],
-                        move_path=hunk.move_path
-                        if isinstance(hunk, UpdateFile)
-                        else None,
-                    )
-                    for hunk in hunks
-                ]
-            ),
+            content=_noted(summarize(hunks), changes),
+            details=ApplyPatchResult(files=changes),
         )
 
 
@@ -655,11 +675,12 @@ class EditTool(_FileTool):
             ),
         )
         return ToolResult(
-            content=(
+            content=_noted(
                 f"The file {change.path} has been updated. All occurrences were "
                 "successfully replaced."
                 if arguments.replace_all
-                else f"The file {change.path} has been updated successfully."
+                else f"The file {change.path} has been updated successfully.",
+                [change],
             ),
             details=ApplyPatchResult(files=[change]),
         )
@@ -691,9 +712,12 @@ class WriteTool(_FileTool):
             lambda _read: arguments.content,
         )
         return ToolResult(
-            content=f"File created successfully at: {change.path}"
-            if change.change == "add"
-            else f"The file {change.path} has been updated successfully.",
+            content=_noted(
+                f"File created successfully at: {change.path}"
+                if change.change == "add"
+                else f"The file {change.path} has been updated successfully.",
+                [change],
+            ),
             details=ApplyPatchResult(files=[change]),
         )
 

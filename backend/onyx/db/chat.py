@@ -7,8 +7,11 @@ from pydantic import TypeAdapter
 from sqlalchemy import (
     Integer,
     Row,
+    String,
     any_,
     bindparam,
+    case,
+    cast,
     delete,
     desc,
     exists,
@@ -17,6 +20,7 @@ from sqlalchemy import (
     nullsfirst,
     or_,
     select,
+    true,
     update,
 )
 from sqlalchemy.dialects import postgresql
@@ -63,6 +67,7 @@ from onyx.db.models import (
     ScheduledTaskRun,
     ToolCall,
     User,
+    UserFile,
 )
 from onyx.db.models import SearchDoc as DBSearchDoc
 from onyx.db.persona import get_best_persona_id_for_user
@@ -1278,6 +1283,52 @@ def create_new_chat_message(
         db_session.commit()
 
     return new_chat_message
+
+
+_UUID_PATTERN = "^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$"
+
+
+def get_chat_session_user_files(
+    chat_session_id: UUID, db_session: Session
+) -> list[UserFile]:
+    """The user files that the chat's user messages attached, on every
+    branch, in the order of their first message. Only file descriptors whose
+    `user_file_id` is the UUID of an existing user file count."""
+    descriptor = (
+        func.jsonb_array_elements(
+            case(
+                (func.jsonb_typeof(ChatMessage.files) == "array", ChatMessage.files),
+                else_=cast(literal("[]"), postgresql.JSONB),
+            )
+        )
+        .table_valued("value")
+        .lateral("descriptor")
+    )
+    raw_id = descriptor.c.value.op("->>", return_type=String)("user_file_id")
+    user_file_id = case(
+        (raw_id.op("~*")(_UUID_PATTERN), cast(raw_id, postgresql.UUID(as_uuid=True)))
+    )
+    first_messages = (
+        select(
+            user_file_id.label("user_file_id"),
+            func.min(ChatMessage.id).label("message_id"),
+        )
+        .select_from(ChatMessage)
+        .join(descriptor, true())
+        .where(
+            ChatMessage.chat_session_id == chat_session_id,
+            ChatMessage.message_type == MessageType.USER,
+        )
+        .group_by(user_file_id)
+        .subquery()
+    )
+    return list(
+        db_session.scalars(
+            select(UserFile)
+            .join(first_messages, first_messages.c.user_file_id == UserFile.id)
+            .order_by(first_messages.c.message_id, UserFile.id)
+        )
+    )
 
 
 def set_as_latest_chat_message(
