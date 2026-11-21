@@ -269,7 +269,11 @@ def _user_skill_selection(
         states=states,
         hidden=order_skill_names(
             states.values(),
-            reserved_names={skill.name for skill in built_ins},
+            reserved_names={
+                name
+                for skill in built_ins
+                for name in (skill.name, *(f.name for f in skill.plugin_skills))
+            },
         ),
         built_ins=built_ins,
         built_in_app_skills=app_skills,
