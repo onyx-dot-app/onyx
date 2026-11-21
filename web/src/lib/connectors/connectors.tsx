@@ -1599,6 +1599,77 @@ export const connectorConfigs: Record<
     ],
     advanced_values: [],
   },
+  directory: {
+    description: "connectors.directory.description",
+    values: [
+      {
+        type: "text",
+        label: "connectors.directory.fields.root_directory.label",
+        name: "root_directory",
+        optional: false,
+        description: "connectors.directory.fields.root_directory.description",
+        placeholder: "connectors.directory.fields.root_directory.placeholder",
+      },
+      {
+        type: "checkbox",
+        label: "connectors.directory.fields.recursive.label",
+        name: "recursive",
+        optional: true,
+        default: true,
+        asCheckbox: true,
+        description: "connectors.directory.fields.recursive.description",
+      },
+    ],
+    advanced_values: [
+      {
+        type: "list",
+        label: "connectors.directory.fields.file_extensions.label",
+        name: "file_extensions",
+        optional: true,
+        description: "connectors.directory.fields.file_extensions.description",
+      },
+      {
+        type: "list",
+        label: "connectors.directory.fields.include_patterns.label",
+        name: "include_patterns",
+        optional: true,
+        description: "connectors.directory.fields.include_patterns.description",
+      },
+      {
+        type: "list",
+        label: "connectors.directory.fields.exclude_patterns.label",
+        name: "exclude_patterns",
+        optional: true,
+        description: "connectors.directory.fields.exclude_patterns.description",
+      },
+      {
+        type: "checkbox",
+        label: "connectors.directory.fields.exclude_hidden.label",
+        name: "exclude_hidden",
+        optional: true,
+        default: true,
+        asCheckbox: true,
+        description: "connectors.directory.fields.exclude_hidden.description",
+      },
+      {
+        type: "number",
+        label: "connectors.directory.fields.max_file_size_mb.label",
+        name: "max_file_size_mb",
+        optional: true,
+        default: 512,
+        description: "connectors.directory.fields.max_file_size_mb.description",
+      },
+      {
+        type: "number",
+        label: "connectors.directory.fields.max_directories_per_batch.label",
+        name: "max_directories_per_batch",
+        optional: true,
+        default: 1000,
+        description:
+          "connectors.directory.fields.max_directories_per_batch.description",
+      },
+    ],
+  },
   zulip: {
     description: "connectors.zulip.description",
     values: [
