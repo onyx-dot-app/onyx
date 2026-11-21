@@ -175,32 +175,28 @@ pub fn build_tray(app: &AppHandle) -> tauri::Result<()> {
         &PredefinedMenuItem::separator(app)?,
         &MenuItem::with_id(app, QUIT, "Quit Onyx", true, None::<&str>)?,
     ])?;
-    let icon = Image::from_bytes(include_bytes!("../icons/tray-icon.png"))?;
     let builder = TrayIconBuilder::with_id("onyx-tray")
+        .icon(Image::from_bytes(include_bytes!("../icons/tray-icon.png"))?)
         .icon_as_template(true)
         .tooltip("Onyx")
         .menu(&menu)
         .show_menu_on_left_click(true);
+    // Linux writes the icon to a file before the tray shows.
+    #[cfg(target_os = "linux")]
+    let builder = {
+        let runtime_dir = std::env::var_os("XDG_RUNTIME_DIR");
+        match tray_icon_dir(
+            runtime_dir.as_deref().map(std::path::Path::new),
+            app.path().app_cache_dir().ok(),
+        ) {
+            Some(dir) => builder.temp_dir_path(dir),
+            None => builder,
+        }
+    };
     // No tray `on_menu_event`: Tauri delivers every menu event, tray items
     // included, to the app-level handler in main.rs. A second listener here
     // ran each menu action twice.
-    #[cfg(not(target_os = "linux"))]
-    builder.icon(icon).build(app)?;
-    // Linux writes the icon to a file. Set it after the build, when the tray
-    // has its per-user directory.
-    #[cfg(target_os = "linux")]
-    {
-        let tray = builder.build(app)?;
-        let runtime_dir = std::env::var_os("XDG_RUNTIME_DIR");
-        let dir = tray_icon_dir(
-            runtime_dir.as_deref().map(std::path::Path::new),
-            app.path().app_cache_dir().ok(),
-        );
-        if let Some(dir) = dir {
-            tray.with_inner_tray_icon(move |inner| inner.set_temp_dir_path(Some(dir)))?;
-        }
-        tray.set_icon(Some(icon))?;
-    }
+    builder.build(app)?;
     Ok(())
 }
 
