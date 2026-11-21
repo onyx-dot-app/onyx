@@ -15,6 +15,10 @@ from onyx.connectors.microsoft_utils.graph_auth import (
 )
 from onyx.connectors.microsoft_utils.graph_client import GraphApiClient
 from onyx.connectors.microsoft_utils.graph_env import resolve_microsoft_environment
+from onyx.connectors.microsoft_utils.request_pacer import (
+    MicrosoftRequestPacer,
+    prepare_sdk_client,
+)
 from onyx.connectors.models import ConnectorMissingCredentialError
 from onyx.connectors.teams.utils import UserDirectory
 
@@ -36,6 +40,8 @@ class TeamsSession:
         # SDK queries queue on their client, so a worker that runs them
         # gets a client of its own.
         self._thread_clients: threading.local = threading.local()
+        # Paces every Graph and REST call. None: the calls are not limited.
+        self.request_pacer: MicrosoftRequestPacer | None = None
 
         resolved_env = resolve_microsoft_environment(graph_api_host, authority_host)
         self._azure_environment = resolved_env.environment
@@ -77,8 +83,9 @@ class TeamsSession:
 
             return token
 
-        self.graph_client = GraphClient(
-            _acquire_token_func, environment=self._azure_environment
+        self.graph_client = prepare_sdk_client(
+            GraphClient(_acquire_token_func, environment=self._azure_environment),
+            lambda: self.request_pacer,
         )
         # Clients built for an earlier credential must not outlive it.
         self._thread_clients: threading.local = threading.local()
@@ -115,8 +122,9 @@ class TeamsSession:
             raise ConnectorMissingCredentialError("Teams")
         client: GraphClient | None = self._thread_clients.__dict__.get("client")
         if client is None:
-            client = GraphClient(
-                self._acquire_token, environment=self._azure_environment
+            client = prepare_sdk_client(
+                GraphClient(self._acquire_token, environment=self._azure_environment),
+                lambda: self.request_pacer,
             )
             self._thread_clients.client = client
         return client
@@ -129,4 +137,6 @@ class TeamsSession:
     def graph_api_client(self) -> GraphApiClient:
         if self._acquire_token is None:
             raise ConnectorMissingCredentialError("Teams")
-        return GraphApiClient(self.access_token, self.graph_root)
+        return GraphApiClient(
+            self.access_token, self.graph_root, lambda: self.request_pacer
+        )

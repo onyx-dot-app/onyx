@@ -30,6 +30,7 @@ from onyx.connectors.interfaces import (
     SecondsSinceUnixEpoch,
     SlimConnector,
     SlimConnectorWithPermSync,
+    SourceApiLimiter,
 )
 from onyx.connectors.microsoft_utils.config import (
     DEFAULT_AUTHORITY_HOST,
@@ -51,6 +52,7 @@ from onyx.connectors.microsoft_utils.drive_items import (
 from onyx.connectors.microsoft_utils.graph_auth import MicrosoftAuthMethod
 from onyx.connectors.microsoft_utils.graph_env import resolve_microsoft_environment
 from onyx.connectors.microsoft_utils.graph_errors import MicrosoftGraphError
+from onyx.connectors.microsoft_utils.request_pacer import MicrosoftRequestPacer
 from onyx.connectors.microsoft_utils.sharepoint_access import (
     SharepointPermissionCache,
     get_sharepoint_external_access,
@@ -61,6 +63,7 @@ from onyx.connectors.models import (
     ConnectorCheckpoint,
     ConnectorFailure,
     ConnectorMissingCredentialError,
+    ConnectorStopSignal,
     Document,
     DocumentFailure,
     EntityFailure,
@@ -1255,6 +1258,8 @@ class SharepointConnector(
                                     doc_created_at=driveitem.created_datetime,
                                 )
                             )
+                    except ConnectorStopSignal:
+                        raise
                     except Exception as e:
                         logger.warning("Failed to process driveitem: %s", str(e))
 
@@ -1299,6 +1304,8 @@ class SharepointConnector(
                                         ),
                                     )
                                 )
+                        except ConnectorStopSignal:
+                            raise
                         except Exception as e:
                             logger.warning(
                                 "Failed to process site page %s: %s",
@@ -1310,6 +1317,8 @@ class SharepointConnector(
                         if len(doc_batch) >= SLIM_BATCH_SIZE:
                             yield doc_batch
                             doc_batch = []
+                except ConnectorStopSignal:
+                    raise
                 except Exception as e:
                     # Broadened from per-site Graph 4xx to any Exception.
                     # Slim retrieval can't yield ConnectorFailure, so
@@ -1354,6 +1363,17 @@ class SharepointConnector(
                 CONFIG_SITES: self.sites,
             },
         )
+        self._ops.request_pacer = self._request_pacer()
+
+    def _request_pacer(self) -> MicrosoftRequestPacer | None:
+        limiter = self.source_api_limiter
+        return MicrosoftRequestPacer(limiter) if limiter is not None else None
+
+    @override
+    def set_source_api_limiter(self, limiter: SourceApiLimiter) -> None:
+        super().set_source_api_limiter(limiter)
+        if self._ops is not None:
+            self._ops.request_pacer = self._request_pacer()
 
     def _get_drives_for_site(
         self,
@@ -1495,6 +1515,8 @@ class SharepointConnector(
                         HierarchyNodeType.FOLDER,
                         folder_server_relative_path=folder_server_relative_path,
                     )
+                except ConnectorStopSignal:
+                    raise
                 except Exception as e:
                     logger.warning(
                         "Failed to get permissions for folder %s, skipping: %s",
@@ -1634,6 +1656,8 @@ class SharepointConnector(
                     driveitem,
                     "not indexable (excluded content type or over size limit)",
                 )
+        except ConnectorStopSignal:
+            raise
         except Exception as e:
             logger.warning(
                 "Failed to process driveitem %s: %s",
@@ -1730,6 +1754,8 @@ class SharepointConnector(
                         [drive.display_name for drive in checkpoint.cached_drives],
                     )
 
+            except ConnectorStopSignal:
+                raise
             except Exception as e:
                 _raise_if_throttled(e)
                 logger.error(
@@ -1796,6 +1822,8 @@ class SharepointConnector(
                     checkpoint,
                     include_permissions=include_permissions,
                 )
+            except ConnectorStopSignal:
+                raise
             except Exception as e:
                 _raise_if_throttled(e)
                 logger.error(
@@ -1839,6 +1867,8 @@ class SharepointConnector(
                             checkpoint.current_drive_delta_resync_attempted
                         ),
                     )
+                except ConnectorStopSignal:
+                    raise
                 except Exception as e:
                     _raise_if_throttled(e)
                     logger.error(
@@ -1886,6 +1916,8 @@ class SharepointConnector(
                         checkpoint,
                         include_permissions,
                     )
+            except ConnectorStopSignal:
+                raise
             except Exception as e:
                 _raise_if_throttled(e)
                 logger.exception(
@@ -1971,6 +2003,8 @@ class SharepointConnector(
                                 treat_sharing_link_as_public=self.treat_sharing_link_as_public,
                             )
                         )
+                    except ConnectorStopSignal:
+                        raise
                     except Exception as e:
                         logger.warning(
                             "Failed to process site page '%s' in site %s: %s",
@@ -2004,6 +2038,8 @@ class SharepointConnector(
                     "Finished processing site pages for site: %s",
                     site_descriptor.url,
                 )
+            except ConnectorStopSignal:
+                raise
             except Exception as e:
                 _raise_if_throttled(e)
                 # Broadened from per-site Graph 4xx to any Exception:
@@ -2256,6 +2292,8 @@ class SharepointConnector(
                         site_drives_cache,
                         include_permissions,
                     )
+            except ConnectorStopSignal:
+                raise
             except Exception as e:
                 logger.warning(
                     "Failed to resolve SharePoint target %s (%s): %s",

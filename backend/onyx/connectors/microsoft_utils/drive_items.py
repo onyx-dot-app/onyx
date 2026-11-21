@@ -42,7 +42,18 @@ from onyx.connectors.microsoft_utils.graph_client import (
     log_and_raise_for_status,
     retry_wait,
 )
-from onyx.connectors.models import ImageSection, TabularSection, TextSection
+from onyx.connectors.microsoft_utils.request_pacer import (
+    MICROSOFT_USER_AGENT,
+    USER_AGENT_HEADER,
+    MicrosoftCall,
+    MicrosoftRequestPacer,
+)
+from onyx.connectors.models import (
+    ConnectorStopSignal,
+    ImageSection,
+    TabularSection,
+    TextSection,
+)
 from onyx.file_processing.extract_file_text import extract_text_and_images, get_file_ext
 from onyx.file_processing.file_types import OnyxFileExtensions, OnyxMimeTypes
 from onyx.file_processing.image_utils import (
@@ -92,6 +103,8 @@ DRIVE_ITEM_SELECT_FIELDS = ",".join(
 # Graph closes the connection mid-body under throttling, so a streaming
 # download retries transport errors on top of its initial attempt.
 STREAM_DOWNLOAD_MAX_RETRIES = 3
+# The answers of Graph's /content that point to the download host.
+_REDIRECT_STATUSES: frozenset[int] = frozenset({301, 302, 303, 307, 308})
 STREAM_CHUNK_SIZE = 64 * 1024
 
 
@@ -377,6 +390,9 @@ def stream_response_to_buffer_with_cap(
     description: str,
     max_retries: int = STREAM_DOWNLOAD_MAX_RETRIES,
     retry_statuses: bool = True,
+    pacer: MicrosoftRequestPacer | None = None,
+    call: MicrosoftCall = MicrosoftCall.DOWNLOAD,
+    on_redirect: Callable[[str], bytes] | None = None,
 ) -> bytes:
     """Stream a GET into memory under a byte cap, retrying transport drops
     (Graph closes a connection mid-body now and then) and, unless told
@@ -390,32 +406,53 @@ def stream_response_to_buffer_with_cap(
         cap: Maximum number of bytes to read before raising ``SizeCapExceeded``.
         description: Short label used in log messages.
         max_retries: Number of retries beyond the initial attempt.
+        pacer: Takes the cost of a download from the shared limiter before
+            each attempt, and reports a throttled answer.
+        call: The call type, which picks the limiter lane: a Graph download
+            or a fetch of a pre-authenticated link.
+        on_redirect: With a request that does not follow redirects, gets the
+            Location of a redirect and returns its bytes.
 
     Raises:
         SizeCapExceeded: when ``cap`` is exceeded (never retried).
         requests.RequestException: once retries are exhausted, including the
             HTTPError of a final throttled or 5xx answer.
     """
+    redirect_to: str | None = None
     for attempt in range(max_retries + 1):
+        if pacer is not None:
+            pacer.acquire(call)
         try:
             with request_factory() as resp:
+                if pacer is not None:
+                    pacer.report_response(
+                        resp.status_code, resp.headers.get("Retry-After"), call
+                    )
+                if on_redirect is not None and resp.status_code in _REDIRECT_STATUSES:
+                    redirect_to = resp.headers.get("Location")
                 sleep_time: float | None = (
                     retry_wait(resp, attempt, max_retries) if retry_statuses else None
                 )
-                if sleep_time is None:
+                if redirect_to is not None:
+                    sleep_time = None
+                elif sleep_time is None:
                     log_and_raise_for_status(resp)
                     return _read_under_cap(resp, cap, description)
-                logger.warning(
-                    "Download for %s answered %s on attempt %s/%s. "
-                    "Sleeping %.1fs before retry.",
-                    description,
-                    resp.status_code,
-                    attempt + 1,
-                    max_retries + 1,
-                    sleep_time,
-                )
+                else:
+                    logger.warning(
+                        "Download for %s answered %s on attempt %s/%s. "
+                        "Sleeping %.1fs before retry.",
+                        description,
+                        resp.status_code,
+                        attempt + 1,
+                        max_retries + 1,
+                        sleep_time,
+                    )
+            if redirect_to is not None:
+                break
             # The response is closed by now, so the wait holds no socket.
-            time.sleep(sleep_time)
+            if sleep_time is not None:
+                time.sleep(sleep_time)
         except TRANSIENT_TRANSPORT_EXCEPTIONS as e:
             if attempt >= max_retries:
                 logger.warning(
@@ -439,6 +476,9 @@ def stream_response_to_buffer_with_cap(
             )
             time.sleep(sleep_time)
 
+    if redirect_to is not None and on_redirect is not None:
+        # The redirect target has retries of its own.
+        return on_redirect(redirect_to)
     # Defensive: the loop either returns or re-raises on the final attempt.
     raise RuntimeError(
         f"Unreachable: streaming download retry loop exited without resolution "
@@ -472,7 +512,9 @@ def _read_under_cap(resp: requests.Response, cap: int, description: str) -> byte
     return buf.getvalue()
 
 
-def download_with_cap(url: str, timeout: int, cap: int) -> bytes:
+def download_with_cap(
+    url: str, timeout: int, cap: int, pacer: MicrosoftRequestPacer | None = None
+) -> bytes:
     """Stream download content with an upper bound on bytes read.
 
     Behavior:
@@ -486,33 +528,83 @@ def download_with_cap(url: str, timeout: int, cap: int) -> bytes:
     """
 
     def _factory() -> requests.Response:
-        return requests.get(url, stream=True, timeout=timeout)
+        return requests.get(
+            url,
+            headers={USER_AGENT_HEADER: MICROSOFT_USER_AGENT},
+            stream=True,
+            timeout=timeout,
+        )
 
     return stream_response_to_buffer_with_cap(
         _factory,
         cap,
         description=f"downloadUrl:{redact_url_for_logging(url)}",
         retry_statuses=False,
+        pacer=pacer,
+        call=MicrosoftCall.LINK_DOWNLOAD,
     )
 
 
 def download_graph_url_with_cap(
-    get_access_token: Callable[[], str], url: str, cap: int, description: str
+    get_access_token: Callable[[], str],
+    url: str,
+    cap: int,
+    description: str,
+    pacer: MicrosoftRequestPacer | None = None,
 ) -> bytes:
     """Stream the bytes a Graph URL serves, with a byte cap.
 
     Retries transport errors and Graph's retryable statuses with Retry-After,
     the token fetched per attempt so a long wait cannot outlive it. Raises
     SizeCapExceeded if the cap is exceeded.
+
+    The request does not follow a redirect. Graph's ``/content`` answers 302
+    to the download host, and that fetch is a link download: it takes its
+    turn from the download lane, and a throttle there pauses that lane only.
     """
 
     def _factory() -> requests.Response:
-        headers = {"Authorization": f"Bearer {get_access_token()}"}
+        headers = {
+            "Authorization": f"Bearer {get_access_token()}",
+            USER_AGENT_HEADER: MICROSOFT_USER_AGENT,
+        }
         return requests.get(
-            url, headers=headers, stream=True, timeout=REQUEST_TIMEOUT_SECONDS
+            url,
+            headers=headers,
+            stream=True,
+            timeout=REQUEST_TIMEOUT_SECONDS,
+            allow_redirects=False,
         )
 
-    return stream_response_to_buffer_with_cap(_factory, cap, description=description)
+    def _follow(location: str) -> bytes:
+        return _download_redirect_target(location, cap, pacer)
+
+    return stream_response_to_buffer_with_cap(
+        _factory, cap, description=description, pacer=pacer, on_redirect=_follow
+    )
+
+
+def _download_redirect_target(
+    url: str, cap: int, pacer: MicrosoftRequestPacer | None
+) -> bytes:
+    """The bytes behind the redirect of a Graph download, as a link
+    download. A throttled answer is retried after its Retry-After."""
+
+    def _factory() -> requests.Response:
+        return requests.get(
+            url,
+            headers={USER_AGENT_HEADER: MICROSOFT_USER_AGENT},
+            stream=True,
+            timeout=REQUEST_TIMEOUT_SECONDS,
+        )
+
+    return stream_response_to_buffer_with_cap(
+        _factory,
+        cap,
+        description=f"redirect:{redact_url_for_logging(url)}",
+        pacer=pacer,
+        call=MicrosoftCall.LINK_DOWNLOAD,
+    )
 
 
 def download_via_graph_api(
@@ -521,6 +613,7 @@ def download_via_graph_api(
     item_id: str,
     cap: int,
     graph_api_base: str,
+    pacer: MicrosoftRequestPacer | None = None,
 ) -> bytes:
     """Download a drive item via the Graph API /content endpoint with a byte cap."""
     return download_graph_url_with_cap(
@@ -528,6 +621,7 @@ def download_via_graph_api(
         f"{graph_api_base}/drives/{drive_id}/items/{item_id}/content",
         cap,
         description=f"graph_api(drive={drive_id},item={item_id})",
+        pacer=pacer,
     )
 
 
@@ -535,8 +629,9 @@ def extract_drive_item_content(
     driveitem: DriveItemData,
     size_threshold: int,
     graph_api_base: str,
-    access_token: str | None = None,
+    get_access_token: Callable[[], str] | None = None,
     raw_file_callback: RawFileCallback | None = None,
+    pacer: MicrosoftRequestPacer | None = None,
 ) -> DriveItemContent | None:
     """Download an item and extract it into Onyx sections.
 
@@ -580,6 +675,7 @@ def extract_drive_item_content(
                 download_url,
                 REQUEST_TIMEOUT_SECONDS,
                 size_threshold,
+                pacer,
             )
         except SizeCapExceeded as e:
             logger.warning(
@@ -595,15 +691,16 @@ def extract_drive_item_content(
             )
 
     # Fallback: download via Graph API /content endpoint
-    if content_bytes is None and access_token and driveitem.drive_id:
-        token: str = access_token
+    if content_bytes is None and get_access_token and driveitem.drive_id:
         try:
+            # The token is read for each try, after its limiter wait.
             content_bytes = download_via_graph_api(
-                lambda: token,
+                get_access_token,
                 driveitem.drive_id,
                 driveitem.id,
                 size_threshold,
                 graph_api_base=graph_api_base,
+                pacer=pacer,
             )
         except SizeCapExceeded:
             logger.warning(
@@ -611,6 +708,8 @@ def extract_drive_item_content(
                 driveitem.name,
             )
             return None
+        except ConnectorStopSignal:
+            raise
         except Exception as e:
             scrubbed = scrub_url_credentials(str(e))
             logger.warning(

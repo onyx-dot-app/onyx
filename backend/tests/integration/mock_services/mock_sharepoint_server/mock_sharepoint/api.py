@@ -338,7 +338,13 @@ class MockMicrosoftApi:
             )
 
         cost = self.quota.cost(spec.cost)
-        decision = self.quota.consume(app, cost, time.monotonic())
+        # The download host is not Graph: the Graph limits and the pause of
+        # the app do not apply to a download URL.
+        decision = (
+            None
+            if spec.name == "download_url.get"
+            else self.quota.consume(app, cost, time.monotonic())
+        )
         if decision is not None:
             if self.settings.latency.enabled:
                 await _wait(self.settings.latency.throttled_ms / 1000)

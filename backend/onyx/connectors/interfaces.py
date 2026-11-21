@@ -82,6 +82,13 @@ class SourceApiLimiter(abc.ABC):
         the user, and False when it limited the whole credential."""
         raise NotImplementedError
 
+    def report_retry_after(self, api: str, seconds: float) -> None:  # noqa: ARG002
+        """Tells the limiter that the source asked its callers to wait
+        ``seconds`` before the next request (Retry-After). A limiter with a
+        shared pause then holds every call of every worker for that time.
+        The default does nothing."""
+        return None
+
 
 class BaseConnector(abc.ABC, Generic[CT]):
     REDIS_KEY_PREFIX = "da_connector_data:"
