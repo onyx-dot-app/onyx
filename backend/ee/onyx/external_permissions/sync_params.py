@@ -17,6 +17,7 @@ from ee.onyx.configs.app_configs import (
     EGNYTE_PERMISSION_GROUP_SYNC_FREQUENCY,
     GITHUB_PERMISSION_DOC_SYNC_FREQUENCY,
     GITHUB_PERMISSION_GROUP_SYNC_FREQUENCY,
+    GMAIL_PERMISSION_GROUP_SYNC_FREQUENCY,
     GOOGLE_DRIVE_PERMISSION_GROUP_SYNC_FREQUENCY,
     HUBSPOT_PERMISSION_DOC_SYNC_FREQUENCY,
     JIRA_PERMISSION_DOC_SYNC_FREQUENCY,
@@ -185,6 +186,12 @@ def _load_gmail_doc_sync() -> DocSyncFuncType:
     from ee.onyx.external_permissions.gmail.doc_sync import gmail_doc_sync
 
     return gmail_doc_sync
+
+
+def _load_gmail_group_sync() -> GroupSyncFuncType:
+    from ee.onyx.external_permissions.gmail.group_sync import gmail_group_sync
+
+    return gmail_group_sync
 
 
 def _load_hubspot_doc_sync() -> DocSyncFuncType:
@@ -437,6 +444,11 @@ _SOURCE_TO_SYNC_CONFIG: dict[DocumentSource, SyncConfig] = {
             doc_sync_frequency=DEFAULT_PERMISSION_DOC_SYNC_FREQUENCY,
             doc_sync_func=_lazy_doc_sync(_load_gmail_doc_sync),
             initial_index_should_sync=False,
+        ),
+        group_sync_config=GroupSyncConfig(
+            group_sync_frequency=GMAIL_PERMISSION_GROUP_SYNC_FREQUENCY,
+            group_sync_func=_lazy_group_sync(_load_gmail_group_sync),
+            group_sync_is_cc_pair_agnostic=False,
         ),
     ),
     DocumentSource.GITHUB: SyncConfig(
