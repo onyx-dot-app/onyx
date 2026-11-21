@@ -112,6 +112,15 @@ VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE = int(
     os.environ.get("VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE", "50")
 )
 
+# Gemini Embedding 2 requests in flight: the max is per process, and each
+# project and model starts at the initial value, then adapts to rate limits.
+VERTEXAI_EMBEDDING_MAX_CONCURRENCY = max(
+    1, int(os.environ.get("VERTEXAI_EMBEDDING_MAX_CONCURRENCY") or 128)
+)
+VERTEXAI_EMBEDDING_INITIAL_CONCURRENCY = max(
+    1, int(os.environ.get("VERTEXAI_EMBEDDING_INITIAL_CONCURRENCY") or 16)
+)
+
 # Only used for OpenAI
 OPENAI_EMBEDDING_TIMEOUT = int(
     os.environ.get("OPENAI_EMBEDDING_TIMEOUT", API_BASED_EMBEDDING_TIMEOUT)
