@@ -38,6 +38,7 @@ from onyx.server.features.build.sandbox.firecracker.models import (
     ExecSessionTable,
     HarnessActivity,
     IdSet,
+    InstalledSkills,
     SessionInstanceTable,
     SessionSave,
     SkillsImage,
@@ -49,6 +50,7 @@ SESSION_INSTANCES_PREFIX = "sandbox_fc:session_instances:"
 SESSION_SAVE_PREFIX = "sandbox_fc:session_save:"
 LAST_ATTEMPT_PREFIX = "sandbox_fc:last_attempt:"
 SKILLS_IMAGE_PREFIX = "sandbox_fc:skills_image:"
+INSTALLED_SKILLS_PREFIX = "sandbox_fc:installed_skills:"
 SAVED_SESSIONS_PREFIX = "sandbox_fc:saved_sessions:"
 WANTED_PREFIX = "sandbox_fc:wanted:"
 PURGED_SESSION_PREFIX = "sandbox_fc:purged_session:"
@@ -66,6 +68,7 @@ SANDBOX_STATE_PREFIXES = (
     SESSION_INSTANCES_PREFIX,
     LAST_ATTEMPT_PREFIX,
     SKILLS_IMAGE_PREFIX,
+    INSTALLED_SKILLS_PREFIX,
     WANTED_PREFIX,
 )
 _CAS_TRIES = 16
@@ -112,6 +115,27 @@ def get_skills_image(cache: CacheBackend, sandbox_id: UUID) -> SkillsImage | Non
 
 def set_skills_image(cache: CacheBackend, sandbox_id: UUID, image: SkillsImage) -> None:
     cache.set(SKILLS_IMAGE_PREFIX + str(sandbox_id), image.model_dump_json())
+
+
+def installed_skills(
+    cache: CacheBackend, sandbox_id: UUID, instance: tuple[int, int]
+) -> dict[str, str]:
+    record = _read(cache, INSTALLED_SKILLS_PREFIX + str(sandbox_id), InstalledSkills)
+    return record.versions if record.instance == instance else {}
+
+
+def add_installed_skill(
+    cache: CacheBackend,
+    sandbox_id: UUID,
+    instance: tuple[int, int],
+    name: str,
+    version: str,
+) -> None:
+    def change(record: InstalledSkills) -> InstalledSkills:
+        versions = record.versions if record.instance == instance else {}
+        return InstalledSkills(instance=instance, versions={**versions, name: version})
+
+    _update(cache, INSTALLED_SKILLS_PREFIX + str(sandbox_id), InstalledSkills, change)
 
 
 def get_exec_session(

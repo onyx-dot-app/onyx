@@ -44,6 +44,7 @@ from onyx.server.features.build.sandbox.util.agent_instructions import (
 from onyx.server.features.build.timeouts import QUEUE_RESIDENCY_SECONDS
 from onyx.skills.built_in import (
     BUILT_IN_SKILLS,
+    CHAT_CUSTOM_SKILLS_PATH,
     COMPANY_SEARCH,
     EXTERNAL_APP_SKILL_ID_TO_APP_TYPE,
     BuiltInSkillDefinition,
@@ -61,7 +62,12 @@ from onyx.skills.limits import (
     SKILL_RUNTIME_MAX_BYTES,
     SKILL_RUNTIME_MAX_FILES,
 )
-from onyx.skills.models import SandboxSkillsState, SkillOmission, SkillUsage
+from onyx.skills.models import (
+    ChatSkill,
+    SandboxSkillsState,
+    SkillOmission,
+    SkillUsage,
+)
 from onyx.skills.rendering import (
     CLAUDE_SKILL_DIR_PLACEHOLDER,
     render_company_search_skill,
@@ -190,7 +196,7 @@ def _usage_of(files: FileSet) -> SkillUsage:
     )
 
 
-def _resolve_skill_dir(files: FileSet, name: str) -> bool:
+def _resolve_skill_dir(files: FileSet, name: str, skills_root: str) -> bool:
     """Point ``${CLAUDE_SKILL_DIR}`` in the root ``SKILL.md`` of one skill's
     files at the skill's sandbox folder. Only the sent copy changes, not the
     stored bundle. False when the resolved file passes the per-file limit."""
@@ -199,7 +205,7 @@ def _resolve_skill_dir(files: FileSet, name: str) -> bool:
     if content is None or CLAUDE_SKILL_DIR_PLACEHOLDER.encode() not in content:
         return True
     resolved = resolve_skill_dir_placeholder(
-        content.decode("utf-8"), f"{SKILLS_MOUNT_PATH}/{name}"
+        content.decode("utf-8"), f"{skills_root}/{name}"
     ).encode("utf-8")
     if len(resolved) > min(DEFAULT_PER_FILE_MAX_BYTES, MAX_FILE_BYTES):
         logger.warning(
@@ -262,7 +268,10 @@ def _sandbox_path(path: str, folders: Iterable[RuntimeSkillFolder]) -> str | Non
 
 
 def _assemble_skills(
-    skills: Iterable[RuntimeSkill], user: User, db_session: Session
+    skills: Iterable[RuntimeSkill],
+    user: User,
+    db_session: Session,
+    skills_root: str = SKILLS_MOUNT_PATH,
 ) -> AssembledSkills:
     """Hydrate the skills, in the keep order, as a flat ``{path: bytes}`` map.
 
@@ -379,7 +388,9 @@ def _assemble_skills(
                 _render_template(
                     skill_files, runtime_skill, definition, db_session, user
                 )
-        if not all(_resolve_skill_dir(skill_files, name) for name in names):
+        if not all(
+            _resolve_skill_dir(skill_files, name, skills_root) for name in names
+        ):
             continue
         size = _larger(size, _usage_of(skill_files))
         if left_out(runtime_skill, size):
@@ -472,6 +483,45 @@ def _chat_built_ins_bundle(
             BUILT_IN_SKILLS[built_in_skill_id],
         )
     return SkillsBundle.from_files(files)
+
+
+def build_chat_custom_skill_bundle(
+    skill: ChatSkill, user: User, db_session: Session
+) -> SkillsBundle | None:
+    """The files of one custom chat skill, in a folder named by the skill, from
+    the version the user runs. None when the user no longer runs that version
+    or its bundle does not load."""
+    runtime_skill = next(
+        (
+            runtime_skill
+            for runtime_skill in list_runtime_skills_for_user(
+                db_session=db_session, user=user
+            )
+            if runtime_skill.version is not None
+            and runtime_skill.version.id == skill.version_id
+        ),
+        None,
+    )
+    if runtime_skill is None:
+        return None
+    if runtime_skill.plugin_skills:
+        runtime_skill = runtime_skill.model_copy(
+            update={
+                "plugin_skills": tuple(
+                    folder
+                    for folder in runtime_skill.plugin_skills
+                    if folder.path == skill.path
+                )
+            }
+        )
+        if not runtime_skill.plugin_skills:
+            return None
+    else:
+        runtime_skill = runtime_skill.model_copy(update={"name": skill.name})
+    files = _assemble_skills(
+        [runtime_skill], user, db_session, CHAT_CUSTOM_SKILLS_PATH
+    ).files
+    return SkillsBundle.from_files(files) if files else None
 
 
 def push_skill_to_affected_sandboxes(skill: Plugin, db_session: Session) -> None:

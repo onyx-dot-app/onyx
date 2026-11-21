@@ -1086,7 +1086,7 @@ def create_chat_agent(
         turn = (
             SandboxTurn(
                 tenant_id=get_current_tenant_id(),
-                user_id=user.id,
+                user=user,
                 chat_session_id=setup.chat_session_id,
             )
             if setup.sandbox_tools

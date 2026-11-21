@@ -53,7 +53,9 @@ def test_expansion_limit_skips_the_whole_skill_only_above_the_limit(
         push, "DEFAULT_PER_FILE_MAX_BYTES", len(expected) - excess, raising=False
     )
 
-    assert push._resolve_skill_dir(files, "report") is not bool(excess)
+    assert push._resolve_skill_dir(files, "report", push.SKILLS_MOUNT_PATH) is not bool(
+        excess
+    )
     if not excess:
         assert files[path] == expected
 
@@ -64,7 +66,7 @@ def test_skill_without_placeholder_keeps_files_over_the_file_limit(
     files = {"first/SKILL.md": b"old instructions" * 100}
     monkeypatch.setattr(push, "DEFAULT_PER_FILE_MAX_BYTES", 100, raising=True)
 
-    assert push._resolve_skill_dir(files, "first")
+    assert push._resolve_skill_dir(files, "first", push.SKILLS_MOUNT_PATH)
     assert files == {"first/SKILL.md": b"old instructions" * 100}
 
 
@@ -76,4 +78,4 @@ def test_expansion_respects_receiver_file_limit_when_upload_limit_is_higher(
     monkeypatch.setattr(push, "DEFAULT_PER_FILE_MAX_BYTES", 1000)
     monkeypatch.setattr(push, "MAX_FILE_BYTES", len(expected) - 1, raising=False)
 
-    assert not push._resolve_skill_dir(files, "report")
+    assert not push._resolve_skill_dir(files, "report", push.SKILLS_MOUNT_PATH)

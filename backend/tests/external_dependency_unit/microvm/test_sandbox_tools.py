@@ -10,7 +10,7 @@ import json
 import threading
 import time
 import zipfile
-from collections.abc import Callable, Generator, Iterator, Sequence
+from collections.abc import Callable, Generator, Iterable, Iterator, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from contextvars import copy_context
 from typing import Any
@@ -160,6 +160,7 @@ from onyx.tools.constants import (
     CODE_MODE_TOOL_NAME,
     INTERNAL_SEARCH_TOOL_NAME,
     POSTGRES_TOOL_NAME,
+    SKILLS_READ_TOOL_NAME,
     SPAWN_AGENT_TOOL_NAME,
 )
 from onyx.tools.interface import Tool
@@ -335,9 +336,7 @@ def user(
 def make_tools(db_session: Session, user: User) -> MakeTools:
     def make(chat_session_id: UUID | None = None) -> SandboxTools:
         session_id = chat_session_id or uuid4()
-        turn = SandboxTurn(
-            tenant_id=TENANT_ID, user_id=user.id, chat_session_id=session_id
-        )
+        turn = SandboxTurn(tenant_id=TENANT_ID, user=user, chat_session_id=session_id)
         return SandboxTools(
             turn=turn,
             ref=HarnessSandboxRef(
@@ -650,6 +649,15 @@ def test_a_turn_that_parks_for_approval_and_its_resumed_root_each_end_the_turn(
     gated_integration: int,
 ) -> None:
     ended = _ended_turns(monkeypatch, sandbox)
+    wanted: dict[int, set[str]] = {}
+    real_want_skills = SandboxTurn.want_skills
+
+    def record_wanted(turn: SandboxTurn, names: Iterable[str]) -> None:
+        names = set(names)
+        wanted.setdefault(id(turn), set()).update(names)
+        real_want_skills(turn, names)
+
+    monkeypatch.setattr(SandboxTurn, "want_skills", record_wanted)
     sent: list[str] = []
     gated = _gated(gated_integration, sent)
     real_construct_tools = construct_tools
@@ -660,6 +668,7 @@ def test_a_turn_that_parks_for_approval_and_its_resumed_root_each_end_the_turn(
     monkeypatch.setattr("onyx.chat.execution.construct_tools", with_gated_tool)
     llm = ChatLLM(
         [
+            tool_step(SKILLS_READ_TOOL_NAME, "read", {"name": "pptx"}),
             tool_step(ExecCommandTool.NAME, "exec", {"cmd": "echo hi"}),
             tool_step(gated.name, "send", {"value": "team"}),
             tool_step(ExecCommandTool.NAME, "again", {"cmd": "echo again"}),
@@ -703,8 +712,10 @@ def test_a_turn_that_parks_for_approval_and_its_resumed_root_each_end_the_turn(
     db_session.refresh(approval)
     assert approval.decision is ApprovalDecision.APPROVED
     assert sent == ["team"]
-    assert len(llm.requests) == 4
+    assert len(llm.requests) == 5
     assert ended == [ref, ref]
+    # The resumed run still sees the skill that the parked run read.
+    assert list(wanted.values()) == [{"pptx"}, {"pptx"}]
 
 
 def _running(node: RunningFakeAgent, ref: HarnessSandboxRef, cmd: str) -> list[str]:

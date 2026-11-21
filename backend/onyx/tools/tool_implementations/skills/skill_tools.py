@@ -124,9 +124,9 @@ class SkillsReadTool(_SkillTool):
                         f"{SKILLS_LIST_TOOL_NAME} for the skills you can use."
                     ),
                 )
-            skill_md = read_chat_skills_md([skill], self.user.id, db_session).get(
-                (skill.version_id, skill.path)
-            )
+            skill_md = read_chat_skills_md(
+                [skill], self.user.id, db_session, sandbox=self.built_ins
+            ).get((skill.version_id, skill.path))
         if skill_md is None:
             raise ToolCallException(
                 message=f"Unreadable skill: {request.name}",

@@ -180,8 +180,12 @@
   starts with a `Skill files:` line that names its folder in the chat VM
   (`/mnt/skills/<name>/`, read-only and noexec), where the model reads its
   other files and runs its scripts through their interpreter with the
-  sandbox tools ([[craft-sandboxes]]). Chat cannot open the other files of a
-  custom skill or run its scripts. App built-ins, company-search,
+  sandbox tools ([[craft-sandboxes]]). In a turn with the sandbox tools, a
+  custom skill's SKILL.md (from `skills_read` or a pick) starts with a
+  `Skill files: /home/sandbox/.agents/skills/<name>/` line instead. Its files
+  copy there, writable, before the next sandbox call after the model reads
+  it or a sent message picks it (`SandboxTurn.want_skills`). Without the
+  sandbox tools, chat cannot open a custom skill's other files. App built-ins, company-search,
   image-generation and craft-documentation stay out of chat.
   A built-in is a built-in plugin in code (`BuiltInSkillDefinition.skills`):
   one skill with SKILL.md at its root, or one skill per

@@ -5,6 +5,7 @@ from functools import partial
 from pydantic import JsonValue
 
 from onyx.agents.agent_coordination import MAX_CHILD_DEPTH
+from onyx.agents.compaction import CheckpointMismatchError, working_messages
 from onyx.agents.models import (
     AgentState,
     CompactionCheckpoint,
@@ -69,6 +70,7 @@ from onyx.prompts.chat_prompts import (
     ROOT_AGENT_INSTRUCTIONS,
     SUBAGENT_INSTRUCTIONS,
 )
+from onyx.skills.chat import used_skill_names
 from onyx.tools.constants import PYTHON_TOOL_NAME
 from onyx.tools.file_snapshot import SavedChatFile, SavedContextFiles
 from onyx.tools.interface import Tool
@@ -246,6 +248,10 @@ class ChatAgent(Agent, RestorableFeature):
             ),
             None,
         )
+        self._sandbox_turn = sandbox_turn
+        # The compaction at the run's start bounds the skills that copy to
+        # the sandbox to those the model still sees.
+        self._skills_checkpoint = checkpoint
         super().__init__(
             llm,
             tools=[tool.bind(self._tool_context) for tool in self.application_tools],
@@ -364,6 +370,22 @@ class ChatAgent(Agent, RestorableFeature):
         )
 
     def _prepare_step(self, state: StepInput) -> PreparedStep:
+        if self._sandbox_turn is not None:
+            source = [
+                *state.history,
+                *state.input_messages,
+                *state.messages,
+                *state.received_inputs,
+            ]
+            try:
+                window = working_messages(
+                    source,
+                    self._skills_checkpoint,
+                    input_start=len(state.history) if state.input_messages else None,
+                )
+            except CheckpointMismatchError:
+                window = source
+            self._sandbox_turn.want_skills(used_skill_names(window))
         previous = state.previous
         if previous is None:
             if self.code_cells is not None:

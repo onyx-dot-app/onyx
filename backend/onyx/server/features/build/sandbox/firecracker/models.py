@@ -38,6 +38,13 @@ class SkillsImage(BaseModel):
     image_id: str
 
 
+class InstalledSkills(BaseModel):
+    """The custom skills copied to one VM instance: name → version key."""
+
+    instance: tuple[int, int] = (0, 0)
+    versions: dict[str, str] = {}
+
+
 class SessionSave(BaseModel):
     """The committed save of one chat session's directory."""
 

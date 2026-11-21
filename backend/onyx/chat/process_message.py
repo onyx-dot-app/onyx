@@ -568,7 +568,11 @@ def prepare_chat_turn(
             )
             picks = (
                 accept_picked_skills(
-                    [new_msg_req.mentions], chat_skills, user.id, db_session
+                    [new_msg_req.mentions],
+                    chat_skills,
+                    user.id,
+                    db_session,
+                    sandbox=sandbox_tools,
                 )[0]
                 if accepts_question
                 else AcceptedPicks()
