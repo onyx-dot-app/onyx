@@ -426,12 +426,14 @@ def test_a_cell_gives_its_slot_back_to_the_budget_it_took_it_from(
     replacement = cells_module._RunningCells(1)
     monkeypatch.setattr(cells_module, "_running_cells", replacement)
     assert replacement.acquire("tenant")
-    response.gate.set()
-    until(lambda: taken.acquire("tenant"))
-    assert not replacement.acquire("tenant")
     # The slots set the process-wide CELLS_RUNNING gauge; later tests expect 0.
-    taken.release("tenant", 0.0)
-    replacement.release("tenant", 0.0)
+    try:
+        response.gate.set()
+        until(lambda: taken.acquire("tenant"))
+        taken.release("tenant", 0.0)
+        assert not replacement.acquire("tenant")
+    finally:
+        replacement.release("tenant", 0.0)
 
 
 def test_commits_follow_completion_order_and_saved_records_fold_to_the_same_store() -> (
