@@ -15,6 +15,8 @@ from google.oauth2.service_account import Credentials as ServiceAccountCredentia
 from googleapiclient.errors import HttpError
 
 from onyx.access.models import ExternalAccess
+from onyx.access.utils import build_ext_group_names_for_storage
+from onyx.configs.constants import DocumentSource
 from onyx.connectors.exceptions import (
     ConnectorValidationError,
     InsufficientPermissionsError,
@@ -36,6 +38,8 @@ from onyx.connectors.gmail.connector import (
 from onyx.connectors.google_utils.resources import GoogleService
 from onyx.connectors.google_utils.shared_constants import MISSING_SCOPES_ERROR_STR
 from onyx.connectors.models import Document, SlimDocument
+from onyx.db.models import Document as DBDocument
+from onyx.indexing.indexing_pipeline import get_docs_to_update
 
 _GROUP = "support@example.com"
 _OTHER_GROUP = "legal@example.com"
@@ -270,6 +274,37 @@ def test_every_member_copy_builds_the_same_group_document(
     assert from_member.sections == from_other_member.sections
     assert from_member.external_access == from_other_member.external_access
     assert from_member.doc_updated_at == from_other_member.doc_updated_at
+
+
+def test_indexing_skips_a_second_member_copy_as_unchanged(
+    group_api: MagicMock,  # noqa: ARG001
+) -> None:
+    """The group document is embedded once, however many members hold a copy."""
+    lookup = _lookup()
+    (stored,) = thread_to_documents(
+        {"id": "18f0aaaa", "messages": [_message("m-member")]}, _MEMBER, lookup
+    )
+    (later_copy,) = thread_to_documents(
+        {"id": "18f0bbbb", "messages": [_message("m-other")]}, _OTHER_MEMBER, lookup
+    )
+    db_document = DBDocument(
+        id=stored.id,
+        semantic_id=stored.semantic_identifier,
+        doc_updated_at=stored.doc_updated_at,
+        content_hash=stored.content_hash(),
+        external_user_emails=[],
+        external_user_group_ids=list(
+            build_ext_group_names_for_storage({_GROUP}, DocumentSource.GMAIL)
+        ),
+        is_public=False,
+    )
+
+    # Docprocessing runs with the timestamp gate off, so the hash gate decides.
+    to_update = get_docs_to_update(
+        [later_copy], [db_document], ignore_timestamp_gate=True
+    )
+
+    assert to_update.updatable_docs == []
 
 
 def test_a_message_sent_to_two_groups_is_one_document_per_group(
