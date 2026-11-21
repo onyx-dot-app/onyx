@@ -1,0 +1,52 @@
+---
+title: "Bifrost"
+description: "Configure Bifrost as a language model gateway for Onyx"
+icon: "server"
+---
+
+import NavigateToAiModels from "/snippets/navigate-to-ai-models.mdx";
+import StandardAiModelConfigs from "/snippets/standard-ai-model-configs.mdx";
+
+## Guide
+
+Configure Onyx to use models served through [Bifrost](https://docs.getbifrost.ai/overview).
+
+<Note>
+  Onyx reads the models exposed by your Bifrost gateway at its `/v1/models` endpoint.
+  Bifrost can expose models from multiple vendors behind a single endpoint.
+</Note>
+
+<Steps>
+  <Step title="Set Up Your Bifrost Gateway">
+    Make sure your Bifrost deployment is reachable from the Onyx server.
+
+    You need the Bifrost **API Base URL**.
+
+    If your Bifrost deployment requires authentication, also create a Bifrost **API Key**.
+  </Step>
+
+  <NavigateToAiModels />
+
+  <Step title="Connect Bifrost">
+    Under **Gateways & Routers**, click **Connect** on the **Bifrost** card.
+
+    Select the API that Onyx must call on the gateway: **Chat Completions API** or **Responses API**.
+    Use **Chat Completions API** unless your gateway is set up for the OpenAI Responses API.
+
+    Enter the **API Base URL** of your Bifrost gateway, including the API version (for example,
+    `https://bifrost.example.com/v1`).
+
+    If your gateway requires authentication, paste your **API Key**.
+  </Step>
+
+  <Step title="Load Your Models">
+    In the **Models** section, click **Refresh models**.
+    Onyx lists the models that Bifrost exposes and uses the display names returned by the gateway when available.
+  </Step>
+
+  <StandardAiModelConfigs />
+
+  <Step title="Connect">
+    Click **Connect**. Onyx tests the gateway with one of the selected models before it saves the provider.
+  </Step>
+</Steps>
