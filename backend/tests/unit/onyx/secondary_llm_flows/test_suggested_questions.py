@@ -11,7 +11,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.models import GenerationRequest, ReasoningEffort
 from onyx.secondary_llm_flows import suggested_questions as sq
-from onyx.server.features.suggested_questions.models import UseCase
+from onyx.server.features.suggested_questions.models import DraftQuestion, UseCase
 from onyx.tracing.flows import LLMFlow
 
 
@@ -209,6 +209,26 @@ def test_a_failed_call_loses_only_its_own_questions(
     )
 
     assert sorted(d.chunk.document_id for d in drafts) == ["doc-2", "doc-4"]
+
+
+def test_a_call_still_running_at_the_time_limit_counts_as_failed(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(sq, "SQ_WRITING_CALLS", 2)
+    kept = DraftQuestion(
+        text="Who approves leave?", chunk=_chunk("doc-2"), best_for=None
+    )
+    # The first call timed out; the second finished.
+    run = MagicMock(return_value=[None, (1, [kept])])
+    monkeypatch.setattr(sq, "run_functions_tuples_in_parallel", run)
+
+    drafts = sq.write_questions(
+        [_chunk("doc-1"), _chunk("doc-2")], [MagicMock()], None, [], timeout_s=12.0
+    )
+
+    assert run.call_args.kwargs["timeout"] == 12.0
+    assert run.call_args.kwargs["timeout_callback"](0, None, ()) is None
+    assert drafts == [kept]
 
 
 def test_write_questions_reads_json_inside_a_code_block() -> None:

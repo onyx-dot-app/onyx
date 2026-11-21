@@ -203,7 +203,6 @@ def test_pool_run_skipped_makes_no_model_call(run: dict[str, Any]) -> None:
     _pool_task()
 
     run["write"].assert_not_called()
-    run["write"].assert_not_called()
     assert run["saved"] is None
 
 
@@ -395,7 +394,6 @@ def test_topup_stops_before_any_model_call(
     _topup(person)
 
     run["write"].assert_not_called()
-    run["write"].assert_not_called()
     assert run["topups"] == []
     assert run["private_saved"] == {}
 
@@ -563,6 +561,9 @@ def test_passages_keep_the_candidates_order(run: dict[str, Any]) -> None:
 
     written = run["write"].call_args.args[0]
     assert [chunk.document_id for chunk in written] == ["private", "shared"]
+    # The writing calls leave the search test its share of the budget.
+    write_timeout = run["write"].call_args.kwargs["timeout_s"]
+    assert 0 < write_timeout <= tasks.SQ_RUN_BUDGET_S - tasks.SQ_SEARCH_TEST_RESERVE_S
     assert run["search_timeout"] is not None
 
 

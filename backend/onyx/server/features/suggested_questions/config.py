@@ -104,6 +104,9 @@ SQ_POOL_LOCK_HELD_S = 120.0
 # A run's own time budget: Celery time limits do not apply in thread pools.
 # Each model call has its own timeout too.
 SQ_RUN_BUDGET_S = 60.0
+# Seconds of the budget kept for the search test: the writing calls stop
+# waiting this long before the budget ends.
+SQ_SEARCH_TEST_RESERVE_S = 10.0
 # Retries of a failed run, and the wait before each.
 SQ_RUN_RETRIES = 2
 SQ_RUN_RETRY_DELAY_S = 30
