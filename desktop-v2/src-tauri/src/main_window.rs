@@ -253,7 +253,10 @@ fn handle_download(event: DownloadEvent) -> bool {
     match event {
         DownloadEvent::Requested { destination, .. } => choose_download_path(destination),
         DownloadEvent::Finished { url, success, .. } => {
-            log::info!("download of {url} finished (success: {success})");
+            log::info!(
+                "download of {} finished (success: {success})",
+                log_safe(url.as_str())
+            );
             true
         }
         _ => true,
@@ -269,7 +272,33 @@ fn popup_title(url: &Url) -> String {
 
 pub fn open_external(app: &AppHandle, url: &str) {
     if let Err(e) = app.opener().open_url(url, None::<&str>) {
-        log::warn!("could not open {url}: {e}");
+        log::warn!("could not open {}: {}", log_safe(url), open_error_kind(&e));
+    }
+}
+
+/// The kind of an opener error. Its message can hold the whole URL (the
+/// launcher command line), so the message is not logged.
+fn open_error_kind(error: &tauri_plugin_opener::Error) -> String {
+    match error {
+        tauri_plugin_opener::Error::Io(e) => format!("{:?}", e.kind()),
+        tauri_plugin_opener::Error::ForbiddenUrl { .. }
+        | tauri_plugin_opener::Error::ForbiddenPath { .. } => "not allowed".into(),
+        _ => "opener error".into(),
+    }
+}
+
+/// A URL or server path for the log file: no user info, query or fragment,
+/// which can carry passwords, tokens or sign-in codes.
+pub fn log_safe(url: &str) -> String {
+    match Url::parse(url) {
+        Ok(mut parsed) => {
+            let _ = parsed.set_username("");
+            let _ = parsed.set_password(None);
+            parsed.set_query(None);
+            parsed.set_fragment(None);
+            parsed.to_string()
+        }
+        Err(_) => url.split(['?', '#']).next().unwrap_or_default().to_string(),
     }
 }
 
@@ -677,9 +706,23 @@ pub fn spawn_session_renewal(app: &AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::{
-        classify, classify_popup, is_web_sign_in, return_path, server_url_join, LinkAction,
+        classify, classify_popup, is_web_sign_in, log_safe, open_error_kind, return_path,
+        server_url_join, LinkAction,
     };
     use url::Url;
+
+    #[test]
+    fn opener_errors_log_no_url() {
+        let error = tauri_plugin_opener::Error::Io(std::io::Error::other(
+            "Launcher \"xdg-open\" [\"https://x.example/?token=secret\"] failed",
+        ));
+        assert_eq!(open_error_kind(&error), "Other");
+        let forbidden = tauri_plugin_opener::Error::ForbiddenUrl {
+            url: "https://x.example/?token=secret".into(),
+            with: None,
+        };
+        assert!(!open_error_kind(&forbidden).contains("secret"));
+    }
 
     const ORIGIN: &str = "http://localhost:3000";
 
@@ -688,6 +731,19 @@ mod tests {
         server_url_join(&server, path)
             .ok()
             .map(|url| url.to_string())
+    }
+
+    #[test]
+    fn log_lines_drop_secrets_from_urls() {
+        assert_eq!(
+            log_safe("https://user:pw@files.example/doc.pdf?X-Amz-Signature=abc#p=2"),
+            "https://files.example/doc.pdf"
+        );
+        assert_eq!(
+            log_safe("/auth/oauth/callback?code=abc&state=xyz"),
+            "/auth/oauth/callback"
+        );
+        assert_eq!(log_safe("/app"), "/app");
     }
 
     #[test]

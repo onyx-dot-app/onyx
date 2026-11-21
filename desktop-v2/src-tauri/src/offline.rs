@@ -308,7 +308,10 @@ fn recover(app: &AppHandle, id: u64) {
             }
         }
     };
-    log::info!("server reachable again; loading {path}");
+    log::info!(
+        "server reachable again; loading {}",
+        main_window::log_safe(&path)
+    );
     windows::close(app, windows::OFFLINE);
     windows::route_to(app, &path);
 }
