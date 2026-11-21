@@ -5,9 +5,11 @@ sandbox), the tools' model text and file effects, published files (access,
 the message's files, the chat delete), the turn lifecycle, the Sandbox row
 and the chat delete purge."""
 
+import io
 import json
 import threading
 import time
+import zipfile
 from collections.abc import Callable, Generator, Iterator, Sequence
 from concurrent.futures import ThreadPoolExecutor
 from contextvars import copy_context
@@ -2065,7 +2067,7 @@ def test_a_deep_research_turn_offers_no_sandbox(
             llm_overrides=None,
         )
     try:
-        assert setup.sandbox_tools
+        assert not setup.sandbox_tools
         agent = execution.create_chat_agent(
             setup, user, 0, CancellationSignal(), False, with_subagents=False
         )
@@ -4078,3 +4080,24 @@ def test_open_url_without_a_sandbox_keeps_its_page_excerpts(
     assert [page.content for page in shown] == [
         _excerpt(index, page) for index, page in enumerate(pages, start=1)
     ]
+
+
+def test_a_turn_shows_its_built_ins_and_again_on_a_vm_that_replaced_a_stopped_one(
+    sandbox: FirecrackerHarnessSandbox, node: RunningFakeAgent, make_tools: MakeTools
+) -> None:
+    tools = make_tools()
+    _run(tools.exec_command, {"cmd": "echo hi"})
+    _run(tools.exec_command, {"cmd": "echo hi"})
+    assert node.agent.swap_mounts == ["skills"]
+    [bundle] = node.agent.managed_images.values()
+    with zipfile.ZipFile(io.BytesIO(bundle)) as zf:
+        assert "pptx/scripts/lint.py" in zf.namelist()
+
+    vm = node.agent.vms[str(tools.ref.sandbox_id)]
+    sandbox._client_factory.client(node.address).stop(
+        sandbox_id=str(tools.ref.sandbox_id),
+        attempt=vm.attempt,
+        generation=vm.generation,
+    )
+    _run(tools.exec_command, {"cmd": "echo hi"})
+    assert node.agent.swap_mounts == ["skills", "skills"]

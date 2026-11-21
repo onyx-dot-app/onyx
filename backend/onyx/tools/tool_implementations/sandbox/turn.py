@@ -7,7 +7,7 @@ from onyx.db.engine.sql_engine import get_session_with_tenant
 from onyx.db.sandbox import get_or_create_sandbox
 from onyx.db.users import fetch_user_by_id
 from onyx.server.features.build.sandbox.harness_base import HarnessSandbox
-from onyx.server.features.build.sandbox.models import HarnessSandboxRef
+from onyx.server.features.build.sandbox.models import FileSet, HarnessSandboxRef
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -35,7 +35,7 @@ class SandboxTurn:
         self._lock = threading.Lock()
         self._ref: HarnessSandboxRef | None = None
         self._skills_lock = threading.Lock()
-        self._skills_synced = False
+        self._skills_files: FileSet | None = None
 
     @property
     def sandbox(self) -> HarnessSandbox:
@@ -80,15 +80,19 @@ class SandboxTurn:
         from onyx.skills.push import build_chat_built_in_files
 
         with self._skills_lock:
-            if self._skills_synced:
-                return
             try:
-                with get_session_with_tenant(tenant_id=self._tenant_id) as db_session:
-                    user = fetch_user_by_id(db_session, self._user_id)
-                    files = build_chat_built_in_files(user, db_session) if user else {}
-                if files:
-                    self.sandbox.sync_skills(ref, files)
-                self._skills_synced = True
+                if self._skills_files is None:
+                    with get_session_with_tenant(
+                        tenant_id=self._tenant_id
+                    ) as db_session:
+                        user = fetch_user_by_id(db_session, self._user_id)
+                        self._skills_files = (
+                            build_chat_built_in_files(user, db_session) if user else {}
+                        )
+                # Every call: a VM that replaced a stopped one mid-turn needs
+                # the push too, and an unchanged instance is skipped.
+                if self._skills_files:
+                    self.sandbox.sync_skills(ref, self._skills_files)
             except Exception:
                 logger.exception(
                     "sandbox_skills_sync_failed sandbox=%s session=%s",

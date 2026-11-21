@@ -630,6 +630,8 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
                 ExecCommand(
                     argv=["bash", "-c", cmd],
                     cwd=workdir or "",
+                    # Each chat session drives its own browser in the shared VM.
+                    env={"AGENT_BROWSER_SESSION": str(ref.session_id)},
                     stdin=True,
                     deadline_seconds=EXEC_DEADLINE_SECONDS,
                     labels=start_label,

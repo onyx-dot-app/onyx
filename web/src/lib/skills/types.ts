@@ -127,6 +127,8 @@ export interface ChatSkill {
   /** `metadata.short-description` in the SKILL.md frontmatter. */
   short_description: string | null;
   version_id: string;
+  /** Set for a built-in, which needs the turn's sandbox tools. */
+  built_in_skill_id: string | null;
 }
 
 export interface SkillsList {

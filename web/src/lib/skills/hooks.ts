@@ -87,7 +87,11 @@ export interface ChatSkillEntries {
  * Skill changes made in this app fetch them again (`lib/skills/cache.ts`).
  * Changes from elsewhere show after the chat input gains focus; a window
  * focus does not fetch them. */
-export function useChatSkills(): ChatSkillEntries {
+export function useChatSkills({
+  builtIns,
+}: {
+  builtIns: boolean;
+}): ChatSkillEntries {
   const { user } = useUser();
   // When the last fetch started, from any trigger.
   const lastFetchRef = useRef(0);
@@ -106,18 +110,20 @@ export function useChatSkills(): ChatSkillEntries {
   }, [mutate]);
   const entries = useMemo(
     (): PickerSections => ({
-      skills: (data ?? []).map(
-        (skill): PickerSkill => ({
-          kind: "skill",
-          slug: skill.name,
-          name: skill.name,
-          description: skill.short_description ?? skill.description,
-        })
-      ),
+      skills: (data ?? [])
+        .filter((skill) => builtIns || skill.built_in_skill_id === null)
+        .map(
+          (skill): PickerSkill => ({
+            kind: "skill",
+            slug: skill.name,
+            name: skill.name,
+            description: skill.short_description ?? skill.description,
+          })
+        ),
       apps: [],
       mcpServers: [],
     }),
-    [data]
+    [data, builtIns]
   );
   return { entries, onInputFocus };
 }
