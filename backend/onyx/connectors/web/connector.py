@@ -50,7 +50,7 @@ from onyx.utils.playwright_fetch import (
     read_bounded_page_html,
     start_playwright,
 )
-from onyx.utils.sitemap import list_pages_for_site
+from onyx.utils.sitemap import list_pages_for_site, list_pages_for_sitemap
 from onyx.utils.url import ssrf_safe_get
 from onyx.utils.web_content import extract_pdf_text, is_pdf_resource
 
@@ -318,10 +318,16 @@ def extract_urls_from_sitemap(sitemap_url: str) -> list[str]:
         )
         response.raise_for_status()
         soup = BeautifulSoup(response.content, "html.parser")
-        urls = [
-            _ensure_absolute_url(sitemap_url, loc_tag.text)
-            for loc_tag in soup.find_all("loc")
-        ]
+        if soup.find("sitemapindex"):
+            # A sitemap index lists child sitemaps, not pages; follow them.
+            urls = list_pages_for_sitemap(
+                sitemap_url, allow_private_network, allow_loopback
+            )
+        else:
+            urls = [
+                _ensure_absolute_url(sitemap_url, loc_tag.text)
+                for loc_tag in soup.find_all("loc")
+            ]
 
         if len(urls) == 0 and len(soup.find_all("urlset")) == 0:
             # the given url doesn't look like a sitemap, let's try to find one
