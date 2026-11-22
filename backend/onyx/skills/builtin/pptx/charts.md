@@ -1,6 +1,6 @@
 # Charts
 
-> **Path convention**: Run all commands from your working directory, the chat session folder. Run skill scripts with their interpreter and the absolute path under `/mnt/skills/pptx/`. Write generated files to the working directory.
+> **Path convention**: Run all commands from your working directory, the chat session folder. Run skill scripts with their interpreter and the absolute path under `/home/sandbox/.agents/skills/pptx/`. Write generated files to the working directory.
 
 Render charts as **PNG images via matplotlib** using the `chart.py` styling helper, then place them like any other image. This works identically for the from-scratch path (pptxgenjs `addImage`) and the template-editing path, and gives full styling control so charts match the deck instead of looking like a pasted Jupyter screenshot.
 
@@ -37,7 +37,7 @@ Only use native PowerPoint charts (pptxgenjs `addChart` or python-pptx) when the
 ```python
 import sys
 
-sys.path.insert(0, "/mnt/skills/pptx/scripts")
+sys.path.insert(0, "/home/sandbox/.agents/skills/pptx/scripts")
 import matplotlib
 
 matplotlib.use("Agg")

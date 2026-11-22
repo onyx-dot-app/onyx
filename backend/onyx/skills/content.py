@@ -16,7 +16,6 @@ from onyx.file_store.file_store import FileStore, get_default_file_store
 from onyx.prompts.skill_prompts import SKILL_FILES_LINE
 from onyx.skills.built_in import (
     BUILT_IN_SKILLS,
-    CHAT_SKILLS_MOUNT_PATH,
     CHAT_SKILLS_PATH,
     BuiltInSkillDefinition,
 )
@@ -161,7 +160,7 @@ def read_chat_skills_md(
             logger.warning("Could not read built-in skill %s", skill.name)
             continue
         skill_md[(skill.version_id, skill.path)] = (
-            SKILL_FILES_LINE.format(folder=f"{CHAT_SKILLS_MOUNT_PATH}/{skill.name}")
+            SKILL_FILES_LINE.format(folder=f"{CHAT_SKILLS_PATH}/{skill.name}")
             + instructions
         )
     return skill_md

@@ -10,7 +10,9 @@ from pathlib import Path
 
 _PPTX_SKILL_DIR = Path(__file__).parents[4] / "onyx" / "skills" / "builtin" / "pptx"
 
-_SCRIPT_REF_RE = re.compile(r"(?:/mnt/skills/pptx/)?(scripts/[\w./-]+\.(?:py|js))")
+_SCRIPT_REF_RE = re.compile(
+    r"(?:/home/sandbox/\.agents/skills/pptx/)?(scripts/[\w./-]+\.(?:py|js))"
+)
 
 
 def test_all_script_paths_referenced_in_docs_exist() -> None:

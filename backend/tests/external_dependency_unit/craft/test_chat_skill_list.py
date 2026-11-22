@@ -309,8 +309,8 @@ def test_chat_built_ins_need_the_sandbox_and_name_their_vm_folder(
     skill_md = read_chat_skills_md([pptx], user.id, db_session, sandbox=True)[
         (pptx.version_id, pptx.path)
     ]
-    assert skill_md.startswith("Skill files: /mnt/skills/pptx/")
-    assert "python /mnt/skills/pptx/scripts/lint.py" in skill_md
+    assert skill_md.startswith("Skill files: /home/sandbox/.agents/skills/pptx/")
+    assert "python /home/sandbox/.agents/skills/pptx/scripts/lint.py" in skill_md
 
     # Each mounted folder is a listed skill; the bundle is built once.
     bundle = build_chat_built_ins_bundle(db_session)
@@ -318,6 +318,8 @@ def test_chat_built_ins_need_the_sandbox_and_name_their_vm_folder(
     assert build_chat_built_ins_bundle(db_session) is bundle
     with zipfile.ZipFile(io.BytesIO(bundle.zip_bytes)) as zf:
         folders = {name.split("/", 1)[0] for name in zf.namelist()}
+        # The host builds the drive root at 0711, so `ls /mnt/skills` fails.
+        assert zf.comment == b"onyx-managed:root-mode=0711"
     assert folders == set(built_ins)
 
 

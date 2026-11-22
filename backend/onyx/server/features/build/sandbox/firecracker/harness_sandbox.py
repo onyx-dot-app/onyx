@@ -9,10 +9,12 @@ durable cache records (`harness_state`), so any API pod can serve
 a user's sandbox keeps (Onyx delete hooks call them through `purge`).
 """
 
+import io
 import posixpath
 import random
 import secrets
 import time
+import zipfile
 from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
 from contextlib import nullcontext
 from typing import IO
@@ -175,7 +177,7 @@ from onyx.server.features.build.sandbox.models import (
     SkillsBundle,
     session_workspace,
 )
-from onyx.skills.built_in import CHAT_SKILLS_PATH
+from onyx.skills.built_in import CHAT_SKILLS_MOUNT_PATH, CHAT_SKILLS_PATH
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -288,6 +290,8 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
         ):
             if get_skills_image(tenant_cache, ref.sandbox_id) == image:
                 return
+            # A swap whose links then fail must not pass for the old drive.
+            set_skills_image(tenant_cache, ref.sandbox_id, None)
             agent = self._client_factory.client(placed.node.address)
             put = agent.put_managed_image(bundle.zip_bytes)
             swap = agent.swap_managed(
@@ -305,7 +309,38 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
                 raise HarnessSandboxError(
                     f"The skills drive did not change: {swap.reason}: {swap.message}"
                 )
+            self._link_built_ins(sandbox_daemon(self._client_factory, placed), bundle)
             set_skills_image(tenant_cache, ref.sandbox_id, image)
+
+    @staticmethod
+    def _link_built_ins(daemon: SandboxDaemonClient, bundle: SkillsBundle) -> None:
+        """Link each skill folder of the drive into CHAT_SKILLS_PATH, and
+        delete the links to folders that the drive no longer has. A folder of
+        that name that is not a link (one the model made) stays."""
+        with zipfile.ZipFile(io.BytesIO(bundle.zip_bytes)) as zf:
+            names = {path.split("/", 1)[0] for path in zf.namelist()}
+        try:
+            here = daemon.list_files(session_id="", path=CHAT_SKILLS_PATH).entries
+        except SandboxDaemonError as e:
+            if e.reason is not SandboxDaemonErrorReason.FILE_NOT_FOUND:
+                raise
+            here = []
+        for entry in here:
+            if (
+                entry.type is FileType.SYMLINK
+                and entry.link_target.startswith(f"{CHAT_SKILLS_MOUNT_PATH}/")
+                and entry.name not in names
+            ):
+                daemon.delete_file(session_id="", path=entry.path)
+        for name in sorted(names):
+            try:
+                daemon.link_file(
+                    path=f"{CHAT_SKILLS_PATH}/{name}",
+                    target=f"{CHAT_SKILLS_MOUNT_PATH}/{name}",
+                )
+            except SandboxDaemonError as e:
+                if e.reason is not SandboxDaemonErrorReason.FILE_EXISTS:
+                    raise
 
     def install_skills(
         self,

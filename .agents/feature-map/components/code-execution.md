@@ -243,7 +243,8 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files (no tool
                                         reads the available chat built-ins once
                                         (skills/push.py:build_chat_built_ins_bundle; the
                                         zip is built once per process for each set), then
-                                        HarnessSandbox.sync_skills shows them at /mnt/skills
+                                        HarnessSandbox.sync_skills shows them at /mnt/skills,
+                                        linked into /home/sandbox/.agents/skills,
                                         and skips a VM instance that has them (an error is
                                         logged; the next call tries again); then the custom
                                         skills in want_skills resolve to the version the

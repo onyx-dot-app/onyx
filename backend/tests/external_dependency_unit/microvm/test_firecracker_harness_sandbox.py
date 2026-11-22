@@ -76,7 +76,7 @@ from onyx.server.features.build.sandbox.models import (
     SkillsBundle,
     session_workspace,
 )
-from onyx.skills.built_in import CHAT_SKILLS_PATH
+from onyx.skills.built_in import CHAT_SKILLS_MOUNT_PATH, CHAT_SKILLS_PATH
 from tests.external_dependency_unit.microvm.conftest import (
     TENANT_ID,
     AddNode,
@@ -1289,6 +1289,7 @@ def test_skills_go_to_each_vm_instance_once_per_change(
     sandbox: FirecrackerHarnessSandbox, node: RunningFakeAgent, new_ref: NewRef
 ) -> None:
     ref = new_ref()
+    sandbox_id = str(ref.sandbox_id)
     files = {"pptx/SKILL.md": b"# pptx", "pptx/scripts/lint.py": b"print(1)"}
     sandbox.sync_skills(ref, SkillsBundle.from_files(files))
     sandbox.sync_skills(
@@ -1297,9 +1298,29 @@ def test_skills_go_to_each_vm_instance_once_per_change(
     assert node.agent.swap_mounts == ["skills"]
     assert len(node.agent.managed_images) == 1
 
-    changed = SkillsBundle.from_files({**files, "pptx/SKILL.md": b"# pptx v2"})
+    def links() -> dict[str, str]:
+        return {
+            path: target
+            for (sid, _, path), target in node.agent.links.items()
+            if sid == sandbox_id
+        }
+
+    assert links() == {f"{CHAT_SKILLS_PATH}/pptx": f"{CHAT_SKILLS_MOUNT_PATH}/pptx"}
+
+    # A built-in that leaves the drive loses its link. A copied skill stays,
+    # also one with a built-in's name.
+    report = (sandbox_id, "", f"{CHAT_SKILLS_PATH}/report/SKILL.md")
+    copied_xlsx = (sandbox_id, "", f"{CHAT_SKILLS_PATH}/xlsx/SKILL.md")
+    node.agent.files[report] = b"r"
+    node.agent.files[copied_xlsx] = b"x"
+    changed = SkillsBundle.from_files(
+        {"docx/SKILL.md": b"# docx", "xlsx/SKILL.md": b"# xlsx"}
+    )
     sandbox.sync_skills(ref, changed)
     assert len(node.agent.swap_mounts) == 2
+    assert links() == {f"{CHAT_SKILLS_PATH}/docx": f"{CHAT_SKILLS_MOUNT_PATH}/docx"}
+    assert node.agent.files[report] == b"r"
+    assert node.agent.files[copied_xlsx] == b"x"
 
     vm = node.agent.vms[str(ref.sandbox_id)]
     sandbox._client_factory.client(node.address).stop(
@@ -1308,6 +1329,22 @@ def test_skills_go_to_each_vm_instance_once_per_change(
     sandbox.sync_skills(ref, changed)
     assert len(node.agent.swap_mounts) == 3
     assert node.agent.create_calls == 2
+
+
+def test_a_sync_whose_links_fail_leaves_no_drive_record(
+    sandbox: FirecrackerHarnessSandbox, node: RunningFakeAgent, new_ref: NewRef
+) -> None:
+    """After a swap whose links fail, a sync with the earlier bundle swaps
+    and links again instead of trusting the old record."""
+    ref = new_ref()
+    first = SkillsBundle.from_files({"pptx/SKILL.md": b"# pptx"})
+    sandbox.sync_skills(ref, first)
+    node.agent.link_error = grpc.StatusCode.INTERNAL
+    with pytest.raises(HostAgentError):
+        sandbox.sync_skills(ref, SkillsBundle.from_files({"docx/SKILL.md": b"# d"}))
+    node.agent.link_error = None
+    sandbox.sync_skills(ref, first)
+    assert len(node.agent.swap_mounts) == 3
 
 
 def test_custom_skills_copy_to_each_vm_instance_once_per_version(

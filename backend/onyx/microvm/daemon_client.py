@@ -745,6 +745,18 @@ class SandboxDaemonClient:
         except grpc.RpcError as e:
             raise sandbox_daemon_error(e) from e
 
+    def link_file(self, *, path: str, target: str) -> None:
+        """Make a symlink at the absolute VM path to target (stored as given),
+        replacing a link there. Another entry at path raises FILE_EXISTS."""
+        try:
+            self._stub.LinkFile(
+                sandboxd_pb2.LinkFileRequest(path=path, target=target),
+                metadata=self._authed(),
+                timeout=SANDBOX_FC_AGENT_RPC_TIMEOUT_SECONDS,
+            )
+        except grpc.RpcError as e:
+            raise sandbox_daemon_error(e) from e
+
     def stat_files(self, *, session_id: str, paths: list[str]) -> list[PathStat]:
         """The kernel's facts of at most STAT_FILES_MAX_PATHS session paths
         (STAT_FILES_MAX_PATH_BYTES in all), in request order. Reads no

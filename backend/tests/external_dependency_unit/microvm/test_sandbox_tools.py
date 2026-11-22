@@ -411,6 +411,14 @@ def _files(node: RunningFakeAgent, ref: HarnessSandboxRef) -> dict[str, bytes]:
     }
 
 
+def _links(node: RunningFakeAgent, ref: HarnessSandboxRef) -> dict[str, str]:
+    return {
+        path: target
+        for (sandbox_id, session_id, path), target in node.agent.links.items()
+        if (sandbox_id, session_id) == (str(ref.sandbox_id), str(ref.session_id))
+    }
+
+
 def _ended_turns(
     monkeypatch: pytest.MonkeyPatch, sandbox: FirecrackerHarnessSandbox
 ) -> list[HarnessSandboxRef]:
@@ -1378,7 +1386,7 @@ def test_a_patch_adds_updates_moves_and_deletes_files(
         # A delete of a link removes the link, not its target.
         "real/target.txt": b"t\n",
     }
-    assert agent.links == {}
+    assert _links(node, ref) == {}
     # An add over a file and an update keep the file's mode.
     assert agent.file_modes[_key(ref, "new/dir/hello.txt")] == 0o644
     assert agent.file_modes[_key(ref, "tool.sh")] == 0o700
@@ -1511,7 +1519,7 @@ def test_a_patch_that_fails_verification_changes_nothing(
     node.agent.links[_key(ref, "uploads")] = "/mnt/user-uploads"
     node.agent.links[_key(ref, "loop")] = "loop2"
     node.agent.links[_key(ref, "loop2")] = "loop"
-    links = dict(node.agent.links)
+    links = _links(node, ref)
     # What os.Root reports through those links (its rules have Go tests).
     keep, directory = tools.turn.sandbox.stat_files(ref, ["keep.py", "dir"])
     assert keep.identity is not None and directory.identity is not None
@@ -1546,7 +1554,7 @@ def test_a_patch_that_fails_verification_changes_nothing(
     assert result.is_error
     assert result.content.startswith(error)
     assert _files(node, ref) == {key[2]: data for key, data in before.items()}
-    assert node.agent.links == links
+    assert _links(node, ref) == links
 
 
 @pytest.mark.usefixtures("sandbox")
@@ -1945,7 +1953,7 @@ def test_a_failed_edit_or_write_changes_nothing(
     assert result.is_error
     assert result.content.startswith(error)
     assert _files(node, ref) == {key[2]: data for key, data in before.items()}
-    assert node.agent.links == {_key(ref, "link.txt"): "keep.py"}
+    assert _links(node, ref) == {"link.txt": "keep.py"}
 
 
 # The turn

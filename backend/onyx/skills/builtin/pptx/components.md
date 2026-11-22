@@ -1,6 +1,6 @@
 # Slide Components
 
-> **Path convention**: Run all commands from your working directory, the chat session folder. Run skill scripts with their interpreter and the absolute path under `/mnt/skills/pptx/`. Write generated files to the working directory.
+> **Path convention**: Run all commands from your working directory, the chat session folder. Run skill scripts with their interpreter and the absolute path under `/home/sandbox/.agents/skills/pptx/`. Write generated files to the working directory.
 
 **Components are the DEFAULT way to build a deck from scratch.** Each component is a tested layout function: fixed 0.5" margins, the SKILL.md typography scale, contrast-safe color picking, and shrink/truncate guards so long content cannot overflow. Assembling slides from components is much faster than hand-placing shapes and produces decks that pass `lint.py` on the first try. Drop to raw pptxgenjs ([pptxgenjs.md](pptxgenjs.md)) **only** for a layout no component covers — and even then, keep the rest of the deck on components.
 
@@ -24,7 +24,7 @@ The default visual system is **engineered monochrome**: a white field with near-
 Use the default monochrome palette (`defaultTheme()`) unless the user wants a specific palette:
 
 ```javascript
-const C = require("/mnt/skills/pptx/scripts/components.js");
+const C = require("/home/sandbox/.agents/skills/pptx/scripts/components.js");
 
 const theme = C.defaultTheme(); // engineered monochrome — colors + fonts, no branding
 const pres = C.createPresentation(theme, { title: "Deck Title", author: "You" });
@@ -103,7 +103,7 @@ C.chartSlide(pres, theme, {
 });
 
 // icons pre-rendered with icon.js in ink, placed bare (no circle backer):
-//   node /mnt/skills/pptx/scripts/icon.js trending-up --color 0F0F0F -o icons/up.png
+//   node /home/sandbox/.agents/skills/pptx/scripts/icon.js trending-up --color 0F0F0F -o icons/up.png
 C.iconRow(pres, theme, {
   title: "What worked",
   items: [
@@ -127,6 +127,6 @@ C.iconRow(pres, theme, {
 `scripts/components_demo.js` renders a deck (on `defaultTheme()`) with one slide per component and must stay lint-clean:
 
 ```bash
-node /mnt/skills/pptx/scripts/components_demo.js components-demo.pptx
-python /mnt/skills/pptx/scripts/lint.py components-demo.pptx
+node /home/sandbox/.agents/skills/pptx/scripts/components_demo.js components-demo.pptx
+python /home/sandbox/.agents/skills/pptx/scripts/lint.py components-demo.pptx
 ```

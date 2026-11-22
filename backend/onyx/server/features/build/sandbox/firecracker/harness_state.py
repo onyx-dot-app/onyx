@@ -113,8 +113,14 @@ def get_skills_image(cache: CacheBackend, sandbox_id: UUID) -> SkillsImage | Non
     return None if raw is None else SkillsImage.model_validate_json(raw)
 
 
-def set_skills_image(cache: CacheBackend, sandbox_id: UUID, image: SkillsImage) -> None:
-    cache.set(SKILLS_IMAGE_PREFIX + str(sandbox_id), image.model_dump_json())
+def set_skills_image(
+    cache: CacheBackend, sandbox_id: UUID, image: SkillsImage | None
+) -> None:
+    """Record the drive that the instance shows; None removes the record."""
+    if image is None:
+        cache.delete(SKILLS_IMAGE_PREFIX + str(sandbox_id))
+    else:
+        cache.set(SKILLS_IMAGE_PREFIX + str(sandbox_id), image.model_dump_json())
 
 
 def installed_skills(

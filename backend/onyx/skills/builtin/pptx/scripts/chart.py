@@ -3,7 +3,7 @@
 Usage (from the chat session folder):
 
     import sys
-    sys.path.insert(0, "/mnt/skills/pptx/scripts")
+    sys.path.insert(0, "/home/sandbox/.agents/skills/pptx/scripts")
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt

@@ -2,7 +2,7 @@
 // component, on the default monochrome palette. Doubles as a lint fixture: the
 // output must pass `python scripts/lint.py` with zero ERRORs.
 //
-//   node /mnt/skills/pptx/scripts/components_demo.js [components-demo.pptx]
+//   node /home/sandbox/.agents/skills/pptx/scripts/components_demo.js [components-demo.pptx]
 //
 // Uses tiny embedded placeholder PNGs so it runs with no asset setup; real
 // decks pass icon.js / chart.py / image-generation outputs as file paths.

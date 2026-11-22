@@ -202,7 +202,7 @@ Render icons with the bundled script — all dependencies (lucide-static, @table
 ### Render an Icon PNG
 
 ```bash
-node /mnt/skills/pptx/scripts/icon.js circle-check --color FFFFFF --size 512 -o icons/check.png
+node /home/sandbox/.agents/skills/pptx/scripts/icon.js circle-check --color FFFFFF --size 512 -o icons/check.png
 ```
 
 - `<icon-name>`: kebab-case icon file name (e.g. `circle-check`, `trending-up`, `shield-check`)
@@ -220,8 +220,8 @@ Render each distinct (icon, color) pair **once** into `icons/`, then reuse the P
 Don't guess identifiers — a wrong name is the main failure mode. If unsure, search first:
 
 ```bash
-node /mnt/skills/pptx/scripts/icon.js --list "shield"               # search both sets
-node /mnt/skills/pptx/scripts/icon.js --list "chart" --set lucide   # scope to one set
+node /home/sandbox/.agents/skills/pptx/scripts/icon.js --list "shield"               # search both sets
+node /home/sandbox/.agents/skills/pptx/scripts/icon.js --list "chart" --set lucide   # scope to one set
 ```
 
 Two sets are available: **lucide** (~2,000 icons, clean stroke style — use as the default) and **tabler** (~6,000 icons, outline + filled — use when lucide lacks a concept).

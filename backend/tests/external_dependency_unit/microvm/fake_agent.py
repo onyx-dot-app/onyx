@@ -170,6 +170,8 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
         # (sandbox_id, session_id, path) -> target of a symlink, as stored.
         self.links: dict[tuple[str, str, str], str] = {}
         self.lose_rename_reply = False
+        # LinkFile fails with this code.
+        self.link_error: grpc.StatusCode | None = None
         # StatFiles facts of a path, as the guest daemon's os.Root reports
         # them (the Go tests own those rules). Other paths get the facts of
         # their own entry, and a link names nothing.
@@ -1545,6 +1547,11 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
                     if sid == sandbox_id and session == request.session_id
                 },
             }
+            targets = {
+                path: target
+                for (sid, session, path), target in self.agent.links.items()
+                if sid == sandbox_id and session == request.session_id
+            }
             self.agent.list_requests.append((base, request.recursive))
             # The directory that the path names through its links; entries
             # keep the requested path.
@@ -1589,6 +1596,7 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
                     name=path.rsplit("/", 1)[-1],
                     type=sandboxd_pb2.FILE_TYPE_SYMLINK,
                     mode=0o777,
+                    link_target=targets.get(real_prefix + rel, ""),
                 )
                 if data is None
                 else self._info(
@@ -1667,6 +1675,27 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
                 self.agent.lose_rename_reply = False
                 context.abort(grpc.StatusCode.UNAVAILABLE, "connection reset")
             return sandboxd_pb2.RenameFileResponse()
+
+    def LinkFile(  # noqa: N802
+        self, request: sandboxd_pb2.LinkFileRequest, context: grpc.ServicerContext
+    ) -> sandboxd_pb2.LinkFileResponse:
+        with self.agent.lock:
+            sandbox_id = self._ready(context)
+            self.agent.daemon_calls.append(("LinkFile", request.path))
+            if self.agent.link_error is not None:
+                context.abort(self.agent.link_error, "injected link failure")
+            if request.session_id or not request.target:
+                abort_daemon(
+                    context, SandboxDaemonErrorReason.INVALID_ARGUMENT, "bad link"
+                )
+            key = self._file_key(context, sandbox_id, "", request.path)
+            if key in self.agent.files or any(
+                k[:2] == key[:2] and k[2].startswith(f"{key[2]}/")
+                for k in self.agent.files
+            ):
+                abort_daemon(context, SandboxDaemonErrorReason.FILE_EXISTS, "exists")
+            self.agent.links[key] = request.target
+            return sandboxd_pb2.LinkFileResponse()
 
     def DeleteFile(  # noqa: N802
         self, request: sandboxd_pb2.DeleteFileRequest, context: grpc.ServicerContext

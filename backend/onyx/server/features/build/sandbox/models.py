@@ -160,6 +160,12 @@ class HarnessSandboxRef(BaseModel):
     session_id: UUID
 
 
+# The host builds a drive from a zip with this comment with its root at 0711:
+# the VM user opens paths in it but cannot list it. Matches
+# microvm/internal/managed UnlistableRootComment.
+_UNLISTABLE_ROOT_COMMENT = b"onyx-managed:root-mode=0711"
+
+
 class SkillsBundle(BaseModel):
     """Skill files (`<skill>/<path>` to bytes) as a zip, and its sha256."""
 
@@ -169,9 +175,13 @@ class SkillsBundle(BaseModel):
     image_id: str
 
     @classmethod
-    def from_files(cls, files: FileSet) -> "SkillsBundle":
+    def from_files(
+        cls, files: FileSet, *, unlistable_root: bool = False
+    ) -> "SkillsBundle":
         buffer = io.BytesIO()
         with zipfile.ZipFile(buffer, "w", zipfile.ZIP_DEFLATED) as zf:
+            if unlistable_root:
+                zf.comment = _UNLISTABLE_ROOT_COMMENT
             for path in sorted(files):
                 info = zipfile.ZipInfo(path, _ZIP_EPOCH)
                 info.compress_type = zipfile.ZIP_DEFLATED

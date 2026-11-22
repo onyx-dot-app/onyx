@@ -1,7 +1,7 @@
 // Composable slide component library for pptxgenjs (see components.md).
 //
 // Usage:
-//   const C = require("/mnt/skills/pptx/scripts/components.js");
+//   const C = require("/home/sandbox/.agents/skills/pptx/scripts/components.js");
 //   const theme = C.defaultTheme(); // or C.makeTheme({ primary: "...", ... })
 //   const pres = C.createPresentation(theme, { title: "My Deck" });
 //   C.titleSlide(pres, theme, { title: "...", subtitle: "..." });

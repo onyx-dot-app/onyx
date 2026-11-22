@@ -273,7 +273,13 @@ the stored token on each request, so a new token takes effect at once.
   `sandbox_fc:skills_sync:<sandbox>`, puts and swaps the image only when
   the `sandbox_fc:skills_image:<sandbox>` cache record names another VM
   instance `(attempt, generation)` or another image. A woken or replaced VM is a
-  new instance, so its first chat turn pushes again. Custom skills do not
+  new instance, so its first chat turn pushes again. After each push, the
+  daemon's `link_file` links each built-in folder into
+  `/home/sandbox/.agents/skills/` and `delete_file` removes links to
+  built-ins that the drive no longer has, so every chat skill is in one
+  folder. The chat built-ins zip carries the `onyx-managed:root-mode=0711`
+  comment, so the host builds the drive root at 0711 and `ls /mnt/skills`
+  fails for the model. Custom skills do not
   use the drive: `install_skills` writes each file of one skill into a hidden
   `/home/sandbox/.agents/skills/.copy-<hex>/` folder with the daemon's
   `write_file`, then swaps it with `<name>/` in one step (`rename_file` with
@@ -286,7 +292,7 @@ the stored token on each request, so a new token takes effect at once.
 - `backend/onyx/microvm/daemon_client.py`: the guest daemon client, through
   the agent pass-through: Health, Init, exec (run, start, stream by offsets,
   interact, cancel with an optional SIGINT/SIGTERM, inspect, list; at most 64
-  tracked executions per VM) and files (read, write, upload, list, rename, delete,
+  tracked executions per VM) and files (read, write, upload, list, rename, delete, link,
   zip; session-relative. All but upload also take an absolute VM path with
   no session, anywhere except the denied VM paths; the daemon confines only
   such paths in its `--onyx-root` (default `/tmp/onyx`), like session
