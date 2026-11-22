@@ -921,3 +921,93 @@ def test_paginated_comments_beyond_embedded_cap_and_multiproject_server_watermar
     assert slim_second["startAt"] == 0
     assert "id not in (10)" in slim_second["jql_str"]
     assert "updated" in slim_second["fields"]
+
+
+def test_server_watermark_exclusion_cap_offset_subtracts_excluded_rows() -> None:
+    connector = JiraServiceManagementConnector(
+        jira_base_url="https://jira.internal.corp",
+        jql_query="project in (JSM, ITSM)",
+        batch_size=4,
+    )
+    dc_client = MagicMock()
+    dc_client.deploymentType = "Server"
+    # Page 1 has 1 issue in 12:00 and 3 issues in 12:01. With the exclusion cap
+    # patched to 2, IDs 10 and 20 are excluded by `id not in (10, 20)` and ID 5
+    # is excluded by `updated >=` (12:01), so only ID 30 remains in the next
+    # filtered result -> offset must advance to 1 (not 4).
+    dc_client.search_issues.side_effect = [
+        ResultList(
+            [
+                _make_mock_issue(
+                    key="JSM-5",
+                    issue_id="5",
+                    updated="2026-11-20T12:00:50.000+0000",
+                ),
+                _make_mock_issue(
+                    key="JSM-10",
+                    issue_id="10",
+                    updated="2026-11-20T12:01:05.000+0000",
+                ),
+                _make_mock_issue(
+                    key="ITSM-20",
+                    issue_id="20",
+                    updated="2026-11-20T12:01:10.000+0000",
+                ),
+                _make_mock_issue(
+                    key="ITSM-30",
+                    issue_id="30",
+                    updated="2026-11-20T12:01:15.000+0000",
+                ),
+            ],
+            _startAt=0,
+            _maxResults=4,
+            _total=6,
+        ),
+        ResultList(
+            [
+                _make_mock_issue(
+                    key="ITSM-40",
+                    issue_id="40",
+                    updated="2026-11-20T12:01:20.000+0000",
+                ),
+                _make_mock_issue(
+                    key="ITSM-50",
+                    issue_id="50",
+                    updated="2026-11-20T12:01:25.000+0000",
+                ),
+            ],
+            _startAt=1,
+            _maxResults=4,
+            _total=3,
+        ),
+    ]
+    connector._jira_client = dc_client
+    connector._is_cloud = False
+
+    with patch(
+        "onyx.connectors.jira_service_management.connector._MAX_JQL_EXCLUDED_IDS", 2
+    ):
+        cp = connector.build_dummy_checkpoint()
+        docs: list[str] = []
+        checkpoints: list[JiraServiceManagementConnectorCheckpoint] = []
+        while cp.has_more:
+            gen = connector.load_from_checkpoint(1700000000, 1799999999, cp)
+            try:
+                while True:
+                    item = next(gen)
+                    assert isinstance(item, Document)
+                    docs.append(item.id)
+            except StopIteration as stop:
+                cp = stop.value
+                checkpoints.append(cp)
+
+    assert len(docs) == 6
+    assert checkpoints[0].cursor_seen_ids == [10, 20]
+    assert checkpoints[0].offset == 1
+    assert checkpoints[1].cursor_seen_ids == [10, 20]
+    assert checkpoints[1].offset == 3
+    assert checkpoints[1].has_more is False
+
+    second_kwargs = dc_client.search_issues.call_args_list[1].kwargs
+    assert second_kwargs["startAt"] == 1
+    assert "id not in (10, 20)" in second_kwargs["jql_str"]

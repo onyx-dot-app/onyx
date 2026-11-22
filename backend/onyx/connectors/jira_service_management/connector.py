@@ -313,7 +313,26 @@ def _advance_updated_cursor(
             if next_minute == prev_minute and cursor_seen_ids
             else sorted(seen_ids)[:_MAX_JQL_EXCLUDED_IDS]
         )
-        return (next_updated_ms, fixed_excluded, offset + len(issues))
+        excluded_ids = set(fixed_excluded)
+        remaining_in_bucket = sum(
+            1
+            for issue in issues
+            if (
+                (
+                    (issue_updated_ms := _extract_updated_ms(issue)) is None
+                    or next_minute is None
+                    or issue_updated_ms // _MINUTE_MS >= next_minute
+                )
+                and _extract_issue_id(issue) not in excluded_ids
+            )
+        )
+        if (
+            remaining_in_bucket == 0
+            and next_minute == prev_minute
+            and fixed_excluded == cursor_seen_ids
+        ):
+            remaining_in_bucket = len(issues)
+        return (next_updated_ms, fixed_excluded, offset + remaining_in_bucket)
 
     sorted_seen_ids = sorted(seen_ids)
     if next_minute == prev_minute and sorted_seen_ids == cursor_seen_ids:
