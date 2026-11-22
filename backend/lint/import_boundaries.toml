@@ -203,6 +203,16 @@ importer = "onyx/connectors/wikipedia/connector.py"
 imports = "onyx.connectors.mediawiki.wiki"
 reason = "Wikipedia is a MediaWiki site: its connector subclasses MediaWikiConnector and adds only the hostname."
 
+[[contract.exception]]
+importer = "onyx/connectors/jira_service_management/config.py"
+imports = "onyx.connectors.jira.config"
+reason = "Jira Service Management is a Jira project type: its config subclasses JiraConnectorConfig and delegates JQL edits to jira_planning_rule."
+
+[[contract.exception]]
+importer = "onyx/connectors/jira_service_management/connector.py"
+imports = "onyx.connectors.jira"
+reason = "Jira Service Management projects run on Jira with Service Desk enrichment: JiraServiceManagementConnector subclasses JiraConnector."
+
 [[contract]]
 name = "permission-sync-sources-are-independent"
 rule = "A permission-sync source must not import another source"

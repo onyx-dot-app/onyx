@@ -5,7 +5,7 @@ import re
 import time
 from collections.abc import Callable, Generator, Iterable, Iterator
 from datetime import timedelta
-from typing import Any, ClassVar
+from typing import Any
 
 from more_itertools import chunked
 from typing_extensions import override
@@ -473,7 +473,6 @@ class JiraConnector(
     Resolver,
 ):
     slim_listing_honors_indexing_start = True
-    connector_source: ClassVar[DocumentSource] = DocumentSource.JIRA
 
     def __init__(
         self,

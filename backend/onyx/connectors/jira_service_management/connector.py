@@ -18,7 +18,7 @@ Jira project of type ``service_desk``. Only two things change here:
 """
 
 from collections.abc import Generator, Mapping
-from typing import Any, ClassVar
+from typing import Any
 
 import requests
 from jira.exceptions import JIRAError
@@ -96,7 +96,6 @@ def _apply_portal_request_metadata(
 class JiraServiceManagementConnector(JiraConnector):
     """Connector for Jira Service Management customer portal tickets."""
 
-    connector_source: ClassVar[DocumentSource] = DocumentSource.JIRA_SERVICE_MANAGEMENT
     _project_type_cache: dict[str, str | None]
 
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, Any] | None:

@@ -5,7 +5,7 @@ member names (VARCHAR sized to the longest name). JIRA_SERVICE_MANAGEMENT is
 longer than the names that sized it.
 
 Revision ID: a1c9e4f27b03
-Revises: 7c00f53ab75f
+Revises: 00a73eb4dccf
 Create Date: 2026-11-05 00:15:00.000000
 
 """
@@ -16,7 +16,7 @@ import sqlalchemy as sa
 
 # revision identifiers, used by Alembic.
 revision = "a1c9e4f27b03"
-down_revision = "7c00f53ab75f"
+down_revision = "00a73eb4dccf"
 branch_labels = None
 depends_on = None
 
