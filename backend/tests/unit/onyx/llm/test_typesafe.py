@@ -3,8 +3,14 @@ from unittest.mock import MagicMock, patch
 import pytest
 from pydantic import ValidationError
 
+from onyx.db.enums import LLMModelFlowType
+from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.llm.constants import WELL_KNOWN_PROVIDER_NAMES, LlmProviderNames
+from onyx.llm.constants import (
+    PROVIDER_DISPLAY_NAMES,
+    WELL_KNOWN_PROVIDER_NAMES,
+    LlmProviderNames,
+)
 from onyx.llm.factory import get_llm
 from onyx.llm.model_catalog import iter_models
 from onyx.llm.well_known_providers.typesafe import (
@@ -145,6 +151,126 @@ def test_update_cannot_reuse_another_providers_key() -> None:
             )
         stored.api_key.get_value.assert_not_called()
         save.assert_not_called()
+
+
+def _stored_openai_provider(*flow_types: LLMModelFlowType) -> MagicMock:
+    stored = MagicMock(
+        id=7,
+        provider="openai",
+        name="Workspace OpenAI",
+        zoom_voice_provider_id=None,
+        api_base=None,
+        custom_config=None,
+        api_key=None,
+        is_auto_mode=False,
+    )
+    models: list[MagicMock] = []
+    for flow_type in flow_types:
+        model = MagicMock()
+        model.llm_model_flow_types = [flow_type]
+        models.append(model)
+    stored.model_configurations = models
+    return stored
+
+
+def _hosted_decision_change(provider: str) -> LLMProviderUpsertRequest:
+    return LLMProviderUpsertRequest(
+        id=7,
+        provider=provider,
+        api_key="new-secret",
+        api_key_changed=True,
+        keep_existing_models=True,
+        model_configurations=[
+            ModelConfigurationUpsertRequest(
+                name="decision-model",
+                is_visible=True,
+                supports_chat=False,
+                supports_decisions=True,
+            )
+        ],
+    )
+
+
+@pytest.mark.parametrize("provider", ["typesafe", "nace"])
+@pytest.mark.parametrize(
+    ("flow_types", "default_provider_id"),
+    [((LLMModelFlowType.CHAT,), None), ((), 7)],
+)
+def test_change_to_hosted_decision_rejects_remaining_chat_use(
+    provider: str,
+    flow_types: tuple[LLMModelFlowType, ...],
+    default_provider_id: int | None,
+) -> None:
+    from onyx.server.manage.llm.api import put_llm_provider
+
+    stored = _stored_openai_provider(*flow_types)
+    chat_default = (
+        None
+        if default_provider_id is None
+        else MagicMock(llm_provider_id=default_provider_id)
+    )
+    with (
+        patch(
+            "onyx.server.manage.llm.api.fetch_existing_llm_provider_by_id",
+            return_value=stored,
+        ),
+        patch(
+            "onyx.server.manage.llm.api.fetch_default_model",
+            return_value=chat_default,
+        ) as fetch_default,
+        patch("onyx.server.manage.llm.api.upsert_llm_provider") as save,
+    ):
+        with pytest.raises(OnyxError, match="Remove the chat models") as error:
+            put_llm_provider(
+                _hosted_decision_change(provider),
+                False,
+                MagicMock(),
+                MagicMock(),
+            )
+    assert error.value.error_code == OnyxErrorCode.VALIDATION_ERROR
+    assert PROVIDER_DISPLAY_NAMES[provider] in error.value.detail
+    assert "chat default" in error.value.detail
+    if not flow_types:
+        assert fetch_default.call_args.args[1] == LLMModelFlowType.CHAT
+    save.assert_not_called()
+
+
+@pytest.mark.parametrize("provider", ["typesafe", "nace"])
+def test_change_to_hosted_decision_allows_provider_without_chat_rows(
+    provider: str,
+) -> None:
+    from onyx.server.manage.llm.api import put_llm_provider
+
+    stored = _stored_openai_provider(LLMModelFlowType.DECISION)
+    saved = MagicMock(
+        id=7,
+        name="Workspace OpenAI",
+        provider=provider,
+        api_key=None,
+        custom_config=None,
+    )
+    with (
+        patch(
+            "onyx.server.manage.llm.api.fetch_existing_llm_provider_by_id",
+            return_value=stored,
+        ),
+        patch(
+            "onyx.server.manage.llm.api.fetch_default_model",
+            return_value=MagicMock(llm_provider_id=99),
+        ),
+        patch(
+            "onyx.server.manage.llm.api.upsert_llm_provider",
+            return_value=saved,
+        ) as save,
+        patch("onyx.server.manage.llm.api.invalidate_provider_listing_cache"),
+    ):
+        result = put_llm_provider(
+            _hosted_decision_change(provider), False, MagicMock(), MagicMock()
+        )
+    assert result is saved
+    request = save.call_args.kwargs["llm_provider_upsert_request"]
+    assert request.keep_existing_models is True
+    save.assert_called_once()
 
 
 def test_admin_test_dispatch_restores_key_without_chat_client() -> None:

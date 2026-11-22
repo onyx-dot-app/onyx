@@ -83,8 +83,8 @@ If a decision request fails, search uses the chat's language model to pick the d
 
 ## Limits
 
-- A request holds at most 512 questions. Each question holds at most 255 options.
-  Onyx caps one ranking request at 200 questions.
+- Nace accepts at most 512 questions in one request, and each question holds at most 255 options.
+  Onyx sends at most 200 questions in one request.
 - Internal search waits up to 5 seconds for a Drex response, then uses the chat's language model.
   The connection test waits up to 60 seconds.
 

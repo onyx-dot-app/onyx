@@ -1075,6 +1075,17 @@ def _initial_auto_update_models(
     ]
 
 
+def _provider_retains_chat_use(provider: LLMProviderModel, db_session: Session) -> bool:
+    """A chat model row or the chat default still belongs to this provider."""
+    if any(
+        LLMModelFlowType.CHAT in model.llm_model_flow_types
+        for model in provider.model_configurations
+    ):
+        return True
+    chat_default = fetch_default_model(db_session, LLMModelFlowType.CHAT)
+    return chat_default is not None and chat_default.llm_provider_id == provider.id
+
+
 @admin_router.put("/provider")
 def put_llm_provider(
     llm_provider_upsert_request: LLMProviderUpsertRequest,
@@ -1195,6 +1206,20 @@ def put_llm_provider(
         existing_provider
         and existing_provider.provider != llm_provider_upsert_request.provider
     )
+    # keep_existing_models leaves stored chat rows in place, so the stored
+    # provider is the check, not the models in this request.
+    if (
+        existing_provider is not None
+        and provider_type_changed
+        and llm_provider_upsert_request.provider in HOSTED_DECISION_PROVIDER_NAMES
+        and _provider_retains_chat_use(existing_provider, db_session)
+    ):
+        display_name = PROVIDER_DISPLAY_NAMES[llm_provider_upsert_request.provider]
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            "Remove the chat models and the chat default before you change "
+            f"this provider to {display_name}.",
+        )
     enabling_auto_update = llm_provider_upsert_request.is_auto_mode and (
         not (existing_provider and existing_provider.is_auto_mode)
         or provider_type_changed
