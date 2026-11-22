@@ -96,6 +96,8 @@ agent, every call also carries `x-sandbox-id`.
 | `Cancel` | With no signal (or `SIGKILL`): kills the command's cgroup and returns the result (`CANCELED`, or `EXITED` if the command exited first). With `SIGINT` or `SIGTERM`: sends the signal to the process group of the main process and returns at once (`signaled`); the command can handle it. If it dies of that signal, its result is `CANCELED`. Not an error. |
 | `Inspect`, `List` | Execution records (state, PID, times, byte counts, result), `List` filtered by labels. |
 | `ReadFile`, `WriteFile`, `ListFiles`, `DeleteFile`, `ZipFiles` | Session files, or any VM path with no session ID (see Files). |
+| `RenameFile` | Move, or swap in one step, two entries of one directory by absolute VM path (no session ID). |
+| `LinkFile` | Make or replace a symlink at an absolute VM path (no session ID). |
 | `UploadFile` | A free name in a session directory (`attachments/` by default). Always needs a session ID. |
 | `StatFiles` | Up to 1,000 session paths (1 MiB of path bytes) in one call, through `os.Root`: each path's own entry (exists, type, mode, link target) and its target through the links inside the session (type, mode, device and inode), or why there is none (missing, escapes the session, loop, other). `os.Root` follows at most 8 links per path. Reads no content. Always needs a session ID. |
 | `CaptureSession`, `RestoreSession` | Session saves as tar + zstd (see Session saves). |
@@ -174,6 +176,14 @@ Files (`internal/guestd/files`):
 - The sessions root, a session directory and the onyx root must not be links, also when a command
   replaces one while a call opens it (`INVALID_ARGUMENT`).
 - `DeleteFile` removes a file or a link (never its target); a directory needs `recursive`.
+- `RenameFile` takes no `session_id`: `path` and `to` are absolute paths in the same directory. Without
+  `exchange`, it fails with `FILE_EXISTS` when `to` exists. With `exchange`, both must exist, and they trade
+  places in one step (`renameat2` with `RENAME_EXCHANGE`), so a reader of `to` sees the old entry or the new
+  one, never neither. A missing entry fails with `FILE_NOT_FOUND`. Denied paths fail as for the other calls.
+- `LinkFile` takes no `session_id`: it makes a symlink at an absolute path to `target`, stored as given
+  (the target need not exist), with missing parents. The link and the parents belong to `--file-owner`.
+  A link at the path is replaced in one rename; any other entry there fails with `FILE_EXISTS`. Denied
+  paths fail as for the other calls.
 - `ZipFiles` streams a deflate zip of the regular files under a directory. It checks
   `--max-zip-bytes` (1 GiB) and 100,000 files before it sends the first byte.
 

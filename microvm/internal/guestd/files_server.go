@@ -221,6 +221,14 @@ func (s *Server) StatFiles(ctx context.Context, r *pb.StatFilesRequest) (*pb.Sta
 	return out, nil
 }
 
+// RenameFile implements pb.SandboxdServer.
+func (s *Server) RenameFile(_ context.Context, r *pb.RenameFileRequest) (*pb.RenameFileResponse, error) {
+	if err := s.files.Rename(r.GetSessionId(), r.GetPath(), r.GetTo(), r.GetExchange()); err != nil {
+		return nil, fileError(err)
+	}
+	return &pb.RenameFileResponse{}, nil
+}
+
 // DeleteFile implements pb.SandboxdServer.
 func (s *Server) DeleteFile(_ context.Context, r *pb.DeleteFileRequest) (*pb.DeleteFileResponse, error) {
 	deleted, err := s.files.Delete(r.GetSessionId(), r.GetPath(), r.GetRecursive())
@@ -228,6 +236,14 @@ func (s *Server) DeleteFile(_ context.Context, r *pb.DeleteFileRequest) (*pb.Del
 		return nil, fileError(err)
 	}
 	return &pb.DeleteFileResponse{Deleted: deleted}, nil
+}
+
+// LinkFile implements pb.SandboxdServer.
+func (s *Server) LinkFile(_ context.Context, r *pb.LinkFileRequest) (*pb.LinkFileResponse, error) {
+	if err := s.files.Link(r.GetSessionId(), r.GetPath(), r.GetTarget()); err != nil {
+		return nil, fileError(err)
+	}
+	return &pb.LinkFileResponse{}, nil
 }
 
 // ZipFiles implements pb.SandboxdServer.

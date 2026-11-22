@@ -600,6 +600,122 @@ func (s *Store) Delete(sessionID, p string, recursive bool) (bool, error) {
 	return true, fsErr(root.Remove(rel))
 }
 
+// Rename moves the absolute path from to the name of to in the same
+// directory (no session). Without exchange, nothing may be at to. With
+// exchange, both must exist and trade places in one step.
+func (s *Store) Rename(sessionID, from, to string, exchange bool) error {
+	if sessionID != "" {
+		return fmt.Errorf("%w: a rename needs absolute paths and no session_id", ErrInvalid)
+	}
+	toAbs, err := vmPath(to)
+	if err != nil {
+		return err
+	}
+	e, err := s.openVMEntry(from, false, false)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = e.root.Close() }()
+	if path.Dir(e.abs) != path.Dir(toAbs) || e.abs == toAbs {
+		return fmt.Errorf("%w: rename %s to %s: not two names in one directory", ErrInvalid, from, to)
+	}
+	if e.real != "" {
+		if err := s.checkVMPath(path.Join(path.Dir(e.real), path.Base(toAbs))); err != nil {
+			return err
+		}
+	}
+	dir, err := e.root.Open(path.Dir(e.name))
+	if err != nil {
+		return fsErr(err)
+	}
+	defer func() { _ = dir.Close() }()
+	return renameAt(dir, path.Base(e.name), path.Base(toAbs), exchange)
+}
+
+// Link makes a symlink at the absolute path p (no session) to target,
+// stored as given, owned by the configured owner. It makes missing parents,
+// and replaces a link at p in one step. Another entry at p fails with
+// ErrExists and is not moved; one that a command puts there during the call
+// stays too.
+func (s *Store) Link(sessionID, p, target string) error {
+	if sessionID != "" {
+		return fmt.Errorf("%w: a link needs an absolute path and no session_id", ErrInvalid)
+	}
+	if target == "" || strings.ContainsRune(target, 0) {
+		return fmt.Errorf("%w: link target %q", ErrInvalid, target)
+	}
+	e, err := s.openVMEntry(p, true, false)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = e.root.Close() }()
+	// A path in the onyx root opens on that root, with its parents still to
+	// make.
+	parent := path.Dir(e.name)
+	if err := s.mkdirAll(e.root, parent); err != nil {
+		return err
+	}
+	// A folder or file the model made stays where it is: never moved aside
+	// to learn its type.
+	if fi, err := e.root.Lstat(e.name); err == nil && fi.Mode()&fs.ModeSymlink == 0 {
+		return fmt.Errorf("%w: %s is not a link", ErrExists, p)
+	} else if err != nil && !errors.Is(err, fs.ErrNotExist) {
+		return fsErr(err)
+	}
+	dir, err := e.root.Open(parent)
+	if err != nil {
+		return fsErr(err)
+	}
+	defer func() { _ = dir.Close() }()
+	name, tmp := path.Base(e.name), randName(writePrefix)
+	if err := e.root.Symlink(target, path.Join(parent, tmp)); err != nil {
+		return fsErr(err)
+	}
+	// Delete the temporary name only while it holds this call's link: a
+	// command can move another entry there between the steps below.
+	drop := func() {
+		if got, err := e.root.Readlink(path.Join(parent, tmp)); err == nil && got == target {
+			_ = e.root.Remove(path.Join(parent, tmp))
+		}
+	}
+	if o := s.cfg.Owner; o != nil {
+		if err := e.root.Lchown(path.Join(parent, tmp), o.UID, o.GID); err != nil {
+			drop()
+			return fmt.Errorf("set the owner of %s: %w", p, err)
+		}
+	}
+	if s.linkChecked != nil {
+		s.linkChecked()
+	}
+	// Nothing at p: the link goes in, unless an entry appears first.
+	err = renameAt(dir, tmp, name, false)
+	if err == nil || !errors.Is(err, ErrExists) {
+		if err != nil {
+			drop()
+		}
+		return err
+	}
+	// A link at p: swap, and keep the swap only if it took out a link (a
+	// command can replace the link after the check above).
+	if err := renameAt(dir, tmp, name, true); err != nil {
+		drop()
+		return err
+	}
+	if s.linkSwapped != nil {
+		s.linkSwapped()
+	}
+	fi, err := e.root.Lstat(path.Join(parent, tmp))
+	if err == nil && fi.Mode()&fs.ModeSymlink != 0 {
+		_ = e.root.Remove(path.Join(parent, tmp))
+		return nil
+	}
+	if err := renameAt(dir, tmp, name, true); err != nil {
+		return fmt.Errorf("put back the entry at %s: %w", p, err)
+	}
+	drop()
+	return fmt.Errorf("%w: %s is not a link", ErrExists, p)
+}
+
 func (s *Store) openDelete(sessionID, p string) (*os.Root, string, error) {
 	rel, err := cleanPath(p)
 	if err != nil {

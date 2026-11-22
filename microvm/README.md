@@ -380,8 +380,9 @@ Postgres cache backend. The chart's bundled Redis uses `allkeys-lru`.
 - `--artifacts-dir` has `firecracker` and `jailer` v1.17.0 and the guest kernel `vmlinux` (the
   `onyxdotapp/craft-fc-artifacts` layout). The agent checks the binaries' SHA256 against `internal/binaries`
   and copies them to `<data-dir>/bin/<version>/`.
-- `mkfs.ext4` (e2fsprogs) in the agent's container, for the template's empty drives and the managed
-  images (`mkfs.ext4 -d`). The agent image must install e2fsprogs.
+- `mkfs.ext4` (e2fsprogs 1.47.1 or later, for `root_perms`) in the agent's container, for the
+  template's empty drives and the managed images (`mkfs.ext4 -d`). The agent image must install
+  e2fsprogs.
 - Privileged enough to mount a tmpfs in its own mount namespace (the managed bundle stage).
 
 ### Metrics, guest logs and audit
@@ -719,7 +720,9 @@ message). The image ID is the zip's SHA256. The agent:
    path, a symlink, device, FIFO or socket, a duplicate name or a file and directory with one name fails
    the whole bundle. Content is counted as it is read (`--managed-max-mib`, `--managed-max-files`), so a
    zip bomb stops at the limit. Files become root-owned 0644 (0755 with an execute bit), directories
-   0755;
+   0755. The drive root is 0755, or 0711 when the zip comment is `onyx-managed:root-mode=0711`: the
+   guest user then opens paths in it but cannot list it. The comment is part of the zip, so the ID
+   covers it;
 3. runs `mkfs.ext4 -d` (4 KiB blocks, no journal, no reserved blocks, root owner, label `managed`) into
    `<data-dir>/managed/<id>.ext4`, with an ext4 UUID derived from the ID. The size is an estimate with
    room; a full file system gets two more tries at twice the size;

@@ -1,5 +1,5 @@
-# Generated from microvm/proto/sandboxd/v1/sandboxd.proto (blob 1b2c0a93d6512da95cdf6f8b9f65fb6c09d3147d)
-# at commit cfd3659a06 by backend/onyx/microvm/generated/regenerate.sh. Do not edit.
+# Generated from microvm/proto/sandboxd/v1/sandboxd.proto (blob 8491f79928974d15d0131a5ad5eb81f6a711902b)
+# at commit 4858c12347 by backend/onyx/microvm/generated/regenerate.sh. Do not edit.
 import datetime
 
 from google.protobuf import duration_pb2 as _duration_pb2
@@ -571,6 +571,22 @@ class ListFilesResponse(_message.Message):
     truncated: bool
     def __init__(self, entries: _Optional[_Iterable[_Union[FileInfo, _Mapping]]] = ..., truncated: bool = ...) -> None: ...
 
+class RenameFileRequest(_message.Message):
+    __slots__ = ("session_id", "path", "to", "exchange")
+    SESSION_ID_FIELD_NUMBER: _ClassVar[int]
+    PATH_FIELD_NUMBER: _ClassVar[int]
+    TO_FIELD_NUMBER: _ClassVar[int]
+    EXCHANGE_FIELD_NUMBER: _ClassVar[int]
+    session_id: str
+    path: str
+    to: str
+    exchange: bool
+    def __init__(self, session_id: _Optional[str] = ..., path: _Optional[str] = ..., to: _Optional[str] = ..., exchange: bool = ...) -> None: ...
+
+class RenameFileResponse(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
+
 class DeleteFileRequest(_message.Message):
     __slots__ = ("session_id", "path", "recursive")
     SESSION_ID_FIELD_NUMBER: _ClassVar[int]
@@ -586,6 +602,20 @@ class DeleteFileResponse(_message.Message):
     DELETED_FIELD_NUMBER: _ClassVar[int]
     deleted: bool
     def __init__(self, deleted: bool = ...) -> None: ...
+
+class LinkFileRequest(_message.Message):
+    __slots__ = ("session_id", "path", "target")
+    SESSION_ID_FIELD_NUMBER: _ClassVar[int]
+    PATH_FIELD_NUMBER: _ClassVar[int]
+    TARGET_FIELD_NUMBER: _ClassVar[int]
+    session_id: str
+    path: str
+    target: str
+    def __init__(self, session_id: _Optional[str] = ..., path: _Optional[str] = ..., target: _Optional[str] = ...) -> None: ...
+
+class LinkFileResponse(_message.Message):
+    __slots__ = ()
+    def __init__(self) -> None: ...
 
 class StatFilesRequest(_message.Message):
     __slots__ = ("session_id", "paths")

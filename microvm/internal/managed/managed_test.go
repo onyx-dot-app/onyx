@@ -6,12 +6,14 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
+	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -465,6 +467,31 @@ func TestMkfsExt4Real(t *testing.T) {
 	if err != nil || !strings.Contains(string(out), img.UUID) || strings.Contains(string(out), "has_journal") {
 		t.Fatalf("debugfs stats: %v\n%s", err, out)
 	}
+	out, err = exec.Command("debugfs", "-R", "stat /", img.Path).Output()
+	if err != nil || !strings.Contains(string(out), "Mode:  0755") {
+		t.Fatalf("debugfs stat /: %v\n%s", err, out)
+	}
+
+	var buf bytes.Buffer
+	zw := zip.NewWriter(&buf)
+	if _, err := zw.Create("pptx/SKILL.md"); err != nil {
+		t.Fatal(err)
+	}
+	if err := zw.SetComment(UnlistableRootComment); err != nil {
+		t.Fatal(err)
+	}
+	if err := zw.Close(); err != nil {
+		t.Fatal(err)
+	}
+	z = buf.Bytes()
+	img, _, err = s.Put(context.Background(), sum(z), int64(len(z)), bytes.NewReader(z))
+	if err != nil {
+		t.Fatal(err)
+	}
+	out, err = exec.Command("debugfs", "-R", "stat /", img.Path).Output()
+	if err != nil || !strings.Contains(string(out), "Mode:  0711") {
+		t.Fatalf("debugfs stat / of an unlistable root: %v\n%s", err, out)
+	}
 }
 
 func TestStoreRemoveUnused(t *testing.T) {
@@ -498,5 +525,91 @@ func TestStoreRemoveUnused(t *testing.T) {
 	}
 	if _, err := s.RemoveUnused("../x", none); err == nil {
 		t.Fatal("accepted a bad id")
+	}
+}
+
+func TestStoreRootModeFollowsTheZipComment(t *testing.T) {
+	commented := func(comment string) []byte {
+		var buf bytes.Buffer
+		zw := zip.NewWriter(&buf)
+		w, err := zw.Create("pptx/SKILL.md")
+		if err != nil {
+			t.Fatal(err)
+		}
+		if _, err := w.Write([]byte("# pptx")); err != nil {
+			t.Fatal(err)
+		}
+		if err := zw.SetComment(comment); err != nil {
+			t.Fatal(err)
+		}
+		if err := zw.Close(); err != nil {
+			t.Fatal(err)
+		}
+		return buf.Bytes()
+	}
+	var calls []string
+	mkfs := fakeMkfs(&calls)
+	modes := map[string]fs.FileMode{}
+	s := &Store{Dir: t.TempDir(), Limits: DefaultLimits, Mkfs: func(ctx context.Context, path, dir string, size int64, uuid string, inodes int) error {
+		fi, err := os.Stat(dir)
+		if err != nil {
+			return err
+		}
+		modes[uuid] = fi.Mode().Perm()
+		return mkfs(ctx, path, dir, size, uuid, inodes)
+	}}
+	for comment, want := range map[string]fs.FileMode{
+		"":                    0o755,
+		"something else":      0o755,
+		UnlistableRootComment: 0o711,
+	} {
+		z := commented(comment)
+		img, _, err := s.Put(context.Background(), sum(z), int64(len(z)), bytes.NewReader(z))
+		if err != nil {
+			t.Fatal(err)
+		}
+		if got := modes[img.UUID]; got != want || img.RootMode != want {
+			t.Fatalf("comment %q: root mode %o, record %o, want %o", comment, got, img.RootMode, want)
+		}
+	}
+
+	// An older agent built this zip's image with a 0755 root and no mode in
+	// its record. The next Put builds it again.
+	z := commented(UnlistableRootComment)
+	id := sum(z)
+	raw, err := os.ReadFile(s.metaPath(id))
+	if err != nil {
+		t.Fatal(err)
+	}
+	var rec map[string]any
+	if err := json.Unmarshal(raw, &rec); err != nil {
+		t.Fatal(err)
+	}
+	delete(rec, "root_mode")
+	raw, err = json.Marshal(rec)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(s.metaPath(id), raw, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	// GC still sees it.
+	listed, err := s.List()
+	if err != nil || !slices.ContainsFunc(listed, func(i Image) bool { return i.ID == id }) {
+		t.Fatalf("List without the old image: %v %v", listed, err)
+	}
+	delete(modes, UUIDFor(id))
+	img, built, err := s.Put(context.Background(), id, int64(len(z)), bytes.NewReader(z))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !built || modes[img.UUID] != 0o711 || img.RootMode != 0o711 {
+		t.Fatalf("built %v, root mode %o, record %o, want a new 0711 build", built, modes[img.UUID], img.RootMode)
+	}
+	if got, err := s.Get(id); err != nil || got.RootMode != 0o711 {
+		t.Fatalf("Get after the new build: %+v, %v", got, err)
+	}
+	if _, built, err := s.Put(context.Background(), id, int64(len(z)), bytes.NewReader(z)); err != nil || built {
+		t.Fatalf("third Put built %v, err %v, want the stored image", built, err)
 	}
 }

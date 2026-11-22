@@ -259,3 +259,60 @@ func TestAFailedOwnerChangeLeavesNoNewDirectory(t *testing.T) {
 		t.Fatalf("parent left behind: %v", err)
 	}
 }
+
+func TestNoSessionWriteGivesNewDirectoriesToTheOwner(t *testing.T) {
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := New(Config{SessionsRoot: filepath.Join(dir, "sessions"), Owner: &Owner{UID: 1000, GID: 1001}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	log := &chownLog{}
+	log.use(s)
+	// So the sandbox user can add files to a folder that Onyx wrote.
+	spec := WriteSpec{Path: dir + "/skills/report/run.py", Size: 1, Overwrite: true, MakeParents: true}
+	if _, _, err := s.Write(context.Background(), "", spec, strings.NewReader("x")); err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"skills", "skills/report", writePrefix + "*"}
+	if got := log.got(); !slices.Equal(got, want) {
+		t.Fatalf("chown %v, want %v", got, want)
+	}
+}
+
+func TestNoSessionWriteMakesNoFolderThroughASwappedInLink(t *testing.T) {
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	home, outside := filepath.Join(dir, "home"), filepath.Join(dir, "outside")
+	for _, d := range []string{home, outside} {
+		if err := os.Mkdir(d, 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s, err := New(Config{SessionsRoot: filepath.Join(dir, "sessions"), Owner: &Owner{UID: 1000, GID: 1001}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A command owns the new folder, so it can put a link in its place
+	// before the next folder is made.
+	s.chown = func(_ *os.File, name string, _, _ int) error {
+		if name == "x" {
+			if err := os.Rename(filepath.Join(home, "x"), filepath.Join(dir, "x-moved")); err != nil {
+				return err
+			}
+			return os.Symlink(outside, filepath.Join(home, "x"))
+		}
+		return nil
+	}
+	spec := WriteSpec{Path: home + "/x/y/f.txt", Size: 1, Overwrite: true, MakeParents: true}
+	if _, _, err := s.Write(context.Background(), "", spec, strings.NewReader("x")); err == nil {
+		t.Fatal("the write went through the link")
+	}
+	if ents, err := os.ReadDir(outside); err != nil || len(ents) != 0 {
+		t.Fatalf("made %v %v outside", ents, err)
+	}
+}

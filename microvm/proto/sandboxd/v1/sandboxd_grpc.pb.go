@@ -33,7 +33,9 @@ const (
 	Sandboxd_WriteFile_FullMethodName      = "/craft.sandboxd.v1.Sandboxd/WriteFile"
 	Sandboxd_UploadFile_FullMethodName     = "/craft.sandboxd.v1.Sandboxd/UploadFile"
 	Sandboxd_ListFiles_FullMethodName      = "/craft.sandboxd.v1.Sandboxd/ListFiles"
+	Sandboxd_RenameFile_FullMethodName     = "/craft.sandboxd.v1.Sandboxd/RenameFile"
 	Sandboxd_DeleteFile_FullMethodName     = "/craft.sandboxd.v1.Sandboxd/DeleteFile"
+	Sandboxd_LinkFile_FullMethodName       = "/craft.sandboxd.v1.Sandboxd/LinkFile"
 	Sandboxd_StatFiles_FullMethodName      = "/craft.sandboxd.v1.Sandboxd/StatFiles"
 	Sandboxd_ZipFiles_FullMethodName       = "/craft.sandboxd.v1.Sandboxd/ZipFiles"
 	Sandboxd_CaptureSession_FullMethodName = "/craft.sandboxd.v1.Sandboxd/CaptureSession"
@@ -127,9 +129,21 @@ type SandboxdClient interface {
 	UploadFile(ctx context.Context, opts ...grpc.CallOption) (grpc.ClientStreamingClient[UploadFileRequest, UploadFileResponse], error)
 	// ListFiles lists one directory, or a tree with recursive.
 	ListFiles(ctx context.Context, in *ListFilesRequest, opts ...grpc.CallOption) (*ListFilesResponse, error)
+	// RenameFile moves the entry at path to the name to in the same
+	// directory, with absolute paths (no session_id). Without exchange,
+	// nothing may be at to. With exchange, both must exist and trade places
+	// in one step (renameat2 RENAME_EXCHANGE), so a reader sees one or the
+	// other, never neither. FILE_NOT_FOUND: path, or with exchange to, is
+	// missing. FILE_EXISTS: to exists without exchange.
+	RenameFile(ctx context.Context, in *RenameFileRequest, opts ...grpc.CallOption) (*RenameFileResponse, error)
 	// DeleteFile removes a file or a link (never its target), or a directory
 	// with recursive. A missing path is not an error (deleted is false).
 	DeleteFile(ctx context.Context, in *DeleteFileRequest, opts ...grpc.CallOption) (*DeleteFileResponse, error)
+	// LinkFile makes a symlink at an absolute path (no session_id) to
+	// target, stored as given; the target need not exist. The link and the
+	// missing parents get the files' owner. A link at path is replaced in one
+	// rename; another entry there fails with FILE_EXISTS.
+	LinkFile(ctx context.Context, in *LinkFileRequest, opts ...grpc.CallOption) (*LinkFileResponse, error)
 	// StatFiles reports what the kernel knows about session paths, in one
 	// call, so a caller can check every file of a change before it writes
 	// one. For each path: its own entry (lstat), and its target through the
@@ -355,10 +369,30 @@ func (c *sandboxdClient) ListFiles(ctx context.Context, in *ListFilesRequest, op
 	return out, nil
 }
 
+func (c *sandboxdClient) RenameFile(ctx context.Context, in *RenameFileRequest, opts ...grpc.CallOption) (*RenameFileResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(RenameFileResponse)
+	err := c.cc.Invoke(ctx, Sandboxd_RenameFile_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 func (c *sandboxdClient) DeleteFile(ctx context.Context, in *DeleteFileRequest, opts ...grpc.CallOption) (*DeleteFileResponse, error) {
 	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
 	out := new(DeleteFileResponse)
 	err := c.cc.Invoke(ctx, Sandboxd_DeleteFile_FullMethodName, in, out, cOpts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *sandboxdClient) LinkFile(ctx context.Context, in *LinkFileRequest, opts ...grpc.CallOption) (*LinkFileResponse, error) {
+	cOpts := append([]grpc.CallOption{grpc.StaticMethod()}, opts...)
+	out := new(LinkFileResponse)
+	err := c.cc.Invoke(ctx, Sandboxd_LinkFile_FullMethodName, in, out, cOpts...)
 	if err != nil {
 		return nil, err
 	}
@@ -549,9 +583,21 @@ type SandboxdServer interface {
 	UploadFile(grpc.ClientStreamingServer[UploadFileRequest, UploadFileResponse]) error
 	// ListFiles lists one directory, or a tree with recursive.
 	ListFiles(context.Context, *ListFilesRequest) (*ListFilesResponse, error)
+	// RenameFile moves the entry at path to the name to in the same
+	// directory, with absolute paths (no session_id). Without exchange,
+	// nothing may be at to. With exchange, both must exist and trade places
+	// in one step (renameat2 RENAME_EXCHANGE), so a reader sees one or the
+	// other, never neither. FILE_NOT_FOUND: path, or with exchange to, is
+	// missing. FILE_EXISTS: to exists without exchange.
+	RenameFile(context.Context, *RenameFileRequest) (*RenameFileResponse, error)
 	// DeleteFile removes a file or a link (never its target), or a directory
 	// with recursive. A missing path is not an error (deleted is false).
 	DeleteFile(context.Context, *DeleteFileRequest) (*DeleteFileResponse, error)
+	// LinkFile makes a symlink at an absolute path (no session_id) to
+	// target, stored as given; the target need not exist. The link and the
+	// missing parents get the files' owner. A link at path is replaced in one
+	// rename; another entry there fails with FILE_EXISTS.
+	LinkFile(context.Context, *LinkFileRequest) (*LinkFileResponse, error)
 	// StatFiles reports what the kernel knows about session paths, in one
 	// call, so a caller can check every file of a change before it writes
 	// one. For each path: its own entry (lstat), and its target through the
@@ -646,8 +692,14 @@ func (UnimplementedSandboxdServer) UploadFile(grpc.ClientStreamingServer[UploadF
 func (UnimplementedSandboxdServer) ListFiles(context.Context, *ListFilesRequest) (*ListFilesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method ListFiles not implemented")
 }
+func (UnimplementedSandboxdServer) RenameFile(context.Context, *RenameFileRequest) (*RenameFileResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method RenameFile not implemented")
+}
 func (UnimplementedSandboxdServer) DeleteFile(context.Context, *DeleteFileRequest) (*DeleteFileResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method DeleteFile not implemented")
+}
+func (UnimplementedSandboxdServer) LinkFile(context.Context, *LinkFileRequest) (*LinkFileResponse, error) {
+	return nil, status.Error(codes.Unimplemented, "method LinkFile not implemented")
 }
 func (UnimplementedSandboxdServer) StatFiles(context.Context, *StatFilesRequest) (*StatFilesResponse, error) {
 	return nil, status.Error(codes.Unimplemented, "method StatFiles not implemented")
@@ -903,6 +955,24 @@ func _Sandboxd_ListFiles_Handler(srv interface{}, ctx context.Context, dec func(
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Sandboxd_RenameFile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RenameFileRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SandboxdServer).RenameFile(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Sandboxd_RenameFile_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SandboxdServer).RenameFile(ctx, req.(*RenameFileRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Sandboxd_DeleteFile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(DeleteFileRequest)
 	if err := dec(in); err != nil {
@@ -917,6 +987,24 @@ func _Sandboxd_DeleteFile_Handler(srv interface{}, ctx context.Context, dec func
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(SandboxdServer).DeleteFile(ctx, req.(*DeleteFileRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Sandboxd_LinkFile_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(LinkFileRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SandboxdServer).LinkFile(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Sandboxd_LinkFile_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SandboxdServer).LinkFile(ctx, req.(*LinkFileRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -1084,8 +1172,16 @@ var Sandboxd_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Sandboxd_ListFiles_Handler,
 		},
 		{
+			MethodName: "RenameFile",
+			Handler:    _Sandboxd_RenameFile_Handler,
+		},
+		{
 			MethodName: "DeleteFile",
 			Handler:    _Sandboxd_DeleteFile_Handler,
+		},
+		{
+			MethodName: "LinkFile",
+			Handler:    _Sandboxd_LinkFile_Handler,
 		},
 		{
 			MethodName: "StatFiles",
