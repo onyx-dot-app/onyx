@@ -53,6 +53,23 @@ test("an admin's list leaves out the private plugins of other members", async ()
   expect(screen.queryByText("their-kit")).not.toBeInTheDocument();
 });
 
+test("a plugin that is only one skill is left out", async () => {
+  window.history.replaceState(null, "", "/app/customize/plugins");
+  mockFetch({
+    "/api/skills": {
+      builtins: [],
+      customs: [
+        plugin("kit", "my-kit"),
+        plugin("lone", "lone-skill", { kind: "skill" }),
+      ],
+    },
+  });
+  render(<CustomizePluginsPage />);
+
+  expect(await screen.findByText("my-kit")).toBeInTheDocument();
+  expect(screen.queryByText("lone-skill")).not.toBeInTheDocument();
+});
+
 test("a plugin that is off because another plugin holds its skill name says so", async () => {
   window.history.replaceState(null, "", "/app/customize/plugins");
   mockFetch({
