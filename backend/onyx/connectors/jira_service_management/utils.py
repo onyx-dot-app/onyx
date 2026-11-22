@@ -277,8 +277,6 @@ def _fetch_remaining_comments(
             break
         fetched.extend(page)
         cursor += len(page)
-        if len(page) < _COMMENT_PAGE_SIZE:
-            break
     return fetched
 
 

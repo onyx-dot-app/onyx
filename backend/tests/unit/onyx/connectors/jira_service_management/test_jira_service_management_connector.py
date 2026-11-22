@@ -719,9 +719,11 @@ def test_cloud_guards_empty_page_continuation_and_per_issue_failure_isolation() 
     assert final_cp.has_more is False
 
 
-def test_paginated_comments_beyond_embedded_cap_and_multiproject_server_offset() -> (
+def test_paginated_comments_beyond_embedded_cap_and_multiproject_server_watermark() -> (
     None
 ):
+    # Short, nonempty comment pages (< _COMMENT_PAGE_SIZE) must keep paginating
+    # while cursor < total, and stop cleanly on an empty page or at total.
     issue = SimpleNamespace(
         id="300",
         key="JSM-300",
@@ -730,7 +732,7 @@ def test_paginated_comments_beyond_embedded_cap_and_multiproject_server_offset()
             "key": "JSM-300",
             "fields": {
                 "comment": {
-                    "total": 3,
+                    "total": 5,
                     "comments": [
                         {"author": {"emailAddress": "a@acme.com"}, "body": "First"},
                         {"author": {"emailAddress": "bot@acme.com"}, "body": "Bot"},
@@ -740,21 +742,48 @@ def test_paginated_comments_beyond_embedded_cap_and_multiproject_server_offset()
         },
     )
     mock_client = MagicMock()
-    mock_client.comments.return_value = [
-        SimpleNamespace(
-            author=SimpleNamespace(emailAddress="c@acme.com"),
-            body="Third beyond cap",
-        )
+    mock_client.comments.side_effect = [
+        [
+            SimpleNamespace(
+                author=SimpleNamespace(emailAddress="c@acme.com"),
+                body="Third short page",
+            )
+        ],
+        [
+            SimpleNamespace(
+                author=SimpleNamespace(emailAddress="d@acme.com"),
+                body="Fourth short page",
+            ),
+            SimpleNamespace(
+                author=SimpleNamespace(emailAddress="e@acme.com"),
+                body="Fifth final comment",
+            ),
+        ],
     ]
     comments = get_comment_strs(
         issue,
         comment_email_blacklist=["bot@acme.com"],
         jira_client=mock_client,
     )
-    assert comments == ["First", "Third beyond cap"]
-    mock_client.comments.assert_called_once_with("JSM-300", start_at=2, max_results=50)
+    assert comments == [
+        "First",
+        "Third short page",
+        "Fourth short page",
+        "Fifth final comment",
+    ]
+    assert mock_client.comments.call_count == 2
+    assert mock_client.comments.call_args_list[0].kwargs == {
+        "start_at": 2,
+        "max_results": 50,
+    }
+    assert mock_client.comments.call_args_list[1].kwargs == {
+        "start_at": 3,
+        "max_results": 50,
+    }
 
-    # Multi-project Server/DC JQL uses pinned-window offset (not `id >` keyset).
+    # Multi-project Server/DC JQL uses an `updated` watermark cursor with
+    # `startAt=0` and same-minute `id not in (...)` exclusion so issues leaving
+    # the pinned window never shift/skip subsequent issues.
     multi_conn = JiraServiceManagementConnector(
         jira_base_url="https://jira.internal.corp",
         jql_query="project in (JSM, ITSM)",
@@ -762,44 +791,133 @@ def test_paginated_comments_beyond_embedded_cap_and_multiproject_server_offset()
     )
     dc_client = MagicMock()
     dc_client.deploymentType = "Server"
+    # Matches at t0: [10, 20, 30]. After page 1 returns issue 10, issue 10 is
+    # updated past pinned_end and leaves the window ([20, 30] remain).
     dc_client.search_issues.side_effect = [
         ResultList(
-            [_make_mock_issue(key="JSM-1", issue_id="10")],
+            [
+                _make_mock_issue(
+                    key="JSM-1",
+                    issue_id="10",
+                    updated="2026-11-20T12:00:10.000+0000",
+                )
+            ],
+            _startAt=0,
+            _maxResults=1,
+            _total=3,
+        ),
+        ResultList(
+            [
+                _make_mock_issue(
+                    key="ITSM-2",
+                    issue_id="20",
+                    updated="2026-11-20T12:00:20.000+0000",
+                )
+            ],
             _startAt=0,
             _maxResults=1,
             _total=2,
         ),
         ResultList(
-            [_make_mock_issue(key="ITSM-2", issue_id="20")],
-            _startAt=1,
+            [
+                _make_mock_issue(
+                    key="ITSM-3",
+                    issue_id="30",
+                    updated="2026-11-20T12:02:00.000+0000",
+                )
+            ],
+            _startAt=0,
             _maxResults=1,
-            _total=2,
+            _total=1,
         ),
     ]
     multi_conn._jira_client = dc_client
     multi_conn._is_cloud = False
 
-    gen1 = multi_conn.load_from_checkpoint(
-        1700000000, 1700003600, multi_conn.build_dummy_checkpoint()
-    )
-    try:
-        while True:
-            next(gen1)
-    except StopIteration as stop:
-        cp1 = stop.value
+    cp = multi_conn.build_dummy_checkpoint()
+    seen_doc_ids: list[str] = []
+    checkpoints: list[JiraServiceManagementConnectorCheckpoint] = []
+    while cp.has_more:
+        gen = multi_conn.load_from_checkpoint(1700000000, 1799999999, cp)
+        try:
+            while True:
+                item = next(gen)
+                assert isinstance(item, Document)
+                seen_doc_ids.append(item.id)
+        except StopIteration as stop:
+            cp = stop.value
+            checkpoints.append(cp)
 
-    assert cp1.has_more is True
-    assert cp1.offset == 1
-    assert cp1.last_issue_id is None
+    assert seen_doc_ids == [
+        build_jsm_document_id("https://jira.internal.corp", "JSM-1"),
+        build_jsm_document_id("https://jira.internal.corp", "ITSM-2"),
+        build_jsm_document_id("https://jira.internal.corp", "ITSM-3"),
+    ]
+    assert checkpoints[0].offset == 0
+    assert checkpoints[0].cursor_seen_ids == [10]
+    assert checkpoints[1].cursor_seen_ids == [10, 20]
+    # Advancing to a new minute bucket resets the excluded ID list.
+    assert checkpoints[2].cursor_seen_ids == [30]
+    assert checkpoints[2].has_more is False
 
-    gen2 = multi_conn.load_from_checkpoint(1700000000, 1700003600, cp1)
-    try:
-        while True:
-            next(gen2)
-    except StopIteration as stop:
-        cp2 = stop.value
-
-    assert cp2.has_more is False
     second_kwargs = dc_client.search_issues.call_args_list[1].kwargs
-    assert second_kwargs["startAt"] == 1
+    assert second_kwargs["startAt"] == 0
     assert "id >" not in second_kwargs["jql_str"]
+    assert "id not in (10)" in second_kwargs["jql_str"]
+    assert second_kwargs["jql_str"].endswith("ORDER BY updated ASC, id ASC")
+
+    third_kwargs = dc_client.search_issues.call_args_list[2].kwargs
+    assert third_kwargs["startAt"] == 0
+    assert "id not in (10, 20)" in third_kwargs["jql_str"]
+
+    # Slim retrieval uses the same watermark cursor so shifted rows are not skipped.
+    dc_client.search_issues.reset_mock()
+    dc_client.search_issues.side_effect = [
+        ResultList(
+            [
+                _make_mock_issue(
+                    key="JSM-1",
+                    issue_id="10",
+                    updated="2026-11-20T12:00:10.000+0000",
+                )
+            ],
+            _startAt=0,
+            _maxResults=1,
+            _total=3,
+        ),
+        ResultList(
+            [
+                _make_mock_issue(
+                    key="ITSM-2",
+                    issue_id="20",
+                    updated="2026-11-20T12:00:20.000+0000",
+                )
+            ],
+            _startAt=0,
+            _maxResults=1,
+            _total=2,
+        ),
+        ResultList(
+            [
+                _make_mock_issue(
+                    key="ITSM-3",
+                    issue_id="30",
+                    updated="2026-11-20T12:02:00.000+0000",
+                )
+            ],
+            _startAt=0,
+            _maxResults=1,
+            _total=1,
+        ),
+    ]
+    slim_ids = [
+        doc.id
+        for batch in multi_conn.retrieve_all_slim_docs(start=1700000000, end=1799999999)
+        for doc in batch
+        if isinstance(doc, SlimDocument)
+    ]
+    assert slim_ids == seen_doc_ids
+    slim_second = dc_client.search_issues.call_args_list[1].kwargs
+    assert slim_second["startAt"] == 0
+    assert "id not in (10)" in slim_second["jql_str"]
+    assert "updated" in slim_second["fields"]

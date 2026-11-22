@@ -7,7 +7,7 @@ from jira import JIRA
 from jira.client import ResultList
 from jira.exceptions import JIRAError
 from jira.resources import Issue
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 from typing_extensions import override
 
 from onyx.configs.app_configs import INDEX_BATCH_SIZE, JIRA_CONNECTOR_LABELS_TO_SKIP
@@ -52,6 +52,8 @@ logger = setup_logger()
 _JIRA_FULL_PAGE_SIZE = 50
 _JIRA_SLIM_PAGE_SIZE = 100
 _SLIM_END_BUFFER_SECONDS = 24 * 60 * 60
+_MINUTE_MS = 60_000
+_MAX_JQL_EXCLUDED_IDS = 200
 
 
 class _JqlPageResult(BaseModel):
@@ -249,6 +251,77 @@ def _extract_issue_id(issue: Any) -> int | None:
     if isinstance(raw_id, str) and raw_id.isdigit():
         return int(raw_id)
     return None
+
+
+def _extract_updated_ms(issue: Any) -> int | None:
+    updated_str = _issue_timestamp(issue, "updated")
+    if not updated_str:
+        return None
+    try:
+        return int(time_str_to_utc(updated_str).timestamp() * 1000)
+    except (TypeError, ValueError, OverflowError):
+        return None
+
+
+def _advance_updated_cursor(
+    issues: list[Any],
+    *,
+    cursor_updated_ms: int | None,
+    cursor_seen_ids: list[int],
+    offset: int,
+) -> tuple[int | None, list[int], int]:
+    """Advance a Server/DC ``updated`` watermark cursor without skipping shifted rows.
+
+    Jira Server/Data Center evaluates ``updated >=`` at minute granularity in some
+    versions, so IDs seen in the current minute bucket are tracked for
+    ``id not in (...)`` exclusion while ``startAt`` stays at ``0``. Only if a
+    single minute contains more than ``_MAX_JQL_EXCLUDED_IDS`` issues (or a page
+    lacks parseable ``updated`` / numeric ``id`` values) does pagination fall back
+    to ``offset`` while keeping the already-excluded ID set fixed.
+    """
+    prev_minute = (
+        cursor_updated_ms // _MINUTE_MS if cursor_updated_ms is not None else None
+    )
+    next_updated_ms = cursor_updated_ms
+    next_minute = prev_minute
+    seen_ids = set(cursor_seen_ids)
+    observed_updated = False
+
+    for issue in issues:
+        updated_ms = _extract_updated_ms(issue)
+        issue_id = _extract_issue_id(issue)
+        if updated_ms is not None:
+            observed_updated = True
+            issue_minute = updated_ms // _MINUTE_MS
+            if next_minute is None or issue_minute > next_minute:
+                next_minute = issue_minute
+                seen_ids = set()
+                offset = 0
+            if next_updated_ms is None or updated_ms > next_updated_ms:
+                next_updated_ms = updated_ms
+            if issue_id is not None and issue_minute == next_minute:
+                seen_ids.add(issue_id)
+
+    if not observed_updated:
+        return (cursor_updated_ms, cursor_seen_ids, offset + len(issues))
+
+    if len(seen_ids) > _MAX_JQL_EXCLUDED_IDS:
+        # Minute bucket exceeded the JQL exclusion cap: keep the fixed prefix of
+        # already-excluded IDs stable and step with offset within this minute.
+        fixed_excluded = (
+            list(cursor_seen_ids)
+            if next_minute == prev_minute and cursor_seen_ids
+            else sorted(seen_ids)[:_MAX_JQL_EXCLUDED_IDS]
+        )
+        return (next_updated_ms, fixed_excluded, offset + len(issues))
+
+    sorted_seen_ids = sorted(seen_ids)
+    if next_minute == prev_minute and sorted_seen_ids == cursor_seen_ids:
+        # Neither the minute watermark nor the excluded ID set advanced (e.g.,
+        # issues lacked numeric IDs), so advance offset to guarantee progress.
+        return (next_updated_ms, sorted_seen_ids, offset + len(issues))
+
+    return (next_updated_ms, sorted_seen_ids, 0)
 
 
 def _issue_labels(issue: Any) -> set[str]:
@@ -469,7 +542,13 @@ class JiraServiceManagementConnectorCheckpoint(ConnectorCheckpoint):
     next_page_token: str | None = None
     # Server / Data Center (v2) keyset cursor on immutable numeric issue ID.
     last_issue_id: int | None = None
-    # Fallback offset for Server / Data Center responses without numeric issue IDs.
+    # Server / Data Center (v2) watermark cursor for multi-project / custom JQL
+    # scans where Data Center `id >` range filtering is unsupported.
+    cursor_updated_ms: int | None = None
+    # Issue IDs already processed in the current `cursor_updated_ms` minute bucket.
+    cursor_seen_ids: list[int] = Field(default_factory=list)
+    # Fallback offset for responses without usable watermark timestamps/IDs or
+    # extreme same-minute tie-groups exceeding `_MAX_JQL_EXCLUDED_IDS`.
     offset: int = 0
     # Upper time bound pinned on the first page so checkpoint resumptions query a
     # fixed time window.
@@ -532,7 +611,10 @@ class JiraServiceManagementConnector(
         start: SecondsSinceUnixEpoch | None = None,
         end: SecondsSinceUnixEpoch | None = None,
         *,
+        start_ms: int | None = None,
         after_issue_id: int | None = None,
+        exclude_issue_ids: list[int] | None = None,
+        order_by: str = "id ASC",
     ) -> str:
         """Build JQL with timezone-independent epoch-ms bounds and deterministic ordering.
 
@@ -545,24 +627,33 @@ class JiraServiceManagementConnector(
         elif self.project_key:
             clauses.append(f'project = "{self.project_key}"')
 
-        if start is not None:
-            clauses.append(f"updated >= {int(start * 1000)}")
+        effective_start_ms = (
+            start_ms
+            if start_ms is not None
+            else (int(start * 1000) if start is not None else None)
+        )
+        if effective_start_ms is not None:
+            clauses.append(f"updated >= {effective_start_ms}")
         if end is not None:
             clauses.append(f"updated <= {int(end * 1000)}")
         if after_issue_id is not None:
             clauses.append(f"id > {after_issue_id}")
+        if exclude_issue_ids:
+            id_list = ", ".join(str(issue_id) for issue_id in exclude_issue_ids)
+            clauses.append(f"id not in ({id_list})")
 
         filter_jql = " AND ".join(clauses)
         if filter_jql:
-            return f"{filter_jql} ORDER BY id ASC"
-        return "ORDER BY id ASC"
+            return f"{filter_jql} ORDER BY {order_by}"
+        return f"ORDER BY {order_by}"
 
     def _can_use_server_keyset(self) -> bool:
         """Restrict Data Center ``id >`` keyset filtering to single-project queries.
 
         Atlassian documents that ``id >`` filters can return incomplete results across
-        multi-project Data Center JQL queries; multi-project Server/DC scans therefore
-        use pinned-window offset pagination with ``ORDER BY id ASC``.
+        multi-project Data Center JQL queries; multi-project and custom-JQL Server/DC
+        scans therefore use an ``updated`` watermark cursor (``ORDER BY updated ASC, id ASC``)
+        with same-minute ``id not in (...)`` exclusion and ``startAt=0``.
         """
         return self.project_key is not None and self.jql_query is None
 
@@ -582,6 +673,11 @@ class JiraServiceManagementConnector(
         page_size = self.batch_size or _JIRA_FULL_PAGE_SIZE
         use_cloud = _is_cloud_client(self.jira_client, self._is_cloud)
         use_keyset = not use_cloud and self._can_use_server_keyset()
+        previous_seen_ids = (
+            set(new_checkpoint.cursor_seen_ids)
+            if not use_cloud and not use_keyset
+            else set()
+        )
 
         if use_cloud:
             jql = self._build_jql(start=start, end=effective_end)
@@ -592,8 +688,8 @@ class JiraServiceManagementConnector(
                 next_page_token=new_checkpoint.next_page_token,
                 max_results=page_size,
             )
-        else:
-            after_id = new_checkpoint.last_issue_id if use_keyset else None
+        elif use_keyset:
+            after_id = new_checkpoint.last_issue_id
             jql = self._build_jql(
                 start=start,
                 end=effective_end,
@@ -606,9 +702,32 @@ class JiraServiceManagementConnector(
                 start=0 if after_id is not None else new_checkpoint.offset,
                 max_results=page_size,
             )
+        else:
+            start_ms = int(start * 1000)
+            if new_checkpoint.cursor_updated_ms is not None:
+                start_ms = max(start_ms, new_checkpoint.cursor_updated_ms)
+            jql = self._build_jql(
+                start_ms=start_ms,
+                end=effective_end,
+                exclude_issue_ids=new_checkpoint.cursor_seen_ids or None,
+                order_by="updated ASC, id ASC",
+            )
+            page = _perform_jql_search(
+                self.jira_client,
+                jql,
+                is_cloud=False,
+                start=new_checkpoint.offset,
+                max_results=page_size,
+            )
 
         max_seen_id = new_checkpoint.last_issue_id
         for issue in page.issues:
+            issue_id = _extract_issue_id(issue)
+            if issue_id is not None and (max_seen_id is None or issue_id > max_seen_id):
+                max_seen_id = issue_id
+            if issue_id is not None and issue_id in previous_seen_ids:
+                continue
+
             try:
                 doc = process_jira_issue(
                     self.jira_base,
@@ -630,19 +749,27 @@ class JiraServiceManagementConnector(
                     exception=e,
                 )
 
-            issue_id = _extract_issue_id(issue)
-            if issue_id is not None and (max_seen_id is None or issue_id > max_seen_id):
-                max_seen_id = issue_id
-
         if use_cloud:
             new_checkpoint.next_page_token = page.next_page_token
             new_checkpoint.has_more = page.has_more
-        else:
-            if use_keyset and max_seen_id is not None:
+        elif use_keyset:
+            if max_seen_id is not None:
                 new_checkpoint.last_issue_id = max_seen_id
                 new_checkpoint.offset = 0
             else:
                 new_checkpoint.offset += len(page.issues)
+            new_checkpoint.has_more = page.has_more
+        else:
+            (
+                new_checkpoint.cursor_updated_ms,
+                new_checkpoint.cursor_seen_ids,
+                new_checkpoint.offset,
+            ) = _advance_updated_cursor(
+                page.issues,
+                cursor_updated_ms=new_checkpoint.cursor_updated_ms,
+                cursor_seen_ids=new_checkpoint.cursor_seen_ids,
+                offset=new_checkpoint.offset,
+            )
             new_checkpoint.has_more = page.has_more
 
         return new_checkpoint
@@ -663,12 +790,17 @@ class JiraServiceManagementConnector(
 
         next_page_token: str | None = None
         last_issue_id: int | None = None
+        cursor_updated_ms: int | None = None
+        cursor_seen_ids: list[int] = []
         offset = 0
 
         while True:
             if callback is not None and callback.should_stop():
                 return
 
+            previous_seen_ids = (
+                set(cursor_seen_ids) if not use_cloud and not use_keyset else set()
+            )
             if use_cloud:
                 jql = self._build_jql(start=effective_start, end=effective_end)
                 page = _perform_jql_search(
@@ -677,22 +809,39 @@ class JiraServiceManagementConnector(
                     is_cloud=True,
                     next_page_token=next_page_token,
                     max_results=_JIRA_SLIM_PAGE_SIZE,
-                    fields="id,key,labels,created",
+                    fields="id,key,labels,created,updated",
                 )
-            else:
-                after_id = last_issue_id if use_keyset else None
+            elif use_keyset:
                 jql = self._build_jql(
                     start=effective_start,
                     end=effective_end,
-                    after_issue_id=after_id,
+                    after_issue_id=last_issue_id,
                 )
                 page = _perform_jql_search(
                     self.jira_client,
                     jql,
                     is_cloud=False,
-                    start=0 if after_id is not None else offset,
+                    start=0 if last_issue_id is not None else offset,
                     max_results=_JIRA_SLIM_PAGE_SIZE,
-                    fields="id,key,labels,created",
+                    fields="id,key,labels,created,updated",
+                )
+            else:
+                start_ms = int(effective_start * 1000)
+                if cursor_updated_ms is not None:
+                    start_ms = max(start_ms, cursor_updated_ms)
+                jql = self._build_jql(
+                    start_ms=start_ms,
+                    end=effective_end,
+                    exclude_issue_ids=cursor_seen_ids or None,
+                    order_by="updated ASC, id ASC",
+                )
+                page = _perform_jql_search(
+                    self.jira_client,
+                    jql,
+                    is_cloud=False,
+                    start=offset,
+                    max_results=_JIRA_SLIM_PAGE_SIZE,
+                    fields="id,key,labels,created,updated",
                 )
 
             slim_batch: list[SlimDocument | HierarchyNode] = []
@@ -703,6 +852,8 @@ class JiraServiceManagementConnector(
                     max_seen_id is None or issue_id > max_seen_id
                 ):
                     max_seen_id = issue_id
+                if issue_id is not None and issue_id in previous_seen_ids:
+                    continue
 
                 issue_labels = _issue_labels(issue)
                 if self.labels_to_skip and issue_labels.intersection(
@@ -732,11 +883,19 @@ class JiraServiceManagementConnector(
 
             if use_cloud:
                 next_page_token = page.next_page_token
-            elif use_keyset and max_seen_id is not None:
-                last_issue_id = max_seen_id
-                offset = 0
+            elif use_keyset:
+                if max_seen_id is not None:
+                    last_issue_id = max_seen_id
+                    offset = 0
+                else:
+                    offset += len(page.issues)
             else:
-                offset += len(page.issues)
+                cursor_updated_ms, cursor_seen_ids, offset = _advance_updated_cursor(
+                    page.issues,
+                    cursor_updated_ms=cursor_updated_ms,
+                    cursor_seen_ids=cursor_seen_ids,
+                    offset=offset,
+                )
 
     @override
     def build_dummy_checkpoint(self) -> JiraServiceManagementConnectorCheckpoint:
