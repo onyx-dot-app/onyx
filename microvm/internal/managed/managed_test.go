@@ -6,14 +6,12 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"io/fs"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"regexp"
-	"slices"
 	"sort"
 	"strings"
 	"sync"
@@ -568,48 +566,8 @@ func TestStoreRootModeFollowsTheZipComment(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		if got := modes[img.UUID]; got != want || img.RootMode != want {
-			t.Fatalf("comment %q: root mode %o, record %o, want %o", comment, got, img.RootMode, want)
+		if got := modes[img.UUID]; got != want {
+			t.Fatalf("comment %q: root mode %o, want %o", comment, got, want)
 		}
-	}
-
-	// An older agent built this zip's image with a 0755 root and no mode in
-	// its record. The next Put builds it again.
-	z := commented(UnlistableRootComment)
-	id := sum(z)
-	raw, err := os.ReadFile(s.metaPath(id))
-	if err != nil {
-		t.Fatal(err)
-	}
-	var rec map[string]any
-	if err := json.Unmarshal(raw, &rec); err != nil {
-		t.Fatal(err)
-	}
-	delete(rec, "root_mode")
-	raw, err = json.Marshal(rec)
-	if err != nil {
-		t.Fatal(err)
-	}
-	if err := os.WriteFile(s.metaPath(id), raw, 0o644); err != nil {
-		t.Fatal(err)
-	}
-	// GC still sees it.
-	listed, err := s.List()
-	if err != nil || !slices.ContainsFunc(listed, func(i Image) bool { return i.ID == id }) {
-		t.Fatalf("List without the old image: %v %v", listed, err)
-	}
-	delete(modes, UUIDFor(id))
-	img, built, err := s.Put(context.Background(), id, int64(len(z)), bytes.NewReader(z))
-	if err != nil {
-		t.Fatal(err)
-	}
-	if !built || modes[img.UUID] != 0o711 || img.RootMode != 0o711 {
-		t.Fatalf("built %v, root mode %o, record %o, want a new 0711 build", built, modes[img.UUID], img.RootMode)
-	}
-	if got, err := s.Get(id); err != nil || got.RootMode != 0o711 {
-		t.Fatalf("Get after the new build: %+v, %v", got, err)
-	}
-	if _, built, err := s.Put(context.Background(), id, int64(len(z)), bytes.NewReader(z)); err != nil || built {
-		t.Fatalf("third Put built %v, err %v, want the stored image", built, err)
 	}
 }

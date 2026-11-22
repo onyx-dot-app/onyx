@@ -316,3 +316,40 @@ func TestNoSessionWriteMakesNoFolderThroughASwappedInLink(t *testing.T) {
 		t.Fatalf("made %v %v outside", ents, err)
 	}
 }
+
+func TestNoSessionWriteMakesNoFolderInADeniedPathThroughARelativeLink(t *testing.T) {
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	denied := filepath.Join(dir, "denied")
+	if err := os.Mkdir(denied, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	s, err := New(Config{
+		SessionsRoot:  filepath.Join(dir, "sessions"),
+		Owner:         &Owner{UID: 1000, GID: 1001},
+		DeniedVMPaths: []string{denied},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	// A command owns the new folder, so it can put a link to a denied path
+	// next to it (inside the same root) in its place.
+	s.chown = func(_ *os.File, name string, _, _ int) error {
+		if name == "x" {
+			if err := os.Rename(filepath.Join(dir, "x"), filepath.Join(dir, "x-moved")); err != nil {
+				return err
+			}
+			return os.Symlink("denied", filepath.Join(dir, "x"))
+		}
+		return nil
+	}
+	spec := WriteSpec{Path: dir + "/x/y/f.txt", Size: 1, Overwrite: true, MakeParents: true}
+	if _, _, err := s.Write(context.Background(), "", spec, strings.NewReader("x")); err == nil {
+		t.Fatal("the write went through the link")
+	}
+	if ents, err := os.ReadDir(denied); err != nil || len(ents) != 0 {
+		t.Fatalf("made %v %v in the denied path", ents, err)
+	}
+}

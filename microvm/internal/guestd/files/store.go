@@ -237,15 +237,20 @@ func chownFile(f *os.File, _ string, uid, gid int) error { return f.Chown(uid, g
 // own gives name in root to the configured owner. It changes the entry
 // through an open handle, never a link's target.
 func (s *Store) own(root *os.Root, name string) error {
+	return s.ownAs(root, name, name)
+}
+
+// ownAs is own with label as the name in errors and the chown hook.
+func (s *Store) ownAs(root *os.Root, name, label string) error {
 	if s.cfg.Owner == nil {
 		return nil
 	}
 	f, err := root.OpenFile(name, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
 	if err != nil {
-		return fmt.Errorf("set the owner of %s: %w", name, err)
+		return fmt.Errorf("set the owner of %s: %w", label, err)
 	}
 	defer func() { _ = f.Close() }()
-	return s.ownFile(f, name)
+	return s.ownFile(f, label)
 }
 
 // ownFile gives an open file to the configured owner.
@@ -260,33 +265,60 @@ func (s *Store) ownFile(f *os.File, name string) error {
 }
 
 // mkdirAll makes dir and its missing parents in root (mode 0755), each owned
-// by the configured owner. Directories that exist keep their owner.
-func (s *Store) mkdirAll(root *os.Root, dir string) error {
+// by the configured owner. Directories that exist keep their owner. Each
+// directory is made in the one before it, opened as its own root, so a link
+// that a command puts in place of a new directory cannot move the later
+// ones. With noLinks, a link at any part of dir fails too.
+func (s *Store) mkdirAll(root *os.Root, dir string, noLinks bool) error {
 	if dir == "." {
 		return nil
 	}
+	cur := root
+	defer func() {
+		if cur != root {
+			_ = cur.Close()
+		}
+	}()
 	parts := strings.Split(dir, "/")
-	for i := range parts {
+	for i, part := range parts {
 		p := strings.Join(parts[:i+1], "/")
-		err := root.Mkdir(p, 0o755)
-		if err == nil {
-			if err := s.own(root, p); err != nil {
+		made := false
+		if err := cur.Mkdir(part, 0o755); err == nil {
+			made = true
+			if err := s.ownAs(cur, part, p); err != nil {
 				// A retry must not find it as an existing directory.
-				_ = root.Remove(p)
+				_ = cur.Remove(part)
 				return err
 			}
-			continue
-		}
-		if !errors.Is(err, fs.ErrExist) {
+		} else if !errors.Is(err, fs.ErrExist) {
 			return fsErr(err)
 		}
-		fi, err := root.Stat(p)
+		strict := made || noLinks
+		stat := cur.Stat
+		if strict {
+			stat = cur.Lstat
+		}
+		fi, err := stat(part)
 		if err != nil {
 			return fsErr(err)
 		}
 		if !fi.IsDir() {
 			return fmt.Errorf("%w: %s is not a directory", ErrInvalid, p)
 		}
+		next, err := cur.OpenRoot(part)
+		if err != nil {
+			return fsErr(err)
+		}
+		if strict {
+			if got, err := next.Stat("."); err != nil || !os.SameFile(fi, got) {
+				_ = next.Close()
+				return fmt.Errorf("%w: %s changed while it was made", ErrInvalid, p)
+			}
+		}
+		if cur != root {
+			_ = cur.Close()
+		}
+		cur = next
 	}
 	return nil
 }
@@ -482,9 +514,9 @@ func (s *Store) checkVMTree(dir string) error {
 // mkdirVM makes dir and its missing parents (mode 0755), each owned by the
 // configured owner, as the files written in them are. It checks the deepest
 // existing parent first, so a link into a denied path gets no new
-// directories. The new directories are made through an os.Root on that
-// parent: a link that a command puts in place of a new directory cannot
-// take the later ones out of it.
+// directories. The new directories are made one in the next from that
+// parent, and a link at any of them fails: a command that puts a link in
+// place of a new directory cannot send the later ones to a denied path.
 func (s *Store) mkdirVM(dir string) error {
 	existing := dir
 	for existing != "/" {
@@ -509,7 +541,7 @@ func (s *Store) mkdirVM(dir string) error {
 		return fsErr(err)
 	}
 	defer func() { _ = r.Close() }()
-	return s.mkdirAll(r, missing)
+	return s.mkdirAll(r, missing, true)
 }
 
 // onyxRel returns the path of abs in OnyxRoot ("." for OnyxRoot itself),

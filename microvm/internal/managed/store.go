@@ -36,9 +36,6 @@ type Image struct {
 	ContentBytes int64     `json:"content_bytes"`
 	BuiltAt      time.Time `json:"built_at"`
 	BuildMS      int64     `json:"build_ms"`
-	// RootMode is the drive root's mode. Zero: an older agent built it and
-	// ignored the zip comment.
-	RootMode fs.FileMode `json:"root_mode,omitempty"`
 	// Path is the ext4 file. Not stored.
 	Path string `json:"-"`
 }
@@ -246,7 +243,7 @@ func (s *Store) Put(ctx context.Context, id string, size int64, r io.Reader) (Im
 	}
 	unlock := s.lockID(id)
 	defer unlock()
-	if img, err := s.Get(id); err == nil && img.RootMode != 0 {
+	if img, err := s.Get(id); err == nil {
 		return img, false, nil
 	}
 	release, err := s.acquire(ctx)
@@ -338,8 +335,7 @@ func (s *Store) build(ctx context.Context, id, zipPath string, size int64) (Imag
 		return Image{}, err
 	}
 	// The stage root is the drive root: root-owned, mode from the zip comment.
-	rootMode := RootMode(zr.Comment)
-	if err := os.Chmod(stage, rootMode); err != nil {
+	if err := os.Chmod(stage, RootMode(zr.Comment)); err != nil {
 		return Image{}, err
 	}
 	mkfs := s.Mkfs
@@ -383,7 +379,7 @@ func (s *Store) build(ctx context.Context, id, zipPath string, size int64) (Imag
 	s.markVerified(id, fid)
 	return Image{
 		ID: id, SHA256: sum, Size: fid.size, UUID: uuid, Files: st.Files, ContentBytes: st.Bytes,
-		BuiltAt: s.now().UTC(), Path: s.imagePath(id), RootMode: rootMode,
+		BuiltAt: s.now().UTC(), Path: s.imagePath(id),
 	}, nil
 }
 

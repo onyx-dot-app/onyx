@@ -301,7 +301,7 @@ func (s *Store) ensureDir(root *os.Root, dir string, create bool) error {
 		return nil
 	}
 	if create {
-		return s.mkdirAll(root, dir)
+		return s.mkdirAll(root, dir, false)
 	}
 	fi, err := root.Stat(dir)
 	if err != nil {
@@ -624,7 +624,7 @@ func (s *Store) Rename(sessionID, from, to string, exchange bool) error {
 			return err
 		}
 	}
-	dir, err := e.root.Open(path.Dir(e.name))
+	dir, err := openDir(e.root, path.Dir(e.name))
 	if err != nil {
 		return fsErr(err)
 	}
@@ -652,7 +652,7 @@ func (s *Store) Link(sessionID, p, target string) error {
 	// A path in the onyx root opens on that root, with its parents still to
 	// make.
 	parent := path.Dir(e.name)
-	if err := s.mkdirAll(e.root, parent); err != nil {
+	if err := s.mkdirAll(e.root, parent, false); err != nil {
 		return err
 	}
 	// A folder or file the model made stays where it is: never moved aside
@@ -662,7 +662,7 @@ func (s *Store) Link(sessionID, p, target string) error {
 	} else if err != nil && !errors.Is(err, fs.ErrNotExist) {
 		return fsErr(err)
 	}
-	dir, err := e.root.Open(parent)
+	dir, err := openDir(e.root, parent)
 	if err != nil {
 		return fsErr(err)
 	}
@@ -720,6 +720,12 @@ func (s *Store) Link(sessionID, p, target string) error {
 	}
 	drop()
 	return fmt.Errorf("%w: %s is not a link", ErrExists, p)
+}
+
+// openDir opens a directory in root for *at calls. A FIFO or other entry
+// fails at once instead of blocking the open.
+func openDir(root *os.Root, name string) (*os.File, error) {
+	return root.OpenFile(name, os.O_RDONLY|syscall.O_DIRECTORY|syscall.O_NONBLOCK, 0)
 }
 
 func (s *Store) openDelete(sessionID, p string) (*os.Root, string, error) {

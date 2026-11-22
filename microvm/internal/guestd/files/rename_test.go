@@ -6,7 +6,9 @@ import (
 	"errors"
 	"os"
 	"path/filepath"
+	"syscall"
 	"testing"
+	"time"
 )
 
 func TestRenameMovesOrSwapsInOneDirectory(t *testing.T) {
@@ -76,5 +78,39 @@ func TestRenameMovesOrSwapsInOneDirectory(t *testing.T) {
 	}
 	if got := read(skills + "/report/SKILL.md"); got != "v2" {
 		t.Fatalf("a refused rename changed report to %q", got)
+	}
+}
+
+func TestRenameAndLinkFailAtOnceUnderAFIFO(t *testing.T) {
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	onyx := filepath.Join(dir, "onyx")
+	s, err := New(Config{SessionsRoot: filepath.Join(dir, "sessions"), OnyxRoot: onyx})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(onyx, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	// A FIFO with no writer: opening it to read would wait for one.
+	if err := syscall.Mkfifo(filepath.Join(onyx, "pipe"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	for name, call := range map[string]func() error{
+		"rename": func() error { return s.Rename("", onyx+"/pipe/a", onyx+"/pipe/b", false) },
+		"link":   func() error { return s.Link("", onyx+"/pipe/a", "/mnt/skills/a") },
+	} {
+		done := make(chan error, 1)
+		go func() { done <- call() }()
+		select {
+		case err := <-done:
+			if err == nil {
+				t.Fatalf("%s under a FIFO: no error", name)
+			}
+		case <-time.After(5 * time.Second):
+			t.Fatalf("%s under a FIFO blocked", name)
+		}
 	}
 }
