@@ -391,6 +391,13 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
         self._resolve_service_desk_id()
         batch: list[Document] = []
         for issue_key, updated_epoch in self._search_issues(start, end):
+            if updated_epoch is not None and not start <= updated_epoch <= end:
+                # Search window was widened for timezone safety; the exact
+                # window is enforced here, on the issue's own timestamp,
+                # before any per-issue fetch so out-of-window issues cost
+                # no request or comment API calls. Issues with no timestamp
+                # still proceed.
+                continue
             try:
                 request = self._fetch_request(issue_key)
             except _JsmApiError as e:
@@ -410,10 +417,6 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
             )
             document = self._request_to_document(request, comments, updated_epoch)
             if document is None:
-                continue
-            if updated_epoch is not None and not start <= updated_epoch <= end:
-                # Search window was widened for timezone safety; the exact
-                # window is enforced here, on the issue's own timestamp.
                 continue
             batch.append(document)
             if len(batch) >= self.batch_size:
