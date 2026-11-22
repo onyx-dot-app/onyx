@@ -353,3 +353,24 @@ func TestNoSessionWriteMakesNoFolderInADeniedPathThroughARelativeLink(t *testing
 		t.Fatalf("made %v %v in the denied path", ents, err)
 	}
 }
+
+func TestSessionWriteMakesFoldersThroughALinkToASiblingFolder(t *testing.T) {
+	s, root, _ := ownedStore(t)
+	ctx := context.Background()
+	session := filepath.Join(root, sid)
+	for _, d := range []string{"work", "shared"} {
+		if err := os.MkdirAll(filepath.Join(session, d), 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.Symlink("../shared", filepath.Join(session, "work/assets")); err != nil {
+		t.Fatal(err)
+	}
+	spec := WriteSpec{Path: "work/assets/img/a.txt", Size: 1, MakeParents: true}
+	if _, _, err := s.Write(ctx, sid, spec, strings.NewReader("x")); err != nil {
+		t.Fatalf("write through the link: %v", err)
+	}
+	if _, err := os.Stat(filepath.Join(session, "shared/img/a.txt")); err != nil {
+		t.Fatal(err)
+	}
+}

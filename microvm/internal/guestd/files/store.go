@@ -265,15 +265,17 @@ func (s *Store) ownFile(f *os.File, name string) error {
 }
 
 // mkdirAll makes dir and its missing parents in root (mode 0755), each owned
-// by the configured owner. Directories that exist keep their owner. Each
-// directory is made in the one before it, opened as its own root, so a link
-// that a command puts in place of a new directory cannot move the later
-// ones. With noLinks, a link at any part of dir fails too.
+// by the configured owner. Directories that exist keep their owner, and a
+// link among them resolves in root as before. From the first directory this
+// call makes, each one is made in the one before it, opened as its own root,
+// so a link that a command puts in place of a new directory cannot move the
+// later ones. With noLinks, a link at any part of dir fails too.
 func (s *Store) mkdirAll(root *os.Root, dir string, noLinks bool) error {
 	if dir == "." {
 		return nil
 	}
-	cur := root
+	// rel is the path in cur of the directories walked so far.
+	cur, rel := root, ""
 	defer func() {
 		if cur != root {
 			_ = cur.Close()
@@ -282,12 +284,13 @@ func (s *Store) mkdirAll(root *os.Root, dir string, noLinks bool) error {
 	parts := strings.Split(dir, "/")
 	for i, part := range parts {
 		p := strings.Join(parts[:i+1], "/")
+		name := path.Join(rel, part)
 		made := false
-		if err := cur.Mkdir(part, 0o755); err == nil {
+		if err := cur.Mkdir(name, 0o755); err == nil {
 			made = true
-			if err := s.ownAs(cur, part, p); err != nil {
+			if err := s.ownAs(cur, name, p); err != nil {
 				// A retry must not find it as an existing directory.
-				_ = cur.Remove(part)
+				_ = cur.Remove(name)
 				return err
 			}
 		} else if !errors.Is(err, fs.ErrExist) {
@@ -298,27 +301,29 @@ func (s *Store) mkdirAll(root *os.Root, dir string, noLinks bool) error {
 		if strict {
 			stat = cur.Lstat
 		}
-		fi, err := stat(part)
+		fi, err := stat(name)
 		if err != nil {
 			return fsErr(err)
 		}
 		if !fi.IsDir() {
 			return fmt.Errorf("%w: %s is not a directory", ErrInvalid, p)
 		}
-		next, err := cur.OpenRoot(part)
+		if !strict {
+			rel = name
+			continue
+		}
+		next, err := cur.OpenRoot(name)
 		if err != nil {
 			return fsErr(err)
 		}
-		if strict {
-			if got, err := next.Stat("."); err != nil || !os.SameFile(fi, got) {
-				_ = next.Close()
-				return fmt.Errorf("%w: %s changed while it was made", ErrInvalid, p)
-			}
+		if got, err := next.Stat("."); err != nil || !os.SameFile(fi, got) {
+			_ = next.Close()
+			return fmt.Errorf("%w: %s changed while it was made", ErrInvalid, p)
 		}
 		if cur != root {
 			_ = cur.Close()
 		}
-		cur = next
+		cur, rel = next, ""
 	}
 	return nil
 }
