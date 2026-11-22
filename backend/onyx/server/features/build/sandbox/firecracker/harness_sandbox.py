@@ -335,7 +335,15 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
         with tenant_cache.lock(
             f"{_SKILLS_INSTALL_LOCK_PREFIX}{ref.sandbox_id}",
             timeout=_SKILLS_SYNC_LOCK_SECONDS,
-        ):
+        ) as lock:
+
+            def keep_lock() -> None:
+                # A pod that takes an expired lock deletes the hidden folders:
+                # stop before the next change to the VM.
+                if not lock.owned():
+                    raise HarnessSandboxError("lost the skills install lock")
+                lock.extend(_SKILLS_SYNC_LOCK_SECONDS)
+
             daemon = sandbox_daemon(self._client_factory, placed)
             for name, version in sorted(missing().items()):
                 if posixpath.basename(name) != name or name.startswith("."):
@@ -349,7 +357,7 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
                     set_installed_skill(
                         tenant_cache, ref.sandbox_id, instance, name, None
                     )
-                    self._install_skill(daemon, name, files)
+                    self._install_skill(daemon, name, files, keep_lock)
                     set_installed_skill(
                         tenant_cache, ref.sandbox_id, instance, name, version
                     )
@@ -361,10 +369,16 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
                     )
 
     @staticmethod
-    def _install_skill(daemon: SandboxDaemonClient, name: str, files: FileSet) -> None:
+    def _install_skill(
+        daemon: SandboxDaemonClient,
+        name: str,
+        files: FileSet,
+        keep_lock: Callable[[], None],
+    ) -> None:
         """Write the skill's files (`<name>/<path>`) into a hidden folder next
         to its folder, then swap the two in one step and delete the old one.
-        A copy that fails leaves the old folder as it was."""
+        A copy that fails leaves the old folder as it was. `keep_lock` runs
+        before each change and raises when the install lock is lost."""
         if any(not path.startswith(f"{name}/") for path in files):
             raise HarnessSandboxError(f"skill {name!r} has files outside its folder")
         try:
@@ -376,16 +390,19 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
         # Hidden folders of copies that an API pod did not finish.
         for entry in here:
             if entry.name.startswith(_SKILL_STAGING_PREFIX):
+                keep_lock()
                 daemon.delete_file(session_id="", path=entry.path, recursive=True)
         folder = f"{CHAT_SKILLS_PATH}/{name}"
         staging = f"{CHAT_SKILLS_PATH}/{_SKILL_STAGING_PREFIX}{secrets.token_hex(8)}"
         try:
             for path, data in files.items():
+                keep_lock()
                 daemon.write_file(
                     session_id="",
                     path=f"{staging}/{path.removeprefix(f'{name}/')}",
                     data=data,
                 )
+            keep_lock()
             try:
                 daemon.rename_file(path=staging, to=folder, exchange=True)
             except SandboxDaemonError as e:

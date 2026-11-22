@@ -14,7 +14,8 @@ from uuid import uuid4
 import grpc
 import pytest
 
-from onyx.cache.interface import CacheBackend
+from onyx.cache.factory import get_cache_backend
+from onyx.cache.interface import CacheBackend, CacheLock
 from onyx.configs.constants import FileOrigin
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
@@ -1400,3 +1401,28 @@ def test_custom_skills_copy_to_each_vm_instance_once_per_version(
     sandbox.install_skills(ref, {"report": "v5"}, load)
     assert loads == ["report"]
     assert copied() == {"report/SKILL.md": b"# report v5", "report/more.md": b"m"}
+
+    # A copy whose install lock expires and goes to another pod stops before
+    # its next change: the old folder stays whole and nothing is recorded.
+    lock_type = type(get_cache_backend(tenant_id=ref.tenant_id).lock("probe"))
+    owned = lock_type.owned
+    lost = False
+
+    def owned_until_lost(self: CacheLock) -> bool:
+        return not lost and owned(self)
+
+    monkeypatch.setattr(lock_type, "owned", owned_until_lost)
+
+    def load_then_lose(name: str) -> FileSet | None:
+        nonlocal lost
+        lost = True
+        return load(name)
+
+    skills["report"] = {"report/SKILL.md": b"# report v7"}
+    sandbox.install_skills(ref, {"report": "v7"}, load_then_lose)
+    assert copied() == {"report/SKILL.md": b"# report v5", "report/more.md": b"m"}
+    lost = False
+    loads.clear()
+    sandbox.install_skills(ref, {"report": "v7"}, load)
+    assert loads == ["report"]
+    assert copied() == {"report/SKILL.md": b"# report v7"}
