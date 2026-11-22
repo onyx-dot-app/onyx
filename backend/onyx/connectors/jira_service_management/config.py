@@ -27,7 +27,7 @@ class JiraServiceManagementConnectorConfig(
     # The JSM service project whose requests get indexed.
     project_key: Annotated[
         str,
-        FieldPolicy(FieldClass.SCOPE, scope=ScopeInclude()),
+        FieldPolicy(FieldClass.SCOPE, scope=ScopeInclude(empty_means_all=True)),
     ]
     batch_size: Annotated[int, FieldPolicy(FieldClass.COSMETIC)] = INDEX_BATCH_SIZE
     # Internal (agent-only) comments stay out of the index unless enabled.

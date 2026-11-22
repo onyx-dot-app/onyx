@@ -12,9 +12,11 @@ Design notes
   datetime parsing, error mapping).
 - Discovery runs through the Jira issue search (JQL), which is the only
   JSM-adjacent API that can filter by ``updated`` window; that is what makes
-  polling possible. Request details and public comments come from the
-  Service Desk API (``/rest/servicedeskapi``), which carries the
-  request-type / portal view of a ticket.
+  polling possible. On Cloud that is ``/rest/api/3/search/jql`` (the older
+  ``/rest/api/3/search`` is gone); Server / Data Center keeps
+  ``/rest/api/2/search``. Request details and public comments come from the
+  Service Desk API (``/rest/servicedeskapi``), whose request payload carries
+  field values as ``requestFieldValues``.
 - Credentials mirror the Jira connector convention: ``jira_user_email`` +
   ``jira_api_token`` (Cloud, basic auth) or a lone ``jira_api_token``
   (Server / Data Center personal access token, bearer auth).
@@ -37,6 +39,7 @@ from onyx.connectors.exceptions import (
     UnexpectedValidationError,
 )
 from onyx.connectors.interfaces import (
+    GenerateDocumentsOutput,
     GenerateSlimDocumentOutput,
     LoadConnector,
     PollConnector,
@@ -109,13 +112,18 @@ def _adf_to_text(node: Any) -> str:
     return inner
 
 
-def _description_to_text(fields: dict[str, Any]) -> str:
-    description = fields.get("description")
-    if isinstance(description, str):
-        return description
-    if isinstance(description, dict):
-        return _adf_to_text(description).strip()
+def _field_value_to_text(value: Any) -> str:
+    """A request field value as text: a plain string, or an ADF tree."""
+    if isinstance(value, str):
+        return value
+    if isinstance(value, dict):
+        return _adf_to_text(value).strip()
     return ""
+
+
+def _updated_epoch(issue: dict[str, Any]) -> float | None:
+    parsed = _parse_jira_datetime((issue.get("fields") or {}).get("updated"))
+    return parsed.timestamp() if parsed is not None else None
 
 
 def _expert_info(user: Any) -> BasicExpertInfo | None:
@@ -212,58 +220,116 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
             params={"expand": "comment,requestType,status,participant"},
         )
 
+    def _fetch_comments(
+        self, issue_key: str, expanded: dict[str, Any]
+    ) -> list[dict[str, Any]]:
+        """Every comment on a request, following the comment pagination.
+
+        The ``comment`` expansion on the request is a single page; when it
+        reports ``isLastPage`` as false, the remaining pages come from the
+        request's comment endpoint.
+        """
+        values = list(expanded.get("values") or [])
+        if expanded.get("isLastPage", True):
+            return values
+        seen = {comment.get("id") for comment in values}
+        start = int(expanded.get("start", 0)) + len(values)
+        while True:
+            page = self._get(
+                f"{_JSM_API}/request/{issue_key}/comment",
+                params={"start": start, "limit": _PAGE_SIZE},
+            )
+            for comment in page.get("values", []):
+                if comment.get("id") not in seen:
+                    values.append(comment)
+                    seen.add(comment.get("id"))
+            if page.get("isLastPage", True):
+                return values
+            start = int(page.get("nextPageStart", start + _PAGE_SIZE))
+
     # -- Jira search (discovery / polling) -----------------------------------
 
-    def _search_issue_keys(
+    def _search_issues(
         self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
-    ) -> Generator[str, None, None]:
-        """Keys of project issues updated inside the window, oldest first."""
-        start_dt = datetime.fromtimestamp(start, tz=timezone.utc)
-        end_dt = datetime.fromtimestamp(end, tz=timezone.utc)
-        # JQL date literals are minute-precision, in the API user's timezone;
-        # the Jira connector's epoch-ms trick only works for `updated`
-        # comparisons on fields that accept it, so use quoted literals here.
+    ) -> Generator[tuple[str, float | None], None, None]:
+        """(key, updated epoch) of project issues updated in the window.
+
+        JQL date literals are minute-precision and are read in the API
+        account's timezone, not UTC, so the searched window is widened by
+        14 hours on both sides (no account offset exceeds that). Callers
+        filter on the exact window with the returned timestamps, so the
+        widening costs a few extra fetches, never a wrong inclusion.
+        """
+        start_dt = datetime.fromtimestamp(start - 14 * 3600, tz=timezone.utc)
+        end_dt = datetime.fromtimestamp(end + 14 * 3600, tz=timezone.utc)
         jql = (
             f'project = "{self.project_key}" AND '
             f'updated >= "{start_dt:%Y-%m-%d %H:%M}" AND '
             f'updated <= "{end_dt:%Y-%m-%d %H:%M}" ORDER BY updated ASC'
         )
+        if self._api_version == _JIRA_API_V3:
+            # Cloud: /rest/api/3/search was removed. search/jql paginates
+            # with an opaque token and reports no total.
+            token: str | None = None
+            while True:
+                params: dict[str, Any] = {
+                    "jql": jql,
+                    "fields": "key,updated",
+                    "maxResults": _PAGE_SIZE,
+                }
+                if token:
+                    params["nextPageToken"] = token
+                page = self._get(f"{_JIRA_API_V3}/search/jql", params=params)
+                for issue in page.get("issues", []):
+                    yield str(issue["key"]), _updated_epoch(issue)
+                token = page.get("nextPageToken")
+                if page.get("isLast", True) or not token:
+                    return
         offset = 0
         while True:
             page = self._get(
-                f"{self._api_version}/search",
+                f"{_JIRA_API_V2}/search",
                 params={
                     "jql": jql,
-                    "fields": "key",
+                    "fields": "key,updated",
                     "startAt": offset,
                     "maxResults": _PAGE_SIZE,
                 },
             )
             issues = page.get("issues", [])
             for issue in issues:
-                yield str(issue["key"])
+                yield str(issue["key"]), _updated_epoch(issue)
             offset += len(issues)
             if offset >= int(page.get("total", 0)) or not issues:
                 return
 
     # -- document building ----------------------------------------------------
 
-    def _request_to_document(self, request: dict[str, Any]) -> Document | None:
-        fields = request.get("issueFields") or {}
-        issue_key = str(request.get("issueKey") or fields.get("key") or "")
+    def _request_to_document(
+        self,
+        request: dict[str, Any],
+        comments: list[dict[str, Any]],
+        updated_epoch: float | None,
+    ) -> Document | None:
+        issue_key = str(request.get("issueKey") or "")
         if not issue_key:
             return None
 
-        summary = str(fields.get("summary") or "")
-        description = _description_to_text(fields)
+        # The Service Desk payload carries field values as a list of
+        # {fieldId, value} entries, not as an issue-fields dictionary.
+        field_values: dict[str, Any] = {}
+        for entry in request.get("requestFieldValues") or []:
+            if isinstance(entry, dict) and entry.get("fieldId"):
+                field_values[str(entry["fieldId"])] = entry.get("value")
+
+        summary = str(field_values.get("summary") or "")
+        description = _field_value_to_text(field_values.get("description"))
 
         comment_texts: list[str] = []
-        comments = (request.get("comment") or {}).get("values") or []
         for comment in comments:
             if not self.include_internal_comments and comment.get("public") is False:
                 continue
-            body = comment.get("body")
-            text = body if isinstance(body, str) else _adf_to_text(body)
+            text = _field_value_to_text(comment.get("body"))
             if text:
                 author = (comment.get("author") or {}).get("displayName")
                 comment_texts.append(
@@ -287,19 +353,24 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
         if reporter is not None:
             people.append(reporter)
             metadata["reporter"] = reporter.get_semantic_name()
-        assignee = _expert_info(fields.get("assignee"))
+        assignee = _expert_info(field_values.get("assignee"))
         if assignee is not None:
             people.append(assignee)
             metadata["assignee"] = assignee.get_semantic_name()
-        if priority := (fields.get("priority") or {}).get("name"):
-            metadata["priority"] = str(priority)
+        priority = field_values.get("priority")
+        if isinstance(priority, dict) and priority.get("name"):
+            metadata["priority"] = str(priority["name"])
         metadata["project"] = self.project_key
         metadata["project_name"] = str(
             (request.get("serviceDesk") or {}).get("projectName") or self.project_key
         )
 
         created = _parse_jira_datetime(request.get("createdDate", {}).get("iso8601"))
-        updated = _parse_jira_datetime(fields.get("updated"))
+        updated = (
+            datetime.fromtimestamp(updated_epoch, tz=timezone.utc)
+            if updated_epoch is not None
+            else None
+        )
 
         return Document(
             id=page_url,
@@ -315,34 +386,52 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
 
     def _fetch_documents(
         self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
-    ) -> Generator[Document, None, None]:
+    ) -> Generator[list[Document], None, None]:
         # Resolve once up front so a bad project key fails fast, not per ticket.
         self._resolve_service_desk_id()
         batch: list[Document] = []
-        for issue_key in self._search_issue_keys(start, end):
+        for issue_key, updated_epoch in self._search_issues(start, end):
             try:
                 request = self._fetch_request(issue_key)
             except _JsmApiError as e:
+                if e.status_code == 404:
+                    # A plain Jira issue, not a service request. Discovery
+                    # runs through Jira search, which cannot tell the two
+                    # apart; skip it instead of failing the whole run.
+                    logger.info(
+                        "Skipping %s: not a service request (HTTP 404)",
+                        issue_key,
+                    )
+                    continue
                 self._raise_mapped(e)
                 raise  # unreachable; keeps type checkers honest
-            document = self._request_to_document(request)
-            if document is not None:
-                batch.append(document)
+            comments = self._fetch_comments(
+                issue_key, request.get("comment") or {}
+            )
+            document = self._request_to_document(request, comments, updated_epoch)
+            if document is None:
+                continue
+            if updated_epoch is not None and not start <= updated_epoch <= end:
+                # Search window was widened for timezone safety; the exact
+                # window is enforced here, on the issue's own timestamp.
+                continue
+            batch.append(document)
             if len(batch) >= self.batch_size:
-                yield from batch
+                yield batch
                 batch = []
-        yield from batch
+        if batch:
+            yield batch
 
     # -- connector interfaces --------------------------------------------------
 
-    def load_from_state(self) -> Generator[Document, None, None]:
+    def load_from_state(self) -> GenerateDocumentsOutput:
         # Epoch to "now + 1 day", the same convention the Jira connector uses
         # for slim listings, to absorb source-side timezone skew.
         yield from self._fetch_documents(0, time.time() + 24 * 3600)
 
     def poll_source(
         self, start: SecondsSinceUnixEpoch, end: SecondsSinceUnixEpoch
-    ) -> Generator[Document, None, None]:
+    ) -> GenerateDocumentsOutput:
         yield from self._fetch_documents(start, end)
 
     def retrieve_all_slim_docs(
@@ -354,7 +443,7 @@ class JiraServiceManagementConnector(LoadConnector, PollConnector, SlimConnector
         start = start or 0
         end = end or time.time() + 24 * 3600
         batch: list[SlimDocument] = []
-        for issue_key in self._search_issue_keys(start, end):
+        for issue_key, _updated_epoch in self._search_issues(start, end):
             batch.append(
                 SlimDocument(id=f"{self.jira_base}/browse/{issue_key}")
             )
@@ -403,5 +492,6 @@ if __name__ == "__main__":
             "jira_api_token": os.environ["JIRA_API_TOKEN"],
         }
     )
-    for doc in connector.load_from_state():
-        print(doc.semantic_identifier)
+    for batch in connector.load_from_state():
+        for doc in batch:
+            print(doc.semantic_identifier)

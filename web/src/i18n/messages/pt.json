@@ -475,7 +475,7 @@
           "description": "Rastreador de issues da Atlassian"
         },
         "jiraServiceManagement": {
-          "description": "Atlassian service desk requests"
+          "description": "Solicitações do service desk da Atlassian"
         },
         "productboard": {
           "description": "Gestão de produto"
@@ -3321,20 +3321,20 @@
           }
         },
         "jira_service_management": {
-          "description": "Configure Jira Service Management connector",
-          "subtext": "Configure which Jira Service Management content to index. Onyx indexes the requests of one service project.",
+          "description": "Configurar conector do Jira Service Management",
+          "subtext": "Configure qual conteúdo do Jira Service Management indexar. O Onyx indexa as solicitações de um projeto de serviço.",
           "fields": {
             "jira_base_url": {
-              "label": "Site URL",
+              "label": "URL do site",
               "placeholder": "https://your-domain.atlassian.net"
             },
             "project_key": {
-              "label": "Project Key",
-              "description": "The key of the service project to index (e.g., 'ITSM')."
+              "label": "Chave do projeto",
+              "description": "A chave do projeto de serviço a indexar (por exemplo, 'ITSM')."
             },
             "include_internal_comments": {
-              "label": "Include Internal Comments",
-              "description": "Index internal (agent-only) comments in addition to public comments."
+              "label": "Incluir comentários internos",
+              "description": "Indexar comentários internos (visíveis apenas para agentes) além dos comentários públicos."
             }
           }
         },

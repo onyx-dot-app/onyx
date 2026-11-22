@@ -26,9 +26,10 @@ access. An API token does not give its owner additional permissions.
 
 Use a dedicated Atlassian account for the connector. The account needs to be
 able to view the requests of the service project you want to index: add it
-to the project as a service desk agent, or give it access through the
-project's customer permissions if it only needs to read requests it can see
-as a customer.
+to the project as a service desk agent, or give it the Browse Projects
+permission another way. A portal-only customer account is not enough:
+discovery runs through Jira issue search, which customer accounts cannot
+use, even for requests they can see in the portal.
 
 ### 2. Create the API token
 
