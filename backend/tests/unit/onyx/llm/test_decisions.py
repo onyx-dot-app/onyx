@@ -278,7 +278,10 @@ def test_nace_key_never_reaches_another_origin(
         with patch("onyx.llm.decisions.client.httpx.Client", return_value=transport):
             with pytest.raises(ValueError, match="fixed hosted endpoint"):
                 DecisionClient(
-                    DecisionProvider.NACE, "drex-max", "nace-key", api_base=api_base
+                    DecisionProvider.NACE,
+                    "drex-max-v1.1",
+                    "nace-key",
+                    api_base=api_base,
                 ).decide(decision_request, flow=LLMFlow.MODEL_VALIDATION)
     assert sent == []
 
@@ -296,7 +299,7 @@ def test_nace_key_never_reaches_another_origin(
 )
 def test_nace_accepts_its_own_origin(api_base: str, url: str) -> None:
     client = DecisionClient(
-        DecisionProvider.NACE, "drex-max", "nace-key", api_base=api_base
+        DecisionProvider.NACE, "drex-max-v1.1", "nace-key", api_base=api_base
     )
     assert client.url == url
 
@@ -588,7 +591,7 @@ def test_nace_list_legend_maps_onto_score_levels() -> None:
     with closing(_score_answer_transport(["Low", "High"])) as transport:
         with patch("onyx.llm.decisions.client.httpx.Client", return_value=transport):
             result = DecisionClient(
-                DecisionProvider.NACE, "drex-max", "test-key"
+                DecisionProvider.NACE, "drex-max-v1.1", "test-key"
             ).decide(_score_only_request(), flow=LLMFlow.MODEL_VALIDATION)
     assert result.model_dump()["answers"] == [
         {
@@ -622,9 +625,9 @@ def test_nace_rejects_malformed_score_legend_list(legend: object) -> None:
     with closing(_score_answer_transport(legend)) as transport:
         with patch("onyx.llm.decisions.client.httpx.Client", return_value=transport):
             with pytest.raises(ValueError, match="legend must match"):
-                DecisionClient(DecisionProvider.NACE, "drex-max", "test-key").decide(
-                    _score_only_request(), flow=LLMFlow.MODEL_VALIDATION
-                )
+                DecisionClient(
+                    DecisionProvider.NACE, "drex-max-v1.1", "test-key"
+                ).decide(_score_only_request(), flow=LLMFlow.MODEL_VALIDATION)
 
 
 def test_typesafe_rejects_list_legend() -> None:
@@ -655,7 +658,7 @@ def test_nace_score_labels_come_from_requested_levels() -> None:
     ) as transport:
         with patch("onyx.llm.decisions.client.httpx.Client", return_value=transport):
             result = DecisionClient(
-                DecisionProvider.NACE, "drex-max", "test-key"
+                DecisionProvider.NACE, "drex-max-v1.1", "test-key"
             ).decide(request, flow=LLMFlow.MODEL_VALIDATION)
     answer = result.answers[0]
     assert isinstance(answer, ScoreAnswer)
@@ -694,7 +697,7 @@ def test_nace_probability_sums_within_rounding_are_accepted(
         _probability_transport({"0": probabilities[0], "1": probabilities[1]})
     ) as transport:
         with patch("onyx.llm.decisions.client.httpx.Client", return_value=transport):
-            DecisionClient(DecisionProvider.NACE, "drex-max", "test-key").decide(
+            DecisionClient(DecisionProvider.NACE, "drex-max-v1.1", "test-key").decide(
                 _score_only_request(), flow=LLMFlow.MODEL_VALIDATION
             )
 
@@ -703,9 +706,9 @@ def test_probability_sums_beyond_rounding_are_rejected() -> None:
     with closing(_probability_transport({"0": 0.49, "1": 0.5})) as transport:
         with patch("onyx.llm.decisions.client.httpx.Client", return_value=transport):
             with pytest.raises(ValueError, match="sum to one"):
-                DecisionClient(DecisionProvider.NACE, "drex-max", "test-key").decide(
-                    _score_only_request(), flow=LLMFlow.MODEL_VALIDATION
-                )
+                DecisionClient(
+                    DecisionProvider.NACE, "drex-max-v1.1", "test-key"
+                ).decide(_score_only_request(), flow=LLMFlow.MODEL_VALIDATION)
 
 
 def test_other_providers_keep_the_strict_probability_tolerance() -> None:

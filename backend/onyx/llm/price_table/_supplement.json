@@ -18,8 +18,8 @@
   },
   "nace": {
     "models": {
-      "drex-max": {
-        "name": "Nace Drex Max",
+      "drex-max-v1.1": {
+        "name": "Nace Drex Max v1.1",
         "mode": "decisions",
         "supports_decisions": true,
         "modalities": {"input": ["text", "image"], "output": ["decisions"]}

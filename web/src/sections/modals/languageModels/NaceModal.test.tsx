@@ -23,11 +23,11 @@ describe("Nace provider setup", () => {
             String(url).endsWith("available-models")
               ? [
                   {
-                    name: "drex-max",
-                    display_name: "drex-max",
+                    name: "drex-max-v1.1",
+                    display_name: "drex-max-v1.1",
                     supports_chat: false,
                     supports_decisions: true,
-                    supports_image_input: false,
+                    supports_image_input: true,
                     max_input_tokens: null,
                   },
                   {
@@ -52,7 +52,7 @@ describe("Nace provider setup", () => {
     expect(screen.queryByLabelText(/API base/i)).not.toBeInTheDocument();
     await user.type(screen.getByLabelText(/API key/i), "nace-test-key");
     await user.click(screen.getByRole("button", { name: "Refresh models" }));
-    expect(await screen.findByText("drex-max")).toBeInTheDocument();
+    expect(await screen.findByText("drex-max-v1.1")).toBeInTheDocument();
     expect(screen.getByText("drex-v2.0")).toBeInTheDocument();
     expect(fetchSpy).toHaveBeenCalledWith(
       "/api/admin/llm/nace/available-models",
@@ -67,7 +67,7 @@ describe("Nace provider setup", () => {
     expect(fetchSpy).toHaveBeenCalledWith(
       "/api/admin/llm/decision-provider/test",
       expect.objectContaining({
-        body: expect.stringContaining('"model":"drex-max"'),
+        body: expect.stringContaining('"model":"drex-max-v1.1"'),
       })
     );
     expect(fetchSpy).toHaveBeenCalledWith(
@@ -80,7 +80,7 @@ describe("Nace provider setup", () => {
       "/api/admin/llm/decision-provider",
       expect.objectContaining({
         body: expect.stringContaining(
-          '"selected_model_names":["drex-max","drex-v2.0"]'
+          '"selected_model_names":["drex-max-v1.1","drex-v2.0"]'
         ),
       })
     );

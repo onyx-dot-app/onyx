@@ -20,7 +20,7 @@ from onyx.server.manage.llm.models import (
 
 def test_catalog_registers_decision_provider_without_chat_models() -> None:
     assert LlmProviderNames.NACE in WELL_KNOWN_PROVIDER_NAMES
-    assert iter_models("nace", mode="decisions") == ["drex-max", "drex-v2.0"]
+    assert iter_models("nace", mode="decisions") == ["drex-max-v1.1", "drex-v2.0"]
     assert iter_models("nace", mode="chat") == []
 
 
@@ -34,7 +34,7 @@ def test_configuration_has_no_auto_mode_or_api_base() -> None:
             provider="nace",
             model_configurations=[
                 ModelConfigurationUpsertRequest(
-                    name="drex-max", is_visible=True, supports_chat=True
+                    name="drex-max-v1.1", is_visible=True, supports_chat=True
                 )
             ],
         )
@@ -46,7 +46,7 @@ def test_nace_cannot_construct_chat_client() -> None:
     with pytest.raises(ValueError, match="does not support chat"):
         get_llm(
             provider="nace",
-            model="drex-max",
+            model="drex-max-v1.1",
             max_input_tokens=100,
             deployment_name=None,
         )
@@ -58,28 +58,38 @@ def test_discovery_lists_models_once_without_catalog_aliases() -> None:
         get.return_value.json.return_value = {
             "models": [
                 {
+                    "name": "drex-max-v1.1",
+                    "description": "Drex Max v1.1 decision model.",
+                    "release_date": "2026-09-30",
+                    "alias_for": None,
+                },
+                {
                     "name": "drex-v2.0",
                     "description": "Drex 2.0 decision model.",
                     "release_date": "2026-10-06",
                     "alias_for": None,
                 },
-                {"name": "drex-max", "description": "Drex Max", "alias_for": None},
                 {
                     "name": "drex-latest",
-                    "description": "Points to drex-v2.0.",
-                    "alias_for": "drex-v2.0",
+                    "description": "Points to drex-max-v1.1.",
+                    "alias_for": "drex-max-v1.1",
+                },
+                {
+                    "name": "drex-max",
+                    "description": "Retired 2026-11-08; served by drex-max-v1.1.",
+                    "alias_for": "drex-max-v1.1",
                 },
                 {
                     "name": "drex-v1.0",
-                    "description": "Retired; served by drex-max.",
-                    "alias_for": "drex-max",
+                    "description": "Retired; served by drex-max-v1.1.",
+                    "alias_for": "drex-max-v1.1",
                 },
             ],
             "request_id": "req_test",
         }
         assert [model.name for model in fetch_nace_models("secret")] == [
+            "drex-max-v1.1",
             "drex-v2.0",
-            "drex-max",
         ]
         client.assert_called_once_with(timeout=30.0, follow_redirects=False)
         get.assert_called_once_with(
@@ -201,7 +211,7 @@ def test_discovery_uses_saved_credentials_and_syncs_decision_models() -> None:
     with (
         patch.object(api, "fetch_existing_llm_provider_by_id", return_value=stored),
         patch.object(
-            api, "fetch_nace_models", return_value=[NaceModel(name="drex-max")]
+            api, "fetch_nace_models", return_value=[NaceModel(name="drex-max-v1.1")]
         ) as fetch,
         patch.object(api, "_sync_fetched_models") as sync,
     ):
@@ -209,7 +219,7 @@ def test_discovery_uses_saved_credentials_and_syncs_decision_models() -> None:
             NaceModelsRequest(provider_id=7), MagicMock(), MagicMock()
         )
         fetch.assert_called_once_with("saved-secret")
-        assert models[0].name == "drex-max"
+        assert models[0].name == "drex-max-v1.1"
         assert models[0].supports_decisions is True
         assert models[0].supports_chat is False
         assert sync.call_args.kwargs["models"][0].supports_chat is False
@@ -235,10 +245,13 @@ def test_decision_catalog_uses_discovered_models() -> None:
     with patch.object(
         api,
         "fetch_nace_models",
-        return_value=[NaceModel(name="drex-max"), NaceModel(name="drex-v2.0")],
+        return_value=[
+            NaceModel(name="drex-max-v1.1"),
+            NaceModel(name="drex-v2.0"),
+        ],
     ) as fetch:
         catalog = api._decision_provider_catalog(
             DecisionProviderConnection(provider="nace", api_key="nace-key")
         )
     fetch.assert_called_once_with("nace-key")
-    assert catalog == {"drex-max": False, "drex-v2.0": False}
+    assert catalog == {"drex-max-v1.1": False, "drex-v2.0": False}
