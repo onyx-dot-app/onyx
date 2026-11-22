@@ -245,7 +245,19 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files (no tool
                                         zip is built once per process for each set), then
                                         HarnessSandbox.sync_skills shows them at /mnt/skills
                                         and skips a VM instance that has them (an error is
-                                        logged; the next call tries again)
+                                        logged; the next call tries again); then the custom
+                                        skills in want_skills resolve to the version the
+                                        user runs, once and again after each new read (a
+                                        built-in is skipped), and
+                                        HarnessSandbox.install_skills writes the files of
+                                        each one that this instance lacks to
+                                        /home/sandbox/.agents/skills/<name>
+  ChatAgent._want_used_skills           before each tool call (before_tool_call, also a
+                                        call on a resume or in a program): the skills_read
+                                        calls and <skill> pick messages in the call's
+                                        context window go to SandboxTurn.want_skills
+                                        (skills/chat.py:used_skill_names), so a resumed or
+                                        woken turn copies them again
   ExecCommandTool / WriteStdinTool      HarnessSandbox.exec_command / write_stdin (each
                                         command gets AGENT_BROWSER_SESSION=<chat session>, so
                                         chats in one VM keep separate browsers); each

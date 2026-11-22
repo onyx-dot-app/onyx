@@ -70,10 +70,12 @@ from onyx.server.features.build.sandbox.models import (
     ExecCommandResult,
     ExecEvent,
     ExecOutputDelta,
+    FileSet,
     HarnessSandboxRef,
     SkillsBundle,
     session_workspace,
 )
+from onyx.skills.built_in import CHAT_SKILLS_PATH
 from tests.external_dependency_unit.microvm.conftest import (
     TENANT_ID,
     AddNode,
@@ -82,6 +84,7 @@ from tests.external_dependency_unit.microvm.conftest import (
 from tests.external_dependency_unit.microvm.fake_agent import (
     InsecureClientFactory,
     RunningFakeAgent,
+    WriteFailure,
 )
 
 MakeSandbox = Callable[[], FirecrackerHarnessSandbox]
@@ -1304,3 +1307,96 @@ def test_skills_go_to_each_vm_instance_once_per_change(
     sandbox.sync_skills(ref, changed)
     assert len(node.agent.swap_mounts) == 3
     assert node.agent.create_calls == 2
+
+
+def test_custom_skills_copy_to_each_vm_instance_once_per_version(
+    monkeypatch: pytest.MonkeyPatch,
+    sandbox: FirecrackerHarnessSandbox,
+    node: RunningFakeAgent,
+    new_ref: NewRef,
+) -> None:
+    ref = new_ref()
+    sandbox_id = str(ref.sandbox_id)
+    root = CHAT_SKILLS_PATH
+    skills: dict[str, FileSet | None] = {
+        "report": {
+            "report/SKILL.md": b"# report",
+            "report/scripts/run.py": b"print(1)",
+        },
+        "gone": None,
+    }
+    loads: list[str] = []
+
+    def load(name: str) -> FileSet | None:
+        loads.append(name)
+        return skills[name]
+
+    def copied() -> dict[str, bytes]:
+        return {
+            path.removeprefix(root + "/"): data
+            for (sid, session, path), data in node.agent.files.items()
+            if sid == sandbox_id and session == "" and path.startswith(root + "/")
+        }
+
+    sandbox.install_skills(ref, {"report": "v1", "gone": "v1"}, load)
+    assert copied() == {
+        "report/SKILL.md": b"# report",
+        "report/scripts/run.py": b"print(1)",
+    }
+    # No command runs in the VM: the daemon writes and renames.
+    assert not node.agent.executions.get(sandbox_id)
+
+    loads.clear()
+    sandbox.install_skills(ref, {"report": "v1"}, load)
+    assert loads == []
+
+    # A new version deletes the files that it no longer has.
+    skills["report"] = {"report/SKILL.md": b"# report v2"}
+    sandbox.install_skills(ref, {"report": "v2"}, load)
+    assert copied() == {"report/SKILL.md": b"# report v2"}
+
+    vm = node.agent.vms[sandbox_id]
+    sandbox._client_factory.client(node.address).stop(
+        sandbox_id=sandbox_id, attempt=vm.attempt, generation=vm.generation
+    )
+    loads.clear()
+    sandbox.install_skills(ref, {"report": "v2"}, load)
+    assert loads == ["report"]
+    assert copied() == {"report/SKILL.md": b"# report v2"}
+
+    # A new version can turn a file into a folder, and a folder into a file.
+    skills["report"] = {"report/data": b"d", "report/SKILL.md/x": b"!"}
+    sandbox.install_skills(ref, {"report": "v3"}, load)
+    assert copied() == {"report/data": b"d", "report/SKILL.md/x": b"!"}
+    reorganized = {"report/data/input.json": b"{}", "report/SKILL.md": b"# v4"}
+    skills["report"] = reorganized
+    sandbox.install_skills(ref, {"report": "v4"}, load)
+    assert copied() == reorganized
+    # The copy finished, so the version is recorded.
+    loads.clear()
+    sandbox.install_skills(ref, {"report": "v4"}, load)
+    assert loads == []
+
+    # A copy that fails part way leaves the old folder whole and no hidden
+    # folder. Its record is gone, so the next call copies again.
+    monkeypatch.setattr(harness_sandbox.secrets, "token_hex", lambda _: "0" * 16)
+    skills["report"] = {"report/SKILL.md": b"# report v5", "report/more.md": b"m"}
+    node.agent.write_failures[f"{root}/.copy-{'0' * 16}/more.md"] = WriteFailure(
+        SandboxDaemonErrorReason.INTERNAL, count=1
+    )
+    sandbox.install_skills(ref, {"report": "v5"}, load)
+    assert copied() == reorganized
+    sandbox.install_skills(ref, {"report": "v5"}, load)
+    assert copied() == {"report/SKILL.md": b"# report v5", "report/more.md": b"m"}
+
+    # A swap whose reply is lost happened anyway: v6 is in place, so a
+    # request for v5 copies again instead of trusting the old record.
+    skills["report"] = {"report/SKILL.md": b"# report v6"}
+    node.agent.lose_rename_reply = True
+    sandbox.install_skills(ref, {"report": "v6"}, load)
+    assert copied() == {"report/SKILL.md": b"# report v6"}
+    skills["report"] = {"report/SKILL.md": b"# report v5", "report/more.md": b"m"}
+    loads.clear()
+    sandbox.install_skills(ref, {"report": "v5"}, load)
+    assert loads == ["report"]
+    assert copied() == {"report/SKILL.md": b"# report v5", "report/more.md": b"m"}

@@ -54,6 +54,11 @@ BUILT_IN_SKILL_FILES_LINE = (
     "for example `python {folder}/scripts/<name>.py`.\n\n"
 )
 
+CUSTOM_SKILL_FILES_LINE = (
+    "Skill files: {folder}/. Run its scripts with their interpreter, "
+    "for example `python {folder}/scripts/<name>.py`.\n\n"
+)
+
 SKILLS_UNAVAILABLE_INTEGRATIONS_LINE = (
     "Some skills come from plugins that need integrations the user cannot use "
     "now: {names}. If a step needs one, tell the user to add it, turn it on or "

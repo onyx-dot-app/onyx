@@ -13,7 +13,7 @@ import posixpath
 import random
 import secrets
 import time
-from collections.abc import Callable, Generator, Iterable, Sequence
+from collections.abc import Callable, Generator, Iterable, Mapping, Sequence
 from contextlib import nullcontext
 from typing import IO
 from uuid import UUID, uuid4
@@ -108,6 +108,7 @@ from onyx.server.features.build.sandbox.firecracker.harness_state import (
     get_skills_image,
     has_marks,
     has_session_records,
+    installed_skills,
     is_purged,
     last_attempt,
     mark_purged,
@@ -117,6 +118,7 @@ from onyx.server.features.build.sandbox.firecracker.harness_state import (
     record_attempt,
     remove_exec_session,
     sessions_on_instance,
+    set_installed_skill,
     set_mark,
     set_skills_image,
 )
@@ -164,6 +166,7 @@ from onyx.server.features.build.sandbox.models import (
     ExecCompletionName,
     ExecEvent,
     ExecOutputDelta,
+    FileSet,
     HarnessSandboxRef,
     SandboxFileType,
     SandboxPathFault,
@@ -172,6 +175,7 @@ from onyx.server.features.build.sandbox.models import (
     SkillsBundle,
     session_workspace,
 )
+from onyx.skills.built_in import CHAT_SKILLS_PATH
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -196,6 +200,10 @@ _SESSION_SETUP_LOCK_PREFIX = "sandbox_fc:session_setup:"
 _SESSION_SETUP_LOCK_SECONDS = 30 * 60.0
 _SKILLS_SYNC_LOCK_PREFIX = "sandbox_fc:skills_sync:"
 _SKILLS_SYNC_LOCK_SECONDS = 5 * 60.0
+_SKILLS_INSTALL_LOCK_PREFIX = "sandbox_fc:skills_install:"
+# A skill copy is written into a hidden folder with this prefix, then swapped
+# into place.
+_SKILL_STAGING_PREFIX = ".copy-"
 # Client token on each started command, to find it when Start gets no answer.
 _START_LABEL = "onyx_start_id"
 # The daemon refuses Start and Run with these while it keeps its most commands.
@@ -300,6 +308,99 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
                     f"The skills drive did not change: {swap.reason}: {swap.message}"
                 )
             set_skills_image(tenant_cache, ref.sandbox_id, image)
+
+    def install_skills(
+        self,
+        ref: HarnessSandboxRef,
+        versions: Mapping[str, str],
+        load: Callable[[str], FileSet | None],
+    ) -> None:
+        if not versions:
+            return
+        placed = self._place(ref)
+        tenant_cache = get_cache_backend(tenant_id=ref.tenant_id)
+        instance = (placed.vm.attempt, placed.vm.generation)
+
+        def missing() -> dict[str, str]:
+            have = installed_skills(tenant_cache, ref.sandbox_id, instance)
+            return {
+                name: version
+                for name, version in versions.items()
+                if have.get(name) != version
+            }
+
+        if not missing():
+            return
+        # One copy of a skill at a time: chat sessions share the VM.
+        with tenant_cache.lock(
+            f"{_SKILLS_INSTALL_LOCK_PREFIX}{ref.sandbox_id}",
+            timeout=_SKILLS_SYNC_LOCK_SECONDS,
+        ):
+            daemon = sandbox_daemon(self._client_factory, placed)
+            for name, version in sorted(missing().items()):
+                if posixpath.basename(name) != name or name.startswith("."):
+                    logger.warning("sandbox_skill_bad_name name=%r", name)
+                    continue
+                try:
+                    files = load(name)
+                    if files is None:
+                        continue
+                    # A swap whose reply is lost may still have happened.
+                    set_installed_skill(
+                        tenant_cache, ref.sandbox_id, instance, name, None
+                    )
+                    self._install_skill(daemon, name, files)
+                    set_installed_skill(
+                        tenant_cache, ref.sandbox_id, instance, name, version
+                    )
+                except Exception:
+                    logger.exception(
+                        "sandbox_skill_install_failed sandbox=%s skill=%s",
+                        ref.sandbox_id,
+                        name,
+                    )
+
+    @staticmethod
+    def _install_skill(daemon: SandboxDaemonClient, name: str, files: FileSet) -> None:
+        """Write the skill's files (`<name>/<path>`) into a hidden folder next
+        to its folder, then swap the two in one step and delete the old one.
+        A copy that fails leaves the old folder as it was."""
+        if any(not path.startswith(f"{name}/") for path in files):
+            raise HarnessSandboxError(f"skill {name!r} has files outside its folder")
+        try:
+            here = daemon.list_files(session_id="", path=CHAT_SKILLS_PATH).entries
+        except SandboxDaemonError as e:
+            if e.reason is not SandboxDaemonErrorReason.FILE_NOT_FOUND:
+                raise
+            here = []
+        # Hidden folders of copies that an API pod did not finish.
+        for entry in here:
+            if entry.name.startswith(_SKILL_STAGING_PREFIX):
+                daemon.delete_file(session_id="", path=entry.path, recursive=True)
+        folder = f"{CHAT_SKILLS_PATH}/{name}"
+        staging = f"{CHAT_SKILLS_PATH}/{_SKILL_STAGING_PREFIX}{secrets.token_hex(8)}"
+        try:
+            for path, data in files.items():
+                daemon.write_file(
+                    session_id="",
+                    path=f"{staging}/{path.removeprefix(f'{name}/')}",
+                    data=data,
+                )
+            try:
+                daemon.rename_file(path=staging, to=folder, exchange=True)
+            except SandboxDaemonError as e:
+                if e.reason is not SandboxDaemonErrorReason.FILE_NOT_FOUND:
+                    raise
+                daemon.rename_file(path=staging, to=folder)
+        finally:
+            # The old folder after the swap, or the unfinished copy. The next
+            # copy deletes what is left.
+            try:
+                daemon.delete_file(session_id="", path=staging, recursive=True)
+            except Exception:
+                logger.warning(
+                    "sandbox_skill_staging_left path=%s", staging, exc_info=True
+                )
 
     def _place(self, ref: HarnessSandboxRef) -> PlacedVm:
         """The running, initialized VM. Init runs only when the daemon is not

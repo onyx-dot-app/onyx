@@ -13,10 +13,14 @@ from onyx.db.plugin import (
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import FileStore, get_default_file_store
-from onyx.prompts.skill_prompts import BUILT_IN_SKILL_FILES_LINE
+from onyx.prompts.skill_prompts import (
+    BUILT_IN_SKILL_FILES_LINE,
+    CUSTOM_SKILL_FILES_LINE,
+)
 from onyx.skills.built_in import (
     BUILT_IN_SKILLS,
     CHAT_SKILLS_MOUNT_PATH,
+    CHAT_SKILLS_PATH,
     BuiltInSkillDefinition,
 )
 from onyx.skills.bundle import (
@@ -28,6 +32,7 @@ from onyx.skills.bundle import (
     strip_skill_md_frontmatter,
 )
 from onyx.skills.models import ChatSkill, CustomSkillBundleContents
+from onyx.skills.rendering import resolve_skill_dir_placeholder
 from onyx.skills.validation import read_stored_bundle_bytes
 from onyx.utils.logger import setup_logger
 
@@ -127,8 +132,15 @@ def read_versions_skill_md(
 
 
 def read_chat_skills_md(
-    skills: Collection[ChatSkill], user_id: UUID, db_session: Session
+    skills: Collection[ChatSkill],
+    user_id: UUID,
+    db_session: Session,
+    *,
+    sandbox: bool,
 ) -> dict[SkillKey, str]:
+    """``sandbox``: the turn has the sandbox tools, so a custom skill's text
+    names the folder that its files copy to, with ``${CLAUDE_SKILL_DIR}``
+    resolved to it as in the copy."""
     skill_md = read_versions_skill_md(
         {
             (skill.version_id, skill.path)
@@ -141,6 +153,12 @@ def read_chat_skills_md(
     for skill in skills:
         definition = BUILT_IN_SKILLS.get(skill.built_in_skill_id or "")
         if definition is None:
+            key = (skill.version_id, skill.path)
+            if sandbox and key in skill_md:
+                folder = f"{CHAT_SKILLS_PATH}/{skill.name}"
+                skill_md[key] = CUSTOM_SKILL_FILES_LINE.format(
+                    folder=folder
+                ) + resolve_skill_dir_placeholder(skill_md[key], folder)
             continue
         try:
             instructions = read_builtin_skill_instructions(definition, skill.path)

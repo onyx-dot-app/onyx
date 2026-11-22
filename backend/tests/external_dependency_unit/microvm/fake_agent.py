@@ -4,8 +4,12 @@ daemon behind its pass-through."""
 import hashlib
 import io
 import itertools
+import os
 import posixpath
 import shlex
+import subprocess
+import sys
+import tempfile
 import threading
 import time
 import zipfile
@@ -13,6 +17,7 @@ import zlib
 from collections.abc import Iterator
 from concurrent import futures
 from dataclasses import dataclass, field
+from typing import Any
 
 import grpc
 from google.rpc import error_details_pb2, status_pb2
@@ -164,6 +169,8 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
         self.file_times: dict[tuple[str, str, str], float] = {}
         # (sandbox_id, session_id, path) -> target of a symlink, as stored.
         self.links: dict[tuple[str, str, str], str] = {}
+        # The next RenameFile happens, then its reply is lost.
+        self.lose_rename_reply = False
         # StatFiles facts of a path, as the guest daemon's os.Root reports
         # them (the Go tests own those rules). Other paths get the facts of
         # their own entry, and a link names nothing.
@@ -895,6 +902,7 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
             "mkdir",
             "true",
             "seq",
+            "python3",
             "soffice",
             "pdftoppm",
         ):
@@ -932,6 +940,9 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
         elif argv[0] == "fail":
             execution.stderr = b"failed\n"
             execution.end(sandboxd_pb2.EXITED, int(argv[1]))
+        elif argv[0] == "python3":
+            code, execution.stderr = self._run_python(sandbox_id, argv[1:])
+            execution.end(sandboxd_pb2.EXITED, code)
         elif argv[0] == "soffice":
             # Like LibreOffice: exit 0 even when the source does not load.
             outdir = argv[argv.index("--outdir") + 1]
@@ -954,6 +965,49 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
             execution
         )
         return execution
+
+    def _run_python(self, sandbox_id: str, args: list[str]) -> tuple[int, bytes]:
+        """`-I -c <code> <file> <dir> ...`: runs the code with real Python on a
+        local copy of the VM file and directory, then copies the results back.
+        Call with the lock held."""
+        flag, dash_c, code, src, root, *rest = args
+        if (flag, dash_c) != ("-I", "-c"):
+            return 2, b"unsupported python3 call\n"
+        with tempfile.TemporaryDirectory() as tmp:
+            local_src = posixpath.join(tmp, "src")
+            local_root = posixpath.join(tmp, "root")
+            src_key = (sandbox_id, "", src)
+            if src_key in self.agent.files:
+                with open(local_src, "wb") as f:
+                    f.write(self.agent.files[src_key])
+            under_root = [
+                key
+                for key in self.agent.files
+                if key[0] == sandbox_id
+                and key[1] == ""
+                and key[2].startswith(root + "/")
+            ]
+            for key in under_root:
+                local = posixpath.join(local_root, key[2].removeprefix(root + "/"))
+                os.makedirs(posixpath.dirname(local), exist_ok=True)
+                with open(local, "wb") as f:
+                    f.write(self.agent.files[key])
+            proc = subprocess.run(
+                [sys.executable, "-I", "-c", code, local_src, local_root, *rest],
+                capture_output=True,
+                timeout=60,
+            )
+            for key in under_root:
+                del self.agent.files[key]
+            for directory, _, names in os.walk(local_root):
+                for name in names:
+                    local = posixpath.join(directory, name)
+                    rel = posixpath.relpath(local, local_root)
+                    with open(local, "rb") as f:
+                        self.agent.files[(sandbox_id, "", f"{root}/{rel}")] = f.read()
+            if not os.path.exists(local_src):
+                self.agent.files.pop(src_key, None)
+        return proc.returncode, proc.stderr
 
     def _stat(self, key: tuple[str, str, str]) -> sandboxd_pb2.PathStat:
         """The canned facts of a path, else those of its own entry. Call
@@ -1425,6 +1479,14 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
             path = key[2]
             if key in self.agent.files and not header.overwrite:
                 abort_daemon(context, SandboxDaemonErrorReason.FILE_EXISTS, path)
+            # Like the daemon: a file cannot be a parent, or replace a folder.
+            for k in self.agent.files:
+                if k[:2] == key[:2] and (
+                    path.startswith(f"{k[2]}/") or k[2].startswith(f"{path}/")
+                ):
+                    abort_daemon(
+                        context, SandboxDaemonErrorReason.INVALID_ARGUMENT, path
+                    )
             digest = self._store(
                 context, sandbox_id, header.session_id, path, data, header
             )
@@ -1550,6 +1612,64 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
             entries=listing[:limit], truncated=len(listing) > limit or depth_cut
         )
 
+    def RenameFile(  # noqa: N802
+        self, request: sandboxd_pb2.RenameFileRequest, context: grpc.ServicerContext
+    ) -> sandboxd_pb2.RenameFileResponse:
+        with self.agent.lock:
+            sandbox_id = self._ready(context)
+            self.agent.daemon_calls.append(("RenameFile", request.path))
+            src = self._file_key(context, sandbox_id, "", request.path)
+            dst = self._file_key(context, sandbox_id, "", request.to)
+            if (
+                request.session_id
+                or src[2].rsplit("/", 1)[0] != dst[2].rsplit("/", 1)[0]
+            ):
+                abort_daemon(
+                    context, SandboxDaemonErrorReason.INVALID_ARGUMENT, request.to
+                )
+            stores: list[dict[tuple[str, str, str], Any]] = [
+                self.agent.files,
+                self.agent.links,
+                self.agent.file_modes,
+            ]
+
+            def under(key: tuple[str, str, str]) -> list[tuple[str, str, str]]:
+                return [
+                    k
+                    for store in stores
+                    for k in store
+                    if k[:2] == key[:2]
+                    and (k[2] == key[2] or k[2].startswith(f"{key[2]}/"))
+                ]
+
+            if not under(src) or (request.exchange and not under(dst)):
+                abort_daemon(context, SandboxDaemonErrorReason.FILE_NOT_FOUND, src[2])
+            if not request.exchange and under(dst):
+                abort_daemon(context, SandboxDaemonErrorReason.FILE_EXISTS, dst[2])
+            for store in stores:
+                moved = {
+                    k: v
+                    for k, v in store.items()
+                    if k[:2] == src[:2]
+                    and (k[2] == src[2] or k[2].startswith(f"{src[2]}/"))
+                }
+                swapped = {
+                    k: v
+                    for k, v in store.items()
+                    if k[:2] == dst[:2]
+                    and (k[2] == dst[2] or k[2].startswith(f"{dst[2]}/"))
+                }
+                for k in [*moved, *swapped]:
+                    del store[k]
+                for k, v in moved.items():
+                    store[(*k[:2], dst[2] + k[2][len(src[2]) :])] = v
+                for k, v in swapped.items():
+                    store[(*k[:2], src[2] + k[2][len(dst[2]) :])] = v
+            if self.agent.lose_rename_reply:
+                self.agent.lose_rename_reply = False
+                context.abort(grpc.StatusCode.UNAVAILABLE, "connection reset")
+            return sandboxd_pb2.RenameFileResponse()
+
     def DeleteFile(  # noqa: N802
         self, request: sandboxd_pb2.DeleteFileRequest, context: grpc.ServicerContext
     ) -> sandboxd_pb2.DeleteFileResponse:
@@ -1568,6 +1688,12 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
                 self._file_key(context, sandbox_id, request.session_id, request.path),
             )
             path = key[2]
+            # Like the daemon: a path under a file is not a path.
+            if any(
+                k[:2] == key[:2] and path.startswith(f"{k[2]}/")
+                for k in self.agent.files
+            ):
+                abort_daemon(context, SandboxDaemonErrorReason.INVALID_ARGUMENT, path)
             self.agent.file_modes.pop(key, None)
             if (
                 self.agent.files.pop(key, None) is not None

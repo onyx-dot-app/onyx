@@ -351,7 +351,7 @@ def test_the_sandbox_section_names_the_turn_s_sandbox_tools(code_mode: bool) -> 
 
     turn = SandboxTurn(
         tenant_id="t",
-        user_id=uuid4(),
+        user=MagicMock(id=uuid4()),
         chat_session_id=uuid4(),
         vm_chat_files=[],
         copy_vm_chat_files=False,
