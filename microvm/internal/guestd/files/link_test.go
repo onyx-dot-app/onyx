@@ -148,3 +148,49 @@ func TestLinkKeepsAnEntryThatACommandMovesInDuringTheSwap(t *testing.T) {
 		t.Fatalf("files after the call: %v, want both kept", kept)
 	}
 }
+
+func TestLinkPutsBackAnEntryWhenACommandDeletesTheNewLink(t *testing.T) {
+	dir, err := filepath.EvalSymlinks(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := New(Config{SessionsRoot: filepath.Join(dir, "sessions")})
+	if err != nil {
+		t.Fatal(err)
+	}
+	skills := dir + "/skills"
+	if err := os.MkdirAll(skills, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("/mnt/skills/old", skills+"/pptx"); err != nil {
+		t.Fatal(err)
+	}
+	// After the check sees a link, a command replaces it with a folder;
+	// after the swap, it deletes the new link.
+	s.linkChecked = func() {
+		if err := os.Remove(skills + "/pptx"); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(skills+"/pptx/scripts", 0o755); err != nil {
+			t.Fatal(err)
+		}
+	}
+	s.linkSwapped = func() {
+		if err := os.Remove(skills + "/pptx"); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := s.Link("", skills+"/pptx", "/mnt/skills/pptx"); !errors.Is(err, ErrExists) {
+		t.Fatalf("link over a folder: %v", err)
+	}
+	ents, err := os.ReadDir(skills)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(ents) != 1 || ents[0].Name() != "pptx" || !ents[0].IsDir() {
+		t.Fatalf("entries after the call: %v, want only the folder pptx", ents)
+	}
+	if _, err := os.Stat(skills + "/pptx/scripts"); err != nil {
+		t.Fatalf("folder contents: %v", err)
+	}
+}

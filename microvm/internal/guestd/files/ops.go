@@ -709,7 +709,13 @@ func (s *Store) Link(sessionID, p, target string) error {
 		_ = e.root.Remove(path.Join(parent, tmp))
 		return nil
 	}
-	if err := renameAt(dir, tmp, name, true); err != nil {
+	// A command can delete the new link first; then the entry moves back
+	// without a swap.
+	err = renameAt(dir, tmp, name, true)
+	if errors.Is(err, ErrNotFound) {
+		err = renameAt(dir, tmp, name, false)
+	}
+	if err != nil {
 		return fmt.Errorf("put back the entry at %s: %w", p, err)
 	}
 	drop()
