@@ -1085,25 +1085,6 @@ class LitellmLLM(LLM):
             else self.config.model_provider
         )
 
-        # Azure responses-bridge calls must target the v1 responses surface:
-        # with a dated api-version, LiteLLM builds the legacy /openai/responses
-        # URL, which sovereign clouds (e.g. Azure Government) do not serve
-        # (#11420). Dropping the dated version lets LiteLLM apply its responses
-        # default (AZURE_DEFAULT_RESPONSES_API_VERSION env var, default
-        # "preview"), which routes to /openai/v1/responses — working on all
-        # clouds with reasoning summaries intact. Admin-configured v1 versions
-        # ("preview"/"latest"/"v1") pass through, and the dated version still
-        # applies to every non-bridge call (e.g. Azure chat completions).
-        api_version = self._api_version or None
-        if (
-            is_openai_model
-            and self._model_provider == LlmProviderNames.AZURE
-            and api_version is not None
-            and api_version not in _AZURE_V1_API_VERSIONS
-        ):
-            _log_azure_responses_api_version_override(self._api_base, api_version)
-            api_version = None
-
         model_bare = self.config.deployment_name or self.config.model_name
         if self._api_surface is LlmApiSurface.OPENAI_RESPONSES:
             # Drives LiteLLM's completions -> responses bridge.
@@ -1347,6 +1328,32 @@ class LitellmLLM(LLM):
                     "reasoning", _OPENAI_REASONING_NONE
                 )
             required_kwarg_keys = required_kwarg_keys | {"reasoning_effort"}
+
+        # Azure responses-bridge calls must target the v1 responses surface:
+        # with a dated api-version, LiteLLM builds the legacy /openai/responses
+        # URL, which sovereign clouds (e.g. Azure Government) do not serve
+        # (#11420). Dropping the dated version lets LiteLLM apply its responses
+        # default (AZURE_DEFAULT_RESPONSES_API_VERSION env var, default
+        # "preview"), which routes to /openai/v1/responses — working on all
+        # clouds with reasoning summaries intact. Admin-configured v1 versions
+        # ("preview"/"latest"/"v1") pass through, and the dated version still
+        # applies to every non-bridge call (e.g. Azure chat completions).
+        # LiteLLM bridges a tool turn only when its effort is not "none".
+        bridged_effort = optional_kwargs.get("reasoning_effort")
+        if isinstance(bridged_effort, dict):
+            bridged_effort = bridged_effort.get("effort")
+        litellm_takes_tool_turn_bridge = (
+            litellm_bridges_tool_turn and bridged_effort != _OPENAI_REASONING_NONE
+        )
+        api_version = self._api_version or None
+        if (
+            (is_openai_model or litellm_takes_tool_turn_bridge)
+            and self._model_provider == LlmProviderNames.AZURE
+            and api_version is not None
+            and api_version not in _AZURE_V1_API_VERSIONS
+        ):
+            _log_azure_responses_api_version_override(self._api_base, api_version)
+            api_version = None
 
         # Every reasoning style can land on the Responses API, and replaying a
         # reasoning item by id alone needs server storage; the encrypted content
