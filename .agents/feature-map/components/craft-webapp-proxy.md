@@ -56,6 +56,7 @@ Neighbours own the rest:
 browser iframe  GET /api/build/sessions/{id}/webapp/{path}
   webapp_proxy.py:get_webapp                 public route, auth inside the handler
     _check_webapp_access                     cached grant, else DB scope check
+    mark_preview_activity                    cache mark; the idle reaper counts it
     _proxy_request                           GET only, headers filtered
       _get_sandbox_url                       cached URL, else get_webapp_target_async
         SandboxManager.get_webapp_url        in-cluster address of the pod
@@ -80,7 +81,7 @@ the script again with the new port and starts the server in the background
 only if the app exists.
 
 **Port lifecycle.** Each session that can show a preview holds a port, unique
-per user (`server/features/build/db/build_session.py:reserve_nextjs_port__no_commit`).
+per user (`db/build_session.py:reserve_nextjs_port__no_commit`).
 Sleep clears all of a user's ports (`clear_nextjs_ports_for_user`).
 `server/features/build/session/session_ready.py:ensure_session_ready` reserves
 a port for any session that has none when it rebuilds the session workspace,

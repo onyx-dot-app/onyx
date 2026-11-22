@@ -19,8 +19,13 @@ from onyx.access.access import user_can_access_chat_file
 from onyx.configs.constants import CHAT_SESSION_ID_FILE_METADATA_KEY, FileOrigin
 from onyx.db.chat import create_chat_session
 from onyx.db.enums import ChatSessionSharedStatus
-from onyx.db.models import ChatSession, FileRecord, User
-from onyx.file_store.utils import chat_image_gen_metadata
+from onyx.db.models import (
+    ChatArtifact,
+    ChatArtifactVersion,
+    ChatSession,
+    FileRecord,
+    User,
+)
 from tests.external_dependency_unit.conftest import create_test_user, delete_test_user
 
 
@@ -57,14 +62,17 @@ def _new_session(db_session: Session, user_id: UUID) -> ChatSession:
 
 
 def _seed_generated_file(
-    db_session: Session, users: _Users, file_metadata: dict[str, str] | None
+    db_session: Session,
+    users: _Users,
+    file_metadata: dict[str, str] | None,
+    origin: FileOrigin = FileOrigin.CHAT_IMAGE_GEN,
 ) -> str:
     file_id = str(uuid4())
     db_session.add(
         FileRecord(
             file_id=file_id,
             display_name="GeneratedImage",
-            file_origin=FileOrigin.CHAT_IMAGE_GEN,
+            file_origin=origin,
             file_type="image/png",
             file_metadata=file_metadata,
             bucket_name="test-bucket",
@@ -81,7 +89,7 @@ def test_owner_can_read_their_generated_file(
 ) -> None:
     session = _new_session(db_session, users.owner.id)
     file_id = _seed_generated_file(
-        db_session, users, chat_image_gen_metadata(session.id)
+        db_session, users, {CHAT_SESSION_ID_FILE_METADATA_KEY: str(session.id)}
     )
 
     assert user_can_access_chat_file(file_id, users.owner, db_session)
@@ -92,7 +100,7 @@ def test_other_user_cannot_read_a_generated_file_from_a_private_session(
 ) -> None:
     session = _new_session(db_session, users.owner.id)
     file_id = _seed_generated_file(
-        db_session, users, chat_image_gen_metadata(session.id)
+        db_session, users, {CHAT_SESSION_ID_FILE_METADATA_KEY: str(session.id)}
     )
 
     assert not user_can_access_chat_file(file_id, users.intruder, db_session)
@@ -105,7 +113,7 @@ def test_other_user_can_read_a_generated_file_from_a_public_session(
     session.shared_status = ChatSessionSharedStatus.PUBLIC
     db_session.commit()
     file_id = _seed_generated_file(
-        db_session, users, chat_image_gen_metadata(session.id)
+        db_session, users, {CHAT_SESSION_ID_FILE_METADATA_KEY: str(session.id)}
     )
 
     assert user_can_access_chat_file(file_id, users.intruder, db_session)
@@ -119,7 +127,7 @@ def test_deleted_public_session_no_longer_shares_its_generated_file(
     session.deleted = True
     db_session.commit()
     file_id = _seed_generated_file(
-        db_session, users, chat_image_gen_metadata(session.id)
+        db_session, users, {CHAT_SESSION_ID_FILE_METADATA_KEY: str(session.id)}
     )
 
     assert not user_can_access_chat_file(file_id, users.intruder, db_session)
@@ -139,3 +147,49 @@ def test_malformed_session_stamp_is_denied(db_session: Session, users: _Users) -
     )
 
     assert not user_can_access_chat_file(file_id, users.owner, db_session)
+
+
+@pytest.mark.parametrize(
+    ("origin", "shared"),
+    [
+        (FileOrigin.CHAT_IMAGE_GEN, True),
+        # A published file's chat is its artifact's, and a stamp on
+        # another origin, such as an agent checkpoint file, grants nothing.
+        (FileOrigin.CHAT_ARTIFACT, False),
+        (FileOrigin.OTHER, False),
+    ],
+)
+def test_only_generated_images_are_shared_by_their_session_stamp(
+    db_session: Session, users: _Users, origin: FileOrigin, shared: bool
+) -> None:
+    session = _new_session(db_session, users.owner.id)
+    session.shared_status = ChatSessionSharedStatus.PUBLIC
+    db_session.commit()
+    file_id = _seed_generated_file(
+        db_session, users, {CHAT_SESSION_ID_FILE_METADATA_KEY: str(session.id)}, origin
+    )
+
+    assert user_can_access_chat_file(file_id, users.intruder, db_session) is shared
+
+
+def test_a_published_file_follows_its_artifacts_chat(
+    db_session: Session, users: _Users
+) -> None:
+    session = _new_session(db_session, users.owner.id)
+    file_id = _seed_generated_file(db_session, users, None, FileOrigin.CHAT_ARTIFACT)
+    # Unlike an unstamped generated image, a published file without an
+    # artifact is denied.
+    assert not user_can_access_chat_file(file_id, users.owner, db_session)
+    artifact = ChatArtifact(chat_session_id=session.id, path="/w/a.md")
+    db_session.add(artifact)
+    db_session.flush()
+    db_session.add(
+        ChatArtifactVersion(artifact_id=artifact.id, version=1, file_id=file_id)
+    )
+    db_session.commit()
+
+    assert user_can_access_chat_file(file_id, users.owner, db_session)
+    assert not user_can_access_chat_file(file_id, users.intruder, db_session)
+    session.shared_status = ChatSessionSharedStatus.PUBLIC
+    db_session.commit()
+    assert user_can_access_chat_file(file_id, users.intruder, db_session)

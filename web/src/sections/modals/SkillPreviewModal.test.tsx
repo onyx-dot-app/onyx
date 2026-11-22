@@ -22,7 +22,7 @@ function preview(overrides: Partial<SkillPreview> = {}): SkillPreview {
     description: "Looks up CRM records",
     author_email: "owner@example.com",
     instructions_markdown: "Look up the requested record.",
-    external_app: null,
+    files: [],
     ...overrides,
   };
 }
@@ -44,47 +44,26 @@ describe("SkillPreviewModal", () => {
     expect(screen.getByText("CRM lookup")).toBeVisible();
   });
 
-  it("explains when the associated external app must be connected", () => {
+  it("shows the unavailable reason of the caller", () => {
     mockUseSWR.mockReturnValue({
-      data: preview({
-        external_app: {
-          external_app_id: 42,
-          name: "Acme CRM",
-          enabled: true,
-          ready: false,
-        },
-      }),
+      data: preview(),
       error: undefined,
       isLoading: false,
     });
 
-    render(<SkillPreviewModal open skillId="skill-id" onClose={jest.fn()} />);
+    render(
+      <SkillPreviewModal
+        open
+        skillId="skill-id"
+        unavailableReason="Not available in this workspace."
+        onClose={jest.fn()}
+      />
+    );
 
     expect(screen.getByText("Skill unavailable")).toBeInTheDocument();
     expect(
-      screen.getByText(
-        "Connect app “Acme CRM” from the Apps page to use this skill."
-      )
+      screen.getByText("Not available in this workspace.")
     ).toBeInTheDocument();
-  });
-
-  it("does not warn when the associated external app is ready", () => {
-    mockUseSWR.mockReturnValue({
-      data: preview({
-        external_app: {
-          external_app_id: 42,
-          name: "Acme CRM",
-          enabled: true,
-          ready: true,
-        },
-      }),
-      error: undefined,
-      isLoading: false,
-    });
-
-    render(<SkillPreviewModal open skillId="skill-id" onClose={jest.fn()} />);
-
-    expect(screen.queryByText("Skill unavailable")).not.toBeInTheDocument();
   });
 });
 

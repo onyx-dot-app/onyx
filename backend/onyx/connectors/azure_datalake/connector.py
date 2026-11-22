@@ -10,7 +10,6 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.azure_datalake.access import (
     AzureDataLakeAccessWalker,
     build_access_walker,
-    prefix_azure_datalake_external_groups,
 )
 from onyx.connectors.azure_datalake.models import (
     AzureDataLakeCheckpoint,
@@ -54,8 +53,7 @@ from onyx.connectors.models import (
     SlimDocument,
 )
 from onyx.db.enums import HierarchyNodeType
-from onyx.file_processing.extract_file_text import get_file_ext
-from onyx.file_processing.file_types import OnyxFileExtensions
+from onyx.file_processing.file_types import is_indexable_file_type
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 
@@ -79,12 +77,10 @@ _ATTEMPT_ERRORS = (
 
 
 def has_indexable_name(path: str, *, allow_images: bool) -> bool:
-    ext: str = get_file_ext(posixpath.basename(path))
-    if ext not in OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS:
-        logger.debug("Skipping unsupported file type: %s", path)
-        return False
-    if ext in OnyxFileExtensions.IMAGE_EXTENSIONS and not allow_images:
-        logger.debug("Skipping image file: %s (images are off)", path)
+    if not is_indexable_file_type(
+        posixpath.basename(path), None, allow_images=allow_images
+    ):
+        logger.debug("Skipping file type that is not indexed: %s", path)
         return False
     return True
 
@@ -316,18 +312,14 @@ class AzureDataLakeConnector(
         each with who may list it."""
         container: HierarchyNode = self._container_node()
         if walker is not None:
-            container.external_access = prefix_azure_datalake_external_groups(
-                walker.container_access()
-            )
+            container.external_access = walker.container_access()
         nodes: list[HierarchyNode] = [container]
         for directory in self._ancestor_directories(
             f"{self.path_prefix}/" if self.path_prefix else ""
         ):
             node: HierarchyNode = self._directory_node(directory)
             if walker is not None:
-                node.external_access = prefix_azure_datalake_external_groups(
-                    walker.directory_access(directory)
-                )
+                node.external_access = walker.directory_access(directory)
             nodes.append(node)
         return nodes
 
@@ -371,9 +363,7 @@ class AzureDataLakeConnector(
                 if path.is_directory:
                     node: HierarchyNode = self._directory_node(path.name)
                     if path_access is not None:
-                        node.external_access = prefix_azure_datalake_external_groups(
-                            path_access
-                        )
+                        node.external_access = path_access
                     batch.append(node)
                     continue
                 batch.append(

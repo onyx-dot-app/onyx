@@ -1,0 +1,165 @@
+# Approved Celery tasks and beat entries, read by check_celery_task_allowlist.py.
+#
+# A Celery task is for work that runs again: a periodic check, a step of a
+# pipeline, or a user-started job that is heavy, long, or must survive an API
+# restart. A run-once backfill or migration is not a task.
+#
+# Format, one entry for each line:
+#   task <OnyxCeleryTask constant>: <why this work is a Celery task>
+#   beat <beat entry name>: <why it runs on a schedule>
+# A line may end with `# one-off: <what must happen before removal>`. Those
+# entries break the rule and stay only until the condition holds.
+
+# Indexing pipeline
+task CHECK_FOR_INDEXING: Beat check that finds cc-pairs due for indexing and sends their docfetching tasks.
+task CONNECTOR_DOC_FETCHING_TASK: Long connector crawl for one index attempt, on the docfetching worker.
+task DOCPROCESSING_TASK: Chunks and embeds one fetched batch, on the docprocessing worker.
+task DOCCONVERSION_TASK: Converts one stub batch from a lister into a document batch, on the docconversion worker.
+task TARGETED_REINDEX_TASK: User-started reindex of chosen documents, too long for an API request.
+task CHECK_FOR_CHECKPOINT_CLEANUP: Beat check that finds old index attempt checkpoints and sends their cleanup.
+task CLEANUP_CHECKPOINT: Deletes the checkpoint of one index attempt, sent for each by its beat check.
+task CHECK_FOR_INDEX_ATTEMPT_CLEANUP: Beat check that finds old index attempts and sends their cleanup in batches.
+task CLEANUP_INDEX_ATTEMPT: Deletes one batch of old index attempts, sent by its beat check.
+task CHECK_FOR_HIERARCHY_FETCHING: Beat check that finds connectors due for a hierarchy fetch and sends it.
+task CONNECTOR_HIERARCHY_FETCHING_TASK: Long fetch of one connector's folder hierarchy, on a worker.
+
+# Document index sync, pruning and deletion
+task CHECK_FOR_VESPA_SYNC_TASK: Beat check that finds documents, document sets and groups to sync to the document index.
+task DOCUMENT_INDEX_METADATA_SYNC_TASK: Syncs one document's metadata to the document index, sent by the sync check.
+task CHECK_FOR_PRUNING: Beat check that finds cc-pairs due for pruning and sends the prune generator.
+task CONNECTOR_PRUNING_GENERATOR_TASK: Long listing of a source's documents to find removed ones, on the heavy worker.
+task CHECK_FOR_CONNECTOR_DELETION: Beat check that drives the deletion of cc-pairs marked for deletion.
+task DOCUMENT_BATCH_BY_CC_PAIR_CLEANUP_TASK: Removes one batch of documents from a deleted or pruned cc-pair.
+task DOCUMENT_BY_CC_PAIR_CLEANUP_TASK: Runs messages queued before the batch cleanup task replaced it. No code sends it. # one-off: remove once no deployment can still hold a queued message from before the batch cleanup task
+
+# Reindex port and old index reclaim
+task CHECK_FOR_PORT: Beat check that fails stalled port attempts and sends new ones after a model change.
+task RUN_PORT_ATTEMPT: Long copy of one cc-pair's documents into the new index, resumable from a cursor.
+task RUN_USER_FILE_PORT_ATTEMPT: Long copy of user files into the new index after a model change.
+task CHECK_FOR_OLD_INDEX_RECLAIM: Beat check that sends one reclaim task for each old index after a reindex.
+task RUN_OLD_INDEX_RECLAIM: Steps one old index through its deletion state machine, off the beat worker.
+
+# Data migrations that run as beat tasks
+task BACKFILL_CC_PAIR_IDS_TASK: Backfills cc_pair_ids onto chunks written before the field existed, too large for a deploy migration. # one-off: remove once every supported deployment has finished the backfill
+task TABULAR_RECHUNK_TASK: Re-chunks tabular documents indexed with the old strategy, too large for a deploy migration. # one-off: remove once every supported deployment has finished the re-chunk
+
+# Permission sync (EE)
+task CHECK_FOR_DOC_PERMISSIONS_SYNC: Beat check that finds cc-pairs due for a permission sync and sends it.
+task CONNECTOR_PERMISSION_SYNC_GENERATOR_TASK: Long crawl of one source's document permissions, on the heavy worker.
+task CHECK_FOR_EXTERNAL_GROUP_SYNC: Beat check that finds cc-pairs due for a group sync and sends it.
+task CONNECTOR_EXTERNAL_GROUP_SYNC_GENERATOR_TASK: Long crawl of one source's groups, on the heavy worker.
+
+# User files
+task CHECK_FOR_USER_FILE_PROCESSING: Beat check that sends a processing task for each user file in PROCESSING.
+task PROCESS_SINGLE_USER_FILE: Parses and indexes one uploaded file, on the user file worker.
+task CHECK_FOR_USER_FILE_PROJECT_SYNC: Beat check that sends a project sync task for each user file that needs one.
+task PROCESS_SINGLE_USER_FILE_PROJECT_SYNC: Syncs one user file's project membership to the document index.
+task CHECK_FOR_USER_FILE_DELETE: Beat check that sends a delete task for each user file in DELETING.
+task DELETE_SINGLE_USER_FILE: Deletes one user file from the index and file store.
+task CHECK_FOR_INCOGNITO_FILE_CLEANUP: Beat check that retries teardown of incognito chat contexts and their blobs.
+
+# Connector capability checks and edits
+task CHECK_FOR_SCHEDULED_CAPABILITY_CHECKS: Beat check that starts the checks of every pair whose check is due.
+task RUN_CAPABILITY_CHECKS: Calls the source for each capability check of a scope, too slow for an API request.
+task RUN_DRAFT_CAPABILITY_CHECKS: Runs the checks of a connector form before it is saved, too slow for an API request.
+task CHECK_FOR_STALE_CAPABILITY_RUNS: Beat check that retires check runs past their deadline.
+task CLEANUP_OLD_CAPABILITY_CHECK_RUNS: Beat cleanup of finished check runs past the retention window.
+task CLEANUP_STALE_DRAFT_CREDENTIALS: Beat cleanup of draft credentials from connector forms never saved.
+task CHECK_FOR_STAGED_CONNECTOR_FILE_CLEANUP: Beat cleanup of files uploaded for connector edits that no plan used.
+
+# Chat retention, exports and reports (EE)
+task CHECK_TTL_MANAGEMENT_TASK: Beat check that starts a chat retention cleanup chain.
+task PERFORM_TTL_MANAGEMENT_TASK: Deletes one batch of expired chat sessions and chains the next batch.
+task PURGE_EXPIRED_HARNESS_SESSIONS: Deletes sandbox session saves that chat retention no longer keeps.
+task EXPORT_QUERY_HISTORY_TASK: User-started CSV export of chat history, too heavy for the API server.
+task EXPORT_QUERY_HISTORY_CLEANUP_TASK: Beat cleanup of finished and failed query history export rows.
+task GENERATE_USAGE_REPORT_TASK: Builds the usage report files, from a user request or the monthly beat entry.
+task EXPORT_LOGS_COLLECT_TASK: Collects one container's log files for a user-started log export.
+task EXPORT_LOGS_CLEANUP_TASK: Beat cleanup of log export files past their retention window.
+task HOOK_EXECUTION_LOG_CLEANUP_TASK: Beat cleanup of old hook execution logs.
+
+# Craft sandboxes and scheduled runs
+task CLEANUP_IDLE_SANDBOXES: Beat sweep of one tenant's stale and idle sandbox rows.
+task RECONCILE_SANDBOX_RUNTIMES: Beat check of every live sandbox runtime against its tenant's database state.
+task PUSH_SKILLS_TO_USERS: Pushes skills to running sandboxes, out of the request that changed them.
+task SYNC_MARKETPLACE: Syncs one GitHub marketplace when a user asks; downloads and stores many plugin bundles.
+task SCHEDULED_TASKS_DISPATCH_DUE: Beat check that claims due scheduled tasks and sends their runs.
+task SCHEDULED_TASKS_RUN: Runs one user-scheduled Craft task, on the scheduled tasks worker.
+task SCHEDULED_TASKS_CLEANUP_STUCK: Beat cleanup that fails abandoned scheduled runs.
+
+# Evals
+task EVAL_RUN_TASK: Superuser-started evaluation run, too long for an API request.
+task SCHEDULED_EVAL_TASK: Weekly evaluation of the configured datasets.
+
+# Auth, licensing and SSO
+task CLEANUP_OAUTH_PROVIDER_GRANTS: Beat cleanup of expired OAuth provider grants.
+task CLEANUP_OAUTH_PROVIDER_CLIENTS: Beat cleanup of idle OAuth provider clients.
+task CHECK_LICENSE_EXPIRY_NOTIFICATIONS: Daily check that notifies admins of a license that expires soon.
+task RECLAIM_LICENSE: Fetches a renewed license from the control plane before the stored one expires, off the request path.
+task REVALIDATE_SSO_DOMAINS_TASK: Beat check that revokes SSO domain routing that is no longer verified.
+task CHECK_FOR_AUTO_LLM_UPDATE: Beat sync of auto-update LLM providers with their published model lists.
+
+# Monitoring
+task MONITOR_CELERY_QUEUES: Beat metric of queue lengths.
+task MONITOR_PROCESS_MEMORY: Beat metric of worker process memory.
+task MONITOR_OPENSEARCH_RESOURCES: Beat probe of OpenSearch resource health.
+task CELERY_BEAT_HEARTBEAT: Beat heartbeat key that shows the scheduler is alive.
+task COLLECT_FLEET_TELEMETRY: Beat collection of fleet telemetry.
+
+# Cloud
+task CLOUD_BEAT_TASK_GENERATOR: Fans one beat entry out to a task for each tenant.
+task CLOUD_MONITOR_ALEMBIC: Beat check that every tenant is on the same Alembic revision.
+task CLOUD_MONITOR_CELERY_QUEUES: Beat metric of queue lengths across the cloud.
+task CLOUD_MONITOR_CELERY_PIDBOX: Beat cleanup of pidbox queues left by old workers.
+task CLOUD_CHECK_AVAILABLE_TENANTS: Beat check that keeps enough tenants provisioned in advance.
+
+# Beat entries
+beat check-for-indexing: Finds cc-pairs due for indexing every 15 seconds.
+beat check-for-checkpoint-cleanup: Finds old checkpoints every hour.
+beat check-for-index-attempt-cleanup: Finds old index attempts every 30 minutes.
+beat check-for-hierarchy-fetching: Finds connectors due for a hierarchy fetch every hour.
+beat check-for-vespa-sync: Finds documents to sync to the document index every 20 seconds.
+beat check-for-pruning: Finds cc-pairs due for pruning every 20 seconds.
+beat check-for-connector-deletion: Drives cc-pair deletion every 20 seconds.
+beat check-for-port: Drives reindex ports every 30 seconds.
+beat check-for-old-index-reclaim: Finds old indexes to reclaim every 30 minutes.
+beat backfill-cc-pair-ids: Resumes the cc_pair_ids backfill every 5 minutes. # one-off: remove with task BACKFILL_CC_PAIR_IDS_TASK
+beat tabular-rechunk: Resumes the tabular re-chunk every 5 minutes when it is enabled. # one-off: remove with task TABULAR_RECHUNK_TASK
+beat check-for-doc-permissions-sync: Finds cc-pairs due for a permission sync every 30 seconds.
+beat check-for-external-group-sync: Finds cc-pairs due for a group sync every 20 seconds.
+beat check-for-user-file-processing: Finds user files to process every 20 seconds.
+beat check-for-user-file-project-sync: Finds user files to sync every 20 seconds.
+beat check-for-user-file-delete: Finds user files to delete every 20 seconds.
+beat check-for-incognito-file-cleanup: Retries incognito teardown every 10 minutes.
+beat check-for-scheduled-capability-checks: Starts due capability checks every 5 minutes.
+beat check-for-stale-capability-runs: Retires stale check runs every 10 minutes.
+beat cleanup-old-capability-check-runs: Deletes old check runs daily.
+beat cleanup-stale-draft-credentials: Deletes stale draft credentials every 30 days.
+beat check-for-staged-connector-file-cleanup: Deletes unused staged connector files every hour.
+beat check-ttl-management: Starts chat retention cleanup on its configured interval.
+beat export-query-history-cleanup-task: Cleans query history export rows every hour.
+beat autogenerate-usage-report: Builds a usage report every 30 days.
+beat export-logs-cleanup-task: Deletes old log exports every hour.
+beat hook-execution-log-cleanup: Deletes old hook execution logs daily.
+beat cleanup-idle-sandboxes: Sweeps stale and idle sandboxes on its configured interval.
+beat reconcile-sandbox-runtimes: Reconciles sandbox runtimes every 15 minutes on a self-hosted deployment.
+beat {ONYX_CLOUD_CELERY_TASK_PREFIX}_reconcile-sandbox-runtimes: Reconciles sandbox runtimes every 15 minutes across the cloud.
+beat dispatch-due-scheduled-tasks: Dispatches due scheduled tasks every 30 seconds.
+beat cleanup-stuck-scheduled-runs: Fails stuck scheduled runs every hour.
+beat scheduled-eval-pipeline: Runs the configured eval datasets weekly.
+beat cleanup-oauth-provider-grants: Deletes expired OAuth grants daily.
+beat cleanup-oauth-provider-clients: Deletes idle OAuth clients daily on a self-hosted deployment.
+beat {ONYX_CLOUD_CELERY_TASK_PREFIX}_cleanup-oauth-provider-clients: Deletes idle OAuth clients daily across the cloud.
+beat check-license-expiry-notifications: Checks license expiry daily.
+beat revalidate-sso-domains: Revalidates SSO domains every 6 hours.
+beat check-for-auto-llm-update: Syncs auto-update LLM providers on their configured interval.
+beat monitor-celery-queues: Records queue lengths every 10 seconds.
+beat monitor-process-memory: Records worker memory every 5 minutes.
+beat monitor-opensearch-resources: Probes OpenSearch resources on a self-hosted deployment.
+beat {ONYX_CLOUD_CELERY_TASK_PREFIX}_monitor-opensearch-resources: Probes OpenSearch resources across the cloud.
+beat celery-beat-heartbeat: Writes the scheduler heartbeat every minute.
+beat collect-fleet-telemetry: Collects fleet telemetry on its configured interval.
+beat {ONYX_CLOUD_CELERY_TASK_PREFIX}_monitor-alembic: Checks tenant Alembic revisions every hour.
+beat {ONYX_CLOUD_CELERY_TASK_PREFIX}_monitor-celery-queues: Records cloud queue lengths every 30 seconds.
+beat {ONYX_CLOUD_CELERY_TASK_PREFIX}_monitor-celery-pidbox: Cleans old pidboxes every 4 hours.
+beat {ONYX_CLOUD_CELERY_TASK_PREFIX}_check-available-tenants: Keeps provisioned tenants available every 2 minutes.

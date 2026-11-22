@@ -9,12 +9,18 @@ import multiprocessing as mp
 import sys
 import traceback
 from collections.abc import Callable
-from dataclasses import dataclass
 from multiprocessing.context import SpawnProcess
+from multiprocessing.queues import Queue
 from typing import Any, Literal, Optional
+
+from pydantic import BaseModel, ConfigDict, PrivateAttr
 
 from onyx.configs.constants import POSTGRES_CELERY_WORKER_INDEXING_CHILD_APP_NAME
 from onyx.db.engine.sql_engine import SqlEngine
+from onyx.server.metrics.child_process_relay import (
+    start_relay_writer,
+    stop_relay_writer,
+)
 from onyx.utils.fleet_telemetry import (
     EXIT_FLUSH_SECONDS,
     start_telemetry,
@@ -94,6 +100,8 @@ def _initializer(
 
     # The parent worker reports this container; the child only delivers its counters.
     start_telemetry("indexing", report_process=False)
+    # Nothing scrapes this process: the worker serves its metrics.
+    start_relay_writer()
 
     # Proceed with executing the target function
     try:
@@ -111,6 +119,7 @@ def _initializer(
 
         sys.exit(255)  # use 255 to indicate a generic exception
     finally:
+        stop_relay_writer()
         # Bounded: the child exits after at most this wait, delivered or not.
         stop_telemetry(flush_timeout=EXIT_FLUSH_SECONDS)
         CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
@@ -130,14 +139,15 @@ def _run_in_process(
     _initializer(func, queue, args, kwargs)
 
 
-@dataclass
-class SimpleJob:
+class SimpleJob(BaseModel):
     """Drop in replacement for `dask.distributed.Future`"""
+
+    model_config = ConfigDict(strict=True, arbitrary_types_allowed=True)
 
     id: int
     process: Optional["SpawnProcess"] = None
-    queue: Optional[mp.Queue] = None
-    _exception: Optional[str] = None
+    queue: Queue | None = None
+    _exception: Optional[str] = PrivateAttr(default=None)
 
     def cancel(self) -> bool:
         return self.release()

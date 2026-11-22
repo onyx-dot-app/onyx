@@ -137,9 +137,9 @@ beat: check_for_vespa_sync_task (primary)            [[document-index]]
   membership needs no sync, because the query reads the user's current groups.
 - **Removal.** Pruning (`check_for_pruning`) and connector deletion
   (`check_for_connector_deletion_task`) both fan out
-  `background/celery/tasks/shared/tasks.py:document_by_cc_pair_cleanup_task`. It deletes a
-  document that this pair owned alone, or removes only this pair's link and
-  access ([[background-jobs]], [[connectors]]).
+  `background/celery/tasks/shared/tasks.py:document_batch_by_cc_pair_cleanup_task` over
+  batches of documents. It deletes a document that this pair owned alone, or
+  removes only this pair's link and access ([[background-jobs]], [[connectors]]).
 - **Other ways in.** A user upload runs the same pipeline through
   `UserFileIndexingAdapter` on the `user_file_processing` worker, with no fetch
   phase ([[file-store-and-user-files]]). A push to `/onyx-api/ingestion` runs
@@ -213,7 +213,7 @@ generation spans -> user_usage                       [[observability]]
   `handle_stream_message_objects` in its own process, so it skips the route's
   `Depends` checks. It calls `check_token_rate_limits` itself, but no API-call
   cap applies ([[slack-bot]]). The Discord bot, the widget and API callers
-  use the HTTP route. Deep research and the research and coding sub-agents run
+  use the HTTP route. Deep research and its research subagents run
   on the same shared runtime ([[agent-runtime]]). The acting user for each
   caller is in [CROSS-CUTTING.md](CROSS-CUTTING.md).
 - **Budgets lag.** Usage reaches `user_usage` from tracing spans in batches, so

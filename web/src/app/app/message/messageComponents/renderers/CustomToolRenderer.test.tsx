@@ -1,4 +1,5 @@
 import { render, screen } from "@tests/setup/test-utils";
+import { toPlainString } from "@opal/components/text/InlineMarkdown";
 import {
   CustomToolErrorInfo,
   CustomToolPacket,
@@ -9,17 +10,25 @@ import { CustomToolRenderer } from "@/app/app/message/messageComponents/renderer
 
 const placement = { turn_index: 0, tab_index: 0 };
 
-function packets(error: CustomToolErrorInfo): CustomToolPacket[] {
+function packets(
+  error: CustomToolErrorInfo,
+  toolName = "get_meta_data",
+  displayName = "get_meta_data"
+): CustomToolPacket[] {
   return [
     {
       placement,
-      obj: { type: PacketType.CUSTOM_TOOL_START, tool_name: "get_meta_data" },
+      obj: {
+        type: PacketType.CUSTOM_TOOL_START,
+        tool_name: toolName,
+        display_name: displayName,
+      },
     },
     {
       placement,
       obj: {
         type: PacketType.CUSTOM_TOOL_DELTA,
-        tool_name: "get_meta_data",
+        tool_name: toolName,
         response_type: "text",
         error,
       },
@@ -28,10 +37,16 @@ function packets(error: CustomToolErrorInfo): CustomToolPacket[] {
   ] as CustomToolPacket[];
 }
 
-function renderStatus(error: CustomToolErrorInfo) {
+function renderStatus(
+  error: CustomToolErrorInfo,
+  toolName?: string,
+  displayName?: string
+) {
+  const toolPackets = packets(error, toolName, displayName);
   render(
     <CustomToolRenderer
-      packets={packets(error)}
+      packets={toolPackets}
+      nestedCalls={[]}
       state={{}}
       onComplete={jest.fn()}
       renderType={RenderType.FULL}
@@ -46,7 +61,8 @@ function renderStatus(error: CustomToolErrorInfo) {
               data-surface={result.surfaceBackground}
               data-collapsible={String(result.supportsCollapsible)}
             >
-              {result.status}
+              {/* The header a done step shows. */}
+              {toPlainString(result.doneStatus ?? result.status ?? "")}
               {result.content}
             </div>
           ))}
@@ -108,5 +124,31 @@ describe("CustomToolRenderer", () => {
     expect(screen.queryByText(/completed/)).not.toBeInTheDocument();
     expect(screen.queryByText(/was blocked/)).not.toBeInTheDocument();
     expect(screen.getByText(/502/)).toBeInTheDocument();
+  });
+
+  test.each([
+    // A server name that contains `__`.
+    ["mcp__3__my__srv__create_issue", "create_issue"],
+    // A long name that normalization truncated and hashed.
+    [
+      "mcp__3__a_very_long_server_name_for_the_issue_tracker_9f3a1c2b7d4e",
+      "Create issue",
+    ],
+  ])("labels the call %s with its display name", (toolName, displayName) => {
+    renderStatus(
+      {
+        is_auth_error: false,
+        is_unreachable: true,
+        status_code: null,
+        message: "Timed out",
+      },
+      toolName,
+      displayName
+    );
+
+    expect(
+      screen.getByText(`${displayName} could not reach its server`)
+    ).toBeInTheDocument();
+    expect(screen.queryByText(new RegExp(toolName))).not.toBeInTheDocument();
   });
 });

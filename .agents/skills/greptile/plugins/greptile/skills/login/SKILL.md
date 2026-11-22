@@ -15,7 +15,7 @@ in there, then run:
 GREPTILE_NO_UPDATE_CHECK=1 node "${CLAUDE_PLUGIN_ROOT}/scripts/greptile.mjs" login
 ```
 
-Outside Claude Code (Codex), replace `${CLAUDE_PLUGIN_ROOT}` with the plugin
+Outside Claude Code (Codex, Devin), replace `${CLAUDE_PLUGIN_ROOT}` with the plugin
 root: the absolute path two folders above this `SKILL.md`.
 
 Give the Bash call a **600000 ms timeout**. The CLI waits up to ten minutes for

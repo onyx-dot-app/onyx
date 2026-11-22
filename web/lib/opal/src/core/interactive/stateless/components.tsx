@@ -77,6 +77,12 @@ interface InteractiveStatelessProps
    * Link target (e.g. `"_blank"`). Only used when `href` is provided.
    */
   target?: string;
+
+  /**
+   * Saves the `href` target as a file instead of opening it: a file name, or
+   * `true` to keep the server's name. Only used when `href` is provided.
+   */
+  download?: string | true;
 }
 
 // ---------------------------------------------------------------------------
@@ -102,6 +108,7 @@ function InteractiveStateless({
   type,
   href,
   target,
+  download,
   disabled,
   passive,
   ...props
@@ -131,6 +138,7 @@ function InteractiveStateless({
   const linkAttrs = href
     ? {
         href: isDisabled ? undefined : href,
+        download: isDisabled ? undefined : download,
         target,
         rel: target === "_blank" ? "noopener noreferrer" : undefined,
       }

@@ -62,6 +62,7 @@ from onyx.llm.decisions.factory import (
     validate_zoom_voice_provider,
 )
 from onyx.llm.decisions.models import (
+    OPENAI_DECISIONS_MODEL_NAME,
     DecisionProvider,
     DecisionRequest,
     PredicateQuestion,
@@ -130,6 +131,7 @@ from onyx.server.manage.llm.models import (
     LMStudioModelsRequest,
     ModelConfigurationPage,
     ModelConfigurationUpsertRequest,
+    ModelDisplayNameCode,
     ModelRoutingUpdateRequest,
     NaceModelsRequest,
     NebiusTokenfactoryFinalModelResponse,
@@ -733,7 +735,6 @@ def list_llm_providers(
         flow_type_filter=[],
         exclude_image_generation_providers=not include_image_gen,
         include_model_configurations=not page_models,
-        include_model_flows=not page_models,
     )
     default_text_model = fetch_default_model(db_session, LLMModelFlowType.CHAT)
     default_vision_model = fetch_default_model(db_session, LLMModelFlowType.VISION)
@@ -1410,6 +1411,10 @@ def get_decision_model_configuration(
             models[0].llm_provider, model_configurations=models, include_api_key=False
         )
         _mask_provider_credentials(view)
+        if view.provider == DecisionProvider.OPENAI:
+            for model_view in view.model_configurations:
+                if model_view.name == OPENAI_DECISIONS_MODEL_NAME:
+                    model_view.display_name_code = ModelDisplayNameCode.OPENAI_DECISIONS
         providers.append(view)
     return DecisionModelResponse(
         model=DefaultModel.from_model_config(
@@ -1904,9 +1909,7 @@ def get_provider_contextual_cost(
       - the chunk_context
     - The per-token cost of the LLM used to generate the doc_summary and chunk_context
     """
-    providers = fetch_existing_llm_providers(
-        db_session, [LLMModelFlowType.CHAT], include_model_flows=True
-    )
+    providers = fetch_existing_llm_providers(db_session, [LLMModelFlowType.CHAT])
     costs = []
     for provider in providers:
         for model_configuration in provider.model_configurations:

@@ -47,6 +47,7 @@ import {
   useLanguageModelsForAgent,
 } from "@/lib/languageModels/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
+import { userGroupListUrl } from "@/hooks/useGroups";
 
 const buildReactedDocsUrl = (ascending: boolean, limit: number) => {
   return `/api/manage/admin/doc-boosts?ascending=${ascending}&limit=${limit}`;
@@ -615,19 +616,11 @@ export function useLlmManager(
     }
   };
 
+  // The chosen temperature. Everything outside reads it through
+  // boundedTemperature, which applies the current model's maximum.
   const [temperature, setTemperature] = useState<number>(() => {
     if (currentChatSession?.current_temperature_override != null) {
-      // Derive Anthropic check from chat session since currentLlm isn't populated yet
-      const sessionModel = currentChatSession.current_alternate_model
-        ? parseLlmDescriptor(currentChatSession.current_alternate_model)
-        : null;
-      const isAnthropicModel = sessionModel
-        ? isAnthropic(sessionModel.provider, sessionModel.modelName)
-        : false;
-      return Math.min(
-        currentChatSession.current_temperature_override,
-        isAnthropicModel ? 1.0 : 2.0
-      );
+      return currentChatSession.current_temperature_override;
     } else if (
       activeAgent?.tools.some((tool) => tool.in_code_tool_id === SEARCH_TOOL_ID)
     ) {
@@ -703,36 +696,14 @@ export function useLlmManager(
     }
     return 2.0; // Default max when no model info available
   }, [currentLlm, currentChatSession]);
+  const boundedTemperature = Math.min(temperature, maxTemperature);
 
+  // Mirrors the session's saved override into local state; opening a chat
+  // never writes. A choice made before the session exists must survive until
+  // persistOverrides writes it to the session the send creates. The send
+  // calls persistOverrides before the new session binds, and the hand-off it
+  // marks stops the identity reset above from discarding the choice.
   useEffect(() => {
-    if (isAnthropic(currentLlm.provider, currentLlm.modelName)) {
-      const newTemperature = Math.min(temperature, 1.0);
-      setTemperature(newTemperature);
-      const sessionId = chatSession?.id;
-      if (sessionId) {
-        void enqueueOverrideWrite(() =>
-          updateTemperatureOverrideForChatSession(sessionId, newTemperature)
-        );
-      }
-    }
-  }, [currentLlm]);
-
-  useEffect(() => {
-    if (!chatSession && currentChatSession) {
-      const sessionId = currentChatSession.id;
-      if (temperature) {
-        void enqueueOverrideWrite(() =>
-          updateTemperatureOverrideForChatSession(sessionId, temperature)
-        );
-      }
-      if (reasoningEffort) {
-        void enqueueOverrideWrite(() =>
-          updateReasoningEffortForChatSession(sessionId, reasoningEffort)
-        );
-      }
-      return;
-    }
-
     // A local slider choice outranks the snapshot, which may not reflect the
     // write yet. The flag is a dep so a session switch, which resets it,
     // re-runs this sync for the new session.
@@ -756,16 +727,14 @@ export function useLlmManager(
   ]);
 
   const updateTemperature = (temperature: number) => {
-    const clampedTemp = isAnthropic(currentLlm.provider, currentLlm.modelName)
-      ? Math.min(temperature, 1.0)
-      : temperature;
-    setTemperature(clampedTemp);
+    const boundedChoice = Math.min(temperature, maxTemperature);
+    setTemperature(boundedChoice);
     setTemperatureExplicitlySet(true);
     setSelectionGen((generation) => generation + 1);
     const sessionId = chatSession?.id;
     if (sessionId) {
       void enqueueOverrideWrite(() =>
-        updateTemperatureOverrideForChatSession(sessionId, clampedTemp)
+        updateTemperatureOverrideForChatSession(sessionId, boundedChoice)
       );
     }
   };
@@ -785,7 +754,7 @@ export function useLlmManager(
   // ref instead of its closure.
   const latestSelection = {
     reasoningEffort,
-    temperature,
+    temperature: boundedTemperature,
     temperatureExplicitlySet,
     selectionGen,
     chatSessionId: chatSession?.id ?? null,
@@ -854,7 +823,7 @@ export function useLlmManager(
     updateModelOverrideBasedOnChatSession,
     currentLlm,
     updateCurrentLlm,
-    temperature,
+    temperature: boundedTemperature,
     updateTemperature,
     temperatureExplicitlySet,
     reasoningEffort,
@@ -882,7 +851,10 @@ export function useLlmManager(
 EE Only APIs
 */
 
-/** `enabled: false` skips the request, e.g. below the plan groups need. */
+/**
+ * Groups without member lists; read `member_count`. `enabled: false` skips the
+ * request, e.g. below the plan groups need.
+ */
 export const useUserGroups = (
   enabled: boolean = true
 ): {
@@ -896,12 +868,21 @@ export const useUserGroups = (
   const isPaidEnterpriseFeaturesEnabled =
     enabled && !isLoading && settings.enterprise !== null;
 
+  const url = userGroupListUrl({
+    includeDefault: false,
+    includeMembers: false,
+  });
   const swrResponse = useSWR<UserGroup[]>(
-    isPaidEnterpriseFeaturesEnabled ? SWR_KEYS.adminUserGroups : null,
+    isPaidEnterpriseFeaturesEnabled ? url : null,
     errorHandlingFetcher
   );
 
-  const refreshUserGroups = () => mutate(SWR_KEYS.adminUserGroups);
+  // Every variant, the same as useGroups' refreshGroups.
+  const refreshUserGroups = () =>
+    mutate(
+      (key) =>
+        typeof key === "string" && key.startsWith(SWR_KEYS.adminUserGroups)
+    );
 
   if (isLoading) {
     return {

@@ -3,7 +3,16 @@
 from collections.abc import Sequence
 from uuid import UUID
 
-from sqlalchemy import ColumnElement, Select, and_, delete, null, or_, select, update
+from sqlalchemy import (
+    ColumnElement,
+    Select,
+    and_,
+    delete,
+    null,
+    or_,
+    select,
+    update,
+)
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -12,9 +21,10 @@ from onyx.db.document import mark_cc_pair_documents_for_sync__no_commit
 from onyx.db.enums import (
     AccessType,
     AccountType,
+    MarketplaceKind,
     Permission,
     PersonaSharePermission,
-    SkillSharePermission,
+    PluginInstallationPolicy,
 )
 from onyx.db.models import (
     ConnectorCredentialPair,
@@ -24,18 +34,22 @@ from onyx.db.models import (
     DocumentSet__UserGroup,
     HierarchyNode,
     Hook,
+    Integration__User,
+    Integration__UserGroup,
     LLMProvider,
     LLMProvider__UserGroup,
+    Marketplace,
     MCPServer,
     MCPServer__UserGroup,
     PermissionGrant,
     Persona,
     Persona__UserFile,
     Persona__UserGroup,
+    Plugin,
+    Plugin__User,
+    Plugin__UserGroup,
     PublicExternalUserGroup,
     ScimToken,
-    Skill,
-    Skill__UserGroup,
     StandardAnswer,
     TokenRateLimit,
     User,
@@ -47,12 +61,19 @@ from onyx.db.models import (
     UserGroup__ConnectorCredentialPair,
 )
 from onyx.db.permissions import recompute_user_permissions__no_commit
+from onyx.db.plugin import (
+    get_or_create_organization_library__no_commit,
+    publish_plugin__no_commit,
+)
 from onyx.db.users import (
     DEFAULT_ADMIN_GROUP_NAME,
     DEFAULT_BASIC_GROUP_NAME,
     fetch_default_group,
     lock_group_membership,
 )
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 # Link tables whose rows the group row's deletion does not cascade to.
 _UNCASCADED_GROUP_LINKS = (
@@ -86,6 +107,9 @@ def make_all_cc_pairs_public__no_commit(db_session: Session) -> list[int]:
             .with_for_update(key_share=True)
         )
     )
+    # Group rows first: their foreign key rejects a pair leaving a group type
+    # while it still has them.
+    db_session.execute(delete(UserGroup__CCPairDataAccess))
     if cc_pair_ids:
         db_session.execute(
             update(ConnectorCredentialPair)
@@ -105,7 +129,6 @@ def make_all_cc_pairs_public__no_commit(db_session: Session) -> list[int]:
     # Not scoped to the changed pairs: with every pair public, nothing may keep a
     # data-access group or a synced permission, whichever pair wrote it. A sync
     # already in flight can still write some back, which grants nothing on a public pair.
-    db_session.execute(delete(UserGroup__CCPairDataAccess))
     db_session.execute(delete(User__ExternalUserGroupId))
     db_session.execute(delete(PublicExternalUserGroup))
     db_session.execute(
@@ -207,17 +230,121 @@ def _make_group_shared_resources_public__no_commit(
         )
         .values(is_public=True)
     )
-    db_session.execute(
-        update(Skill)
-        .where(
-            Skill.id.in_(
-                select(Skill__UserGroup.skill_id).where(
-                    Skill__UserGroup.user_group_id.in_(group_ids)
-                )
-            ),
-            Skill.public_permission.is_(None),
+    # A private plugin shared with one of these groups is published, so its
+    # members keep it. A group row with no permission or with NOT_AVAILABLE
+    # never publishes. The downgrade cannot stop, so a plugin whose name the
+    # Organization library already has takes the next free name (deploy-2).
+    # Logs each plugin that changes.
+    library_id = get_or_create_organization_library__no_commit(db_session)
+    shared_plugin_ids = select(Plugin__UserGroup.plugin_id).where(
+        Plugin__UserGroup.user_group_id.in_(group_ids),
+        Plugin__UserGroup.permission.is_not(None),
+        or_(
+            Plugin__UserGroup.installation_policy.is_(None),
+            Plugin__UserGroup.installation_policy
+            != PluginInstallationPolicy.NOT_AVAILABLE,
+        ),
+    )
+    # A synced plugin stays in its GitHub marketplace: the group's members get
+    # a user share instead.
+    github_marketplace_ids = select(Marketplace.id).where(
+        Marketplace.kind == MarketplaceKind.GITHUB
+    )
+    synced_shares = db_session.execute(
+        pg_insert(Plugin__User)
+        .from_select(
+            ["plugin_id", "user_id"],
+            select(Plugin.id, User__UserGroup.user_id)
+            .join(Plugin__UserGroup, Plugin__UserGroup.plugin_id == Plugin.id)
+            .join(
+                User__UserGroup,
+                User__UserGroup.user_group_id == Plugin__UserGroup.user_group_id,
+            )
+            .where(
+                Plugin__UserGroup.user_group_id.in_(group_ids),
+                Plugin__UserGroup.permission.is_not(None),
+                or_(
+                    Plugin__UserGroup.installation_policy.is_(None),
+                    Plugin__UserGroup.installation_policy
+                    != PluginInstallationPolicy.NOT_AVAILABLE,
+                ),
+                Plugin.marketplace_id.in_(github_marketplace_ids),
+                User__UserGroup.user_id.is_not(None),
+            )
+            .distinct(),
         )
-        .values(public_permission=SkillSharePermission.VIEWER)
+        .on_conflict_do_nothing()
+        .returning(Plugin__User.plugin_id)
+    ).all()
+    logger.info(
+        "Community downgrade gave %d synced plugin shares to the members of "
+        "removed groups",
+        len(synced_shares),
+    )
+    plugin_ids: Sequence[UUID] = db_session.scalars(
+        select(Plugin.id)
+        .where(
+            Plugin.id.in_(shared_plugin_ids),
+            Plugin.marketplace_id != library_id,
+            Plugin.marketplace_id.not_in(github_marketplace_ids),
+        )
+        .order_by(Plugin.id)
+        .with_for_update()
+    ).all()
+    for plugin_id in plugin_ids:
+        publish_plugin__no_commit(plugin_id, "rename", db_session)
+        published_name = db_session.scalar(
+            select(Plugin.name).where(Plugin.id == plugin_id)
+        )
+        logger.info(
+            "Community downgrade published plugin %s to the organization as '%s'",
+            plugin_id,
+            published_name,
+        )
+    # Each member of a group that has access to an integration (a share, or a
+    # group setting above NOT_AVAILABLE) gets a user share, so the members keep
+    # it. The integration keeps its company setting: one that an admin closed
+    # stays closed, and none opens to the whole organization.
+    not_available = PluginInstallationPolicy.NOT_AVAILABLE
+    granted = (
+        select(
+            Integration__UserGroup.integration_id,
+            User__UserGroup.user_id,
+        )
+        .join(
+            User__UserGroup,
+            User__UserGroup.user_group_id == Integration__UserGroup.user_group_id,
+        )
+        .where(
+            Integration__UserGroup.user_group_id.in_(group_ids),
+            User__UserGroup.user_id.is_not(None),
+            or_(
+                and_(
+                    Integration__UserGroup.permission.is_not(None),
+                    or_(
+                        Integration__UserGroup.installation_policy.is_(None),
+                        Integration__UserGroup.installation_policy != not_available,
+                    ),
+                ),
+                and_(
+                    Integration__UserGroup.permission.is_(None),
+                    Integration__UserGroup.installation_policy.is_not(None),
+                    Integration__UserGroup.installation_policy != not_available,
+                ),
+            ),
+        )
+        .distinct()
+    )
+    shared = db_session.execute(
+        pg_insert(Integration__User)
+        .from_select(["integration_id", "user_id"], granted)
+        .on_conflict_do_nothing()
+        .returning(Integration__User.integration_id)
+    ).all()
+    logger.info(
+        "Community downgrade gave %d integration shares to the members of "
+        "removed groups",
+        len(shared),
     )
 
 

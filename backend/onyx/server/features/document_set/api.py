@@ -9,6 +9,7 @@ from onyx.auth.permissions import (
 from onyx.auth.scoped_permissions import (
     assert_within_scope,
 )
+from onyx.background.celery.tasks.beat_schedule import BEAT_EXPIRES_DEFAULT
 from onyx.background.celery.versioned_apps.client import app as client_app
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.configs.constants import OnyxCeleryPriority, OnyxCeleryTask
@@ -77,6 +78,7 @@ def create_document_set(
             OnyxCeleryTask.CHECK_FOR_VESPA_SYNC_TASK,
             kwargs={"tenant_id": tenant_id},
             priority=OnyxCeleryPriority.HIGH,
+            expires=BEAT_EXPIRES_DEFAULT,
         )
 
     return document_set_db_model.id
@@ -176,6 +178,7 @@ def patch_document_set(
             OnyxCeleryTask.CHECK_FOR_VESPA_SYNC_TASK,
             kwargs={"tenant_id": tenant_id},
             priority=OnyxCeleryPriority.HIGH,
+            expires=BEAT_EXPIRES_DEFAULT,
         )
 
 
@@ -225,6 +228,7 @@ def delete_document_set(
             OnyxCeleryTask.CHECK_FOR_VESPA_SYNC_TASK,
             kwargs={"tenant_id": tenant_id},
             priority=OnyxCeleryPriority.HIGH,
+            expires=BEAT_EXPIRES_DEFAULT,
         )
 
 
@@ -292,6 +296,10 @@ def list_document_sets_for_user(
     get_editable: bool = Query(
         False, description="If true, return editable document sets"
     ),
+    searchable_only: bool = Query(
+        False,
+        description="If true, return only document sets the user can search",
+    ),
 ) -> list[DocumentSetSummary]:
     readable = fetch_all_document_sets_for_user(
         db_session=db_session, user=user, get_editable=get_editable
@@ -316,6 +324,18 @@ def list_document_sets_for_user(
     by_id = {ds.id: ds for ds in readable}
     by_id.update({ds.id: ds for ds in editable})
     document_sets = list(by_id.values())
+    if searchable_only:
+        # Search validates names with the read predicate, so editable-only sets
+        # would be rejected there.
+        searchable = (
+            fetch_all_document_sets_for_user(
+                db_session=db_session, user=user, get_editable=False
+            )
+            if get_editable
+            else readable
+        )
+        searchable_ids = {ds.id for ds in searchable}
+        document_sets = [ds for ds in document_sets if ds.id in searchable_ids]
 
     summaries: list[DocumentSetSummary] = []
     for ds in document_sets:

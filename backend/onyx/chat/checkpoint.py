@@ -6,15 +6,19 @@ from collections.abc import Mapping
 
 from pydantic import BaseModel, JsonValue, TypeAdapter
 
+from onyx.agents.compaction import is_input_context
 from onyx.agents.models import (
     AgentState,
     ExecutionCheckpoint,
+    InputMessageMetadata,
     RunProgress,
     RunState,
     RunStatus,
 )
 from onyx.agents.tools import HumanToolAnswer
 from onyx.chat.models import (
+    ChatCodeModeResult,
+    ChatInputMetadata,
     ChatMessageMetadata,
     ChatSearchResult,
     CheckpointBinding,
@@ -25,45 +29,36 @@ from onyx.chat.models import (
     PromptMetadata,
     ResponseCheckpoint,
     ResponseRecord,
+    ToolApprovalDenial,
 )
 from onyx.chat.response import response_snapshot
-from onyx.coding_agent.models import CodingAgentCallResult
-from onyx.context.search.models import SearchDocsResponse
-from onyx.deep_research.models import ResearchAgentCallResult, ResearchMessageMetadata
-from onyx.llm.models import Message, ToolResult
+from onyx.db.models import SAVED_TOOL_RESULT_TYPES
+from onyx.deep_research.models import ResearchMessageMetadata
+from onyx.llm.models import Message, ToolResult, ToolResultFields
 from onyx.tools.file_snapshot import SavedLoadedFile
-from onyx.tools.models import (
-    CustomToolCallSummary,
-    FileReadResult,
-    LlmBashExecutionResult,
-    LlmPythonExecutionResult,
-    MemoryUpdated,
-    ToolExecutionError,
-)
-from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
+from onyx.tools.models import ToolOptions
 from onyx.tools.tool_implementations.search.models import SearchPlanningResult
+from onyx.utils.postgres_sanitization import sanitize_json_like
 
 _JSON_OBJECT = TypeAdapter(dict[str, JsonValue])
 _SAVED_IMAGES = TypeAdapter(list[SavedLoadedFile])
 
 
 CHECKPOINT_PAYLOAD_TYPES: dict[str, type[BaseModel]] = {
+    "agent.input.v1": InputMessageMetadata,
+    "chat.input.v1": ChatInputMetadata,
     "prompt.metadata.v1": PromptMetadata,
     "chat.metadata.v1": ChatMessageMetadata,
     "chat.rendering.v1": MessageRendering,
+    "chat.tool_approval_denial.v1": ToolApprovalDenial,
     "chat.search.v1": ChatSearchResult,
-    "search.results.v1": SearchDocsResponse,
+    "chat.code_mode.v1": ChatCodeModeResult,
     "search.planning.v1": SearchPlanningResult,
     "research.metadata.v1": ResearchMessageMetadata,
-    "research.result.v1": ResearchAgentCallResult,
-    "coding.result.v1": CodingAgentCallResult,
-    "tool.custom.v1": CustomToolCallSummary,
-    "tool.file_read.v1": FileReadResult,
-    "tool.bash.v1": LlmBashExecutionResult,
-    "tool.python.v1": LlmPythonExecutionResult,
-    "tool.memory.v1": MemoryUpdated,
-    "tool.error.v1": ToolExecutionError,
-    "tool.image.v1": FinalImageGenerationResponse,
+    **{
+        f"result.{kind.model_fields['type'].default}.v1": kind
+        for kind in SAVED_TOOL_RESULT_TYPES
+    },
 }
 
 
@@ -128,7 +123,7 @@ class CheckpointSerializer:
         data = _dump(message, exclude={"metadata", "details", "cacheable"})
         data["metadata"] = self.encode_payload(message.metadata)
         data["cacheable"] = message.cacheable
-        if isinstance(message, ToolResult):
+        if isinstance(message, ToolResultFields):
             data["details"] = self.encode_payload(message.details)
         return data
 
@@ -156,6 +151,7 @@ class CheckpointSerializer:
             result=self._decode_tool_result(encoded.result)
             if encoded.result is not None
             else None,
+            standing=encoded.standing,
         )
 
     def encode_progress(self, progress: RunProgress) -> dict[str, JsonValue]:
@@ -169,6 +165,8 @@ class CheckpointSerializer:
     def decode_progress(self, value: JsonValue) -> RunProgress:
         raw = _object(value)
         answers = raw.pop("human_tool_answers", {})
+        # Saved checkpoints of deployed servers carry this unused key.
+        raw.pop("tool_configuration_digest", None)
         progress = RunProgress.model_validate(raw)
         progress.human_tool_answers = {
             key: self.decode_answer(answer) for key, answer in _object(answers).items()
@@ -178,9 +176,12 @@ class CheckpointSerializer:
 
 def _digest(context: AgentState, serializer: CheckpointSerializer) -> str:
     content = "\n".join(
-        # The serializer preserves typed metadata that BaseMessage excludes from JSON.
+        # The serializer preserves typed metadata that BaseMessage excludes from
+        # JSON. Digests hash what PostgreSQL keeps, so stored history matches.
         json.dumps(
-            serializer.encode_message(message), sort_keys=True, separators=(",", ":")
+            sanitize_json_like(serializer.encode_message(message)),
+            sort_keys=True,
+            separators=(",", ":"),
         )
         for message in context.messages
     )
@@ -190,15 +191,21 @@ def _digest(context: AgentState, serializer: CheckpointSerializer) -> str:
 def _response_digest(response: ResponseRecord) -> str:
     return hashlib.sha256(
         json.dumps(
-            {
-                "steps": [step.model_dump(mode="json") for step in response.steps],
-                "answer_step_index": response.answer_step_index,
-                "input": [
-                    # The question is durable; attachment and request context live in the checkpoint.
-                    item.model_dump(mode="json")
-                    for item in response.input_messages[-1:]
-                ],
-            },
+            sanitize_json_like(
+                {
+                    "steps": [step.model_dump(mode="json") for step in response.steps],
+                    "answer_step_index": response.answer_step_index,
+                    "input": [
+                        # The question is durable; attachment, skill and request context live in the checkpoint.
+                        item.model_dump(mode="json")
+                        for item in [
+                            message
+                            for message in response.input_messages
+                            if not is_input_context(message)
+                        ][-1:]
+                    ],
+                }
+            ),
             sort_keys=True,
             separators=(",", ":"),
         ).encode()
@@ -211,6 +218,9 @@ def _serialized_run_state(
     data = _dump(state, exclude={"input_messages", "steps", "progress"})
     data["steps"] = [
         {
+            "input_messages": [
+                serializer.encode_message(message) for message in step.input_messages
+            ],
             "message": serializer.encode_message(step.message),
             "generation_status": step.generation_status.value,
             "tools": {
@@ -240,6 +250,10 @@ def serialize_checkpoint(
     checkpoint: ExecutionCheckpoint,
     response: ResponseRecord,
     binding: CheckpointBinding,
+    *,
+    model_configuration_id: int | None = None,
+    temperature: float | None = None,
+    tool_options: ToolOptions | None = None,
 ) -> ResponseCheckpoint:
     """Build resume data for storage alongside the response and verify it can reconstruct the run."""
     snapshot = checkpoint.run_state
@@ -255,7 +269,7 @@ def serialize_checkpoint(
         return MessagePayload(
             metadata=serializer.encode_payload(message.metadata),
             details=serializer.encode_payload(message.details)
-            if isinstance(message, ToolResult)
+            if isinstance(message, ToolResultFields)
             else None,
             cacheable=message.cacheable,
         )
@@ -273,6 +287,9 @@ def serialize_checkpoint(
         message_payloads=[payload(message) for message in snapshot.messages],
         input_messages=snapshot.input_messages,
         input_payloads=[payload(message) for message in snapshot.input_messages],
+        model_configuration_id=model_configuration_id,
+        temperature=temperature,
+        tool_options=tool_options,
     )
     restored = _restore_checkpoint_state(
         data, response, checkpoint.agent_state, serializer
@@ -330,7 +347,7 @@ def _restore_checkpoint_state(
         for message, payload in zip(messages, payloads, strict=True):
             message.metadata = serializer.decode_payload(payload.metadata)
             message.cacheable = payload.cacheable
-            if isinstance(message, ToolResult):
+            if isinstance(message, ToolResultFields):
                 message.details = serializer.decode_payload(payload.details)
             elif payload.details is not None:
                 raise ValueError("Only tool results can have tool details")

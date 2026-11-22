@@ -115,8 +115,8 @@ Independent of the map, check the change against the rules in these files:
   `backend/AGENTS.md`, `web/AGENTS.md`, `mobile/AGENTS.md`. Mobile does not follow
   the web rules.
 - [CROSS-CUTTING.md](CROSS-CUTTING.md), for the rules every component follows.
-- `CONTRIBUTING.md`, "Engineering Best Practices".
-- `pre-commit run --files <changed paths>`.
+- `contributing_guides/best_practices.md`.
+- `prek run --files <changed paths>`.
 
 ## Step 8: Report
 

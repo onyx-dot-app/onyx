@@ -467,15 +467,21 @@ func TestRunUploadBaselines_reportsFailures(t *testing.T) {
 }
 
 func TestSummaryText(t *testing.T) {
-	results := []imgdiff.Result{
-		{Name: "big.png", Status: imgdiff.StatusChanged, DiffPercent: 12.345},
-		{Name: "new.png", Status: imgdiff.StatusAdded},
-		{Name: "gone.png", Status: imgdiff.StatusRemoved},
-		{Name: "same.png", Status: imgdiff.StatusUnchanged},
-		{Name: "same2.png", Status: imgdiff.StatusUnchanged},
-	}
-
-	want := `
+	tests := []struct {
+		name    string
+		results []imgdiff.Result
+		want    string
+	}{
+		{
+			name: "lists every difference",
+			results: []imgdiff.Result{
+				{Name: "big.png", Status: imgdiff.StatusChanged, DiffPercent: 12.345},
+				{Name: "new.png", Status: imgdiff.StatusAdded},
+				{Name: "gone.png", Status: imgdiff.StatusRemoved},
+				{Name: "same.png", Status: imgdiff.StatusUnchanged},
+				{Name: "same2.png", Status: imgdiff.StatusUnchanged},
+			},
+			want: `
 ╔══════════════════════════════════════════════╗
 ║          Visual Regression Summary           ║
 ╠══════════════════════════════════════════════╣
@@ -490,19 +496,30 @@ func TestSummaryText(t *testing.T) {
   ✚ ADDED    new.png
   ✖ REMOVED  gone.png
 
-`
-	if got := summaryText(results); got != want {
-		t.Fatalf("expected:\n%s\ngot:\n%s", want, got)
-	}
-}
+`,
+		},
+		{
+			name:    "ends after the box without differences",
+			results: []imgdiff.Result{{Name: "same.png", Status: imgdiff.StatusUnchanged}},
+			want: `
+╔══════════════════════════════════════════════╗
+║          Visual Regression Summary           ║
+╠══════════════════════════════════════════════╣
+║  Changed:   0                                ║
+║  Added:     0                                ║
+║  Removed:   0                                ║
+║  Unchanged: 1                                ║
+║  Total:     1                                ║
+╚══════════════════════════════════════════════╝
 
-func TestSummaryText_listsNothingWithoutDifferences(t *testing.T) {
-	got := summaryText([]imgdiff.Result{{Name: "same.png", Status: imgdiff.StatusUnchanged}})
-
-	if strings.Contains(got, "same.png") {
-		t.Fatalf("expected unchanged screenshots not to be listed, got:\n%s", got)
+`,
+		},
 	}
-	if !strings.HasSuffix(got, "║  Total:     1                                ║\n╚══════════════════════════════════════════════╝\n\n") {
-		t.Fatalf("expected the output to end after the box, got:\n%s", got)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := summaryText(tt.results); got != tt.want {
+				t.Fatalf("expected:\n%s\ngot:\n%s", tt.want, got)
+			}
+		})
 	}
 }

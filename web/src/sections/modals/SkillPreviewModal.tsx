@@ -2,7 +2,7 @@
 
 import type { RichStr } from "@opal/types";
 import { IconLoader } from "@opal/loaders";
-import { useEffect, useState } from "react";
+import { useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import useSWR from "swr";
 import { Button, CompactMarkdown, MessageCard, Text } from "@opal/components";
@@ -24,36 +24,6 @@ interface SkillPreviewModalProps {
   onClose: () => void;
 }
 
-// Message keys under `skills.modals`, not copy — the literal union keeps `t()`
-// statically checked while this stays a plain helper.
-type MetadataLabelKey =
-  | "preview.metadata.createdBy.label"
-  | "preview.metadata.externalApp.label";
-
-interface MetadataRow {
-  labelKey: MetadataLabelKey;
-  value: string;
-}
-
-function metadataRows(preview: SkillPreview): MetadataRow[] {
-  const rows: MetadataRow[] = [];
-  if (preview.source === "builtin") {
-    rows.push({ labelKey: "preview.metadata.createdBy.label", value: "Onyx" });
-  } else if (preview.author_email) {
-    rows.push({
-      labelKey: "preview.metadata.createdBy.label",
-      value: preview.author_email,
-    });
-  }
-  if (preview.external_app) {
-    rows.push({
-      labelKey: "preview.metadata.externalApp.label",
-      value: preview.external_app.name,
-    });
-  }
-  return rows;
-}
-
 interface SkillPreviewContentProps extends Omit<
   SkillPreviewModalProps,
   "open"
@@ -66,13 +36,77 @@ type SkillPreviewDetailsProps = Pick<
   "skillId" | "unavailableReason"
 >;
 
+interface SkillInstructionsPanelProps {
+  instructionsMarkdown: string;
+}
+
+export function SkillInstructionsPanel({
+  instructionsMarkdown,
+}: SkillInstructionsPanelProps) {
+  const t = useTranslations("skills.modals");
+  const [instructionsDisplayMode, setInstructionsDisplayMode] =
+    useState<InstructionsDisplayMode>("rendered");
+  const contentBox = useRef<HTMLDivElement>(null);
+  // The two modes have different heights. Keep the box at the tallest height
+  // seen (in rem) for these instructions, so a toggle does not move the
+  // content below it or resize a modal.
+  const [held, setHeld] = useState<{ text: string; rem: number } | null>(null);
+  const minHeight = held?.text === instructionsMarkdown ? held.rem : undefined;
+
+  function changeDisplayMode(mode: InstructionsDisplayMode) {
+    const box = contentBox.current;
+    if (box) {
+      const rootPx = parseFloat(
+        getComputedStyle(document.documentElement).fontSize
+      );
+      setHeld({ text: instructionsMarkdown, rem: box.offsetHeight / rootPx });
+    }
+    setInstructionsDisplayMode(mode);
+  }
+
+  return (
+    <Section gap={1} height="auto" alignItems="stretch">
+      <Section
+        flexDirection="row"
+        justifyContent="between"
+        height="auto"
+        gap={2}
+      >
+        <Text font="main-ui-action" color="text-05">
+          {t("preview.instructions.title")}
+        </Text>
+        <InstructionsDisplayModeToggle
+          value={instructionsDisplayMode}
+          onChange={changeDisplayMode}
+        />
+      </Section>
+      <Section
+        ref={contentBox}
+        height="auto"
+        minHeight={minHeight}
+        justifyContent="start"
+        padding={3}
+        gap={0}
+        alignItems="stretch"
+        className="rounded-lg border border-border overflow-y-auto overflow-x-hidden bg-background-neutral-00 max-h-[48dvh]"
+      >
+        {instructionsDisplayMode === "rendered" ? (
+          <CompactMarkdown>{instructionsMarkdown}</CompactMarkdown>
+        ) : (
+          <pre className="m-0 whitespace-pre-wrap wrap-break-word font-mono text-xs leading-5 text-text-04">
+            {instructionsMarkdown}
+          </pre>
+        )}
+      </Section>
+    </Section>
+  );
+}
+
 export function SkillPreviewDetails({
   skillId,
   unavailableReason = null,
 }: SkillPreviewDetailsProps) {
   const t = useTranslations("skills.modals");
-  const [instructionsDisplayMode, setInstructionsDisplayMode] =
-    useState<InstructionsDisplayMode>("rendered");
   const swrKey = skillId ? SWR_KEYS.userSkillPreview(skillId) : null;
   const {
     data: preview,
@@ -81,19 +115,8 @@ export function SkillPreviewDetails({
   } = useSWR<SkillPreview>(swrKey, errorHandlingFetcher);
   const instructionsMarkdown =
     preview?.instructions_markdown || t("preview.noInstructions.message");
-  const dependency = preview?.external_app;
-  const dependencyUnavailableReason =
-    dependency && !dependency.ready
-      ? dependency.enabled
-        ? t("preview.unavailable.appNotConnected", { appName: dependency.name })
-        : t("preview.unavailable.appDisabled", { appName: dependency.name })
-      : null;
-  const displayedUnavailableReason =
-    unavailableReason ?? dependencyUnavailableReason;
-
-  useEffect(() => {
-    setInstructionsDisplayMode("rendered");
-  }, [skillId]);
+  const createdBy =
+    preview?.source === "builtin" ? "Onyx" : preview?.author_email;
 
   return (
     <>
@@ -115,65 +138,33 @@ export function SkillPreviewDetails({
 
       {preview && !isLoading && !error && (
         <Section gap={4} height="auto" alignItems="stretch">
-          {displayedUnavailableReason && (
+          {unavailableReason && (
             <MessageCard
               outerPadding={1}
               innerPadding={1}
               variant="warning"
               title={t("preview.unavailable.title")}
-              description={displayedUnavailableReason}
+              description={unavailableReason}
             />
           )}
 
           <CardGrid>
-            {metadataRows(preview).map((row) => (
-              <Section
-                key={row.labelKey}
-                height="auto"
-                gap={1}
-                alignItems="stretch"
-              >
+            {createdBy && (
+              <Section height="auto" gap={1} alignItems="stretch">
                 <Text font="main-ui-action" color="text-05">
-                  {t(row.labelKey)}
+                  {t("preview.metadata.createdBy.label")}
                 </Text>
                 <Text font="main-ui-body" color="text-04">
-                  {row.value}
+                  {createdBy}
                 </Text>
               </Section>
-            ))}
+            )}
           </CardGrid>
 
-          <Section gap={1} height="auto" alignItems="stretch">
-            <Section
-              flexDirection="row"
-              justifyContent="between"
-              height="auto"
-              gap={2}
-            >
-              <Text font="main-ui-action" color="text-05">
-                {t("preview.instructions.title")}
-              </Text>
-              <InstructionsDisplayModeToggle
-                value={instructionsDisplayMode}
-                onChange={setInstructionsDisplayMode}
-              />
-            </Section>
-            <Section
-              height="auto"
-              padding={3}
-              gap={0}
-              alignItems="stretch"
-              className="rounded-lg border border-border overflow-y-auto overflow-x-hidden bg-background-neutral-00 max-h-[48dvh]"
-            >
-              {instructionsDisplayMode === "rendered" ? (
-                <CompactMarkdown>{instructionsMarkdown}</CompactMarkdown>
-              ) : (
-                <pre className="m-0 whitespace-pre-wrap wrap-break-word font-mono text-xs leading-5 text-text-04">
-                  {instructionsMarkdown}
-                </pre>
-              )}
-            </Section>
-          </Section>
+          <SkillInstructionsPanel
+            key={skillId}
+            instructionsMarkdown={instructionsMarkdown}
+          />
         </Section>
       )}
     </>

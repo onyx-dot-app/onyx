@@ -105,6 +105,43 @@ export function LabelBadge({ label, tooltip }: LabelBadgeProps) {
 }
 
 // ---------------------------------------------------------------------------
+// Model type
+// ---------------------------------------------------------------------------
+
+/** What a language model can do beyond chat. */
+export type ModelType = "decision" | "vision";
+
+const MODEL_TYPE_BADGES: Record<
+  ModelType,
+  {
+    // The label's key under `common.badges.modelTypes`.
+    copyKey: "decision" | "vision";
+  }
+> = {
+  decision: { copyKey: "decision" },
+  vision: { copyKey: "vision" },
+};
+
+/** A model type badge's props, for a `tag` or `badge` slot. */
+export function useModelTypeBadge(modelType: ModelType): BadgeProps {
+  const t = useTranslations("common.badges.modelTypes");
+  return useMemo(() => {
+    const { copyKey } = MODEL_TYPE_BADGES[modelType];
+    return { title: t(copyKey), color: "default", size: 4 };
+  }, [t, modelType]);
+}
+
+export interface ModelTypeBadgeProps {
+  modelType: ModelType;
+  tooltip?: string | RichStr;
+}
+
+/** A model type badge on its own. */
+export function ModelTypeBadge({ modelType, tooltip }: ModelTypeBadgeProps) {
+  return <Badge {...useModelTypeBadge(modelType)} tooltip={tooltip} />;
+}
+
+// ---------------------------------------------------------------------------
 // Plan
 // ---------------------------------------------------------------------------
 

@@ -15,6 +15,9 @@ from onyx.db.llm import (
     fetch_model_configuration_by_id,
     fetch_user_group_ids,
 )
+from onyx.db.model_configuration import (
+    fetch_model_configuration_by_provider_id_and_name,
+)
 from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import ModelConfiguration, Persona, SearchSettings, User
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -104,8 +107,10 @@ def _resolve_provider_and_model(
     model_version_override: str | None,
     db_session: Session,
     model_configuration_override_id: int | None = None,
-) -> tuple[LLMProviderModel, str] | None:
-    """Resolve the (provider, model_name) pair for get_llm_for_persona.
+) -> tuple[LLMProviderModel, str, ModelConfiguration | None] | None:
+    """Resolve the provider, model name and that model's saved configuration
+    for get_llm_for_persona. The configuration is None when the provider has no
+    saved row for the name.
 
     Returns None when the override provider doesn't exist or the persona's
     configured model config is missing; the caller falls back to the default.
@@ -119,7 +124,7 @@ def _resolve_provider_and_model(
             db_session, model_configuration_override_id
         )
         if mc is not None and mc.llm_provider is not None:
-            return mc.llm_provider, mc.name
+            return mc.llm_provider, mc.name, mc
         logger.warning(
             "llm_override.model_configuration_id=%s not found; falling back to"
             " the default LLM.",
@@ -128,7 +133,9 @@ def _resolve_provider_and_model(
         return None
 
     if provider_name_override:
-        provider_model = fetch_existing_llm_provider(provider_name_override, db_session)
+        provider_model = fetch_existing_llm_provider(
+            provider_name_override, db_session, include_model_configurations=False
+        )
         if not provider_model:
             return None
         if model_version_override:
@@ -153,11 +160,19 @@ def _resolve_provider_and_model(
             )
             return None
         provider_model = model_config.llm_provider
-        model_name = model_version_override or model_config.name
+        if not model_version_override:
+            return provider_model, model_config.name, model_config
+        model_name = model_version_override
 
     if not provider_model or not model_name:
         return None
-    return provider_model, model_name
+    return (
+        provider_model,
+        model_name,
+        fetch_model_configuration_by_provider_id_and_name(
+            db_session, provider_model.id, model_name
+        ),
+    )
 
 
 def get_llm_for_persona(
@@ -213,7 +228,7 @@ def get_llm_for_persona(
                 policy_fn=policy_fn,
                 user_defaults=user_defaults,
             )
-        provider_model, model = resolved
+        provider_model, model, model_config = resolved
 
         user_group_ids = fetch_user_group_ids(db_session, user)
 
@@ -240,17 +255,16 @@ def get_llm_for_persona(
         # Checked after access so a caller without access learns nothing about
         # the provider's models. A name with no saved configuration runs outside
         # visibility, price overrides and usage attribution.
-        if (
-            mc_id_override is None
-            and model_version_override
-            and not any(mc.name == model for mc in provider_model.model_configurations)
-        ):
+        if model_version_override and model_config is None:
             raise OnyxError(
                 OnyxErrorCode.INVALID_INPUT,
                 f"Model '{model}' is not configured on this provider.",
             )
 
-        llm_provider = LLMProviderView.from_model(provider_model)
+        llm_provider = LLMProviderView.from_model(
+            provider_model,
+            model_configurations=[model_config] if model_config else [],
+        )
 
     return llm_from_provider(
         model_name=model,
@@ -301,7 +315,9 @@ def get_default_llm_with_vision(
         )
         return llm_from_provider(
             model_name=default_model.name,
-            llm_provider=LLMProviderView.from_model(default_model.llm_provider),
+            llm_provider=LLMProviderView.from_model(
+                default_model.llm_provider, model_configurations=[default_model]
+            ),
             temperature=temperature,
             additional_headers=additional_headers,
         )
@@ -384,14 +400,16 @@ def llm_from_provider(
 
 def get_llm_for_contextual_rag(model_configuration_id: int) -> LLM:
     with get_session_with_current_tenant() as db_session:
-        mc = db_session.get(ModelConfiguration, model_configuration_id)
+        mc = fetch_model_configuration_by_id(db_session, model_configuration_id)
         if not mc:
             raise ValueError(
                 f"model_configuration id={model_configuration_id} not found"
             )
         return llm_from_provider(
             model_name=mc.name,
-            llm_provider=LLMProviderView.from_model(mc.llm_provider),
+            llm_provider=LLMProviderView.from_model(
+                mc.llm_provider, model_configurations=[mc]
+            ),
         )
 
 
@@ -422,7 +440,9 @@ def get_default_llm(
 
         return llm_from_provider(
             model_name=model.name,
-            llm_provider=LLMProviderView.from_model(model.llm_provider),
+            llm_provider=LLMProviderView.from_model(
+                model.llm_provider, model_configurations=[model]
+            ),
             temperature=temperature,
             additional_headers=additional_headers,
             policy_fn=policy_fn,
@@ -594,11 +614,14 @@ def get_llm_tokenizer_encode_func(llm: LLM) -> Callable[[str], list[int]]:
 
 
 def get_llm_token_counter(llm: LLM) -> Callable[[str], int]:
-    tokenizer_encode_func = get_llm_tokenizer_encode_func(llm)
+    tokenizer_encode_func: Callable[[str], list[int]] | None = None
 
     # Keep prompt content local to this counter, never in a process-wide cache.
     @lru_cache(maxsize=TOKEN_COUNT_CACHE_SIZE)
     def count(text: str) -> int:
+        nonlocal tokenizer_encode_func
+        if tokenizer_encode_func is None:
+            tokenizer_encode_func = get_llm_tokenizer_encode_func(llm)
         return len(tokenizer_encode_func(text))
 
     return count

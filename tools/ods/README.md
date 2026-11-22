@@ -76,6 +76,7 @@ _Note: bash completion requires the [bash-completion](https://github.com/scop/ba
 | Use a separate dataset and infrastructure | `ods --isolated stack up` | Background, inspect with `ods --isolated stack status` |
 | Run a frontend build, test, or other package script | `ods web <script> [args...]` | Until the script exits |
 | Run Onyx in Docker containers | `ods compose [profile]` | Docker-managed containers |
+| Run Craft against the shared Firecracker dev cluster | `ods craft-dev api` and `ods craft-dev web` | Foreground, stop with Ctrl-C |
 
 Source commands use the selected project's ports and environment. Shared
 infrastructure is the default. `--project NAME` selects an existing project;
@@ -247,6 +248,49 @@ ods backend model-server
 ods backend model-server --port 9001
 ```
 
+### `craft-dev` - Run Craft Against the Firecracker Dev Cluster
+
+Run a local Craft API and web server against the shared remote Firecracker dev
+cluster, and work with your own sandbox VM there. The commands run the Python
+launchers in `deployment/helm/dev` with `uv run`. That directory's
+[README](../../deployment/helm/dev/README.md) has the full workflow.
+
+A profile file holds the cluster facts: `--profile`, else `CRAFT_DEV_PROFILE`,
+else `dev/craft-dev.yaml` in the onyx-internal checkout next to this repository.
+kubectl always gets an explicit context. `--context` (or `CRAFT_DEV_CONTEXT`)
+must be in the profile's `kube.allowed_contexts`.
+
+```shell
+ods craft-dev <subcommand>
+```
+
+**Subcommands:**
+
+- `doctor` - Check AWS SSO, VPN egress, kube access, Telepresence, host agent mTLS, and the Alembic head. Changes nothing.
+- `api` - Start the local API server. Needs `telepresence connect`. Arguments after `--` go to uvicorn.
+- `web` - Start the local web server against the local API.
+- `vms` - Show your VM.
+- `skills push <dir>` - Put a local directory on a managed mount of your VM (`--mount`, `--wake`).
+- `exec -- <command>` - Run a command in your VM as the sandbox user (`--wake`, `--cwd`).
+- `logs` - Show the guest and agent lines of your VM (`--guest`, `--agent`, `--since`, `--tail`, `-f`).
+- `reset` - Save your sessions, then stop your VM (`--force` skips the save).
+
+The VM commands act only on your user: `--user`, else `CRAFT_DEV_USER`, else
+`user.email` in the profile.
+
+**Examples:**
+
+```shell
+ods craft-dev doctor
+ods craft-dev api --port 8081
+ods craft-dev web --port 8081
+CRAFT_DEV_USER=me@example.com ods craft-dev skills push ./my-skills --wake
+ods craft-dev exec -- ls -la /mnt/skills
+```
+
+Until an `onyx-devtools` release includes `craft-dev`, run it from source at the
+repository root: `go -C tools/ods run . craft-dev doctor`.
+
 ### `stack` - Run the Local Dev Stack of a Worktree
 
 Run the whole local dev stack from a source checkout without an editor:
@@ -345,7 +389,7 @@ forgets a service. `down` also stops the Compose containers; volumes are kept.
 | Profile | Services |
 |---------|----------|
 | `minimal` | Web Server, API Server |
-| `default` | `minimal` plus the primary, light, beat, docfetching, docprocessing and user_file_processing Celery workers |
+| `default` | `minimal` plus the primary, light, beat, docfetching, docconversion, docprocessing and user_file_processing Celery workers |
 | `full` | Every service in the `Run All Onyx Services` compound |
 
 The model server comes from Compose and runs the `edge` image, which is built
@@ -409,7 +453,8 @@ state.
 | `stopped` | Nothing runs (with `--all`) |
 | `stale-lease` | Port leases that no stack uses (with `--all`) |
 
-By default `ls` shows stacks with a running process or container. `--all` adds
+By default `ls` shows stacks with a running process or container, and orphans
+that left only Docker volumes. `--all` adds
 stopped stacks, and `--orphaned` shows only orphaned stacks. `--json` prints an
 array with the project, root, branch, mode, profile, phase, application and
 container counts, web URL, age, status, leases, errors, and `next`, the command
@@ -424,7 +469,27 @@ releases the stack's port leases, and removes the owner record of an orphan. The
 refuse a stack that still runs in an existing worktree unless you add `--force`.
 `ods stack prune` runs `down --project` for every orphaned stack after a
 confirmation (`--yes` skips it). `--volumes` also deletes their Docker volumes,
-after a separate confirmation.
+after a separate confirmation. A removed worktree whose stack was already down
+leaves only its volumes. `ls` shows it as orphaned, plain `prune` leaves it,
+and `prune --volumes` deletes the volumes. Plain `prune` keeps the owner record
+of a project with volumes, because that record is the only link from the
+removed worktree to them. When Docker cannot list the volumes, `prune` keeps
+every owner record. Docker keeps a volume that a container still uses, so
+`prune --volumes` lists the volumes again and keeps the owner record if any is left.
+
+`ods stack prune --idle 6h` also stops each isolated stack whose worktree had no
+activity for 6 hours. Activity is the stack start, a Git operation in the
+worktree (commit, checkout, add, rebase), a change to a modified or untracked
+file, a deleted tracked file or directory, or a running coding agent (`claude`, `codex`, `opencode`, `cursor-agent`)
+whose working directory is in the worktree. Ignored files, such as service
+logs, do not count. ods finds agents through `/proc` on Linux and `lsof` on
+macOS. If ods cannot find the agents, `prune --idle` fails and stops nothing.
+If Git cannot read a worktree, prune warns and does not stop its stack.
+After the confirmation and the stack lock, prune checks the activity again and
+skips a stack that had activity since the listing. Shared stacks serve several
+worktrees, so prune never stops them as idle. Idle stacks keep their volumes, also with `--volumes`, so `ods stack up`
+in the worktree starts the stack again with its data. To prune on a schedule,
+run `ods stack prune --idle 6h --yes` from cron or a systemd timer.
 
 **Examples:**
 
@@ -451,6 +516,9 @@ ods stack plan --profile full
 ods stack ls --all
 ods stack down --project fast-mode-93732ec3
 ods stack prune
+
+# Also stop isolated stacks with no work in their worktree for 6 hours
+ods stack prune --idle 6h --yes
 ```
 
 ### `object-store migrate` - Move a Dev MinIO's Files to the Object Store
@@ -535,6 +603,7 @@ later arguments go to the suite's test runner.
 | `ods` | | `tools/ods` | `go test` |
 | `cli` | | `cli` | `go test` |
 | `terraform` | `tf` | `terraform-provider-onyx` | `go test` |
+| `microvm` | | `microvm` | `go test` |
 
 The Go suites run with `-race`, the same as `pr-golang-tests.yml`. A runner that
 takes packages rather than files, such as `go test`, runs the package that holds
@@ -566,8 +635,10 @@ ods coverage <suite|module-dir> [flags]
 
 The baseline is a `.coverage-baseline.yaml` at the module root recording each
 package's floor. `--check` fails when a package drops below its floor, which is
-what `pr-golang-tests.yml` runs on every PR. After adding tests, `--update`
-raises the floors.
+what `pr-golang-tests.yml` runs on every PR. A floor is a coarse minimum, not
+the last measurement: `--update` rounds each package down to a multiple of 5%
+and leaves out a package below 5%. Run `--update` when a package crosses the
+next 5% step.
 
 The floors are the gate, but they are not always a good comparison: they go
 stale, so the report shows gains the current change never made. Give `--base` a
@@ -579,8 +650,8 @@ number counts only its own tests. That is a number the package's owner can act
 on; a cross-package `-coverpkg` total would credit a package for statements its
 own tests never assert on.
 
-The suites are the same Go modules `ods test` knows: `ods`, `cli`, and
-`terraform`. A module directory such as `tools/ods` is accepted in place of a
+The suites are the same Go modules `ods test` knows: `ods`, `cli`,
+`terraform` and `microvm`. A module directory such as `tools/ods` is accepted in place of a
 suite name, which is what CI passes.
 
 **Flags:**
@@ -593,7 +664,7 @@ suite name, which is what CI passes.
 | `--from-profile` | | Report from this coverage profile instead of running the tests |
 | `--html` | | Render the profile as a browsable page at this path |
 | `--markdown` | | Write the changed packages as a markdown table at this path, for a PR comment |
-| `--tolerance` | `0.1` | Percentage points a package may drop below its floor without failing |
+| `--tolerance` | `1` | Percentage points a package may drop below its floor without failing |
 | `--base` | | Report against the coverage snapshot of this commit instead of the floors |
 | `--publish` | `false` | Record this run as the snapshot of `HEAD` (needs AWS credentials) |
 | `--snapshot-bucket` | `onyx-playwright-artifacts` | S3 bucket that holds the snapshots |
@@ -672,9 +743,10 @@ In CI, each module's `--markdown` report goes to the job summary, and its
 One PR comment, updated in place, lists the modules where a package moved, each
 with a link to its page.
 
-Floors are rounded down to one decimal, and a package may sit `--tolerance`
+Floors are rounded down to a multiple of 5%, and a package may sit `--tolerance`
 below its floor without failing. That absorbs the jitter from suites that depend
-on ports or timing; a real regression is far larger.
+on ports, timing or the runner image. The step is recorded as `step` in the
+baseline file.
 
 The package floors are the gate. The module total is reported with its delta
 but never fails the check: a package added without tests, or a well-covered
@@ -1000,6 +1072,52 @@ ods audit --format=sarif,text > audit.sarif
 
 # Every tracked bun.lock and uv.lock, not just the root and web ones
 ods audit --all-lockfiles --web --python
+```
+
+#### Rust-built PyPI tools in images
+
+The image scanner records the `uv` binary as the crates.io crate `uv`, but uv advisories are
+filed on PyPI. `ods audit image` also matches each such crate as the PyPI package of the same
+version. Add other tools of this kind to `pypiToolsFromCrates` in `internal/audit/image.go`.
+
+#### Audit software installed outside package managers
+
+Use `ods audit image IMAGE --sbom /path/in/image.cdx.json` for a required CycloneDX inventory.
+ODS scans the inventory with pinned Grype and combines its findings with the OSV image report.
+Docker must be available. Missing inventory, empty inventory, and scanner errors fail the audit.
+Use `--sbom-only` when a job checks only software from supplemental inventories.
+The same advisory exceptions, JSON/SARIF reports, and CVE alerts apply to both scanners.
+
+Deployment opts into update deadlines with `--update-policy s3://onyx-internal-tools/audit/updates.json`.
+PR audits and CVE collection scan vulnerabilities without reading update policy.
+Missing or invalid policy fails deployment audits.
+This state is separate from advisory exceptions. It records an emergency minimum and each release's first observation.
+Routine updates warn after 24 hours and block after 72 hours. Emergency minimums block immediately.
+Stale upstream observations warn without resetting recorded deadlines.
+Image scans leave freshness checks disabled unless `--update-policy` is supplied.
+`ods audit gate` includes freshness checks as part of its deployment checks.
+
+CVE Tracking owns policy observation and S3 writes. Its manual `minimum` input raises Chrome's emergency minimum.
+It saves this minimum before upstream discovery, preserving release timestamps even if discovery fails.
+It checks main and supported release branches. Update Sandbox Browser opens or updates pin PRs for stale branches.
+CI builds the audit binary from source. Installed ODS commands receive these features through the normal devtools release.
+
+#### Audit the Craft Firecracker guest kernel and Firecracker
+
+A scanner cannot read a bare `vmlinux` or the Firecracker binaries.
+`ods audit craft-fc` reads the `KERNEL_TAG` and `FC_VERSION` pins in
+`deployment/craft-fc/Dockerfile.artifacts` and matches them against advisory feeds:
+
+- The guest kernel is an `amazonlinux/linux` tag: the AL2023 kernel package source
+  (`kernel6.18-<version>`) or a `microvm-kernel` tag. Each Amazon Linux 2023 advisory (ALAS)
+  for the same kernel series, fixed in a newer package than the pin, is a finding.
+- Firecracker is matched against the GitHub security advisories of `firecracker-microvm/firecracker`.
+
+The allowlist, report formats and `--fail-on` work as for `ods audit image`.
+A feed that cannot be read fails the command. Set `GH_TOKEN` to raise the GitHub API rate limit.
+
+```shell
+ods audit craft-fc --fail-on=high
 ```
 
 #### Checking a release branch before a tag
@@ -1397,16 +1515,20 @@ UV_BUILD_CONSTRAINT="$(git rev-parse --show-toplevel)/tools/requirements/build-c
 ```
 
 `tools/requirements/build-constraints.txt` is compiled from its `.in` by the
-`pip-compile` pre-commit hook, so a plain `pre-commit run pip-compile` refreshes
+`pip-compile` pre-commit hook, so `prek run pip-compile --all-files` refreshes
 it. To upgrade a pinned build dependency, edit `build-constraints.in` and the
 matching `[build-system] requires` in all three `pyproject.toml` files; the
 `build-constraints-drift` hook fails if they disagree.
 
 `go-bin` ships the Go toolchain used to compile the binary. Bumping Go means
-moving it everywhere at once: the `go` directive in `go.mod`, `cli/Dockerfile`,
-the `setup-go` and `GO_VERSION` pins across `.github/workflows/`,
-`.devcontainer/Dockerfile`, the `go-bin` pin in all three `pyproject.toml` files
-and in `tools/requirements/build-constraints.in`, and the compiled `build-constraints.txt`.
+moving it everywhere at once: the `go` directive in every `go.mod`, the `golang`
+image tag and digest in `cli/Dockerfile` and `microvm/Dockerfile`, the `setup-go`
+and `GO_VERSION` pins across `.github/workflows/`, `GO_VERSION` and both tarball
+checksums in `.devcontainer/Dockerfile`, the `go-bin` pin in all three
+`pyproject.toml` files and in `tools/requirements/build-constraints.in`, the
+compiled `build-constraints.txt`, and the golangci-lint `language_version` in
+`.pre-commit-config.yaml`. A new Go release can need a newer golangci-lint, so
+run the hook on a file in each module after the bump.
 
 ## Deploy
 

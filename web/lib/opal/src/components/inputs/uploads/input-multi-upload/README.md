@@ -33,7 +33,12 @@ picker does not count as leaving the field, so a form does not mark it touched m
 | `accept`                              | `string`                        | The picker's filter, as the HTML `accept` attribute                                                     |
 | `maxSizeKb`                           | `number`                        | Rejects a file larger than this                                                                         |
 | `onFileSizeExceeded`                  | `({ file, maxSizeKb }) => void` | Called when a file is rejected for its size                                                             |
+| `tooltip`                             | `string \| RichStr`             | Shown on hover, in any state                                                                            |
 | `id`, `name`, `onBlur`, `data-testid` | —                               | `id` goes on a hidden proxy, so a click on a field label focuses the field and does not open the picker |
+
+Inside `InputHorizontal` or `InputVertical`, the row's `disabled` sets the
+`"disabled"` variant, and its `disabledTooltip` replaces `tooltip` while
+disabled.
 
 `InputMultiUploadField` binds it to a Formik `File[]` field, holding `null` when empty so a required
 check fails.

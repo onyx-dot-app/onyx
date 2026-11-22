@@ -13,8 +13,15 @@ from onyx.file_store.models import ChatFileType, InMemoryChatFile, UserFileMetad
 from onyx.file_store.utils import load_chat_file_by_id, load_user_file_content
 from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.tools.constants import FILE_READER_MAX_CHARS
-from onyx.tools.interface import Tool, parse_tool_arguments
+from onyx.tools.interface import (
+    Tool,
+    parse_tool_arguments,
+    tool_definition_from_arguments,
+)
 from onyx.tools.models import (
+    CodeModeExposure,
+    CodeModeResultKind,
+    CodeModeResultSpec,
     FileReaderArguments,
     FileReadResult,
     ToolCallException,
@@ -23,10 +30,6 @@ from onyx.tools.models import (
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
-
-FILE_ID_FIELD = "file_id"
-START_CHAR_FIELD = "start_char"
-NUM_CHARS_FIELD = "num_chars"
 
 PREVIEW_CHARS = 500
 
@@ -54,6 +57,10 @@ class FileReaderTool(Tool):
         return self._id
 
     @property
+    def code_mode_exposure(self) -> CodeModeExposure:
+        return CodeModeExposure.IMMEDIATE
+
+    @property
     def name(self) -> str:
         return self.NAME
 
@@ -65,6 +72,10 @@ class FileReaderTool(Tool):
     def display_name(self) -> str:
         return self.DISPLAY_NAME
 
+    @property
+    def code_mode_result(self) -> CodeModeResultSpec:
+        return CodeModeResultSpec(kind=CodeModeResultKind.TEXT, annotation="str")
+
     @override
     @classmethod
     def is_available(cls, db_session: Session) -> bool:  # noqa: ARG003
@@ -73,33 +84,8 @@ class FileReaderTool(Tool):
         return DISABLE_VECTOR_DB
 
     def tool_definition(self) -> ToolDefinition:
-        return ToolDefinition(
-            name=self.name,
-            description=self.DESCRIPTION,
-            strict=True,
-            parameters={
-                "type": "object",
-                "additionalProperties": False,
-                "properties": {
-                    FILE_ID_FIELD: {
-                        "type": "string",
-                        "description": "The UUID of the file to read.",
-                    },
-                    START_CHAR_FIELD: {
-                        "anyOf": [{"type": "integer"}, {"type": "null"}],
-                        "description": (
-                            "Character offset to start reading from. Use null for the default of 0."
-                        ),
-                    },
-                    NUM_CHARS_FIELD: {
-                        "anyOf": [{"type": "integer"}, {"type": "null"}],
-                        "description": (
-                            "Number of characters to return (max 16000). Use null for the default of 16000."
-                        ),
-                    },
-                },
-                "required": [FILE_ID_FIELD, START_CHAR_FIELD, NUM_CHARS_FIELD],
-            },
+        return tool_definition_from_arguments(
+            self.name, self.description, FileReaderArguments, strict=True
         )
 
     def _validate_file_id(self, raw_file_id: str) -> UUID:
@@ -129,15 +115,6 @@ class FileReaderTool(Tool):
         return load_chat_file_by_id(str(file_id))
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:  # noqa: ARG002
-        if FILE_ID_FIELD not in invocation.arguments:
-            raise ToolCallException(
-                message=f"Missing required '{FILE_ID_FIELD}' parameter",
-                llm_facing_message=(
-                    f"The read_file tool requires a '{FILE_ID_FIELD}' parameter. "
-                    f'Example: {{"file_id": "abc-123", "start_char": 0, "num_chars": 16000}}'
-                ),
-            )
-
         arguments = parse_tool_arguments(FileReaderArguments, invocation.arguments)
         raw_file_id = arguments.file_id
         file_id = self._validate_file_id(raw_file_id)

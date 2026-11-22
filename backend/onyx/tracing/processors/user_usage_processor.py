@@ -5,10 +5,10 @@ from __future__ import annotations
 import queue
 import threading
 from collections import defaultdict
-from dataclasses import dataclass, replace
 from datetime import datetime, timezone
 from typing import Any
 
+from pydantic import BaseModel, ConfigDict, SkipValidation
 from sqlalchemy.orm import Session
 
 from onyx.db.engine.sql_engine import get_session_with_tenant
@@ -48,10 +48,11 @@ _MAX_QUEUE_SIZE = 100_000
 _SHUTDOWN = object()
 
 
-@dataclass(frozen=True)
-class _UsageRecord:
+class _UsageRecord(BaseModel):
     """Everything needed to write one ledger row, captured at span-end while the
     request contextvars are still valid (the drain thread has none)."""
+
+    model_config = ConfigDict(strict=True, frozen=True)
 
     tenant_id: str
     user_id: str | None
@@ -61,8 +62,8 @@ class _UsageRecord:
     # Keys admin cost overrides and per-model spend; None when the call ran no
     # saved configuration.
     model_configuration_id: int | None
-    flow: str
-    provider: str | None
+    flow: SkipValidation[str]
+    provider: SkipValidation[str | None]
     incognito: bool
     input_tokens: int
     output_tokens: int
@@ -269,18 +270,20 @@ class UserUsageTracingProcessor(TracingProcessor):
             )
             current = aggregated.get(key)
             if current is None:
-                aggregated[key] = replace(record, cost_parts=(part,))
+                aggregated[key] = record.model_copy(update={"cost_parts": (part,)})
                 continue
-            aggregated[key] = replace(
-                current,
-                input_tokens=current.input_tokens + record.input_tokens,
-                output_tokens=current.output_tokens + record.output_tokens,
-                cache_read_tokens=current.cache_read_tokens + record.cache_read_tokens,
-                cache_creation_tokens=(
-                    current.cache_creation_tokens + record.cache_creation_tokens
-                ),
-                image_count=current.image_count + record.image_count,
-                cost_parts=current.cost_parts + (part,),
+            aggregated[key] = current.model_copy(
+                update={
+                    "input_tokens": current.input_tokens + record.input_tokens,
+                    "output_tokens": current.output_tokens + record.output_tokens,
+                    "cache_read_tokens": current.cache_read_tokens
+                    + record.cache_read_tokens,
+                    "cache_creation_tokens": (
+                        current.cache_creation_tokens + record.cache_creation_tokens
+                    ),
+                    "image_count": current.image_count + record.image_count,
+                    "cost_parts": current.cost_parts + (part,),
+                }
             )
         return list(aggregated.values())
 

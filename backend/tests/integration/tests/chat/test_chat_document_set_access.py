@@ -4,7 +4,7 @@ Covers the bypass where a user could override a persona's configured document
 sets by supplying `internal_search_filters.document_set` on a chat message.
 
 The SearchTool is only invoked when the LLM decides to call it, so these tests
-prefer the call with `preferred_tool_id` and script the mock LLM to make it. They
+prefer the call with `tool_options.preferred` and script the mock LLM to make it. They
 also need a seeded connector because DocumentSetManager rejects creation with
 no connectors.
 """
@@ -25,7 +25,10 @@ from tests.integration.common_utils.http_client import client
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.chat import ChatSessionManager
 from tests.integration.common_utils.managers.document_set import DocumentSetManager
-from tests.integration.common_utils.managers.mock_llm import MockLLMScript
+from tests.integration.common_utils.managers.mock_llm import (
+    MockLLMScript,
+    tool_call_reply,
+)
 from tests.integration.common_utils.managers.persona import PersonaManager
 from tests.integration.common_utils.managers.tool import ToolManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
@@ -62,18 +65,13 @@ def _setup_search_infrastructure(
     A blocked request may fail before any LLM call, so its replies are optional."""
     mock_llm.conversation(
         "chat",
-        Reply(
-            tool_calls=[
-                ToolCall(
-                    id=_SEARCH_CALL_ID,
-                    name="internal_search",
-                    arguments={"queries": ["test query"]},
-                )
-            ],
-            conditions=RequestConditions(
-                offers=["internal_search"],
-                tool_choice="auto",
+        tool_call_reply(
+            ToolCall(
+                id=_SEARCH_CALL_ID,
+                name="internal_search",
+                arguments={"queries": ["test query"]},
             ),
+            tool_choice="auto",
             required=search_expected,
         ),
         Reply(
@@ -104,8 +102,10 @@ def _send_message_with_document_set_filter(
             "message": "hello",
             "chat_session_id": str(chat_session_id),
             "stream": True,
-            "internal_search_filters": {"document_set": document_set_names},
-            "preferred_tool_id": preferred_tool_id,
+            "tool_options": {
+                "internal_search_filters": {"document_set": document_set_names},
+                "preferred": {"type": "capability", "tool_id": preferred_tool_id},
+            },
         },
         headers=user.headers,
         cookies=user.cookies,

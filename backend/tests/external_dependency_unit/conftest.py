@@ -3,11 +3,12 @@ import os
 from collections.abc import Generator, Sequence
 from contextlib import contextmanager
 from typing import Protocol
+from unittest.mock import patch
 from uuid import UUID, uuid4
 
 import pytest
 from fastapi_users.password import PasswordHelper
-from sqlalchemy import create_engine, delete, or_, select, update
+from sqlalchemy import create_engine, delete, event, or_, select, update
 from sqlalchemy.engine import Engine
 from sqlalchemy.orm import Session
 from sqlalchemy.pool import NullPool
@@ -98,6 +99,31 @@ def db_session() -> Generator[Session, None, None]:
     )
     with get_session_with_current_tenant() as session:
         yield session
+
+
+@pytest.fixture
+def executed_sql(db_session: Session) -> Generator[list[str], None, None]:
+    """Every SQL statement run on the test engine while the fixture is active."""
+    statements: list[str] = []
+
+    def capture_statement(statement: str, **_event: object) -> None:
+        # SQLAlchemy supplies the unused connection, cursor, and execution parameters.
+        statements.append(statement)
+
+    engine = db_session.get_bind()
+    event.listen(engine, "before_cursor_execute", capture_statement, named=True)
+    try:
+        yield statements
+    finally:
+        event.remove(engine, "before_cursor_execute", capture_statement)
+
+
+@pytest.fixture(params=[False, True], ids=["direct", "code_mode"])
+def code_mode(request: pytest.FixtureRequest) -> Generator[bool, None, None]:
+    """Run the test with CODE_MODE_ENABLED off and on, for chat flows whose
+    behavior depends on it. CI runs the rest of this suite with it off."""
+    with patch("onyx.chat.agent.CODE_MODE_ENABLED", request.param):
+        yield request.param
 
 
 @pytest.fixture

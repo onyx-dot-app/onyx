@@ -31,7 +31,6 @@ from sqlalchemy.orm import Session
 from starlette.types import ASGIApp, Message, Receive, Scope, Send
 
 from onyx.auth.permissions import require_permission
-from onyx.auth.schemas import AuthBackend
 from onyx.auth.users import (
     TenantAwareRedisStrategy,
     auth_backend,
@@ -39,7 +38,7 @@ from onyx.auth.users import (
     get_redis_strategy,
 )
 from onyx.configs import app_configs
-from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
+from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME, AuthBackend
 from onyx.db.engine.async_sql_engine import reset_sqlalchemy_async_engine
 from onyx.db.engine.sql_engine import (
     SqlEngine,
@@ -63,7 +62,7 @@ _CLI_TIMEOUT_SECONDS = 120
 _STRICT_ENV = "MCP_NATIVE_CLIENTS_REQUIRED"
 _URL_PATTERN = re.compile(r"https?://[^\s'\"<>\x00-\x1f]+")
 _REPO_ROOT = Path(__file__).resolve().parents[4]
-_NGINX_IMAGE = os.environ.get("MCP_PROXY_NGINX_IMAGE", "nginx:1.25.5-alpine")
+_NGINX_IMAGE = os.environ.get("MCP_PROXY_NGINX_IMAGE", "nginx:1.30.7-alpine")
 _MCP_NGINX_TEMPLATE = _REPO_ROOT / "deployment/data/nginx/mcp.conf.inc.template"
 
 

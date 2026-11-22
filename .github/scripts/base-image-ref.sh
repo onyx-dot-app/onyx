@@ -1,11 +1,11 @@
 #!/usr/bin/env bash
 # Prints the image that holds everything the component's runtime image ships
 # outside its lockfiles: the pinned hardened runtime base for web and
-# model-server, and for backend and the sandbox their apt stage, built here
-# from the checked-out Dockerfile.
+# model-server, for backend and the sandbox their apt stage, built here
+# from the checked-out Dockerfile, and the Craft Firecracker host agent image
+# built here (its Debian packages and its Go binary).
 #
-# usage: base-image-ref.sh <web|model-server|backend|sandbox> [--report]
-# Report collection uses --report so browser findings do not stop CVE alerts.
+# usage: base-image-ref.sh <web|model-server|backend|sandbox|craft-fc-host-agent>
 #
 # The hardened digests come from the environment the dhi-base-images action
 # exports in CI, or straight from that action's file otherwise (a local run),
@@ -32,10 +32,10 @@ case "${component}" in
   sandbox)
     docker build --quiet --target os --tag onyx-sandbox-os:audit backend/onyx/server/features/build/sandbox/image >&2
     ref="onyx-sandbox-os:audit"
-    if [ "${2:-}" != "--report" ]; then
-      # Exit 2 means an unknown component to ODS, not a failed browser audit.
-      bash .github/scripts/audit-sandbox-browser.sh "$ref" >&2 || exit 1
-    fi
+    ;;
+  craft-fc-host-agent)
+    docker build --quiet --platform linux/amd64 --tag onyx-craft-fc-host-agent:audit microvm >&2
+    ref="onyx-craft-fc-host-agent:audit"
     ;;
   *)
     echo "unknown component: ${component}" >&2

@@ -10,6 +10,7 @@ openpyxl
 pandas
 pdfplumber
 pillow
+power-pptx
 pydantic
 python-docx
 python-pptx

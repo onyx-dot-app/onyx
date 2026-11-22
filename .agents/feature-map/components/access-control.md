@@ -20,8 +20,12 @@ access, hierarchy filtering and post-query censoring.
   message says "you cannot see this".
 - **An anonymous visitor** sees public documents only.
 - **An admin** controls visibility through connector access types (public,
-  private to groups, or synced from the source), user groups, and document
-  sets. A document set narrows what an agent searches. It never grants access
+  private to groups, owner-only (`personal`, Business+), or synced from the
+  source), user groups, and document sets. `private` may have no groups, and
+  owner-only is its own type: nothing converts one to the other, so the edit
+  form shows what the admin saved. Data-access rows copy their pair's access type, and a composite
+  foreign key on `(cc_pair_id, access_type)` limits them to `private` and
+  `sync_restricted`: leaving a group type must delete the rows first. A document set narrows what an agent searches. It never grants access
   to a document the user could not already see.
 - **A user who asks for a document set they cannot access** gets a 403
   `INSUFFICIENT_PERMISSIONS`, not an empty answer.

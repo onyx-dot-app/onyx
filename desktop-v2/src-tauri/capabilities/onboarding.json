@@ -1,0 +1,13 @@
+{
+  "$schema": "../gen/schemas/desktop-schema.json",
+  "identifier": "onboarding",
+  "description": "The onboarding window: check and save the server URL.",
+  "local": true,
+  "windows": ["onboarding"],
+  "permissions": [
+    "core:window:allow-start-dragging",
+    "core:window:allow-set-size",
+    "allow-check-server",
+    "allow-save-server"
+  ]
+}

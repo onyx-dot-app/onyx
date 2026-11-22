@@ -16,6 +16,9 @@ interface InputTypeInTagProps extends TagFieldBaseProps {
  * with a text input on the `.opal-input` chrome. Enter commits the typed
  * text through `onAdd`. There is nothing to select from; a field that
  * offers a set is `InputMultiSelect`.
+ *
+ * Inside `InputHorizontal` or `InputVertical`, the row's `disabled` and
+ * `disabledTooltip` apply to it too.
  */
 function InputTypeInTag({ onAdd, ...props }: InputTypeInTagProps) {
   return <TagField {...props} onEnter={onAdd} />;

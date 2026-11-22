@@ -36,9 +36,7 @@ from onyx.chat.models import (
 )
 from onyx.chat.presentation import ResponsePresenter, project_response, replay_response
 from onyx.chat.renderer import MessageRenderer, ResponseLayout, ToolRenderer
-from onyx.chat.response import response_record, tool_arguments_for_display
-from onyx.coding_agent.models import CodingAgentCallResult
-from onyx.coding_agent.tool_definitions import CODING_AGENT_TOOL_NAME
+from onyx.chat.response import response_record
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import SearchDoc
 from onyx.deep_research.models import ResearchAgentCallResult
@@ -77,11 +75,7 @@ from onyx.server.query_and_chat.placement import Placement
 from onyx.server.query_and_chat.streaming_models import (
     AgentResponseDelta,
     AgentResponseStart,
-    BashToolDelta,
-    BashToolStart,
     CitationInfo,
-    CodingAgentFinal,
-    CodingAgentThinkingDelta,
     CustomToolDelta,
     CustomToolStart,
     IntermediateReportCitedDocs,
@@ -94,12 +88,10 @@ from onyx.server.query_and_chat.streaming_models import (
     SearchToolStart,
     SectionEnd,
     ToolCallArgumentDelta,
-    ToolCallDebug,
 )
 from onyx.tools.models import (
     CustomToolCallSummary,
     CustomToolErrorInfo,
-    LlmBashExecutionResult,
     ToolExecutionError,
 )
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
@@ -617,38 +609,12 @@ def test_leading_citation_keeps_metadata(live: bool) -> None:
     assert citations[0].placement == starts[0].placement
 
 
-@pytest.mark.parametrize("debug", [False, True])
-def test_bash_debug_packet_precedes_output_start(
-    debug: bool, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    monkeypatch.setattr("onyx.chat.renderer.INTEGRATION_TESTS_MODE", debug)
-    renderer = ToolRenderer(
-        ToolCall(id="bash", name="bash", arguments={"cmd": "pwd"}),
-        Placement(turn_index=0),
-    )
-    packets = renderer.start()
-    packets.extend(
-        renderer.complete(
-            ToolResult(
-                content="done",
-                details=LlmBashExecutionResult(
-                    stdout="/repo", stderr="", exit_code=0, timed_out=False
-                ),
-            )
-        )
-    )
-    assert sum(isinstance(p.obj, ToolCallDebug) for p in packets) == int(debug)
-    start = next(i for i, p in enumerate(packets) if isinstance(p.obj, BashToolStart))
-    assert isinstance(packets[start + 1].obj, BashToolDelta)
-
-
 @pytest.mark.parametrize(
     ("name", "arguments"),
     [
         ("run_python", {"code": []}),
         ("internal_search", {"queries": 3}),
         ("open_url", {"urls": {}}),
-        ("bash", {"cmd": None}),
     ],
 )
 def test_invalid_tool_arguments_replay_the_error_and_later_answer(
@@ -697,34 +663,6 @@ def test_invalid_tool_arguments_replay_the_error_and_later_answer(
     )
 
 
-@pytest.mark.parametrize("reasoning", ["Reasoning", []])
-def test_replay_hides_configured_thinking_tool(reasoning: str | list[str]) -> None:
-    response = ResponseRecord(
-        run_id="r",
-        status=RunStatus.COMPLETE,
-        steps=[
-            StepRecord(
-                message=AssistantMessage(
-                    id="m",
-                    content=[
-                        ToolCall(
-                            id="think",
-                            name="think",
-                            arguments={"reasoning": reasoning},
-                        )
-                    ],
-                ),
-                generation_status=ExecutionStatus.COMPLETE,
-            ),
-        ],
-    )
-    packets = replay_response(
-        response, {}, {"m": MessageRendering(think_tool="think")}, {}
-    )
-    assert not any(isinstance(p.obj, CustomToolStart) for p in packets)
-    assert any(p.obj.type == "reasoning_delta" for p in packets) == bool(reasoning)
-
-
 @pytest.mark.parametrize("status", [RunStatus.ERROR, RunStatus.CANCELLED])
 def test_interrupted_answer_citations_belong_to_the_selected_text(
     status: RunStatus,
@@ -767,160 +705,6 @@ def test_interrupted_answer_citations_belong_to_the_selected_text(
     response = project_response(snapshot, tool_ids={})
     assert response.answer == "Partial answer"
     assert response.citation_info == []
-
-
-@pytest.mark.parametrize("live", [False, True])
-@pytest.mark.parametrize("tool_thinking", [False, True])
-@pytest.mark.parametrize(
-    "mode", [PresentationMode.CODING_THINKING, PresentationMode.CODING_ANSWER]
-)
-def test_coding_thinking_uses_coding_packets(
-    live: bool, tool_thinking: bool, mode: PresentationMode
-) -> None:
-    settings = MessageRendering(mode=mode, think_tool="think")
-    message = AssistantMessage(
-        id="m",
-        content=[
-            ToolCall(id="t", name="think", arguments={"reasoning": "Inspect the code"})
-            if tool_thinking
-            else ThinkingContent(text="Inspect the code")
-        ],
-    )
-    parent = Placement(turn_index=3, tab_index=1)
-    if live:
-        renderer = MessageRenderer(settings, {}, ResponseLayout(), parent)
-        if tool_thinking:
-            call = message.tool_calls[0]
-            output = renderer.consume(
-                ToolCallStartEvent(
-                    content_index=0, tool_call_id=call.id, tool_name=call.name
-                )
-            )
-            output.extend(
-                renderer.consume(ToolCallEndEvent(content_index=0, tool_call=call))
-            )
-        else:
-            output = renderer.consume(
-                ThinkingDeltaEvent(content_index=0, text="Inspect the code")
-            )
-        output.extend(renderer.complete(message))
-    else:
-        output = replay_response(
-            ResponseRecord(
-                run_id="child",
-                parent_run_id="root",
-                status=RunStatus.COMPLETE,
-                steps=[
-                    StepRecord(
-                        message=message, generation_status=ExecutionStatus.COMPLETE
-                    )
-                ],
-            ),
-            {},
-            {"m": settings},
-            {},
-            parent=parent,
-        )
-    assert [
-        packet.obj.content
-        for packet in output
-        if isinstance(packet.obj, CodingAgentThinkingDelta)
-    ] == ["Inspect the code"]
-    assert not any(packet.obj.type.startswith("reasoning_") for packet in output)
-    assert all(
-        (packet.placement.turn_index, packet.placement.tab_index) == (3, 1)
-        for packet in output
-    )
-
-
-@pytest.mark.parametrize("live", [False, True])
-def test_parallel_coding_commands_keep_separate_output_sections(live: bool) -> None:
-    calls = [
-        ToolCall(id=str(index), name="bash", arguments={"cmd": f"command-{index}"})
-        for index in range(2)
-    ]
-    message = AssistantMessage(
-        id="coding", content=[ThinkingContent(text="Inspect both files"), *calls]
-    )
-    settings = MessageRendering(mode=PresentationMode.CODING_THINKING)
-    parent = Placement(turn_index=3, tab_index=1)
-    results = {
-        call.id: ToolResultMessage(
-            tool_call_id=call.id,
-            tool_name=call.name,
-            content=f"output-{call.id}",
-            details=LlmBashExecutionResult(
-                stdout=f"output-{call.id}",
-                stderr="",
-                exit_code=int(call.id),
-                timed_out=False,
-            ),
-        )
-        for call in calls
-    }
-    if live:
-        renderer = MessageRenderer(settings, {}, ResponseLayout(), parent)
-        output = renderer.consume(
-            ThinkingDeltaEvent(content_index=0, text="Inspect both files")
-        )
-        for index, call in enumerate(calls, 1):
-            output.extend(
-                renderer.consume(
-                    ToolCallStartEvent(
-                        content_index=index, tool_call_id=call.id, tool_name=call.name
-                    )
-                )
-            )
-        output.extend(renderer.complete(message))
-        tools = [ToolRenderer(call, renderer.tool_placement(call.id)) for call in calls]
-        for tool in tools:
-            output.extend(tool.start())
-        for tool, call in zip(reversed(tools), reversed(calls), strict=True):
-            output.extend(tool.complete(results[call.id]))
-    else:
-        output = replay_response(
-            ResponseRecord(
-                run_id="child",
-                parent_run_id="root",
-                status=RunStatus.COMPLETE,
-                steps=[
-                    StepRecord(
-                        message=message,
-                        generation_status=ExecutionStatus.COMPLETE,
-                        tools={
-                            call.id: ToolExecutionRecord(
-                                status=ExecutionStatus.COMPLETE, result=results[call.id]
-                            )
-                            for call in calls
-                        },
-                    )
-                ],
-            ),
-            {},
-            {"coding": settings},
-            {},
-            parent=parent,
-        )
-    starts = {
-        packet.obj.cmd: packet.placement
-        for packet in output
-        if isinstance(packet.obj, BashToolStart)
-    }
-    assert starts["command-0"] != starts["command-1"]
-    for index in range(2):
-        delta = next(
-            packet
-            for packet in output
-            if isinstance(packet.obj, BashToolDelta)
-            and packet.obj.stdout == f"output-{index}"
-        )
-        assert delta.placement == starts[f"command-{index}"]
-        assert isinstance(delta.obj, BashToolDelta)
-        assert delta.obj.exit_code == index
-    thinking = next(
-        packet for packet in output if isinstance(packet.obj, CodingAgentThinkingDelta)
-    )
-    assert all(thinking.placement != placement for placement in starts.values())
 
 
 @pytest.mark.parametrize("tool_first", [False, True])
@@ -1066,36 +850,17 @@ def test_tool_errors_only_display_explicit_public_details(
 
 
 @pytest.mark.parametrize("live", [False, True])
-def test_completion_batches_content_and_decodes_thinking_once(
-    live: bool, monkeypatch: pytest.MonkeyPatch
-) -> None:
-    decoded_calls: list[str] = []
-
-    def decode(call: ToolCall) -> dict[str, JsonValue]:
-        decoded_calls.append(call.id)
-        return tool_arguments_for_display(call)
-
-    monkeypatch.setattr("onyx.chat.response.tool_arguments_for_display", decode)
-    think = ToolCall(
-        id="think",
-        name="think",
-        arguments={},
-        raw_arguments='{"reasoning":"' + "r" * 128,
-        arguments_complete=False,
-    )
+def test_completion_batches_content(live: bool) -> None:
     tool = ToolCall(id="lookup", name="lookup", arguments={})
     message = AssistantMessage(
         content=[
-            *[ThinkingContent(text="r") for _ in range(128)],
-            think,
+            *[ThinkingContent(text="r") for _ in range(256)],
             *[TextContent(text="a") for _ in range(128)],
             tool,
             *[TextContent(text="b") for _ in range(128)],
         ]
     )
-    renderer = MessageRenderer(
-        MessageRendering(think_tool="think"), {}, ResponseLayout()
-    )
+    renderer = MessageRenderer(MessageRendering(), {}, ResponseLayout())
     output: list[Packet] = []
     if live:
         output.extend(
@@ -1103,7 +868,6 @@ def test_completion_batches_content_and_decodes_thinking_once(
         )
     output.extend(renderer.complete(message))
     assert renderer.complete(message) == []
-    assert decoded_calls == ["think"]
     assert renderer.reasoning == "r" * 256
     assert renderer.answer == "a" * 128 + "b" * 128
     assert [
@@ -1122,8 +886,6 @@ def test_completion_batches_content_and_decodes_thinking_once(
     assert (
         renderer.tool_placement(tool.id).turn_index > answer_start.placement.turn_index
     )
-    assert think.arguments == {}
-    assert len(message.content) == 386
 
 
 @pytest.mark.parametrize("public_error", [False, True])
@@ -1296,15 +1058,10 @@ def test_child_completion_closes_only_its_tool_cards() -> None:
     ]
 
 
-@pytest.mark.parametrize("coding", [False, True])
-def test_completed_agent_tool_output_matches_replay(coding: bool) -> None:
-    name = CODING_AGENT_TOOL_NAME if coding else RESEARCH_AGENT_TOOL_NAME
-    details = (
-        CodingAgentCallResult(answer="Final report")
-        if coding
-        else ResearchAgentCallResult(
-            intermediate_report="Final report", citation_mapping={}
-        )
+def test_completed_agent_tool_output_matches_replay() -> None:
+    name = RESEARCH_AGENT_TOOL_NAME
+    details = ResearchAgentCallResult(
+        intermediate_report="Final report", citation_mapping={}
     )
     output: list[Packet] = []
     presenter = ResponsePresenter(_emitter(output))
@@ -1332,21 +1089,11 @@ def test_completed_agent_tool_output_matches_replay(coding: bool) -> None:
     )
     replay = replay_response(response_record(runs[0].snapshot()), {}, {}, {})
     for packets in (output, replay):
-        assert not any(
-            isinstance(packet.obj, CodingAgentThinkingDelta) for packet in packets
-        )
-        if coding:
-            assert [
-                packet.obj.answer
-                for packet in packets
-                if isinstance(packet.obj, CodingAgentFinal)
-            ] == ["Final report"]
-        else:
-            assert [
-                packet.obj.content
-                for packet in packets
-                if isinstance(packet.obj, IntermediateReportDelta)
-            ] == ["Final report"]
+        assert [
+            packet.obj.content
+            for packet in packets
+            if isinstance(packet.obj, IntermediateReportDelta)
+        ] == ["Final report"]
 
 
 def test_parallel_search_packets_complete_without_waiting_for_an_earlier_call() -> None:
@@ -1425,6 +1172,8 @@ def test_parallel_search_packets_complete_without_waiting_for_an_earlier_call() 
     "outcome, failure, reason",
     [
         (RunStatus.COMPLETE, None, "finished"),
+        (RunStatus.LIMIT, None, "finished"),
+        (RunStatus.ERROR, None, "finished"),
         (RunStatus.CANCELLED, None, "user_cancelled"),
         (
             RunStatus.CANCELLED,

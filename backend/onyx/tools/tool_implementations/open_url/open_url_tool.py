@@ -1,8 +1,8 @@
 import json
 from collections import defaultdict
-from typing import Any
+from typing import Any, NamedTuple
 
-from pydantic import BaseModel, JsonValue
+from pydantic import BaseModel
 from sqlalchemy.orm import Session
 from typing_extensions import override
 
@@ -26,10 +26,22 @@ from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import User
 from onyx.document_index.interfaces import DocumentIndex, DocumentSectionRequest
 from onyx.llm.models import ToolDefinition, ToolResult
-from onyx.tools.interface import CITATIONS_PER_TOOL_CALL, Tool
-from onyx.tools.models import ToolCallException, ToolContext
+from onyx.tools.interface import (
+    CITATIONS_PER_TOOL_CALL,
+    Tool,
+    parse_tool_arguments,
+    tool_definition_from_arguments,
+)
+from onyx.tools.models import (
+    CodeModeExposure,
+    CodeModeResultSpec,
+    SearchResult,
+    SearchResults,
+    ToolContext,
+)
 from onyx.tools.tool_implementations.open_url.models import (
     FailedFetch,
+    OpenURLArguments,
     WebContentProvider,
 )
 from onyx.tools.tool_implementations.open_url.url_normalization import (
@@ -39,12 +51,16 @@ from onyx.tools.tool_implementations.open_url.url_normalization import (
 from onyx.tools.tool_implementations.open_url.utils import (
     filter_web_contents_with_no_title_or_content,
 )
+from onyx.tools.tool_implementations.utils import SEARCH_RESULTS_CODE_MODE_RESULT
 from onyx.tools.tool_implementations.web_search.providers import (
     get_default_content_provider,
 )
 from onyx.tools.tool_implementations.web_search.utils import (
     MAX_CHARS_PER_URL,
+    TRUNCATED_CONTENT_PREFIX,
+    TRUNCATED_CONTENT_SUFFIX,
     inference_section_from_internet_page_scrape,
+    truncate_search_result_content,
 )
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
@@ -54,8 +70,6 @@ from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
 
-URLS_FIELD = "urls"
-
 # 2 minute timeout for parallel URL fetching to prevent indefinite hangs
 OPEN_URL_TIMEOUT_SECONDS = 2 * 60
 
@@ -63,6 +77,15 @@ OPEN_URL_TIMEOUT_SECONDS = 2 * 60
 # otherwise this alone will completely flood the context and degrade experience.
 # Note that if a lot of the URLs contain very little content, this results in no truncation.
 MAX_CHARS_ACROSS_URLS = 10 * MAX_CHARS_PER_URL
+# The full value of a call (ToolResult.full_value): this many characters of
+# whole pages, plus the excerpts of later pages. A fetched page is cut to it
+# too, since no call keeps more of one page.
+OPEN_URL_MAX_CHARS = 2_000_000
+# The same for a call from a code mode program: 200,000 characters of whole
+# pages, plus the excerpts of later pages. The program holds its results in
+# its 128 MB of memory: ten calls of CJK pages, about 3 bytes for each
+# character, still let the program pause to wait for a tool.
+OPEN_URL_PROGRAM_MAX_CHARS = 200_000
 
 # Minimum content length to include a document (avoid tiny snippets)
 # This is for truncation purposes, if a document is small (unless it goes into truncation flow),
@@ -125,38 +148,6 @@ def _build_failure_message(
     if not parts:
         return "Failed to fetch content from the requested resources."
     return "Failed to fetch content from " + " and ".join(parts)
-
-
-def _dedupe_preserve_order(values: list[str]) -> list[str]:
-    seen: set[str] = set()
-    ordered: list[str] = []
-    for value in values:
-        if not value:
-            continue
-        if value in seen:
-            continue
-        seen.add(value)
-        ordered.append(value)
-    return ordered
-
-
-def _normalize_string_list(value: JsonValue) -> list[str]:
-    """Normalize a value that may be a string, list of strings, or None into a cleaned list.
-
-    Returns a deduplicated list of non-empty stripped strings.
-    """
-    if value is None:
-        return []
-    if isinstance(value, str):
-        value = [value]
-    if not isinstance(value, list):
-        raise ToolCallException(
-            message="Invalid URL list",
-            llm_facing_message="Provide urls as a string or a list of strings.",
-        )
-    return _dedupe_preserve_order(
-        [stripped for item in value if (stripped := str(item).strip())]
-    )
 
 
 def _url_lookup_variants(url: str) -> set[str]:
@@ -302,22 +293,20 @@ def _resolve_urls_to_document_ids(
     return matches, unresolved
 
 
-def _estimate_result_chars(result: dict[str, Any]) -> int:
-    """Estimate character count from document fields in a result dict."""
-    total = 0
-    for value in result.values():
-        if value is not None:
-            total += len(str(value))
-    return total
+def _estimate_result_chars(result: SearchResult) -> int:
+    """Estimate character count from the document fields of a result."""
+    return sum(
+        len(str(value)) for value in result.model_dump(exclude_none=True).values()
+    )
 
 
-def _convert_sections_to_llm_string_with_citations(
+def _sections_to_search_results(
     sections: list[InferenceSection],
     existing_citation_mapping: dict[str, int],
     citation_start: int,
     max_document_chars: int = MAX_CHARS_ACROSS_URLS,
-) -> tuple[str, dict[int, str]]:
-    """Convert InferenceSections to LLM string, reusing existing citations where available.
+) -> tuple[SearchResults, dict[int, str]]:
+    """Convert InferenceSections to the model's results, reusing existing citations where available.
 
     Args:
         sections: List of InferenceSection objects to convert.
@@ -325,10 +314,11 @@ def _convert_sections_to_llm_string_with_citations(
             documents that have already been cited.
         citation_start: Starting citation number for new citations.
         max_document_chars: Maximum total characters from document fields.
-            Content will be truncated to fit within this budget.
+            Content is cut to fit within this budget, with
+            TRUNCATED_CONTENT_SUFFIX; the documents after it are left out.
 
     Returns:
-        Tuple of (JSON string for LLM, citation_mapping dict).
+        Tuple of (the results, citation_mapping dict).
         The citation_mapping maps citation_id -> document_id.
     """
     # Build document_id to citation_id mapping, reusing existing citations
@@ -355,40 +345,27 @@ def _convert_sections_to_llm_string_with_citations(
             next_citation_id += 1
 
     # Second pass: build results, respecting max_document_chars budget
-    results = []
+    results: list[SearchResult] = []
     total_chars = 0
 
     for section in sections:
         chunk = section.center_chunk
-        document_id = chunk.document_id
-        citation_id = document_id_to_citation_id[document_id]
-
-        # Format updated_at as ISO string if available
-        updated_at_str = None
-        if chunk.updated_at:
-            updated_at_str = chunk.updated_at.isoformat()
-
-        # Build result dict without content first to calculate metadata overhead
-        result: dict[str, Any] = {
-            "document": citation_id,
-            "title": chunk.semantic_identifier,
-        }
-        if updated_at_str is not None:
-            result["updated_at"] = updated_at_str
-        if chunk.source_links:
-            link = next(iter(chunk.source_links.values()), None)
-            if link:
-                result["url"] = link
-
-        if chunk.metadata:
-            result["metadata"] = json.dumps(chunk.metadata, ensure_ascii=False)
-
-        # Calculate chars used by metadata fields (everything except content)
-        metadata_chars = _estimate_result_chars(result)
+        # Built without content first to calculate the metadata overhead
+        result = SearchResult(
+            document=document_id_to_citation_id[chunk.document_id],
+            title=chunk.semantic_identifier,
+            updated_at=chunk.updated_at.isoformat() if chunk.updated_at else None,
+            url=next(iter((chunk.source_links or {}).values()), None) or None,
+            content="",
+            metadata=json.dumps(chunk.metadata, ensure_ascii=False)
+            if chunk.metadata
+            else None,
+        )
 
         # Calculate remaining budget for content
-        remaining_budget = max_document_chars - total_chars - metadata_chars
-        content = section.combined_content
+        remaining_budget = (
+            max_document_chars - total_chars - _estimate_result_chars(result)
+        )
 
         # Check if we have enough budget for meaningful content
         if remaining_budget < MIN_CONTENT_CHARS:
@@ -396,26 +373,28 @@ def _convert_sections_to_llm_string_with_citations(
             break
 
         # Truncate content if it exceeds remaining budget
-        if len(content) > remaining_budget:
-            content = content[:remaining_budget]
-
-        result["content"] = content
-
-        result_chars = _estimate_result_chars(result)
+        result.content = truncate_search_result_content(
+            section.combined_content, remaining_budget
+        )
+        total_chars += _estimate_result_chars(result)
         results.append(result)
-        total_chars += result_chars
 
-    output = {"results": results}
-    return json.dumps(
-        output, separators=(",", ":"), ensure_ascii=False
-    ), citation_mapping
+    return SearchResults(results=results), citation_mapping
 
 
 MAX_URLS_PER_CALL = 10
 
 
+class OpenedPage(NamedTuple):
+    """A page that the call opened: its section, whose content is the
+    model's excerpt, and its whole text."""
+
+    section: InferenceSection
+    text: str
+
+
 class OpenURLTool(Tool):
-    merge_list_argument = URLS_FIELD
+    merge_list_argument = "urls"
     merge_list_limit = MAX_URLS_PER_CALL
 
     NAME = "open_url"
@@ -475,6 +454,10 @@ class OpenURLTool(Tool):
         return self._id
 
     @property
+    def code_mode_exposure(self) -> CodeModeExposure:
+        return CodeModeExposure.IMMEDIATE
+
+    @property
     def name(self) -> str:
         return self.NAME
 
@@ -488,6 +471,10 @@ class OpenURLTool(Tool):
     def display_name(self) -> str:
         return self.DISPLAY_NAME
 
+    @property
+    def code_mode_result(self) -> CodeModeResultSpec:
+        return SEARCH_RESULTS_CODE_MODE_RESULT
+
     @override
     @classmethod
     def is_available(cls, db_session: Session) -> bool:  # noqa: ARG003
@@ -499,29 +486,12 @@ class OpenURLTool(Tool):
         return True
 
     def tool_definition(self) -> ToolDefinition:
-        return ToolDefinition(
-            name=self.name,
-            description=self.description,
-            strict=True,
-            parameters={
-                "type": "object",
-                "additionalProperties": False,
-                "properties": {
-                    URLS_FIELD: {
-                        "type": "array",
-                        "items": {"type": "string"},
-                        "description": (
-                            "List of URLs to open and read, can be a single URL or multiple URLs. "
-                            "This will return the text content of the page(s)."
-                        ),
-                    },
-                },
-                "required": [URLS_FIELD],
-            },
+        return tool_definition_from_arguments(
+            self.name, self.description, OpenURLArguments, strict=True
         )
 
     def _run(self, invocation: ToolInvocation, context: ToolContext) -> ToolResult:
-        urls = _normalize_string_list(invocation.arguments.get(URLS_FIELD))
+        urls = parse_tool_arguments(OpenURLArguments, invocation.arguments).urls
 
         if len(urls) > MAX_URLS_PER_CALL:
             logger.warning(
@@ -530,16 +500,6 @@ class OpenURLTool(Tool):
                 MAX_URLS_PER_CALL,
             )
             urls = urls[:MAX_URLS_PER_CALL]
-
-        if not urls:
-            raise ToolCallException(
-                message=f"Missing required '{URLS_FIELD}' parameter in open_url tool call",
-                llm_facing_message=(
-                    f"The open_url tool requires a '{URLS_FIELD}' parameter "
-                    f"containing an array of URLs. Please provide "
-                    f'like: {{"urls": ["https://example.com"]}}'
-                ),
-            )
 
         with get_session_with_current_tenant() as db_session:
             url_to_doc_id: dict[str, str] = {}
@@ -558,9 +518,7 @@ class OpenURLTool(Tool):
                     # No index to serve from and crawling is off — nothing to do.
                     # (construct_tools normally drops the tool in this config;
                     # this is a defensive fallback.)
-                    return ToolResult(
-                        content=WEB_FETCH_DISABLED_REASON,
-                    )
+                    return ToolResult(content=WEB_FETCH_DISABLED_REASON, is_error=True)
                 # Crawl-only: no indexed retrieval / link-based fallback without a vector DB.
                 crawled_result = run_functions_tuples_in_parallel(
                     [
@@ -576,15 +534,15 @@ class OpenURLTool(Tool):
                 indexed_result = IndexedRetrievalResult(
                     sections=[], missing_document_ids=[]
                 )
-                crawled_sections, failed_web_fetches = crawled_result or ([], [])
+                crawled_pages, failed_web_fetches = crawled_result or ([], [])
 
                 if (
                     timeout_occurred[0]
                     and not indexed_result.sections
-                    and not crawled_sections
+                    and not crawled_pages
                 ):
                     return ToolResult(
-                        content="The call to open_url timed out",
+                        content="The call to open_url timed out", is_error=True
                     )
             else:
                 url_requests, unresolved_urls = _resolve_urls_to_document_ids(
@@ -646,16 +604,16 @@ class OpenURLTool(Tool):
                 indexed_result = indexed_result or IndexedRetrievalResult(
                     sections=[], missing_document_ids=[]
                 )
-                crawled_sections, failed_web_fetches = crawled_result or ([], [])
+                crawled_pages, failed_web_fetches = crawled_result or ([], [])
 
                 # Before link-based fallback (retries index retrieval with no timeout).
                 if (
                     timeout_occurred[0]
                     and not indexed_result.sections
-                    and not crawled_sections
+                    and not crawled_pages
                 ):
                     return ToolResult(
-                        content="The call to open_url timed out",
+                        content="The call to open_url timed out", is_error=True
                     )
 
                 # Last-resort: link-based lookup when doc-ID resolve + crawl both fail.
@@ -669,13 +627,14 @@ class OpenURLTool(Tool):
                 )
 
             # Prefer indexed when available, else crawled
-            inference_sections = self._merge_indexed_and_crawled_results(
+            opened = self._merge_indexed_and_crawled_results(
                 indexed_result.sections,
-                crawled_sections,
+                crawled_pages,
                 url_to_doc_id,
                 urls,
                 failed_web_fetches,
             )
+        inference_sections = [page.section for page in opened]
 
         if not inference_sections:
             failure_msg = _build_failure_message(
@@ -683,7 +642,7 @@ class OpenURLTool(Tool):
                 failed_web_fetches=failed_web_fetches,
             )
             logger.warning("OpenURL tool failed: %s", failure_msg)
-            return ToolResult(content=failure_msg)
+            return ToolResult(content=failure_msg, is_error=True)
 
         for section in inference_sections:
             chunk = section.center_chunk
@@ -703,13 +662,55 @@ class OpenURLTool(Tool):
         # Note that with this call, some contents may be truncated or dropped so what the LLM sees may not be the entire set
         # That said, it is still the best experience to show all the docs that were fetched, even if the LLM on rare
         # occasions only actually sees a subset.
-        docs_str, citation_mapping = _convert_sections_to_llm_string_with_citations(
+        existing_citation_mapping = {
+            url: number for number, url in context.citation_mapping.items()
+        }
+        citation_start = (
+            context.next_citation_num + CITATIONS_PER_TOOL_CALL * invocation.call_index
+        )
+        excerpts, citation_mapping = _sections_to_search_results(
             sections=inference_sections,
-            existing_citation_mapping={
-                url: number for number, url in context.citation_mapping.items()
-            },
-            citation_start=context.next_citation_num
-            + CITATIONS_PER_TOOL_CALL * invocation.call_index,
+            existing_citation_mapping=existing_citation_mapping,
+            citation_start=citation_start,
+        )
+        # The full value: each page whole, within the call's limit. A page
+        # keeps its whole text when that text holds all that the model saw of
+        # it: the excerpt as the call's budget cut it, without its markers.
+        # Otherwise (the limit can cut a page before its snippet) it keeps its
+        # excerpt, as does a page past the limit, so the full value holds all
+        # that the model sees. A page past the excerpts' budget, which the
+        # model did not see, goes in whole. Both lists follow the sections'
+        # order, so a page pairs with its excerpt by position, also when two
+        # pages share a citation number.
+        pages, _ = _sections_to_search_results(
+            sections=[
+                page.section.model_copy(update={"combined_content": page.text})
+                for page in opened
+            ],
+            existing_citation_mapping=existing_citation_mapping,
+            citation_start=citation_start,
+            max_document_chars=OPEN_URL_PROGRAM_MAX_CHARS
+            if context.program_call
+            else OPEN_URL_MAX_CHARS,
+        )
+        full_pages: list[SearchResult] = []
+        for page, excerpt in zip(pages.results, excerpts.results, strict=False):
+            seen = excerpt.content.removeprefix(TRUNCATED_CONTENT_PREFIX).removesuffix(
+                TRUNCATED_CONTENT_SUFFIX
+            )
+            # The budget cut can split the excerpt's own closing marker.
+            seen = next(
+                (
+                    seen[:-length]
+                    for length in range(len(TRUNCATED_CONTENT_SUFFIX) - 1, 0, -1)
+                    if seen.endswith(TRUNCATED_CONTENT_SUFFIX[:length])
+                ),
+                seen,
+            )
+            full_pages.append(page if seen in page.content else excerpt)
+        full_pages += (
+            pages.results[len(excerpts.results) :]
+            or excerpts.results[len(pages.results) :]
         )
 
         return ToolResult(
@@ -717,7 +718,11 @@ class OpenURLTool(Tool):
                 search_docs=search_docs,
                 citation_mapping=citation_mapping,
             ),
-            content=docs_str,
+            content=excerpts.model_dump_json(),
+            # Set only when some page holds more than the model sees of it.
+            full_value=None
+            if full_pages == excerpts.results
+            else SearchResults(results=full_pages),
         )
 
     def _fallback_link_lookup(
@@ -850,11 +855,11 @@ class OpenURLTool(Tool):
     def _merge_indexed_and_crawled_results(
         self,
         indexed_sections: list[InferenceSection],
-        crawled_sections: list[InferenceSection],
+        crawled_pages: list[OpenedPage],
         url_to_doc_id: dict[str, str],
         all_urls: list[str],
         failed_web_fetches: list[FailedFetch],  # noqa: ARG002
-    ) -> list[InferenceSection]:
+    ) -> list[OpenedPage]:
         """Merge indexed and crawled results, preferring indexed when available.
 
         For each URL:
@@ -867,16 +872,17 @@ class OpenURLTool(Tool):
         for section in indexed_sections:
             indexed_by_doc_id[section.center_chunk.document_id] = section
 
-        # Map crawled sections by URL (from source_links)
-        crawled_by_url: dict[str, InferenceSection] = {}
-        for section in crawled_sections:
+        # Map crawled pages by URL (from source_links)
+        crawled_by_url: dict[str, OpenedPage] = {}
+        for page in crawled_pages:
             # Extract URL from source_links (crawled sections store URL here)
-            if section.center_chunk.source_links:
-                url = next(iter(section.center_chunk.source_links.values()))
+            if page.section.center_chunk.source_links:
+                url = next(iter(page.section.center_chunk.source_links.values()))
                 if url:
-                    crawled_by_url[url] = section
+                    crawled_by_url[url] = page
 
-        merged_sections: list[InferenceSection] = []
+        # An indexed section's content is the document's whole text.
+        merged_sections: list[OpenedPage] = []
         used_doc_ids: set[str] = set()
 
         # Process URLs: prefer indexed, fallback to crawled
@@ -885,38 +891,45 @@ class OpenURLTool(Tool):
             indexed_section = indexed_by_doc_id.get(doc_id) if doc_id else None
             # WebContent.link is normalized (query/fragment stripped). Match on the
             # same normalized form to avoid dropping successful crawl results.
-            crawled_section = crawled_by_url.get(normalize_web_content_url(url))
+            crawled_page = crawled_by_url.get(normalize_web_content_url(url))
 
             if indexed_section and indexed_section.combined_content:
                 # Prefer indexed
-                merged_sections.append(indexed_section)
+                merged_sections.append(
+                    OpenedPage(indexed_section, indexed_section.combined_content)
+                )
                 if doc_id:
                     used_doc_ids.add(doc_id)
-            elif crawled_section and crawled_section.combined_content:
+            elif crawled_page and crawled_page.section.combined_content:
                 # Fallback to crawled if indexed unavailable or empty
                 # (e.g., auth issues, document not indexed, etc.)
-                merged_sections.append(crawled_section)
+                merged_sections.append(crawled_page)
 
         # Add any indexed sections that weren't matched to URLs
         for doc_id, section in indexed_by_doc_id.items():
             # Skip if this doc_id was already used for a URL
             if doc_id not in used_doc_ids:
-                merged_sections.append(section)
+                merged_sections.append(OpenedPage(section, section.combined_content))
 
         return merged_sections
 
     def _fetch_web_content(
         self, urls: list[str], url_snippet_map: dict[str, str]
-    ) -> tuple[list[InferenceSection], list[FailedFetch]]:
+    ) -> tuple[list[OpenedPage], list[FailedFetch]]:
+        """The fetched pages, each with an excerpt around its snippet and its
+        whole text cut to OPEN_URL_MAX_CHARS, and the failed fetches."""
         if not urls:
             return [], []
 
         if self._provider is None:
             # Only possible in web-fetch-disabled mode, which never routes here.
-            return [], [
-                FailedFetch(url=url, failure_reason=WEB_FETCH_DISABLED_REASON)
-                for url in urls
-            ]
+            return (
+                [],
+                [
+                    FailedFetch(url=url, failure_reason=WEB_FETCH_DISABLED_REASON)
+                    for url in urls
+                ],
+            )
 
         raw_web_contents = self._provider.contents(urls)
         # Track per-URL failure reasons (preferred) but de-dupe by URL since the
@@ -938,7 +951,7 @@ class OpenURLTool(Tool):
                 _mark_failed(content.link, content.failure_reason)
 
         web_contents = filter_web_contents_with_no_title_or_content(raw_web_contents)
-        sections: list[InferenceSection] = []
+        pages: list[OpenedPage] = []
 
         for content in web_contents:
             # Check if content is insufficient (e.g., "Loading..." or too short)
@@ -955,12 +968,17 @@ class OpenURLTool(Tool):
                 and content.full_content
                 and not is_insufficient
             ):
-                sections.append(
-                    inference_section_from_internet_page_scrape(
-                        content, url_snippet_map.get(content.link, "")
+                pages.append(
+                    OpenedPage(
+                        inference_section_from_internet_page_scrape(
+                            content, url_snippet_map.get(content.link, "")
+                        ),
+                        truncate_search_result_content(
+                            content.full_content, OPEN_URL_MAX_CHARS
+                        ),
                     )
                 )
             else:
                 _mark_failed(content.link or "", content.failure_reason)
 
-        return sections, list(failed_by_url.values())
+        return pages, list(failed_by_url.values())

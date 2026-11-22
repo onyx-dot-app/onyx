@@ -4,17 +4,24 @@ from __future__ import annotations
 
 import hashlib
 import io
-import os
 import stat
 import sys
 import zipfile
+import zlib
+from collections.abc import Callable, Iterable
 from contextlib import ExitStack
 from copy import copy
-from dataclasses import dataclass
-from typing import IO, Final
+from itertools import pairwise
+from typing import IO, Final, Literal
+
+from pydantic import BaseModel, ConfigDict
 
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.file_processing.zip_limits import (
+    ZipDirectoryLimitError,
+    open_zip_within_directory_limit,
+)
 from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.metadata import (
     parse_skill_document,
@@ -22,14 +29,36 @@ from onyx.skills.metadata import (
     serialize_skill_md,
     split_skill_md,
 )
-from onyx.skills.models import CustomSkillBundleContents, SkillBundleFile
+from onyx.skills.models import (
+    BundleLayout,
+    CustomSkillBundleContents,
+    PluginFileEntry,
+    SkillBundleFile,
+)
 
-DEFAULT_PER_FILE_MAX_BYTES: Final[int] = int(
-    os.environ.get("SKILL_BUNDLE_PER_FILE_MAX_BYTES") or 25 * 1024 * 1024
-)
-DEFAULT_TOTAL_MAX_BYTES: Final[int] = int(
-    os.environ.get("SKILL_BUNDLE_TOTAL_MAX_BYTES") or 100 * 1024 * 1024
-)
+_MIB: Final[int] = 1024 * 1024
+
+DEFAULT_PER_FILE_MAX_BYTES: Final[int] = 25 * _MIB
+DEFAULT_TOTAL_MAX_BYTES: Final[int] = 100 * _MIB
+DEFAULT_ZIP_MAX_BYTES: Final[int] = 25 * _MIB
+DEFAULT_MAX_FILE_COUNT: Final[int] = 500
+# Each new version stores its SKILL.md text in the database.
+SKILL_MD_MAX_BYTES: Final[int] = 256 * 1024
+# Saved bundles are read up to this many ZIP bytes; before the ZIP limit, uploads
+# were capped at the expanded total.
+STORED_ZIP_MAX_BYTES: Final[int] = DEFAULT_TOTAL_MAX_BYTES
+# A ZIP file list for 500 files fits 1 MiB. Saved bundles had no file limit.
+ZIP_DIRECTORY_MAX_BYTES: Final[int] = 1 * _MIB
+STORED_ZIP_DIRECTORY_MAX_BYTES: Final[int] = 4 * _MIB
+
+SkillBundleLimit = Literal[
+    "zip_bytes",
+    "zip_metadata_bytes",
+    "file_count",
+    "file_bytes",
+    "total_bytes",
+    "skill_md_bytes",
+]
 
 SKILL_MD_NAME: Final[str] = "SKILL.md"
 TEMPLATE_SUFFIX: Final[str] = ".template"
@@ -41,21 +70,108 @@ _IGNORED_BUNDLE_FILE_NAMES: Final[frozenset[str]] = frozenset(
 )
 
 
-@dataclass(frozen=True)
-class NormalizedSkillBundle:
+SKILL_BUNDLE_LAYOUT: Final = BundleLayout(
+    markers=(SKILL_MD_NAME,),
+    missing_detail="SKILL.md missing at bundle root or directly inside one "
+    "top-level directory",
+    outside_detail="bundle contains files outside the directory containing SKILL.md",
+)
+PLUGIN_MANIFEST_PATHS: Final = (
+    ".claude-plugin/plugin.json",
+    ".codex-plugin/plugin.json",
+    "plugin.json",
+)
+PLUGIN_BUNDLE_LAYOUT: Final = BundleLayout(
+    markers=PLUGIN_MANIFEST_PATHS,
+    missing_detail="The plugin has no .claude-plugin/plugin.json, "
+    ".codex-plugin/plugin.json or plugin.json at the zip root or directly "
+    "inside one top-level folder.",
+    outside_detail="The zip contains files outside the folder that holds plugin.json.",
+)
+
+
+class NormalizedSkillBundle(BaseModel):
+    model_config = ConfigDict(frozen=True, strict=True)
+
     content: bytes
     source_directory: str | None
 
 
-def read_bundle_file(bundle_file: IO[bytes]) -> bytes:
-    """Read a bundle stream without buffering an arbitrarily large body."""
-    data = bundle_file.read(DEFAULT_TOTAL_MAX_BYTES + 1)
-    if len(data) > DEFAULT_TOTAL_MAX_BYTES:
-        raise OnyxError(
-            OnyxErrorCode.PAYLOAD_TOO_LARGE,
-            f"Skill bundle exceeds the {DEFAULT_TOTAL_MAX_BYTES} byte limit.",
+def _bundle_limit_error(
+    limit: SkillBundleLimit, limit_value: int, detail: str
+) -> OnyxError:
+    return OnyxError(
+        OnyxErrorCode.PAYLOAD_TOO_LARGE,
+        detail,
+        extra={"limit": limit, "limit_value": limit_value},
+    )
+
+
+def _zip_too_large_error(max_bytes: int) -> OnyxError:
+    return _bundle_limit_error(
+        "zip_bytes",
+        max_bytes,
+        f"Skill bundle zip exceeds the {max_bytes // (1024 * 1024)} MiB limit.",
+    )
+
+
+def check_skill_md_size(raw_skill_md: bytes) -> None:
+    """Refuse a SKILL.md that a new version cannot store."""
+    if len(raw_skill_md) > SKILL_MD_MAX_BYTES:
+        raise _bundle_limit_error(
+            "skill_md_bytes",
+            SKILL_MD_MAX_BYTES,
+            f"SKILL.md exceeds the {SKILL_MD_MAX_BYTES // 1024} KiB limit. "
+            "Split it into several files and link them from SKILL.md.",
         )
+    # A Postgres text column cannot hold NUL.
+    if b"\x00" in raw_skill_md:
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "SKILL.md cannot contain a NUL character. Remove it and try again.",
+        )
+
+
+def read_bundle_file(
+    bundle_file: IO[bytes],
+    *,
+    filename: str | None = None,
+    max_bytes: int | None = None,
+) -> bytes:
+    """Read a bundle stream without buffering an arbitrarily large body."""
+    is_raw_file = filename is not None and not filename.lower().endswith(".zip")
+    if max_bytes is None:
+        max_bytes = DEFAULT_PER_FILE_MAX_BYTES if is_raw_file else DEFAULT_ZIP_MAX_BYTES
+    data = bundle_file.read(max_bytes + 1)
+    if len(data) > max_bytes:
+        if is_raw_file:
+            raise _bundle_limit_error(
+                "file_bytes", max_bytes, f"file '{filename}' exceeds the per-file limit"
+            )
+        raise _zip_too_large_error(max_bytes)
     return data
+
+
+def open_bundle_zip(
+    zip_bytes: bytes, max_directory_bytes: int = STORED_ZIP_DIRECTORY_MAX_BYTES
+) -> zipfile.ZipFile:
+    try:
+        return open_zip_within_directory_limit(zip_bytes, max_directory_bytes)
+    except ZipDirectoryLimitError as exc:
+        raise _bundle_limit_error(
+            "zip_metadata_bytes",
+            max_directory_bytes,
+            f"Skill bundle file list exceeds the {max_directory_bytes // _MIB} MiB limit.",
+        ) from exc
+
+
+def _check_bundle_file_count(count: int, max_file_count: int | None) -> None:
+    if max_file_count is not None and count > max_file_count:
+        raise _bundle_limit_error(
+            "file_count",
+            max_file_count,
+            f"bundle contains more than {max_file_count} files",
+        )
 
 
 def strip_skill_md_frontmatter(content: str) -> str:
@@ -66,9 +182,11 @@ def strip_skill_md_frontmatter(content: str) -> str:
     return instructions_markdown.strip()
 
 
-def inspect_custom_bundle(zip_bytes: bytes) -> CustomSkillBundleContents:
+def read_stored_bundle(zip_bytes: bytes) -> tuple[str, list[SkillBundleFile]]:
+    """The whole root SKILL.md of a stored bundle, frontmatter included, and
+    its other files, sorted by path."""
     try:
-        zf = zipfile.ZipFile(io.BytesIO(zip_bytes))
+        zf = open_bundle_zip(zip_bytes)
     except zipfile.BadZipFile as exc:
         raise OnyxError(
             OnyxErrorCode.INTERNAL_ERROR,
@@ -82,6 +200,12 @@ def inspect_custom_bundle(zip_bytes: bytes) -> CustomSkillBundleContents:
             raise OnyxError(
                 OnyxErrorCode.INTERNAL_ERROR,
                 "Stored skill bundle is missing SKILL.md.",
+            ) from exc
+        # A damaged member fails its CRC or decompression only when read.
+        except (zipfile.BadZipFile, zlib.error) as exc:
+            raise OnyxError(
+                OnyxErrorCode.INTERNAL_ERROR,
+                "Stored skill bundle SKILL.md is unreadable.",
             ) from exc
         files: list[SkillBundleFile] = []
         for info in zf.infolist():
@@ -99,12 +223,39 @@ def inspect_custom_bundle(zip_bytes: bytes) -> CustomSkillBundleContents:
             OnyxErrorCode.INTERNAL_ERROR,
             "Stored skill bundle SKILL.md must be UTF-8 encoded.",
         ) from exc
+    return skill_md, sorted(files, key=lambda entry: entry.path)
 
-    sorted_files = sorted(files, key=lambda entry: entry.path)
+
+def inspect_custom_bundle(zip_bytes: bytes) -> CustomSkillBundleContents:
+    skill_md, files = read_stored_bundle(zip_bytes)
+    return CustomSkillBundleContents(
+        instructions_markdown=strip_skill_md_frontmatter(skill_md), files=files
+    )
+
+
+def custom_bundle_contents_from_stored(
+    skill_md: str, file_manifest: Iterable[PluginFileEntry]
+) -> CustomSkillBundleContents:
+    """The same contents as ``inspect_custom_bundle``, from the SKILL.md text
+    and file list a version stores in the database."""
     return CustomSkillBundleContents(
         instructions_markdown=strip_skill_md_frontmatter(skill_md),
-        files=sorted_files,
+        files=[
+            file
+            for file in bundle_files_from_manifest(file_manifest)
+            if file.path != SKILL_MD_NAME
+        ],
     )
+
+
+def bundle_files_from_manifest(
+    file_manifest: Iterable[PluginFileEntry],
+) -> list[SkillBundleFile]:
+    return [
+        SkillBundleFile(path=entry.path, size=entry.size)
+        for entry in sorted(file_manifest, key=lambda entry: entry.path)
+        if not _is_ignored_bundle_path(entry.path)
+    ]
 
 
 def read_custom_bundle_instructions(zip_bytes: bytes) -> str:
@@ -175,14 +326,15 @@ def rewrite_custom_bundle_skill_md(
         instructions_markdown=instructions_markdown,
     ).encode("utf-8")
     if len(base_skill_md) > DEFAULT_PER_FILE_MAX_BYTES:
-        raise OnyxError(
-            OnyxErrorCode.PAYLOAD_TOO_LARGE,
+        raise _bundle_limit_error(
+            "file_bytes",
+            DEFAULT_PER_FILE_MAX_BYTES,
             f"file '{SKILL_MD_NAME}' exceeds "
             f"{DEFAULT_PER_FILE_MAX_BYTES // (1024 * 1024)} MiB",
         )
 
     try:
-        source_zip = zipfile.ZipFile(io.BytesIO(zip_bytes))
+        source_zip = open_bundle_zip(zip_bytes)
     except zipfile.BadZipFile as exc:
         raise OnyxError(
             OnyxErrorCode.INTERNAL_ERROR,
@@ -224,8 +376,9 @@ def rewrite_custom_bundle_skill_md(
                     instructions_markdown,
                 ).encode("utf-8")
                 if len(new_skill_md) > DEFAULT_PER_FILE_MAX_BYTES:
-                    raise OnyxError(
-                        OnyxErrorCode.PAYLOAD_TOO_LARGE,
+                    raise _bundle_limit_error(
+                        "file_bytes",
+                        DEFAULT_PER_FILE_MAX_BYTES,
                         f"file '{SKILL_MD_NAME}' exceeds "
                         f"{DEFAULT_PER_FILE_MAX_BYTES // (1024 * 1024)} MiB",
                     )
@@ -253,7 +406,7 @@ def rewrite_custom_bundle_skill_md(
         )
 
     rewritten = output.getvalue()
-    return normalize_custom_bundle(rewritten).content
+    return normalize_stored_bundle(rewritten).content
 
 
 def _validated_bundle_path(info: zipfile.ZipInfo) -> str:
@@ -295,35 +448,27 @@ def _is_ignored_bundle_path(path: str) -> bool:
     )
 
 
-def _bundle_wrapper_prefix(file_paths: list[str]) -> str | None:
-    """Identify an optional single directory wrapped around a skill bundle."""
+def _bundle_wrapper_prefix(file_paths: list[str], layout: BundleLayout) -> str | None:
     meaningful_paths = [
         path for path in file_paths if not _is_ignored_bundle_path(path)
     ]
-    if SKILL_MD_NAME in meaningful_paths:
+    if any(path in layout.markers for path in meaningful_paths):
         return None
 
-    wrapped_skill_md_paths = [
-        path
-        for path in meaningful_paths
-        if len(path.split("/")) == 2 and path.endswith(f"/{SKILL_MD_NAME}")
-    ]
-    if len(wrapped_skill_md_paths) != 1:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "SKILL.md missing at bundle root or directly inside one "
-            "top-level directory",
-        )
+    wrappers = {
+        wrapper
+        for wrapper, _, rest in (path.partition("/") for path in meaningful_paths)
+        if rest in layout.markers
+    }
+    if len(wrappers) != 1:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, layout.missing_detail)
 
-    wrapper_prefix = wrapped_skill_md_paths[0].split("/", maxsplit=1)[0]
+    wrapper_prefix = wrappers.pop()
     unexpected_paths = [
         path for path in meaningful_paths if not path.startswith(f"{wrapper_prefix}/")
     ]
     if unexpected_paths:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "bundle contains files outside the directory containing SKILL.md",
-        )
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, layout.outside_detail)
     return wrapper_prefix
 
 
@@ -355,14 +500,16 @@ def _copy_validated_bundle_file(
                     break
                 size += len(chunk)
                 if size > per_file_max_bytes:
-                    raise OnyxError(
-                        OnyxErrorCode.PAYLOAD_TOO_LARGE,
+                    raise _bundle_limit_error(
+                        "file_bytes",
+                        per_file_max_bytes,
                         f"file '{output_path}' exceeds "
                         f"{per_file_max_bytes // (1024 * 1024)} MiB",
                     )
                 if total_bytes_before_file + size > total_max_bytes:
-                    raise OnyxError(
-                        OnyxErrorCode.PAYLOAD_TOO_LARGE,
+                    raise _bundle_limit_error(
+                        "total_bytes",
+                        total_max_bytes,
                         f"bundle exceeds "
                         f"{total_max_bytes // (1024 * 1024)} MiB uncompressed",
                     )
@@ -392,17 +539,27 @@ def _copy_validated_bundle_file(
 def normalize_custom_bundle(
     zip_bytes: bytes,
     *,
+    zip_max_bytes: int | None = DEFAULT_ZIP_MAX_BYTES,
+    max_file_count: int | None = DEFAULT_MAX_FILE_COUNT,
+    max_directory_bytes: int = ZIP_DIRECTORY_MAX_BYTES,
     per_file_max_bytes: int = DEFAULT_PER_FILE_MAX_BYTES,
     total_max_bytes: int = DEFAULT_TOTAL_MAX_BYTES,
+    layout: BundleLayout = SKILL_BUNDLE_LAYOUT,
 ) -> NormalizedSkillBundle:
     """Validate a custom bundle and remove one optional wrapper directory.
 
     Stored custom bundles always use a canonical root-level ``SKILL.md`` layout.
     A common ``zip -r skill.zip skill`` archive is accepted at ingestion and
     flattened here before metadata parsing, hashing, and storage.
+
+    Each limit is checked on its own and the first one that fails raises a
+    413. ``None`` skips the zip size or file count check; reads of bundles
+    stored before those limits existed use it.
     """
+    if zip_max_bytes is not None and len(zip_bytes) > zip_max_bytes:
+        raise _zip_too_large_error(zip_max_bytes)
     try:
-        source_zip = zipfile.ZipFile(io.BytesIO(zip_bytes))
+        source_zip = open_bundle_zip(zip_bytes, max_directory_bytes)
     except zipfile.BadZipFile:
         raise OnyxError(OnyxErrorCode.INVALID_INPUT, "bundle is not a valid zip")
 
@@ -413,10 +570,39 @@ def normalize_custom_bundle(
         file_paths = [
             normalized for info, normalized in normalized_infos if not info.is_dir()
         ]
-        wrapper_prefix = _bundle_wrapper_prefix(file_paths)
+        _check_bundle_file_count(len(file_paths), max_file_count)
+        wrapper_prefix = _bundle_wrapper_prefix(file_paths, layout)
         needs_rewrite = wrapper_prefix is not None or any(
             _is_ignored_bundle_path(path) for path in file_paths
         )
+
+        wrapper_path_prefix = "" if wrapper_prefix is None else f"{wrapper_prefix}/"
+        # With NUL for "/", a path sorts directly before every path under it, so
+        # neighbors show each conflict without building the set of parent paths.
+        entries: list[tuple[str, bool, str]] = []
+        for info, normalized in normalized_infos:
+            if (
+                _is_ignored_bundle_path(normalized)
+                or normalized == wrapper_prefix
+                or not normalized.startswith(wrapper_path_prefix)
+            ):
+                continue
+            output_path = normalized.removeprefix(wrapper_path_prefix)
+            entries.append((output_path.replace("/", "\0"), info.is_dir(), output_path))
+        entries.sort()
+        for (key, is_dir, _), (next_key, next_is_dir, next_path) in pairwise(entries):
+            if key == next_key and not is_dir and not next_is_dir:
+                raise OnyxError(
+                    OnyxErrorCode.INVALID_INPUT,
+                    f"bundle contains duplicate path '{next_path}'",
+                )
+            if (key == next_key and is_dir != next_is_dir) or (
+                not is_dir and next_key.startswith(f"{key}\0")
+            ):
+                raise OnyxError(
+                    OnyxErrorCode.INVALID_INPUT,
+                    f"bundle contains conflicting path '{next_path}'",
+                )
 
         output = io.BytesIO()
         target_zip = (
@@ -425,57 +611,13 @@ def normalize_custom_bundle(
             else None
         )
         total = 0
-        output_paths: set[str] = set()
-        output_directory_paths: set[str] = set()
-        saw_skill_md = False
-
-        for info, normalized in normalized_infos:
-            if not info.is_dir() or _is_ignored_bundle_path(normalized):
-                continue
-
-            output_directory_path = normalized
-            if wrapper_prefix is not None:
-                if normalized == wrapper_prefix:
-                    continue
-                wrapper_path_prefix = f"{wrapper_prefix}/"
-                if not normalized.startswith(wrapper_path_prefix):
-                    continue
-                output_directory_path = normalized.removeprefix(wrapper_path_prefix)
-
-            directory_parts = output_directory_path.split("/")
-            output_directory_paths.add(output_directory_path)
-            output_directory_paths.update(
-                "/".join(directory_parts[:index])
-                for index in range(1, len(directory_parts))
-            )
-
+        saw_marker = False
         try:
             for info, normalized in normalized_infos:
                 if info.is_dir() or _is_ignored_bundle_path(normalized):
                     continue
 
-                output_path = normalized
-                if wrapper_prefix is not None:
-                    output_path = normalized.removeprefix(f"{wrapper_prefix}/")
-
-                if output_path in output_paths:
-                    raise OnyxError(
-                        OnyxErrorCode.INVALID_INPUT,
-                        f"bundle contains duplicate path '{output_path}'",
-                    )
-                path_parts = output_path.split("/")
-                parent_paths = {
-                    "/".join(path_parts[:index]) for index in range(1, len(path_parts))
-                }
-                if output_path in output_directory_paths or output_paths.intersection(
-                    parent_paths
-                ):
-                    raise OnyxError(
-                        OnyxErrorCode.INVALID_INPUT,
-                        f"bundle contains conflicting path '{output_path}'",
-                    )
-                output_paths.add(output_path)
-                output_directory_paths.update(parent_paths)
+                output_path = normalized.removeprefix(wrapper_path_prefix)
 
                 if output_path.endswith(TEMPLATE_SUFFIX):
                     raise OnyxError(
@@ -494,8 +636,8 @@ def normalize_custom_bundle(
                     total_max_bytes=total_max_bytes,
                 )
 
-                if output_path == SKILL_MD_NAME:
-                    saw_skill_md = True
+                if output_path in layout.markers:
+                    saw_marker = True
         finally:
             if target_zip is not None:
                 active_exception = sys.exception()
@@ -508,20 +650,34 @@ def normalize_custom_bundle(
                             f"cannot finish normalized bundle: {exc}",
                         ) from exc
 
-    if not saw_skill_md:
-        raise OnyxError(
-            OnyxErrorCode.INVALID_INPUT,
-            "SKILL.md missing at bundle root or directly inside one "
-            "top-level directory",
-        )
-    return NormalizedSkillBundle(
-        content=output.getvalue() if needs_rewrite else zip_bytes,
-        source_directory=wrapper_prefix,
+    if not saw_marker:
+        raise OnyxError(OnyxErrorCode.INVALID_INPUT, layout.missing_detail)
+    content = output.getvalue() if needs_rewrite else zip_bytes
+    if zip_max_bytes is not None and len(content) > zip_max_bytes:
+        raise _zip_too_large_error(zip_max_bytes)
+    return NormalizedSkillBundle(content=content, source_directory=wrapper_prefix)
+
+
+def normalize_stored_bundle(
+    zip_bytes: bytes, layout: BundleLayout = SKILL_BUNDLE_LAYOUT
+) -> NormalizedSkillBundle:
+    """Normalize a saved bundle, or an edit that cannot add files to one.
+
+    Saved bundles can predate the ZIP-size and file-count limits, so these
+    limits do not apply. The per-file and expanded-total limits still do, and
+    the ZIP must fit the stored-read limit so it can be loaded again.
+    """
+    return normalize_custom_bundle(
+        zip_bytes,
+        zip_max_bytes=STORED_ZIP_MAX_BYTES,
+        max_file_count=None,
+        max_directory_bytes=STORED_ZIP_DIRECTORY_MAX_BYTES,
+        layout=layout,
     )
 
 
 def update_custom_bundle_files(
-    existing_zip_bytes: bytes,
+    existing_zip_bytes: bytes | Callable[[], bytes],
     upload_bytes: bytes | None = None,
     *,
     filename: str | None = None,
@@ -534,6 +690,8 @@ def update_custom_bundle_files(
     A ZIP or standalone file containing ``SKILL.md`` is a full bundle
     replacement. Other uploads are merged into the existing bundle, replacing
     files at matching paths while preserving ``SKILL.md`` and unrelated files.
+    A callable for ``existing_zip_bytes`` is read only when the existing bundle
+    is needed, so a full replacement does not depend on it.
     """
     is_upload = upload_bytes is not None
     if is_upload == (remove_path is not None):
@@ -541,8 +699,6 @@ def update_custom_bundle_files(
             OnyxErrorCode.INVALID_INPUT,
             "provide exactly one file upload or path to remove",
         )
-    if is_upload and not filename:
-        raise OnyxError(OnyxErrorCode.INVALID_INPUT, "upload is missing a filename")
 
     output = io.BytesIO()
     with ExitStack() as archives:
@@ -550,7 +706,15 @@ def update_custom_bundle_files(
         upload_infos: list[tuple[zipfile.ZipInfo, str]] = []
         changed_paths: set[str]
         if upload_bytes is not None:
-            assert filename is not None
+            if not filename:
+                raise OnyxError(
+                    OnyxErrorCode.INVALID_INPUT, "upload is missing a filename"
+                )
+            if (
+                filename.lower().endswith(".zip")
+                and len(upload_bytes) > DEFAULT_ZIP_MAX_BYTES
+            ):
+                raise _zip_too_large_error(DEFAULT_ZIP_MAX_BYTES)
             upload_archive_bytes = (
                 upload_bytes
                 if filename.lower().endswith(".zip")
@@ -563,7 +727,7 @@ def update_custom_bundle_files(
             )
             try:
                 upload_zip = archives.enter_context(
-                    zipfile.ZipFile(io.BytesIO(upload_archive_bytes))
+                    open_bundle_zip(upload_archive_bytes, ZIP_DIRECTORY_MAX_BYTES)
                 )
             except zipfile.BadZipFile as exc:
                 raise OnyxError(
@@ -573,6 +737,10 @@ def update_custom_bundle_files(
             upload_infos = [
                 (info, _validated_bundle_path(info)) for info in upload_zip.infolist()
             ]
+            _check_bundle_file_count(
+                sum(not info.is_dir() for info, _ in upload_infos),
+                DEFAULT_MAX_FILE_COUNT,
+            )
             upload_file_paths = [
                 path
                 for info, path in upload_infos
@@ -600,7 +768,8 @@ def update_custom_bundle_files(
                 )
             changed_paths = set(upload_file_paths)
         else:
-            assert remove_path is not None
+            if remove_path is None:
+                raise RuntimeError("Bug: no upload and no path to remove.")
             normalized_remove_path = _validated_bundle_path(
                 zipfile.ZipInfo(remove_path)
             )
@@ -610,10 +779,13 @@ def update_custom_bundle_files(
                 )
             changed_paths = {normalized_remove_path}
 
+        existing_bytes = (
+            existing_zip_bytes
+            if isinstance(existing_zip_bytes, bytes)
+            else existing_zip_bytes()
+        )
         try:
-            existing_zip = archives.enter_context(
-                zipfile.ZipFile(io.BytesIO(existing_zip_bytes))
-            )
+            existing_zip = archives.enter_context(open_bundle_zip(existing_bytes))
         except zipfile.BadZipFile as exc:
             raise OnyxError(
                 OnyxErrorCode.INTERNAL_ERROR,
@@ -652,6 +824,8 @@ def update_custom_bundle_files(
                         total_max_bytes=total_max_bytes,
                     )
 
+    if remove_path is not None:
+        return normalize_stored_bundle(output.getvalue()).content
     return normalize_custom_bundle(
         output.getvalue(),
         per_file_max_bytes=per_file_max_bytes,
@@ -667,3 +841,29 @@ def compute_bundle_sha256(zip_bytes: bytes) -> str:
     with identical contents but different timestamps still hash differently.
     """
     return hashlib.sha256(zip_bytes).hexdigest()
+
+
+def compute_bundle_manifest(zip_bytes: bytes) -> list[PluginFileEntry]:
+    """Path, size and SHA-256 of each file in a normalized bundle, by path.
+
+    Two bundles with the same manifest hold the same files, also when their
+    ZIP bytes differ (timestamps, compression)."""
+    entries: list[PluginFileEntry] = []
+    with open_bundle_zip(zip_bytes) as bundle_zip:
+        for info in bundle_zip.infolist():
+            if info.is_dir():
+                continue
+            digest = hashlib.sha256()
+            size = 0
+            with bundle_zip.open(info, mode="r") as source:
+                while chunk := source.read(64 * 1024):
+                    digest.update(chunk)
+                    size += len(chunk)
+            entries.append(
+                PluginFileEntry(
+                    path=_validated_bundle_path(info),
+                    size=size,
+                    sha256=digest.hexdigest(),
+                )
+            )
+    return sorted(entries, key=lambda entry: entry.path)

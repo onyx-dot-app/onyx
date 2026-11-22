@@ -639,6 +639,18 @@ class TenantRedisClient:
             int, self._r.zremrangebyscore(_prefix_key(self._prefix, name), min, max)
         )
 
+    def zrem(self, name: KeyArg, *values: str | bytes) -> int:
+        """Removes members from a tenant-prefixed sorted-set key.
+
+        Args:
+            name: The (unprefixed) sorted-set key.
+            values: The members to remove.
+
+        Returns:
+            The number of members removed.
+        """
+        return cast(int, self._r.zrem(_prefix_key(self._prefix, name), *values))
+
     def zscore(self, name: KeyArg, value: str | bytes) -> float | None:
         """Returns the score of a member of a tenant-prefixed sorted-set key.
 
@@ -809,6 +821,40 @@ class TenantRedisClient:
                 ``-2`` if the key does not exist.
         """
         return cast(int, self._r.pttl(_prefix_key(self._prefix, name)))
+
+    def replace_if_value(
+        self,
+        name: KeyArg,
+        expected: bytes,
+        value: str | bytes | int | float,
+        ex: int | None,
+    ) -> bool:
+        """Set the current tenant's key only while it holds ``expected``."""
+        key = _prefix_key(self._prefix, name)
+        with self._r.pipeline() as pipeline:
+            try:
+                pipeline.watch(key)
+                if pipeline.get(key) != expected:
+                    return False
+                pipeline.multi()
+                pipeline.set(key, value, ex=ex)
+                return bool(pipeline.execute()[0])
+            except redis.WatchError:
+                return False
+
+    def delete_if_value(self, name: KeyArg, expected: bytes) -> bool:
+        """Delete the current tenant's key only while it holds ``expected``."""
+        key = _prefix_key(self._prefix, name)
+        with self._r.pipeline() as pipeline:
+            try:
+                pipeline.watch(key)
+                if pipeline.get(key) != expected:
+                    return False
+                pipeline.multi()
+                pipeline.delete(key)
+                return bool(pipeline.execute()[0])
+            except redis.WatchError:
+                return False
 
     def renew_if_value(self, name: KeyArg, expected: bytes, seconds: int) -> bool:
         """Renew only the current tenant's matching lease, without a lock wait."""

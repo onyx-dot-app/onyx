@@ -108,6 +108,30 @@ Run `"$ODS" stack logs --help` to select a service or follow logs. Follow logs i
 
 Successful startup requires the readiness check through the reported frontend URL. A process that exists is insufficient evidence.
 
+## Setup traps
+
+ODS sets `WEB_DOMAIN` to its HTTP web URL, for example `http://localhost:3000`.
+This value replaces `WEB_DOMAIN` in `.vscode/.env` and `.vscode/.env.web`.
+An HTTPS proxy in front of the stack does not change it.
+Before you test HTTPS behavior, such as `Secure` cookies or OAuth redirects, read the running process environment:
+
+```bash
+tr '\0' '\n' < /proc/<api-or-web-pid>/environ | grep '^WEB_DOMAIN='
+```
+
+To test an HTTPS origin, stop the managed API and web processes.
+Start them manually with the same environment and an HTTPS `WEB_DOMAIN`.
+After the test, run `"$ODS" stack restart` to return to the managed stack.
+
+A relative `PYTHONPATH`, for example `PYTHONPATH=./backend` from the shell, breaks indexing.
+The workers run in `backend/`, so the path resolves to `backend/backend`.
+The worker starts, but its spawned fetch process fails with `ModuleNotFoundError: No module named 'onyx'`.
+Before you test indexing, set `PYTHONPATH` to the absolute `backend` path, and then restart the stack from the repository root:
+
+```bash
+PYTHONPATH="$PWD/backend" "$ODS" stack restart
+```
+
 ## Validate changes
 
 For lifecycle, concurrency, browser, or real worker validation, read [the ODS integration guide](../../../tools/ods/integration/README.md).
@@ -134,9 +158,14 @@ Normal shutdown preserves volumes. Delete database, index, or object-store data 
 
 After shutdown, inspect status to confirm the targeted stack stopped. Check that another running worktree remains available when testing isolation.
 
+When your task is complete, run `"$ODS" --isolated stack down` for an isolated stack you started. Each isolated stack keeps about 4 GB of memory for OpenSearch and the model servers, even after `stack stop`. Do not stop a shared stack, because other worktrees use it.
+
 ## Find and stop old stacks
 
 Run `"$ODS" stack ls` from any directory. It lists every stack on the machine and prints the command that stops each one. Add `--all` for stopped stacks, `--json` for the same rows with a `next` field. Run `"$ODS" stack ls --help` for the statuses.
 
 Stop `orphaned` stacks; no worktree owns them. Run the printed command, or confirm with the user before you stop a stack that another agent may still use.
-Do not add `--force`, `prune --yes`, or `prune --volumes` unless the user asks.
+An orphan whose `next` is `ods stack prune --volumes` has only Docker volumes left. Deleting them deletes its data, so ask the user first.
+
+`"$ODS" stack prune --idle 6h` also stops isolated stacks whose worktree had no Git operation, file edit, or running coding agent for 6 hours. It stops stacks of other worktrees, so run it only when the user asks.
+Do not add `--force`, `--idle`, `prune --yes`, or `prune --volumes` unless the user asks.

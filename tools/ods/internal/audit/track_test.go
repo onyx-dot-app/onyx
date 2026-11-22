@@ -125,12 +125,3 @@ func TestHistoryFiles_reportBrokenPaths(t *testing.T) {
 		t.Fatal("expected writing into a missing directory to fail")
 	}
 }
-
-func TestFirstNonEmpty(t *testing.T) {
-	if got := firstNonEmpty("", "b", "c"); got != "b" {
-		t.Errorf("got %q", got)
-	}
-	if got := firstNonEmpty("", ""); got != "" {
-		t.Errorf("got %q", got)
-	}
-}

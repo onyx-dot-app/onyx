@@ -82,7 +82,12 @@ provider. MANAGE_LLMS bypasses the group check, never the agent check.
 | groups only | every user | group members and MANAGE_LLMS holders |
 | groups and agents | every user, only with a listed agent | group check and agent check |
 
-**Building the client.** `llm/factory.py:llm_from_provider` resolves
+**Building the client.** The factories and the public search API build the
+`LLMProviderView` from the chosen model's saved configuration only. That
+configuration applies even to a dated variant that provider listings hide.
+`ModelConfiguration.llm_model_flows` loads with `lazy="selectin"`, so every
+view reads flows in one query per batch of models, not one per model.
+`llm/factory.py:llm_from_provider` resolves
 `max_input_tokens` (configured value, else the model catalog) and temperature
 (session, then model default, then user default, then `GEN_AI_TEMPERATURE`). It
 rejects a model without CHAT capability. It calls `policy_fn` with the
@@ -136,9 +141,10 @@ before retry handling; removing cache options prevents later attempts from addin
 markers again. When a provider 400 names a
 reasoning, temperature, or explicit-cache kwarg, `_completion` retries without it
 (`_retry_attempts`). A cache fallback also removes the breakpoint markers. It
-never drops tools, tool choice or messages during that retry. Separately, final-answer
-requests omit tool definitions for native Bedrock and Ollama adapters that cannot
-enforce `NONE`. Prior tool evidence stays in the messages. `_track_llm_cost` counts
+never drops tools, tool choice or messages during that retry; the one message
+edit is the removal of rejected `reasoning_items`
+([[#openai-reasoning-items-replay]]). Typed requests with tool choice `NONE`
+keep their tool definitions ([[#none-tool-choice-keeps-tools]]). `_track_llm_cost` counts
 cost only when usage limits are on and the key is Onyx-managed. Per-user usage comes from
 spans, not from this call.
 
@@ -287,6 +293,43 @@ and allows Nace's 4-decimal rounding in probability sums (other providers
     model that the catalog does not know, but never turn it off. Chat image
     replay (`chat/prompt_formatting.py:prepare_model_messages`) reads the resolved
     `LLMConfig.supports_images`. Do not remove that read.
+16. `openai-reasoning-items-replay` **OpenAI reasoning items are replayable
+    thinking state.** A Responses API `reasoning` item (id, encrypted content,
+    summary) is kept as `llm/models.py:ReasoningItemBlock` inside the message's
+    `ThinkingContent.blocks`.
+    `llm/model_request.py:format_provider_message` replays it as
+    `reasoning_items`, which LiteLLM's responses bridge turns back into the
+    item. `llm/multi_llm.py` keeps `reasoning_items` only on responses routes
+    (OpenAI and Azure registry models, the `openai_responses` surface, the
+    GPT-5.4+ tool-turn bridge), strips it elsewhere, and sends
+    `include: ["reasoning.encrypted_content"]` with `reasoning` so replay does
+    not depend on server-side storage; an item without encrypted content is
+    not kept. Only the key, deployment and model that issued an item can read
+    it, so when the provider rejects replayed reasoning, `_completion` retries
+    the attempt once with `reasoning_items` removed from the messages.
+    `agents/execution_records.py:messages_for_model` drops an item whose text
+    or tool call did not survive, because the API rejects a lone item. The
+    Anthropic `thinking_blocks` rule is separate: a block type needs the route
+    that can read it.
+17. `none-tool-choice-keeps-tools` **A typed `NONE` request keeps its tools.**
+    `LitellmLLM._prepare_tools` sends the request's tool definitions with a
+    `NONE` choice. (A named choice on Claude, Qwen or GLM sends only the named
+    tool.) `llm/model_capabilities.py:model_supports_none_tool_choice`
+    says whether the provider and model can take `NONE`: Bedrock, Bedrock
+    Converse, Ollama and Ollama Chat cannot (`PROVIDERS_WITHOUT_NONE_TOOL_CHOICE`),
+    and Qwen and GLM deployments can reject it. Those requests send `AUTO`. The
+    agent runtime denies any call that comes back ([[core-chat-loop#stopping-tools]]).
+    Decoding follows the choice that was sent (`llm/model_response.py:_provider_may_call`):
+    after `AUTO`, a call written as text is recovered so the runtime can deny it,
+    and call-like text that names no declared tool stays part of the answer;
+    after `NONE`, all call-like text stays part of the answer.
+    Only the providers that receive `AUTO` reuse the whole cached prefix on a
+    final step. Claude through Anthropic, Vertex, OpenRouter or a proxy receives
+    `NONE`, and its prompt cache counts a changed tool choice as a change to the
+    messages, so the message history misses on that step. Raw calls
+    (`invoke_raw`, `stream_raw`, used by the gateway) do not send `AUTO` for
+    `NONE`: `_completion` omits the schemas of a `NONE` request to the providers
+    in `PROVIDERS_WITHOUT_NONE_TOOL_CHOICE` and sends `NONE` to other models.
 
 ---
 
@@ -373,9 +416,12 @@ and allows Nace's 4-decimal rounding in probability sums (other providers
 
 Tool authors opt into enforcement with `ToolDefinition.strict`. They supply
 closed schemas with all properties required and nullable defaulted arguments.
-File reader and image generation resolve null defaults in their argument models;
-the LLM response parser does not change nulls or remove arguments. MCP and custom
-OpenAPI tools do not opt in, and their schemas remain unchanged.
+`tools/interface.py:tool_definition_from_arguments` with `strict=True` makes
+such a schema from the tool's argument model, and `parse_tool_arguments` reads
+null for a defaulted argument as its default when the argument's type does not
+accept null. The LLM response parser does not
+change nulls or remove arguments. MCP and custom OpenAPI tools do not opt in,
+and their schemas remain unchanged.
 
 The shared invoke/stream paths enable strict flags only for direct OpenAI requests
 to catalogued, non-fine-tuned models with function-calling support. The adapter

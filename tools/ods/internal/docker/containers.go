@@ -15,6 +15,20 @@ const (
 	ComposeWorkingDirLabel = "com.docker.compose.project.working_dir"
 )
 
+// ListComposeVolumes returns the number of Docker volumes of each Compose
+// project. It only reads from Docker.
+func ListComposeVolumes() (map[string]int, error) {
+	out, err := exec.Command("docker", "volume", "ls", "--filter", "label="+ComposeProjectLabel, "--format", `{{.Label "`+ComposeProjectLabel+`"}}`).Output()
+	if err != nil {
+		return nil, fmt.Errorf("docker volume ls: %w", commandError(err))
+	}
+	counts := map[string]int{}
+	for _, project := range strings.Fields(string(out)) {
+		counts[project]++
+	}
+	return counts, nil
+}
+
 // ComposeContainer is one container that belongs to a Compose project.
 type ComposeContainer struct {
 	ID         string

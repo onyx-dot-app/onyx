@@ -11,8 +11,9 @@ first message names the builder, whose copy is the thread document, and
 import base64
 import binascii
 from collections.abc import Callable, Iterable, Sequence
-from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
+
+from pydantic import BaseModel, ConfigDict
 
 from onyx.connectors.outlook.models import (
     DocumentPlan,
@@ -75,10 +76,11 @@ def _key_bytes(key: str) -> bytes | None:
     return raw if len(raw) == _ROOT_BYTES else None
 
 
-@dataclass(frozen=True)
-class ThreadDocumentRef:
+class ThreadDocumentRef(BaseModel):
     """What a thread document id names: the thread, and for a copy or an own
     document the mailbox in its id."""
+
+    model_config = ConfigDict(frozen=True, strict=True)
 
     key: str
     mailbox_id: str | None = None

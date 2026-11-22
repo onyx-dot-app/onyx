@@ -22,8 +22,7 @@ from ee.onyx.utils.license import (
     verify_and_store_license,
 )
 from ee.onyx.utils.license_expiry import LICENSE_RECLAIM_WINDOW
-from onyx.cache.interface import CacheBackendType
-from onyx.configs.constants import OnyxCeleryPriority, OnyxCeleryTask
+from onyx.configs.constants import CacheBackendType, OnyxCeleryPriority, OnyxCeleryTask
 
 
 def _make_license_payload(stripe_customer_id: str | None = None) -> LicensePayload:
@@ -514,10 +513,10 @@ def _expiring_in(delta: timedelta) -> datetime:
 class TestMaybeScheduleLicenseReclaim:
     @patch("ee.onyx.utils.license.CACHE_BACKEND", CacheBackendType.POSTGRES)
     @patch("ee.onyx.utils.license.client_app")
-    @patch("ee.onyx.utils.license.get_redis_client")
+    @patch("ee.onyx.utils.license.get_cache_backend")
     def test_no_op_without_redis(
         self,
-        mock_get_redis: MagicMock,
+        mock_get_cache: MagicMock,
         mock_client_app: MagicMock,
     ) -> None:
         """The debounce and the Celery broker are both this Redis, so where it
@@ -525,21 +524,21 @@ class TestMaybeScheduleLicenseReclaim:
         for a send that can never be consumed."""
         maybe_schedule_license_reclaim(_expiring_in(timedelta(days=1)), "tenant_123")
 
-        mock_get_redis.assert_not_called()
+        mock_get_cache.assert_not_called()
         mock_client_app.send_task.assert_not_called()
 
     @patch("ee.onyx.utils.license.client_app")
-    @patch("ee.onyx.utils.license.get_redis_client")
+    @patch("ee.onyx.utils.license.get_cache_backend")
     def test_no_op_when_license_is_outside_the_reclaim_window(
         self,
-        mock_get_redis: MagicMock,
+        mock_get_cache: MagicMock,
         mock_client_app: MagicMock,
     ) -> None:
         maybe_schedule_license_reclaim(
             _expiring_in(LICENSE_RECLAIM_WINDOW + timedelta(days=1)), "tenant_123"
         )
 
-        mock_get_redis.assert_not_called()
+        mock_get_cache.assert_not_called()
         mock_client_app.send_task.assert_not_called()
 
     @pytest.mark.parametrize(
@@ -552,10 +551,10 @@ class TestMaybeScheduleLicenseReclaim:
         ids=["expiring-soon", "period-ending", "already-expired"],
     )
     @patch("ee.onyx.utils.license.client_app")
-    @patch("ee.onyx.utils.license.get_redis_client")
+    @patch("ee.onyx.utils.license.get_cache_backend")
     def test_schedules_one_reclaim_when_debounce_lock_is_acquired(
         self,
-        mock_get_redis: MagicMock,
+        mock_get_cache: MagicMock,
         mock_client_app: MagicMock,
         expires_in: timedelta,
         expected_debounce: int,
@@ -564,12 +563,12 @@ class TestMaybeScheduleLicenseReclaim:
         a served request is the earliest chance to fetch it and the debounce
         tightens. Holding the full window there would strand a renewed customer
         on an expired license until the next beat."""
-        mock_get_redis.return_value.exists.return_value = 0
-        mock_get_redis.return_value.set.return_value = True
+        mock_get_cache.return_value.exists.return_value = 0
+        mock_get_cache.return_value.set_if_absent.return_value = True
 
         maybe_schedule_license_reclaim(_expiring_in(expires_in), "tenant_123")
 
-        assert mock_get_redis.return_value.set.call_args.kwargs["ex"] == (
+        assert mock_get_cache.return_value.set_if_absent.call_args.kwargs["ex"] == (
             expected_debounce
         )
         mock_client_app.send_task.assert_called_once_with(
@@ -619,14 +618,14 @@ class TestMaybeScheduleLicenseReclaim:
         mock_get_cache.return_value.get.assert_called_once()
 
     @patch("ee.onyx.utils.license.client_app")
-    @patch("ee.onyx.utils.license.get_redis_client")
+    @patch("ee.onyx.utils.license.get_cache_backend")
     def test_no_op_when_debounce_lock_is_held(
         self,
-        mock_get_redis: MagicMock,
+        mock_get_cache: MagicMock,
         mock_client_app: MagicMock,
     ) -> None:
-        mock_get_redis.return_value.exists.return_value = 0
-        mock_get_redis.return_value.set.return_value = None
+        mock_get_cache.return_value.exists.return_value = 0
+        mock_get_cache.return_value.set_if_absent.return_value = False
 
         maybe_schedule_license_reclaim(_expiring_in(timedelta(days=1)), "tenant_123")
 
@@ -634,14 +633,14 @@ class TestMaybeScheduleLicenseReclaim:
 
     @patch("ee.onyx.utils.license.logger")
     @patch("ee.onyx.utils.license.client_app")
-    @patch("ee.onyx.utils.license.get_redis_client")
+    @patch("ee.onyx.utils.license.get_cache_backend")
     def test_scheduling_failure_is_logged_and_swallowed(
         self,
-        mock_get_redis: MagicMock,
+        mock_get_cache: MagicMock,
         mock_client_app: MagicMock,
         mock_logger: MagicMock,
     ) -> None:
-        mock_get_redis.side_effect = RuntimeError("redis down")
+        mock_get_cache.side_effect = RuntimeError("redis down")
 
         maybe_schedule_license_reclaim(_expiring_in(timedelta(days=1)), "tenant_123")
 

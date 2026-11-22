@@ -84,6 +84,8 @@ def _claims(**overrides: Any) -> dict[str, Any]:
         "iat": _NOW,
         "exp": _NOW + 60,
         "jti": "jti-0001",
+        # Last, matching the Go relay's claim order.
+        "aud": "sandbox-proxy",
     }
     claims.update(overrides)
     return claims
@@ -92,6 +94,7 @@ def _claims(**overrides: Any) -> dict[str, Any]:
 def _build_vectors() -> dict[str, Any]:
     eddsa = {"alg": "EdDSA", "typ": "JWT", "kid": _KID}
     no_jti = {k: v for k, v in _claims().items() if k != "jti"}
+    no_aud = {k: v for k, v in _claims().items() if k != "aud"}
     cases: list[tuple[str, dict[str, Any], dict[str, Any], str, str | None]] = [
         ("valid", eddsa, _claims(), "node", None),
         ("wrong_signing_key", eddsa, _claims(), "other", "bad_signature"),
@@ -121,6 +124,8 @@ def _build_vectors() -> dict[str, Any]:
         ),
         ("missing_jti", eddsa, no_jti, "node", "malformed"),
         ("exp_before_iat", eddsa, _claims(iat=_NOW, exp=_NOW - 1), "node", "malformed"),
+        ("wrong_audience", eddsa, _claims(aud="onyx-api"), "node", "malformed"),
+        ("missing_aud", eddsa, no_aud, "node", "malformed"),
     ]
     vectors: list[dict[str, Any]] = []
     for name, header, claims, signer, rejection in cases:
@@ -223,6 +228,11 @@ def test_wrong_generation_not_placed() -> None:
 
 def test_issued_in_future_rejected() -> None:
     token = _sign(_claims(iat=_NOW + 30, exp=_NOW + 60))
+    assert _rejection(_verifier(), token) is SignedIdentityRejection.MALFORMED
+
+
+def test_audience_list_rejected() -> None:
+    token = _sign(_claims(aud=["sandbox-proxy"]))
     assert _rejection(_verifier(), token) is SignedIdentityRejection.MALFORMED
 
 

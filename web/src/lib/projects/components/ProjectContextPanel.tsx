@@ -4,6 +4,10 @@ import { IconLoader } from "@opal/loaders";
 import React, { useCallback } from "react";
 import { useTranslations } from "next-intl";
 import { useDropzone } from "react-dropzone";
+import useSWR from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import { errorHandlingFetcher } from "@/lib/fetcher";
+import { DEFAULT_CONTEXT_TOKENS } from "@/lib/constants";
 import { useProjectsContext } from "@/lib/projects/providers";
 import FilePickerPopover from "@/refresh-components/popovers/FilePickerPopover";
 import { UserFileStatus, type ProjectFile } from "@/lib/projects/types";
@@ -25,16 +29,31 @@ import {
 
 export interface ProjectContextPanelProps {
   projectTokenCount?: number;
-  availableContextTokens?: number;
+  /** The agent a new chat in this project uses; its budget bounds the files. */
+  agentId?: number;
+  /** Without an LLM provider the backend cannot size the budget. */
+  hasAnyProvider: boolean;
   setPresentingDocument?: (document: MinimalOnyxDocument) => void;
 }
 
 export default function ProjectContextPanel({
   projectTokenCount = 0,
-  availableContextTokens = 128_000,
+  agentId,
+  hasAnyProvider,
   setPresentingDocument,
 }: ProjectContextPanelProps) {
   const t = useTranslations("chat");
+  // Mirrors `MaxSelectedDocumentTokens` in chat_backend.py. A failed first
+  // fetch leaves no data, so the default applies.
+  const { data: agentBudget } = useSWR<{ max_tokens: number }>(
+    hasAnyProvider && agentId !== undefined
+      ? SWR_KEYS.maxSelectedDocumentTokens(agentId)
+      : null,
+    errorHandlingFetcher,
+    { revalidateOnFocus: false, shouldRetryOnError: false }
+  );
+  const availableContextTokens =
+    agentBudget?.max_tokens ?? DEFAULT_CONTEXT_TOKENS;
   const addInstructionModal = useCreateModal();
   const projectFilesModal = useCreateModal();
   // Convert ProjectFile to MinimalOnyxDocument format for viewing
@@ -138,7 +157,7 @@ export default function ProjectContextPanel({
           title={projectName}
           editable
           onTitleChange={async (newName) => {
-            if (currentProjectId) {
+            if (currentProjectId && newName) {
               await renameProject(currentProjectId, newName);
             }
           }}

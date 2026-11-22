@@ -25,7 +25,6 @@ import { PlusMenuButton } from "@/sections/input/PlusMenuButton";
 import { buildEntryMenuItems } from "@/app/craft/components/buildEntryMenuItems";
 import UserLibraryModal from "@/app/craft/components/UserLibraryModal";
 import { useEscapeInterrupt } from "@/hooks/useEscapeInterrupt";
-import useSlashPicker from "@/hooks/useSlashPicker";
 import {
   useUploadFilesContext,
   type BuildFile,
@@ -35,7 +34,11 @@ import { clearDraft, draftKey, useDraft } from "@/hooks/useDraft";
 import useUserSkills from "@/hooks/useUserSkills";
 import useUserExternalApps from "@/hooks/useUserExternalApps";
 import { useCraftMcpServers } from "@/lib/mcp/hooks";
+import type { CaretText } from "@/lib/contentEditable";
+import { useChatSkills, useEntryPicker } from "@/lib/skills/hooks";
 import {
+  CRAFT_PICKER_TRIGGER,
+  filterPickerSections,
   pickerEntryConnectionPath,
   pickerEntryKey,
   pickerEntryPromptPrefix,
@@ -45,6 +48,7 @@ import {
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { fetchLibraryTree } from "@/app/craft/services/apiServices";
 import type { QueuedMessage } from "@/app/app/types";
+import { customizeTabHref } from "@/lib/customize/paths";
 
 export interface CraftInputBarHandle {
   reset: () => void;
@@ -144,11 +148,18 @@ const CraftInputBar = memo(
       } = useUploadFilesContext();
 
       const { data: skillsData } = useUserSkills();
+      const { entries: chatSkills, onInputFocus: onChatSkillsFocus } =
+        useChatSkills({ builtIns: false });
       const { data: appsData } = useUserExternalApps();
       const { data: craftMcpData } = useCraftMcpServers();
       const pickerSections = useMemo(
-        () => toPickerSections(skillsData, appsData, craftMcpData?.mcp_servers),
-        [skillsData, appsData, craftMcpData]
+        () =>
+          toPickerSections(
+            { builtins: skillsData?.builtins, customs: chatSkills.skills },
+            appsData,
+            craftMcpData
+          ),
+        [skillsData, chatSkills, appsData, craftMcpData]
       );
 
       const { data: libraryTree, mutate: mutateLibrary } = useSWR(
@@ -197,9 +208,18 @@ const CraftInputBar = memo(
         );
       }, []);
 
-      const slashPicker = useSlashPicker({
-        inputRef: baseRef,
-        onSelect: addEntry,
+      const pickEntry = useCallback(
+        (entry: PickerEntry, token: CaretText) => {
+          baseRef.current?.deleteToken(token);
+          addEntry(entry);
+        },
+        [addEntry]
+      );
+      const slashPicker = useEntryPicker({
+        trigger: CRAFT_PICKER_TRIGGER,
+        entries: pickerSections,
+        filter: filterPickerSections,
+        onSelect: pickEntry,
       });
 
       const interruptible = !!onInterrupt && isRunning;
@@ -291,7 +311,7 @@ const CraftInputBar = memo(
             {
               onAttachFiles: () => fileInputRef.current?.click(),
               onSelectEntry: addEntry,
-              onBrowseSkills: () => navigation.go("/craft/v1/skills"),
+              onBrowseSkills: () => navigation.go(customizeTabHref("skills")),
               onBrowseApps: () => navigation.go("/craft/v1/apps"),
               libraryFiles,
               // Defer the modal until the + popover finishes closing, else it paints over it.
@@ -357,15 +377,17 @@ const CraftInputBar = memo(
             onPasteText={onPasteText}
             onPasteFiles={uploadFiles}
             onInputCallback={slashPicker.onInput}
-            onSelectionChange={slashPicker.onSelectionChange}
+            onFocus={onChatSkillsFocus}
           />
           <EntryPickerPopover
             open={slashPicker.open}
             anchorRect={slashPicker.anchorRect}
             query={slashPicker.query}
-            sections={pickerSections}
+            sections={slashPicker.sections}
             onSelect={slashPicker.onSelect}
-            onClose={slashPicker.onClose}
+            onEscape={slashPicker.onEscape}
+            onDismiss={slashPicker.reset}
+            trigger={CRAFT_PICKER_TRIGGER}
           />
           {entryInfo && (
             <EntryInfoPopover

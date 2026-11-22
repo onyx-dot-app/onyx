@@ -2,6 +2,10 @@ import { NextResponse } from "next/server";
 import type { NextRequest } from "next/server";
 import { SERVER_SIDE_ONLY__AUTH_COOKIE_NAME } from "@/lib/constants";
 import { loginPath, ORIGINAL_PATH_HEADER } from "@/lib/auth/paths";
+import {
+  DESKTOP_HANDOFF_PATH,
+  isDesktopOAuthCallback,
+} from "@/lib/oauth/desktopCallback";
 
 // Route prefixes that never allow anonymous access, so we fast-fail at the edge
 // when no auth cookie is present. "/app" is intentionally excluded: it allows
@@ -71,13 +75,9 @@ const CSP_HEADER = [
   strictCspEnabled
     ? "script-src 'self' 'unsafe-inline' https://www.googletagmanager.com;"
     : "",
-  // connect-src blob: for the DOCX preview modal, which fetches the document
-  // back out of a blob: URL to render it. The Sentry origin (when configured) is
-  // derived from the DSN above.
+  // The Sentry origin (when configured) is derived from the DSN above.
   strictCspEnabled
-    ? `connect-src 'self' blob:${
-        sentryConnectSrc ? ` ${sentryConnectSrc}` : ""
-      };`
+    ? `connect-src 'self'${sentryConnectSrc ? ` ${sentryConnectSrc}` : ""};`
     : "",
   // img-src stays broad: chat markdown and connector content render remote
   // images.
@@ -85,9 +85,9 @@ const CSP_HEADER = [
   // cdn.onyx.app serves the Craft page's animated background video.
   strictCspEnabled ? "media-src 'self' blob: data: https://cdn.onyx.app;" : "",
   // worker-src blob: covers pdf.js-style workers and the PostHog session
-  // recorder; frame-src blob: covers in-app PDF preview.
+  // recorder.
   strictCspEnabled ? "worker-src 'self' blob:;" : "",
-  strictCspEnabled ? "frame-src 'self' blob:;" : "",
+  strictCspEnabled ? "frame-src 'self';" : "",
 ]
   .filter(Boolean)
   .join(" ");
@@ -111,6 +111,7 @@ const EE_ROUTES = [
   "/admin/performance/custom-analytics",
   "/admin/standard-answer",
   "/admin/export-logs",
+  "/admin/service-status",
   "/admin/scim",
   "/admin/service-accounts",
   "/agents/stats",
@@ -128,6 +129,17 @@ export async function proxy(request: NextRequest) {
   // Set, not merged, so a client cannot supply its own.
   const requestHeaders = new Headers(request.headers);
   requestHeaders.set(ORIGINAL_PATH_HEADER, pathWithQuery);
+
+  // A desktop-started OAuth callback goes back to the app, which holds the
+  // session. Serve the handoff page ahead of any auth gate; the URL stays the
+  // same, so the page builds the onyx:// link from it.
+  if (
+    isDesktopOAuthCallback(pathname, request.nextUrl.searchParams.get("state"))
+  ) {
+    return withSecurityHeaders(
+      NextResponse.rewrite(new URL(DESKTOP_HANDOFF_PATH, request.url))
+    );
+  }
 
   // Auth Check: Fast-fail at edge if no cookie (defense in depth)
   // Note: Layouts still do full verification (token validity, roles, etc.)

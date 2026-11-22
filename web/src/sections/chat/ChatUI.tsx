@@ -8,8 +8,10 @@ import React, {
   useRef,
 } from "react";
 import { Message } from "@/app/app/types";
+import type { ComposedMessage } from "@/lib/chat/types";
 import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/types";
 import HumanMessage from "@/app/app/message/HumanMessage";
+import AgentResultsDivider from "@/app/app/message/AgentResultsDivider";
 import { ErrorBanner } from "@/app/app/message/Resubmit";
 import { MinimalAgent } from "@/lib/agents/types";
 import { LlmDescriptor, LlmManager } from "@/lib/hooks";
@@ -19,7 +21,6 @@ import { MultiModelResponse } from "@/app/app/message/types";
 import { getMultiModelResponses } from "@/app/app/message/multiModel";
 import { SelectedModel } from "@/sections/model-selector/MultiModelSelector";
 import { buildModelProviderLookup } from "@/lib/languageModels/options";
-import DynamicBottomSpacer from "@/components/chat/DynamicBottomSpacer";
 import {
   useCurrentChatState,
   useCurrentMessageHistory,
@@ -28,19 +29,20 @@ import {
   useLoadingError,
   useUncaughtError,
 } from "@/app/app/stores/useChatSessionStore";
-import WindowedRow from "@/sections/chat/WindowedRow";
+import WindowedRow, {
+  ESTIMATED_ROW_HEIGHT_PX,
+} from "@/lib/chatScroll/components/WindowedRow";
 import OlderMessagesLoader from "@/sections/chat/OlderMessagesLoader";
-import { useOptionalScrollContainer } from "@/sections/chat/ScrollContainerContext";
+import { useOptionalScrollContainer } from "@/lib/chatScroll/components/ScrollContainerContext";
+import ToolApprovalsRegion from "@/sections/chat/ToolApprovalsRegion";
+import ToolQuestionsRegion from "@/sections/chat/ToolQuestionsRegion";
 import { cn } from "@opal/utils";
+import { Section } from "@opal/layouts";
+import { CHAT_COLUMN_WIDTH } from "@/lib/chat/layout";
+import { messageRowId } from "@/lib/chat/rowIds";
+import { getChatScrollMemory } from "@/lib/chatScroll/scrollMemory";
 
 /** Width constraint for normal (non-multi-model) messages. */
-// The chat column's width comes from the page (`--app-chat-column-width`, set
-// by AppPage for its compact and full-width modes). A page that does not set
-// it gets the compact reading width. The cap only applies at md and up — below
-// that the window is too narrow for it to matter, so chat is always full width
-// (and the top-bar toggle is hidden).
-const MSG_W =
-  "md:max-w-[var(--app-chat-column-width,var(--width-chat-message-max))]";
 
 /**
  * Rows at the end of the chat mount on the first render. Rows above them
@@ -51,9 +53,11 @@ const INITIALLY_MOUNTED_ROWS = 6;
 /** Rows at the end of the chat that never unmount: the latest turn. */
 const PINNED_ROWS = 2;
 
-/** Animates the full-width toggle; every surface it widens uses this. */
-export const FULL_WIDTH_TRANSITION =
-  "transition-[max-width] duration-300 ease-in-out motion-reduce:transition-none";
+/**
+ * Rows above a saved position that mount on the first render. Below it, rows
+ * mount until their cached heights cover the viewport.
+ */
+const SAVED_ROW_NEIGHBORS = 4;
 
 export interface ChatUIProps {
   activeAgent: MinimalAgent;
@@ -63,29 +67,26 @@ export interface ChatUIProps {
   stopGenerating: () => void;
 
   // Submit handlers
-  onSubmit: (args: {
-    message: string;
-    messageIdToResend?: number;
-    currentMessageFiles: any[];
-    deepResearch: boolean;
-    modelOverride?: LlmDescriptor;
-    regenerationRequest?: {
-      messageId: number;
-      parentMessage: Message;
-      preferSearch?: boolean;
-    };
-    preferSearch?: boolean;
-    selectedModels?: SelectedModel[];
-  }) => Promise<void>;
+  onSubmit: (
+    args: ComposedMessage & {
+      messageIdToResend?: number;
+      currentMessageFiles: any[];
+      deepResearch: boolean;
+      modelOverride?: LlmDescriptor;
+      regenerationRequest?: {
+        messageId: number;
+        parentMessage: Message;
+      };
+      selectedModels?: SelectedModel[];
+    }
+  ) => Promise<void>;
   deepResearchEnabled: boolean;
   currentMessageFiles: any[];
 
   onResubmit: () => void;
 
-  /**
-   * Node ID of the message to use as scroll anchor.
-   * Used by DynamicBottomSpacer to position the push-up effect.
-   */
+  /** Node ID of the latest user message, the scroll anchor. Its row stays
+   *  mounted. */
   anchorNodeId?: number;
 
   /** Currently selected models for multi-model comparison. */
@@ -123,9 +124,22 @@ const ChatUI = React.memo(
     // Stable fallbacks to avoid changing prop identities on each render
     const emptyDocs = useMemo<OnyxDocument[]>(() => [], []);
     const emptyChildrenIds = useMemo<number[]>(() => [], []);
-    const rowHeightCache = useRef(new Map<string, number>()).current;
     const hasOlderMessages = useHasOlderMessages();
-    const scrollContainerRef = useOptionalScrollContainer()?.scrollContainerRef;
+    const scrollContainer = useOptionalScrollContainer();
+    const scrollContainerRef = scrollContainer?.scrollContainerRef;
+    // Kept per chat, so a chat opened again lays out its windowed rows at
+    // their real heights and its saved position lands exactly. This component
+    // remounts per chat, so the first render's chat is the one shown.
+    const fallbackRowHeights = useRef(new Map<string, number>()).current;
+    const scrollMemory = scrollContainer?.sessionId
+      ? getChatScrollMemory(scrollContainer.sessionId)
+      : null;
+    const rowHeightCache = scrollMemory?.rowHeights ?? fallbackRowHeights;
+    // The rows around a saved position mount on the first render, so a chat
+    // opened there paints no blank placeholders.
+    const savedRowRef = useRef(
+      scrollMemory?.position?.kind === "row" ? scrollMemory.position : null
+    );
 
     // A page of older messages goes in above the first row. Keep the view
     // still: scroll by the distance the former first row moved. Native scroll
@@ -143,17 +157,20 @@ const ChatUI = React.memo(
       return () => root.removeEventListener("scroll", onScroll);
     }, [scrollContainerRef]);
 
-    const firstRowRef = useRef<{ nodeId: number; top: number } | null>(null);
-    const firstNodeId = messages[0]?.nodeId;
+    // Rows are found by their DOM id, which can be the id first shown
+    // (messageRowId), not `message-${nodeId}`.
+    const firstRowRef = useRef<{ rowId: string; top: number } | null>(null);
+    const firstMessage = messages[0];
+    const firstRowId = firstMessage ? messageRowId(firstMessage) : undefined;
     useLayoutEffect(() => {
       const root = scrollContainerRef?.current;
-      if (!root || firstNodeId === undefined) return;
+      if (firstRowId === undefined) return;
 
+      // Record the first row even before the scroll root attaches (they can
+      // mount in the same commit); only the correction needs the root.
       const previous = firstRowRef.current;
-      if (previous && previous.nodeId !== firstNodeId) {
-        const previousRow = document.getElementById(
-          `message-${previous.nodeId}`
-        );
+      if (root && previous && previous.rowId !== firstRowId) {
+        const previousRow = document.getElementById(previous.rowId);
         if (previousRow) {
           // A no-op where the browser's anchoring already moved it.
           const target =
@@ -162,14 +179,14 @@ const ChatUI = React.memo(
         }
       }
 
-      const firstRow = document.getElementById(`message-${firstNodeId}`);
+      const firstRow = document.getElementById(firstRowId);
       firstRowRef.current = firstRow
-        ? { nodeId: firstNodeId, top: firstRow.offsetTop }
+        ? { rowId: firstRowId, top: firstRow.offsetTop }
         : null;
-    }, [scrollContainerRef, firstNodeId]);
+    }, [scrollContainerRef, firstRowId]);
 
     // Reading-width cap on messages, from the page's chat column width.
-    const msgWidth = cn(MSG_W, FULL_WIDTH_TRANSITION);
+    const msgWidth = CHAT_COLUMN_WIDTH;
 
     // Lookup: model identifier → provider slug (for icon resolution).
     const modelProviderLookup = useMemo(
@@ -191,20 +208,16 @@ const ChatUI = React.memo(
     }, [onSubmit, deepResearchEnabled, currentMessageFiles, selectedModels]);
 
     const createRegenerator = useCallback(
-      (regenerationRequest: {
-        messageId: number;
-        parentMessage: Message;
-        preferSearch?: boolean;
-      }) => {
+      (regenerationRequest: { messageId: number; parentMessage: Message }) => {
         return async function (modelOverride: LlmDescriptor) {
           return await onSubmitRef.current({
             message: regenerationRequest.parentMessage.message,
+            mentions: regenerationRequest.parentMessage.mentions ?? [],
             currentMessageFiles: currentMessageFilesRef.current,
             deepResearch: deepResearchEnabledRef.current,
             modelOverride,
             messageIdToResend: regenerationRequest.parentMessage.messageId,
             regenerationRequest,
-            preferSearch: regenerationRequest.preferSearch,
           });
         };
       },
@@ -212,10 +225,10 @@ const ChatUI = React.memo(
     );
 
     const handleEditWithMessageId = useCallback(
-      (editedContent: string, msgId: number) => {
+      (edited: ComposedMessage, msgId: number) => {
         const models = selectedModelsRef.current;
         onSubmitRef.current({
-          message: editedContent,
+          ...edited,
           messageIdToResend: msgId,
           currentMessageFiles: [],
           deepResearch: deepResearchEnabledRef.current,
@@ -241,6 +254,227 @@ const ChatUI = React.memo(
       [messageTree, modelProviderLookup]
     );
 
+    const savedRow = savedRowRef.current;
+    const savedRowIndex = savedRow
+      ? messages.findIndex(
+          (message) => messageRowId(message) === savedRow.rowId
+        )
+      : -1;
+    // The last row to mount below the saved row: the first one whose bottom
+    // reaches the viewport's bottom, by cached heights.
+    let savedRowMountEnd = savedRowIndex;
+    // Scroll memory is per page, so a saved row only exists in the browser.
+    if (savedRow && savedRowIndex >= 0 && typeof window !== "undefined") {
+      const viewportHeight = window.innerHeight;
+      let covered = savedRow.rowOffset;
+      while (
+        savedRowMountEnd < messages.length - 1 &&
+        covered < viewportHeight
+      ) {
+        const message = messages[savedRowMountEnd];
+        if (!message) break;
+        const previous = messages[savedRowMountEnd - 1];
+        // A multi-model reply renders in its user message's row, not its own.
+        const ownRow = !(
+          (message.type === "assistant" || message.type === "error") &&
+          previous?.type === "user" &&
+          getMultiModelResponsesForMessage(previous)
+        );
+        if (ownRow) {
+          covered +=
+            rowHeightCache.get(messageRowId(message)) ??
+            ESTIMATED_ROW_HEIGHT_PX;
+        }
+        savedRowMountEnd += 1;
+      }
+    }
+
+    const renderRow = (message: Message, i: number) => {
+      const messageReactComponentKey = messageRowId(message);
+      const rowsFromEnd = messages.length - i;
+      const pinned =
+        rowsFromEnd <= PINNED_ROWS ||
+        message.is_generating ||
+        message.nodeId === anchorNodeId;
+      const initiallyMounted =
+        rowsFromEnd <= INITIALLY_MOUNTED_ROWS ||
+        (savedRowIndex >= 0 &&
+          i >= savedRowIndex - SAVED_ROW_NEIGHBORS &&
+          i <= savedRowMountEnd);
+      const parentMessage = message.parentNodeId
+        ? messageTree?.get(message.parentNodeId)
+        : null;
+      if (message.type === "user") {
+        const nextMessage = messages.length > i + 1 ? messages[i + 1] : null;
+        const multiModelResponses = getMultiModelResponsesForMessage(message);
+
+        return (
+          <WindowedRow
+            id={messageReactComponentKey}
+            key={messageReactComponentKey}
+            className="flex flex-col gap-12 w-full"
+            pinned={pinned}
+            initiallyMounted={initiallyMounted}
+            heightCache={rowHeightCache}
+          >
+            <div className={cn("w-full self-center", msgWidth)}>
+              <HumanMessage
+                disableSwitchingForStreaming={
+                  (nextMessage && nextMessage.is_generating) || false
+                }
+                stopGenerating={stopGenerating}
+                content={message.message}
+                files={message.files}
+                mentions={message.mentions}
+                messageId={message.messageId}
+                nodeId={message.nodeId}
+                onEdit={handleEditWithMessageId}
+                otherMessagesCanSwitchTo={
+                  parentMessage?.childrenNodeIds ?? emptyChildrenIds
+                }
+                onMessageSelection={onMessageSelection}
+              />
+            </div>
+
+            {/* Multi-model responses use full width */}
+            {multiModelResponses && (
+              <MultiModelResponseView
+                responses={multiModelResponses}
+                chatState={{
+                  agent: activeAgent,
+                  docs: emptyDocs,
+                  citations: undefined,
+                  setPresentingDocument,
+                  overriddenModel: llmManager.currentLlm?.modelName,
+                }}
+                llmManager={llmManager}
+                onRegenerate={createRegenerator}
+                parentMessage={message}
+                otherMessagesCanSwitchTo={
+                  parentMessage?.childrenNodeIds ?? emptyChildrenIds
+                }
+                onMessageSelection={onMessageSelection}
+                selectionDisabled={chatState !== "input"}
+              />
+            )}
+          </WindowedRow>
+        );
+      } else if (message.type === "agent_results") {
+        return (
+          <WindowedRow
+            id={messageReactComponentKey}
+            key={messageReactComponentKey}
+            className={cn("w-full self-center", msgWidth)}
+            pinned={pinned}
+            initiallyMounted={initiallyMounted}
+            heightCache={rowHeightCache}
+          >
+            <AgentResultsDivider />
+          </WindowedRow>
+        );
+      } else if (message.type === "assistant" || message.type === "error") {
+        const previousMessage = i !== 0 ? messages[i - 1] : null;
+
+        // Skip assistant messages already rendered in MultiModelResponseView
+        if (
+          previousMessage?.type === "user" &&
+          getMultiModelResponsesForMessage(previousMessage)
+        ) {
+          return null;
+        }
+
+        const chatStateData = {
+          agent: activeAgent,
+          docs: message.documents ?? emptyDocs,
+          citations: message.citations,
+          setPresentingDocument,
+          overriddenModel: llmManager.currentLlm?.modelName,
+          researchType: message.researchType,
+        };
+
+        return (
+          <WindowedRow
+            id={messageReactComponentKey}
+            key={messageReactComponentKey}
+            className={cn("w-full self-center", msgWidth)}
+            pinned={pinned}
+            initiallyMounted={initiallyMounted}
+            heightCache={rowHeightCache}
+          >
+            {(message.type !== "error" || message.packets.length > 0) && (
+              <AgentMessage
+                rawPackets={message.packets}
+                packetCount={message.packetCount}
+                restoredPacketCount={message.restoredPacketCount}
+                chatState={chatStateData}
+                nodeId={message.nodeId}
+                messageId={message.messageId}
+                currentFeedback={message.currentFeedback}
+                llmManager={llmManager}
+                otherMessagesCanSwitchTo={
+                  parentMessage?.childrenNodeIds ?? emptyChildrenIds
+                }
+                onMessageSelection={onMessageSelection}
+                onRegenerate={createRegenerator}
+                parentMessage={previousMessage}
+                processingDurationSeconds={message.processingDurationSeconds}
+                hideFooter={message.type === "error"}
+                disableTTS={message.type === "error"}
+              />
+            )}
+            {message.type === "error" && (
+              <ErrorBanner
+                resubmit={
+                  chatState === "input" &&
+                  previousMessage?.type === "user" &&
+                  i === messages.length - 1
+                    ? onResubmit
+                    : undefined
+                }
+                error={message.errorMessage ?? ""}
+                errorCode={message.errorCode ?? undefined}
+                isRetryable={message.isRetryable ?? true}
+                details={message.errorDetails ?? undefined}
+                stackTrace={message.stackTrace}
+              />
+            )}
+          </WindowedRow>
+        );
+      }
+      return null;
+    };
+
+    // Error banners belong to the latest turn, inside its height, so they
+    // sit under its reply and not a viewport below it.
+    const errorBanner = error ? (
+      <div className={cn("p-4 w-full self-center", msgWidth)}>
+        {/* A session error has no saved question to resend. */}
+        <ErrorBanner {...error} />
+      </div>
+    ) : loadError ? (
+      <div className={cn("p-4 w-full self-center", msgWidth)}>
+        <ErrorBanner
+          resubmit={chatState === "input" ? onResubmit : undefined}
+          error={loadError}
+        />
+      </div>
+    ) : null;
+
+    // Each turn (a user message and its replies) is one group, so a row never
+    // changes parent when a turn arrives. The latest turn fills the viewport
+    // less the 1rem anchor offset and the list's 2rem bottom padding: at the
+    // end of the chat, its user message sits 1rem below the top. Pure layout,
+    // so it is the same in every browser and tab.
+    const turns: { key: string; start: number; end: number }[] = [];
+    messages.forEach((message, i) => {
+      const last = turns[turns.length - 1];
+      if (!last || message.type === "user") {
+        turns.push({ key: messageRowId(message), start: i, end: i + 1 });
+      } else {
+        last.end = i + 1;
+      }
+    });
+
     return (
       <>
         {/* No max-width on container — individual messages control their own width.
@@ -253,160 +487,50 @@ const ChatUI = React.memo(
         >
           {hasOlderMessages && <OlderMessagesLoader className={msgWidth} />}
 
-          {messages.map((message, i) => {
-            const messageReactComponentKey = `message-${message.nodeId}`;
-            const rowsFromEnd = messages.length - i;
-            const pinned =
-              rowsFromEnd <= PINNED_ROWS ||
-              message.is_generating ||
-              message.nodeId === anchorNodeId;
-            const initiallyMounted = rowsFromEnd <= INITIALLY_MOUNTED_ROWS;
-            const parentMessage = message.parentNodeId
-              ? messageTree?.get(message.parentNodeId)
-              : null;
-            if (message.type === "user") {
-              const nextMessage =
-                messages.length > i + 1 ? messages[i + 1] : null;
-              const multiModelResponses =
-                getMultiModelResponsesForMessage(message);
-
-              return (
-                <WindowedRow
-                  id={messageReactComponentKey}
-                  key={messageReactComponentKey}
-                  className="flex flex-col gap-12 w-full"
-                  pinned={pinned}
-                  initiallyMounted={initiallyMounted}
-                  heightCache={rowHeightCache}
-                >
-                  <div className={cn("w-full self-center", msgWidth)}>
-                    <HumanMessage
-                      disableSwitchingForStreaming={
-                        (nextMessage && nextMessage.is_generating) || false
-                      }
-                      stopGenerating={stopGenerating}
-                      content={message.message}
-                      files={message.files}
-                      messageId={message.messageId}
-                      nodeId={message.nodeId}
-                      onEdit={handleEditWithMessageId}
-                      otherMessagesCanSwitchTo={
-                        parentMessage?.childrenNodeIds ?? emptyChildrenIds
-                      }
-                      onMessageSelection={onMessageSelection}
-                    />
-                  </div>
-
-                  {/* Multi-model responses use full width */}
-                  {multiModelResponses && (
-                    <MultiModelResponseView
-                      responses={multiModelResponses}
-                      chatState={{
-                        agent: activeAgent,
-                        docs: emptyDocs,
-                        citations: undefined,
-                        setPresentingDocument,
-                        overriddenModel: llmManager.currentLlm?.modelName,
-                      }}
-                      llmManager={llmManager}
-                      onRegenerate={createRegenerator}
-                      parentMessage={message}
-                      otherMessagesCanSwitchTo={
-                        parentMessage?.childrenNodeIds ?? emptyChildrenIds
-                      }
-                      onMessageSelection={onMessageSelection}
-                      selectionDisabled={chatState !== "input"}
-                    />
+          {turns.map((turn, turnIndex) => {
+            const latest = turnIndex === turns.length - 1;
+            return (
+              <Section
+                key={turn.key}
+                data-chat-turn
+                justifyContent="start"
+                height="fit"
+                gap={12}
+                className={cn(latest && "min-h-[calc(100cqh-3rem)]")}
+              >
+                {messages
+                  .slice(turn.start, turn.end)
+                  .map((message, offset) =>
+                    renderRow(message, turn.start + offset)
                   )}
-                </WindowedRow>
-              );
-            } else if (
-              message.type === "assistant" ||
-              message.type === "error"
-            ) {
-              const previousMessage = i !== 0 ? messages[i - 1] : null;
-
-              // Skip assistant messages already rendered in MultiModelResponseView
-              if (
-                previousMessage?.type === "user" &&
-                getMultiModelResponsesForMessage(previousMessage)
-              ) {
-                return null;
-              }
-
-              const chatStateData = {
-                agent: activeAgent,
-                docs: message.documents ?? emptyDocs,
-                citations: message.citations,
-                setPresentingDocument,
-                overriddenModel: llmManager.currentLlm?.modelName,
-                researchType: message.researchType,
-              };
-
-              return (
-                <WindowedRow
-                  id={messageReactComponentKey}
-                  key={messageReactComponentKey}
-                  className={cn("w-full self-center", msgWidth)}
-                  pinned={pinned}
-                  initiallyMounted={initiallyMounted}
-                  heightCache={rowHeightCache}
-                >
-                  {(message.type !== "error" || message.packets.length > 0) && (
-                    <AgentMessage
-                      fullWidthChat={fullWidthChat}
-                      rawPackets={message.packets}
-                      packetCount={message.packetCount}
-                      restoredPacketCount={message.restoredPacketCount}
-                      chatState={chatStateData}
-                      nodeId={message.nodeId}
-                      messageId={message.messageId}
-                      currentFeedback={message.currentFeedback}
-                      llmManager={llmManager}
-                      otherMessagesCanSwitchTo={
-                        parentMessage?.childrenNodeIds ?? emptyChildrenIds
-                      }
-                      onMessageSelection={onMessageSelection}
-                      onRegenerate={createRegenerator}
-                      parentMessage={previousMessage}
-                      processingDurationSeconds={
-                        message.processingDurationSeconds
-                      }
-                      hideFooter={message.type === "error"}
-                      disableTTS={message.type === "error"}
+                {/* Approval and question cards that wait for the user
+                    belong to the latest turn, inside its height. */}
+                {latest && (
+                  <>
+                    <ToolApprovalsRegion
+                      modelProviderLookup={modelProviderLookup}
+                      className={cn(
+                        "w-full self-center",
+                        msgWidth,
+                        !fullWidthChat && "px-3"
+                      )}
                     />
-                  )}
-                  {message.type === "error" && (
-                    <ErrorBanner
-                      resubmit={
-                        chatState === "input" && i === messages.length - 1
-                          ? onResubmit
-                          : undefined
-                      }
-                      error={message.errorMessage ?? ""}
-                      errorCode={message.errorCode ?? undefined}
-                      isRetryable={message.isRetryable ?? true}
-                      details={message.errorDetails ?? undefined}
-                      stackTrace={message.stackTrace}
+                    <ToolQuestionsRegion
+                      className={cn(
+                        "w-full self-center",
+                        msgWidth,
+                        !fullWidthChat && "px-3"
+                      )}
                     />
-                  )}
-                </WindowedRow>
-              );
-            }
-            return null;
+                    {errorBanner}
+                  </>
+                )}
+              </Section>
+            );
           })}
 
-          {(error || loadError) && (
-            <div className={cn("p-4 w-full self-center", msgWidth)}>
-              <ErrorBanner
-                resubmit={chatState === "input" ? onResubmit : undefined}
-                error={error || loadError || ""}
-              />
-            </div>
-          )}
+          {turns.length === 0 && errorBanner}
         </div>
-        {/* Dynamic spacer for "fresh chat" effect - pushes content up when new message is sent */}
-        <DynamicBottomSpacer anchorNodeId={anchorNodeId} />
       </>
     );
   }

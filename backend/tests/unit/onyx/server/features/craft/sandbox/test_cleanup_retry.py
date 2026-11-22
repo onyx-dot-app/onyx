@@ -5,10 +5,10 @@ from uuid import uuid4
 import pytest
 from docker.errors import NotFound
 
+from onyx.db import build_session as session_db
+from onyx.db import sandbox as sandbox_db
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import BuildSession, Sandbox
-from onyx.server.features.build.db import build_session as session_db
-from onyx.server.features.build.db import sandbox as sandbox_db
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.docker import docker_sandbox_manager as dsm
 from onyx.server.features.build.sandbox.models import (
@@ -188,7 +188,8 @@ def test_retry_requires_matching_attempt_storage_and_absent_runtime(
     manager.create_opencode_history_snapshot.side_effect = RuntimeError(
         "checkpoint failed"
     )
-    lifecycle.sleep_sandbox(MagicMock(), manager, sandbox, "tenant-a", MagicMock())
+    with pytest.raises(RuntimeError, match="history snapshot failed"):
+        lifecycle.sleep_sandbox(MagicMock(), manager, sandbox, "tenant-a", MagicMock())
     manager.create_opencode_history_snapshot.assert_called_once()
     manager.terminate.assert_not_called()
 

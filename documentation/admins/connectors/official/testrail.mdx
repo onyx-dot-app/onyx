@@ -14,7 +14,7 @@ with its steps and expected results as text and a link back to the case in TestR
 | Steps      | Separated steps and their expected results are indexed. When a case has no separated steps, Onyx falls back to its plain steps and expected-result fields. |
 | Fields     | Custom field values are resolved to their labels, so a drop-down reads as its text rather than its stored number.                |
 | Suites     | Onyx reads every suite in a project. A project in single-suite mode is read directly.                                            |
-| Permissions | Not available. **Sync with TestRail** is not offered, so **Document Access** can only be **Everyone in Your Organization** or **Specific Groups**. |
+| Permissions | Not available. **Sync with TestRail** is not offered, so **Document Access** can only be **Everyone in Your Organization**, **Specific Groups**, or **Only Me**. |
 
 ## Before you begin
 
@@ -52,8 +52,9 @@ for enabling the API and generating a key.
   </Step>
 
   <Step title="Choose the document access">
-    Under **Connector Settings**, set **Document Access**. **Specific Groups** is a paid feature:
+    Under **Connector Settings**, set **Document Access**. **Specific Groups** and **Only Me** are paid features:
     the Business and Enterprise tiers on Onyx Cloud, and the Enterprise Edition when self-hosted.
+    See [Document Access Controls](/admins/connectors/overview#document-access-controls) for what each option means.
   </Step>
 
   <Step title="Connect and verify">

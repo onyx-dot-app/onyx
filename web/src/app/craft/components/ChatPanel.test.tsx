@@ -35,7 +35,6 @@ jest.mock("@/providers/CraftStreamingProvider", () => ({
     streamMessage,
     retryQueuedMessage,
     interruptStreaming: idle,
-    streamScheduledRunEvents: idle,
     streamTurnEvents: idle,
   }),
 }));
@@ -141,11 +140,6 @@ jest.mock("@/app/craft/components/ModelPickerButton", () => ({
     </div>
   ),
 }));
-jest.mock("@/app/craft/components/ScheduledRunBanner", () => ({
-  __esModule: true,
-  default: () => null,
-  useScheduledRunContext: () => ({ data: null, mutate: idle }),
-}));
 jest.mock("@/app/craft/components/BuildMessageList", () => ({
   __esModule: true,
   default: () => <div>Saved history</div>,
@@ -201,6 +195,26 @@ function DraftSelection() {
     </div>
   );
 }
+
+// jsdom has no scrollTo; the transcript's scroll container calls it.
+const originalScrollTo = Object.getOwnPropertyDescriptor(
+  HTMLElement.prototype,
+  "scrollTo"
+);
+beforeEach(() => {
+  Object.defineProperty(HTMLElement.prototype, "scrollTo", {
+    configurable: true,
+    writable: true,
+    value: jest.fn(),
+  });
+});
+afterEach(() => {
+  if (originalScrollTo) {
+    Object.defineProperty(HTMLElement.prototype, "scrollTo", originalScrollTo);
+  } else {
+    Reflect.deleteProperty(HTMLElement.prototype, "scrollTo");
+  }
+});
 
 const SESSION_ID = "metadata-session";
 beforeEach(() => {

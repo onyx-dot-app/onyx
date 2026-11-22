@@ -344,6 +344,15 @@ class VoiceRecorderSession {
 
       if (data.type === "transcript") {
         if (data.text) {
+          // New words mean the user is still speaking: count the fallback's 10s
+          // from them, not from the last phrase end.
+          if (
+            this.isActive &&
+            this.silenceFallbackTimer &&
+            data.text !== this.transcript
+          ) {
+            this.startSilenceFallbackTimer();
+          }
           this.transcript = data.text;
           // Only push live updates to React while actively recording.
           // After stop(), the final transcript is returned via stopResolver

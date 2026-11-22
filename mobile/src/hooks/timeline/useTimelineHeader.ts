@@ -9,7 +9,17 @@ import {
   PacketType,
   StopReason,
 } from "@/chat/streamingModels";
+import { isDisplayPacket, isToolPacket } from "@/chat/timeline/packetUtils";
+import { customToolLabel } from "@/chat/timeline/toolDisplay";
 import { TurnGroup } from "@/chat/timeline/transformers";
+
+// What a waiting response waits for from the user.
+export type AwaitingUser = "approval" | "answer";
+
+const AWAITING_HEADER: Record<AwaitingUser, string> = {
+  approval: "Waiting for your approval",
+  answer: "Waiting for your answer",
+};
 
 export interface TimelineHeaderResult {
   headerText: string;
@@ -20,10 +30,24 @@ export interface TimelineHeaderResult {
 export function useTimelineHeader(
   turnGroups: TurnGroup[],
   stopReason?: StopReason,
+  codeModeWorking = false,
+  awaitingUser: AwaitingUser | null = null,
 ): TimelineHeaderResult {
   return useMemo(() => {
     const hasPackets = turnGroups.length > 0;
     const userStopped = stopReason === StopReason.USER_CANCELLED;
+
+    if (awaitingUser !== null) {
+      return {
+        headerText: AWAITING_HEADER[awaitingUser],
+        hasPackets,
+        userStopped,
+      };
+    }
+
+    if (codeModeWorking) {
+      return { headerText: "Working", hasPackets, userStopped };
+    }
 
     if (!hasPackets) {
       return { headerText: "Thinking...", hasPackets, userStopped };
@@ -39,7 +63,9 @@ export function useTimelineHeader(
       return { headerText: "Thinking...", hasPackets, userStopped };
     }
 
-    const firstPacket = currentStep.packets[0];
+    const firstPacket = currentStep.packets.find(
+      (packet) => isToolPacket(packet, false) || isDisplayPacket(packet),
+    );
     if (!firstPacket) {
       return { headerText: "Thinking...", hasPackets, userStopped };
     }
@@ -68,7 +94,7 @@ export function useTimelineHeader(
     }
 
     if (packetType === PacketType.CUSTOM_TOOL_START) {
-      const toolName = (firstPacket.obj as CustomToolStart).tool_name;
+      const toolName = customToolLabel(firstPacket.obj as CustomToolStart);
       return {
         headerText: toolName ? `Executing ${toolName}` : "Executing tool",
         hasPackets,
@@ -96,5 +122,5 @@ export function useTimelineHeader(
     }
 
     return { headerText: "Thinking...", hasPackets, userStopped };
-  }, [turnGroups, stopReason]);
+  }, [turnGroups, stopReason, codeModeWorking, awaitingUser]);
 }

@@ -108,6 +108,7 @@ class TestConvertChatHistory:
                 cast(list[ChatMessage], chat_history), {}, lambda s: len(s)
             ),
             files=[user_image],
+            vm_paths={},
         )
 
         user_messages = [m for m in result.messages if m.role == "user"]
@@ -146,6 +147,7 @@ class TestConvertChatHistory:
                 lambda s: len(s),
             ),
             files=[],
+            vm_paths={},
         )
 
         tool_responses = [m for m in result.messages if m.role == "tool_result"]
@@ -154,6 +156,39 @@ class TestConvertChatHistory:
         assert prompt_metadata(tool_responses[0]).token_count == len(
             "original tool output"
         )
+
+    def test_legacy_calls_replay_in_saved_order_with_and_without_tool_rows(
+        self,
+    ) -> None:
+        def call(row_id: int, tab_index: int, tool_id: int | None) -> MagicMock:
+            saved = MagicMock()
+            saved.id = row_id
+            saved.turn_number = 0
+            saved.tab_index = tab_index
+            saved.tool_id = tool_id
+            saved.tool_call_id = f"call-{row_id}"
+            saved.tool_call_arguments = {}
+            saved.generated_images = None
+            saved.tool_call_response = f"output {row_id}"
+            return saved
+
+        assistant_msg = self._make_chat_message("final answer", MessageType.ASSISTANT)
+        # A code mode call has no tool row; order comes from the saved tabs.
+        assistant_msg.tool_calls = [call(1, 1, None), call(2, 0, 7)]
+        history = capture_chat_history(
+            cast(list[ChatMessage], [assistant_msg]),
+            {7: "internal_search"},
+            lambda s: len(s),
+        )
+        results = [
+            message
+            for message in history[0].response_messages
+            if isinstance(message, ToolResultMessage)
+        ]
+        assert [(m.tool_call_id, m.tool_name) for m in results] == [
+            ("call-2", "internal_search"),
+            ("call-1", "unknown"),
+        ]
 
 
 @pytest.mark.parametrize("copy_messages", [True, False])
@@ -190,6 +225,7 @@ def test_replay_preserves_completed_tools_and_drops_partial_arguments(
 
 def test_saved_response_history_preserves_generation_content() -> None:
     response = ChatMessage(
+        mentions=[],
         id=42,
         chat_session=ChatSession(),
         message_type=MessageType.ASSISTANT,
@@ -203,6 +239,7 @@ def test_saved_response_history_preserves_generation_content() -> None:
             id="generation-1",
             chat_message_id=42,
             step_index=0,
+            inputs=[],
             generation_status=ExecutionStatus.CANCELLED,
             message=AssistantMessage(
                 id="generation-1", content=[TextContent(text="Accepted partial output")]
@@ -222,6 +259,7 @@ def test_saved_response_history_preserves_generation_content() -> None:
 
 def test_saved_file_citations_restore_without_search_tool_results() -> None:
     response = ChatMessage(
+        mentions=[],
         id=42,
         chat_session=ChatSession(),
         message_type=MessageType.ASSISTANT,
@@ -252,6 +290,7 @@ def test_saved_file_citations_restore_without_search_tool_results() -> None:
             id="generation-1",
             chat_message_id=42,
             step_index=0,
+            inputs=[],
             generation_status=ExecutionStatus.COMPLETE,
             message=AssistantMessage.model_validate_json(
                 AssistantMessage(

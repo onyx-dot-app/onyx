@@ -178,9 +178,10 @@ def test_the_beat_leaves_a_full_run_pending_during_a_port_flow_reindex(
         .where(IndexAttempt.connector_credential_pair_id == pair.id)
     )
 
-    def beat() -> None:
+    def beat() -> int:
+        """One kickoff pass. Returns how many pairs it held for the swap."""
         db_session.expire_all()
-        _kickoff_indexing_tasks(
+        result = _kickoff_indexing_tasks(
             celery_app=MagicMock(),
             db_session=db_session,
             search_settings=present,
@@ -191,17 +192,18 @@ def test_the_beat_leaves_a_full_run_pending_during_a_port_flow_reindex(
             tenant_id=get_current_tenant_id(),
         )
         db_session.expire_all()
+        return result.skipped_waiting_for_swap
 
     try:
         pair.indexing_trigger = IndexingMode.REINDEX
         db_session.commit()
-        beat()
+        assert beat() == 1
         assert db_session.scalar(attempts) == 0
         assert pair.indexing_trigger == IndexingMode.REINDEX
 
         legacy_future.use_port_flow = False
         db_session.commit()
-        beat()
+        assert beat() == 0
         assert db_session.scalar(attempts) == 1
         assert pair.indexing_trigger is None
     finally:

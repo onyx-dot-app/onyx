@@ -41,7 +41,8 @@ class FamilyFileGeneratorInMemory(generate_family_file.FamilyFileGenerator):
             )
         else:
             url = urlunparse(url_parse)
-        assert isinstance(url, str)
+        if not isinstance(url, str):
+            raise TypeError("url must be a str.")
 
         if any(x not in generate_family_file.NAME_CHARACTERS for x in name):
             raise ValueError(
@@ -50,11 +51,13 @@ class FamilyFileGeneratorInMemory(generate_family_file.FamilyFileGenerator):
 
         if isinstance(dointerwiki, bool):
             dointerwiki = "Y" if dointerwiki else "N"
-        assert isinstance(dointerwiki, str)
+        if not isinstance(dointerwiki, str):
+            raise TypeError("dointerwiki must be a str or bool.")
 
         if isinstance(verify, bool):
             verify = "Y" if verify else "N"
-        assert isinstance(verify, str)
+        if not isinstance(verify, str):
+            raise TypeError("verify must be a str or bool.")
 
         super().__init__(url, name, dointerwiki, verify)
         self.family_definition: type[family.Family] | None = None

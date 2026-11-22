@@ -5,13 +5,12 @@ import { useTranslations } from "next-intl";
 import { Section } from "@opal/layouts";
 import { ChatMessageLoader } from "@opal/loaders";
 import { cn } from "@opal/utils";
-import { useOptionalScrollContainer } from "@/sections/chat/ScrollContainerContext";
+import { useOptionalScrollContainer } from "@/lib/chatScroll/components/ScrollContainerContext";
 import {
   useChatSessionStore,
   useIsLoadingOlderMessages,
 } from "@/app/app/stores/useChatSessionStore";
 import { loadOlderChatMessages } from "@/lib/chat/pagedSession";
-import { overscanMargin } from "@/sections/chat/WindowedRow";
 
 export interface OlderMessagesLoaderProps {
   className?: string;
@@ -29,28 +28,22 @@ export default function OlderMessagesLoader({
   className,
 }: OlderMessagesLoaderProps) {
   const t = useTranslations("chat.app");
-  const scrollContainerRef = useOptionalScrollContainer()?.scrollContainerRef;
+  const observeNearViewport = useOptionalScrollContainer()?.observeNearViewport;
   const loaderRef = useRef<HTMLDivElement>(null);
   const isLoading = useIsLoadingOlderMessages();
 
   // Observed again after each page: a loader still in range loads the next.
   useEffect(() => {
-    const root = scrollContainerRef?.current;
     const loader = loaderRef.current;
-    if (!root || !loader || isLoading) return;
+    if (!observeNearViewport || !loader || isLoading) return;
 
-    const observer = new IntersectionObserver(
-      ([entry]) => {
-        const sessionId = useChatSessionStore.getState().currentSessionId;
-        if (entry?.isIntersecting && sessionId) {
-          void loadOlderChatMessages(sessionId);
-        }
-      },
-      { root, rootMargin: overscanMargin(root) }
-    );
-    observer.observe(loader);
-    return () => observer.disconnect();
-  }, [scrollContainerRef, isLoading]);
+    return observeNearViewport(loader, (near) => {
+      const sessionId = useChatSessionStore.getState().currentSessionId;
+      if (near && sessionId) {
+        void loadOlderChatMessages(sessionId);
+      }
+    });
+  }, [observeNearViewport, isLoading]);
 
   return (
     <div

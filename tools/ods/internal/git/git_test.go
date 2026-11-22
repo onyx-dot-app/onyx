@@ -4,6 +4,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 )
@@ -97,34 +98,14 @@ func TestCherryPickStateRoundTrip(t *testing.T) {
 		t.Fatalf("LoadCherryPickState: %v", err)
 	}
 
-	if loaded.OriginalBranch != state.OriginalBranch {
-		t.Errorf("OriginalBranch = %q, want %q", loaded.OriginalBranch, state.OriginalBranch)
-	}
-	if len(loaded.CommitSHAs) != len(state.CommitSHAs) {
-		t.Errorf("CommitSHAs len = %d, want %d", len(loaded.CommitSHAs), len(state.CommitSHAs))
-	}
-	if loaded.Stashed != state.Stashed {
-		t.Errorf("Stashed = %v, want %v", loaded.Stashed, state.Stashed)
-	}
-	if loaded.DryRun != state.DryRun {
-		t.Errorf("DryRun = %v, want %v", loaded.DryRun, state.DryRun)
-	}
-	if len(loaded.Assignees) != len(state.Assignees) {
-		t.Errorf("Assignees len = %d, want %d", len(loaded.Assignees), len(state.Assignees))
+	if !reflect.DeepEqual(loaded, state) {
+		t.Errorf("round trip changed the state:\ngot  %+v\nwant %+v", loaded, state)
 	}
 
 	CleanCherryPickState()
 
-	if _, err = LoadCherryPickState(); err == nil {
-		t.Error("LoadCherryPickState after clean should fail")
-	}
-}
-
-func TestLoadCherryPickStateMissing(t *testing.T) {
-	newTestRepo(t)
-
-	if _, err := LoadCherryPickState(); err == nil {
-		t.Error("expected error for missing state file")
+	if _, err = LoadCherryPickState(); err == nil || !strings.HasPrefix(err.Error(), "no cherry-pick state file found at ") {
+		t.Errorf("expected a missing state file error after clean, got %v", err)
 	}
 }
 
@@ -156,17 +137,6 @@ func TestIsCommitAppliedOnBranch_SubjectMatch(t *testing.T) {
 
 	if !IsCommitAppliedOnBranch(featureSHA, "main") {
 		t.Error("expected IsCommitAppliedOnBranch to find cherry-picked commit by subject")
-	}
-}
-
-func TestIsCommitAppliedOnBranch_NoMatch(t *testing.T) {
-	repo := newTestRepo(t)
-
-	repo.Git("checkout", "-b", "feature")
-	featureSHA := repo.Commit("feat: only on feature branch", "only-feature.txt", "only")
-
-	if IsCommitAppliedOnBranch(featureSHA, "main") {
-		t.Error("expected commit NOT to be found on main")
 	}
 }
 

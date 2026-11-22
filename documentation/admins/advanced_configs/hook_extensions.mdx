@@ -89,6 +89,17 @@ Click the status to open **Most Recent Errors** and the full error log for the p
 
 <img className="rounded-image" src="/assets/admins/advanced_configs/hook_thirty_days_errors.webp" alt="Hook Errors in the Last 30 Days"/>
 
+## Authentication
+
+If you configured an API key when registering the hook, Onyx includes it in every request to every hook point:
+
+```
+Authorization: Bearer <your-api-key>
+```
+
+Each Lambda example below checks this header only when you set the same key in the `HOOK_API_KEY` environment variable
+of the Lambda function. If `HOOK_API_KEY` is not set, the example accepts every request.
+
 ---
 
 ## Document Ingestion
@@ -250,14 +261,6 @@ A successful response from your endpoint must return HTTP `200` and a JSON body:
     ```
   </Accordion>
 </AccordionGroup>
-
-### Authentication
-
-If you configured an API key when registering the hook, Onyx includes it in every request:
-
-```
-Authorization: Bearer <your-api-key>
-```
 
 ### Lambda Example
 
@@ -441,14 +444,6 @@ Onyx sends a `POST` request to your endpoint once per successfully indexed docum
 The response body is **not used** — any `2xx` status code is treated as success.
 Your endpoint can return an empty body or any JSON object.
 
-### Authentication
-
-If you configured an API key when registering the hook, Onyx includes it in every request:
-
-```
-Authorization: Bearer <your-api-key>
-```
-
 ### Lambda Example
 
 You can use an [AWS Lambda function](https://docs.aws.amazon.com/lambda/latest/dg/getting-started.html)
@@ -464,6 +459,8 @@ URL](https://docs.aws.amazon.com/lambda/latest/dg/lambda-urls.html).
   logger = logging.getLogger()
   logger.setLevel(logging.INFO)
 
+  # Set the HOOK_API_KEY environment variable in your Lambda configuration.
+  # If not set, API key validation is skipped.
   API_KEY = os.environ.get("HOOK_API_KEY")
 
   def lambda_handler(event, context):
@@ -569,14 +566,6 @@ A successful response from your endpoint must return HTTP `200` and a JSON body:
     ```
   </Accordion>
 </AccordionGroup>
-
-### Authentication
-
-If you configured an API key when registering the hook, Onyx includes it in every request:
-
-```
-Authorization: Bearer <your-api-key>
-```
 
 ### Lambda Example
 

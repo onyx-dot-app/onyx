@@ -7,6 +7,7 @@ import pytest
 from kubernetes import client
 from sqlalchemy.orm import Session
 
+from onyx.db.build_session import reserve_nextjs_port__no_commit
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import BuildSession, Sandbox
 from onyx.server.features.build.configs import (
@@ -15,7 +16,6 @@ from onyx.server.features.build.configs import (
     SANDBOX_NAMESPACE,
     SandboxBackend,
 )
-from onyx.server.features.build.db.build_session import reserve_nextjs_port__no_commit
 from tests.common.craft.cleanup_worker import (
     isolated_cleanup_deployment as isolated_cleanup_deployment,
 )
@@ -105,7 +105,8 @@ def test_worker_preserves_files_runtime_and_ports_after_checkpoint_failure(
         )
         db_session.commit()
 
-        run_cleanup(k8s_client)
+        # Both tasks try to sleep the idle sandbox and report the failed checkpoint.
+        run_cleanup(k8s_client, sweep="FAILURE", reconcile="FAILURE")
 
         db_session.expire_all()
         db_session.refresh(sandbox)

@@ -1,6 +1,6 @@
-import { type Page, expect } from "@playwright/test";
+import type { Page } from "@playwright/test";
 import { logPageState } from "@tests/e2e/utils/pageStateLogger";
-import { ChatPluginsPopover } from "@tests/e2e/pages/ChatPluginsPopover";
+import type { IntegrationConnectPrompt } from "@tests/e2e/pages/IntegrationConnectPrompt";
 
 const REQUIRED_ENV_VARS = [
   "MCP_OAUTH_CLIENT_ID",
@@ -518,33 +518,38 @@ export class McpOAuthFlow {
     await tryConfirmConnected(false);
   }
 
-  async connectFromChat(
-    plugins: ChatPluginsPopover,
-    serverName: string
-  ): Promise<void> {
-    const startingUrl = this.page.url();
-    if (await plugins.needsConnection(serverName)) {
-      await plugins.connectPlugin(serverName);
-      const popup =
-        await plugins.connectionDialog.continueWithOAuth(serverName);
-      try {
-        await popup.waitForURL(
-          (url) => url.protocol === "https:" || url.protocol === "http:",
-          {
-            timeout: 10_000,
-          }
-        );
-        if (!popup.isClosed() && !this.isOnAppHost(popup.url())) {
-          await new McpOAuthFlow(popup, this.config).performIdpLogin();
-        }
-      } catch (error) {
-        if (!popup.isClosed()) throw error;
+  /** Runs an action that opens OAuth in a new tab, signs in there, and waits for the tab to close. */
+  async completeFlowInNewTab(action: () => Promise<void>): Promise<void> {
+    const tabPromise = this.page
+      .context()
+      .waitForEvent("page", { timeout: 15_000 });
+    await action();
+    const tab = await tabPromise;
+    try {
+      await tab.waitForURL(
+        (url) => url.protocol === "https:" || url.protocol === "http:",
+        { timeout: 10_000 }
+      );
+      if (!tab.isClosed() && !this.isOnAppHost(tab.url())) {
+        await new McpOAuthFlow(tab, this.config).performIdpLogin();
       }
-      await plugins.connectionDialog.expectClosed();
+    } catch (error) {
+      if (!tab.isClosed()) throw error;
     }
-    await expect(this.page).toHaveURL(startingUrl);
-    await plugins.expectConnected(serverName);
-    await plugins.expectPluginEnabled(serverName, true);
-    await plugins.close();
+    if (!tab.isClosed()) await tab.waitForEvent("close", { timeout: 60_000 });
+  }
+
+  /** Connects an integration from the chat connect prompt in a new tab. */
+  async connectFromPrompt(
+    prompt: IntegrationConnectPrompt,
+    integrationName: string
+  ): Promise<void> {
+    await prompt.open();
+    await this.completeFlowInNewTab(() =>
+      prompt.dialog.startConnect(integrationName)
+    );
+    await prompt.dialog.expectConnected(integrationName);
+    await prompt.dialog.close();
+    await prompt.expectHidden();
   }
 }

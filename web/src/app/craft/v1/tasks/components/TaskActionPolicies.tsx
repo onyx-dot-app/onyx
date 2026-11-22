@@ -1,65 +1,47 @@
 "use client";
 
-import { useId, useState } from "react";
+import { useId, useRef, useState } from "react";
 import useSWR from "swr";
 import { useTranslations } from "next-intl";
-import { Button, Text } from "@opal/components";
+import { Text, useCreateModal } from "@opal/components";
 import { Section } from "@opal/layouts";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import type {
-  AppActionPoliciesView,
-  TaskAppActionPolicies,
-} from "@/lib/plugins/types";
-import type { ActionPolicy } from "@/app/craft/v1/apps/registry";
-import { useMemberPlugins, type MemberPlugin } from "@/lib/plugins/member";
-import MemberPluginConnectionDialog from "@/sections/plugins/MemberPluginConnectionDialog";
+  TaskActionSettings,
+  TaskIntegrationLink,
+  TaskIntegrationView,
+} from "@/app/craft/v1/tasks/types";
 import styles from "@/sections/plugins/PluginsPage.module.css";
-import TaskPluginCard from "@/app/craft/v1/tasks/components/TaskPluginCard";
+import TaskIntegrationCard from "@/app/craft/v1/tasks/components/TaskIntegrationCard";
 import TaskAppActionsModal from "@/app/craft/v1/tasks/components/TaskAppActionsModal";
 import ActionPoliciesLoadError from "@/app/craft/v1/tasks/components/ActionPoliciesLoadError";
 
-function findTaskPlugin(app: AppActionPoliciesView, plugins: MemberPlugin[]) {
-  return plugins.find((plugin) =>
-    plugin.kind === "external-app"
-      ? app.kind === "external_app" && plugin.app.id === app.target_id
-      : plugin.kind === "mcp" &&
-        app.kind === "mcp_server" &&
-        plugin.server.id === app.target_id
-  );
-}
-
-// Snapshot personal defaults before the first task-specific edit or enable.
-function initialActionPolicies(
-  app: AppActionPoliciesView,
-  policies: Record<string, ActionPolicy>
-): Record<string, ActionPolicy> {
-  return app.enabled === null && Object.keys(policies).length === 0
-    ? Object.fromEntries(
-        app.actions.map((action) => [action.action_id, action.effective_policy])
-      )
-    : policies;
-}
+const INHERIT_ALL: TaskActionSettings = { default: "inherit", actions: {} };
 
 interface TaskActionPoliciesProps {
   taskId: string | null;
-  value: TaskAppActionPolicies[] | null;
-  onChange: (value: TaskAppActionPolicies[]) => void;
+  value: TaskIntegrationLink[] | null;
+  onChange: (value: TaskIntegrationLink[]) => void;
+  /** Reads the integrations from this URL instead of the Craft one. */
+  url?: string;
 }
 
 export default function TaskActionPolicies({
   taskId,
   value,
   onChange,
+  url,
 }: TaskActionPoliciesProps) {
   const t = useTranslations("craft.actionPolicies");
   const openingId = useId();
-  const [catalog, setCatalog] = useState<AppActionPoliciesView[] | null>(null);
-  const { error, mutate } = useSWR<AppActionPoliciesView[], Error>(
+  const [catalog, setCatalog] = useState<TaskIntegrationView[] | null>(null);
+  const { error, mutate } = useSWR<TaskIntegrationView[], Error>(
     [
-      taskId
-        ? SWR_KEYS.taskActionPolicies(taskId)
-        : SWR_KEYS.personalActionPolicies,
+      url ??
+        (taskId
+          ? SWR_KEYS.taskActionPolicies(taskId)
+          : SWR_KEYS.personalActionPolicies),
       openingId,
     ],
     ([url]: [string, string]) => errorHandlingFetcher(url),
@@ -70,20 +52,12 @@ export default function TaskActionPolicies({
         if (catalog !== null) return;
         setCatalog(data);
         onChange(
-          data.map((app) => ({
-            gated_app_id: app.gated_app_id,
-            enabled: taskId !== null && app.enabled === true,
-            action_policies: taskId
-              ? Object.fromEntries(
-                  app.actions
-                    .filter((action) => action.stored_policy !== null)
-                    .map((action) => [
-                      action.action_id,
-                      action.stored_policy ?? action.effective_policy,
-                    ])
-                )
-              : {},
-          }))
+          data
+            .filter((integration) => integration.enabled)
+            .map((integration) => ({
+              integration_id: integration.id,
+              action_settings: integration.action_settings ?? INHERIT_ALL,
+            }))
         );
       },
     }
@@ -94,10 +68,10 @@ export default function TaskActionPolicies({
     <Section height="auto" alignItems="stretch" gap={3}>
       <Text font="main-content-emphasis">{t("taskAppsTitle")}</Text>
       <Text font="secondary-body" color="text-03">
-        {t(taskId ? "taskDescription" : "newTaskDescription")}
+        {t(taskId ? "taskDescription" : "newTaskIntegrationsDescription")}
       </Text>
-      <AppActionPolicyGroups
-        apps={catalog}
+      <IntegrationGrid
+        integrations={catalog}
         value={value ?? []}
         onChange={onChange}
       />
@@ -105,116 +79,90 @@ export default function TaskActionPolicies({
   );
 }
 
-interface AppActionPolicyGroupsProps {
-  apps: AppActionPoliciesView[] | null;
-  value: TaskAppActionPolicies[];
-  onChange: (value: TaskAppActionPolicies[]) => void;
+interface IntegrationGridProps {
+  integrations: TaskIntegrationView[] | null;
+  value: TaskIntegrationLink[];
+  onChange: (value: TaskIntegrationLink[]) => void;
 }
-function AppActionPolicyGroups({
-  apps,
+function IntegrationGrid({
+  integrations,
   value,
   onChange,
-}: AppActionPolicyGroupsProps) {
+}: IntegrationGridProps) {
   const t = useTranslations("craft.actionPolicies");
-  const tPlugins = useTranslations("actions.memberPlugins.state");
-  const { plugins, refresh, errors } = useMemberPlugins({ surface: "craft" });
-  const [dialog, setDialog] = useState<{
-    kind: "actions" | "connection";
-    appId: number;
-  } | null>(null);
-  if (!apps) return <Text font="secondary-body">{t("loading")}</Text>;
-  if (apps.length === 0)
-    return <Text font="secondary-body">{t("emptyApps")}</Text>;
-  const activeApp = apps.find((app) => app.gated_app_id === dialog?.appId);
-  const activeDraft = value.find((app) => app.gated_app_id === dialog?.appId);
-  const connectingPlugin =
-    activeApp && dialog?.kind === "connection"
-      ? findTaskPlugin(activeApp, plugins)
-      : undefined;
-  const editingApp = dialog?.kind === "actions" ? activeApp : undefined;
+  const [editingId, setEditingId] = useState<number | null>(null);
+  // The settings of an integration the user turned off, so turning it on
+  // again restores them.
+  const turnedOff = useRef<Record<number, TaskActionSettings>>({});
+  const actionsModal = useCreateModal();
+  if (!integrations) return <Text font="secondary-body">{t("loading")}</Text>;
+  if (integrations.length === 0)
+    return <Text font="secondary-body">{t("emptyIntegrations")}</Text>;
+  const linkFor = (integrationId: number) =>
+    value.find((link) => link.integration_id === integrationId);
+  const editing = integrations.find(
+    (integration) => integration.id === editingId
+  );
+  function save(integrationId: number, settings: TaskActionSettings) {
+    onChange([
+      ...value.filter((link) => link.integration_id !== integrationId),
+      { integration_id: integrationId, action_settings: settings },
+    ]);
+  }
   return (
     <>
-      {(errors.apps || errors.servers) && (
-        <Section height="auto" alignItems="start" gap={2}>
-          <Text font="secondary-body" color="status-error-05">
-            {tPlugins(errors.apps ? "appsError" : "serversError")}
-          </Text>
-          <Button prominence="secondary" onClick={() => void refresh()}>
-            {t("retry")}
-          </Button>
-        </Section>
-      )}
       <div className={styles.grid}>
-        {apps.map((app) => {
-          const plugin = findTaskPlugin(app, plugins);
-          const draft = value.find(
-            (item) => item.gated_app_id === app.gated_app_id
-          );
+        {integrations.map((integration) => {
+          const link = linkFor(integration.id);
           return (
-            <TaskPluginCard
-              key={app.gated_app_id}
-              app={app}
-              enabled={draft?.enabled === true}
-              policies={draft?.action_policies ?? {}}
-              connection={plugin?.connection}
-              onEdit={() =>
-                setDialog({ kind: "actions", appId: app.gated_app_id })
-              }
-              onConnect={() =>
-                setDialog({ kind: "connection", appId: app.gated_app_id })
-              }
-              onToggle={(enabled) =>
+            <TaskIntegrationCard
+              key={integration.id}
+              integration={integration}
+              enabled={link !== undefined}
+              settings={link?.action_settings ?? INHERIT_ALL}
+              onEdit={() => {
+                setEditingId(integration.id);
+                actionsModal.toggle(true);
+              }}
+              onToggle={(enabled) => {
+                if (enabled) {
+                  save(
+                    integration.id,
+                    link?.action_settings ??
+                      turnedOff.current[integration.id] ??
+                      INHERIT_ALL
+                  );
+                  return;
+                }
+                if (link)
+                  turnedOff.current[integration.id] = link.action_settings;
                 onChange(
-                  value.map((item) =>
-                    item.gated_app_id === app.gated_app_id
-                      ? {
-                          ...item,
-                          enabled,
-                          action_policies: enabled
-                            ? initialActionPolicies(app, item.action_policies)
-                            : item.action_policies,
-                        }
-                      : item
-                  )
-                )
-              }
+                  value.filter((item) => item.integration_id !== integration.id)
+                );
+              }}
             />
           );
         })}
       </div>
-      {connectingPlugin && (
-        <MemberPluginConnectionDialog
-          plugin={connectingPlugin}
-          surface="craft"
-          open
-          onClose={() => setDialog(null)}
-          onConnected={() => {
-            setDialog(null);
-            void refresh();
-          }}
-        />
-      )}
-      {editingApp && (
-        <TaskAppActionsModal
-          key={editingApp.gated_app_id}
-          app={editingApp}
-          policies={initialActionPolicies(
-            editingApp,
-            activeDraft?.action_policies ?? {}
-          )}
-          onClose={() => setDialog(null)}
-          onSave={(policies) => {
-            onChange(
-              value.map((app) =>
-                app.gated_app_id === editingApp.gated_app_id
-                  ? { ...app, action_policies: policies }
-                  : app
-              )
-            );
-            setDialog(null);
-          }}
-        />
-      )}
+      <actionsModal.Provider>
+        {editing && (
+          <TaskAppActionsModal
+            key={editing.id}
+            integration={editing}
+            settings={
+              linkFor(editing.id)?.action_settings ??
+              turnedOff.current[editing.id] ??
+              INHERIT_ALL
+            }
+            onClose={() => actionsModal.toggle(false)}
+            onSave={(settings) => {
+              // Setting actions turns the integration on for the task.
+              save(editing.id, settings);
+              actionsModal.toggle(false);
+            }}
+          />
+        )}
+      </actionsModal.Provider>
     </>
   );
 }

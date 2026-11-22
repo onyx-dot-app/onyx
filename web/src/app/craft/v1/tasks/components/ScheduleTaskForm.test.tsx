@@ -1,9 +1,14 @@
-import { render, screen, setupUser, waitFor } from "@tests/setup/test-utils";
+import {
+  fireEvent,
+  render,
+  screen,
+  setupUser,
+  waitFor,
+} from "@tests/setup/test-utils";
 import ScheduleTaskForm, {
   defaultFormInitial,
   type ScheduleTaskFormInitial,
 } from "@/app/craft/v1/tasks/components/ScheduleTaskForm";
-import type { PickerEntry } from "@/lib/skills/picker";
 
 const mockRouterReplace = jest.fn();
 const mockCreateScheduledTask = jest.fn();
@@ -27,18 +32,45 @@ jest.mock("swr", () => ({
   useSWRConfig: () => ({ mutate: mockMutate }),
 }));
 
+const mockSkills = {
+  builtins: [
+    {
+      name: "pptx",
+      description: "Make slides",
+      is_available: true,
+      enabled: true,
+    },
+  ],
+  customs: [],
+};
 jest.mock("@/hooks/useUserSkills", () => ({
   __esModule: true,
-  default: () => ({ data: { builtins: [], customs: [] } }),
+  default: () => ({ data: mockSkills }),
 }));
 
+const mockChatSkills = {
+  entries: { skills: [], apps: [], mcpServers: [] },
+  onInputFocus: () => undefined,
+};
+jest.mock("@/lib/skills/hooks", () => ({
+  ...jest.requireActual<typeof import("@/lib/skills/hooks")>(
+    "@/lib/skills/hooks"
+  ),
+  useChatSkills: () => mockChatSkills,
+}));
+
+const mockExternalApps = [
+  { id: 1, name: "Slack", app_type: "SLACK", authenticated: true },
+  { id: 2, name: "Gmail", app_type: "GMAIL", authenticated: false },
+];
 jest.mock("@/hooks/useUserExternalApps", () => ({
   __esModule: true,
-  default: () => ({ data: [] }),
+  default: () => ({ data: mockExternalApps }),
 }));
 
+const mockCraftMcp = { data: [] };
 jest.mock("@/lib/mcp/hooks", () => ({
-  useCraftMcpServers: () => ({ data: { mcp_servers: [] } }),
+  useCraftMcpServers: () => mockCraftMcp,
 }));
 
 jest.mock("@/app/craft/v1/tasks/api", () => ({
@@ -62,62 +94,17 @@ jest.mock("@/app/craft/v1/tasks/components/TaskActionPolicies", () => ({
     useEffect(() => {
       onChange([
         {
-          gated_app_id: 11,
-          enabled: true,
-          action_policies: { send: "ALWAYS" },
+          integration_id: 11,
+          action_settings: { default: "inherit", actions: { send: "allow" } },
         },
         {
-          gated_app_id: 22,
-          enabled: false,
-          action_policies: { read: "ASK" },
+          integration_id: 22,
+          action_settings: { default: "ask", actions: { read: "blocked" } },
         },
       ]);
     }, [onChange]);
     return null;
   },
-}));
-
-jest.mock("@/sections/input/EntryPickerPopover", () => ({
-  __esModule: true,
-  default: ({
-    open,
-    onSelect,
-  }: {
-    open: boolean;
-    onSelect: (entry: PickerEntry) => void;
-  }) =>
-    open ? (
-      <div>
-        <button
-          type="button"
-          onClick={() =>
-            onSelect({
-              kind: "app",
-              externalAppId: 1,
-              name: "Slack",
-              appType: "SLACK",
-              authenticated: true,
-            })
-          }
-        >
-          Select connected Slack
-        </button>
-        <button
-          type="button"
-          onClick={() =>
-            onSelect({
-              kind: "app",
-              externalAppId: 2,
-              name: "Gmail",
-              appType: "GMAIL",
-              authenticated: false,
-            })
-          }
-        >
-          Connect Gmail
-        </button>
-      </div>
-    ) : null,
 }));
 
 function renderForm({
@@ -154,14 +141,21 @@ describe("ScheduleTaskForm app picker", () => {
 
     const prompt = screen.getByTestId("task-prompt-input");
     await user.type(prompt, "/");
-    await user.click(
-      screen.getByRole("button", { name: "Select connected Slack" })
-    );
+    await user.click(screen.getByTestId("app-picker-row-1"));
 
     await waitFor(() =>
       expect(prompt).toHaveValue('[Use external app "Slack" (ID: 1)] ')
     );
     expect(mockRouterReplace).not.toHaveBeenCalled();
+  });
+
+  it("fetches the chat skills again when the prompt gains focus", () => {
+    const onInputFocus = jest.fn();
+    mockChatSkills.onInputFocus = onInputFocus;
+    renderForm();
+    fireEvent.focus(screen.getByTestId("task-prompt-input"));
+    expect(onInputFocus).toHaveBeenCalledTimes(1);
+    mockChatSkills.onInputFocus = () => undefined;
   });
 
   it("routes an unauthenticated app to connection without inserting it", async () => {
@@ -170,13 +164,89 @@ describe("ScheduleTaskForm app picker", () => {
 
     const prompt = screen.getByTestId("task-prompt-input");
     await user.type(prompt, "/");
-    await user.click(screen.getByRole("button", { name: "Connect Gmail" }));
+    await user.click(screen.getByTestId("app-picker-row-2"));
 
     expect(mockRouterReplace).toHaveBeenCalledWith("/craft/v1/apps?connect=2");
     expect(prompt).toHaveValue("/");
   });
 
-  it("saves independent action choices for apps and MCP servers", async () => {
+  it("opens only on input, and a caret move closes it", async () => {
+    const user = setupUser();
+    renderForm();
+    const prompt = screen.getByTestId("task-prompt-input");
+    await user.type(prompt, "/pptx now");
+    expect(screen.queryByTestId("skill-picker-popover")).toBeNull();
+
+    // The caret lands inside `/pp|tx`, which matches, but a move never opens.
+    await user.keyboard("{Home}{ArrowRight}{ArrowRight}{ArrowRight}");
+    fireEvent(prompt, new Event("selectionchange", { bubbles: true }));
+    expect(screen.queryByTestId("skill-picker-popover")).toBeNull();
+
+    await user.keyboard("{Backspace}");
+    expect(await screen.findByTestId("skill-picker-popover")).toBeVisible();
+    await user.keyboard("{ArrowLeft}");
+    // Browsers fire `selectionchange` on a textarea's caret move; jsdom does not.
+    fireEvent(prompt, new Event("selectionchange", { bubbles: true }));
+    expect(screen.queryByTestId("skill-picker-popover")).toBeNull();
+  });
+
+  it("a paste never opens it and closes an open one", async () => {
+    const user = setupUser();
+    renderForm();
+    const prompt = screen.getByTestId("task-prompt-input");
+    await user.click(prompt);
+    await user.paste("/pptx");
+    expect(screen.queryByTestId("skill-picker-popover")).toBeNull();
+    await user.keyboard("{Enter}");
+    expect(prompt).toHaveValue("/pptx\n");
+
+    await user.type(prompt, "/p");
+    expect(await screen.findByTestId("skill-picker-popover")).toBeVisible();
+    await user.paste("ptx");
+    expect(screen.queryByTestId("skill-picker-popover")).toBeNull();
+  });
+
+  it("closes on a word that matches nothing, with substring matching", async () => {
+    const user = setupUser();
+    renderForm();
+    const prompt = screen.getByTestId("task-prompt-input");
+    await user.type(prompt, "/ptx");
+    expect(await screen.findByTestId("skill-picker-row-pptx")).toBeVisible();
+    await user.type(prompt, "z");
+    expect(screen.queryByTestId("skill-picker-popover")).toBeNull();
+  });
+
+  it("Esc hides it until its slash is deleted", async () => {
+    const user = setupUser();
+    renderForm();
+    const prompt = screen.getByTestId("task-prompt-input");
+    await user.type(prompt, "/p");
+    await screen.findByTestId("skill-picker-popover");
+
+    await user.keyboard("{Escape}p");
+    expect(screen.queryByTestId("skill-picker-popover")).toBeNull();
+    await user.paste("t");
+    await user.keyboard("x");
+    expect(screen.queryByTestId("skill-picker-popover")).toBeNull();
+    await user.keyboard("{Backspace}{Backspace}");
+    await user.keyboard("{Backspace}{Backspace}{Backspace}/p");
+    expect(await screen.findByTestId("skill-picker-popover")).toBeVisible();
+  });
+
+  it("a pick replaces the whole word around the caret", async () => {
+    const user = setupUser();
+    renderForm();
+    const prompt = screen.getByTestId("task-prompt-input");
+    await user.type(prompt, "make /ptx now");
+    await user.keyboard(
+      "{ArrowLeft}{ArrowLeft}{ArrowLeft}{ArrowLeft}{ArrowLeft}{ArrowLeft}{ArrowLeft}"
+    );
+    await user.keyboard("p");
+    await user.keyboard("{Enter}");
+    await waitFor(() => expect(prompt).toHaveValue("make /pptx  now"));
+  });
+
+  it("saves the integrations of the task with their action settings", async () => {
     const user = setupUser();
     renderForm();
 
@@ -187,16 +257,17 @@ describe("ScheduleTaskForm app picker", () => {
     await waitFor(() =>
       expect(mockCreateScheduledTask).toHaveBeenCalledWith(
         expect.objectContaining({
-          action_policies: [
+          integrations: [
             {
-              gated_app_id: 11,
-              enabled: true,
-              action_policies: { send: "ALWAYS" },
+              integration_id: 11,
+              action_settings: {
+                default: "inherit",
+                actions: { send: "allow" },
+              },
             },
             {
-              gated_app_id: 22,
-              enabled: false,
-              action_policies: { read: "ASK" },
+              integration_id: 22,
+              action_settings: { default: "ask", actions: { read: "blocked" } },
             },
           ],
         })
@@ -223,16 +294,17 @@ describe("ScheduleTaskForm app picker", () => {
       expect(mockUpdateScheduledTask).toHaveBeenCalledWith(
         "task-id",
         expect.objectContaining({
-          action_policies: [
+          integrations: [
             {
-              gated_app_id: 11,
-              enabled: true,
-              action_policies: { send: "ALWAYS" },
+              integration_id: 11,
+              action_settings: {
+                default: "inherit",
+                actions: { send: "allow" },
+              },
             },
             {
-              gated_app_id: 22,
-              enabled: false,
-              action_policies: { read: "ASK" },
+              integration_id: 22,
+              action_settings: { default: "ask", actions: { read: "blocked" } },
             },
           ],
         })

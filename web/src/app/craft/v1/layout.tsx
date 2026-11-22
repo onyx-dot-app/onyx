@@ -3,6 +3,7 @@
 import { BuildProvider } from "@/app/craft/contexts/BuildContext";
 import { BuildOnboardingProvider } from "@/app/craft/onboarding/BuildOnboardingProvider";
 import BuildSidebar from "@/app/craft/components/SideBar";
+import RequiredIntegrationGate from "@/sections/integrations/RequiredIntegrationGate";
 // hljs theme for fenced code blocks rendered by the shared CodeBlock (via
 // MinimalMarkdown). CodeBlock expects this CSS to be present; we load it from
 // the craft layout so it's reliably themed on /craft without importing it
@@ -25,6 +26,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           <BuildSidebar />
           {children}
         </div>
+        <RequiredIntegrationGate />
       </BuildOnboardingProvider>
     </BuildProvider>
   );

@@ -17,6 +17,7 @@ from onyx.db.sso_provider import (
     delete_sso_provider_links__no_commit,
     delete_sso_provider_row__no_commit,
     enabled_provider_domains,
+    fetch_sso_provider_by_id,
     fetch_sso_providers,
     is_valid_email_domain,
     normalize_email_domains,
@@ -131,7 +132,7 @@ def _require_business_tier_for_additional_enabled_provider(
 
 
 def _fetch_sso_provider_or_raise(db_session: Session, provider_id: int) -> SSOProvider:
-    provider = db_session.get(SSOProvider, provider_id)
+    provider = fetch_sso_provider_by_id(db_session, provider_id)
     if provider is None:
         raise OnyxError(
             OnyxErrorCode.NOT_FOUND,

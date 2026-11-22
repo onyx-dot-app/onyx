@@ -4,19 +4,21 @@ Used by the indexing pipeline / Postgres upsert layer; not part of the search
 backend interface (`onyx.document_index.interfaces`).
 """
 
-from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
+
+from pydantic import BaseModel, ConfigDict
 
 from onyx.access.models import ExternalAccess
 
 
-@dataclass
-class DocumentMetadata:
+class DocumentMetadata(BaseModel):
     """
     Document information that needs to be inserted into Postgres on first time
     encountering this document during indexing across any of the connectors.
     """
+
+    model_config = ConfigDict(strict=True)
 
     connector_id: int
     credential_id: int

@@ -33,6 +33,24 @@ different shard settings on AWS-managed OpenSearch.
 - **A full admin sees resource warnings** when the OpenSearch cluster is short
   of disk, JVM heap or vector memory: one popup per 24 hours, and a banner on
   admin pages.
+- **A full admin on a self-hosted Business or Enterprise deployment** reads the
+  cluster status (`GET /admin/service-status/opensearch`, EE): cluster health,
+  each data node's disk, heap and vector memory against its file cache, the
+  current and reindex indexes, and the issues with their severity. The result is
+  shared for 60 seconds. Multi-tenant Cloud refuses it. A second route
+  (`/admin/service-status/opensearch/searches`) returns the last 30 minutes of
+  searches: per minute the count, failures and the p10 and p90 of the
+  successful searches, the window's p90, the slow p90 threshold (700 ms), each
+  slow or failed search, and up to 20 random other searches per minute. The
+  current minute reports its elapsed seconds, so its rate is not understated.
+  The admin **Service Status** page (Usage section, hidden on Cloud) shows
+  both: a cluster card, the search rate with failed searches, the search
+  latency (one faint dot per listed search in its minute's column, the p10 to
+  p90 band, and the p90 line, green until both ends of a segment pass the
+  threshold; hovering a minute shows its p90 and p10),
+  each data node's disk and vector memory, the indexes, and an issues panel.
+  An admin can dismiss a warning in their browser until it changes; critical
+  issues stay.
 - **An operator** sees the old index deleted about a day after a switch, once
   the new index is healthy. A reclaim that fails repeatedly stops and needs a
   person.
@@ -46,7 +64,8 @@ swap and the reclaim of old indices. It owns the metadata sync: the `needs_sync`
 predicate and `document_index_metadata_sync_task`. Their module keeps the name
 `vespa`; the backend AGENTS file explains why. It owns the embedding model registry,
 how the model server loads a self-hosted model, the cluster resource health
-check and the `cc_pair_ids` backfill.
+check, the cluster status for the admin Service Status page and
+the `cc_pair_ids` backfill.
 
 Its neighbours own:
 - [[indexing-pipeline]]: building the chunks that cross `index()`.
@@ -160,7 +179,7 @@ it deletes the old one.
    needs an orphan record.** A copy can recreate a document that was deleted
    after the copy read it. The cleanup task records a port orphan candidate
    before it deletes
-   (`background/celery/tasks/shared/tasks.py:document_by_cc_pair_cleanup_task`),
+   (`background/celery/tasks/shared/tasks.py:document_batch_by_cc_pair_cleanup_task`),
    and the port sweeps it.
 5. `missing-secondary-defers-sync` **A sync to a document the port has not
    copied is deferred, not failed.** This applies to FUTURE, and to a PRESENT
@@ -260,6 +279,23 @@ it deletes the old one.
 
 ## Decisions
 
+- **Vector memory is estimated from the vector files, not k-NN memory.**
+  Lucene reads vectors through the OS file cache, so k-NN graph memory stays 0
+  for Onyx indexes. `document_index/opensearch/client.py:get_node_vector_bytes` sums each shard copy's
+  graph (`vex`) plus the vectors the graph walk reads: the quantized copy
+  (`veq`, `veb`) when there is one, else the float32 `vec`. The file cache is
+  the smaller of host RAM and the cgroup limit, minus the heap. The resource
+  warning and the status page share this estimate.
+- **Search samples are buffered per process, not written per search.** Each
+  search adds a small sample to an in-process buffer
+  (`document_index/opensearch/search_samples.py`). A daemon thread flushes it
+  every 5 seconds as one member of a per-minute set in the shared cache, so a
+  search pays no cache round trip. Prometheus keeps only latency buckets per
+  pod. The read returns per-minute percentiles of the successful searches
+  and lists the latest 1,000 slow or failed searches. It also lists up to 20
+  other searches per minute, picked at random with the minute as the seed, so
+  a refresh shows the same ones.
+  Multi-tenant deployments record nothing.
 - **Reindex copies stored chunks instead of fetching sources again.** A full
   refetch is slow and fails when a connector is broken. The port re-embeds what
   PRESENT holds, and the reindex endpoint creates every FUTURE row with
@@ -267,6 +303,41 @@ it deletes the old one.
   only rows without the flag.
 - **The old index is kept for a soak period.** It allows a rollback while the new
   model is judged, and the PAST row stays forever as a record.
+- **Hybrid search reads chunk keys first, then the top hits.** On a
+  single-shard index, OpenSearch fetches every hybrid candidate before
+  normalization keeps the top hits: up to `DEFAULT_NUM_HYBRID_SUBQUERY_CANDIDATES`
+  per subquery, about 1,000 chunks at the default of 500.
+  `OpenSearchDocumentIndex.hybrid_retrieval` asks for doc values only and
+  fetches the source of the top hits in a second request. That request applies
+  the search filters again and builds the match highlights from the keyword
+  subquery. This path runs only on a single-shard index with explain off (the
+  default). A multi-shard search already fetches only the top hits, and a
+  second request would go to every shard. Explain describes the hybrid
+  scoring, so it keeps one request.
+- **New self-hosted indexes preload their search files.**
+  `DocumentSchema.get_index_settings_based_on_environment` sets
+  `index.store.preload` to the vectors, HNSW graph, postings, terms, doc
+  values and compound files. When a shard opens, OpenSearch reads them in one
+  sequential pass. Without it, the first searches after a restart each wait on
+  thousands of random reads, and search stays slow for minutes. A quantized
+  index preloads `.veq`, not the float32 `.vec`, so it keeps its memory saving.
+  Stored text is not preloaded: only the top hits read it. AWS managed indexes
+  do not set it. The setting applies only when the index is created.
+- **A new self-hosted deployment starts with 7-bit quantization.**
+  `document_index/opensearch/new_deployment.py:set_new_deployment_vector_quantization`
+  changes a SearchSettings row from NONE to 7-bit just before its first index
+  is created. Two paths can create it, so both call the rule: startup
+  (`setup.py:setup_onyx`) and the swap (`db/swap_index.py`). On a new
+  deployment the migrations leave the old default as PRESENT and the default
+  model as FUTURE, and the first swap, often from a Celery worker before the
+  API starts, creates the index. A column default cannot do this: the first
+  rows predate quantization. If an index for the row already exists (Postgres
+  reset, OpenSearch kept, as the integration-test reset does), the row takes
+  that index's quantization instead, so its mapping update does not fail. The
+  rule skips on any sign of earlier use: documents, connectors, user files, a
+  FUTURE row, multi-tenant, or a cluster not reachable. It sets 7-bit only on
+  OpenSearch 2.16 or later. Quantization is part of the mapping, so it must not
+  change once the index exists.
 
 ## Known issues
 

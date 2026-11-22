@@ -1,4 +1,3 @@
-import math
 import time
 from collections.abc import Callable
 from datetime import datetime, timedelta, timezone
@@ -6,20 +5,20 @@ from uuid import UUID
 
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CacheLock, CacheLockLostError
+from onyx.db.build_session import get_orphan_build_session_ids
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import Sandbox
-from onyx.server.features.build.configs import (
-    SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS,
-    SANDBOX_RESOURCE_GRACE_SECONDS,
-)
-from onyx.server.features.build.db.build_session import get_orphan_build_session_ids
-from onyx.server.features.build.db.sandbox import (
+from onyx.db.sandbox import (
     fail_stale_provisioning__no_commit,
     get_sandbox_by_id,
     get_stale_provisioning_sandboxes,
     record_cleanup_checkpoint__no_commit,
     user_has_build_sessions,
+)
+from onyx.server.features.build.configs import (
+    SANDBOX_IDLE_CLEANUP_INTERVAL_SECONDS,
+    SANDBOX_RESOURCE_GRACE_SECONDS,
 )
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.locks import sandbox_provision_lock
@@ -71,9 +70,7 @@ def _checkpoint_failed_runtime(
             check_ownership()
             if not session_lock.owned():
                 raise CacheLockLostError("Sandbox checkpoint session lock lost")
-            session_lock.extend(
-                math.ceil(SESSION_FLOW_LOCK_LEASE_SECONDS), replace_ttl=True
-            )
+            session_lock.extend(SESSION_FLOW_LOCK_LEASE_SECONDS)
 
         check_checkpoint_ownership()
         if manager.supports_opencode_history_persistence:
@@ -170,16 +167,10 @@ def _prepare_failed_resource_cleanup(
     return True
 
 
-def reconcile_sandbox_resources(
-    manager: SandboxManager,
-    tenant_id: str,
-    deadline: float,
-    check_ownership: Callable[[], None],
+def fail_stale_provisioning_sandboxes(
+    tenant_id: str, check_ownership: Callable[[], None]
 ) -> None:
-    """Collect abandoned resources using successful, current DB reads as evidence."""
-    if get_current_tenant_id() != tenant_id:
-        raise RuntimeError("Sandbox cleanup tenant context mismatch")
-    cache = get_cache_backend(tenant_id=tenant_id)
+    """Mark ``PROVISIONING`` rows past their attempt deadline as ``FAILED``."""
     stale_cutoff = datetime.now(timezone.utc) - timedelta(
         seconds=ATTEMPT_DEADLINE_SECONDS
     )
@@ -202,10 +193,22 @@ def reconcile_sandbox_resources(
         except SandboxProvisionContentionError:
             continue
 
+
+def reconcile_sandbox_resources(
+    manager: SandboxManager,
+    tenant_id: str,
+    deadline: float,
+    check_ownership: Callable[[], None],
+) -> None:
+    """Collect abandoned resources using successful, current DB reads as evidence."""
+    if get_current_tenant_id() != tenant_id:
+        raise RuntimeError("Sandbox cleanup tenant context mismatch")
+    cache = get_cache_backend(tenant_id=tenant_id)
     grace_cutoff = datetime.now(timezone.utc) - timedelta(
         seconds=SANDBOX_RESOURCE_GRACE_SECONDS
     )
     attempted = 0
+    errors: list[Exception] = []
     verified_owners: set[UUID] = set()
     for resource in manager.iter_resources(tenant_id, deadline):
         check_ownership()
@@ -280,8 +283,49 @@ def reconcile_sandbox_resources(
             continue
         except CacheLockLostError:
             raise
-        except Exception:
+        except Exception as e:
             cache.set(retry_key, "retry", ex=RESOURCE_RETRY_SECONDS)
             logger.exception("Failed to reconcile sandbox resource %s", resource.name)
+            errors.append(e)
         if attempted >= MAX_CLEANUP_RESOURCES:
             break
+    if errors:
+        raise ExceptionGroup("Failed to reconcile sandbox resources", errors)
+
+
+def delete_unknown_tenant_resources(
+    manager: SandboxManager, tenant_id: str, deadline: float
+) -> None:
+    """Delete the resources of a tenant that no longer exists.
+
+    The caller must have positive evidence that the tenant is gone. Resources
+    inside the grace period and legacy resources, which carry no tenant label,
+    are retained.
+    """
+    grace_cutoff = datetime.now(timezone.utc) - timedelta(
+        seconds=SANDBOX_RESOURCE_GRACE_SECONDS
+    )
+    attempted = 0
+    errors: list[Exception] = []
+    for resource in manager.iter_resources(tenant_id, deadline):
+        if resource.legacy_ownership or resource.created_at > grace_cutoff:
+            continue
+        attempted += 1
+        try:
+            manager.delete_resource(
+                resource, min(deadline, time.monotonic() + RUNTIME_TEARDOWN_SECONDS)
+            )
+            logger.info(
+                "Removed sandbox %s resource %s %s of unknown tenant %s",
+                resource.sandbox_id,
+                resource.kind.value,
+                resource.name,
+                tenant_id,
+            )
+        except Exception as e:
+            logger.exception("Failed to remove sandbox resource %s", resource.name)
+            errors.append(e)
+        if attempted >= MAX_CLEANUP_RESOURCES:
+            break
+    if errors:
+        raise ExceptionGroup("Failed to remove sandbox resources", errors)

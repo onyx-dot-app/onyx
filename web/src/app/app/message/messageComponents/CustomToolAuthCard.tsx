@@ -1,48 +1,37 @@
 "use client";
 
-import { useMemo } from "react";
+import { useEffect } from "react";
 import { useTranslations } from "next-intl";
-import { ToolSnapshot } from "@/lib/tools/types";
-import { useToolOAuthStatus } from "@/lib/hooks/useToolOAuthStatus";
+import { useSWRConfig } from "swr";
+import { useNavigation } from "@opal/navigation";
+import { useAvailableTools } from "@/lib/tools/hooks";
+import { integrationHref } from "@/lib/customize/paths";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import { SvgArrowExchange } from "@opal/icons";
 import { Button, MessageCard } from "@opal/components";
 
 interface CustomToolAuthCardProps {
   toolName: string;
   toolId: number | null;
-  tools: ToolSnapshot[];
-  agentId: number;
 }
 
-function CustomToolAuthCard({
-  toolName,
-  toolId,
-  tools,
-  agentId,
-}: CustomToolAuthCardProps) {
+/** A tool call that needs the user's sign-in. Connect opens the tool's
+ * integration, from the tool list: only that list sets `integration_id`. The
+ * card
+ * reads the integration statuses again, so the chat's connect prompt shows
+ * the connection that failed. */
+function CustomToolAuthCard({ toolName, toolId }: CustomToolAuthCardProps) {
   const t = useTranslations("chat.messages");
-  const { getToolAuthStatus, authenticateTool } = useToolOAuthStatus(agentId);
-  const matchedTool = useMemo(() => {
-    if (toolId == null) return null;
-    return tools.find((t) => t.id === toolId) ?? null;
-  }, [toolId, tools]);
-
-  // Hide the card if the user already has a valid token
-  const authStatus = matchedTool ? getToolAuthStatus(matchedTool) : undefined;
-  if (authStatus?.hasToken && !authStatus.isTokenExpired) {
-    return null;
-  }
-
-  const oauthConfigId = matchedTool?.oauth_config_id ?? null;
-
-  // No OAuth config — nothing actionable to show
-  if (!oauthConfigId) {
-    return null;
-  }
-
-  const handleAuthenticate = () => {
-    if (matchedTool) void authenticateTool(matchedTool);
-  };
+  const navigation = useNavigation();
+  const { tools } = useAvailableTools();
+  const { mutate } = useSWRConfig();
+  useEffect(() => {
+    void mutate(SWR_KEYS.integrations);
+  }, [mutate]);
+  const integrationId = tools.find(
+    (tool) => tool.id === toolId
+  )?.integration_id;
+  if (integrationId === undefined || integrationId === null) return null;
 
   return (
     <MessageCard
@@ -54,7 +43,9 @@ function CustomToolAuthCard({
         <Button
           prominence="primary"
           icon={SvgArrowExchange}
-          onClick={handleAuthenticate}
+          {...navigation.linkTo(
+            integrationHref(integrationId, "configuration")
+          )}
         >
           {t("customToolAuth.connectButton.label")}
         </Button>

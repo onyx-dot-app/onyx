@@ -304,7 +304,7 @@ export async function gotoDiscordBotPage(adminPage: Page): Promise<void> {
   await adminPage.goto("/admin/discord-bot");
   await adminPage.waitForLoadState("networkidle");
   // Wait for the page title
-  await adminPage.waitForSelector("text=Discord Integration", {
+  await adminPage.waitForSelector("text=Discord Bot", {
     timeout: 15000,
   });
 }

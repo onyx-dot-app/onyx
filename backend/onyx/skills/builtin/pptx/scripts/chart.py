@@ -1,9 +1,9 @@
 """Deck-styled matplotlib baseline for slide charts.
 
-Usage (from the session workspace):
+Usage (from the chat session folder):
 
     import sys
-    sys.path.insert(0, ".opencode/skills/pptx/scripts")
+    sys.path.insert(0, "/mnt/skills/pptx/scripts")
     import matplotlib
     matplotlib.use("Agg")
     import matplotlib.pyplot as plt
@@ -13,7 +13,7 @@ Usage (from the session workspace):
         fig, ax = plt.subplots(layout="constrained")
         ax.bar(["Q1", "Q2", "Q3", "Q4"], [4500, 5500, 6200, 7100])
         ax.set_title("Quarterly Sales")
-        save_for_slide(fig, "outputs/sales.png", width_in=6, height_in=3.5)
+        save_for_slide(fig, "sales.png", width_in=6, height_in=3.5)
 
 See charts.md for chart-type selection, sizing, and slide placement.
 """

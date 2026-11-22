@@ -29,6 +29,8 @@ const esmPackages = [
   "until-async",
   // Language Detection
   "linguist-languages",
+  // PowerPoint slides
+  "@jvmr",
   // Markdown & Syntax Highlighting
   "react-markdown",
   "remark-.*", // All remark packages
@@ -99,6 +101,9 @@ const sharedConfig = {
     // Mock specific components that have complex dependencies
     "^@/providers/UserProvider$":
       "<rootDir>/tests/setup/mocks/components/UserProvider.tsx",
+    // An ESM-only package: its exports have no require condition
+    "^@jvmr/pptx-to-html$":
+      "<rootDir>/node_modules/@jvmr/pptx-to-html/dist/index.js",
     // Path aliases (must come after specific mocks)
     "^@/(.*)$": "<rootDir>/src/$1",
     "^@tests/(.*)$": "<rootDir>/tests/$1",
@@ -164,12 +169,8 @@ module.exports = {
       testEnvironment: "node",
       testMatch: [
         // Pure unit tests that don't need DOM
-        "**/src/**/codeUtils.test.ts",
         "**/src/lib/**/*.test.ts",
-        "**/src/app/**/services/*.test.ts",
-        "**/src/app/**/utils/*.test.ts",
-        "**/src/app/**/hooks/*.test.ts", // Pure packet processor tests
-        "**/src/app/**/__tests__/*.test.ts",
+        "**/src/app/**/*.test.ts",
         "**/src/hooks/**/*.test.ts",
         "**/src/i18n/**/*.test.ts",
         "**/src/refresh-components/**/*.test.ts",
@@ -178,6 +179,7 @@ module.exports = {
         "**/src/components/**/*.test.ts",
         "**/src/views/**/*.test.ts",
         "**/lib/opal/**/*.test.ts",
+        "**/tools/oxlint/**/*.test.ts",
         // Add more patterns here as you add more unit tests
       ],
     },

@@ -39,8 +39,6 @@ from onyx.server.features.build.timeouts import (
     REQUEST_ID_TTL_SECONDS,
     RPC_TIMEOUT_SECONDS,
     RUNNER_STALE_AFTER_SECONDS,
-    SCHEDULED_RUN_HARD_CAP_SECONDS,
-    SCHEDULED_RUN_SOFT_BUDGET_SECONDS,
     SESSION_FLOW_LOCK_LEASE_SECONDS,
     TURN_FINAL_NOTICE_MARGIN_SECONDS,
     TURN_SOFT_BUDGET_FRACTION,
@@ -51,7 +49,6 @@ from onyx.server.features.build.timeouts import (
 def test_root_values_pin_the_spec() -> None:
     assert PROVISION_DEADLINE_SECONDS == 180.0
     assert INTERACTIVE_TURN_HARD_CAP_SECONDS == 30 * 60
-    assert SCHEDULED_RUN_HARD_CAP_SECONDS == 60 * 60
     assert TURN_SOFT_BUDGET_FRACTION == 0.4
     assert QUEUE_RESIDENCY_SECONDS == 15 * 60
 
@@ -73,9 +70,7 @@ def test_turn_derivations() -> None:
     # The identity is the spec: a slot held past any interactive turn is leaked.
     assert PROMPT_SLOT_KEEP_ALIVE_MAX_SECONDS == INTERACTIVE_TURN_HARD_CAP_SECONDS
     assert INTERACTIVE_TURN_SOFT_BUDGET_SECONDS == 12 * 60
-    assert SCHEDULED_RUN_SOFT_BUDGET_SECONDS == 24 * 60
     assert INTERACTIVE_TURN_SOFT_BUDGET_SECONDS < INTERACTIVE_TURN_HARD_CAP_SECONDS
-    assert SCHEDULED_RUN_SOFT_BUDGET_SECONDS < SCHEDULED_RUN_HARD_CAP_SECONDS
     # The finish-now escalation must land inside the wrap-up window.
     assert TURN_FINAL_NOTICE_MARGIN_SECONDS == 10 * 60
     assert TURN_FINAL_NOTICE_MARGIN_SECONDS < (

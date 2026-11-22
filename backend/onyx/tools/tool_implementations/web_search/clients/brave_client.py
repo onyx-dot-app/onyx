@@ -5,6 +5,8 @@ from typing import Any
 import requests
 from fastapi import HTTPException
 
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.tools.tool_implementations.web_search.models import (
     WebSearchProvider,
     WebSearchResult,
@@ -146,11 +148,11 @@ class BraveClient(WebSearchProvider):
         try:
             test_results = self.search("test")
             if not test_results or not any(result.link for result in test_results):
-                raise HTTPException(
-                    status_code=400,
-                    detail="Brave API key validation failed: search returned no results.",
+                raise OnyxError(
+                    OnyxErrorCode.BAD_REQUEST,
+                    "Brave API key validation failed: search returned no results.",
                 )
-        except HTTPException:
+        except (HTTPException, OnyxError):
             raise
         except (ValueError, requests.RequestException) as e:
             error_msg = str(e)
@@ -161,18 +163,17 @@ class BraveClient(WebSearchProvider):
                 or "api key" in lower
                 or "auth" in lower
             ):
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Invalid Brave API key: {error_msg}",
+                raise OnyxError(
+                    OnyxErrorCode.BAD_REQUEST, f"Invalid Brave API key: {error_msg}"
                 ) from e
             if "status 429" in lower or "rate limit" in lower:
-                raise HTTPException(
-                    status_code=400,
-                    detail=f"Brave API rate limit exceeded: {error_msg}",
+                raise OnyxError(
+                    OnyxErrorCode.BAD_REQUEST,
+                    f"Brave API rate limit exceeded: {error_msg}",
                 ) from e
-            raise HTTPException(
-                status_code=400,
-                detail=f"Brave API key validation failed: {error_msg}",
+            raise OnyxError(
+                OnyxErrorCode.BAD_REQUEST,
+                f"Brave API key validation failed: {error_msg}",
             ) from e
 
         logger.info("Web search provider test succeeded for Brave.")

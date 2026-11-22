@@ -17,7 +17,6 @@ from onyx.db.enums import (
     AccessType,
     ConnectorCredentialPairStatus,
     ConnectorManageRole,
-    ExternalAppType,
     SandboxStatus,
     SkillSharePermission,
 )
@@ -25,13 +24,19 @@ from onyx.db.models import (
     Connector,
     ConnectorCredentialPair,
     Credential,
-    ExternalApp__Skill,
+    Plugin,
+    PluginSkill,
+    PluginVersion,
     Sandbox,
     Skill,
     User,
     User__UserGroup,
     UserGroup,
     UserGroup__ConnectorCredentialPair,
+)
+from onyx.db.plugin import (
+    free_plugin_name,
+    get_or_create_organization_library__no_commit,
 )
 from onyx.server.features.build.configs import SANDBOX_BACKEND, SandboxBackend
 from onyx.server.features.skill.models import SkillResponse, SkillUserShareRequest
@@ -41,7 +46,6 @@ from onyx.skills.push import (
     push_skill_to_affected_sandboxes,
 )
 from onyx.utils.logger import setup_logger
-from tests.integration.common_utils.managers.external_app import ExternalAppManager
 from tests.integration.common_utils.managers.skill import SkillManager
 from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.managers.user_group import UserGroupManager
@@ -229,9 +233,6 @@ def _make_built_in_skill_row(db_session: Session, *, built_in_skill_id: str) -> 
         name=built_in_skill_id,
         description="test built-in",
         built_in_skill_id=built_in_skill_id,
-        bundle_file_id=None,
-        bundle_sha256=None,
-        public_permission=SkillSharePermission.VIEWER,
     )
     db_session.add(skill)
     db_session.flush()
@@ -245,18 +246,11 @@ def _reset_built_in_skill_row(db_session: Session, *, built_in_skill_id: str) ->
     return _make_built_in_skill_row(db_session, built_in_skill_id=built_in_skill_id)
 
 
-def _seed_custom_skill(
-    db_session: Session,
-    *,
-    name: str,
-    public: bool,
-    body: str,
-    group: UserGroup | None = None,
-) -> Skill:
+def _seed_custom_skill(db_session: Session, *, name: str, body: str) -> Plugin:
+    """A skill published to the organization with no author."""
     import hashlib
 
     from onyx.configs.constants import FileOrigin
-    from onyx.db.models import Skill__UserGroup
     from onyx.file_store.file_store import get_default_file_store
 
     bundle_bytes = _bundle(name, body)
@@ -268,19 +262,35 @@ def _seed_custom_skill(
         file_origin=FileOrigin.SKILL_BUNDLE,
         file_type="application/zip",
     )
-    skill = Skill(
+    marketplace_id = get_or_create_organization_library__no_commit(db_session)
+    version_id = uuid4()
+    skill = Plugin(
         id=uuid4(),
-        name=name,
+        name=free_plugin_name(marketplace_id, name, db_session),
         description=f"Seeded skill {name}",
-        bundle_file_id=bundle_file_id,
-        bundle_sha256=hashlib.sha256(bundle_bytes).hexdigest(),
-        public_permission=SkillSharePermission.VIEWER if public else None,
+        marketplace_id=marketplace_id,
+        current_version_id=version_id,
+        published_version_id=version_id,
     )
     db_session.add(skill)
     db_session.flush()
-    if group is not None:
-        db_session.add(Skill__UserGroup(skill_id=skill.id, user_group_id=group.id))
-        db_session.flush()
+    db_session.add(
+        PluginVersion(
+            id=version_id,
+            plugin_id=skill.id,
+            version_number=1,
+            bundle_file_id=bundle_file_id,
+            bundle_sha256=hashlib.sha256(bundle_bytes).hexdigest(),
+        )
+    )
+    db_session.flush()
+    db_session.add(
+        PluginSkill(
+            plugin_version_id=version_id,
+            path="",
+            frontmatter={"name": name, "description": f"Seeded skill {name}"},
+        )
+    )
     db_session.commit()
     db_session.refresh(skill)
     return skill
@@ -347,56 +357,6 @@ def _rendered_company_search_lines(db_session: Session, user: User) -> list[str]
 
 
 class TestSkillPush:
-    def test_external_app_skill_requires_authentication_and_selection(
-        self,
-        k8s_admin_user: DATestUser,
-        running_sandbox: Callable[..., SandboxHandle],
-        db_session: Session,
-    ) -> None:
-        handle = running_sandbox()
-        user = handle.api_user
-        workspace = handle.workspace_path
-        app = ExternalAppManager.create(
-            user_performing_action=k8s_admin_user,
-            name=f"Credential-gated app {uuid4().hex[:8]}",
-            upstream_url_patterns=["https://api.example.com/*"],
-            auth_template={"Authorization": "Bearer {access_token}"},
-            organization_credentials={},
-            app_type=ExternalAppType.CUSTOM,
-        )
-        try:
-            assert app.associated_skills == []
-            skill_response = _create_skill(
-                k8s_admin_user,
-                f"credential-gated-skill-{uuid4().hex[:8]}",
-                body="credential gated skill body\n",
-            )
-            db_session.expire_all()
-            skill = db_session.get(Skill, skill_response.id)
-            assert skill is not None
-            skill.public_permission = SkillSharePermission.VIEWER
-            db_session.add(
-                ExternalApp__Skill(external_app_id=app.id, skill_id=skill.id)
-            )
-            db_session.commit()
-
-            push_skill_to_affected_sandboxes(skill, db_session)
-            db_session.commit()
-            skill_file = _skill_file_path(workspace, skill.name)
-            skill_file.wait_for_absent()
-
-            ExternalAppManager.upsert_user_credentials(
-                user_performing_action=user,
-                app_id=app.id,
-                credentials={"access_token": "integration-test-token"},
-            )
-
-            skill_file.wait_for_absent()
-            SkillManager.set_enabled(skill_response, user, True)
-            skill_file.wait_for_bytes(b"credential gated skill body\n")
-        finally:
-            ExternalAppManager.delete(k8s_admin_user, app.id)
-
     def test_public_skill_lands_only_after_each_user_enables_it(
         self,
         k8s_admin_user: DATestUser,
@@ -589,7 +549,9 @@ class TestSkillPush:
         _skill_file_path(workspace, skill.name).wait_for_bytes(b"version one\n")
 
         _replace_bundle(k8s_admin_user, skill, body="version two\n")
+        _skill_file_path(workspace, skill.name).wait_for_bytes(b"version one\n")
 
+        SkillManager.publish(skill.id, k8s_admin_user)
         _skill_file_path(workspace, skill.name).wait_for_bytes(b"version two\n")
 
     def test_owner_file_removal_propagates_to_shared_users_sandbox(
@@ -774,7 +736,6 @@ class TestSkillPushLowLevel:
         skill = _seed_custom_skill(
             db_session,
             name=f"sleeping-{uuid4().hex[:6]}",
-            public=True,
             body="anything\n",
         )
 
@@ -800,7 +761,6 @@ class TestSkillPushLowLevel:
         skill = _seed_custom_skill(
             db_session,
             name=f"terminated-{uuid4().hex[:6]}",
-            public=True,
             body="anything\n",
         )
 

@@ -1318,7 +1318,8 @@ class SlackConnector(
             checkpoint.current_channel = filtered_channels[0]
             if include_permissions:
                 # checkpoint.current_channel is guaranteed to be non-None here since we just assigned it
-                assert checkpoint.current_channel is not None
+                if checkpoint.current_channel is None:
+                    raise RuntimeError("Slack checkpoint has no current channel.")
                 channel_access = get_channel_access(
                     slack_client=self.slack_client,
                     channel=checkpoint.current_channel,

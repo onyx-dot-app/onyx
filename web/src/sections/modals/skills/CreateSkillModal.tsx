@@ -2,7 +2,13 @@
 
 import { useEffect, useState } from "react";
 import { useTranslations } from "next-intl";
-import { Button, MessageCard, Modal, Text } from "@opal/components";
+import {
+  Button,
+  MessageCard,
+  Modal,
+  Text,
+  useCreateModal,
+} from "@opal/components";
 import { SvgUploadCloud } from "@opal/icons";
 import { inspectSkillBundle, uploadSkillBundles } from "@/lib/skills/api";
 import type { PreparedSkillBundle } from "@/lib/skills/bundleUpload";
@@ -18,35 +24,29 @@ import {
 } from "@/lib/skills/sharing";
 import type { GitHubSkillsImportResult } from "@/lib/skills/types";
 import { useUser } from "@/providers/UserProvider";
+import { usePermissionAuthority } from "@/lib/permissions/hooks";
+import { Permission } from "@/lib/types";
 
 interface CreateSkillModalProps {
   open: boolean;
   onClose: () => void;
   onContinue: (draft: SkillCreationDraft) => void;
   onImported?: () => void;
-  validateDraft?: (draft: SkillCreationDraft) => string | null;
 }
 
 interface CreateSkillModalContentProps extends Omit<
   CreateSkillModalProps,
   "open" | "onClose"
 > {
-  hidden?: boolean;
   onRequestClose: () => void;
   onBusyChange?: (busy: boolean) => void;
-  onDirtyChange?: (dirty: boolean) => void;
-  preserveDraftOnContinue?: boolean;
 }
 
-export function CreateSkillModalContent({
-  hidden = false,
+function CreateSkillModalContent({
   onRequestClose,
   onContinue,
   onImported,
   onBusyChange,
-  onDirtyChange,
-  preserveDraftOnContinue = false,
-  validateDraft,
 }: CreateSkillModalContentProps) {
   const t = useTranslations("skills.modals");
   const [bundle, setBundle] = useState<PreparedSkillBundle | null>(null);
@@ -54,11 +54,14 @@ export function CreateSkillModalContent({
   const [inspecting, setInspecting] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const busy = preparing || inspecting;
-  const { isAdmin, user } = useUser();
+  const { user } = useUser();
+  const { isGlobalHolder: isOrganizationManager } = usePermissionAuthority(
+    Permission.MANAGE_PLUGINS
+  );
   const [batchFiles, setBatchFiles] = useState<File[]>([]);
   const [result, setResult] = useState<GitHubSkillsImportResult | null>(null);
   const [sharing, setSharing] = useState<SkillSharingDraft | null>(null);
-  const [sharingOpen, setSharingOpen] = useState(false);
+  const sharingModal = useCreateModal();
   const sharingDraft =
     sharing ??
     emptySkillSharingDraft(
@@ -76,7 +79,6 @@ export function CreateSkillModalContent({
     setSharing(null);
     setResult(null);
     setErrorMessage(null);
-    onDirtyChange?.(false);
   }
 
   function handleClose() {
@@ -92,10 +94,11 @@ export function CreateSkillModalContent({
       try {
         const imported = await uploadSkillBundles(
           batchFiles,
-          sharing ? serializeSkillSharing(sharing, isAdmin) : undefined
+          sharing
+            ? serializeSkillSharing(sharing, isOrganizationManager)
+            : undefined
         );
         setResult(imported);
-        onDirtyChange?.(false);
         if (imported.imported.length > 0) onImported?.();
       } catch (error) {
         setErrorMessage(
@@ -120,12 +123,7 @@ export function CreateSkillModalContent({
           containsSkillMd: true,
         },
       };
-      const validationError = validateDraft?.(draft);
-      if (validationError) {
-        setErrorMessage(validationError);
-        return;
-      }
-      if (!preserveDraftOnContinue) reset();
+      reset();
       onContinue(draft);
     } catch (error) {
       console.error("Failed to inspect skill bundle", error);
@@ -136,8 +134,6 @@ export function CreateSkillModalContent({
       setInspecting(false);
     }
   }
-
-  if (hidden) return null;
 
   return (
     <>
@@ -157,7 +153,6 @@ export function CreateSkillModalContent({
               setBundle(nextBundle);
               setBatchFiles([]);
               setErrorMessage(null);
-              onDirtyChange?.(nextBundle !== null);
             }}
             onBatchChange={
               onImported
@@ -165,7 +160,6 @@ export function CreateSkillModalContent({
                     setBatchFiles(files);
                     setBundle(null);
                     setErrorMessage(null);
-                    onDirtyChange?.(true);
                   }
                 : undefined
             }
@@ -173,7 +167,6 @@ export function CreateSkillModalContent({
               setBundle(null);
               setBatchFiles([]);
               setErrorMessage(message);
-              onDirtyChange?.(false);
             }}
           />
         )}
@@ -184,7 +177,7 @@ export function CreateSkillModalContent({
             count={batchFiles.length}
             configureLabel={t("importGithub.sharing.configureButton")}
             disabled={busy}
-            onConfigure={() => setSharingOpen(true)}
+            onConfigure={() => sharingModal.toggle(true)}
           >
             <Section height="auto" className="max-h-24 overflow-y-auto">
               <Text font="secondary-body" color="text-03">
@@ -297,15 +290,15 @@ export function CreateSkillModalContent({
           </>
         )}
       </Modal.Footer>
-      {sharingOpen && (
+      <sharingModal.Provider>
         <ShareSkillModal
           mode="create"
           open
           draft={sharingDraft}
           onSaveDraft={setSharing}
-          onClose={() => setSharingOpen(false)}
+          onClose={() => sharingModal.toggle(false)}
         />
-      )}
+      </sharingModal.Provider>
     </>
   );
 }
@@ -315,7 +308,6 @@ export default function CreateSkillModal({
   onClose,
   onContinue,
   onImported,
-  validateDraft,
 }: CreateSkillModalProps) {
   const [busy, setBusy] = useState(false);
 
@@ -328,7 +320,6 @@ export default function CreateSkillModal({
             onContinue={onContinue}
             onImported={onImported}
             onBusyChange={setBusy}
-            validateDraft={validateDraft}
           />
         )}
       </Modal.Content>

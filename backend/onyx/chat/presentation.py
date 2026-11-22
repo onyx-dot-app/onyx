@@ -1,58 +1,82 @@
 """Attach chat metadata to agent output and build saved response summaries."""
 
 from collections.abc import Mapping, Sequence
+from types import MappingProxyType
 
 from pydantic import BaseModel
 
 from onyx.agents.events import (
     AgentEndEvent,
     AgentEvent,
+    InputEndedEvent,
+    InputRequiredEvent,
     MessageEndEvent,
     MessageStartEvent,
     MessageUpdateEvent,
     ToolEndEvent,
+    ToolResultAmendedEvent,
     ToolStartEvent,
     ToolUpdateEvent,
 )
 from onyx.agents.models import (
     AgentInfo,
     ExecutionStatus,
+    InputMessageMetadata,
+    InputSource,
     RunFailure,
     RunFailureKind,
     RunState,
     RunStatus,
 )
 from onyx.chat.citation_processor import CitationMapping, DynamicCitationProcessor
-from onyx.chat.citation_utils import message_citation_sources
 from onyx.chat.emitter import Emitter
 from onyx.chat.models import (
+    AgentToolApproval,
     ChatMessageMetadata,
     ChatResponseSnapshot,
     CitationMode,
     MessageRendering,
     PresentationMode,
     ResponseRecord,
+    ResponseReplayData,
+    SavedToolApproval,
+    SavedToolQuestion,
     ToolHistorySnapshot,
     ToolReplayData,
+    recorded_mentions,
 )
 from onyx.chat.renderer import (
     HIDDEN_TOOLS,
     MessageRenderer,
     ResponseLayout,
     ToolRenderer,
+    approval_outcome,
+    question_resolved,
+    tool_renderer,
 )
 from onyx.chat.response import response_record, tool_arguments_for_display
-from onyx.coding_agent.tool_definitions import CODING_AGENT_TOOL_NAME
-from onyx.context.search.models import SearchDoc, SearchDocsResponse
-from onyx.deep_research.models import (
-    ResearchAgentCallResult,
-    ResearchMessageMetadata,
-    ResearchPhase,
+from onyx.chat.tool_approvals import ended_answer
+from onyx.chat.tool_questions import question_answer
+from onyx.chat.tool_results import (
+    restored_result_details,
+    tool_result_parts,
+    tool_result_sources,
 )
-from onyx.deep_research.tool_definitions import THINK_TOOL_NAME
-from onyx.llm.models import AssistantMessage, ToolCall, ToolResultMessage
+from onyx.context.search.models import SearchDoc, SearchDocsResponse
+from onyx.deep_research.models import ResearchMessageMetadata, ResearchPhase
+from onyx.llm.models import AssistantMessage, ToolCall, ToolResultMessage, UserMessage
 from onyx.server.query_and_chat.placement import Placement
-from onyx.server.query_and_chat.streaming_models import OverallStop, Packet
+from onyx.server.query_and_chat.streaming_models import (
+    AWAITING_USER,
+    OverallStop,
+    Packet,
+    ReplayEnd,
+    ToolApprovalRequest,
+    ToolApprovalResolved,
+    ToolQuestionRequest,
+    UserMessagePacket,
+)
+from onyx.tools.constants import SEND_MESSAGE_TOOL_NAME, SPAWN_AGENT_TOOL_NAME
 from onyx.tools.models import (
     CustomToolCallSummary,
     CustomToolUserFileSnapshot,
@@ -60,9 +84,18 @@ from onyx.tools.models import (
     ToolCallInfo,
 )
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
+from onyx.tools.tool_implementations.sandbox.models import PublishedFiles
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+_NO_APPROVALS: Mapping[tuple[str, str], Sequence[SavedToolApproval]] = MappingProxyType(
+    {}
+)
+_NO_AGENT_APPROVALS: Mapping[tuple[str, str], Sequence[AgentToolApproval]] = (
+    MappingProxyType({})
+)
+_NO_QUESTIONS: Mapping[tuple[str, str], SavedToolQuestion] = MappingProxyType({})
 
 
 def _message_identity(message: AssistantMessage) -> str:
@@ -73,10 +106,16 @@ def _message_identity(message: AssistantMessage) -> str:
 
 def _collect_tool_history(
     snapshot: RunState,
-    tool_ids: Mapping[str, int],
+    tool_ids: Mapping[str, int | None],
     initial_citations: CitationMapping | None = None,
+    *,
+    include_parent: bool = False,
 ) -> ToolHistorySnapshot:
-    """Project completed and interrupted operations from one execution tree."""
+    """Project completed and interrupted operations from one execution tree.
+
+    `tool_ids` names the application tools to record, with their tool row ids; a
+    tool without a row maps to None. Calls of other tools are skipped.
+    """
     records: list[ToolCallInfo] = []
     documents: dict[str, SearchDoc] = {}
     citations = DynamicCitationProcessor(citation_mode=CitationMode.HYPERLINK)
@@ -89,33 +128,30 @@ def _collect_tool_history(
                 message.metadata.sources, update_duplicate_keys=True
             )
         for index, call in enumerate(message.tool_calls):
-            tool_id = tool_ids.get(call.name)
-            if tool_id is None:
+            if call.name not in tool_ids:
                 continue
             execution = step.tools.get(call.id)
             result = execution.result if execution is not None else None
             records.append(
                 _tool_record(
-                    tool_id,
+                    tool_ids[call.name],
                     message,
                     result,
                     call,
                     snapshot,
                     step_index,
                     index,
+                    include_parent=include_parent,
                 )
             )
-            if result is None:
+            sources = tool_result_sources(result.details) if result else None
+            if sources is None:
                 continue
-            if isinstance(result.details, SearchDocsResponse):
-                for document in result.details.search_docs:
-                    documents.setdefault(document.document_id, document)
-            if isinstance(result.details, ResearchAgentCallResult):
-                for document in result.details.citation_mapping.values():
-                    documents.setdefault(document.document_id, document)
-            citations.update_citation_mapping(message_citation_sources(result))
+            for document in sources.documents:
+                documents.setdefault(document.document_id, document)
+            citations.update_citation_mapping(sources.citations)
     for child in snapshot.child_runs:
-        child_history = _collect_tool_history(child, tool_ids)
+        child_history = _collect_tool_history(child, tool_ids, include_parent=True)
         records.extend(child_history.tool_calls)
         documents.update(child_history.all_search_docs)
     return ToolHistorySnapshot(
@@ -126,38 +162,55 @@ def _collect_tool_history(
 
 
 def _tool_record(
-    tool_id: int,
+    tool_id: int | None,
     output: AssistantMessage,
     tool_response: ToolResultMessage | None,
     tool_call: ToolCall,
     snapshot: RunState,
     turn: int,
     index: int,
+    *,
+    include_parent: bool,
 ) -> ToolCallInfo:
     data = tool_response.details if tool_response else None
-    search_docs = data.search_docs if isinstance(data, SearchDocsResponse) else None
-    displayed_docs = (
-        data.displayed_docs if isinstance(data, SearchDocsResponse) else None
+    sources = tool_result_sources(data)
+    # Artifacts of nested calls belong to the call that made them.
+    parts = (
+        [part.details for part in tool_result_parts(tool_response)]
+        if tool_response
+        else []
     )
-    generated_images = None
-    if isinstance(data, FinalImageGenerationResponse):
-        generated_images = data.generated_images
-
-    generated_files = None
-    if isinstance(data, LlmPythonExecutionResult):
-        generated_files = data.generated_files or None
-
+    generated_images = [
+        image
+        for part in parts
+        if isinstance(part, FinalImageGenerationResponse)
+        for image in part.generated_images
+    ] or None
+    generated_files = [
+        file
+        for part in parts
+        if isinstance(part, LlmPythonExecutionResult)
+        for file in part.generated_files
+    ] or None
     # Custom tools save image/CSV blobs and return their ids.
-    generated_file_ids = None
-    if isinstance(data, CustomToolCallSummary) and isinstance(
-        data.tool_result, CustomToolUserFileSnapshot
-    ):
-        generated_file_ids = data.tool_result.file_ids or None
+    generated_file_ids = [
+        file_id
+        for part in parts
+        if isinstance(part, CustomToolCallSummary)
+        and isinstance(part.tool_result, CustomToolUserFileSnapshot)
+        for file_id in part.tool_result.file_ids
+    ] or None
+    published_files = [
+        file
+        for part in parts
+        if isinstance(part, PublishedFiles)
+        for file in part.files
+    ] or None
 
     return ToolCallInfo(
         message_id=_message_identity(output),
-        parent_message_id=snapshot.parent_message_id,
-        parent_tool_call_id=snapshot.parent_tool_call_id,
+        parent_message_id=snapshot.parent_message_id if include_parent else None,
+        parent_tool_call_id=snapshot.parent_tool_call_id if include_parent else None,
         turn_index=turn,
         tab_index=index,
         tool_name=tool_call.name,
@@ -166,29 +219,19 @@ def _tool_record(
         reasoning_tokens=output.thinking,  # Calls from one assistant message share its thinking.
         tool_call_arguments=tool_arguments_for_display(tool_call),
         tool_call_response=tool_response.text if tool_response else "",
-        search_docs=displayed_docs if displayed_docs is not None else search_docs,
+        search_docs=sources.displayed if sources is not None else None,
         generated_images=generated_images,
         generated_files=generated_files,
         generated_file_ids=generated_file_ids,
+        published_files=published_files,
     )
 
 
-def message_presentation(
-    metadata: BaseModel | None,
-    *,
-    parent_tool_name: str | None = None,
-) -> MessageRendering:
+def message_presentation(metadata: BaseModel | None) -> MessageRendering:
     """Resolve feature metadata into display settings retained for history replay."""
     if isinstance(metadata, MessageRendering):
         return metadata.model_copy(deep=True)
-    presentation = MessageRendering(
-        mode=PresentationMode.CODING_THINKING
-        if parent_tool_name == CODING_AGENT_TOOL_NAME
-        else PresentationMode.ANSWER,
-        think_tool=THINK_TOOL_NAME
-        if parent_tool_name == CODING_AGENT_TOOL_NAME
-        else None,
-    )
+    presentation = MessageRendering()
     if isinstance(metadata, ChatMessageMetadata):
         presentation.citation_mode = (
             CitationMode.HYPERLINK
@@ -206,10 +249,7 @@ def message_presentation(
         if metadata.phase == ResearchPhase.PLANNING:
             presentation.mode = PresentationMode.PLAN
         elif metadata.phase == ResearchPhase.RESEARCH:
-            presentation.text_as_thinking = True
-            presentation.think_tool = (
-                THINK_TOOL_NAME if not metadata.is_reasoning_model else None
-            )
+            presentation.mode = PresentationMode.RESEARCH
         elif metadata.phase == ResearchPhase.REPORT:
             presentation.mode = (
                 PresentationMode.REPORT
@@ -244,7 +284,7 @@ def message_documents(metadata: BaseModel | None) -> dict[str, SearchDoc]:
 def project_response(
     snapshot: RunState,
     *,
-    tool_ids: Mapping[str, int],
+    tool_ids: Mapping[str, int | None],
     initial_citations: CitationMapping | None = None,
     registrations: Sequence[AgentInfo] = (),
 ) -> ChatResponseSnapshot:
@@ -298,22 +338,18 @@ def _project_response_display(
     record = response.response
     if record is None:
         raise ValueError("Saved response content is required for display projection")
-    pending: list[tuple[RunState, str | None]] = [(snapshot, None)]
+    pending = [snapshot]
     while pending:
-        node, parent_tool_name = pending.pop()
-        call_names: dict[tuple[str, str], str] = {}
+        node = pending.pop()
         for step_index, step in enumerate(node.steps):
             message = step.message
             message_id = _message_identity(message)
-            call_names.update(
-                {(message_id, call.id): call.name for call in message.tool_calls}
-            )
-            setting = message_presentation(
-                message.metadata,
-                parent_tool_name=parent_tool_name,
-            )
+            setting = message_presentation(message.metadata)
             presentation[message_id] = setting
-            if node is not snapshot or setting.mode != PresentationMode.ANSWER:
+            if node is not snapshot or setting.mode not in (
+                PresentationMode.ANSWER,
+                PresentationMode.RESEARCH,
+            ):
                 continue
             renderer = MessageRenderer(
                 setting,
@@ -338,16 +374,35 @@ def _project_response_display(
                     and not message.tool_calls,
                 }
             )
-        pending.extend(
-            (
-                child,
-                call_names.get(
-                    (child.parent_message_id or "", child.parent_tool_call_id or "")
+        pending.extend(node.child_runs)
+    return response.model_copy(update={"presentation": presentation})
+
+
+def user_message_packets(
+    messages: Sequence[UserMessage],
+    layout: ResponseLayout,
+    parent: Placement | None,
+) -> list[Packet]:
+    packets: list[Packet] = []
+    for message in messages:
+        if (
+            not isinstance(message.metadata, InputMessageMetadata)
+            or message.metadata.source != InputSource.HUMAN
+        ):
+            continue
+        if message.id is None:
+            raise ValueError("Accepted user message has no identity")
+        packets.append(
+            Packet(
+                placement=layout.next_section(parent),
+                obj=UserMessagePacket(
+                    id=message.id,
+                    message=message.text,
+                    mentions=recorded_mentions(message),
                 ),
             )
-            for child in node.child_runs
         )
-    return response.model_copy(update={"presentation": presentation})
+    return packets
 
 
 class ResponsePresenter:
@@ -357,13 +412,36 @@ class ResponsePresenter:
         self,
         emitter: Emitter,
         *,
-        tool_ids: Mapping[str, int] | None = None,
+        tool_ids: Mapping[str, int | None] | None = None,
     ) -> None:
         self.tool_ids = tool_ids or {}
         self.emitter = emitter
         self.layout = ResponseLayout()
         self.renderers: dict[str, MessageRenderer] = {}
         self.tools: dict[tuple[str, str, str], ToolRenderer] = {}
+
+    def replay(
+        self,
+        response: ResponseRecord,
+        replay: ResponseReplayData,
+        settings: dict[str, MessageRendering],
+    ) -> None:
+        """Send the saved output of a suspended response that this stream
+        continues, then `ReplayEnd`; the live events of its calls reuse their
+        cards, and its calls that wait stay open."""
+        for packet in replay_response(
+            response,
+            replay.tools,
+            settings,
+            replay.documents,
+            self.layout,
+            approvals=replay.approvals,
+            agent_approvals=replay.agent_approvals,
+            questions=replay.questions,
+            open_calls=self.tools,
+        ):
+            self.emitter.emit(packet)
+        self.emitter.emit(Packet(placement=Placement(turn_index=0), obj=ReplayEnd()))
 
     def consume(self, event: AgentEvent) -> None:
         output: list[Packet] = []
@@ -375,15 +453,15 @@ class ResponsePresenter:
             )
         )
         if isinstance(event, MessageStartEvent):
+            output = user_message_packets(
+                event.input_messages, self.layout, parent.placement if parent else None
+            )
             if event.parent_run_id is None:
                 self.emitter.llm_step_started()
             if parent is not None:
                 parent.has_child_output = True
             self.renderers[event.run_id] = MessageRenderer(
-                message_presentation(
-                    event.metadata,
-                    parent_tool_name=parent.call.name if parent else None,
-                ),
+                message_presentation(event.metadata),
                 message_documents(event.metadata),
                 self.layout,
                 parent.placement if parent else None,
@@ -396,24 +474,41 @@ class ResponsePresenter:
             calls = [
                 call
                 for call in event.message.tool_calls
-                if call.name != renderer.settings.think_tool
-                and call.name not in HIDDEN_TOOLS
+                if call.name not in HIDDEN_TOOLS
             ]
             for call in calls:
                 tool_placement = renderer.tool_placement(call.id)
-                self.tools[(event.run_id, event.message_id, call.id)] = ToolRenderer(
-                    call, tool_placement, self.tool_ids.get(call.name)
+                self.tools[(event.run_id, event.message_id, call.id)] = tool_renderer(
+                    call,
+                    tool_placement,
+                    self.tool_ids.get(call.name),
                 )
         elif isinstance(event, (ToolStartEvent, ToolUpdateEvent, ToolEndEvent)):
             tool = self.tools.get((event.run_id, event.message_id, event.tool_call.id))
             if tool is None:
                 return
-            if isinstance(event, ToolStartEvent):
-                output = tool.start()
-            elif isinstance(event, ToolUpdateEvent):
-                output = tool.update(event.progress.details, event.progress.content)
-            else:
-                output = tool.complete(event.result)
+            output = tool.consume(event)
+        elif isinstance(
+            event, (InputRequiredEvent, InputEndedEvent, ToolResultAmendedEvent)
+        ):
+            if event.tool_call.name in HIDDEN_TOOLS:
+                return
+            key = (event.run_id, event.message_id, event.tool_call.id)
+            tool = self.tools.get(key)
+            amended = isinstance(event, ToolResultAmendedEvent)
+            if tool is None:
+                # A call that this stream did not draw gets an open card, which
+                # later events of the call reuse. An amended result completes it.
+                renderer = self.renderers.get(event.run_id)
+                tool = self.tools[key] = tool_renderer(
+                    event.tool_call,
+                    renderer.tool_placement(event.tool_call.id)
+                    if renderer is not None
+                    else self.layout.next_section(parent.placement if parent else None),
+                    self.tool_ids.get(event.tool_call.name),
+                    event.display_name if amended else None,
+                )
+            output = tool.amend(event.result) if amended else tool.consume(event)
         elif isinstance(event, AgentEndEvent):
             # The response owner reports classified failures separately.
             for key in tuple(self.tools):
@@ -433,7 +528,10 @@ class ResponsePresenter:
 
 
 def overall_stop(status: RunStatus, failure: RunFailure | None) -> OverallStop:
-    """How a top-level response ended: the one mapping for live, replay and Stop."""
+    """How a top-level response ended: the one mapping for live, replay and Stop.
+    A suspended response waits for the user's approval decisions or answers."""
+    if status == RunStatus.SUSPENDED:
+        return OverallStop(stop_reason=AWAITING_USER)
     if status != RunStatus.CANCELLED:
         return OverallStop(stop_reason="finished")
     if failure is not None and failure.kind == RunFailureKind.DEADLINE:
@@ -448,26 +546,40 @@ def replay_response(
     documents: Mapping[str, SearchDoc],
     layout: ResponseLayout | None = None,
     parent: Placement | None = None,
-    default_mode: PresentationMode = PresentationMode.ANSWER,
+    *,
+    approvals: Mapping[tuple[str, str], Sequence[SavedToolApproval]] = _NO_APPROVALS,
+    agent_approvals: Mapping[
+        tuple[str, str], Sequence[AgentToolApproval]
+    ] = _NO_AGENT_APPROVALS,
+    questions: Mapping[tuple[str, str], SavedToolQuestion] = _NO_QUESTIONS,
+    open_calls: dict[tuple[str, str, str], ToolRenderer] | None = None,
 ) -> list[Packet]:
     """Render saved accepted steps using detached tool records and source documents.
 
-    The session response carries the saved message error separately. Stop packets
-    close rendering; they do not classify execution success or failure.
+    `approvals` holds the response's approval requests by run ID and tool call
+    ID; each shows in its call's card, with its decision once it has one.
+    `agent_approvals` holds the requests of the background agents that a call
+    started, which show in that call's card the same way. `questions` holds
+    the response's questions by run ID and the call that asked, which show
+    the same way. The
+    calls of a suspended response that have no result stay open, as its stream
+    left them. With `open_calls`, the replay starts a stream that continues the
+    response: it collects the renderer of each call it draws, ended or open
+    and in child runs too, by run, message and call ID, so that the call's
+    live events reuse its card, and sends no stop. The session response carries the saved message error separately.
+    Stop packets close rendering; they do not classify execution success or
+    failure.
     """
     layout = layout or ResponseLayout()
     packets: list[Packet] = []
     for step in response.steps:
+        packets.extend(user_message_packets(step.input_messages, layout, parent))
         message = step.message
         message_id = _message_identity(message)
-        setting = settings.get(message_id, MessageRendering(mode=default_mode))
+        setting = settings.get(message_id) or MessageRendering()
         renderer = MessageRenderer(setting, documents, layout, parent)
         packets.extend(renderer.complete(message))
-        calls = [
-            call
-            for call in message.tool_calls
-            if call.name not in HIDDEN_TOOLS and call.name != setting.think_tool
-        ]
+        calls = [call for call in message.tool_calls if call.name not in HIDDEN_TOOLS]
         if not calls:
             continue
         for call in calls:
@@ -475,32 +587,99 @@ def replay_response(
             record = records.get((message_id, call.id))
             execution = step.tools.get(call.id)
             result = execution.result if execution is not None else None
+            details = result.details if result is not None else None
             if (
                 result is not None
-                and isinstance(result.details, SearchDocsResponse)
+                and isinstance(details, SearchDocsResponse)
                 and record is not None
             ):
                 # Saved document IDs support citation and source-card links.
-                search = result.details.model_copy(
-                    update={"search_docs": record.search_docs or []}
-                )
+                search = details.model_copy(update={"search_docs": record.search_docs})
                 result = result.model_copy(update={"details": search})
-            tool_renderer = ToolRenderer(
-                call, tool_placement, record.tool_id if record is not None else None
+            elif result is not None and details is not None:
+                # Nested results keep documents as citation numbers; the call's
+                # saved documents and the response's documents refill them.
+                saved_documents = record.search_docs if record is not None else []
+                restored = restored_result_details(
+                    details,
+                    {
+                        **documents,
+                        **{doc.document_id: doc for doc in saved_documents},
+                    },
+                )
+                result = result.model_copy(update={"details": restored})
+            renderer_of_call = tool_renderer(
+                call,
+                tool_placement,
+                record.tool_id if record is not None else None,
+                execution.display_name if execution is not None else None,
             )
-            packets.extend(tool_renderer.start())
+            packets.extend(renderer_of_call.start())
+            waits = result is None and response.status == RunStatus.SUSPENDED
+            shown = [
+                (approval, None)
+                for approval in approvals.get((response.run_id, call.id), ())
+            ] + [
+                (agent.approval, agent.agent_name)
+                for agent in agent_approvals.get((response.run_id, call.id), ())
+            ]
+            for approval, agent_name in shown:
+                approval_id = str(approval.id)
+                packets.append(
+                    Packet(
+                        placement=tool_placement,
+                        obj=ToolApprovalRequest(
+                            approval_id=approval_id,
+                            tool_call_id=call.id,
+                            tool_name=approval.tool_name,
+                            display_name=approval.display_name,
+                            arguments=approval.arguments,
+                            agent_name=agent_name,
+                        ),
+                    )
+                )
+                if approval.decision is None:
+                    continue
+                packets.append(
+                    Packet(
+                        placement=tool_placement,
+                        obj=ToolApprovalResolved(
+                            approval_id=approval_id,
+                            outcome=approval_outcome(ended_answer(approval)),
+                        ),
+                    )
+                )
+            question = questions.get((response.run_id, call.id))
+            if question is not None:
+                packets.append(
+                    Packet(
+                        placement=tool_placement,
+                        obj=ToolQuestionRequest(
+                            question_request_id=str(question.id),
+                            tool_call_id=call.id,
+                            questions=question.questions,
+                        ),
+                    )
+                )
+                if question.outcome is not None:
+                    packets.append(
+                        Packet(
+                            placement=tool_placement,
+                            obj=question_resolved(
+                                str(question.id),
+                                question_answer(question.id, question),
+                            ),
+                        )
+                    )
             for child in response.child_runs:
+                # Agent tools start background runs, whose output arrives separately.
                 if (
-                    child.parent_message_id != message_id
+                    call.name in (SPAWN_AGENT_TOOL_NAME, SEND_MESSAGE_TOOL_NAME)
+                    or child.parent_message_id != message_id
                     or child.parent_tool_call_id != call.id
                 ):
                     continue
-                tool_renderer.has_child_output = True
-                child_mode = (
-                    PresentationMode.CODING_THINKING
-                    if call.name == CODING_AGENT_TOOL_NAME
-                    else PresentationMode.ANSWER
-                )
+                renderer_of_call.has_child_output = True
                 packets.extend(
                     replay_response(
                         child,
@@ -509,11 +688,15 @@ def replay_response(
                         documents,
                         layout,
                         tool_placement,
-                        child_mode,
+                        approvals=approvals,
+                        open_calls=open_calls,
                     )
                 )
-            packets.extend(tool_renderer.complete(result))
-    if response.parent_run_id is None:
+            if open_calls is not None:
+                open_calls[(response.run_id, message_id, call.id)] = renderer_of_call
+            if not waits:
+                packets.extend(renderer_of_call.complete(result))
+    if response.parent_run_id is None and open_calls is None:
         packets.append(
             Packet(
                 placement=Placement(turn_index=0),

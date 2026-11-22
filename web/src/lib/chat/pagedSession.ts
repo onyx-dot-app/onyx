@@ -1,20 +1,101 @@
-import type { BackendChatSession } from "@/app/app/types";
+import type { BackendChatSession, Message } from "@/app/app/types";
 import { processRawChatHistory } from "@/app/app/services/lib";
 import { getLatestMessageChain } from "@/app/app/services/messageTree";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
+import {
+  addLoadedPublishedFiles,
+  startChatLoad,
+} from "@/lib/chat/publishedFiles";
+import { fetchSettledChatSession } from "@/lib/chat/sessionReadiness";
+import { readWaitingToolRequests } from "@/lib/chat/toolApprovals";
+import type { ChatHistoryPage } from "@/lib/chat/types";
 
 /** Messages of the current branch that one page of a chat holds. */
 export const CHAT_PAGE_SIZE = 20;
 
-/** URL of a page of a chat: its last messages, or those before a message. */
+/**
+ * Keep loaded history when the latest page attaches to the selected branch.
+ * The latest page holds every reply with a waiting approval or question card,
+ * so a loaded older reply outside it that still shows one is stale; the older history is
+ * then dropped and loads again on scroll.
+ */
+export function mergeLatestChatPage(
+  page: BackendChatSession,
+  current: ChatHistoryPage
+): ChatHistoryPage {
+  const saved = processRawChatHistory(page.messages, page.packets);
+  const local = current.messageTree;
+  const first = getLatestMessageChain(saved)[0];
+  const localChain = getLatestMessageChain(local);
+  if (
+    first?.parentNodeId == null ||
+    !localChain.some((message) => message.messageId === first.parentNodeId) ||
+    readWaitingToolRequests(local).some(
+      ({ response }) =>
+        response.messageId != null && !saved.has(response.messageId)
+    )
+  ) {
+    return {
+      messageTree: saved,
+      hasOlderMessages: page.has_older_messages ?? false,
+    };
+  }
+
+  // Live nodes can still use temporary IDs; saved links use database IDs.
+  const nodeIds = new Map(
+    [...local].map(([id, message]) => [id, message.messageId ?? id])
+  );
+  const messageTree = new Map<number, Message>();
+  for (const [id, message] of local) {
+    const nodeId = nodeIds.get(id) ?? id;
+    messageTree.set(nodeId, {
+      ...message,
+      nodeId,
+      parentNodeId:
+        message.parentNodeId === null
+          ? null
+          : (nodeIds.get(message.parentNodeId) ?? message.parentNodeId),
+      childrenNodeIds: message.childrenNodeIds?.map(
+        (child) => nodeIds.get(child) ?? child
+      ),
+      latestChildNodeId:
+        message.latestChildNodeId == null
+          ? message.latestChildNodeId
+          : (nodeIds.get(message.latestChildNodeId) ??
+            message.latestChildNodeId),
+    });
+  }
+  for (const [id, message] of saved) messageTree.set(id, message);
+  const parent = messageTree.get(first.parentNodeId);
+  if (parent) {
+    messageTree.set(parent.nodeId, {
+      ...parent,
+      childrenNodeIds: [
+        ...new Set([...(parent.childrenNodeIds ?? []), first.nodeId]),
+      ],
+      latestChildNodeId: first.nodeId,
+    });
+  }
+  return { messageTree, hasOlderMessages: current.hasOlderMessages };
+}
+
+/**
+ * URL of a page of a chat: its last messages, or those before a message.
+ * With `shared`, the server returns the chat only when its owner shared it,
+ * also to a user who does not own it.
+ */
 export function chatPageUrl(
   sessionId: string,
-  beforeMessageId?: number
+  {
+    beforeMessageId,
+    shared = false,
+  }: { beforeMessageId?: number; shared?: boolean } = {}
 ): string {
   const params = new URLSearchParams({ limit: String(CHAT_PAGE_SIZE) });
   if (beforeMessageId !== undefined) {
     params.set("before_message_id", String(beforeMessageId));
   }
+  if (shared) params.set("is_shared", "true");
   return `/api/chat/get-chat-session/${sessionId}?${params}`;
 }
 
@@ -32,8 +113,11 @@ export async function loadOlderChatMessages(sessionId: string): Promise<void> {
   if (oldest?.messageId === undefined || oldest.messageId === null) return;
 
   store.updateSessionData(sessionId, { isLoadingOlderMessages: true });
+  const loadSequence = startChatLoad();
   try {
-    const response = await fetch(chatPageUrl(sessionId, oldest.messageId));
+    const response = await fetch(
+      chatPageUrl(sessionId, { beforeMessageId: oldest.messageId })
+    );
     if (!response.ok) {
       throw new Error(`Failed to load older messages: ${response.status}`);
     }
@@ -67,15 +151,21 @@ export async function loadOlderChatMessages(sessionId: string): Promise<void> {
       );
     useChatSessionStore.getState().updateSessionData(sessionId, {
       hasOlderMessages: page.has_older_messages ?? false,
+      loadedPublishedFiles: addLoadedPublishedFiles(
+        current.loadedPublishedFiles,
+        page,
+        loadSequence
+      ),
     });
   } catch (error) {
     console.error("Failed to load older chat messages", { sessionId, error });
     // Stop loading older pages, so a failing request does not repeat while
     // the loader stays in view. Reopening the chat tries again.
     if (useChatSessionStore.getState().sessions.has(sessionId)) {
-      useChatSessionStore
-        .getState()
-        .updateSessionData(sessionId, { hasOlderMessages: false });
+      useChatSessionStore.getState().updateSessionData(sessionId, {
+        hasOlderMessages: false,
+        olderMessagesFailed: true,
+      });
     }
   } finally {
     if (useChatSessionStore.getState().sessions.has(sessionId)) {
@@ -87,12 +177,35 @@ export async function loadOlderChatMessages(sessionId: string): Promise<void> {
 }
 
 /**
+ * Loads the chat's latest page and adds the server's list of the chat's
+ * published files to the chat in the store. The message tree stays as it is.
+ * Rejects when the page does not load.
+ */
+export async function reloadChatPublishedFiles(
+  sessionId: string
+): Promise<void> {
+  const loadSequence = startChatLoad();
+  const page = await fetchSettledChatSession(sessionId);
+  const store = useChatSessionStore.getState();
+  const session = store.sessions.get(sessionId);
+  if (!session) return;
+  store.updateSessionData(sessionId, {
+    loadedPublishedFiles: addLoadedPublishedFiles(
+      session.loadedPublishedFiles,
+      page,
+      loadSequence
+    ),
+  });
+}
+
+/**
  * Replaces the chat's message tree with the last page of its current branch,
  * for example after a switch to a branch whose messages are not loaded. Does
  * nothing if the latest message changed while the page loaded.
  */
 export async function reloadLatestChatPage(sessionId: string): Promise<void> {
   const tailAtStart = latestMessageNodeId(sessionId);
+  const loadSequence = startChatLoad();
   try {
     const response = await fetch(chatPageUrl(sessionId));
     if (!response.ok) {
@@ -113,7 +226,7 @@ export async function reloadLatestChatPage(sessionId: string): Promise<void> {
       sessionId,
       processRawChatHistory(page.messages, page.packets)
     );
-    store.updateSessionData(sessionId, {
+    store.applyLoadedSession(sessionId, page, loadSequence, {
       hasOlderMessages: page.has_older_messages ?? false,
     });
   } catch (error) {

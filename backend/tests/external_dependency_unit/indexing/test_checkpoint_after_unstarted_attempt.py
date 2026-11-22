@@ -106,11 +106,11 @@ def test_recent_completed_attempts_skip_unstarted(
 @patch(f"{_RUN_DOCFETCHING}.get_redis_client")
 @patch(f"{_RUN_DOCFETCHING}.ensure_source_node_exists")
 @patch(f"{_RUN_DOCFETCHING}.get_source_node_id_from_cache")
-@patch(f"{_RUN_DOCFETCHING}.get_node_id_from_raw_id")
+@patch(f"{_RUN_DOCFETCHING}.resolve_parent_node_ids")
 @patch(f"{_RUN_DOCFETCHING}.cache_hierarchy_nodes_batch")
 def test_docfetching_reissues_batches_past_unstarted_attempt(
     mock_cache_hierarchy_nodes_batch: MagicMock,  # noqa: ARG001
-    mock_get_node_id_from_raw_id: MagicMock,
+    mock_resolve_parent_node_ids: MagicMock,
     mock_get_source_node_id_from_cache: MagicMock,
     mock_ensure_source_node_exists: MagicMock,
     mock_get_redis_client: MagicMock,
@@ -146,7 +146,7 @@ def test_docfetching_reissues_batches_past_unstarted_attempt(
     mock_get_redis_client.return_value = MagicMock()
     mock_ensure_source_node_exists.return_value = 1
     mock_get_source_node_id_from_cache.return_value = 1
-    mock_get_node_id_from_raw_id.return_value = (None, False)
+    mock_resolve_parent_node_ids.return_value = {}
     mock_get_last_successful_attempt_poll_range_end.return_value = 0
     mock_load_checkpoint.return_value = ConnectorCheckpoint(has_more=True)
 

@@ -182,6 +182,23 @@ def test_text_reply_finishes_with_stop(script: MockLLMScript, llm: LitellmLLM) -
     assert result["finish_reasons"] == ["stop"]
 
 
+def test_error_after_text_fails_the_stream_after_its_text(
+    script: MockLLMScript, llm: LitellmLLM
+) -> None:
+    script.conversation(
+        "main",
+        Reply(text="Partial answer", error_after_text="Provider failed"),
+        conditions=TOOL_FREE,
+    )
+    content = ""
+    with pytest.raises(Exception, match="Provider failed"):
+        for chunk in llm.stream_raw(prompt=PROMPT):
+            content += chunk.choice.delta.content or ""
+
+    assert content == "Partial answer"
+    script.verify()
+
+
 def test_stream_usage_follows_include_usage(
     script: MockLLMScript, llm: LitellmLLM
 ) -> None:

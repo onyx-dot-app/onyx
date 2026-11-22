@@ -4,22 +4,30 @@ from __future__ import annotations
 
 import io
 import json
+import zipfile
+from datetime import UTC, datetime
 from types import SimpleNamespace
 from typing import cast
-from unittest.mock import MagicMock
+from unittest.mock import MagicMock, patch
+from uuid import uuid4
 
 import pytest
 from fastapi import UploadFile
-from pydantic import ValidationError
+from sqlalchemy import func, select, update
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import (
+    PluginInstallationPolicy,
     SkillAccessLevel,
-    SkillInstallationPolicy,
     SkillSharePermission,
 )
-from onyx.db.models import User, UserSkillPreference
-from onyx.db.skill import set_skill_enabled_for_user, skill_user_states
+from onyx.db.models import PluginVersion, Skill, User, UserPluginPreference
+from onyx.db.skill import (
+    set_skill_enabled_for_user,
+    set_skill_installation_policy,
+    skill_user_states,
+)
+from onyx.db.utils import UNSET
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.skill.api import (
@@ -38,8 +46,10 @@ from onyx.server.features.skill.api import (
 from onyx.server.features.skill.models import (
     SkillEnableRequest,
     SkillPatchRequest,
+    SkillResponse,
     SkillShareRequest,
 )
+from onyx.skills.built_in import BUILT_IN_SKILLS
 from onyx.skills.bundle import SKILL_MD_NAME, build_single_file_bundle, build_skill_md
 from tests.external_dependency_unit.craft.db_helpers import (
     add_user_to_group,
@@ -47,7 +57,7 @@ from tests.external_dependency_unit.craft.db_helpers import (
     make_group,
     make_skill,
     make_user,
-    make_user_credential,
+    set_plugin_created_at,
     share_skill_with_group,
     share_skill_with_user,
 )
@@ -100,50 +110,25 @@ def test_fetch_direct_shared_skill_is_not_personal(
     assert response.user_permission == SkillAccessLevel.VIEWER
 
 
-def test_fetch_associated_skill_reports_current_user_dependency_readiness(
+def test_app_skill_can_be_turned_on_before_the_app_is_connected(
     db_session: Session,
     test_user: User,  # noqa: ARG001
 ) -> None:
     user = make_user(db_session, standard_account=True)
     skill = make_skill(db_session, is_public=True)
-    app = make_external_app(
+    make_external_app(
         db_session,
         skill=skill,
         auth_template={"Authorization": "Bearer {token}"},
     )
-    app.name = "Acme CRM"
-    db_session.flush()
 
     disconnected = fetch_skill_for_current_user(
         skill.id,
         user=user,
         db_session=db_session,
     )
-
-    assert disconnected.external_app is not None
-    assert disconnected.external_app.external_app_id == app.id
-    assert disconnected.external_app.name == "Acme CRM"
-    assert disconnected.external_app.enabled is True
-    assert disconnected.external_app.ready is False
     assert disconnected.enabled is False
-    assert disconnected.can_toggle is False
-
-    make_user_credential(
-        db_session,
-        app=app,
-        user=user,
-        user_credentials={"token": "connected"},
-    )
-    connected = fetch_skill_for_current_user(
-        skill.id,
-        user=user,
-        db_session=db_session,
-    )
-
-    assert connected.external_app is not None
-    assert connected.external_app.ready is True
-    assert connected.enabled is False
-    assert connected.can_toggle is True
+    assert disconnected.can_toggle is True
 
     selected = set_skill_enabled_for_current_user(
         skill.id,
@@ -152,20 +137,6 @@ def test_fetch_associated_skill_reports_current_user_dependency_readiness(
         db_session=db_session,
     )
     assert selected.enabled is True
-    assert selected.external_app is not None
-    assert selected.external_app.ready is True
-
-    app.enabled = False
-    db_session.flush()
-    unavailable = fetch_skill_for_current_user(
-        skill.id,
-        user=user,
-        db_session=db_session,
-    )
-    assert unavailable.enabled is True
-    assert unavailable.can_toggle is True
-    assert unavailable.external_app is not None
-    assert unavailable.external_app.ready is False
 
 
 def test_viewer_share_cannot_patch_skill(
@@ -221,8 +192,8 @@ def test_preference_commit_succeeds_when_sandbox_push_fails(
     )
 
     preference = db_session.get(
-        UserSkillPreference,
-        {"user_id": user.id, "skill_id": skill.id},
+        UserPluginPreference,
+        {"user_id": user.id, "plugin_id": skill.id},
     )
     assert response.enabled is True
     assert preference is not None
@@ -366,7 +337,7 @@ def test_remove_file_authorizes_before_reading_bundle(
     )
     read_bundle = MagicMock()
     monkeypatch.setattr(
-        "onyx.server.features.skill.api.read_custom_skill_bundle_bytes",
+        "onyx.server.features.skill.api.read_skill_bundle_blob",
         read_bundle,
     )
 
@@ -395,7 +366,7 @@ def test_remove_file_rejects_empty_path_before_reading_bundle(
     )
     read_bundle = MagicMock()
     monkeypatch.setattr(
-        "onyx.server.features.skill.api.read_custom_skill_bundle_bytes",
+        "onyx.server.features.skill.api.read_skill_bundle_blob",
         read_bundle,
     )
 
@@ -412,18 +383,24 @@ def test_remove_file_rejects_empty_path_before_reading_bundle(
     read_bundle.assert_not_called()
 
 
-@pytest.mark.parametrize("policy", list(SkillInstallationPolicy))
+@pytest.mark.parametrize(
+    "policy",
+    [
+        PluginInstallationPolicy.AVAILABLE,
+        PluginInstallationPolicy.DEFAULT,
+        PluginInstallationPolicy.REQUIRED,
+    ],
+)
 def test_admin_can_set_installation_policy(
     db_session: Session,
     monkeypatch: pytest.MonkeyPatch,
-    policy: SkillInstallationPolicy,
+    policy: PluginInstallationPolicy,
 ) -> None:
     admin = make_user(db_session, is_admin=True)
     skill = make_skill(db_session, is_public=True)
-    skill.installation_policy = SkillInstallationPolicy.REQUIRED
-    db_session.flush()
+    set_skill_installation_policy(skill, PluginInstallationPolicy.REQUIRED, db_session)
     push = MagicMock()
-    monkeypatch.setattr("onyx.server.features.skill.api.push_skills_for_users", push)
+    monkeypatch.setattr("onyx.server.features.skill.api.push_skills_and_commit", push)
     response = share_current_user_skill(
         skill.id,
         SkillShareRequest(installation_policy=policy),
@@ -431,8 +408,8 @@ def test_admin_can_set_installation_policy(
         db_session=db_session,
     )
     assert response.installation_policy == policy
-    assert response.enabled == (policy != SkillInstallationPolicy.AVAILABLE)
-    assert response.can_toggle == (policy != SkillInstallationPolicy.REQUIRED)
+    assert response.enabled == (policy != PluginInstallationPolicy.AVAILABLE)
+    assert response.can_toggle == (policy != PluginInstallationPolicy.REQUIRED)
     push.assert_called_once()
 
 
@@ -442,7 +419,7 @@ def test_skill_owner_cannot_change_installation_policy(db_session: Session) -> N
     with pytest.raises(OnyxError) as error:
         share_current_user_skill(
             skill.id,
-            SkillShareRequest(installation_policy=SkillInstallationPolicy.REQUIRED),
+            SkillShareRequest(installation_policy=PluginInstallationPolicy.REQUIRED),
             user=owner,
             db_session=db_session,
         )
@@ -453,19 +430,18 @@ def test_required_skill_owner_cannot_delete_but_can_change_audience(
     db_session: Session,
 ) -> None:
     owner = make_user(db_session, standard_account=True)
-    skill = make_skill(db_session, is_public=True, author_user_id=owner.id)
-    skill.installation_policy = SkillInstallationPolicy.REQUIRED
-    db_session.flush()
+    skill = make_skill(db_session, is_public=False, author_user_id=owner.id)
+    set_skill_installation_policy(skill, PluginInstallationPolicy.REQUIRED, db_session)
     with pytest.raises(OnyxError):
         delete_current_user_skill(skill.id, user=owner, db_session=db_session)
     response = patch_current_user_skill(
         skill.id,
-        SkillPatchRequest(public_permission=None),
+        SkillPatchRequest(public_permission=SkillSharePermission.VIEWER),
         user=owner,
         db_session=db_session,
     )
-    assert response.public_permission is None
-    assert response.installation_policy == SkillInstallationPolicy.REQUIRED
+    assert response.public_permission == SkillSharePermission.VIEWER
+    assert response.installation_policy == PluginInstallationPolicy.REQUIRED
 
 
 @pytest.mark.parametrize("is_admin", [False, True])
@@ -539,7 +515,7 @@ def test_sharing_metadata_requires_edit_access_without_reading_bundle(
         side_effect=AssertionError("Sharing must not read the bundle")
     )
     monkeypatch.setattr(
-        "onyx.server.features.skill.api.read_custom_skill_bundle_bytes", read_bundle
+        "onyx.server.features.skill.api.read_skill_bundle_blob", read_bundle
     )
     if editor:
         response = fetch_custom_skill_sharing(
@@ -561,15 +537,14 @@ def test_required_creation_preserves_same_name_personal_preference(
     personal = make_skill(
         db_session, name="required-creation-conflict", author_user_id=owner.id
     )
+    set_plugin_created_at(db_session, personal.id, datetime(2025, 1, 1, tzinfo=UTC))
     set_skill_enabled_for_user(
         skill_id=personal.id, enabled=True, user=owner, db_session=db_session
     )
     monkeypatch.setattr(
         "onyx.server.features.skill.api.push_skill_to_affected_sandboxes", MagicMock()
     )
-    monkeypatch.setattr(
-        "onyx.server.features.skill.api.push_skills_for_users", MagicMock()
-    )
+    monkeypatch.setattr("onyx.skills.push.push_skills_for_users", MagicMock())
     response = create_custom_skill_from_editor(
         name=personal.name,
         description="Admin required skill",
@@ -579,12 +554,12 @@ def test_required_creation_preserves_same_name_personal_preference(
         db_session=db_session,
     )
     assert response.enabled
-    assert db_session.get(UserSkillPreference, (owner.id, response.id)) is None
-    personal_preference = db_session.get(UserSkillPreference, (owner.id, personal.id))
+    assert db_session.get(UserPluginPreference, (owner.id, response.id)) is None
+    personal_preference = db_session.get(UserPluginPreference, (owner.id, personal.id))
     assert personal_preference is not None and personal_preference.enabled
     share_current_user_skill(
         response.id,
-        SkillShareRequest(installation_policy=SkillInstallationPolicy.DEFAULT),
+        SkillShareRequest(installation_policy=PluginInstallationPolicy.DEFAULT),
         user=owner,
         db_session=db_session,
     )
@@ -603,25 +578,43 @@ def test_sharing_without_policy_preserves_existing_policy(
 ) -> None:
     owner = make_user(db_session, is_admin=is_admin, standard_account=not is_admin)
     skill = make_skill(db_session, author_user_id=owner.id)
-    skill.installation_policy = SkillInstallationPolicy.REQUIRED
-    db_session.flush()
-    monkeypatch.setattr(
-        "onyx.server.features.skill.api.push_skills_for_users", MagicMock()
-    )
+    set_skill_installation_policy(skill, PluginInstallationPolicy.REQUIRED, db_session)
+    monkeypatch.setattr("onyx.skills.push.push_skills_for_users", MagicMock())
     response = share_current_user_skill(
         skill.id,
         SkillShareRequest.model_validate(sharing),
         user=owner,
         db_session=db_session,
     )
-    assert response.installation_policy == SkillInstallationPolicy.REQUIRED
+    assert response.installation_policy == PluginInstallationPolicy.REQUIRED
     db_session.refresh(skill)
-    assert skill.installation_policy == SkillInstallationPolicy.REQUIRED
+    assert skill.installation_policy == PluginInstallationPolicy.REQUIRED
 
 
-def test_sharing_rejects_explicit_null_policy() -> None:
-    with pytest.raises(ValidationError):
+def test_sharing_policy_is_unchanged_when_missing_and_default_when_null() -> None:
+    assert SkillShareRequest.model_validate({}).to_change().installation_policy is UNSET
+    assert (
         SkillShareRequest.model_validate({"installation_policy": None})
+        .to_change()
+        .installation_policy
+        is None
+    )
+
+
+def test_built_in_skill_response_reports_available_policy(
+    db_session: Session,
+) -> None:
+    built_in_skill_id, definition = next(iter(BUILT_IN_SKILLS.items()))
+    skill = Skill(
+        id=uuid4(),
+        name=built_in_skill_id,
+        description="A built-in skill",
+        built_in_skill_id=built_in_skill_id,
+    )
+    response = SkillResponse.from_builtin(
+        skill, definition, db_session, enabled=True, can_toggle=True
+    )
+    assert response.installation_policy == PluginInstallationPolicy.AVAILABLE
 
 
 def test_creation_response_includes_saved_group_shares(
@@ -644,3 +637,94 @@ def test_creation_response_includes_saved_group_shares(
     )
     assert [share.group_id for share in response.group_shares] == [group.id]
     assert not response.is_personal
+
+
+def test_full_replacement_upload_does_not_read_current_bundle(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    owner = make_user(db_session, standard_account=True)
+    name = f"replace-{uuid4().hex[:8]}"
+
+    def skill_md(description: str) -> bytes:
+        return build_skill_md(
+            name=name, description=description, instructions_markdown="Do it."
+        ).encode("utf-8")
+
+    created = create_custom_skill(
+        bundle=_upload(
+            f"{name}.zip", build_single_file_bundle(SKILL_MD_NAME, skill_md("Old"))
+        ),
+        auto_enable=False,
+        user=owner,
+        db_session=db_session,
+    )
+    current_read = MagicMock(side_effect=AssertionError("current bundle was read"))
+    monkeypatch.setattr(
+        "onyx.server.features.skill.api.read_skill_bundle_blob",
+        current_read,
+    )
+
+    with patch(
+        "onyx.server.features.skill.api._editable_skill_response"
+    ) as editable_response:
+        upload_current_user_skill_files(
+            created.id,
+            upload=_upload(SKILL_MD_NAME, skill_md("New")),
+            user=owner,
+            db_session=db_session,
+        )
+
+    current_read.assert_not_called()
+    editable_response.assert_called_once()
+    assert editable_response.call_args.args[0].description == "New"
+
+
+def test_adding_an_unchanged_file_to_a_version_without_a_file_list_adds_none(
+    db_session: Session,
+    test_user: User,  # noqa: ARG001
+) -> None:
+    owner = make_user(db_session, standard_account=True)
+    name = f"unchanged-{uuid4().hex[:8]}"
+    skill_md = build_skill_md(
+        name=name, description="Same files.", instructions_markdown="Do it."
+    ).encode("utf-8")
+    # A stored, uncompressed ZIP with its own timestamps: a rewrite of the
+    # same files gives other bytes and another hash.
+    original = io.BytesIO()
+    with zipfile.ZipFile(original, "w", compression=zipfile.ZIP_STORED) as archive:
+        for path, content in ((SKILL_MD_NAME, skill_md), ("notes.txt", b"notes")):
+            archive.writestr(
+                zipfile.ZipInfo(path, date_time=(2001, 2, 3, 4, 5, 6)), content
+            )
+    created = create_custom_skill(
+        bundle=_upload(f"{name}.zip", original.getvalue()),
+        auto_enable=False,
+        user=owner,
+        db_session=db_session,
+    )
+    # A version backfilled from an old skill row has no file list.
+    db_session.execute(
+        update(PluginVersion)
+        .where(PluginVersion.plugin_id == created.id)
+        .values(file_manifest=None)
+    )
+    db_session.flush()
+
+    with patch("onyx.server.features.skill.api._editable_skill_response"):
+        upload_current_user_skill_files(
+            created.id,
+            upload=_upload("notes.txt", b"notes"),
+            user=owner,
+            db_session=db_session,
+        )
+
+    assert (
+        db_session.scalar(
+            select(func.count())
+            .select_from(PluginVersion)
+            .where(PluginVersion.plugin_id == created.id)
+        )
+        == 1
+    )

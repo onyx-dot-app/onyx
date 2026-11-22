@@ -64,7 +64,7 @@ Neighbours own the rest:
 
 ```
 POST /user/projects/file/upload             server/features/projects/api.py:upload_user_files
-  upload_files_to_user_files_with_indexing  db/projects.py
+  upload_files_to_user_files_with_indexing  server/features/projects/upload.py
     create_user_files
       categorize_uploaded_files             extract text, count tokens, reject (in the request)
       upload_files(FileOrigin.USER_FILE)    blob + FileRecord
@@ -93,6 +93,14 @@ the `FileRecord` row for every backend. The Postgres backend adds a
 through `get_default_file_store` and never branch on the backend. The one
 exception is presigned URLs: only the cloud backends have them, so a caller
 checks `isinstance(store, PresignableFileStore)` first.
+
+The S3, GCS and Azure stores upload the object first, then write and commit
+the record through `file_store/file_store.py:record_uploaded_object`. When the
+record write or commit fails, it deletes the upload unless a committed record
+points at that object, then raises the original error. The S3 store also
+deletes the copy in the legacy MinIO store ([[#minio-dual-store]]). The Postgres
+store writes its large object in the record's transaction.
+
 `upsert_filerecord` also stamps a blob saved during a `USAGE_ONLY` incognito
 turn with its session id (`CURRENT_CONTENT_FREE_SESSION_ID_CONTEXTVAR`, set by
 `chat/execution.py:start_chat_turn`). The incognito cleanup finds blobs only
@@ -114,9 +122,27 @@ does them ([[indexing-pipeline]]).
 
 **Generated files.** The image tool (through
 `file_store/utils.py:save_files`) and the Python tool save blobs with
-`FileOrigin.CHAT_IMAGE_GEN` and the session stamp from
-`file_store/utils.py:chat_image_gen_metadata`. They get a `FileRecord` but no
-`UserFile`. The chat shows them through `/chat/file/{file_id}`.
+`FileOrigin.CHAT_IMAGE_GEN` and the session stamp, through
+`file_store/utils.py:save_chat_output_file`. The sandbox tool
+`publish_files` saves files from the user's VM with `FileOrigin.CHAT_ARTIFACT`
+(`tools/tool_implementations/sandbox/sandbox_tools.py:PublishFilesTool`)
+through `db/chat.py:save_chat_artifact`. Each file is a version of an
+artifact: `db/models.py:ChatArtifact` is one VM path in one root chat
+session, and `ChatArtifactVersion` numbers its files from 1 and holds each
+file's title. The save writes the file record, upserts the artifact (its row
+lock serializes concurrent publishes of one path) and adds the next version in
+one commit. A PDF, PowerPoint or Word file of at most 20 MiB also gets a
+thumbnail: `HarnessSandbox.render_first_page` draws a JPEG of its first page in
+the VM, and the save writes it first as a `FileOrigin.CHAT_ARTIFACT_THUMBNAIL`
+record that `ChatArtifactVersion.thumbnail_file_id` links (`ON DELETE SET
+NULL`: a version stays valid without it). A render or thumbnail save that
+fails leaves the link null; it never fails the publish. They get a
+`FileRecord` but no `UserFile`. The chat shows them
+through `/chat/file/{file_id}`. A chat delete deletes a published file and its
+thumbnail through its artifact's versions, also when its response never saved; a saved response
+also lists it in `ChatMessage.files` ([[chat-persistence]]). The version rows
+cascade from the file record and the artifact, and the artifact from the chat
+session, so a chat delete must delete the files before the session.
 
 **Serving.** `server/query_and_chat/chat_backend.py:fetch_chat_file` resolves
 the id, calls `backend/onyx/access/access.py:user_can_access_chat_file`, and
@@ -133,18 +159,30 @@ preview.
 1. `read-check-404` **Every read checks the acting user, and denial is a
    404.** `backend/onyx/access/access.py:user_can_access_chat_file` admits, in order: the file owner;
    readers of an agent the file is attached to; readers of a session whose
-   `ChatMessage.files` lists it; readers of the session stamped on a generated
-   file; and the document ACL for connector files. A new kind of file must fit
+   `ChatMessage.files` lists it; readers of the session of a chat output file
+   (`configs/constants.py:CHAT_OUTPUT_FILE_ORIGINS`: the session stamped on a
+   generated image, the artifact's session of a published file and of its
+   thumbnail, which `db/access.py:get_chat_output_file_row` matches on
+   either version column);
+   and the document ACL for connector files. A new kind of file must fit
    one of these branches, or nobody can read it.
    `FileStore.presign_download` checks no user: a caller that hands a URL to
    anyone else must authorize first.
-2. `generated-file-session-stamp` **Every generated file must carry the
-   session stamp.** A `CHAT_IMAGE_GEN` file with no `chat_session_id` in
-   `file_metadata` is open to every signed-in user
-   (`backend/onyx/access/access.py:_user_can_access_chat_image_gen_file`). Files written before stamping
-   depend on this, so the open branch must stay. A new writer that forgets the
-   stamp creates an open file, and nothing fails. Use
-   `file_store/utils.py:chat_image_gen_metadata`.
+2. `generated-file-session-stamp` **Every generated image must carry the
+   session stamp, and every published file its artifact version.** A
+   `chat_session_id` in the `file_metadata` of a `CHAT_IMAGE_GEN` file gives
+   the file to every reader of that session: its owner, and everyone while
+   it is shared as `PUBLIC`. On any other origin the stamp grants nothing. A
+   `CHAT_IMAGE_GEN` file with no stamp is open to every signed-in user
+   (`backend/onyx/access/access.py:user_can_access_chat_file`). Unstamped
+   generated images depend on this, so the open branch must stay. A new writer
+   that forgets the stamp creates an open file, and nothing fails. Save
+   through `file_store/utils.py:save_chat_output_file`, which stamps the
+   file. A `CHAT_ARTIFACT` file, and a `CHAT_ARTIFACT_THUMBNAIL` file,
+   gets its chat from its version's artifact instead. Without a version, only a saved message that lists the file
+   gives access to it (`db/access.py:user_can_access_chat_message_file`), and
+   the chat's file list leaves it out. Save it through
+   `db/chat.py:save_chat_artifact`.
 3. `say-which-id` **Say which id you mean.** A new route or tool that accepts
    "a file id" must state whether it is a blob id or a `UserFile.id`. Pass a
    `UserFile.id` to `FileStore.read_file` and you get "not found" for a file
@@ -170,7 +208,11 @@ preview.
    read; indexing does not.**
    `server/features/projects/projects_file_utils.py:categorize_uploaded_files` rejects a file with
    empty extracted text, except a PDF or DOCX with embedded images when image
-   analysis is on. `file_processing/extract_file_text.py:_extract_text_and_images`
+   analysis is on. A code or script file
+   (`file_processing/file_types.py:OnyxFileExtensions.SANDBOX_ONLY_EXTENSIONS`,
+   for example `.py`, `.ts`, `.sh`) must be text. Upload marks it `SKIPPED`, so
+   it is never indexed. The sets that connectors index do not include these
+   extensions. `file_processing/extract_file_text.py:_extract_text_and_images`
    catches every parser error and returns empty text. A parser crash during
    indexing can therefore give a `COMPLETED` file with no content, not
    `FAILED`: the chunker emits one empty chunk for an empty document
@@ -215,8 +257,11 @@ preview.
     suspended, the resumed run fails when it loads that image. Inline bytes become
     `agent-checkpoint/<root session id>/<sha256>` blobs with
     `FileOrigin.OTHER` and no `UserFile`
-    (`chat/restoration.py:persist_checkpoint_files`); session hard delete
-    removes them by that prefix ([[chat-persistence#checkpoints-not-written]]).
+    (`chat/restoration.py:persist_checkpoint_files`). The dumps of parked code
+    mode programs use `agent-checkpoint/<root session id>/<unique id>`
+    instead, and the checkpoint row that saved them deletes them when it ends
+    or is replaced; session hard delete removes every blob by that prefix
+    ([[chat-persistence#checkpoints-for-approvals]]).
 13. `minio-dual-store` **While `S3_LEGACY_ENDPOINT_URL` is set, the S3 store
     serves two stores.** A deployment that upgrades from the bundled MinIO
     keeps it as a second, read-fallback store. `S3BackedFileStore` writes and
@@ -278,21 +323,24 @@ preview.
   in `OnyxFileExtensions`. Then check the upload branch in
   `categorize_uploaded_files` ([[#upload-rejects-indexing-does-not]]).
 - `add-generated-file-writer` **Add a generated-file writer.** Copy `file_store/utils.py:save_file_from_base64`:
-  save through `FileStore.save_file` with `FileOrigin.CHAT_IMAGE_GEN` and
-  `chat_image_gen_metadata` ([[#generated-file-session-stamp]]). List the
-  current writers with `git grep -n "FileOrigin.CHAT_IMAGE_GEN" backend/onyx`.
+  save through `file_store/utils.py:save_chat_output_file`
+  ([[#generated-file-session-stamp]]). List
+  the current writers with `git grep -n "save_chat_output_file(" backend/onyx`.
 - `add-storage-backend` **Add a storage backend.** Copy `file_store/gcs_file_store.py`. List the
   current backends in `file_store/file_store.py:get_default_file_store`.
   Implement every `FileStore` method, write the record through
   `upsert_filerecord` so incognito blobs get their cleanup stamp, and keep
   [[#file-id-write-once]]. An object-store backend subclasses
   `PresignableFileStore` and implements its signing hooks, because the Craft
-  Firecracker runtime will move files through presigned URLs.
+  Firecracker runtime will move files through presigned URLs. Override
+  `FileStore.is_transient_error` for the service's throttling and connection
+  errors, so a chat run that parks retries them instead of ending.
 - `investigate-file-404` **Investigate a 404 on `/chat/file/{file_id}`.** Find which id the caller
   sent ([[#say-which-id]]). Then walk the branches of
   `user_can_access_chat_file` in order for that user: `user_file.user_id`,
   agent links, `chat_message.files`, the `chat_session_id` in
-  `file_record.file_metadata`, and the connector document ACL.
+  `file_record.file_metadata` (a published file: its version's artifact),
+  and the connector document ACL.
 - `investigate-file-processing` **Investigate a file stuck in processing, or
   `COMPLETED` with no answers.**
   Read `user_file.status`, `chunk_count` and the sync flags. Search the

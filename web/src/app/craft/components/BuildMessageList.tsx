@@ -1,63 +1,54 @@
 "use client";
 
-import { useEffect, useMemo } from "react";
-import useSWR from "swr";
+import { useMemo } from "react";
+import { useTranslations } from "next-intl";
 import { cn } from "@opal/utils";
+import { Section } from "@opal/layouts";
+import { CHAT_COLUMN_ROW, CHAT_GUTTER } from "@/lib/chat/layout";
 import { CopyButton } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { SvgAlertCircle } from "@opal/icons";
-import { AnimatePresence, motion } from "motion/react";
-import { FoldableLogo } from "@/lib/app/components";
 import SetupCard from "@/app/craft/components/setup-requests/SetupCard";
-import { ExternalAppUserResponse } from "@/app/craft/v1/apps/registry";
-import { errorHandlingFetcher } from "@/lib/fetcher";
-import { SWR_KEYS } from "@/lib/swr-keys";
+import useUserExternalApps from "@/hooks/useUserExternalApps";
 import TextChunk from "@/app/craft/components/TextChunk";
-import ThinkingCard from "@/app/craft/components/ThinkingCard";
+import CraftTimeline from "@/lib/timeline/craft/components/CraftTimeline";
+import {
+  Response,
+  type ResponseItem,
+} from "@/lib/timeline/components/Response";
 import { BlinkingBar } from "@/app/app/message/BlinkingBar";
 import { ErrorBanner } from "@/app/app/message/Resubmit";
-import { RATE_LIMITED_ERROR_CODE } from "@/app/app/types";
+import { RATE_LIMITED_ERROR_CODE, RateLimitDetails } from "@/app/app/types";
 import { convertMarkdownTablesToTsv } from "@/app/app/message/copyingUtils";
 import CompactionMarker from "@/app/craft/components/CompactionMarker";
-import CraftToolCard from "@/app/craft/components/tool-cards/CraftToolCard";
-import CraftToolGroup from "@/app/craft/components/tool-cards/CraftToolGroup";
 import TodoListCard from "@/app/craft/components/TodoListCard";
 import HumanMessage from "@/app/app/message/HumanMessage";
 import CraftMessageAttachments from "@/app/craft/components/CraftMessageAttachments";
 import TurnOutputCards from "@/app/craft/components/TurnOutputCards";
+import { craftMessageRowId } from "@/app/craft/utils/rowIds";
 import {
   BuildMessage,
   type OutputCard,
 } from "@/app/craft/types/streamingTypes";
+import { TodoListState } from "@/app/craft/types/displayTypes";
+import type { CraftTimelineEntry } from "@/lib/timeline/craft/timelineEntries";
+import { toCraftToolCall } from "@/lib/timeline/craft/toolCall";
+import type { AcpPlanEntry } from "@/lib/timeline/acp";
+import type { TimelineEvent } from "@/lib/timeline/events";
 import {
-  StreamItem,
-  ToolCallState,
-  TodoListState,
-} from "@/app/craft/types/displayTypes";
-
-/**
- * A render unit: a run of consecutive non-task tool calls (the "Working" block),
- * or a single non-tool item. Task calls become their own one-tool block so they
- * render as standalone, non-collapsible rows.
- */
-type RenderBlock =
-  | { kind: "tools"; tools: ToolCallState[] }
-  | { kind: "item"; item: Exclude<StreamItem, { type: "tool_call" }> };
+  reduceTimelineEvents,
+  type AcpTimelineEntry,
+  type TimelineState,
+} from "@/lib/timeline/reducer";
 
 interface BuildMessageListProps {
   sessionId: string | null;
   attachmentRefreshKey?: number;
   messages: BuildMessage[];
-  streamItems: StreamItem[];
+  /** The current turn's timeline events. */
+  timelineEvents: TimelineEvent[];
   isStreaming?: boolean;
   isFinalizing?: boolean;
-  /** Whether auto-scroll is enabled (user is at bottom) */
-  autoScrollEnabled?: boolean;
-  /**
-   * Scrollable container wrapping this list. Auto-scroll moves it directly
-   * rather than via scrollIntoView, which scrolls every ancestor.
-   */
-  scrollContainerRef: React.RefObject<HTMLDivElement | null>;
   /**
    * Trailing content attached to the last assistant block — either the
    * in-progress streaming area (if visible) or the last saved assistant
@@ -75,7 +66,7 @@ interface BuildMessageListProps {
  * BuildMessageList - Displays the conversation history with FIFO rendering.
  *
  * Per-turn structure after filtering:
- *   [Working block | single tool card], [last thinking?], [final text]
+ *   [timeline rail of tool calls and thinking], [inline items], [final text]
  * The in-progress turn additionally pins the latest TodoListCard to the top
  * (sticky) and keeps a flashing cursor visible until the turn settles.
  */
@@ -83,17 +74,16 @@ export default function BuildMessageList({
   sessionId,
   attachmentRefreshKey = 0,
   messages,
-  streamItems,
+  timelineEvents,
   isStreaming = false,
   isFinalizing = false,
-  autoScrollEnabled = true,
-  scrollContainerRef,
   trailingAssistantSlot,
   outputCards,
   onOutputOpen,
   onTurnOutputsOpen,
   onFileOpen,
 }: BuildMessageListProps) {
+  const t = useTranslations("craft.messageList");
   const outputsByTurn = useMemo(() => {
     const groups = new Map<number, OutputCard[]>();
     for (const output of outputCards ?? []) {
@@ -110,214 +100,208 @@ export default function BuildMessageList({
         turns.set(message.turn_index, message.id);
     return turns;
   }, [messages]);
-  useEffect(() => {
-    const container = scrollContainerRef.current;
-    if (autoScrollEnabled && container) {
-      container.scrollTo({ top: container.scrollHeight, behavior: "smooth" });
-    }
-  }, [
-    messages.length,
-    streamItems.length,
-    outputCards,
-    autoScrollEnabled,
-    scrollContainerRef,
-  ]);
-
   // Resolve a connect card's app (oauth-vs-form, credential fields) by ID.
-  const { data: connectableApps } = useSWR<ExternalAppUserResponse[]>(
-    SWR_KEYS.buildExternalApps,
-    errorHandlingFetcher
-  );
+  const { data: connectableApps } = useUserExternalApps();
   const appsById = useMemo(
     () => new Map((connectableApps ?? []).map((app) => [app.id, app])),
     [connectableApps]
   );
 
-  const hasStreamItems = streamItems.length > 0;
+  const timelineState = useMemo(
+    () => reduceTimelineEvents(timelineEvents),
+    [timelineEvents]
+  );
+  const hasStreamItems =
+    timelineState.entries.length > 0 || timelineState.plan.length > 0;
   const lastMessage = messages[messages.length - 1];
   const showStreamingArea =
     hasStreamItems ||
     (isStreaming && (!isFinalizing || lastMessage?.type !== "assistant"));
   const showStreamCursor =
     isStreaming &&
-    !streamItems.some((item) => item.type === "text" && item.isStreaming);
+    !timelineState.entries.some(
+      (entry) =>
+        entry.payload.kind === "message" && entry.status === "streaming"
+    );
 
-  const renderStreamItems = (
-    rawItems: StreamItem[],
-    opts: {
-      isCurrentStream: boolean;
-      extractLatestTodo: boolean;
+  // Inline items between timeline steps.
+  const renderConnectCard = (
+    key: string,
+    requestId: string,
+    externalAppId: number,
+    reason: string | null
+  ) => (
+    <div key={key}>
+      <SetupCard
+        requestId={requestId}
+        externalAppId={externalAppId}
+        reason={reason}
+        userApp={appsById.get(externalAppId)}
+      />
+    </div>
+  );
+  const renderCompaction = (key: string, summary: string | null) => (
+    <div key={key}>
+      <CompactionMarker summary={summary} />
+    </div>
+  );
+  const renderError = (
+    key: string,
+    content: string,
+    rateLimit: RateLimitDetails | undefined
+  ) => {
+    if (rateLimit) {
+      return (
+        <div key={key}>
+          <ErrorBanner
+            error={content}
+            errorCode={RATE_LIMITED_ERROR_CODE}
+            isRetryable={false}
+            details={rateLimit}
+          />
+        </div>
+      );
     }
-  ): { nodes: React.ReactNode[]; pinnedTodo: TodoListState | null } => {
-    // Render items in stream order (tools, text, thinking interleaved).
-    //
-    // Filtering rules that apply first:
-    // - Only the LATEST todo_list is kept (either pinned via extractLatestTodo
-    //   or rendered inline at its original position).
-    // - Thinking remains as a collapsed transcript row so users have a durable
-    //   signal that the model spent time reasoning without opening by default.
-    let latestTodoIdx = -1;
-    rawItems.forEach((it, idx) => {
-      if (it.type === "todo_list") latestTodoIdx = idx;
-    });
+    return (
+      <div
+        key={key}
+        className={cn(
+          "flex items-start gap-2 rounded-08 border border-status-error-02 bg-status-error-00 px-3 py-2 text-sm text-status-error-05"
+        )}
+        role="alert"
+      >
+        <SvgAlertCircle className="mt-0.5 size-4 shrink-0 stroke-status-error-05" />
+        <span className="min-w-0 break-words">{content}</span>
+      </div>
+    );
+  };
 
-    const items = rawItems.filter((it, idx) => {
-      // Collapse to one todo_list per turn.
-      if (it.type === "todo_list" && idx !== latestTodoIdx) {
-        return false;
-      }
-      if (opts.extractLatestTodo && it.type === "todo_list") {
-        return false;
-      }
-      return true;
-    });
-
-    const pinnedTodo =
-      opts.extractLatestTodo && latestTodoIdx !== -1
-        ? (
-            rawItems[latestTodoIdx] as {
-              type: "todo_list";
-              todoList: TodoListState;
-            }
-          ).todoList
-        : null;
-
-    // Group the flat items into render blocks: consecutive non-task tool calls
-    // merge into one "Working" block; task calls and non-tool items each stand
-    // alone.
-    const blocks: RenderBlock[] = [];
-    for (const it of items) {
-      if (it.type !== "tool_call") {
-        blocks.push({ kind: "item", item: it });
-        continue;
-      }
-      const tool = it.toolCall;
-      const last = blocks[blocks.length - 1];
-      if (
-        tool.kind !== "task" &&
-        last?.kind === "tools" &&
-        last.tools[0]!.kind !== "task"
-      ) {
-        last.tools.push(tool);
-      } else {
-        blocks.push({ kind: "tools", tools: [tool] });
-      }
-    }
-
-    const nodes = blocks.map((block, idx) => {
-      if (block.kind === "tools") {
-        const { tools } = block;
-        // A single tool (incl. every task) is a plain, non-collapsible card.
-        if (tools.length === 1) {
-          return <CraftToolCard key={tools[0]!.id} toolCall={tools[0]!} />;
-        }
-        // The group folds closed once an assistant message follows it.
-        const followedByMessage = blocks
-          .slice(idx + 1)
-          .some((b) => b.kind === "item" && b.item.type === "text");
+  // A message or notice between runs.
+  const renderInlineEntry = (
+    entry: AcpTimelineEntry,
+    isCurrentStream: boolean
+  ) => {
+    switch (entry.payload.kind) {
+      case "message":
         return (
-          <CraftToolGroup
-            key={`group-${tools[0]!.id}`}
-            toolCalls={tools}
-            autoCollapse={followedByMessage}
+          <TextChunk
+            sessionId={sessionId}
+            content={entry.payload.content
+              .map((part) => (part.type === "text" ? part.text : ""))
+              .join("")}
+            isStreaming={isCurrentStream && entry.status === "streaming"}
+            onFileOpen={onFileOpen}
           />
         );
+      case "notice": {
+        const { notice } = entry.payload;
+        switch (notice.type) {
+          case "connect_app_request":
+            return renderConnectCard(
+              entry.id,
+              notice.requestId,
+              notice.externalAppId,
+              notice.reason
+            );
+          case "compaction":
+            return renderCompaction(entry.id, notice.summary);
+          case "error":
+            return renderError(
+              entry.id,
+              notice.message || t("turnFailed.message"),
+              notice.rateLimit
+            );
+        }
+        return null;
+      }
+      default:
+        return null;
+    }
+  };
+
+  /**
+   * Renders the in-progress turn from the timeline reducer: runs of thinking
+   * and tool calls go on the rail, messages and notices render between them,
+   * and the plan is pinned on top.
+   */
+  const renderTimeline = (
+    state: TimelineState,
+    opts: { isCurrentStream: boolean }
+  ): { items: ResponseItem[]; isEmpty: boolean } => {
+    type Block =
+      | { kind: "steps"; id: string; entries: CraftTimelineEntry[] }
+      | { kind: "item"; entry: AcpTimelineEntry };
+    const blocks: Block[] = [];
+    for (const entry of state.entries) {
+      const step = toCraftStep(entry, opts.isCurrentStream);
+      if (step) {
+        const last = blocks[blocks.length - 1];
+        if (last?.kind === "steps") last.entries.push(step);
+        else blocks.push({ kind: "steps", id: step.id, entries: [step] });
+      } else if (entry.payload.kind !== "thinking") {
+        blocks.push({ kind: "item", entry });
+      }
+    }
+
+    const todo = planToTodoList(state.plan, opts.isCurrentStream);
+
+    const items = blocks.map((block, idx): ResponseItem => {
+      if (block.kind === "steps") {
+        // The block folds closed once an assistant message follows it.
+        const followedByMessage = blocks
+          .slice(idx + 1)
+          .some((b) => b.kind === "item" && b.entry.payload.kind === "message");
+        return {
+          kind: "run",
+          key: block.id,
+          node: (
+            <CraftTimeline
+              entries={block.entries}
+              autoCollapse={followedByMessage}
+              // As in chat, a run works until its end marker: anything after
+              // it, or the end of the turn. Between two calls it still works.
+              isActive={
+                opts.isCurrentStream && isStreaming && idx === blocks.length - 1
+              }
+            />
+          ),
+        };
       }
 
-      // Inline item — small top margin when it follows a tool block.
-      const topMargin = blocks[idx - 1]?.kind === "tools" ? "mt-3" : "";
-      const { item } = block;
-      switch (item.type) {
-        case "text":
-          return (
-            <div key={item.id} className={cn(topMargin)}>
-              <TextChunk
-                sessionId={sessionId}
-                content={item.content}
-                isStreaming={opts.isCurrentStream && item.isStreaming}
-                onFileOpen={onFileOpen}
-              />
-            </div>
-          );
-        case "thinking":
-          return (
-            <motion.div
-              key={item.id}
-              className={cn(topMargin)}
-              initial={
-                opts.isCurrentStream ? { opacity: 0, y: -4, height: 0 } : false
-              }
-              // oxlint-disable-next-line react-doctor/no-layout-property-animation -- height 0/auto must reflow the message list, transform cannot
-              animate={{ opacity: 1, y: 0, height: "auto" }}
-              // oxlint-disable-next-line react-doctor/no-layout-property-animation -- height/marginTop collapse must reflow the message list, transform cannot
-              exit={{ opacity: 0, y: -6, height: 0, marginTop: 0 }}
-              transition={{ duration: 0.18, ease: [0.16, 1, 0.3, 1] }}
-            >
-              <ThinkingCard
-                content={item.content}
-                isStreaming={item.isStreaming}
-              />
-            </motion.div>
-          );
-        case "todo_list":
-          return (
-            <div key={item.id} className={cn(topMargin)}>
-              <TodoListCard
-                todoList={item.todoList}
-                defaultOpen={item.todoList.isOpen}
-              />
-            </div>
-          );
-        case "connect_app_request":
-          return (
-            <div key={item.id} className={cn(topMargin)}>
-              <SetupCard
-                requestId={item.requestId}
-                externalAppId={item.externalAppId}
-                reason={item.reason}
-                userApp={appsById.get(item.externalAppId)}
-              />
-            </div>
-          );
-        case "compaction":
-          return (
-            <div key={item.id} className={cn(topMargin)}>
-              <CompactionMarker summary={item.summary} />
-            </div>
-          );
-        case "error":
-          if (item.rateLimit) {
-            return (
-              <div key={item.id} className={cn(topMargin)}>
-                <ErrorBanner
-                  error={item.content}
-                  errorCode={RATE_LIMITED_ERROR_CODE}
-                  isRetryable={false}
-                  details={item.rateLimit}
-                />
-              </div>
-            );
-          }
-          return (
-            <div
-              key={item.id}
-              className={cn(
-                topMargin,
-                "flex items-start gap-2 rounded-08 border border-status-error-02 bg-status-error-00 px-3 py-2 text-sm text-status-error-05"
-              )}
-              role="alert"
-            >
-              <SvgAlertCircle className="mt-0.5 size-4 shrink-0 stroke-status-error-05" />
-              <span className="min-w-0 break-words">{item.content}</span>
-            </div>
-          );
-        default:
-          return null;
-      }
+      const { entry } = block;
+      return {
+        kind: entry.payload.kind === "message" ? "text" : "card",
+        key: entry.id,
+        node: renderInlineEntry(entry, opts.isCurrentStream),
+      };
     });
 
-    return { nodes, pinnedTodo };
+    return {
+      items: [
+        ...(todo
+          ? [
+              {
+                kind: "card" as const,
+                key: "plan",
+                node: (
+                  <TodoListCard todoList={todo} defaultOpen={todo.isOpen} />
+                ),
+              },
+            ]
+          : []),
+        ...items,
+      ],
+      isEmpty: blocks.length === 0 && !todo,
+    };
   };
+
+  const savedTimelines = useMemo(() => {
+    const states = new Map<string, TimelineState>();
+    for (const message of messages)
+      if (message.type === "assistant" && message.timelineEvents?.length)
+        states.set(message.id, reduceTimelineEvents(message.timelineEvents));
+    return states;
+  }, [messages]);
 
   const renderAgentMessage = (
     message: BuildMessage,
@@ -331,90 +315,97 @@ export default function BuildMessageList({
       lastAssistantByTurn.get(turnIndex) !== message.id
         ? undefined
         : outputsByTurn.get(turnIndex);
-    const savedStreamItems = message.message_metadata?.streamItems as
-      | StreamItem[]
-      | undefined;
-    const savedRender =
-      savedStreamItems && savedStreamItems.length > 0
-        ? renderStreamItems(savedStreamItems, {
-            isCurrentStream: false,
-            extractLatestTodo: true,
-          })
-        : null;
+    const savedTimeline = savedTimelines.get(message.id);
+    const savedRender = savedTimeline
+      ? renderTimeline(savedTimeline, { isCurrentStream: false })
+      : null;
     const visibleSavedRender =
-      savedRender && (savedRender.pinnedTodo || savedRender.nodes.length > 0)
-        ? savedRender
-        : null;
+      savedRender && !savedRender.isEmpty ? savedRender : null;
 
     return (
-      <div
+      <Section
         key={message.id}
-        className="flex flex-col gap-2 py-4"
+        gap={3}
+        alignItems="stretch"
+        height="fit"
+        className="my-4"
         data-testid="craft-assistant-message"
         aria-busy={finalizing}
       >
         <Hoverable.Root group="craftAgentMessage" width="full">
-          <div className="grid grid-cols-[1.5rem_minmax(0,1fr)] gap-x-3">
-            <div className="relative">
-              <div className="h-9 flex items-center">
-                <FoldableLogo onyxBranded folded size={24} />
-              </div>
-              {message.content.trim() && (
-                <div className="absolute start-0 top-[max(2.25rem,calc(100%-1.75rem))]">
-                  <Hoverable.Item
-                    group="craftAgentMessage"
-                    variant="appear-on-hover"
-                  >
-                    <CopyButton
-                      getCopyText={() =>
-                        convertMarkdownTablesToTsv(message.content)
-                      }
-                      prominence="tertiary"
-                      size="sm"
-                      data-testid="CraftAgentMessage/copy-button"
-                    />
-                  </Hoverable.Item>
-                </div>
-              )}
-            </div>
-            <div className="flex flex-col gap-2 min-w-0">
-              {visibleSavedRender ? (
-                <>
-                  {visibleSavedRender.pinnedTodo && (
-                    <div>
-                      <TodoListCard
-                        todoList={visibleSavedRender.pinnedTodo}
-                        defaultOpen={visibleSavedRender.pinnedTodo.isOpen}
-                      />
-                    </div>
-                  )}
-                  {visibleSavedRender.nodes}
-                </>
-              ) : (
-                <TextChunk
-                  sessionId={sessionId}
-                  content={message.content}
-                  onFileOpen={onFileOpen}
+          <Response
+            items={[
+              ...(visibleSavedRender
+                ? visibleSavedRender.items
+                : [
+                    {
+                      kind: "text" as const,
+                      key: "content",
+                      node: (
+                        <TextChunk
+                          sessionId={sessionId}
+                          content={message.content}
+                          onFileOpen={onFileOpen}
+                        />
+                      ),
+                    },
+                  ]),
+              ...(finalizing
+                ? [
+                    {
+                      kind: "text" as const,
+                      key: "cursor",
+                      node: <BlinkingBar />,
+                    },
+                  ]
+                : []),
+              ...(message.content.trim()
+                ? [
+                    {
+                      kind: "text" as const,
+                      key: "copy",
+                      node: (
+                        <Hoverable.Item
+                          group="craftAgentMessage"
+                          variant="appear-on-hover"
+                        >
+                          <CopyButton
+                            getCopyText={() =>
+                              convertMarkdownTablesToTsv(message.content)
+                            }
+                            prominence="tertiary"
+                            size="sm"
+                            data-testid="CraftAgentMessage/copy-button"
+                          />
+                        </Hoverable.Item>
+                      ),
+                    },
+                  ]
+                : []),
+            ]}
+          />
+        </Hoverable.Root>
+        <div>
+          <Section
+            gap={2}
+            alignItems="stretch"
+            height="fit"
+            className="min-w-0"
+          >
+            {outputs &&
+              onOutputOpen &&
+              onTurnOutputsOpen &&
+              turnIndex !== undefined && (
+                <TurnOutputCards
+                  outputs={outputs}
+                  onOpen={onOutputOpen}
+                  onShowAll={() => onTurnOutputsOpen(turnIndex)}
                 />
               )}
-              {finalizing && <BlinkingBar />}
-            </div>
-          </div>
-        </Hoverable.Root>
-        <div className="flex min-w-0 flex-col gap-2 ps-9">
-          {outputs &&
-            onOutputOpen &&
-            onTurnOutputsOpen &&
-            turnIndex !== undefined && (
-              <TurnOutputCards
-                outputs={outputs}
-                onOpen={onOutputOpen}
-                onShowAll={() => onTurnOutputsOpen(turnIndex)}
-              />
-            )}
-          {trailing}
+            {trailing}
+          </Section>
         </div>
-      </div>
+      </Section>
     );
   };
 
@@ -430,104 +421,168 @@ export default function BuildMessageList({
   }, [messages]);
 
   const streamRender = hasStreamItems
-    ? renderStreamItems(streamItems, {
-        isCurrentStream: true,
-        extractLatestTodo: true,
-      })
+    ? renderTimeline(timelineState, { isCurrentStream: true })
     : null;
 
   return (
-    <div className="flex flex-col items-center px-4 pb-4">
-      <div className="w-full max-w-[720px] rounded-16 p-4">
-        {messages.map((message, idx) => {
-          if (message.type === "user") {
-            const turnIndex = message.turn_index;
-            const outputs =
-              turnIndex !== undefined &&
-              !(showStreamingArea && idx === messages.length - 1) &&
-              !lastAssistantByTurn.has(turnIndex)
-                ? outputsByTurn.get(turnIndex)
-                : undefined;
-            return (
-              <div key={message.id}>
-                <div className="py-4">
-                  {sessionId && message.attachments && (
-                    <CraftMessageAttachments
-                      sessionId={sessionId}
-                      attachments={message.attachments}
-                      refreshKey={attachmentRefreshKey}
-                      onFileOpen={onFileOpen}
-                    />
-                  )}
-                  <HumanMessage content={message.content} nodeId={idx} />
+    // The same frame as chat: its gutter, and its column width.
+    <div className={cn("pb-4", CHAT_GUTTER)}>
+      <Section gap={0} height="fit">
+        <div className={CHAT_COLUMN_ROW}>
+          {messages.map((message, idx) => {
+            if (message.type === "user") {
+              const turnIndex = message.turn_index;
+              const outputs =
+                turnIndex !== undefined &&
+                !(showStreamingArea && idx === messages.length - 1) &&
+                !lastAssistantByTurn.has(turnIndex)
+                  ? outputsByTurn.get(turnIndex)
+                  : undefined;
+              return (
+                <div key={message.id} id={craftMessageRowId(message.id)}>
+                  <div className="py-4">
+                    {sessionId && message.attachments && (
+                      <CraftMessageAttachments
+                        sessionId={sessionId}
+                        attachments={message.attachments}
+                        refreshKey={attachmentRefreshKey}
+                        onFileOpen={onFileOpen}
+                      />
+                    )}
+                    <HumanMessage content={message.content} nodeId={idx} />
+                  </div>
+                  {outputs &&
+                    onOutputOpen &&
+                    onTurnOutputsOpen &&
+                    turnIndex !== undefined && (
+                      <div className="py-4">
+                        <div>
+                          <TurnOutputCards
+                            outputs={outputs}
+                            onOpen={onOutputOpen}
+                            onShowAll={() => onTurnOutputsOpen(turnIndex)}
+                          />
+                        </div>
+                      </div>
+                    )}
                 </div>
-                {outputs &&
-                  onOutputOpen &&
-                  onTurnOutputsOpen &&
-                  turnIndex !== undefined && (
-                    <div className="flex items-start gap-3 py-4">
-                      <div className="flex h-9 shrink-0 items-center">
-                        <FoldableLogo onyxBranded folded size={24} />
-                      </div>
-                      <div className="min-w-0 flex-1">
-                        <TurnOutputCards
-                          outputs={outputs}
-                          onOpen={onOutputOpen}
-                          onShowAll={() => onTurnOutputsOpen(turnIndex)}
-                        />
-                      </div>
-                    </div>
-                  )}
-              </div>
-            );
-          }
-          if (message.type === "assistant") {
-            // Anchor the trailing slot (e.g. approval cards) under the
-            // last saved assistant message — but only when there's no
-            // live streaming area, since that case has its own anchor
-            // below.
-            const trailing =
-              !showStreamingArea && idx === lastAssistantIndex
-                ? trailingAssistantSlot
-                : null;
-            return renderAgentMessage(message, trailing);
-          }
-          return null;
-        })}
+              );
+            }
+            if (message.type === "assistant") {
+              // Anchor the trailing slot (e.g. approval cards) under the
+              // last saved assistant message — but only when there's no
+              // live streaming area, since that case has its own anchor
+              // below.
+              const trailing =
+                !showStreamingArea && idx === lastAssistantIndex
+                  ? trailingAssistantSlot
+                  : null;
+              return renderAgentMessage(message, trailing);
+            }
+            return null;
+          })}
 
-        {showStreamingArea && (
-          <div
-            className="flex items-start gap-3 py-4"
-            data-testid="craft-assistant-message"
-            aria-busy={isStreaming}
-          >
-            <div className="shrink-0 mt-2">
-              <FoldableLogo onyxBranded folded size={24} />
-            </div>
-            <div className="flex-1 flex flex-col gap-2 min-w-0">
-              {streamRender?.pinnedTodo && (
-                <div>
-                  <TodoListCard
-                    todoList={streamRender.pinnedTodo}
-                    defaultOpen={streamRender.pinnedTodo.isOpen}
-                  />
-                </div>
-              )}
-              {hasStreamItems && (
-                <AnimatePresence initial={false}>
-                  {streamRender?.nodes}
-                </AnimatePresence>
-              )}
-              {showStreamCursor && (
-                <div className="h-9 flex items-center">
-                  <BlinkingBar />
-                </div>
-              )}
-              {trailingAssistantSlot}
-            </div>
-          </div>
-        )}
-      </div>
+          {showStreamingArea && (
+            <Section
+              gap={3}
+              alignItems="stretch"
+              height="fit"
+              className="my-4"
+              data-testid="craft-assistant-message"
+              aria-busy={isStreaming}
+            >
+              <Response
+                items={[
+                  ...(streamRender?.items ?? []),
+                  ...(showStreamCursor
+                    ? [
+                        {
+                          kind: "text" as const,
+                          key: "cursor",
+                          node: (
+                            <Section
+                              flexDirection="row"
+                              justifyContent="start"
+                              height={2.25}
+                              gap={0}
+                            >
+                              <BlinkingBar />
+                            </Section>
+                          ),
+                        },
+                      ]
+                    : []),
+                  ...(trailingAssistantSlot
+                    ? [
+                        {
+                          kind: "card" as const,
+                          key: "trailing",
+                          node: trailingAssistantSlot,
+                        },
+                      ]
+                    : []),
+                ]}
+              />
+            </Section>
+          )}
+        </div>
+      </Section>
     </div>
   );
+}
+
+/**
+ * A thinking block or tool call as a rail step; anything else is not a step.
+ * Outside the current stream, a thinking block that never got its end is done.
+ */
+function toCraftStep(
+  entry: AcpTimelineEntry,
+  isCurrentStream: boolean
+): CraftTimelineEntry | null {
+  switch (entry.payload.kind) {
+    case "tool":
+      return {
+        id: entry.id,
+        status: entry.status,
+        groupId: null,
+        payload: {
+          kind: "tool",
+          toolCall: toCraftToolCall(entry.payload.toolCall),
+        },
+      };
+    case "thinking":
+      if (!entry.payload.text) return null;
+      return {
+        id: entry.id,
+        status:
+          !isCurrentStream && entry.status === "streaming"
+            ? "done"
+            : entry.status,
+        groupId: null,
+        payload: {
+          kind: "thinking",
+          content: entry.payload.text,
+          isStreaming: isCurrentStream && entry.status === "streaming",
+        },
+      };
+    default:
+      return null;
+  }
+}
+
+/** The plan as the pinned todo list; it starts open only in the live turn. */
+function planToTodoList(
+  plan: AcpPlanEntry[],
+  isOpen: boolean
+): TodoListState | null {
+  if (plan.length === 0) return null;
+  return {
+    id: "plan",
+    todos: plan.map((entry) => ({
+      content: entry.content,
+      status: entry.status,
+      activeForm: entry._meta?.onyx?.activeForm ?? entry.content,
+    })),
+    isOpen,
+  };
 }

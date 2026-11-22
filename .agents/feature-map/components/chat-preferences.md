@@ -25,6 +25,8 @@ chat retention needs Enterprise. The settings API enforces these tiers.
 - **A user** saves prompt shortcuts and inserts them into the message box. They
   can hide a shared shortcut for themselves.
 - **A user** picks a UI and answer language, or follows the workspace default.
+- **A user** chooses whether Enter and the send arrow wait for the current step
+  or interrupt current work. Ctrl/Cmd+Enter always queues a follow-up.
 - **An admin**, at Admin > Chat Preferences, sets workspace chat options. These
   include the team name and context that every prompt includes, the default
   language, the default assistant's system prompt and built-in tools, and the
@@ -63,7 +65,7 @@ It does not own:
 - [[llm-providers]]: how the chat naming, search selection and decision models
   resolve,
   and the personal default model string.
-- [[tools-framework]]: why the memory tool skips `allowed_tool_ids`.
+- [[tools-framework]]: why the memory tool skips the tool options.
 - [[auth-and-identity]]: the user routes, the IdP profile snapshot, and the
   meaning of `invite_only_enabled` and `anonymous_user_enabled`.
 - [[plugins]]: Default Chat selection of MCP and OpenAPI tools.
@@ -71,6 +73,10 @@ It does not own:
 ---
 
 ## Architecture
+
+**UI preferences.** Boolean `User` columns store small interface choices, such
+as `paste_as_tile` and `interrupt_on_send`. Each has its own `PATCH` endpoint in
+`server/manage/users.py` and a flat field in `UserPreferences`.
 
 **From setting to prompt.** `db/memory.py:get_memories` builds one
 `UserMemoryContext` per turn, called from

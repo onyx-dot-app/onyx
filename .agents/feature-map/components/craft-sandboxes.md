@@ -16,8 +16,10 @@ that user's sessions. Each session has its own session workspace, a directory
 inside the sandbox. The user never manages the sandbox.
 
 After an idle period (`SANDBOX_IDLE_TIMEOUT_SECONDS`, one hour by default) the
-sandbox sleeps: the platform saves each session's outputs, attachments and the
-agent's chat history, then removes the container. The next message wakes a new
+sandbox sleeps. App preview requests count as activity
+(`server/features/build/preview_activity.py`). On sleep the platform saves
+each session's outputs, attachments and the agent's chat history, then
+removes the container. The next message wakes a new
 container and restores the session, with a short delay. Work that only lives
 outside `outputs/` and `attachments/`, such as installed packages or browser
 logins, is not kept.
@@ -29,6 +31,11 @@ the Onyx API and Craft MCP servers that the proxy allows.
 An operator deploys sandboxes on Kubernetes (the default) or Docker Compose.
 When the pod template, RBAC or network setup is wrong, provisioning fails and
 the user sees Craft fail to start.
+
+A third runtime is in development: Firecracker micro-VMs on KVM nodes, opt-in
+with `SANDBOX_RUNTIME=firecracker` (default `pod`). It is not wired to the API
+server yet, so users and operators do not see it. The Kubernetes and Docker
+paths do not change.
 
 In this document "session workspace" is the directory of one session under
 `/workspace/sessions`. "Workspace" alone, as in "workspace policy", means the
@@ -46,7 +53,17 @@ This component owns:
 - session snapshots, the opencode history archive, and the cleanup of runtime
   resources;
 - the Helm sandbox pod template, RBAC and network policies, and the local
-  Kubernetes dev tooling.
+  Kubernetes dev tooling;
+- the Firecracker runtime in development (Go): the guest daemon and the
+  in-guest egress relay inside each VM, and the node agent on each KVM node.
+  The API server will reach a VM's guest daemon through the node agent: the
+  agent forwards each `Sandboxd` call, routed by the `x-sandbox-id` metadata,
+  over mTLS and then vsock, without decoding it. The guest daemon runs as
+  root, but it runs each command as the sandbox user (uid 1000,
+  `--command-user`). Session saves in this
+  runtime hold only `attachments/`, without dependencies
+  (tar + zstd). The node agent moves the archive to and from object storage
+  with presigned URLs from the API server.
 
 Neighbours:
 - [[craft-sessions]]: sessions, turns and `SessionManager`, which call this
@@ -60,12 +77,47 @@ Neighbours:
 
 ## Architecture
 
+The separate userspace image in `deployment/craft-runtime/` is only for the
+new integrated harness. Existing Craft keeps its current sandbox image and
+skills. The new image is an input to `deployment/craft-fc/rootfs/build-rootfs.sh`. It includes execution tools and
+assets, without OpenCode or the current Python sidecar. The existing converter
+adds init, the static Go daemon and relay, overlays, and the rootfs manifest.
+In a Firecracker VM, managed content mounts on read-only, noexec drives at
+`/mnt/skills`, `/mnt/user-uploads` and `/mnt/spaces` (each swappable with the
+same A/B slot mechanism); scripts run through interpreters. Each session has
+`/home/onyx/workspaces/<session-id>`, the default working directory of its
+commands; commands can still reach any path in the VM. The template boot
+makes `/tmp/onyx/{tool-results,search-files,artifacts}` on the `/tmp` tmpfs,
+owned by the sandbox user, and the template snapshot keeps them. Chat writes
+large tool results to `tool-results` ([[code-execution]]). A VM has
+8 GiB of guest memory by default; the host agent charges a starting VM half
+of it in memory admission (`--starting-mem-divisor`) and owns admission;
+placement only ranks nodes by free memory. Every VM has a Firecracker balloon
+with free page reporting. Publishing the
+userspace image does not change the current pod/Docker image settings.
+
+Rootfs delivery (Firecracker only): `.github/workflows/craft-fc-rootfs.yml` converts a
+`craft-runtime` tag with no egress CA and publishes
+`onyxdotapp/craft-fc-artifacts:rootfs-<version>`. The host agent DaemonSet copies
+it into `<dataDir>/rootfs` with an init container (`craft.hostAgent.rootfs`).
+The chart takes `<version>` from `craft.hostAgent.rootfs.version` (default: the
+`global.version` release tag) and sets `SANDBOX_FC_TEMPLATE` to it, so the drive
+and the template tag move together (`onyx.craftFcRootfsVersion`). An explicit
+`craft.hostAgent.rootfs.image.tag` needs an explicit `configMap.SANDBOX_FC_TEMPLATE`
+(the chart fails without it); the operator keeps those two aligned. Without
+`existingSecret` values, the chart makes the agent mTLS CA and certificates and
+keeps them on upgrade with `lookup` (`deployment/helm/charts/onyx/templates/craft-fc-host-agent.yaml`).
+The agent reads the sandbox-proxy CA ConfigMap at each Create and sends it with
+`SetKey`; the guest daemon installs it at `Init`. So one drive and one template
+key serve every deployment CA.
+
 Operator guides: `backend/onyx/server/features/build/sandbox/README.md` (image
 and tag coupling, IPv6), `backend/onyx/server/features/build/sandbox/docker/README.md`
-(Docker backend), and `deployment/helm/dev/README.md` (local kind cluster).
+(Docker backend), `deployment/helm/dev/README.md` (local kind cluster), and
+`microvm/RUNBOOKS.md` (Firecracker host agent alerts and node procedures).
 
 ```
-SessionManager / scheduled executor / sweep
+SessionManager / sweep
   -> session/sandbox_lifecycle.py:ensure_sandbox_ready
        reserve   (short txn, user row locked) a new provisioning_attempt_number
                  when it must provision; Craft PAT
@@ -136,15 +188,43 @@ then replaces `outputs/` and `attachments/`
 in place with `tar`. Managed-content pushes, not snapshots, use
 `backend/onyx/server/features/build/sandbox/image/sandbox_daemon/extract.py:safe_extract_then_atomic_swap`.
 
-**Sweep.** `cleanup_idle_sandboxes_task` runs on the `sandbox` Celery queue.
-It first reconciles runtime resources
-(`backend/onyx/server/features/build/session/resource_cleanup.py:reconcile_sandbox_resources`): it fails stale
-`PROVISIONING` attempts and deletes runtime resources
-(`backend/onyx/server/features/build/sandbox/models.py:SandboxResourceKind`) whose owner row is absent, failed,
-sleeping or terminated, after a grace period. It then snapshots active
-sandboxes and puts idle ones to sleep. Sleep also clears every Next.js port of
-the user, so a restored session can get a different port
+**Push transport.** A push carries at most 900 MiB of files:
+`MAX_BUNDLE_BYTES` in
+`backend/onyx/server/features/build/sandbox/image/sandbox_daemon/extract.py`.
+The sender (`_build_targz`) and the run-time skill limit
+(`backend/onyx/skills/limits.py:SKILL_RUNTIME_MAX_BYTES`) import it, so the
+caps cannot drift. The sender spools the archive to disk and streams it with a
+`Content-Length`
+(`backend/onyx/server/features/build/sandbox/kubernetes/sidecar_client.py:SidecarClient.push_archive`).
+The sidecar refuses a `Content-Length` past `MAX_ARCHIVE_BYTES` (the bundle
+cap plus tar and gzip overhead) with a 413 before it reads the body, spools
+the rest to disk and cuts a longer stream at that cap.
+A failure keeps the live tree. Each mount holds at most two trees: a push
+removes that mount's versions other than the live one before it extracts.
+
+**Sweep.** Two tasks on the `sandbox` Celery queue share one per-tenant sweep
+(`backend/onyx/background/celery/tasks/build/tasks.py:_sweep_tenant_sandboxes`). The sweep fails stale
+`PROVISIONING` attempts
+(`backend/onyx/server/features/build/session/resource_cleanup.py:fail_stale_provisioning_sandboxes`), snapshots
+active sandboxes and puts idle ones to sleep. Sleep also clears every Next.js
+port of the user, so a restored session can get a different port
 ([[craft-webapp-proxy]]).
+
+- `cleanup_idle_sandboxes_task` runs the sweep for each tenant from the
+  per-tenant fanout. It reaches rows whose runtime may be gone and lists no
+  runtime resources.
+- `reconcile_sandbox_runtimes_task` is cluster-wide. It runs every 15 minutes,
+  and is scheduled and runs only when `ENABLE_CRAFT=true`. It lists the tenants that
+  own a live runtime resource
+  (`backend/onyx/server/features/build/sandbox/base.py:SandboxManager.list_resource_tenant_ids`) and runs the
+  sweep for each, including tenants the fanout skips, such as product-gated
+  ones. For these tenants the sweep also deletes runtime resources
+  (`backend/onyx/server/features/build/sandbox/models.py:SandboxResourceKind`) whose owner row is absent, failed,
+  sleeping or terminated, after a grace period
+  (`backend/onyx/server/features/build/session/resource_cleanup.py:reconcile_sandbox_resources`). In
+  multi-tenant deployments it deletes the resources of tenants that no longer
+  exist, after the same grace period; single-tenant deployments retain
+  resources labelled with another tenant.
 
 **Managed content.** Provisioning and a live push build the skills and user
 library payload with the same code
@@ -152,8 +232,9 @@ library payload with the same code
 must close before the push. `push_managed_content` runs before the sandbox is
 reported `RUNNING`, because opencode scans the skills directory once per
 instance: a turn that starts during the push misses managed skills for good. It
-logs a failure and never raises. `skills_hash` is written
-only after a successful push, so the next session create or reload retries.
+logs a failure and never raises. `skills_hash` and `skill_omissions` (the
+plugins the run-time skill limit left out, [[skills]]) are written only after a
+successful push, so the next session create or reload retries.
 User library blobs use `FileOrigin.USER_FILE` but have no `UserFile` rows, so
 the chat user-file lifecycle does not apply to them.
 
@@ -171,7 +252,7 @@ matches.
 (`backend/onyx/server/features/build/session/llm_config.py:build_onyx_gateway_config`). The egress proxy
 overwrites the auth headers for the API host with the Craft PAT.
 
-**The Craft PAT.** `server/features/build/db/sandbox.py:ensure_sandbox_pat`
+**The Craft PAT.** `db/sandbox.py:ensure_sandbox_pat`
 mints one `PatType.CRAFT` token per user, with only the `CRAFT_SANDBOX` scope
 and a 30-day expiry, and stores it encrypted on `Sandbox.encrypted_pat`. It
 reuses the stored token only when it is the user's single active Craft PAT
@@ -180,6 +261,221 @@ mints a new one. The reserve step calls it on each provision. For a healthy
 sandbox it re-mints only when `has_active_craft_pat` is false, for example
 after a password change revoked it ([[auth-and-identity]]). The proxy reads
 the stored token on each request, so a new token takes effect at once.
+
+**Firecracker runtime (in progress, `SANDBOX_RUNTIME=firecracker` only).**
+`backend/onyx/microvm/` is the api_server side of the micro-VM runtime:
+- `backend/onyx/microvm/agent_client.py`: a typed mTLS client for the host
+  agent, with session saves (capture, upload, discard, restore) and the
+  managed drive (put, swap). Chat's built-ins use the skills drive:
+  `FirecrackerHarnessSandbox.sync_skills` takes a `SkillsBundle` (a zip
+  with fixed entry times, so the same files give the same image ID), and,
+  under the per-sandbox lock
+  `sandbox_fc:skills_sync:<sandbox>`, puts and swaps the image only when
+  the `sandbox_fc:skills_image:<sandbox>` cache record names another VM
+  instance `(attempt, generation)` or another image. A woken or replaced VM is a
+  new instance, so its first chat turn pushes again. Stubs in `backend/onyx/microvm/generated/`; the
+  `microvm-python-stubs` pre-commit hook fails when they differ from
+  `microvm/proto` (`regenerate.sh --check`).
+- `backend/onyx/microvm/daemon_client.py`: the guest daemon client, through
+  the agent pass-through: Health, Init, exec (run, start, stream by offsets,
+  interact, cancel with an optional SIGINT/SIGTERM, inspect, list; at most 64
+  tracked executions per VM) and files (read, write, upload, list, delete,
+  zip; session-relative. All but upload also take an absolute VM path with
+  no session, anywhere except the denied VM paths; the daemon confines only
+  such paths in its `--onyx-root` (default `/tmp/onyx`), like session
+  paths). Write and
+  upload take bytes or a seekable binary file, streamed whole from its start
+  in 1 MiB messages; the daemon checks the size. Every call but Health sends
+  `x-sandboxd-key`.
+- `backend/onyx/microvm/placement.py`: one VM per sandbox, best of K nodes on
+  free memory (a node at its `max_vms` cap is skipped),
+  `SANDBOX_CAPACITY_UNAVAILABLE` with the reason. New `VmRequest`s default to
+  32 GiB of scratch; placement keeps larger template disks. Sparse growth
+  preserves the small shared template. Existing VMs keep their size until recreated.
+  When every node refuses,
+  placement deletes the attempt's daemon key, unless it skipped the pinned
+  node (no template there) without a Create. Wake is an
+  idempotent ensure: it reads the durable placement record and asks that
+  node's agent whether the VM runs. Before Create it takes the sandbox's
+  reservation (attempt, node) atomically; a Create with no known outcome
+  keeps the reservation on its node. Each attempt gets a random daemon key,
+  stored encrypted in the tenant cache before Create. A rejected or lost key,
+  an exited VM, or a dead node creates the next attempt; the caller must
+  store the returned attempt. A node is dead when its registration expired
+  or ended (an agent that stops on a drained node calls
+  `POST /microvm/node/deregister`), or its last state report is older than
+  `SANDBOX_FC_NODE_REPORT_TIMEOUT_SECONDS` (180 s).
+- `backend/onyx/microvm/registry.py`: placement records, reservations and
+  daemon keys have no TTL. Record writes are fenced on (attempt, generation)
+  with `CacheBackend.replace_if_value` / `delete_if_value`. Redis must use a
+  `volatile-*` or `noeviction` policy (the chart's bundled Redis uses
+  `allkeys-lru`), or use the Postgres cache backend.
+- `backend/onyx/microvm/lifecycle.py`: wake, Init, activity, the idle evictor
+  (decides, and stops only after a saved checkpoint).
+- `backend/onyx/microvm/reconcile.py`: the per-node reconcile pass, driven by
+  pushed node reports. Each agent pushes its VMs and recently ended VMs to
+  `POST /microvm/node/state`, signed with its registered key
+  (`backend/onyx/microvm/node_report.py`), and the api_server reconciles that
+  node under a per-node lease: it clears records of ended VMs, and adopts a
+  VM that a reservation names once its daemon holds the attempt's key. It
+  stops a VM of an older attempt on that report, and an unknown VM only
+  after `SANDBOX_FC_ORPHAN_GRACE_SECONDS` (no checkpoint). A record that no
+  reported VM names is cleared after a fresh `List` under the sandbox lock.
+  See `microvm/README.md`, "Sandbox state model".
+
+Agents become reachable when their signing-key registration carries
+`agent_address`.
+
+Harness sandboxes (the agent harness runs outside the sandbox):
+- `backend/onyx/server/features/build/sandbox/harness_base.py:HarnessSandbox`
+  is the narrow interface the new harness calls: `ensure_running`, the
+  `exec_command` / `write_stdin` contract (yield time, head and tail output
+  caps, "\x03" sends SIGINT; the exec limits live in
+  `.../sandbox/exec_output.py`, whose `ExecOutputBuffer` keeps one call's
+  output, 1 MiB head and tail, and counts the characters between them; live
+  deltas carry the head. The caller cuts what the model gets and what streams
+  ([[code-execution]])). A cancel of the current signal ends the wait and
+  kills the command however the wait ends (also when the consumer drops the
+  stream); a call cancelled before its command starts or its input is
+  written does neither. `read_file` / `write_file` (exact bytes, a mode;
+  a write also takes a seekable file, for example a file store
+  `read_file(use_tempfile=True)`, and streams it whole from its start, or
+  the bytes in parts; an optional transfer timeout), `delete_listed_files`
+  (lists the entries below a directory with size and modification time, up
+  to `max_entries`, `truncated` past it, and deletes the files that a
+  caller's function picks, on one VM lookup),
+  `stat_files` (the guest daemon's typed `StatFiles` RPC over `os.Root`:
+  each path's own entry and link target, and its target through the links
+  inside the session with a device and inode identity, or why there is none:
+  missing, escapes, loop; at most 8 links per path; up to 1,000 paths and
+  1 MiB of path bytes per call; an older root drive fails with a message
+  that it updates after a restart) and `delete_file` for apply_patch,
+  `session_files` (a `SessionFiles` bound to the running VM instance: a
+  write and a delete that share the session path checks of `write_file` and
+  `delete_file`, a listing of one directory, and one busy mark; a purged
+  session is refused, and a write that finds its session purged deletes the
+  session directory again; each turn's background chat file copy uses one: see
+  the docstring of `tools/tool_implementations/sandbox/file_copies.py`
+  ([[code-execution]])), and busy signals (turn,
+  background-copy and parked-approval marks).
+  `read_file`, `write_file`,
+  `delete_file` and `delete_listed_files` also take an absolute path under
+  `ONYX_VM_FILES_ROOT` (`/tmp/onyx`,
+  `server/features/build/sandbox/harness_base.py:onyx_vm_path`), which the
+  daemon confines to its onyx root with no session: the call wakes the VM but
+  restores no session, and session saves never include the path. They refuse
+  every other path outside the session directory. `publish_files` reads
+  through `read_file`. `render_first_page` draws a JPEG of the first page of a
+  `.pdf`, `.pptx` or `.docx` at a path that `read_file` accepts (a
+  session path or one under `ONYX_VM_FILES_ROOT`, through `_file_target`)
+  with the root drive's poppler and LibreOffice, as typed argv execs
+  (`daemon.run`, no shell) in a scratch directory under
+  `ONYX_VM_FILES_ROOT/renders` that it deletes, by the caller's deadline
+  (`publish_files` gives all renders of a call one 30 s budget, which starts
+  once the call has its sandbox). It returns
+  None on any failure; a cancel, or a step that ends without a result (a
+  broken stream), kills the running step before the delete. LibreOffice runs
+  without the AF_UNIX shim of
+  `backend/onyx/skills/builtin/pptx/scripts/office/soffice.py`: the guest
+  allows AF_UNIX sockets, and `deployment/craft-runtime/check-kvm.sh` runs
+  the runtime smoke test's `soffice` conversion in a real VM.
+  Each chat session works in `SESSION_WORKSPACE_ROOT/<session_id>`
+  (`/home/onyx/workspaces`); file calls take paths by
+  `session_relative_path`. For a missing file, `read_file` raises
+  `SandboxFileNotFoundError`, `stat_files` reports it and `delete_file`
+  returns False. A yield window counts from the
+  Start or the write, so a slow wake does not use it up; `wall_time_seconds`
+  covers the whole call.
+- The chat sandbox tools ([[code-execution]],
+  `backend/onyx/tools/tool_implementations/sandbox/sandbox_tools.py`) call it with the
+  user's `Sandbox` row and the chat session ID. The first call of a
+  response's sandbox tools gets or creates the row
+  (`backend/onyx/db/sandbox.py:get_or_create_sandbox`,
+  safe against a race on the unique `user_id`; a new row is `TERMINATED`,
+  with no pod runtime). Chat and the new Craft harness share one VM per
+  user, in separate session directories. The row's
+  `provisioning_attempt_number` counts Craft's pods; harness calls do not
+  read it: the harness's own attempt record (`harness_state.last_attempt`)
+  fences VMs.
+- `.../sandbox/firecracker/harness_sandbox.py:FirecrackerHarnessSandbox`
+  implements it on the microvm code: wake on the first call (capacity
+  retry for 10 s), Init only when `Health.initialized` is false or the
+  Health generation is not the VM's generation (under a cache lock per VM
+  instance, so concurrent wakes run one Init). Exec
+  sessions are durable records in the tenant cache
+  (`.../firecracker/harness_state.py`, no TTL, compare-and-set, the 64 most
+  recently used per sandbox); a record of another VM instance raises
+  `ExecSessionEndedError`. Commands send `Command.session_id`, so the daemon
+  makes the session directory and uses it as the default cwd. A full daemon
+  execution table (`EXECUTION_CAP_REACHED`) raises `ExecCapReachedError`.
+  Each command has a client label; when Start gets no answer, the harness
+  finds the command by that label and adopts it.
+- `.../sandbox/harness_factory.py:get_harness_sandbox` returns it with
+  `SANDBOX_RUNTIME=firecracker` and `SANDBOX_FC_TEMPLATE`
+  (`backend/onyx/microvm/configs.py:HARNESS_SANDBOX_ENABLED`), the source image
+  tag of the root drive. Each node names its templates
+  `<tag>-<key hash[:12]>` and the hash differs per node, so
+  `backend/onyx/microvm/models.py:NodeInfo.template` takes an exact version or that node's newest
+  compatible template of the tag. Opencode sessions keep
+  `get_sandbox_manager` (pod or Docker).
+- Session saves (`.../firecracker/session_saves.py`): the idle evictor
+  (node reports, `get_eviction_policy`, 15 min) saves each session on the
+  VM first, in the background: CaptureSession of the session's top-level
+  directories and files (without dependencies, caches and the chat file
+  copies in `attachments/`; files go under
+  `.onyx-top-level` in the archive, which older daemons restore as a
+  directory; a later save sends that directory as a root, and the daemon
+  takes its files back as top-level files), presigned upload, file
+  store finalize, commit of the new save in the cache, then deletion of the
+  old archive. A busy sandbox (running command, turn, background file
+  copy, parked approval) or a
+  failed save keeps the VM. A session's first use on a new VM instance
+  restores its last save, once across pods (cache lock + session-instance
+  record). The record is written under the placement lock only while the
+  placement is still that instance. Session setup takes no command slot.
+  The stop renews its sandbox lock before each session's save and keeps the
+  VM if it lost the lock. A session with no directory keeps its last save.
+  A configuration error in the eviction
+  policy turns idle eviction off; it never fails the node report.
+  On a draining node (NodeInfo drain state, read by each report) every VM
+  counts as idle, so it is saved and stopped once not busy. Each call
+  records "wanted" for the sandbox; a stop's save gives way to a call
+  within the placement lock wait (capture and upload are cancelled). The
+  end of a turn saves that session in the background
+  (`SANDBOX_FC_TURN_END_SAVE_INTERVAL_SECONDS`, default 300, 0 = off). One
+  save per session runs at a time (non-blocking session lock; a stop that
+  finds it held keeps the VM).
+- Purge (`.../firecracker/purge.py`, delete hooks, all after the DB
+  commit): a Craft session delete
+  (`backend/onyx/server/features/build/session/api.py:delete_session`)
+  deletes that session's save, its directory on the running VM and its
+  exec records. A user's chat delete, hard or soft
+  (`backend/onyx/server/query_and_chat/chat_backend.py:delete_chat_session_by_id`;
+  `delete_all_chat_sessions` purges in a background thread) does the same for
+  the chat session: no one can restore a soft-deleted chat. A chat purge
+  also deletes the chat's tool results directory, by the purge rule at
+  `backend/onyx/server/features/build/sandbox/harness_base.py:TOOL_RESULTS_ROOT`
+  ([[code-execution]]). The API routes
+  purge, not `db/chat.py`: a VM purge needs the host agent client
+  certificates, which the light worker that runs chat retention lacks. A
+  session the harness has no record of (save, instance mark or exec record)
+  costs only cache reads and, while the VM runs, that one delete. A user delete (`delete_user_from_db`
+  in a background thread, `UserManager.delete`) and the last-admin tenant
+  delete stop the VM and delete every save and record of the
+  sandbox. At the end of each chat retention chain
+  (`backend/ee/onyx/background/celery/tasks/ttl_management/tasks.py`),
+  `purge_expired_harness_sessions_task` runs on the `sandbox` queue (the
+  heavy worker has the host agent client certificates). It purges up to
+  100 saved sessions whose chat session is gone or whose build session had
+  no activity in the window.
+  A purge mark makes a save in progress drop its archive instead of
+  committing. Saves are indexed per sandbox in the tenant cache. A session
+  purge also takes the chat's next copy generation, so the chat's
+  background file copies stop (`.../sandbox/file_copy_state.py`; the
+  Generations rule in `tools/tool_implementations/sandbox/file_copies.py`).
+  A chat's
+  published files are chat files, not sandbox state: a hard chat delete
+  deletes them, and a soft delete keeps them ([[chat-persistence]]).
 
 ---
 
@@ -215,14 +511,16 @@ the stored token on each request, so a new token takes effect at once.
    ready at the first read, with no polling fallback. Only a real cluster test
    shows this.
 5. `provisioning-writes-fenced` **Provisioning writes are fenced.** Status
-   updates in `server/features/build/db/sandbox.py` require the row to still
+   updates in `db/sandbox.py` require the row to still
    hold the attempt's `provisioning_attempt_number`. A superseded attempt's
    late write does nothing. Keep this condition on every new status write.
 6. `sleep-fail-closed` **Sleep is fail-closed.** If any snapshot or session
    workspace listing fails,
    `server/features/build/session/sandbox_lifecycle.py:sleep_sandbox` aborts and the sandbox stays
-   `RUNNING` for the next sweep. An unhealthy endpoint does not prove files are
-   lost. The session creation lock is held around the final check and
+   `RUNNING` for the next sweep. It raises, and the sweep and the reconciler
+   finish their other work and then fail, so a sandbox that cannot be slept or
+   a resource that cannot be removed is reported, not only logged. An unhealthy
+   endpoint does not prove files are lost. The session creation lock is held around the final check and
    termination, so a new session cannot start in a pod that is being removed.
 7. `exec-completion-sentinel` **Use the completion sentinel for exec
    scripts.** The Kubernetes exec client returns buffered output without
@@ -251,9 +549,9 @@ the stored token on each request, so a new token takes effect at once.
     (`backend/onyx/server/features/build/session/resource_cleanup.py:_prepare_failed_resource_cleanup`). It deletes with
     the observed resource identity. The Redis retry key only delays a retry; a
     cache entry never authorizes a deletion. A heartbeat clears the proof
-    (`server/features/build/db/sandbox.py:update_sandbox_heartbeat`, which
+    (`db/sandbox.py:update_sandbox_heartbeat`, which
     flushes; a function of the same name in
-    `server/features/build/db/build_session.py` commits), so any path that writes
+    `db/build_session.py` commits), so any path that writes
     into a session workspace must commit a heartbeat before the write, as
     `SessionManager.upload_file` and `delete_file` do. Without it, a sweep can
     delete a volume or pod that holds files no checkpoint captured.
@@ -281,12 +579,21 @@ the stored token on each request, so a new token takes effect at once.
 - **Browser security updates do not wait for Debian.**
   `backend/onyx/server/features/build/sandbox/image/install-browser.sh` pins
   Chrome for Testing and verifies the selected archive with its architecture's
-  checksum. Release gates require current stable Chrome and run Grype on its
-  inventory before ODS scans apt. CVE report collection uses `--report` to
-  resolve the image without enforcing the browser gate, so browser failures
-  cannot stop unrelated alerts.
-  Keep that scan: ODS does not detect the browser ZIP. Browser findings do not
-  use the ODS allowlist or automatic issue tracking.
+  checksum. `ods audit image --sbom /opt/chrome/browser.cdx.json` scans the
+  explicit browser inventory with Grype alongside the OSV image scan. Findings
+  use ODS reports, the shared CVE allowlist, and the existing CVE alert lifecycle.
+  Update deadlines use separate S3 state at `s3://onyx-internal-tools/audit/updates.json`. Routine updates
+  have 72 hours from first observation; maintenance monitoring warns after 24 hours.
+  Emergency minimum versions block immediately. A new release or failed PR does
+  not reset existing deadlines. PR audits scan vulnerabilities without update-policy access.
+  Deployment audits enforce freshness and fail if policy is missing. Missing inventory fails every audit.
+  Stale observations warn while recorded deadlines remain enforced.
+  Deployment records sandbox audit status separately and requires success before
+  sandbox publication, including reuse of an existing context image.
+  `.github/workflows/cve-tracking.yml` observes releases independently of pin PRs.
+  `.github/workflows/update-sandbox-browser.yml` uses the shared task-PR workflow
+  to update main and the four newest release lines every four hours.
+
 
 - **One sandbox per user, not per session.** Sessions share a warm pod, the
   managed skills and the user library.
@@ -368,6 +675,10 @@ the stored token on each request, so a new token takes effect at once.
 
 ## Verification
 
+- Integrated harness image: `deployment/craft-runtime/check-kvm.sh` converts
+  the image and runs the daemon, init, restore, and tool smoke tests on x86
+  KVM with the pinned guest kernel. Container smoke and rootfs conversion
+  alone do not establish VM tool coverage.
 - Unit: `backend/tests/unit/onyx/server/features/craft/sandbox/`.
 - Lifecycle, sweep and snapshots with real Postgres and Redis:
   `backend/tests/external_dependency_unit/craft/`.

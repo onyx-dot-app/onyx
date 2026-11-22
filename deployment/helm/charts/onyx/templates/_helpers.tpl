@@ -291,6 +291,336 @@ true
 {{- if eq (toString (index .Values.configMap "ENABLE_CRAFT" | default "")) "true" -}}true{{- end -}}
 {{- end }}
 
+{{/* craft.sandboxRuntime: "pod" (default) or "firecracker". Mirrors Terraform craft_sandbox_runtime. */}}
+{{- define "onyx.craftSandboxRuntime" -}}
+{{- $runtime := lower (toString ((.Values.craft | default dict).sandboxRuntime | default "pod")) -}}
+{{- if not (has $runtime (list "pod" "firecracker")) -}}
+{{- fail (printf "craft.sandboxRuntime must be \"pod\" or \"firecracker\", not %q" $runtime) -}}
+{{- end -}}
+{{- $runtime -}}
+{{- end }}
+
+{{/* Tolerations (default: the sandbox tolerations) plus the onyx.app/kvm taint
+that Terraform puts on Firecracker nodes (kubelet does not count VM memory).
+Only the host agent and the preflight use this; pod sandboxes and the
+prepuller must not. Call with (dict "ctx" $ "tolerations" $list). */}}
+{{- define "onyx.craftKvmNodeTolerations" -}}
+{{- $sandboxPod := .ctx.Values.sandboxPod | default dict -}}
+{{- $base := .tolerations | default (index $sandboxPod "tolerations") | default (list (dict "key" "workload" "operator" "Equal" "value" "sandbox" "effect" "NoSchedule")) -}}
+{{- $out := list -}}
+{{- $hasKvm := false -}}
+{{- range $base -}}
+{{- $out = append $out . -}}
+{{- $effectMatches := has (toString (.effect | default "")) (list "" "NoSchedule") -}}
+{{- $exists := eq (toString .operator) "Exists" -}}
+{{- $keyMatches := and (eq (toString .key) "onyx.app/kvm") (or $exists (eq (toString .value) "true")) -}}
+{{- if and $effectMatches (or $keyMatches (and (not .key) $exists)) -}}{{- $hasKvm = true -}}{{- end -}}
+{{- end -}}
+{{- if not $hasKvm -}}
+{{- $out = append $out (dict "key" "onyx.app/kvm" "operator" "Equal" "value" "true" "effect" "NoSchedule") -}}
+{{- end -}}
+{{- toYaml $out -}}
+{{- end }}
+
+{{/* Fails when sandboxPod.tolerations would let pod sandboxes onto the
+onyx.app/kvm nodes: that key, or an Exists toleration without a key. */}}
+{{- define "onyx.craftCheckSandboxTolerations" -}}
+{{- if eq (include "onyx.craftSandboxRuntime" .) "firecracker" -}}
+{{- range (index (.Values.sandboxPod | default dict) "tolerations" | default list) -}}
+{{- $effectMatches := has (toString (.effect | default "")) (list "" "NoSchedule") -}}
+{{- if and $effectMatches (or (eq (toString .key) "onyx.app/kvm") (and (not .key) (eq (toString .operator) "Exists"))) -}}
+{{- fail "sandboxPod.tolerations must not tolerate the onyx.app/kvm taint (key onyx.app/kvm, or operator Exists without a key) with craft.sandboxRuntime=firecracker: pod sandboxes must stay off the Firecracker nodes" -}}
+{{- end -}}
+{{- end -}}
+{{- end -}}
+{{- end }}
+
+{{/* Prometheus job label of the host agent series (alert rules, dashboard).
+The value goes into PromQL and JSON strings unescaped, so only plain characters pass. */}}
+{{- define "onyx.craftHostAgentMetricsJob" -}}
+{{- $job := (dig "hostAgent" "metrics" "job" "" (.Values.craft | default dict)) | default (include "onyx.resourceName" (list . "craft-fc-host-agent")) -}}
+{{- if not (regexMatch "^[A-Za-z0-9_.:/-]+$" $job) -}}
+{{- fail "craft.hostAgent.metrics.job may only have letters, digits and _ . : / -" -}}
+{{- end -}}
+{{- $job -}}
+{{- end }}
+
+{{/*
+Increase of a counter selector over a window, for alert rules. A labeled
+counter series starts at its first event, and increase() does not count that
+event, so a series with no sample in the hour before the window gives its
+full value. The hour keeps a short scrape gap from making an old series new.
+Input: (list "<selector>" "<window>").
+*/}}
+{{- define "onyx.craftFcCounterIncrease" -}}
+{{- $x := index . 0 -}}
+{{- $w := index . 1 -}}
+(({{ $x }} unless present_over_time({{ $x }}[1h] offset {{ $w }})) or increase({{ $x }}[{{ $w }}]))
+{{- end }}
+
+{{- define "onyx.craftHostAgentNamespace" -}}
+{{- (dig "hostAgent" "namespace" "" (.Values.craft | default dict)) | default "onyx-sandbox-runtime" -}}
+{{- end }}
+
+{{/*
+Craft Firecracker host agent /metrics auth, the same rules as the api_server
+/metrics: "disabled" with configMap.DISABLE_METRICS_AUTH=true, "token" with
+auth.metricsAuth.enabled, else "locked" (every scrape gets 401).
+*/}}
+{{- define "onyx.craftHostAgentMetricsAuth" -}}
+{{- $metricsAuth := (.Values.auth | default dict).metricsAuth | default dict -}}
+{{- if eq (lower (toString ((.Values.configMap | default dict).DISABLE_METRICS_AUTH | default ""))) "true" -}}
+disabled
+{{- else if dig "enabled" false $metricsAuth -}}
+token
+{{- else -}}
+locked
+{{- end -}}
+{{- end }}
+
+{{/*
+Onyx release tag for the Craft Firecracker images: global.version (else
+appVersion) without the "-dev" suffix of the debug image twins.
+*/}}
+{{- define "onyx.craftFcReleaseTag" -}}
+{{- trimSuffix "-dev" (toString (.Values.global.version | default .Chart.AppVersion)) -}}
+{{- end }}
+
+{{/*
+Source image tag of the root drive: craft.hostAgent.rootfs.version, else the
+release tag. The rootfs image is rootfs-<version> and SANDBOX_FC_TEMPLATE is
+<version>. Fails on a floating tag: no root drive is published for it.
+*/}}
+{{- define "onyx.craftFcRootfsVersion" -}}
+{{- $v := (dig "hostAgent" "rootfs" "version" "" (.Values.craft | default dict)) | default (include "onyx.craftFcReleaseTag" .) -}}
+{{- include "onyx.craftFcPinnedTag" (list $v "root drive version" "craft.hostAgent.rootfs.version") -}}
+{{- end }}
+
+{{/* Returns the tag, or fails when it is empty or floating. Input: (list tag what value). */}}
+{{- define "onyx.craftFcPinnedTag" -}}
+{{- $v := index . 0 -}}
+{{- if or (not $v) (has $v (list "latest" "edge" "beta")) -}}
+{{- fail (printf "craft.sandboxRuntime=firecracker needs a pinned %s, not %q: set global.version to an Onyx release tag (for example v5.2.0) or set %s" (index . 1) $v (index . 2)) -}}
+{{- end -}}
+{{- $v -}}
+{{- end }}
+
+{{/*
+mTLS client of the Craft Firecracker host agents, for the pods that call them:
+api_server, and the heavy (VM reconcile) and scheduled-tasks workers. Empty
+unless craft.sandboxRuntime=firecracker. Env names: backend/onyx/microvm/configs.py.
+With no existingSecret, craft-fc-host-agent.yaml makes the certificates.
+*/}}
+{{- define "onyx.craftFcAgentClient.secretName" -}}
+{{- if eq (include "onyx.craftSandboxRuntime" .) "firecracker" -}}
+{{- $agent := (.Values.craft | default dict).hostAgent | default dict -}}
+{{- $name := dig "client" "existingSecret" "" $agent -}}
+{{- if ne (empty $name) (empty (dig "tls" "existingSecret" "" $agent)) -}}
+{{- fail "set both craft.hostAgent.tls.existingSecret and craft.hostAgent.client.existingSecret, or neither (the chart then makes the certificates)" -}}
+{{- end -}}
+{{- $name | default (printf "%s-client-tls" (include "onyx.resourceName" (list . "craft-fc-host-agent"))) -}}
+{{- end -}}
+{{- end }}
+
+{{/* Name the clients verify in the agent certificate. Default with chart-made certificates: the agent Service DNS name. */}}
+{{- define "onyx.craftFcAgentClient.tlsServerName" -}}
+{{- $agent := (.Values.craft | default dict).hostAgent | default dict -}}
+{{- $name := dig "client" "tlsServerName" "" $agent -}}
+{{- if and (not $name) (not (dig "tls" "existingSecret" "" $agent)) -}}
+{{- $name = printf "%s.%s.svc" (include "onyx.resourceName" (list . "craft-fc-host-agent")) (include "onyx.craftHostAgentNamespace" .) -}}
+{{- end -}}
+{{- $name -}}
+{{- end }}
+
+{{/*
+Chart-made agent mTLS set (no existingSecret). "onyx.craftFcAgentCerts.stored"
+returns the stored set as YAML when it can be reused: both Secrets exist with
+the same CA, the agent DNS names are the same, and renewal is not due. Else
+it returns "" and the agent template makes a new set. The decision depends
+only on the cluster state, so the client pods use it too.
+*/}}
+{{- define "onyx.craftFcAgentCerts.names" -}}
+{{- $name := include "onyx.resourceName" (list . "craft-fc-host-agent") -}}
+{{- $ns := include "onyx.craftHostAgentNamespace" . -}}
+{{- toYaml (uniq (list (include "onyx.craftFcAgentClient.tlsServerName" .) (printf "%s.%s.svc" $name $ns) (printf "%s.%s.svc.%s" $name $ns (include "onyx.clusterDomain" .)))) -}}
+{{- end }}
+
+{{- define "onyx.craftFcAgentCerts.stored" -}}
+{{- $name := include "onyx.resourceName" (list . "craft-fc-host-agent") -}}
+{{- $old := lookup "v1" "Secret" (include "onyx.craftHostAgentNamespace" .) (printf "%s-tls" $name) | default dict -}}
+{{- $oldClient := lookup "v1" "Secret" .Release.Namespace (include "onyx.craftFcAgentClient.secretName" .) | default dict -}}
+{{- $server := $old.data | default dict -}}
+{{- $client := $oldClient.data | default dict -}}
+{{- $annotations := dig "metadata" "annotations" dict $old -}}
+{{- $renewAfter := index $annotations "onyx.app/craft-fc-cert-renew-after" | default "0" | int64 -}}
+{{- $sans := join "," (include "onyx.craftFcAgentCerts.names" . | fromYamlArray) -}}
+{{- if and (index $server "ca.crt") (index $server "tls.crt") (index $server "tls.key") (index $client "tls.crt") (index $client "tls.key") (eq (index $server "ca.crt") (index $client "ca.crt" | default "")) (eq (index $annotations "onyx.app/craft-fc-agent-sans" | default "") $sans) (lt (now | unixEpoch | int64) $renewAfter) -}}
+{{- toYaml (dict "server" $server "client" $client "renewAfter" (toString $renewAfter) "revision" (index $annotations "onyx.app/craft-fc-cert-revision" | default "0")) -}}
+{{- end -}}
+{{- end }}
+
+{{/* Pod annotation that restarts the agent clients when the chart makes a new mTLS set: they load the certificate once. */}}
+{{- define "onyx.craftFcAgentClient.podAnnotations" -}}
+{{- $agent := (.Values.craft | default dict).hostAgent | default dict -}}
+{{- if and (include "onyx.craftFcAgentClient.secretName" .) (not (dig "tls" "existingSecret" "" $agent)) -}}
+{{- $stored := include "onyx.craftFcAgentCerts.stored" . | fromYaml -}}
+onyx.app/craft-fc-cert-revision: {{ (get $stored "revision" | default .Release.Revision) | toString | quote }}
+{{- end -}}
+{{- end }}
+
+{{/*
+mTLS on the relay → sandbox-proxy hop (craft.hostAgent.relayTls). On with
+craft.sandboxRuntime=firecracker unless relayTls.enabled=false. Its own CA,
+apart from the agent set: the two sets renew on their own, and an agent or
+client certificate never opens the proxy relay port. With no existingSecret,
+craft-fc-relay-tls.yaml makes the certificates.
+*/}}
+{{- define "onyx.craftFcRelayTls.enabled" -}}
+{{- if eq (include "onyx.craftSandboxRuntime" .) "firecracker" -}}
+{{- if ne (toString (dig "hostAgent" "relayTls" "enabled" true (.Values.craft | default dict))) "false" -}}true{{- end -}}
+{{- end -}}
+{{- end }}
+
+{{- define "onyx.craftFcRelayTls.values" -}}
+{{- toYaml (dig "hostAgent" "relayTls" dict (.Values.craft | default dict)) -}}
+{{- end }}
+
+{{- define "onyx.craftFcRelayTls.port" -}}
+{{- (include "onyx.craftFcRelayTls.values" . | fromYaml).port | default 8443 | int -}}
+{{- end }}
+
+{{/* "true" when the customer brings the relay certificates. */}}
+{{- define "onyx.craftFcRelayTls.existing" -}}
+{{- $r := include "onyx.craftFcRelayTls.values" . | fromYaml -}}
+{{- if ne (empty $r.existingSecret) (empty $r.proxyExistingSecret) -}}
+{{- fail "set both craft.hostAgent.relayTls.existingSecret and craft.hostAgent.relayTls.proxyExistingSecret, or neither (the chart then makes the certificates)" -}}
+{{- end -}}
+{{- if $r.existingSecret -}}true{{- end -}}
+{{- end }}
+
+{{/* Agent namespace: the relay client certificate and the proxy CA. */}}
+{{- define "onyx.craftFcRelayTls.relaySecretName" -}}
+{{- $r := include "onyx.craftFcRelayTls.values" . | fromYaml -}}
+{{- $r.existingSecret | default (printf "%s-relay-tls" (include "onyx.resourceName" (list . "craft-fc-host-agent"))) -}}
+{{- end }}
+
+{{/* Release namespace: the proxy certificate and the relay CA. */}}
+{{- define "onyx.craftFcRelayTls.proxySecretName" -}}
+{{- $r := include "onyx.craftFcRelayTls.values" . | fromYaml -}}
+{{- $r.proxyExistingSecret | default (printf "%s-relay-tls" (include "onyx.resourceName" (list . "sandbox-proxy"))) -}}
+{{- end }}
+
+{{- define "onyx.craftFcRelayTls.serverName" -}}
+{{- (include "onyx.craftFcRelayTls.values" . | fromYaml).serverName | default (include "onyx.sandboxProxyHost" .) -}}
+{{- end }}
+
+{{/* DNS names of the chart-made proxy certificate. */}}
+{{- define "onyx.craftFcRelayTls.proxyNames" -}}
+{{- $svc := include "onyx.resourceName" (list . "sandbox-proxy") -}}
+{{- toYaml (uniq (list (include "onyx.craftFcRelayTls.serverName" .) (printf "%s.%s.svc" $svc .Release.Namespace) (include "onyx.serviceFqdn" (list . $svc)))) -}}
+{{- end }}
+
+{{- define "onyx.craftFcRelayTls.clientName" -}}
+{{- printf "%s.%s.svc" (include "onyx.resourceName" (list . "craft-fc-relay")) (include "onyx.craftHostAgentNamespace" .) -}}
+{{- end }}
+
+{{/* SANs the proxy accepts. Chart-made: only the relay certificate name. */}}
+{{- define "onyx.craftFcRelayTls.allowedSans" -}}
+{{- $sans := (include "onyx.craftFcRelayTls.values" . | fromYaml).clientAllowedSans -}}
+{{- if and (not $sans) (not (include "onyx.craftFcRelayTls.existing" .)) -}}
+{{- $sans = include "onyx.craftFcRelayTls.clientName" . -}}
+{{- end -}}
+{{- $sans -}}
+{{- end }}
+
+{{/*
+The stored chart-made relay set as YAML when it can be reused: both Secrets
+exist with the same CA, the names are the same, and renewal is not due.
+Else "" and craft-fc-relay-tls.yaml makes a new set.
+*/}}
+{{- define "onyx.craftFcRelayTls.namesKey" -}}
+{{- join "," (concat (include "onyx.craftFcRelayTls.proxyNames" . | fromYamlArray) (list (include "onyx.craftFcRelayTls.clientName" .))) -}}
+{{- end }}
+
+{{- define "onyx.craftFcRelayTls.stored" -}}
+{{- $old := lookup "v1" "Secret" .Release.Namespace (include "onyx.craftFcRelayTls.proxySecretName" .) | default dict -}}
+{{- $oldRelay := lookup "v1" "Secret" (include "onyx.craftHostAgentNamespace" .) (include "onyx.craftFcRelayTls.relaySecretName" .) | default dict -}}
+{{- $proxy := $old.data | default dict -}}
+{{- $relay := $oldRelay.data | default dict -}}
+{{- $annotations := dig "metadata" "annotations" dict $old -}}
+{{- $renewAfter := index $annotations "onyx.app/craft-fc-relay-cert-renew-after" | default "0" | int64 -}}
+{{- if and (index $proxy "ca.crt") (index $proxy "tls.crt") (index $proxy "tls.key") (index $relay "tls.crt") (index $relay "tls.key") (eq (index $proxy "ca.crt") (index $relay "ca.crt" | default "")) (eq (index $annotations "onyx.app/craft-fc-relay-names" | default "") (include "onyx.craftFcRelayTls.namesKey" .)) (lt (now | unixEpoch | int64) $renewAfter) -}}
+{{- toYaml (dict "proxy" $proxy "relay" $relay "renewAfter" (toString $renewAfter) "revision" (index $annotations "onyx.app/craft-fc-relay-cert-revision" | default "0")) -}}
+{{- end -}}
+{{- end }}
+
+{{/* NetworkPolicy peer: the host agent pods in their namespace. */}}
+{{- define "onyx.craftFcRelayTls.agentPeer" -}}
+namespaceSelector:
+  matchLabels:
+    kubernetes.io/metadata.name: {{ include "onyx.craftHostAgentNamespace" . }}
+podSelector:
+  matchLabels:
+    {{- include "onyx.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: craft-fc-host-agent
+{{- end }}
+
+{{/* sandbox-proxy pod annotation: a new chart-made relay set restarts the proxy, which loads its certificate once. */}}
+{{- define "onyx.craftFcRelayTls.podAnnotations" -}}
+{{- if and (include "onyx.craftFcRelayTls.enabled" .) (not (include "onyx.craftFcRelayTls.existing" .)) -}}
+{{- $stored := include "onyx.craftFcRelayTls.stored" . | fromYaml -}}
+onyx.app/craft-fc-relay-cert-revision: {{ (get $stored "revision" | default .Release.Revision) | toString | quote }}
+{{- end -}}
+{{- end }}
+
+{{- define "onyx.craftFcAgentClient.env" -}}
+{{- if include "onyx.craftFcAgentClient.secretName" . -}}
+- name: SANDBOX_FC_AGENT_CLIENT_CERT_PATH
+  value: /etc/onyx/craft-fc-agent-client/tls.crt
+- name: SANDBOX_FC_AGENT_CLIENT_KEY_PATH
+  value: /etc/onyx/craft-fc-agent-client/tls.key
+- name: SANDBOX_FC_AGENT_CA_PATH
+  value: /etc/onyx/craft-fc-agent-client/ca.crt
+{{- with include "onyx.craftFcAgentClient.tlsServerName" . }}
+- name: SANDBOX_FC_AGENT_TLS_SERVER_NAME
+  value: {{ . | quote }}
+{{- end }}
+{{- end -}}
+{{- end }}
+
+{{/* YAML lists, for concat with the pod's own volumeMounts and volumes. */}}
+{{- define "onyx.craftFcAgentClient.volumeMounts" -}}
+{{- if include "onyx.craftFcAgentClient.secretName" . -}}
+- name: craft-fc-agent-client
+  mountPath: /etc/onyx/craft-fc-agent-client
+  readOnly: true
+{{- end -}}
+{{- end }}
+
+{{- define "onyx.craftFcAgentClient.volumes" -}}
+{{- with include "onyx.craftFcAgentClient.secretName" . -}}
+- name: craft-fc-agent-client
+  secret:
+    secretName: {{ . }}
+    defaultMode: 0440
+{{- end -}}
+{{- end }}
+
+{{/*
+Key of the metrics token in auth.metricsAuth's Secret; the agent namespace
+copy uses the same key.
+*/}}
+{{- define "onyx.craftHostAgentMetricsKey" -}}
+{{- default "METRICS_AUTH_TOKEN" (dig "secretKeys" "METRICS_AUTH_TOKEN" "" ((.Values.auth | default dict).metricsAuth | default dict)) -}}
+{{- end }}
+
+{{/*
+Secret with the metrics token in the agent namespace (Secrets are namespaced).
+*/}}
+{{- define "onyx.craftHostAgentMetricsSecret" -}}
+{{- (dig "hostAgent" "metrics" "authExistingSecret" "" (.Values.craft | default dict)) | default (printf "%s-metrics-auth" (include "onyx.resourceName" (list . "craft-fc-host-agent"))) -}}
+{{- end }}
+
 {{/*
 Sandbox container image and pull policy. Shared by the sandbox-pod PodTemplate
 and the image-prepull DaemonSet: the prepull only pins layers the sandbox pods
@@ -307,11 +637,11 @@ invisible (the DaemonSet looks healthy while every sandbox still cold-pulls).
 
 {{/* Sandbox callbacks stay inside Kubernetes unless the operator sets a URL. */}}
 {{- define "onyx.sandboxApiUrl" -}}
-{{- (index .Values.configMap "ONYX_SERVER_URL") | default (printf "http://%s.%s.svc.cluster.local:%v" (include "onyx.resourceName" (list . "api-service")) .Release.Namespace (.Values.api.service.servicePort | default 8080)) -}}
+{{- (index .Values.configMap "ONYX_SERVER_URL") | default (printf "http://%s:%v" (include "onyx.serviceFqdn" (list . (include "onyx.resourceName" (list . "api-service")))) (.Values.api.service.servicePort | default 8080)) -}}
 {{- end }}
 
 {{- define "onyx.sandboxProxyHost" -}}
-{{- (index .Values.configMap "SANDBOX_PROXY_HOST") | default (printf "%s.%s.svc.cluster.local" (include "onyx.resourceName" (list . "sandbox-proxy")) .Release.Namespace) -}}
+{{- (index .Values.configMap "SANDBOX_PROXY_HOST") | default (include "onyx.serviceFqdn" (list . (include "onyx.resourceName" (list . "sandbox-proxy")))) -}}
 {{- end }}
 
 {{- define "onyx.sandboxProxyPort" -}}
@@ -329,8 +659,9 @@ invisible (the DaemonSet looks healthy while every sandbox still cold-pulls).
 - { name: HTTP_PROXY, value: "{{ $proxyUrl }}" }
 - { name: https_proxy, value: "{{ $proxyUrl }}" }
 - { name: http_proxy, value: "{{ $proxyUrl }}" }
-- { name: NO_PROXY, value: "127.0.0.1,localhost,::1" }
-- { name: no_proxy, value: "127.0.0.1,localhost,::1" }
+- { name: NO_PROXY, value: "127.0.0.1,localhost,::1,[::1]" }
+- { name: no_proxy, value: "127.0.0.1,localhost,::1,[::1]" }
+- { name: NODE_USE_ENV_PROXY, value: "1" }
 - { name: NODE_EXTRA_CA_CERTS, value: "{{ .caBundleFile }}" }
 - { name: REQUESTS_CA_BUNDLE, value: "{{ .caBundleFile }}" }
 - { name: SSL_CERT_FILE, value: "{{ .caBundleFile }}" }
@@ -705,10 +1036,40 @@ so the templates must not depend on values.yaml for these keys.
 {{- toYaml $merged -}}
 {{- end }}
 
+{{- define "onyx.clusterDomain" -}}
+{{- .Values.global.clusterDomain | default "cluster.local" -}}
+{{- end }}
+
+{{/* <service>.<release namespace>.svc.<cluster domain> */}}
+{{- define "onyx.serviceFqdn" -}}
+{{- $ctx := index . 0 -}}
+{{- printf "%s.%s.svc.%s" (index . 1) $ctx.Release.Namespace (include "onyx.clusterDomain" $ctx) -}}
+{{- end }}
+
+{{/*
+Host of a bundled store Service in S3_ENDPOINT_URL. Firecracker host agents
+upload to the presigned URL host from their own namespace, so with Firecracker
+it is the FQDN; otherwise the short name.
+*/}}
+{{- define "onyx.bundledStoreHost" -}}
+{{- $ctx := index . 0 -}}
+{{- if eq (include "onyx.craftSandboxRuntime" $ctx) "firecracker" -}}
+{{- include "onyx.serviceFqdn" (list $ctx (index . 1)) -}}
+{{- else -}}
+{{- index . 1 -}}
+{{- end -}}
+{{- end }}
+
 {{/* The bundled object store's Service name and S3 endpoint. */}}
 {{- define "onyx.objectStore.endpoint" -}}
 {{- $objectStore := include "onyx.objectStore.values" . | fromYaml -}}
 {{- printf "http://%s:%v" (include "onyx.resourceName" (list . "object-store")) $objectStore.service.port -}}
+{{- end }}
+
+{{/* S3_ENDPOINT_URL of the bundled object store. */}}
+{{- define "onyx.objectStore.s3Endpoint" -}}
+{{- $objectStore := include "onyx.objectStore.values" . | fromYaml -}}
+{{- printf "http://%s:%v" (include "onyx.bundledStoreHost" (list . (include "onyx.resourceName" (list . "object-store")))) $objectStore.service.port -}}
 {{- end }}
 
 {{/*
@@ -843,5 +1204,17 @@ immutable.
 {{- $copy := $objectStore.legacyCopy -}}
 {{- $podTemplate := include "onyx.objectStore.legacyCopyPod" (dict "ctx" . "copy" $copy) -}}
 {{- printf "%s-%s" (include "onyx.resourceName" (list . "legacy-minio-copy") | trunc 54 | trimSuffix "-") (printf "%s\n%v" $podTemplate $copy.backoffLimit | sha256sum | trunc 8) -}}
+{{- end -}}
+{{- end }}
+
+{{/*
+"true" when the chart deploys a docconversion worker. Docfetching only lists
+then: with no worker, the listed batches would wait for a consumer that never
+runs.
+*/}}
+{{- define "onyx.docconversion.deployed" -}}
+{{- $worker := .Values.celery_worker_docconversion -}}
+{{- if and .Values.vectorDB.enabled $worker.enabled (or $worker.autoscaling.enabled (gt (int $worker.replicaCount) 0)) -}}
+true
 {{- end -}}
 {{- end }}

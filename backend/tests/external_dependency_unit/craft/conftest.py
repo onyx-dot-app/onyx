@@ -22,7 +22,6 @@ from onyx.db.enums import (
     BuildSessionStatus,
     LLMModelFlowType,
     SandboxStatus,
-    SkillSharePermission,
 )
 from onyx.db.llm import (
     fetch_default_model,
@@ -33,16 +32,15 @@ from onyx.db.llm import (
 )
 from onyx.db.models import (
     BuildSession,
+    Plugin,
     Sandbox,
     ScheduledTask,
-    Skill,
-    Skill__UserGroup,
     User,
     UserGroup,
 )
+from onyx.db.sandbox import create_sandbox__no_commit
 from onyx.file_store.file_store import get_default_file_store
 from onyx.llm.constants import LlmProviderNames
-from onyx.server.features.build.db.sandbox import create_sandbox__no_commit
 from onyx.server.features.build.session import llm_config
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.manage.llm.models import (
@@ -57,7 +55,10 @@ from tests.common.craft.skill_table_isolation import (
 )
 from tests.common.craft.stubs import StubSandboxManager
 from tests.common.models import CI_OPENAI_MODEL
-from tests.external_dependency_unit.craft.db_helpers import make_user
+from tests.external_dependency_unit.craft.db_helpers import (
+    make_skill,
+    share_skill_with_group,
+)
 
 
 def _best_effort_delete(model: type[Any], ids: Iterable[Any]) -> None:
@@ -282,8 +283,8 @@ def seeded_skill(
     db_session: Session,
     request: pytest.FixtureRequest,
     tenant_context: None,  # noqa: ARG001
-) -> Callable[..., Skill]:
-    """Factory: create a ``Skill`` row + its bundle in the file store."""
+) -> Callable[..., Plugin]:
+    """Factory: create a custom skill's plugin + its bundle in the file store."""
     file_store = get_default_file_store()
     file_store.initialize()
     bundle_file_ids: list[str] = []
@@ -303,7 +304,7 @@ def seeded_skill(
         groups: Iterable[UserGroup] | None = None,
         bundle_files: dict[str, bytes | str] | None = None,
         author_user_id: UUID | None = None,
-    ) -> Skill:
+    ) -> Plugin:
         if bundle_files is None:
             bundle_files = {
                 "SKILL.md": (
@@ -321,24 +322,20 @@ def seeded_skill(
         )
         bundle_file_ids.append(bundle_file_id)
 
-        if author_user_id is None and not public:
-            author_user_id = make_user(db_session, standard_account=True).id
-
-        skill = Skill(
-            id=uuid4(),
+        skill = make_skill(
+            db_session,
             name=name,
+            is_public=public,
+            author_user_id=author_user_id,
             description=f"Seeded skill {name}",
             bundle_file_id=bundle_file_id,
             bundle_sha256=bundle_sha256,
-            public_permission=SkillSharePermission.VIEWER if public else None,
-            author_user_id=author_user_id,
         )
-        db_session.add(skill)
         db_session.commit()
         db_session.refresh(skill)
 
         for group in groups or []:
-            db_session.add(Skill__UserGroup(skill_id=skill.id, user_group_id=group.id))
+            share_skill_with_group(db_session, skill, group)
         db_session.commit()
         return skill
 

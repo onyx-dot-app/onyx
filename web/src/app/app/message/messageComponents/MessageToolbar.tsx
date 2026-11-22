@@ -9,9 +9,13 @@ import { TooltipGroup } from "@/components/tooltip/CustomTooltip";
 import {
   useChatSessionStore,
   useCurrentMessageTree,
-  useDocumentSidebarVisible,
+  useSourcesShown,
   useSelectedNodeForDocDisplay,
 } from "@/app/app/stores/useChatSessionStore";
+import {
+  RIGHT_PANEL_SOURCES_TAB,
+  type ChatRightPanelAction,
+} from "@/lib/chat/rightPanel";
 import { messageModelName } from "@/app/app/message/multiModel";
 import { useDistinctModelsUsed } from "@/lib/multiModel/hooks";
 import { convertMarkdownTablesToTsv } from "@/app/app/message/copyingUtils";
@@ -42,8 +46,8 @@ interface SouurcesTagWrapperProps {
   documentMap: Map<string, OnyxDocument>;
   nodeId: number;
   selectedMessageForDocDisplay: number | null;
-  documentSidebarVisible: boolean;
-  updateCurrentDocumentSidebarVisible: (visible: boolean) => void;
+  sourcesPanelVisible: boolean;
+  updateCurrentRightPanel: (action: ChatRightPanelAction) => void;
   updateCurrentSelectedNodeForDocDisplay: (nodeId: number | null) => void;
 }
 
@@ -53,8 +57,8 @@ const SourcesTagWrapper = React.memo(function SourcesTagWrapper({
   documentMap,
   nodeId,
   selectedMessageForDocDisplay,
-  documentSidebarVisible,
-  updateCurrentDocumentSidebarVisible,
+  sourcesPanelVisible,
+  updateCurrentRightPanel,
   updateCurrentSelectedNodeForDocDisplay,
 }: SouurcesTagWrapperProps) {
   const t = useTranslations("chat.messages");
@@ -66,18 +70,21 @@ const SourcesTagWrapper = React.memo(function SourcesTagWrapper({
 
   // Handle click to toggle sidebar
   const handleSourceClick = useCallback(() => {
-    if (selectedMessageForDocDisplay === nodeId && documentSidebarVisible) {
-      updateCurrentDocumentSidebarVisible(false);
+    if (selectedMessageForDocDisplay === nodeId && sourcesPanelVisible) {
+      updateCurrentRightPanel({ type: "closePanel" });
       updateCurrentSelectedNodeForDocDisplay(null);
     } else {
       updateCurrentSelectedNodeForDocDisplay(nodeId);
-      updateCurrentDocumentSidebarVisible(true);
+      updateCurrentRightPanel({
+        type: "showTab",
+        tabId: RIGHT_PANEL_SOURCES_TAB,
+      });
     }
   }, [
     nodeId,
     selectedMessageForDocDisplay,
-    documentSidebarVisible,
-    updateCurrentDocumentSidebarVisible,
+    sourcesPanelVisible,
+    updateCurrentRightPanel,
     updateCurrentSelectedNodeForDocDisplay,
   ]);
 
@@ -109,7 +116,7 @@ export interface MessageToolbarProps {
 
   // Copy functionality
   rawPackets: Packet[];
-  finalAnswerRef: RefObject<HTMLDivElement | null>;
+  answerRefs: RefObject<(HTMLDivElement | null)[]>;
 
   // Feedback
   currentFeedback?: FeedbackType | null;
@@ -138,7 +145,7 @@ export default function MessageToolbar({
   getNextMessage,
   onMessageSelection,
   rawPackets,
-  finalAnswerRef,
+  answerRefs,
   currentFeedback,
   onRegenerate,
   parentMessage,
@@ -157,6 +164,13 @@ export default function MessageToolbar({
     return msg ? (messageModelName(msg) ?? undefined) : undefined;
   }, [messageTree, nodeId]);
   const distinctModelsUsed = useDistinctModelsUsed();
+  // A follow-up to agent results has no prompt to regenerate from.
+  const isFollowUp = parentMessage?.type === "agent_results";
+  const readOnlyModelName = !llmManager
+    ? currentModelName
+    : isFollowUp
+      ? (ownModelName ?? currentModelName)
+      : undefined;
 
   // Incognito responses take no feedback: votes would persist reviewable
   // signal tied to a chat hidden from the owner's surfaces. The session's
@@ -168,10 +182,10 @@ export default function MessageToolbar({
   const incognitoEnabled =
     (useIncognitoOptional()?.incognitoEnabled ?? false) || sessionIncognito;
   // Document sidebar state - managed internally to reduce prop drilling
-  const documentSidebarVisible = useDocumentSidebarVisible();
+  const sourcesPanelVisible = useSourcesShown();
   const selectedMessageForDocDisplay = useSelectedNodeForDocDisplay();
-  const updateCurrentDocumentSidebarVisible = useChatSessionStore(
-    (state) => state.updateCurrentDocumentSidebarVisible
+  const updateCurrentRightPanel = useChatSessionStore(
+    (state) => state.updateCurrentRightPanel
   );
   const updateCurrentSelectedNodeForDocDisplay = useChatSessionStore(
     (state) => state.updateCurrentSelectedNodeForDocDisplay
@@ -289,7 +303,11 @@ export default function MessageToolbar({
                   removeThinkingTokens(getTextContent(rawPackets)) as string
                 )
               }
-              getHtmlContent={() => finalAnswerRef.current?.innerHTML || ""}
+              getHtmlContent={() =>
+                answerRefs.current
+                  .map((element) => element?.innerHTML || "")
+                  .join("\n")
+              }
               data-testid="AgentMessage/copy-button"
             />
             {!incognitoEnabled && (
@@ -328,24 +346,25 @@ export default function MessageToolbar({
               />
             )}
 
-            {/* Read-only model label for the shared view: no llmManager to
-                power the interactive selector, so surface which model answered. */}
-            {!llmManager && currentModelName && (
+            {/* Read-only model label where the regenerate selector is not
+                available, so the answer still shows which model answered. */}
+            {readOnlyModelName && (
               <SelectButton
                 chevron
                 disabled
                 icon={getModelIcon(
                   currentModelProvider ?? "",
-                  currentModelName
+                  readOnlyModelName
                 )}
               >
-                {currentModelName}
+                {readOnlyModelName}
               </SelectButton>
             )}
 
             {onRegenerate &&
               messageId !== undefined &&
               parentMessage &&
+              !isFollowUp &&
               llmManager && (
                 <div data-testid="AgentMessage/regenerate">
                   <ModelSelector
@@ -416,10 +435,8 @@ export default function MessageToolbar({
                 documentMap={documentMap}
                 nodeId={nodeId}
                 selectedMessageForDocDisplay={selectedMessageForDocDisplay}
-                documentSidebarVisible={documentSidebarVisible}
-                updateCurrentDocumentSidebarVisible={
-                  updateCurrentDocumentSidebarVisible
-                }
+                sourcesPanelVisible={sourcesPanelVisible}
+                updateCurrentRightPanel={updateCurrentRightPanel}
                 updateCurrentSelectedNodeForDocDisplay={
                   updateCurrentSelectedNodeForDocDisplay
                 }

@@ -73,8 +73,9 @@ import { useAppPosition } from "@/lib/navigation/hooks";
 import { useCreateModal } from "@opal/components";
 import { useModalContext } from "@/components/context/ModalContext";
 import {
+  SvgClock,
   SvgDevKit,
-  SvgPlug,
+  SvgSliders,
   SvgEditBig,
   SvgFolderPlus,
   SvgMoreHorizontal,
@@ -86,7 +87,11 @@ import BuildModeIntroBackground from "@/app/craft/components/IntroBackground";
 import BuildModeIntroContent from "@/app/craft/components/IntroContent";
 import { CRAFT_PATH } from "@/app/craft/v1/constants";
 import UnseenMarker from "@/app/craft/components/UnseenMarker";
-import { useUnviewedScheduledTaskCount } from "@/lib/scheduledTasks/hooks";
+import {
+  useUnviewedChatScheduledTaskCount,
+  useUnviewedScheduledTaskCount,
+} from "@/lib/scheduledTasks/hooks";
+import { SCHEDULED_TASKS_PATH } from "@/lib/scheduledTasks/paths";
 import { track, AnalyticsEvent } from "@/lib/analytics/utils";
 import { motion, AnimatePresence } from "motion/react";
 import { NotificationType } from "@/lib/notifications/interfaces";
@@ -95,6 +100,7 @@ import { AccountPopover } from "@/lib/app/components";
 import ChatSearchCommandMenu from "@/sections/sidebar/ChatSearchCommandMenu";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import { DEFAULT_AGENT_ID } from "@/lib/constants";
+import { CUSTOMIZE_PATH } from "@/lib/customize/paths";
 
 // Visible-agents = pinned-agents + current-agent (if current-agent not in pinned-agents)
 // OR Visible-agents = pinned-agents (if current-agent in pinned-agents)
@@ -259,8 +265,7 @@ export default function AppSidebar() {
   const [pendingMoveProjectId, setPendingMoveProjectId] = useState<
     number | null
   >(null);
-  const [showMoveCustomAgentModal, setShowMoveCustomAgentModal] =
-    useState(false);
+  const moveCustomAgentModal = useCreateModal();
 
   // Check if Onyx Craft is enabled via settings (backed by PostHog feature flag)
   // Only explicit true enables the feature; false or undefined = disabled
@@ -274,6 +279,8 @@ export default function AppSidebar() {
   const unviewedTaskCount = useUnviewedScheduledTaskCount(
     isOnyxCraftEnabled && hasCraftTier
   );
+  const tScheduledTasks = useTranslations("scheduledTasks");
+  const unviewedChatTaskCount = useUnviewedChatScheduledTaskCount();
   const plans = usePlans();
 
   // Fetch notifications for build mode intro
@@ -461,7 +468,7 @@ export default function AppSidebar() {
         if (shouldShowMoveModal(chatSession)) {
           setPendingMoveChatSession(chatSession);
           setPendingMoveProjectId(targetProject.id);
-          setShowMoveCustomAgentModal(true);
+          moveCustomAgentModal.toggle(true);
           return;
         }
 
@@ -500,6 +507,7 @@ export default function AppSidebar() {
       refreshCurrentProjectDetails,
       refreshProjects,
       moveChatErrorMessage,
+      moveCustomAgentModal.toggle,
     ]
   );
 
@@ -553,10 +561,10 @@ export default function AppSidebar() {
         <CreateProjectModal />
       </createProjectModal.Provider>
 
-      {showMoveCustomAgentModal && (
+      <moveCustomAgentModal.Provider>
         <MoveCustomAgentChatModal
           onCancel={() => {
-            setShowMoveCustomAgentModal(false);
+            moveCustomAgentModal.toggle(false);
             setPendingMoveChatSession(null);
             setPendingMoveProjectId(null);
           }}
@@ -569,7 +577,7 @@ export default function AppSidebar() {
             }
             const chat = pendingMoveChatSession;
             const target = pendingMoveProjectId;
-            setShowMoveCustomAgentModal(false);
+            moveCustomAgentModal.toggle(false);
             setPendingMoveChatSession(null);
             setPendingMoveProjectId(null);
             if (chat && target != null) {
@@ -581,7 +589,7 @@ export default function AppSidebar() {
             }
           }}
         />
-      )}
+      </moveCustomAgentModal.Provider>
 
       {/* Intro animation overlay */}
       <AnimatePresence>
@@ -681,12 +689,26 @@ export default function AppSidebar() {
               </Disabled>
             </div>
           )}
+          <div data-testid="AppSidebar/scheduled-tasks">
+            <SidebarTab
+              icon={SvgClock}
+              {...navigation.linkTo(SCHEDULED_TASKS_PATH, { scroll: false })}
+              selected={activeSidebarTab.isScheduledTasks()}
+              rightChildren={
+                unviewedChatTaskCount > 0 ? (
+                  <UnseenMarker label={tScheduledTasks("unviewedResults")} />
+                ) : undefined
+              }
+            >
+              {t("appSidebar.scheduledTasks.label")}
+            </SidebarTab>
+          </div>
           <SidebarTab
-            icon={SvgPlug}
-            {...navigation.linkTo("/app/plugins", { scroll: false })}
-            selected={activeSidebarTab.isPlugins()}
+            icon={SvgSliders}
+            {...navigation.linkTo(CUSTOMIZE_PATH, { scroll: false })}
+            selected={activeSidebarTab.isCustomize()}
           >
-            {t("appSidebar.plugins.label")}
+            {t("appSidebar.customize.label")}
           </SidebarTab>
           {/* Folded, the body's sections collapse into the header, in the
               unfolded order: Agents, then Projects. */}

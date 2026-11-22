@@ -3,16 +3,72 @@
  */
 
 import {
+  ApprovalDecisionResponse,
+  ChatSessionDetail,
+  ChatSessionStatus,
+  ChatStream,
+  MessageResponseIDInfo,
   Packet,
+  StreamCursor,
   CreateSessionRequest,
   CreateSessionResponse,
+  QuestionAnswersRequest,
+  QuestionAnswersResponse,
   SendMessageRequest,
 } from "@/types/api-types";
 import { TokenProvider } from "@/types/widget-types";
+import {
+  APPROVAL_PENDING_ERROR_CODE,
+  type ApprovalDecision,
+} from "@/services/approvals";
 
 const READINESS_REQUEST_TIMEOUT_MS = 10_000;
+export const READINESS_POLL_INTERVAL_MS = 1_000;
+
+/** Resolves after `ms`, or at once when `signal` aborts. */
+export function pause(ms: number, signal: AbortSignal): Promise<void> {
+  return new Promise<void>((resolve) => {
+    const onAbort = () => {
+      clearTimeout(timer);
+      resolve();
+    };
+    const timer = setTimeout(() => {
+      signal.removeEventListener("abort", onAbort);
+      resolve();
+    }, ms);
+    signal.addEventListener("abort", onAbort, { once: true });
+  });
+}
 
 class SessionUnavailableError extends Error {}
+
+/** How a resume attempt ended without throwing. */
+export type ResumeEnd = "noBuffer" | "ended";
+
+/** A rejected request, with the backend's `error_code` when it sent one. */
+export class ApiError extends Error {
+  constructor(
+    message: string,
+    readonly status: number,
+    readonly errorCode?: string
+  ) {
+    super(message);
+    this.name = "ApiError";
+  }
+}
+
+async function apiErrorFrom(response: Response): Promise<ApiError> {
+  let detail = response.statusText;
+  let errorCode: string | undefined;
+  try {
+    const body = await response.json();
+    if (body.detail) detail = body.detail;
+    if (typeof body.error_code === "string") errorCode = body.error_code;
+  } catch {
+    // Fall back to statusText if body isn't JSON
+  }
+  return new ApiError(detail, response.status, errorCode);
+}
 
 export class ApiService {
   private maxRetries = 3;
@@ -58,11 +114,17 @@ export class ApiService {
     return data.chat_session_id;
   }
 
+  /**
+   * Polls the session status until the session is idle, or until it runs a
+   * stream that `attachable` accepts. Returns the status read that ended the
+   * wait.
+   */
   async waitForSessionIdle(
     sessionId: string,
     signal: AbortSignal,
-    onUnconfirmed: () => void
-  ): Promise<void> {
+    onUnconfirmed: () => void,
+    attachable: (stream: ChatStream) => boolean = () => false
+  ): Promise<ChatSessionStatus> {
     let authenticationFailures = 0;
     while (!signal.aborted) {
       const controller = new AbortController();
@@ -105,16 +167,12 @@ export class ApiService {
           );
         }
         if (!response.ok) throw new Error("Cannot confirm chat readiness");
-        const status: unknown = await response.json();
+        const status = readChatSessionStatus(await response.json());
         if (
-          typeof status !== "object" ||
-          status === null ||
-          !("is_processing" in status) ||
-          typeof status.is_processing !== "boolean"
-        ) {
-          throw new Error("Invalid chat readiness response");
-        }
-        if (!status.is_processing) return;
+          !status.is_processing ||
+          (status.current_stream !== null && attachable(status.current_stream))
+        )
+          return status;
       } catch (error) {
         if (signal.aborted || error instanceof SessionUnavailableError)
           throw error;
@@ -124,17 +182,7 @@ export class ApiService {
         signal.removeEventListener("abort", onAbort);
       }
       if (signal.aborted) break;
-      await new Promise<void>((resolve) => {
-        const onAbort = () => {
-          clearTimeout(timer);
-          resolve();
-        };
-        const timer = setTimeout(() => {
-          signal.removeEventListener("abort", onAbort);
-          resolve();
-        }, 1000);
-        signal.addEventListener("abort", onAbort, { once: true });
-      });
+      await pause(READINESS_POLL_INTERVAL_MS, signal);
     }
     throw new DOMException("Request cancelled", "AbortError");
   }
@@ -149,7 +197,7 @@ export class ApiService {
     parentMessageId?: number | null;
     signal?: AbortSignal;
     includeCitations?: boolean;
-  }): AsyncGenerator<Packet, void, unknown> {
+  }): AsyncGenerator<Packet | StreamCursor, void, unknown> {
     const request: SendMessageRequest = {
       message: params.message,
       chat_session_id: params.chatSessionId,
@@ -169,16 +217,7 @@ export class ApiService {
     );
 
     if (!response.ok) {
-      let detail = response.statusText;
-      try {
-        const body = await response.json();
-        if (body.detail) {
-          detail = body.detail;
-        }
-      } catch {
-        // Fall back to statusText if body isn't JSON
-      }
-      throw new Error(detail);
+      throw await apiErrorFrom(response);
     }
 
     // Parse SSE stream
@@ -186,16 +225,187 @@ export class ApiService {
   }
 
   /**
-   * Parse Server-Sent Events stream
-   * Backend returns newline-delimited JSON packets
+   * Replay the session's running response from `from.cursor` of stream
+   * `from.streamId`, or from the start of the current stream, then follow it.
+   * Returns "noBuffer" without packets when the server has nothing to serve
+   * at that cursor (404), else "ended" when the body ends. Other failures
+   * throw.
+   */
+  async *resumeStream(
+    chatSessionId: string,
+    signal: AbortSignal,
+    from: { streamId: number; cursor: number } | null = null
+  ): AsyncGenerator<Packet | StreamCursor, ResumeEnd, unknown> {
+    const query = from
+      ? `stream_id=${from.streamId}&cursor=${from.cursor}`
+      : "cursor=0";
+    const response = await this.fetchWithRetry(
+      `${this.backendUrl}/chat/chat-session/${encodeURIComponent(chatSessionId)}/resume-stream?${query}`,
+      async () => ({ headers: await this.getHeaders(), signal })
+    );
+    if (response.status === 404) return "noBuffer";
+    if (!response.ok) throw await apiErrorFrom(response);
+    yield* this.parseSSEStream(response);
+    return "ended";
+  }
+
+  /** The session's saved messages, with a replay packet list for each response. */
+  async getChatSession(
+    chatSessionId: string,
+    signal: AbortSignal
+  ): Promise<ChatSessionDetail> {
+    const response = await this.fetchWithRetry(
+      `${this.backendUrl}/chat/get-chat-session/${encodeURIComponent(chatSessionId)}`,
+      async () => ({ headers: await this.getHeaders(), signal })
+    );
+    if (!response.ok) throw await apiErrorFrom(response);
+    const body: unknown = await response.json();
+    if (
+      typeof body !== "object" ||
+      body === null ||
+      !("messages" in body) ||
+      !Array.isArray(body.messages) ||
+      !("packets" in body) ||
+      !Array.isArray(body.packets)
+    ) {
+      throw new Error("Invalid chat session response");
+    }
+    return body as ChatSessionDetail;
+  }
+
+  /**
+   * Submit a decision on a tool call's approval request. Returns "closed"
+   * when the request no longer waits for a decision (404 or 409). A response
+   * names the stream that continues the turn when the decision resumed it.
+   */
+  async submitApprovalDecision(
+    approvalId: string,
+    decision: ApprovalDecision
+  ): Promise<ApprovalDecisionResponse | "closed"> {
+    // No retry: a repeated decision on a decided request only returns 409.
+    const response = await fetch(
+      `${this.backendUrl}/chat/approvals/${encodeURIComponent(approvalId)}/decision`,
+      {
+        method: "POST",
+        headers: await this.getHeaders(),
+        body: JSON.stringify({ decision }),
+      }
+    );
+    if (response.status === 404 || response.status === 409) return "closed";
+    if (!response.ok) throw await apiErrorFrom(response);
+    const body: unknown = await response.json();
+    if (
+      typeof body !== "object" ||
+      body === null ||
+      !("decision" in body) ||
+      (body.decision !== "APPROVED" && body.decision !== "REJECTED") ||
+      !("decided_via" in body) ||
+      typeof body.decided_via !== "string"
+    ) {
+      throw new Error("Invalid approval decision response");
+    }
+    const continuation =
+      "continuation" in body ? readChatStream(body.continuation) : null;
+    return {
+      decision: body.decision,
+      decided_via: body.decided_via,
+      continuation,
+    };
+  }
+
+  /**
+   * Answer a question request: its card's answers, or a message that the
+   * user typed, which answers every question of the response that waits.
+   * Returns "closed" when the request no longer waits for this answer (404,
+   * or a 409 conflict). Throws the 409 APPROVAL_PENDING of a message while an
+   * approval request of the response waits.
+   */
+  async submitQuestionAnswers(
+    questionRequestId: string,
+    body: QuestionAnswersRequest
+  ): Promise<QuestionAnswersResponse | "closed"> {
+    // No retry, as for a decision: a failed answer stays on the card or in
+    // the input for the user to submit again.
+    const response = await fetch(
+      `${this.backendUrl}/chat/question-requests/${encodeURIComponent(questionRequestId)}/answers`,
+      {
+        method: "POST",
+        headers: await this.getHeaders(),
+        body: JSON.stringify(body),
+      }
+    );
+    if (response.status === 404) return "closed";
+    if (!response.ok) {
+      const error = await apiErrorFrom(response);
+      if (
+        response.status === 409 &&
+        error.errorCode !== APPROVAL_PENDING_ERROR_CODE
+      )
+        return "closed";
+      throw error;
+    }
+    const result: unknown = await response.json();
+    if (typeof result !== "object" || result === null) {
+      throw new Error("Invalid question answers response");
+    }
+    return {
+      continuation:
+        "continuation" in result ? readChatStream(result.continuation) : null,
+    };
+  }
+
+  /** Record the visitor's rating of a response, or remove it when `isPositive` is null. */
+  async setMessageFeedback(
+    chatMessageId: number,
+    isPositive: boolean | null
+  ): Promise<void> {
+    const response =
+      isPositive === null
+        ? await fetch(
+            `${this.backendUrl}/chat/remove-chat-message-feedback?chat_message_id=${chatMessageId}`,
+            { method: "DELETE", headers: await this.getHeaders() }
+          )
+        : await fetch(`${this.backendUrl}/chat/create-chat-message-feedback`, {
+            method: "POST",
+            headers: await this.getHeaders(),
+            body: JSON.stringify({
+              chat_message_id: chatMessageId,
+              is_positive: isPositive,
+            }),
+          });
+    if (!response.ok) throw await apiErrorFrom(response);
+  }
+
+  /**
+   * Parse the NDJSON stream. A response-ID line comes without a packet
+   * wrapper; a resumed stream adds its cursor lines.
    */
   private async *parseSSEStream(
     response: Response
-  ): AsyncGenerator<Packet, void, unknown> {
+  ): AsyncGenerator<Packet | StreamCursor, void, unknown> {
     const reader = response.body?.getReader();
     if (!reader) {
       throw new Error("Response body is not readable");
     }
+
+    const parse = (line: string): Packet | StreamCursor => {
+      try {
+        const rawData = JSON.parse(line);
+        if (
+          "user_message_id" in rawData &&
+          "reserved_assistant_message_id" in rawData
+        ) {
+          return { obj: rawData as MessageResponseIDInfo };
+        }
+        if ("next_cursor" in rawData && !("obj" in rawData)) {
+          return rawData as StreamCursor;
+        }
+        return rawData as Packet;
+      } catch (e) {
+        // Fail fast on malformed packets - don't hide backend issues
+        throw new Error(`Failed to parse SSE packet: ${line}. Error: ${e}`);
+      }
+    };
 
     const decoder = new TextDecoder();
     let buffer = "";
@@ -210,58 +420,10 @@ export class ApiService {
         buffer = lines.pop() || ""; // Keep incomplete line in buffer
 
         for (const line of lines) {
-          if (line.trim()) {
-            try {
-              const rawData = JSON.parse(line);
-
-              // Check if this is a MessageResponseIDInfo (not wrapped in Packet)
-              if (
-                "user_message_id" in rawData &&
-                "reserved_assistant_message_id" in rawData
-              ) {
-                // Wrap it in a Packet structure for consistent handling
-                const packet: Packet = {
-                  obj: rawData as any,
-                };
-                yield packet;
-              } else {
-                // Regular packet with placement and obj
-                yield rawData as Packet;
-              }
-            } catch (e) {
-              // Fail fast on malformed packets - don't hide backend issues
-              throw new Error(
-                `Failed to parse SSE packet: ${line}. Error: ${e}`
-              );
-            }
-          }
+          if (line.trim()) yield parse(line);
         }
       }
-
-      // Process any remaining data in buffer
-      if (buffer.trim()) {
-        try {
-          const rawData = JSON.parse(buffer);
-
-          // Check if this is a MessageResponseIDInfo (not wrapped in Packet)
-          if (
-            "user_message_id" in rawData &&
-            "reserved_assistant_message_id" in rawData
-          ) {
-            const packet: Packet = {
-              obj: rawData as any,
-            };
-            yield packet;
-          } else {
-            yield rawData as Packet;
-          }
-        } catch (e) {
-          // Fail fast on malformed final buffer packets
-          throw new Error(
-            `Failed to parse final packet: ${buffer}. Error: ${e}`
-          );
-        }
-      }
+      if (buffer.trim()) yield parse(buffer);
     } finally {
       reader.releaseLock();
     }
@@ -322,4 +484,53 @@ export class ApiService {
       Authorization: `Bearer ${token}`,
     };
   }
+}
+
+/** A stream that the server names, or null for anything else. */
+export function readChatStream(value: unknown): ChatStream | null {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    !("stream_id" in value) ||
+    typeof value.stream_id !== "number"
+  )
+    return null;
+  const responseIds =
+    "response_ids" in value && Array.isArray(value.response_ids)
+      ? value.response_ids.filter(
+          (id: unknown): id is number => typeof id === "number"
+        )
+      : [];
+  return { stream_id: value.stream_id, response_ids: responseIds };
+}
+
+/** The status fields the widget reads; throws on a response without them. */
+export function readChatSessionStatus(value: unknown): ChatSessionStatus {
+  if (
+    typeof value !== "object" ||
+    value === null ||
+    !("is_processing" in value) ||
+    typeof value.is_processing !== "boolean"
+  ) {
+    throw new Error("Invalid chat readiness response");
+  }
+  return {
+    is_processing: value.is_processing,
+    has_active_subagents:
+      "has_active_subagents" in value && value.has_active_subagents === true,
+    has_startable_input:
+      "has_startable_input" in value && value.has_startable_input === true,
+    latest_response_id:
+      "latest_response_id" in value &&
+      typeof value.latest_response_id === "number"
+        ? value.latest_response_id
+        : null,
+    current_stream:
+      "current_stream" in value ? readChatStream(value.current_stream) : null,
+    approvals_version:
+      "approvals_version" in value &&
+      typeof value.approvals_version === "string"
+        ? value.approvals_version
+        : null,
+  };
 }

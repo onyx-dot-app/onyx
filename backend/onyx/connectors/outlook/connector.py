@@ -23,14 +23,13 @@ gains a message or a full re-index rebuilds it.
 
 from collections import deque
 from collections.abc import Callable, Container, Generator, Iterable, Iterator
-from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from io import BytesIO
 from typing import Any, TypeVar
 from zoneinfo import ZoneInfo, ZoneInfoNotFoundError
 
 from babel.core import get_global
-from pydantic import model_validator
+from pydantic import BaseModel, ConfigDict, model_validator
 
 from onyx.access.models import ExternalAccess
 from onyx.configs.app_configs import (
@@ -138,9 +137,8 @@ from onyx.connectors.outlook.threads import (
 from onyx.db.enums import HierarchyNodeType
 from onyx.file_processing.extract_file_text import (
     extract_file_text_locally,
-    get_file_ext,
 )
-from onyx.file_processing.file_types import OnyxFileExtensions
+from onyx.file_processing.file_types import is_indexable_file_type
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.logger import setup_logger
 from onyx.utils.process_isolation import run_in_isolated_process
@@ -412,10 +410,7 @@ def attachment_skip_reason(attachment: OutlookAttachment) -> str | None:
         return "not a file attachment"
     if attachment.is_inline:
         return "inline attachment"
-    if (
-        get_file_ext(attachment.name)
-        not in OnyxFileExtensions.TEXT_AND_DOCUMENT_EXTENSIONS
-    ):
+    if not is_indexable_file_type(attachment.name, None, allow_images=False):
         return "unsupported file type"
     if attachment.size > OUTLOOK_CONNECTOR_ATTACHMENT_SIZE_THRESHOLD:
         return "over the size threshold"
@@ -588,10 +583,11 @@ def build_event_document(
     )
 
 
-@dataclass
-class AttachmentBudget:
+class AttachmentBudget(BaseModel):
     """What one conversation may still spend on attachments: characters kept
     and download-plus-extraction attempts, successful or not."""
+
+    model_config = ConfigDict(strict=True)
 
     text: int = MAX_ATTACHMENT_TEXT_PER_CONVERSATION
     reads: int = MAX_ATTACHMENT_READS_PER_CONVERSATION

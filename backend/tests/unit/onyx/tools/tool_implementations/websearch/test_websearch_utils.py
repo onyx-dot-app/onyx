@@ -2,6 +2,7 @@ from pathlib import Path
 
 from onyx.tools.tool_implementations.open_url.models import WebContent
 from onyx.tools.tool_implementations.web_search.utils import (
+    extract_site_operators,
     inference_section_from_internet_page_scrape,
 )
 
@@ -207,3 +208,21 @@ def test_similar_snippet_in_middle_fuzzy_match() -> None:
         ]
         + TRUNCATED_CONTENT_SUFFIX
     )
+
+
+def test_extract_site_operators_splits_include_and_exclude() -> None:
+    result = extract_site_operators(
+        "release notes site:onyx.app/blog -site:spam.example.com SITE:docs.onyx.app"
+    )
+
+    assert result.query == "release notes"
+    assert result.include_domains == ["onyx.app/blog", "docs.onyx.app"]
+    assert result.exclude_domains == ["spam.example.com"]
+
+
+def test_extract_site_operators_uses_domain_when_query_is_empty() -> None:
+    result = extract_site_operators("site:onyx.app")
+
+    assert result.query == "onyx.app"
+    assert result.include_domains == ["onyx.app"]
+    assert result.exclude_domains == []

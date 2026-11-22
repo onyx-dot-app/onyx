@@ -49,6 +49,7 @@ kiwisolver==1.5.0
 lxml==6.1.1
     # via
     #   -r initial-requirements.in
+    #   power-pptx
     #   python-docx
     #   python-pptx
 matplotlib==3.11.0
@@ -61,7 +62,7 @@ numpy==2.4.6
     #   contourpy
     #   matplotlib
     #   pandas
-onyx-cli==1.3.3
+onyx-cli==1.5.0
     # via -r initial-requirements.in
 openpyxl==3.1.5
     # via -r initial-requirements.in
@@ -78,7 +79,10 @@ pillow==13.0.0
     #   -r initial-requirements.in
     #   matplotlib
     #   pdfplumber
+    #   power-pptx
     #   python-pptx
+power-pptx==2.15.0
+    # via -r initial-requirements.in
 pycparser==3.0
     # via cffi
 pydantic==2.13.4
@@ -114,6 +118,7 @@ traitlets==5.15.1
 typing-extensions==4.15.0
     # via
     #   fastapi
+    #   power-pptx
     #   pydantic
     #   pydantic-core
     #   python-docx
@@ -134,4 +139,6 @@ watchfiles==1.2.0
 websockets==16.0
     # via uvicorn
 xlsxwriter==3.2.9
-    # via python-pptx
+    # via
+    #   power-pptx
+    #   python-pptx

@@ -26,12 +26,13 @@ from onyx.db.enums import (
     ConnectorCredentialPairStatus,
     IndexingMode,
     IndexingStatus,
+    SyncType,
 )
 from onyx.db.index_attempt import (
     cancel_waiting_index_attempt__no_commit,
     create_index_attempt__no_commit,
 )
-from onyx.db.models import ConnectorCredentialPair, IndexAttempt
+from onyx.db.models import ConnectorCredentialPair, IndexAttempt, SyncRecord
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.variable_functionality import fetch_ee_implementation_or_noop
@@ -451,9 +452,9 @@ def has_scoped_backfill_outstanding(db_session: Session, cc_pair_id: int) -> boo
 def request_prune__no_commit(db_session: Session, cc_pair_id: int) -> None:
     """Asks the pruning beat to prune the pair once, even without prune_freq.
     The request waits while the pair is not ACTIVE or a prune runs, and is
-    cleared when a prune dispatched after it succeeds."""
+    cleared when a prune dispatched after it succeeds or three attempts end."""
     cc_pair = _lock_cc_pair_for_request(db_session, cc_pair_id)
-    cc_pair.prune_requested_at = func.now()
+    cc_pair.prune_requested_at = func.clock_timestamp()
 
 
 def request_prune_after_reindex__no_commit(
@@ -478,7 +479,7 @@ def promote_prune_after_reindex_request__no_commit(
     db_session.execute(
         update(ConnectorCredentialPair)
         .where(ConnectorCredentialPair.id == cc_pair_id)
-        .values(prune_requested_at=func.now())
+        .values(prune_requested_at=func.clock_timestamp())
     )
     db_session.execute(
         update(ConnectorCredentialPair)
@@ -562,8 +563,22 @@ def apply_access_change__no_commit(
     if data_access_group_ids and not has_data_access:
         raise ValueError(f"Access type {access_type} takes no data-access groups")
 
+    def set_groups() -> None:
+        fetch_ee_implementation_or_noop(
+            "onyx.db.cc_pair_data_access", "set_cc_pair_data_access_groups__no_commit"
+        )(
+            db_session,
+            cc_pair_id=cc_pair_id,
+            requested_group_ids=data_access_group_ids,
+            visible_group_ids=visible_group_ids if has_data_access else None,
+        )
+
     cc_pair = _lock_cc_pair_for_request(db_session, cc_pair_id)
     previous_access_type = cc_pair.access_type
+    # The group rows' foreign key carries the access type: leaving a group
+    # type removes them first, and entering one adds them after the type.
+    if not has_data_access:
+        set_groups()
     cc_pair.access_type = access_type
     if access_type.is_perm_synced() and not previous_access_type.is_perm_synced():
         cc_pair.last_time_perm_sync = None
@@ -577,15 +592,8 @@ def apply_access_change__no_commit(
     elif not access_type.is_perm_synced():
         cc_pair.perm_sync_pending_since = None
     db_session.flush()
-
-    fetch_ee_implementation_or_noop(
-        "onyx.db.cc_pair_data_access", "set_cc_pair_data_access_groups__no_commit"
-    )(
-        db_session,
-        cc_pair_id=cc_pair_id,
-        requested_group_ids=data_access_group_ids,
-        visible_group_ids=visible_group_ids if has_data_access else None,
-    )
+    if has_data_access:
+        set_groups()
     fetch_ee_implementation_or_noop(
         "onyx.db.cc_pair_data_access", "assert_restricted_cc_pairs_keep_a_group"
     )(db_session, [cc_pair_id])
@@ -593,3 +601,23 @@ def apply_access_change__no_commit(
     if access_type != previous_access_type:
         # Rewrites the chunks' public field and group: entries.
         mark_cc_pair_documents_for_sync__no_commit(db_session, [cc_pair_id])
+
+
+def clear_exhausted_prune_request__no_commit(
+    db_session: Session, cc_pair_id: int
+) -> bool:
+    """Limit an explicit prune request to three durable dispatch attempts."""
+    cc_pair = _lock_cc_pair_for_request(db_session, cc_pair_id)
+    if cc_pair.prune_requested_at is None:
+        return False
+    attempts = db_session.scalar(
+        select(func.count(SyncRecord.id)).where(
+            SyncRecord.entity_id == cc_pair_id,
+            SyncRecord.sync_type == SyncType.PRUNING,
+            SyncRecord.sync_start_time >= cc_pair.prune_requested_at,
+        )
+    )
+    if attempts is None or attempts < 3:
+        return False
+    cc_pair.prune_requested_at = None
+    return True

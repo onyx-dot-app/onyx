@@ -43,7 +43,7 @@ web bell and banner queue.
 Producers own the decision to notify. [[cc-pairs-and-creds]] and
 [[indexing-pipeline]] raise and clear connector alerts. [[agents-personas]]
 notifies on sharing. [[file-store-and-user-files]] notifies when files are
-ready. [[craft-scheduled-tasks]] notifies on task failure.
+ready. [[craft-scheduled-tasks]] notifies when a run fails or waits for approval.
 [[craft-external-apps]] notifies on a pending approval (`APPROVAL_REQUESTED`,
 from the egress proxy). [[billing]] owns the license state that the expiry
 warning reads. The admin banner editor sits on the theme page

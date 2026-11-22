@@ -390,32 +390,19 @@ const CommandMenuContent = React.forwardRef<
           "data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0"
         )}
       />
-      {/* Content - centered within the main container when available,
-          otherwise falls back to viewport centering */}
+      {/* Content - positioned and animated like every Opal modal: top-aligned,
+          centred on the main container when available, else the viewport */}
       <DialogPrimitive.Content
         ref={ref}
         onKeyDown={handleKeyDown}
         style={
-          hasContainerCenter
-            ? ({
-                left: centerX,
-                "--tw-enter-translate-x": "-50%",
-                "--tw-exit-translate-x": "-50%",
-              } as React.CSSProperties)
-            : undefined
+          hasContainerCenter && centerX !== null ? { left: centerX } : undefined
         }
+        {...(!hasContainerCenter && { "data-viewport-centered": "" })}
         className={cn(
-          "fixed top-[72px]",
-          hasContainerCenter ? "-translate-x-1/2" : "inset-x-0 mx-auto",
-          "z-modal",
+          "opal-modal-positioner",
           "bg-background-tint-00 border rounded-16 shadow-2xl outline-hidden",
           "flex flex-col overflow-hidden",
-          "max-w-[calc(100dvw-2rem)] max-h-[calc(100dvh-144px)]",
-          "data-[state=open]:animate-in data-[state=closed]:animate-out",
-          "data-[state=open]:fade-in-0 data-[state=closed]:fade-out-0",
-          "data-[state=open]:slide-in-from-bottom data-[state=open]:slide-in-from-left-0",
-          "data-[state=closed]:slide-out-to-bottom data-[state=closed]:slide-out-to-left-0",
-          "duration-200",
           "w-128",
           "min-h-60"
         )}

@@ -33,15 +33,19 @@ from onyx.configs.app_configs import (
     OPENSEARCH_VERIFY_CERTS,
     PIT_KEEP_ALIVE,
 )
+from onyx.configs.constants import OpenSearchAuthMethod
 from onyx.document_index.interfaces import TenantState
 from onyx.document_index.opensearch.constants import (
     DEFAULT_MAX_CHUNK_SIZE,
     RESOURCE_CHECK_TIMEOUT_SECONDS,
-    OpenSearchAuthMethod,
     OpenSearchSearchType,
 )
 from onyx.document_index.opensearch.models import (
+    NodeMemoryStats,
+    NodesMemoryStats,
     NodesResourceStats,
+    NodeVectorBytes,
+    VectorNodeStats,
     VectorResourceStats,
 )
 from onyx.document_index.opensearch.schema import (
@@ -76,6 +80,25 @@ _RETRYABLE_UPDATE_ERROR_TYPES = (
 
 
 logger = setup_logger(__name__)
+
+# Lucene vector files: float32 vectors, HNSW graph, scalar and binary quantized vectors.
+_VECTOR_FILE_EXTENSIONS: tuple[str, ...] = ("vec", "vex", "veq", "veb")
+
+
+def _file_size(sizes: dict[str, Any], ext: str) -> int:
+    return int(sizes.get(ext, {}).get("size_in_bytes", 0))
+
+
+def vector_usage_percent(vector_bytes: int, file_cache_bytes: int) -> float:
+    """Vector bytes as a share of the file cache.
+
+    A node with vectors but no file cache (memory at or below the heap) reads
+    every vector from disk, so it counts as 100%.
+    """
+    if file_cache_bytes <= 0:
+        return 100.0 if vector_bytes > 0 else 0.0
+    return 100 * vector_bytes / file_cache_bytes
+
 
 # One update-by-query can touch thousands of chunks, so it gets longer than the
 # client's default request timeout.
@@ -123,6 +146,17 @@ class SearchHit(BaseModel, Generic[SchemaDocumentModel]):
     # Score explanation from OpenSearch when "explain": true is set in the
     # query. Contains detailed breakdown of how the score was calculated.
     explanation: dict[str, Any] | None = None
+
+
+class ChunkKeySearchHit(BaseModel):
+    """A search hit identified by its doc values instead of its stored source."""
+
+    model_config = {"frozen": True}
+
+    document_id: str
+    chunk_index: int
+    max_chunk_size: int
+    score: float | None = None
 
 
 class IndexInfo(BaseModel):
@@ -187,6 +221,9 @@ _SEARCH_CONTEXT_MISSING_ERROR_TYPE = "search_context_missing"
 # Rejection by an index/cluster block, e.g. the read_only_allow_delete block
 # OpenSearch applies when disk usage crosses the flood-stage watermark.
 _CLUSTER_BLOCK_ERROR_TYPE = "cluster_block_exception"
+# Rejections of a query whose analyzed text exceeds indices.query.bool.max_clause_count.
+# The type appears only in a nested cause, under HTTP 400 or 500.
+_CLAUSE_LIMIT_ERROR_TYPES = frozenset({"too_many_clauses", "too_many_nested_clauses"})
 # Chunks per PIT-scan page. A port doc-batch is small (INDEX_BATCH_SIZE docs), so
 # one page covers a batch; paging still protects against a pathological doc.
 _PIT_SCAN_PAGE_SIZE = 1000
@@ -195,12 +232,39 @@ _PIT_SCAN_PAGE_SIZE = 1000
 _PIT_SCAN_PAGE_SIZE_WITH_VECTORS = 200
 # Ids per mget request, so the body stays under the cluster's http.max_content_length.
 _MGET_BATCH_SIZE = 500
+# Primary shard count per index name. The count is fixed when an index is
+# created, so it is read once per process. Creating or deleting the index in
+# this process clears its entry; another process that recreates the index under
+# the same name leaves a stale entry here until restart, which only chooses the
+# slower hybrid search path, never wrong results.
+_NUMBER_OF_SHARDS_BY_INDEX: dict[str, int] = {}
 
 
 def is_cluster_block_error(e: Exception) -> bool:
     """True when a request was rejected by an index/cluster block rather than a
     problem with the request itself."""
     return isinstance(e, TransportError) and _CLUSTER_BLOCK_ERROR_TYPE in str(e.error)
+
+
+def _contains_error_type(body: object, error_types: frozenset[str]) -> bool:
+    if isinstance(body, dict):
+        return body.get("type") in error_types or any(
+            _contains_error_type(value, error_types) for value in body.values()
+        )
+    if isinstance(body, list):
+        return any(_contains_error_type(item, error_types) for item in body)
+    return False
+
+
+def is_clause_limit_error(e: BaseException) -> bool:
+    """True when a search was rejected because its query has more clauses than
+    the cluster allows."""
+    # TransportError.info reads args[2], which a hand-built error may lack.
+    return (
+        isinstance(e, TransportError)
+        and len(e.args) > 2
+        and _contains_error_type(e.info, _CLAUSE_LIMIT_ERROR_TYPES)
+    )
 
 
 class OpenSearchIndexWriteBlockedError(Exception):
@@ -409,15 +473,161 @@ class OpenSearchClient(AbstractContextManager):
         return NodesResourceStats.model_validate(response)
 
     def get_vector_resource_stats(self) -> VectorResourceStats:
-        response: dict[str, Any] = self._client.transport.perform_request(
+        """Estimates each data node's vector memory use against its file cache.
+
+        Lucene reads vectors through the OS file cache, so k-NN native graph
+        memory stays 0 for Onyx indexes and cannot show the pressure.
+        """
+        memory: NodesMemoryStats = self.get_node_memory_stats()
+        vectors: dict[str, NodeVectorBytes] = self.get_node_vector_bytes()
+        breaker: dict[str, Any] = self._client.transport.perform_request(
             "GET",
-            "/_plugins/_knn/stats/circuit_breaker_triggered,graph_memory_usage_percentage",
+            "/_plugins/_knn/stats/circuit_breaker_triggered",
             params={
                 "request_timeout": RESOURCE_CHECK_TIMEOUT_SECONDS,
                 "timeout": f"{RESOURCE_CHECK_TIMEOUT_SECONDS}s",
             },
         )
-        return VectorResourceStats.model_validate(response)
+        return VectorResourceStats.model_validate(
+            {
+                # A node that did not answer fails the check, as k-NN stats did.
+                "_nodes": {"failed": memory.failed},
+                "circuit_breaker_triggered": bool(
+                    breaker.get("circuit_breaker_triggered")
+                ),
+                "nodes": {
+                    node_id: VectorNodeStats(
+                        usage_percent=vector_usage_percent(
+                            vectors.get(node_id, NodeVectorBytes()).vector_bytes,
+                            node.file_cache_bytes,
+                        )
+                    )
+                    for node_id, node in memory.nodes.items()
+                },
+            }
+        )
+
+    def get_node_memory_stats(self) -> NodesMemoryStats:
+        """Returns memory, disk, CPU and search queue stats per data node."""
+        response: dict[str, Any] = self._client.nodes.stats(
+            node_id="data:true",
+            metric="os,jvm,fs,thread_pool",
+            params={
+                "request_timeout": RESOURCE_CHECK_TIMEOUT_SECONDS,
+                "timeout": f"{RESOURCE_CHECK_TIMEOUT_SECONDS}s",
+                "filter_path": ",".join(
+                    ["_nodes.failed"]
+                    + [
+                        f"nodes.*.{path}"
+                        for path in (
+                            "name",
+                            "os.mem.total_in_bytes",
+                            "os.cgroup.memory.limit_in_bytes",
+                            "os.cpu.percent",
+                            "os.cpu.load_average.1m",
+                            "jvm.mem.heap_used_in_bytes",
+                            "jvm.mem.heap_max_in_bytes",
+                            "fs.total.total_in_bytes",
+                            "fs.total.available_in_bytes",
+                            "thread_pool.search.queue",
+                            "thread_pool.search.rejected",
+                        )
+                    ]
+                ),
+            },
+        )
+        stats: dict[str, NodeMemoryStats] = {}
+        for node_id, node in response.get("nodes", {}).items():
+            os_stats: dict[str, Any] = node.get("os", {})
+            memory_bytes: int = os_stats["mem"]["total_in_bytes"]
+            # The cgroup limit is a string: "max", or a huge number when unset.
+            limit: str = str(
+                os_stats.get("cgroup", {}).get("memory", {}).get("limit_in_bytes", "")
+            )
+            if limit.isdigit() and 0 < int(limit) < memory_bytes:
+                memory_bytes = int(limit)
+            cpu: dict[str, Any] = os_stats.get("cpu", {})
+            search_pool: dict[str, Any] = node.get("thread_pool", {}).get("search", {})
+            stats[node_id] = NodeMemoryStats(
+                name=node.get("name", node_id),
+                memory_bytes=memory_bytes,
+                heap_max_bytes=node["jvm"]["mem"]["heap_max_in_bytes"],
+                heap_used_bytes=node["jvm"]["mem"]["heap_used_in_bytes"],
+                disk_total_bytes=node["fs"]["total"]["total_in_bytes"],
+                disk_available_bytes=node["fs"]["total"]["available_in_bytes"],
+                cpu_percent=cpu.get("percent", 0),
+                load_average_1m=cpu.get("load_average", {}).get("1m"),
+                search_queue=search_pool.get("queue", 0),
+                search_rejected=search_pool.get("rejected", 0),
+            )
+        return NodesMemoryStats(
+            failed=response.get("_nodes", {}).get("failed", 0), nodes=stats
+        )
+
+    def get_node_vector_bytes(
+        self, index_name: str | None = None
+    ) -> dict[str, NodeVectorBytes]:
+        """Sums the vector files that search reads per node, over all shards.
+
+        index_name limits the sum to one index; None counts every index.
+
+        A shard copy needs its HNSW graph (vex) and the vectors the graph walk
+        compares: the quantized copy (veq, veb) when the field is quantized,
+        else the float32 vectors (vec). A quantized field keeps its float32
+        copy on disk for rescoring a few results, which reads little of it.
+        """
+        response: dict[str, Any] = self._client.indices.stats(
+            index=index_name,
+            metric="segments",
+            params={
+                "level": "shards",
+                "include_segment_file_sizes": "true",
+                "request_timeout": RESOURCE_CHECK_TIMEOUT_SECONDS,
+                "filter_path": ",".join(
+                    ["_shards.failed", "indices.*.shards.*.routing.node"]
+                    + [
+                        f"indices.*.shards.*.segments.file_sizes.{ext}.size_in_bytes"
+                        for ext in _VECTOR_FILE_EXTENSIONS
+                    ]
+                ),
+            },
+        )
+        failed: int = response.get("_shards", {}).get("failed", 0)
+        if failed:
+            # Partial totals would understate the vectors; fail like a timeout.
+            raise RuntimeError(f"{failed} shard copies did not return their stats")
+        per_node: dict[str, NodeVectorBytes] = {}
+        for index in response.get("indices", {}).values():
+            for copies in index.get("shards", {}).values():
+                for copy in copies:
+                    node_id: str | None = copy.get("routing", {}).get("node")
+                    if node_id is None:
+                        continue
+                    sizes: dict[str, Any] = copy.get("segments", {}).get(
+                        "file_sizes", {}
+                    )
+                    quantized: int = _file_size(sizes, "veq") + _file_size(sizes, "veb")
+                    node: NodeVectorBytes = per_node.setdefault(
+                        node_id, NodeVectorBytes()
+                    )
+                    node.vector_bytes += _file_size(sizes, "vex") + (
+                        quantized or _file_size(sizes, "vec")
+                    )
+                    node.shard_count += 1
+        return per_node
+
+    def get_index_summaries(self, index_names: list[str]) -> dict[str, dict[str, str]]:
+        """Returns the _cat/indices row of each named index that exists."""
+        rows: list[dict[str, str]] = self._client.cat.indices(
+            format="json",
+            params={
+                "bytes": "b",
+                "h": "index,health,pri,rep,docs.count,docs.deleted,store.size",
+                "request_timeout": RESOURCE_CHECK_TIMEOUT_SECONDS,
+            },
+        )
+        wanted: set[str] = set(index_names)
+        return {row["index"]: row for row in rows if row.get("index") in wanted}
 
     def __exit__(self, *_: Any) -> None:
         self.close()
@@ -746,6 +956,7 @@ class OpenSearchIndexClient(OpenSearchClient):
             "settings": settings,
         }
         logger.debug("Creating index %s.", self._index_name)
+        _NUMBER_OF_SHARDS_BY_INDEX.pop(self._index_name, None)
         response = self._client.indices.create(index=self._index_name, body=body)
         if not response.get("acknowledged", False):
             raise RuntimeError(f"Failed to create index {self._index_name}.")
@@ -775,6 +986,7 @@ class OpenSearchIndexClient(OpenSearchClient):
             return False
 
         logger.info("Deleting index %s.", self._index_name)
+        _NUMBER_OF_SHARDS_BY_INDEX.pop(self._index_name, None)
         response = self._client.indices.delete(index=self._index_name)
         if not response.get("acknowledged", False):
             raise RuntimeError(f"Failed to delete index {self._index_name}.")
@@ -892,9 +1104,10 @@ class OpenSearchIndexClient(OpenSearchClient):
         expected_mapping_properties: dict[str, Any] = expected_mappings.get(
             "properties", {}
         )
-        assert expected_mapping_properties, (
-            "Bug: No properties were found in the provided expected mappings."
-        )
+        if not expected_mapping_properties:
+            raise RuntimeError(
+                "Bug: No properties were found in the provided expected mappings."
+            )
 
         for property in expected_mapping_properties:
             if property not in index_mapping_properties:
@@ -908,9 +1121,10 @@ class OpenSearchIndexClient(OpenSearchClient):
             expected_property_type = expected_mapping_properties[property].get(
                 "type", ""
             )
-            assert expected_property_type, (
-                f'Bug: The field "{property}" in the supplied expected schema mappings has no type.'
-            )
+            if not expected_property_type:
+                raise RuntimeError(
+                    f'Bug: The field "{property}" in the supplied expected schema mappings has no type.'
+                )
 
             index_property_type = index_mapping_properties[property].get("type", "")
             if expected_property_type != index_property_type:
@@ -1000,6 +1214,21 @@ class OpenSearchIndexClient(OpenSearchClient):
         return response[self._index_name]["settings"], response[self._index_name].get(
             "defaults", None
         )
+
+    def get_number_of_shards(self) -> int:
+        """Returns the number of primary shards of the index.
+
+        Reads the index settings once per process for each index name.
+
+        Raises:
+            Exception: There was an error getting the settings of the index.
+        """
+        number_of_shards = _NUMBER_OF_SHARDS_BY_INDEX.get(self._index_name)
+        if number_of_shards is None:
+            settings, _ = self.get_settings()
+            number_of_shards = int(settings["index"]["number_of_shards"])
+            _NUMBER_OF_SHARDS_BY_INDEX[self._index_name] = number_of_shards
+        return number_of_shards
 
     @log_function_time(debug_only=True)
     def open_index(self, timeout: float = DEFAULT_INDEX_SETTINGS_TIMEOUT_S) -> None:
@@ -1756,6 +1985,7 @@ class OpenSearchIndexClient(OpenSearchClient):
         body: dict[str, Any],
         search_pipeline_id: str | None,
         search_type: OpenSearchSearchType = OpenSearchSearchType.UNKNOWN,
+        preference: str | None = None,
     ) -> list[SearchHit[DocumentChunkWithoutVectors]]:
         """Searches the index.
 
@@ -1775,6 +2005,8 @@ class OpenSearchIndexClient(OpenSearchClient):
                 the default search pipeline will be used.
             search_type: Label for Prometheus metrics. Does not affect search
                 behavior.
+            preference: Searches with the same preference string read the
+                same shard copies. If None, OpenSearch chooses the copies.
 
         Raises:
             Exception: There was an error searching the index.
@@ -1787,8 +2019,116 @@ class OpenSearchIndexClient(OpenSearchClient):
             self._index_name,
             search_pipeline_id,
         )
+        hits = self._run_search(
+            body=body,
+            search_pipeline_id=search_pipeline_id,
+            search_type=search_type,
+            preference=preference,
+        )
+
+        search_hits: list[SearchHit[DocumentChunkWithoutVectors]] = []
+        for hit in hits:
+            document_chunk_source: dict[str, Any] | None = hit.get("_source")
+            if not document_chunk_source:
+                raise RuntimeError(
+                    f'Document chunk with ID "{hit.get("_id", "")}" has no data.'
+                )
+            document_chunk_score = hit.get("_score", None)
+            match_highlights: dict[str, list[str]] = hit.get("highlight", {})
+            explanation: dict[str, Any] | None = hit.get("_explanation", None)
+            search_hit = SearchHit[DocumentChunkWithoutVectors](
+                document_chunk=DocumentChunkWithoutVectors.model_validate(
+                    document_chunk_source
+                ),
+                score=document_chunk_score,
+                match_highlights=match_highlights,
+                explanation=explanation,
+            )
+            search_hits.append(search_hit)
+        logger.debug(
+            "Successfully searched index %s and got %s hits.",
+            self._index_name,
+            len(search_hits),
+        )
+        return search_hits
+
+    def search_for_chunk_keys(
+        self,
+        body: dict[str, Any],
+        search_pipeline_id: str | None,
+        search_type: OpenSearchSearchType = OpenSearchSearchType.UNKNOWN,
+        preference: str | None = None,
+    ) -> list[ChunkKeySearchHit]:
+        """Searches the index and returns only the key fields of each hit.
+
+        The body must request the key fields as doc values and no stored
+        fields (see DocumentQuery.get_hybrid_search_query with
+        chunk_keys_only=True), so the search reads no chunk source.
+
+        Args:
+            body: The body of the search request.
+            search_pipeline_id: The ID of the search pipeline to use. If None,
+                the default search pipeline will be used.
+            search_type: Label for Prometheus metrics. Does not affect search
+                behavior.
+            preference: Searches with the same preference string read the
+                same shard copies. If None, OpenSearch chooses the copies.
+
+        Raises:
+            Exception: There was an error searching the index, or a hit is
+                missing a key field.
+
+        Returns:
+            The key fields and score of each hit, in result order.
+        """
+        if body.get("stored_fields") != "_none_":
+            logger.warning(
+                'The body of the search request for chunk keys is missing the key, value pair of "stored_fields": '
+                '"_none_". This query will therefore read the source of every hit.'
+            )
+        hits = self._run_search(
+            body=body,
+            search_pipeline_id=search_pipeline_id,
+            search_type=search_type,
+            preference=preference,
+        )
+        chunk_key_hits: list[ChunkKeySearchHit] = []
+        for hit in hits:
+            fields: dict[str, list[Any]] = hit.get("fields", {})
+            try:
+                chunk_key_hits.append(
+                    ChunkKeySearchHit(
+                        document_id=fields[DOCUMENT_ID_FIELD_NAME][0],
+                        chunk_index=fields[CHUNK_INDEX_FIELD_NAME][0],
+                        max_chunk_size=fields[MAX_CHUNK_SIZE_FIELD_NAME][0],
+                        score=hit.get("_score"),
+                    )
+                )
+            except (KeyError, IndexError) as e:
+                raise RuntimeError(
+                    f"Search hit is missing a chunk key field: {fields}."
+                ) from e
+        return chunk_key_hits
+
+    def _run_search(
+        self,
+        body: dict[str, Any],
+        search_pipeline_id: str | None,
+        search_type: OpenSearchSearchType,
+        preference: str | None = None,
+    ) -> list[Any]:
+        """Runs a search, records its metrics, and returns the raw hits.
+
+        Searches with the same preference string read the same shard copies.
+
+        Raises:
+            Exception: There was an error searching the index, or the search
+                timed out.
+        """
         result: dict[str, Any]
         params = {"phase_took": "true"}
+        if preference is not None:
+            params["preference"] = preference
         ctx = self._get_emit_metrics_context_manager(search_type)
         with ctx:
             try:
@@ -1821,34 +2161,14 @@ class OpenSearchIndexClient(OpenSearchClient):
                     observe_opensearch_search(search_type, client_duration_s, time_took)
             except Exception as e:
                 if self._emit_metrics:
-                    record_opensearch_search_error(search_type, e)
+                    record_opensearch_search_error(
+                        search_type,
+                        "too_many_clauses"
+                        if is_clause_limit_error(e)
+                        else type(e).__name__,
+                    )
                 raise
-
-        search_hits: list[SearchHit[DocumentChunkWithoutVectors]] = []
-        for hit in hits:
-            document_chunk_source: dict[str, Any] | None = hit.get("_source")
-            if not document_chunk_source:
-                raise RuntimeError(
-                    f'Document chunk with ID "{hit.get("_id", "")}" has no data.'
-                )
-            document_chunk_score = hit.get("_score", None)
-            match_highlights: dict[str, list[str]] = hit.get("highlight", {})
-            explanation: dict[str, Any] | None = hit.get("_explanation", None)
-            search_hit = SearchHit[DocumentChunkWithoutVectors](
-                document_chunk=DocumentChunkWithoutVectors.model_validate(
-                    document_chunk_source
-                ),
-                score=document_chunk_score,
-                match_highlights=match_highlights,
-                explanation=explanation,
-            )
-            search_hits.append(search_hit)
-        logger.debug(
-            "Successfully searched index %s and got %s hits.",
-            self._index_name,
-            len(search_hits),
-        )
-        return search_hits
+        return hits
 
     @log_function_time(debug_only=True)
     def search_for_document_ids(
@@ -1920,7 +2240,12 @@ class OpenSearchIndexClient(OpenSearchClient):
                     observe_opensearch_search(search_type, client_duration_s, time_took)
             except Exception as e:
                 if self._emit_metrics:
-                    record_opensearch_search_error(search_type, e)
+                    record_opensearch_search_error(
+                        search_type,
+                        "too_many_clauses"
+                        if is_clause_limit_error(e)
+                        else type(e).__name__,
+                    )
                 raise
 
         # TODO(andrei): Implement scroll/point in time for results so that we
@@ -2245,6 +2570,20 @@ class OpenSearchIndexClient(OpenSearchClient):
                 doc["_id"] for doc in response.get("docs", []) if doc.get("found")
             )
         return found
+
+    def analyze(self, text: str, field: str) -> list[str]:
+        """Runs a field's search analyzer on text.
+
+        Raises:
+            Exception: There was an error analyzing the text.
+
+        Returns:
+            The terms the analyzer produces, in order.
+        """
+        result: dict[str, Any] = self._client.indices.analyze(
+            index=self._index_name, body={"field": field, "text": text}
+        )
+        return [token["token"] for token in result["tokens"]]
 
     @log_function_time(debug_only=True)
     def refresh_index(self) -> None:

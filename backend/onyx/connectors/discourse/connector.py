@@ -78,7 +78,8 @@ class DiscourseConnector(PollConnector):
     def _get_categories_map(
         self,
     ) -> None:
-        assert self.permissions is not None
+        if self.permissions is None:
+            raise ConnectorMissingCredentialError("Discourse")
         categories_endpoint = urllib.parse.urljoin(self.base_url, "categories.json")
         response = self._make_request(
             endpoint=categories_endpoint,
@@ -93,7 +94,8 @@ class DiscourseConnector(PollConnector):
         self.active_categories = set(self.category_id_map)
 
     def _get_doc_from_topic(self, topic_id: int) -> Document:
-        assert self.permissions is not None
+        if self.permissions is None:
+            raise ConnectorMissingCredentialError("Discourse")
         topic_endpoint = urllib.parse.urljoin(self.base_url, f"t/{topic_id}.json")
         response = self._make_request(endpoint=topic_endpoint)
         topic = response.json()
@@ -149,7 +151,8 @@ class DiscourseConnector(PollConnector):
     def _get_latest_topics(
         self, start: datetime | None, end: datetime | None, page: int
     ) -> list[int]:
-        assert self.permissions is not None
+        if self.permissions is None:
+            raise ConnectorMissingCredentialError("Discourse")
         topic_ids = []
 
         if not self.categories:

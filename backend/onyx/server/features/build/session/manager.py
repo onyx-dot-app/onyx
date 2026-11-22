@@ -10,6 +10,7 @@ import io
 import json
 import mimetypes
 import threading
+import time
 import uuid
 import zipfile
 from collections.abc import Callable, Generator
@@ -25,27 +26,7 @@ from sqlalchemy.orm import Session as DBSession
 from onyx.cache.factory import get_cache_backend
 from onyx.configs.app_configs import WEB_DOMAIN
 from onyx.configs.constants import MessageType
-from onyx.db.enums import (
-    BuildSessionStatus,
-    LLMModelFlowType,
-    SandboxStatus,
-    SessionOrigin,
-)
-from onyx.db.external_app import get_connectable_apps_for_user
-from onyx.db.llm import (
-    fetch_all_accessible_llm_providers,
-    fetch_default_model,
-)
-from onyx.db.models import BuildMessage, BuildSession, Sandbox, User
-from onyx.db.users import fetch_user_by_id
-from onyx.error_handling.error_codes import OnyxErrorCode
-from onyx.error_handling.exceptions import OnyxError
-from onyx.file_store.file_store import get_default_file_store
-from onyx.server.features.build.configs import (
-    MAX_TOTAL_UPLOAD_SIZE_BYTES,
-    MAX_UPLOAD_FILES_PER_SESSION,
-)
-from onyx.server.features.build.db.build_session import (
+from onyx.db.build_session import (
     create_build_session__no_commit,
     create_message,
     delete_build_session__no_commit,
@@ -59,10 +40,30 @@ from onyx.server.features.build.db.build_session import (
     session_runtime_stale,
     update_session_activity,
 )
-from onyx.server.features.build.db.sandbox import (
+from onyx.db.enums import (
+    BuildSessionStatus,
+    LLMModelFlowType,
+    SandboxStatus,
+    SessionOrigin,
+)
+from onyx.db.llm import (
+    fetch_all_accessible_llm_providers,
+    fetch_default_model,
+)
+from onyx.db.models import BuildMessage, BuildSession, Sandbox, User
+from onyx.db.sandbox import (
     get_sandbox_by_user_id,
     get_snapshots_for_session,
     update_sandbox_heartbeat,
+)
+from onyx.db.users import fetch_user_by_id
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from onyx.file_store.file_store import get_default_file_store
+from onyx.integrations.craft import list_connectable_apps
+from onyx.server.features.build.configs import (
+    MAX_TOTAL_UPLOAD_SIZE_BYTES,
+    MAX_UPLOAD_FILES_PER_SESSION,
 )
 from onyx.server.features.build.interactive_turns.state import (
     acquire_active_turn_lock,
@@ -95,6 +96,7 @@ from onyx.server.features.build.sandbox.util.opencode_config import (
 )
 from onyx.server.features.build.session import streaming as _streaming
 from onyx.server.features.build.session.errors import (
+    OpencodeConfigReloadError,
     StaleProvisioningAttemptError,
     UploadLimitExceededError,
 )
@@ -131,10 +133,38 @@ from shared_configs.contextvars import get_current_tenant_id
 logger = setup_logger()
 
 _DISPOSE_PENDING_TTL_SECONDS = 24 * 3600
+# After this many failed dispose attempts, turns fail fast (no dispose call)
+# until the backoff passes, then one more attempt is made.
+_DISPOSE_MAX_FAILED_ATTEMPTS = 3
+_DISPOSE_FAILURE_BACKOFF_SECONDS = 300
+
+_DISPOSE_RELOAD_FAILED_MESSAGE = (
+    "The sandbox did not apply the current model and tool settings, so this "
+    "turn did not run."
+)
+_DISPOSE_BACKOFF_MESSAGE = (
+    "The sandbox did not apply the current model and tool settings after "
+    "several attempts, so this turn did not run. Wait a few minutes, then try "
+    "again."
+)
 
 
 def _dispose_pending_key(session_id: UUID) -> str:
     return f"craft:llm_config_dispose_pending:{session_id}"
+
+
+def _encode_dispose_pending(failed_attempts: int, last_failure_at: float) -> str:
+    return f"{failed_attempts}:{last_failure_at}"
+
+
+def _decode_dispose_pending(raw: bytes) -> tuple[int, float]:
+    """(failed attempts, epoch of last failure). Unknown values, such as the
+    legacy ``"1"``, decode as no failures."""
+    try:
+        attempts, last_failure_at = raw.decode().split(":", 1)
+        return int(attempts), float(last_failure_at)
+    except ValueError:
+        return 0, 0.0
 
 
 def mark_opencode_dispose_pending(session_id: UUID) -> None:
@@ -142,10 +172,13 @@ def mark_opencode_dispose_pending(session_id: UUID) -> None:
 
     ``reconcile_session_llm_config`` performs it on the next turn, and needs the
     marker because it short-circuits when the file already matches what it would
-    write — which it does after a workspace rebuild.
+    write — which it does after a workspace rebuild. The value also counts
+    failed dispose attempts; a new claim resets the count.
     """
     get_cache_backend().set(
-        _dispose_pending_key(session_id), "1", ex=_DISPOSE_PENDING_TTL_SECONDS
+        _dispose_pending_key(session_id),
+        _encode_dispose_pending(0, 0.0),
+        ex=_DISPOSE_PENDING_TTL_SECONDS,
     )
 
 
@@ -203,7 +236,7 @@ class SessionManager:
             fetch_default_model(self._db_session, LLMModelFlowType.CHAT),
         ]
         configured_defaults = [
-            GatewaySelection(model.llm_provider_id, model.name)
+            GatewaySelection(provider_id=model.llm_provider_id, model_name=model.name)
             for model in configured_default_models
             if model is not None
         ]
@@ -313,11 +346,14 @@ class SessionManager:
             # picked it up: a prior reconcile may have written the file and
             # then failed the dispose. Retry the dispose while the marker is
             # set, else the instance stays on the old config until pod death.
-            if (
-                session.opencode_session_id is not None
-                and cache.get(dispose_pending_key) is not None
-            ):
-                self._sandbox_manager.dispose_opencode_instance(sandbox.id, session.id)
+            pending = cache.get(dispose_pending_key)
+            if session.opencode_session_id is not None and pending is not None:
+                self._dispose_for_config(
+                    sandbox.id,
+                    session.id,
+                    pending=_decode_dispose_pending(pending),
+                    status="pending_dispose_retry",
+                )
             cache.delete(dispose_pending_key)
             if (
                 session.agent_provider != llm_config.provider
@@ -341,18 +377,79 @@ class SessionManager:
             agent_model=llm_config.model_name,
             nextjs_port=session.nextjs_port,
             connectable_apps_section=build_connectable_apps_list(
-                get_connectable_apps_for_user(self._db_session, user)
+                list_connectable_apps(self._db_session, user)
             ),
             user_name=user.personal_name,
             llm_config=llm_config,
             mcp_servers=mcp_servers,
         )
         if session.opencode_session_id is not None:
-            self._sandbox_manager.dispose_opencode_instance(sandbox.id, session.id)
+            self._dispose_for_config(
+                sandbox.id, session.id, pending=(0, 0.0), status="config_rewrite"
+            )
         cache.delete(dispose_pending_key)
         session.agent_provider = llm_config.provider
         session.agent_model = llm_config.model_name
         self._db_session.flush()
+
+    def _dispose_for_config(
+        self,
+        sandbox_id: UUID,
+        session_id: UUID,
+        *,
+        pending: tuple[int, float],
+        status: str,
+    ) -> None:
+        """Dispose the instance so it reloads its config. On failure, keep the
+        marker with a higher failure count and raise
+        ``OpencodeConfigReloadError``; the turn must not run on the old config.
+
+        Logs carry only a status category, the attempt number and the duration.
+        """
+        failed_attempts, last_failure_at = pending
+        if (
+            failed_attempts >= _DISPOSE_MAX_FAILED_ATTEMPTS
+            and time.time() - last_failure_at < _DISPOSE_FAILURE_BACKOFF_SECONDS
+        ):
+            logger.warning(
+                "[SESSION-LIFECYCLE] opencode config reload: status=dispose_backoff "
+                "failed_attempts=%d",
+                failed_attempts,
+            )
+            raise OpencodeConfigReloadError(_DISPOSE_BACKOFF_MESSAGE)
+
+        attempt = failed_attempts + 1
+        started = time.monotonic()
+        try:
+            self._sandbox_manager.dispose_opencode_instance(sandbox_id, session_id)
+        except httpx.HTTPError as exc:
+            duration_ms = int((time.monotonic() - started) * 1000)
+            logger.warning(
+                "[SESSION-LIFECYCLE] opencode config reload: status=%s attempt=%d "
+                "duration_ms=%d error=%s",
+                (
+                    "dispose_timeout"
+                    if isinstance(exc, httpx.TimeoutException)
+                    else "dispose_failed"
+                ),
+                attempt,
+                duration_ms,
+                type(exc).__name__,
+            )
+            get_cache_backend().set(
+                _dispose_pending_key(session_id),
+                _encode_dispose_pending(attempt, time.time()),
+                ex=_DISPOSE_PENDING_TTL_SECONDS,
+            )
+            raise OpencodeConfigReloadError(_DISPOSE_RELOAD_FAILED_MESSAGE) from exc
+
+        logger.info(
+            "[SESSION-LIFECYCLE] opencode config reload: status=%s attempt=%d "
+            "duration_ms=%d",
+            "dispose_recovered" if failed_attempts > 0 else status,
+            attempt,
+            int((time.monotonic() - started) * 1000),
+        )
 
     def reload_session_skills(self, session_id: UUID, user: User) -> bool:
         """Reload one runtime and report whether its skills remain stale."""
@@ -406,7 +503,7 @@ class SessionManager:
                         agent_model=session.agent_model,
                         nextjs_port=session.nextjs_port,
                         connectable_apps_section=build_connectable_apps_list(
-                            get_connectable_apps_for_user(self._db_session, user)
+                            list_connectable_apps(self._db_session, user)
                         ),
                         user_name=user.personal_name,
                         llm_config=llm_config,
@@ -441,8 +538,8 @@ class SessionManager:
     ) -> Sandbox:
         """Ensure the user has a RUNNING sandbox, creating/waking as needed.
 
-        Headless entry point for flows (e.g. scheduled tasks) that need the
-        sandbox up but aren't going through ``create_session``.
+        Headless entry point for flows that need the sandbox up but aren't
+        going through ``create_session``.
 
         Behavior by current sandbox status:
         - No sandbox row: creates one and provisions it.
@@ -508,8 +605,8 @@ class SessionManager:
             user_id: The user ID
             name: Optional session name
             origin: Provenance of the session. INTERACTIVE (default) sessions
-                appear in the Craft sidebar; SCHEDULED (scheduled-tasks
-                executor) and SLACK (Slack bot) sessions are excluded.
+                appear in the Craft sidebar; SCHEDULED and SLACK (Slack bot)
+                sessions are excluded.
 
         Raises:
             ValueError: If the user is missing
@@ -680,7 +777,7 @@ class SessionManager:
         session_id = session.id
         try:
             connectable_apps_section = build_connectable_apps_list(
-                get_connectable_apps_for_user(self._db_session, user)
+                list_connectable_apps(self._db_session, user)
             )
             mcp_servers = resolve_craft_mcp_servers(self._db_session, user)
             nextjs_port = session.nextjs_port
@@ -1078,10 +1175,11 @@ class SessionManager:
     ) -> Generator[str, None, None]:
         """Attach to an existing opencode session and stream translated ACP SSE.
 
-        Used by scheduled-run viewers: the Celery executor is already driving
-        the prompt, so this path only subscribes to the pod-wide event stream and
-        filters by the session's persisted opencode session id. It deliberately
-        does not persist events because the executor remains the durable writer.
+        Used by live-stream viewers: the interactive turn executor is already
+        driving the prompt, so this path only subscribes to the pod-wide event
+        stream and filters by the session's persisted opencode session id. It
+        deliberately does not persist events because the executor remains the
+        durable writer.
         """
         session = get_build_session(session_id, user_id, self._db_session)
         if session is None:
@@ -1118,14 +1216,12 @@ class SessionManager:
             for acp_event in raw_events:
                 yield _streaming.event_to_sse(acp_event)
 
-    # ----- Persistence helpers (shared with the headless scheduled-tasks executor) -----
+    # ----- Persistence helpers -----
     #
     # `yield_sandbox_events` is a thin wrapper around the sandbox manager that drives
     # the agent to completion and yields raw sandbox events. It does NO database
-    # writes, no SSE formatting — making it composable: the SSE endpoint wraps
-    # it with `persist_sandbox_event` + an SSE formatter, and the headless
-    # scheduled-tasks executor reuses `persist_sandbox_event` directly so the
-    # persisted transcript is identical to an interactive run.
+    # writes, no SSE formatting — making it composable: the interactive turn
+    # executor wraps it with `persist_sandbox_event`.
 
     def prompt_slot(
         self,
@@ -1236,6 +1332,9 @@ class SessionManager:
 
     def clear_turn_deadline(self, sandbox_id: UUID, session_id: UUID) -> None:
         self._sandbox_manager.clear_turn_deadline(sandbox_id, session_id)
+
+    def close_session_event_bus(self, sandbox_id: UUID, session_id: UUID) -> None:
+        self._sandbox_manager.close_session_event_bus(sandbox_id, session_id)
 
     # =========================================================================
     # Artifact Operations

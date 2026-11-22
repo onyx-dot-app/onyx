@@ -1,0 +1,1090 @@
+// Command host-agent runs the Firecracker VMs of one Craft node.
+//
+// It serves the HostAgent gRPC API on a Unix socket. VMs run in a host
+// systemd slice and keep running when the agent stops.
+package main
+
+import (
+	"context"
+	"crypto/ed25519"
+	"errors"
+	"flag"
+	"fmt"
+	"log/slog"
+	"math"
+	"net"
+	"os"
+	"os/exec"
+	"os/signal"
+	"path/filepath"
+	"regexp"
+	"strconv"
+	"strings"
+	"sync"
+	"sync/atomic"
+	"syscall"
+	"time"
+
+	"google.golang.org/grpc"
+
+	"github.com/onyx-dot-app/onyx/microvm/internal/agent"
+	"github.com/onyx-dot-app/onyx/microvm/internal/binaries"
+	"github.com/onyx-dot-app/onyx/microvm/internal/egressca"
+	"github.com/onyx-dot-app/onyx/microvm/internal/fcvm"
+	"github.com/onyx-dot-app/onyx/microvm/internal/hostinfo"
+	"github.com/onyx-dot-app/onyx/microvm/internal/imagegc"
+	"github.com/onyx-dot-app/onyx/microvm/internal/jailer"
+	"github.com/onyx-dot-app/onyx/microvm/internal/journal"
+	"github.com/onyx-dot-app/onyx/microvm/internal/loopstore"
+	"github.com/onyx-dot-app/onyx/microvm/internal/managed"
+	"github.com/onyx-dot-app/onyx/microvm/internal/metrics"
+	"github.com/onyx-dot-app/onyx/microvm/internal/nodereport"
+	"github.com/onyx-dot-app/onyx/microvm/internal/nodewatch"
+	"github.com/onyx-dot-app/onyx/microvm/internal/relay"
+	"github.com/onyx-dot-app/onyx/microvm/internal/scratch"
+	"github.com/onyx-dot-app/onyx/microvm/internal/server"
+	"github.com/onyx-dot-app/onyx/microvm/internal/template"
+	"github.com/onyx-dot-app/onyx/microvm/internal/tplbuild"
+	"github.com/onyx-dot-app/onyx/microvm/internal/transfer"
+)
+
+// version is set with -ldflags "-X main.version=...".
+var version = "dev"
+
+// The longest in-chroot socket name the agent uses (the egress relay socket).
+const longestSock = "/v.sock_65535"
+
+type flags struct {
+	obs            obsFlags
+	dataDir        string
+	artifactsDir   string
+	socket         string
+	slice          string
+	hostMountNS    bool
+	uidBase        uint
+	uidCount       uint
+	minFreeMemMiB  uint64
+	startingMemDiv uint
+	maxVMs         int
+	minFreeDiskGB  uint64
+	maxScratchGiB  uint
+	startTimeout   time.Duration
+	stopTimeout    time.Duration
+	logLevel       string
+	nodeID         string
+	egressProxy    string
+	egressTLSCA    string
+	egressTLSCert  string
+	egressTLSKey   string
+	egressTLSName  string
+	apiServerURL   string
+	stateReport    time.Duration
+	endedRetention time.Duration
+	relayIdle      time.Duration
+	relayMaxConns  int
+	relayMaxNode   int
+	listen         string
+	tlsCert        string
+	tlsKey         string
+	clientCA       string
+	dialPorts      string
+	clientSANs     string
+	dialMax        int
+	daemonPort     uint
+	rootfsDir      string
+	egressCA       string
+	egressCACM     string
+	tplVCPUs       uint
+	tplMemMiB      uint
+	tplScratchGiB  uint
+	tplKeep        int
+	tplTimeout     time.Duration
+	managedKeep    int
+	managedZipMiB  int64
+	managedMaxMiB  int64
+	managedFiles   int
+	managedBuilds  int
+	swapTimeout    time.Duration
+	memOverhead    uint
+	slicePercent   uint
+	watchDrain     bool
+	drainTaints    string
+	drainPoll      time.Duration
+	guardScale     bool
+	guardGrace     time.Duration
+	advertise      string
+	captureTTL     time.Duration
+	captureMax     int64
+	transferTO     time.Duration
+	transferHTTP   bool
+	transferPar    int
+	transferPart   int64
+	imageGCEvery   time.Duration
+	imageGCGrace   time.Duration
+	loopStore      string
+	loopStoreGiB   uint64
+}
+
+func main() {
+	var f flags
+	f.obs.register(flag.CommandLine)
+	flag.StringVar(&f.dataDir, "data-dir", "/var/lib/craft-fc", "data dir with reflink (XFS reflink=1), or see --loop-store; must be the same path on the host and in the container")
+	flag.StringVar(&f.loopStore, "loop-store", string(loopstore.Auto),
+		"auto: if the data dir has no reflink (ext4), mount a sparse XFS image <data-dir>/"+loopstore.ImageName+" on a loop device there; off: refuse to start (default $CRAFT_FC_LOOP_STORE or auto)")
+	flag.Uint64Var(&f.loopStoreGiB, "loop-store-gib", 0,
+		"size of a new loop store image; 0: the free space less 1/5 of the disk, 20 GiB to 4 TiB (default $CRAFT_FC_LOOP_STORE_GIB or 0); an existing image keeps its size")
+	flag.StringVar(&f.artifactsDir, "artifacts-dir", "/opt/craft-fc", "directory with the firecracker and jailer binaries")
+	flag.StringVar(&f.socket, "socket", "", "API Unix socket (default <data-dir>/run/host-agent.sock)")
+	flag.StringVar(&f.slice, "slice", "fcvms.slice", "host systemd slice for the VM scopes")
+	flag.BoolVar(&f.hostMountNS, "host-mount-ns", true, "start VMs in the host mount namespace (nsenter -t 1 -m); needs hostPID")
+	flag.UintVar(&f.uidBase, "uid-base", 1000000, "first jailer UID/GID")
+	flag.UintVar(&f.uidCount, "uid-count", 65536, "number of jailer UIDs")
+	flag.Uint64Var(&f.minFreeMemMiB, "min-free-mem-mib", 2048, "memory reserve: Create needs available memory >= charge of the starting VMs + charge of the new VM + this")
+	flag.UintVar(&f.startingMemDiv, "starting-mem-divisor", 2, "the admission charge of a starting VM is its guest memory divided by this (1 to 16; 1: full size)")
+	flag.Uint64Var(&f.minFreeDiskGB, "min-free-disk-gib", 10, "Create needs this much free space on the data disk")
+	flag.UintVar(&f.maxScratchGiB, "max-scratch-gib", 100, "largest scratch disk")
+	flag.IntVar(&f.maxVMs, "max-vms", 0, "most VMs on the node, template build VMs included; Create refuses over it with CAPACITY_VM_SLOTS (0 = no cap)")
+	flag.DurationVar(&f.startTimeout, "start-timeout", 30*time.Second, "limit for one VM start")
+	flag.DurationVar(&f.stopTimeout, "stop-timeout", 30*time.Second, "limit for one VM stop")
+	flag.StringVar(&f.logLevel, "firecracker-log-level", "Warning", "Firecracker log level")
+	flag.StringVar(&f.nodeID, "node-id", os.Getenv("NODE_NAME"), "node name in the signed egress identity (default $NODE_NAME)")
+	flag.StringVar(&f.egressProxy, "egress-proxy", "", "sandbox-proxy relay listener host:port; empty turns VM egress off")
+	flag.StringVar(&f.egressTLSCA, "egress-proxy-tls-ca", "", "CA file (PEM) of the sandbox-proxy certificate; with --egress-proxy-tls-cert and -key, every relay connection uses mTLS and fails if the handshake fails")
+	flag.StringVar(&f.egressTLSCert, "egress-proxy-tls-cert", "", "relay client certificate file (PEM) for the sandbox-proxy mTLS port")
+	flag.StringVar(&f.egressTLSKey, "egress-proxy-tls-key", "", "relay client key file (PEM) for the sandbox-proxy mTLS port")
+	flag.StringVar(&f.egressTLSName, "egress-proxy-tls-server-name", "", "DNS name to check in the sandbox-proxy certificate (default: the --egress-proxy host)")
+	flag.StringVar(&f.apiServerURL, "api-server-url", "", "api_server URL for the node key registration (needs $SANDBOX_NODE_REGISTRATION_SECRET)")
+	flag.DurationVar(&f.stateReport, "state-report-interval", nodereport.DefaultInterval, "how often the agent sends its VM state to --api-server-url, signed with the node key (0 = off)")
+	flag.DurationVar(&f.endedRetention, "ended-retention", agent.DefaultEndedRetention, "how long each state report lists a VM that exited or stopped (0 = not listed)")
+	flag.DurationVar(&f.relayIdle, "relay-idle-timeout", relay.DefaultIdleTimeout, "close a relay connection after this long without traffic (at least 180s)")
+	flag.IntVar(&f.relayMaxConns, "relay-max-conns", relay.DefaultMaxConns, "most open relay connections per VM; new ones over the cap are closed")
+	flag.IntVar(&f.relayMaxNode, "relay-max-conns-node", relay.DefaultMaxConnsNode, "most open relay connections of all VMs together (about 100 KiB of agent memory each); new ones over the cap are closed")
+	flag.StringVar(&f.listen, "listen", "", "mTLS TCP address for the api_server (for example :7443); empty: Unix socket only")
+	flag.StringVar(&f.tlsCert, "tls-cert", "", "server certificate file (PEM) for --listen")
+	flag.StringVar(&f.tlsKey, "tls-key", "", "server key file (PEM) for --listen")
+	flag.StringVar(&f.clientCA, "client-ca", "", "api_server client CA file (PEM); only clients it signed are accepted")
+	flag.StringVar(&f.dialPorts, "dial-ports", "3010", "guest vsock ports that Dial allows (never --daemon-port)")
+	flag.StringVar(&f.clientSANs, "client-allowed-sans", "", "comma-separated DNS or URI SANs; a client cert must have one (empty: any cert from --client-ca)")
+	flag.IntVar(&f.dialMax, "dial-max-streams", server.DefaultMaxDialsPerVM, "most open Dial streams per VM")
+	flag.UintVar(&f.daemonPort, "daemon-port", server.DefaultDaemonPort, "guest vsock port of the guest daemon (craft.sandboxd.v1.Sandboxd pass-through)")
+	flag.StringVar(&f.rootfsDir, "rootfs-dir", "", "directory with rootfs.ext4 and manifest.json (build-rootfs.sh output); the agent builds its template from it at start and on BuildTemplate. Empty: no build")
+	flag.StringVar(&f.egressCA, "egress-ca", "", "egress CA certificate file (PEM) of this deployment, read at each Create (cached 30s) and sent to the guest daemon, which installs it at Init. A root drive with another built-in CA is refused")
+	flag.StringVar(&f.egressCACM, "egress-ca-configmap", "", "like --egress-ca, but read from <namespace>/<name>[:<key>] (default key ca.crt) through the Kubernetes API; needs RBAC get on that ConfigMap")
+	flag.UintVar(&f.tplVCPUs, "template-vcpus", 2, "vCPUs of the built template (Create must ask for the same)")
+	flag.UintVar(&f.tplMemMiB, "template-mem-mib", 8192, "memory of the built template in MiB (Create must ask for the same)")
+	flag.UintVar(&f.tplScratchGiB, "template-scratch-gib", 1, "scratch disk of the built template in GiB (Create can grow it)")
+	flag.IntVar(&f.tplKeep, "template-keep", 2, "templates to keep; older ones are removed unless a VM uses them")
+	flag.DurationVar(&f.tplTimeout, "template-build-timeout", 5*time.Minute, "limit for one template build")
+	flag.IntVar(&f.managedKeep, "managed-keep", 3, "managed images to keep; older ones are removed unless a VM has them behind a slot")
+	flag.Int64Var(&f.managedZipMiB, "managed-max-zip-mib", managed.DefaultLimits.MaxZipBytes>>20, "largest managed bundle zip")
+	flag.Int64Var(&f.managedMaxMiB, "managed-max-mib", managed.DefaultLimits.MaxBytes>>20, "most file content of a managed bundle after unzip (the tmpfs stage size)")
+	flag.IntVar(&f.managedFiles, "managed-max-files", managed.DefaultLimits.MaxEntries, "most files and directories in a managed bundle")
+	flag.IntVar(&f.managedBuilds, "managed-max-builds", 1, "most managed bundle uploads that receive and build at once")
+	flag.DurationVar(&f.swapTimeout, "managed-swap-timeout", 30*time.Second, "limit for the managed drive swap of one VM")
+	flag.UintVar(&f.slicePercent, "slice-memory-percent", jailer.DefaultSliceMemoryPercent, "memory.max of --slice in percent of the node's MemTotal, set at start (10 to 100; 0: no limit)")
+	flag.UintVar(&f.memOverhead, "vm-mem-overhead-mib", jailer.DefaultMemOverheadMiB, "memory each VM scope gets on top of the guest memory (cgroup memory.max = mem_mib + this)")
+	flag.BoolVar(&f.watchDrain, "watch-node-drain", false, "read this pod's Node (--node-id) and drain while it has a --drain-taints taint; needs RBAC get on nodes")
+	flag.StringVar(&f.drainTaints, "drain-taints", strings.Join(nodewatch.DefaultTaintKeys, ","), "comma-separated taint keys that drain the node")
+	flag.DurationVar(&f.drainPoll, "drain-poll-interval", 10*time.Second, "how often --watch-node-drain reads the Node")
+	flag.BoolVar(&f.guardScale, "scale-down-guard", false, "annotate this pod's Node (--node-id) with "+nodewatch.ScaleDownDisabledKey+"=true while it runs VMs, so the cluster autoscaler does not remove it; needs RBAC get and patch on nodes")
+	flag.DurationVar(&f.guardGrace, "scale-down-guard-grace", 10*time.Minute, "how long the node has no VMs before --scale-down-guard removes the annotation")
+	flag.StringVar(&f.advertise, "advertise-address", "", "host:port the api_server dials for --listen, sent with the node key registration (default $POD_IP:<--listen port>)")
+	flag.DurationVar(&f.captureTTL, "capture-ttl", server.DefaultCaptureTTL, "delete a spooled session capture that is not uploaded after this long")
+	flag.Int64Var(&f.captureMax, "capture-max-bytes", server.DefaultCaptureMaxBytes, "largest session archive (stored bytes) that CaptureSession spools")
+	flag.DurationVar(&f.transferTO, "transfer-timeout", 10*time.Minute, "limit for one presigned upload, or for one whole restore download (all range parts)")
+	flag.BoolVar(&f.transferHTTP, "transfer-allow-http", false, "allow plain http presigned URLs and redirects, to any host (use it only for an object store inside the cluster, or a test store)")
+	flag.IntVar(&f.transferPar, "transfer-parallel", 8, "range GETs at once for a session restore download (1: one plain GET)")
+	flag.Int64Var(&f.transferPart, "transfer-part-bytes", 8<<20, "bytes per range GET; a restore holds up to --transfer-parallel of them in memory")
+	flag.DurationVar(&f.imageGCEvery, "image-gc-interval", 15*time.Minute, "how often the image GC removes managed images and old templates that no VM used for --image-gc-grace (0 = off)")
+	flag.DurationVar(&f.imageGCGrace, "image-gc-grace", 6*time.Hour, "how long a managed image, or a template that is not the current one, stays on the node after no VM uses it")
+	flag.Parse()
+
+	log := slog.New(slog.NewJSONHandler(os.Stderr, nil))
+	if err := loopStoreEnv(flag.CommandLine, os.LookupEnv); err != nil {
+		log.Error("host agent failed", "err", err)
+		os.Exit(1)
+	}
+	if err := run(f, log); err != nil {
+		log.Error("host agent failed", "err", err)
+		os.Exit(1)
+	}
+}
+
+func run(f flags, log *slog.Logger) error {
+	if f.socket == "" {
+		f.socket = filepath.Join(f.dataDir, "run", "host-agent.sock")
+	}
+	lay := jailer.Layout{ChrootBase: filepath.Join(f.dataDir, "jail")}
+	// Flag checks first: preflight can make and mount a loop store.
+	if err := checkRanges(f); err != nil {
+		return err
+	}
+	if err := checkListen(f); err != nil {
+		return err
+	}
+	ls, err := preflight(f, lay, log)
+	if err != nil {
+		return fmt.Errorf("preflight: %w", err)
+	}
+	// The host cgroup tree through PID 1's root (hostPID): the agent's own
+	// cgroup mount can show only the pod's subtree.
+	stats := hostinfo.Stats{DataDir: f.dataDir, SliceDir: hostinfo.SliceCgroupDir("/proc/1/root/sys/fs/cgroup", f.slice)}
+	if ls != nil {
+		stats.NodeDir = ls.NodeDir
+	}
+	bins, err := binaries.Install(f.artifactsDir, filepath.Join(f.dataDir, "bin"),
+		binaries.FirecrackerVersion, binaries.FirecrackerSHA256, binaries.JailerSHA256)
+	if err != nil {
+		return err
+	}
+	cmd := jailer.Command{
+		JailerBin: bins.Jailer, FirecrackerBin: bins.Firecracker, Layout: lay,
+		Slice: f.slice, HostMountNS: f.hostMountNS, LogLevel: f.logLevel,
+	}
+	if err := checkSystemdRun(cmd); err != nil {
+		return err
+	}
+	if stats.SliceLimitBytes, err = capVMSlice(cmd, f.slicePercent, stats, log); err != nil {
+		return err
+	}
+	if _, err := os.Stat(stats.SliceDir); stats.SliceLimitBytes > 0 && err != nil {
+		log.Warn("VM slice cgroup not found; admission uses the slice limit as its room until the first VM starts",
+			"dir", stats.SliceDir, "err", err)
+	}
+	kernel, err := binaries.InstallKernel(filepath.Join(f.artifactsDir, "vmlinux"), filepath.Join(f.dataDir, "kernel"))
+	if err != nil {
+		return err
+	}
+	caSrc, err := egressCASource(f)
+	if err != nil {
+		return err
+	}
+	caFP := ""
+	if caSrc != nil {
+		// sandbox-proxy writes the CA at its first start, so it can come later.
+		cctx, ccancel := context.WithTimeout(context.Background(), 10*time.Second)
+		ca, err := caSrc.CA(cctx)
+		ccancel()
+		if err != nil {
+			log.Warn("egress CA not readable yet; Create fails with EGRESS_CA_UNAVAILABLE until it is", "source", caSrc.String(), "err", err)
+		} else {
+			caFP = ca.Fingerprint
+			log.Info("egress CA", "source", caSrc.String(), "sha256", caFP, "subject", ca.Cert.Subject.String(), "not_after", ca.Cert.NotAfter)
+		}
+	}
+	if f.advertise, err = advertiseAddress(f, os.Getenv("POD_IP")); err != nil {
+		return err
+	}
+	uids, err := jailer.NewUIDPool(uint32(f.uidBase), uint32(f.uidCount))
+	if err != nil {
+		return err
+	}
+	cgroups, err := fcvm.DetectCgroupView("/proc")
+	if err != nil {
+		return err
+	}
+	if cgroups.Private {
+		log.Info("private cgroup namespace: VM scopes are checked in the host cgroup tree", "host_cgroup_fs", cgroups.HostCgroupFS)
+	}
+	launcher := &fcvm.Launcher{Cmd: cmd, Log: log, Cgroups: cgroups, MemOverheadMiB: uint32(f.memOverhead)}
+	store := &template.Store{Dir: filepath.Join(f.dataDir, "templates")}
+	versions := agent.Versions{
+		Firecracker: bins.Version, HostKernel: hostinfo.KernelRelease(), CPUModel: hostinfo.CPUModel(), Agent: version,
+		GuestKernel: kernel.Release, GuestKernelSHA256: kernel.SHA256, EgressCAFingerprint: caFP,
+		NoEgressCASource: caSrc == nil,
+	}
+	m := agent.NewManager(agent.Config{
+		MinFreeMemMiB:      f.minFreeMemMiB,
+		StartingMemDivisor: uint32(f.startingMemDiv),
+		MinFreeDiskBytes:   f.minFreeDiskGB * uint64(scratch.GiB),
+		MaxScratchGiB:      uint32(f.maxScratchGiB),
+		MaxVMs:             f.maxVMs,
+		StartTimeout:       f.startTimeout,
+		StopTimeout:        f.stopTimeout,
+		TombstoneTTL:       24 * time.Hour,
+		EndedRetention:     f.endedRetention,
+	},
+		store,
+		launcher,
+		stats,
+		uids,
+		versions,
+		log,
+	)
+	m.UseJournal(&journal.Journal{Dir: filepath.Join(f.dataDir, "journal")})
+	if err := m.UseDrainFile(filepath.Join(f.dataDir, "drain.json")); err != nil {
+		return err
+	}
+	if f.daemonPort == 0 || f.daemonPort > math.MaxUint32 {
+		return fmt.Errorf("--daemon-port %d is not a vsock port", f.daemonPort)
+	}
+	// Registered before Recover, so a VM that exits after adoption also
+	// drops its daemon connection before its socket and UID are freed.
+	pt := server.NewPassthrough(m, uint32(f.daemonPort), log)
+	ctx, stop := signal.NotifyContext(context.Background(), syscall.SIGINT, syscall.SIGTERM)
+	defer stop()
+	push, err := setupEgress(f, m, log)
+	if err != nil {
+		return err
+	}
+	obs, err := newObservability(f.obs, m, lay, stats, log)
+	if err != nil {
+		return err
+	}
+	push.start(ctx, obs.metrics)
+	if ls != nil {
+		go trimLoop(ctx, f.dataDir, log)
+	}
+	drainWatch, err := startDrainWatch(ctx, f, m, log)
+	if err != nil {
+		return err
+	}
+	guard, err := newScaleDownGuard(f, m, log)
+	if err != nil {
+		return err
+	}
+	t0 := time.Now()
+	rep, err := m.Recover(context.Background(), launcher)
+	if err != nil {
+		return err
+	}
+	log.Info("recovered VMs", "adopted", rep.Adopted, "unresponsive", rep.Unresponsive, "exited", rep.Exited,
+		"abandoned", rep.Abandoned, "unverified", rep.Unverified, "unreadable", rep.Unreadable,
+		"tombstones", rep.Tombstones, "orphans_killed", rep.Orphans, "leftovers_removed", rep.Leftovers,
+		"ms", time.Since(t0).Milliseconds())
+	if guard != nil {
+		// After Recover, so adopted VMs count from the first check.
+		go guard.Run(ctx)
+		log.Info("scale-down guard on", "node", f.nodeID, "annotation", nodewatch.ScaleDownDisabledKey, "grace", f.guardGrace)
+	}
+	ports, err := parsePorts(f.dialPorts)
+	if err != nil {
+		return err
+	}
+	builder := &tplbuild.Builder{
+		Store: store, VMM: tplbuild.FirecrackerVMM{Launcher: launcher}, Slots: m, Node: versions.NodeKey(),
+		GuestKernel: kernel.Release, KernelPath: kernel.Path,
+		VCPUs: uint32(f.tplVCPUs), MemMiB: uint32(f.tplMemMiB), ScratchGiB: uint32(f.tplScratchGiB),
+		Keep: f.tplKeep, Ready: tplbuild.DaemonHealth(uint32(f.daemonPort)), Timeout: f.tplTimeout, Log: log,
+	}
+	if err := builder.CleanStaging(); err != nil {
+		return err
+	}
+	mstore := &managed.Store{
+		Dir: filepath.Join(f.dataDir, "managed"), Stager: managed.TmpfsStager{}, Log: log,
+		Limits:    managed.Limits{MaxZipBytes: f.managedZipMiB << 20, MaxBytes: f.managedMaxMiB << 20, MaxEntries: f.managedFiles},
+		MaxBuilds: f.managedBuilds,
+	}
+	if err := mstore.CleanStaging(managed.Unmount); err != nil {
+		return err
+	}
+	saves, err := server.NewSaves(&server.Saves{
+		M: m, PT: pt, Dir: filepath.Join(f.dataDir, "captures"), TTL: f.captureTTL, MaxBytes: f.captureMax,
+		MinFreeBytes: f.minFreeDiskGB * uint64(scratch.GiB), FreeBytes: stats.DiskFreeBytes,
+		Transfer: &transfer.Client{Timeout: f.transferTO, AllowHTTP: f.transferHTTP, Parallel: f.transferPar, PartBytes: f.transferPart},
+		Log:      log,
+	})
+	if err != nil {
+		return fmt.Errorf("capture spool: %w", err)
+	}
+	m.UseManagedGuest(server.DaemonManaged{Port: uint32(f.daemonPort)}, f.swapTimeout)
+	svc := &server.Service{M: m, DialPorts: ports, DaemonPort: uint32(f.daemonPort), MaxDialsPerVM: f.dialMax, Keys: pt, Managed: &server.ManagedImages{Store: mstore, Keep: f.managedKeep}, Saves: saves, Log: log}
+	if caSrc != nil {
+		svc.EgressCA = &egressca.Cached{Src: caSrc, TTL: egressCACacheTTL, MaxAge: egressCAMaxAge}
+	} else {
+		log.Warn("no --egress-ca or --egress-ca-configmap: VMs trust only a CA built into the root drive")
+	}
+	// The template of the last build from --rootfs-dir; the image GC keeps it.
+	var currentTemplate atomic.Pointer[string]
+	// Held over the build and its metrics, so template_ready shows the last
+	// build to finish, and over each template GC removal, so a build's
+	// template is current before the GC can see it unused.
+	var buildMu sync.Mutex
+	if f.rootfsDir != "" {
+		svc.Builder = func(ctx context.Context) (tplbuild.Result, error) {
+			buildMu.Lock()
+			defer buildMu.Unlock()
+			t0 := time.Now()
+			r, err := buildTemplate(ctx, builder, f.rootfsDir)
+			obs.metrics.TemplateBuild(time.Since(t0), templateResult(r, err))
+			if r.Template != nil {
+				v := r.Template.Version
+				currentTemplate.Store(&v)
+			}
+			return r, err
+		}
+	}
+	if gc := imageGC(f, m, store, mstore, &currentTemplate, &buildMu, obs.metrics, log); gc != nil {
+		go gc.Run(ctx)
+	}
+	if err := obs.start(ctx, svc); err != nil {
+		return err
+	}
+	ln, err := server.ListenUnix(f.socket)
+	if err != nil {
+		return err
+	}
+	// Both listeners serve the HostAgent API and the daemon pass-through.
+	servers := []*grpc.Server{server.NewServer(svc, append(pt.ServerOptions(), obs.serverOptions()...)...)}
+	listeners := []net.Listener{ln}
+	if f.listen != "" {
+		creds, err := (&server.MTLS{
+			CertFile: f.tlsCert, KeyFile: f.tlsKey, ClientCAFile: f.clientCA, AllowedSANs: splitList(f.clientSANs),
+		}).Credentials()
+		if err != nil {
+			return err
+		}
+		tln, err := net.Listen("tcp", f.listen)
+		if err != nil {
+			return err
+		}
+		servers = append(servers, server.NewServer(svc, append(append(pt.ServerOptions(), obs.serverOptions()...), grpc.Creds(creds))...))
+		listeners = append(listeners, tln)
+	}
+	go func() {
+		<-ctx.Done()
+		var refresh func(context.Context)
+		if drainWatch != nil {
+			refresh = drainWatch.Once
+		}
+		push.leave(m.DrainTaints, refresh, log)
+		// VMs keep running: they are in the host slice, not in this process.
+		for _, s := range servers {
+			s.GracefulStop()
+		}
+	}()
+	log.Info("host agent ready", "socket", f.socket, "listen", f.listen, "dial_ports", ports, "daemon_port", f.daemonPort,
+		"firecracker", bins.Version, "version", version)
+	errs := make(chan error, len(servers))
+	for i := range servers {
+		go func(i int) { errs <- servers[i].Serve(listeners[i]) }(i)
+	}
+	go startupTemplates(svc, builder, log)
+	return <-errs
+}
+
+func buildTemplate(ctx context.Context, b *tplbuild.Builder, rootfsDir string) (tplbuild.Result, error) {
+	rf, err := tplbuild.LoadRootfs(rootfsDir)
+	if err != nil {
+		return tplbuild.Result{}, err
+	}
+	// A build goes on when its caller goes away.
+	return b.Build(context.WithoutCancel(ctx), rf)
+}
+
+// templateResult is the metrics result of a build. A build that made a
+// template but then failed its GC still gave a usable template.
+func templateResult(r tplbuild.Result, err error) string {
+	switch {
+	case r.Template == nil:
+		return metrics.TemplateFailed
+	case r.Built:
+		return metrics.TemplateBuilt
+	default:
+		return metrics.TemplateExisting
+	}
+}
+
+// startupTemplates builds the template from --rootfs-dir, or only removes
+// old templates when there is no root drive.
+func startupTemplates(svc *server.Service, b *tplbuild.Builder, log *slog.Logger) {
+	if svc.Builder == nil {
+		if removed, err := b.Store.GC(b.Keep, b.Slots.TemplatesInUse); err != nil {
+			log.Error("template GC", "err", err)
+		} else if len(removed) > 0 {
+			log.Info("template GC", "removed", removed)
+		}
+		return
+	}
+	r, err := svc.Builder(context.Background())
+	if err != nil {
+		log.Error("template build at start-up failed", "err", err)
+		return
+	}
+	log.Info("template ready", "template", r.Template.Version, "built", r.Built, "build_ms", r.BuildMS, "removed", r.Removed)
+}
+
+// imageGC returns the sweeper of unused managed images and old templates,
+// or nil with --image-gc-interval 0. Templates are swept only once a build
+// from --rootfs-dir named the current template.
+func imageGC(f flags, m *agent.Manager, store *template.Store, mstore *managed.Store,
+	current *atomic.Pointer[string], buildMu sync.Locker, mt *metrics.Metrics, log *slog.Logger) *imagegc.Sweeper {
+	if f.imageGCEvery <= 0 {
+		log.Warn("--image-gc-interval is 0: unused managed images and old templates stay on the node")
+		return nil
+	}
+	return &imagegc.Sweeper{
+		Grace: f.imageGCGrace, Interval: f.imageGCEvery, Log: log, Removed: mt.ImageGCRemoved,
+		Kinds: []imagegc.Kind{
+			{
+				Name: "managed",
+				List: func() ([]string, error) {
+					imgs, err := mstore.List()
+					ids := make([]string, 0, len(imgs))
+					for _, img := range imgs {
+						ids = append(ids, img.ID)
+					}
+					return ids, err
+				},
+				Keep:   m.ManagedImagesInUse,
+				Remove: func(id string) (bool, error) { return mstore.RemoveUnused(id, m.ManagedImagesInUse) },
+			},
+			templateKind(store, m.TemplatesInUse, current, buildMu),
+		},
+	}
+}
+
+// templateKind sweeps the templates other than the current one. It lists
+// nothing until a build named the current template. Removals hold buildMu.
+func templateKind(store *template.Store, inUse func() map[string]bool, current *atomic.Pointer[string], buildMu sync.Locker) imagegc.Kind {
+	kept := func() map[string]bool {
+		keep := inUse()
+		if c := current.Load(); c != nil {
+			keep[*c] = true
+		}
+		return keep
+	}
+	return imagegc.Kind{
+		Name: "template",
+		List: func() ([]string, error) {
+			if current.Load() == nil {
+				return nil, nil
+			}
+			ts, err := store.List()
+			ids := make([]string, 0, len(ts))
+			for _, t := range ts {
+				ids = append(ids, t.Version)
+			}
+			return ids, err
+		},
+		Keep: kept,
+		Remove: func(id string) (bool, error) {
+			buildMu.Lock()
+			defer buildMu.Unlock()
+			return store.RemoveUnused(id, kept)
+		},
+	}
+}
+
+// egressCACacheTTL is how long Create reuses a CA read. A rotated CA reaches
+// new VMs after at most this long.
+const egressCACacheTTL = 30 * time.Second
+
+// egressCAMaxAge is how long Create uses the last good CA while reads fail.
+const egressCAMaxAge = time.Hour
+
+// egressCASource returns the --egress-ca or --egress-ca-configmap source, or
+// nil if neither is set.
+func egressCASource(f flags) (egressca.Source, error) {
+	switch {
+	case f.egressCA != "" && f.egressCACM != "":
+		return nil, errors.New("set --egress-ca or --egress-ca-configmap, not both")
+	case f.egressCA != "":
+		return egressca.File{Path: f.egressCA}, nil
+	case f.egressCACM != "":
+		ns, name, key, err := egressca.ParseConfigMapRef(f.egressCACM)
+		if err != nil {
+			return nil, fmt.Errorf("--egress-ca-configmap: %w", err)
+		}
+		c, err := nodewatch.NewInCluster(f.nodeID)
+		if err != nil {
+			return nil, fmt.Errorf("--egress-ca-configmap: %w", err)
+		}
+		return egressca.ConfigMap{Getter: c, Namespace: ns, Name: name, Key: key}, nil
+	}
+	return nil, nil
+}
+
+func parsePorts(s string) ([]uint32, error) {
+	var out []uint32
+	for _, p := range strings.Split(s, ",") {
+		p = strings.TrimSpace(p)
+		if p == "" {
+			continue
+		}
+		n, err := strconv.ParseUint(p, 10, 32)
+		if err != nil || n == 0 {
+			return nil, fmt.Errorf("bad --dial-ports entry %q", p)
+		}
+		out = append(out, uint32(n))
+	}
+	if len(out) == 0 {
+		// An empty list would fall back to the default ports.
+		return nil, fmt.Errorf("--dial-ports %q names no port", s)
+	}
+	return out, nil
+}
+
+// startDrainWatch reads the agent's Node every --drain-poll-interval and
+// drains the node while it has a drain taint. The first read
+// runs before the API serves, so a restarted agent on a cordoned node
+// never admits a VM.
+func startDrainWatch(ctx context.Context, f flags, m *agent.Manager, log *slog.Logger) (*nodewatch.Watcher, error) {
+	if !f.watchDrain {
+		return nil, nil
+	}
+	keys := splitList(f.drainTaints)
+	if len(keys) == 0 {
+		return nil, errors.New("--watch-node-drain needs --drain-taints")
+	}
+	if f.drainPoll < time.Second {
+		return nil, fmt.Errorf("--drain-poll-interval %v must be at least 1s", f.drainPoll)
+	}
+	src, err := nodewatch.NewInCluster(f.nodeID)
+	if err != nil {
+		return nil, fmt.Errorf("--watch-node-drain: %w", err)
+	}
+	w := &nodewatch.Watcher{Source: src, Keys: keys, Interval: f.drainPoll, Timeout: 10 * time.Second, Apply: m.SetNodeDrain}
+	w.Once(ctx)
+	go w.Run(ctx)
+	log.Info("watching the node for drain taints", "node", f.nodeID, "taints", keys, "interval", f.drainPoll)
+	return w, nil
+}
+
+// scaleDownGuardInterval is how often --scale-down-guard counts the VMs.
+const scaleDownGuardInterval = 10 * time.Second
+
+// newScaleDownGuard returns the guard that keeps the cluster autoscaler from
+// removing the node while it runs VMs, or nil when --scale-down-guard is
+// off. A failed Node patch is logged and never blocks VMs.
+func newScaleDownGuard(f flags, m *agent.Manager, log *slog.Logger) (*nodewatch.ScaleDownGuard, error) {
+	if !f.guardScale {
+		return nil, nil
+	}
+	c, err := nodewatch.NewInCluster(f.nodeID)
+	if err != nil {
+		return nil, fmt.Errorf("--scale-down-guard: %w", err)
+	}
+	g := &nodewatch.ScaleDownGuard{Node: c, VMs: m.ScaleDownHolds, Grace: f.guardGrace, Interval: scaleDownGuardInterval, Log: log}
+	// A new VM is guarded at once, not at the next tick.
+	m.OnAdmit(g.Kick)
+	return g, nil
+}
+
+// pushers are the key registration and node state report loops. They
+// start after the metrics exist, so the first result is counted.
+type pushers struct {
+	reg *relay.Registrar
+	rep *nodereport.Reporter
+	// deregister ends the node's registration; nil without a registrar.
+	deregister func(context.Context) (bool, error)
+	wg         *sync.WaitGroup
+}
+
+func (p pushers) start(ctx context.Context, mt *metrics.Metrics) {
+	wg := p.wg
+	if wg == nil {
+		wg = &sync.WaitGroup{}
+	}
+	if p.reg != nil {
+		p.reg.Observe = mt.KeyRegistration
+		wg.Go(func() { p.reg.Run(ctx) })
+	}
+	if p.rep != nil {
+		p.rep.Observe = mt.NodeReport
+		wg.Go(func() { p.rep.Run(ctx) })
+	}
+}
+
+// refreshTimeout and deregisterTimeout bound the node read and the
+// deregistration at shutdown, well inside the pod's termination grace period.
+const (
+	refreshTimeout    = 3 * time.Second
+	deregisterTimeout = 5 * time.Second
+)
+
+// leave runs after the stop signal. On a node with drain taints (the node
+// goes away) it ends the node's registration, so placement and the node
+// list drop the node at once. Else, or if the call fails, the registration
+// expires after relay.KeyTTL.
+// refresh, if set, reads the node again first: the taint can be newer than
+// the last poll.
+func (p pushers) leave(taints func() []string, refresh func(context.Context), log *slog.Logger) {
+	if p.deregister == nil {
+		return
+	}
+	// A registration that is still in flight must not come after the
+	// deregistration.
+	p.wg.Wait()
+	if refresh != nil {
+		rctx, rcancel := context.WithTimeout(context.Background(), refreshTimeout)
+		refresh(rctx)
+		rcancel()
+	}
+	t := taints()
+	if len(t) == 0 {
+		log.Info("agent stops on a node without drain taints; the node stays registered")
+		return
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), deregisterTimeout)
+	defer cancel()
+	ok, err := p.deregister(ctx)
+	if err != nil {
+		log.Error("node deregistration failed; the registration expires on its own", "taints", t, "err", err)
+		return
+	}
+	log.Info("node deregistered", "taints", t, "deregistered", ok)
+}
+
+// setupEgress makes a fresh node signing key and attaches the relay to the
+// Manager. Its pushers keep the key registered with the api_server and send
+// the node state reports.
+func setupEgress(f flags, m *agent.Manager, log *slog.Logger) (pushers, error) {
+	upTLS, err := egressTLS(f)
+	if err != nil {
+		return pushers{}, err
+	}
+	if f.egressProxy == "" {
+		log.Warn("no --egress-proxy: VMs have no egress")
+		return pushers{}, nil
+	}
+	if upTLS == nil {
+		log.Warn("no --egress-proxy-tls-*: the relay sends signed tokens to the proxy in plain TCP")
+	}
+	if f.nodeID == "" {
+		return pushers{}, errors.New("--egress-proxy needs --node-id (or $NODE_NAME)")
+	}
+	if f.relayMaxConns < 1 {
+		return pushers{}, fmt.Errorf("--relay-max-conns %d must be 1 or more", f.relayMaxConns)
+	}
+	if f.relayMaxNode < 1 {
+		return pushers{}, fmt.Errorf("--relay-max-conns-node %d must be 1 or more", f.relayMaxNode)
+	}
+	_, key, err := ed25519.GenerateKey(nil)
+	if err != nil {
+		return pushers{}, err
+	}
+	kid, err := relay.NewKeyID(f.nodeID, time.Now())
+	if err != nil {
+		return pushers{}, err
+	}
+	signer := relay.NewSigner(f.nodeID, kid, key)
+	m.UseEgress(&relay.AgentEgress{Relay: &relay.Relay{
+		Signer: signer, Upstream: f.egressProxy, TLS: upTLS, IdleTimeout: f.relayIdle, MaxConns: f.relayMaxConns, MaxConnsNode: f.relayMaxNode, Log: log,
+	}})
+	if f.apiServerURL == "" {
+		log.Warn("no --api-server-url: the node signing key is not registered, so the proxy rejects VM egress")
+		return pushers{}, nil
+	}
+	secret := os.Getenv("SANDBOX_NODE_REGISTRATION_SECRET")
+	if secret == "" {
+		return pushers{}, errors.New("--api-server-url needs $SANDBOX_NODE_REGISTRATION_SECRET")
+	}
+	if f.advertise == "" {
+		log.Warn("no --advertise-address and no $POD_IP: the registration has no agent address, so the api_server cannot place VMs here")
+	}
+	g := &relay.Registrar{BaseURL: f.apiServerURL, Secret: secret, Signer: signer, AgentAddress: f.advertise, Log: log}
+	p := pushers{reg: g, wg: &sync.WaitGroup{}, deregister: func(ctx context.Context) (bool, error) {
+		return nodereport.Deregister(ctx, nil, f.apiServerURL, signer)
+	}}
+	if f.stateReport <= 0 {
+		log.Warn("--state-report-interval is 0: the api_server does not reconcile this node's VMs")
+		return p, nil
+	}
+	r := &nodereport.Reporter{
+		BaseURL: f.apiServerURL, Signer: signer, List: func() []nodereport.VM { return reportVMs(m.List()) },
+		Ended: func() []nodereport.EndedVM { return reportEnded(m.Ended()) },
+		Ready: g.Registered(), Log: log, Interval: f.stateReport,
+	}
+	p.rep = r
+	return p, nil
+}
+
+// reportVMs converts the Manager's List for the node state report.
+func reportVMs(vms []agent.VM) []nodereport.VM {
+	out := make([]nodereport.VM, 0, len(vms))
+	for _, vm := range vms {
+		v := nodereport.VM{
+			SandboxID: vm.SandboxID, TenantID: vm.TenantID, Attempt: vm.Attempt, Generation: vm.Generation,
+			State: strings.TrimPrefix(vm.State.String(), "VM_STATE_"), Template: vm.Template,
+			VCPUs: vm.VCPUs, MemMiB: vm.MemMiB, ScratchGiB: vm.ScratchGiB, PID: vm.PID,
+		}
+		if !vm.StartedAt.IsZero() {
+			t := vm.StartedAt.UTC()
+			v.StartedAt = &t
+		}
+		out = append(out, v)
+	}
+	return out
+}
+
+// reportEnded converts the Manager's ended list for the node state report.
+func reportEnded(ended []agent.EndedVM) []nodereport.EndedVM {
+	out := make([]nodereport.EndedVM, 0, len(ended))
+	for _, e := range ended {
+		out = append(out, nodereport.EndedVM{
+			SandboxID: e.SandboxID, TenantID: e.TenantID, Attempt: e.Attempt, Generation: e.Generation,
+			Reason: string(e.Reason), EndedAt: e.EndedAt.UTC(),
+		})
+	}
+	return out
+}
+
+func preflight(f flags, lay jailer.Layout, log *slog.Logger) (*loopstore.Store, error) {
+	if os.Geteuid() != 0 {
+		return nil, errors.New("the host agent must run as root")
+	}
+	if _, err := os.Stat("/dev/kvm"); err != nil {
+		return nil, fmt.Errorf("no /dev/kvm: %w", err)
+	}
+	if _, err := os.Stat("/sys/fs/cgroup/cgroup.controllers"); err != nil {
+		return nil, fmt.Errorf("cgroup v2 is not mounted at /sys/fs/cgroup: %w", err)
+	}
+	mode, err := loopstore.ParseMode(f.loopStore)
+	if err != nil {
+		return nil, err
+	}
+	// The agent reads the host view of the data dir under /proc/1/root.
+	if !filepath.IsAbs(f.dataDir) {
+		return nil, fmt.Errorf("--data-dir %q must be an absolute path", f.dataDir)
+	}
+	longest := lay.HostPath(strings.Repeat("x", 36), longestSock)
+	if len(longest) > jailer.MaxSockPath {
+		return nil, fmt.Errorf("data dir %s is too long: VM socket paths would be %d bytes, the limit is %d",
+			f.dataDir, len(longest), jailer.MaxSockPath)
+	}
+	if err := os.MkdirAll(f.dataDir, 0o755); err != nil {
+		return nil, err
+	}
+	// Before the subdirs: a loop store mount hides what is under it.
+	store, err := loopstore.Ensure(loopstore.Options{
+		DataDir: f.dataDir, Mode: mode, SizeGiB: f.loopStoreGiB, HostMountNS: f.hostMountNS, RootfsDir: f.rootfsDir, Log: log,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("data dir %s: %w", f.dataDir, err)
+	}
+	if store != nil {
+		log.Info("data dir is a loop store", "image", store.Image, "device", store.Device,
+			"gib", store.SizeBytes>>30, "created", store.Created, "node_dir", store.NodeDir)
+		if store.NodeDir == "" {
+			log.Info("the node file system under the loop store has no other path here (a disk mounted at the data dir?): Create checks the free space of the store only")
+		}
+	}
+	for _, d := range []string{"templates", "jail", "bin", "kernel", "run", "journal", "managed"} {
+		if err := os.MkdirAll(filepath.Join(f.dataDir, d), 0o700); err != nil {
+			return nil, err
+		}
+	}
+	// The jailer needs to traverse the chroot base as the VM user.
+	if err := os.Chmod(lay.ChrootBase, 0o711); err != nil {
+		return nil, err
+	}
+	return store, nil
+}
+
+// trimLoop gives the blocks of deleted files in the loop store back to the
+// node disk at start and then every hour.
+func trimLoop(ctx context.Context, dir string, log *slog.Logger) {
+	t := time.NewTicker(time.Hour)
+	defer t.Stop()
+	for {
+		if n, err := loopstore.Trim(dir); err != nil {
+			log.Warn("loop store trim failed", "err", err)
+		} else {
+			log.Info("loop store trimmed", "mib", n>>20)
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+	}
+}
+
+// loopStoreEnv applies $CRAFT_FC_LOOP_STORE and $CRAFT_FC_LOOP_STORE_GIB to
+// the loop store flags that the command line does not set.
+func loopStoreEnv(fs *flag.FlagSet, lookup func(string) (string, bool)) error {
+	set := map[string]bool{}
+	fs.Visit(func(fl *flag.Flag) { set[fl.Name] = true })
+	for name, env := range map[string]string{"loop-store": "CRAFT_FC_LOOP_STORE", "loop-store-gib": "CRAFT_FC_LOOP_STORE_GIB"} {
+		v, ok := lookup(env)
+		if !ok || v == "" || set[name] {
+			continue
+		}
+		if err := fs.Set(name, v); err != nil {
+			return fmt.Errorf("$%s: %w", env, err)
+		}
+	}
+	return nil
+}
+
+// checkRanges rejects flag values that do not fit the uint32 fields.
+func checkRanges(f flags) error {
+	if f.uidBase == 0 || f.uidCount == 0 || uint64(f.uidBase)+uint64(f.uidCount) > math.MaxUint32 {
+		return fmt.Errorf("--uid-base %d and --uid-count %d must be more than 0 and end at or below %d",
+			f.uidBase, f.uidCount, uint64(math.MaxUint32))
+	}
+	if f.maxVMs < 0 {
+		return fmt.Errorf("--max-vms %d must be 0 (no cap) or more", f.maxVMs)
+	}
+	if f.tplVCPUs == 0 || f.tplVCPUs > 32 || f.tplMemMiB < 128 || f.tplMemMiB > math.MaxUint32 ||
+		f.tplScratchGiB == 0 || f.tplScratchGiB > f.maxScratchGiB || f.tplKeep < 1 {
+		return fmt.Errorf("bad template shape --template-vcpus %d --template-mem-mib %d --template-scratch-gib %d --template-keep %d",
+			f.tplVCPUs, f.tplMemMiB, f.tplScratchGiB, f.tplKeep)
+	}
+	if f.managedKeep < 1 || f.managedZipMiB < 1 || f.managedMaxMiB < 1 || f.managedFiles < 1 || f.managedBuilds < 1 || f.swapTimeout <= 0 {
+		return fmt.Errorf("bad managed limits --managed-keep %d --managed-max-zip-mib %d --managed-max-mib %d --managed-max-files %d --managed-max-builds %d --managed-swap-timeout %v",
+			f.managedKeep, f.managedZipMiB, f.managedMaxMiB, f.managedFiles, f.managedBuilds, f.swapTimeout)
+	}
+	if f.transferPar < 1 || f.transferPar > 64 || f.transferPart < 1<<20 || f.transferPart > 256<<20 {
+		return fmt.Errorf("bad transfer settings --transfer-parallel %d (1 to 64) --transfer-part-bytes %d (1 MiB to 256 MiB)",
+			f.transferPar, f.transferPart)
+	}
+	if f.imageGCEvery < 0 || (f.imageGCEvery > 0 && (f.imageGCEvery < time.Minute || f.imageGCGrace < 10*time.Minute)) {
+		return fmt.Errorf("--image-gc-interval %v must be 0 or at least 1m, and --image-gc-grace %v at least 10m",
+			f.imageGCEvery, f.imageGCGrace)
+	}
+	if f.slicePercent != 0 && (f.slicePercent < 10 || f.slicePercent > 100) {
+		return fmt.Errorf("--slice-memory-percent %d must be 0 or 10 to 100", f.slicePercent)
+	}
+	if f.startingMemDiv < 1 || f.startingMemDiv > 16 {
+		return fmt.Errorf("--starting-mem-divisor %d must be 1 to 16", f.startingMemDiv)
+	}
+	if f.memOverhead < 16 || f.memOverhead > 4096 {
+		return fmt.Errorf("--vm-mem-overhead-mib %d must be 16 to 4096", f.memOverhead)
+	}
+	if f.maxScratchGiB > math.MaxUint32 {
+		return fmt.Errorf("--max-scratch-gib %d is too large", f.maxScratchGiB)
+	}
+	if f.guardGrace < 0 {
+		return fmt.Errorf("--scale-down-guard-grace %v must be 0 or more", f.guardGrace)
+	}
+	return nil
+}
+
+// egressTLS returns the relay → proxy mTLS setup, or nil when no
+// --egress-proxy-tls-* flag is set. A partial or unloadable setup is an
+// error, so the agent never starts with plain TCP by mistake.
+func egressTLS(f flags) (*relay.UpstreamTLS, error) {
+	if f.egressTLSCA == "" && f.egressTLSCert == "" && f.egressTLSKey == "" && f.egressTLSName == "" {
+		return nil, nil
+	}
+	if f.egressProxy == "" {
+		return nil, errors.New("--egress-proxy-tls-* flags need --egress-proxy")
+	}
+	name := f.egressTLSName
+	if name == "" {
+		host, _, err := net.SplitHostPort(f.egressProxy)
+		if err != nil {
+			return nil, fmt.Errorf("--egress-proxy %q: %w", f.egressProxy, err)
+		}
+		name = host
+	}
+	u := &relay.UpstreamTLS{CAFile: f.egressTLSCA, CertFile: f.egressTLSCert, KeyFile: f.egressTLSKey, ServerName: name}
+	if err := u.Check(); err != nil {
+		return nil, fmt.Errorf("--egress-proxy-tls-*: %w", err)
+	}
+	return u, nil
+}
+
+// checkListen rejects a TCP listener without its TLS files, TLS flags
+// without a listener, and a Dial cap under 1.
+func checkListen(f flags) error {
+	tls := f.tlsCert != "" || f.tlsKey != "" || f.clientCA != "" || f.clientSANs != ""
+	if f.listen == "" && tls {
+		return errors.New("--tls-cert, --tls-key, --client-ca and --client-allowed-sans need --listen")
+	}
+	if f.listen != "" && (f.tlsCert == "" || f.tlsKey == "" || f.clientCA == "") {
+		return errors.New("--listen needs --tls-cert, --tls-key and --client-ca")
+	}
+	if f.dialMax < 1 {
+		return fmt.Errorf("--dial-max-streams %d must be 1 or more", f.dialMax)
+	}
+	return nil
+}
+
+// dnsHost matches the DNS names the api_server accepts in agent_address.
+var dnsHost = regexp.MustCompile(`^[A-Za-z0-9][A-Za-z0-9.-]*$`)
+
+// advertiseAddress is the host:port of --listen that the api_server dials:
+// --advertise-address, else $POD_IP with the --listen port, else a specific
+// --listen host. Empty if there is no TCP listener or no usable host.
+func advertiseAddress(f flags, podIP string) (string, error) {
+	if f.listen == "" {
+		if f.advertise != "" {
+			return "", errors.New("--advertise-address needs --listen")
+		}
+		return "", nil
+	}
+	if f.advertise != "" {
+		host, port, err := net.SplitHostPort(f.advertise)
+		if err != nil || (net.ParseIP(host) == nil && !dnsHost.MatchString(host)) {
+			return "", fmt.Errorf("--advertise-address %q must be host:port with a DNS name or IP address", f.advertise)
+		}
+		if !canonicalPort(port) {
+			return "", fmt.Errorf("--advertise-address %q has a bad port", f.advertise)
+		}
+		return f.advertise, nil
+	}
+	host, port, err := net.SplitHostPort(f.listen)
+	if err != nil {
+		return "", fmt.Errorf("--listen %q: %w", f.listen, err)
+	}
+	if !canonicalPort(port) {
+		return "", fmt.Errorf("--listen %q needs a port from 1 to 65535 in plain decimal", f.listen)
+	}
+	if podIP != "" {
+		if net.ParseIP(podIP) == nil {
+			return "", fmt.Errorf("$POD_IP %q is not an IP address", podIP)
+		}
+		return net.JoinHostPort(podIP, port), nil
+	}
+	if ip := net.ParseIP(host); host == "" || (ip != nil && ip.IsUnspecified()) {
+		return "", nil
+	}
+	return net.JoinHostPort(host, port), nil
+}
+
+// canonicalPort reports a port in 1-65535 in plain decimal, the form the
+// api_server accepts in agent_address.
+func canonicalPort(port string) bool {
+	n, err := strconv.ParseUint(port, 10, 16)
+	return err == nil && n != 0 && strconv.FormatUint(n, 10) == port
+}
+
+func splitList(s string) []string {
+	var out []string
+	for _, v := range strings.Split(s, ",") {
+		if v = strings.TrimSpace(v); v != "" {
+			out = append(out, v)
+		}
+	}
+	return out
+}
+
+// capVMSlice sets MemoryMax of the VM slice to percent of MemTotal and
+// returns it (0: no limit). kubelet does not see VM memory, so without the
+// cap an overcommitted node runs out of memory outside the slice. percent 0
+// removes a limit of an earlier start; a failure then only logs, so 0 also
+// works where systemctl set-property does not.
+func capVMSlice(c jailer.Command, percent uint, stats hostinfo.Stats, log *slog.Logger) (uint64, error) {
+	if percent == 0 {
+		argv := c.SliceMemoryMaxArgv(0)
+		if out, err := exec.Command(argv[0], argv[1:]...).CombinedOutput(); err != nil {
+			log.Warn("VM slice memory limit not removed", "slice", c.Slice, "err", err, "output", strings.TrimSpace(string(out)))
+		}
+		return 0, nil
+	}
+	total, _, err := stats.MemInfo()
+	if err != nil {
+		return 0, fmt.Errorf("slice memory cap: %w", err)
+	}
+	limit := jailer.SliceMemoryMax(total, percent)
+	argv := c.SliceMemoryMaxArgv(limit)
+	if out, err := exec.Command(argv[0], argv[1:]...).CombinedOutput(); err != nil {
+		return 0, fmt.Errorf("%s: %w: %s", strings.Join(argv, " "), err, strings.TrimSpace(string(out)))
+	}
+	log.Info("VM slice memory cap", "slice", c.Slice, "memory_max_bytes", limit, "percent", percent, "mem_total_mib", total)
+	return limit, nil
+}
+
+func checkSystemdRun(c jailer.Command) error {
+	argv := []string{"systemd-run", "--version"}
+	if c.HostMountNS {
+		argv = append([]string{"nsenter", "-t", "1", "-m", "--"}, argv...)
+	}
+	if out, err := exec.Command(argv[0], argv[1:]...).CombinedOutput(); err != nil {
+		return fmt.Errorf("%s: %w: %s", strings.Join(argv, " "), err, strings.TrimSpace(string(out)))
+	}
+	return nil
+}

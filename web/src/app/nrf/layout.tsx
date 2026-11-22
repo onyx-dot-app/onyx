@@ -1,5 +1,6 @@
 import { ProjectsProvider } from "@/lib/projects/providers";
 import { VoiceModeProvider } from "@/providers/VoiceModeProvider";
+import RequiredIntegrationGate from "@/sections/integrations/RequiredIntegrationGate";
 
 export interface LayoutProps {
   children: React.ReactNode;
@@ -14,7 +15,10 @@ export interface LayoutProps {
 export default function Layout({ children }: LayoutProps) {
   return (
     <ProjectsProvider>
-      <VoiceModeProvider>{children}</VoiceModeProvider>
+      <VoiceModeProvider>
+        {children}
+        <RequiredIntegrationGate />
+      </VoiceModeProvider>
     </ProjectsProvider>
   );
 }

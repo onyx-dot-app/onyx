@@ -30,9 +30,9 @@ from onyx.db.models import (
     User,
     User__UserGroup,
 )
+from onyx.db.user_library import delete_user_file
 from onyx.file_store.file_store import get_default_file_store
 from onyx.server.features.build.configs import SANDBOX_NAMESPACE, SANDBOX_PROXY_PORT
-from onyx.server.features.build.db.user_library import delete_user_file
 from onyx.server.features.build.sandbox.kubernetes.kubernetes_sandbox_manager import (
     KubernetesSandboxManager,
 )

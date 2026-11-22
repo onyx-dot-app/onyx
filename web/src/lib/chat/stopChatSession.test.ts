@@ -6,15 +6,16 @@ import { ChatSendRejectedError, sendMessage } from "@/app/app/services/lib";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import { settleChatSession } from "@/lib/chat/settleChatSession";
 import { stopChatSession } from "@/lib/chat/stopChatSession";
-import { waitForChatSessionIdle } from "@/lib/chat/sessionReadiness";
+import { waitForChatResponseEnd } from "@/lib/chat/sessionReadiness";
 
 jest.mock("@/app/app/services/lib", () => ({
   ChatSendRejectedError: class extends Error {},
+  ApprovalPendingError: class extends Error {},
   sendMessage: jest.fn(),
   processRawChatHistory: jest.fn(() => new Map()),
 }));
 jest.mock("@/lib/chat/sessionReadiness", () => ({
-  waitForChatSessionIdle: jest.fn(),
+  waitForChatResponseEnd: jest.fn(),
   fetchSettledChatSession: jest.fn(async () => ({
     messages: [],
     packets: [],
@@ -27,7 +28,11 @@ const params = {
   message: "Question",
   parentMessageId: null,
   chatSessionId: "session",
-  filters: null,
+  toolOptions: {
+    allowed: null,
+    preferred: null,
+    internal_search_filters: null,
+  },
 };
 const errorMessage = "Cannot confirm completion";
 const fetchMock = jest.fn<ReturnType<typeof fetch>, Parameters<typeof fetch>>();
@@ -41,7 +46,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   global.fetch = fetchMock;
   fetchMock.mockResolvedValue(new Response(null, { status: 200 }));
-  jest.mocked(waitForChatSessionIdle).mockResolvedValue();
+  jest.mocked(waitForChatResponseEnd).mockResolvedValue(null);
   useChatSessionStore.setState({ sessions: new Map(), currentSessionId: null });
   useChatSessionStore.getState().createSession("session", {
     chatState: "loading",
@@ -59,13 +64,13 @@ function dispatch() {
 }
 
 test.each([false, true])(
-  "Stop waits for backend admission and targets the accepted stream (multi-model: %s)",
+  "Stop waits for backend admission, then stops the chat's current turn (multi-model: %s)",
   async (multiModel) => {
     const admitted = Promise.withResolvers<void>();
     const provider = Promise.withResolvers<void>();
-    const idle = Promise.withResolvers<void>();
+    const idle = Promise.withResolvers<null>();
     const pollingStarted = Promise.withResolvers<void>();
-    jest.mocked(waitForChatSessionIdle).mockImplementation(() => {
+    jest.mocked(waitForChatResponseEnd).mockImplementation(() => {
       pollingStarted.resolve();
       return idle.promise;
     });
@@ -89,7 +94,7 @@ test.each([false, true])(
     const stopping = stopChatSession("session", errorMessage);
     await Promise.resolve();
     expect(fetchMock).not.toHaveBeenCalled();
-    expect(waitForChatSessionIdle).not.toHaveBeenCalled();
+    expect(waitForChatResponseEnd).not.toHaveBeenCalled();
     expect(
       useChatSessionStore.getState().sessions.get("session")?.chatState
     ).toBe("cancelling");
@@ -97,15 +102,18 @@ test.each([false, true])(
     admitted.resolve();
     await pollingStarted.promise;
     expect(fetchMock).toHaveBeenCalledWith(
-      `/api/chat/stop-chat-session/session?stream_id=${multiModel ? 11 : 12}`,
+      "/api/chat/stop-chat-session/session",
       expect.objectContaining({ method: "POST" })
     );
-    expect(waitForChatSessionIdle).toHaveBeenCalledWith("session");
+    expect(waitForChatResponseEnd).toHaveBeenCalledWith(
+      "session",
+      multiModel ? 11 : 12
+    );
     expect(
       useChatSessionStore.getState().sessions.get("session")?.chatState
     ).toBe("cancelling");
 
-    idle.resolve();
+    idle.resolve(null);
     await stopping;
     expect(
       useChatSessionStore.getState().sessions.get("session")
@@ -128,7 +136,7 @@ test("a rejected send finishes without stopping another session turn", async () 
   await stopChatSession("session", errorMessage);
   await sending;
   expect(fetchMock).not.toHaveBeenCalled();
-  expect(waitForChatSessionIdle).toHaveBeenCalledWith("session");
+  expect(waitForChatResponseEnd).toHaveBeenCalledWith("session", undefined);
 });
 
 test("a connection failure before admission cannot release input through either completion path", async () => {
@@ -153,11 +161,10 @@ test("a connection failure before admission cannot release input through either 
   await sending;
   await rejectedStop;
   await settling;
-  expect(waitForChatSessionIdle).not.toHaveBeenCalled();
+  expect(waitForChatResponseEnd).not.toHaveBeenCalled();
   expect(fetchMock).not.toHaveBeenCalled();
   expect(useChatSessionStore.getState().sessions.get("session")).toMatchObject({
     chatState: "unconfirmed",
-    queuedMessagesPaused: true,
   });
 });
 
@@ -179,7 +186,7 @@ test("late admission cannot stop or clear a newer request", async () => {
   await sending;
   await stopping;
   expect(fetchMock).not.toHaveBeenCalled();
-  expect(waitForChatSessionIdle).not.toHaveBeenCalled();
+  expect(waitForChatResponseEnd).not.toHaveBeenCalled();
   expect(useChatSessionStore.getState().sessions.get("session")).toMatchObject({
     chatState: "loading",
     streamingStartTime: 123,
@@ -188,11 +195,11 @@ test("late admission cannot stop or clear a newer request", async () => {
   });
 });
 
-test("a failed Stop can target the same accepted stream again before the reader finishes", async () => {
+test("a failed Stop can be sent again before the reader finishes", async () => {
   const reader = Promise.withResolvers<void>();
   useChatSessionStore.getState().updateSessionData("session", {
     chatState: "streaming",
-    sendAcknowledged: Promise.resolve(42),
+    sendAcknowledged: Promise.resolve({ stream_id: 42, response_ids: [42] }),
     readerFinished: reader.promise,
   });
   fetchMock.mockRejectedValueOnce(new TypeError("Network unavailable"));
@@ -201,20 +208,56 @@ test("a failed Stop can target the same accepted stream again before the reader 
   );
   expect(useChatSessionStore.getState().sessions.get("session")).toMatchObject({
     chatState: "streaming",
-    queuedMessagesPaused: true,
-    uncaughtError: errorMessage,
+    uncaughtError: { error: errorMessage },
   });
   const retry = stopChatSession("session", errorMessage);
   await Promise.resolve();
   expect(fetchMock).toHaveBeenCalledTimes(2);
   expect(fetchMock).toHaveBeenLastCalledWith(
-    "/api/chat/stop-chat-session/session?stream_id=42",
+    "/api/chat/stop-chat-session/session",
     expect.objectContaining({ method: "POST" })
   );
-  expect(waitForChatSessionIdle).not.toHaveBeenCalled();
+  expect(waitForChatResponseEnd).not.toHaveBeenCalled();
   reader.resolve();
   await retry;
   expect(
     useChatSessionStore.getState().sessions.get("session")?.chatState
   ).toBe("input");
+});
+
+test("Stop after the accepted stream ended stops the queued turn that followed it", async () => {
+  // The answer ended and the server started a queued turn; the browser has not
+  // seen that turn yet, so the session still shows the finished stream.
+  useChatSessionStore.getState().updateSessionData("session", {
+    chatState: "streaming",
+    sendAcknowledged: Promise.resolve({ stream_id: 42, response_ids: [42] }),
+    readerFinished: Promise.resolve(),
+  });
+  jest
+    .mocked(waitForChatResponseEnd)
+    .mockResolvedValue({ stream_id: 43, response_ids: [43] });
+  await stopChatSession("session", errorMessage);
+  expect(fetchMock).toHaveBeenCalledWith(
+    "/api/chat/stop-chat-session/session",
+    expect.objectContaining({ method: "POST" })
+  );
+  expect(fetchMock.mock.calls[0]?.[0]).not.toContain("stream_id");
+});
+
+test("Stop reaches a server turn that has not published its stream", async () => {
+  // A refresh found the server preparing a queued turn: no local send and no
+  // stream yet.
+  useChatSessionStore.getState().updateSessionData("session", {
+    chatState: "streaming",
+    sendAcknowledged: undefined,
+  });
+  const controller = useChatSessionStore
+    .getState()
+    .sessions.get("session")!.abortController;
+  await stopChatSession("session", errorMessage);
+  expect(fetchMock).toHaveBeenCalledWith(
+    "/api/chat/stop-chat-session/session",
+    expect.objectContaining({ method: "POST" })
+  );
+  expect(controller.signal.aborted).toBe(false);
 });

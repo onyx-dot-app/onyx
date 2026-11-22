@@ -21,22 +21,25 @@ from typing import Any
 from uuid import UUID, uuid4
 
 from fastapi_users.password import PasswordHelper
-from sqlalchemy import delete, update
+from sqlalchemy import delete, select, update
+from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource
-from onyx.db.action_policy import get_or_create_gated_app_id
 from onyx.db.enums import (
     AccessType,
     AccountType,
-    ActionPolicy,
     ConnectorCredentialPairStatus,
     ConnectorManageRole,
     ExternalAppType,
-    GatedAppKind,
+    IntegrationActionPolicyValue,
+    IntegrationAuthMode,
+    IntegrationOAuthProviderMode,
+    PluginInstallationPolicy,
     SandboxStatus,
     SkillSharePermission,
 )
+from onyx.db.integration_access import set_integration_preferences__no_commit
 from onyx.db.models import (
     ActionApproval,
     ActionReceipt,
@@ -44,18 +47,28 @@ from onyx.db.models import (
     ConnectorCredentialPair,
     Credential,
     ExternalApp,
-    ExternalAppUserCredential,
+    Integration,
+    Integration__User,
+    IntegrationActionPolicy,
+    IntegrationOAuthClient,
+    Plugin,
+    Plugin__User,
+    Plugin__UserGroup,
+    PluginSkill,
+    PluginVersion,
     Sandbox,
     Skill,
-    Skill__User,
-    Skill__UserGroup,
     User,
     User__UserGroup,
     UserGroup,
     UserGroup__ConnectorCredentialPair,
-    WorkspaceActionPolicy,
 )
 from onyx.db.permissions import recompute_user_permissions__no_commit
+from onyx.db.plugin import (
+    free_plugin_name,
+    get_or_create_organization_library__no_commit,
+    get_or_create_user_uploads__no_commit,
+)
 from onyx.db.users import assign_user_to_default_groups__no_commit
 
 
@@ -179,29 +192,89 @@ def make_skill(
     *,
     name: str | None = None,
     is_public: bool = False,
-    public_permission: SkillSharePermission = SkillSharePermission.VIEWER,
     author_user_id: UUID | None = None,
-) -> Skill:
-    """Create a single custom ``Skill`` row.
+    description: str = "d",
+    bundle_file_id: str | None = None,
+    bundle_sha256: str = "0" * 64,
+) -> Plugin:
+    """Create the plugin of a custom skill: version 1 with one skill at the
+    root. A public skill is in the Organization library, published; others are
+    in the author's "My uploads". A public skill may have no author.
 
-    Bundle metadata (``bundle_file_id``, ``bundle_sha256``) is filled with
-    placeholder values; tests that need a real bundle should use the
-    ``seeded_skill`` fixture from ``conftest.py`` instead.
+    Without ``bundle_file_id`` the bundle fields hold placeholder values;
+    tests that need a real bundle should use the ``seeded_skill`` fixture
+    from ``conftest.py`` instead.
     """
     if author_user_id is None and not is_public:
         author_user_id = make_user(db_session, standard_account=True).id
-    skill = Skill(
-        id=uuid4(),
-        name=name or f"helper-skill-{uuid4().hex[:8]}",
-        description="d",
-        bundle_file_id=f"bundle-{uuid4().hex[:8]}",
-        bundle_sha256="0" * 64,
-        public_permission=public_permission if is_public else None,
+    skill_name = name or f"helper-skill-{uuid4().hex[:8]}"
+    if is_public or author_user_id is None:
+        marketplace_id = get_or_create_organization_library__no_commit(db_session)
+    else:
+        marketplace_id = get_or_create_user_uploads__no_commit(
+            author_user_id, db_session
+        )
+    plugin_id = uuid4()
+    version_id = uuid4()
+    plugin = Plugin(
+        id=plugin_id,
+        name=free_plugin_name(marketplace_id, skill_name, db_session),
+        description=description,
+        marketplace_id=marketplace_id,
         author_user_id=author_user_id,
+        current_version_id=version_id,
+        published_version_id=version_id if is_public else None,
     )
-    db_session.add(skill)
+    db_session.add(plugin)
     db_session.flush()
-    return skill
+    db_session.add(
+        PluginVersion(
+            id=version_id,
+            plugin_id=plugin_id,
+            version_number=1,
+            bundle_file_id=bundle_file_id or f"bundle-{uuid4().hex[:8]}",
+            bundle_sha256=bundle_sha256,
+        )
+    )
+    db_session.flush()
+    db_session.add(
+        PluginSkill(
+            plugin_version_id=version_id,
+            path="",
+            frontmatter={"name": skill_name, "description": description},
+        )
+    )
+    db_session.flush()
+    return plugin
+
+
+def set_current_version_validity(
+    db_session: Session, skill_id: UUID, is_valid: bool | None
+) -> None:
+    """Set the lazy validity of the skill plugin's current version, which the
+    readers use."""
+    db_session.execute(
+        update(PluginVersion)
+        .where(
+            PluginVersion.id
+            == select(Plugin.current_version_id)
+            .where(Plugin.id == skill_id)
+            .scalar_subquery()
+        )
+        .values(is_valid=is_valid)
+    )
+    db_session.flush()
+
+
+def set_plugin_created_at(
+    db_session: Session, plugin_id: UUID, created_at: datetime
+) -> None:
+    """Set a plugin's age. Rows made in one test transaction share one
+    timestamp, and the name order prefers the older plugin."""
+    db_session.execute(
+        update(Plugin).where(Plugin.id == plugin_id).values(created_at=created_at)
+    )
+    db_session.flush()
 
 
 def make_built_in_skill_row(
@@ -210,21 +283,16 @@ def make_built_in_skill_row(
     built_in_skill_id: str,
     name: str | None = None,
     description: str = "test built-in",
-    is_public: bool = True,
 ) -> Skill:
     """Insert a built-in-style ``Skill`` row pointing at a
     ``built_in_skill_id``. Name defaults to ``built_in_skill_id`` (the
     default seeder convention), but can be overridden to test the
-    multi-row case where several skills share the same built-in id.
-    Bundle fields stay NULL (required by the XOR check constraint)."""
+    multi-row case where several skills share the same built-in id."""
     skill = Skill(
         id=uuid4(),
         name=name or built_in_skill_id,
         description=description,
         built_in_skill_id=built_in_skill_id,
-        bundle_file_id=None,
-        bundle_sha256=None,
-        public_permission=SkillSharePermission.VIEWER if is_public else None,
     )
     db_session.add(skill)
     db_session.flush()
@@ -237,7 +305,6 @@ def reset_built_in_skill_row(
     built_in_skill_id: str,
     name: str | None = None,
     description: str = "test built-in",
-    is_public: bool = True,
 ) -> Skill:
     """Idempotently (re)create a built-in row for ``built_in_skill_id``.
 
@@ -253,100 +320,155 @@ def reset_built_in_skill_row(
         built_in_skill_id=built_in_skill_id,
         name=name,
         description=description,
-        is_public=is_public,
     )
 
 
 def make_external_app(
     db_session: Session,
     *,
-    skill: Skill,
     auth_template: dict[str, Any],
-    organization_credentials: dict[str, Any] | None = None,
+    skill: Skill | Plugin | None = None,
+    name: str | None = None,
+    organization_credentials: dict[str, str] | None = None,
     app_type: ExternalAppType = ExternalAppType.CUSTOM,
     upstream_url_patterns: list[str] | None = None,
-    action_policies: dict[str, ActionPolicy] | None = None,
+    action_policies: dict[str, IntegrationActionPolicyValue] | None = None,
     enabled: bool = True,
 ) -> ExternalApp:
-    """Insert an ``ExternalApp`` row backing ``skill``, plus any per-action
-    policy overrides in ``action_policies`` (``{action_id: policy}``)."""
-    app = ExternalApp(
-        name=skill.name,
-        app_type=app_type,
-        enabled=enabled,
-        upstream_url_patterns=upstream_url_patterns or [],
-        auth_template=auth_template,
-        organization_credentials=organization_credentials or {},
-        associated_skills=[skill],
+    """Insert an ``ExternalApp`` row and its integration, plus the preset
+    OAuth client that holds ``organization_credentials`` and the admin rows
+    in ``action_policies`` (``{action_key: policy}``). ``skill`` gives the
+    default name."""
+    from tests.external_dependency_unit.integration_helpers import (
+        make_app_integration,
     )
-    db_session.add(app)
+
+    integration, app = make_app_integration(
+        db_session,
+        name=name or (skill.name if skill is not None else None),
+        app_type=app_type,
+        upstream_url_patterns=upstream_url_patterns,
+        auth_template=auth_template,
+        auth_mode=IntegrationAuthMode.INDIVIDUAL,
+        oauth_client=(
+            IntegrationOAuthClient(
+                provider_mode=IntegrationOAuthProviderMode.PRESET,
+                client_id=organization_credentials.get("client_id"),
+                client_secret=organization_credentials.get("client_secret"),
+                additional_params={
+                    key: value
+                    for key, value in organization_credentials.items()
+                    if key not in ("client_id", "client_secret")
+                },
+            )
+            if organization_credentials
+            else None
+        ),
+    )
+    app.enabled = enabled
+    integration.enabled = enabled
     db_session.flush()
     if action_policies:
-        gated_app_id = get_or_create_gated_app_id(
-            db_session, GatedAppKind.EXTERNAL_APP, app.id
-        )
-        for action_id, policy in action_policies.items():
-            db_session.add(
-                WorkspaceActionPolicy(
-                    gated_app_id=gated_app_id,
-                    action_id=action_id,
-                    policy=policy,
-                )
+        db_session.add_all(
+            IntegrationActionPolicy(
+                integration_id=integration.id, action=action, policy=policy
             )
+            for action, policy in action_policies.items()
+        )
         db_session.flush()
     return app
 
 
-def make_user_credential(
-    db_session: Session,
-    *,
-    app: ExternalApp,
-    user: User,
-    user_credentials: dict[str, Any],
-) -> ExternalAppUserCredential:
-    """Insert an ``ExternalAppUserCredential`` row for ``user`` + ``app``."""
-    cred = ExternalAppUserCredential(
-        external_app_id=app.id,
-        user_id=user.id,
-        user_credentials=user_credentials,
+def app_integration_id(db_session: Session, app: ExternalApp) -> int:
+    integration_id = db_session.scalar(
+        select(Integration.id).where(Integration.external_app_id == app.id)
     )
-    db_session.add(cred)
+    assert integration_id is not None
+    return integration_id
+
+
+def give_app_to_user(
+    db_session: Session, *, app: ExternalApp, user: User, enabled: bool = True
+) -> None:
+    """Share the integration of ``app`` with ``user``, with the user's on/off
+    choice set to ``enabled``."""
+    integration_id = app_integration_id(db_session, app)
+    db_session.execute(
+        pg_insert(Integration__User)
+        .values(integration_id=integration_id, user_id=user.id)
+        .on_conflict_do_nothing()
+    )
+    set_integration_preferences__no_commit(
+        user.id, [integration_id], enabled, db_session
+    )
     db_session.flush()
-    return cred
 
 
 def share_skill_with_user(
     db_session: Session,
-    skill: Skill,
+    skill: Plugin,
     user: User,
     permission: SkillSharePermission = SkillSharePermission.VIEWER,
-) -> Skill__User:
-    """Insert a ``Skill__User`` share row."""
-    share = Skill__User(
-        skill_id=skill.id,
-        user_id=user.id,
-        permission=permission,
-    )
-    db_session.add(share)
-    db_session.flush()
-    return share
+) -> None:
+    share_plugin_with_user(db_session, skill.id, user.id, permission)
 
 
 def share_skill_with_group(
     db_session: Session,
-    skill: Skill,
+    skill: Plugin,
     group: UserGroup,
     permission: SkillSharePermission = SkillSharePermission.VIEWER,
-) -> Skill__UserGroup:
-    """Insert a ``Skill__UserGroup`` share row."""
-    share = Skill__UserGroup(
-        skill_id=skill.id,
-        user_group_id=group.id,
-        permission=permission,
+) -> None:
+    share_plugin_with_group(db_session, skill.id, group.id, permission)
+
+
+def share_plugin_with_user(
+    db_session: Session,
+    plugin_id: UUID,
+    user_id: UUID,
+    permission: SkillSharePermission,
+) -> None:
+    """Upsert a ``Plugin__User`` row."""
+    stmt = pg_insert(Plugin__User).values(
+        plugin_id=plugin_id, user_id=user_id, permission=permission
     )
-    db_session.add(share)
+    db_session.execute(
+        stmt.on_conflict_do_update(
+            index_elements=[Plugin__User.plugin_id, Plugin__User.user_id],
+            set_={"permission": stmt.excluded.permission},
+        )
+    )
     db_session.flush()
-    return share
+
+
+def share_plugin_with_group(
+    db_session: Session,
+    plugin_id: UUID,
+    group_id: int,
+    permission: SkillSharePermission | None,
+    installation_policy: PluginInstallationPolicy | None = None,
+) -> None:
+    """Upsert a ``Plugin__UserGroup`` row. A row with no permission holds only
+    a group install setting."""
+    stmt = pg_insert(Plugin__UserGroup).values(
+        plugin_id=plugin_id,
+        user_group_id=group_id,
+        permission=permission,
+        installation_policy=installation_policy,
+    )
+    db_session.execute(
+        stmt.on_conflict_do_update(
+            index_elements=[
+                Plugin__UserGroup.plugin_id,
+                Plugin__UserGroup.user_group_id,
+            ],
+            set_={
+                "permission": stmt.excluded.permission,
+                "installation_policy": stmt.excluded.installation_policy,
+            },
+        )
+    )
+    db_session.flush()
 
 
 def make_cc_pair(

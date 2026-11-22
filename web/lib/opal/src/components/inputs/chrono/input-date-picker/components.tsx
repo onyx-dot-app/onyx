@@ -2,7 +2,7 @@
 
 import { InputContainer } from "@opal/components/inputs/container";
 import React from "react";
-import type { InputVariants } from "@opal/types";
+import type { InputVariants, RichStr } from "@opal/types";
 import { Button, Calendar, Popover, Text } from "@opal/components";
 import { SvgCalendar, SvgX } from "@opal/icons";
 import {
@@ -14,6 +14,10 @@ import {
   usePendingCaret,
 } from "@opal/components/inputs/segmented";
 import { useOpalStrings } from "@opal/strings";
+import {
+  InputTooltip,
+  useInputDisabled,
+} from "@opal/components/inputs/disabled";
 
 // ---------------------------------------------------------------------------
 // Segment helpers
@@ -108,6 +112,9 @@ interface InputDatePickerProps {
   error?: boolean;
   disabled?: boolean;
 
+  /** Shown on hover, in any state. A disabled row's reason replaces it. */
+  tooltip?: string | RichStr;
+
   /** Shows a clear action while a value is set and the field is enabled. */
   clearable?: boolean;
 
@@ -132,18 +139,23 @@ interface InputDatePickerProps {
  * calendar action that opens the Opal Calendar in a popover. Typing commits
  * on blur or Enter once the segments form a real in-range date. Picking in
  * the calendar commits immediately.
+ *
+ * Inside `InputHorizontal` or `InputVertical`, the row's `disabled` and
+ * `disabledTooltip` apply to it too.
  */
 function InputDatePicker({
   value,
   onChange,
   error,
-  disabled,
+  disabled: disabledProp,
+  tooltip,
   clearable,
   minDate,
   maxDate,
   id,
   placeholder,
 }: InputDatePickerProps) {
+  const disabled = useInputDisabled(disabledProp);
   const variant: InputVariants = disabled
     ? "disabled"
     : error
@@ -287,7 +299,8 @@ function InputDatePicker({
   }
 
   function handleCalendarSelect(date: Date | undefined) {
-    if (!date) return;
+    // The row can disable the input while its calendar is open.
+    if (!date || disabled) return;
     onChange(date);
     setOpen(false);
   }
@@ -303,111 +316,117 @@ function InputDatePicker({
     !segments.year;
 
   return (
-    <div className="opal-input-segmented-root">
-      <Popover open={open} onOpenChange={setOpen}>
-        <InputContainer
-          className="opal-input-segmented"
-          variant={variant}
-          onFocus={() => setFocused(true)}
-          onFieldBlur={handleFieldBlur}
-        >
-          <div
-            className="opal-input-segmented-content"
-            role="group"
-            aria-label={strings.date}
-            data-placeholder-shown={showPlaceholder || undefined}
+    <InputTooltip tooltip={tooltip}>
+      <div className="opal-input-segmented-root">
+        <Popover open={open} onOpenChange={setOpen}>
+          <InputContainer
+            className="opal-input-segmented"
+            variant={variant}
+            onFocus={() => setFocused(true)}
+            onFieldBlur={handleFieldBlur}
           >
-            {/* The segments stay mounted under the placeholder, so a click or
+            <div
+              className="opal-input-segmented-content"
+              role="group"
+              aria-label={strings.date}
+              data-placeholder-shown={showPlaceholder || undefined}
+            >
+              {/* The segments stay mounted under the placeholder, so a click or
                 Tab still lands in the month segment and reveals them. */}
-            {showPlaceholder && (
-              <span className="opal-input-segmented-placeholder">
-                <Text
-                  font="main-ui-body"
-                  color={disabled ? "text-01" : "text-02"}
-                >
-                  {placeholder}
-                </Text>
-              </span>
-            )}
-            {SEGMENT_FIELDS.map((field, i) => (
-              <React.Fragment key={field.part}>
-                {i > 0 && separator}
-                {/* raw-ok: segmented numeric fields have no Opal input primitive. The field chrome is the surrounding .opal-input. */}
-                <input
-                  {...SEGMENT_INPUT_PROPS}
+              {showPlaceholder && (
+                <span className="opal-input-segmented-placeholder">
+                  <Text
+                    font="main-ui-body"
+                    color={disabled ? "text-01" : "text-02"}
+                  >
+                    {placeholder}
+                  </Text>
+                </span>
+              )}
+              {SEGMENT_FIELDS.map((field, i) => (
+                <React.Fragment key={field.part}>
+                  {i > 0 && separator}
+                  {/* raw-ok: segmented numeric fields have no Opal input primitive. The field chrome is the surrounding .opal-input. */}
+                  <input
+                    {...SEGMENT_INPUT_PROPS}
+                    disabled={disabled}
+                    ref={segmentRefs[field.part]}
+                    id={field.part === "month" ? id : undefined}
+                    aria-label={strings[field.part]}
+                    placeholder={field.placeholder}
+                    data-wide={field.part === "year" ? true : undefined}
+                    value={segments[field.part]}
+                    onChange={handleSegmentChange(field, SEGMENT_FIELDS[i + 1])}
+                    onPaste={handlePaste(field)}
+                    onKeyDown={handleSegmentKeyDown(
+                      field.part,
+                      i > 0 ? segmentRefs[SEGMENT_FIELDS[i - 1]!.part] : null,
+                      i < SEGMENT_FIELDS.length - 1
+                        ? segmentRefs[SEGMENT_FIELDS[i + 1]!.part]
+                        : null
+                    )}
+                  />
+                </React.Fragment>
+              ))}
+            </div>
+
+            <div
+              role="presentation"
+              className="opal-input-segmented-actions"
+              // Escape on an action returns focus to the field's first segment.
+              onKeyDown={(event) => {
+                if (event.key === "Escape") monthRef.current?.focus();
+              }}
+            >
+              <Popover.Trigger asChild>
+                <Button
+                  icon={SvgCalendar}
+                  prominence="tertiary"
+                  size="sm"
+                  tooltip={strings.openCalendar}
+                  aria-label={strings.openCalendar}
                   disabled={disabled}
-                  ref={segmentRefs[field.part]}
-                  id={field.part === "month" ? id : undefined}
-                  aria-label={strings[field.part]}
-                  placeholder={field.placeholder}
-                  data-wide={field.part === "year" ? true : undefined}
-                  value={segments[field.part]}
-                  onChange={handleSegmentChange(field, SEGMENT_FIELDS[i + 1])}
-                  onPaste={handlePaste(field)}
-                  onKeyDown={handleSegmentKeyDown(
-                    field.part,
-                    i > 0 ? segmentRefs[SEGMENT_FIELDS[i - 1]!.part] : null,
-                    i < SEGMENT_FIELDS.length - 1
-                      ? segmentRefs[SEGMENT_FIELDS[i + 1]!.part]
-                      : null
-                  )}
                 />
-              </React.Fragment>
-            ))}
-          </div>
+              </Popover.Trigger>
+              {/* The clear action is always the field's last control. */}
+              {clearable && value && !disabled && (
+                <Button
+                  icon={SvgX}
+                  prominence="tertiary"
+                  size="sm"
+                  tooltip={strings.clear}
+                  aria-label={strings.clear}
+                  onClick={() => onChange(null)}
+                />
+              )}
+            </div>
+          </InputContainer>
 
-          <div
-            role="presentation"
-            className="opal-input-segmented-actions"
-            // Escape on an action returns focus to the field's first segment.
-            onKeyDown={(event) => {
-              if (event.key === "Escape") monthRef.current?.focus();
-            }}
-          >
-            <Popover.Trigger asChild>
-              <Button
-                icon={SvgCalendar}
-                prominence="tertiary"
-                size="sm"
-                tooltip={strings.openCalendar}
-                aria-label={strings.openCalendar}
-                disabled={disabled}
-              />
-            </Popover.Trigger>
-            {/* The clear action is always the field's last control. */}
-            {clearable && value && !disabled && (
-              <Button
-                icon={SvgX}
-                prominence="tertiary"
-                size="sm"
-                tooltip={strings.clear}
-                aria-label={strings.clear}
-                onClick={() => onChange(null)}
-              />
-            )}
-          </div>
-        </InputContainer>
-
-        <Popover.Content ref={popoverContentRef} align="end">
-          <Calendar
-            mode="single"
-            selected={value ?? undefined}
-            onSelect={handleCalendarSelect}
-            defaultMonth={value ?? normalizedMax ?? normalizedMin ?? undefined}
-            startMonth={normalizedMin}
-            endMonth={normalizedMax}
-            disabled={
-              normalizedMin || normalizedMax
-                ? [
-                    ...(normalizedMin ? [{ before: normalizedMin }] : []),
-                    ...(normalizedMax ? [{ after: normalizedMax }] : []),
-                  ]
-                : undefined
-            }
-          />
-        </Popover.Content>
-      </Popover>
-    </div>
+          <Popover.Content ref={popoverContentRef} align="end">
+            <Calendar
+              mode="single"
+              selected={value ?? undefined}
+              onSelect={handleCalendarSelect}
+              defaultMonth={
+                value ?? normalizedMax ?? normalizedMin ?? undefined
+              }
+              startMonth={normalizedMin}
+              endMonth={normalizedMax}
+              disabled={
+                disabled
+                  ? true
+                  : normalizedMin || normalizedMax
+                    ? [
+                        ...(normalizedMin ? [{ before: normalizedMin }] : []),
+                        ...(normalizedMax ? [{ after: normalizedMax }] : []),
+                      ]
+                    : undefined
+              }
+            />
+          </Popover.Content>
+        </Popover>
+      </div>
+    </InputTooltip>
   );
 }
 

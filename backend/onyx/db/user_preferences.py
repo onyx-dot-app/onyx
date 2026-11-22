@@ -5,6 +5,7 @@ from sqlalchemy import Column, delete, desc, select, update
 from sqlalchemy.orm import Session
 
 from onyx.db.enums import AccountType, DefaultAppMode, ThemePreference
+from onyx.db.integration_connection import delete_connections_for_user__no_commit
 from onyx.db.models import (
     AccessToken,
     Assistant__UserSpecificConfig,
@@ -28,9 +29,11 @@ def deactivate_user(
     user: User,
     db_session: Session,
 ) -> None:
-    """Deactivate a user and release the personas they own."""
+    """Deactivate a user, release the personas they own and delete their
+    integration connections."""
     user.is_active = False
     release_personas_owned_by_user__no_commit(db_session, user.id)
+    delete_connections_for_user__no_commit(db_session, user.id)
     db_session.add(user)
     db_session.commit()
 
@@ -159,6 +162,19 @@ def update_user_paste_as_tile(
         update(User)
         .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
         .values(paste_as_tile=paste_as_tile)
+    )
+    db_session.commit()
+
+
+def update_user_interrupt_on_send(
+    user_id: UUID,
+    interrupt_on_send: bool,
+    db_session: Session,
+) -> None:
+    db_session.execute(
+        update(User)
+        .where(User.id == user_id)  # ty: ignore[invalid-argument-type]
+        .values(interrupt_on_send=interrupt_on_send)
     )
     db_session.commit()
 
@@ -350,8 +366,6 @@ def update_assistant_preferences(
     new_assistant_preference: UserSpecificAssistantPreference,
     db_session: Session,
 ) -> None:
-    """Update the disabled tools for a specific assistant for a specific user."""
-    # First check if a config already exists
     result = db_session.execute(
         select(Assistant__UserSpecificConfig)
         .where(Assistant__UserSpecificConfig.assistant_id == assistant_id)
@@ -360,14 +374,20 @@ def update_assistant_preferences(
     config = result.scalar_one_or_none()
 
     if config:
-        # Update existing config
-        config.disabled_tool_ids = new_assistant_preference.disabled_tool_ids
+        if new_assistant_preference.disabled_tool_ids is not None:
+            config.disabled_tool_ids = new_assistant_preference.disabled_tool_ids
+        if new_assistant_preference.disabled_integration_ids is not None:
+            config.disabled_integration_ids = (
+                new_assistant_preference.disabled_integration_ids
+            )
     else:
-        # Create new config
         config = Assistant__UserSpecificConfig(
             assistant_id=assistant_id,
             user_id=user_id,
-            disabled_tool_ids=new_assistant_preference.disabled_tool_ids,
+            disabled_tool_ids=new_assistant_preference.disabled_tool_ids or [],
+            disabled_integration_ids=(
+                new_assistant_preference.disabled_integration_ids or []
+            ),
         )
         db_session.add(config)
 

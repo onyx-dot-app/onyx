@@ -29,7 +29,7 @@ mutes its text and icon to `text-03` on its gray fill.
 
 | Color     | Fill                 |
 | --------- | -------------------- |
-| `default` | `background-tint-02` |
+| `default` | `background-neutral-02` |
 | `info`    | `theme-blue-01`      |
 | `success` | `theme-green-01`     |
 | `warning` | `status-warning-01`  |

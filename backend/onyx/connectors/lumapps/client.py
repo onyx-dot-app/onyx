@@ -106,7 +106,8 @@ class OnyxLumApps:
     def _bearer(self) -> str:
         if not self._token or time.monotonic() >= self._token_expiry_monotonic:
             self._mint_token()
-        assert self._token is not None
+        if self._token is None:
+            raise RuntimeError("LumApps token is missing after minting.")
         return self._token
 
     # --------------------------------------------------------------- request

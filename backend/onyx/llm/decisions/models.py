@@ -13,6 +13,10 @@ class DecisionProvider(StrEnum):
     NACE = "nace"
 
 
+# The OpenAI model offered as the built-in decision model.
+OPENAI_DECISIONS_MODEL_NAME = "gpt-6-luna"
+
+
 class DecisionModel(BaseModel):
     model_config = ConfigDict(strict=True, allow_inf_nan=False)
 

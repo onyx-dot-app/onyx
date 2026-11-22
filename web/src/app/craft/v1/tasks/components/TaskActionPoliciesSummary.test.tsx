@@ -1,50 +1,49 @@
 import { render, screen } from "@tests/setup/test-utils";
 import TaskActionPoliciesSummary from "@/app/craft/v1/tasks/components/TaskActionPoliciesSummary";
-import type { AppActionPoliciesView } from "@/lib/plugins/types";
+import type { TaskIntegrationView } from "@/app/craft/v1/tasks/types";
 
-const initialData: AppActionPoliciesView[] = [
-  {
-    gated_app_id: 1,
-    kind: "external_app",
-    target_id: 10,
-    name: "Slack",
-    enabled: true,
-    users_can_manage_policies: true,
+function integration(
+  id: number,
+  name: string,
+  enabled: boolean
+): TaskIntegrationView {
+  return {
+    id,
+    name,
+    kind: "mcp",
+    app_type: null,
+    status: { state: "connected", reason: null },
     actions: [],
-  },
-];
-let mockData = initialData;
+    enabled,
+    action_settings: enabled ? { default: "inherit", actions: {} } : null,
+    runnable: true,
+  };
+}
+
+let mockData: TaskIntegrationView[] = [];
 jest.mock("swr", () => ({
   ...jest.requireActual("swr"),
   __esModule: true,
   default: () => ({ data: mockData, mutate: jest.fn() }),
 }));
-beforeEach(() => {
-  mockData = initialData;
-});
 
-it("lists only enabled plugins as passive task context", () => {
+it("lists only enabled integrations as passive task context", () => {
   mockData = [
-    ...initialData.map((app) => ({ ...app, enabled: true })),
-    ...initialData.map((app) => ({
-      ...app,
-      gated_app_id: 2,
-      name: "Disabled plugin",
-      enabled: false,
-    })),
+    integration(1, "Slack", true),
+    integration(2, "Disabled app", false),
   ];
   render(<TaskActionPoliciesSummary taskId="task" />);
   expect(screen.getByText("Slack")).toBeInTheDocument();
-  expect(screen.queryByText("Disabled plugin")).not.toBeInTheDocument();
+  expect(screen.queryByText("Disabled app")).not.toBeInTheDocument();
   expect(screen.queryByRole("switch")).not.toBeInTheDocument();
   expect(screen.queryByRole("button")).not.toBeInTheDocument();
 });
 
-it("shows an explicit empty state when no plugins are enabled", () => {
-  mockData = initialData.map((app) => ({ ...app, enabled: false }));
+it("shows an explicit empty state when no integrations are enabled", () => {
+  mockData = [integration(1, "Slack", false)];
   render(<TaskActionPoliciesSummary taskId="task" />);
   expect(
-    screen.getByText("No plugins enabled for this task.")
+    screen.getByText("No integrations turned on for this task.")
   ).toBeInTheDocument();
   expect(screen.queryByText("Slack")).not.toBeInTheDocument();
 });

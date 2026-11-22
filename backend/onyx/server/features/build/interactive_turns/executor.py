@@ -10,16 +10,16 @@ from sqlalchemy.orm import Session
 
 from onyx.cache.factory import get_cache_backend
 from onyx.cache.interface import CACHE_TRANSIENT_ERRORS, CacheBackend
+from onyx.db.build_session import get_build_session
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.models import Sandbox
+from onyx.db.sandbox import (
+    get_sandbox_by_user_id,
+    update_sandbox_heartbeat,
+)
 from onyx.db.users import fetch_user_by_id
 from onyx.server.features.build.configs import (
     OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS,
-)
-from onyx.server.features.build.db.build_session import get_build_session
-from onyx.server.features.build.db.sandbox import (
-    get_sandbox_by_user_id,
-    update_sandbox_heartbeat,
 )
 from onyx.server.features.build.interactive_turns.models import (
     PromptOutcome,
@@ -44,6 +44,7 @@ from onyx.server.features.build.sandbox.event_schema import Error as SandboxErro
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
 from onyx.server.features.build.sandbox.models import PromptAttachment
 from onyx.server.features.build.sandbox.sse import SSEKeepalive
+from onyx.server.features.build.session.errors import OpencodeConfigReloadError
 from onyx.server.features.build.session.interrupt_signal import (
     clear_interrupt,
     is_interrupt_requested,
@@ -545,7 +546,11 @@ def _drive_interactive_turn(
                     logger.exception(
                         "Failed to finalize persistence for turn %s", turn_id
                     )
-                persist_turn_error("This turn failed unexpectedly.")
+                persist_turn_error(
+                    str(exc)
+                    if isinstance(exc, OpencodeConfigReloadError)
+                    else "This turn failed unexpectedly."
+                )
                 completion_status = TURN_STATUS_FAILED
                 completion_error = f"{type(exc).__name__}: {str(exc)[:950]}"
             finally:

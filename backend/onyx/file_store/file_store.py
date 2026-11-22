@@ -13,7 +13,12 @@ from io import BytesIO
 from typing import IO, TYPE_CHECKING, Any, NotRequired, TypedDict, TypeVar, cast
 
 import puremagic
-from botocore.exceptions import ClientError
+from botocore.exceptions import BotoCoreError, ClientError
+from botocore.retries.standard import (
+    RetryContext,
+    ThrottledRetryableChecker,
+    TransientRetryableChecker,
+)
 from sqlalchemy.orm import Session
 
 from onyx.cache.factory import get_cache_backend
@@ -45,6 +50,7 @@ from onyx.db.file_record import (
     get_filerecord_by_file_id_for_update,
     get_filerecord_by_file_id_optional,
     get_filerecord_by_prefix,
+    get_object_keys_with_records,
     rename_filerecord,
     upsert_filerecord,
 )
@@ -86,6 +92,58 @@ def content_byte_size(file_content: object) -> int | None:
     if isinstance(file_content, str):
         return len(file_content.encode("utf-8"))
     return None
+
+
+def record_uploaded_object(
+    *,
+    file_id: str,
+    display_name: str | None,
+    file_origin: FileOrigin,
+    file_type: str,
+    file_metadata: dict[str, Any] | None,
+    file_size: int | None,
+    bucket_name: str,
+    object_key: str,
+    db_session: Session | None,
+    delete_object: Callable[[], None],
+) -> None:
+    """Writes and commits the record of an object that save_file uploaded.
+    When the write or commit fails, calls delete_object unless a committed
+    record points at the object, then raises the original error. Such a record
+    can be an earlier save of the same file ID, a renamed record or another ID
+    that sanitizes to the same key."""
+    try:
+        with get_session_with_current_tenant_if_none(db_session) as db_session:
+            upsert_filerecord(
+                file_id=file_id,
+                display_name=display_name or file_id,
+                file_origin=file_origin,
+                file_type=file_type,
+                bucket_name=bucket_name,
+                object_key=object_key,
+                db_session=db_session,
+                file_metadata=file_metadata,
+                file_size=file_size,
+            )
+            db_session.commit()
+    except Exception:
+        try:
+            with get_session_with_current_tenant() as cleanup_session:
+                referenced = get_object_keys_with_records(
+                    bucket_name, [object_key], cleanup_session
+                )
+            if not referenced:
+                delete_object()
+        except Exception:
+            logger.warning(
+                "Failed to delete orphaned object %s/%s after the record "
+                "write for file %s failed",
+                bucket_name,
+                object_key,
+                file_id,
+                exc_info=True,
+            )
+        raise
 
 
 _T = TypeVar("_T")
@@ -342,6 +400,7 @@ class FileStore(ABC):
         file_type: str,
         file_metadata: dict[str, Any] | None = None,
         file_id: str | None = None,
+        db_session: Session | None = None,
     ) -> str:
         """
         Save a file to the blob store
@@ -354,6 +413,10 @@ class FileStore(ABC):
         - file_metadata: Additional metadata for the file
         - file_id: Unique ID of the file to save. If not provided, a random UUID will be generated.
                    It is generally NOT recommended to provide this.
+        - db_session: Session that writes the file record. save_file commits
+                      it exactly once, after the record is written, so a
+                      `before_commit` hook on it runs in the record's
+                      transaction. If not provided, a new session is used.
 
         Returns:
             The unique ID of the file that was saved.
@@ -428,12 +491,25 @@ class FileStore(ABC):
         List all file IDs that start with the given prefix.
         """
 
+    def is_transient_error(self, error: Exception) -> bool:  # noqa: ARG002
+        """Whether a later attempt can succeed after this store raised `error`:
+        the backing service throttled or failed for a moment. A denied access
+        or a missing bucket fails every attempt."""
+        return False
+
+
+# HTTP statuses of an object store that throttled or failed for a moment.
+TRANSIENT_STORAGE_STATUS = frozenset({429, 500, 502, 503, 504})
+
 
 class PresignableFileStore(FileStore):
     """A file store on a cloud object store (S3, GCS, Azure) that can sign URLs.
     Callers check isinstance(store, PresignableFileStore); other stores have no
     presigned URLs. The hooks take the bucket, so a store for another bucket can
     reuse the signer."""
+
+    # The largest object one presigned PUT can write.
+    _presign_max_upload_bytes = FILE_STORE_PRESIGN_MAX_UPLOAD_BYTES
 
     @abstractmethod
     def _presign_bucket_name(self) -> str:
@@ -505,9 +581,9 @@ class PresignableFileStore(FileStore):
         writes no file_record row until finalize_presigned_upload. sha256 is
         the hex digest of the content to upload."""
         ttl_seconds = presign_ttl_seconds(ttl)
-        if not 0 <= size <= FILE_STORE_PRESIGN_MAX_UPLOAD_BYTES:
+        if not 0 <= size <= self._presign_max_upload_bytes:
             raise ValueError(
-                f"A presigned upload size must be 0 to {FILE_STORE_PRESIGN_MAX_UPLOAD_BYTES} bytes"
+                f"A presigned upload size must be 0 to {self._presign_max_upload_bytes} bytes"
             )
         sha256 = sha256.lower()
         if not _SHA256_HEX.fullmatch(sha256):
@@ -629,6 +705,19 @@ class PresignableFileStore(FileStore):
 
 class S3BackedFileStore(PresignableFileStore):
     """Isn't necessarily S3, but is any S3-compatible storage (e.g. MinIO)"""
+
+    def is_transient_error(self, error: Exception) -> bool:
+        # A connection error retries; an error response retries as botocore's
+        # retry checks decide.
+        if not isinstance(error, ClientError):
+            return isinstance(error, BotoCoreError)
+        context = RetryContext(attempt_number=1, parsed_response=error.response)
+        return (
+            error.response.get("ResponseMetadata", {}).get("HTTPStatusCode")
+            in TRANSIENT_STORAGE_STATUS
+            or TransientRetryableChecker().is_retryable(context)
+            or ThrottledRetryableChecker().is_retryable(context)
+        )
 
     def __init__(
         self,
@@ -894,20 +983,22 @@ class S3BackedFileStore(PresignableFileStore):
         )
         self._put_legacy_object(bucket_name, s3_key, file_content, file_type, kwargs)
 
-        with get_session_with_current_tenant_if_none(db_session) as db_session:
-            # Save metadata to database
-            upsert_filerecord(
-                file_id=file_id,
-                display_name=display_name or file_id,
-                file_origin=file_origin,
-                file_type=file_type,
-                bucket_name=bucket_name,
-                object_key=s3_key,
-                db_session=db_session,
-                file_metadata=file_metadata,
-                file_size=content_byte_size(file_content),
-            )
-            db_session.commit()
+        def delete_upload() -> None:
+            self._delete_legacy_object(bucket_name, s3_key)
+            s3_client.delete_object(Bucket=bucket_name, Key=s3_key)
+
+        record_uploaded_object(
+            file_id=file_id,
+            display_name=display_name,
+            file_origin=file_origin,
+            file_type=file_type,
+            file_metadata=file_metadata,
+            file_size=content_byte_size(file_content),
+            bucket_name=bucket_name,
+            object_key=s3_key,
+            db_session=db_session,
+            delete_object=delete_upload,
+        )
 
         return file_id
 

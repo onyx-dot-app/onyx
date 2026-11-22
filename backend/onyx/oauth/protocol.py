@@ -54,8 +54,8 @@ def ensure_offline_access_auth_params(authorization_url: str) -> str:
 
 class OAuthFlowParams(BaseModel):
     """Stateless inputs for the OAuth 2.0 authorization-code grant, decoupled
-    from any storage model so both `OAuthConfig`-backed tool OAuth and MCP
-    known-provider OAuth can share the wire primitives below."""
+    from any storage model so integration OAuth and MCP known-provider OAuth
+    can share the wire primitives below."""
 
     authorization_url: str
     token_url: str

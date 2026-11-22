@@ -118,6 +118,24 @@ def test_selection_caps_serialized_metadata_and_preserves_full_evidence() -> Non
     assert first.combined_content == "onboarding evidence " * 12000
 
 
+def test_selection_fits_ranked_prefix_without_counting_each_removed_section() -> None:
+    sections = [_section(i, "onboarding evidence " * 500) for i in range(32)]
+    llm = _llm("[0]")
+    with patch(
+        "onyx.secondary_llm_flows.search_prompt_budget.get_llm_token_counter"
+    ) as factory:
+        factory.return_value.side_effect = get_llm_token_counter(llm)
+        selected, _ = select_sections_for_expansion(
+            sections, "Find onboarding steps", llm, enforce_llm_input_budget=True
+        )
+    request = _assert_request_fits(llm)
+    documents = json.loads(request.messages[0].text.split("```", 2)[1])
+    assert selected == sections[:1]
+    assert 0 < len(documents) < len(sections) // 2
+    assert [doc["section_id"] for doc in documents] == list(range(len(documents)))
+    assert factory.return_value.call_count <= 8
+
+
 def test_selection_omits_oversized_title_only_from_utility_prompt() -> None:
     section = _section(0, "onboarding evidence")
     section.center_chunk.semantic_identifier = "Long title " * 12000

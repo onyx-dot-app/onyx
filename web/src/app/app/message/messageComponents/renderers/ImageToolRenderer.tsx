@@ -1,5 +1,5 @@
 import { useTranslations } from "next-intl";
-import { SvgImage } from "@opal/icons";
+import { STEP_ICONS } from "@/lib/timeline/icons";
 import { Text } from "@opal/components";
 import { CardGrid, Section } from "@opal/layouts";
 import {
@@ -11,6 +11,7 @@ import {
   MessageRenderer,
   RenderType,
 } from "@/app/app/message/messageComponents/types";
+import { isGroupEndPacket } from "@/lib/timeline/chat/packetHelpers";
 import { InMessageImage } from "@/app/app/components/files/images/InMessageImage";
 import GeneratingImageDisplay from "@/app/app/components/tools/GeneratingImageDisplay";
 
@@ -56,24 +57,19 @@ export const ImageToolRenderer: MessageRenderer<
   const hasResult = packets.some(
     (packet) => packet.obj.type === PacketType.IMAGE_GENERATION_TOOL_DELTA
   );
-  const isComplete = packets.some(
-    (packet) =>
-      packet.obj.type === PacketType.SECTION_END ||
-      packet.obj.type === PacketType.ERROR
-  );
-  const failed = packets.some((p) => p.obj.type === PacketType.ERROR);
+  const isComplete = packets.some(isGroupEndPacket);
   const isRunning = !isComplete && !stopPacketSeen;
 
-  // A final result can be empty. A stopped call has no result packet.
-  const status = failed
-    ? t("imageTool.failedStatus.text")
-    : isRunning
-      ? t("imageTool.generatingStatus.text")
-      : images.length > 0
-        ? t("imageTool.generatedStatus.text", { count: images.length })
-        : hasResult
-          ? t("imageTool.emptyState.text")
-          : t("imageTool.stoppedStatus.text");
+  // A failed or stopped step keeps the running title. A final result can be
+  // empty. A call with no result packet was stopped, by Stop or by an
+  // interrupted code mode program.
+  const status = t("imageTool.generatingStatus.text");
+  const doneStatus =
+    images.length > 0
+      ? t("imageTool.generatedStatus.text", { count: images.length })
+      : hasResult
+        ? t("imageTool.emptyState.text")
+        : t("imageTool.stoppedStatus.text");
 
   const revisedPrompts = Array.from(
     new Set(images.map((image) => image.revised_prompt).filter(Boolean))
@@ -97,8 +93,9 @@ export const ImageToolRenderer: MessageRenderer<
 
   return children([
     {
-      icon: SvgImage,
+      icon: STEP_ICONS.image,
       status,
+      doneStatus,
       supportsCollapsible: false,
       content,
     },

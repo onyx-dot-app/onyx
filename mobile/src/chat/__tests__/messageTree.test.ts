@@ -11,7 +11,6 @@ import { Message, MessageType } from "@/chat/interfaces";
 import {
   buildEmptyMessage,
   buildImmediateMessages,
-  getLastSuccessfulMessageId,
   getLatestMessageChain,
   getMessageByMessageId,
   setMessageAsLatest,
@@ -153,19 +152,5 @@ describe("getMessageByMessageId", () => {
     ]);
     expect(getMessageByMessageId(tree, 42)!.nodeId).toBe(100);
     expect(getMessageByMessageId(tree, 999)).toBeUndefined();
-  });
-});
-
-describe("getLastSuccessfulMessageId", () => {
-  it("returns the last non-error messageId in the chain", () => {
-    let tree = upsertMessages(new Map(), [
-      node(100, "user", null, { messageId: 1 }),
-    ]);
-    tree = upsertMessages(tree, [
-      node(101, "assistant", 100, { messageId: 2 }),
-    ]);
-    tree = upsertMessages(tree, [node(102, "error", 101, { messageId: 3 })]);
-
-    expect(getLastSuccessfulMessageId(tree)).toBe(2);
   });
 });

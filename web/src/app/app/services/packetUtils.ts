@@ -31,17 +31,25 @@ export function isToolPacket(
     PacketType.MEMORY_TOOL_START,
     PacketType.MEMORY_TOOL_DELTA,
     PacketType.MEMORY_TOOL_NO_ACCESS,
+    PacketType.POSTGRES_TOOL_START,
+    PacketType.POSTGRES_TOOL_DOCUMENTS,
     PacketType.DEEP_RESEARCH_PLAN_START,
     PacketType.DEEP_RESEARCH_PLAN_DELTA,
     PacketType.RESEARCH_AGENT_START,
     PacketType.INTERMEDIATE_REPORT_START,
     PacketType.INTERMEDIATE_REPORT_DELTA,
     PacketType.INTERMEDIATE_REPORT_CITED_DOCS,
-    PacketType.CODING_AGENT_START,
-    PacketType.CODING_AGENT_THINKING_DELTA,
-    PacketType.CODING_AGENT_FINAL,
-    PacketType.BASH_TOOL_START,
-    PacketType.BASH_TOOL_DELTA,
+    PacketType.EXEC_COMMAND_START,
+    PacketType.WRITE_STDIN_START,
+    PacketType.EXEC_OUTPUT_DELTA,
+    PacketType.EXEC_END,
+    PacketType.FILE_TOOL_PROGRESS,
+    PacketType.APPLY_PATCH_START,
+    PacketType.APPLY_PATCH_END,
+    PacketType.PUBLISH_FILES_START,
+    PacketType.PUBLISH_FILES_END,
+    PacketType.CODE_MODE_START,
+    PacketType.CODE_MODE_DELTA,
     PacketType.IMAGE_GENERATION_TOOL_START,
     PacketType.IMAGE_GENERATION_TOOL_DELTA,
   ];
@@ -66,7 +74,10 @@ export function isActualToolCallPacket(packet: Packet): boolean {
 }
 
 export function isDisplayPacket(packet: Packet) {
-  return packet.obj.type === PacketType.MESSAGE_START;
+  return (
+    packet.obj.type === PacketType.MESSAGE_START ||
+    packet.obj.type === PacketType.USER_MESSAGE
+  );
 }
 
 export function isSearchToolPacket(packet: Packet): boolean {
@@ -76,14 +87,6 @@ export function isSearchToolPacket(packet: Packet): boolean {
     packet.obj.type === PacketType.SEARCH_TOOL_FILTER_DELTA ||
     packet.obj.type === PacketType.SEARCH_TOOL_DOCUMENTS_DELTA
   );
-}
-
-export function isStreamingComplete(packets: Packet[]) {
-  return packets.some((packet) => packet.obj.type === PacketType.STOP);
-}
-
-export function isFinalAnswerComing(packets: Packet[]) {
-  return packets.some((packet) => packet.obj.type === PacketType.MESSAGE_START);
 }
 
 export function isFinalAnswerComplete(packets: Packet[]) {

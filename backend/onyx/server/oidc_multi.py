@@ -18,15 +18,16 @@ from contextlib import contextmanager
 from typing import Any
 
 from cachetools import TTLCache
-from fastapi import APIRouter, Depends, Request, Response
+from fastapi import APIRouter, Depends, Query, Request, Response
 from fastapi.concurrency import run_in_threadpool
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, RedirectResponse
 from fastapi_users.authentication import Strategy
 from httpx_oauth.clients.google import GoogleOAuth2
 from httpx_oauth.clients.openid import BASE_SCOPES
 from httpx_oauth.oauth2 import BaseOAuth2, GetAccessTokenError
 from sqlalchemy.orm import Session
 
+from onyx.auth.mobile_sso.sso_completion import apply_mobile_state
 from onyx.auth.oidc_client import VerifiedEmailOpenID, log_token_exchange_failure
 from onyx.auth.sso_tenant_token import (
     SSO_TENANT_TOKEN_PARAM,
@@ -315,6 +316,14 @@ def _callback_uri(provider: SSOProvider, config: dict[str, Any]) -> str:
 async def oidc_login_for_provider(
     provider_name: str,
     request: Request,
+    # A browser that opens this URL itself (a native app's sign-in) needs the
+    # redirect; the web page reads the URL from the JSON instead.
+    redirect: bool = Query(False),
+    # Native-app SSO: present => the callback returns a one-time PKCE code to
+    # the app's allowlisted deep link instead of a web session cookie.
+    mobile_redirect_uri: str | None = Query(None),
+    app_state: str | None = Query(None),
+    app_code_challenge: str | None = Query(None),
     db_session: Session = Depends(get_authorize_session),
 ) -> Response:
     provider, config = _resolve_oidc_provider(db_session, provider_name)
@@ -323,20 +332,21 @@ async def oidc_login_for_provider(
     next_url = sanitize_next_url(request.query_params.get("next"))
     csrf_token = generate_csrf_token()
     use_pkce = _pkce_enabled(config)
-    state = generate_state_token(
-        {
-            "next_url": next_url,
-            "provider_name": provider_name,
-            # Pins this flow's PKCE mode, so a provider edit mid-login cannot
-            # make the callback disagree with the authorization request.
-            "pkce": use_pkce,
-            # The IdP redirect arrives with no session, so the state is the only
-            # thing carrying the workspace across the round trip.
-            _STATE_TENANT_KEY: get_current_tenant_id(),
-            CSRF_TOKEN_KEY: csrf_token,
-        },
-        USER_AUTH_SECRET,
-    )
+    state_data: dict[str, Any] = {
+        "next_url": next_url,
+        "provider_name": provider_name,
+        # Pins this flow's PKCE mode, so a provider edit mid-login cannot
+        # make the callback disagree with the authorization request.
+        "pkce": use_pkce,
+        # The IdP redirect arrives with no session, so the state is the only
+        # thing carrying the workspace across the round trip.
+        _STATE_TENANT_KEY: get_current_tenant_id(),
+        CSRF_TOKEN_KEY: csrf_token,
+    }
+    # No-op for web; for a native app, marks the signed state so the shared
+    # login completion returns the app's one-time code.
+    apply_mobile_state(state_data, mobile_redirect_uri, app_state, app_code_challenge)
+    state = generate_state_token(state_data, USER_AUTH_SECRET)
 
     extras: dict[str, str] | None = None
     if provider.provider_type is SSOProviderType.GOOGLE_OAUTH:
@@ -359,11 +369,15 @@ async def oidc_login_for_provider(
             extras_params=extras,
         )
 
-    response = JSONResponse(
-        content=OAuth2AuthorizeResponse(
-            authorization_url=authorization_url
-        ).model_dump()
-    )
+    response: Response
+    if redirect:
+        response = RedirectResponse(authorization_url, status_code=302)
+    else:
+        response = JSONResponse(
+            content=OAuth2AuthorizeResponse(
+                authorization_url=authorization_url
+            ).model_dump()
+        )
     _set_oauth_cookie(
         response,
         key=CSRF_TOKEN_COOKIE_NAME,

@@ -13,11 +13,15 @@ A dual-element checkbox with custom styling. Uses a hidden native `<input>` for 
 | `onCheckedChange` | `(checked: boolean) => void` | —       | Called when the checked state changes                |
 | `indeterminate`   | `boolean`                    | `false` | Shows a dash instead of a check                      |
 | `disabled`        | `boolean`                    | `false` | Prevents interaction                                 |
+| `tooltip`         | `string \| RichStr`          | —       | Shown on hover, in any state                         |
 | `className`       | `string`                     | —       | Additional classes for the visual surface            |
 | `id`              | `string`                     | —       | Passed to the hidden `<input>` for label association |
 | `name`            | `string`                     | —       | Form field name                                      |
 
 All remaining props are forwarded to the hidden `<input>` element.
+
+Inside `InputHorizontal` or `InputVertical`, the row's `disabled` also disables
+the checkbox, and its `disabledTooltip` replaces `tooltip` while disabled.
 
 ## Styles
 

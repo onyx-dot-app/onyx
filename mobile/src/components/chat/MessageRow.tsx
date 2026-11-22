@@ -10,6 +10,9 @@ import { MinimalAgent } from "@/chat/agents";
 import { getErrorTitle } from "@/chat/errorHelpers";
 import { fileDescriptorToDisplayFile } from "@/chat/fileDescriptors";
 import { openSource } from "@/chat/openSource";
+import { APPROVAL_CARDS } from "@/chat/toolApprovals";
+import { orderCardsByTurn } from "@/chat/toolCards";
+import { QUESTION_CARDS, typedAnswerShownBy } from "@/chat/toolQuestions";
 import { AgentTimeline } from "@/components/chat/AgentTimeline";
 import { AttachmentImage } from "@/components/chat/AttachmentImage";
 import {
@@ -20,11 +23,15 @@ import { FileCard } from "@/components/chat/FileCard";
 import { RendererComponent } from "@/components/chat/renderers/RendererComponent";
 import type { FullChatState } from "@/components/chat/renderers/registry";
 import { ReasoningTextSheet } from "@/components/chat/timeline/ReasoningTextSheet";
+import { ToolApprovalCard } from "@/components/chat/ToolApprovalCard";
+import { ToolQuestionCard } from "@/components/chat/ToolQuestionCard";
+import { UserMessageBubble } from "@/components/chat/UserMessageBubble";
 import { Icon } from "@/components/ui/icon";
 import { Text } from "@/components/ui/text";
 import SvgAlertCircle from "@/icons/alert-circle";
 import { usePacedTurnGroups } from "@/hooks/timeline/usePacedTurnGroups";
 import { usePacketProcessor } from "@/hooks/timeline/usePacketProcessor";
+import { useToolCards } from "@/hooks/useToolCards";
 
 // Non-final display groups don't complete the message.
 const NOOP = (): void => {};
@@ -42,13 +49,7 @@ function UserMessage({ node }: { node: Message }) {
         </View>
       ) : null}
       {node.message.length > 0 ? (
-        // Web HumanMessage bubble: squared bottom-right corner.
-        <View className="max-w-[85%] rounded-t-16 rounded-bl-16 bg-background-tint-02 px-12 py-8">
-          {/* 14px body: deliberate reduction from web's 16px, which reads oversized on a phone. */}
-          <Text font="main-ui-body" color="text-05">
-            {node.message}
-          </Text>
-        </View>
+        <UserMessageBubble text={node.message} />
       ) : null}
     </View>
   );
@@ -87,6 +88,7 @@ function AssistantMessage({
   const {
     processed,
     toolTurnGroups,
+    codeModeWorking,
     displayGroups,
     hasSteps,
     stopPacketSeen,
@@ -106,6 +108,40 @@ function AssistantMessage({
       node.nodeId,
       finalAnswerComing,
     );
+
+  const toolApprovals = useToolCards(node.packets, APPROVAL_CARDS);
+  const toolQuestions = useToolCards(node.packets, QUESTION_CARDS);
+  const typedAnswerShown = useMemo(
+    () => typedAnswerShownBy(toolQuestions),
+    [toolQuestions],
+  );
+  // Each card follows the answer text of its own and earlier turns.
+  const sectionEntries = useMemo(
+    () =>
+      orderCardsByTurn(pacedDisplayGroups, [
+        ...toolApprovals.map((approval) => ({
+          kind: "approval" as const,
+          turnIndex: approval.turnIndex,
+          approval,
+        })),
+        ...toolQuestions.map((question) => ({
+          kind: "question" as const,
+          turnIndex: question.turnIndex,
+          question,
+        })),
+      ]),
+    [pacedDisplayGroups, toolApprovals, toolQuestions],
+  );
+  // An approval decision comes before an answer, since the server refuses a typed answer while an
+  // approval of the response waits.
+  const awaitingUser = toolApprovals.some(
+    (approval) => approval.status === "pending",
+  )
+    ? "approval"
+    : toolQuestions.some((question) => question.resolution === null)
+      ? "answer"
+      : null;
+  const lastDisplayGroup = pacedDisplayGroups[pacedDisplayGroups.length - 1];
 
   const [sourcesOpen, setSourcesOpen] = useState(false);
   // Which step's text the full-text reader is showing. Owned here, not in the step: the timeline
@@ -154,6 +190,8 @@ function AssistantMessage({
         generatedImageCount={generatedImages.length}
         toolProcessingDuration={toolProcessingDuration}
         streamingStartTime={node.streamingStartedAt}
+        codeModeWorking={codeModeWorking}
+        awaitingUser={awaitingUser}
       />
       {/* Images from every image generation step lead the answer. */}
       {generatedImages.length > 0 ? (
@@ -168,37 +206,56 @@ function AssistantMessage({
           ))}
         </View>
       ) : null}
-      {hasDisplayContent ? (
+      {sectionEntries.length > 0 ? (
         // px-12 aligns the answer under the avatar rail (web's px-3).
         <View className="gap-12 px-12">
-          {pacedDisplayGroups.map((displayGroup, groupIndex) => (
-            <RendererComponent
-              key={`${displayGroup.turn_index}-${displayGroup.tab_index}`}
-              packets={displayGroup.packets}
-              chatState={chatState}
-              messageNodeId={node.nodeId}
-              hasTimelineThinking={pacedTurnGroups.length > 0 || hasSteps}
-              // Only the last group completes the message.
-              onComplete={
-                groupIndex === pacedDisplayGroups.length - 1
-                  ? onRenderComplete
-                  : NOOP
-              }
-              animate={!stopPacketSeen}
-              stopPacketSeen={stopPacketSeen}
-              stopReason={stopReason}
-            >
-              {(results) => (
-                <>
-                  {results.map((result, index) => (
-                    <Fragment key={index}>{result.content}</Fragment>
-                  ))}
-                </>
-              )}
-            </RendererComponent>
-          ))}
+          {sectionEntries.map((entry) => {
+            if (entry.kind === "card") {
+              const { card } = entry;
+              return card.kind === "approval" ? (
+                <ToolApprovalCard
+                  key={card.approval.request.approval_id}
+                  approval={card.approval}
+                />
+              ) : (
+                <ToolQuestionCard
+                  key={card.question.request.question_request_id}
+                  question={card.question}
+                  showsTypedAnswer={typedAnswerShown.has(
+                    card.question.request.question_request_id,
+                  )}
+                />
+              );
+            }
+            const displayGroup = entry.group;
+            return (
+              <RendererComponent
+                key={`${displayGroup.turn_index}-${displayGroup.tab_index}`}
+                packets={displayGroup.packets}
+                chatState={chatState}
+                messageNodeId={node.nodeId}
+                hasTimelineThinking={pacedTurnGroups.length > 0 || hasSteps}
+                // Only the last group completes the message.
+                onComplete={
+                  displayGroup === lastDisplayGroup ? onRenderComplete : NOOP
+                }
+                animate={!stopPacketSeen}
+                stopPacketSeen={stopPacketSeen}
+                stopReason={stopReason}
+              >
+                {(results) => (
+                  <>
+                    {results.map((result, index) => (
+                      <Fragment key={index}>{result.content}</Fragment>
+                    ))}
+                  </>
+                )}
+              </RendererComponent>
+            );
+          })}
         </View>
-      ) : stopReason === StopReason.USER_CANCELLED ? (
+      ) : null}
+      {!hasDisplayContent && stopReason === StopReason.USER_CANCELLED ? (
         <View className="px-12">
           <Text font="secondary-body" color="text-04">
             User has stopped generation
@@ -246,6 +303,8 @@ function MessageRowComponent({
 }) {
   if (node.type === "user") return <UserMessage node={node} />;
   if (node.type === "error") return <ErrorMessage node={node} />;
+  // The follow-up answer after it renders the agents' results.
+  if (node.type === "agent_results") return null;
   return <AssistantMessage node={node} agent={agent} />;
 }
 
@@ -260,7 +319,7 @@ export const MessageRow = memo(
     prev.node.streamingStartedAt === next.node.streamingStartedAt &&
     prev.node.processingDurationSeconds ===
       next.node.processingDurationSeconds &&
-    prev.node.packets.length === next.node.packets.length &&
+    prev.node.packets === next.node.packets &&
     prev.node.files === next.node.files &&
     prev.agent === next.agent,
 );

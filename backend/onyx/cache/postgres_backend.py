@@ -15,7 +15,8 @@ from datetime import datetime, timedelta, timezone
 from itertools import batched
 from typing import cast
 
-from sqlalchemy import delete, func, or_, select, update
+from sqlalchemy import BigInteger, String, case, delete, func, or_, select, update
+from sqlalchemy import cast as cast_sql
 from sqlalchemy.dialects.postgresql import insert as pg_insert
 from sqlalchemy.orm import Session
 
@@ -149,7 +150,8 @@ class PostgresCacheLock(CacheLock):
                 self._session = None
 
     def _try_lock(self) -> bool:
-        assert self._session is not None
+        if self._session is None:
+            raise RuntimeError("Advisory lock has no open session.")
         result = self._session.execute(
             select(func.pg_try_advisory_lock(self._lock_id))
         ).scalar()
@@ -277,6 +279,89 @@ class PostgresCacheBackend(CacheBackend):
             session.commit()
         return stored_key is not None
 
+    def replace_if_value(
+        self,
+        key: str,
+        expected: bytes,
+        value: str | bytes | int | float,
+        ex: int | None = None,
+    ) -> bool:
+        from onyx.db.engine.sql_engine import get_session_with_tenant
+
+        now = func.clock_timestamp()
+        stmt = (
+            update(CacheStore)
+            .where(
+                CacheStore.key == key,
+                CacheStore.value == expected,
+                or_(CacheStore.expires_at.is_(None), CacheStore.expires_at > now),
+            )
+            .values(
+                value=_to_bytes(value),
+                expires_at=now + timedelta(seconds=ex) if ex is not None else None,
+            )
+            .returning(CacheStore.key)
+        )
+        with get_session_with_tenant(tenant_id=self._tenant_id) as session:
+            _set_statement_timeout(session, self._statement_timeout_ms)
+            replaced = session.execute(stmt).scalar_one_or_none()
+            session.commit()
+        return replaced is not None
+
+    def delete_if_value(self, key: str, expected: bytes) -> bool:
+        from onyx.db.engine.sql_engine import get_session_with_tenant
+
+        stmt = (
+            delete(CacheStore)
+            .where(
+                CacheStore.key == key,
+                CacheStore.value == expected,
+                or_(
+                    CacheStore.expires_at.is_(None),
+                    CacheStore.expires_at > func.clock_timestamp(),
+                ),
+            )
+            .returning(CacheStore.key)
+        )
+        with get_session_with_tenant(tenant_id=self._tenant_id) as session:
+            _set_statement_timeout(session, self._statement_timeout_ms)
+            deleted = session.execute(stmt).scalar_one_or_none()
+            session.commit()
+        return deleted is not None
+
+    def incr(self, key: str, ex: int | None = None) -> int:
+        from onyx.db.engine.sql_engine import get_session_with_tenant
+
+        now = func.clock_timestamp()
+        expired = CacheStore.expires_at.is_not(None) & (CacheStore.expires_at <= now)
+        current = cast_sql(func.convert_from(CacheStore.value, "UTF8"), BigInteger)
+        new_expiry = now + timedelta(seconds=ex) if ex is not None else None
+        stmt = (
+            pg_insert(CacheStore)
+            .values(key=key, value=b"1", expires_at=new_expiry)
+            .on_conflict_do_update(
+                index_elements=[CacheStore.key],
+                set_={
+                    "value": case(
+                        (expired, b"1"),
+                        else_=func.convert_to(cast_sql(current + 1, String), "UTF8"),
+                    ),
+                    "expires_at": (
+                        new_expiry
+                        if ex is not None
+                        else case((expired, None), else_=CacheStore.expires_at)
+                    ),
+                },
+            )
+            .returning(CacheStore.value)
+        )
+        with get_session_with_tenant(tenant_id=self._tenant_id) as session:
+            _set_statement_timeout(session, self._statement_timeout_ms)
+            # Counter rows always hold bytes; other cache rows may have NULL values.
+            value = cast(bytes, session.execute(stmt).scalar_one())
+            session.commit()
+        return int(value)
+
     def delete(self, key: str) -> None:
         from onyx.db.engine.sql_engine import get_session_with_tenant
 
@@ -355,6 +440,42 @@ class PostgresCacheBackend(CacheBackend):
         self.delete(
             _set_key_prefix(key) + hashlib.sha256(_to_bytes(member)).hexdigest()
         )
+
+    def set_contains(self, key: str, member: str | bytes) -> bool:
+        return self.exists(
+            _set_key_prefix(key) + hashlib.sha256(_to_bytes(member)).hexdigest()
+        )
+
+    def set_replace(self, key: str, members: Collection[str | bytes]) -> None:
+        from onyx.db.engine.sql_engine import get_session_with_tenant
+
+        prefix = _set_key_prefix(key)
+        values = {_to_bytes(member) for member in members}
+        rows = [
+            {"key": prefix + hashlib.sha256(value).hexdigest(), "value": value}
+            for value in values
+        ]
+        clear = delete(CacheStore).where(
+            CacheStore.key >= prefix,
+            CacheStore.key < prefix[:-1] + _COLLECTION_KEY_RANGE_TERMINATOR,
+        )
+        with get_session_with_tenant(tenant_id=self._tenant_id) as session:
+            _set_statement_timeout(session, self._statement_timeout_ms)
+            # Two replacements must not interleave: under READ COMMITTED both
+            # could clear first and then both insert, which merges their members.
+            session.execute(
+                select(func.pg_advisory_xact_lock(self._lock_id_for(prefix)))
+            )
+            # One transaction: a reader sees the old members or the new ones.
+            session.execute(clear)
+            for batch in batched(rows, _EXISTS_BATCH_SIZE, strict=False):
+                # A concurrent set_add can insert the same member first.
+                session.execute(
+                    pg_insert(CacheStore)
+                    .values(list(batch))
+                    .on_conflict_do_nothing(index_elements=[CacheStore.key])
+                )
+            session.commit()
 
     def set_members(self, key: str, *, limit: int) -> list[bytes]:
         from onyx.db.engine.sql_engine import get_session_with_tenant

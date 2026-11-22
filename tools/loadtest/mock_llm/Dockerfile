@@ -1,9 +1,15 @@
 # Mock OpenAI-compatible LLM server for Onyx load testing.
 # Build from the tools/loadtest/ directory:  docker build -f mock_llm/Dockerfile -t onyx-mock-llm .
 ARG BASE_IMAGE_REGISTRY=docker.io
-FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:ae14d4ce8771606477a81446e7ef429edd6762305fc50c84507c1041fa8285d1
+FROM ${BASE_IMAGE_REGISTRY}/library/python:3.13-slim@sha256:e48f59cdba69a3cbd9ed2cf0f348d90d45a8d350d98134cf1070bc106ee9ed90
 
 WORKDIR /app
+
+# The base image ships a zlib1g behind Debian security, so take the patched one.
+RUN apt-get update && \
+    apt-get install -y --no-install-recommends zlib1g && \
+    rm -rf /var/lib/apt/lists/* && \
+    apt-get clean
 
 # Keep pins in sync with the root pyproject.toml + uv.lock (reproducible builds).
 RUN pip install --no-cache-dir fastapi==0.136.3 uvicorn==0.49.0 tiktoken==0.13.0 prometheus-client==0.23.1

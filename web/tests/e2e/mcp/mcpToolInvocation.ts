@@ -3,7 +3,28 @@ import {
   getToolPacketCounts,
   sendMessageAndCaptureStreamPackets,
 } from "@tests/e2e/utils/chatStream";
-import { addMockLlmConversation, mockLlmNonce } from "@tests/e2e/utils/mockLlm";
+import {
+  addMockLlmConversation,
+  mockLlmNonce,
+  mockLlmToolCallReply,
+} from "@tests/e2e/utils/mockLlm";
+
+/** The name the LLM sees for an MCP tool; it matches `MCPTool.name` in the backend. */
+export function qualifiedMcpToolName(
+  integrationId: number,
+  serverName: string,
+  toolName: string
+): string {
+  const sanitize = (name: string): string =>
+    name.replace(/[^a-zA-Z0-9_-]/g, "_");
+  const qualified = `mcp__${integrationId}__${sanitize(serverName)}__${toolName}`;
+  if (sanitize(qualified) !== qualified || qualified.length > 64) {
+    throw new Error(
+      `Use a shorter MCP tool name without symbols: ${qualified}`
+    );
+  }
+  return qualified;
+}
 
 /**
  * Send a chat message and return the tool's invocation packet counts. The mock LLM
@@ -19,12 +40,9 @@ export async function sendMcpToolCall(
     name: `mcp-${nonce}`,
     conditions: { prompt_contains: [nonce] },
     replies: [
-      {
-        tool_calls: [
-          { id: callId, name: toolName, arguments: { name: nonce } },
-        ],
-        conditions: { offers: [toolName] },
-      },
+      mockLlmToolCallReply([
+        { id: callId, name: toolName, arguments: { name: nonce } },
+      ]),
       { text: "Done.", conditions: { has_results_for: [callId] } },
     ],
   });
@@ -53,11 +71,11 @@ export async function expectMcpToolInvoked(
   expect(counts.debug).toBeGreaterThan(0);
 }
 
-/** Assert the tool did NOT run (e.g. because it was disabled for the agent). */
+/** Assert the tool did NOT run because its integration is off in this chat. */
 export async function expectMcpToolNotInvoked(
   page: Page,
   toolName: string,
-  excludedToolId: number
+  excludedIntegrationId: number
 ): Promise<void> {
   const requestPromise = page.waitForRequest(
     (request) =>
@@ -65,10 +83,15 @@ export async function expectMcpToolNotInvoked(
       new URL(request.url()).pathname === "/api/chat/send-chat-message"
   );
   const counts = await sendMcpToolCall(page, toolName);
-  expect((await requestPromise).postDataJSON()).toMatchObject({
-    allowed_tool_ids: expect.not.arrayContaining([excludedToolId]),
-    preferred_tool_id: null,
-  });
+  const body = (await requestPromise).postDataJSON();
+  expect(body.tool_options.allowed).toEqual(
+    expect.not.arrayContaining([
+      expect.objectContaining({
+        type: "integration",
+        integration_id: excludedIntegrationId,
+      }),
+    ])
+  );
   expect(counts.start).toBe(0);
   expect(counts.delta).toBe(0);
   expect(counts.debug).toBe(0);

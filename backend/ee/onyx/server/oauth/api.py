@@ -1,7 +1,7 @@
 import base64
 import uuid
 
-from fastapi import Depends, HTTPException
+from fastapi import Depends
 from fastapi.responses import JSONResponse
 
 from ee.onyx.server.oauth.api_router import router
@@ -9,13 +9,13 @@ from ee.onyx.server.oauth.confluence_cloud import ConfluenceCloudOAuth
 from ee.onyx.server.oauth.google_drive import GoogleDriveOAuth
 from ee.onyx.server.oauth.slack import SlackOAuth
 from onyx.auth.permissions import require_permission
+from onyx.cache.factory import get_cache_backend
 from onyx.configs.app_configs import DEV_MODE
 from onyx.configs.constants import DocumentSource
 from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -90,21 +90,21 @@ def prepare_authorization_request(
         oauth_url = None
 
     if not oauth_url:
-        raise HTTPException(
-            status_code=404,
-            detail=f"The document source type {connector} does not have OAuth implemented",
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            f"The document source type {connector} does not have OAuth implemented",
         )
 
     if not session:
-        raise HTTPException(
-            status_code=500,
-            detail=f"The document source type {connector} failed to generate an OAuth session.",
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR,
+            f"The document source type {connector} failed to generate an OAuth session.",
         )
 
-    r = get_redis_client(tenant_id=tenant_id)
+    cache = get_cache_backend(tenant_id=tenant_id)
 
     # store important session state to retrieve when the user is redirected back
     # 10 min is the max we want an oauth flow to be valid
-    r.set(f"da_oauth:{oauth_uuid_str}", session, ex=600)
+    cache.set(f"da_oauth:{oauth_uuid_str}", session, ex=600)
 
     return JSONResponse(content={"url": oauth_url})

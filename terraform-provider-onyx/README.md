@@ -245,7 +245,7 @@ released Onyx yet, so the provider keeps its workaround and the limitation still
   refuses that route, so the provider keeps the last known value. After `terraform import` the
   value reads as empty.
 - **Permissions use Onyx's wire tokens**, such as `manage:connectors`, not the enum names.
-  Only toggleable permissions can be set; `basic`, `admin`, `craft_sandbox`, `manage:skills`
+  Only toggleable permissions can be set; `basic`, `admin`, `craft_sandbox`, `manage:plugins`
   and the implied read tokens are managed by Onyx.
 - **A seeded default group (`Admin`, `Basic`) holds members and nothing else.** Managing its
   roster works; rename, delete, permission and incognito changes are refused.

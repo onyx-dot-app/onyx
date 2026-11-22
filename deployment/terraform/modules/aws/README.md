@@ -67,6 +67,9 @@ module "onyx" {
   postgres_username = local.postgres_username
   postgres_password = local.postgres_password
   # create_vpc    = true  # default true; set to false to use an existing VPC (see below)
+
+  # New cluster: install vpc-cni, kube-proxy and CoreDNS (see "Core addons on new clusters").
+  manage_core_addons = true
 }
 
 resource "null_resource" "wait_for_cluster" {
@@ -199,6 +202,9 @@ module "onyx" {
   postgres_username = "pgusername"
   postgres_password = "your-postgres-password"
 
+  # New cluster: install vpc-cni, kube-proxy and CoreDNS (see "Core addons on new clusters").
+  manage_core_addons = true
+
   create_vpc       = false
   vpc_id           = "vpc-xxxxxxxx"
   private_subnets  = ["subnet-aaaa", "subnet-bbbb", "subnet-cccc"]
@@ -258,6 +264,7 @@ Inputs (common):
 - WAF controls such as `waf_allowed_ip_cidrs`, `waf_common_rule_set_count_rules`, rate limits, geo restrictions, and logging retention
 - Optional OpenSearch controls such as `enable_opensearch`, sizing, credentials, and log retention
 - `alarm_actions`: SNS topic ARNs for the CloudWatch alarms created by the data-plane modules. Empty (the default) leaves the alarms in place but notifying nothing
+- `manage_core_addons` (default false): set true for a new cluster. See "Core addons on new clusters" under `eks`
 - Optional extras: `enable_upload_bucket`, `enable_gpu_node`, `enable_network_policy`, `enable_craft`
 - `enable_sandbox_archive_bucket` (default false): a bucket for Craft sandbox
   session archives. See "Sandbox archive bucket" below
@@ -283,6 +290,20 @@ Key inputs include:
 - `cluster_endpoint_public_access_cidrs` (default `[]`). Empty denies all public API access. Set it when `public_cluster_enabled` is true and you need to reach the API server
 - `eks_managed_node_groups` (defaults include a main group and a dedicated document-index group, legacy key `vespa`, with GP3 volumes)
 - `s3_bucket_names` (optional list). If set, creates an IRSA role and Kubernetes service account for S3 access
+- `manage_core_addons` (default false). See below
+
+#### Core addons on new clusters
+
+Set `manage_core_addons = true` when you create a new cluster. The upstream EKS module v21 creates a cluster
+without vpc-cni, kube-proxy, and CoreDNS, so without this the nodes never become Ready
+("cni plugin not initialized"). With `true`, the module installs the three as EKS addons, installs
+vpc-cni before the node groups, and turns on NetworkPolicy enforcement. `vpc_cni_addon_version` pins the vpc-cni version.
+Do not also set `enable_network_policy`: the module refuses the combination.
+
+Keep `false` on a cluster that already runs these components (for example a cluster made with module v20),
+and use `enable_network_policy = true` there to turn on enforcement. On a cluster that already has
+`enable_network_policy = true`, do not switch to `manage_core_addons`: the CNI addon would move to another
+Terraform resource, and Terraform would replace the running CNI.
 
 ### `postgres`
 - Amazon RDS for PostgreSQL with parameterized instance size, storage, version
@@ -510,13 +531,40 @@ craft_sandbox_node_disk_throughput = 500
 With `"firecracker"`, the `eks` module:
 
 - turns on nested virtualization in the launch template (non-metal types only);
-- adds the label `onyx.app/kvm=true`;
+- adds the label `onyx.app/kvm=true` and the taint `onyx.app/kvm=true:NoSchedule`;
+- sets `vm.max_map_count` to `1048576` with a cloud-init script that runs
+  before nodeadm (AL2023 ships `524288`);
 - keeps the group on-demand. A spot reclaim stops every microVM on the node;
 - keeps IMDSv2 with hop limit 1.
 
-The default, `"pod"`, leaves the group as it is. On non-metal types, a change
-to `craft_sandbox_runtime` makes a new launch template version, so EKS rolls the
-sandbox nodes. On `.metal` groups, only the label changes, in place.
+Kubelet does not count microVM memory, so only the Firecracker host agent and
+the preflight check tolerate the `onyx.app/kvm` taint. Pod sandboxes and the
+sandbox image prepuller do not run on these nodes. To keep pod sandboxes, add a
+small pod sandbox group next to the Firecracker group:
+
+```hcl
+enable_craft_pod_sandbox_node_group = true
+craft_pod_sandbox_node_instance_types = ["m8i.xlarge"] # default
+craft_pod_sandbox_node_min_size       = 1              # default
+craft_pod_sandbox_node_max_size       = 2              # default
+```
+
+This group has the label `onyx.app/workload=sandbox` and the taint
+`workload=sandbox:NoSchedule`, but no `onyx.app/kvm` label or taint. It uses
+`craft_sandbox_node_disk_size_gb` with baseline gp3 (3000 IOPS, 125 MiB/s).
+EKS updates the taints of an existing node group in place; it does not replace
+the nodes. `NoSchedule` does not evict running pods, and the new pod group does
+not move them. Pod sandboxes and the prepuller pod that already run on a
+Firecracker node stay there until they stop. Let those sandboxes finish, delete
+the prepuller pod on that node, and check that no such pod is left:
+
+```bash
+kubectl get pods -n onyx-sandboxes -o wide --field-selector spec.nodeName=<firecracker node>
+```
+
+The default, `"pod"`, leaves the group as it is. A change to
+`craft_sandbox_runtime` makes a new launch template version (user data, and
+nested virtualization on non-metal types), so EKS rolls the sandbox nodes.
 `craft_sandbox_node_disk_iops` and `_throughput` set the gp3 root
 volume (defaults 3000 and 125). The tested values for Firecracker are 6000 and
 500 MiB/s. The AL2023 root filesystem is XFS with reflink, so no extra disk is
@@ -530,6 +578,7 @@ Node requirements:
 | Metal | Intel `.metal` types, such as `m7i.metal-24xl` | Graviton and AMD `.metal`, `a1.metal`, `mac*.metal` |
 | AMI | AL2023 (module default `AL2023_x86_64_STANDARD`). Use an AMI release with kernel 6.18, the tested host kernel. | — |
 | Capacity | On-demand | Spot |
+| `vm.max_map_count` | `1048576` or more (set by the module) | The AL2023 default `524288` |
 
 The module refuses a blocked type, and a group that mixes `.metal` and
 nested virtualization types. Keep `craft_sandbox_runtime = "pod"` on Graviton,

@@ -41,13 +41,13 @@ jobs:
           ecr-registry: ${{ vars.ECR_REGISTRY }}
       - uses: astral-sh/setup-uv@ed21f2f24f8dd64503750218de024bcf64c7250a
         with:
-          version: "0.11.25"
+          version: "0.13.8"
       - uses: azure/setup-helm@9bc31f4ebc9c6b171d7bfbaa5d006ae7abdb4310
         with:
           version: v3.19.0
       - name: Check rendered ingress and real nginx routing
         env:
-          MCP_PROXY_NGINX_IMAGE: ${{ env.BASE_IMAGE_REGISTRY }}/library/nginx:1.25.5-alpine
+          MCP_PROXY_NGINX_IMAGE: ${{ env.BASE_IMAGE_REGISTRY }}/library/nginx:1.30.7-alpine
         run: uv run --frozen --only-group dev pytest -q deployment/tests
 
   native-clients:
@@ -107,7 +107,7 @@ jobs:
         run: alembic upgrade head
       - name: Check real Claude Code and Codex OAuth connections
         env:
-          MCP_PROXY_NGINX_IMAGE: ${{ env.BASE_IMAGE_REGISTRY }}/library/nginx:1.25.5-alpine
+          MCP_PROXY_NGINX_IMAGE: ${{ env.BASE_IMAGE_REGISTRY }}/library/nginx:1.30.7-alpine
         run: >-
           pytest -q
           backend/tests/external_dependency_unit/oauth_provider/test_native_clients.py

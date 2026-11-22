@@ -1,24 +1,19 @@
 "use client";
 
 import { useEffect, useCallback, useState } from "react";
+import { useSWRConfig } from "swr";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import {
   nameChatSession,
   processRawChatHistory,
   patchMessageToBeLatest,
-  resumeStream,
 } from "@/app/app/services/lib";
-import { Packet } from "@/app/app/services/streamingModels";
 import {
   getLatestMessageChain,
-  getMessageByMessageId,
   setMessageAsLatest,
   restoreIncognitoMessages,
 } from "@/app/app/services/messageTree";
-import {
-  BackendChatSession,
-  ChatSessionSharedStatus,
-  Message,
-} from "@/app/app/types";
+import { BackendChatSession, ChatSessionSharedStatus } from "@/app/app/types";
 import {
   SEARCH_PARAM_NAMES,
   shouldSubmitOnLoad,
@@ -30,22 +25,26 @@ import {
   useCurrentMessageHistory,
 } from "@/app/app/stores/useChatSessionStore";
 import { useIncognito } from "@/providers/IncognitoProvider";
-import { chatPageUrl, reloadLatestChatPage } from "@/lib/chat/pagedSession";
+import { useUser } from "@/providers/UserProvider";
+import {
+  chatPageUrl,
+  mergeLatestChatPage,
+  reloadLatestChatPage,
+} from "@/lib/chat/pagedSession";
 import type { ProjectFile } from "@/lib/projects/types";
-import { getProjectFilesForSession } from "@/lib/projects/svc";
 import { AppInputBarHandle } from "@/sections/input/AppInputBar";
 import type { ErrorResponseBody } from "@/lib/fetcher";
 import {
+  followChatSession,
+  prepareSavedChat,
   preserveFailedMessages,
-  settleChatSession,
 } from "@/lib/chat/settleChatSession";
 import { useTranslations } from "next-intl";
 import type { Route } from "next";
 import { useNavigation } from "@opal/navigation";
-
-// Runs currently being re-attached; module-level so effect re-runs (incl.
-// strict mode) can't start a second tail for the same run.
-const resumingRuns = new Set<number>();
+import { useChatSessionQueue } from "@/lib/chat/hooks";
+import { startChatLoad } from "@/lib/chat/publishedFiles";
+import type { ComposedMessage } from "@/lib/chat/types";
 
 interface UseChatSessionControllerProps {
   existingChatSessionId: string | null;
@@ -67,12 +66,13 @@ interface UseChatSessionControllerProps {
 
   // Actions
   refreshChatSessions: () => void;
-  onSubmit: (params: {
-    message: string;
-    currentMessageFiles: ProjectFile[];
-    deepResearch: boolean;
-    isSeededChat?: boolean;
-  }) => Promise<void>;
+  onSubmit: (
+    params: ComposedMessage & {
+      currentMessageFiles: ProjectFile[];
+      deepResearch: boolean;
+      isSeededChat?: boolean;
+    }
+  ) => Promise<void>;
 }
 
 export type SessionFetchError = {
@@ -95,8 +95,8 @@ export default function useChatSessionController({
   onSubmit,
 }: UseChatSessionControllerProps) {
   const navigation = useNavigation();
+  const { mutate: mutateCache } = useSWRConfig();
   const tReadiness = useTranslations("chat.readiness");
-  const [projectFiles, setProjectFiles] = useState<ProjectFile[]>([]);
   const [sessionFetchError, setSessionFetchError] =
     useState<SessionFetchError>(null);
   // Store actions
@@ -127,7 +127,13 @@ export default function useChatSessionController({
   );
   const currentChatHistory = useCurrentMessageHistory();
   const chatSessions = useChatSessionStore((state) => state.sessions);
-  const { setIncognitoEnabled, setIncognitoSessionId } = useIncognito();
+  const { incognitoEnabled, setIncognitoEnabled, setIncognitoSessionId } =
+    useIncognito();
+  const { user } = useUser();
+  // Anonymous users and incognito chats have no server queue.
+  const queue = useChatSessionQueue(
+    !incognitoEnabled && !user?.is_anonymous_user
+  );
 
   // Fetch chat messages for the chat session
   useEffect(() => {
@@ -165,6 +171,9 @@ export default function useChatSessionController({
       }
     }
 
+    // Each run owns its load: cleanup cancels the request and stops the run.
+    const load = new AbortController();
+
     async function initialSessionFetch() {
       setSessionFetchError(null);
 
@@ -182,6 +191,7 @@ export default function useChatSessionController({
           submitOnLoadPerformed.current = true;
           await onSubmit({
             message: firstMessage || "",
+            mentions: [],
             currentMessageFiles: [],
             deepResearch: false,
           });
@@ -199,15 +209,22 @@ export default function useChatSessionController({
       const ownsFetch = () => {
         const store = useChatSessionStore.getState();
         return (
+          !load.signal.aborted &&
           store.currentSessionId === existingChatSessionId &&
           store.sessions.get(existingChatSessionId)?.abortController ===
             fetchOwner
         );
       };
 
+      const toolOptionsVersion =
+        useChatSessionStore.getState().sessions.get(existingChatSessionId)
+          ?.toolOptionsVersion ?? 0;
+      const loadSequence = startChatLoad();
       let response: Response;
       try {
-        response = await fetch(chatPageUrl(existingChatSessionId));
+        response = await fetch(chatPageUrl(existingChatSessionId), {
+          signal: load.signal,
+        });
       } catch (error) {
         if (!ownsFetch()) return;
         setIsFetchingChatMessages(existingChatSessionId, false);
@@ -257,7 +274,11 @@ export default function useChatSessionController({
       setCurrentSession(chatSession.chat_session_id);
 
       // Initialize session data including personaId
-      initializeSession(chatSession.chat_session_id, chatSession);
+      initializeSession(
+        chatSession.chat_session_id,
+        chatSession,
+        toolOptionsVersion
+      );
       const sessionOwner = useChatSessionStore
         .getState()
         .sessions.get(chatSession.chat_session_id)?.abortController;
@@ -278,24 +299,34 @@ export default function useChatSessionController({
         }
       }
 
-      const savedMessages = processRawChatHistory(
+      const localSession = useChatSessionStore
+        .getState()
+        .sessions.get(chatSession.chat_session_id);
+      const localMessages = localSession?.messageTree;
+      let savedMessages = processRawChatHistory(
         chatSession.messages,
         chatSession.packets
       );
-      const localMessages = useChatSessionStore
-        .getState()
-        .sessions.get(chatSession.chat_session_id)?.messageTree;
-      let newMessageMap = savedMessages;
-      if (recovering && localMessages?.size) {
-        if (isIncognito) {
-          newMessageMap = restoreIncognitoMessages(
-            savedMessages,
-            localMessages,
-            chatSession.current_stream?.stream_id
-          );
-        } else {
-          newMessageMap = preserveFailedMessages(savedMessages, localMessages);
-        }
+      let hasOlderMessages = chatSession.has_older_messages ?? false;
+      if (!recovering && !isIncognito && localSession && localMessages?.size) {
+        // A cached chat keeps the older pages it loaded, so a reopen does not
+        // drop the rows its saved scroll position is on. An older page that
+        // failed to load is retried.
+        const merged = mergeLatestChatPage(chatSession, {
+          messageTree: localMessages,
+          hasOlderMessages:
+            localSession.hasOlderMessages || localSession.olderMessagesFailed,
+        });
+        savedMessages = merged.messageTree;
+        hasOlderMessages = merged.hasOlderMessages;
+      } else if (recovering && localMessages?.size) {
+        savedMessages = isIncognito
+          ? restoreIncognitoMessages(
+              savedMessages,
+              localMessages,
+              chatSession.current_stream?.response_ids[0]
+            )
+          : preserveFailedMessages(savedMessages, localMessages);
       }
       const currentStream = chatSession.current_stream;
       if (currentStream) {
@@ -303,35 +334,14 @@ export default function useChatSessionController({
         useChatSessionStore
           .getState()
           .updateSessionData(chatSession.chat_session_id, {
-            sendAcknowledged: Promise.resolve(currentStream.stream_id),
+            sendAcknowledged: Promise.resolve(currentStream),
           });
       }
-      const resumedMessage = currentStream
-        ? getMessageByMessageId(newMessageMap, currentStream.stream_id)
-        : undefined;
-      if (currentStream && resumedMessage?.type === "assistant") {
-        const retained = localMessages
-          ? getMessageByMessageId(localMessages, currentStream.stream_id)
-          : undefined;
-        newMessageMap = new Map(newMessageMap);
-        newMessageMap.set(
-          resumedMessage.nodeId,
-          retained?.replayCursor !== undefined
-            ? {
-                ...retained,
-                nodeId: resumedMessage.nodeId,
-                parentNodeId: resumedMessage.parentNodeId,
-                childrenNodeIds: resumedMessage.childrenNodeIds,
-                latestChildNodeId: resumedMessage.latestChildNodeId,
-              }
-            : {
-                ...resumedMessage,
-                message: "",
-                packets: [],
-                packetCount: 0,
-              }
-        );
-      }
+      const { messageTree: newMessageMap, replayStream } = prepareSavedChat(
+        savedMessages,
+        localMessages,
+        currentStream
+      );
       const newMessageHistory = getLatestMessageChain(newMessageMap);
 
       // Update message history except for edge where where
@@ -355,168 +365,36 @@ export default function useChatSessionController({
         updateSessionAndMessageTree(chatSession.chat_session_id, newMessageMap);
         useChatSessionStore
           .getState()
-          .updateSessionData(chatSession.chat_session_id, {
-            hasOlderMessages: chatSession.has_older_messages ?? false,
-          });
+          .applyLoadedSession(
+            chatSession.chat_session_id,
+            chatSession,
+            loadSequence,
+            {
+              hasOlderMessages,
+              olderMessagesFailed: false,
+            }
+          );
         chatSessionIdRef.current = chatSession.chat_session_id;
       }
 
       setIsFetchingChatMessages(chatSession.chat_session_id, false);
 
-      async function settleSession(sessionId: string) {
-        if (!sessionOwner) return;
-        await settleChatSession({
-          sessionId,
+      if (
+        sessionOwner &&
+        (replayStream !== null ||
+          sessionBusy ||
+          useChatSessionStore
+            .getState()
+            .sessions.get(chatSession.chat_session_id)?.chatState !== "input")
+      ) {
+        void followChatSession({
+          sessionId: chatSession.chat_session_id,
           controller: sessionOwner,
           errorMessage: tReadiness("checkFailed"),
           mode: recovering ? "recovery" : "completion",
+          stream: replayStream,
+          messageMap: newMessageMap,
         });
-      }
-
-      // Replay single-model output; multi-model sessions wait for saved history.
-      async function resumeInFlightRun(
-        sessionId: string,
-        runId: number,
-        messageMap: Map<number, Message>
-      ) {
-        const retained = getMessageByMessageId(messageMap, runId);
-        if (!retained || resumingRuns.has(runId)) {
-          return;
-        }
-        const node = { ...retained };
-        // Added and deleted in this function only, so an entry can never
-        // outlive its tail.
-        resumingRuns.add(runId);
-        let resolveReaderFinished: () => void = () => {};
-        const readerFinished = new Promise<void>((resolve) => {
-          resolveReaderFinished = resolve;
-        });
-        useChatSessionStore.getState().updateSessionData(sessionId, {
-          readerFinished,
-        });
-        const accumulated: Packet[] = [...node.packets];
-        let restoring = true;
-        let pendingRestore: Message | undefined;
-        // Keep replay attached across navigation without changing the selected chat.
-        const ownsStream = () => {
-          const session = useChatSessionStore
-            .getState()
-            .sessions.get(sessionId);
-          return (
-            session !== undefined &&
-            session.abortController === sessionOwner &&
-            session.chatState !== "input"
-          );
-        };
-        const publishResponse = (response: Message) => {
-          if (!ownsStream()) return;
-          messageMap.set(response.nodeId, response);
-          useChatSessionStore
-            .getState()
-            .updateSessionMessageTree(sessionId, new Map(messageMap));
-        };
-        const abortController = new AbortController();
-        try {
-          for await (const rawPacket of resumeStream(
-            sessionId,
-            runId,
-            node.replayCursor ?? 0,
-            abortController.signal
-          )) {
-            if (!ownsStream()) {
-              return;
-            }
-            if ("next_cursor" in rawPacket) {
-              if (rawPacket.stream_id !== runId) {
-                throw new Error("Replay cursor belongs to another response");
-              }
-              if (restoring) {
-                node.restoredPacketCount = accumulated.length;
-                restoring = !rawPacket.replay_complete;
-              }
-              // Store content and cursor together, only after a complete batch.
-              node.replayCursor = rawPacket.next_cursor;
-              const response: Message = {
-                ...node,
-                packets: [...accumulated],
-                packetCount: accumulated.length,
-              };
-              if (restoring) {
-                pendingRestore = response;
-                continue;
-              }
-              pendingRestore = undefined;
-              publishResponse(response);
-              continue;
-            }
-            if ("error" in rawPacket && rawPacket.error) {
-              const store = useChatSessionStore.getState();
-              store.updateSessionData(sessionId, {
-                queuedMessagesPaused: true,
-              });
-              // Keep the error on its reserved row through readiness retries.
-              node.type = "error";
-              node.errorMessage = rawPacket.error;
-              if (!("message_id" in rawPacket)) {
-                node.errorCode = rawPacket.error_code;
-                node.stackTrace = rawPacket.stack_trace;
-                node.isRetryable = rawPacket.is_retryable ?? true;
-                node.errorDetails = rawPacket.details;
-              }
-              node.is_generating = false;
-            }
-            if (!("obj" in rawPacket)) {
-              continue;
-            }
-            const packet = rawPacket;
-            // Heartbeats are liveness ticks for the ownership check above,
-            // not run state — never render them.
-            if (packet.obj.type === "chat_heartbeat") {
-              continue;
-            }
-            accumulated.push(packet);
-          }
-        } catch (error) {
-          console.error("Failed to resume in-flight run", { runId, error });
-        } finally {
-          abortController.abort();
-          try {
-            // A lost tail must not discard earlier acknowledged cache batches.
-            if (pendingRestore) publishResponse(pendingRestore);
-          } finally {
-            resumingRuns.delete(runId);
-            resolveReaderFinished();
-            await settleSession(sessionId);
-          }
-        }
-      }
-
-      if (currentStream && resumedMessage?.type === "assistant") {
-        void resumeInFlightRun(
-          chatSession.chat_session_id,
-          currentStream.stream_id,
-          newMessageMap
-        );
-      } else if (
-        sessionBusy ||
-        useChatSessionStore.getState().sessions.get(chatSession.chat_session_id)
-          ?.chatState !== "input"
-      ) {
-        void settleSession(chatSession.chat_session_id);
-      }
-
-      // Fetch project files for this chat session (if any)
-      try {
-        if (chatSession.chat_session_id) {
-          const files = await getProjectFilesForSession(
-            chatSession.chat_session_id
-          );
-          setProjectFiles(files || []);
-        } else {
-          setProjectFiles([]);
-        }
-      } catch (e) {
-        setProjectFiles([]);
       }
 
       // If this is a seeded chat, then kick off the AI message generation
@@ -527,13 +405,14 @@ export default function useChatSessionController({
       ) {
         submitOnLoadPerformed.current = true;
 
-        const seededMessage = newMessageHistory[0]?.message;
-        if (!seededMessage) {
+        const seeded = newMessageHistory[0];
+        if (!seeded?.message) {
           return;
         }
 
         await onSubmit({
-          message: seededMessage,
+          message: seeded.message,
+          mentions: seeded.mentions ?? [],
           isSeededChat: true,
           currentMessageFiles: [],
           deepResearch: false,
@@ -566,7 +445,14 @@ export default function useChatSessionController({
         existingChatSession.chatState === "unconfirmed" ||
         existingChatSession.abortController.signal.aborted
       ) {
-        initialSessionFetch();
+        void initialSessionFetch().catch((error: unknown) => {
+          // Only the cancelled request ends quietly; other failures surface.
+          if (
+            !load.signal.aborted ||
+            !(error instanceof Error && error.name === "AbortError")
+          )
+            throw error;
+        });
       } else {
         // no need to fetch if the chat session is currently streaming (it would be )
         // out of date).
@@ -589,6 +475,8 @@ export default function useChatSessionController({
         navigation.go(newUrl as Route, { replace: true, shallow: true });
       }
     }
+
+    return () => load.abort();
   }, [
     existingChatSessionId,
     searchParams?.get(SEARCH_PARAM_NAMES.AGENT_ID),
@@ -624,31 +512,39 @@ export default function useChatSessionController({
           // Once the server has the new branch, load its last page.
           const branch = getLatestMessageChain(newMessageTree);
           const nextId = branch[branch.length - 1]?.latestChildNodeId;
-          if (
-            currentSessionId &&
-            nextId !== null &&
-            nextId !== undefined &&
-            !newMessageTree.has(nextId)
-          ) {
-            void saved.then((response) => {
-              if (response.ok) return reloadLatestChatPage(currentSessionId);
-              console.error("Failed to save the selected branch", {
-                messageId: message.messageId,
-                status: response.status,
-              });
+          void saved
+            .then(async (response) => {
+              if (!response.ok) {
+                console.error("Failed to save the selected branch", {
+                  messageId: message.messageId,
+                  status: response.status,
+                });
+                return;
+              }
+              if (!currentSessionId) return;
+              if (nextId != null && !newMessageTree.has(nextId)) {
+                await reloadLatestChatPage(currentSessionId);
+              }
+              await mutateCache(SWR_KEYS.chatSessionStatus(currentSessionId));
+            })
+            .catch((error: unknown) => {
+              console.error("Could not refresh the selected branch", error);
             });
-          }
         } else {
           console.error("Message has no messageId", nodeId);
         }
       }
     },
-    [updateCurrentSelectedNodeForDocDisplay, updateSessionMessageTree]
+    [
+      updateCurrentSelectedNodeForDocDisplay,
+      updateSessionMessageTree,
+      mutateCache,
+    ]
   );
 
   return {
     onMessageSelection,
-    projectFiles,
     sessionFetchError,
+    queue,
   };
 }

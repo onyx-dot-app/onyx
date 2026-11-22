@@ -50,6 +50,7 @@ test.describe("Chat send after the session ends", () => {
     await chatPage.inputBar.fill("first message");
     await chatPage.inputBar.send();
     await chatPage.expectHumanMessage("first message");
+    await chatPage.expectLatestReplyComplete();
 
     await revokeSession(chatPage.page, "**/api/chat/send-chat-message");
 

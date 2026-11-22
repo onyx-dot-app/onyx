@@ -12,6 +12,7 @@ import {
 } from "@/app/app/stores/useChatSessionStore";
 import { Text, Button, Divider } from "@opal/components";
 import { SvgSearchMenu, SvgX } from "@opal/icons";
+import { cn } from "@opal/utils";
 
 // Build an OnyxDocument from basic file info
 const buildOnyxDocumentFromFile = (
@@ -39,14 +40,20 @@ const buildOnyxDocumentFromFile = (
 
 interface HeaderProps {
   children: string;
-  onClose: () => void;
+  // Without one, the header has no close button: its panel closes itself
+  onClose?: () => void;
 }
 
 function Header({ children, onClose }: HeaderProps) {
   const t = useTranslations("chat.documentSidebar");
 
   return (
-    <div className="sticky top-0 z-sticky bg-background-tint-01">
+    <div
+      className={cn(
+        "sticky top-0 z-sticky",
+        onClose ? "bg-background-tint-01" : "bg-background-neutral-00"
+      )}
+    >
       <div className="flex flex-row w-full items-center justify-between gap-2 py-3">
         <div className="flex items-center gap-2 w-full px-3">
           <SvgSearchMenu className="w-[1.3rem] h-[1.3rem] stroke-text-03" />
@@ -54,12 +61,14 @@ function Header({ children, onClose }: HeaderProps) {
             {children}
           </Text>
         </div>
-        <Button
-          icon={SvgX}
-          prominence="tertiary"
-          onClick={onClose}
-          tooltip={t("closeButton.tooltip")}
-        />
+        {onClose && (
+          <Button
+            icon={SvgX}
+            prominence="tertiary"
+            onClick={onClose}
+            tooltip={t("closeButton.tooltip")}
+          />
+        )}
       </div>
       <Divider paddingParallel={0} paddingPerpendicular={0} />
     </div>
@@ -81,16 +90,16 @@ function ChatDocumentDisplayWrapper({
 }
 
 interface DocumentsSidebarProps {
-  closeSidebar: () => void;
+  // Without it, the sidebar sits in a panel that draws its own frame and
+  // close button: it has no close button, border or background of its own
+  closeSidebar?: () => void;
   selectedDocuments: OnyxDocument[] | null;
-  modal: boolean;
   setPresentingDocument: Dispatch<SetStateAction<MinimalOnyxDocument | null>>;
 }
 
 const DocumentsSidebar = memo(
   ({
     closeSidebar,
-    modal,
     selectedDocuments,
     setPresentingDocument,
   }: DocumentsSidebarProps) => {
@@ -164,7 +173,10 @@ const DocumentsSidebar = memo(
     return (
       <div
         id="onyx-chat-sidebar"
-        className="bg-background-tint-01 overflow-y-scroll h-full w-full border-s"
+        className={cn(
+          "overflow-y-scroll h-full w-full",
+          closeSidebar && "bg-background-tint-01 border-s"
+        )}
       >
         <div className="flex flex-col px-3 gap-6">
           {hasCited && (
@@ -175,7 +187,6 @@ const DocumentsSidebar = memo(
                   <ChatDocumentDisplay
                     key={document.document_id}
                     setPresentingDocument={setPresentingDocument}
-                    modal={modal}
                     document={document}
                     isSelected={selectedDocumentIds.includes(
                       document.document_id
@@ -198,7 +209,6 @@ const DocumentsSidebar = memo(
                   <ChatDocumentDisplay
                     key={document.document_id}
                     setPresentingDocument={setPresentingDocument}
-                    modal={modal}
                     document={document}
                     isSelected={selectedDocumentIds.includes(
                       document.document_id
@@ -217,7 +227,6 @@ const DocumentsSidebar = memo(
                   <ChatDocumentDisplay
                     key={file.id}
                     setPresentingDocument={setPresentingDocument}
-                    modal={modal}
                     document={buildOnyxDocumentFromFile(
                       file.id,
                       file.name,

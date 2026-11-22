@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from typing import cast
 from unittest.mock import MagicMock, patch
 
+import httpx
 import pytest
 from sqlalchemy.orm import Session
 
@@ -23,6 +24,7 @@ from onyx.server.features.build.sandbox.util.opencode_config import (
 )
 from onyx.server.features.build.session import llm_config
 from onyx.server.features.build.session import manager as manager_module
+from onyx.server.features.build.session.errors import OpencodeConfigReloadError
 from onyx.server.features.build.session.manager import SessionManager
 from onyx.server.gateway import model_catalog
 from onyx.server.gateway.models import GatewayModelDescriptor
@@ -110,7 +112,7 @@ def test_decision_models_require_chat_capability_for_craft(supports_chat: bool) 
             )
         ],
     )
-    selection = llm_config.GatewaySelection(3, "gpt-6-luna")
+    selection = llm_config.GatewaySelection(provider_id=3, model_name="gpt-6-luna")
     expected = (3, "gpt-6-luna") if supports_chat else None
 
     assert llm_config._select_gateway_default([provider], selection) == expected
@@ -142,7 +144,9 @@ def test_gateway_config_qualifies_collisions_and_selects_exact_default() -> None
     with patch.object(llm_config, "ONYX_SERVER_URL", "https://onyx.test/api"):
         config = llm_config.build_onyx_gateway_config(
             [bedrock, direct],
-            llm_config.GatewaySelection(7, "anthropic/claude-sonnet"),
+            llm_config.GatewaySelection(
+                provider_id=7, model_name="anthropic/claude-sonnet"
+            ),
         )
 
     assert config is not None
@@ -361,7 +365,9 @@ def test_small_input_override_does_not_reduce_provider_output() -> None:
 
 
 def test_gateway_selection_renders_storage_columns() -> None:
-    assert llm_config.GatewaySelection(17, "anthropic/claude-sonnet").to_columns() == (
+    assert llm_config.GatewaySelection(
+        provider_id=17, model_name="anthropic/claude-sonnet"
+    ).to_columns() == (
         "onyx",
         "17/anthropic/claude-sonnet",
     )
@@ -546,7 +552,8 @@ def test_manager_stored_selection_outranks_craft_default() -> None:
         ),
     ):
         config = manager.build_llm_configs(
-            user, llm_config.GatewaySelection(3, "claude-sonnet-5")
+            user,
+            llm_config.GatewaySelection(provider_id=3, model_name="claude-sonnet-5"),
         )
 
     assert config.model_name == "3/claude-sonnet-5"
@@ -605,8 +612,8 @@ def test_selection_outranks_configured_default() -> None:
     with patch.object(llm_config, "ONYX_SERVER_URL", "https://onyx.test"):
         config = llm_config.build_onyx_gateway_config(
             [anthropic, bedrock],
-            llm_config.GatewaySelection(7, "bedrock-pro"),
-            [llm_config.GatewaySelection(3, "claude-sonnet-5")],
+            llm_config.GatewaySelection(provider_id=7, model_name="bedrock-pro"),
+            [llm_config.GatewaySelection(provider_id=3, model_name="claude-sonnet-5")],
         )
 
     assert config is not None
@@ -620,8 +627,8 @@ def test_stale_selection_falls_through_to_configured_default() -> None:
     with patch.object(llm_config, "ONYX_SERVER_URL", "https://onyx.test"):
         config = llm_config.build_onyx_gateway_config(
             [anthropic, bedrock],
-            llm_config.GatewaySelection(7, "retired-model"),
-            [llm_config.GatewaySelection(3, "claude-sonnet-5")],
+            llm_config.GatewaySelection(provider_id=7, model_name="retired-model"),
+            [llm_config.GatewaySelection(provider_id=3, model_name="claude-sonnet-5")],
         )
 
     assert config is not None
@@ -650,7 +657,7 @@ def test_gateway_config_falls_back_when_requested_selection_is_stale() -> None:
     with patch.object(llm_config, "ONYX_SERVER_URL", "https://onyx.test"):
         config = llm_config.build_onyx_gateway_config(
             [provider],
-            llm_config.GatewaySelection(99, "deleted-model"),
+            llm_config.GatewaySelection(provider_id=99, model_name="deleted-model"),
         )
 
     assert config is not None
@@ -780,14 +787,14 @@ def test_reconcile_parses_stored_gateway_selection() -> None:
     cache.get.return_value = None
     with (
         patch.object(manager_module, "get_cache_backend", return_value=cache),
-        patch.object(manager_module, "get_connectable_apps_for_user", return_value=[]),
+        patch.object(manager_module, "list_connectable_apps", return_value=[]),
     ):
         manager.reconcile_session_llm_config(
             cast(Sandbox, MagicMock(id=1)), session, cast(User, MagicMock(spec=User))
         )
 
     assert build_llm_configs.call_args.args[1] == llm_config.GatewaySelection(
-        17, "anthropic/claude-sonnet"
+        provider_id=17, model_name="anthropic/claude-sonnet"
     )
 
 
@@ -811,14 +818,14 @@ def test_reconcile_forwards_legacy_provider_selection() -> None:
     cache.get.return_value = None
     with (
         patch.object(manager_module, "get_cache_backend", return_value=cache),
-        patch.object(manager_module, "get_connectable_apps_for_user", return_value=[]),
+        patch.object(manager_module, "list_connectable_apps", return_value=[]),
     ):
         manager.reconcile_session_llm_config(
             cast(Sandbox, MagicMock(id=1)), session, cast(User, MagicMock(spec=User))
         )
 
     assert build_llm_configs.call_args.args[1] == llm_config.LegacySelection(
-        "anthropic", "claude-fable-5"
+        provider_type="anthropic", model_name="claude-fable-5"
     )
 
 
@@ -843,7 +850,7 @@ def test_empty_gateway_session_restarts_instance_for_changed_catalog() -> None:
     cache.get.return_value = None
     with (
         patch.object(manager_module, "get_cache_backend", return_value=cache),
-        patch.object(manager_module, "get_connectable_apps_for_user", return_value=[]),
+        patch.object(manager_module, "list_connectable_apps", return_value=[]),
     ):
         manager.reconcile_session_llm_config(sandbox, session, user)
 
@@ -876,12 +883,7 @@ def test_workspace_rebuild_claims_a_dispose_the_next_reconcile_honours() -> None
     sandbox_manager.read_file.return_value = expected.encode()
 
     store: dict[str, str] = {}
-    cache = MagicMock()
-    cache.set.side_effect = lambda key, value, ex=None: store.__setitem__(  # noqa: ARG005
-        key, value
-    )
-    cache.get.side_effect = store.get
-    cache.delete.side_effect = lambda key: store.pop(key, None)
+    cache = _dict_cache(store)
 
     session = cast(
         BuildSession,
@@ -906,3 +908,109 @@ def test_workspace_rebuild_claims_a_dispose_the_next_reconcile_honours() -> None
 
     sandbox_manager.dispose_opencode_instance.assert_called_once()
     assert store == {}, "the claim must be cleared once the dispose succeeded"
+
+
+def _dict_cache(store: dict[str, str]) -> MagicMock:
+    cache = MagicMock()
+    cache.set.side_effect = lambda key, value, ex=None: store.__setitem__(  # noqa: ARG005
+        key, value
+    )
+    cache.get.side_effect = lambda key: store[key].encode() if key in store else None
+    cache.delete.side_effect = lambda key: store.pop(key, None)
+    return cache
+
+
+def _live_session() -> BuildSession:
+    return cast(
+        BuildSession,
+        MagicMock(
+            id=2,
+            agent_provider=None,
+            agent_model=None,
+            opencode_session_id="ses-live",
+            nextjs_port=3010,
+        ),
+    )
+
+
+def test_dispose_timeout_after_rewrite_converges_on_next_turn() -> None:
+    """The turn that rewrote the config fails with a clear error when the
+    dispose times out. The next turn sees a matching file plus the marker,
+    disposes again, and clears the marker."""
+    config = _gateway_config()
+    manager, sandbox_manager, _ = _reconcile_manager(config)
+    expected = json.dumps(
+        build_provider_opencode_config(
+            config, disabled_tools=OPENCODE_DISABLED_TOOLS, session_id="2"
+        )
+    )
+    session = _live_session()
+    sandbox = cast(Sandbox, MagicMock(id=1))
+    user = cast(User, MagicMock(spec=User, personal_name="Roshan"))
+    store: dict[str, str] = {}
+    cache = _dict_cache(store)
+
+    with (
+        patch.object(manager_module, "get_cache_backend", return_value=cache),
+        patch.object(manager_module, "list_connectable_apps", return_value=[]),
+    ):
+        sandbox_manager.read_file.return_value = b"stale"
+        sandbox_manager.dispose_opencode_instance.side_effect = httpx.ReadTimeout(
+            "timed out"
+        )
+        with pytest.raises(OpencodeConfigReloadError):
+            manager.reconcile_session_llm_config(sandbox, session, user)
+        assert len(store) == 1, "a failed dispose must keep the marker"
+
+        sandbox_manager.read_file.return_value = expected.encode()
+        sandbox_manager.dispose_opencode_instance.side_effect = None
+        manager.reconcile_session_llm_config(sandbox, session, user)
+
+    sandbox_manager.regenerate_session_config.assert_called_once()
+    assert sandbox_manager.dispose_opencode_instance.call_count == 2
+    assert store == {}
+
+
+def test_stuck_dispose_fails_fast_after_bounded_attempts() -> None:
+    """A dispose that never completes must not cost a full timeout on every
+    turn: after the attempt limit, turns fail fast without a dispose call
+    until the backoff passes. The marker stays, so no turn runs on the old
+    config."""
+    config = _gateway_config()
+    manager, sandbox_manager, _ = _reconcile_manager(config)
+    expected = json.dumps(
+        build_provider_opencode_config(
+            config, disabled_tools=OPENCODE_DISABLED_TOOLS, session_id="2"
+        )
+    )
+    sandbox_manager.read_file.return_value = expected.encode()
+    sandbox_manager.dispose_opencode_instance.side_effect = httpx.ReadTimeout(
+        "timed out"
+    )
+    session = _live_session()
+    sandbox = cast(Sandbox, MagicMock(id=1))
+    user = cast(User, MagicMock(spec=User))
+    store: dict[str, str] = {}
+    cache = _dict_cache(store)
+    max_attempts = manager_module._DISPOSE_MAX_FAILED_ATTEMPTS
+
+    with patch.object(manager_module, "get_cache_backend", return_value=cache):
+        manager_module.mark_opencode_dispose_pending(session.id)
+        messages: list[str] = []
+        for _ in range(max_attempts + 2):
+            with pytest.raises(OpencodeConfigReloadError) as exc_info:
+                manager.reconcile_session_llm_config(sandbox, session, user)
+            messages.append(str(exc_info.value))
+
+        assert sandbox_manager.dispose_opencode_instance.call_count == max_attempts
+        assert messages[-1] == manager_module._DISPOSE_BACKOFF_MESSAGE
+        assert len(store) == 1
+
+        # After the backoff, one more attempt runs; a success clears the marker.
+        (key,) = store
+        store[key] = manager_module._encode_dispose_pending(max_attempts, 0.0)
+        sandbox_manager.dispose_opencode_instance.side_effect = None
+        manager.reconcile_session_llm_config(sandbox, session, user)
+
+    assert sandbox_manager.dispose_opencode_instance.call_count == max_attempts + 1
+    assert store == {}

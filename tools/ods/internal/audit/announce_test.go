@@ -168,14 +168,6 @@ func TestPlanAnnouncement_retriedPackagesSplitBelowSlackSplitSize(t *testing.T) 
 	}
 }
 
-func TestPackageSection_fitsOneMessageWhenSmall(t *testing.T) {
-	opts := baseAnnounce()
-	a := chromiumAlert()
-	if msgs := packageSection(a, a.Advisories, opts.Triage[16065], true, opts); len(msgs) != 1 {
-		t.Errorf("want one message, got %d", len(msgs))
-	}
-}
-
 func TestPlanAnnouncement_nothingFailingPostsNothing(t *testing.T) {
 	plan := PlanAnnouncement(baseAnnounce())
 	if plan.Post != nil || len(plan.Replies) != 0 || len(plan.Markers) != 0 {
@@ -201,5 +193,23 @@ func TestAnnounceHelpers(t *testing.T) {
 	}
 	if got := ignoreReason(strings.Repeat("a", 130)); len(got) != 120 {
 		t.Errorf("ignoreReason should cap at 120 runes, got %d", len(got))
+	}
+}
+
+func TestCVECountNamesTheSeverities(t *testing.T) {
+	cases := []struct {
+		count      int
+		severities map[Severity]int
+		want       string
+	}{
+		{1, map[Severity]int{SeverityCritical: 1}, "1 critical CVE"},
+		{4, map[Severity]int{SeverityCritical: 4}, "4 critical CVEs"},
+		{18, map[Severity]int{SeverityHigh: 18}, "18 high CVEs"},
+		{3, map[Severity]int{SeverityCritical: 1, SeverityHigh: 2}, "3 CVEs (1 critical, 2 high)"},
+	}
+	for _, tc := range cases {
+		if got := cveCount(tc.count, tc.severities); got != tc.want {
+			t.Errorf("cveCount(%d, %v) = %q, want %q", tc.count, tc.severities, got, tc.want)
+		}
 	}
 }

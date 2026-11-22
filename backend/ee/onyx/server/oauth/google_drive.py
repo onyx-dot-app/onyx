@@ -1,20 +1,22 @@
 import base64
 import json
 import uuid
-from typing import Any, cast
+from typing import Any
 
 import requests
-from fastapi import Depends, HTTPException
+from fastapi import Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ee.onyx.server.oauth.api_router import router
 from onyx.auth.permissions import require_permission
+from onyx.cache.factory import get_cache_backend
 from onyx.configs.app_configs import (
     DEV_MODE,
     OAUTH_GOOGLE_DRIVE_CLIENT_ID,
     OAUTH_GOOGLE_DRIVE_CLIENT_SECRET,
+    REQUEST_TIMEOUT_SECONDS,
     WEB_DOMAIN,
 )
 from onyx.configs.constants import DocumentSource
@@ -34,7 +36,6 @@ from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.redis.redis_pool import get_redis_client
 from onyx.server.documents.models import CredentialBase
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -121,12 +122,12 @@ def handle_google_drive_oauth_callback(
     tenant_id: str | None = Depends(get_current_tenant_id),
 ) -> JSONResponse:
     if not GoogleDriveOAuth.CLIENT_ID or not GoogleDriveOAuth.CLIENT_SECRET:
-        raise HTTPException(
-            status_code=500,
-            detail="Google Drive client ID or client secret is not configured.",
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR,
+            "Google Drive client ID or client secret is not configured.",
         )
 
-    r = get_redis_client(tenant_id=tenant_id)
+    cache = get_cache_backend(tenant_id=tenant_id)
 
     # recover the state
     padded_state = state + "=" * (
@@ -142,11 +143,11 @@ def handle_google_drive_oauth_callback(
 
     r_key = f"da_oauth:{oauth_uuid_str}"
 
-    session_json_bytes = cast(bytes, r.get(r_key))
+    session_json_bytes = cache.get(r_key)
     if not session_json_bytes:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Google Drive OAuth failed - OAuth state key not found: key={r_key}",
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST,
+            f"Google Drive OAuth failed - OAuth state key not found: key={r_key}",
         )
 
     session_json = session_json_bytes.decode("utf-8")
@@ -175,6 +176,7 @@ def handle_google_drive_oauth_callback(
                 "redirect_uri": redirect_uri,
                 "grant_type": "authorization_code",
             },
+            timeout=REQUEST_TIMEOUT_SECONDS,
         )
 
         response.raise_for_status()
@@ -224,7 +226,7 @@ def handle_google_drive_oauth_callback(
             },
         )
     finally:
-        r.delete(r_key)
+        cache.delete(r_key)
 
     # return the result
     return JSONResponse(

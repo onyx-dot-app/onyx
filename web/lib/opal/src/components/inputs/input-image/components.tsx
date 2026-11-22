@@ -7,6 +7,11 @@ import { Tooltip } from "@opal/components/tooltip/components";
 import { Text } from "@opal/components/text/components";
 import { useOpalStrings } from "@opal/strings";
 import { useImageDropzone } from "@opal/hooks/useImageDropzone";
+import type { RichStr } from "@opal/types";
+import {
+  InputTooltip,
+  useInputDisabled,
+} from "@opal/components/inputs/disabled";
 
 type ImageState = "empty" | "withImage" | "dragActive";
 type AbledState = "enabled" | "disabled";
@@ -99,6 +104,8 @@ const inputImageClasses = {
 export interface InputImageProps {
   // State control
   disabled?: boolean;
+  /** Shown on hover, in any state. A disabled row's reason replaces it. */
+  tooltip?: string | RichStr;
 
   // Image source
   src?: string;
@@ -121,8 +128,13 @@ export interface InputImageProps {
   className?: string;
 }
 
+/**
+ * Inside `InputHorizontal` or `InputVertical`, the row's `disabled` and
+ * `disabledTooltip` apply to it too.
+ */
 export default function InputImage({
-  disabled = false,
+  disabled: disabledProp,
+  tooltip,
   src,
   alt,
   onEdit,
@@ -133,6 +145,7 @@ export default function InputImage({
   size = 120,
   className,
 }: InputImageProps) {
+  const disabled = useInputDisabled(disabledProp);
   const strings = useOpalStrings();
   const isInteractive = !disabled && (onEdit || onDrop);
   const hasImage = !!src;
@@ -176,111 +189,117 @@ export default function InputImage({
 
   return (
     <Hoverable.Root group="inputImage" width="fit">
-      <div
-        className={cn("relative", className)}
-        style={{ width: size, height: size }}
-        {...dropzoneProps}
-      >
-        {/* Hidden input for file selection */}
-        {onDrop && <input {...getInputProps()} />}
-
-        {/* Main container */}
-        <button
-          type="button"
-          onClick={handleClick}
-          disabled={disabled}
-          className={cn(
-            "group relative w-full h-full rounded-full overflow-hidden",
-            "border flex items-center justify-center",
-            "transition-all duration-150",
-            containerClass
-          )}
-          aria-label={
-            isInteractive
-              ? hasImage
-                ? strings.imageEdit
-                : strings.imageUpload
-              : undefined
-          }
+      <InputTooltip tooltip={tooltip}>
+        <div
+          className={cn("relative", className)}
+          style={{ width: size, height: size }}
+          {...dropzoneProps}
         >
-          {/* Content */}
-          {hasImage ? (
-            <img
-              src={src}
-              alt={alt ?? strings.image}
-              className="absolute inset-0 w-full h-full object-cover pointer-events-none"
-            />
-          ) : (
-            <SvgPlus
-              className={cn("w-6 h-6", placeholderClass, "pointer-events-none")}
-            />
-          )}
+          {/* Hidden input for file selection */}
+          {onDrop && <input {...getInputProps()} />}
 
-          {/* Drag overlay indicator */}
-          {isDragActive && (
-            <div className="absolute inset-0 bg-action-selection-05/10 flex items-center justify-center rounded-full pointer-events-none">
-              <SvgPlus className="w-8 h-8 stroke-action-selection-05" />
-            </div>
-          )}
+          {/* Main container */}
+          <button
+            type="button"
+            onClick={handleClick}
+            disabled={disabled}
+            className={cn(
+              "group relative w-full h-full rounded-full overflow-hidden",
+              "border flex items-center justify-center",
+              "transition-all duration-150",
+              containerClass
+            )}
+            aria-label={
+              isInteractive
+                ? hasImage
+                  ? strings.imageEdit
+                  : strings.imageUpload
+                : undefined
+            }
+          >
+            {/* Content */}
+            {hasImage ? (
+              <img
+                src={src}
+                alt={alt ?? strings.image}
+                className="absolute inset-0 w-full h-full object-cover pointer-events-none"
+              />
+            ) : (
+              <SvgPlus
+                className={cn(
+                  "w-6 h-6",
+                  placeholderClass,
+                  "pointer-events-none"
+                )}
+              />
+            )}
 
-          {/* Edit overlay - shows on hover/focus when image is uploaded */}
-          {showEditOverlay && isInteractive && hasImage && !isDragActive && (
-            <div className="absolute bottom-0 start-0 end-0 pointer-events-none">
+            {/* Drag overlay indicator */}
+            {isDragActive && (
+              <div className="absolute inset-0 bg-action-selection-05/10 flex items-center justify-center rounded-full pointer-events-none">
+                <SvgPlus className="w-8 h-8 stroke-action-selection-05" />
+              </div>
+            )}
+
+            {/* Edit overlay - shows on hover/focus when image is uploaded */}
+            {showEditOverlay && isInteractive && hasImage && !isDragActive && (
+              <div className="absolute bottom-0 start-0 end-0 pointer-events-none">
+                <Hoverable.Item group="inputImage" variant="appear-on-hover">
+                  <div
+                    className={cn(
+                      "flex items-center justify-center",
+                      "pb-2.5 pt-1.5",
+                      "backdrop-blur-xs bg-mask-01",
+                      "pointer-events-none"
+                    )}
+                  >
+                    <div className="pointer-events-auto">
+                      <Tooltip tooltip={strings.edit} side="top">
+                        <div
+                          className={cn(
+                            "flex items-center justify-center",
+                            "px-1 py-0.5 rounded-08"
+                          )}
+                        >
+                          <Text color="text-03" font="secondary-action">
+                            {strings.edit}
+                          </Text>
+                        </div>
+                      </Tooltip>
+                    </div>
+                  </div>
+                </Hoverable.Item>
+              </div>
+            )}
+          </button>
+
+          {/* Remove button - top left corner (only when image is uploaded) */}
+          {isInteractive && hasImage && onRemove && (
+            <div className="absolute top-1 start-1">
               <Hoverable.Item group="inputImage" variant="appear-on-hover">
-                <div
+                {/* raw-ok: a 20px compact square none of the Button size
+                  presets offer — the old IconButton TODO, resolved by owning
+                  the element. */}
+                <button
+                  type="button"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onRemove();
+                  }}
+                  aria-label={strings.imageRemove}
                   className={cn(
-                    "flex items-center justify-center",
-                    "pb-2.5 pt-1.5",
-                    "backdrop-blur-xs bg-mask-01",
-                    "pointer-events-none"
+                    "flex h-5 w-5 items-center justify-center rounded-04 p-0.5",
+                    "bg-theme-primary-05 hover:bg-theme-primary-04",
+                    "active:bg-theme-primary-06"
                   )}
                 >
-                  <div className="pointer-events-auto">
-                    <Tooltip tooltip={strings.edit} side="top">
-                      <div
-                        className={cn(
-                          "flex items-center justify-center",
-                          "px-1 py-0.5 rounded-08"
-                        )}
-                      >
-                        <Text color="text-03" font="secondary-action">
-                          {strings.edit}
-                        </Text>
-                      </div>
-                    </Tooltip>
-                  </div>
-                </div>
+                  <SvgX className="h-4 w-4 stroke-text-inverted-05" />
+                </button>
               </Hoverable.Item>
             </div>
           )}
-        </button>
-
-        {/* Remove button - top left corner (only when image is uploaded) */}
-        {isInteractive && hasImage && onRemove && (
-          <div className="absolute top-1 start-1">
-            <Hoverable.Item group="inputImage" variant="appear-on-hover">
-              {/* raw-ok: a 20px compact square none of the Button size
-                  presets offer — the old IconButton TODO, resolved by owning
-                  the element. */}
-              <button
-                type="button"
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onRemove();
-                }}
-                aria-label={strings.imageRemove}
-                className={cn(
-                  "flex h-5 w-5 items-center justify-center rounded-04 p-0.5",
-                  "bg-theme-primary-05 hover:bg-theme-primary-04",
-                  "active:bg-theme-primary-06"
-                )}
-              >
-                <SvgX className="h-4 w-4 stroke-text-inverted-05" />
-              </button>
-            </Hoverable.Item>
-          </div>
-        )}
-      </div>
+        </div>
+      </InputTooltip>
     </Hoverable.Root>
   );
 }

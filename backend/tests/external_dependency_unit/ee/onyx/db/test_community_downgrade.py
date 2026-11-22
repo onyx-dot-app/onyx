@@ -172,7 +172,9 @@ def test_private_pair_loses_its_data_access_groups(db_session: Session) -> None:
         db_session.add(group)
         db_session.flush()
         db_session.add(
-            UserGroup__CCPairDataAccess(user_group_id=group.id, cc_pair_id=pair.id)
+            UserGroup__CCPairDataAccess(
+                user_group_id=group.id, cc_pair_id=pair.id, access_type=pair.access_type
+            )
         )
         db_session.flush()
 

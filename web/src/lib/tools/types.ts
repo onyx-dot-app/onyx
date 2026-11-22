@@ -1,5 +1,9 @@
-import type { Tag } from "@/lib/types";
+import type { ActionPolicy } from "@/app/craft/v1/apps/registry";
 import type { PermissionsOf } from "@/lib/permissions/resource-actions";
+import type {
+  SearchFiltersRequest,
+  TagSelection,
+} from "@/lib/searchFilters/types";
 
 export interface MethodSpec {
   /* Defines a single method that is part of a custom tool. Each method maps to a single
@@ -38,6 +42,9 @@ export interface ToolSnapshot {
   // If this is an MCP tool, which server it belongs to
   mcp_server_id?: number | null;
   user_id?: string | null;
+  // The integration of an OpenAPI or MCP tool; chat tool options name it.
+  // Only the tool list sets it.
+  integration_id?: number | null;
 
   // Whether the tool is enabled
   enabled: boolean;
@@ -46,64 +53,15 @@ export interface ToolSnapshot {
   chat_selectable: boolean;
   agent_creation_selectable: boolean;
   default_enabled: boolean;
-  default_chat_enabled?: boolean | null;
-  user_enabled_in_chat?: boolean;
+  default_action_policy?: ActionPolicy | null;
 
   // Server-stamped affordance map; fail-closed (absent = denied).
   permissions?: PermissionsOf<"Action">;
 }
 
-export interface ToolUserPreferencesRequest {
-  enabled_in_chat: boolean;
-}
-
-export type ToolUserPreferencesResponse = ToolUserPreferencesRequest;
-
 export interface ApiResponse<T> {
   data: T | null;
   error: string | null;
-}
-
-export interface OAuthConfig {
-  id: number;
-  name: string;
-  authorization_url: string;
-  token_url: string;
-  scopes: string[] | null;
-  supports_pkce: boolean;
-  has_client_credentials: boolean;
-  tool_count: number;
-  created_at: string;
-  updated_at: string;
-}
-
-export interface OAuthConfigCreate {
-  name: string;
-  authorization_url: string;
-  token_url: string;
-  client_id: string;
-  client_secret: string;
-  scopes?: string[];
-  additional_params?: Record<string, any>;
-  supports_pkce?: boolean;
-}
-
-export interface OAuthConfigUpdate {
-  name?: string;
-  authorization_url?: string;
-  token_url?: string;
-  client_id?: string;
-  client_secret?: string;
-  scopes?: string[];
-  additional_params?: Record<string, any>;
-  supports_pkce?: boolean;
-}
-
-export interface OAuthTokenStatus {
-  oauth_config_id: number;
-  expires_at: number | null;
-  is_expired: boolean;
-  can_refresh?: boolean;
 }
 
 /**
@@ -129,7 +87,34 @@ export interface ChatSearchFilters {
   /** `uniqueKey`s of the sources switched on; `null` means untouched (all on). */
   selectedSources: readonly string[] | null;
   documentSets: readonly string[];
-  tags: readonly Tag[];
-  /** ISO datetime strings, kept serializable rather than as `Date`s. */
-  timeRange: { from: string; to: string } | null;
+  tags: readonly TagSelection[];
+  /** An ISO datetime string, kept serializable rather than as a `Date`. */
+  timeRange: { from: string } | null;
+}
+
+/** A built-in tool by its id, or an integration with the action keys to
+ * keep. */
+export type ToolOptionsEntry =
+  | { type: "capability"; tool_id: number }
+  | { type: "integration"; integration_id: number; actions?: string[] | null };
+
+/** A built-in tool, or one action of an integration. */
+export type ToolPreference =
+  | { type: "capability"; tool_id: number }
+  | { type: "action"; integration_id: number; action: string };
+
+/** A preferred integration action. The web keeps it but has no control for
+ * it. */
+export type ActionPreference = Extract<ToolPreference, { type: "action" }>;
+
+/**
+ * The tools, integrations and search filters of a chat. A send carries them, and
+ * the server saves them on an existing chat: the chat-session detail returns
+ * them, and the tool-options PATCH is their only writer. Turns the server
+ * starts use them. `allowed` null means every tool and integration of the agent.
+ */
+export interface ChatToolOptions {
+  allowed: ToolOptionsEntry[] | null;
+  preferred: ToolPreference | null;
+  internal_search_filters: SearchFiltersRequest | null;
 }

@@ -111,6 +111,11 @@ variable "enable_craft" {
     condition     = !var.enable_craft || !contains(keys(var.eks_managed_node_groups), "sandbox")
     error_message = "enable_craft injects a node group under the key \"sandbox\", which eks_managed_node_groups already defines. Rename your group so the Craft group does not replace it."
   }
+
+  validation {
+    condition     = !var.enable_craft || !var.enable_craft_pod_sandbox_node_group || !contains(keys(var.eks_managed_node_groups), "sandbox_pod")
+    error_message = "enable_craft_pod_sandbox_node_group injects a node group under the key \"sandbox_pod\", which eks_managed_node_groups already defines. Rename your group."
+  }
 }
 
 variable "craft_sandbox_node_instance_types" {
@@ -178,7 +183,7 @@ variable "craft_sandbox_node_disk_throughput" {
 
 variable "craft_sandbox_runtime" {
   type        = string
-  description = "How Craft sandboxes run on the sandbox node group. \"pod\" is one container per sandbox. \"firecracker\" labels the group onyx.app/kvm=true and, on non-metal types, turns on nested virtualization so nodes expose /dev/kvm. It needs Intel c8i, m8i or r8i (or -flex) types, or Intel .metal types."
+  description = "How Craft sandboxes run on the sandbox node group. \"pod\" is one container per sandbox. \"firecracker\" labels and taints the group onyx.app/kvm=true (only the host agent and preflight tolerate the taint) and, on non-metal types, turns on nested virtualization so nodes expose /dev/kvm. It needs Intel c8i, m8i or r8i (or -flex) types, or Intel .metal types."
   default     = "pod"
 
   validation {
@@ -208,6 +213,41 @@ variable "craft_sandbox_runtime" {
     ])) == 1
     error_message = "craft_sandbox_node_instance_types must be all .metal types or all nested virtualization types when craft_sandbox_runtime = \"firecracker\"."
   }
+}
+
+variable "enable_craft_pod_sandbox_node_group" {
+  type        = bool
+  description = "With craft_sandbox_runtime = \"firecracker\", also create a small pod sandbox node group (label onyx.app/workload=sandbox, taint workload=sandbox, no onyx.app/kvm). Pod sandboxes and the image prepuller run there, because the Firecracker nodes carry the onyx.app/kvm taint."
+  default     = false
+
+  validation {
+    condition     = !var.enable_craft_pod_sandbox_node_group || var.craft_sandbox_runtime == "firecracker"
+    error_message = "enable_craft_pod_sandbox_node_group needs craft_sandbox_runtime = \"firecracker\". With the pod runtime, the sandbox node group already runs pod sandboxes."
+  }
+}
+
+variable "craft_pod_sandbox_node_instance_types" {
+  type        = list(string)
+  description = "Instance types for the pod sandbox node group next to a Firecracker group. One pod sandbox requests about 1.1 vCPU, 2.3 GiB and 5.5 GiB of ephemeral storage."
+  default     = ["m8i.xlarge"]
+}
+
+variable "craft_pod_sandbox_node_min_size" {
+  type        = number
+  description = "Min size of the pod sandbox node group next to a Firecracker group."
+  default     = 1
+}
+
+variable "craft_pod_sandbox_node_max_size" {
+  type        = number
+  description = "Max size of the pod sandbox node group next to a Firecracker group (cluster-autoscaler scales between min and max)."
+  default     = 2
+}
+
+variable "craft_pod_sandbox_node_desired_size" {
+  type        = number
+  description = "Desired size of the pod sandbox node group next to a Firecracker group."
+  default     = 1
 }
 
 variable "eks_managed_node_groups" {
@@ -352,9 +392,20 @@ variable "enable_network_policy" {
   default     = false
 }
 
+variable "manage_core_addons" {
+  type        = bool
+  description = "New clusters only. Install vpc-cni (before the node groups, with NetworkPolicy enforcement on), kube-proxy and CoreDNS as EKS addons. The upstream EKS module v21 creates no default addons, so without them the nodes of a new cluster never become Ready. Keep false on a cluster that already runs these components. Cannot be combined with enable_network_policy: on a cluster that already has it, the CNI addon would move to another resource and be replaced."
+  default     = false
+
+  validation {
+    condition     = !(var.manage_core_addons && var.enable_network_policy)
+    error_message = "Set only one of manage_core_addons and enable_network_policy. manage_core_addons (new clusters) already turns on NetworkPolicy enforcement. On an existing cluster with enable_network_policy = true, keep manage_core_addons = false: switching moves the vpc-cni addon to another resource, and Terraform would replace the running CNI."
+  }
+}
+
 variable "vpc_cni_addon_version" {
   type        = string
-  description = "VPC CNI addon version to pin when enable_network_policy is true. Set to the cluster's currently-running version (set CLUSTER_NAME, then: aws eks describe-addon --cluster-name \"$CLUSTER_NAME\" --addon-name vpc-cni --query 'addon.addonVersion') to avoid an unintended CNI upgrade on adoption."
+  description = "VPC CNI addon version to pin when enable_network_policy or manage_core_addons is true. Set to the cluster's currently-running version (set CLUSTER_NAME, then: aws eks describe-addon --cluster-name \"$CLUSTER_NAME\" --addon-name vpc-cni --query 'addon.addonVersion') to avoid an unintended CNI upgrade on adoption."
   default     = "v1.20.4-eksbuild.2"
 }
 

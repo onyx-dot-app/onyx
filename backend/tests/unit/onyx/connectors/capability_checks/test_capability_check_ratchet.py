@@ -53,7 +53,7 @@ def test_named_indexing_checks_require_a_gateway(
     )
 
     # Under test and postcondition.
-    with pytest.raises(AssertionError, match="source-operations gateway"):
+    with pytest.raises(RuntimeError, match="source-operations gateway"):
         get_capability_checks(DocumentSource.BOX)
 
 
@@ -95,7 +95,7 @@ def test_named_perm_sync_checks_require_a_gateway(
     )
 
     # Under test and postcondition.
-    with pytest.raises(AssertionError, match="source-operations gateway"):
+    with pytest.raises(RuntimeError, match="source-operations gateway"):
         get_perm_sync_capability_checks(DocumentSource.BOX)
 
 

@@ -11,6 +11,7 @@ import {
   type SetStateAction,
 } from "react";
 import { useTranslations } from "next-intl";
+import { useFormatBytes } from "@/hooks/useFormatBytes";
 import { uploadFile as uploadFileApi } from "@/app/craft/services/apiServices";
 import { useBuildSessionStore } from "@/app/craft/hooks/useBuildSessionStore";
 import { FetchError, isNotFoundError } from "@/lib/fetcher";
@@ -71,13 +72,6 @@ const MAX_TOTAL_SIZE_BYTES = 200 * 1024 * 1024;
 /** Maximum files per session - matches BUILD_MAX_UPLOAD_FILES_PER_SESSION */
 const MAX_FILES_PER_SESSION = 20;
 
-/** Format bytes to human-readable string */
-function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`;
-  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
-  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
-}
-
 /** Validation result for a single file */
 type FileValidationResult = { valid: true } | { valid: false; error: string };
 
@@ -85,7 +79,11 @@ type FileValidationResult = { valid: true } | { valid: false; error: string };
 type UploadTranslate = ReturnType<typeof useTranslations<"craft.uploadFiles">>;
 
 /** Validate a single file before upload */
-function validateFile(file: File, t: UploadTranslate): FileValidationResult {
+function validateFile(
+  file: File,
+  t: UploadTranslate,
+  formatBytes: (bytes: number) => string
+): FileValidationResult {
   // Check file size. Extension/type are intentionally not restricted - uploaded
   // files only run inside the isolated sandbox, which is the security boundary.
   if (file.size > MAX_FILE_SIZE_BYTES) {
@@ -105,7 +103,8 @@ function validateFile(file: File, t: UploadTranslate): FileValidationResult {
 function validateBatch(
   newFiles: File[],
   existingFiles: BuildFile[],
-  t: UploadTranslate
+  t: UploadTranslate,
+  formatBytes: (bytes: number) => string
 ): FileValidationResult {
   const totalCount = existingFiles.length + newFiles.length;
   if (totalCount > MAX_FILES_PER_SESSION) {
@@ -256,6 +255,7 @@ export interface UploadFilesProviderProps {
 
 export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
   const t = useTranslations("craft.uploadFiles");
+  const formatBytes = useFormatBytes();
   // =========================================================================
   // State
   // =========================================================================
@@ -460,7 +460,12 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
       const existingFiles = currentMessageFilesRef.current;
 
       // Validate batch constraints first
-      const batchValidation = validateBatch(files, existingFiles, t);
+      const batchValidation = validateBatch(
+        files,
+        existingFiles,
+        t,
+        formatBytes
+      );
       if (!batchValidation.valid) {
         // Create failed files for all with the batch error
         const failedFiles = files.map((f) =>
@@ -475,7 +480,7 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
       const failedFiles: BuildFile[] = [];
 
       for (const file of files) {
-        const validation = validateFile(file, t);
+        const validation = validateFile(file, t, formatBytes);
         if (validation.valid) {
           validFiles.push(file);
         } else {
@@ -522,6 +527,7 @@ export function UploadFilesProvider({ children }: UploadFilesProviderProps) {
       activeSessionId,
       uploadAttachedFiles,
       t,
+      formatBytes,
       setCurrentMessageFiles,
     ]
   );

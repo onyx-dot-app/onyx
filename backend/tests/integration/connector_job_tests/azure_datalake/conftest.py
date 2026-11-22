@@ -107,12 +107,14 @@ def azure_datalake_permission_environment(
         # The group sync reads the exclusion groups from the synced access, so
         # a new one gets its members on the next run.
         resynced_at = datetime.now(timezone.utc)
-        CCPairManager.sync(cc_pair=cc_pair, user_performing_action=admin_user)
+        CCPairManager.sync_groups(cc_pair=cc_pair, user_performing_action=admin_user)
         CCPairManager.wait_for_sync(
             cc_pair=cc_pair,
-            after=resynced_at,
+            after=started_at,
+            group_sync_after=resynced_at,
             user_performing_action=admin_user,
             timeout=JOB_TIMEOUT_SECONDS,
+            should_wait_for_index_sync=False,
         )
 
         yield AzureDataLakePermissionEnvironment(

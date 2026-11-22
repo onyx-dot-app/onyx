@@ -1,30 +1,32 @@
 """Render dynamic skill templates for the per-user skills fileset."""
 
 import re
-from collections.abc import Mapping
+from collections.abc import Collection, Mapping
 from pathlib import Path
 
 from sqlalchemy.orm import Session
 
 from onyx.configs.constants import DocumentSource, DocumentSourceDescription
-from onyx.db.action_policy import get_workspace_action_policies
 from onyx.db.connector import _INTERNAL_ONLY_SOURCES
 from onyx.db.connector_credential_pair import (
     CCPairAccessLevel,
     get_connector_credential_pairs_for_user,
 )
-from onyx.db.enums import ActionPolicy, ExternalAppType, GatedAppKind
-from onyx.db.external_app import get_external_app_by_skill_id
-from onyx.db.models import ExternalApp, Skill, User
+from onyx.db.enums import ExternalAppType
+from onyx.db.external_app import get_external_app_by_id
+from onyx.db.integration import get_integration_by_kind_row
+from onyx.db.models import ExternalApp, Integration, User
 from onyx.error_handling.exceptions import OnyxError
 from onyx.external_apps.providers.registry import (
-    action_policy_views,
+    get_endpoint_catalog,
     get_provider_for_app,
     uses_cloud_scope,
     withheld_on_cloud,
 )
+from onyx.integrations.connections import preset_organization_values
+from onyx.integrations.policy import admin_blocked_actions
+from onyx.skills.built_in import iter_builtin_skill_files
 from onyx.skills.bundle import SKILL_MD_NAME, TEMPLATE_SUFFIX
-from onyx.skills.content import iter_builtin_skill_files
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -53,6 +55,10 @@ _CLOUD_DESCRIPTION_RE = re.compile(
     r"^cloud-description:[ \t]*(\S[^\n]*)\n", re.MULTILINE
 )
 _DESCRIPTION_RE = re.compile(r"^description:[^\n]*\n", re.MULTILINE)
+
+# Claude Code replaces this in a skill's text with the skill's folder. OpenCode
+# does not, so bash expands it to an empty string.
+CLAUDE_SKILL_DIR_PLACEHOLDER = "${CLAUDE_SKILL_DIR}"
 
 
 def build_available_sources_section(
@@ -117,26 +123,30 @@ def render_company_search_skill(
 
 def build_action_availability_section(
     app_type: ExternalAppType,
-    stored: dict[str, ActionPolicy],
+    blocked: Collection[str],
 ) -> str:
     """The warning listing the app's unavailable actions — cloud-withheld plus
-    the ``DENY`` entries from ``stored`` (the admin's per-action overrides) —
-    or "" when none apply. Available actions are omitted: the skill body
-    already documents those."""
-    # Cloud-withheld actions never reach the filtered catalog, so the DENY
+    the actions the admin blocked — or "" when none apply. Available actions
+    are omitted: the skill body already documents those."""
+    # Cloud-withheld actions never reach the filtered catalog, so the blocked
     # loop below can't see them.
     unavailable: list[str] = [
         endpoint.normalised_name for endpoint in withheld_on_cloud(app_type)
     ]
     unavailable.extend(
-        view.normalised_name
-        for view in action_policy_views(app_type, stored)
-        if view.state == ActionPolicy.DENY
+        endpoint.normalised_name
+        for endpoint in get_endpoint_catalog(app_type)
+        if endpoint.id.value in blocked
     )
     if not unavailable:
         return ""
     header = "These actions are unavailable and should not be attempted:"
     return "\n".join([header, "", *(f"- {name}" for name in unavailable)])
+
+
+def resolve_skill_dir_placeholder(skill_md: str, skill_dir: str) -> str:
+    """Replace each ``${CLAUDE_SKILL_DIR}`` with the skill's absolute folder."""
+    return skill_md.replace(CLAUDE_SKILL_DIR_PLACEHOLDER, skill_dir)
 
 
 def substitute_app_values(template: str, values: Mapping[str, str]) -> str:
@@ -150,7 +160,7 @@ def substitute_app_values(template: str, values: Mapping[str, str]) -> str:
 def render_external_app_skill(
     template: str,
     app_type: ExternalAppType,
-    stored: dict[str, ActionPolicy],
+    blocked: Collection[str],
     app_values: Mapping[str, str] | None = None,
 ) -> str:
     """Pure template rendering for an external-app SKILL.md: apply the cloud
@@ -173,7 +183,7 @@ def render_external_app_skill(
 
     template = _CLOUD_SCOPE_BLOCK_RE.sub(_resolve_block, template)
     template = substitute_app_values(template, app_values or {})
-    section = build_action_availability_section(app_type, stored)
+    section = build_action_availability_section(app_type, blocked)
     if section:
         rendered = template.replace(ACTION_AVAILABILITY_PLACEHOLDER, section)
     else:
@@ -187,7 +197,9 @@ def render_external_app_skill(
     return rendered
 
 
-def _app_template_values(external_app: ExternalApp | None) -> dict[str, str]:
+def _app_template_values(
+    external_app: ExternalApp | None, organization_values: Mapping[str, str]
+) -> dict[str, str]:
     """The provider's ``{{APP:<key>}}`` values for this app row, or ``{}`` when
     there is no row or its config no longer resolves — rendering is a read-only
     projection, so a rejected config leaves placeholders unconfigured."""
@@ -196,10 +208,9 @@ def _app_template_values(external_app: ExternalApp | None) -> dict[str, str]:
     provider = get_provider_for_app(external_app)
     if provider is None:
         return {}
-    credentials = external_app.organization_credentials.get_value(apply_mask=False)
     # Only public fields may enter files sent to a sandbox or shown in previews.
     public = {
-        field.key: value if isinstance(value := credentials.get(field.key), str) else ""
+        field.key: organization_values.get(field.key, "")
         for field in provider.spec.descriptor.required_org_credential_fields
         if not field.secret
     }
@@ -216,26 +227,45 @@ def _app_template_values(external_app: ExternalApp | None) -> dict[str, str]:
 
 def render_external_app_files(
     db_session: Session,
-    skill: Skill,
+    external_app_id: int | None,
     app_type: ExternalAppType,
     source_dir: Path,
 ) -> dict[str, str]:
     """Every rendered file for an external-app built-in, keyed by its path in
     the sandbox: ``SKILL.md`` plus any other ``*.template`` sibling, which is
     how a bundled helper gets the connected account baked in rather than taking
-    it as an argument it could only ever be given one value for."""
-    external_app = get_external_app_by_skill_id(db_session, skill.id)
-    stored = (
-        get_workspace_action_policies(
-            db_session, GatedAppKind.EXTERNAL_APP, external_app.id
-        )
-        if external_app
-        else {}
+    it as an argument it could only ever be given one value for.
+
+    ``external_app_id`` None renders unconfigured placeholders."""
+    external_app = (
+        get_external_app_by_id(db_session, external_app_id)
+        if external_app_id is not None
+        else None
     )
-    values = _app_template_values(external_app)
+    integration = (
+        get_integration_by_kind_row(
+            Integration.external_app_id, external_app.id, db_session
+        )
+        if external_app is not None
+        else None
+    )
+    integration_id = integration.id if integration is not None else None
+    blocked = (
+        admin_blocked_actions(db_session, integration_id)
+        if integration_id is not None
+        else set()
+    )
+    values = _app_template_values(
+        external_app,
+        (
+            preset_organization_values(integration_id, db_session)
+            if integration_id is not None
+            else {}
+        ),
+    )
     rendered = {
         SKILL_MD_NAME: render_external_app_skill(
-            (source_dir / _SKILL_TEMPLATE_NAME).read_text(), app_type, stored, values
+            (source_dir / _SKILL_TEMPLATE_NAME).read_text(), app_type, blocked, values
         )
     }
     for path in iter_builtin_skill_files(source_dir):

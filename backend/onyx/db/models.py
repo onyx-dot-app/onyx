@@ -1,6 +1,6 @@
 import datetime
 import json
-from typing import Annotated, Any, Literal, NotRequired
+from typing import Annotated, Any, Literal, NotRequired, get_args
 from uuid import UUID, uuid4
 
 from fastapi_users_db_sqlalchemy import (
@@ -9,7 +9,7 @@ from fastapi_users_db_sqlalchemy import (
 )
 from fastapi_users_db_sqlalchemy.access_token import SQLAlchemyBaseAccessTokenTableUUID
 from fastapi_users_db_sqlalchemy.generics import TIMESTAMPAware
-from pydantic import BaseModel, Field, JsonValue, ValidationError
+from pydantic import BaseModel, BeforeValidator, Field, JsonValue, ValidationError
 from sqlalchemy import (
     BigInteger,
     Boolean,
@@ -54,9 +54,15 @@ from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.types import LargeBinary, TypeDecorator
 from typing_extensions import TypedDict  # noreorder
 
-from onyx.agents.models import ExecutionStatus, RunFailure, RunStatus
+from onyx.agents.models import (
+    ExecutionStatus,
+    InputSource,
+    MessageDelivery,
+    RunFailure,
+    RunStatus,
+)
 from onyx.auth.schemas import UserRole
-from onyx.coding_agent.models import CodingAgentCallResult
+from onyx.chat.mention_models import Mention, PickedSkillMessage, RecordedMention
 from onyx.configs.constants import (
     ANONYMOUS_USER_UUID,
     DEFAULT_BOOST,
@@ -77,7 +83,6 @@ from onyx.db.backfill_models import PendingBackfill
 from onyx.db.enums import (
     AccessType,
     AccountType,
-    ActionPolicy,
     ApprovalDecidedVia,
     ApprovalDecision,
     ArtifactType,
@@ -103,7 +108,15 @@ from onyx.db.enums import (
     IndexingStatus,
     IndexModelStatus,
     IndexReclaimStatus,
+    IntegrationActionPolicyValue,
+    IntegrationActionSource,
+    IntegrationAuthMethod,
+    IntegrationAuthMode,
+    IntegrationConnectionStatus,
+    IntegrationKind,
+    IntegrationOAuthProviderMode,
     LLMModelFlowType,
+    MarketplaceKind,
     MCPAuthenticationPerformer,
     MCPAuthenticationType,
     MCPOAuthProviderMode,
@@ -114,8 +127,11 @@ from onyx.db.enums import (
     Permission,
     PermissionSyncStatus,
     PersonaSharePermission,
+    PluginInstallationPolicy,
     PortAttemptStatus,
     ProcessingMode,
+    QuestionAnsweredVia,
+    QuestionOutcome,
     ReceiptStatus,
     SandboxStatus,
     ScheduledTaskRunStatus,
@@ -123,7 +139,6 @@ from onyx.db.enums import (
     ScheduledTaskTriggerSource,
     SessionOrigin,
     SharingScope,
-    SkillInstallationPolicy,
     SkillSharePermission,
     SSOProviderType,
     SwitchoverType,
@@ -152,15 +167,27 @@ from onyx.llm.models import (
 from onyx.llm.override_models import LLMOverride, PromptOverride
 from onyx.natural_language_processing.vertex_auth import VertexEmbeddingConfigDict
 from onyx.server.security.models import IncognitoAvailability, SSRFProtectionLevel
+from onyx.skills.models import SkillOmission
 from onyx.tools.models import (
     CustomToolCallSummary,
     FileReadResult,
-    LlmBashExecutionResult,
     LlmPythonExecutionResult,
     MemoryUpdated,
     ToolExecutionError,
+    ToolOptions,
 )
+from onyx.tools.tool_implementations.code_mode.models import CodeModeExecutionResult
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
+from onyx.tools.tool_implementations.question.models import QuestionToolDetails
+from onyx.tools.tool_implementations.sandbox.models import (
+    ApplyPatchResult,
+    PublishedFiles,
+    SandboxExecResult,
+)
+from onyx.tools.tool_implementations.subagents.models import (
+    AgentWaitDetails,
+    ChatConfiguration,
+)
 from onyx.tools.tool_implementations.web_search.models import WebContentProviderConfig
 from onyx.utils.encryption import decrypt_bytes_to_string, encrypt_string_to_bytes
 from onyx.utils.headers import HeaderItemDict
@@ -522,6 +549,9 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
 
     # Input preferences
     paste_as_tile: Mapped[bool] = mapped_column(Boolean, default=False)
+    interrupt_on_send: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
 
     # Voice preferences
     voice_auto_send: Mapped[bool] = mapped_column(Boolean, default=False)
@@ -556,20 +586,11 @@ class User(SQLAlchemyBaseUserTableUUID, Base):
         "UserProject", back_populates="user"
     )
     files: Mapped[list["UserFile"]] = relationship("UserFile", back_populates="user")
-    # MCP servers accessible to this user
-    accessible_mcp_servers: Mapped[list["MCPServer"]] = relationship(
-        "MCPServer", secondary="mcp_server__user", back_populates="users"
-    )
     memories: Mapped[list["Memory"]] = relationship(
         "Memory",
         back_populates="user",
         cascade="all, delete-orphan",
         order_by="desc(Memory.id)",
-    )
-    oauth_user_tokens: Mapped[list["OAuthUserToken"]] = relationship(
-        "OAuthUserToken",
-        back_populates="user",
-        cascade="all, delete-orphan",
     )
 
     @validates("email")
@@ -849,65 +870,6 @@ class Persona__User(Base):
     user: Mapped["User | None"] = relationship("User")
 
 
-class Skill__User(Base):
-    __tablename__ = "skill__user"
-
-    skill_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("skill.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    user_id: Mapped[UUID] = mapped_column(
-        ForeignKey("user.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    permission: Mapped[SkillSharePermission] = mapped_column(
-        Enum(SkillSharePermission, native_enum=False),
-        nullable=False,
-        default=SkillSharePermission.VIEWER,
-        server_default=SkillSharePermission.VIEWER.value,
-    )
-
-    user: Mapped["User"] = relationship("User")
-
-    __table_args__ = (Index("ix_skill__user_user_id", "user_id"),)
-
-
-class UserSkillPreference(Base):
-    __tablename__ = "user_skill_preference"
-
-    user_id: Mapped[UUID] = mapped_column(
-        ForeignKey("user.id", ondelete="CASCADE"), primary_key=True
-    )
-    skill_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        primary_key=True,
-    )
-    # Denormalized for name uniqueness; the composite FK keeps it exact.
-    name: Mapped[str] = mapped_column(String(64), nullable=False)
-
-    enabled: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True, server_default=text("true")
-    )
-
-    __table_args__ = (
-        ForeignKeyConstraint(
-            ["name", "skill_id"],
-            ["skill.name", "skill.id"],
-            name="fk_user_skill_preference_skill_name",
-            ondelete="CASCADE",
-        ),
-        Index("ix_user_skill_preference_skill_id", "skill_id"),
-        Index(
-            "uq_user_skill_preference_name",
-            "user_id",
-            "name",
-            unique=True,
-            postgresql_where=text("enabled"),
-        ),
-    )
-
-
 class DocumentSet__User(Base):
     __tablename__ = "document_set__user"
 
@@ -1043,6 +1005,13 @@ class ConnectorCredentialPair(Base):
     """
 
     __tablename__ = "connector_credential_pair"
+    # The target of the data-access rows' (cc_pair_id, access_type) foreign key,
+    # which pins those rows to group access types.
+    __table_args__ = (
+        UniqueConstraint(
+            "id", "access_type", name="uq_connector_credential_pair_id_access_type"
+        ),
+    )
     # NOTE: this `id` column has to use `Sequence` instead of `autoincrement=True`
     # due to some SQLAlchemy quirks + this not being a primary key column
     id: Mapped[int] = mapped_column(
@@ -1176,7 +1145,9 @@ class ConnectorCredentialPair(Base):
     )
 
     # the user id of the user that created this cc pair
-    creator_id: Mapped[UUID | None] = mapped_column(nullable=True)
+    creator_id: Mapped[UUID | None] = mapped_column(
+        ForeignKey("user.id", ondelete="SET NULL"), nullable=True
+    )
     creator: Mapped["User"] = relationship(
         "User",
         back_populates="cc_pairs",
@@ -2606,7 +2577,7 @@ class TargetedReindexJob(Base):
         index=True,
     )
     # Pre-allocated celery task UUID. Written before `apply_async` so the
-    # orphan-detector can clean up if enqueue fails after INSERT, and so
+    # stale-job validator can clean up if enqueue fails after INSERT, and so
     # cancellation has a handle to revoke.
     celery_task_id: Mapped[str | None] = mapped_column(Text, nullable=True)
 
@@ -2789,9 +2760,39 @@ class IndexAttempt(Base):
     total_batches: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # batches that are fully indexed (i.e. have completed docfetching and docprocessing)
     completed_batches: Mapped[int] = mapped_column(Integer, default=0)
-    # TODO: unused, remove this column
+    # Stub batches whose conversion failed as a whole (conversion stage only).
     total_failures_batch_level: Mapped[int] = mapped_column(Integer, default=0)
     total_chunks: Mapped[int] = mapped_column(Integer, default=0)
+
+    # True when docfetching lists stub batches for the conversion stage.
+    uses_conversion_stage: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    # Conversion stage counters. Stub batch numbers are dense from the
+    # attempt's first number (0, or above the batches a resumed attempt took
+    # over): numbers below `stored` exist, numbers below `sent` went to
+    # conversion, and `converted` counts those that became document batches.
+    stub_batches_stored: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0"
+    )
+    stub_batches_sent: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0"
+    )
+    stub_batches_converted: Mapped[int] = mapped_column(
+        Integer, default=0, server_default="0"
+    )
+
+    # Documents that the lister listed, and those it dropped because the
+    # stored document has the same modified time and size.
+    stubs_listed: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+    stubs_skipped: Mapped[int] = mapped_column(Integer, default=0, server_default="0")
+
+    # The last task that sent stub batches to conversion, and when. The
+    # watchdog checks this task before it decides that the chain is broken.
+    last_dispatch_task_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    last_dispatch_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
     # Progress tracking for stall detection
     last_progress_time: Mapped[datetime.datetime | None] = mapped_column(
@@ -3466,8 +3467,13 @@ class ChatSession(Base):
         ForeignKey("chat_message.id", ondelete="CASCADE"), nullable=True, index=True
     )
     agent_name: Mapped[str | None] = mapped_column(String, nullable=True)
-    restoration_config: Mapped[ResearchConfiguration | None] = mapped_column(
-        PydanticType(ResearchConfiguration, sanitize_strings=True), nullable=True
+    restoration_config: Mapped[ResearchConfiguration | ChatConfiguration | None] = (
+        mapped_column(
+            PydanticType(
+                ResearchConfiguration | ChatConfiguration, sanitize_strings=True
+            ),
+            nullable=True,
+        )
     )
     user_id: Mapped[UUID | None] = mapped_column(
         ForeignKey("user.id", ondelete="CASCADE"), nullable=True
@@ -3537,6 +3543,15 @@ class ChatSession(Base):
     prompt_override: Mapped[PromptOverride | None] = mapped_column(
         PydanticType(PromptOverride), nullable=True
     )
+    # The tools, plugins and search filters the user last picked. Turns the
+    # server starts use them; NULL means the agent's tools.
+    tool_options: Mapped[ToolOptions | None] = mapped_column(
+        PydanticType(ToolOptions), nullable=True
+    )
+    # When the user stopped the chat; queued turns wait until the next turn starts.
+    queue_paused_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
     time_updated: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
@@ -3569,6 +3584,143 @@ class ChatResponseCheckpoint(Base):
         BigInteger, default=0, server_default="0"
     )
     state: Mapped[dict[str, JsonValue]] = mapped_column(PGJSONB)
+    # The foreground child runs that the parked run waits for, by response ID,
+    # so finding resumable runs reads no state.
+    child_run_ids: Mapped[list[int]] = mapped_column(
+        postgresql.ARRAY(Integer), nullable=False, default=list, server_default="{}"
+    )
+    # The file IDs of the parked programs' dumps that this checkpoint saved.
+    # They are deleted when the checkpoint ends or a new one replaces it.
+    dump_file_ids: Mapped[list[str]] = mapped_column(
+        postgresql.ARRAY(String), nullable=False, default=list, server_default="{}"
+    )
+
+
+class ApprovalRequest(Base):
+    """An action in a chat that waits for the user's decision.
+
+    The ID is the waiter's request ID, such as a run's input request ID.
+    ``decision IS NULL`` is pending. A ``SESSION_GRANT`` approval also approves
+    later requests of the same action in the chat session.
+    """
+
+    __tablename__ = "approval_request"
+    __table_args__ = (
+        Index(
+            "ix_approval_request_session_action",
+            "chat_session_id",
+            "gated_app_id",
+            "action_id",
+        ),
+        Index("ix_approval_request_chat_message", "chat_message_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    chat_session_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("chat_session.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # The response that waits for the decision.
+    chat_message_id: Mapped[int] = mapped_column(
+        ForeignKey("chat_message.id", ondelete="CASCADE"), nullable=False
+    )
+    # The old key, for a rollback. New rows leave it NULL.
+    gated_app_id: Mapped[int | None] = mapped_column(
+        ForeignKey("gated_app.id", ondelete="CASCADE"), nullable=True
+    )
+    # The integration of the action. Keys session grants and the policy
+    # re-check. NULL after the integration is deleted.
+    integration_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey(
+            "integration.id",
+            ondelete="SET NULL",
+            name="fk_approval_request_integration_id",
+        ),
+        nullable=True,
+    )
+    # The action key that the request asks to run, such as an MCP tool name
+    # or an OpenAPI operationId.
+    action_id: Mapped[str] = mapped_column(String, nullable=False)
+    # The call of the response's step whose card shows the request: the call
+    # that waits, or the call whose tool, such as a program, made it. Places
+    # the request's record when the saved response is shown again.
+    tool_call_id: Mapped[str] = mapped_column(String, nullable=False)
+    # The name and display name of the tool of the call that waits, for the
+    # request's record and the result the model sees.
+    tool_name: Mapped[str] = mapped_column(String, nullable=False)
+    display_name: Mapped[str] = mapped_column(String, nullable=False)
+    # The arguments of the call that waits, as its card shows them.
+    arguments: Mapped[dict[str, JsonValue]] = mapped_column(PGJSONB, nullable=False)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    decision: Mapped[ApprovalDecision | None] = mapped_column(
+        Enum(ApprovalDecision, native_enum=False, name="approvaldecision"),
+        nullable=True,
+    )
+    decided_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    decided_via: Mapped[ApprovalDecidedVia | None] = mapped_column(
+        Enum(ApprovalDecidedVia, native_enum=False, name="approvaldecidedvia"),
+        nullable=True,
+    )
+
+
+class QuestionRequest(Base):
+    """Questions that a response's agent asked the user, and their answers.
+
+    The ID is the run's input request ID. ``outcome IS NULL`` waits. An
+    ANSWERED request has ``answers`` from its card, or the ``message`` that
+    the user typed in the chat instead.
+    """
+
+    __tablename__ = "question_request"
+    __table_args__ = (
+        Index("ix_question_request_chat_message", "chat_message_id"),
+        Index("ix_question_request_chat_session", "chat_session_id"),
+    )
+
+    id: Mapped[UUID] = mapped_column(PGUUID(as_uuid=True), primary_key=True)
+    chat_session_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("chat_session.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # The response that waits for the answers.
+    chat_message_id: Mapped[int] = mapped_column(
+        ForeignKey("chat_message.id", ondelete="CASCADE"), nullable=False
+    )
+    # The call of the response's step that asked; places the request's record
+    # when the saved response is shown again.
+    tool_call_id: Mapped[str] = mapped_column(String, nullable=False)
+    # The call's questions (`ToolQuestion`), as the card shows them.
+    questions: Mapped[list[dict[str, JsonValue]]] = mapped_column(
+        PGJSONB, nullable=False
+    )
+    # The card's answers (`ToolQuestionAnswer`), in question order.
+    answers: Mapped[list[dict[str, JsonValue]] | None] = mapped_column(
+        PGJSONB, nullable=True
+    )
+    message: Mapped[str | None] = mapped_column(Text, nullable=True)
+    outcome: Mapped[QuestionOutcome | None] = mapped_column(
+        Enum(QuestionOutcome, native_enum=False, name="questionoutcome"),
+        nullable=True,
+    )
+    answered_via: Mapped[QuestionAnsweredVia | None] = mapped_column(
+        Enum(QuestionAnsweredVia, native_enum=False, name="questionansweredvia"),
+        nullable=True,
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    resolved_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
 
 
 class ChatMessage(Base):
@@ -3596,12 +3748,11 @@ class ChatMessage(Base):
         PydanticType(RunFailure, sanitize_strings=True), nullable=True
     )
     invoking_tool_call_id: Mapped[int | None] = mapped_column(
-        ForeignKey("tool_call.id", deferrable=True, initially="DEFERRED"),
-        nullable=True,
-        index=True,
+        Integer, nullable=True, index=True
     )
     invoking_tool_call: Mapped["ToolCall | None"] = relationship(
-        "ToolCall", foreign_keys=[invoking_tool_call_id]
+        "ToolCall",
+        primaryjoin="foreign(ChatMessage.invoking_tool_call_id) == ToolCall.id",
     )
     response_items: Mapped[list["ChatResponseItem"]] = relationship(
         "ChatResponseItem",
@@ -3619,7 +3770,7 @@ class ChatMessage(Base):
     # Parent message pointer for the tree structure, nullable because the first message is
     # an empty root node to allow edits on the first message of a session.
     parent_message_id: Mapped[int | None] = mapped_column(
-        ForeignKey("chat_message.id"), nullable=True
+        ForeignKey("chat_message.id"), nullable=True, index=True
     )
     # This only maps to the latest because only that message chain is needed.
     # It can be updated as needed to trace other branches.
@@ -3658,6 +3809,22 @@ class ChatMessage(Base):
     # Files attached to the message, when parsed into history, it becomes a separate message
     files: Mapped[list[FileDescriptor] | None] = mapped_column(
         postgresql.JSONB(), nullable=True
+    )
+    # What the user tagged in the question, as the turn accepted it. A skill
+    # keeps the version the user ran.
+    mentions: Mapped[list[RecordedMention]] = mapped_column(
+        PydanticListType(RecordedMention),
+        default=list,
+        server_default=text("'[]'::jsonb"),
+    )
+    # The `<skill>` message of each picked skill, which follows the question
+    # in history; empty in a row that keeps no conversation content. Only
+    # the history the model gets loads it.
+    skill_messages: Mapped[list[PickedSkillMessage]] = mapped_column(
+        PydanticListType(PickedSkillMessage),
+        default=list,
+        server_default=text("'[]'::jsonb"),
+        deferred=True,
     )
 
     # Maps the citation numbers to a SearchDoc id
@@ -3736,6 +3903,23 @@ class ChatMessage(Base):
     )
 
 
+class AcceptedChatInputRecord(BaseModel):
+    """A message a model generation accepted, with its provenance and the
+    records of what a user message picked."""
+
+    id: str
+    source: InputSource
+    source_run_id: str | None = None
+    content: str
+    mentions: list[RecordedMention] = Field(default_factory=list)
+
+
+class AcceptedChatInput(AcceptedChatInputRecord):
+    """An accepted message as stored, with the `<skill>` message of each pick."""
+
+    skill_messages: list[PickedSkillMessage] = Field(default_factory=list)
+
+
 class ChatResponseItem(Base):
     """One recorded model generation and its display settings."""
 
@@ -3763,6 +3947,14 @@ class ChatResponseItem(Base):
     message: Mapped[AssistantMessage] = mapped_column(
         PydanticType(AssistantMessage, sanitize_strings=True, none_as_null=True),
     )
+    # Messages this generation accepted before it started, in model order.
+    # An input accepted between steps is stored only here, on the step that read
+    # it; it is not a chat_message row. See chat-persistence.md for the routing.
+    inputs: Mapped[list[AcceptedChatInput]] = mapped_column(
+        PydanticListType(AcceptedChatInput),
+        default=list,
+        server_default=text("'[]'::jsonb"),
+    )
     generation_status: Mapped[ExecutionStatus] = mapped_column(
         Enum(
             ExecutionStatus,
@@ -3783,25 +3975,143 @@ class ChatResponseItem(Base):
     )
 
 
+class ChatInput(Base):
+    """A pending message for a chat or agent session; consuming it deletes the row.
+
+    A message is in exactly one place at any moment. A step that reads a
+    `send` moves it to `ChatResponseItem.inputs`; a turn that accepts any other
+    message moves it to a USER `ChatMessage`. The routing table is in
+    `.agents/feature-map/components/chat-persistence.md`.
+
+    `agent_result` rows exist from the child response's reservation and become
+    readable when it finishes. Rows from child agents name the root response of
+    the invocation, which decides branch visibility.
+    """
+
+    __tablename__ = "chat_input"
+    __table_args__ = (
+        # IS TRUE: a NULL comparison makes CHECK pass, so require a true result.
+        CheckConstraint(
+            "((source = 'human' AND delivery IN ('send', 'queue', 'interrupt') "
+            "AND invoking_tool_call_id IS NULL AND max_steps IS NULL "
+            "AND root_response_id IS NULL) OR "
+            "(source = 'agent' AND delivery IN ('send', 'queue') "
+            "AND invoking_tool_call_id IS NOT NULL AND max_steps > 0 "
+            "AND root_response_id IS NOT NULL) OR "
+            "(source = 'agent_result' AND delivery IS NULL "
+            "AND source_response_id IS NOT NULL AND root_response_id IS NOT NULL)) "
+            "IS TRUE",
+            name="ck_chat_input_source",
+        ),
+        Index("ix_chat_input_recipient", "recipient_session_id", "id"),
+    )
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    recipient_session_id: Mapped[UUID] = mapped_column(
+        ForeignKey("chat_session.id", ondelete="CASCADE")
+    )
+    message_id: Mapped[str] = mapped_column(String)
+    source: Mapped[InputSource] = mapped_column(
+        Enum(
+            InputSource,
+            native_enum=False,
+            values_callable=lambda values: [v.value for v in values],
+        )
+    )
+    invoking_tool_call_id: Mapped[int | None] = mapped_column(
+        ForeignKey("tool_call.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    source_response_id: Mapped[int | None] = mapped_column(
+        ForeignKey("chat_message.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    target_response_id: Mapped[int | None] = mapped_column(
+        ForeignKey("chat_message.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    root_response_id: Mapped[int | None] = mapped_column(
+        ForeignKey("chat_message.id", ondelete="CASCADE"), nullable=True, index=True
+    )
+    delivery: Mapped[MessageDelivery | None] = mapped_column(
+        Enum(
+            MessageDelivery,
+            native_enum=False,
+            values_callable=lambda values: [v.value for v in values],
+        ),
+        nullable=True,
+    )
+    content: Mapped[str] = mapped_column(Text)
+    # A queued or interrupting human message starts its turn as Deep Research.
+    deep_research: Mapped[bool] = mapped_column(
+        Boolean, default=False, server_default="false"
+    )
+    # The model the composer showed when a queued or interrupting message was sent.
+    llm_override: Mapped[LLMOverride | None] = mapped_column(
+        PydanticType(LLMOverride), nullable=True
+    )
+    # What the user tagged in a queued or interrupting message; its turn
+    # resolves the mentions when it accepts the message.
+    mentions: Mapped[list[Mention]] = mapped_column(
+        PydanticListType(Mention), default=list, server_default=text("'[]'::jsonb")
+    )
+    max_steps: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    total_timeout_s: Mapped[float | None] = mapped_column(Float, nullable=True)
+    invoking_tool_call: Mapped["ToolCall | None"] = relationship(
+        "ToolCall", foreign_keys=[invoking_tool_call_id]
+    )
+
+
+# Tool result details that saved responses, checkpoints and temporary chats keep,
+# told apart by their `type` literal.
+SavedToolResultDetails = Annotated[
+    SearchDocsResponse
+    | ResearchAgentCallResult
+    | CustomToolCallSummary
+    | FileReadResult
+    | LlmPythonExecutionResult
+    | MemoryUpdated
+    | ToolExecutionError
+    | FinalImageGenerationResponse
+    | CodeModeExecutionResult
+    | AgentWaitDetails
+    | SandboxExecResult
+    | ApplyPatchResult
+    | PublishedFiles
+    | QuestionToolDetails,
+    Field(discriminator="type"),
+]
+SAVED_TOOL_RESULT_TYPES: tuple[type[BaseModel], ...] = get_args(
+    get_args(SavedToolResultDetails)[0]
+)
+
+
 class StoredToolResult(ToolResultMessage):
     """Tool output with durable application details that can be restored from JSON."""
 
-    details: (
-        Annotated[
-            SearchDocsResponse
-            | ResearchAgentCallResult
-            | CodingAgentCallResult
-            | CustomToolCallSummary
-            | FileReadResult
-            | LlmBashExecutionResult
-            | LlmPythonExecutionResult
-            | MemoryUpdated
-            | ToolExecutionError
-            | FinalImageGenerationResponse,
-            Field(discriminator="type"),
-        ]
-        | None
-    ) = None
+    details: SavedToolResultDetails | None = None
+
+
+_SAVED_TOOL_DETAIL_TAGS = frozenset(
+    kind.model_fields["type"].default for kind in SAVED_TOOL_RESULT_TYPES
+)
+
+
+class UnavailableStoredToolResult(StoredToolResult):
+    """A completed result whose display schema is unavailable."""
+
+
+def _read_stored_tool_result(value: object) -> object:
+    if isinstance(value, dict):
+        details = value.get("details")
+        if (
+            isinstance(details, dict)
+            and isinstance(tag := details.get("type"), str)
+            and tag not in _SAVED_TOOL_DETAIL_TAGS
+        ):
+            result = UnavailableStoredToolResult.model_validate(
+                {**value, "details": None}
+            )
+            result.content = ""
+            return result
+    return value
 
 
 class ToolCall(Base):
@@ -3820,7 +4130,11 @@ class ToolCall(Base):
         nullable=True,
     )
     result: Mapped[StoredToolResult | None] = mapped_column(
-        PydanticType(StoredToolResult, sanitize_strings=True), nullable=True
+        PydanticType(
+            Annotated[StoredToolResult, BeforeValidator(_read_stored_tool_result)],
+            sanitize_strings=True,
+        ),
+        nullable=True,
     )
     chat_session_id: Mapped[UUID] = mapped_column(
         PGUUID(as_uuid=True), ForeignKey("chat_session.id", ondelete="CASCADE")
@@ -3829,7 +4143,7 @@ class ToolCall(Base):
     # If this is not None, it's a top level tool call from the user message
     # If this is None, it's a lower level call from another tool/agent
     parent_chat_message_id: Mapped[int | None] = mapped_column(
-        ForeignKey("chat_message.id", ondelete="CASCADE"), nullable=True
+        ForeignKey("chat_message.id", ondelete="CASCADE"), nullable=True, index=True
     )
     # If this is not None, this tool call is a child of another tool call
     parent_tool_call_id: Mapped[int | None] = mapped_column(
@@ -3844,6 +4158,8 @@ class ToolCall(Base):
     # Not a FK because we want to be able to delete the tool without deleting
     # this entry
     tool_id: Mapped[int | None] = mapped_column(Integer(), nullable=True)
+    # The tool's display name when called; None for a tool without one.
+    display_name: Mapped[str | None] = mapped_column(String(), nullable=True)
     # This is needed because LLMs expect the tool call and the response to have matching IDs
     # This is better than just regenerating one randomly
     tool_call_id: Mapped[str] = mapped_column(String())
@@ -4151,11 +4467,14 @@ class ModelConfiguration(Base):
         back_populates="model_configurations",
     )
 
+    # Views read llm_model_flow_types for every model, so flows load in one
+    # query per batch of models instead of one query per model.
     llm_model_flows: Mapped[list["LLMModelFlow"]] = relationship(
         "LLMModelFlow",
         back_populates="model_configuration",
         cascade="all, delete-orphan",
         passive_deletes=True,
+        lazy="selectin",
     )
 
     @property
@@ -4471,6 +4790,12 @@ class Tool(Base):
     mcp_input_schema: Mapped[dict[str, Any] | None] = mapped_column(
         postgresql.JSONB(), nullable=True
     )
+    # MCP tool output schema, when the server declares one. Only applies to MCP tools.
+    mcp_output_schema: Mapped[dict[str, Any] | None] = mapped_column(
+        postgresql.JSONB(), nullable=True
+    )
+    # MCP readOnlyHint; NULL when the server gives none. Only applies to MCP tools.
+    mcp_read_only: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     custom_headers: Mapped[list[HeaderItemDict] | None] = mapped_column(
         postgresql.JSONB(), nullable=True
     )
@@ -4491,9 +4816,6 @@ class Tool(Base):
     enabled: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True)
 
     user: Mapped[User | None] = relationship("User", back_populates="custom_tools")
-    oauth_config: Mapped["OAuthConfig | None"] = relationship(
-        "OAuthConfig", back_populates="tools"
-    )
     # Relationship to Persona through the association table
     personas: Mapped[list["Persona"]] = relationship(
         "Persona",
@@ -4503,20 +4825,6 @@ class Tool(Base):
     # MCP server relationship
     mcp_server: Mapped["MCPServer | None"] = relationship(
         "MCPServer", back_populates="current_actions"
-    )
-
-
-class ToolUserPreference(Base):
-    __tablename__ = "tool_user_preference"
-
-    user_id: Mapped[UUID] = mapped_column(
-        ForeignKey("user.id", ondelete="CASCADE"), primary_key=True
-    )
-    tool_id: Mapped[int] = mapped_column(
-        ForeignKey("tool.id", ondelete="CASCADE"), primary_key=True
-    )
-    enabled_in_chat: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True, server_default=text("true")
     )
 
 
@@ -4558,60 +4866,6 @@ class OAuthConfig(Base):
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
-    )
-
-    # Relationships
-    tools: Mapped[list["Tool"]] = relationship("Tool", back_populates="oauth_config")
-    user_tokens: Mapped[list["OAuthUserToken"]] = relationship(
-        "OAuthUserToken", back_populates="oauth_config", cascade="all, delete-orphan"
-    )
-
-
-class OAuthUserToken(Base):
-    """Per-user OAuth tokens for a specific OAuth configuration"""
-
-    __tablename__ = "oauth_user_token"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    oauth_config_id: Mapped[int] = mapped_column(
-        ForeignKey("oauth_config.id", ondelete="CASCADE"), nullable=False
-    )
-    user_id: Mapped[UUID] = mapped_column(
-        ForeignKey("user.id", ondelete="CASCADE"), nullable=False
-    )
-
-    # Token data (encrypted)
-    # Structure: {
-    #   "access_token": "...",
-    #   "refresh_token": "...",  # Optional
-    #   "token_type": "Bearer",
-    #   "expires_at": 1234567890,  # Unix timestamp, optional
-    #   "scope": "repo user"  # Optional
-    # }
-    token_data: Mapped[SensitiveValue[dict[str, Any]] | None] = mapped_column(
-        EncryptedJson(), nullable=False
-    )
-
-    # Metadata
-    created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True), server_default=func.now(), nullable=False
-    )
-    updated_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
-        nullable=False,
-    )
-
-    # Relationships
-    oauth_config: Mapped["OAuthConfig"] = relationship(
-        "OAuthConfig", back_populates="user_tokens"
-    )
-    user: Mapped["User"] = relationship("User")
-
-    # Unique constraint: One token per user per OAuth config
-    __table_args__ = (
-        UniqueConstraint("oauth_config_id", "user_id", name="uq_oauth_user_token"),
     )
 
 
@@ -4864,6 +5118,9 @@ class Assistant__UserSpecificConfig(Base):
     )
     disabled_tool_ids: Mapped[list[int]] = mapped_column(
         postgresql.ARRAY(Integer), nullable=False
+    )
+    disabled_integration_ids: Mapped[list[int]] = mapped_column(
+        postgresql.ARRAY(Integer), nullable=False, server_default="{}"
     )
 
 
@@ -5358,13 +5615,75 @@ class FileContent(Base):
     file_size: Mapped[int] = mapped_column(BigInteger, nullable=False, default=0)
 
 
-class Skill(Base):
-    """A built-in or custom skill.
+class ChatArtifact(Base):
+    """A file that the model published from its sandbox (publish_files) into a
+    root chat, across its versions (ChatArtifactVersion): every publish of one
+    VM path in the chat. Its files inherit the chat's access, and a hard chat
+    delete deletes them
+    (db/chat.py:delete_messages_and_files_from_chat_session) before the
+    cascade from the chat removes the rows."""
 
-    Skill metadata is shared schema state. Group-based grants use user_group,
-    which is available in the base migration chain even though its ORM model
-    currently lives in the Enterprise Edition section below.
-    """
+    __tablename__ = "chat_artifact"
+    # Also the index of the chat's artifacts
+    __table_args__ = (UniqueConstraint("chat_session_id", "path"),)
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    # The root chat: a subagent run publishes into its root chat.
+    chat_session_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("chat_session.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # The absolute, normalized VM path
+    path: Mapped[str] = mapped_column(Text, nullable=False)
+    # The first publish
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+    # The latest publish
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class ChatArtifactVersion(Base):
+    """One publish of a ChatArtifact: its file, numbered from 1 in publish
+    order."""
+
+    __tablename__ = "chat_artifact_version"
+
+    artifact_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("chat_artifact.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    version: Mapped[int] = mapped_column(Integer, primary_key=True)
+    file_id: Mapped[str] = mapped_column(
+        String,
+        ForeignKey("file_record.file_id", ondelete="CASCADE"),
+        nullable=False,
+        unique=True,
+    )
+    title: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # A JPEG of the file's first page (FileOrigin.CHAT_ARTIFACT_THUMBNAIL),
+    # with the version's access and deletes. A version stays valid without
+    # it, so a deleted thumbnail only clears the link.
+    thumbnail_file_id: Mapped[str | None] = mapped_column(
+        String,
+        ForeignKey("file_record.file_id", ondelete="SET NULL"),
+        nullable=True,
+        unique=True,
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now()
+    )
+
+
+class Skill(Base):
+    """A built-in skill. Old custom rows stay in the table for a rollback, with
+    columns this model does not map (``alembic/env.py``)."""
 
     __tablename__ = "skill"
 
@@ -5376,35 +5695,10 @@ class Skill(Base):
     name: Mapped[str] = mapped_column(String(64), nullable=False)
     description: Mapped[str] = mapped_column(Text, nullable=False)
 
-    # Discriminator: when set, definition (source files, has_template, etc.)
-    # comes from BUILT_IN_SKILLS in `onyx.skills.built_in`. When NULL, the
-    # row is a custom (admin-uploaded) skill and bundle_file_id is set.
-    # Exactly one of (built_in_skill_id, bundle_file_id) is non-null —
-    # enforced by `ck_skill_definition_source` below.
+    # The definition (source files, has_template, etc.) comes from
+    # BUILT_IN_SKILLS in `onyx.skills.built_in`. NULL only on an old custom
+    # row, which no code reads: a custom skill is a plugin.
     built_in_skill_id: Mapped[str | None] = mapped_column(String, nullable=True)
-
-    # Bundle bytes for custom skills. NULL for built-ins (their source
-    # files live on disk under BUILTIN_SKILLS_PATH).
-    bundle_file_id: Mapped[str | None] = mapped_column(String, nullable=True)
-    bundle_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
-    # Existing custom rows are classified lazily before sandbox hydration.
-    is_valid: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
-
-    author_user_id: Mapped[UUID | None] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("user.id", ondelete="SET NULL"),
-        nullable=True,
-    )
-    public_permission: Mapped[SkillSharePermission | None] = mapped_column(
-        Enum(SkillSharePermission, native_enum=False),
-        nullable=True,
-    )
-    installation_policy: Mapped[SkillInstallationPolicy] = mapped_column(
-        Enum(SkillInstallationPolicy, native_enum=False),
-        nullable=False,
-        default=SkillInstallationPolicy.AVAILABLE,
-        server_default=SkillInstallationPolicy.AVAILABLE.value,
-    )
 
     created_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), nullable=False
@@ -5416,55 +5710,876 @@ class Skill(Base):
         nullable=False,
     )
 
-    author: Mapped[User | None] = relationship(
-        "User",
-        foreign_keys=[author_user_id],
-    )
+    __table_args__ = (UniqueConstraint("name", "id", name="uq_skill_name_id"),)
 
-    users: Mapped[list[User]] = relationship(
-        "User",
-        secondary=Skill__User.__table__,
-        viewonly=True,
-        overlaps="user_shares",
+
+class Marketplace(Base):
+    """Where a plugin comes from: a user's "My uploads", the tenant's
+    Organization library, or a GitHub repository (personal with an owner,
+    company without). A marketplace grants no access."""
+
+    __tablename__ = "plugin_marketplace"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
     )
-    user_shares: Mapped[list[Skill__User]] = relationship(
-        "Skill__User",
-        viewonly=True,
-        overlaps="users",
+    kind: Mapped[MarketplaceKind] = mapped_column(
+        Enum(
+            MarketplaceKind,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=False,
     )
-    group_shares: Mapped[list["Skill__UserGroup"]] = relationship(
-        "Skill__UserGroup",
-        viewonly=True,
-        overlaps="groups",
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    owner_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("user.id", ondelete="CASCADE"),
+        nullable=True,
     )
-    groups: Mapped[list["UserGroup"]] = relationship(
-        "UserGroup",
-        secondary="skill__user_group",
-        viewonly=True,
-        overlaps="group_shares",
+    # A plugin with no installation_policy follows this value.
+    default_installation_policy: Mapped[PluginInstallationPolicy] = mapped_column(
+        Enum(PluginInstallationPolicy, native_enum=False),
+        nullable=False,
+        default=PluginInstallationPolicy.AVAILABLE,
+        server_default=PluginInstallationPolicy.AVAILABLE.value,
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    # GitHub source: owner/repo, plus '' for no folder or ref.
+    repository: Mapped[str | None] = mapped_column(String, nullable=True)
+    folder: Mapped[str] = mapped_column(String, nullable=False, server_default="")
+    ref: Mapped[str] = mapped_column(String, nullable=False, server_default="")
+    login_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey(
+            "user.id", ondelete="SET NULL", name="fk_plugin_marketplace_login_user"
+        ),
+        nullable=True,
+    )
+    last_synced_revision: Mapped[str | None] = mapped_column(String(40), nullable=True)
+    last_synced_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    last_error: Mapped[str | None] = mapped_column(Text, nullable=True)
+    last_sync_result: Mapped[list[dict[str, Any]] | None] = mapped_column(
+        PGJSONB(), nullable=True
     )
 
     __table_args__ = (
+        CheckConstraint(
+            "(kind = 'user_uploads' AND owner_user_id IS NOT NULL) "
+            "OR (kind = 'organization_library' AND owner_user_id IS NULL) "
+            "OR (kind = 'github' AND repository IS NOT NULL)",
+            name="ck_plugin_marketplace_owner_by_kind",
+        ),
         Index(
-            "uq_skill_automatic_name",
-            "name",
+            "uq_plugin_marketplace_personal_source",
+            "owner_user_id",
+            "repository",
+            "folder",
+            "ref",
             unique=True,
-            postgresql_where=text("installation_policy <> 'AVAILABLE'"),
+            postgresql_where=text("kind = 'github' AND owner_user_id IS NOT NULL"),
         ),
-        UniqueConstraint("name", "id", name="uq_skill_name_id"),
-        CheckConstraint(
-            "(built_in_skill_id IS NULL) <> (bundle_file_id IS NULL)",
-            name="ck_skill_definition_source",
+        Index(
+            "uq_plugin_marketplace_company_source",
+            "repository",
+            "folder",
+            "ref",
+            unique=True,
+            postgresql_where=text("kind = 'github' AND owner_user_id IS NULL"),
         ),
-        CheckConstraint(
-            "built_in_skill_id IS NOT NULL OR public_permission IS NOT NULL OR author_user_id IS NOT NULL",
-            name="ck_private_skill_has_owner",
+        Index(
+            "uq_plugin_marketplace_organization_library",
+            "kind",
+            unique=True,
+            postgresql_where=text("kind = 'organization_library'"),
+        ),
+        Index(
+            "uq_plugin_marketplace_user_uploads_owner",
+            "owner_user_id",
+            unique=True,
+            postgresql_where=text("kind = 'user_uploads'"),
         ),
     )
 
-    @property
-    def is_custom(self) -> bool:
-        return self.built_in_skill_id is None
+
+class Plugin(Base):
+    """The package with identity: name, access and install settings. A custom
+    skill is a plugin whose legacy skill row has the same id. Kind (skill or
+    plugin) is not stored: it comes from the layout of each version.
+
+    Published means: in the Organization library. published_version_id is only
+    the version the organization runs; NULL means current_version_id."""
+
+    __tablename__ = "plugin"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    # Label in the marketplace. A plugin_skill frontmatter name can differ.
+    name: Mapped[str] = mapped_column(String(64), nullable=False)
+    description: Mapped[str] = mapped_column(Text, nullable=False)
+    marketplace_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("plugin_marketplace.id", ondelete="RESTRICT"),
+        nullable=False,
+    )
+    author_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("user.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    # NULL means: use the marketplace default and follow later changes to it.
+    installation_policy: Mapped[PluginInstallationPolicy | None] = mapped_column(
+        Enum(PluginInstallationPolicy, native_enum=False),
+        nullable=True,
+    )
+    current_version_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), nullable=False
+    )
+    published_version_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), nullable=True
+    )
+    # The version waiting for an admin's review, if any.
+    pending_version_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), nullable=True
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    marketplace: Mapped[Marketplace] = relationship("Marketplace")
+
+    __table_args__ = (
+        UniqueConstraint("marketplace_id", "name", name="uq_plugin_marketplace_name"),
+        CheckConstraint(
+            "published_version_id IS NOT NULL OR author_user_id IS NOT NULL",
+            name="ck_private_plugin_has_owner",
+        ),
+    )
+
+
+class PluginVersion(Base):
+    """One immutable copy of a plugin's files."""
+
+    __tablename__ = "plugin_version"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    plugin_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("plugin.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    version_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    # NULL after pruning.
+    bundle_file_id: Mapped[str | None] = mapped_column(String, nullable=True)
+    bundle_sha256: Mapped[str | None] = mapped_column(String(64), nullable=True)
+    is_valid: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    # One {path, size, sha256} entry per file. NULL for a version copied from
+    # a legacy skill row.
+    file_manifest: Mapped[list[dict[str, Any]] | None] = mapped_column(
+        PGJSONB(), nullable=True, deferred=True
+    )
+    unpacked_size_bytes: Mapped[int | None] = mapped_column(BigInteger, nullable=True)
+    file_count: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    manifest: Mapped[dict[str, Any] | None] = mapped_column(PGJSONB(), nullable=True)
+    needs: Mapped[list[dict[str, Any]] | None] = mapped_column(PGJSONB(), nullable=True)
+    created_by_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("user.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    # Snapshot, so authorship survives a user delete.
+    created_by_email: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "plugin_id", "version_number", name="uq_plugin_version_plugin_number"
+        ),
+        # Target of the plugin's composite version pointers.
+        UniqueConstraint("id", "plugin_id", name="uq_plugin_version_id_plugin"),
+    )
+
+
+class PluginSkill(Base):
+    """One skill in one plugin version."""
+
+    __tablename__ = "plugin_skill"
+
+    id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True), primary_key=True, default=uuid4
+    )
+    plugin_version_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("plugin_version.id", ondelete="CASCADE"),
+        nullable=False,
+    )
+    # Folder in the bundle; empty for a SKILL.md at the root.
+    path: Mapped[str] = mapped_column(String, nullable=False, server_default="")
+    # Raw SKILL.md, the source of truth. NULL when larger than 256 KiB or not yet
+    # repaired; readers then open the bundle.
+    skill_md: Mapped[str | None] = mapped_column(Text, nullable=True, deferred=True)
+    # Parsed copy of the SKILL.md frontmatter. Always holds a string name, the
+    # skill name, and a description.
+    frontmatter: Mapped[dict[str, Any]] = mapped_column(PGJSONB(), nullable=False)
+
+    __table_args__ = (
+        CheckConstraint(
+            "coalesce(jsonb_typeof(frontmatter -> 'name'), '') = 'string'",
+            name="ck_plugin_skill_frontmatter_name",
+        ),
+        Index(
+            "uq_plugin_skill_version_name",
+            "plugin_version_id",
+            text("(frontmatter ->> 'name')"),
+            unique=True,
+        ),
+    )
+
+
+class Plugin__User(Base):
+    __tablename__ = "plugin__user"
+
+    plugin_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("plugin.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    permission: Mapped[SkillSharePermission] = mapped_column(
+        Enum(SkillSharePermission, native_enum=False),
+        nullable=False,
+        default=SkillSharePermission.VIEWER,
+        server_default=SkillSharePermission.VIEWER.value,
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (Index("ix_plugin__user_user_id", "user_id"),)
+
+
+class Plugin__UserGroup(Base):
+    __tablename__ = "plugin__user_group"
+
+    plugin_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("plugin.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    user_group_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("user_group.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    # NULL: the row holds only a group install setting and grants no access.
+    permission: Mapped[SkillSharePermission | None] = mapped_column(
+        Enum(SkillSharePermission, native_enum=False),
+        nullable=True,
+    )
+    # NULL: no group override.
+    installation_policy: Mapped[PluginInstallationPolicy | None] = mapped_column(
+        Enum(PluginInstallationPolicy, native_enum=False),
+        nullable=True,
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (Index("ix_plugin__user_group_user_group_id", "user_group_id"),)
+
+
+class UserPluginPreference(Base):
+    __tablename__ = "user_plugin_preference"
+
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), primary_key=True
+    )
+    plugin_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("plugin.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
+    # Last time the user turned the plugin on. NULL for backfilled rows.
+    enabled_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    __table_args__ = (Index("ix_user_plugin_preference_plugin_id", "plugin_id"),)
+
+
+class Integration(Base):
+    """A connection from Onyx to one service: an MCP server or an HTTP API. It
+    stands alone and owns its access: the owner, the install setting, the
+    shares (``integration__user``, ``integration__user_group``) and the on/off
+    choice of each user (``user_integration_preference``). A plugin gives no
+    access to it. The settings of each kind stay on the kind's own table
+    (``mcp_server``, ``external_app``, or the OpenAPI ``tool`` row), which this
+    row points at, as ``GatedApp`` does.
+
+    Read a kind table only for the settings of its kind: the server URL and
+    transport, the preset and URL patterns, the spec. Its name, owner, access,
+    sign-in and approval columns are old copies. This table, its access
+    tables, ``integration_oauth_client``, ``integration_connection`` and
+    ``integration_action_policy`` own those."""
+
+    __tablename__ = "integration"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    kind: Mapped[IntegrationKind] = mapped_column(
+        Enum(
+            IntegrationKind,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=False,
+    )
+    name: Mapped[str] = mapped_column(String, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # The owner always has access. NULL when not known, as for an external
+    # app made before this column, or when the owner was deleted. The person
+    # who signs in is ``IntegrationConnection.user_id``.
+    owner_user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("user.id", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
+    # The company install setting. NOT_AVAILABLE is private: only the owner
+    # and the shares have access.
+    installation_policy: Mapped[PluginInstallationPolicy] = mapped_column(
+        Enum(PluginInstallationPolicy, native_enum=False),
+        nullable=False,
+        default=PluginInstallationPolicy.NOT_AVAILABLE,
+        server_default=PluginInstallationPolicy.NOT_AVAILABLE.value,
+    )
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
+    auth_mode: Mapped[IntegrationAuthMode] = mapped_column(
+        Enum(
+            IntegrationAuthMode,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=False,
+    )
+    auth_method: Mapped[IntegrationAuthMethod | None] = mapped_column(
+        Enum(
+            IntegrationAuthMethod,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=True,
+    )
+    # The fields a person fills for an api_key connection.
+    credential_fields: Mapped[list[dict[str, Any]] | None] = mapped_column(
+        PGJSONB(), nullable=True
+    )
+    # How a credential goes on a request, e.g. {"Authorization": "Bearer {api_key}"}.
+    header_template: Mapped[dict[str, str] | None] = mapped_column(
+        PGJSONB(), nullable=True
+    )
+    users_can_save_always_allow: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
+    # The row of its kind that holds the settings: exactly one is set, and it
+    # matches kind. Deleting that row deletes the integration.
+    mcp_server_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("mcp_server.id", ondelete="CASCADE"),
+        nullable=True,
+        unique=True,
+    )
+    external_app_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey("external_app.id", ondelete="CASCADE"),
+        nullable=True,
+        unique=True,
+    )
+    tool_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("tool.id", ondelete="CASCADE"), nullable=True, unique=True
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    actions: Mapped[list["IntegrationAction"]] = relationship(
+        "IntegrationAction",
+        back_populates="integration",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+    )
+    oauth_client: Mapped["IntegrationOAuthClient | None"] = relationship(
+        "IntegrationOAuthClient",
+        back_populates="integration",
+        cascade="all, delete-orphan",
+        passive_deletes=True,
+        uselist=False,
+    )
+
+    __table_args__ = (
+        # The value checks of the integration tables: SQL migrations write
+        # these columns as plain strings, past the enum type. A value outside
+        # the enum makes each ORM read of the row raise.
+        # Old code still writes the kind tables, so the database keeps each
+        # integration tied to exactly one row of its kind.
+        CheckConstraint(
+            "num_nonnulls(mcp_server_id, external_app_id, tool_id) = 1",
+            name="ck_integration_single_kind_row",
+        ),
+        CheckConstraint(
+            "(kind = 'mcp') = (mcp_server_id IS NOT NULL)",
+            name="ck_integration_kind_row",
+        ),
+        CheckConstraint("kind IN ('mcp', 'api')", name="ck_integration_kind"),
+        CheckConstraint(
+            "auth_mode IN ('none', 'shared', 'individual')",
+            name="ck_integration_auth_mode",
+        ),
+        CheckConstraint(
+            "auth_method IN ('oauth2', 'api_key', 'onyx_login', 'managed')",
+            name="ck_integration_auth_method",
+        ),
+    )
+
+
+class IntegrationAction(Base):
+    """One action of an integration: an MCP tool, an OpenAPI operation, or an
+    entry of a built-in provider catalog. Policies key on ``key``."""
+
+    __tablename__ = "integration_action"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    integration_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("integration.id", ondelete="CASCADE"), nullable=False
+    )
+    # The MCP tool name, the OpenAPI operationId, or the provider action id.
+    key: Mapped[str] = mapped_column(String, nullable=False)
+    source: Mapped[IntegrationActionSource] = mapped_column(
+        Enum(
+            IntegrationActionSource,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=False,
+    )
+    display_name: Mapped[str] = mapped_column(String, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    read_only: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    # The value the catalog or spec starts the action at. An admin policy row
+    # overrides it.
+    default_policy: Mapped[IntegrationActionPolicyValue | None] = mapped_column(
+        Enum(
+            IntegrationActionPolicyValue,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=True,
+    )
+    # Set: chat can offer the action as an LLM tool.
+    input_schema: Mapped[dict[str, Any] | None] = mapped_column(
+        PGJSONB(), nullable=True
+    )
+    output_schema: Mapped[dict[str, Any] | None] = mapped_column(
+        PGJSONB(), nullable=True
+    )
+    # OpenAPI only: the egress proxy matches a request on these.
+    http_method: Mapped[str | None] = mapped_column(String, nullable=True)
+    path_template: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    integration: Mapped["Integration"] = relationship(
+        "Integration", back_populates="actions"
+    )
+
+    __table_args__ = (
+        UniqueConstraint(
+            "integration_id", "key", name="uq_integration_action_integration_key"
+        ),
+        CheckConstraint(
+            "source IN ('mcp', 'openapi', 'external_app')",
+            name="ck_integration_action_source",
+        ),
+        CheckConstraint(
+            "default_policy IN ('allow', 'auto', 'ask', 'blocked')",
+            name="ck_integration_action_default_policy",
+        ),
+    )
+
+
+class IntegrationOAuthClient(Base):
+    """The OAuth client of an integration with ``auth_method = oauth2``."""
+
+    __tablename__ = "integration_oauth_client"
+
+    integration_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("integration.id", ondelete="CASCADE"), primary_key=True
+    )
+    provider_mode: Mapped[IntegrationOAuthProviderMode] = mapped_column(
+        Enum(
+            IntegrationOAuthProviderMode,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=False,
+    )
+    # NULL for preset and discovery: code or discovery gives the endpoints.
+    authorization_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    token_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # NULL: the provider or discovery default.
+    scopes: Mapped[list[str] | None] = mapped_column(
+        postgresql.ARRAY(String), nullable=True
+    )
+    additional_params: Mapped[dict[str, str] | None] = mapped_column(
+        PGJSONB(), nullable=True
+    )
+    # NULL: the provider or the MCP client decides.
+    pkce: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
+    cimd_enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=False, server_default=text("false")
+    )
+    client_id: Mapped[SensitiveValue[str] | None] = mapped_column(
+        EncryptedString(), nullable=True
+    )
+    client_secret: Mapped[SensitiveValue[str] | None] = mapped_column(
+        EncryptedString(), nullable=True
+    )
+    # Dynamic client registration: registration_access_token and
+    # registration_client_uri.
+    registration: Mapped[SensitiveValue[dict[str, Any]] | None] = mapped_column(
+        EncryptedJson(), nullable=True
+    )
+    # The old format of a secret that the migration copied as it was, such as
+    # mcp_config. Read it with the old shape; a write saves the new format and
+    # clears it. NULL: the new format.
+    legacy_format: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    integration: Mapped["Integration"] = relationship(
+        "Integration", back_populates="oauth_client"
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "provider_mode IN ('preset', 'manual', 'discovery')",
+            name="ck_integration_oauth_client_provider_mode",
+        ),
+    )
+
+
+class IntegrationConnection(Base):
+    """One credential on one integration, for one user or (no user_id) for
+    the organization."""
+
+    __tablename__ = "integration_connection"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    integration_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("integration.id", ondelete="CASCADE"), nullable=False
+    )
+    user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("user.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    secret: Mapped[SensitiveValue[dict[str, Any]]] = mapped_column(
+        EncryptedJson(), nullable=False
+    )
+    expires_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+    granted_scopes: Mapped[list[str] | None] = mapped_column(
+        postgresql.ARRAY(String), nullable=True
+    )
+    status: Mapped[IntegrationConnectionStatus] = mapped_column(
+        Enum(
+            IntegrationConnectionStatus,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=False,
+        default=IntegrationConnectionStatus.CONNECTED,
+        server_default=IntegrationConnectionStatus.CONNECTED.value,
+    )
+    status_reason: Mapped[str | None] = mapped_column(Text, nullable=True)
+    # The old format of a secret that the migration copied as it was, such as
+    # mcp_config. Read it with the old shape; a write saves the new format and
+    # clears it. NULL: the new format.
+    legacy_format: Mapped[str | None] = mapped_column(String, nullable=True)
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "status IN ('connected', 'needs_reconnect')",
+            name="ck_integration_connection_status",
+        ),
+        Index("ix_integration_connection_integration_id", "integration_id"),
+        Index(
+            "uq_integration_connection_organization",
+            "integration_id",
+            unique=True,
+            postgresql_where=text("user_id IS NULL"),
+        ),
+        Index(
+            "uq_integration_connection_user",
+            "user_id",
+            "integration_id",
+            unique=True,
+            postgresql_where=text("user_id IS NOT NULL"),
+        ),
+    )
+
+
+class Integration__User(Base):
+    __tablename__ = "integration__user"
+
+    integration_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("integration.id", ondelete="CASCADE"), primary_key=True
+    )
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), primary_key=True
+    )
+    # Only VIEWER is written.
+    permission: Mapped[SkillSharePermission] = mapped_column(
+        Enum(SkillSharePermission, native_enum=False),
+        nullable=False,
+        default=SkillSharePermission.VIEWER,
+        server_default=SkillSharePermission.VIEWER.value,
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (Index("ix_integration__user_user_id", "user_id"),)
+
+
+class Integration__UserGroup(Base):
+    __tablename__ = "integration__user_group"
+
+    integration_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("integration.id", ondelete="CASCADE"), primary_key=True
+    )
+    user_group_id: Mapped[int] = mapped_column(
+        Integer,
+        ForeignKey("user_group.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    # NULL: the row holds only a group install setting and grants no access.
+    permission: Mapped[SkillSharePermission | None] = mapped_column(
+        Enum(SkillSharePermission, native_enum=False),
+        nullable=True,
+    )
+    # NULL: no group override.
+    installation_policy: Mapped[PluginInstallationPolicy | None] = mapped_column(
+        Enum(PluginInstallationPolicy, native_enum=False),
+        nullable=True,
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+
+    __table_args__ = (
+        Index("ix_integration__user_group_user_group_id", "user_group_id"),
+    )
+
+
+class UserIntegrationPreference(Base):
+    __tablename__ = "user_integration_preference"
+
+    user_id: Mapped[UUID] = mapped_column(
+        ForeignKey("user.id", ondelete="CASCADE"), primary_key=True
+    )
+    integration_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("integration.id", ondelete="CASCADE"), primary_key=True
+    )
+    enabled: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default=text("true")
+    )
+    # Last time the user turned the integration on. NULL for copied rows.
+    enabled_at: Mapped[datetime.datetime | None] = mapped_column(
+        DateTime(timezone=True), nullable=True
+    )
+
+    __table_args__ = (
+        Index("ix_user_integration_preference_integration_id", "integration_id"),
+    )
+
+
+class IntegrationActionPolicy(Base):
+    """The admin value (no user_id and no user_group_id), the value for one
+    group, or the saved choice of one user for one action. The row with the
+    empty action is the default for each action with no row of its own."""
+
+    __tablename__ = "integration_action_policy"
+
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    integration_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("integration.id", ondelete="CASCADE"), nullable=False
+    )
+    action: Mapped[str] = mapped_column(String, nullable=False, server_default="")
+    user_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("user.id", ondelete="CASCADE"),
+        nullable=True,
+    )
+    # No code reads or writes a group row yet.
+    user_group_id: Mapped[int | None] = mapped_column(
+        Integer, ForeignKey("user_group.id", ondelete="CASCADE"), nullable=True
+    )
+    policy: Mapped[IntegrationActionPolicyValue] = mapped_column(
+        Enum(
+            IntegrationActionPolicyValue,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=False,
+    )
+    created_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True), server_default=func.now(), nullable=False
+    )
+    updated_at: Mapped[datetime.datetime] = mapped_column(
+        DateTime(timezone=True),
+        server_default=func.now(),
+        onupdate=func.now(),
+        nullable=False,
+    )
+
+    __table_args__ = (
+        CheckConstraint(
+            "policy IN ('allow', 'auto', 'ask', 'blocked')",
+            name="ck_integration_action_policy_policy",
+        ),
+        # Each unique index covers one scope. A row with a user and a group
+        # would be in two, and a writer of one scope cannot see the other.
+        CheckConstraint(
+            "num_nonnulls(user_id, user_group_id) <= 1",
+            name="ck_integration_action_policy_single_scope",
+        ),
+        Index("ix_integration_action_policy_integration_id", "integration_id"),
+        Index(
+            "uq_integration_action_policy_admin",
+            "integration_id",
+            "action",
+            unique=True,
+            postgresql_where=text("user_id IS NULL AND user_group_id IS NULL"),
+        ),
+        Index(
+            "uq_integration_action_policy_user_group",
+            "user_group_id",
+            "integration_id",
+            "action",
+            unique=True,
+            postgresql_where=text("user_group_id IS NOT NULL"),
+        ),
+        Index(
+            "uq_integration_action_policy_user",
+            "user_id",
+            "integration_id",
+            "action",
+            unique=True,
+            postgresql_where=text("user_id IS NOT NULL"),
+        ),
+    )
+
+
+# action_settings of an agent or task link: {"default": <value>, "actions":
+# {<action name>: <value>}}, each value inherit, allow, ask or blocked. A
+# missing key is inherit.
+
+
+class Persona__Integration(Base):
+    """An integration on an agent. The link gives no access: each user of
+    the agent needs access to the integration."""
+
+    __tablename__ = "persona__integration"
+
+    persona_id: Mapped[int] = mapped_column(
+        ForeignKey("persona.id", ondelete="CASCADE"), primary_key=True
+    )
+    integration_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("integration.id", ondelete="CASCADE"), primary_key=True
+    )
+    action_settings: Mapped[dict[str, Any]] = mapped_column(
+        PGJSONB(), nullable=False, default=dict, server_default=text("'{}'::jsonb")
+    )
+
+    __table_args__ = (
+        Index("ix_persona__integration_integration_id", "integration_id"),
+    )
+
+
+class ScheduledTask__Integration(Base):
+    """An integration on a task."""
+
+    __tablename__ = "scheduled_task__integration"
+
+    scheduled_task_id: Mapped[UUID] = mapped_column(
+        PGUUID(as_uuid=True),
+        ForeignKey("scheduled_task.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    integration_id: Mapped[int] = mapped_column(
+        Integer, ForeignKey("integration.id", ondelete="CASCADE"), primary_key=True
+    )
+    action_settings: Mapped[dict[str, Any]] = mapped_column(
+        PGJSONB(), nullable=False, default=dict, server_default=text("'{}'::jsonb")
+    )
+
+    __table_args__ = (
+        Index("ix_scheduled_task__integration_integration_id", "integration_id"),
+    )
 
 
 """
@@ -5598,15 +6713,32 @@ class UserGroup__CCPairDataAccess(Base):
     may manage the pair."""
 
     __tablename__ = "user_group__cc_pair_data_access"
-
-    cc_pair_id: Mapped[int] = mapped_column(
-        ForeignKey("connector_credential_pair.id", ondelete="CASCADE"),
-        primary_key=True,
+    # A row copies its pair's access type, and the foreign key matches both, so
+    # a row can exist only while its pair takes groups. Moving a pair to a type
+    # without groups fails until its rows are removed; PRIVATE <-> SYNC_RESTRICTED
+    # cascades.
+    __table_args__ = (
+        ForeignKeyConstraint(
+            ["cc_pair_id", "access_type"],
+            ["connector_credential_pair.id", "connector_credential_pair.access_type"],
+            ondelete="CASCADE",
+            onupdate="CASCADE",
+            name="fk_cc_pair_data_access_cc_pair_access_type",
+        ),
+        CheckConstraint(
+            "access_type IN ('PRIVATE', 'SYNC_RESTRICTED')",
+            name="ck_cc_pair_data_access_group_access_type",
+        ),
     )
+
+    cc_pair_id: Mapped[int] = mapped_column(primary_key=True)
     user_group_id: Mapped[int] = mapped_column(
         ForeignKey("user_group.id", ondelete="CASCADE"),
         primary_key=True,
         index=True,
+    )
+    access_type: Mapped[AccessType] = mapped_column(
+        Enum(AccessType, native_enum=False), nullable=False
     )
 
 
@@ -5622,29 +6754,6 @@ class Persona__UserGroup(Base):
         nullable=False,
         default=PersonaSharePermission.VIEWER,
         server_default=PersonaSharePermission.VIEWER.value,
-    )
-
-    user_group: Mapped["UserGroup"] = relationship("UserGroup")
-
-
-class Skill__UserGroup(Base):
-    __tablename__ = "skill__user_group"
-
-    skill_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("skill.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    user_group_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey("user_group.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    permission: Mapped[SkillSharePermission] = mapped_column(
-        Enum(SkillSharePermission, native_enum=False),
-        nullable=False,
-        default=SkillSharePermission.VIEWER,
-        server_default=SkillSharePermission.VIEWER.value,
     )
 
     user_group: Mapped["UserGroup"] = relationship("UserGroup")
@@ -5747,11 +6856,6 @@ class UserGroup(Base):
     personas: Mapped[list[Persona]] = relationship(
         "Persona",
         secondary=Persona__UserGroup.__table__,
-        viewonly=True,
-    )
-    skills: Mapped[list[Skill]] = relationship(
-        "Skill",
-        secondary=Skill__UserGroup.__table__,
         viewonly=True,
     )
     document_sets: Mapped[list[DocumentSet]] = relationship(
@@ -6507,57 +7611,14 @@ class MCPServer(Base):
         DateTime(timezone=True), nullable=True
     )
 
-    # Relationships
-    admin_connection_config: Mapped["MCPConnectionConfig | None"] = relationship(
-        "MCPConnectionConfig",
-        foreign_keys=[admin_connection_config_id],
-        back_populates="admin_servers",
-    )
-
-    user_connection_configs: Mapped[list["MCPConnectionConfig"]] = relationship(
-        "MCPConnectionConfig",
-        foreign_keys="MCPConnectionConfig.mcp_server_id",
-        back_populates="mcp_server",
-        passive_deletes=True,
-    )
     current_actions: Mapped[list["Tool"]] = relationship(
         "Tool", back_populates="mcp_server", cascade="all, delete-orphan"
     )
     # Many-to-many relationships for access control
-    users: Mapped[list["User"]] = relationship(
-        "User", secondary="mcp_server__user", back_populates="accessible_mcp_servers"
-    )
     user_groups: Mapped[list["UserGroup"]] = relationship(
         "UserGroup",
         secondary="mcp_server__user_group",
         back_populates="accessible_mcp_servers",
-    )
-
-
-class MCPServerUserPreference(Base):
-    __tablename__ = "mcp_server_user_preference"
-
-    user_id: Mapped[UUID] = mapped_column(
-        ForeignKey("user.id", ondelete="CASCADE"), primary_key=True
-    )
-    mcp_server_id: Mapped[int] = mapped_column(
-        ForeignKey("mcp_server.id", ondelete="CASCADE"), primary_key=True
-    )
-    enabled_in_chat: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True, server_default=text("true")
-    )
-    enabled_in_craft: Mapped[bool] = mapped_column(
-        Boolean, nullable=False, default=True, server_default=text("true")
-    )
-
-
-class MCPServer__User(Base):
-    __tablename__ = "mcp_server__user"
-    mcp_server_id: Mapped[int] = mapped_column(
-        ForeignKey("mcp_server.id", ondelete="CASCADE"), primary_key=True
-    )
-    user_id: Mapped[UUID] = mapped_column(
-        ForeignKey("user.id", ondelete="CASCADE"), primary_key=True
     )
 
 
@@ -6606,18 +7667,6 @@ class MCPConnectionConfig(Base):
     )
     updated_at: Mapped[datetime.datetime] = mapped_column(
         DateTime(timezone=True), server_default=func.now(), onupdate=func.now()
-    )
-
-    # Relationships
-    mcp_server: Mapped["MCPServer | None"] = relationship(
-        "MCPServer",
-        foreign_keys=[mcp_server_id],
-        back_populates="user_connection_configs",
-    )
-    admin_servers: Mapped[list["MCPServer"]] = relationship(
-        "MCPServer",
-        foreign_keys="MCPServer.admin_connection_config_id",
-        back_populates="admin_connection_config",
     )
 
     __table_args__ = (
@@ -7220,6 +8269,14 @@ class Sandbox(Base):
     cleanup_checkpoint: Mapped[dict[str, int | str | None] | None] = mapped_column(
         PGJSONB, nullable=True
     )
+    # Plugins the run-time skill limit left out of the content behind
+    # skills_hash. Written together with skills_hash.
+    skill_omissions: Mapped[list[SkillOmission]] = mapped_column(
+        PydanticListType(SkillOmission),
+        nullable=False,
+        default=list,
+        server_default=text("'[]'::jsonb"),
+    )
 
     # Relationships
     user: Mapped[User] = relationship("User")
@@ -7315,6 +8372,15 @@ class ActionReceipt(Base):
     gated_app_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("gated_app.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+    integration_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey(
+            "integration.id",
+            ondelete="SET NULL",
+            name="fk_action_receipt_integration_id",
+        ),
         nullable=True,
     )
     # The approval that authorized this action, when it went through one.
@@ -7473,22 +8539,30 @@ class ActionApproval(Base):
         Enum(ApprovalDecidedVia, native_enum=False, name="approvaldecidedvia"),
         nullable=True,
     )
-    # The gated target (external app or MCP server) this request hit, via the
-    # polymorphic ``gated_app`` identity row. Goes NULL when that target is
-    # deleted (SET NULL) — the decided row stays as an audit record.
+    # The old identity row of the target, kept for rollback: written only when
+    # a gated_app row with the integration id exists.
     gated_app_id: Mapped[int | None] = mapped_column(
         Integer,
         ForeignKey("gated_app.id", ondelete="SET NULL"),
         nullable=True,
     )
-    gated_app: Mapped["GatedApp | None"] = relationship("GatedApp")
+    integration_id: Mapped[int | None] = mapped_column(
+        Integer,
+        ForeignKey(
+            "integration.id",
+            ondelete="SET NULL",
+            name="fk_action_approval_integration_id",
+        ),
+        nullable=True,
+    )
+    integration: Mapped["Integration | None"] = relationship("Integration")
 
 
 class ScheduledTask(Base):
-    """A user-defined recurring Craft prompt + schedule.
+    """A user-defined recurring prompt + schedule.
 
-    Each fire spawns a fresh `BuildSession` (via the executor) and records a
-    `ScheduledTaskRun` row pointing back at the session. Soft-deleted tasks
+    Each fire runs the prompt in a new hidden chat and records a
+    `ScheduledTaskRun` row that links the chat. Soft-deleted tasks
     are excluded from dispatch but retained so users can still open past
     runs.
     """
@@ -7557,10 +8631,8 @@ class ScheduledTask(Base):
 class ScheduledTaskRun(Base):
     """One firing of a ScheduledTask.
 
-    `session_id` is nullable for the brief window between the dispatcher
-    inserting this row and the executor creating the BuildSession. On
-    session delete the FK is cleared (SET NULL) so the run row survives
-    as part of the task's run history.
+    `chat_session_id` is set in the commit that creates the run's chat and
+    makes the run RUNNING. It also marks that chat as hidden from history.
     """
 
     __tablename__ = "scheduled_task_run"
@@ -7573,10 +8645,10 @@ class ScheduledTaskRun(Base):
         ForeignKey("scheduled_task.id", ondelete="CASCADE"),
         nullable=False,
     )
-    session_id: Mapped[UUID | None] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("build_session.id", ondelete="SET NULL"),
-        nullable=True,
+    # No foreign key: adding one would lock chat_session. A hard-deleted chat
+    # leaves the id, and the dispatcher cancels a run whose chat is gone.
+    chat_session_id: Mapped[UUID | None] = mapped_column(
+        PGUUID(as_uuid=True), nullable=True
     )
 
     status: Mapped[ScheduledTaskRunStatus] = mapped_column(
@@ -7622,9 +8694,6 @@ class ScheduledTaskRun(Base):
 
     # Relationships
     task: Mapped[ScheduledTask] = relationship("ScheduledTask", back_populates="runs")
-    session: Mapped[BuildSession | None] = relationship(
-        "BuildSession", foreign_keys=[session_id]
-    )
 
     __table_args__ = (
         Index(
@@ -7633,9 +8702,7 @@ class ScheduledTaskRun(Base):
             desc("started_at"),
         ),
         Index("ix_scheduled_task_run_status", "status"),
-        # Session-view banner lookup: get_scheduled_run_context filters by
-        # session_id on every session open.
-        Index("ix_scheduled_task_run_session", "session_id"),
+        Index("ix_scheduled_task_run_chat_session", "chat_session_id"),
     )
 
 
@@ -7859,30 +8926,6 @@ class HookExecutionLog(Base):
     hook: Mapped["Hook"] = relationship("Hook", back_populates="execution_logs")
 
 
-class ExternalApp__Skill(Base):
-    """Non-owning association between an app and its dependent skills.
-
-    One app may support many skills. The unique skill constraint keeps the
-    initial dependency model to at most one external app per skill.
-    """
-
-    __tablename__ = "external_app__skill"
-    __table_args__ = (
-        UniqueConstraint("skill_id", name="uq_external_app__skill_skill_id"),
-    )
-
-    external_app_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey("external_app.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    skill_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("skill.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-
-
 class ExternalApp(Base):
     __tablename__ = "external_app"
 
@@ -7941,16 +8984,6 @@ class ExternalApp(Base):
         nullable=False,
     )
 
-    associated_skills: Mapped[list["Skill"]] = relationship(
-        "Skill",
-        secondary=ExternalApp__Skill.__table__,
-    )
-    user_credentials: Mapped[list["ExternalAppUserCredential"]] = relationship(
-        "ExternalAppUserCredential",
-        back_populates="external_app",
-        cascade="all, delete-orphan",
-    )
-
     @property
     def upstream_url_regexes(self) -> list[str]:
         """``upstream_url_patterns`` as match-ready regexes: CUSTOM apps author
@@ -7961,59 +8994,6 @@ class ExternalApp(Base):
                 for pattern in self.upstream_url_patterns
             ]
         return list(self.upstream_url_patterns)
-
-
-class ExternalAppUserCredential(Base):
-    __tablename__ = "external_app_user_credential"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    external_app_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey("external_app.id", ondelete="CASCADE"),
-        nullable=False,
-    )
-    user_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("user.id", ondelete="CASCADE"),
-        nullable=False,
-        index=True,
-    )
-    # Encrypted at rest: the calling user's credential values for this app.
-    # Read via .get_value(apply_mask=False).
-    user_credentials: Mapped[SensitiveValue[dict[str, Any]]] = mapped_column(
-        EncryptedJson(), nullable=False, default=dict
-    )
-    # OAuth scopes the user actually granted for this app. NULL means
-    # we have no authoritative record of the grant (provider doesn't report
-    # scopes, or the best-effort lookup failed); a non-null list is the exact
-    # set the user granted. Consumers must distinguish the two.
-    granted_scopes: Mapped[list[str] | None] = mapped_column(
-        postgresql.ARRAY(String),
-        nullable=True,
-    )
-    created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        nullable=False,
-    )
-    updated_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
-        nullable=False,
-    )
-
-    external_app: Mapped["ExternalApp"] = relationship(
-        "ExternalApp", back_populates="user_credentials"
-    )
-
-    __table_args__ = (
-        UniqueConstraint(
-            "external_app_id",
-            "user_id",
-            name="uq_external_app_user_credential_app_user",
-        ),
-    )
 
 
 class GatedApp(Base):
@@ -8086,109 +9066,6 @@ class GatedApp(Base):
     def target_key(self) -> tuple[GatedAppKind, int]:
         """The ``(kind, target_id)`` pair consumers key grants and lookups off."""
         return self.kind, self.target_id
-
-
-class WorkspaceActionPolicy(Base):
-    """Admin's action policy override for a gated target, keyed by the
-    ``gated_app`` identity row.
-
-    Sparse: only actions the admin has set are stored. Missing actions use the
-    provider catalog default; MCP tools default to ``ASK``.
-
-    ``action_id`` is a catalog id (external apps) or a tool name (MCP servers);
-    display (name/description) comes from the code catalog / discovered tools.
-    """
-
-    __tablename__ = "workspace_action_policy"
-
-    id: Mapped[int] = mapped_column(Integer, primary_key=True)
-    gated_app_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey("gated_app.id", ondelete="CASCADE"),
-        nullable=False,
-    )
-    action_id: Mapped[str] = mapped_column(Text, nullable=False)
-    policy: Mapped[ActionPolicy] = mapped_column(
-        Enum(ActionPolicy, name="actionpolicy", native_enum=False),
-        nullable=False,
-    )
-    created_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        nullable=False,
-    )
-    updated_at: Mapped[datetime.datetime] = mapped_column(
-        DateTime(timezone=True),
-        server_default=func.now(),
-        onupdate=func.now(),
-        nullable=False,
-    )
-
-    __table_args__ = (
-        UniqueConstraint(
-            "gated_app_id",
-            "action_id",
-            name="uq_workspace_action_policy",
-        ),
-    )
-
-
-class UserActionPolicy(Base):
-    """A user's saved choice for an app action, independent of credentials."""
-
-    __tablename__ = "user_action_policy"
-    __table_args__ = (Index("ix_user_action_policy_gated_app", "gated_app_id"),)
-    user_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("user.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    gated_app_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey("gated_app.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    action_id: Mapped[str] = mapped_column(Text, primary_key=True)
-    policy: Mapped[ActionPolicy] = mapped_column(
-        Enum(ActionPolicy, name="actionpolicy", native_enum=False), nullable=False
-    )
-
-
-class ScheduledTaskEnabledApp(Base):
-    """An app this task may use; absent membership blocks every app action."""
-
-    __tablename__ = "scheduled_task_enabled_app"
-    scheduled_task_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("scheduled_task.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    gated_app_id: Mapped[int] = mapped_column(
-        Integer, ForeignKey("gated_app.id", ondelete="CASCADE"), primary_key=True
-    )
-
-
-class ScheduledTaskActionPolicy(Base):
-    """A scheduled task's independent choices; absent actions require approval."""
-
-    __tablename__ = "scheduled_task_action_policy"
-    __table_args__ = (
-        Index("ix_scheduled_task_action_policy_gated_app", "gated_app_id"),
-    )
-    scheduled_task_id: Mapped[UUID] = mapped_column(
-        PGUUID(as_uuid=True),
-        ForeignKey("scheduled_task.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    gated_app_id: Mapped[int] = mapped_column(
-        Integer,
-        ForeignKey("gated_app.id", ondelete="CASCADE"),
-        primary_key=True,
-    )
-    action_id: Mapped[str] = mapped_column(Text, primary_key=True)
-    policy: Mapped[ActionPolicy] = mapped_column(
-        Enum(ActionPolicy, name="actionpolicy", native_enum=False), nullable=False
-    )
 
 
 class SSOProvider(Base):

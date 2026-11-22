@@ -1,10 +1,15 @@
 import { DocumentInfoPacket, StreamStopInfo } from "@/lib/search/types";
-import type { SearchFiltersRequest } from "@/lib/searchFilters/types";
+import type { ChatToolOptions } from "@/lib/tools/types";
+import { mutate } from "swr";
 import { handleSSEStream } from "@/lib/search/streamingUtils";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import type { ComposedMention, PendingChatMessage } from "@/lib/chat/types";
+import { requestMentions } from "@/lib/chat/mentions";
 import { ReasoningEffortOverride } from "@/lib/languageModels/types";
 import { FeedbackType } from "@/app/app/types";
 import {
   BackendMessage,
+  ChatSessionNameInfo,
   DocumentsResponse,
   FileDescriptor,
   FileChatDisplay,
@@ -13,6 +18,7 @@ import {
   MultiModelMessageResponseIDInfo,
   RateLimitDetails,
   RATE_LIMITED_ERROR_CODE,
+  APPROVAL_PENDING_ERROR_CODE,
   ResearchType,
   RetrievalType,
   StreamingError,
@@ -21,7 +27,7 @@ import {
 } from "@/app/app/types";
 import { SEARCH_PARAM_NAMES } from "./searchParams";
 import { Packet, StreamCursor } from "@/app/app/services/streamingModels";
-import type { ErrorResponseBody } from "@/lib/fetcher";
+import { FetchError, type ErrorResponseBody } from "@/lib/fetcher";
 import { isSessionEndedResponse } from "@/lib/auth/utils";
 import { revalidateCurrentUser } from "@/lib/users/svc";
 
@@ -147,6 +153,7 @@ export type PacketType =
   | StreamingError
   | MessageResponseIDInfo
   | MultiModelMessageResponseIDInfo
+  | ChatSessionNameInfo
   | StreamStopInfo
   | UserKnowledgeFilePacket
   | Packet;
@@ -171,14 +178,15 @@ export interface LLMOverride {
 export interface SendMessageParams {
   message: string;
   fileDescriptors?: FileDescriptor[];
+  // What the user tagged in the message with `@`, one per tile.
+  mentions?: ComposedMention[];
   parentMessageId: number | null;
   chatSessionId: string;
-  filters: SearchFiltersRequest | null;
+  // The tools, plugins and search filters of this request. A preferred tool
+  // is a preference; invocation is not guaranteed.
+  toolOptions: ChatToolOptions;
   signal?: AbortSignal;
   deepResearch?: boolean;
-  enabledToolIds?: number[];
-  // Preferred tool for this request; invocation is not guaranteed
-  preferredToolId?: number | null;
   // LLM override parameters
   modelProvider?: string;
   modelVersion?: string;
@@ -195,16 +203,18 @@ export interface SendMessageParams {
 
 export class ChatSendRejectedError extends Error {}
 
+/** The chat waits for a tool approval or answers; the server saved nothing. */
+export class ApprovalPendingError extends ChatSendRejectedError {}
+
 export async function* sendMessage({
   message,
   fileDescriptors,
+  mentions,
   parentMessageId,
   chatSessionId,
-  filters,
+  toolOptions,
   signal,
   deepResearch,
-  enabledToolIds,
-  preferredToolId,
   modelProvider,
   modelVersion,
   modelConfigurationId,
@@ -219,10 +229,9 @@ export async function* sendMessage({
     chat_session_id: chatSessionId,
     parent_message_id: parentMessageId,
     file_descriptors: fileDescriptors,
-    internal_search_filters: filters,
+    mentions: requestMentions(mentions ?? []),
+    tool_options: toolOptions,
     deep_research: deepResearch ?? false,
-    allowed_tool_ids: enabledToolIds,
-    preferred_tool_id: preferredToolId ?? null,
     llm_override:
       temperature || modelVersion || modelConfigurationId != null
         ? {
@@ -237,6 +246,10 @@ export async function* sendMessage({
     // Default to "unknown" for consistency with backend; callers should set explicitly
     origin: origin ?? "unknown",
     additional_context: additionalContext ?? null,
+    // The web chat shows responses that background agents start later.
+    accepts_follow_ups: true,
+    // The web chat updates the sidebar when the server names a new chat.
+    accepts_chat_session_name: true,
   };
 
   const body = JSON.stringify(payload);
@@ -285,13 +298,38 @@ export async function* sendMessage({
     }
 
     const message = data.detail ?? `HTTP error! status: ${response.status}`;
+    if (data.error_code === APPROVAL_PENDING_ERROR_CODE) {
+      throw new ApprovalPendingError(message);
+    }
     if (response.status < 500 && response.status !== 408) {
       throw new ChatSendRejectedError(message);
     }
     throw new Error(message);
   }
 
-  yield* withoutHeartbeats(handleSSEStream<PacketType>(response, signal));
+  yield* withoutHeartbeats(
+    readChatStream<PacketType>(chatSessionId, response, signal)
+  );
+}
+
+// Both readers of a turn pass through here, so either one removes the pending
+// input a turn accepts.
+async function* readChatStream<T extends PacketType | StreamCursor>(
+  chatSessionId: string,
+  response: Response,
+  signal?: AbortSignal
+): AsyncGenerator<T, void, unknown> {
+  for await (const packet of handleSSEStream<T>(response, signal)) {
+    if ("obj" in packet && packet.obj.type === "user_message") {
+      const { id } = packet.obj;
+      void mutate<PendingChatMessage[]>(
+        SWR_KEYS.pendingChatMessages(chatSessionId),
+        (current) => current?.filter((message) => message.id !== id),
+        { revalidate: false }
+      );
+    }
+    yield packet;
+  }
 }
 
 // Drops keepalive heartbeats so stream consumers only ever see run state.
@@ -320,10 +358,18 @@ export async function* resumeStream(
 
   if (!response.ok) {
     const data: ErrorResponseBody = await response.json().catch(() => ({}));
-    throw new Error(data.detail ?? `HTTP error! status: ${response.status}`);
+    throw new FetchError(
+      data.detail ?? `HTTP error! status: ${response.status}`,
+      response.status,
+      data
+    );
   }
 
-  yield* handleSSEStream<PacketType | StreamCursor>(response, signal);
+  yield* readChatStream<PacketType | StreamCursor>(
+    chatSessionId,
+    response,
+    signal
+  );
 }
 
 export async function setPreferredResponse(
@@ -438,24 +484,6 @@ export async function deleteAllChatSessions() {
   return response;
 }
 
-export async function getAvailableContextTokens(
-  chatSessionId: string,
-  modelConfigurationId?: number | null
-): Promise<number | null> {
-  const params =
-    modelConfigurationId != null
-      ? `?model_configuration_id=${modelConfigurationId}`
-      : "";
-  const response = await fetch(
-    `/api/chat/available-context-tokens/${chatSessionId}${params}`
-  );
-  if (!response.ok) {
-    return null;
-  }
-  const data: { available_tokens: number } = await response.json();
-  return data?.available_tokens ?? null;
-}
-
 export function processRawChatHistory(
   rawMessages: BackendMessage[],
   packets: Packet[][]
@@ -497,8 +525,9 @@ export function processRawChatHistory(
       type:
         messageInfo.error_info || messageInfo.error
           ? "error"
-          : (messageInfo.message_type as "user" | "assistant"),
+          : (messageInfo.message_type as Message["type"]),
       files: messageInfo.files,
+      mentions: messageInfo.mentions,
       alternateAgentID:
         messageInfo.alternate_assistant_id !== null
           ? Number(messageInfo.alternate_assistant_id)
@@ -556,6 +585,7 @@ export function processRawChatHistory(
 const PARAMS_TO_SKIP = [
   SEARCH_PARAM_NAMES.SUBMIT_ON_LOAD,
   SEARCH_PARAM_NAMES.USER_PROMPT,
+  SEARCH_PARAM_NAMES.SKILLS,
   SEARCH_PARAM_NAMES.TITLE,
   // only use these if explicitly passed in
   SEARCH_PARAM_NAMES.CHAT_ID,

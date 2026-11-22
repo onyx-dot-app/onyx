@@ -1,8 +1,29 @@
+import asyncio
+from collections.abc import AsyncGenerator
+from contextlib import asynccontextmanager
+from typing import Any
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+from onyx.auth import oauth_refresher
 from onyx.db.models import OAuthAccount, User
+
+
+@pytest.fixture(autouse=True)
+def _in_process_cache_lock(monkeypatch: pytest.MonkeyPatch) -> None:
+    """Unit tests have no cache backend. One asyncio lock for each lock name
+    stands in for the login refresh lock."""
+    locks: dict[str, asyncio.Lock] = {}
+
+    @asynccontextmanager
+    async def lock(
+        lock_name: str, *_args: Any, **_kwargs: Any
+    ) -> AsyncGenerator[None, None]:
+        async with locks.setdefault(lock_name, asyncio.Lock()):
+            yield
+
+    monkeypatch.setattr(oauth_refresher, "async_cache_shared_lock", lock)
 
 
 @pytest.fixture
@@ -40,7 +61,7 @@ def mock_db_session() -> MagicMock:
     """Creates a mock database session for testing."""
     session = MagicMock()
     # `check_and_refresh_oauth_tokens` calls `await db_session.refresh(...)`
-    # inside the per-user lock to re-read the latest expires_at from DB; the
+    # inside the login refresh lock to re-read the latest expires_at from DB; the
     # AsyncMock here lets that await resolve without raising.
     session.refresh = AsyncMock()
     return session

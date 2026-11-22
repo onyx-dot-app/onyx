@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<policyDefinitionResources xmlns:xsd="http://www.w3.org/2001/XMLSchema" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance" revision="1.0" schemaVersion="1.0" xmlns="http://schemas.microsoft.com/GroupPolicy/2006/07/PolicyDefinitions">
+  <displayName>Onyx Desktop</displayName>
+  <description>Settings for the Onyx desktop app.</description>
+  <resources>
+    <stringTable>
+      <string id="Onyx">Onyx</string>
+      <string id="OnyxDesktop">Onyx Desktop</string>
+      <string id="SUPPORTED_OnyxDesktopV2">Onyx Desktop v2 and later</string>
+      <string id="ServerURL">Onyx server</string>
+      <string id="ServerURL_Explain">The Onyx server that the app connects to, for example https://onyx.example.com. http:// is allowed for an intranet server. If the user has not saved a server, the app skips onboarding. A server that the user saves later is used instead, unless "Lock the Onyx server" is enabled.</string>
+      <string id="LockServerURL">Lock the Onyx server</string>
+      <string id="LockServerURL_Explain">If enabled, the app always uses the server in "Onyx server", and the user cannot change it. If "Onyx server" is not set or not valid, the user's saved server stays and cannot change. Applies at the next launch.</string>
+      <string id="DisableAutoUpdate">Turn off automatic updates</string>
+      <string id="DisableAutoUpdate_Explain">If enabled, the app does not check for, download or install updates. Deploy new versions with your management tool.</string>
+      <string id="LauncherShortcut">Launcher shortcut</string>
+      <string id="LauncherShortcut_Explain">The keyboard shortcut that opens the launcher, for example CommandOrControl+Shift+Space. The user cannot change it.</string>
+      <string id="DisableLauncher">Turn off the launcher</string>
+      <string id="DisableLauncher_Explain">If enabled, the app registers no launcher shortcut, and the launcher does not open.</string>
+      <string id="LaunchAtLogin">Launch at login</string>
+      <string id="LaunchAtLogin_Explain">If enabled, the app adds a login item for the user. If disabled, the app removes it. The user cannot change the setting in Preferences. This is best effort: the user can turn the item off in Task Manager. To force the app to start, add it to HKLM\Software\Microsoft\Windows\CurrentVersion\Run.</string>
+      <string id="DisableNotifications">Turn off notifications</string>
+      <string id="DisableNotifications_Explain">If enabled, the app shows no desktop notifications.</string>
+    </stringTable>
+    <presentationTable>
+      <presentation id="ServerURL">
+        <textBox refId="ServerURL">
+          <label>Server URL:</label>
+        </textBox>
+      </presentation>
+      <presentation id="LauncherShortcut">
+        <textBox refId="LauncherShortcut">
+          <label>Shortcut:</label>
+        </textBox>
+      </presentation>
+    </presentationTable>
+  </resources>
+</policyDefinitionResources>

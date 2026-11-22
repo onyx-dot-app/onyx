@@ -35,6 +35,7 @@ interface UserPreferences {
   default_app_mode: "AUTO" | "CHAT" | "SEARCH";
   // Input preferences
   paste_as_tile?: boolean;
+  interrupt_on_send?: boolean;
   // Voice preferences
   voice_auto_send?: boolean;
   voice_auto_playback?: boolean;
@@ -79,7 +80,7 @@ export enum Permission {
   MANAGE_ACTIONS = "manage:actions",
   READ_QUERY_HISTORY = "read:query_history",
   MANAGE_USER_GROUPS = "manage:user_groups",
-  MANAGE_SKILLS = "manage:skills",
+  MANAGE_PLUGINS = "manage:plugins",
   CREATE_USER_API_KEYS = "create:user_api_keys",
   MANAGE_SERVICE_ACCOUNT_API_KEYS = "manage:service_account_api_keys",
   MANAGE_BOTS = "manage:bots",
@@ -187,7 +188,12 @@ export type ValidStatuses =
   | "not_started";
 export type TaskStatus = "PENDING" | "STARTED" | "SUCCESS" | "FAILURE";
 export type Feedback = "like" | "dislike" | "mixed";
-export type AccessType = "public" | "private" | "sync" | "sync_restricted";
+export type AccessType =
+  | "public"
+  | "private"
+  | "sync"
+  | "sync_restricted"
+  | "personal";
 export type ProcessingMode = "REGULAR";
 export type SessionType = "Chat" | "Search" | "Slack";
 
@@ -230,6 +236,25 @@ export interface IndexAttemptSnapshot {
   is_new_model: boolean;
   /** A one-off run over a window outside the pair's incremental cursor, such as an added scope. */
   is_backfill: boolean;
+  /** Set for an attempt that lists, converts and indexes in separate stages. */
+  progress?: IndexAttemptProgress | null;
+}
+
+/** Mirror of `onyx.server.documents.models.IndexAttemptProgress`. */
+export interface IndexAttemptProgress {
+  /** False while the listing runs. The totals are then not final. */
+  listing_done: boolean;
+  docs_listed: number;
+  docs_skipped: number;
+  docs_indexed: number;
+  docs_failed: number;
+  batches_listed: number;
+  batches_converted: number;
+  batches_indexed: number;
+  /** Set when the listing is done. */
+  batches_total: number | null;
+  /** Seconds until the slowest stage finishes at its rate so far. */
+  eta_seconds: number | null;
 }
 
 // Mirror of `onyx.db.index_attempt_metrics_models.IndexAttemptStage`. The
@@ -243,6 +268,11 @@ export const INDEX_ATTEMPT_STAGES = [
   "HIERARCHY_UPSERT",
   "DOC_BATCH_STORE",
   "DOC_BATCH_ENQUEUE",
+  "CONVERSION_QUEUE_WAIT",
+  "STUB_BATCH_LOAD",
+  "CONVERSION",
+  "CONVERSION_DOC_BATCH_STORE",
+  "CONVERSION_DISPATCH",
   "QUEUE_WAIT",
   "DOCPROCESSING_SETUP",
   "BATCH_LOAD",
@@ -560,7 +590,10 @@ export interface SlackBotTokens {
 export interface UserGroup {
   id: number;
   name: string;
+  // Empty when the list was fetched without members; use member_count.
   users: User[];
+  member_count: number;
+  active_member_count: number;
   // ids of members who manage this group (drives the Make/Revoke Manager toggle)
   manager_ids: string[];
   cc_pairs: CCPairDescriptor<any, any>[];

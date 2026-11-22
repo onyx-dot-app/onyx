@@ -416,7 +416,10 @@ services:
       # See https://opster.com/guides/opensearch/opensearch-basics/opensearch-heap-size-usage-and-jvm-garbage-collection/
       # Xms is the starting size, Xmx is the maximum size. These should be the
       # same.
-      - "OPENSEARCH_JAVA_OPTS=-Xms2g -Xmx2g"
+      # -XX:-UseBASE64Intrinsics turns off the JVM's native Base64 decoder
+      # (Java4Shell, CVE-2026-114938). Keep it until the OpenSearch image ships
+      # a fixed JDK.
+      - "OPENSEARCH_JAVA_OPTS=-Xms2g -Xmx2g -XX:-UseBASE64Intrinsics"
     volumes:
       - opensearch-data:/usr/share/opensearch/data
     # These come from the example in https://docs.opensearch.org/latest/install-and-configure/install-opensearch/docker/
@@ -436,7 +439,7 @@ services:
         max-file: "6"
 
   nginx:
-    image: ${BASE_IMAGE_REGISTRY:-docker.io}/library/nginx:1.25.5-alpine
+    image: ${BASE_IMAGE_REGISTRY:-docker.io}/library/nginx:1.30.7-alpine
     restart: unless-stopped
     # nginx will immediately crash with `nginx: [emerg] host not found in upstream`
     # if api_server / web_server are not up

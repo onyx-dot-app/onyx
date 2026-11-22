@@ -1,11 +1,12 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useCallback, useMemo, useReducer, useState } from "react";
 import { humanReadableFormat } from "@opal/time";
 import { BackendChatSession } from "@/app/app/types";
 import { processRawChatHistory } from "@/app/app/services/lib";
 import { getLatestMessageChain } from "@/app/app/services/messageTree";
 import HumanMessage from "@/app/app/message/HumanMessage";
+import AgentResultsDivider from "@/app/app/message/AgentResultsDivider";
 import { ErrorBanner } from "@/app/app/message/Resubmit";
 import AgentMessage from "@/app/app/message/messageComponents/AgentMessage";
 import MultiModelResponseView from "@/app/app/message/MultiModelResponseView";
@@ -13,15 +14,36 @@ import { getMultiModelResponses } from "@/app/app/message/multiModel";
 import { useLanguageModels } from "@/lib/languageModels/hooks";
 import { buildModelProviderLookup } from "@/lib/languageModels/options";
 import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
-import { IllustrationContent, Section } from "@opal/layouts";
+import { IllustrationContent, RootLayout, Section } from "@opal/layouts";
 import SvgNotFound from "@opal/illustrations/not-found";
-import { Button, Text } from "@opal/components";
+import { Button, Text, useCreateModal } from "@opal/components";
 import { Agent } from "@/lib/agents/types";
 import { useAppPosition } from "@/lib/navigation/hooks";
 import { MinimalOnyxDocument } from "@/lib/search/types";
 import PreviewModal from "@/sections/modals/PreviewModal";
 import useOnMount from "@/hooks/useOnMount";
 import SharedAppInputBar from "@/sections/input/SharedAppInputBar";
+import {
+  addLoadedPublishedFiles,
+  NO_LOADED_PUBLISHED_FILES,
+  startChatLoad,
+} from "@/lib/chat/publishedFiles";
+import { usePublishedFiles } from "@/lib/chat/hooks";
+import { fetchSettledChatSession } from "@/lib/chat/sessionReadiness";
+import { PANEL_TOGGLE_RESERVE } from "@/lib/outputPanel/layout";
+import { ChatRightPanel } from "@/sections/chat/ChatRightPanel";
+import {
+  INITIAL_RIGHT_PANEL,
+  RIGHT_PANEL_FILES_TAB,
+  openCardFileAction,
+  rightPanelReducer,
+  showsFiles,
+} from "@/lib/chat/rightPanel";
+import type { PublishedFile } from "@/app/app/services/streamingModels";
+import {
+  PublishedFilesPanelContext,
+  type PublishedFilesPanel,
+} from "@/sections/chat/PublishedFileCards";
 import { useLocale, useTranslations } from "next-intl";
 
 export interface SharedChatDisplayProps {
@@ -37,6 +59,63 @@ export default function SharedChatDisplay({
   const locale = useLocale();
   const [presentingDocument, setPresentingDocument] =
     useState<MinimalOnyxDocument | null>(null);
+  const previewModal = useCreateModal();
+  const presentDocument = (document: MinimalOnyxDocument) => {
+    setPresentingDocument(document);
+    previewModal.toggle(true);
+  };
+  // The page keeps the panel's state: a shared chat has no chat store entry
+  const [rightPanel, dispatchRightPanel] = useReducer(
+    rightPanelReducer,
+    INITIAL_RIGHT_PANEL
+  );
+
+  // A shared chat has no live publishes: its load's list, or without one
+  // its packets, gives the files. A reload's page of this chat gives a newer
+  // list.
+  const [reloaded, setReloaded] = useState<{
+    page: BackendChatSession;
+    loadSequence: number;
+  } | null>(null);
+  const sharedMessageTree = useMemo(
+    () =>
+      chatSession &&
+      processRawChatHistory(chatSession.messages, chatSession.packets),
+    [chatSession]
+  );
+  const chat = useMemo(() => {
+    if (!chatSession || !sharedMessageTree) return null;
+    // The server rendered the first page: sequence 0
+    const loaded = addLoadedPublishedFiles(
+      NO_LOADED_PUBLISHED_FILES,
+      chatSession,
+      0
+    );
+    return {
+      messageTree: sharedMessageTree,
+      loadedPublishedFiles:
+        reloaded?.page.chat_session_id === chatSession.chat_session_id
+          ? addLoadedPublishedFiles(
+              loaded,
+              reloaded.page,
+              reloaded.loadSequence
+            )
+          : loaded,
+    };
+  }, [chatSession, sharedMessageTree, reloaded]);
+  const publishedFiles = usePublishedFiles(chat);
+  const sessionId = chatSession?.chat_session_id ?? null;
+  const reloadFiles = useCallback(async () => {
+    if (sessionId === null) return;
+    const loadSequence = startChatLoad();
+    const page = await fetchSettledChatSession(sessionId, { shared: true });
+    // A reload that started earlier and ended later keeps the newer list
+    setReloaded((current) =>
+      current && current.loadSequence > loadSequence
+        ? current
+        : { page, loadSequence }
+    );
+  }, [sessionId]);
 
   const isMounted = useOnMount();
   const appPosition = useAppPosition();
@@ -49,7 +128,7 @@ export default function SharedChatDisplay({
     [llmProviders]
   );
 
-  if (!chatSession) {
+  if (!chatSession || !chat) {
     return (
       <div className="h-full w-full flex flex-col items-center justify-center">
         <Section flexDirection="column" alignItems="center" gap={4}>
@@ -66,13 +145,16 @@ export default function SharedChatDisplay({
     );
   }
 
-  const messageTree = processRawChatHistory(
-    chatSession.messages,
-    chatSession.packets
-  );
+  const { messageTree } = chat;
   const messages = getLatestMessageChain(messageTree);
 
   const firstMessage = messages[0];
+  const filesPanel: PublishedFilesPanel = {
+    openFile: (file: PublishedFile) =>
+      dispatchRightPanel(openCardFileAction(file, publishedFiles)),
+    showFiles: () =>
+      dispatchRightPanel({ type: "showTab", tabId: RIGHT_PANEL_FILES_TAB }),
+  };
 
   if (firstMessage === undefined) {
     return (
@@ -92,32 +174,61 @@ export default function SharedChatDisplay({
   }
 
   return (
-    <>
-      {presentingDocument && (
-        <PreviewModal
-          presentingDocument={presentingDocument}
-          onClose={() => setPresentingDocument(null)}
+    <PublishedFilesPanelContext.Provider value={filesPanel}>
+      <previewModal.Provider>
+        {presentingDocument && (
+          <PreviewModal
+            presentingDocument={presentingDocument}
+            onClose={() => previewModal.toggle(false)}
+          />
+        )}
+      </previewModal.Provider>
+
+      {/* Always mounted, so a reply card opens its file whatever the Files
+          list holds. A shared chat has no Sources view. */}
+      <RootLayout.RightPanel>
+        <ChatRightPanel
+          sessionId={chatSession.chat_session_id}
+          open={showsFiles(rightPanel)}
+          state={rightPanel}
+          dispatch={dispatchRightPanel}
+          files={publishedFiles}
+          sources={null}
+          hasSources={false}
+          reloadFiles={reloadFiles}
         />
-      )}
+      </RootLayout.RightPanel>
 
       <div className="flex flex-col h-full w-full overflow-hidden">
         <div className="flex-1 flex flex-col items-center overflow-y-auto">
-          <div className="sticky top-0 z-10 flex items-center justify-between w-full bg-background-tint-01 px-8 py-4">
+          {/* The end padding keeps the text clear of the panel toggle */}
+          <div
+            className="sticky top-0 z-10 flex items-center justify-between w-full bg-background-tint-01 ps-8 py-4"
+            style={{ paddingInlineEnd: PANEL_TOGGLE_RESERVE }}
+          >
             <Text as="p" font="heading-headline" color="text-04">
               {chatSession.description || t("header.untitledChat.title")}
             </Text>
-            <div className="flex flex-col items-end">
-              <Text as="p" font="secondary-body" color="text-03">
-                {t("header.sharedOn.text", {
-                  date: humanReadableFormat(chatSession.time_created, locale),
-                })}
-              </Text>
-              {chatSession.owner_name && (
+            <Section
+              flexDirection="row"
+              width="fit"
+              height="fit"
+              alignItems="center"
+              gap={2}
+            >
+              <Section alignItems="end" gap={0} width="fit" height="fit">
                 <Text as="p" font="secondary-body" color="text-03">
-                  {t("header.owner.text", { name: chatSession.owner_name })}
+                  {t("header.sharedOn.text", {
+                    date: humanReadableFormat(chatSession.time_created, locale),
+                  })}
                 </Text>
-              )}
-            </div>
+                {chatSession.owner_name && (
+                  <Text as="p" font="secondary-body" color="text-03">
+                    {t("header.owner.text", { name: chatSession.owner_name })}
+                  </Text>
+                )}
+              </Section>
+            </Section>
           </div>
 
           {isMounted ? (
@@ -151,7 +262,7 @@ export default function SharedChatDisplay({
                               agent: persona,
                               docs: [],
                               citations: undefined,
-                              setPresentingDocument,
+                              setPresentingDocument: presentDocument,
                             }}
                             llmManager={null}
                             parentMessage={message}
@@ -159,6 +270,17 @@ export default function SharedChatDisplay({
                           />
                         </div>
                       )}
+                    </div>
+                  );
+                }
+
+                if (message.type === "agent_results") {
+                  return (
+                    <div
+                      key={message.messageId}
+                      className="w-[min(50rem,100%)]"
+                    >
+                      <AgentResultsDivider />
                     </div>
                   );
                 }
@@ -192,7 +314,7 @@ export default function SharedChatDisplay({
                             agent: persona,
                             docs: message.documents,
                             citations: message.citations,
-                            setPresentingDocument: setPresentingDocument,
+                            setPresentingDocument: presentDocument,
                             // Shared payload carries the model as `modelDisplayName`,
                             // not `overridden_model`. Surface it in the read-only footer.
                             overriddenModel:
@@ -237,6 +359,6 @@ export default function SharedChatDisplay({
           <SharedAppInputBar />
         </div>
       </div>
-    </>
+    </PublishedFilesPanelContext.Provider>
   );
 }

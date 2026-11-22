@@ -66,6 +66,10 @@ Key props (`InputSingleComboBoxProps` also passes DOM input attributes through):
 | `placeholder`   | `string`                            | —          | Trigger placeholder (required)                       |
 | `isError`       | `boolean`                           | —          | External error state (overrides internal validation) |
 | `rightChildren` | `React.ReactNode`                   | —          | Extra trigger-side controls                          |
+| `tooltip`       | `string \| RichStr`                 | —          | Shown on hover, in any state                         |
+
+Inside `InputHorizontal` or `InputVertical`, the row's `disabled` also disables
+the field, and its `disabledTooltip` replaces `tooltip` while disabled.
 
 Formik: `InputSingleComboBoxField` from `@opal/form`. The dropdown itself
 (`dropdown/`) is a family-internal component, never consumed directly by app code.

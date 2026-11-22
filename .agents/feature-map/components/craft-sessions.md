@@ -76,8 +76,6 @@ Neighbours own the rest:
 - [[craft-frontend]]: the browser stores, the prompt queue, and transcript
   settlement.
 - [[craft-webapp-proxy]]: the preview of the session's web app and its port.
-- [[craft-scheduled-tasks]]: the scheduled executor, which reuses session
-  creation, persistence and output capture.
 - [[craft-admin]]: the Craft access gate and the Craft default model setting.
 
 ---
@@ -125,8 +123,8 @@ save-the-turn transaction.
 
 **Three locks at three scopes.**
 - `server/features/build/session/locks.py:session_creation_lock` (per user,
-  Redis): serializes create, restore, the interactive and scheduled runners'
-  wake paths, attachment upload and delete, and the idle sweep's checkpoint and
+  Redis): serializes create, restore, the interactive runner's
+  wake path, attachment upload and delete, and the idle sweep's checkpoint and
   cleanup ([[craft-sandboxes]]). The
   restore endpoint acquires without blocking and returns 409.
 - `SessionManager.prompt_slot` (per session, a renewable cache lease from
@@ -166,8 +164,8 @@ holds the prompt slot. Changed paths become `Artifact` rows owned by that
 `turn_index`. All of `outputs/web` is one app card. A file's
 `source_revision` comes from modification time, change time and size, not from
 a content hash. A changed `source_revision` adds one to the row's `version`
-(`server/features/build/db/artifact.py:upsert_artifact`). The viewed routes
-(`server/features/build/db/artifact.py:mark_outputs_viewed`) record the
+(`db/artifact.py:upsert_artifact`). The viewed routes
+(`db/artifact.py:mark_outputs_viewed`) record the
 `version` the owner opened in `viewed_revision`. `viewed_revision` only grows,
 and a value above the row's `version` gets 409. The bulk route locks and checks
 every row before it writes, so the request succeeds or fails as a whole.
@@ -189,10 +187,12 @@ gateway call (`server/gateway/configs.py:CRAFT_SESSION_HEADER`), and
 
 **User library.** Library files are ordinary `Document` rows with
 `DocumentSource.CRAFT_FILE`, one shared connector per deployment and one
-credential per user (`server/features/build/db/user_library.py:build_document_id`).
+credential per user (`db/user_library.py:build_document_id`).
 Uploads and deletes push the full file set to the user's sandbox when it is
 `RUNNING` (`server/features/build/sandbox/user_library.py:sync_user_library_to_active_sandboxes`).
 Provisioning pushes it again with the other managed content.
+No connector class backs `CRAFT_FILE`, so `should_index` never schedules these
+pairs and a legacy embedding swap does not count them (`db/swap_index.py`).
 
 **Skills reload.** `SessionManager.reload_session_skills` refuses while the
 sandbox is `PROVISIONING` and while a turn holds the prompt slot. It rewrites
@@ -262,7 +262,11 @@ opencode instance, so the next instance reads the new files ([[skills]]).
    (`server/features/build/session/manager.py:mark_opencode_dispose_pending`) before it
    writes the file, so a crash between write and dispose is retried on the
    next turn. `ensure_session_ready` sets the same marker before a rebuild. A
-   new config writer must set it first.
+   new config writer must set it first. A failed dispose keeps the marker,
+   counts the failure in it, and fails the turn with
+   `OpencodeConfigReloadError`. After `_DISPOSE_MAX_FAILED_ATTEMPTS` failures,
+   turns fail fast without a dispose call until the backoff passes. Do not
+   clear the marker on failure: the turn would run on the old config.
 9. `output-attribution-complete-pair` **Output attribution needs a complete
    before-and-after pair.**
    `server/features/build/session/output_cards.py:capture_turn_outputs` takes
@@ -271,7 +275,7 @@ opencode instance, so the next instance reads the new files ([[skills]]).
    incomplete scan or lost ownership writes nothing. A later turn's row is
    never moved back to an earlier turn.
 10. `user-library-rules` **User library ownership is the document id prefix.**
-    `server/features/build/db/user_library.py:fetch_user_file_for_user` returns
+    `db/user_library.py:fetch_user_file_for_user` returns
     `NOT_FOUND`, never 403, for another user's file. `store_user_file` returns
     the old blob id: pass it to `cleanup_old_blobs` only after the final commit.
     Generic `Document` and connector changes (deletion, metadata, permission
@@ -332,9 +336,9 @@ opencode instance, so the next instance reads the new files ([[skills]]).
   admin default chat model, not the session's model.
 - **No manual compaction.** Only opencode's automatic compaction appears in
   the transcript.
-- `server/features/build/db/user_library.py:set_sync_disabled` has no route,
+- `db/user_library.py:set_sync_disabled` has no route,
   so a `sync_disabled` change never triggers a sync.
-- `server/features/build/db/receipt.py` (`ActionReceipt`) has no caller
+- `db/receipt.py` (`ActionReceipt`) has no caller
   outside its tests. Nothing records external write actions or sweeps stale
   receipts.
 

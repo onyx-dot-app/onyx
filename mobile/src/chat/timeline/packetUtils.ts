@@ -39,11 +39,8 @@ export function isToolPacket(
     PacketType.INTERMEDIATE_REPORT_START,
     PacketType.INTERMEDIATE_REPORT_DELTA,
     PacketType.INTERMEDIATE_REPORT_CITED_DOCS,
-    PacketType.CODING_AGENT_START,
-    PacketType.CODING_AGENT_THINKING_DELTA,
-    PacketType.CODING_AGENT_FINAL,
-    PacketType.BASH_TOOL_START,
-    PacketType.BASH_TOOL_DELTA,
+    PacketType.CODE_MODE_START,
+    PacketType.CODE_MODE_DELTA,
     PacketType.IMAGE_GENERATION_TOOL_START,
     PacketType.IMAGE_GENERATION_TOOL_DELTA,
   ];
@@ -73,31 +70,6 @@ export function isSearchToolPacket(packet: Packet): boolean {
     packet.obj.type === PacketType.SEARCH_TOOL_QUERIES_DELTA ||
     packet.obj.type === PacketType.SEARCH_TOOL_FILTER_DELTA ||
     packet.obj.type === PacketType.SEARCH_TOOL_DOCUMENTS_DELTA
-  );
-}
-
-export function isStreamingComplete(packets: Packet[]): boolean {
-  return packets.some((packet) => packet.obj.type === PacketType.STOP);
-}
-
-export function isFinalAnswerComing(packets: Packet[]): boolean {
-  return packets.some((packet) => packet.obj.type === PacketType.MESSAGE_START);
-}
-
-export function isFinalAnswerComplete(packets: Packet[]): boolean {
-  const messageStartPacket = packets.find(
-    (packet) => packet.obj.type === PacketType.MESSAGE_START,
-  );
-
-  if (!messageStartPacket) {
-    return false;
-  }
-
-  return packets.some(
-    (packet) =>
-      (packet.obj.type === PacketType.SECTION_END ||
-        packet.obj.type === PacketType.ERROR) &&
-      packet.placement.turn_index === messageStartPacket.placement.turn_index,
   );
 }
 

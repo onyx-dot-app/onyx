@@ -19,20 +19,38 @@ If it is unclear which tool to use, consider using multiple in parallel to be ef
 """.lstrip()
 
 
+CODE_MODE_GUIDANCE = """
+## execute_code
+Call tools from Python programs with `execute_code`; its description lists the functions. Batch independent calls in one `execute_code` with `asyncio.gather`, and inspect every result. Keep dependent or judgment-based follow-ups in a later call. Avoid unnecessary output.
+""".lstrip()
+
+
+# In the tool sections below, `{name}` is the name that the model calls the tool
+# by in the turn (chat/prompt_utils.py:build_system_prompt).
 INTERNAL_SEARCH_GUIDANCE = """
-## internal_search
-Use the `internal_search` tool to search connected applications for information. Some examples of when to use `internal_search` include:
+## {name}
+Use the `{name}` tool to search connected applications for information. Some examples of when to use `{name}` include:
 - Internal information: any time where there may be some information stored in internal applications that could help better answer the query.
 - Niche/Specific information: information that is likely not found in public sources, things specific to a project or product, team, process, etc.
 - Keyword Queries: queries that are heavily keyword based are often internal document search queries.
 - Ambiguity: questions about something that is not widely known or understood.
-Never provide more than 3 queries at once to `internal_search`.
 """.lstrip()
+
+# The internal_search stub's note in code mode: each call runs its own retrieval
+# pipeline.
+CODE_MODE_SEARCH_USAGE = (
+    "Each call runs a full retrieval pipeline with several model calls, so it is "
+    "expensive. Pass the queries for one information need in one call, for example "
+    '`await tools.internal_search(queries=["first phrasing", "second phrasing"])`. Do not '
+    "split them into one call per query, and do not `asyncio.gather` single-query "
+    "calls. Search again when earlier results are insufficient or when a follow-up "
+    "depends on them."
+)
 
 
 WEB_SEARCH_GUIDANCE = """
-## web_search
-Use the `web_search` tool to access up-to-date information from the web. Some examples of when to use `web_search` include:
+## {name}
+Use the `{name}` tool to access up-to-date information from the web. Some examples of when to use `{name}` include:
 - Freshness: when the answer might be enhanced by up-to-date information on a topic. Very important for topics that are changing or evolving.
 - Accuracy: if the cost of outdated/inaccurate information is high.
 - Niche Information: when detailed info is not widely known or understood (but is likely found on the internet).{site_colon_disabled}
@@ -44,21 +62,23 @@ Do not use the "site:" operator in your web search queries.
 
 
 OPEN_URLS_GUIDANCE = """
-## open_url
-Use the `open_url` tool to read the content of one or more URLs. Use this tool to access the contents of the most promising web pages from your web searches or user specified URLs. \
+## {name}
+Use the `{name}` tool to read the content of one or more URLs. Use this tool to access the contents of the most promising web pages from your web searches or user specified URLs. \
 You can open many URLs at once by passing multiple URLs in the array if multiple pages seem promising. Prioritize the most promising pages and reputable sources. \
 Do not open URLs that are image files like .png, .jpg, etc.
-You should almost always use open_url after a web_search call. Use this tool when a user asks about a specific provided URL.
+You should almost always use {name} after a web search. Use this tool when a user asks about a specific provided URL.
 """.lstrip()
 
 PYTHON_TOOL_GUIDANCE = """
-## run_python
-Use the `run_python` tool to execute Python code in an isolated sandbox. The tool will respond with the output of the execution or time out after 60.0 seconds.
+## {name}
+Use the `{name}` tool to execute Python code in an isolated sandbox. The tool will respond with the output of the execution or time out after 60.0 seconds.
 Any files uploaded to the chat will be automatically be available in the execution environment's current directory. \
+Word (.docx), PowerPoint (.pptx), Excel (.xlsx, .xlsm), and CSV files attached to the agent or project are also available there under their file names (list the directory if a name does not resolve). \
+File count and size limits apply to each run; the result's staging notice names any files that were not staged. \
 The current directory in the file system can be used to save and persist user files. Files written to the current directory will be returned with a `file_link`. \
 Use this to give the user a way to download the file OR to display generated images.
 Internet access for this session is disabled. Do not make external web requests or API calls as they will fail.
-Use `openpyxl` to read and write Excel files. You have access to libraries like numpy, pandas, scipy, matplotlib, and PIL.
+Use `openpyxl`, `python-docx`, and `python-pptx` to read and write Excel, Word, and PowerPoint files. You have access to libraries like numpy, pandas, scipy, matplotlib, and PIL.
 Write chart titles, axis labels, legends, and other text rendered into images in the language you reply in. \
 The sandbox fonts cannot shape Arabic or render CJK glyphs (they come out as disconnected letters or boxes), so for those languages write the rendered text in English and explain the labels in your reply.
 IMPORTANT: each call to this tool runs in a fresh, stateless sandbox. Variables, imports, and in-memory state from previous calls will NOT be available, \
@@ -67,18 +87,31 @@ Therefore batch multi-step work into a single script per call: e.g. load a workb
 """.lstrip()
 
 GENERATE_IMAGE_GUIDANCE = """
-## generate_image
-NEVER use generate_image unless the user specifically requests an image.
+## {name}
+NEVER use {name} unless the user specifically requests an image.
 To edit, restyle, or vary an existing image, pass its file_id in `reference_image_file_ids`. \
-File IDs come from `[attached image — file_id: <id>]` tags on user-attached images or from prior `generate_image` tool results — never invent one. \
+File IDs come from `[attached image — file_id: <id>]` tags on user-attached images or from prior `{name}` tool results — never invent one. \
 Leave `reference_image_file_ids` unset for a fresh generation.
 """.lstrip()
 
 MEMORY_GUIDANCE = """
-## add_memory
-Use the `add_memory` tool for facts shared by the user that should be remembered for future conversations. \
+## {name}
+Use the `{name}` tool for facts shared by the user that should be remembered for future conversations. \
 Only add memories that are specific, likely to remain true, and likely to be useful later. \
 Focus on enduring preferences, long-term goals, stable constraints, and explicit "remember this" type requests.
+""".lstrip()
+
+POSTGRES_QUERY_GUIDANCE = """
+## {name}
+Use the `{name}` tool for questions about metadata, counts, or the user's own chat history — things top-k search cannot answer exhaustively:
+- Counting/aggregation: "how many Salesforce docs changed last month", document counts broken down by source or owner.
+- Exhaustive listing by metadata: every document matching a title substring, date range, owner, source, or folder — when completeness matters.
+- The user's own history: finding past conversations or messages, and which documents a past answer cited.
+- Verifying absence by metadata: before stating that no documents match a source, owner, date range, title, or folder, confirm with a count. A zero count says nothing about what documents discuss; check content with search.
+It sees metadata only (titles, dates, owners, sources, folder structure) — for questions about document *content* or meaning, use the internal search tool. \
+When the user asks for every matching document, keep the user's filters and page through all of them: call again with the returned `next_cursor` as `cursor` and the same filters until no `next_cursor` comes back. \
+Otherwise, when the result-set size is unknown, run with `count=true` first and narrow the filters before listing rows. \
+Listed documents carry citation numbers like [3]; cite the ones you mention the same way as search results.
 """.lstrip()
 
 TOOL_CALL_FAILURE_PROMPT = """

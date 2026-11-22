@@ -3,7 +3,7 @@ import time
 from collections import defaultdict
 from collections.abc import Collection, Generator, Iterable, Sequence
 from datetime import datetime, timezone
-from typing import Any, NamedTuple
+from typing import Any, NamedTuple, TypeVar
 from uuid import UUID
 
 from psycopg2.errors import QueryCanceled
@@ -11,6 +11,8 @@ from sqlalchemy import (
     BigInteger,
     CompoundSelect,
     Integer,
+    Result,
+    ScalarResult,
     Select,
     String,
     and_,
@@ -35,6 +37,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 from sqlalchemy.sql.expression import null
 
+from onyx.access.models import ExternalAccess
+from onyx.access.utils import build_ext_group_names_for_storage
+from onyx.configs.app_configs import DB_YIELD_PER_DEFAULT
 from onyx.configs.constants import DEFAULT_BOOST, DocumentSource
 from onyx.db.chunk import delete_chunk_stats_by_connector_credential_pair__no_commit
 from onyx.db.connector_credential_pair import get_connector_credential_pair_from_id
@@ -224,6 +229,31 @@ def construct_document_id_select_by_needs_sync_or_secondary_pending() -> Compoun
         ~needs_sync_predicate,
     )
     return needs_sync.union_all(deferred_only)
+
+
+# Row type of a single-column select; untyped builders leave it unknown.
+T = TypeVar("T")
+
+
+def stream_document_ids(
+    db_session: Session,
+    stmt: Select[tuple[T]],
+    yield_per: int = DB_YIELD_PER_DEFAULT,
+) -> ScalarResult[T]:
+    """Runs a `construct_document_id_select_*` statement and streams the ids in
+    batches of `yield_per`. Returns the live result, so the rows load lazily while
+    the caller iterates on `db_session`."""
+    return db_session.scalars(stmt).yield_per(yield_per)
+
+
+def stream_document_ids_with_secondary_pending(
+    db_session: Session,
+    stmt: CompoundSelect,
+    yield_per: int = DB_YIELD_PER_DEFAULT,
+) -> Result[tuple[str, bool]]:
+    """Same as `stream_document_ids`, for the two-column statement of
+    `construct_document_id_select_by_needs_sync_or_secondary_pending`."""
+    return db_session.execute(stmt).yield_per(yield_per)
 
 
 def construct_document_id_select_for_connector_credential_pair(
@@ -857,31 +887,6 @@ def get_document_source_types(
     }
 
 
-def get_document_source_types_after_cc_pair_removal(
-    db_session: Session,
-    document_id: str,
-    connector_id: int,
-    credential_id: int,
-) -> tuple[DocumentSource, ...]:
-    sources = db_session.execute(
-        select(Connector.source)
-        .select_from(DocumentByConnectorCredentialPair)
-        .join(
-            Connector,
-            DocumentByConnectorCredentialPair.connector_id == Connector.id,
-        )
-        .where(
-            DocumentByConnectorCredentialPair.id == document_id,
-            ~and_(
-                DocumentByConnectorCredentialPair.connector_id == connector_id,
-                DocumentByConnectorCredentialPair.credential_id == credential_id,
-            ),
-        )
-        .distinct()
-    ).scalars()
-    return tuple(sorted(set(sources), key=lambda source: source.value))
-
-
 def get_document_connector_count(
     db_session: Session,
     document_id: str,
@@ -906,6 +911,27 @@ def get_document_connector_counts(
         .group_by(DocumentByConnectorCredentialPair.id)
     )
     return db_session.execute(stmt).all()  # ty: ignore[invalid-return-type]
+
+
+def get_document_ids_linked_to_other_cc_pairs(
+    db_session: Session,
+    document_ids: list[str],
+    connector_id: int,
+    credential_id: int,
+) -> set[str]:
+    """The given documents that some cc-pair other than this one still links."""
+    stmt = (
+        select(DocumentByConnectorCredentialPair.id)
+        .where(
+            DocumentByConnectorCredentialPair.id.in_(document_ids),
+            ~and_(
+                DocumentByConnectorCredentialPair.connector_id == connector_id,
+                DocumentByConnectorCredentialPair.credential_id == credential_id,
+            ),
+        )
+        .distinct()
+    )
+    return set(db_session.scalars(stmt))
 
 
 def get_document_counts_for_cc_pairs(
@@ -1158,7 +1184,18 @@ def get_access_info_for_documents(
         .outerjoin(
             User,
             and_(
-                Credential.user_id == User.id,
+                # A PERSONAL pair on an ownerless credential (a source with no
+                # credential form) is read by its creator.
+                case(
+                    (
+                        ConnectorCredentialPair.access_type == AccessType.PERSONAL,
+                        func.coalesce(
+                            Credential.user_id, ConnectorCredentialPair.creator_id
+                        ),
+                    ),
+                    else_=Credential.user_id,
+                )
+                == User.id,
                 ConnectorCredentialPair.access_type.notin_(
                     AccessType.perm_synced_types()
                 ),
@@ -1223,6 +1260,43 @@ def get_last_modified_for_documents(
     return dict(db_session.execute(stmt).tuples().all())
 
 
+def _get_onedrive_permission_owned_doc_ids(
+    db_session: Session, doc_ids: list[str]
+) -> set[str]:
+    """IDs of documents whose permissions an indexed, perm-synced OneDrive pair owns.
+
+    Kept as a separate query: a correlated subquery in the ON CONFLICT SET clause
+    renders its FROM tables without the tenant schema and does not correlate.
+
+    Not serialized with OneDrive marking its relationship indexed, so an overlapping
+    SharePoint write can land on a OneDrive-owned row. OneDrive's next permission
+    sync takes ownership back.
+    """
+    stmt = (
+        select(DocumentByConnectorCredentialPair.id)
+        .join(
+            Connector,
+            Connector.id == DocumentByConnectorCredentialPair.connector_id,
+        )
+        .join(
+            ConnectorCredentialPair,
+            and_(
+                ConnectorCredentialPair.connector_id
+                == DocumentByConnectorCredentialPair.connector_id,
+                ConnectorCredentialPair.credential_id
+                == DocumentByConnectorCredentialPair.credential_id,
+            ),
+        )
+        .where(
+            DocumentByConnectorCredentialPair.id.in_(doc_ids),
+            DocumentByConnectorCredentialPair.has_been_indexed.is_(True),
+            Connector.source == DocumentSource.ONEDRIVE,
+            ConnectorCredentialPair.access_type.in_(AccessType.perm_synced_types()),
+        )
+    )
+    return set(db_session.scalars(stmt))
+
+
 def upsert_documents(
     db_session: Session,
     document_metadata_batch: list[DocumentMetadata],
@@ -1243,6 +1317,13 @@ def upsert_documents(
         return
 
     includes_permissions = any(doc.external_access for doc in seen_documents.values())
+
+    def stored_group_ids(access: ExternalAccess) -> list[str]:
+        if source is None:
+            raise ValueError("Cannot store external access without a source.")
+        return list(
+            build_ext_group_names_for_storage(access.external_user_group_ids, source)
+        )
 
     insert_stmt = insert(DbDocument).values(
         [
@@ -1268,8 +1349,8 @@ def upsert_documents(
                             "external_user_emails": list(
                                 doc.external_access.external_user_emails
                             ),
-                            "external_user_group_ids": list(
-                                doc.external_access.external_user_group_ids
+                            "external_user_group_ids": stored_group_ids(
+                                doc.external_access
                             ),
                             "is_public": doc.external_access.is_public,
                         }
@@ -1301,30 +1382,6 @@ def upsert_documents(
         # index write, so a failed write is retried on the next sync.
     }
     if includes_permissions:
-        preserve_onedrive_permissions = exists(
-            select(DocumentByConnectorCredentialPair.id)
-            .join(
-                Connector,
-                Connector.id == DocumentByConnectorCredentialPair.connector_id,
-            )
-            .join(
-                ConnectorCredentialPair,
-                and_(
-                    ConnectorCredentialPair.connector_id
-                    == DocumentByConnectorCredentialPair.connector_id,
-                    ConnectorCredentialPair.credential_id
-                    == DocumentByConnectorCredentialPair.credential_id,
-                ),
-            )
-            .where(
-                DocumentByConnectorCredentialPair.id == DbDocument.id,
-                DocumentByConnectorCredentialPair.has_been_indexed.is_(True),
-                Connector.source == DocumentSource.ONEDRIVE,
-                ConnectorCredentialPair.access_type.in_(AccessType.perm_synced_types()),
-            )
-            .correlate(DbDocument)
-        )
-
         # Use COALESCE to preserve existing permissions when new values are NULL.
         # This prevents subsequent indexing runs (which don't fetch permissions)
         # from overwriting permissions set by permission sync jobs.
@@ -1340,7 +1397,15 @@ def upsert_documents(
             insert_stmt.excluded.is_public,
             DbDocument.is_public,
         )
-        if source == DocumentSource.SHAREPOINT:
+        onedrive_owned_doc_ids = (
+            _get_onedrive_permission_owned_doc_ids(
+                db_session, list(seen_documents.keys())
+            )
+            if source == DocumentSource.SHAREPOINT
+            else set()
+        )
+        if onedrive_owned_doc_ids:
+            preserve_onedrive_permissions = DbDocument.id.in_(onedrive_owned_doc_ids)
             external_user_emails = case(
                 (preserve_onedrive_permissions, DbDocument.external_user_emails),
                 else_=external_user_emails,
@@ -1427,6 +1492,45 @@ def mark_document_as_indexed_for_cc_pair__no_commit(
         )
         .values(has_been_indexed=True)
     )
+
+
+def get_unchanged_document_ids(
+    db_session: Session,
+    connector_id: int,
+    credential_id: int,
+    listed: dict[str, tuple[datetime, int | None]],
+) -> set[str]:
+    """Returns the ids in `listed` (document id to source modified time and
+    size) whose stored document is the same version: this cc_pair indexed it,
+    with the same modified time and the same size. `doc_updated_at` is written
+    only after a document is written to the index, so a match means that
+    version is in the index. A document with no stored size matches only a
+    listing with no size. A document with no content hash never matches: a
+    reindex swap clears the hash of what the new index may lack, so the next
+    run writes it again.
+    """
+    if not listed:
+        return set()
+    rows = db_session.execute(
+        select(DbDocument.id, DbDocument.doc_updated_at, DbDocument.source_size_bytes)
+        .join(
+            DocumentByConnectorCredentialPair,
+            DocumentByConnectorCredentialPair.id == DbDocument.id,
+        )
+        .where(
+            DbDocument.id.in_(list(listed)),
+            DbDocument.doc_updated_at.is_not(None),
+            DbDocument.content_hash.is_not(None),
+            DocumentByConnectorCredentialPair.connector_id == connector_id,
+            DocumentByConnectorCredentialPair.credential_id == credential_id,
+            DocumentByConnectorCredentialPair.has_been_indexed.is_(True),
+        )
+    ).all()
+    return {
+        doc_id
+        for doc_id, stored_updated_at, stored_size in rows
+        if (stored_updated_at, stored_size) == listed[doc_id]
+    }
 
 
 def update_docs_updated_at__no_commit(
@@ -1606,9 +1710,9 @@ def _update_documents__no_commit(
 ) -> int:
     """Updates the documents `targets` selects (a plain id select, no DISTINCT).
     With `skip_locked`, rows another transaction holds are left out, not waited
-    for: the swap's second pass runs after the status flip, so a row a batch
-    still holds gets no new stamp from that batch (it reads PAST), and its old
-    stamp was already handled by the first pass. Returns the row count."""
+    for. The swap uses it for its pass inside the status flip: a batch that
+    still holds a row reads PAST and stamps nothing, and the pass after the
+    commit clears that row. Returns the row count."""
     if skip_locked:
         targets = targets.with_for_update(skip_locked=True)
     result = db_session.execute(
@@ -1709,6 +1813,21 @@ def mark_document_as_modified__no_commit(
     return modified_at
 
 
+def mark_documents_as_modified__no_commit(
+    document_ids: list[str],
+    db_session: Session,
+) -> datetime:
+    """Stamps one last_modified on every given document that exists and
+    returns it."""
+    modified_at = datetime.now(timezone.utc)
+    db_session.execute(
+        update(DbDocument)
+        .where(DbDocument.id.in_(document_ids))
+        .values(last_modified=modified_at)
+    )
+    return modified_at
+
+
 def mark_document_as_modified(
     document_id: str,
     db_session: Session,
@@ -1739,6 +1858,20 @@ def mark_document_as_synced(
     db_session.commit()
 
 
+def mark_documents_as_synced__no_commit(
+    document_ids: list[str],
+    db_session: Session,
+    synced_as_of: datetime,
+) -> None:
+    """Batch form of mark_document_as_synced. ``synced_as_of`` is the
+    watermark captured when the synced state was read."""
+    db_session.execute(
+        update(DbDocument)
+        .where(DbDocument.id.in_(document_ids))
+        .values(last_synced=synced_as_of, secondary_only_sync_pending=False)
+    )
+
+
 def mark_document_synced_secondary_pending(
     document_id: str,
     db_session: Session,
@@ -1759,25 +1892,6 @@ def mark_document_synced_secondary_pending(
     )
     doc.secondary_only_sync_pending = True
     db_session.commit()
-
-
-def delete_document_by_connector_credential_pair__no_commit(
-    db_session: Session,
-    document_id: str,
-    connector_credential_pair_identifier: (
-        ConnectorCredentialPairIdentifier | None
-    ) = None,
-) -> None:
-    """Deletes a single document by cc pair relationship entry.
-    Foreign key rows are left in place.
-    The implicit assumption is that the document itself still has other cc_pair
-    references and needs to continue existing.
-    """
-    delete_documents_by_connector_credential_pair__no_commit(
-        db_session=db_session,
-        document_ids=[document_id],
-        connector_credential_pair_identifier=connector_credential_pair_identifier,
-    )
 
 
 def delete_documents_by_connector_credential_pair__no_commit(
@@ -2103,12 +2217,44 @@ def get_document(
     return doc
 
 
-def get_document_for_update(
-    document_id: str,
+def get_documents_for_update(
+    document_ids: list[str],
     db_session: Session,
-) -> DbDocument | None:
-    stmt = select(DbDocument).where(DbDocument.id == document_id).with_for_update()
-    return db_session.scalar(stmt)
+) -> list[DbDocument]:
+    """Locks the existing documents among the given ids. Rows are locked in id
+    order so two batches that share documents cannot deadlock."""
+    stmt = (
+        select(DbDocument)
+        .where(DbDocument.id.in_(document_ids))
+        .order_by(DbDocument.id)
+        .with_for_update()
+    )
+    return list(db_session.scalars(stmt))
+
+
+def get_linked_cc_pair_ids_for_documents(
+    db_session: Session,
+    document_ids: list[str],
+) -> dict[str, list[int]]:
+    """Maps each document to every cc-pair that links it, DELETING ones
+    included (unlike get_cc_pair_ids_for_documents)."""
+    stmt = (
+        select(DocumentByConnectorCredentialPair.id, ConnectorCredentialPair.id)
+        .join(
+            ConnectorCredentialPair,
+            and_(
+                DocumentByConnectorCredentialPair.connector_id
+                == ConnectorCredentialPair.connector_id,
+                DocumentByConnectorCredentialPair.credential_id
+                == ConnectorCredentialPair.credential_id,
+            ),
+        )
+        .where(DocumentByConnectorCredentialPair.id.in_(document_ids))
+    )
+    doc_id_to_cc_pair_ids: dict[str, list[int]] = defaultdict(list)
+    for document_id, cc_pair_id in db_session.execute(stmt):
+        doc_id_to_cc_pair_ids[document_id].append(cc_pair_id)
+    return dict(doc_id_to_cc_pair_ids)
 
 
 def get_cc_pairs_for_document(
@@ -2228,14 +2374,6 @@ def fetch_known_chunk_counts_for_documents(
     )
     chunk_counts = {str(row.id): row.chunk_count for row in db_session.execute(stmt)}
     return [(doc_id, chunk_counts.get(doc_id)) for doc_id in document_ids]
-
-
-def fetch_chunk_count_for_document(
-    document_id: str,
-    db_session: Session,
-) -> int | None:
-    stmt = select(DbDocument.chunk_count).where(DbDocument.id == document_id)
-    return db_session.execute(stmt).scalar_one_or_none()
 
 
 def reset_all_document_kg_stages(db_session: Session) -> int:

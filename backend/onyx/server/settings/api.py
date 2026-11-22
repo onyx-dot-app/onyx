@@ -66,7 +66,7 @@ from onyx.utils.variable_functionality import (
     fetch_versioned_implementation_with_fallback,
     global_version,
 )
-from shared_configs.configs import MULTI_TENANT
+from shared_configs.configs import IS_PLAYGROUND, MULTI_TENANT
 
 logger = setup_logger()
 
@@ -258,6 +258,7 @@ def fetch_settings(
         hide_onyx_branding=HIDE_ONYX_BRANDING
         and tier_at_least(resolved_tier, Tier.ENTERPRISE),
         hooks_enabled=not MULTI_TENANT,
+        is_playground=IS_PLAYGROUND,
         version=onyx_version,
         commit=build_info.commit,
         commit_date=build_info.commit_date,

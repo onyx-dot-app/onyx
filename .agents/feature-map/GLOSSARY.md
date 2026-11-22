@@ -17,7 +17,7 @@ owns the rules.
 | Onyx | Danswer | Some identifiers and comments say Danswer. It is the same product. |
 | Craft | `build` | The product is Craft. The backend directory `backend/onyx/server/features/build/`, the `/build` API paths and `BUILD_MODE_FEATURE_ID` say build. |
 | Action | `Tool` | Some UI text calls tools "Actions". The code calls them Tools. |
-| Plugin | MCP server, OpenAPI `Tool`, or Craft external app | The UI word for all three. See [[plugins]]. |
+| Plugin | MCP server, OpenAPI `Tool`, or Craft external app | The UI word for all three. See [[plugins]]. The `plugin` table (`db/models.py:Plugin`) is different: a package of custom skills. Access reads for custom skills come from it. See [[skills#plugin-tables]]. |
 | Free plan | `Tier.COMMUNITY` | The web UI shows the Community tier as the Free plan. |
 | Workspace | the tenant | The tenant-wide scope, as in workspace setting, workspace default and workspace policy. An admin sets it. Not the session workspace (see Craft vocabulary). See [[multi-tenancy]]. |
 
@@ -36,7 +36,7 @@ owns the rules.
   `openapi_schema` or `mcp_server_id`. See [[tools-framework]].
 - `backend/onyx/agents/tools.py:AgentTool` is the tool the shared runtime runs.
   A chat `Tool` becomes one through `Tool.bind`. The control tools of the
-  research and coding agents, such as `think_tool` and `generate_report`, are
+  research agents, such as `generate_report`, are
   `AgentTool` objects only, with no `Tool` class and no table row. See
   [[tools-framework]].
 
@@ -59,8 +59,8 @@ owns the rules.
   See [[chat-persistence]].
 
 **"Agent"** means three things: a `Persona`; an `agents/runtime.py:Agent` of
-the shared runtime, such as `ChatAgent`, the deep research agent, the research
-agent or the coding agent ([[agent-runtime]]); or the AI assistant in general.
+the shared runtime, such as `ChatAgent`, `DeepResearchAgent` or `ResearchAgent`
+([[agent-runtime]]); or the AI assistant in general.
 
 **"Flow"** means two things.
 - `LLMModelFlowType` (`backend/onyx/db/enums.py`) and the `LLMModelFlow`
@@ -97,6 +97,26 @@ calls at a `HookPoint`. It is not a React hook, an agent hook or a Celery signal
 usage events sent to the Onyx fleet service ([[fleet-telemetry]]).
 `backend/onyx/utils/telemetry.py` is cloud PostHog product analytics
 ([[observability]]); `DISABLE_TELEMETRY` does not turn it off.
+
+**"Approval"** exists twice, and both read the same action policy.
+- Craft: `ActionApproval` rows (`action_approval`) that the sandbox proxy writes and waits on
+  (`SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS`), with "approve for session" scoped
+  to a Craft session. See [[craft-external-apps]].
+- Chat: `ApprovalRequest` rows (`approval_request`) for paused MCP calls, with no
+  deadline; the response is saved while they wait. "Approve for this chat" is
+  scoped to a chat session. See [[mcp-and-custom-tools#chat-approval-durable-wait]].
+  The root agent's questions (`QuestionRequest`, "tool question") wait the
+  same way.
+
+**"Sandbox"** means four things.
+- Code mode's sandbox: Monty worker processes that run `execute_code`
+  programs, with no files or network. See [[code-execution]].
+- A Craft sandbox: the pod or Docker container of opencode sessions. See
+  [[craft-sandboxes]].
+- A harness sandbox: the user's Firecracker VM behind `HarnessSandbox`, which
+  the chat sandbox tools (`tools/tool_implementations/sandbox/sandbox_tools.py:sandbox_tools_for_model`) use. See [[craft-sandboxes]] and [[code-execution]].
+- The `sandbox` table: one row per user, which Craft and harness sandboxes
+  share.
 
 **MCP** goes both ways. Onyx is an MCP client of servers that an admin connects
 ([[mcp-and-custom-tools]]), and an MCP server for external clients
@@ -173,22 +193,24 @@ mobile code checks for it. See [[streaming-protocol]].
 
 | Term | Meaning |
 |---|---|
-| Step / cycle | One model generation and the tool calls it requests. A chat response has up to `MAX_LLM_CYCLES` of them. See [[agent-runtime]]. |
+| Timeline entry | One item on the shared timeline rail (`web/src/lib/timeline/types.ts:TimelineEntry`): a chat packet group or a Craft tool call or thinking block. It is not a step or a section. See [[chat-frontend]] and [[craft-frontend]]. |
+| Step / cycle | One model generation and the tool calls it requests. A chat response has up to `MAX_LLM_CYCLES` of them (default 30; when code mode applies, `CODE_MODE_MAX_LLM_CYCLES`, a safety cap of 100 or `MAX_LLM_CYCLES` when higher); the last one offers no tools, so the model must answer. See [[agent-runtime]] and [[core-chat-loop]]. |
+| Cell / observation (code mode) | A cell is one running code mode program; it can outlive the tool call that started it, but not its response. An observation is one `execute_code` or `wait_code` call on a cell: it reports what the cell did in one time window and saves one `CodeModeExecutionResult` (`cell_id`, `observation` 0, 1, ...). See [[code-execution]]. |
 | Run | One execution of an agent on the shared runtime (`agents/runtime.py:Run`). Its `RunState` records the input, steps, outcome and child runs. In a session that keeps content, a chat response's root run ID is its assistant `ChatMessage` ID. A content-free incognito run uses generated IDs. See [[agent-runtime#run-id-is-message-id]]. |
 | Stream ID | The key that the processing fence, the stop fence and the stream buffer share. See [[core-chat-loop]]. |
 | Presenter and renderer | `ResponsePresenter` and `MessageRenderer` turn runtime events into packets. They never drive execution. See [[core-chat-loop#presentation-does-not-drive-execution]]. |
 | Emitter | The object that stamps `model_index` on a packet and hands it to delivery. See [[streaming-protocol#emitter-sets-model-index]]. |
 | Reminder | A trailing message with one or two critical instructions. See [[context-assembly]]. |
 | Custom agent prompt | The agent's instructions, normally sent as a fixed user message before conversation history. With an empty base prompt and no base-prompt replacement, they become the system message. See [[context-assembly]]. |
-| Fence (chat) | A per-session cache flag. The stop fence (`chat/stop_signal_checker.py`, keyed by session and stream ID) means the user pressed Stop. The processing fence holds 0 after admission and the live stream ID after `ChatTurnAdmission.publish`. The admission owner key, not a fence, marks a busy session. The per-response keys in `chat/run_store.py:ChatRunStore` are not fences: `chat_response_owner` is the execution lease, and `chat_response_stop` is the flag that `cancel_run` sets when a parent cancels a child agent. See [[core-chat-loop#session-admission]]. |
+| Fence (chat) | A per-session cache flag. The stop fence (`chat/stop_signal_checker.py`, keyed by session and stream ID) means the user pressed Stop. The processing fence holds 0 after admission, and the live stream ID with the response IDs it writes after `ChatTurnAdmission.publish` (`chat/chat_processing_checker.py:get_processing_stream`). The admission owner key, not a fence, marks a busy session. The per-response keys in `chat/run_store.py:ChatRunStore` are not fences: `chat_response_owner` is the execution lease, and `chat_response_stop` is the flag that `cancel_run` sets when a parent cancels a child agent. See [[core-chat-loop#session-admission]]. |
 | Last cycle | The final allowed chat step offers no tools and must answer. Image generation does not end tool use early. See [[core-chat-loop#stopping-tools]]. |
-| `BASH_TOOL_SENTINEL_ID` | The id that the coding agent gives its in-memory `BashTool`. See [[code-execution#bash-tool-sentinel]]. |
 | Message types | `ChatMessage` (the row), `ChatResponseItem` (the saved steps of a response), `llm/models.py:Message` (the conversation type the runtime uses) and `llm/model_request.py:ChatCompletionMessage` (the provider wire form). See [[core-chat-loop#three-message-types]]. |
 | Active branch | The chain of `latest_child_message_id` pointers from a session's root message. See [[chat-persistence]]. |
 | Reserved message | An assistant `ChatMessage` row created with placeholder text before streaming starts. See [[chat-persistence]]. |
 | Incognito and record mode | `IncognitoRecordMode` is fixed on a session and decides what the database keeps. See [[chat-persistence]]. |
-| Child session | A `ChatSession` with `spawned_by_message_id` set. Research and coding child agents get one in a session that keeps content. See [[chat-persistence]]. |
-| Not wired | A part of the shared runtime that no product path reaches: explicit suspension (`Run.suspend`), input requests (`PendingToolInput`), `start_run`, and checkpoint handoff and resume. Suspension on `ChildRunWait` in the same process is live. See [[agent-runtime#wire-module]]. |
+| Child session | A `ChatSession` with `spawned_by_message_id` set. Research and background subagents get one in a session that keeps content. See [[chat-persistence]]. |
+| Not wired | A part of the shared runtime that no product path reaches: explicit suspension (`Run.suspend`). Suspension on `ChildRunWait`, on chat tool approvals and on tool questions is live, and so are checkpoint handoff and resume: a run whose waits are all on people parks and resumes on any pod ([[mcp-and-custom-tools#chat-approval-durable-wait]]). See [[agent-runtime#wire-module]]. |
+| Tool question | A question that the root chat agent's question tool asks the user (`QuestionRequest`, `question_request`), not the user's chat message, which code also calls a question. Its run waits like an approval. See [[tools-framework]]. |
 | `use_memories` vs `enable_memory_tool` | `use_memories` controls whether memories reach the prompt. `enable_memory_tool` controls whether the memory tool can write them. See [[chat-preferences]]. |
 | Decision model | A model that answers typed predicate, choice or score questions with probabilities, not through LiteLLM. See [[llm-providers]]. |
 | Passthrough (LLM gateway) | A native OpenAI Responses or Anthropic Messages forward that skips `LitellmLLM`. See [[llm-gateway]]. |
@@ -210,12 +232,12 @@ mobile code checks for it. See [[streaming-protocol]].
 | Term | Meaning |
 |---|---|
 | Session workspace | The sandbox directory of one Craft session (`/workspace/sessions/<id>`), with its outputs, attachments and agent config. Not the tenant-wide workspace. See [[craft-sandboxes]]. |
-| Action policy | `ALWAYS` (Auto-approve), `ASK` (Ask) or `DENY` (Disabled) for each catalog action or MCP tool. See [[craft-external-apps]]. |
+| Action policy | `ALWAYS` (Allow), `ASK` (Ask) or `DENY` (Blocked); the integration API writes `allow`, `ask` or `blocked` for each catalog action or MCP tool. Chat applies it to MCP tools too. See [[craft-external-apps]]. |
 | Workspace policy, personal choice, task choice | The three policy layers. See [[craft-external-apps]]. |
 | `unspecified` | The synthetic whole-domain action for a connected-app request that matches no catalog action. See [[craft-external-apps]]. |
-| Session grant | "Approve for session" for specific Ask actions in one Craft session. See [[craft-external-apps]]. |
+| Session grant | "Approve for session" for specific Ask actions in one Craft session. Chat has its own, "Approve for this chat" ([[mcp-and-custom-tools]]). See [[craft-external-apps]]. |
 | Sandbox sleep | Snapshot, then remove the pod. See [[craft-sandboxes]]. |
 | Prompt slot | A renewable per-session cache lease (`server/features/build/sandbox/serve_transport.py`) that serializes the work on one opencode session. It is not the active-turn lock. See [[craft-sessions]]. |
 | `turn_completed` | The Craft packet that the attach endpoint sends after the turn finishes. It is not opencode's `prompt_response`. See [[craft-streaming]]. |
 | Settlement (Craft) | The browser step that replaces the live transcript with saved history after the turn ends, and then releases the prompt queue. See [[craft-frontend]]. |
-| Built-in skill and custom skill | A built-in skill's files are on disk. A custom skill is an uploaded bundle with an installation policy. See [[skills]]. |
+| Built-in skill and custom skill | A built-in skill's files are on disk. A custom skill is a plugin whose version holds one uploaded skill. See [[skills]]. |

@@ -1,16 +1,17 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-# Update the version and both archive hashes together.
-version=157.0.8103.38
+# update-sandbox-browser.sh rewrites these pins by line shape: keep `version=`
+# at column 0 and one `checksum=` in each architecture arm.
+version=158.0.8127.36
 case "$(dpkg --print-architecture)" in
   amd64)
     platform=linux64
-    checksum=8cdeb344e9b2cefe59f4aea8d1d93d5d93054c03cde217665c16fc1f62e72a66
+    checksum=dba9cc838e1ce269c33ea68170881127bd15d078fc3ca5891c90802819a4d7c7
     ;;
   arm64)
     platform=linux-arm64
-    checksum=5517510e61657ff43ee9ab804ecd1a499b3d5bd3caf72f097516bd6565ba5a17
+    checksum=f811b64a50cbc73f94fda7b3f3b3bf62be5d9409b3207e6ead9b61e6706afffe
     ;;
   *) echo 'Unsupported browser architecture' >&2; exit 1 ;;
 esac
@@ -25,7 +26,7 @@ rm /tmp/chrome.zip
 /opt/chrome/chrome --version | grep -F " ${version} "
 
 # ODS's Debian inventory cannot identify a ZIP install. Grype scans this
-# explicit CPE inventory in the image audit resolver before ODS scans apt.
+# explicit CPE inventory through ODS alongside the apt scan.
 cat > /opt/chrome/browser.cdx.json <<EOF
 {
   "bomFormat": "CycloneDX",

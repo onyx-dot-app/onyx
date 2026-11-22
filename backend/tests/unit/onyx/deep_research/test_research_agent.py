@@ -16,7 +16,6 @@ from onyx.deep_research.research_agent import ResearchAgent
 from onyx.deep_research.tool_definitions import (
     GENERATE_REPORT_TOOL_NAME,
     RESEARCH_AGENT_TOOL_NAME,
-    THINK_TOOL_NAME,
 )
 from onyx.llm.cancellation import CancellationSignal
 from onyx.llm.models import (
@@ -30,7 +29,8 @@ from onyx.llm.models import (
     ToolResultMessage,
     UserMessage,
 )
-from tests.unit.onyx.agents.fakes import FakeModelClient, run_agent
+from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
+from tests.unit.onyx.agents.fakes import EchoTool, FakeModelClient, run_agent
 
 
 def test_timed_out_child_preserves_successful_sibling(
@@ -116,6 +116,11 @@ def test_elapsed_time_forces_report_before_step_limit(parent: bool) -> None:
     requests: list[GenerationRequest] = []
     feature: DeepResearchAgent | ResearchAgent
 
+    class SearchStub(EchoTool):
+        @property
+        def name(self) -> str:
+            return WebSearchTool.NAME
+
     def reply(
         request: GenerationRequest, _signal: CancellationSignal
     ) -> AssistantMessage:
@@ -128,9 +133,9 @@ def test_elapsed_time_forces_report_before_step_limit(parent: bool) -> None:
                 else AssistantMessage(
                     content=[
                         ToolCall(
-                            id="think",
-                            name=THINK_TOOL_NAME,
-                            arguments={"reasoning": "Plan"},
+                            id="search",
+                            name=WebSearchTool.NAME,
+                            arguments={"value": "Evidence"},
                         )
                     ]
                 )
@@ -157,7 +162,7 @@ def test_elapsed_time_forces_report_before_step_limit(parent: bool) -> None:
             skip_clarification=True,
         )
         if parent
-        else ResearchAgent([], llm, len, None, "", ReasoningEffort.LOW)
+        else ResearchAgent([SearchStub()], llm, len, None, "", ReasoningEffort.LOW)
     )
     result = run_agent(
         feature, messages=[UserMessage(content="Research")], max_steps=10
@@ -378,15 +383,11 @@ def test_research_cycles_keep_system_and_tool_phase_stable(
     question = UserMessage(content="Research the launch")
     plan = AssistantMessage(
         content=[TextContent(text="Compare launch evidence")],
-        metadata=ResearchMessageMetadata(
-            phase=ResearchPhase.PLANNING, is_reasoning_model=reasoning
-        ),
+        metadata=ResearchMessageMetadata(phase=ResearchPhase.PLANNING),
     )
     research = AssistantMessage(
         content=[ToolCall(id="child", name=RESEARCH_AGENT_TOOL_NAME, arguments={})],
-        metadata=ResearchMessageMetadata(
-            phase=ResearchPhase.RESEARCH, is_reasoning_model=reasoning
-        ),
+        metadata=ResearchMessageMetadata(phase=ResearchPhase.RESEARCH),
     )
     result = ToolResultMessage(
         tool_call_id="child", tool_name=RESEARCH_AGENT_TOOL_NAME, content="Evidence"

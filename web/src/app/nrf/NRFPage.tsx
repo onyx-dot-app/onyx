@@ -19,7 +19,8 @@ import { CHROME_MESSAGE } from "@/lib/extension/constants";
 import { SettingsPanel } from "@/app/components/nrf/SettingsPanel";
 import LoginPage from "@/app/auth/login/LoginPage";
 import { useAgents } from "@/lib/agents/hooks";
-import { type ProjectFile, useProjectsContext } from "@/lib/projects/providers";
+import { useProjectsContext } from "@/lib/projects/providers";
+import type { ComposedMessage, UnsentMessage } from "@/lib/chat/types";
 import useDeepResearchToggle from "@/hooks/useDeepResearchToggle";
 import { useToolConfiguration } from "@/lib/tools/hooks";
 import useChatController from "@/hooks/useChatController";
@@ -27,12 +28,18 @@ import useChatSessionController from "@/hooks/useChatSessionController";
 import { useActiveAgent } from "@/lib/agents/hooks";
 import {
   useCurrentChatState,
+  useCurrentIsStreamDraining,
   useCurrentMessageHistory,
   useChatSessionStore,
-  useDocumentSidebarVisible,
+  useSelectedNodeForDocDisplay,
+  useSourcesShown,
 } from "@/app/app/stores/useChatSessionStore";
 import ChatUI from "@/sections/chat/ChatUI";
-import ChatScrollContainer from "@/sections/chat/ChatScrollContainer";
+import { messageRowId } from "@/lib/chat/rowIds";
+import { useScrollToNewTurn } from "@/lib/chatScroll/hooks";
+import ChatScrollContainer, {
+  type ChatScrollContainerHandle,
+} from "@/lib/chatScroll/components/ChatScrollContainer";
 import WelcomeMessage from "@/app/app/components/WelcomeMessage";
 import useChatSessions from "@/hooks/useChatSessions";
 import { cn } from "@opal/utils";
@@ -40,6 +47,7 @@ import { Spacer } from "@opal/components";
 import { SvgUser, SvgMenu, SvgAlertTriangle } from "@opal/icons";
 import { useAppBackground } from "@/providers/AppBackgroundProvider";
 import { MinimalOnyxDocument } from "@/lib/search/types";
+import { ChatSidePanel } from "@/sections/chat/ChatSidePanel";
 import DocumentsSidebar from "@/sections/document-sidebar/DocumentsSidebar";
 import PreviewModal from "@/sections/modals/PreviewModal";
 import { useQueryController } from "@/providers/QueryControllerProvider";
@@ -153,9 +161,11 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     useState<MinimalOnyxDocument | null>(null);
 
   // Document sidebar state (from store)
-  const documentSidebarVisible = useDocumentSidebarVisible();
-  const updateCurrentDocumentSidebarVisible = useChatSessionStore(
-    (state) => state.updateCurrentDocumentSidebarVisible
+  const sourcesPanelVisible = useSourcesShown();
+  // The message whose sources the panel shows
+  const sourcesNodeId = useSelectedNodeForDocDisplay();
+  const updateCurrentRightPanel = useChatSessionStore(
+    (state) => state.updateCurrentRightPanel
   );
   const setCurrentSession = useChatSessionStore(
     (state) => state.setCurrentSession
@@ -166,8 +176,8 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
   // Memoized callback for closing document sidebar
   const handleDocumentSidebarClose = useCallback(() => {
-    updateCurrentDocumentSidebarVisible(false);
-  }, [updateCurrentDocumentSidebarVisible]);
+    updateCurrentRightPanel({ type: "closePanel" });
+  }, [updateCurrentRightPanel]);
 
   // Initialize message from URL input parameter (for Chrome extension)
   const initializedRef = useRef(false);
@@ -203,7 +213,13 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   const resolvedAgent = activeAgent ?? undefined;
 
   // Auto-scroll preference from user settings (matches ChatPage pattern)
-  const autoScrollEnabled = user?.preferences?.auto_scroll !== false;
+  // The setting decides whether a running reply is followed. With nothing
+  // running, a view at the end keeps to it (matches AppPage).
+  const autoScrollEnabled =
+    user?.preferences?.auto_scroll !== false || currentChatState === "input";
+  // Pause following while the typewriter drains a finished reply (matches
+  // AppPage).
+  const isStreamDraining = useCurrentIsStreamDraining();
   const isStreaming = currentChatState === "streaming";
 
   // Query controller for search/chat classification (EE feature)
@@ -216,7 +232,18 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
   // Anchor for scroll positioning (matches ChatPage pattern)
   const anchorMessage = messageHistory.at(-2) ?? messageHistory[0];
   const anchorNodeId = anchorMessage?.nodeId;
-  const anchorSelector = anchorNodeId ? `#message-${anchorNodeId}` : undefined;
+  // The row keeps the id it was first shown with (see messageRowId).
+  const anchorSelector = anchorMessage
+    ? `#${messageRowId(anchorMessage)}`
+    : undefined;
+  const scrollContainerRef = useRef<ChatScrollContainerHandle>(null);
+  // A send glides to the new turn: its message at the top.
+  useScrollToNewTurn(
+    scrollContainerRef,
+    "nrf-session",
+    anchorSelector,
+    currentChatState === "loading"
+  );
 
   useSendMessageToParent();
 
@@ -284,12 +311,9 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     chatInputBarRef.current?.reset();
   }, [setMessage, setCurrentMessageFiles]);
 
-  const restoreInputBar = useCallback(
-    (message: string, files: ProjectFile[]) => {
-      chatInputBarRef.current?.restore(message, files);
-    },
-    []
-  );
+  const restoreInputBar = useCallback((unsent: UnsentMessage) => {
+    chatInputBarRef.current?.restore(unsent);
+  }, []);
 
   // Chat controller for submitting messages
   const { onSubmit, stopGenerating, handleMessageSpecificFileUpload } =
@@ -306,7 +330,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
     });
 
   // Chat session controller for loading sessions
-  useChatSessionController({
+  const { queue } = useChatSessionController({
     existingChatSessionId,
     searchParams: searchParams!,
     firstMessage: undefined,
@@ -331,46 +355,42 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
   // Handle submit from AppInputBar - routes through query controller for search/chat classification
   const handleChatInputSubmit = useCallback(
-    async (submittedMessage: string) => {
-      if (!submittedMessage.trim()) return;
+    async (composed: ComposedMessage) => {
+      if (!composed.message.trim()) return;
 
       const additionalContext =
         tabReadingEnabled && currentTabUrl
           ? `The user is currently viewing: ${currentTabUrl}. Use the open_url tool to read this page and use its content as additional context for your response.`
           : undefined;
 
-      // If we already have messages (chat session started), always use chat mode
-      // (matches AppPage behavior where existing sessions bypass classification)
       const selectedModels = multiModel.isMultiModelActive
         ? multiModel.selectedModels
         : undefined;
 
-      if (hasMessages) {
-        onSubmit({
-          message: submittedMessage,
-          currentMessageFiles: currentMessageFiles,
-          deepResearch: deepResearchEnabled && !multiModel.isMultiModelActive,
-          additionalContext,
-          selectedModels,
-        });
-        return;
-      }
-
       // Build an onChat closure that captures additionalContext for this submission
-      const onChat = (chatMessage: string) => {
+      const onChat = () => {
         onSubmit({
-          message: chatMessage,
+          ...composed,
           currentMessageFiles: currentMessageFiles,
           deepResearch: deepResearchEnabled && !multiModel.isMultiModelActive,
           additionalContext,
           selectedModels,
         });
       };
+      // If we already have messages (chat session started), always use chat mode
+      // (matches AppPage behavior where existing sessions bypass classification)
+      if (hasMessages) {
+        onChat();
+        return;
+      }
 
       // Use submitQuery which will classify the query and either:
       // - Route to search (sets phase to "searching"/"search-results" and shows SearchUI)
       // - Route to chat (calls onChat callback)
-      await submitQuery(submittedMessage, onChat);
+      // Search cannot use mentions, so a message with mentions routes to chat.
+      await submitQuery(composed.message, onChat, {
+        chatOnly: composed.mentions.length > 0,
+      });
     },
     [
       hasMessages,
@@ -398,6 +418,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
 
     onSubmit({
       message: lastUserMsg.message,
+      mentions: lastUserMsg.mentions ?? [],
       currentMessageFiles: currentMessageFiles,
       deepResearch: deepResearchEnabled && !multiModel.isMultiModelActive,
       messageIdToResend: lastUserMsg.messageId,
@@ -501,9 +522,11 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                 {/* Fake header - pushes content below absolute settings button (non-side-panel only) */}
                 {!isSidePanel && <Spacer rem={2} />}
                 <ChatScrollContainer
+                  ref={scrollContainerRef}
                   sessionId="nrf-session"
                   anchorSelector={anchorSelector}
                   autoScroll={autoScrollEnabled}
+                  pauseFollowing={isStreamDraining}
                   isStreaming={isStreaming}
                   hideScrollbar={isSidePanel}
                 >
@@ -573,6 +596,7 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
                 </div>
               )}
               <AppInputBar
+                queue={queue}
                 toolConfiguration={toolConfiguration}
                 ref={chatInputBarRef}
                 deepResearchEnabled={deepResearchEnabled}
@@ -618,19 +642,18 @@ export default function NRFPage({ isSidePanel = false }: NRFPageProps) {
       </Dropzone>
 
       {/* Document sidebar - shown when sources are clicked */}
-      <div
-        className={cn(
-          "absolute end-0 top-0 h-full z-20 overflow-hidden transition-all duration-300",
-          documentSidebarVisible ? "w-100" : "w-0"
-        )}
+      <ChatSidePanel
+        open={sourcesPanelVisible}
+        onEscape={handleDocumentSidebarClose}
+        shows={sourcesNodeId === null ? undefined : String(sourcesNodeId)}
+        className="absolute end-0 top-0 z-20"
       >
         <DocumentsSidebar
           setPresentingDocument={setPresentingDocument}
-          modal={false}
           closeSidebar={handleDocumentSidebarClose}
           selectedDocuments={[]}
         />
-      </div>
+      </ChatSidePanel>
 
       {/* Text/document preview modal */}
       {presentingDocument && (

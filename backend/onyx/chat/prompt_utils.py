@@ -7,6 +7,7 @@ from uuid import UUID
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
+from onyx.chat.citation_utils import result_cites_documents
 from onyx.chat.models import (
     ChatPrompt,
     ChatReminderContext,
@@ -21,6 +22,7 @@ from onyx.chat.prompt_formatting import (
     prepare_model_messages,
     prompt_metadata,
 )
+from onyx.chat.tool_results import tool_result_parts
 from onyx.context.models import UserMemoryContext
 from onyx.context.search.models import SearchDocsResponse
 from onyx.db.enums import SUPPORTED_LANGUAGE_ENGLISH_NAMES, SupportedLanguage
@@ -58,10 +60,12 @@ from onyx.prompts.prompt_utils import (
     substitute_user_placeholders,
 )
 from onyx.prompts.tool_prompts import (
+    CODE_MODE_GUIDANCE,
     GENERATE_IMAGE_GUIDANCE,
     INTERNAL_SEARCH_GUIDANCE,
     MEMORY_GUIDANCE,
     OPEN_URLS_GUIDANCE,
+    POSTGRES_QUERY_GUIDANCE,
     PYTHON_TOOL_GUIDANCE,
     TOOL_DESCRIPTION_SEARCH_GUIDANCE,
     TOOL_SECTION_HEADER,
@@ -80,22 +84,33 @@ from onyx.prompts.user_info import (
     USER_PREFERENCES_PROMPT,
     USER_ROLE_PROMPT,
 )
-from onyx.tools.constants import CITEABLE_TOOLS_NAMES, FILE_READER_TOOL_NAME
+from onyx.tools.constants import FILE_READER_TOOL_NAME
 from onyx.tools.interface import Tool
-from onyx.tools.models import LlmPythonExecutionResult
+from onyx.tools.models import LlmPythonExecutionResult, ToolPreference
+from onyx.tools.tool_implementations.code_mode.code_mode_tool import CodeModeTool
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
 )
 from onyx.tools.tool_implementations.images.models import FinalImageGenerationResponse
 from onyx.tools.tool_implementations.memory.memory_tool import MemoryTool
 from onyx.tools.tool_implementations.open_url.open_url_tool import OpenURLTool
+from onyx.tools.tool_implementations.postgres.postgres_tool import PostgresTool
 from onyx.tools.tool_implementations.python.python_tool import PythonTool
+from onyx.tools.tool_implementations.sandbox.sandbox_tools import (
+    SandboxTool,
+    sandbox_guidance,
+)
 from onyx.tools.tool_implementations.search.search_tool import SearchTool
 from onyx.tools.tool_implementations.web_search.web_search_tool import WebSearchTool
 from onyx.utils.logger import setup_logger
 from onyx.utils.timing import log_function_time
 
 logger = setup_logger()
+
+
+def callable_tools(tools: Sequence[Tool]) -> list[Tool]:
+    """The offered tools, then the tools that run inside their calls."""
+    return [*tools, *(inner for tool in tools for inner in tool.inner_tools)]
 
 
 def build_chat_reminder(
@@ -106,41 +121,43 @@ def build_chat_reminder(
     enabled: bool,
     has_history_citations: bool = False,
 ) -> str | None:
+    """`results` are this turn's tool results; `previous_results` the last step's."""
     if not enabled:
         return context.persona_task_prompt
     reminder_text = context.persona_task_prompt
-    has_generated_images = any(
-        isinstance(result.details, FinalImageGenerationResponse)
-        and result.details.generated_images
-        for result in results
-    )
+    parts = [part for result in results for part in tool_result_parts(result)]
     # Only suggest opening URLs when this agent has the tool.
     if (
-        not any(result.tool_name == ImageGenerationTool.NAME for result in results)
+        not any(part.tool_name == ImageGenerationTool.NAME for part in parts)
         and context.has_open_url_tool
         and not context.out_of_cycles
         and any(
-            result.tool_name == WebSearchTool.NAME
-            and isinstance(result.details, SearchDocsResponse)
-            and result.details.search_docs
+            part.tool_name == WebSearchTool.NAME
+            and isinstance(part.details, SearchDocsResponse)
+            and part.details.search_docs
             for result in previous_results
+            for part in tool_result_parts(result)
         )
     ):
         reminder_text = OPEN_URL_REMINDER
     return build_reminder_message(
         reminder_text=reminder_text,
         include_citation_reminder=any(
-            result.tool_name in CITEABLE_TOOLS_NAMES for result in results
+            result_cites_documents(result) for result in results
         )
         or context.has_context_documents
         or has_history_citations,
         include_file_reminder=any(
-            result.tool_name == PythonTool.NAME
-            and isinstance(result.details, LlmPythonExecutionResult)
-            and result.details.generated_files
-            for result in results
+            part.tool_name == PythonTool.NAME
+            and isinstance(part.details, LlmPythonExecutionResult)
+            and part.details.generated_files
+            for part in parts
         ),
-        include_image_reminder=has_generated_images,
+        include_image_reminder=any(
+            isinstance(part.details, FinalImageGenerationResponse)
+            and part.details.generated_images
+            for part in parts
+        ),
         is_last_cycle=context.out_of_cycles,
     )
 
@@ -159,7 +176,7 @@ def build_chat_prompt(
     previous_results: Sequence[ToolResultMessage],
     is_last_step: bool,
     has_history_citations: bool = False,
-    preferred_tool_id: int | None = None,
+    preferred_tool: ToolPreference | None = None,
 ) -> ChatPrompt:
     """Select instructions and reminders before assembling conversation history."""
     values = memory.user_info.placeholder_values if memory else {}
@@ -175,7 +192,7 @@ def build_chat_prompt(
         reminders_enabled
         and (
             has_history_citations
-            or any(result.tool_name in CITEABLE_TOOLS_NAMES for result in results)
+            or any(result_cites_documents(result) for result in results)
         )
     ) or context_documents
     datetime_aware = persona.datetime_aware if persona else True
@@ -214,7 +231,9 @@ def build_chat_prompt(
         custom = None
     reminder = build_chat_reminder(
         ChatReminderContext(
-            has_open_url_tool=any(isinstance(tool, OpenURLTool) for tool in tools),
+            has_open_url_tool=any(
+                isinstance(tool, OpenURLTool) for tool in callable_tools(tools)
+            ),
             out_of_cycles=is_last_step,
             persona_task_prompt=render(persona_task, citations=cite),
             has_context_documents=context_documents,
@@ -224,10 +243,12 @@ def build_chat_prompt(
         enabled=reminders_enabled,
         has_history_citations=has_history_citations,
     )
-    if preferred_tool_id is not None:
-        preferred_names = [tool.name for tool in tools if tool.id == preferred_tool_id]
+    if preferred_tool is not None:
+        preferred_names = [
+            name for tool in tools for name in tool.operation_names(preferred_tool)
+        ]
         if not preferred_names:
-            raise ValueError(f"Preferred tool {preferred_tool_id} is not available")
+            raise ValueError(f"Preferred {preferred_tool} is not available")
         preference = TOOL_PREFERENCE_REMINDER.format(
             operations=", ".join(preferred_names),
             guidance=TOOL_PREFERENCE_LAST_STEP_GUIDANCE
@@ -262,6 +283,7 @@ def calculate_reserved_tokens(
     persona_system_prompt: str,
     base_system_prompt: str,
     token_counter: Callable[[str], int],
+    sandbox_tools: Sequence[type[SandboxTool]],
     files: list[FileDescriptor] | None = None,
     user_memory_context: UserMemoryContext | None = None,
 ) -> int:
@@ -276,6 +298,7 @@ def calculate_reserved_tokens(
         db_session: Database session
         persona_system_prompt: Custom agent system prompt (can be empty string)
         token_counter: Function that counts tokens in text
+        sandbox_tools: The turn's sandbox tools (sandbox_tools_for_model), if any
         files: List of file descriptors from the chat message (optional)
         user_memory_context: User memory context (optional)
 
@@ -290,6 +313,7 @@ def calculate_reserved_tokens(
         tools=None,
         should_cite_documents=True,
         include_all_guidance=True,
+        all_guidance_sandbox_tools=sandbox_tools,
     )
 
     custom_agent_prompt = persona_system_prompt or ""
@@ -445,9 +469,15 @@ def build_system_prompt(
     should_cite_documents: bool = False,
     include_all_guidance: bool = False,
     include_user_info: bool = True,
+    all_guidance_sandbox_tools: Sequence[type[SandboxTool]] = (),
 ) -> str:
     """Should only be called with the default behavior system prompt.
     If the user has replaced the default behavior prompt with their custom agent prompt, do not call this function.
+
+    `tools` are the offered tools. Tools that run inside their calls, such as code
+    mode functions, get their guidance too, and the prompt names them as functions.
+    With include_all_guidance, the prompt names every guided tool for a token
+    estimate, and `all_guidance_sandbox_tools` are the sandbox tools it names.
 
     With include_user_info=False the per-user block is left out so the result is
     byte-identical across users; emit it separately via build_user_information_prompt.
@@ -474,59 +504,88 @@ def build_system_prompt(
     if include_all_guidance:
         tool_sections = [
             TOOL_DESCRIPTION_SEARCH_GUIDANCE,
-            INTERNAL_SEARCH_GUIDANCE,
+            INTERNAL_SEARCH_GUIDANCE.format(name=SearchTool.NAME),
             WEB_SEARCH_GUIDANCE.format(
-                site_colon_disabled=WEB_SEARCH_SITE_DISABLED_GUIDANCE
+                name=WebSearchTool.NAME,
+                site_colon_disabled=WEB_SEARCH_SITE_DISABLED_GUIDANCE,
             ),
-            OPEN_URLS_GUIDANCE,
-            PYTHON_TOOL_GUIDANCE,
-            GENERATE_IMAGE_GUIDANCE,
-            MEMORY_GUIDANCE,
+            OPEN_URLS_GUIDANCE.format(name=OpenURLTool.NAME),
+            PYTHON_TOOL_GUIDANCE.format(name=PythonTool.NAME),
+            GENERATE_IMAGE_GUIDANCE.format(name=ImageGenerationTool.NAME),
+            MEMORY_GUIDANCE.format(name=MemoryTool.NAME),
+            CODE_MODE_GUIDANCE,
+            POSTGRES_QUERY_GUIDANCE.format(name=PostgresTool.NAME),
         ]
+        sandbox_section = sandbox_guidance(
+            all_guidance_sandbox_tools, str, code_mode=True
+        )
+        if sandbox_section is not None:
+            tool_sections.append(sandbox_section)
         system_prompt += TOOL_SECTION_HEADER + "\n".join(tool_sections)
         return system_prompt
 
     if tools:
-        has_web_search = any(isinstance(tool, WebSearchTool) for tool in tools)
-        has_internal_search = any(isinstance(tool, SearchTool) for tool in tools)
-        has_open_urls = any(isinstance(tool, OpenURLTool) for tool in tools)
-        has_python = any(isinstance(tool, PythonTool) for tool in tools)
-        has_generate_image = any(
-            isinstance(tool, ImageGenerationTool) for tool in tools
+        code_mode_tool = next((t for t in tools if isinstance(t, CodeModeTool)), None)
+        code_mode = code_mode_tool is not None
+        # The name that the model calls a tool by: in code mode, its program
+        # function's.
+        called_name: Callable[[str], str] = (
+            code_mode_tool.called_name if code_mode_tool is not None else str
         )
-        has_memory = any(isinstance(tool, MemoryTool) for tool in tools)
+        # Inner tools are functions of a code mode program, not direct tools.
+        tools = callable_tools(tools)
+        tool_guidance_sections: list[str] = [CODE_MODE_GUIDANCE] if code_mode else []
+        search_tool = next((t for t in tools if isinstance(t, SearchTool)), None)
+        web_search_tool = next((t for t in tools if isinstance(t, WebSearchTool)), None)
+        open_url_tool = next((t for t in tools if isinstance(t, OpenURLTool)), None)
+        python_tool = next((t for t in tools if isinstance(t, PythonTool)), None)
+        image_tool = next(
+            (t for t in tools if isinstance(t, ImageGenerationTool)), None
+        )
+        memory_tool = next((t for t in tools if isinstance(t, MemoryTool)), None)
+        postgres_tool = next((t for t in tools if isinstance(t, PostgresTool)), None)
 
-        tool_guidance_sections: list[str] = []
-
-        if has_web_search or has_internal_search:
+        if web_search_tool is not None or search_tool is not None:
             tool_guidance_sections.append(TOOL_DESCRIPTION_SEARCH_GUIDANCE)
 
         # These are not included at the Tool level because the ordering may matter.
-        if has_internal_search:
-            tool_guidance_sections.append(INTERNAL_SEARCH_GUIDANCE)
+        if search_tool is not None:
+            tool_guidance_sections.append(
+                INTERNAL_SEARCH_GUIDANCE.format(name=called_name(search_tool.name))
+            )
 
-        if has_web_search:
-            web_search_tool = next(t for t in tools if isinstance(t, WebSearchTool))
+        if web_search_tool is not None:
             site_disabled_guidance = (
                 ""
                 if web_search_tool.supports_site_filter
                 else WEB_SEARCH_SITE_DISABLED_GUIDANCE
             )
             tool_guidance_sections.append(
-                WEB_SEARCH_GUIDANCE.format(site_colon_disabled=site_disabled_guidance)
+                WEB_SEARCH_GUIDANCE.format(
+                    name=called_name(web_search_tool.name),
+                    site_colon_disabled=site_disabled_guidance,
+                )
             )
 
-        if has_open_urls:
-            tool_guidance_sections.append(OPEN_URLS_GUIDANCE)
+        for template, tool in (
+            (OPEN_URLS_GUIDANCE, open_url_tool),
+            (PYTHON_TOOL_GUIDANCE, python_tool),
+            (GENERATE_IMAGE_GUIDANCE, image_tool),
+            (MEMORY_GUIDANCE, memory_tool),
+            (POSTGRES_QUERY_GUIDANCE, postgres_tool),
+        ):
+            if tool is not None:
+                tool_guidance_sections.append(
+                    template.format(name=called_name(tool.name))
+                )
 
-        if has_python:
-            tool_guidance_sections.append(PYTHON_TOOL_GUIDANCE)
-
-        if has_generate_image:
-            tool_guidance_sections.append(GENERATE_IMAGE_GUIDANCE)
-
-        if has_memory:
-            tool_guidance_sections.append(MEMORY_GUIDANCE)
+        sandbox_section = sandbox_guidance(
+            [tool for tool in tools if isinstance(tool, SandboxTool)],
+            called_name,
+            code_mode=code_mode,
+        )
+        if sandbox_section is not None:
+            tool_guidance_sections.append(sandbox_section)
 
         if tool_guidance_sections:
             system_prompt += TOOL_SECTION_HEADER + "\n".join(tool_guidance_sections)
@@ -585,7 +644,9 @@ def prepare_prompt(
     context_files: ExtractedContextFiles | None,
     token_counter: Callable[[str], int],
     user_info_prompt: Message | None = None,
+    skills_catalog_message: Message | None = None,
     request_context_message: Message | None = None,
+    agent_instructions: str | None = None,
     all_injected_file_metadata: dict[str, FileToolMetadata] | None = None,
     llm_config: LLMConfig | None = None,
     available_tool_names: set[str] | None = None,
@@ -605,8 +666,13 @@ def prepare_prompt(
         result.append(system_prompt.model_copy())
     if user_info_prompt is not None:
         result.append(user_info_prompt.model_copy())
+    if skills_catalog_message is not None:
+        result.append(skills_catalog_message.model_copy())
     if custom_agent_prompt is not None:
         result.append(custom_agent_prompt.model_copy())
+    if agent_instructions is not None:
+        # Keep shared instructions ahead of the fixed agent-role block for prefix caching.
+        result.append(SystemMessage(content=agent_instructions))
     if context_files and (context_files.file_texts or context_files.image_files):
         result.append(
             _create_context_files_message(context_files, context_file_citations)
@@ -668,7 +734,7 @@ def _create_file_tool_metadata_message(
 
     Name only a tool this step actually received. FileReaderTool is attached
     only when the vector DB is disabled, and internal search can be absent even
-    when it is enabled (persona, ``allowed_tool_ids``, or a disabled search
+    when it is enabled (persona, the tool options, or a disabled search
     usage setting). Naming a tool the model was never given makes it invent
     workarounds — it searches the web for the document or guesses the contents.
 
@@ -677,10 +743,11 @@ def _create_file_tool_metadata_message(
     copy; the python tool is handed the files themselves, so prompt truncation
     does not take them away from it.
 
-    The python tier applies only when every listed file actually reached
+    The python tier lists only files that actually reached
     ``chat_files_for_tools`` (see ``FileToolMetadata.staged_for_tools``) —
     summary-truncated files are listed for the LLM but never staged, so naming
-    python for them would send the model after bytes it does not have. The
+    python for them would send the model after bytes it does not have. Other
+    files in the same notice go under the no-reader header. The
     notice also stops short of promising a path, because PythonTool normalizes
     and de-duplicates filenames at staging time and applies its own count and
     byte caps.
@@ -703,31 +770,46 @@ def _create_file_tool_metadata_message(
         )
         return _finalize_file_metadata_message(lines, token_counter)
 
-    if SearchTool.NAME in offered:
-        lines = [
-            "These files are attached but too large to include in full. Their "
-            "contents are indexed — use internal search to find the relevant "
-            "passages. Do not guess them or search the web for them:"
+    def _entries(metas: list[FileToolMetadata]) -> list[str]:
+        return [
+            f'- filename="{meta.filename}" (~{meta.approx_char_count:,} chars)'
+            for meta in metas
         ]
-    elif PythonTool.NAME in offered and all(
-        meta.staged_for_tools for meta in file_metadata
-    ):
-        lines = [
+
+    lines = []
+    remaining = file_metadata
+    if SearchTool.NAME in offered:
+        # Only indexed files can be found by search; the rest fall through.
+        searchable = [meta for meta in file_metadata if meta.indexed]
+        remaining = [meta for meta in file_metadata if not meta.indexed]
+        if searchable:
+            lines.append(
+                "These files are attached but too large to include in full. Their "
+                "contents are indexed — use internal search to find the relevant "
+                "passages. Do not guess them or search the web for them:"
+            )
+            lines.extend(_entries(searchable))
+
+    python_offered = PythonTool.NAME in offered
+    staged = [meta for meta in remaining if python_offered and meta.staged_for_tools]
+    unreadable = [
+        meta for meta in remaining if not (python_offered and meta.staged_for_tools)
+    ]
+    if staged:
+        lines.append(
             "These files are attached but too large to include in full. The "
             "python tool receives them — read them there, listing the working "
             "directory if a name does not resolve. Do not guess their contents "
             "or search the web for them:"
-        ]
-    else:
-        lines = [
+        )
+        lines.extend(_entries(staged))
+    if unreadable:
+        lines.append(
             "These files are attached but too large to include in full, and no "
             "tool here can read them. Do not guess their contents or search the "
             "web for them — say they are too large to read in this conversation:"
-        ]
-    lines.extend(
-        f'- filename="{meta.filename}" (~{meta.approx_char_count:,} chars)'
-        for meta in file_metadata
-    )
+        )
+        lines.extend(_entries(unreadable))
     return _finalize_file_metadata_message(lines, token_counter)
 
 

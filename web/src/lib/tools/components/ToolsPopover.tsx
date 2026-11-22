@@ -20,14 +20,11 @@ import SourcesView from "@/lib/tools/components/SourcesView";
 import ToolLineItem from "@/lib/tools/components/ToolLineItem";
 import { Permission } from "@/lib/types";
 import { useUser } from "@/providers/UserProvider";
-import ChatPluginsPopover from "@/sections/plugins/ChatPluginsPopover";
-import MemberPluginConnectionDialog from "@/sections/plugins/MemberPluginConnectionDialog";
-import {
-  useMemberPlugins,
-  memberPluginReference,
-  type MemberPlugin,
-} from "@/lib/plugins/member";
-import { chatPluginsForAgent, setChatPluginEnabled } from "@/lib/plugins/chat";
+import ChatIntegrationsPopover from "@/sections/plugins/ChatIntegrationsPopover";
+import IntegrationConnectModal from "@/sections/plugins/IntegrationConnectModal";
+import { useAgentChatIntegrations } from "@/lib/integrations/hooks";
+import { usePathname, useSearchParams } from "@opal/navigation";
+import { locationKey } from "@/app/app/services/submitLocation";
 
 export interface ToolsPopoverProps {
   agent: MinimalAgent;
@@ -45,11 +42,10 @@ export default function ToolsPopover({
   const [open, setOpen] = useState(false);
   const [showSources, setShowSources] = useState(false);
   const [searchTerm, setSearchTerm] = useState("");
-  const catalog = useMemberPlugins({ surface: "chat", agentId: agent.id });
-  const [connection, setConnection] = useState<{
-    agentId: number;
-    plugin: MemberPlugin;
-  } | null>(null);
+  const catalog = useAgentChatIntegrations(agent.id);
+  const [connectingId, setConnectingId] = useState<number | null>(null);
+  const pathname = usePathname();
+  const searchParams = useSearchParams();
   const focusOnMount = useFocusOnMount<HTMLInputElement>();
   const { permissions } = useUser();
   const { vectorDbEnabled } = useSettings();
@@ -63,8 +59,12 @@ export default function ToolsPopover({
     setOpen(false);
     setShowSources(false);
     setSearchTerm("");
-    setConnection(null);
+    setConnectingId(null);
   }, [agent.id]);
+
+  const connecting = catalog.integrations.find(
+    (integration) => integration.id === connectingId
+  );
 
   const displayTools = agent.tools.filter((tool) => {
     if (!tool.in_code_tool_id || tool.mcp_server_id) return false;
@@ -153,14 +153,14 @@ export default function ToolsPopover({
                   ...filteredTools.map((tool) => (
                     <ToolLineItem key={tool.id} tool={tool} />
                   )),
-                  <ChatPluginsPopover
-                    key="plugins"
-                    agent={agent}
+                  <ChatIntegrationsPopover
+                    key="integrations"
+                    agentId={agent.id}
                     toolConfiguration={toolConfiguration}
                     catalog={catalog}
                     disabled={disabled}
-                    onConnect={(plugin) => {
-                      setConnection({ agentId: agent.id, plugin });
+                    onConnect={(integration) => {
+                      setConnectingId(integration.id);
                       close();
                     }}
                     onBrowse={close}
@@ -171,28 +171,11 @@ export default function ToolsPopover({
           </div>
         </Popover.Content>
       </Popover>
-      {connection && connection.agentId === agent.id && (
-        <MemberPluginConnectionDialog
-          plugin={connection.plugin}
-          agentId={agent.id}
-          surface="chat"
-          open
-          onClose={() => setConnection(null)}
-          onConnected={() => {
-            const reference = memberPluginReference(connection.plugin);
-            const group = chatPluginsForAgent(catalog.plugins, agent).find(
-              ({ plugin }) => {
-                const candidate = memberPluginReference(plugin);
-                return (
-                  candidate.kind === reference.kind &&
-                  candidate.id === reference.id
-                );
-              }
-            );
-            if (group) setChatPluginEnabled(group, true, toolConfiguration);
-            setConnection(null);
-            void catalog.refresh();
-          }}
+      {connecting && (
+        <IntegrationConnectModal
+          integrations={[connecting]}
+          returnPath={locationKey(pathname, searchParams.toString())}
+          onClose={() => setConnectingId(null)}
         />
       )}
     </ToolsPopoverProvider>

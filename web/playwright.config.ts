@@ -23,7 +23,9 @@ export default defineConfig({
   workers: process.env.CI ? 4 : undefined,
   // workers: 1,
 
-  reporter: [["list"]],
+  reporter: process.env.GITHUB_STEP_SUMMARY
+    ? [["list"], ["./tests/e2e/utils/flakyReporter.ts"]]
+    : [["list"]],
   // Only run Playwright tests from tests/e2e directory (ignore Jest tests in src/)
   testMatch: /.*\/tests\/e2e\/.*\.spec\.ts/,
   outputDir: "output/playwright",
@@ -64,6 +66,17 @@ export default defineConfig({
         storageState: "admin_auth.json",
       },
       grep: /@lite/,
+    },
+    {
+      // Runs the @code-mode specs against a backend with CODE_MODE_ENABLED=true.
+      // The admin project runs them with code mode off.
+      name: "code-mode",
+      use: {
+        ...devices["Desktop Chrome"],
+        viewport: { width: 1280, height: 720 },
+        storageState: "admin_auth.json",
+      },
+      grep: /@code-mode/,
     },
   ],
 });

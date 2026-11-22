@@ -1,0 +1,61 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>PayloadContent</key>
+  <array>
+    <dict>
+      <key>PayloadType</key>
+      <string>com.apple.ManagedClient.preferences</string>
+      <key>PayloadIdentifier</key>
+      <string>com.example.onyx-desktop.preferences</string>
+      <key>PayloadUUID</key>
+      <string>0B0EFAE4-B391-4C0D-8953-D994C35D8BD8</string>
+      <key>PayloadVersion</key>
+      <integer>1</integer>
+      <key>PayloadDisplayName</key>
+      <string>Onyx Desktop settings</string>
+      <key>PayloadContent</key>
+      <dict>
+        <key>app.onyx.desktop.v2</key>
+        <dict>
+          <key>Forced</key>
+          <array>
+            <dict>
+              <key>mcx_preference_settings</key>
+              <dict>
+                <key>ServerURL</key>
+                <string>https://onyx.example.com</string>
+                <key>LockServerURL</key>
+                <true/>
+                <key>DisableAutoUpdate</key>
+                <false/>
+                <key>LauncherShortcut</key>
+                <string>CommandOrControl+Shift+Space</string>
+                <key>DisableLauncher</key>
+                <false/>
+                <key>LaunchAtLogin</key>
+                <true/>
+                <key>DisableNotifications</key>
+                <false/>
+              </dict>
+            </dict>
+          </array>
+        </dict>
+      </dict>
+    </dict>
+  </array>
+  <key>PayloadType</key>
+  <string>Configuration</string>
+  <key>PayloadIdentifier</key>
+  <string>com.example.onyx-desktop</string>
+  <key>PayloadUUID</key>
+  <string>B9F776F8-59CA-4093-9C03-95707C6E65EA</string>
+  <key>PayloadVersion</key>
+  <integer>1</integer>
+  <key>PayloadDisplayName</key>
+  <string>Onyx Desktop</string>
+  <key>PayloadScope</key>
+  <string>System</string>
+</dict>
+</plist>

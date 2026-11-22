@@ -137,8 +137,13 @@ function mockApi({
   availableTools = [searchTool, imageTool, fileReaderTool],
   holdTools = false,
   toolError = false,
+  preferencesError = false,
+  agentPluginIds = [],
 }: {
-  preferences?: Record<string, { disabled_tool_ids: number[] }>;
+  preferences?: Record<
+    string,
+    { disabled_tool_ids: number[]; disabled_plugin_ids?: string[] }
+  >;
   connectors?: string[];
   federated?: string[];
   // Leaves the preferences GET pending so a test can land the connector list first.
@@ -147,11 +152,17 @@ function mockApi({
   holdPatch?: boolean;
   // Leaves the connector list pending, so a test can act before it resolves.
   holdConnectors?: boolean;
-  availableTools?: ToolSnapshot[];
+  availableTools?: (ToolSnapshot & { plugin_ids?: string[] })[];
   holdTools?: boolean;
   toolError?: boolean;
+  preferencesError?: boolean;
+  // The plugins the server says the agent runs.
+  agentPluginIds?: string[];
 } = {}) {
-  const stored: Record<string, { disabled_tool_ids: number[] }> = {
+  const stored: Record<
+    string,
+    { disabled_tool_ids: number[]; disabled_plugin_ids?: string[] }
+  > = {
     ...preferences,
   };
   let release = () => {};
@@ -174,6 +185,8 @@ function mockApi({
         ? new Promise(() => {})
         : Promise.resolve(availableTools);
     }
+    if (path.startsWith("/plugins/agents/"))
+      return Promise.resolve(agentPluginIds);
     if (path === "/manage/connector-status") {
       const rows = () =>
         connectors.map((source) => ({
@@ -202,6 +215,8 @@ function mockApi({
       };
       return holdPatch ? patchGate.then(apply) : Promise.resolve(apply());
     }
+    if (preferencesError)
+      return Promise.reject(new Error("Preferences unavailable"));
     if (holdPreferences) return gate.then(() => ({ ...stored }));
     return Promise.resolve({ ...stored });
   });
@@ -308,7 +323,7 @@ describe("useComposerToolsState", () => {
     const { result } = renderTools();
     expect(result.current.resolveToolOptions()).toEqual({
       deepResearch: false,
-      allowedToolIds: null,
+      allowed: null,
       preferredToolId: null,
       internalSearchFilters: null,
       llmOverride: null,
@@ -384,11 +399,155 @@ describe("useComposerToolsState", () => {
     });
 
     await waitFor(() => expect(result.current.disabledToolIds).toEqual([2]));
-    expect(result.current.resolveToolOptions().allowedToolIds).toEqual([1, 3]);
+    expect(result.current.resolveToolOptions().allowed).toEqual([
+      { type: "capability", tool_id: 1 },
+      { type: "capability", tool_id: 3 },
+    ]);
+  });
+
+  it("switches an OpenAPI tool through its plugin and keeps the other plugins", async () => {
+    const api = mockApi({
+      availableTools: [
+        searchTool,
+        { ...imageTool, plugin_ids: ["plugin-image"] },
+        { ...imageTool, id: 9, plugin_ids: ["plugin-other"] },
+      ],
+      agentPluginIds: ["plugin-image", "plugin-other"],
+    });
+    const { result } = renderTools({
+      agent: agent([searchTool, imageTool]),
+    });
+    // The plugins of a tool come from the tool list.
+    await waitFor(() => expect(client.isFetching()).toBe(0));
+
+    await act(async () => {
+      result.current.toggleToolEnabled(2);
+    });
+
+    await waitFor(() => expect(result.current.disabledToolIds).toEqual([2]));
+    expect(api.stored["0"]).toEqual({
+      disabled_tool_ids: [],
+      disabled_plugin_ids: ["plugin-image"],
+    });
+    expect(result.current.resolveToolOptions().allowed).toEqual([
+      { type: "capability", tool_id: 1 },
+      { type: "plugin", plugin_id: "plugin-other" },
+    ]);
+  });
+
+  it("does not switch an OpenAPI tool before the tool list gives its plugins", async () => {
+    const api = mockApi({ holdTools: true });
+    const { result } = renderTools({
+      agent: agent([searchTool, imageTool]),
+    });
+    await waitFor(() => expect(result.current.actionTools).toHaveLength(2));
+
+    await act(async () => {
+      result.current.toggleToolEnabled(2);
+    });
+
+    expect(patchCalls()).toEqual([]);
+    expect(api.stored["0"]).toBeUndefined();
+    expect(result.current.disabledToolIds).toEqual([]);
+  });
+
+  it("holds a send while a saved switch-off waits for the plugin list", async () => {
+    mockApi({
+      holdTools: true,
+      preferences: {
+        "0": { disabled_tool_ids: [], disabled_plugin_ids: ["p"] },
+      },
+    });
+    const { result } = renderTools();
+    await waitFor(() => expect(client.isFetching()).toBe(1));
+    expect(result.current.toolOptionsReady).toBe(false);
+  });
+
+  it("holds a send until the saved switches load", async () => {
+    const api = mockApi({
+      holdPreferences: true,
+      preferences: {
+        "0": { disabled_tool_ids: [], disabled_plugin_ids: ["p"] },
+      },
+    });
+    const { result } = renderTools();
+    await act(async () => {});
+    expect(result.current.toolOptionsReady).toBe(false);
+
+    await act(async () => {
+      api.releasePreferences();
+    });
+    await waitFor(() => expect(result.current.toolOptionsReady).toBe(true));
+  });
+
+  it("offers a retry that loads the saved switches after a failed load", async () => {
+    mockApi({ preferencesError: true });
+    const { result } = renderTools();
+    await waitFor(() => expect(result.current.toolOptionsFailed).toBe(true));
+    expect(result.current.toolOptionsReady).toBe(false);
+
+    mockApi();
+    await act(async () => {
+      result.current.retryToolOptions();
+    });
+    await waitFor(() => expect(result.current.toolOptionsReady).toBe(true));
+    expect(result.current.toolOptionsFailed).toBe(false);
+  });
+
+  it("sends at once when nothing is switched off, before the plugin list loads", async () => {
+    mockApi({ holdTools: true });
+    const { result } = renderTools();
+    await waitFor(() => expect(client.isFetching()).toBe(1));
+    expect(result.current.toolOptionsReady).toBe(true);
+  });
+
+  it("keeps an MCP plugin that no tool lists in the allow-list", async () => {
+    mockApi({
+      agentPluginIds: ["plugin-mcp"],
+    });
+    const { result } = renderTools({
+      agent: agent([searchTool, imageTool]),
+    });
+    await waitFor(() => expect(client.isFetching()).toBe(0));
+
+    await act(async () => {
+      result.current.toggleToolEnabled(2);
+    });
+
+    await waitFor(() => expect(result.current.disabledToolIds).toEqual([2]));
+    expect(result.current.resolveToolOptions().allowed).toEqual([
+      { type: "capability", tool_id: 1 },
+      { type: "plugin", plugin_id: "plugin-mcp" },
+    ]);
+  });
+
+  it("turns on an OpenAPI tool that an old tool id still lists as off", async () => {
+    const api = mockApi({
+      preferences: {
+        "0": { disabled_tool_ids: [2], disabled_plugin_ids: ["plugin-image"] },
+      },
+      availableTools: [
+        searchTool,
+        { ...imageTool, plugin_ids: ["plugin-image"] },
+      ],
+    });
+    const { result } = renderTools({
+      agent: agent([searchTool, imageTool]),
+    });
+    await waitFor(() => expect(client.isFetching()).toBe(0));
+    expect(result.current.disabledToolIds).toEqual([2]);
+
+    await act(async () => {
+      result.current.toggleToolEnabled(2);
+    });
+
+    await waitFor(() => expect(result.current.disabledToolIds).toEqual([]));
+    expect(api.stored["0"]?.disabled_plugin_ids).toEqual([]);
   });
 
   it("clears the preference when the preferred tool is disabled", async () => {
     const { result } = renderTools({ agent: agent([searchTool, imageTool]) });
+    await waitFor(() => expect(client.isFetching()).toBe(0));
     act(() => result.current.togglePreferredTool(2));
     expect(result.current.preferredToolId).toBe(2);
 
@@ -461,7 +620,9 @@ describe("useComposerToolsState", () => {
       projectId: null,
     });
     expect(result.current.disabledToolIds).toEqual([2]);
-    expect(result.current.resolveToolOptions().allowedToolIds).toEqual([1]);
+    expect(result.current.resolveToolOptions().allowed).toEqual([
+      { type: "capability", tool_id: 1 },
+    ]);
   });
 
   it("records the agent the send used, not one picked while the create was in flight", async () => {
@@ -558,7 +719,7 @@ describe("useComposerToolsState", () => {
     expect(result.current.actionTools).toEqual([]);
     expect(result.current.resolveToolOptions()).toEqual({
       deepResearch: false,
-      allowedToolIds: null,
+      allowed: null,
       preferredToolId: null,
       internalSearchFilters: null,
       llmOverride: null,
@@ -593,7 +754,10 @@ describe("useComposerToolsState", () => {
     });
 
     expect(result.current.resolveToolOptions().preferredToolId).toBe(1);
-    expect(result.current.resolveToolOptions().allowedToolIds).toEqual([1, 3]);
+    expect(result.current.resolveToolOptions().allowed).toEqual([
+      { type: "capability", tool_id: 1 },
+      { type: "capability", tool_id: 3 },
+    ]);
 
     rerender({
       chatSessionId: "session-1",
@@ -734,7 +898,7 @@ describe("useComposerToolsState — sources", () => {
       result.current.toggleSource("web");
     });
     await waitFor(() => expect(result.current.disabledToolIds).toEqual([]));
-    expect(result.current.resolveToolOptions().allowedToolIds).toBeNull();
+    expect(result.current.resolveToolOptions().allowed).toBeNull();
   });
 
   it("restores the sources search was switched off with", async () => {

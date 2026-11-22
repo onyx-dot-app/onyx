@@ -114,7 +114,6 @@ test.describe("InlineFileManagement", () => {
     await page.waitForLoadState("networkidle");
 
     await new AdminConnectorDetailPage(page).openFilesEditor();
-    await page.waitForTimeout(500);
     await uploadTestFile(
       page,
       "test-document.txt",
@@ -130,7 +129,6 @@ test.describe("InlineFileManagement", () => {
     await page.waitForLoadState("networkidle");
 
     await new AdminConnectorDetailPage(page).openFilesEditor();
-    await page.waitForTimeout(500);
     await uploadTestFile(
       page,
       "file-to-remove.txt",
@@ -146,7 +144,6 @@ test.describe("InlineFileManagement", () => {
     await page.waitForLoadState("networkidle");
 
     await new AdminConnectorDetailPage(page).openFilesEditor();
-    await page.waitForTimeout(500);
     await uploadTestFile(
       page,
       "confirm-test.txt",
@@ -175,7 +172,6 @@ test.describe("InlineFileManagement", () => {
     await page.waitForLoadState("networkidle");
 
     await new AdminConnectorDetailPage(page).openFilesEditor();
-    await page.waitForTimeout(500);
     await uploadTestFile(
       page,
       "discard-test.txt",

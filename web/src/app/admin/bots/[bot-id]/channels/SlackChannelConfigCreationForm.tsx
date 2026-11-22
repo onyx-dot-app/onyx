@@ -6,6 +6,7 @@ import { useTranslations } from "next-intl";
 import { Formik, Form } from "formik";
 import * as Yup from "yup";
 import { toast } from "@opal/layouts";
+import { parseErrorDetail } from "@/lib/fetcher";
 import {
   DocumentSetSummary,
   SlackChannelConfig,
@@ -215,8 +216,10 @@ export const SlackChannelConfigCreationForm = ({
           if (response.ok) {
             navigation.go(`/admin/bots/${slack_bot_id}`);
           } else {
-            const responseJson = await response.json();
-            const errorMsg = responseJson.detail || responseJson.message;
+            const errorMsg = await parseErrorDetail(
+              response,
+              response.statusText || t("error.unknownOccurred.message")
+            );
             toast.error(
               isUpdate
                 ? t("channelConfig.updateError.toast", { error: errorMsg })

@@ -30,17 +30,16 @@
               "overview/core_features/code_interpreter",
               "overview/core_features/image_generation",
               "overview/core_features/voice_mode",
+              "overview/core_features/scheduled_tasks",
               {
                 "group": "Craft",
                 "icon": "hammer",
                 "pages": [
                   "overview/core_features/craft",
                   "overview/core_features/craft_skills",
-                  "overview/core_features/craft_apps",
-                  "overview/core_features/craft_scheduled_tasks"
+                  "overview/core_features/craft_apps"
                 ]
-              },
-              "overview/core_features/coding_agent"
+              }
             ]
           },
           {
@@ -51,7 +50,18 @@
               "overview/onyx_anywhere/website_widget",
               "overview/onyx_anywhere/slack",
               "overview/onyx_anywhere/discord_bot",
-              "overview/onyx_anywhere/mcp_server",
+              {
+                "group": "MCP Server",
+                "icon": "plug",
+                "expanded": true,
+                "pages": [
+                  "overview/onyx_anywhere/mcp_server",
+                  "overview/onyx_anywhere/mcp_server/claude",
+                  "overview/onyx_anywhere/mcp_server/chatgpt",
+                  "overview/onyx_anywhere/mcp_server/codex",
+                  "overview/onyx_anywhere/mcp_server/claude_code"
+                ]
+              },
               "developers/guides/llm_gateway",
               "overview/onyx_anywhere/cli"
             ]
@@ -96,6 +106,7 @@
             "pages": [
               "deployment/production/external_services",
               "deployment/production/high_availability",
+              "deployment/production/conversion_stage",
               "deployment/production/monitoring",
               "deployment/production/security",
               "deployment/production/code_interpreter"
@@ -107,6 +118,20 @@
             "pages": [
               "deployment/local/craft",
               "deployment/local/craft_kubernetes",
+              {
+                "group": "Firecracker",
+                "icon": "microchip",
+                "pages": [
+                  "deployment/kubernetes/craft-firecracker",
+                  "deployment/kubernetes/craft-firecracker-eks",
+                  "deployment/kubernetes/craft-firecracker-gke",
+                  "deployment/kubernetes/craft-firecracker-aks",
+                  "deployment/kubernetes/craft-firecracker-bare-metal",
+                  "deployment/kubernetes/craft-firecracker-operations",
+                  "deployment/kubernetes/craft-firecracker-monitoring",
+                  "deployment/kubernetes/craft-firecracker-sizing"
+                ]
+              },
               "deployment/local/craft_docker_compose"
             ]
           },
@@ -340,8 +365,7 @@
                   "admins/actions/web_search",
                   "admins/actions/code_interpreter",
                   "admins/actions/image_generation",
-                  "admins/actions/voice_mode",
-                  "admins/actions/coding_agent"
+                  "admins/actions/voice_mode"
                 ]
               },
               {
@@ -587,6 +611,7 @@
                   "developers/api_reference/user_management/activate_user_api",
                   "developers/api_reference/user_management/deactivate_user_api",
                   "developers/api_reference/user_management/delete_user",
+                  "developers/api_reference/user_management/transfer_private_plugins",
                   "developers/api_reference/user_management/list_all_accepted_users",
                   "developers/api_reference/user_management/list_minimal_user_groups",
                   "developers/api_reference/user_management/get_permission_registry"
@@ -777,6 +802,14 @@
   },
   "redirects": [
     {
+      "source": "/overview/core_features/coding_agent",
+      "destination": "/overview/core_features/chat"
+    },
+    {
+      "source": "/admins/actions/coding_agent",
+      "destination": "/admins/managing_features/chat"
+    },
+    {
       "source": "/developers/api_reference/miscellaneous/get_global_token_limit_settings",
       "destination": "/admins/advanced_configs/spending_limits"
     },
@@ -910,7 +943,11 @@
     },
     {
       "source": "/overview/core_features/workflows",
-      "destination": "/overview/core_features/craft_scheduled_tasks"
+      "destination": "/overview/core_features/scheduled_tasks"
+    },
+    {
+      "source": "/overview/core_features/craft_scheduled_tasks",
+      "destination": "/overview/core_features/scheduled_tasks"
     },
     {
       "source": "/overview/onyx_anywhere/web_interface",
@@ -979,6 +1016,15 @@
     }
   },
   "contextual": {
-    "options": []
+    "options": [
+      "copy",
+      "view",
+      "chatgpt",
+      "claude",
+      "mcp",
+      "add-mcp",
+      "cursor",
+      "vscode"
+    ]
   }
 }

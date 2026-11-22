@@ -5,21 +5,37 @@ against a real PostgreSQL database. The email send path is patched so we can
 assert "fresh insert only" behavior without configuring SendGrid.
 """
 
+from collections.abc import Generator
 from datetime import datetime, timedelta, timezone
-from unittest.mock import patch
+from unittest.mock import MagicMock, patch
 from uuid import UUID
 
 import pytest
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from ee.onyx.db.license import delete_license, get_license, upsert_license
+from ee.onyx.server.license.models import LicensePayload, PlanType
+from ee.onyx.utils.license import verify_and_store_license
 from ee.onyx.utils.license_expiry import ExpiryWarningStage
-from ee.onyx.utils.license_notifications import notify_admins_for_stage
+from ee.onyx.utils.license_notifications import (
+    ensure_license_expiry_notification_for_user,
+    notify_admins_for_stage,
+)
 from onyx.configs.constants import NotificationType
 from onyx.db.models import Notification, User
 from tests.external_dependency_unit.conftest import create_test_user
 
 EXPIRES_AT = datetime(2026, 6, 1, 12, 0, 0, tzinfo=timezone.utc)
+RENEWED_EXPIRES_AT = EXPIRES_AT + timedelta(days=365)
+_STORED_EXPIRY = "ee.onyx.utils.license_notifications._stored_license_expires_at"
+
+
+@pytest.fixture(autouse=True)
+def _no_stored_license() -> Generator[None, None, None]:
+    """Keep the license in the shared test database out of these tests."""
+    with patch(_STORED_EXPIRY, return_value=None):
+        yield
 
 
 @pytest.fixture
@@ -217,3 +233,114 @@ def test_two_admins_both_get_notified(
     targeted_emails = {c.kwargs["user_email"] for c in send_email.call_args_list}
     assert a1.email in targeted_emails
     assert a2.email in targeted_emails
+
+
+def _license_notif_dismissed(
+    db_session: Session, user_id: UUID, expires_at: datetime
+) -> list[bool]:
+    db_session.expire_all()
+    rows = (
+        db_session.execute(
+            select(Notification).where(
+                Notification.user_id == user_id,
+                Notification.notif_type == NotificationType.LICENSE_EXPIRY_WARNING,
+            )
+        )
+        .scalars()
+        .all()
+    )
+    return [
+        r.dismissed
+        for r in rows
+        if (r.additional_data or {}).get("expires_at") == expires_at.isoformat()
+    ]
+
+
+def test_storing_renewal_dismisses_old_license_warnings(
+    db_session: Session, admin: User
+) -> None:
+    """A renewal clears the replaced license's banners but keeps any already
+    raised for the new license's own expiry."""
+    renewed_expires = RENEWED_EXPIRES_AT
+    with patch("ee.onyx.utils.license_notifications._send_email_for_stage"):
+        notify_admins_for_stage(db_session, ExpiryWarningStage.GRACE, EXPIRES_AT)
+        notify_admins_for_stage(db_session, ExpiryWarningStage.T_30D, renewed_expires)
+
+    renewal = LicensePayload(
+        version="1.0",
+        tenant_id="tenant_renewal",
+        issued_at=datetime.now(timezone.utc),
+        expires_at=renewed_expires,
+        seats=10,
+        plan_type=PlanType.ANNUAL,
+    )
+    previous = get_license(db_session)
+    previous_data = previous.license_data if previous else None
+    try:
+        with (
+            patch(
+                "ee.onyx.utils.license.verify_license_signature",
+                return_value=renewal,
+            ),
+            patch("ee.onyx.utils.license.publish_license_cache"),
+            patch("ee.onyx.utils.license.resume_license_reclaim"),
+        ):
+            verify_and_store_license(db_session, "renewed-license-blob")
+    finally:
+        if previous_data is None:
+            delete_license(db_session)
+        else:
+            upsert_license(db_session, previous_data)
+
+    assert _license_notif_dismissed(db_session, admin.id, EXPIRES_AT) == [True]
+    assert _license_notif_dismissed(db_session, admin.id, renewed_expires) == [False]
+
+
+def test_warning_for_replaced_license_is_not_written(
+    db_session: Session, admin: User
+) -> None:
+    """A daily run that read the license before a renewal landed must not
+    write a warning for the replaced expiry."""
+    with (
+        patch(_STORED_EXPIRY, return_value=RENEWED_EXPIRES_AT),
+        patch(
+            "ee.onyx.utils.license_notifications._send_email_for_stage"
+        ) as send_email,
+    ):
+        notify_admins_for_stage(db_session, ExpiryWarningStage.GRACE, EXPIRES_AT)
+
+    assert _license_notif_dismissed(db_session, admin.id, EXPIRES_AT) == []
+    assert send_email.call_count == 0
+
+
+def test_on_read_warning_for_replaced_license_is_not_written(
+    db_session: Session, admin: User
+) -> None:
+    """The on-read ensure has the same window: it read the replaced license,
+    and the stored one changed before its insert."""
+    # Relative to now so the replaced license is inside a warning window.
+    replaced_expires = datetime.now(timezone.utc) + timedelta(days=10)
+    replaced = LicensePayload(
+        version="1.0",
+        tenant_id="tenant_replaced",
+        issued_at=replaced_expires - timedelta(days=365),
+        expires_at=replaced_expires,
+        seats=10,
+        plan_type=PlanType.ANNUAL,
+    )
+    license_row = MagicMock(license_data="replaced-license-blob")
+    with (
+        patch(_STORED_EXPIRY, return_value=replaced_expires + timedelta(days=365)),
+        patch(
+            "ee.onyx.utils.license_notifications.get_license",
+            return_value=license_row,
+        ),
+        patch(
+            "ee.onyx.utils.license_notifications.verify_license_signature",
+            return_value=replaced,
+        ),
+        patch("ee.onyx.utils.license_notifications.MULTI_TENANT", False),
+    ):
+        ensure_license_expiry_notification_for_user(admin, db_session)
+
+    assert _license_notif_dismissed(db_session, admin.id, replaced_expires) == []

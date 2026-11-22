@@ -3,6 +3,7 @@
 import threading
 from collections.abc import Callable, Generator, Sequence
 from unittest.mock import Mock, patch
+from uuid import uuid4
 
 import pytest
 import tiktoken
@@ -25,10 +26,13 @@ from onyx.agents.models import (
     AgentState,
     CompactionCheckpoint,
     ExecutionStatus,
+    InputMessageMetadata,
+    InputSource,
     PreparedStep,
     RunState,
     RunStatus,
     StepInput,
+    ToolResultAmendment,
 )
 from onyx.agents.runtime import (
     Agent,
@@ -47,7 +51,12 @@ from onyx.agents.tools import (
 )
 from onyx.chat.chat_utils import convert_chat_history
 from onyx.chat.files import build_file_context
-from onyx.chat.models import ChatHistoryMessage, CheckpointBinding
+from onyx.chat.mention_models import PickedSkillMessage, RecordedSkillMention
+from onyx.chat.models import (
+    ChatHistoryMessage,
+    CheckpointBinding,
+    picked_skill_messages,
+)
 from onyx.chat.prompt_formatting import prompt_metadata
 from onyx.chat.prompt_utils import prepare_prompt
 from onyx.configs.constants import MessageType
@@ -147,7 +156,7 @@ class ContextModel(LLM):
 def test_rebuilt_prompts_reuse_counts_and_recount_changed_content() -> None:
     evidence = "Retrieved evidence from search. " * 20
     revised_evidence = evidence + "New information. " * 10
-    system = "Use the evidence to answer."
+    system = "Use the evidence to answer." * 40
     tokenizer = tiktoken.get_encoding("cl100k_base")
     sdk_encoder = Mock(wraps=tokenizer)
     provider_inputs: list[str] = []
@@ -235,11 +244,35 @@ def test_rebuilt_prompts_reuse_counts_and_recount_changed_content() -> None:
         assert sdk_inputs.count(request.tools[0].model_dump_json()) == 2
 
 
+@pytest.mark.parametrize("text", ["small request", "短い質問🙂"])
+def test_small_requests_skip_encoding_with_full_output_allowance(
+    monkeypatch: pytest.MonkeyPatch, text: str
+) -> None:
+    output = TokenBudget(max_output_tokens=200, context_tokens=1200, safety_tokens=64)
+    monkeypatch.setattr("onyx.agents.runtime.resolve_token_budget", lambda _: output)
+    run = Run(
+        RunState(run_id="run", agent_id="agent", status=RunStatus.RUNNING),
+        CancellationSignal(),
+    )
+    with patch(
+        "onyx.agents.compaction._encoder", side_effect=AssertionError("encoded")
+    ):
+        request = _compact_context(
+            run,
+            ContextModel(),
+            [UserMessage(content=text)],
+            PreparedStep(),
+            GenerationContext(),
+        )
+    assert request.options.max_tokens == 200
+    assert request.messages[0].text == text
+
+
 def test_long_requests_reuse_counts_and_release_removed_history() -> None:
     class LargeContextModel(ContextModel):
         @property
         def config(self) -> LLMConfig:
-            return super().config.model_copy(update={"max_input_tokens": 128000})
+            return super().config.model_copy(update={"max_input_tokens": 64000})
 
     source: list[Message] = [UserMessage(content="Compare these sources.")]
     for index in range(350):
@@ -353,6 +386,7 @@ def test_compaction_replaces_attachment_body_with_file_reference() -> None:
 def test_summary_cutoff_survives_next_user_turn(long_question: bool) -> None:
     model = ContextModel()
     old_answer = ChatHistoryMessage(
+        skill_messages=[],
         id=1,
         message_type=MessageType.ASSISTANT,
         message="Old findings. " * 600,
@@ -366,6 +400,7 @@ def test_summary_cutoff_survives_next_user_turn(long_question: bool) -> None:
         ],
     )
     question = ChatHistoryMessage(
+        skill_messages=[],
         id=2,
         message_type=MessageType.USER,
         message="Current question. " * (160 if long_question else 1),
@@ -377,6 +412,7 @@ def test_summary_cutoff_survives_next_user_turn(long_question: bool) -> None:
     source = convert_chat_history(
         [old_answer, question],
         files=[],
+        vm_paths={},
     ).messages
     checkpoint = compact_history(model, source, None, GenerationContext())
     assert checkpoint.covered_through_message_id == "old-answer"
@@ -385,6 +421,7 @@ def test_summary_cutoff_survives_next_user_turn(long_question: bool) -> None:
     reloaded = convert_chat_history(
         [old_answer, question, next_question],
         files=[],
+        vm_paths={},
     ).messages
     restored_checkpoint = CompactionCheckpoint.model_validate_json(
         checkpoint.model_dump_json()
@@ -510,6 +547,50 @@ def test_compaction_within_task_preserves_tool_effects_and_prepared_steps() -> N
         "Conversation summary:" in message.text
         for message in model.generations[-1].messages
     )
+
+
+def test_amending_a_summarized_result_drops_the_summary() -> None:
+    model = ContextModel(tool_rounds=5)
+    agent = Agent(
+        model,
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        state=AgentState(messages=[UserMessage(content=TASK)]),
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(
+                    name="lookup", description="Search", parameters={}
+                ),
+                execute=lambda _invocation: ToolResult(
+                    content="Evidence [1] 東京 " * 180
+                ),
+            )
+        ],
+        on_finish=lambda _results: [
+            ToolResultAmendment(
+                call_id="call-1", result=ToolResult(content="Amended evidence.")
+            )
+        ],
+    )
+    run = agent.start(max_steps=6)
+    run.result()
+    assert run.wait_for_idle(2)
+    assert model.summaries
+    assert run.snapshot().checkpoint is None
+
+    # The next turn reads the amended result, not a summary of the replaced one.
+    summaries = len(model.summaries)
+    reloaded = Agent(
+        model,
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        state=AgentState(
+            messages=agent.state.messages, checkpoint=agent.state.checkpoint
+        ),
+    )
+    reloaded.start(max_steps=1, messages=[UserMessage(content="Conclude.")]).result()
+    inputs = [message.text for message in model.generations[-1].messages] + [
+        request.messages[0].text for request in model.summaries[summaries:]
+    ]
+    assert any("Amended evidence." in text for text in inputs)
 
 
 @pytest.mark.parametrize("step_timeout", [None, 37])
@@ -761,6 +842,7 @@ def test_image_replay_cost_controls_compaction_and_output_allowance(
         token_count=stored_image_tokens,
     )
     question = ChatHistoryMessage(
+        skill_messages=[],
         id=1,
         message_type=MessageType.USER,
         message=older_text,
@@ -789,6 +871,7 @@ def test_image_replay_cost_controls_compaction_and_output_allowance(
             ),
         ],
         files=[image],
+        vm_paths={},
     ).messages
     original = [message.model_copy(deep=True) for message in history]
     model = ImageBudgetModel()
@@ -908,6 +991,103 @@ def test_failed_summary_truncates_old_turns_without_changing_history(
     reloaded.start(background=False, max_steps=1).result()
     assert model.generations[-1].messages[: len(request.messages)] == request.messages
     assert reloaded.state.messages[: len(history)] == history
+
+
+def test_truncation_preserves_the_user_task_before_an_agent_result() -> None:
+    source: list[Message] = [
+        SystemMessage(id="system", content="Keep the system instructions."),
+        UserMessage(id="task", content=TASK),
+        AssistantMessage(
+            id="work", content=[TextContent(text="Earlier research context. " * 1000)]
+        ),
+        UserMessage(
+            id="child-delivery",
+            content="Child research findings",
+            metadata=InputMessageMetadata(
+                source=InputSource.AGENT_RESULT, source_run_id="child"
+            ),
+        ),
+    ]
+    expected = [source[0], source[1], source[3]]
+    input_limit = request_tokens(GenerationRequest(messages=expected))
+    checkpoint, request, size = _truncate_context(
+        CancellationSignal(),
+        source,
+        PreparedStep(),
+        token_counts={},
+        input_limit=input_limit,
+        original_size=request_tokens(GenerationRequest(messages=source)),
+        input_start=1,
+    )
+    assert [message.text for message in request.messages] == [
+        message.text for message in expected
+    ]
+    assert [message.text for message in request.messages] == [
+        message.text for message in working_messages(source, checkpoint, input_start=1)
+    ]
+    assert size == input_limit
+
+
+def test_compaction_drops_skill_messages_and_keeps_the_question_as_the_task() -> None:
+    model = ContextModel()
+    version_id = uuid4()
+    question = ChatHistoryMessage(
+        id=1,
+        message_type=MessageType.USER,
+        message=TASK,
+        token_count=0,
+        files=[],
+        is_clarification=False,
+        skill_messages=picked_skill_messages(
+            "chat:1",
+            [RecordedSkillMention(name="triage", version_id=version_id)],
+            [
+                PickedSkillMessage(
+                    version_id=version_id,
+                    content="<skill>\n<name>triage</name>\nSort by area.\n</skill>",
+                    token_count=9,
+                )
+            ],
+        ),
+        response_messages=[],
+    )
+    history: list[Message] = [
+        *convert_chat_history([question], files=[], vm_paths={}).messages,
+        AssistantMessage(
+            id="work", content=[TextContent(text="Earlier research context. " * 300)]
+        ),
+        UserMessage(
+            id="child-delivery",
+            content="Child research findings",
+            metadata=InputMessageMetadata(
+                source=InputSource.AGENT_RESULT, source_run_id="child"
+            ),
+        ),
+    ]
+    skill_text = "<skill>\n<name>triage</name>\nSort by area.\n</skill>"
+    assert [message.text for message in history[:2]] == [TASK, skill_text]
+
+    # A cut never falls between the question and its skill.
+    assert 1 not in history_boundaries(history, input_start=0)
+    checkpoint = compact_history(
+        model,
+        history,
+        None,
+        GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        input_start=0,
+    )
+
+    # The summary reads the skill; compacted history keeps the question as the
+    # task and drops its skill.
+    assert checkpoint.covered_through_message_id == "work"
+    assert any(skill_text in summary.messages[0].text for summary in model.summaries)
+    assert [
+        message.text for message in working_messages(history, checkpoint, input_start=0)
+    ] == [
+        f"Conversation summary:\n{checkpoint.summary}",
+        TASK,
+        "Child research findings",
+    ]
 
 
 def test_truncation_validates_boundaries_once_across_candidates() -> None:
@@ -1238,3 +1418,32 @@ def test_context_rejection_after_thinking_does_not_restart_generation() -> None:
     ends = [e for e in events if e.type == "message_end"]
     assert len(ends) == 1
     assert ends[0].message == state.steps[0].message
+
+
+@pytest.mark.parametrize("input_start", [None, 0])
+@pytest.mark.parametrize("covered_index", [1, 2, 3])
+def test_compaction_retains_the_user_task_instead_of_an_agent_result(
+    input_start: int | None, covered_index: int
+) -> None:
+    messages: list[Message] = [
+        UserMessage(id="question", content="Compare the findings."),
+        AssistantMessage(id="first-answer", content=[TextContent(text="Working")]),
+        UserMessage(
+            id="child-delivery",
+            content="Background findings",
+            metadata=InputMessageMetadata(
+                source=InputSource.AGENT_RESULT, source_run_id="child"
+            ),
+        ),
+        AssistantMessage(id="second-answer", content=[TextContent(text="Comparison")]),
+    ]
+    covered_id = messages[covered_index].id
+    assert covered_id is not None
+    checkpoint = CompactionCheckpoint(
+        summary="Research progress", covered_through_message_id=covered_id
+    )
+    assert working_messages(messages, checkpoint, input_start=input_start) == [
+        SystemMessage(content="Conversation summary:\nResearch progress"),
+        messages[0],
+        *messages[covered_index + 1 :],
+    ]

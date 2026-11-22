@@ -15,6 +15,9 @@
 - **Custom agent instructions** apply for the whole chat, not only the first
   few turns. Inside a project, the project instructions also apply. When the two
   conflict, the agent instructions win.
+- **Subagent role.** Child chat agents add fixed delegation instructions after the shared
+  system, user, and custom instructions, before files and history. The block contains
+  no agent identity or task text, preserving the reusable prompt prefix.
 - **Personal context.** The assistant knows the user's name, email, role,
   directory profile, preferred language, preferences and memories. An agent
   author can write `{{user.<key>}}` in an agent prompt, and each user sees their
@@ -28,8 +31,8 @@
   Project images stay beside project text in the fixed preamble. A project that is too
   large is searched instead ([[projects]]).
 - **Long chats** keep working. When a request reaches about 85% of the model's
-  usable input, older history is summarized before the model call. Research and
-  coding child agents do the same. The user does not see the summary.
+  usable input, older history is summarized before the model call. Research child agents
+  do the same. The user does not see the summary.
 - **Admins** edit the default system prompt, which is the default assistant's
   `system_prompt`. An agent can replace the base prompt fully.
 - **Images and model switches.** When a chat has images and the user switches
@@ -37,8 +40,8 @@
   the image. With `ENABLE_AZURE_IMAGE_CAP=true`, an Azure model gets at most 50
   images per request: the most recent ones, and a notice of how many were
   dropped. No other provider has a cap.
-- **Incognito.** A usage-only session retains questions, text-file messages, image references,
-  and full tool results in temporary history
+- **Incognito.** A usage-only session retains questions, their picked skills, text-file messages,
+  image references, and full tool results in temporary history
   ([[#usage-only-history-shape]]). Request-only context reaches the current turn
   through its trailing reminder. If the stored conversation expires, a new
   message continues without the earlier messages and with no error
@@ -84,16 +87,24 @@ compaction candidate. The list on each model call:
 ```
 [system]                    base prompt, shared user-information framing, tool guidance   stable
 [user information]          SYSTEM message: per-user block                                stable
+[skills catalog]            SYSTEM message: the user's chat skills                        stable
 [custom agent prompt]       USER message, fixed before conversation history               stable
 [project files and images]  USER message, JSON documents and image content blocks          stable
 [conversation summary]      SYSTEM message, when a compaction checkpoint applies          stable
 [chronological history]     questions, attachments, assistant messages, full tool results stable
+  [mentioned skills]        USER message: recorded <skill> SKILL.md right after the message that picked it
 [request-only context]      USER reminder, supplied only for the current request
 [oversized-files notice]    USER, names the retrieval tools offered this step
 [forgotten-files notice]    USER, files that are not in the working history
 [reminder]                  USER, wrapped in <system-reminder>
 [image-drop notice]         USER reminder, only when an image cap dropped images
 ```
+
+`llm/multi_llm.py:LitellmLLM._prepare_request` joins the leading SYSTEM
+messages into one unless the cache adapter's
+`caches_leading_system_messages_separately` is true (only the Anthropic
+adapter). Some chat templates, such as Qwen's on vLLM, reject a second system
+message with a 400.
 
 The notices and reminders change between steps, so they stay after the stable
 prefix. Prompt assembly marks the stable part as cacheable
@@ -120,7 +131,36 @@ document and text) with a pointer to that result
 search result JSON must keep that parse working. Later turns retain saved tool-result
 content until compaction or truncation moves the cutoff past it. A placeholder is used when a legacy record has missing or empty output.
 Compaction controls history growth; starting a new user turn does not rewrite
-previous evidence. `backend/onyx/chat/README.md` has worked examples of the fixed
+previous evidence. A code mode result keeps what a later turn needs in its own
+content ([[chat-persistence#code-mode-replay-content]]).
+The skills catalog is per user, so it is a separate message and not part of
+the shared system prompt. Each agent reads the user's current chat skills
+once, when it is built, and renders the catalog for its own model's window
+(`tools/tool_implementations/skills/skill_tools.py:skills_catalog_message`);
+a change to the user's skills changes the prefix from the catalog on.
+Mentioned skills are recorded history. When a message is accepted, each
+pick is stored as a record and a `<skill>` message with the cut SKILL.md and
+its token count ([[skills]]): a question's in `chat_message.mentions` and the
+deferred `chat_message.skill_messages`, which only
+`db/chat.py:load_message_branch` loads, and a message sent into a running
+response in its accepted input, with its records in its metadata
+(`chat/models.py:ChatInputMetadata`). History puts one user-role `<skill>`
+message for each pick right after the message that picked it (id
+`<message id>:skill:<version id>`), built from the stored message:
+`chat/chat_utils.py:convert_chat_history` for a question and
+`chat/models.py:accepted_input_messages` for an accepted send.
+Old turns never read the skill again, so their prompt stays the same after
+the skill changes, is deleted or is hidden from the user. A skill message has
+`PromptMetadata` with `is_input_context` (from `CompactionMetadata`,
+predicate `agents/compaction.py:is_input_context`) and the stored
+`token_count`: it belongs to the message before it and is never a user turn.
+Compaction never takes it as the user's task
+(`agents/compaction.py:messages_after_compaction`), the summarizer sees it,
+and compacted history drops it with the summarized prefix. No cut falls just
+before one (`agents/compaction.py:history_boundaries`), so a kept message
+keeps its skills. Message text never mentions a skill; an agent message
+mentions none.
+`backend/onyx/chat/README.md` has worked examples of the fixed
 preamble and growing history.
 
 **System prompt.** `chat/prompt_utils.py:build_system_prompt` resolves the
@@ -142,9 +182,10 @@ or an agent that replaces the base prompt.
 **Tool definitions.** Action preferences keep the full tool definitions and order.
 The selected Action appears in a request-only trailing reminder, outside the cached
 prefix. When project files replace retrieval, preparation omits an enabled,
-configured, allowed Search preference and its reminder. Final steps use `NONE`; providers that cannot enforce it omit definitions.
-Those provider exceptions can invalidate cache reuse. The shared policy lives in
-`llm/model_capabilities.py` and `llm/multi_llm.py`.
+configured, allowed Search preference and its reminder. Chat's final step uses `NONE` and
+keeps the same tool definitions and system prompt; the cache effect depends on the
+provider ([[llm-providers#none-tool-choice-keeps-tools]]). Research agents change
+their system prompt on the final step, so their prefix changes there.
 
 **Custom agent prompt.** `chat/process_message.py:prepare_chat_turn` labels
 project and agent instructions when both exist, and tells the model to follow
@@ -177,8 +218,10 @@ replacement and agent prompts, and the files attached to the new message. Then
 smallest model of the turn, to decide whether project files go inline
 ([[projects]]). On each model call, the runtime counts the whole assembled
 request, tool definitions included, against `agents/compaction.py:context_budget`.
-That count uses `cl100k_base` and a fixed estimate per image
-(`agents/compaction.py:request_tokens`), not the model's tokenizer. It caps the output with `llm/token_budget.py:resolve_token_budget`
+When the run has no cached counts, a byte upper bound can prove the request
+fits below the compaction trigger with full output capacity. Otherwise the
+runtime counts text with `cl100k_base`. Both paths include a fixed estimate
+per image and cap output with `llm/token_budget.py:resolve_token_budget`
 ([[agent-runtime]]).
 
 **Compaction.** The runtime summarizes or truncates older history before a model
@@ -230,7 +273,10 @@ counts what is sent, not the stored token counts.
    `chat/prompt_utils.py:calculate_reserved_tokens` runs before
    `chat/files.py:extract_context_files` in
    `chat/process_message.py:prepare_chat_turn`. Reverse them and a large project
-   takes space the prompt needs.
+   takes space the prompt needs. Extraction runs after history assembly, and
+   in a usage-only session after the temporary history save. Its reservation
+   adds the stored token counts of the current input's skill messages, from
+   history or temporary history, so a usage-only regeneration counts them too.
 5. `fixed-parts-must-fit` **The fixed parts must fit, or the response fails.**
    The head prompt, project files, notices, the reminder and the newest
    question and request-only context always stay. Before the first model step,
@@ -241,7 +287,11 @@ counts what is sent, not the stored token counts.
    `agents/compaction.py:ContextLimitError` when the rest does not fit. That
    error is a `ValueError`, so `llm/exceptions.py:litellm_exception_to_safe_error`
    reports it as `UNKNOWN_ERROR`, not `CONTEXT_TOO_LONG`. A new large fixed
-   element makes this error more frequent.
+   element makes this error more frequent. In a chat with a sandbox, large
+   tool results go to a file in the VM before they reach the history
+   ([[code-execution]], `tools/tool_implementations/sandbox/spill.py`). This
+   makes the error less likely but does not prevent it: the limits count
+   characters, not tokens, and some tools are exempt from them.
 6. `forgotten-files-need-metadata` **A forgotten-files notice needs file
    metadata.** `chat/process_message.py:prepare_chat_turn` clears the metadata
    map when the persona has no file reader tool. Then a file that compaction or
@@ -249,17 +299,16 @@ counts what is sent, not the stored token counts.
    every attached file whose message is not in the working history.
 7. `file-notice-names-offered-tools` **A file notice names only tools the model
    has this step.** `chat/prompt_utils.py:_create_file_tool_metadata_message`
-   prefers `read_file`, then internal search, then the Python tool (only when
-   every file was staged for it). A notice that names a missing tool makes the
-   model guess or search the web.
+   prefers `read_file`, then internal search (only for files with
+   `FileToolMetadata.indexed`; `SKIPPED` uploads such as code files are not),
+   then the Python tool (only for files staged for it). A notice that names a
+   missing tool, or search for an unindexed file, makes the model guess or
+   search the web.
 8. `history-builder-callers` **`chat/prompt_utils.py:prepare_prompt` has
-   several callers.** `ChatAgent`, `DeepResearchAgent`, `ResearchAgent` and
-   `CodingAgent` call it with their own arguments, such as no custom agent
+   several callers.** `ChatAgent`, `DeepResearchAgent` and `ResearchAgent`
+   call it with their own arguments, such as no custom agent
    prompt. Only `ChatAgent` passes `available_tool_names`, so a deep research
-   file notice names no tool. The coding agent's final-step reminder has no
-   `is_reminder` flag, so it is sent as a plain user message without the
-   `<system-reminder>` wrap. Check all callers after you change the signature or
-   order.
+   file notice names no tool. Check all callers after you change the signature or order.
 9. `replace-base-drops-user-block` **Replacing the base prompt drops the
    per-user block.** With `replace_base_system_prompt`, or with an empty default
    prompt, `build_chat_prompt` builds no user-information message, so memories
@@ -274,9 +323,15 @@ counts what is sent, not the stored token counts.
     whether `calculate_reserved_tokens` counts it, whether it belongs to recorded
     history or request-only prompt assembly, what each incognito mode stores
     ([[chat-persistence#incognito-decision-per-field]]), and whether a resumed
-    turn needs it. Add request-only context through `prepare_prompt`, outside recorded
-    history. Compaction cutoffs identify recorded messages; they must not reference
-    request-only context. A resumed turn rebuilds `ChatAgent` only from
+    turn needs it. Mentioned skills, for example, are recorded history: the
+    accepted message stores each SKILL.md, history puts it after its message
+    as input context, and the summarizer sees it but compaction never takes it
+    as the task; `prepare_chat_turn` adds the current input's skill messages to
+    the reservation; a usage-only session keeps the skill messages in temporary history
+    while its content-free rows keep the picks without text; a restored agent
+    reads the user's current chat skills for its catalog. Add request-only context through
+    `prepare_prompt`, outside recorded history. Compaction cutoffs identify
+    recorded messages; they must not reference request-only context. A resumed turn rebuilds `ChatAgent` only from
     `chat/models.py:ChatFeatureState` (`chat/restoration.py:restore_chat_agent`),
     not from the current persona or settings. A new prompt input that is not in
     that state, `ChatAgent.capture_state` and `ChatAgent.restore_state` is lost
@@ -284,8 +339,10 @@ counts what is sent, not the stored token counts.
 12. `usage-only-history-shape` **A usage-only session retains complete input groups.**
     `chat/history_store.py:RedisChatHistoryStore.prepare_messages` combines
     the selected branch of temporary history with the accepted question and its
-    preceding text-file messages ([[chat-persistence]]). Regeneration reuses the
-    saved question and attachments. Only new attachments need text extraction;
+    preceding text-file messages ([[chat-persistence]]). The question's skill
+    messages follow it in temporary history, and trimming and branch selection
+    keep them with it. Regeneration reuses the saved question, its skill
+    messages and attachments. Only new attachments need text extraction;
     earlier text comes from temporary history. Image references
     restore lazy file descriptors; temporary history stores no image bytes.
     Temporary file metadata preserves names and sizes for retrieval notices. The current
@@ -317,6 +374,18 @@ counts what is sent, not the stored token counts.
   Full results remain available while the runtime manages the context budget.
 - **Attached files stay where they were attached.** User attachments remain
   beside their question; project files and images remain in the preamble.
+  In a turn with the sandbox, each attachment's file message names its copy
+  in the VM with an "In the VM: attachments/<id prefix>-<name>" line, counted in the
+  message's tokens (`chat/files.py:build_file_context`), and the images of a
+  message get one more message with a line for each image
+  (`chat/chat_utils.py:convert_chat_history`). A path depends on its file
+  alone (`chat/files.py:place_chat_files`), so a message keeps its lines
+  and the prefix stays cacheable. The `exec_command` description gains the
+  layout of `attachments/` once, when the chat gets its first file.
+  Only user attachments enter the prompt as text, so turn preparation
+  extracts text only for the files of user messages
+  (`chat/process_message.py:prepare_chat_turn`, `text_file_ids`). Files of
+  assistant messages, such as published files, reach tools as bytes only.
   Changes to project content, configuration, image limits, or a compaction
   checkpoint can intentionally invalidate cache prefixes.
 

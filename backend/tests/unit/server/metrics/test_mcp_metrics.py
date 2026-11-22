@@ -1,4 +1,5 @@
 import asyncio
+from datetime import datetime, timezone
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import httpx
@@ -7,8 +8,10 @@ from fastapi.testclient import TestClient
 from mcp.types import CallToolResult, TextContent
 
 from onyx.agents.tools import ToolInvocation, ToolResult, ToolUpdate
-from onyx.db.enums import MCPAuthenticationType, MCPOAuthProviderMode
-from onyx.db.models import MCPServer
+from onyx.db.enums import IntegrationAuthMethod
+from onyx.integrations.call_credentials import CallCredentials
+from onyx.integrations.connection_models import ConnectionState
+from onyx.integrations.connections import ConnectionProblem
 from onyx.llm.cancellation import CancellationSignal
 from onyx.mcp_server.api import create_mcp_fastapi_app
 from onyx.mcp_server.auth import OnyxTokenVerifier
@@ -19,28 +22,31 @@ from onyx.server.metrics.mcp_common import MCPToolCallStatus
 from onyx.server.metrics.mcp_server import MCPAuthResult, MCPServerToolName
 from onyx.tools.models import ToolContext
 from onyx.tools.tool_implementations.mcp.mcp_tool import MCPTool
+from tests.unit.onyx.mcp_server.tool_result import tool_payload
+
+_MODULE = "onyx.tools.tool_implementations.mcp.mcp_tool"
 
 
-def _mcp_tool(
-    auth_type: MCPAuthenticationType = MCPAuthenticationType.NONE,
-) -> MCPTool:
-    server = MCPServer(
-        id=1,
-        name="Customer MCP",
-        server_url="https://mcp.example",
-        auth_type=auth_type,
-        transport=None,
-        oauth_provider_mode=MCPOAuthProviderMode.AUTO_DISCOVERY,
-        oauth_cimd_enabled=True,
-        oauth_authorization_endpoint=None,
-        oauth_token_endpoint=None,
-    )
+_NO_AUTH = CallCredentials(
+    integration_id=1,
+    auth_method=None,
+    connection_id=None,
+    connection_user_id=None,
+    headers={},
+)
+
+
+def _mcp_tool(credentials: CallCredentials = _NO_AUTH) -> MCPTool:
     return MCPTool(
-        tool_id=1,
-        mcp_server=server,
+        integration_id=1,
+        integration_name="Customer MCP",
+        server_url="https://mcp.example",
+        transport=None,
         tool_name="lookup",
         tool_description="Lookup",
         tool_definition={"type": "object", "properties": {}},
+        acting_user_id=None,
+        credentials=credentials,
     )
 
 
@@ -76,10 +82,25 @@ def test_client_records_success_once() -> None:
 
 
 def test_client_records_missing_credentials_as_auth_error() -> None:
-    tool = _mcp_tool(MCPAuthenticationType.API_TOKEN)
-    with patch(
-        "onyx.tools.tool_implementations.mcp.mcp_tool.record_mcp_client_tool_outcome"
-    ) as record:
+    tool = _mcp_tool(
+        CallCredentials(
+            integration_id=1,
+            auth_method=IntegrationAuthMethod.OAUTH2,
+            connection_id=7,
+            connection_user_id=None,
+            headers={},
+            expires_at=datetime.now(timezone.utc),
+        )
+    )
+    with (
+        patch(
+            f"{_MODULE}.resolve_fresh_call_credentials",
+            return_value=ConnectionProblem(
+                code=ConnectionState.NOT_CONNECTED, reason="Connect it."
+            ),
+        ),
+        patch(f"{_MODULE}.record_mcp_client_tool_outcome") as record,
+    ):
         response = tool.run(_invocation(), ToolContext())
 
     record.assert_called_once()
@@ -103,7 +124,7 @@ def test_client_records_reauthentication_required_as_auth_error() -> None:
         response = tool.run(_invocation(), ToolContext())
 
     assert isinstance(response, ToolResult)
-    assert "Please use the MCP dropdown" in response.text
+    assert "from the Plugins page" in response.text
     record.assert_called_once()
     assert record.call_args.kwargs["status"] == MCPToolCallStatus.AUTH_ERROR
     assert response.is_error
@@ -151,7 +172,7 @@ def test_server_empty_state_is_success() -> None:
         patch.object(search, "record_mcp_server_tool_outcome") as outcome,
         patch.object(search, "record_mcp_search_results") as results,
     ):
-        response = asyncio.run(search.search_indexed_documents("query"))
+        response = tool_payload(asyncio.run(search.search_indexed_documents("query")))
 
     assert response["results"] == []
     outcome.assert_called_once()

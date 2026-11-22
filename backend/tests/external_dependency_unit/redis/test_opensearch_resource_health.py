@@ -10,6 +10,7 @@ from fastapi.testclient import TestClient
 
 from onyx.auth.users import current_user
 from onyx.background.celery.tasks import beat_schedule
+from onyx.cache.redis_backend import RedisCacheBackend
 from onyx.configs import app_configs
 from onyx.configs.constants import OnyxCeleryQueues, OnyxCeleryTask
 from onyx.db.enums import Permission
@@ -57,7 +58,7 @@ def vector_stats(usage: float = 20, tripped: bool = False) -> VectorResourceStat
         {
             "_nodes": {"failed": 0},
             "circuit_breaker_triggered": tripped,
-            "nodes": {"node-1": {"graph_memory_usage_percentage": usage}},
+            "nodes": {"node-1": {"usage_percent": usage}},
         }
     )
 
@@ -65,8 +66,9 @@ def vector_stats(usage: float = 20, tripped: bool = False) -> VectorResourceStat
 @pytest.fixture
 def redis(monkeypatch: pytest.MonkeyPatch) -> Generator[TenantRedisClient, None, None]:
     client = get_redis_client(tenant_id=f"test_resource_health_{uuid4().hex}")
-    monkeypatch.setattr(health, "get_shared_redis_client", lambda: client)
-    monkeypatch.setattr(api, "get_redis_client", lambda: client)
+    backend = RedisCacheBackend(client)
+    monkeypatch.setattr(health, "get_shared_cache_backend", lambda: backend)
+    monkeypatch.setattr(api, "get_cache_backend", lambda: backend)
     monkeypatch.setattr(health, "DISABLE_VECTOR_DB", False)
     yield client
     client.delete(

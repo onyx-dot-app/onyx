@@ -1,46 +1,39 @@
 """API endpoints for Build Mode session management."""
 
-import json
-import time
-from collections.abc import Generator
-from datetime import datetime, timezone
 from uuid import UUID
 
 from fastapi import APIRouter, Depends, File, HTTPException, Response, UploadFile
-from fastapi.responses import JSONResponse, StreamingResponse
-from pydantic import BaseModel
-from sqlalchemy import exists
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
-from onyx.db.engine.sql_engine import get_session, get_session_with_current_tenant
-from onyx.db.enums import (
-    Permission,
-    SandboxStatus,
-    ScheduledTaskRunStatus,
-)
-from onyx.db.models import BuildMessage, Sandbox, User
-from onyx.db.scheduled_task import get_scheduled_run_context
-from onyx.error_handling.error_codes import OnyxErrorCode
-from onyx.error_handling.exceptions import OnyxError
-from onyx.file_store.serving import build_content_disposition
-from onyx.redis.redis_pool import get_redis_client
-from onyx.server.features.build.configs import SSE_KEEPALIVE_INTERVAL
-from onyx.server.features.build.db.artifact import (
+from onyx.db.artifact import (
     get_output_card_rows,
     mark_output_viewed,
     mark_outputs_viewed,
 )
-from onyx.server.features.build.db.build_session import (
+from onyx.db.build_session import (
+    build_session_has_messages,
     get_build_session,
+    session_runtime_stale,
     set_build_session_sharing_scope,
 )
-from onyx.server.features.build.db.sandbox import (
+from onyx.db.engine.sql_engine import get_session
+from onyx.db.enums import (
+    Permission,
+    SandboxStatus,
+)
+from onyx.db.models import Sandbox, User
+from onyx.db.sandbox import (
     get_sandbox_by_user_id,
     update_sandbox_heartbeat,
 )
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
+from onyx.file_store.serving import build_content_disposition
 from onyx.server.features.build.models import UploadResponse
 from onyx.server.features.build.sandbox.factory import get_sandbox_manager
+from onyx.server.features.build.sandbox.firecracker.purge import purge_harness_session
 from onyx.server.features.build.sandbox.models import DirectoryListing
 from onyx.server.features.build.session.errors import (
     SandboxProvisioningInProgressError,
@@ -74,13 +67,12 @@ from onyx.server.features.build.session.models import (
     SetSessionSharingResponse,
     SnapshotResponse,
     WebappInfo,
+    skill_limit_notice,
 )
 from onyx.server.features.build.session.sandbox_lifecycle import (
     create_session_snapshot_keep_latest,
 )
 from onyx.server.features.build.session.session_ready import ensure_session_ready
-from onyx.server.features.build.session.streaming import SSE_KEEPALIVE
-from onyx.server.features.build.timeouts import POLL_INTERVAL_SECONDS
 from onyx.server.features.build.utils import sanitize_filename, validate_file
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
@@ -95,7 +87,7 @@ router = APIRouter(prefix="/sessions")
 # =============================================================================
 
 
-@router.get("", response_model=SessionListResponse)
+@router.get("")
 def list_sessions(
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
     db_session: Session = Depends(get_session),
@@ -113,7 +105,7 @@ def list_sessions(
     )
 
 
-@router.post("", response_model=DetailedSessionResponse)
+@router.post("")
 def create_session(
     request: SessionCreateRequest,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
@@ -127,7 +119,7 @@ def create_session(
     attempt leaves durable, repairable state (a later request converges on
     the same IDs) rather than rolling back to nothing.
 
-    The Redis lock only reduces duplicate provisioning work for concurrent
+    The cache lock only reduces duplicate provisioning work for concurrent
     requests; correctness comes from the committed reservation and the
     attempt-number condition on status writes.
     """
@@ -165,14 +157,14 @@ def create_session(
     except ValueError as e:
         logger.exception("Session creation failed")
         db_session.rollback()
-        raise HTTPException(status_code=429, detail=str(e))
+        raise OnyxError(OnyxErrorCode.RATE_LIMITED, str(e))
     except Exception as e:
         db_session.rollback()
         logger.error("Session creation failed: %s", e)
-        raise HTTPException(status_code=500, detail=f"Session creation failed: {e}")
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, f"Session creation failed: {e}")
 
 
-@router.get("/{session_id}", response_model=DetailedSessionResponse)
+@router.get("/{session_id}")
 def get_session_details(
     session_id: UUID,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
@@ -190,7 +182,7 @@ def get_session_details(
     session = session_manager.get_session(session_id, user.id)
 
     if session is None:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Session not found")
 
     # Get the user's sandbox to include in response
     sandbox = get_sandbox_by_user_id(db_session, user.id)
@@ -217,7 +209,10 @@ def reload_session_skills(
 ) -> SessionSkillsStateResponse:
     skills_stale = SessionManager(db_session).reload_session_skills(session_id, user)
     db_session.commit()
-    return SessionSkillsStateResponse(skills_stale=skills_stale)
+    return SessionSkillsStateResponse(
+        skills_stale=skills_stale,
+        skill_omissions=skill_limit_notice(get_sandbox_by_user_id(db_session, user.id)),
+    )
 
 
 @router.get("/{session_id}/sandbox-status")
@@ -234,12 +229,14 @@ def get_sandbox_status(
 
     sandbox = get_sandbox_by_user_id(db_session, user.id)
 
-    return SandboxStatusResponse(status=sandbox.status if sandbox else None)
+    return SandboxStatusResponse(
+        status=sandbox.status if sandbox else None,
+        skills_stale=session_runtime_stale(session, sandbox),
+        skill_omissions=skill_limit_notice(sandbox),
+    )
 
 
-@router.get(
-    "/{session_id}/pre-provisioned-check", response_model=PreProvisionedCheckResponse
-)
+@router.get("/{session_id}/pre-provisioned-check")
 def check_pre_provisioned_session(
     session_id: UUID,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
@@ -261,9 +258,7 @@ def check_pre_provisioned_session(
         return PreProvisionedCheckResponse(valid=False, session_id=None)
 
     # Check if session is still empty (no messages = pre-provisioned)
-    has_messages = db_session.query(
-        exists().where(BuildMessage.session_id == session_id)
-    ).scalar()
+    has_messages = build_session_has_messages(db_session, session_id)
 
     if not has_messages:
         return PreProvisionedCheckResponse(valid=True, session_id=str(session_id))
@@ -272,7 +267,7 @@ def check_pre_provisioned_session(
     return PreProvisionedCheckResponse(valid=False, session_id=None)
 
 
-@router.post("/{session_id}/generate-name", response_model=SessionNameGenerateResponse)
+@router.post("/{session_id}/generate-name")
 def generate_session_name(
     session_id: UUID,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
@@ -284,12 +279,12 @@ def generate_session_name(
     generated_name = session_manager.generate_session_name(session_id, user.id)
 
     if generated_name is None:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Session not found")
 
     return SessionNameGenerateResponse(name=generated_name)
 
 
-@router.put("/{session_id}/name", response_model=SessionResponse)
+@router.put("/{session_id}/name")
 def update_session_name(
     session_id: UUID,
     request: SessionUpdateRequest,
@@ -302,7 +297,7 @@ def update_session_name(
     session = session_manager.update_session_name(session_id, user.id, request.name)
 
     if session is None:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Session not found")
 
     # Get the user's sandbox to include in response
     sandbox = get_sandbox_by_user_id(db_session, user.id)
@@ -321,7 +316,7 @@ def set_session_public(
         session_id, user.id, request.sharing_scope, db_session
     )
     if not updated:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Session not found")
     return SetSessionSharingResponse(
         session_id=str(session_id),
         sharing_scope=updated.sharing_scope,
@@ -340,12 +335,17 @@ def delete_session(
     is NOT deleted (transaction is rolled back).
     """
     session_manager = SessionManager(db_session)
+    sandbox = get_sandbox_by_user_id(db_session, user.id)
+    sandbox_id = sandbox.id if sandbox is not None else None
 
     try:
         success = session_manager.delete_session(session_id, user.id)
         if not success:
-            raise HTTPException(status_code=404, detail="Session not found")
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "Session not found")
         db_session.commit()
+        # Only after the commit: a rolled-back delete keeps the session's save.
+        if sandbox_id is not None:
+            purge_harness_session(sandbox_id, session_id)
     except OnyxError:
         db_session.rollback()
         raise
@@ -356,15 +356,12 @@ def delete_session(
         # Sandbox termination failed - rollback to preserve session
         db_session.rollback()
         logger.error("Failed to delete session %s: %s", session_id, e)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to delete session: {e}",
-        )
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, f"Failed to delete session: {e}")
 
     return Response(status_code=204)
 
 
-@router.post("/{session_id}/restore", response_model=DetailedSessionResponse)
+@router.post("/{session_id}/restore")
 def restore_session(
     session_id: UUID,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
@@ -375,25 +372,21 @@ def restore_session(
     session-flow lock; returns 409 if another flow holds it."""
     session = get_build_session(session_id, user.id, db_session)
     if not session:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Session not found")
 
     sandbox = get_sandbox_by_user_id(db_session, user.id)
     if not sandbox:
-        raise HTTPException(status_code=404, detail="Sandbox not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Sandbox not found")
 
     sandbox_manager = get_sandbox_manager()
     tenant_id = get_current_tenant_id()
 
-    redis_client = get_redis_client(tenant_id=tenant_id)
-    lock = get_session_creation_lock(redis_client, user.id)
+    lock = get_session_creation_lock(tenant_id, user.id)
 
     # 409 instead of blocking — the frontend retries.
     acquired = lock.acquire(blocking=False)
     if not acquired:
-        raise HTTPException(
-            status_code=409,
-            detail="Restore already in progress",
-        )
+        raise OnyxError(OnyxErrorCode.CONFLICT, "Restore already in progress")
 
     try:
         sandbox = ensure_session_ready(db_session, sandbox_manager, session, user)
@@ -408,10 +401,7 @@ def restore_session(
         raise
     except Exception as e:
         logger.error("Failed to restore session %s: %s", session_id, e, exc_info=True)
-        raise HTTPException(
-            status_code=500,
-            detail=f"Failed to restore session: {e}",
-        )
+        raise OnyxError(OnyxErrorCode.INTERNAL_ERROR, f"Failed to restore session: {e}")
     finally:
         if lock.owned():
             lock.release()
@@ -510,6 +500,7 @@ def create_session_opencode_history_snapshot(
 
 @router.get(
     "/{session_id}/artifacts",
+    # no-response-model: allow the handler returns dicts that this model validates and filters
     response_model=list[ArtifactResponse],
 )
 def list_artifacts(
@@ -523,7 +514,7 @@ def list_artifacts(
 
     artifacts = session_manager.list_artifacts(session_id, user_id)
     if artifacts is None:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Session not found")
 
     return artifacts
 
@@ -602,7 +593,7 @@ def get_output_inventory(
     return SessionManager(db_session).get_output_inventory(session_id, user.id)
 
 
-@router.get("/{session_id}/files", response_model=DirectoryListing)
+@router.get("/{session_id}/files")
 def list_directory(
     session_id: UUID,
     path: str = "",
@@ -627,15 +618,15 @@ def list_directory(
     except ValueError as e:
         error_message = str(e)
         if "path traversal" in error_message.lower():
-            raise HTTPException(status_code=403, detail="Access denied")
+            raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "Access denied")
         elif "not found" in error_message.lower():
-            raise HTTPException(status_code=404, detail="Directory not found")
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "Directory not found")
         elif "not a directory" in error_message.lower():
-            raise HTTPException(status_code=400, detail="Path is not a directory")
-        raise HTTPException(status_code=400, detail=error_message)
+            raise OnyxError(OnyxErrorCode.BAD_REQUEST, "Path is not a directory")
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, error_message)
 
     if listing is None:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Session not found")
 
     return listing
 
@@ -659,13 +650,13 @@ def download_artifact(
             "path traversal" in error_message.lower()
             or "access denied" in error_message.lower()
         ):
-            raise HTTPException(status_code=403, detail="Access denied")
+            raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "Access denied")
         elif "directory" in error_message.lower():
-            raise HTTPException(status_code=400, detail="Cannot download directory")
-        raise HTTPException(status_code=400, detail=error_message)
+            raise OnyxError(OnyxErrorCode.BAD_REQUEST, "Cannot download directory")
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, error_message)
 
     if result is None:
-        raise HTTPException(status_code=404, detail="Artifact not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Artifact not found")
 
     content, mime_type, filename = result
 
@@ -696,11 +687,11 @@ def export_docx(
             "path traversal" in error_message.lower()
             or "access denied" in error_message.lower()
         ):
-            raise HTTPException(status_code=403, detail="Access denied")
-        raise HTTPException(status_code=400, detail=error_message)
+            raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "Access denied")
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, error_message)
 
     if result is None:
-        raise HTTPException(status_code=404, detail="File not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "File not found")
 
     docx_bytes, filename = result
 
@@ -731,11 +722,11 @@ def get_pptx_preview(
             "path traversal" in error_message.lower()
             or "access denied" in error_message.lower()
         ):
-            raise HTTPException(status_code=403, detail="Access denied")
-        raise HTTPException(status_code=400, detail=error_message)
+            raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "Access denied")
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, error_message)
 
     if result is None:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Session not found")
 
     return PptxPreviewResponse(**result)
 
@@ -771,7 +762,7 @@ def get_output_thumbnail(
     )
 
 
-@router.get("/{session_id}/webapp-info", response_model=WebappInfo)
+@router.get("/{session_id}/webapp-info")
 def get_webapp_info(
     session_id: UUID,
     user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
@@ -788,7 +779,7 @@ def get_webapp_info(
     webapp_info = session_manager.get_webapp_info(session_id, user_id)
 
     if webapp_info is None:
-        raise HTTPException(status_code=404, detail="Session not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Session not found")
 
     return WebappInfo(**webapp_info)
 
@@ -810,7 +801,7 @@ def download_webapp(
     result = session_manager.download_webapp_zip(session_id, user_id)
 
     if result is None:
-        raise HTTPException(status_code=404, detail="Webapp not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Webapp not found")
 
     zip_bytes, filename = result
 
@@ -843,11 +834,11 @@ def download_directory(
     except ValueError as e:
         error_message = str(e)
         if "path traversal" in error_message.lower():
-            raise HTTPException(status_code=403, detail="Access denied")
-        raise HTTPException(status_code=400, detail=error_message)
+            raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "Access denied")
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, error_message)
 
     if result is None:
-        raise HTTPException(status_code=404, detail="Directory not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Directory not found")
 
     zip_bytes, filename = result
 
@@ -860,7 +851,7 @@ def download_directory(
     )
 
 
-@router.post("/{session_id}/upload", response_model=UploadResponse)
+@router.post("/{session_id}/upload")
 def upload_file_endpoint(
     session_id: UUID,
     file: UploadFile = File(...),
@@ -875,7 +866,7 @@ def upload_file_endpoint(
     session_manager = SessionManager(db_session)
 
     if not file.filename:
-        raise HTTPException(status_code=400, detail="File has no filename")
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, "File has no filename")
 
     # Read file content (use sync file interface)
     content = file.file.read()
@@ -883,7 +874,7 @@ def upload_file_endpoint(
     # Validate file size (extension/type are intentionally unrestricted)
     is_valid, error = validate_file(len(content))
     if not is_valid:
-        raise HTTPException(status_code=400, detail=error)
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, error)
 
     # Sanitize filename
     safe_filename = sanitize_filename(file.filename)
@@ -898,12 +889,12 @@ def upload_file_endpoint(
             )
     except UploadLimitExceededError as e:
         # Return 429 for limit exceeded errors
-        raise HTTPException(status_code=429, detail=str(e))
+        raise OnyxError(OnyxErrorCode.RATE_LIMITED, str(e))
     except ValueError as e:
         error_message = str(e)
         if "not found" in error_message.lower():
-            raise HTTPException(status_code=404, detail=error_message)
-        raise HTTPException(status_code=400, detail=error_message)
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, error_message)
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, error_message)
 
     return UploadResponse(
         filename=safe_filename,
@@ -934,171 +925,14 @@ def delete_file_endpoint(
     except ValueError as e:
         error_message = str(e)
         if "path traversal" in error_message.lower():
-            raise HTTPException(status_code=403, detail="Access denied")
+            raise OnyxError(OnyxErrorCode.UNAUTHORIZED, "Access denied")
         elif "not found" in error_message.lower():
-            raise HTTPException(status_code=404, detail=error_message)
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, error_message)
         elif "directory" in error_message.lower():
-            raise HTTPException(status_code=400, detail="Cannot delete directory")
-        raise HTTPException(status_code=400, detail=error_message)
+            raise OnyxError(OnyxErrorCode.BAD_REQUEST, "Cannot delete directory")
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, error_message)
 
     if not deleted:
-        raise HTTPException(status_code=404, detail="File not found")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "File not found")
 
     return Response(status_code=204)
-
-
-# =============================================================================
-# Scheduled Task — session-view banner
-# =============================================================================
-
-
-class ScheduledRunContextResponse(BaseModel):
-    """Context surfaced by the session-view banner when a session came from a
-    scheduled run. Returned by ``GET /sessions/{id}/scheduled-run-context``.
-    """
-
-    run_id: str
-    task_id: str
-    task_name: str
-    status: ScheduledTaskRunStatus
-    started_at: datetime
-    finished_at: datetime | None
-    revision: int
-    viewed_revision: int | None
-
-
-@router.get("/{session_id}/scheduled-run-context")
-def get_session_scheduled_run_context(
-    session_id: UUID,
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
-    db_session: Session = Depends(get_session),
-) -> ScheduledRunContextResponse:
-    """Return the scheduled-task context for a session, if any.
-
-    The web UI calls this on every session view; a 200 response means
-    "render the banner above the transcript and apply scheduled-run state".
-    A 404 means "this is an interactive session, behave normally".
-    """
-    context = get_scheduled_run_context(
-        db_session=db_session,
-        session_id=session_id,
-        user_id=user.id,
-    )
-    if context is None:
-        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Session has no scheduled-run context")
-    return ScheduledRunContextResponse(
-        run_id=str(context["run_id"]),
-        task_id=str(context["task_id"]),
-        task_name=context["task_name"],
-        status=context["status"],
-        started_at=context["started_at"],
-        finished_at=context["finished_at"],
-        revision=context["revision"],
-        viewed_revision=context["viewed_revision"],
-    )
-
-
-def _scheduled_run_is_running(
-    *,
-    db_session: Session,
-    session_id: UUID,
-    user_id: UUID,
-) -> bool:
-    context = get_scheduled_run_context(
-        db_session=db_session,
-        session_id=session_id,
-        user_id=user_id,
-    )
-    return context is not None and context["status"] == ScheduledTaskRunStatus.RUNNING
-
-
-def _format_stream_error(detail: str) -> str:
-    payload = {
-        "type": "error",
-        "message": detail,
-        "timestamp": datetime.now(tz=timezone.utc).isoformat(),
-    }
-    return f"event: message\ndata: {json.dumps(payload)}\n\n"
-
-
-@router.get("/{session_id}/scheduled-run-events")
-def get_session_scheduled_run_events(
-    session_id: UUID,
-    user: User = Depends(require_permission(Permission.BASIC_ACCESS)),
-    db_session: Session = Depends(get_session),
-) -> StreamingResponse:
-    """Stream live ACP events for a running scheduled-origin Craft session."""
-    context = get_scheduled_run_context(
-        db_session=db_session,
-        session_id=session_id,
-        user_id=user.id,
-    )
-    if context is None:
-        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Session has no scheduled-run context")
-    if context["status"] != ScheduledTaskRunStatus.RUNNING:
-        raise OnyxError(OnyxErrorCode.CONFLICT, "Scheduled run is not running")
-
-    user_id = user.id
-
-    def stream_generator() -> Generator[str, None, None]:
-        # The executor links ScheduledTaskRun.session_id just before it resolves
-        # and persists BuildSession.opencode_session_id. Keep the HTTP stream
-        # alive during that short handoff so a fast click from the run table can
-        # attach without a visible error.
-        while True:
-            with get_session_with_current_tenant() as stream_db_session:
-                if not _scheduled_run_is_running(
-                    db_session=stream_db_session,
-                    session_id=session_id,
-                    user_id=user_id,
-                ):
-                    return
-
-                session = get_build_session(session_id, user_id, stream_db_session)
-                if session is None:
-                    yield _format_stream_error("Session not found")
-                    return
-                if session.opencode_session_id:
-                    break
-
-            yield SSE_KEEPALIVE
-            time.sleep(POLL_INTERVAL_SECONDS)
-
-        try:
-            with get_session_with_current_tenant() as stream_db_session:
-                session_manager = SessionManager(stream_db_session)
-                for chunk in session_manager.subscribe_to_existing_session_events(
-                    session_id,
-                    user_id,
-                    keepalive_seconds=SSE_KEEPALIVE_INTERVAL,
-                ):
-                    yield chunk
-                    stream_db_session.expire_all()
-                    if not _scheduled_run_is_running(
-                        db_session=stream_db_session,
-                        session_id=session_id,
-                        user_id=user_id,
-                    ):
-                        return
-        except GeneratorExit:
-            logger.info(
-                "Scheduled run live stream disconnected for session %s", session_id
-            )
-            raise
-        except OnyxError as exc:
-            yield _format_stream_error(exc.detail)
-        except Exception as exc:
-            logger.exception(
-                "Scheduled run live stream failed for session %s", session_id
-            )
-            yield _format_stream_error(str(exc))
-
-    return StreamingResponse(
-        stream_generator(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache, no-transform",
-            "Connection": "keep-alive",
-            "X-Accel-Buffering": "no",
-        },
-    )

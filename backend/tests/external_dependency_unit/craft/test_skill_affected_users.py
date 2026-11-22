@@ -6,8 +6,8 @@ from sqlalchemy.orm import Session
 
 from onyx.db.enums import SandboxStatus
 from onyx.db.models import OAuthAccount, User
-from onyx.db.skill import affected_user_ids_for_skill
-from onyx.server.features.build.db.sandbox import get_sandbox_user_map
+from onyx.db.plugin_access import affected_user_ids_for_plugins
+from onyx.db.sandbox import get_sandbox_user_map
 from tests.external_dependency_unit.craft.db_helpers import (
     add_user_to_group,
     make_group,
@@ -32,7 +32,7 @@ class TestAffectedUserIdsForSkill:
         make_sandbox(db_session, sleeping_user, status=SandboxStatus.SLEEPING)
         skill = make_skill(db_session, is_public=True)
 
-        result = affected_user_ids_for_skill(skill, db_session)
+        result = affected_user_ids_for_plugins([skill.id], db_session)
 
         assert {user.id for user in running_users} <= result
         assert sleeping_user.id not in result
@@ -53,7 +53,7 @@ class TestAffectedUserIdsForSkill:
         share_skill_with_group(db_session, skill, group)
         share_skill_with_user(db_session, skill, direct_user)
 
-        result = affected_user_ids_for_skill(skill, db_session)
+        result = affected_user_ids_for_plugins([skill.id], db_session)
 
         assert group_user.id in result
         assert direct_user.id in result
@@ -72,7 +72,7 @@ class TestAffectedUserIdsForSkill:
         share_skill_with_group(db_session, skill, group)
         share_skill_with_user(db_session, skill, user)
 
-        result = affected_user_ids_for_skill(skill, db_session)
+        result = affected_user_ids_for_plugins([skill.id], db_session)
 
         assert result == {user.id}
 

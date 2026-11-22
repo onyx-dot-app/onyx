@@ -19,6 +19,7 @@ from onyx.server.features.build.sandbox.models import (
     SandboxResource,
     SandboxResourceKind,
 )
+from onyx.server.features.build.session import locks as session_locks
 from onyx.server.features.build.session import sandbox_lifecycle as lifecycle
 
 
@@ -75,10 +76,7 @@ def test_cleanup_keeps_runtime_and_ports_after_checkpoint_or_delete_failure(
     else:
         manager.terminate_observed_resources.side_effect = RuntimeError("delete failed")
 
-    if failure in {"discovery", "rescan", "delete"}:
-        with pytest.raises(RuntimeError, match="failed"):
-            lifecycle.sleep_sandbox(db_session, manager, sandbox, "tenant-a", lock)
-    else:
+    with pytest.raises(RuntimeError, match="failed"):
         lifecycle.sleep_sandbox(db_session, manager, sandbox, "tenant-a", lock)
     if failure != "delete":
         manager.terminate_observed_resources.assert_not_called()
@@ -156,9 +154,9 @@ def test_sweep_checks_all_running_pages_before_the_next_scheduled_run(
     stale = MagicMock(return_value=False)
     session = MagicMock()
     monkeypatch.setattr(tasks, "get_cache_backend", lambda **_kwargs: cache)
-    monkeypatch.setattr(tasks, "get_redis_client", MagicMock())
+    monkeypatch.setattr(session_locks, "get_cache_backend", MagicMock())
     monkeypatch.setattr(tasks, "get_sandbox_manager", MagicMock())
-    monkeypatch.setattr(tasks, "reconcile_sandbox_resources", MagicMock())
+    monkeypatch.setattr(tasks, "fail_stale_provisioning_sandboxes", MagicMock())
     monkeypatch.setattr(tasks, "maybe_mark_tenant_active", MagicMock())
     monkeypatch.setattr(tasks, "get_session_with_current_tenant", lambda: session)
     monkeypatch.setattr(tasks, "get_running_sandboxes", pages)
@@ -201,9 +199,9 @@ def test_expired_sweep_resumes_after_a_slow_failed_sandbox(
 
     monkeypatch.setattr(tasks.time, "monotonic", lambda: elapsed)
     monkeypatch.setattr(tasks, "get_cache_backend", lambda **_kwargs: cache)
-    monkeypatch.setattr(tasks, "get_redis_client", MagicMock())
+    monkeypatch.setattr(session_locks, "get_cache_backend", MagicMock())
     monkeypatch.setattr(tasks, "get_sandbox_manager", MagicMock())
-    monkeypatch.setattr(tasks, "reconcile_sandbox_resources", MagicMock())
+    monkeypatch.setattr(tasks, "fail_stale_provisioning_sandboxes", MagicMock())
     monkeypatch.setattr(tasks, "maybe_mark_tenant_active", MagicMock())
     monkeypatch.setattr(tasks, "get_session_with_current_tenant", MagicMock())
     monkeypatch.setattr(tasks, "get_running_sandboxes", page)

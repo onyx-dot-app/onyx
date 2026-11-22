@@ -1,3 +1,6 @@
+import type { SkillLimitNotice } from "@/lib/skills/limits";
+import type { TimelineEvent } from "@/lib/timeline/events";
+
 // =============================================================================
 // Sharing Types
 // =============================================================================
@@ -41,6 +44,8 @@ export interface BuildMessage {
   attachments?: BuildMessageAttachment[];
   /** Structured sandbox event data (tool calls, thinking, plans) */
   message_metadata?: Record<string, any> | null;
+  /** A consolidated turn's timeline events, from its saved packets. */
+  timelineEvents?: TimelineEvent[];
 }
 
 export interface BuildMessageAttachment {
@@ -92,6 +97,8 @@ export interface ApiSandboxResponse {
 
 export interface ApiSandboxStatusResponse {
   status: ApiSandboxStatus | null;
+  skills_stale: boolean;
+  skill_omissions: SkillLimitNotice | null;
 }
 
 export interface ApiSessionResponse {
@@ -109,10 +116,12 @@ export interface ApiSessionResponse {
   agent_provider: string | null;
   agent_model: string | null;
   skills_stale: boolean;
+  skill_omissions: SkillLimitNotice | null;
 }
 
 export interface ApiSessionSkillsState {
   skills_stale: boolean;
+  skill_omissions: SkillLimitNotice | null;
 }
 
 export interface ApiDetailedSessionResponse extends ApiSessionResponse {

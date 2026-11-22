@@ -13,6 +13,7 @@ import (
 	"os/signal"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"sync"
 	"syscall"
 	"testing"
@@ -530,27 +531,21 @@ func TestLock_timesOutWithOwner(t *testing.T) {
 	if !errors.Is(err, ErrLocked) {
 		t.Fatalf("second lock: %v", err)
 	}
-	if got := err.Error(); !contains(got, "test holder") {
+	if got := err.Error(); !strings.Contains(got, "test holder") {
 		t.Errorf("error does not name the owner: %s", got)
 	}
 }
 
-func contains(s, sub string) bool {
-	return len(s) >= len(sub) && (s == sub || len(sub) == 0 || indexOf(s, sub) >= 0)
-}
-
-func indexOf(s, sub string) int {
-	for i := 0; i+len(sub) <= len(s); i++ {
-		if s[i:i+len(sub)] == sub {
-			return i
-		}
-	}
-	return -1
-}
-
 func TestUp_keepsServiceOnFixedPortItHolds(t *testing.T) {
 	s := newTestStack(t, t.TempDir())
-	fixed := freeBasePort() + 5
+	reservation, err := net.Listen("tcp", ":0")
+	if err != nil {
+		t.Fatal(err)
+	}
+	fixed := reservation.Addr().(*net.TCPAddr).Port
+	if err := reservation.Close(); err != nil {
+		t.Fatal(err)
+	}
 	p := &fakeProvider{services: []string{"web", "bot"}, fixedPorts: map[string]int{"bot": fixed}}
 	mustUp(t, s, p)
 	bot := servicePID(t, s, "bot")

@@ -1,3 +1,4 @@
+import { FetchError, type ErrorResponseBody } from "@/lib/fetcher";
 import {
   act,
   deferred,
@@ -8,6 +9,7 @@ import {
   within,
 } from "@tests/setup/test-utils";
 import SkillsPage from "@/views/SkillsPage";
+import { SWR_KEYS } from "@/lib/swr-keys";
 import type { CustomSkill, SkillsList } from "@/lib/skills/types";
 
 const mockSetSkillEnabled = jest.fn();
@@ -19,12 +21,11 @@ const mockToastError = jest.fn();
 const mockRouterReplace = jest.fn();
 const mockUseUserSkills = jest.fn();
 const mockStageSkillCreationDraft = jest.fn();
-const mockSearchParamsGet = jest.fn();
 
 jest.mock("swr", () => ({
   __esModule: true,
   ...jest.requireActual("swr"),
-  useSWRConfig: () => ({ mutate: mockMutate }),
+  useSWRConfig: () => ({ mutate: mockMutate, cache: new Map() }),
 }));
 
 jest.mock("next/navigation", () => ({
@@ -32,13 +33,7 @@ jest.mock("next/navigation", () => ({
     "@tests/setup/mocks/nextNavigation"
   ).nextNavigationMock,
   useRouter: () => ({ replace: mockRouterReplace }),
-  usePathname: () => "/craft/v1/skills",
-  useSearchParams: () => {
-    const externalAppId: unknown = mockSearchParamsGet("externalAppId");
-    return new URLSearchParams(
-      typeof externalAppId === "string" ? { externalAppId } : {}
-    );
-  },
+  usePathname: () => "/admin/skills",
 }));
 
 jest.mock("@/hooks/useUserSkills", () => ({
@@ -58,53 +53,6 @@ jest.mock("@opal/layouts/toast/store", () => ({
     error: (...args: unknown[]) => mockToastError(...args),
     success: jest.fn(),
   },
-}));
-
-jest.mock("@/sections/cards/SkillCard", () => ({
-  __esModule: true,
-  default: ({
-    item,
-    onEnabledChange,
-    onClick,
-    onDelete,
-    enablementPending,
-    selection,
-  }: {
-    item: CustomSkill;
-    onEnabledChange: (item: CustomSkill, enabled: boolean) => void;
-    onClick: (item: CustomSkill) => void;
-    onDelete: (item: CustomSkill) => void;
-    enablementPending: boolean;
-    selection?: {
-      checked: boolean;
-      disabled: boolean;
-      onCheckedChange: (checked: boolean) => void;
-    };
-  }) => (
-    <>
-      {selection && (
-        <input
-          type="checkbox"
-          aria-label={`Select ${item.name}`}
-          checked={selection.checked}
-          disabled={selection.disabled}
-          onChange={(event) => selection.onCheckedChange(event.target.checked)}
-        />
-      )}
-      <button
-        type="button"
-        role="switch"
-        aria-label={item.name}
-        aria-checked={item.enabled}
-        disabled={enablementPending}
-        onClick={() => onEnabledChange(item, !item.enabled)}
-      >
-        {item.name}
-      </button>
-      <button onClick={() => onClick(item)}>Preview {item.name}</button>
-      <button onClick={() => onDelete(item)}>Delete {item.name}</button>
-    </>
-  ),
 }));
 
 jest.mock("@/lib/skills/creationDraft", () => ({
@@ -128,16 +76,38 @@ jest.mock("@/sections/modals/skills/CreateSkillModal", () => ({
     ) : null,
 }));
 
-jest.mock("@/sections/modals/skills/ImportSkillsFromGitHubModal", () => ({
+jest.mock("@/sections/marketplaces/AddMarketplaceModal", () => ({
   __esModule: true,
   default: ({ open, onClose }: { open: boolean; onClose: () => void }) =>
     open ? (
       <button type="button" onClick={onClose}>
-        GitHub import open
+        Add marketplace open
       </button>
     ) : null,
 }));
 
+jest.mock("@/sections/marketplaces/MarketplacesTable", () => ({
+  __esModule: true,
+  default: () => <div>Marketplaces table</div>,
+}));
+
+let mockIsManager = false;
+jest.mock("@/lib/permissions/hooks", () => ({
+  usePermissionAuthority: () => ({
+    isGlobalHolder: mockIsManager,
+    isScopedManager: false,
+  }),
+}));
+
+jest.mock("@/sections/skills/SkillReviewRequests", () => ({
+  __esModule: true,
+  default: () => <div>Publish requests list</div>,
+}));
+
+jest.mock("@/sections/skills/SkillPublishingCard", () => ({
+  __esModule: true,
+  default: () => null,
+}));
 jest.mock("@/sections/modals/SkillPreviewModal", () => ({
   __esModule: true,
   default: ({ open }: { open: boolean }) =>
@@ -157,6 +127,10 @@ function customSkill(id: string, name: string): CustomSkill {
     enabled: false,
     can_toggle: true,
     installation_policy: "AVAILABLE",
+    default_installation_policy: "AVAILABLE",
+    can_delete: true,
+    group_summaries: [],
+    required_for_user: false,
     author_user_id: "owner-id",
     author_email: "owner@example.com",
     owner: { id: "owner-id", email: "owner@example.com" },
@@ -167,7 +141,18 @@ function customSkill(id: string, name: string): CustomSkill {
     group_shares: [],
     public_permission: "VIEWER",
     user_permission: "VIEWER",
-    external_app: null,
+    member_visible: true,
+    name_held_by: [],
+    current_version_id: null,
+    current_version_number: null,
+    published_version_number: null,
+    pending_version_number: null,
+    kind: "skill",
+    available_count: 0,
+    needed_count: 0,
+    plugin: null,
+    marketplace: null,
+    content_locked: false,
   };
 }
 
@@ -193,6 +178,7 @@ describe("SkillsPage preference toggles", () => {
   }
 
   beforeEach(() => {
+    mockIsManager = false;
     skillsData = {
       builtins: [],
       customs: [
@@ -216,110 +202,88 @@ describe("SkillsPage preference toggles", () => {
     mockBulkUpdateSkills.mockReset();
     mockRouterReplace.mockReset();
     window.history.replaceState(null, "", "/");
-    mockSearchParamsGet.mockReset();
-    mockSearchParamsGet.mockReturnValue(null);
     mockStageSkillCreationDraft.mockReset();
     mockStageSkillCreationDraft.mockReturnValue("draft-id");
   });
 
-  it("keeps shared skill previews available without sharing-management permission", async () => {
+  it("opens a custom skill on its skill page", async () => {
     skillsData.customs = [
       {
         ...customSkill("shared-id", "shared-skill"),
         user_permission: "VIEWER",
+        member_visible: true,
+        name_held_by: [],
       },
     ];
     render(<SkillsPage />);
     const user = setupUser();
-    await user.click(
-      screen.getByRole("button", { name: "Preview shared-skill" })
+    await user.click(screen.getByRole("row", { name: "Open shared-skill" }));
+    await waitFor(() =>
+      expect(window.location.pathname).toBe("/admin/skills/shared-id")
     );
-    expect(screen.getByRole("dialog")).toHaveTextContent("Skill instructions");
   });
 
-  it("keeps built-in skills collapsed until expanded", async () => {
-    skillsData.builtins = [builtinSkill()];
+  it("opens an uploaded plugin on its plugin page", async () => {
+    skillsData.customs = [
+      { ...customSkill("plugin-id", "review-kit"), kind: "plugin" },
+    ];
     render(<SkillsPage />);
     const user = setupUser();
-    const expand = screen.getByRole("button", {
-      name: "Expand Built-in skills (1)",
-    });
-    expect(expand).toHaveAttribute("aria-expanded", "false");
-    expect(
-      screen.queryByRole("button", { name: "Preview Browser" })
-    ).not.toBeInTheDocument();
-    await user.click(expand);
-    expect(
-      screen.getByRole("button", { name: "Preview Browser" })
-    ).toBeVisible();
-    expect(
-      screen.queryByRole("checkbox", { name: "Select Browser" })
-    ).not.toBeInTheDocument();
+    await user.click(screen.getByRole("row", { name: "Open review-kit" }));
+    await waitFor(() =>
+      expect(window.location.pathname).toBe("/app/customize/plugins/plugin-id")
+    );
   });
 
-  it("expands built-in matches when searching", async () => {
-    skillsData.builtins = [builtinSkill()];
+  it("shows publish requests in the library to a non-admin skill manager", () => {
+    mockIsManager = true;
     render(<SkillsPage />);
-    const user = setupUser();
-    await user.type(screen.getByPlaceholderText("Search skills..."), "browser");
-    expect(
-      await screen.findByRole("button", { name: "Preview Browser" })
-    ).toBeVisible();
-    expect(
-      screen.getByRole("button", { name: "Fold Built-in skills (1)" })
-    ).toHaveAttribute("aria-expanded", "true");
-    await user.clear(screen.getByPlaceholderText("Search skills..."));
-    expect(
-      screen.getByRole("button", { name: "Expand Built-in skills (1)" })
-    ).toHaveAttribute("aria-expanded", "false");
+    expect(screen.getByText("Publish requests list")).toBeInTheDocument();
+  });
+
+  it("hides publish requests from a user who does not manage skills", () => {
+    render(<SkillsPage />);
+    expect(screen.queryByText("Publish requests list")).not.toBeInTheDocument();
   });
 
   it("does not include built-in skills on the admin page", () => {
     skillsData.builtins = [builtinSkill()];
-    render(<SkillsPage admin />);
-    expect(screen.queryByText("Built-in skills (1)")).not.toBeInTheDocument();
+    render(<SkillsPage />);
     expect(
-      screen.queryByRole("button", { name: "Preview Browser" })
+      screen.queryByRole("row", { name: "Open Browser" })
     ).not.toBeInTheDocument();
   });
 
-  it("shows the custom empty state while keeping built-ins available", () => {
+  it("shows the empty state with no custom skills", () => {
     skillsData.builtins = [builtinSkill()];
     skillsData.customs = [];
     render(<SkillsPage />);
     expect(screen.getByText("No custom skills yet")).toBeInTheDocument();
-    expect(
-      screen.getByRole("button", { name: "Expand Built-in skills (1)" })
-    ).toBeInTheDocument();
   });
 
   it("shows the admin description on the admin page", () => {
-    render(<SkillsPage admin />);
+    render(<SkillsPage />);
     expect(
       screen.getByText("Manage skills and access across your organization.")
     ).toBeInTheDocument();
   });
 
-  it("replaces the selection label with the count and restores it when cleared", async () => {
+  it("shows the selection count and bulk actions until the selection clears", async () => {
     render(<SkillsPage />);
     const user = setupUser();
-    const row = screen.getByRole("group", { name: "Select skills" });
-    expect(within(row).getByText("Select skills")).toBeInTheDocument();
+    expect(screen.queryByText(/^\d+ selected$/)).not.toBeInTheDocument();
     await user.click(
       screen.getByRole("checkbox", { name: "Select first-skill" })
     );
-    expect(within(row).getByText("1 selected")).toBeInTheDocument();
-    expect(within(row).queryByText("Select skills")).not.toBeInTheDocument();
+    expect(screen.getByText("1 selected")).toBeInTheDocument();
     await user.click(
       screen.getByRole("checkbox", { name: "Select second-skill" })
     );
-    expect(within(row).getByText("2 selected")).toBeInTheDocument();
-    await user.click(
-      screen.getByRole("checkbox", { name: "Select all visible custom skills" })
-    );
-    expect(within(row).getByText("Select skills")).toBeInTheDocument();
+    expect(screen.getByText("2 selected")).toBeInTheDocument();
+    await user.click(screen.getByRole("checkbox", { name: "Select all" }));
+    expect(screen.queryByText(/^\d+ selected$/)).not.toBeInTheDocument();
     expect(
-      within(row).queryByRole("button", { name: "Share" })
+      screen.queryByRole("button", { name: "Share" })
     ).not.toBeInTheDocument();
   });
 
@@ -330,14 +294,9 @@ describe("SkillsPage preference toggles", () => {
     });
     render(<SkillsPage />);
     const user = setupUser();
-    await user.click(
-      screen.getByRole("checkbox", { name: "Select all visible custom skills" })
-    );
-    const browseRow = screen.getByRole("group", { name: "Select skills" });
-    expect(within(browseRow).getByText("2 selected")).toBeInTheDocument();
-    await user.click(
-      within(browseRow).getByRole("button", { name: "More actions" })
-    );
+    await user.click(screen.getByRole("checkbox", { name: "Select all" }));
+    expect(screen.getByText("2 selected")).toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "More actions" }));
     await user.click(screen.getByText("Enable for me", { exact: true }));
     await waitFor(() =>
       expect(mockBulkUpdateSkills).toHaveBeenCalledWith({
@@ -371,7 +330,7 @@ describe("SkillsPage preference toggles", () => {
       const user = setupUser();
       await user.click(
         screen.getByRole("checkbox", {
-          name: "Select all visible custom skills",
+          name: "Select all",
         })
       );
       await user.click(screen.getByRole("button", { name: "More actions" }));
@@ -393,9 +352,7 @@ describe("SkillsPage preference toggles", () => {
     });
     render(<SkillsPage />);
     const user = setupUser();
-    await user.click(
-      screen.getByRole("checkbox", { name: "Select all visible custom skills" })
-    );
+    await user.click(screen.getByRole("checkbox", { name: "Select all" }));
     await user.click(screen.getByRole("button", { name: "More actions" }));
     await user.click(screen.getByText("Enable for me", { exact: true }));
     await waitFor(() =>
@@ -412,48 +369,15 @@ describe("SkillsPage preference toggles", () => {
     mockSetSkillEnabled.mockReturnValueOnce(mutation.promise);
     render(<SkillsPage />);
     await user.click(screen.getByRole("switch", { name: "first-skill" }));
-    await user.click(
-      screen.getByRole("checkbox", { name: "Select all visible custom skills" })
-    );
-    const browseRow = screen.getByRole("group", { name: "Select skills" });
-    expect(
-      within(browseRow).getByRole("button", { name: "More actions" })
-    ).toBeDisabled();
+    await user.click(screen.getByRole("checkbox", { name: "Select all" }));
+    expect(screen.getByRole("button", { name: "More actions" })).toBeDisabled();
     await act(async () => {
       mutation.resolve(enabledCustomAt(0));
       await mutation.promise;
     });
     await waitFor(() =>
-      expect(
-        within(browseRow).getByRole("button", { name: "More actions" })
-      ).toBeEnabled()
+      expect(screen.getByRole("button", { name: "More actions" })).toBeEnabled()
     );
-  });
-
-  it("locks organization access in bulk sharing when an app skill is selected", async () => {
-    skillsData.customs[1] = {
-      ...skillsData.customs[1]!,
-      user_permission: "OWNER",
-      external_app: {
-        external_app_id: 7,
-        name: "GitHub",
-        enabled: true,
-        ready: true,
-      },
-    };
-    skillsData.customs[0] = {
-      ...skillsData.customs[0]!,
-      user_permission: "OWNER",
-    };
-    render(<SkillsPage />);
-    const user = setupUser();
-    await user.click(
-      screen.getByRole("checkbox", { name: "Select all visible custom skills" })
-    );
-    await user.click(screen.getByRole("button", { name: "Share" }));
-    expect(
-      screen.getByRole("button", { name: "Who can access" })
-    ).toBeDisabled();
   });
 
   it("lists exactly the skills selected for deletion before confirming", async () => {
@@ -465,7 +389,10 @@ describe("SkillsPage preference toggles", () => {
     ];
     skillsData.customs = names.map((name, index) => ({
       ...customSkill(`skill-${index}`, name),
+      public_permission: null,
       user_permission: "OWNER",
+      member_visible: true,
+      name_held_by: [],
     }));
     render(<SkillsPage />);
     const user = setupUser();
@@ -488,19 +415,171 @@ describe("SkillsPage preference toggles", () => {
     expect(mockBulkUpdateSkills).not.toHaveBeenCalled();
   });
 
+  it("does not offer bulk delete when the server refuses one skill", async () => {
+    skillsData.customs = [
+      { ...customSkill("private", "private-skill"), public_permission: null },
+      { ...customSkill("published", "published-skill"), can_delete: false },
+    ].map((skill) => ({ ...skill, user_permission: "OWNER" as const }));
+    render(<SkillsPage />);
+    const user = setupUser();
+    for (const name of ["private-skill", "published-skill"]) {
+      await user.click(
+        screen.getByRole("checkbox", { name: `Select ${name}` })
+      );
+    }
+    await user.click(screen.getByRole("button", { name: "More actions" }));
+    await user.click(screen.getByText("Delete", { exact: true }));
+    expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
+  });
+
   it("clears selection when search changes so hidden skills are not changed", async () => {
     render(<SkillsPage />);
     const user = setupUser();
-    await user.click(
-      screen.getByRole("checkbox", { name: "Select all visible custom skills" })
-    );
+    await user.click(screen.getByRole("checkbox", { name: "Select all" }));
     await user.type(screen.getByPlaceholderText("Search skills..."), "first");
     expect(screen.queryByText(/^\d+ selected$/)).not.toBeInTheDocument();
-    expect(screen.getByText("Select skills")).toBeInTheDocument();
     expect(
       screen.queryByRole("button", { name: "Enable for me" })
     ).not.toBeInTheDocument();
     expect(mockBulkUpdateSkills).not.toHaveBeenCalled();
+  });
+
+  it("finds skills by owner email and by group name", async () => {
+    skillsData.customs = [
+      {
+        ...customSkill("first-id", "first-skill"),
+        owner: { id: "ana-id", email: "ana@example.com" },
+      },
+      {
+        ...customSkill("second-id", "second-skill"),
+        group_summaries: [
+          {
+            group_id: 3,
+            group_name: "Design",
+            permission: "VIEWER",
+            installation_policy: null,
+          },
+        ],
+      },
+    ];
+    render(<SkillsPage />);
+    const user = setupUser();
+    const search = screen.getByPlaceholderText("Search skills...");
+
+    await user.type(search, "ana@");
+    expect(screen.getByText("first-skill")).toBeInTheDocument();
+    expect(screen.queryByText("second-skill")).not.toBeInTheDocument();
+
+    await user.clear(search);
+    await user.type(search, "design");
+    expect(screen.getByText("second-skill")).toBeInTheDocument();
+    expect(screen.queryByText("first-skill")).not.toBeInTheDocument();
+  });
+
+  it("filters the list by a group of the visible group summaries", async () => {
+    skillsData.customs = [
+      {
+        ...customSkill("first-id", "first-skill"),
+        group_summaries: [
+          {
+            group_id: 3,
+            group_name: "Design",
+            permission: "VIEWER",
+            installation_policy: "REQUIRED",
+          },
+        ],
+      },
+      {
+        ...customSkill("second-id", "second-skill"),
+        group_summaries: [
+          {
+            group_id: 4,
+            group_name: "Ops",
+            permission: null,
+            installation_policy: "NOT_AVAILABLE",
+          },
+        ],
+      },
+    ];
+    render(<SkillsPage />);
+    const user = setupUser();
+    await user.click(screen.getByRole("checkbox", { name: "Select all" }));
+
+    const filter = screen.getByRole("combobox", { name: "Filter by group" });
+    expect(filter).toHaveValue("All groups");
+    await user.click(filter);
+    await user.click(screen.getByRole("option", { name: "Ops" }));
+
+    expect(
+      screen.getByRole("switch", { name: "second-skill" })
+    ).toBeInTheDocument();
+    expect(
+      screen.queryByRole("switch", { name: "first-skill" })
+    ).not.toBeInTheDocument();
+    // A filter change clears the selection, as a search does.
+    expect(screen.queryByText(/^\d+ selected$/)).not.toBeInTheDocument();
+
+    await user.type(screen.getByPlaceholderText("Search skills..."), "first");
+    expect(screen.getByText("No matching skills")).toBeInTheDocument();
+    expect(
+      screen.getByText(
+        "No skills in this group match. Try a different group or search."
+      )
+    ).toBeInTheDocument();
+  });
+
+  it("clears the group filter when its group leaves every summary", async () => {
+    const ops = {
+      group_id: 4,
+      group_name: "Ops",
+      permission: null,
+      installation_policy: "NOT_AVAILABLE" as const,
+    };
+    const design = { ...ops, group_id: 3, group_name: "Design" };
+    skillsData.customs = [
+      { ...customSkill("first-id", "first-skill"), group_summaries: [design] },
+      { ...customSkill("second-id", "second-skill"), group_summaries: [ops] },
+    ];
+    const { rerender } = render(<SkillsPage />);
+    const user = setupUser();
+    await user.click(screen.getByRole("combobox", { name: "Filter by group" }));
+    await user.click(screen.getByRole("option", { name: "Ops" }));
+    expect(
+      screen.queryByRole("switch", { name: "first-skill" })
+    ).not.toBeInTheDocument();
+
+    skillsData = {
+      ...skillsData,
+      customs: [
+        {
+          ...customSkill("first-id", "first-skill"),
+          group_summaries: [design],
+        },
+        { ...customSkill("second-id", "second-skill"), group_summaries: [] },
+      ],
+    };
+    rerender(<SkillsPage />);
+    skillsData = {
+      ...skillsData,
+      customs: [
+        {
+          ...customSkill("first-id", "first-skill"),
+          group_summaries: [design],
+        },
+        { ...customSkill("second-id", "second-skill"), group_summaries: [ops] },
+      ],
+    };
+    rerender(<SkillsPage />);
+
+    expect(screen.getByRole("switch", { name: "first-skill" })).toBeVisible();
+    expect(screen.getByRole("switch", { name: "second-skill" })).toBeVisible();
+  });
+
+  it("shows no group filter when no skill has group summaries", () => {
+    render(<SkillsPage />);
+    expect(
+      screen.queryByRole("combobox", { name: "Filter by group" })
+    ).not.toBeInTheDocument();
   });
 
   it("deletes an invalid skill only after confirmation and removes it from the list", async () => {
@@ -509,14 +588,17 @@ describe("SkillsPage preference toggles", () => {
         ...customSkill("invalid-id", "invalid-skill"),
         is_valid: false,
         user_permission: "OWNER",
+        member_visible: true,
+        name_held_by: [],
       },
     ];
     mockDeleteUserSkill.mockResolvedValue(undefined);
     render(<SkillsPage />);
     const user = setupUser();
     await user.click(
-      screen.getByRole("button", { name: "Delete invalid-skill" })
+      screen.getByRole("button", { name: "More for invalid-skill" })
     );
+    await user.click(screen.getByRole("menuitem", { name: "Delete" }));
     expect(mockDeleteUserSkill).not.toHaveBeenCalled();
     expect(screen.getByRole("dialog")).toHaveTextContent("invalid-skill");
     await user.click(screen.getByRole("button", { name: "Delete" }));
@@ -528,69 +610,7 @@ describe("SkillsPage preference toggles", () => {
         screen.queryByRole("switch", { name: "invalid-skill" })
       ).not.toBeInTheDocument()
     );
-  });
-
-  it("refreshes associated apps after deletion without masking a successful delete on refresh failure", async () => {
-    skillsData.customs = [
-      {
-        ...customSkill("associated-id", "associated-skill"),
-        user_permission: "OWNER",
-        external_app: {
-          external_app_id: 7,
-          name: "CRM",
-          enabled: true,
-          ready: true,
-        },
-      },
-    ];
-    mockDeleteUserSkill.mockResolvedValue(undefined);
-    mockMutate.mockRejectedValue(new Error("Refresh failed"));
-    const log = jest.spyOn(console, "error").mockImplementation(() => {});
-    try {
-      render(<SkillsPage />);
-      const user = setupUser();
-      await user.click(
-        screen.getByRole("button", { name: "Delete associated-skill" })
-      );
-      await user.click(screen.getByRole("button", { name: "Delete" }));
-      await waitFor(() =>
-        expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
-      );
-      expect(mockMutate).toHaveBeenCalledWith("/api/build/admin/apps");
-      expect(skillsData.customs).toHaveLength(0);
-      expect(log).toHaveBeenCalled();
-    } finally {
-      log.mockRestore();
-    }
-  });
-
-  it("finishes deletion while the optional app refresh is pending", async () => {
-    skillsData.customs = [
-      {
-        ...customSkill("associated-id", "associated-skill"),
-        user_permission: "OWNER",
-        external_app: {
-          external_app_id: 7,
-          name: "CRM",
-          enabled: true,
-          ready: true,
-        },
-      },
-    ];
-    const refresh = deferred<void>();
-    mockDeleteUserSkill.mockResolvedValue(undefined);
-    mockMutate.mockReturnValue(refresh.promise);
-    render(<SkillsPage />);
-    const user = setupUser();
-    await user.click(
-      screen.getByRole("button", { name: "Delete associated-skill" })
-    );
-    await user.click(screen.getByRole("button", { name: "Delete" }));
-    await waitFor(() =>
-      expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
-    );
-    expect(skillsData.customs).toHaveLength(0);
-    await act(async () => refresh.resolve());
+    expect(mockMutate).toHaveBeenCalledWith(SWR_KEYS.chatSkills);
   });
 
   it("keeps an invalid skill and reports a failed delete", async () => {
@@ -599,14 +619,17 @@ describe("SkillsPage preference toggles", () => {
         ...customSkill("invalid-id", "invalid-skill"),
         is_valid: false,
         user_permission: "OWNER",
+        member_visible: true,
+        name_held_by: [],
       },
     ];
     mockDeleteUserSkill.mockRejectedValue(new Error("Delete failed"));
     render(<SkillsPage />);
     const user = setupUser();
     await user.click(
-      screen.getByRole("button", { name: "Delete invalid-skill" })
+      screen.getByRole("button", { name: "More for invalid-skill" })
     );
+    await user.click(screen.getByRole("menuitem", { name: "Delete" }));
     await user.click(screen.getByRole("button", { name: "Delete" }));
     await waitFor(() =>
       expect(mockToastError).toHaveBeenCalledWith("Delete failed")
@@ -625,20 +648,24 @@ describe("SkillsPage preference toggles", () => {
 
     expect(mockStageSkillCreationDraft).toHaveBeenCalledWith({ draft: true });
     expect(mockRouterReplace).toHaveBeenCalledWith(
-      "/craft/v1/skills/new?draft=draft-id"
+      "/app/customize/skills/new?draft=draft-id"
     );
     expect(mockRefresh).not.toHaveBeenCalled();
   });
 
-  it("offers GitHub import from the create menu", async () => {
+  it("offers Add marketplace from the create menu and lists marketplaces", async () => {
     const user = setupUser();
     render(<SkillsPage />);
 
+    expect(screen.getByText("Marketplaces table")).toBeInTheDocument();
+    expect(screen.queryByText("Import from GitHub")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "Create skill" }));
-    await user.click(screen.getAllByText("Import from GitHub")[0]!);
+    await user.click(
+      screen.getByRole("menuitem", { name: /^Add marketplace/ })
+    );
 
     expect(
-      screen.getByRole("button", { name: "GitHub import open" })
+      screen.getByRole("button", { name: "Add marketplace open" })
     ).toBeInTheDocument();
   });
 
@@ -650,18 +677,24 @@ describe("SkillsPage preference toggles", () => {
 
     await user.click(screen.getByRole("switch", { name: "first-skill" }));
 
-    const firstSwitch = screen.getByRole("switch", { name: "first-skill" });
-    const secondSwitch = screen.getByRole("switch", { name: "second-skill" });
-    expect(firstSwitch).toHaveAttribute("aria-checked", "true");
-    expect(firstSwitch).toBeDisabled();
-    expect(secondSwitch).toHaveAttribute("aria-checked", "false");
-    expect(secondSwitch).toBeEnabled();
+    const firstSwitch = () =>
+      screen.getByRole("switch", { name: "first-skill" });
+    const secondSwitch = () =>
+      screen.getByRole("switch", { name: "second-skill" });
+    expect(firstSwitch()).toHaveAttribute("aria-checked", "true");
+    expect(firstSwitch()).toHaveAttribute("aria-disabled", "true");
+    expect(secondSwitch()).toHaveAttribute("aria-checked", "false");
+    expect(secondSwitch()).not.toHaveAttribute("aria-disabled", "true");
 
     await act(async () => {
       mutation.resolve(enabledCustomAt(0));
       await mutation.promise;
     });
-    await waitFor(() => expect(firstSwitch).toBeEnabled());
+    await waitFor(() =>
+      expect(firstSwitch()).not.toHaveAttribute("aria-disabled", "true")
+    );
+    // The `@` menu in chat offers only enabled skills.
+    expect(mockMutate).toHaveBeenCalledWith(SWR_KEYS.chatSkills);
   });
 
   it("does not flash an unchanged same-named skill while enabling another", async () => {
@@ -677,15 +710,16 @@ describe("SkillsPage preference toggles", () => {
     mockSetSkillEnabled.mockReturnValueOnce(mutation.promise);
     render(<SkillsPage />);
 
-    const [firstSwitch, secondSwitch] = screen.getAllByRole("switch", {
-      name: "shared-name",
-    });
-    await user.click(firstSwitch!);
+    const firstSwitch = () =>
+      screen.getAllByRole("switch", { name: "shared-name" })[0]!;
+    const secondSwitch = () =>
+      screen.getAllByRole("switch", { name: "shared-name" })[1]!;
+    await user.click(firstSwitch());
 
-    expect(firstSwitch).toHaveAttribute("aria-checked", "true");
-    expect(firstSwitch).toBeDisabled();
-    expect(secondSwitch).toHaveAttribute("aria-checked", "false");
-    expect(secondSwitch).toBeEnabled();
+    expect(firstSwitch()).toHaveAttribute("aria-checked", "true");
+    expect(firstSwitch()).toHaveAttribute("aria-disabled", "true");
+    expect(secondSwitch()).toHaveAttribute("aria-checked", "false");
+    expect(secondSwitch()).not.toHaveAttribute("aria-disabled", "true");
 
     await act(async () => {
       mutation.resolve(enabledCustomAt(0));
@@ -705,19 +739,23 @@ describe("SkillsPage preference toggles", () => {
     await user.click(screen.getByRole("switch", { name: "first-skill" }));
     await user.click(screen.getByRole("switch", { name: "second-skill" }));
 
-    const firstSwitch = screen.getByRole("switch", { name: "first-skill" });
-    const secondSwitch = screen.getByRole("switch", { name: "second-skill" });
-    expect(firstSwitch).toHaveAttribute("aria-checked", "true");
-    expect(firstSwitch).toBeDisabled();
-    expect(secondSwitch).toHaveAttribute("aria-checked", "true");
-    expect(secondSwitch).toBeDisabled();
+    const firstSwitch = () =>
+      screen.getByRole("switch", { name: "first-skill" });
+    const secondSwitch = () =>
+      screen.getByRole("switch", { name: "second-skill" });
+    expect(firstSwitch()).toHaveAttribute("aria-checked", "true");
+    expect(firstSwitch()).toHaveAttribute("aria-disabled", "true");
+    expect(secondSwitch()).toHaveAttribute("aria-checked", "true");
+    expect(secondSwitch()).toHaveAttribute("aria-disabled", "true");
 
     await act(async () => {
       firstMutation.resolve(enabledCustomAt(0));
       await firstMutation.promise;
     });
-    await waitFor(() => expect(firstSwitch).toBeEnabled());
-    expect(secondSwitch).toBeDisabled();
+    await waitFor(() =>
+      expect(firstSwitch()).not.toHaveAttribute("aria-disabled", "true")
+    );
+    expect(secondSwitch()).toHaveAttribute("aria-disabled", "true");
 
     await act(async () => {
       secondMutation.resolve(enabledCustomAt(1));
@@ -732,8 +770,9 @@ describe("SkillsPage preference toggles", () => {
     render(<SkillsPage />);
 
     await user.click(screen.getByRole("switch", { name: "first-skill" }));
-    const firstSwitch = screen.getByRole("switch", { name: "first-skill" });
-    expect(firstSwitch).toHaveAttribute("aria-checked", "true");
+    const firstSwitch = () =>
+      screen.getByRole("switch", { name: "first-skill" });
+    expect(firstSwitch()).toHaveAttribute("aria-checked", "true");
 
     await act(async () => {
       mutation.reject(new Error("Preference update failed"));
@@ -741,32 +780,49 @@ describe("SkillsPage preference toggles", () => {
     });
 
     await waitFor(() => {
-      expect(firstSwitch).toHaveAttribute("aria-checked", "false");
-      expect(firstSwitch).toBeEnabled();
+      expect(firstSwitch()).toHaveAttribute("aria-checked", "false");
+      expect(firstSwitch()).not.toHaveAttribute("aria-disabled", "true");
     });
     expect(mockToastError).toHaveBeenCalledWith("Preference update failed");
+  });
+
+  it("shows a user the limit when the skill limit refuses a toggle", async () => {
+    const user = setupUser();
+    const refused = new FetchError("Refused", 413, {
+      error_code: "SKILL_LIMIT_EXCEEDED",
+      detail: "Refused",
+      skill_limit: {
+        usage: { bytes: 520 * 1024 * 1024, files: 140 },
+        max_bytes: 500 * 1024 * 1024,
+        max_files: 5000,
+      },
+    } as ErrorResponseBody);
+    mockSetSkillEnabled.mockRejectedValueOnce(refused);
+    render(<SkillsPage />);
+
+    await user.click(screen.getByRole("switch", { name: "first-skill" }));
+
+    await waitFor(() =>
+      expect(mockToastError).toHaveBeenCalledWith(
+        "This change puts you past the skill limit of 500 MB or 5,000 files. Turn off skills you do not use, then try again."
+      )
+    );
   });
 
   it("keeps a successful update when background revalidation fails", async () => {
     const user = setupUser();
     const updated = enabledCustomAt(0);
     mockSetSkillEnabled.mockResolvedValueOnce(updated);
-    mockRefresh
-      .mockImplementationOnce(
-        async (updater: (value: SkillsList) => SkillsList) => {
-          skillsData = updater(skillsData);
-          return skillsData;
-        }
-      )
-      .mockRejectedValueOnce(new Error("Refresh failed"));
+    mockMutate.mockRejectedValue(new Error("Refresh failed"));
     render(<SkillsPage />);
 
     await user.click(screen.getByRole("switch", { name: "first-skill" }));
 
-    const firstSwitch = screen.getByRole("switch", { name: "first-skill" });
+    const firstSwitch = () =>
+      screen.getByRole("switch", { name: "first-skill" });
     await waitFor(() => {
-      expect(firstSwitch).toHaveAttribute("aria-checked", "true");
-      expect(firstSwitch).toBeEnabled();
+      expect(firstSwitch()).toHaveAttribute("aria-checked", "true");
+      expect(firstSwitch()).not.toHaveAttribute("aria-disabled", "true");
     });
     await waitFor(() =>
       expect(mockToastError).toHaveBeenCalledWith(
@@ -786,24 +842,17 @@ describe("SkillsPage preference toggles", () => {
     };
     const second = {
       ...customSkill("second-id", "report-writer"),
-      external_app: {
-        external_app_id: 42,
-        name: "Acme CRM",
-        enabled: true,
-        ready: true,
-      },
     };
     skillsData = { builtins: [], customs: [first, second] };
     mockSetSkillEnabled.mockResolvedValueOnce({ ...second, enabled: true });
     render(<SkillsPage />);
 
-    const switches = screen.getAllByRole("switch", { name: "report-writer" });
-    await user.click(switches[1]!);
+    const switches = () =>
+      screen.getAllByRole("switch", { name: "report-writer" });
+    await user.click(switches()[1]!);
 
     expect(mockSetSkillEnabled).not.toHaveBeenCalled();
-    expect(
-      screen.getByText("Switch “report-writer” skill?")
-    ).toBeInTheDocument();
+    expect(screen.getByText("Turn on “report-writer”?")).toBeInTheDocument();
     expect(
       screen.getAllByText(
         "Only one skill named “report-writer” can be enabled at a time."
@@ -818,18 +867,18 @@ describe("SkillsPage preference toggles", () => {
     await user.click(screen.getByRole("button", { name: "Cancel" }));
     expect(mockSetSkillEnabled).not.toHaveBeenCalled();
 
-    await user.click(switches[1]!);
-    await user.click(screen.getByRole("button", { name: "Switch skill" }));
+    await user.click(switches()[1]!);
+    await user.click(screen.getByRole("button", { name: "Switch" }));
 
     await waitFor(() =>
       expect(mockSetSkillEnabled).toHaveBeenCalledWith("second-id", true, true)
     );
     await waitFor(() => {
-      expect(switches[0]).toHaveAttribute("aria-checked", "false");
-      expect(switches[1]).toHaveAttribute("aria-checked", "true");
+      expect(switches()[0]).toHaveAttribute("aria-checked", "false");
+      expect(switches()[1]).toHaveAttribute("aria-checked", "true");
     });
     expect(
-      screen.queryByText("Switch “report-writer” skill?")
+      screen.queryByText("Turn on “report-writer”?")
     ).not.toBeInTheDocument();
   });
 
@@ -848,12 +897,10 @@ describe("SkillsPage preference toggles", () => {
     await user.click(
       screen.getAllByRole("switch", { name: "report-writer" })[1]!
     );
-    await user.click(screen.getByRole("button", { name: "Switch skill" }));
+    await user.click(screen.getByRole("button", { name: "Switch" }));
 
     expect(screen.getByRole("button", { name: "Switching..." })).toBeDisabled();
-    expect(
-      screen.getByText("Switch “report-writer” skill?")
-    ).toBeInTheDocument();
+    expect(screen.getByText("Turn on “report-writer”?")).toBeInTheDocument();
 
     await act(async () => {
       mutation.reject(new Error("Replacement failed"));
@@ -861,11 +908,9 @@ describe("SkillsPage preference toggles", () => {
     });
 
     await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Switch skill" })).toBeEnabled()
+      expect(screen.getByRole("button", { name: "Switch" })).toBeEnabled()
     );
-    expect(
-      screen.getByText("Switch “report-writer” skill?")
-    ).toBeInTheDocument();
+    expect(screen.getByText("Turn on “report-writer”?")).toBeInTheDocument();
     expect(mockToastError).toHaveBeenCalledWith("Replacement failed");
   });
 
@@ -882,11 +927,11 @@ describe("SkillsPage preference toggles", () => {
     await user.click(screen.getByRole("switch", { name: "first-skill" }));
 
     expect(
-      await screen.findByText("Switch “first-skill” skill?")
+      await screen.findByText("Turn on “first-skill”?")
     ).toBeInTheDocument();
     expect(mockToastError).not.toHaveBeenCalled();
 
-    await user.click(screen.getByRole("button", { name: "Switch skill" }));
+    await user.click(screen.getByRole("button", { name: "Switch" }));
     await waitFor(() =>
       expect(mockSetSkillEnabled).toHaveBeenLastCalledWith(
         "first-id",
@@ -896,75 +941,8 @@ describe("SkillsPage preference toggles", () => {
     );
     await waitFor(() =>
       expect(
-        screen.queryByText("Switch “first-skill” skill?")
+        screen.queryByText("Turn on “first-skill”?")
       ).not.toBeInTheDocument()
     );
-  });
-
-  it("focuses the list on skills associated with a reviewed app", () => {
-    mockSearchParamsGet.mockImplementation((key: string) =>
-      key === "externalAppId" ? "42" : null
-    );
-    skillsData = {
-      builtins: [],
-      customs: [
-        {
-          ...customSkill("associated-id", "crm-workflow"),
-          external_app: {
-            external_app_id: 42,
-            name: "Acme CRM",
-            enabled: true,
-            ready: true,
-          },
-        },
-        customSkill("other-id", "other-skill"),
-      ],
-    };
-
-    render(<SkillsPage />);
-
-    expect(screen.getByText("Skills for app “Acme CRM”")).toBeInTheDocument();
-    expect(
-      screen.getByText(
-        "Enable every skill associated with app “Acme CRM”. The app may not work correctly without them. If another skill with the same name is enabled, enabling the app-associated skill disables the other skill for you."
-      )
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("switch", { name: "crm-workflow" })
-    ).toBeInTheDocument();
-    expect(
-      screen.queryByRole("switch", { name: "other-skill" })
-    ).not.toBeInTheDocument();
-  });
-
-  it("shows all skills when an app focus no longer resolves", () => {
-    mockSearchParamsGet.mockImplementation((key: string) =>
-      key === "externalAppId" ? "999" : null
-    );
-    skillsData = {
-      builtins: [],
-      customs: [
-        {
-          ...customSkill("associated-id", "crm-workflow"),
-          external_app: {
-            external_app_id: 42,
-            name: "Acme CRM",
-            enabled: true,
-            ready: true,
-          },
-        },
-        customSkill("other-id", "other-skill"),
-      ],
-    };
-
-    render(<SkillsPage />);
-
-    expect(screen.queryByText(/Skills for app/)).not.toBeInTheDocument();
-    expect(
-      screen.getByRole("switch", { name: "crm-workflow" })
-    ).toBeInTheDocument();
-    expect(
-      screen.getByRole("switch", { name: "other-skill" })
-    ).toBeInTheDocument();
   });
 });

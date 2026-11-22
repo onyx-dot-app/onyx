@@ -4,13 +4,14 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session
 
+from onyx.cache.factory import get_cache_backend
 from onyx.configs.app_configs import (
     DISABLE_VECTOR_DB,
     DOCUMENT_INDEX_NUM_ATTEMPTS_ON_STARTUP,
     PORT_SWAP_VERIFY_DOCS_PER_UNIT,
     PORT_SWAP_VERIFY_RETRY_DELAY_S,
 )
-from onyx.configs.constants import KV_REINDEX_KEY
+from onyx.configs.constants import KV_REINDEX_KEY, DocumentSource
 from onyx.db.connector_credential_pair import (
     fetch_indexable_standard_connector_credential_pair_ids,
     get_connector_credential_pairs,
@@ -62,12 +63,14 @@ from onyx.db.user_file import (
     sample_ported_user_file_ids,
 )
 from onyx.document_index.factory import get_default_document_index
+from onyx.document_index.opensearch.new_deployment import (
+    set_new_deployment_vector_quantization,
+)
 from onyx.document_index.opensearch.port_copy import (
     find_documents_missing_from_index,
     find_documents_with_no_chunks,
 )
 from onyx.key_value_store.factory import get_kv_store
-from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -84,7 +87,8 @@ def _perform_index_swap(
 
     `clear_for_cc_pairs` (the non-INSTANT port flow) clears what FUTURE may
     lack inside the flip's transaction and once more right after the commit;
-    see _clear_what_future_missed__no_commit.
+    see _clear_what_future_missed__no_commit. An empty list still clears the
+    documents a FUTURE attempt failed on.
 
     Returns the old search settings if the swap was successful, otherwise None.
     """
@@ -140,7 +144,7 @@ def _perform_index_swap(
         new_status=IndexModelStatus.PRESENT,
         db_session=db_session,
     )
-    if clear_for_cc_pairs:
+    if clear_for_cc_pairs is not None:
         # After the status updates, in the same transaction: every stamp that
         # was in flight has committed by now, and a row still locked belongs to
         # a batch that will read PAST and stamp nothing, so skip it rather
@@ -149,7 +153,7 @@ def _perform_index_swap(
             db_session, new_search_settings, clear_for_cc_pairs, skip_locked=True
         )
     db_session.commit()
-    if clear_for_cc_pairs:
+    if clear_for_cc_pairs is not None:
         # Once more after the commit, for the rows that were skipped: they are
         # free now, and nothing can stamp into the old index anymore.
         _clear_what_future_missed__no_commit(
@@ -186,7 +190,10 @@ def _perform_index_swap(
         new_search_settings.contextual_rag_model_configuration_id = None
         db_session.commit()
 
-    # Check for and possibly create the index for the new search settings.
+    # Check for and possibly create the index for the new search settings. On a
+    # new deployment this creates the first index, for the default model's
+    # FUTURE row from the migrations.
+    set_new_deployment_vector_quantization(db_session, new_search_settings)
     document_index = get_default_document_index(new_search_settings, None)
 
     WAIT_SECONDS = 5
@@ -269,9 +276,9 @@ def _ported_documents_present_in_new_index(
     if PORT_SWAP_VERIFY_DOCS_PER_UNIT == 0:
         return True
 
-    redis_client = get_redis_client()
+    cache = get_cache_backend()
     backoff_key = _verification_backoff_key(new_search_settings.id)
-    if redis_client.exists(backoff_key):
+    if cache.exists(backoff_key):
         return False
 
     connector_document_ids = sample_ported_document_ids(
@@ -285,9 +292,9 @@ def _ported_documents_present_in_new_index(
         return True
 
     def hold_and_back_off() -> bool:
-        # Redis rejects ex=0, and a delay of 0 means retry on the next tick anyway.
+        # The cache rejects ex=0, and a delay of 0 means retry on the next tick anyway.
         if PORT_SWAP_VERIFY_RETRY_DELAY_S > 0:
-            redis_client.set(backoff_key, "1", ex=PORT_SWAP_VERIFY_RETRY_DELAY_S)
+            cache.set(backoff_key, "1", ex=PORT_SWAP_VERIFY_RETRY_DELAY_S)
         return False
 
     try:
@@ -513,13 +520,20 @@ def check_and_perform_index_swap(db_session: Session) -> SearchSettings | None:
     if DISABLE_VECTOR_DB:
         return None
 
-    # Default CC-pair created for Ingestion API unused here
-    all_cc_pairs = get_connector_credential_pairs(db_session)
-    cc_pair_count = max(len(all_cc_pairs) - 1, 0)
     new_search_settings = get_secondary_search_settings(db_session)
 
     if not new_search_settings:
         return None
+
+    all_cc_pairs = get_connector_credential_pairs(db_session, eager_load_connector=True)
+    # User Library pairs are never indexed, so they never count as complete.
+    swap_counted_cc_pairs = [
+        cc_pair
+        for cc_pair in all_cc_pairs
+        if cc_pair.connector.source != DocumentSource.CRAFT_FILE
+    ]
+    # Default CC-pair created for Ingestion API unused here
+    cc_pair_count = max(len(swap_counted_cc_pairs) - 1, 0)
 
     # Handle switchover based on switchover_type
     switchover_type = new_search_settings.switchover_type
@@ -590,7 +604,7 @@ def check_and_perform_index_swap(db_session: Session) -> SearchSettings | None:
         # Count non-paused cc_pairs (excluding the default Ingestion API cc_pair)
         active_cc_pairs = [
             cc_pair
-            for cc_pair in all_cc_pairs
+            for cc_pair in swap_counted_cc_pairs
             if cc_pair.status != ConnectorCredentialPairStatus.PAUSED
         ]
         active_cc_pair_count = max(len(active_cc_pairs) - 1, 0)

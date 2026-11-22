@@ -43,10 +43,13 @@ inputs:
       public bases with a warning instead. Passed to the dhi-base-images action.
     required: false
     default: "true"
+  persist-pr-digest:
+    description: "Also persist the prebuilt digest for future runs of this PR."
+    default: "false"
 outputs:
   digest:
     description: "Digest of the pushed image. Consumers pull <runs-on-ecr-cache>@<digest>, never the mutable tag."
-    value: ${{ steps.build.outputs.digest }}
+    value: ${{ steps.prebuilt.outputs.digest || steps.build.outputs.digest }}
 runs:
   using: "composite"
   steps:
@@ -82,8 +85,24 @@ runs:
         docker-token: ${{ inputs.docker-token }}
         required: ${{ inputs.dhi-required }}
 
+    - name: Find a prebuilt Model Server image
+      id: prebuilt
+      uses: ./.github/actions/prebuilt-image
+      with:
+        name: model-server
+        context: ./backend
+        dockerfile: ./backend/Dockerfile.model_server
+        build-config: |
+          BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
+          ${{ env.DHI_PYTHON_BUILD_ARGS }}
+          platforms=${{ inputs.platforms }}
+        extra-paths: .github/actions/build-model-server-image/action.yml
+        image-repo: ${{ inputs.runs-on-ecr-cache }}
+        persist-pr-digest: ${{ inputs.persist-pr-digest }}
+
     - name: Build and push Model Server Docker image
       id: build
+      if: steps.prebuilt.outputs.digest == ''
       uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # ratchet:docker/build-push-action@v6
       with:
         context: ./backend
@@ -111,3 +130,12 @@ runs:
           type=registry,ref=${{ inputs.runs-on-ecr-cache }}:model-server-cache-${{ inputs.github-sha }},mode=max
           type=registry,ref=${{ inputs.runs-on-ecr-cache }}:model-server-cache-${{ steps.format-branch.outputs.cache-suffix }},mode=max
           type=registry,ref=${{ inputs.runs-on-ecr-cache }}:model-server-cache,mode=max
+
+    - name: Save the Model Server image digest
+      if: steps.build.outcome == 'success'
+      uses: ./.github/actions/prebuilt-image
+      with:
+        name: model-server
+        save-key: ${{ steps.prebuilt.outputs.save-key }}
+        save-digest: ${{ steps.build.outputs.digest }}
+        persist-pr-digest: ${{ inputs.persist-pr-digest }}

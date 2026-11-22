@@ -16,7 +16,6 @@ import { SettingsLayouts, InputVertical, toast, Section } from "@opal/layouts";
 import { SvgClock } from "@opal/icons";
 import ScheduleEditor from "@/app/craft/v1/tasks/components/ScheduleEditor";
 import TaskActionPolicies from "@/app/craft/v1/tasks/components/TaskActionPolicies";
-import type { TaskAppActionPolicies } from "@/lib/plugins/types";
 import {
   compileLocalPayloadToUtcCron,
   localPayloadToUtcPayload,
@@ -25,8 +24,11 @@ import EntryPickerPopover from "@/sections/input/EntryPickerPopover";
 import useUserSkills from "@/hooks/useUserSkills";
 import useUserExternalApps from "@/hooks/useUserExternalApps";
 import { useCraftMcpServers } from "@/lib/mcp/hooks";
+import { useChatSkills, useEntryPicker } from "@/lib/skills/hooks";
+import type { CaretText } from "@/lib/contentEditable";
 import {
-  detectSlashTrigger,
+  CRAFT_PICKER_TRIGGER,
+  filterPickerSections,
   pickerEntryConnectionPath,
   pickerEntryPromptPrefix,
   toPickerSections,
@@ -38,6 +40,7 @@ import type {
   ScheduledTaskCreateBody,
   ScheduledTaskDetail,
   ScheduledTaskPatchBody,
+  TaskIntegrationLink,
 } from "@/app/craft/v1/tasks/types";
 import {
   createScheduledTask,
@@ -76,14 +79,15 @@ export default function ScheduleTaskForm({
 }: ScheduleTaskFormProps) {
   const t = useTranslations("craft.tasks.form");
   const tActionPolicies = useTranslations("craft.actionPolicies");
+  const tScheduleEditor = useTranslations("craft.tasks.scheduleEditor");
   const navigation = useNavigation();
   const { mutate } = useSWRConfig();
   const [name, setName] = useState(initial.name);
   const [prompt, setPrompt] = useState(initial.prompt);
   const [mode, setMode] = useState<EditorMode>(initial.mode);
   const [payload, setPayload] = useState<EditorPayload>(initial.payload);
-  const [actionPolicies, setActionPolicies] = useState<
-    TaskAppActionPolicies[] | null
+  const [integrations, setIntegrations] = useState<
+    TaskIntegrationLink[] | null
   >(null);
   const [saving, setSaving] = useState(false);
   const [nameTouched, setNameTouched] = useState(false);
@@ -91,88 +95,51 @@ export default function ScheduleTaskForm({
 
   const promptTextareaRef = useRef<HTMLTextAreaElement>(null);
   const { data: skillsData } = useUserSkills();
+  const { entries: chatSkills, onInputFocus: onChatSkillsFocus } =
+    useChatSkills({ builtIns: false });
   const { data: externalAppsData } = useUserExternalApps();
   const { data: craftMcpData } = useCraftMcpServers();
   const pickerSections = useMemo(
     () =>
-      toPickerSections(skillsData, externalAppsData, craftMcpData?.mcp_servers),
-    [skillsData, externalAppsData, craftMcpData]
+      toPickerSections(
+        { builtins: skillsData?.builtins, customs: chatSkills.skills },
+        externalAppsData,
+        craftMcpData
+      ),
+    [skillsData, chatSkills, externalAppsData, craftMcpData]
   );
-  const [skillPicker, setSkillPicker] = useState<{
-    open: boolean;
-    anchorRect: DOMRect | null;
-    query: string;
-    slashIndex: number;
-  }>({ open: false, anchorRect: null, query: "", slashIndex: -1 });
-
-  const evaluateSkillPicker = useCallback((value: string, cursor: number) => {
-    const textBefore = value.slice(0, cursor);
-    const trigger = detectSlashTrigger(textBefore);
-    if (!trigger) {
-      setSkillPicker((s) => (s.open ? { ...s, open: false } : s));
-      return;
-    }
-    const anchorRect =
-      promptTextareaRef.current?.getBoundingClientRect() ?? null;
-    setSkillPicker({
-      open: true,
-      anchorRect,
-      query: trigger.query,
-      slashIndex: trigger.slashIndex,
-    });
-  }, []);
-
-  const handlePromptChange = useCallback(
-    (e: React.ChangeEvent<HTMLTextAreaElement>) => {
-      const value = e.target.value;
-      setPrompt(value);
-      evaluateSkillPicker(value, e.target.selectionStart ?? value.length);
-    },
-    [evaluateSkillPicker]
-  );
-
-  const handlePromptCursorChange = useCallback(
-    (e: React.SyntheticEvent<HTMLTextAreaElement>) => {
-      const target = e.currentTarget;
-      evaluateSkillPicker(target.value, target.selectionStart ?? 0);
-    },
-    [evaluateSkillPicker]
-  );
-
-  const closeSkillPicker = useCallback(() => {
-    setSkillPicker((s) => ({ ...s, open: false }));
-  }, []);
-
-  const handleSkillPickerSelect = useCallback(
-    (entry: PickerEntry) => {
+  const pickPromptEntry = useCallback(
+    (entry: PickerEntry, token: CaretText) => {
       const connectionPath = pickerEntryConnectionPath(entry);
       if (connectionPath) {
-        setSkillPicker((s) => ({ ...s, open: false }));
         navigation.go(connectionPath);
         return;
       }
-      if (!skillPicker.open) return;
-
-      const replacement = `${pickerEntryPromptPrefix(entry)} `;
-      const newPrompt =
-        prompt.slice(0, skillPicker.slashIndex) +
-        replacement +
-        prompt.slice(skillPicker.slashIndex + 1 + skillPicker.query.length);
-      setPrompt(newPrompt);
-
-      const cursorPos = skillPicker.slashIndex + replacement.length;
       const textarea = promptTextareaRef.current;
-      if (textarea) {
-        requestAnimationFrame(() => {
-          textarea.focus();
-          textarea.setSelectionRange(cursorPos, cursorPos);
-        });
-      }
-
-      setSkillPicker((prev) => (prev.open ? { ...prev, open: false } : prev));
+      if (!textarea) return;
+      // The caret is still where the last input left it, inside the word.
+      const caret = textarea.selectionStart;
+      const start = caret - token.before.length;
+      const replacement = `${pickerEntryPromptPrefix(entry)} `;
+      setPrompt(
+        textarea.value.slice(0, start) +
+          replacement +
+          textarea.value.slice(caret + token.after.length)
+      );
+      const cursorPos = start + replacement.length;
+      requestAnimationFrame(() => {
+        textarea.focus();
+        textarea.setSelectionRange(cursorPos, cursorPos);
+      });
     },
-    [prompt, navigation, skillPicker]
+    [navigation]
   );
+  const promptPicker = useEntryPicker({
+    trigger: CRAFT_PICKER_TRIGGER,
+    entries: pickerSections,
+    filter: filterPickerSections,
+    onSelect: pickPromptEntry,
+  });
 
   const compiled = compileLocalPayloadToUtcCron(mode, payload);
 
@@ -185,7 +152,9 @@ export default function ScheduleTaskForm({
   const nameError = trimmedName.length === 0 ? t("errors.nameRequired") : null;
   const promptError =
     trimmedPrompt.length === 0 ? t("errors.promptRequired") : null;
-  const scheduleError = !compiled.ok ? compiled.error : null;
+  const scheduleError = !compiled.ok
+    ? tScheduleEditor(`errors.${compiled.error}`)
+    : null;
 
   const shownNameError = nameTouched ? nameError : null;
   const shownPromptError = promptTouched ? promptError : null;
@@ -195,7 +164,7 @@ export default function ScheduleTaskForm({
     !promptError &&
     !scheduleError &&
     !saving &&
-    actionPolicies !== null;
+    integrations !== null;
 
   // Reason a submit button is blocked, surfaced via the `Disabled` wrapper's
   // tooltip. A natively-disabled <button> is inert and never fires hover
@@ -205,11 +174,11 @@ export default function ScheduleTaskForm({
     : (nameError ??
       promptError ??
       scheduleError ??
-      (actionPolicies === null ? tActionPolicies("loading") : undefined));
+      (integrations === null ? tActionPolicies("loading") : undefined));
 
   const submit = useCallback(
     async (runImmediately: boolean) => {
-      if (!compiled.ok || actionPolicies === null) return; // validation should already block, but typescript needs this
+      if (!compiled.ok || integrations === null) return; // validation should already block, but typescript needs this
       setSaving(true);
       try {
         const storagePayload = localPayloadToUtcPayload(mode, payload);
@@ -219,7 +188,7 @@ export default function ScheduleTaskForm({
             prompt: trimmedPrompt,
             editor_mode: mode,
             editor_payload: storagePayload,
-            action_policies: actionPolicies,
+            integrations,
           };
           const updated: ScheduledTaskDetail = await updateScheduledTask(
             initial.taskId,
@@ -239,7 +208,7 @@ export default function ScheduleTaskForm({
             editor_mode: mode,
             editor_payload: storagePayload,
             run_immediately: runImmediately,
-            action_policies: actionPolicies,
+            integrations,
           };
           await createScheduledTask(body);
           await mutate(SWR_KEYS.scheduledTasks);
@@ -263,7 +232,7 @@ export default function ScheduleTaskForm({
       mode,
       mutate,
       payload,
-      actionPolicies,
+      integrations,
       navigation,
       trimmedName,
       trimmedPrompt,
@@ -347,9 +316,11 @@ export default function ScheduleTaskForm({
             <InputTextArea
               ref={promptTextareaRef}
               value={prompt}
-              onChange={handlePromptChange}
-              onKeyUp={handlePromptCursorChange}
-              onClick={handlePromptCursorChange}
+              onChange={(e) => {
+                setPrompt(e.target.value);
+                promptPicker.onInput(e);
+              }}
+              onFocus={onChatSkillsFocus}
               onBlur={() => setPromptTouched(true)}
               placeholder={t("fields.prompt.placeholder")}
               rows={6}
@@ -359,12 +330,14 @@ export default function ScheduleTaskForm({
               variant={shownPromptError ? "error" : undefined}
             />
             <EntryPickerPopover
-              open={skillPicker.open}
-              anchorRect={skillPicker.anchorRect}
-              query={skillPicker.query}
-              sections={pickerSections}
-              onSelect={handleSkillPickerSelect}
-              onClose={closeSkillPicker}
+              open={promptPicker.open}
+              anchorRect={promptPicker.anchorRect}
+              query={promptPicker.query}
+              sections={promptPicker.sections}
+              onSelect={promptPicker.onSelect}
+              onEscape={promptPicker.onEscape}
+              onDismiss={promptPicker.reset}
+              trigger={CRAFT_PICKER_TRIGGER}
             />
             {shownPromptError && (
               <Text font="secondary-body" color="status-error-05">
@@ -393,8 +366,8 @@ export default function ScheduleTaskForm({
         <Section alignItems="stretch">
           <TaskActionPolicies
             taskId={initial.taskId}
-            value={actionPolicies}
-            onChange={setActionPolicies}
+            value={integrations}
+            onChange={setIntegrations}
           />
         </Section>
       </SettingsLayouts.Body>

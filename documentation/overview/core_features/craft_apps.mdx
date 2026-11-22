@@ -14,7 +14,7 @@ Craft can read a private Slack channel and reply in one of its threads only if y
 Examples include finding customer context in HubSpot, drafting a reply in Gmail, creating a Linear issue,
 writing a document to Google Drive, or opening a pull request in GitHub.
 
-<img className="rounded-image" src="/assets/overview/core_features/plugins/craft_plugins_directory.webp" alt="The Craft Plugins page with an MCP server and the Slack Craft App"/>
+<img className="rounded-image" src="/assets/overview/core_features/plugins/craft_plugins_directory.webp" alt="The Integrations tab of Customize with an MCP server and the Slack Craft App"/>
 
 <Note>
   Craft Apps work only in Craft. Main Chat does not support them.
@@ -34,8 +34,8 @@ These sources serve different purposes in a Craft session:
 
 ## Available apps
 
-Craft Apps are available in all editions. The Plugins page shows only the apps your organization has enabled.
-Onyx includes built-in support for:
+Craft Apps are available on Onyx Cloud and Enterprise Edition (Business plan or higher).
+**Customize → Integrations** shows only the apps that you have access to. Onyx includes built-in support for:
 
 | App                 | Example uses                                                                                        |
 | ------------------- | --------------------------------------------------------------------------------------------------- |
@@ -57,7 +57,7 @@ The actions available to you depend on the access granted by the external servic
 
 <Steps>
   <Step title="Connect your account">
-    Select **Plugins** in the Craft sidebar, click the app, then click **Connect**.
+    Select **Customize → Integrations** in the Craft sidebar, then click **Connect** on the app.
     Built-in apps open the service's sign-in page in a new tab.
     A custom app may instead ask for fields defined by your admin.
 
@@ -78,12 +78,6 @@ a connection card appears in the session with **Connect** and **Not now** option
   the Gmail account you authorize is the account Craft reads from and uses for drafts or sends.
 </Tip>
 
-### Review the app's skills
-
-The **Skills** tab lists the [Skills](/overview/core_features/craft_skills) that teach Craft how to use the app.
-
-<img className="rounded-image" src="/assets/overview/core_features/plugins/craft_plugin_slack_skills.webp" alt="The Skills tab for the Slack app"/>
-
 ## Guide Craft to the right data
 
 Connecting an app makes it available; your prompt should still identify the relevant scope. Include concrete names,
@@ -102,14 +96,14 @@ Your organization sets one of three policies for every app action:
 
 | Policy           | What you experience                                                   |
 | ---------------- | --------------------------------------------------------------------- |
-| **Auto-approve** | Craft performs the action without pausing. Common for low-risk reads. |
+| **Allow** | Craft performs the action without pausing. Common for low-risk reads. |
 | **Ask**          | Craft pauses and shows an approval card before sending the request.   |
-| **Disabled**     | Craft cannot perform the action and reports that it was blocked.      |
+| **Blocked**     | Craft cannot perform the action and reports that it was blocked.      |
 
-When an action uses **Ask**, expand the approval card to review the app, action, description,
-and request payload before deciding.
+When an action uses **Ask**, the approval card shows the app, action, description, request payload,
+and the time by which you must decide. Review them before deciding.
 
-<img className="rounded-image" src="/assets/overview/core_features/craft_approval_card.webp" alt="A Craft approval card for posting a Slack message with options to approve once, approve for the session, or reject"/>
+<img className="rounded-image" src="/assets/overview/core_features/craft_approval_card.webp" alt="A Craft approval card for sending a Gmail message, with the recipient, subject, and body, and options to approve once, approve for the session, or reject"/>
 
 | Choice                  | Effect                                                                                                  |
 | ----------------------- | ------------------------------------------------------------------------------------------------------- |
@@ -131,20 +125,16 @@ Before approving, confirm:
 
 If your admin lets users manage approval settings,
 open the app's approval settings to change the policy for your account.
-You cannot turn on an action that your admin set to **Disabled**.
+You cannot turn on an action that your admin set to **Blocked**.
 
 ## Apps in Scheduled Tasks
 
-A [Scheduled Task](/overview/core_features/craft_scheduled_tasks) runs without you present.
-In the task's **Plugins** section, enable only the apps that the task needs,
-and set the actions it must perform to **Auto-approve** in the app's **Approval settings**.
-
-Task settings apply only to that task. An action with a **Disabled** policy stays blocked.
-If a run reaches an action that needs approval, the run stops and waits for you.
+Craft Apps are not available to [Scheduled Tasks](/overview/core_features/scheduled_tasks).
+A Scheduled Task runs in chat and can use only MCP and OpenAPI integrations.
 
 ## Disconnect an app
 
-Open **Plugins**, click the app, and click **Disconnect**.
+Open **Customize → Integrations**, click the app, and click **Disconnect**.
 
 <Info>
   Raw app credentials never enter Craft's sandbox workspace.
@@ -160,12 +150,6 @@ Open **Plugins**, click the app, and click **Disconnect**.
   or expired while awaiting approval. Craft does not retry a blocked action automatically;
   adjust the request or contact an admin if the action should be available.
 </Accordion>
-
-  <Accordion title="A Scheduled Task is awaiting approval">
-    Edit the task and confirm that the required app is enabled under **Plugins** and the action is set to
-    **Auto-approve** in its approval settings. If it is, an admin may have disabled that action,
-    or the run may need a different app.
-  </Accordion>
 </AccordionGroup>
 
 <CardGroup cols={2}>

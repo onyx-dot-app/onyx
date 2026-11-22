@@ -2,6 +2,7 @@ package parser
 
 import (
 	"encoding/json"
+	"reflect"
 	"testing"
 
 	"github.com/onyx-dot-app/onyx/cli/internal/models"
@@ -44,7 +45,7 @@ func TestSessionCreated(t *testing.T) {
 
 func TestMessageIDInfo(t *testing.T) {
 	line := mustJSON(map[string]interface{}{
-		"user_message_id":              1,
+		"user_message_id":               1,
 		"reserved_assistant_message_id": 2,
 	})
 	event := ParseStreamLine(line)
@@ -60,9 +61,23 @@ func TestMessageIDInfo(t *testing.T) {
 	}
 }
 
+func TestStreamCursor(t *testing.T) {
+	event := ParseStreamLine(`{"stream_id":7,"next_cursor":3,"replay_complete":true}`)
+	if e, ok := event.(models.StreamCursorEvent); !ok || e != (models.StreamCursorEvent{StreamID: 7, NextCursor: 3, ReplayComplete: true}) {
+		t.Fatalf("got %#v", event)
+	}
+}
+
+func TestReplayEnd(t *testing.T) {
+	event := ParseStreamLine(`{"placement":{"turn_index":0},"obj":{"type":"replay_end"}}`)
+	if _, ok := event.(models.ReplayEndEvent); !ok {
+		t.Fatalf("got %#v", event)
+	}
+}
+
 func TestMessageIDInfoNullUserID(t *testing.T) {
 	line := mustJSON(map[string]interface{}{
-		"user_message_id":              nil,
+		"user_message_id":               nil,
 		"reserved_assistant_message_id": 5,
 	})
 	event := ParseStreamLine(line)
@@ -335,6 +350,139 @@ func TestCustomToolStart(t *testing.T) {
 	}
 }
 
+func TestCustomToolStartUsesDisplayName(t *testing.T) {
+	line := makePacket(map[string]interface{}{
+		"type":         "custom_tool_start",
+		"tool_name":    "mcp__3__my__srv__create_issue",
+		"display_name": "create_issue",
+	}, 0, 0)
+	event := ParseStreamLine(line)
+	e, ok := event.(models.ToolStartEvent)
+	if !ok {
+		t.Fatalf("expected ToolStartEvent, got %T", event)
+	}
+	if e.ToolName != "create_issue" {
+		t.Errorf("got %s", e.ToolName)
+	}
+}
+
+func TestToolApprovalRequest(t *testing.T) {
+	line := makePacket(map[string]interface{}{
+		"type":         "tool_approval_request",
+		"approval_id":  "a1",
+		"tool_call_id": "call-1",
+		"tool_name":    "mcp__3__linear__create_issue",
+		"display_name": "Create issue",
+		"arguments":    map[string]interface{}{"title": "Bug", "priority": 2, "id": json.Number("9007199254740993")},
+		"agent_name":   "researcher",
+	}, 1, 0)
+	event := ParseStreamLine(line)
+	e, ok := event.(models.ToolApprovalRequestEvent)
+	if !ok {
+		t.Fatalf("expected ToolApprovalRequestEvent, got %T", event)
+	}
+	if e.ApprovalID != "a1" || e.ToolCallID != "call-1" || e.ToolName != "mcp__3__linear__create_issue" || e.DisplayName != "Create issue" || e.AgentName != "researcher" {
+		t.Errorf("unexpected identity fields: %+v", e)
+	}
+	if e.Arguments["title"] != "Bug" || e.Arguments["priority"] != json.Number("2") || e.Arguments["id"] != json.Number("9007199254740993") {
+		t.Errorf("arguments = %v", e.Arguments)
+	}
+	if e.EventType() != models.EventToolApprovalRequest {
+		t.Errorf("event type = %s", e.EventType())
+	}
+}
+
+func TestToolApprovalRequestToleratesBadFields(t *testing.T) {
+	line := makePacket(map[string]interface{}{
+		"type":        "tool_approval_request",
+		"approval_id": "a1",
+		"arguments":   "not an object",
+	}, 1, 0)
+	e, ok := ParseStreamLine(line).(models.ToolApprovalRequestEvent)
+	if !ok {
+		t.Fatal("expected ToolApprovalRequestEvent")
+	}
+	if e.Arguments != nil {
+		t.Errorf("bad fields must parse as absent, got %+v", e)
+	}
+}
+
+func TestToolApprovalResolved(t *testing.T) {
+	line := makePacket(map[string]interface{}{
+		"type": "tool_approval_resolved", "approval_id": "a1", "outcome": "cancelled",
+	}, 1, 0)
+	e, ok := ParseStreamLine(line).(models.ToolApprovalResolvedEvent)
+	if !ok {
+		t.Fatal("expected ToolApprovalResolvedEvent")
+	}
+	if e.ApprovalID != "a1" || e.Outcome != models.ApprovalOutcomeCancelled {
+		t.Errorf("got %+v", e)
+	}
+}
+
+func TestToolQuestionRequest(t *testing.T) {
+	line := makePacket(map[string]interface{}{
+		"type":                "tool_question_request",
+		"question_request_id": "q1",
+		"tool_call_id":        "call-1",
+		"questions": []interface{}{map[string]interface{}{
+			"id": "scope", "header": "Scope", "question": "Which teams?",
+			"options": []interface{}{
+				map[string]interface{}{"label": "Company (Recommended)", "description": "All teams."},
+				map[string]interface{}{"label": "Team", "description": "Only yours."},
+			},
+		}},
+	}, 1, 0)
+	e, ok := ParseStreamLine(line).(models.ToolQuestionRequestEvent)
+	if !ok {
+		t.Fatal("expected ToolQuestionRequestEvent")
+	}
+	want := []models.ToolQuestion{{ID: "scope", Header: "Scope", Question: "Which teams?", Options: []models.ToolQuestionOption{
+		{Label: "Company (Recommended)", Description: "All teams."}, {Label: "Team", Description: "Only yours."},
+	}}}
+	if e.QuestionRequestID != "q1" || e.ToolCallID != "call-1" || !reflect.DeepEqual(e.Questions, want) || e.Placement == nil || e.Placement.TurnIndex != 1 {
+		t.Errorf("got %+v", e)
+	}
+}
+
+func TestToolQuestionResolved(t *testing.T) {
+	for name, tt := range map[string]struct {
+		obj  map[string]interface{}
+		want models.ToolQuestionResolvedEvent
+	}{
+		"card": {
+			obj: map[string]interface{}{"answered_via": "card", "answers": []interface{}{
+				map[string]interface{}{"question_id": "scope", "option_label": "Team", "user_note": nil},
+			}, "message": nil},
+			want: models.ToolQuestionResolvedEvent{AnsweredVia: "card", Answers: []models.ToolQuestionAnswer{{QuestionID: "scope", OptionLabel: "Team"}}},
+		},
+		"message": {
+			obj:  map[string]interface{}{"answered_via": "message", "answers": nil, "message": "Only Ana"},
+			want: models.ToolQuestionResolvedEvent{AnsweredVia: "message", Message: "Only Ana"},
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			tt.obj["type"], tt.obj["question_request_id"], tt.obj["outcome"] = "tool_question_resolved", "q1", "answered"
+			e, ok := ParseStreamLine(makePacket(tt.obj, 1, 0)).(models.ToolQuestionResolvedEvent)
+			if !ok {
+				t.Fatal("expected ToolQuestionResolvedEvent")
+			}
+			e.Placement = nil
+			tt.want.QuestionRequestID, tt.want.Outcome = "q1", models.QuestionOutcomeAnswered
+			if !reflect.DeepEqual(e, tt.want) {
+				t.Errorf("got %+v, want %+v", e, tt.want)
+			}
+		})
+	}
+}
+
+func TestToolQuestionRequestWithBadFieldsIsUnknown(t *testing.T) {
+	line := makePacket(map[string]interface{}{"type": "tool_question_request", "question_request_id": "q1", "questions": "not a list"}, 1, 0)
+	if _, ok := ParseStreamLine(line).(models.UnknownEvent); !ok {
+		t.Fatal("a malformed question request must not show as a question")
+	}
+}
+
 func TestDeepResearchPlanDelta(t *testing.T) {
 	line := makePacket(map[string]interface{}{
 		"type": "deep_research_plan_delta", "content": "Step 1: ...",
@@ -416,4 +564,12 @@ func mustJSON(v interface{}) string {
 		panic(err)
 	}
 	return string(b)
+}
+
+func TestStreamedErrorKeepsItsErrorCode(t *testing.T) {
+	event := ParseStreamLine(`{"error":"Approve or reject","error_code":"APPROVAL_PENDING","is_retryable":false}`)
+	e, ok := event.(models.ErrorEvent)
+	if !ok || e.ErrorCode != "APPROVAL_PENDING" || e.Error != "Approve or reject" || e.IsRetryable {
+		t.Fatalf("event = %#v", event)
+	}
 }

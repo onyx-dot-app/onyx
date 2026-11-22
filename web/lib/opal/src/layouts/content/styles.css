@@ -240,6 +240,12 @@
   @apply flex items-center min-w-0 gap-0;
 }
 
+/* A title with no spaces, such as a long name, breaks to fit its row. */
+.opal-content-title-row > [data-opal-content-title] {
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+
 .opal-content-description,
 .opal-content-suffix {
   color: var(--content-foreground-secondary);
@@ -255,7 +261,7 @@
 }
 
 .opal-content-badge {
-  @apply ms-1 flex shrink-0;
+  @apply ms-1 flex shrink-0 gap-1;
 }
 
 /* ---------------------------------------------------------------------------

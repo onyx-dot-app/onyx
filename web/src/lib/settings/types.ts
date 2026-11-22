@@ -15,6 +15,14 @@ export enum QueryHistoryType {
   NORMAL = "normal",
 }
 
+// Who can publish skills to the organization. Organization-wide skill
+// managers always publish at once.
+export enum PluginPublishingPolicy {
+  OPEN = "OPEN",
+  REQUIRES_REVIEW = "REQUIRES_REVIEW",
+  OFF = "OFF",
+}
+
 export interface Settings {
   anonymous_user_enabled: boolean;
   invite_only_enabled: boolean;
@@ -90,6 +98,10 @@ export interface Settings {
   // prompt (AGENTS.md).
   craft_instructions?: string | null;
 
+  plugin_publishing?: PluginPublishingPolicy;
+  // Whether members can share skills with people and groups. Admins always can.
+  plugin_sharing?: boolean;
+
   // Dev/debug flag: when true, the Craft UI renders an "Opencode pod logs"
   // button that streams the user's sandbox pod logs in real time. Backed
   // by the ENABLE_OPENCODE_DEBUGGING env var on the server. Never set in
@@ -115,6 +127,9 @@ export interface Settings {
 
   // True when hooks are available: single-tenant deployments only.
   hooks_enabled?: boolean;
+
+  // True on the playground deployment (IS_PLAYGROUND env var on the server).
+  is_playground?: boolean;
 
   // Application version from the ONYX_VERSION env var on the server.
   version?: string | null;

@@ -9,6 +9,10 @@ import { Text } from "@opal/components";
 import { Interactive } from "@opal/core";
 import { SvgChevronUp, SvgChevronDown, SvgRevert } from "@opal/icons";
 import type { RichStr } from "@opal/types";
+import {
+  InputTooltip,
+  useInputDisabled,
+} from "@opal/components/inputs/disabled";
 
 type InputNumberVariant =
   | "primary"
@@ -58,6 +62,9 @@ const INNER_CLASSES: Record<InputNumberVariant, string | null> = {
  *   step={5}
  * />
  * ```
+ *
+ * Inside `InputHorizontal` or `InputVertical`, the row's `disabled` and
+ * `disabledTooltip` apply to it too.
  */
 export interface InputNumberProps {
   value: number | null;
@@ -72,6 +79,8 @@ export interface InputNumberProps {
   showReset?: boolean;
   variant?: InputNumberVariant;
   disabled?: boolean;
+  /** Shown on hover, in any state. A disabled row's reason replaces it. */
+  tooltip?: string | RichStr;
   placeholder?: string;
   /** Unit text shown after the value, inside the field (e.g. "minutes"). */
   suffix?: string;
@@ -105,8 +114,9 @@ export default function InputNumber({
   decimalPlaces = 0,
   defaultValue,
   showReset = false,
-  variant = "primary",
+  variant: variantProp = "primary",
   disabled = false,
+  tooltip,
   placeholder,
   suffix,
   valueSuffix,
@@ -114,6 +124,9 @@ export default function InputNumber({
   allowEmpty = true,
   plain = false,
 }: InputNumberProps) {
+  const variant: InputNumberVariant = useInputDisabled(false)
+    ? "disabled"
+    : variantProp;
   const inputRef = React.useRef<HTMLInputElement | null>(null);
   const [inputValue, setInputValue] = React.useState(
     value === null ? "" : String(value)
@@ -273,89 +286,97 @@ export default function InputNumber({
   return (
     // Pointer convenience only — this forwards a click to the input, which is
     // already keyboard reachable.
-    <InputContainer variant={variant} focusTarget={() => inputRef.current}>
-      {valueSuffix ? (
-        <span className="opal-input-number-value">
-          {/* The input grows with its text, so the suffix follows the value. */}
-          <span
-            className={cn("opal-input-number-sizer", valueFont)}
-            data-value={inputValue || placeholder || ""}
-          >
-            {input}
-          </span>
-          {inputValue !== "" && (
-            <span id={valueSuffixId} className="opal-input-number-value-suffix">
-              <Text
-                font={plain ? "main-ui-mono" : "main-ui-body"}
-                color={isDisabled ? "text-01" : "text-02"}
-              >
-                {valueSuffix}
-              </Text>
+    <InputTooltip tooltip={tooltip}>
+      <InputContainer variant={variant} focusTarget={() => inputRef.current}>
+        {valueSuffix ? (
+          <span className="opal-input-number-value">
+            {/* The input grows with its text, so the suffix follows the value. */}
+            <span
+              className={cn("opal-input-number-sizer", valueFont)}
+              data-value={inputValue || placeholder || ""}
+            >
+              {input}
             </span>
-          )}
-        </span>
-      ) : (
-        input
-      )}
+            {inputValue !== "" && (
+              <span
+                id={valueSuffixId}
+                className="opal-input-number-value-suffix"
+              >
+                <Text
+                  font={plain ? "main-ui-mono" : "main-ui-body"}
+                  color={isDisabled ? "text-01" : "text-02"}
+                >
+                  {valueSuffix}
+                </Text>
+              </span>
+            )}
+          </span>
+        ) : (
+          input
+        )}
 
-      {/* A pointer press on the controls keeps focus in the input. Otherwise
+        {/* A pointer press on the controls keeps focus in the input. Otherwise
           blur commits the typed value just before the control commits its own. */}
-      <div
-        role="presentation"
-        className="flex flex-row items-center gap-1"
-        onMouseDown={(e) => e.preventDefault()}
-      >
-        {suffix && (
-          // The placeholder's style: muted weight in text-02.
-          <Text font="main-ui-muted" color={isDisabled ? "text-01" : "text-02"}>
-            {suffix}
-          </Text>
-        )}
-        {showReset && (
-          <Button
-            disabled={!canReset || isDisabled}
-            icon={SvgRevert}
-            onClick={handleReset}
-            prominence="tertiary"
-            size="sm"
-          />
-        )}
-        {!plain && (
-          // The two steppers share the text line's height (1.5rem), so the
-          // field stays as tall as the other inputs. Each arrow moves 0.5px
-          // toward the other, so the chevrons sit 8px apart.
-          <div className="flex flex-col h-6">
-            <div className="flex flex-1 items-end justify-center translate-y-[0.5px]">
-              <Interactive.Stateless
-                prominence="tertiary"
-                disabled={!canIncrement || isDisabled}
-                onClick={handleIncrement}
-              >
-                <Interactive.Container type="button" size="fit" rounding={1}>
-                  <SvgChevronUp
-                    size={12}
-                    className="interactive-foreground-icon"
-                  />
-                </Interactive.Container>
-              </Interactive.Stateless>
+        <div
+          role="presentation"
+          className="flex flex-row items-center gap-1"
+          onMouseDown={(e) => e.preventDefault()}
+        >
+          {suffix && (
+            // The placeholder's style: muted weight in text-02.
+            <Text
+              font="main-ui-muted"
+              color={isDisabled ? "text-01" : "text-02"}
+            >
+              {suffix}
+            </Text>
+          )}
+          {showReset && (
+            <Button
+              disabled={!canReset || isDisabled}
+              icon={SvgRevert}
+              onClick={handleReset}
+              prominence="tertiary"
+              size="sm"
+            />
+          )}
+          {!plain && (
+            // The two steppers share the text line's height (1.5rem), so the
+            // field stays as tall as the other inputs. Each arrow moves 0.5px
+            // toward the other, so the chevrons sit 8px apart.
+            <div className="flex flex-col h-6">
+              <div className="flex flex-1 items-end justify-center translate-y-[0.5px]">
+                <Interactive.Stateless
+                  prominence="tertiary"
+                  disabled={!canIncrement || isDisabled}
+                  onClick={handleIncrement}
+                >
+                  <Interactive.Container type="button" size="fit" rounding={1}>
+                    <SvgChevronUp
+                      size={12}
+                      className="interactive-foreground-icon"
+                    />
+                  </Interactive.Container>
+                </Interactive.Stateless>
+              </div>
+              <div className="flex flex-1 items-start justify-center -translate-y-[0.5px]">
+                <Interactive.Stateless
+                  prominence="tertiary"
+                  disabled={!canDecrement || isDisabled}
+                  onClick={handleDecrement}
+                >
+                  <Interactive.Container type="button" size="fit" rounding={1}>
+                    <SvgChevronDown
+                      size={12}
+                      className="interactive-foreground-icon"
+                    />
+                  </Interactive.Container>
+                </Interactive.Stateless>
+              </div>
             </div>
-            <div className="flex flex-1 items-start justify-center -translate-y-[0.5px]">
-              <Interactive.Stateless
-                prominence="tertiary"
-                disabled={!canDecrement || isDisabled}
-                onClick={handleDecrement}
-              >
-                <Interactive.Container type="button" size="fit" rounding={1}>
-                  <SvgChevronDown
-                    size={12}
-                    className="interactive-foreground-icon"
-                  />
-                </Interactive.Container>
-              </Interactive.Stateless>
-            </div>
-          </div>
-        )}
-      </div>
-    </InputContainer>
+          )}
+        </div>
+      </InputContainer>
+    </InputTooltip>
   );
 }

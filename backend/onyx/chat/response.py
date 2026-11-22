@@ -2,24 +2,30 @@
 
 from collections.abc import Mapping, Sequence
 
-from pydantic import JsonValue, TypeAdapter, ValidationError
+from pydantic import BaseModel, JsonValue
 
-from onyx.agents.models import AgentInfo, RunState, StepRecord, ToolExecutionRecord
+from onyx.agents.compaction import is_input_context
+from onyx.agents.models import (
+    AgentInfo,
+    InputMessageMetadata,
+    RunState,
+    StepRecord,
+    ToolExecutionRecord,
+)
 from onyx.chat.models import ChatMessageMetadata, MessageRendering, ResponseRecord
-from onyx.context.search.models import SearchDoc, SearchDocsResponse
+from onyx.chat.tool_results import restored_result_details, saved_result_details
+from onyx.context.search.models import SearchDoc
 from onyx.deep_research.models import ResearchConfiguration
 from onyx.llm.models import (
     AssistantMessage,
     Message,
-    TextContent,
-    ThinkingContent,
     ToolCall,
     ToolResultMessage,
 )
+from onyx.tools.tool_implementations.subagents.models import ChatConfiguration
 from onyx.utils.logger import setup_logger
 from onyx.utils.streaming_json import parse_partial_object
 
-_STRING = TypeAdapter(str)
 logger = setup_logger()
 
 
@@ -32,34 +38,6 @@ def tool_arguments_for_display(call: ToolCall) -> dict[str, JsonValue]:
     except ValueError:
         logger.debug("Interrupted tool arguments cannot be displayed", exc_info=True)
         return call.arguments
-
-
-def thinking_tool_text(call: ToolCall) -> str:
-    try:
-        return _STRING.validate_python(
-            tool_arguments_for_display(call).get("reasoning", "")
-        )
-    except ValidationError:
-        logger.debug("Thinking tool arguments are not text", exc_info=True)
-        return ""
-
-
-def message_thinking(
-    message: AssistantMessage,
-    think_tool: str | None = None,
-    *,
-    text_as_thinking: bool = False,
-) -> str:
-    """Collect model and configured-tool thinking in accepted content order."""
-    return "".join(
-        block.text
-        if isinstance(block, (ThinkingContent, TextContent))
-        else thinking_tool_text(block)
-        for block in message.content
-        if isinstance(block, ThinkingContent)
-        or (text_as_thinking and isinstance(block, TextContent))
-        or (isinstance(block, ToolCall) and block.name == think_tool)
-    )
 
 
 def response_record(
@@ -78,7 +56,7 @@ def response_record(
             raise ValueError("Child response requires its agent registration")
         configuration = info.restoration_config if info else None
         if configuration is not None and not isinstance(
-            configuration, ResearchConfiguration
+            configuration, (ResearchConfiguration, ChatConfiguration)
         ):
             raise ValueError("Unsupported saved child configuration")
         return ResponseRecord(
@@ -152,47 +130,30 @@ def restore_response_sources(
                     }
                 )
             continue
-        if not isinstance(message, ToolResultMessage) or not isinstance(
-            message.details, SearchDocsResponse
-        ):
+        if not isinstance(message, ToolResultMessage) or message.details is None:
             continue
-        details = message.details.model_copy(
-            update={
-                "search_docs": [
-                    documents[document_id]
-                    for document_id in dict.fromkeys(
-                        message.details.citation_mapping.values()
-                    )
-                    if document_id in documents
-                ]
-            }
-        )
-        messages[index] = message.model_copy(update={"details": details})
+        details = restored_result_details(message.details, documents)
+        if details is not message.details:
+            messages[index] = message.model_copy(update={"details": details})
 
 
 def _saved_message[T: Message](message: T) -> T:
-    if isinstance(message, ToolResultMessage) and isinstance(
-        message.details, SearchDocsResponse
-    ):
-        details = message.details
-        # Documents use their existing relation; staged files stay in execution state.
-        saved_details = SearchDocsResponse(
-            queries=details.queries,
-            sources=details.sources,
-            time_filter_start=details.time_filter_start,
-            time_filter_end=details.time_filter_end,
-            search_docs=[],
-            citation_mapping=details.citation_mapping,
-            displayed_docs=[] if details.displayed_docs == [] else None,
-        )
-        return message.model_copy(
-            update={"metadata": None, "details": saved_details}
-        ).model_copy(deep=True)
-    return message.model_copy(update={"metadata": None}).model_copy(deep=True)
+    # Input provenance and input context are saved; the runtime already dropped
+    # the content metadata of input.
+    update: dict[str, BaseModel | None] = (
+        {}
+        if isinstance(message.metadata, InputMessageMetadata)
+        or is_input_context(message)
+        else {"metadata": None}
+    )
+    if isinstance(message, ToolResultMessage):
+        update["details"] = saved_result_details(message.details)
+    return message.model_copy(update=update).model_copy(deep=True)
 
 
 def _saved_step(step: StepRecord) -> StepRecord:
     return StepRecord(
+        input_messages=[_saved_message(message) for message in step.input_messages],
         message=_saved_message(step.message),
         generation_status=step.generation_status,
         tools={
@@ -201,6 +162,7 @@ def _saved_step(step: StepRecord) -> StepRecord:
                 result=_saved_message(execution.result)
                 if execution.result is not None
                 else None,
+                display_name=execution.display_name,
             )
             for call_id, execution in step.tools.items()
         },

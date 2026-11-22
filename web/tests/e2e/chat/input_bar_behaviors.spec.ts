@@ -5,6 +5,17 @@ import {
   resetTurnCounter,
 } from "@tests/e2e/utils/chatMock";
 import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
+import {
+  createSkill,
+  deleteSkill,
+  skillMessage,
+  uniqueSkillName,
+} from "@tests/e2e/utils/skills";
+import {
+  addMockLlmConversation,
+  MOCK_LLM_DEFAULT_RESPONSE,
+  mockLlmNonce,
+} from "@tests/e2e/utils/mockLlm";
 
 const LARGE_TEXT = "line 1\nline 2\nline 3\nline 4";
 const LARGE_TEXT_B = "alpha\nbeta\ngamma\ndelta";
@@ -713,6 +724,170 @@ test.describe("Paste Tiles: User Setting", () => {
     await chatPage.inputBar.paste(LARGE_TEXT);
     await chatPage.inputBar.expectTileCount(1);
     await chatPage.inputBar.expectTileData(LARGE_TEXT);
+  });
+});
+
+test.describe("Skill Mentions", () => {
+  test("`@` mentions chat skills; their chips show and the model gets their SKILL.md, while typed mention text mentions nothing", async ({
+    chatPage,
+  }) => {
+    const nonce = mockLlmNonce();
+    const first = uniqueSkillName("mention-a");
+    const second = uniqueSkillName("mention-b");
+    const instructions = `Answer in one line. ${nonce}`;
+    const skills = [
+      await createSkill(chatPage.page.request, first, instructions),
+      await createSkill(chatPage.page.request, second, instructions),
+    ];
+    try {
+      // The skill text stays in later turns' history, so only the first turn
+      // takes this reply; the second gets the default one.
+      await addMockLlmConversation({
+        name: nonce,
+        conditions: {
+          prompt_contains: [first, second].map((name) =>
+            skillMessage(name, instructions)
+          ),
+        },
+        replies: [{ text: `Answered with the skills. ${nonce}` }],
+      });
+      await chatPage.goto(undefined, { skills: true });
+
+      await chatPage.inputBar.typeText(`use @${first.slice(0, -1)}`);
+      await chatPage.inputBar.pickSkill(first, "click");
+      // Enter picks the highlighted skill without sending.
+      await chatPage.inputBar.typeText(`and @${second.slice(0, -1)}`);
+      await chatPage.inputBar.pickSkill(second, "Enter");
+      await chatPage.inputBar.typeText("for $5");
+      await expect(chatPage.inputBar.skillPicker).toBeHidden();
+      await expect(chatPage.inputBar.tile).toHaveCount(2);
+      await chatPage.inputBar.send();
+      await chatPage.expectAnswerParagraph(
+        `Answered with the skills. ${nonce}`
+      );
+      await chatPage.inputBar.expectIdle();
+
+      // Typed mention text is not a pick.
+      await chatPage.inputBar.typeText(`now @${first} for $5`);
+      await expect(chatPage.inputBar.skillPicker).toBeHidden();
+      await expect(chatPage.inputBar.tile).toHaveCount(0);
+      await chatPage.inputBar.send();
+      await chatPage.expectAnswerParagraph(MOCK_LLM_DEFAULT_RESPONSE);
+
+      for (const view of ["live", "reloaded"]) {
+        if (view === "reloaded") await chatPage.reload();
+        await chatPage.expectHumanMessage(
+          `use @${first} and @${second} for $5`
+        );
+        await expect(chatPage.skillMentionChips(0)).toHaveText([
+          `@${first}`,
+          `@${second}`,
+        ]);
+        await chatPage.expectHumanMessage(`now @${first} for $5`, 1);
+        await expect(chatPage.skillMentionChips(1)).toHaveCount(0);
+      }
+    } finally {
+      for (const skill of skills) {
+        await deleteSkill(chatPage.page.request, skill.id);
+      }
+    }
+  });
+
+  test("a pick next to other text keeps its tile through a reload and invokes its skill", async ({
+    chatPage,
+  }) => {
+    const nonce = mockLlmNonce();
+    const name = uniqueSkillName("mention-glued");
+    const instructions = `Answer in one line. ${nonce}`;
+    const skill = await createSkill(chatPage.page.request, name, instructions);
+    try {
+      await addMockLlmConversation({
+        name: nonce,
+        conditions: {
+          prompt_contains: [skillMessage(name, instructions)],
+        },
+        replies: [{ text: `Answered with the skill. ${nonce}` }],
+      });
+      await chatPage.goto(undefined, { skills: true });
+
+      await chatPage.inputBar.typeText(`use @${name.slice(0, -1)}`);
+      await chatPage.inputBar.pickSkill(name, "Enter");
+      // A word typed against the tile, without the space the pick added.
+      await chatPage.inputBar.press("Backspace");
+      await chatPage.inputBar.typeText("now)");
+      // `(` typed against the tile's other side.
+      await chatPage.inputBar.clickAtTextOffset("use".length);
+      await chatPage.inputBar.press("ArrowRight");
+      await chatPage.inputBar.typeText("(");
+      await expect(chatPage.inputBar.textbox).toHaveText(`use (@${name}now)`);
+      await expect(chatPage.inputBar.tile).toHaveCount(1);
+
+      // The draft brings the tile back in its place.
+      await chatPage.reload();
+      await expect(chatPage.inputBar.textbox).toHaveText(`use (@${name}now)`);
+      await expect(chatPage.inputBar.tile).toHaveCount(1);
+
+      await chatPage.inputBar.send();
+      await chatPage.expectAnswerParagraph(`Answered with the skill. ${nonce}`);
+      await chatPage.expectHumanMessage(`use (@${name}now)`);
+      await expect(chatPage.skillMentionChips(0)).toHaveText([`@${name}`]);
+    } finally {
+      await deleteSkill(chatPage.page.request, skill.id);
+    }
+  });
+
+  test("the picker searches the whole word, and a click inside a word does not open it", async ({
+    chatPage,
+  }) => {
+    const name = uniqueSkillName("mention-word");
+    const skill = await createSkill(chatPage.page.request, name, "Unused.");
+    try {
+      await chatPage.goto(undefined, { skills: true });
+      await chatPage.inputBar.typeText(`@${name}xyz`);
+      await expect(chatPage.inputBar.skillPicker).toBeHidden();
+
+      // The caret sits after the skill name, but the word is still `<name>xyz`.
+      await chatPage.inputBar.clickAtTextOffset(`@${name}`.length);
+      await expect(chatPage.inputBar.skillPicker).toBeHidden();
+      await chatPage.inputBar.press("Backspace");
+      await expect(chatPage.inputBar.skillPicker).toBeHidden();
+
+      // Typing completes the name with the caret inside the word, and a pick
+      // replaces the whole word.
+      await chatPage.inputBar.clear();
+      await chatPage.inputBar.typeText(`@${name.charAt(0)}${name.slice(2)}`);
+      await expect(chatPage.inputBar.skillPicker).toBeHidden();
+      await chatPage.inputBar.clickAtTextOffset(2);
+      await chatPage.inputBar.typeText(name.charAt(1));
+      await chatPage.inputBar.pickSkill(name, "Enter");
+      await expect(chatPage.inputBar.tile).toHaveCount(1);
+      await expect(chatPage.inputBar.textbox).toHaveText(`@${name}`);
+    } finally {
+      await deleteSkill(chatPage.page.request, skill.id);
+    }
+  });
+
+  test("a click in the word closes the open picker, and input in the word opens it again", async ({
+    chatPage,
+  }) => {
+    const name = uniqueSkillName("mention-click");
+    const skill = await createSkill(chatPage.page.request, name, "Unused.");
+    try {
+      await chatPage.goto(undefined, { skills: true });
+      const typed = `@${name.slice(0, 6)}`;
+      await chatPage.inputBar.typeText(typed);
+      await expect(chatPage.inputBar.skillPicker).toBeVisible();
+
+      await chatPage.inputBar.clickAtTextOffset(typed.length - 1);
+      await expect(chatPage.inputBar.skillPicker).toBeHidden();
+      // Unlike Esc, the click does not hide the word: deleting its last
+      // character is input that opens the picker again.
+      await chatPage.inputBar.press("Delete");
+      await expect(chatPage.inputBar.skillPicker).toBeVisible();
+      await expect(chatPage.inputBar.textbox).toHaveText(typed.slice(0, -1));
+    } finally {
+      await deleteSkill(chatPage.page.request, skill.id);
+    }
   });
 });
 

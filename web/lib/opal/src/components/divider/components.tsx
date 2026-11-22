@@ -4,9 +4,9 @@ import "@opal/components/divider/styles.css";
 import { useState, useCallback } from "react";
 import { Fold } from "@opal/components/fold/components";
 import type { OrientationVariants, RichStr } from "@opal/types";
-import { Button, Text } from "@opal/components";
+import { Button, FoldButton, Text } from "@opal/components";
 import { toPlainString } from "@opal/components/text/InlineMarkdown";
-import { SvgChevronDown, SvgChevronRight } from "@opal/icons";
+import { SvgChevronDown } from "@opal/icons";
 import { useOpalStrings } from "@opal/strings";
 import { Interactive, type InteractiveStatelessInteraction } from "@opal/core";
 import { clickOnKeyDown, cn } from "@opal/utils";
@@ -291,18 +291,7 @@ function FoldableDivider({
               </div>
               <div className="opal-divider-line" />
               {chevronPosition === "end" && (
-                <div
-                  className="opal-divider-chevron"
-                  data-open={isOpen}
-                  aria-hidden
-                >
-                  <Button
-                    icon={SvgChevronRight}
-                    size="sm"
-                    prominence="tertiary"
-                    tabIndex={-1}
-                  />
-                </div>
+                <FoldButton open={isOpen} tabIndex={-1} aria-hidden />
               )}
             </div>
           </div>

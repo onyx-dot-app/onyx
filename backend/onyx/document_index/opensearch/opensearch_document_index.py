@@ -1,6 +1,7 @@
 import contextvars
 import json
 import threading
+import uuid
 from collections.abc import Callable, Iterable
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
@@ -8,8 +9,10 @@ from typing import Any
 from opensearchpy.helpers.errors import BulkIndexError
 
 from onyx.access.models import DocumentAccess
+from onyx.cache.locks import cache_shared_lock
 from onyx.configs.app_configs import (
     MAX_CHUNKS_PER_DOC_BATCH,
+    OPENSEARCH_EXPLAIN_ENABLED,
     VERIFY_CREATE_OPENSEARCH_INDEX_ON_INIT_MT,
 )
 from onyx.configs.constants import PUBLIC_DOC_PAT, OnyxRedisLocks
@@ -35,6 +38,7 @@ from onyx.document_index.interfaces import (
     DocumentInsertionRecord,
     DocumentSectionRequest,
     IndexingMetadata,
+    KeywordTermCounts,
     MetadataUpdateRequest,
     SecondaryIndexDocumentMissingError,
     TenantState,
@@ -73,8 +77,8 @@ from onyx.document_index.opensearch.search import (
     get_normalization_pipeline_name_and_config,
     get_zscore_normalization_pipeline_name_and_config,
 )
-from onyx.indexing.models import DocMetadataAwareIndexChunk, Document
-from onyx.redis.lock_context import redis_shared_lock
+from onyx.indexing.models import DocMetadataAwareIndexChunk
+from onyx.natural_language_processing.english_stopwords import strip_stopwords
 from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
 from onyx.utils.text_processing import remove_invalid_unicode_chars
@@ -90,6 +94,11 @@ VERIFY_INDEX_LOCK_BLOCKING_TIMEOUT_S = 60
 # Batch size for the orphan sweep's delete-by-query terms filter — well under the
 # OpenSearch terms cap (65536) so a large mid-port purge can't build an oversized query.
 _PORT_ORPHAN_DELETE_BATCH_SIZE = 1000
+
+# Chunk keys per source fetch of a keys-only hybrid search. Each key adds four
+# clauses, so a fetch stays well under indices.query.bool.max_clause_count
+# (1024 on Cloud).
+_MAX_CHUNK_KEYS_PER_FETCH = 100
 
 # Chunk IDs logged per direction when the cc-pair access shadow comparison
 # finds a disagreement.
@@ -434,7 +443,7 @@ class OpenSearchDocumentIndex(DocumentIndex):
             embedding_dim,
         )
 
-        with redis_shared_lock(
+        with cache_shared_lock(
             lock_name=f"{OnyxRedisLocks.OPENSEARCH_VERIFY_INDEX_LOCK_PREFIX}:{self._index_name}",
             max_time_lock_held_s=VERIFY_INDEX_LOCK_TTL_S,
             wait_for_lock_s=VERIFY_INDEX_LOCK_BLOCKING_TIMEOUT_S,
@@ -450,8 +459,8 @@ class OpenSearchDocumentIndex(DocumentIndex):
             )
 
             if not self._client.index_exists():
-                index_settings = (
-                    DocumentSchema.get_index_settings_based_on_environment()
+                index_settings = DocumentSchema.get_index_settings_based_on_environment(
+                    vector_quantization=self._vector_quantization
                 )
                 self._client.create_index(
                     mappings=expected_mappings,
@@ -521,8 +530,11 @@ class OpenSearchDocumentIndex(DocumentIndex):
     ) -> list[DocumentInsertionRecord]:
         """Indexes an iterable of document chunks into the document index.
 
-        Groups chunks by document ID and for each document, deletes existing
-        chunks and indexes the new chunks in bulk.
+        Groups up to MAX_CHUNKS_PER_DOC_BATCH chunks. For each group, one
+        delete_by_query removes the existing chunks of the group's documents
+        that this call has not deleted yet. Then one bulk call writes the
+        group's chunks. A typical batch thus costs two round trips, not two
+        per document.
 
         NOTE: It is assumed that chunks for a given document are not spread out
         over multiple index() calls.
@@ -555,61 +567,66 @@ class OpenSearchDocumentIndex(DocumentIndex):
 
         document_indexing_results: list[DocumentInsertionRecord] = []
         deleted_doc_ids: set[str] = set()
-        # Buffer chunks per document as they arrive from the iterable.
-        # When the document ID changes flush the buffered chunks.
-        current_doc_id: str | None = None
-        current_chunks: list[DocMetadataAwareIndexChunk] = []
 
-        def _flush_chunks(doc_chunks: list[DocMetadataAwareIndexChunk]) -> None:
-            assert len(doc_chunks) > 0, "doc_chunks is empty"
+        def _flush_chunks(group: list[DocMetadataAwareIndexChunk]) -> None:
+            if not group:
+                raise RuntimeError("Bug: group is empty.")
 
-            # Create a batch of OpenSearch-formatted chunks for bulk insertion.
-            # Since we are doing this in batches, an error occurring midway
-            # can result in a state where chunks are deleted and not all the
-            # new chunks have been indexed.
+            # An error midway can leave a doc with its chunks deleted and not
+            # all of its new chunks indexed.
             chunk_batch: list[DocumentChunk] = [
-                _convert_onyx_chunk_to_opensearch_document(chunk)
-                for chunk in doc_chunks
+                _convert_onyx_chunk_to_opensearch_document(chunk) for chunk in group
             ]
-            onyx_document: Document = doc_chunks[0].source_document
-            # First delete the doc's chunks from the index. This is so that
-            # there are no dangling chunks in the index, in the event that the
-            # new document's content contains fewer chunks than the previous
-            # content.
-            # TODO(andrei): This can possibly be made more efficient by checking
-            # if the chunk count has actually decreased. This assumes that
-            # overlapping chunks are perfectly overwritten. If we can't
-            # guarantee that then we need the code as-is.
-            if onyx_document.id not in deleted_doc_ids:
-                num_chunks_deleted = self.delete(
-                    onyx_document.id, onyx_document.chunk_count
+            # Delete all old chunks first so that no chunks dangle when a doc
+            # now has fewer chunks. This also clears legacy chunks.
+            docs_to_delete: list[str] = list(
+                dict.fromkeys(
+                    chunk.source_document.id
+                    for chunk in group
+                    if chunk.source_document.id not in deleted_doc_ids
                 )
-                deleted_doc_ids.add(onyx_document.id)
-                # If we see that chunks were deleted we assume the doc already
-                # existed. We record the result before bulk_index_documents
-                # runs. If indexing raises, this entire result list is discarded
-                # by the caller's retry logic, so early recording is safe.
-                document_indexing_results.append(
-                    DocumentInsertionRecord(
-                        document_id=onyx_document.id,
-                        already_existed=num_chunks_deleted > 0,
+            )
+            if docs_to_delete:
+                num_chunks_deleted = self._client.delete_by_query(
+                    DocumentQuery.delete_from_document_ids_query(
+                        document_ids=docs_to_delete,
+                        tenant_state=self._tenant_state,
                     )
                 )
-            # Now index. This will raise if a chunk of the same ID exists, which
-            # we do not expect because we should have deleted all chunks.
+                deleted_doc_ids.update(docs_to_delete)
+                # One delete cannot report a count per doc. A single doc gets
+                # the exact answer; with several, a doc existed if Postgres
+                # had chunks for it.
+                for doc_id in docs_to_delete:
+                    if num_chunks_deleted == 0:
+                        already_existed = False
+                    elif len(docs_to_delete) == 1:
+                        already_existed = True
+                    else:
+                        counts = indexing_metadata.doc_id_to_chunk_cnt_diff.get(doc_id)
+                        already_existed = (
+                            counts is not None and counts.old_chunk_cnt > 0
+                        )
+                    # If indexing raises, the caller's retry logic discards
+                    # this result list, so early recording is safe.
+                    document_indexing_results.append(
+                        DocumentInsertionRecord(
+                            document_id=doc_id,
+                            already_existed=already_existed,
+                        )
+                    )
+            # This raises if a chunk of the same ID exists, which we do not
+            # expect because we deleted all chunks.
             try:
                 self._client.bulk_index_documents(
                     documents=chunk_batch,
                     tenant_state=self._tenant_state,
                 )
             except BulkIndexError as e:
-                # There are several reasons why this might be raised, but the
-                # most likely one is if the deletion has not had enough time to
-                # propagate throughout the index, in which case this would be
-                # raised with some form of "version_conflict_engine_exception
-                # version conflict, document already exists" messaging.
-                # Refresh the index and try one more time. We do not refresh
-                # after every delete because this may become expensive.
+                # Most likely the deletion has not propagated through the index
+                # yet ("version_conflict_engine_exception ... document already
+                # exists"). Refresh the index and try one more time. We do not
+                # refresh after every delete because this may become expensive.
                 logger.warning(
                     "Failed to bulk index documents: %s. Refreshing index and trying again.",
                     e,
@@ -618,26 +635,20 @@ class OpenSearchDocumentIndex(DocumentIndex):
                 self._client.bulk_index_documents(
                     documents=chunk_batch,
                     tenant_state=self._tenant_state,
-                    # At this point we know for sure some docs from this batch
-                    # may exist, so we don't want to fail in that case.
+                    # Some chunks of this group may exist now, so do not fail
+                    # in that case.
                     update_if_exists=True,
                 )
 
+        current_group: list[DocMetadataAwareIndexChunk] = []
         for chunk in chunks:
-            doc_id = chunk.source_document.id
-            if doc_id != current_doc_id:
-                if current_chunks:
-                    _flush_chunks(current_chunks)
-                current_doc_id = doc_id
-                current_chunks = [chunk]
-            elif len(current_chunks) >= MAX_CHUNKS_PER_DOC_BATCH:
-                _flush_chunks(current_chunks)
-                current_chunks = [chunk]
-            else:
-                current_chunks.append(chunk)
+            current_group.append(chunk)
+            if len(current_group) >= MAX_CHUNKS_PER_DOC_BATCH:
+                _flush_chunks(current_group)
+                current_group = []
 
-        if current_chunks:
-            _flush_chunks(current_chunks)
+        if current_group:
+            _flush_chunks(current_group)
 
         return document_indexing_results
 
@@ -677,6 +688,15 @@ class OpenSearchDocumentIndex(DocumentIndex):
             tenant_state=self._tenant_state,
         )
 
+        return self._client.delete_by_query(query_body)
+
+    def delete_documents(self, document_ids: list[str]) -> int:
+        if not document_ids:
+            return 0
+        query_body = DocumentQuery.delete_from_document_ids_query(
+            document_ids=document_ids,
+            tenant_state=self._tenant_state,
+        )
         return self._client.delete_by_query(query_body)
 
     def get_documents_with_any_chunk(self, document_ids: list[str]) -> set[str]:
@@ -1047,6 +1067,13 @@ class OpenSearchDocumentIndex(DocumentIndex):
         # decision when passing in the query param. See the above comment in the
         # function signature.
         final_query = " ".join(final_keywords) if final_keywords else query
+        # Only a single-shard search fetches every hybrid candidate; a
+        # multi-shard search already fetches only the top hits, and a second
+        # request would go to every shard. Explain describes the hybrid
+        # scoring, so it keeps one request.
+        chunk_keys_only = (
+            not OPENSEARCH_EXPLAIN_ENABLED and self._is_single_shard_index()
+        )
         query_body = DocumentQuery.get_hybrid_search_query(
             query_text=final_query,
             query_vector=query_embedding,
@@ -1061,13 +1088,24 @@ class OpenSearchDocumentIndex(DocumentIndex):
             index_filters=filters,
             include_hidden=False,
             vector_quantization=self._vector_quantization,
+            chunk_keys_only=chunk_keys_only,
         )
         normalization_pipeline_name, _ = get_normalization_pipeline_name_and_config()
-        search_hits: list[SearchHit[DocumentChunkWithoutVectors]] = self._client.search(
-            body=query_body,
-            search_pipeline_id=normalization_pipeline_name,
-            search_type=OpenSearchSearchType.HYBRID,
-        )
+        search_hits: list[SearchHit[DocumentChunkWithoutVectors]]
+        if chunk_keys_only:
+            search_hits = self._get_hybrid_search_hits_by_chunk_keys(
+                query_body=query_body,
+                query_text=final_query,
+                normalization_pipeline_name=normalization_pipeline_name,
+                filters=filters,
+                include_hidden=False,
+            )
+        else:
+            search_hits = self._client.search(
+                body=query_body,
+                search_pipeline_id=normalization_pipeline_name,
+                search_type=OpenSearchSearchType.HYBRID,
+            )
 
         # Good place for a breakpoint to inspect the search hits if you have
         # "explain" enabled.
@@ -1082,6 +1120,96 @@ class OpenSearchDocumentIndex(DocumentIndex):
         )
 
         return inference_chunks
+
+    def _is_single_shard_index(self) -> bool:
+        """Returns whether the index has one primary shard.
+
+        If the shard count cannot be read, returns False so hybrid search uses
+        the single-request path.
+        """
+        try:
+            return self._client.get_number_of_shards() == 1
+        except Exception:
+            logger.warning(
+                "Could not read the shard count of index %s; using the single-request hybrid search.",
+                self._index_name,
+                exc_info=True,
+            )
+            return False
+
+    def _get_hybrid_search_hits_by_chunk_keys(
+        self,
+        query_body: dict[str, Any],
+        query_text: str,
+        normalization_pipeline_name: str,
+        filters: IndexFilters,
+        include_hidden: bool,
+    ) -> list[SearchHit[DocumentChunkWithoutVectors]]:
+        """Runs a keys-only hybrid search, then fetches the top hits' source.
+
+        A single-shard search fetches every hybrid candidate before
+        normalization keeps the top hits, so reading only doc values there and
+        the source of the top hits here avoids reading the source of
+        candidates that are discarded. The source fetch applies the hybrid
+        search filters again, so a chunk whose access changed between the two
+        requests is dropped, and it returns the match highlights.
+        """
+        # Both requests read the same shard copies, so a replica that has not
+        # refreshed yet cannot drop a hit the hybrid search returned.
+        preference = uuid.uuid4().hex
+        chunk_key_hits = self._client.search_for_chunk_keys(
+            body=query_body,
+            search_pipeline_id=normalization_pipeline_name,
+            search_type=OpenSearchSearchType.HYBRID,
+            preference=preference,
+        )
+        fetched_hits: list[SearchHit[DocumentChunkWithoutVectors]] = []
+        for start in range(0, len(chunk_key_hits), _MAX_CHUNK_KEYS_PER_FETCH):
+            fetch_body = DocumentQuery.get_from_chunk_keys_query(
+                chunk_keys=[
+                    (hit.document_id, hit.chunk_index, hit.max_chunk_size)
+                    for hit in chunk_key_hits[start : start + _MAX_CHUNK_KEYS_PER_FETCH]
+                ],
+                query_text=query_text,
+                tenant_state=self._tenant_state,
+                index_filters=filters,
+                include_hidden=include_hidden,
+            )
+            fetched_hits.extend(
+                self._client.search(
+                    body=fetch_body,
+                    search_pipeline_id=None,
+                    search_type=OpenSearchSearchType.HYBRID_FETCH,
+                    preference=preference,
+                )
+            )
+        fetched_hits_by_key: dict[
+            tuple[str, int, int], SearchHit[DocumentChunkWithoutVectors]
+        ] = {
+            (
+                hit.document_chunk.document_id,
+                hit.document_chunk.chunk_index,
+                hit.document_chunk.max_chunk_size,
+            ): hit
+            for hit in fetched_hits
+        }
+
+        # Keep the hybrid order and scores. A chunk deleted, or no longer
+        # matching the filters, between the two requests is dropped.
+        search_hits: list[SearchHit[DocumentChunkWithoutVectors]] = []
+        for hit in chunk_key_hits:
+            fetched_hit = fetched_hits_by_key.get(
+                (hit.document_id, hit.chunk_index, hit.max_chunk_size)
+            )
+            if fetched_hit is not None:
+                search_hits.append(
+                    SearchHit[DocumentChunkWithoutVectors](
+                        document_chunk=fetched_hit.document_chunk,
+                        score=hit.score,
+                        match_highlights=fetched_hit.match_highlights,
+                    )
+                )
+        return search_hits
 
     def keyword_retrieval(
         self,
@@ -1128,6 +1256,14 @@ class OpenSearchDocumentIndex(DocumentIndex):
         )
 
         return inference_chunks
+
+    def count_keyword_terms(self, query: str) -> KeywordTermCounts:
+        # The keyword text hybrid_retrieval matches. Title and content share
+        # one analyzer, so one field covers both.
+        terms = self._client.analyze(
+            " ".join(strip_stopwords(query)) or query, field=CONTENT_FIELD_NAME
+        )
+        return KeywordTermCounts(total=len(terms), distinct=len(set(terms)))
 
     def semantic_retrieval(
         self,
@@ -1280,9 +1416,8 @@ class OpenSearchIndexPair(DocumentIndex):
     def verify_and_create_index_if_necessary(self, embedding_dim: int) -> None:
         self._primary.verify_and_create_index_if_necessary(embedding_dim)
         if self._secondary is not None:
-            assert self._secondary_embedding_dim is not None, (
-                "Bug: Secondary embedding dimension is not set."
-            )
+            if self._secondary_embedding_dim is None:
+                raise RuntimeError("Bug: Secondary embedding dimension is not set.")
             self._secondary.verify_and_create_index_if_necessary(
                 self._secondary_embedding_dim
             )
@@ -1298,6 +1433,12 @@ class OpenSearchIndexPair(DocumentIndex):
         total = self._primary.delete(document_id, chunk_count)
         if self._secondary is not None:
             total += self._secondary.delete(document_id, chunk_count)
+        return total
+
+    def delete_documents(self, document_ids: list[str]) -> int:
+        total = self._primary.delete_documents(document_ids)
+        if self._secondary is not None:
+            total += self._secondary.delete_documents(document_ids)
         return total
 
     def update(self, update_requests: list[MetadataUpdateRequest]) -> None:
@@ -1358,6 +1499,9 @@ class OpenSearchIndexPair(DocumentIndex):
         return self._primary.keyword_retrieval(
             query, filters, num_to_retrieve, include_hidden=include_hidden
         )
+
+    def count_keyword_terms(self, query: str) -> KeywordTermCounts:
+        return self._primary.count_keyword_terms(query)
 
     def semantic_retrieval(
         self,

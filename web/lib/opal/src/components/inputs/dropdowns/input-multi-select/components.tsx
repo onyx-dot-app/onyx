@@ -9,6 +9,9 @@ import type { InputMultiSelectProps } from "@opal/components/inputs/dropdowns/ty
  * keyboard, and the list always shows the full set. A click toggles it open
  * and closed; focus alone does not open it. The family's type-in sibling is
  * `InputMultiComboBox`.
+ *
+ * Inside `InputHorizontal` or `InputVertical`, the row's `disabled` and
+ * `disabledTooltip` apply to it too.
  */
 function InputMultiSelect(props: InputMultiSelectProps) {
   return <MultiSelectField {...props} trigger="button" />;

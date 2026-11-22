@@ -17,10 +17,6 @@ export function taskEditPath(taskId: string): Route {
   return `${TASKS_PATH}/${taskId}/edit` as Route;
 }
 
-export function buildSessionPath(sessionId: string): Route {
-  return `/craft/v1?sessionId=${sessionId}`;
-}
-
 // Default page size for the scheduled task list.
 export const TASKS_PAGE_SIZE = 20;
 

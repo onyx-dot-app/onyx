@@ -2,7 +2,6 @@
 
 import {
   Fragment,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -352,9 +351,14 @@ function markAt(target: EventTarget): Mark | null {
   return kind === undefined || Number.isNaN(index) ? null : { index, kind };
 }
 
+/** `part` of `whole` as a fraction, 0 for an empty whole. */
+function fractionOf(part: number, whole: number): number {
+  return whole > 0 ? part / whole : 0;
+}
+
 /** `part` of `whole` as a CSS percentage, 0 for an empty whole. */
 function percentOf(part: number, whole: number): string {
-  return `${whole > 0 ? (part / whole) * 100 : 0}%`;
+  return `${fractionOf(part, whole) * 100}%`;
 }
 
 export interface ThroughputWindowPickerProps<W extends PickerWindow> {
@@ -444,38 +448,29 @@ function TooltipCard({ title, slice }: TooltipCardProps) {
 }
 
 interface CenteredInsideProps {
-  /** Where its middle sits, as a CSS percentage of its parent's width. */
-  at: string;
+  /** Where its middle sits across its parent's width, from 0 to 1. */
+  at: number;
   className?: string;
   children: ReactNode;
 }
 
-/** Centered at `at` across its positioned parent, and moved inward where it would cross either edge, since the chart's card clips what hangs past it. */
+/** Centered at `at` across its positioned parent, and moved inward where it would cross either edge, since the chart's card clips what hangs past it. Placed by CSS alone, since feeding a measured width back into the position can re-render without end. */
 function CenteredInside({ at, className, children }: CenteredInsideProps) {
-  const ref = useRef<HTMLDivElement>(null);
-  const [width, setWidth] = useState<number | null>(null);
-  // Measured before paint on every render, since a tooltip's text changes its width.
-  useLayoutEffect(() => {
-    const measured = ref.current?.getBoundingClientRect().width ?? null;
-    if (measured !== width) setWidth(measured);
-  });
   return (
-    // raw-ok: placed at a measured offset, which Section cannot position
+    // raw-ok: the widest span centered on `at` that fits the parent, which Section cannot position
     <div
-      ref={ref}
-      className={cn(
-        "absolute w-max",
-        width === null && "-translate-x-1/2",
-        className
-      )}
+      // rtl past the middle, so content wider than the span overflows toward the far edge. Physical insets, since dir would flip logical ones.
+      dir={at > 0.5 ? "rtl" : "ltr"}
+      className={cn("absolute", className)}
       style={{
-        insetInlineStart:
-          width === null
-            ? at
-            : `clamp(0px, calc(${at} - ${width / 2}px), calc(100% - ${width}px))`,
+        left: `${Math.max(0, 2 * at - 1) * 100}%`,
+        right: `${Math.max(0, 1 - 2 * at) * 100}%`,
       }}
     >
-      {children}
+      {/* raw-ok: auto margins center it while it fits and resolve to zero once it does not */}
+      <div dir="ltr" className="mx-auto w-max">
+        {children}
+      </div>
     </div>
   );
 }
@@ -708,7 +703,7 @@ export function ThroughputBars({
     >
       {tipped !== null && tipped.slice !== null && (
         <CenteredInside
-          at={percentOf(tipped.index + 0.5, count)}
+          at={fractionOf(tipped.index + 0.5, count)}
           className="pointer-events-none bottom-full z-10 mb-1"
         >
           <TooltipCard
@@ -821,13 +816,15 @@ export function ThroughputBars({
         </Section>
         <Section height={1} className="relative" aria-hidden>
           {ticks.map((tick) => {
-            const at = percentOf(tick - start, end - start);
+            const at = fractionOf(tick - start, end - start);
             return (
               <Fragment key={tick}>
                 {/* raw-ok: a 2px tick mark at its time, which Section cannot position */}
                 <div
                   className="absolute top-0 h-0.5 w-px -translate-x-1/2 bg-border-01"
-                  style={{ insetInlineStart: at }}
+                  style={{
+                    insetInlineStart: percentOf(tick - start, end - start),
+                  }}
                 />
                 <CenteredInside at={at} className="top-1">
                   {/* raw-ok: DM Mono at 10px has no Text preset */}

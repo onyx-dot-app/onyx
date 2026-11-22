@@ -63,6 +63,13 @@ class TenantState(BaseModel):
         return self
 
 
+class KeywordTermCounts(BaseModel):
+    """Terms the index analyzer produces for a query's keyword text."""
+
+    total: int
+    distinct: int
+
+
 class DocumentInsertionRecord(BaseModel):
     """
     Result of indexing a document.
@@ -287,6 +294,12 @@ class Deletable(abc.ABC):
         """
         raise NotImplementedError
 
+    @abc.abstractmethod
+    def delete_documents(self, document_ids: list[str]) -> int:
+        """Hard deletes every chunk of the given documents in one request per
+        index. Missing documents are not an error. Returns the chunks deleted."""
+        raise NotImplementedError
+
 
 class Updatable(abc.ABC):
     """
@@ -415,6 +428,18 @@ class HybridCapable(abc.ABC):
 
         Returns:
             Score-ranked (highest first) list of highest matching chunks.
+        """
+        raise NotImplementedError
+
+    @abc.abstractmethod
+    def count_keyword_terms(self, query: str) -> KeywordTermCounts:
+        """Analyzes the keyword text hybrid retrieval would send for this query.
+
+        Args:
+            query: User query.
+
+        Returns:
+            The total and distinct terms the index analyzer produces.
         """
         raise NotImplementedError
 

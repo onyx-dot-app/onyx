@@ -29,11 +29,27 @@ Open the menu on a row to act on that user:
 | Reset Password | Generates a new random password and signs the user out of all sessions. Available for password sign-in only. |
 | Delete User | Removes the user and their chat history. This cannot be undone. |
 
-<Tip>
-  Unable to delete a user? They may have a Document Set or Agent still associated with their profile.
-</Tip>
-
 <img className="rounded-image" src="/assets/admins/user_management/manage_users.webp" alt="Users page listing accounts with their groups, account type, and status"/>
+
+### Delete a user who owns private Skills
+
+Onyx does not delete a user who owns private Skills. The **Delete User** dialog then lists those Skills.
+Move all of them to one new owner in the same dialog:
+
+<Steps>
+  <Step title="Select the new owner">
+    In **Transfer Ownership To**, select the new owner. The new owner must be an active standard user.
+  </Step>
+
+  <Step title="Transfer and delete">
+    Select **Transfer All and Delete**.
+  </Step>
+</Steps>
+
+Onyx moves all the private Skills to the new owner, then deletes the user.
+People and groups keep their shares of the moved Skills. If the new owner already has a Skill with the same plugin name,
+the moved Skill gets the next free plugin name, for example `deploy-2`. The name in its `SKILL.md` does not change.
+Onyx shows each rename after the delete. Published Skills need no transfer. They stay in the organization with no owner.
 
 ### Account Types
 
@@ -102,7 +118,8 @@ Selecting a group opens its **Edit Group** page:
 | Token Rate Limit | Limits the tokens or cost the group can use in a time window. Requires an **Enterprise** plan. |
 
 The **Admin** and **Basic** groups are system groups. You can change only their members.
-The **Basic** group also shows the one permission you can toggle for every user, **Create User Access Token**.
+The **Basic** group also shows the two permissions you can toggle for every user:
+**Create User Access Token** and **Create Agents**.
 
 <img className="rounded-image" src="/assets/admins/user_management/group_detail.webp" alt="Edit Group page showing members, group permissions, shared resources, and token rate limits"/>
 

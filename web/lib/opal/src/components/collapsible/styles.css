@@ -12,8 +12,13 @@
   @apply w-full cursor-pointer select-none;
 }
 
-.opal-collapsible[data-disabled] .opal-collapsible-header {
+.opal-collapsible-header[data-disabled] {
   @apply cursor-not-allowed;
+}
+
+/* The header's content takes the row's free width. */
+.opal-collapsible-header-content {
+  @apply flex-1 min-w-0;
 }
 
 /* Keyboard focus on the fold button shows as its hover state, not the

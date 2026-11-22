@@ -39,7 +39,7 @@ from onyx.background.celery.tasks.port.tasks import (
     run_port_attempt,
 )
 from onyx.background.celery.tasks.shared.tasks import (
-    _clear_port_orphan_candidate_for_live_doc,
+    _clear_port_orphan_candidates_for_live_docs,
 )
 from onyx.configs.app_configs import (
     INDEX_BATCH_SIZE,
@@ -1965,10 +1965,12 @@ def test_clear_for_live_doc_clears_live_but_keeps_removed(
         record_port_orphan_candidates(db_session, ss.id, cc_pair.id, ["removed-doc"])
         db_session.commit()
 
-        for doc in (live_doc, "removed-doc"):
-            _clear_port_orphan_candidate_for_live_doc(
-                db_session, cc_pair.connector_id, cc_pair.credential_id, doc
-            )
+        _clear_port_orphan_candidates_for_live_docs(
+            db_session,
+            cc_pair.connector_id,
+            cc_pair.credential_id,
+            [live_doc, "removed-doc"],
+        )
         db_session.commit()
 
         this_cc = get_port_orphan_candidate_doc_ids(db_session, ss.id, cc_pair.id)

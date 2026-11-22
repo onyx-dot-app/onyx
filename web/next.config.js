@@ -18,6 +18,10 @@ const nextConfig = {
     // TypeScript 7 has no classic JS API, so `next build` must type-check
     // through the `tsc` CLI.
     useTypeScriptCli: true,
+    // Next truncates larger bodies before they reach the API catch-all. This
+    // applies when requests reach Next directly (local dev); nginx and the Helm
+    // ingress send /api to the backend. Skill uploads allow a 25 MiB ZIP.
+    proxyClientMaxBodySize: "32mb",
   },
   transpilePackages: ["@onyx-ai/opal", "@onyx-ai/shared"],
   typedRoutes: true,
@@ -146,6 +150,74 @@ const nextConfig = {
         source: "/admin/craft/instructions",
         destination: "/admin/craft/preferences",
         permanent: true,
+      },
+      // Old plugin and action pages. Their ids are not integration ids.
+      {
+        source: "/admin/mcp-actions/:path*",
+        destination: "/admin/integrations",
+        permanent: false,
+      },
+      {
+        source: "/admin/openapi-actions",
+        destination: "/admin/integrations",
+        permanent: false,
+      },
+      {
+        source: "/admin/craft/apps",
+        destination: "/admin/integrations",
+        permanent: false,
+      },
+      {
+        source: "/admin/plugins",
+        destination: "/admin/integrations",
+        permanent: false,
+      },
+      {
+        source: "/admin/plugins/mcp/:id",
+        destination: "/admin/integrations",
+        permanent: false,
+      },
+      {
+        source: "/admin/plugins/openapi/:id",
+        destination: "/admin/integrations",
+        permanent: false,
+      },
+      {
+        source: "/admin/plugins/external-app/:id",
+        destination: "/admin/integrations",
+        permanent: false,
+      },
+      // The member plugin and skill pages moved to Customize. Next.js passes
+      // the query of the old URL on to the new one.
+      {
+        source: "/app/plugins",
+        destination: "/app/customize/plugins",
+        permanent: false,
+      },
+      {
+        source: "/app/plugins/:pluginId",
+        destination: "/app/customize/plugins/:pluginId",
+        permanent: false,
+      },
+      {
+        source: "/craft/v1/skills",
+        destination: "/app/customize/skills",
+        permanent: false,
+      },
+      {
+        source: "/craft/v1/skills/new",
+        destination: "/app/customize/skills/new",
+        permanent: false,
+      },
+      {
+        source: "/craft/v1/skills/edit/:id",
+        destination: "/app/customize/skills/:id?edit=1",
+        permanent: false,
+      },
+      {
+        source: "/craft/v1/plugins",
+        destination: "/app/customize/integrations",
+        permanent: false,
       },
       {
         source: "/admin/assistants/:path*",

@@ -100,7 +100,7 @@ def _send_docfetching_task(
     # No expires=: a docfetching task can wait in the queue for hours under
     # load, and the NOT_STARTED scan in the indexing watchdog fails an attempt
     # whose task is lost.
-    result = celery_app.send_task(
+    result = celery_app.send_task(  # celery-expires: allow (one task per index attempt, may wait hours)
         OnyxCeleryTask.CONNECTOR_DOC_FETCHING_TASK,
         kwargs={
             "index_attempt_id": index_attempt_id,

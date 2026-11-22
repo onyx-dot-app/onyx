@@ -1,54 +1,72 @@
 "use client";
 
 import { useTranslations } from "next-intl";
+import { useEffect, useRef } from "react";
 import { Text, Button } from "@opal/components";
-import { SvgTrash } from "@opal/icons";
-import { cn, clickOnKeyDown } from "@opal/utils";
+import { SvgTrash, SvgEdit, SvgArrowUp } from "@opal/icons";
+import { cn } from "@opal/utils";
 import { QueuedMessage } from "@/app/app/types";
+import type { PendingChatMessage } from "@/lib/chat/types";
 
 interface QueuedMessageBarProps {
-  messages: readonly QueuedMessage[];
-  highlightedIndex: number | null;
+  /** Craft's local queue or the chat's server-owned pending messages. */
+  messages: readonly (QueuedMessage | PendingChatMessage)[];
+  highlightedId: (QueuedMessage | PendingChatMessage)["id"] | null;
   onDiscard: (index: number) => void;
-  onHighlight: (index: number | null) => void;
+  onEdit?: (index: number) => void;
+  onSendNow?: (index: number) => void;
+  disabled?: boolean;
+  canEdit?: boolean;
 }
 
 function QueuedMessageBar({
   messages,
-  highlightedIndex,
+  highlightedId,
   onDiscard,
-  onHighlight,
+  onEdit,
+  onSendNow,
+  disabled = false,
+  canEdit = true,
 }: QueuedMessageBarProps) {
   const t = useTranslations("chat.input");
   const isEmpty = messages.length === 0;
+  const highlightedItemRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    highlightedItemRef.current?.scrollIntoView({
+      block: "nearest",
+      inline: "nearest",
+    });
+  }, [highlightedId]);
 
   return (
     <div
       className={cn(
         "transition-all duration-150",
-        isEmpty ? "opacity-0 h-0 overflow-hidden" : "opacity-100"
+        isEmpty
+          ? "opacity-0 h-0 overflow-hidden"
+          : "opacity-100 max-h-[min(16rem,30dvh)] overflow-y-auto overscroll-contain"
       )}
     >
       {!isEmpty && (
-        <div className="flex flex-col gap-1 pb-1.5">
+        // Rows are not focusable: the composer's arrow keys move the highlight,
+        // and Tab reaches each row's buttons.
+        <div role="list" className="flex flex-col gap-1 pb-1.5">
           {messages.map((item, index) => {
-            const isHighlighted = highlightedIndex === index;
+            const isHighlighted = highlightedId === item.id;
+            const text = "text" in item ? item.text : item.message;
 
             return (
               <div
                 key={item.id}
+                ref={isHighlighted ? highlightedItemRef : undefined}
                 data-testid="queued-message-bar"
                 className={cn(
-                  "bg-background-neutral-02 rounded-12 border px-3 py-1.5 flex items-center gap-2 cursor-pointer",
+                  "bg-background-neutral-02 rounded-12 border px-3 py-1.5 flex items-center gap-2",
                   isHighlighted ? "border-border-03" : "border-border-01"
                 )}
-                role="button"
-                tabIndex={0}
-                aria-label={t("queuedMessageBar.item.ariaLabel")}
-                onKeyDown={clickOnKeyDown(() =>
-                  onHighlight(isHighlighted ? null : index)
-                )}
-                onClick={() => onHighlight(isHighlighted ? null : index)}
+                role="listitem"
+                aria-current={isHighlighted || undefined}
               >
                 <div
                   className="flex-1 min-w-0 overflow-hidden whitespace-nowrap"
@@ -60,7 +78,7 @@ function QueuedMessageBar({
                   }}
                 >
                   <Text font="secondary-body" color="text-03">
-                    {item.text}
+                    {text}
                   </Text>
                 </div>
                 {isHighlighted && (
@@ -69,7 +87,11 @@ function QueuedMessageBar({
                       ↵
                     </span>
                     <Text font="secondary-body" color="text-02">
-                      {t("queuedMessageBar.editHint.label")}
+                      {t(
+                        onSendNow
+                          ? "queuedMessageBar.sendHint.label"
+                          : "queuedMessageBar.editHint.label"
+                      )}
                     </Text>
                     <span className="translate-y-[1.5px] text-text-02 text-[0.7rem]">
                       ⌫
@@ -79,15 +101,46 @@ function QueuedMessageBar({
                     </Text>
                   </div>
                 )}
+                {onSendNow && (
+                  <Button
+                    icon={SvgArrowUp}
+                    prominence="tertiary"
+                    size="xs"
+                    disabled={disabled}
+                    aria-label={t("queuedMessageBar.sendButton.ariaLabel", {
+                      message: text,
+                    })}
+                    tooltip={t("queuedMessageBar.sendButton.tooltip")}
+                    onClick={() => onSendNow(index)}
+                  />
+                )}
+                {onEdit && (
+                  <Button
+                    icon={SvgEdit}
+                    aria-label={t("queuedMessageBar.editButton.ariaLabel", {
+                      message: text,
+                    })}
+                    prominence="tertiary"
+                    size="xs"
+                    disabled={disabled || !canEdit}
+                    tooltip={t(
+                      canEdit
+                        ? "queuedMessageBar.editButton.tooltip"
+                        : "queuedMessageBar.editButton.clearDraftTooltip"
+                    )}
+                    onClick={() => onEdit(index)}
+                  />
+                )}
                 <Button
+                  disabled={disabled}
                   icon={SvgTrash}
+                  aria-label={t("queuedMessageBar.discardButton.ariaLabel", {
+                    message: text,
+                  })}
                   prominence="tertiary"
                   size="xs"
                   tooltip={t("queuedMessageBar.discardButton.tooltip")}
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onDiscard(index);
-                  }}
+                  onClick={() => onDiscard(index)}
                 />
               </div>
             );

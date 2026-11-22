@@ -10,7 +10,12 @@ if TYPE_CHECKING:
 
 
 from onyx.agents.execution_records import completed_tool_call_ids
-from onyx.agents.models import CompactionCheckpoint, CompactionMetadata, ContextBudget
+from onyx.agents.models import (
+    CompactionCheckpoint,
+    CompactionMetadata,
+    ContextBudget,
+    InputMessageMetadata,
+)
 from onyx.configs.model_configs import GEN_AI_INPUT_TOKEN_SAFETY_MARGIN
 from onyx.llm.interfaces import LLM, GenerationContext
 from onyx.llm.models import (
@@ -58,6 +63,14 @@ def count_tokens(text: str, *, cached_counts: Mapping[str, int] | None = None) -
     return len(_encoder().encode(text, disallowed_special=()))
 
 
+def _strict_decode(tokens: list[int]) -> str | None:
+    """The text of `tokens`, or None when they start or end inside a character."""
+    try:
+        return _encoder().decode_bytes(tokens).decode("utf-8")
+    except UnicodeDecodeError:
+        return None
+
+
 def message_tokens(
     message: Message, token_counter: Callable[[str], int] = count_tokens
 ) -> int:
@@ -77,7 +90,17 @@ def message_tokens(
 
 
 def request_tokens(
-    request: GenerationRequest, cached_counts: dict[str, int] | None = None
+    request: GenerationRequest, token_counter: Callable[[str], int] = count_tokens
+) -> int:
+    return (
+        token_counter(request.system_prompt)
+        + sum(token_counter(tool.model_dump_json()) for tool in request.tools)
+        + sum(message_tokens(message, token_counter) for message in request.messages)
+    )
+
+
+def cached_request_tokens(
+    request: GenerationRequest, cached_counts: dict[str, int]
 ) -> int:
     """Count the request and retain only its text counts for the next request."""
     current_counts: dict[str, int] = {}
@@ -88,14 +111,9 @@ def request_tokens(
             current_counts[text] = tokens
         return tokens
 
-    total = (
-        count(request.system_prompt)
-        + sum(count(tool.model_dump_json()) for tool in request.tools)
-        + sum(message_tokens(message, count) for message in request.messages)
-    )
-    if cached_counts is not None:
-        cached_counts.clear()
-        cached_counts.update(current_counts)
+    total = request_tokens(request, count)
+    cached_counts.clear()
+    cached_counts.update(current_counts)
     return total
 
 
@@ -141,17 +159,35 @@ def working_messages(
     if checkpoint is None:
         return list(messages)
     boundary = checkpoint_boundary(messages, checkpoint, input_start=input_start)
+    return messages_after_compaction(messages, boundary, summary=checkpoint.summary)
+
+
+def is_input_context(message: Message) -> bool:
+    """Whether a message is context of the user message before it, such as a
+    picked skill, and not a user turn."""
+    return (
+        isinstance(message.metadata, CompactionMetadata)
+        and message.metadata.is_input_context
+    )
+
+
+def messages_after_compaction(
+    messages: list[Message], boundary: int, *, summary: str
+) -> list[Message]:
+    """Apply a validated cutoff while preserving system messages and the user's task."""
     prefix = messages[:boundary]
     retained: list[Message] = [m for m in prefix if isinstance(m, SystemMessage)]
-    if checkpoint.summary:
-        retained.append(
-            SystemMessage(content=f"Conversation summary:\n{checkpoint.summary}")
-        )
+    if summary:
+        retained.append(SystemMessage(content=f"Conversation summary:\n{summary}"))
+    # Between-step input and input context do not replace the question that
+    # started this task. A retained question keeps no context messages.
     latest_user = next(
         (
             index
             for index in range(len(messages) - 1, -1, -1)
             if isinstance(messages[index], UserMessage)
+            and not isinstance(messages[index].metadata, InputMessageMetadata)
+            and not is_input_context(messages[index])
         ),
         None,
     )
@@ -163,7 +199,8 @@ def working_messages(
 def history_boundaries(
     messages: list[Message], *, input_start: int | None = None
 ) -> list[int]:
-    """Preserve tool exchanges and unanswered input from input_start onward.
+    """Preserve tool exchanges, input context and unanswered input from
+    input_start onward.
 
     Without a run boundary, retain the whole trailing unanswered input group.
     """
@@ -184,7 +221,9 @@ def history_boundaries(
             and (input_start is None or index >= input_start)
         ):
             unanswered_input_start = index
-        if not pending:
+        if not pending and not (
+            index + 1 < len(messages) and is_input_context(messages[index + 1])
+        ):
             boundaries.append(index + 1)
     # Files and request context can precede the question as separate user messages.
     if unanswered_input_start is not None:
@@ -230,18 +269,9 @@ class _SummaryInput:
             if available <= 0:
                 break
             end = min(len(self.tokens), self.offset + available)
-            text = ""
             # A token boundary can split a UTF-8 character.
-            while end > self.offset:
-                try:
-                    text = (
-                        _encoder()
-                        .decode_bytes(self.tokens[self.offset : end])
-                        .decode("utf-8")
-                    )
-                    break
-                except UnicodeDecodeError:
-                    end -= 1
+            while (text := _strict_decode(self.tokens[self.offset : end])) is None:
+                end -= 1
             if end == self.offset and self.tokens:
                 break
             parts.append(header + text)

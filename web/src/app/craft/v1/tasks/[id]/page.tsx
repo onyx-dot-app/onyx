@@ -11,7 +11,7 @@ import {
   SettingsLayouts,
   toast,
 } from "@opal/layouts";
-import { Button, Card, Text } from "@opal/components";
+import { Button, Card, Text, useCreateModal } from "@opal/components";
 import {
   SvgChevronDown,
   SvgChevronUp,
@@ -58,7 +58,8 @@ export default function ScheduledTaskDetailPage() {
 
   const [promptExpanded, setPromptExpanded] = useState(false);
   const [busy, setBusy] = useState(false);
-  const [confirmDelete, setConfirmDelete] = useState(false);
+  const deleteModal = useCreateModal();
+  const toggleDeleteModal = deleteModal.toggle;
   const scheduleDescription = data
     ? humanReadableScheduleFromCron(data.editor_mode, data.cron_expression)
     : undefined;
@@ -124,7 +125,7 @@ export default function ScheduledTaskDetailPage() {
           },
         { revalidate: false }
       );
-      setConfirmDelete(false);
+      toggleDeleteModal(false);
       navigation.go(TASKS_PATH, { replace: true });
     } catch (err) {
       toast.error(
@@ -132,7 +133,7 @@ export default function ScheduledTaskDetailPage() {
       );
       setBusy(false);
     }
-  }, [data, globalMutate, navigation, t]);
+  }, [data, globalMutate, navigation, t, toggleDeleteModal]);
 
   if (!taskId) {
     return (
@@ -201,7 +202,7 @@ export default function ScheduledTaskDetailPage() {
                     key="delete"
                     icon={SvgTrash}
                     prominence="tertiary"
-                    onClick={() => setConfirmDelete(true)}
+                    onClick={() => toggleDeleteModal(true)}
                     disabled={busy}
                     data-testid="delete-button"
                     aria-label={t("deleteButton")}
@@ -274,27 +275,29 @@ export default function ScheduledTaskDetailPage() {
           )}
         </SettingsLayouts.Body>
 
-        {confirmDelete && data && (
-          <ConfirmationModalLayout
-            icon={SvgTrash}
-            title={t("confirmDelete.title", { name: data.name })}
-            description={t("confirmDelete.description")}
-            onClose={() => setConfirmDelete(false)}
-            submit={
-              <Button
-                variant="danger"
-                prominence="primary"
-                onClick={() => void handleDelete()}
-                disabled={busy}
-                data-testid="confirm-delete-task"
-              >
-                {busy
-                  ? t("confirmDelete.deletingButton")
-                  : t("confirmDelete.deleteButton")}
-              </Button>
-            }
-          />
-        )}
+        <deleteModal.Provider>
+          {data && (
+            <ConfirmationModalLayout
+              icon={SvgTrash}
+              title={t("confirmDelete.title", { name: data.name })}
+              description={t("confirmDelete.description")}
+              onClose={() => toggleDeleteModal(false)}
+              submit={
+                <Button
+                  variant="danger"
+                  prominence="primary"
+                  onClick={() => void handleDelete()}
+                  disabled={busy}
+                  data-testid="confirm-delete-task"
+                >
+                  {busy
+                    ? t("confirmDelete.deletingButton")
+                    : t("confirmDelete.deleteButton")}
+                </Button>
+              }
+            />
+          )}
+        </deleteModal.Provider>
       </SettingsLayouts.Root>
     </Section>
   );

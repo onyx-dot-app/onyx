@@ -56,8 +56,15 @@ def count_message_tokens(message: Message, token_counter: Callable[[str], int]) 
             token_counter(json.dumps(call.arguments)) for call in message.tool_calls
         )
         if message.thinking_blocks:
+            # Encrypted reasoning is opaque: its size says nothing about the
+            # tokens it holds, so replayed reasoning is not estimated.
             count += token_counter(
-                json.dumps([block.model_dump() for block in message.thinking_blocks])
+                json.dumps(
+                    [
+                        block.model_dump(exclude={"encrypted_content"})
+                        for block in message.thinking_blocks
+                    ]
+                )
             )
     return count
 

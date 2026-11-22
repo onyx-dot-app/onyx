@@ -46,7 +46,7 @@ STANDARD = ChannelRef(
 PRIVATE = ChannelRef(
     team_id=TEAM_ID, id="19:private", display_name="Leads", membership_type="private"
 )
-TEAM_GROUP = f"teams_team-members:{TEAM_ID}".lower()
+TEAM_GROUP = f"team-members:{TEAM_ID}"
 # What a checkpoint saved by an older version holds: a channel with no type.
 UNTYPED = ChannelRef(team_id=TEAM_ID, id=CHANNEL_ID, display_name="General")
 CHANNEL_TYPE_URL = f"teams/{TEAM_ID}/channels/{CHANNEL_ID}?$select=membershipType"
@@ -100,21 +100,13 @@ def test_a_private_channel_and_an_unknown_one_have_a_group_of_their_own() -> Non
 
 
 def test_a_thread_names_its_group_and_no_one_by_email() -> None:
-    access = channel_access(STANDARD, for_indexing=True)
+    access = channel_access(STANDARD)
 
     # A team of thousands would put every email on every thread, and a join or
     # a leave would rewrite them all.
     assert access.is_public is False
     assert access.external_user_emails == set()
     assert access.external_user_group_ids == {TEAM_GROUP}
-
-
-def test_the_permission_sync_walk_leaves_the_source_prefix_to_the_sync() -> None:
-    # The permission sync prefixes every group it is handed. A second prefix
-    # (teams_teams_...) matches no synced group, and nobody can read the thread.
-    access = channel_access(STANDARD, for_indexing=False)
-
-    assert access.external_user_group_ids == {f"team-members:{TEAM_ID}"}
 
 
 def test_a_member_without_an_email_is_named_by_user_id() -> None:
@@ -321,7 +313,7 @@ def test_the_channel_walk_lists_no_members_and_names_the_thread_authors() -> Non
     documents = [item for item in items if isinstance(item, Document)]
     assert len(documents) == 2 and len(items) == 2
     for document in documents:
-        assert document.external_access == channel_access(STANDARD, for_indexing=True)
+        assert document.external_access == channel_access(STANDARD)
         owners = document.primary_owners or []
         assert [(o.display_name, o.email) for o in owners] == [("Ada", None)]
     # Naming a channel's people is the group sync's work, so indexing lists no
@@ -369,7 +361,7 @@ def test_a_checkpoint_without_the_channel_type_reads_it_from_graph() -> None:
     # The group sync names a standard channel's group by its team, so a resumed
     # checkpoint that named it by channel would share its threads with no one.
     assert [item.external_access for item in items if isinstance(item, Document)] == [
-        channel_access(STANDARD, for_indexing=True)
+        channel_access(STANDARD)
     ]
     assert _requested(client).count(CHANNEL_TYPE_URL) == 1
 

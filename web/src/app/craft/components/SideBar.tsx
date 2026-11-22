@@ -15,7 +15,13 @@ import {
 } from "@/app/craft/hooks/useBuildSessionStore";
 import type { SessionHistoryItem } from "@/app/craft/types/streamingTypes";
 import { CRAFT_SEARCH_PARAM_NAMES } from "@/app/craft/services/searchParams";
-import { Button, Dropdown, SidebarTab, Text } from "@opal/components";
+import {
+  Button,
+  Dropdown,
+  SidebarTab,
+  Text,
+  useCreateModal,
+} from "@opal/components";
 import {
   ConfirmationModalLayout,
   SidebarLayouts,
@@ -32,21 +38,16 @@ import { noProp } from "@/lib/utils";
 import {
   SvgEditBig,
   SvgArrowLeft,
-  SvgBlocks,
+  SvgSliders,
   SvgClock,
   SvgMoreHorizontal,
   SvgEdit,
   SvgTrash,
-  SvgPlug,
 } from "@opal/icons";
 import TypewriterText from "@/app/craft/components/TypewriterText";
+import { customizeTabHref } from "@/lib/customize/paths";
 import OpencodeDebugLogsButton from "@/app/craft/components/OpencodeDebugLogs";
-import {
-  CRAFT_PATH,
-  CRAFT_SKILLS_PATH,
-  CRAFT_PLUGINS_PATH,
-  CRAFT_TASKS_PATH,
-} from "@/app/craft/v1/constants";
+import { CRAFT_PATH, CRAFT_TASKS_PATH } from "@/app/craft/v1/constants";
 import { useUnsavedChangesNavigation } from "@/providers/UnsavedChangesNavigationProvider";
 
 // ============================================================================
@@ -109,7 +110,8 @@ function BuildSessionButton({
   const t = useTranslations("craft.sideBar");
   const [renaming, setRenaming] = useState(false);
   const [menuOpen, setMenuOpen] = useState(false);
-  const [isDeleteModalOpen, setIsDeleteModalOpen] = useState(false);
+  const deleteModal = useCreateModal();
+  const toggleDeleteModal = deleteModal.toggle;
   const [isDeleting, setIsDeleting] = useState(false);
 
   // Track title changes for typewriter animation (only for auto-naming, not manual rename)
@@ -130,9 +132,9 @@ function BuildSessionButton({
   }, [historyItem.title, renaming]);
 
   const closeModal = useCallback(() => {
-    setIsDeleteModalOpen(false);
+    toggleDeleteModal(false);
     setMenuOpen(false);
-  }, []);
+  }, [toggleDeleteModal]);
 
   const handleConfirmDelete = useCallback(
     async (e: React.MouseEvent<HTMLButtonElement>) => {
@@ -203,7 +205,7 @@ function BuildSessionButton({
                 icon: SvgTrash,
                 danger: true,
                 title: t("delete.label"),
-                onSelect: () => setIsDeleteModalOpen(true),
+                onSelect: () => toggleDeleteModal(true),
               },
             ],
           },
@@ -258,14 +260,14 @@ function BuildSessionButton({
           </Hoverable.Root>
         </Dropdown.Anchor>
       </Dropdown>
-      {isDeleteModalOpen && (
+      <deleteModal.Provider>
         <CraftSessionDeleteModal
           sessionTitle={historyItem.title}
           isDeleting={isDeleting}
           onClose={closeModal}
           onConfirm={handleConfirmDelete}
         />
-      )}
+      </deleteModal.Provider>
     </>
   );
 }
@@ -368,18 +370,10 @@ const MemoizedBuildSidebarInner = memo(() => {
             {t("scheduledTasks.label")}
           </SidebarTab>
           <SidebarTab
-            icon={SvgBlocks}
-            onClick={() => navigate(CRAFT_SKILLS_PATH)}
-            selected={pathname.startsWith(CRAFT_SKILLS_PATH)}
+            icon={SvgSliders}
+            onClick={() => navigate(customizeTabHref("skills"))}
           >
-            {t("skills.label")}
-          </SidebarTab>
-          <SidebarTab
-            icon={SvgPlug}
-            onClick={() => navigate(CRAFT_PLUGINS_PATH)}
-            selected={pathname.startsWith(CRAFT_PLUGINS_PATH)}
-          >
-            {t("plugins.label")}
+            {t("customize.label")}
           </SidebarTab>
         </div>
       </BrandedSidebarHeader>
@@ -398,8 +392,6 @@ const MemoizedBuildSidebarInner = memo(() => {
                   historyItem={historyItem}
                   isActive={
                     !pathname.startsWith(CRAFT_TASKS_PATH) &&
-                    !pathname.startsWith(CRAFT_SKILLS_PATH) &&
-                    !pathname.startsWith(CRAFT_PLUGINS_PATH) &&
                     session?.id === historyItem.id
                   }
                   onLoad={() => handleLoadSession(historyItem.id)}

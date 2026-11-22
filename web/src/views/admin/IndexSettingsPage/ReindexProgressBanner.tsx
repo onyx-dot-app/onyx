@@ -1,6 +1,5 @@
 "use client";
 
-import { useState } from "react";
 import { useTranslations } from "next-intl";
 import { cn, markdown } from "@opal/utils";
 import type { IconFunctionComponent } from "@opal/types";
@@ -10,6 +9,7 @@ import {
   ProgressBar,
   Badge,
   Text,
+  useCreateModal,
 } from "@opal/components";
 import {
   SvgAlertCircle,
@@ -50,7 +50,7 @@ export default function ReindexProgressBanner({
   onCancel,
 }: ReindexProgressBannerProps) {
   const t = useTranslations("admin.indexSettings");
-  const [errorsOpen, setErrorsOpen] = useState(false);
+  const errorsModal = useCreateModal();
   const { data } = useReindexProgress({ pollIntervalMs: 5000 });
   const { total, waiting, in_progress, completed, failed, paused, reembeds } =
     data ?? ZERO;
@@ -74,9 +74,9 @@ export default function ReindexProgressBanner({
 
   return (
     <>
-      {errorsOpen && (
-        <ReindexErrorsModal onClose={() => setErrorsOpen(false)} />
-      )}
+      <errorsModal.Provider>
+        <ReindexErrorsModal onClose={() => errorsModal.toggle(false)} />
+      </errorsModal.Provider>
 
       <MessageCard
         variant="pending"
@@ -127,7 +127,7 @@ export default function ReindexProgressBanner({
                       size="sm"
                       tooltip={t("progressBanner.attentionButton.label")}
                       aria-label={t("progressBanner.attentionButton.label")}
-                      onClick={() => setErrorsOpen(true)}
+                      onClick={() => errorsModal.toggle(true)}
                     />
                   )}
                 </div>

@@ -2,8 +2,8 @@ import React from "react";
 import { act, fireEvent, screen, within } from "@testing-library/react";
 import { deferred, render } from "@tests/setup/test-utils";
 import { draftKey } from "@/hooks/useDraft";
-import type { BaseInputBarHandle } from "@/sections/input/BaseInputBar";
 import CraftInputBar from "@/app/craft/components/CraftInputBar";
+import type { PickerSections, PickerSkill } from "@/lib/skills/picker";
 import {
   UploadFileStatus,
   type BuildFile,
@@ -57,9 +57,40 @@ jest.mock("swr", () => ({
   SWRConfig: jest.requireActual("swr").SWRConfig,
 }));
 
+const PPTX_SKILLS = {
+  builtins: [
+    {
+      name: "pptx",
+      description: "Make slides",
+      is_available: true,
+      enabled: true,
+    },
+  ],
+  customs: [],
+};
+let mockSkillsData:
+  | {
+      builtins: typeof PPTX_SKILLS.builtins;
+      customs: { name: string; description: string; enabled: boolean }[];
+    }
+  | undefined;
 jest.mock("@/hooks/useUserSkills", () => ({
   __esModule: true,
-  default: () => ({ data: undefined }),
+  default: () => ({ data: mockSkillsData }),
+}));
+
+const mockChatSkills: {
+  entries: PickerSections;
+  onInputFocus: () => void;
+} = {
+  entries: { skills: [], apps: [], mcpServers: [] },
+  onInputFocus: () => undefined,
+};
+jest.mock("@/lib/skills/hooks", () => ({
+  ...jest.requireActual<typeof import("@/lib/skills/hooks")>(
+    "@/lib/skills/hooks"
+  ),
+  useChatSkills: () => mockChatSkills,
 }));
 
 jest.mock("@/hooks/useUserExternalApps", () => ({
@@ -75,42 +106,11 @@ jest.mock("@/hooks/useEscapeInterrupt", () => ({
   useEscapeInterrupt: jest.fn(),
 }));
 
-let mockDeleteBeforeToken: (token: string) => boolean | undefined;
-jest.mock("@/hooks/useSlashPicker", () => ({
-  __esModule: true,
-  default: ({
-    inputRef,
-  }: {
-    inputRef: React.RefObject<BaseInputBarHandle | null>;
-  }) => {
-    mockDeleteBeforeToken = (token) =>
-      inputRef.current?.deleteBeforeToken(token);
-    return {
-      open: false,
-      anchorRect: null,
-      query: "",
-      onInput: jest.fn(),
-      onSelectionChange: jest.fn(),
-      onSelect: jest.fn(),
-      onClose: jest.fn(),
-      reset: jest.fn(),
-    };
-  },
-}));
-
-jest.mock("@/lib/skills/picker", () => ({
-  pickerEntryConnectionPath: () => null,
-  pickerEntryKey: () => "",
-  pickerEntryPromptPrefix: () => "",
-  toPickerSections: () => ({ skills: [], apps: [], mcpServers: [] }),
-}));
-
 jest.mock("@/app/craft/components/buildEntryMenuItems", () => ({
   buildEntryMenuItems: () => [],
 }));
 
 jest.mock("@/sections/input/EntryInfoPopover", () => () => null);
-jest.mock("@/sections/input/EntryPickerPopover", () => () => null);
 jest.mock("@/app/craft/components/InterruptHint", () => () => null);
 jest.mock("@/app/craft/components/ContextRing", () => () => null);
 jest.mock("@/sections/input/InputChipStrip", () => ({
@@ -128,8 +128,29 @@ function enterText(text: string) {
   return input;
 }
 
+/** Enters `text` with the caret before character `caret`. */
+function enterTextWithCaret(text: string, caret: number) {
+  const input = screen.getByRole("textbox", { name: "Message input" });
+  input.textContent = text;
+  const textNode = input.firstChild;
+  if (!textNode) throw new Error("Expected input text");
+  window.getSelection()?.collapse(textNode, caret);
+  fireEvent.input(input);
+  return input;
+}
+
+// jsdom has no layout, so ranges cannot measure the caret.
+const rangeRect = Range.prototype.getBoundingClientRect;
+beforeAll(() => {
+  Range.prototype.getBoundingClientRect = () => new DOMRect();
+});
+afterAll(() => {
+  Range.prototype.getBoundingClientRect = rangeRect;
+});
+
 beforeEach(() => {
   mockUserId = "user";
+  mockSkillsData = undefined;
   sessionStorage.clear();
 });
 
@@ -297,26 +318,56 @@ describe("Craft draft review regressions", () => {
   });
 
   it("does not restore a slash query removed by the picker", () => {
+    mockSkillsData = PPTX_SKILLS;
     const props = { onSubmit: jest.fn(), isRunning: false };
     const { unmount } = render(<CraftInputBar {...props} />);
-    const input = enterText("Prompt /pptx");
-    const range = document.createRange();
-    range.selectNodeContents(input);
-    range.collapse(false);
-    const selection = window.getSelection();
-    selection?.removeAllRanges();
-    // The picker removes a token immediately before a text-node caret.
-    const textNode = input.firstChild;
-    if (!textNode) throw new Error("Expected input text");
-    range.setStart(textNode, textNode.textContent?.length ?? 0);
-    range.collapse(true);
-    selection?.addRange(range);
-    act(() => {
-      expect(mockDeleteBeforeToken("/pptx")).toBe(true);
-    });
+    // A pick removes the whole word, even with the caret inside it.
+    const input = enterTextWithCaret("Prompt /pptx", "Prompt /pp".length);
+    expect(screen.getByTestId("skill-picker-popover")).toBeVisible();
+    fireEvent.keyDown(document, { key: "Enter" });
+    expect(input.textContent).toBe("Prompt ");
     unmount();
     render(<CraftInputBar {...props} />);
     expect(screen.getByRole("textbox").textContent).toBe("Prompt ");
+  });
+});
+
+describe("Craft `/` picker", () => {
+  it("matches a substring and closes on a word that matches nothing", () => {
+    mockSkillsData = PPTX_SKILLS;
+    render(<CraftInputBar onSubmit={jest.fn()} isRunning={false} />);
+    enterTextWithCaret("/ptx", 4);
+    expect(screen.getByTestId("skill-picker-row-pptx")).toBeVisible();
+    enterTextWithCaret("/ptxz", 5);
+    expect(screen.queryByTestId("skill-picker-popover")).toBeNull();
+  });
+
+  it("offers each skill of an uploaded plugin, not the plugin name", () => {
+    mockSkillsData = {
+      ...PPTX_SKILLS,
+      customs: [{ name: "review-kit", description: "Kit", enabled: true }],
+    };
+    const review: PickerSkill = {
+      kind: "skill",
+      slug: "review",
+      name: "review",
+      description: "Review code.",
+    };
+    mockChatSkills.entries = { skills: [review], apps: [], mcpServers: [] };
+    render(<CraftInputBar onSubmit={jest.fn()} isRunning={false} />);
+    enterTextWithCaret("/", 1);
+    expect(screen.getByTestId("skill-picker-row-review")).toBeVisible();
+    expect(screen.queryByTestId("skill-picker-row-review-kit")).toBeNull();
+    mockChatSkills.entries = { skills: [], apps: [], mcpServers: [] };
+  });
+
+  it("fetches the chat skills again when the input gains focus", () => {
+    const onInputFocus = jest.fn();
+    mockChatSkills.onInputFocus = onInputFocus;
+    render(<CraftInputBar onSubmit={jest.fn()} isRunning={false} />);
+    act(() => screen.getByRole("textbox", { name: "Message input" }).focus());
+    expect(onInputFocus).toHaveBeenCalledTimes(1);
+    mockChatSkills.onInputFocus = () => undefined;
   });
 });
 

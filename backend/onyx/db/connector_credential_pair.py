@@ -4,7 +4,6 @@ from enum import Enum
 from typing import TypeVarTuple
 from uuid import UUID
 
-from fastapi import HTTPException
 from pydantic import BaseModel
 from sqlalchemy import Select, and_, delete, desc, false, func, or_, select, update
 from sqlalchemy.orm import Session, aliased, joinedload, selectinload
@@ -85,6 +84,22 @@ def build_user_cc_pair_access_filter(user_id: UUID) -> ColumnElement[bool]:
         .correlate(ConnectorCredentialPair)
         .exists()
     )
+    # A PERSONAL pair on an ownerless credential is read by its creator.
+    ownerless_credential = (
+        select(1)
+        .select_from(Credential)
+        .where(
+            Credential.id == ConnectorCredentialPair.credential_id,
+            Credential.user_id.is_(None),
+        )
+        .correlate(ConnectorCredentialPair)
+        .exists()
+    )
+    personal_creator = and_(
+        ConnectorCredentialPair.access_type == AccessType.PERSONAL,
+        ConnectorCredentialPair.creator_id == user_id,
+        ownerless_credential,
+    )
     group_access_clause_fn = fetch_versioned_implementation(
         "onyx.db.connector_credential_pair", "_build_user_group_cc_pair_access_clause"
     )
@@ -92,7 +107,7 @@ def build_user_cc_pair_access_filter(user_id: UUID) -> ColumnElement[bool]:
         ConnectorCredentialPair.access_type == AccessType.PUBLIC,
         and_(
             ConnectorCredentialPair.access_type.notin_(AccessType.perm_synced_types()),
-            or_(credential_owner, group_access_clause_fn(user_id)),
+            or_(credential_owner, personal_creator, group_access_clause_fn(user_id)),
         ),
     )
 
@@ -469,8 +484,8 @@ def get_connector_credential_pairs_for_user(
             to avoid fetching large JSONB blobs when they aren't needed.
         eager_load_creator: If True, loads each pair's creator in one query.
     """
-    if eager_load_user:
-        assert eager_load_credential, (
+    if eager_load_user and not eager_load_credential:
+        raise ValueError(
             "eager_load_credential must be True if eager_load_user is True"
         )
     stmt = select(ConnectorCredentialPair).distinct()
@@ -1099,6 +1114,7 @@ def _relate_groups_to_cc_pair__no_commit(
 def _relate_data_access_groups_to_cc_pair__no_commit(
     db_session: Session,
     cc_pair_id: int,
+    access_type: AccessType,
     user_group_ids: list[int],
 ) -> None:
     if not user_group_ids:
@@ -1121,8 +1137,36 @@ def _relate_data_access_groups_to_cc_pair__no_commit(
 
     for group_id in set(user_group_ids):
         db_session.add(
-            UserGroup__CCPairDataAccess(user_group_id=group_id, cc_pair_id=cc_pair_id)
+            UserGroup__CCPairDataAccess(
+                user_group_id=group_id, cc_pair_id=cc_pair_id, access_type=access_type
+            )
         )
+
+
+def ensure_personal_has_reader(
+    access_type: AccessType,
+    credential_user_id: UUID | None,
+    creator_id: UUID | None,
+) -> None:
+    """A PERSONAL pair is read by its credential's owner, or by its creator
+    when the credential has no owner, so one of them must exist."""
+    if (
+        access_type == AccessType.PERSONAL
+        and credential_user_id is None
+        and creator_id is None
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "An owner-only connector needs a credential owner or a creator.",
+        )
+
+
+def fetch_cc_pair_creator_id(db_session: Session, cc_pair_id: int) -> UUID | None:
+    return db_session.scalar(
+        select(ConnectorCredentialPair.creator_id).where(
+            ConnectorCredentialPair.id == cc_pair_id
+        )
+    )
 
 
 def add_credential_to_connector(
@@ -1158,17 +1202,16 @@ def add_credential_to_connector(
         )
 
     if connector is None:
-        raise HTTPException(status_code=404, detail="Connector does not exist")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Connector does not exist")
 
     if credential is None:
         error_msg = (
             f"Credential {credential_id} does not exist or does not belong to user"
         )
         logger.error(error_msg)
-        raise HTTPException(
-            status_code=401,
-            detail=error_msg,
-        )
+        raise OnyxError(OnyxErrorCode.UNAUTHENTICATED, error_msg)
+    # The creating user becomes the pair's creator.
+    ensure_personal_has_reader(access_type, credential.user_id, user.id)
 
     existing_association = (
         db_session.query(ConnectorCredentialPair)
@@ -1184,6 +1227,14 @@ def add_credential_to_connector(
             message=f"Connector {connector_id} already has Credential {credential_id}",
             data=connector_id,
         )
+
+    # The ingestion API never gets an index attempt, so nothing would ever
+    # move its pair out of SCHEDULED. It starts ACTIVE, like DefaultCCPair.
+    if (
+        connector.source == DocumentSource.INGESTION_API
+        and initial_status == ConnectorCredentialPairStatus.SCHEDULED
+    ):
+        initial_status = ConnectorCredentialPairStatus.ACTIVE
 
     association = ConnectorCredentialPair(
         creator_id=user.id,
@@ -1208,14 +1259,16 @@ def add_credential_to_connector(
     if access_type == AccessType.PRIVATE:
         # Callers that set only manage groups keep today's meaning: the
         # manage groups also get data access.
+        private_group_ids = (
+            data_access_group_ids
+            if data_access_group_ids is not None
+            else list(manage_access)
+        )
         _relate_data_access_groups_to_cc_pair__no_commit(
             db_session=db_session,
             cc_pair_id=association.id,
-            user_group_ids=(
-                data_access_group_ids
-                if data_access_group_ids is not None
-                else list(manage_access)
-            ),
+            access_type=access_type,
+            user_group_ids=private_group_ids,
         )
     elif access_type == AccessType.SYNC_RESTRICTED:
         # With no data-access group the pair would be visible to nobody.
@@ -1227,6 +1280,7 @@ def add_credential_to_connector(
         _relate_data_access_groups_to_cc_pair__no_commit(
             db_session=db_session,
             cc_pair_id=association.id,
+            access_type=access_type,
             user_group_ids=data_access_group_ids,
         )
 
@@ -1253,12 +1307,12 @@ def remove_credential_from_connector(
     )
 
     if connector is None:
-        raise HTTPException(status_code=404, detail="Connector does not exist")
+        raise OnyxError(OnyxErrorCode.NOT_FOUND, "Connector does not exist")
 
     if credential is None:
-        raise HTTPException(
-            status_code=404,
-            detail="Credential does not exist or does not belong to user",
+        raise OnyxError(
+            OnyxErrorCode.NOT_FOUND,
+            "Credential does not exist or does not belong to user",
         )
 
     association = get_connector_credential_pair_for_user(

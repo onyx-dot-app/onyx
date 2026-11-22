@@ -25,7 +25,7 @@ from onyx.connectors.models import (
     TextSection,
 )
 from onyx.file_processing.extract_file_text import extract_file_text
-from onyx.file_processing.file_types import OnyxFileExtensions
+from onyx.file_processing.file_types import is_indexable_file_type
 from onyx.indexing.indexing_heartbeat import IndexingHeartbeatInterface
 from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
@@ -341,7 +341,7 @@ class HighspotConnector(LoadConnector, PollConnector, SlimConnectorWithPermSync)
 
             elif (
                 is_valid_format
-                and file_extension in OnyxFileExtensions.TEXT_AND_DOCUMENT_EXTENSIONS
+                and is_indexable_file_type(content_name, None, allow_images=False)
                 and can_download
             ):
                 content_response = self.client.get_item_content(item_id)

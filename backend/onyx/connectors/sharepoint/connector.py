@@ -51,6 +51,11 @@ from onyx.connectors.microsoft_utils.drive_items import (
 from onyx.connectors.microsoft_utils.graph_auth import MicrosoftAuthMethod
 from onyx.connectors.microsoft_utils.graph_env import resolve_microsoft_environment
 from onyx.connectors.microsoft_utils.graph_errors import MicrosoftGraphError
+from onyx.connectors.microsoft_utils.sharepoint_access import (
+    SharepointPermissionCache,
+    get_sharepoint_external_access,
+    get_sharepoint_hierarchy_node_external_access,
+)
 from onyx.connectors.models import (
     BasicExpertInfo,
     ConnectorCheckpoint,
@@ -65,9 +70,6 @@ from onyx.connectors.models import (
     TextSection,
 )
 from onyx.connectors.sharepoint.connector_utils import (
-    SharepointPermissionCache,
-    get_sharepoint_external_access,
-    get_sharepoint_hierarchy_node_external_access,
     validate_content_types,
     validate_site_url,
 )
@@ -81,7 +83,7 @@ from onyx.connectors.sharepoint.source_operations import (
 )
 from onyx.db.enums import HierarchyNodeType
 from onyx.file_processing.extract_file_text import get_file_ext
-from onyx.file_processing.file_types import OnyxFileExtensions
+from onyx.file_processing.file_types import OnyxFileExtensions, is_indexable_file_type
 from onyx.file_store.staging import RawFileCallback
 from onyx.utils.logger import setup_logger
 
@@ -360,7 +362,6 @@ def _convert_driveitem_to_document_with_permissions(
             permission_cache=permission_cache,
             drive_item=driveitem,
             list_id=drive.list_id,
-            add_prefix=True,
             treat_sharing_link_as_public=treat_sharing_link_as_public,
         )
     else:
@@ -510,7 +511,6 @@ def _convert_sitepage_to_document(
             site_url=site_url,
             permission_cache=permission_cache,
             site_page=site_page,
-            add_prefix=True,
             treat_sharing_link_as_public=treat_sharing_link_as_public,
         )
     else:
@@ -1558,7 +1558,7 @@ class SharepointConnector(
             return
 
         driveitem_extension = get_file_ext(driveitem.name)
-        if driveitem_extension not in OnyxFileExtensions.ALL_ALLOWED_EXTENSIONS:
+        if not is_indexable_file_type(driveitem.name, None, allow_images=True):
             logger.warning(
                 "Skipping %s as it is not a supported file type",
                 driveitem.web_url,

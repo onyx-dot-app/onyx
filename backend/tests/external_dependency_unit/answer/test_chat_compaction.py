@@ -1,5 +1,6 @@
 """Chat history retains inputs across compaction, reload, and regeneration."""
 
+import json
 from io import BytesIO
 from unittest.mock import patch
 from uuid import uuid4
@@ -15,7 +16,9 @@ from onyx.chat.files import _get_or_extract_plaintext
 from onyx.chat.incognito_context import teardown_incognito_session
 from onyx.chat.process_message import handle_stream_message_objects
 from onyx.configs.constants import FileOrigin, MessageType
+from onyx.configs.model_configs import GEN_AI_INPUT_TOKEN_SAFETY_MARGIN
 from onyx.db.chat import delete_chat_session
+from onyx.db.chat_response import load_child_responses
 from onyx.db.enums import IncognitoRecordMode, UserFileStatus
 from onyx.db.models import ChatMessage, ChatResponseItem, UserFile
 from onyx.file_store.file_store import get_default_file_store
@@ -299,6 +302,9 @@ def test_chat_compaction_preserves_current_files_and_compacts_them_after_answeri
 ) -> None:
     user = create_test_user(db_session, "attachment-compaction")
     session = create_chat_session(db_session, user)
+    # A named chat is not auto-named, so `summarize` counts only summaries.
+    session.description = "File comparison"
+    db_session.commit()
     file_store = get_default_file_store()
     files: list[UserFile] = []
     bodies = [
@@ -365,7 +371,21 @@ def test_chat_compaction_preserves_current_files_and_compacts_them_after_answeri
                 )
                 == "Earlier answer"
             )
-            model.max_input_tokens = 12000
+            # Budgets follow the measured instructions and tools, so they hold
+            # when tool definitions change.
+            first_request = model.requests[0]
+            overhead = count_tokens(json.dumps(first_request["tools"])) + count_tokens(
+                first_request["prompt"][0].model_dump_json()
+            )
+            # Sized for regular reports; oversized reports exceed it.
+            file_tokens = sum(
+                count_tokens(f"Report {index} contains unique supporting evidence. ")
+                * 600
+                for index in range(2)
+            )
+            usable_share = 1 - GEN_AI_INPUT_TOKEN_SAFETY_MARGIN
+            # The current files fit; the old context must be compacted.
+            model.max_input_tokens = int((overhead + file_tokens + 1000) / usable_share)
             parts = list(
                 handle_stream_message_objects(
                     new_msg_req=SendMessageRequest(
@@ -390,7 +410,10 @@ def test_chat_compaction_preserves_current_files_and_compacts_them_after_answeri
                     assert body in current_prompt
                 assert "Include supporting evidence." in current_prompt
 
-                model.max_input_tokens = 6000
+                # Too small for either file, so the follow-up compacts them.
+                model.max_input_tokens = int(
+                    (overhead + file_tokens // 4) / usable_share
+                )
                 assert (
                     final_answer(
                         list(submit_query("Continue the comparison.", session.id, user))
@@ -434,6 +457,9 @@ def test_shorter_question_recovers_after_oversized_input(
 ) -> None:
     user = create_test_user(db_session, "oversized-chat")
     session = create_chat_session(db_session, user)
+    # A named chat is not auto-named, so `summarize` counts only summaries.
+    session.description = "Oversized input"
+    db_session.commit()
     oversized = "Oversized input. " * 10000
     model = ScriptedLLM([Delta(content="Hello")], max_input_tokens=8000)
     try:
@@ -502,6 +528,10 @@ def test_compacted_chat_reloads_continues_and_regenerates_selected_branch(
 ) -> None:
     user = create_test_user(db_session, "compacted-chat")
     session = create_chat_session(db_session, user)
+    # A named chat is not auto-named, so naming makes no `invoke` call on the
+    # chat's model, and `summarize` counts only summaries.
+    session.description = "Kiwi project"
+    db_session.commit()
     original_input = "The project is called Kiwi. " + "historical detail " * 10000
     summary = (
         ""
@@ -570,7 +600,10 @@ def test_compacted_chat_reloads_continues_and_regenerates_selected_branch(
             saved = db_session.get(ChatMessage, ids.reserved_assistant_message_id)
             assert saved is not None
             replayed = translate_assistant_message_to_packets(
-                saved, load_session_tools([saved], db_session), db_session
+                saved,
+                load_session_tools([saved], db_session),
+                db_session,
+                child_responses=load_child_responses(db_session, [saved]),
             )
             assert (
                 "".join(
