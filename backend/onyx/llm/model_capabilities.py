@@ -397,10 +397,12 @@ def _probe_supports_reasoning(full_model_name: str) -> bool:
         if cached is not None:
             return cached
 
-        import litellm
-
         expires_at = None
         try:
+            # Inside the try: a failed import must get the failure TTL too,
+            # or every request retries the whole import.
+            from onyx.llm.litellm_singleton import litellm
+
             result = bool(litellm.supports_reasoning(model=full_model_name))
         except Exception:
             logger.exception(

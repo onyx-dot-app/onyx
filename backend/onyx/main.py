@@ -430,6 +430,10 @@ async def lifespan(app: FastAPI) -> AsyncGenerator[None, None]:  # noqa: ARG001
     # Initialize tracing if credentials are provided
     setup_tracing()
 
+    # Import litellm before request threads do. Concurrent first imports from
+    # request threads can deadlock in the import system (#18332).
+    import onyx.llm.litellm_singleton  # noqa: F401
+
     # fill up Postgres connection pools
     await warm_up_connections()
 

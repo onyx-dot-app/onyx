@@ -1,3 +1,5 @@
+import sys
+
 import litellm
 import pytest
 
@@ -153,3 +155,24 @@ def test_probe_results_are_tenant_scoped(monkeypatch: pytest.MonkeyPatch) -> Non
         ("tenant_a", "fakeprov/shared-name-model"),
         ("tenant_b", "fakeprov/shared-name-model"),
     ]
+
+
+def test_failed_litellm_import_cached_with_ttl(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A litellm import that fails (e.g. a deadlock between request threads,
+    #18332) gets the failure TTL like a failed probe, instead of escaping the
+    cache and being retried on every request."""
+    fake_now = 1000.0
+    monkeypatch.setitem(sys.modules, "litellm", None)
+    monkeypatch.setitem(sys.modules, "onyx.llm.litellm_singleton", None)
+    monkeypatch.setattr(model_capabilities, "_SUPPORTS_REASONING_PROBE_CACHE", {})
+    monkeypatch.setattr(model_capabilities.time, "monotonic", lambda: fake_now)
+
+    assert model_is_reasoning_model("import-fails-model", "fakeprov") is False
+
+    cache_key = model_capabilities._reasoning_cache_key("fakeprov/import-fails-model")
+    assert model_capabilities._SUPPORTS_REASONING_PROBE_CACHE[cache_key] == (
+        False,
+        fake_now + model_capabilities._REASONING_PROBE_FAILURE_TTL_SECONDS,
+    )
