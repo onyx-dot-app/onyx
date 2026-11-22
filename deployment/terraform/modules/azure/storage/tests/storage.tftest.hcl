@@ -1,7 +1,24 @@
 # Plans the module against a mocked provider, so these run without an Azure
 # subscription or credentials. Run with `terraform test` from the module directory.
 
-mock_provider "azurerm" {}
+mock_provider "azurerm" {
+  # Key Vault access policies validate these as UUIDs.
+  override_data {
+    target = data.azurerm_client_config.current
+    values = {
+      tenant_id = "00000000-0000-0000-0000-000000000001"
+      object_id = "00000000-0000-0000-0000-000000000002"
+    }
+  }
+
+  override_resource {
+    target = azurerm_user_assigned_identity.cmk
+    values = {
+      tenant_id    = "00000000-0000-0000-0000-000000000001"
+      principal_id = "00000000-0000-0000-0000-000000000003"
+    }
+  }
+}
 
 variables {
   storage_account_name = "onyxfilestoreprod"
@@ -263,4 +280,124 @@ run "rejects_an_invalid_bypass" {
   }
 
   expect_failures = [var.network_rules_bypass]
+}
+
+run "defaults_use_microsoft_managed_keys" {
+  command = plan
+
+  assert {
+    condition = (
+      length(azurerm_key_vault.cmk) == 0 &&
+      length(azurerm_key_vault_key.cmk) == 0 &&
+      length(azurerm_user_assigned_identity.cmk) == 0
+    )
+    error_message = "No Key Vault, key or identity should exist unless create_customer_managed_key is set."
+  }
+
+  assert {
+    condition     = length(azurerm_storage_account.this.customer_managed_key) == 0 && length(azurerm_storage_account.this.identity) == 0
+    error_message = "Existing accounts must see no encryption or identity change by default."
+  }
+}
+
+run "a_customer_managed_key_encrypts_and_expires_the_account" {
+  command = plan
+
+  variables {
+    storage_account_name        = "onyxsandboxarchive"
+    container_name              = "sandbox-archives"
+    create_customer_managed_key = true
+    expiration_days             = 30
+    noncurrent_expiration_days  = 7
+    transition_to_cool          = false
+  }
+
+  assert {
+    condition     = azurerm_key_vault.cmk[0].purge_protection_enabled == true
+    error_message = "Azure storage needs purge protection on the key's vault."
+  }
+
+  assert {
+    condition     = azurerm_key_vault.cmk[0].name == "kv-onyxsandboxar${substr(sha1("onyxsandboxarchive"), 0, 8)}"
+    error_message = "The vault name should be kv- plus 13 characters of the account name plus an 8-character digest of it."
+  }
+
+  assert {
+    condition     = toset(azurerm_key_vault.cmk[0].access_policy[1].key_permissions) == toset(["Get", "UnwrapKey", "WrapKey"])
+    error_message = "The storage identity may only wrap and unwrap."
+  }
+
+  assert {
+    condition     = one(azurerm_key_vault_key.cmk[0].rotation_policy[0].automatic).time_after_creation == "P90D"
+    error_message = "The key should rotate every 90 days by default."
+  }
+
+  assert {
+    condition     = length(azurerm_storage_account.this.customer_managed_key) == 1
+    error_message = "The account should encrypt with the customer-managed key."
+  }
+
+  assert {
+    condition     = one(azurerm_storage_account.this.identity).type == "UserAssigned"
+    error_message = "The account reaches the key through a user-assigned identity."
+  }
+
+  assert {
+    condition     = azurerm_storage_account.this.allow_nested_items_to_be_public == false && azurerm_storage_container.this.container_access_type == "private"
+    error_message = "The archive must never be servable anonymously."
+  }
+
+  assert {
+    condition     = one(azurerm_storage_account.this.blob_properties).versioning_enabled == true
+    error_message = "Versioning must be on."
+  }
+
+  assert {
+    condition     = one([for r in azurerm_storage_management_policy.this[0].rule : r if r.name == "object-expiration"]).actions[0].base_blob[0].delete_after_days_since_modification_greater_than == 30
+    error_message = "Blobs should be deleted after expiration_days."
+  }
+
+  assert {
+    condition     = one([for r in azurerm_storage_management_policy.this[0].rule : r if r.name == "noncurrent-version-expiration"]).actions[0].version[0].delete_after_days_since_creation == 7
+    error_message = "Old versions should be deleted after noncurrent_expiration_days."
+  }
+}
+
+run "rejects_a_malformed_key_vault_name" {
+  command = plan
+
+  variables {
+    create_customer_managed_key = true
+    key_vault_name              = "1-bad--name"
+  }
+
+  expect_failures = [var.key_vault_name]
+}
+
+run "a_long_account_name_keeps_the_full_vault_digest" {
+  command = plan
+
+  variables {
+    storage_account_name        = "onyxenterpriseprodarc123"
+    create_customer_managed_key = true
+  }
+
+  assert {
+    condition = (
+      length(azurerm_key_vault.cmk[0].name) <= 24 &&
+      endswith(azurerm_key_vault.cmk[0].name, substr(sha1("onyxenterpriseprodarc123"), 0, 8))
+    )
+    error_message = "A 24-character account name must still give a vault name of at most 24 characters that ends in the full digest."
+  }
+}
+
+run "rejects_a_key_vault_name_that_is_too_short" {
+  command = plan
+
+  variables {
+    create_customer_managed_key = true
+    key_vault_name              = "ab"
+  }
+
+  expect_failures = [var.key_vault_name]
 }

@@ -17,7 +17,7 @@ import (
 func NewLintCommand() *cobra.Command {
 	cmd := &cobra.Command{
 		Use:   "lint",
-		Short: "Run repository linters",
+		Short: "Check published Terraform modules for internal values",
 	}
 	cmd.AddCommand(newLintTerraformCommand())
 	return cmd

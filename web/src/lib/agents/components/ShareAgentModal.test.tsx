@@ -5,6 +5,11 @@ import {
   type ShareAgentModalProps,
 } from "@/lib/agents/components/ShareAgentModal";
 import { useCreateModal } from "@opal/components";
+import type { FullAgent } from "@/lib/agents/types";
+
+// The refetch on open re-renders with whatever the mocked hook returns next.
+let mockAgentOverride: Partial<FullAgent> = {};
+let mockRefresh: () => Promise<void> = async () => {};
 
 jest.mock("@/hooks/useShareableUsers", () => ({
   __esModule: true,
@@ -71,7 +76,9 @@ jest.mock("@/lib/agents/hooks", () => ({
       user_permission: "OWNER",
       user_shares: [],
       users: [],
+      ...mockAgentOverride,
     },
+    refresh: jest.fn(() => mockRefresh()),
   })),
   useLabels: jest.fn(() => ({
     createLabel: jest.fn(),
@@ -108,12 +115,31 @@ function renderShareAgentModal(overrides: Partial<ShareAgentModalProps> = {}) {
 }
 
 describe("ShareAgentModal", () => {
+  beforeEach(() => {
+    mockAgentOverride = {};
+    mockRefresh = async () => {};
+  });
+
+  it("hydrates from the refetched agent, not the cached one", async () => {
+    mockRefresh = async () => {
+      mockAgentOverride = { is_public: true, sharing_status: "PUBLIC" };
+    };
+
+    renderShareAgentModal();
+
+    expect(
+      await screen.findByText("Anyone in your organization")
+    ).toBeInTheDocument();
+    expect(screen.queryByText("Only those invited")).not.toBeInTheDocument();
+  });
+
   it("renders the new share view", async () => {
     renderShareAgentModal();
 
     expect(await screen.findByText(/Share/)).toBeInTheDocument();
+    // Rows render once the on-open refetch settles
     expect(
-      screen.getByPlaceholderText("Add users, groups, and accounts")
+      await screen.findByPlaceholderText("Add users, groups, and accounts")
     ).toBeInTheDocument();
     expect(screen.getByText("Admins")).toBeInTheDocument();
     expect(screen.getByText("Only those invited")).toBeInTheDocument();

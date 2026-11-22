@@ -108,7 +108,7 @@ async def prepare_from_fastapi_request(request: Request) -> dict[str, Any]:
     if request.client is None:
         raise ValueError("Invalid request for SAML")
 
-    # Derive http_host and server_port from WEB_DOMAIN (a trusted env var)
+    # Derive http_host, server_port and https from WEB_DOMAIN (a trusted env var)
     # instead of X-Forwarded-* headers, which can be spoofed by an attacker
     # to poison SAML redirect URLs (host header poisoning).
     parsed_domain = urlparse(WEB_DOMAIN)
@@ -119,6 +119,9 @@ async def prepare_from_fastapi_request(request: Request) -> dict[str, Any]:
         "http_host": http_host,
         "server_port": server_port,
         "script_name": request.url.path,
+        # OneLogin assumes HTTPS only on port 443, so without this an HTTPS
+        # WEB_DOMAIN on another port fails the Destination check.
+        "https": "on" if parsed_domain.scheme == "https" else "off",
         "post_data": {},
         "get_data": {},
     }
@@ -127,7 +130,8 @@ async def prepare_from_fastapi_request(request: Request) -> dict[str, Any]:
     if request.query_params:
         rv["get_data"] = dict(request.query_params)
 
-    # Handle form data (for POST requests)
+    # A SAMLResponse is only read from a POST body: the redirect binding is not
+    # permitted for responses, and a query string lands in access logs.
     if request.method == "POST":
         form_data = await request.form()
         if "SAMLResponse" in form_data:
@@ -136,12 +140,6 @@ async def prepare_from_fastapi_request(request: Request) -> dict[str, Any]:
         if "RelayState" in form_data:
             RelayState = form_data["RelayState"]
             rv["post_data"]["RelayState"] = RelayState
-    else:
-        # For GET requests, check if SAMLResponse is in query params
-        if "SAMLResponse" in request.query_params:
-            rv["get_data"]["SAMLResponse"] = request.query_params["SAMLResponse"]
-        if "RelayState" in request.query_params:
-            rv["get_data"]["RelayState"] = request.query_params["RelayState"]
 
     return rv
 

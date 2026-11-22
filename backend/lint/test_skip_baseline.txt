@@ -1,0 +1,16 @@
+# Test skip violations that predate the rule.
+#
+# GENERATED. Do not edit by hand. To regenerate after removing a use:
+#   uv run --no-sync python -m backend.lint.check_test_flakes --write-baseline
+#
+# Do not regenerate to admit a new use.
+#
+# One `<count> <path>` per line, sorted by path.
+1 backend/tests/daily/connectors/onedrive/test_onedrive_fixed_tenant_daily.py
+1 backend/tests/external_dependency_unit/craft_helm/rendering.py
+1 backend/tests/external_dependency_unit/craft_helm/test_sandbox_image_prepuller.py
+1 backend/tests/external_dependency_unit/llm/test_prompt_caching.py
+1 backend/tests/external_dependency_unit/oauth_provider/test_native_clients.py
+1 backend/tests/integration/connector_job_tests/onedrive/test_onedrive_full_acl_integration.py
+1 backend/tests/integration/tests/gateway_clients/conftest.py
+1 backend/tests/integration/tests/llm_workflows/test_nightly_provider_chat_workflow.py

@@ -1,0 +1,71 @@
+from typing import Annotated, Any
+
+from pydantic import field_validator
+
+from onyx.configs.app_configs import INDEX_BATCH_SIZE
+from onyx.connectors.connector_config import ConnectorConfig
+from onyx.connectors.field_policy import (
+    FieldClass,
+    FieldPolicy,
+    ScopeInclude,
+    ScopeOpaque,
+    ScopeOrdered,
+)
+
+# The connector's values for a None limit.
+DEFAULT_MAX_PAGES = 10000
+DEFAULT_SKIP_DOC_ABSOLUTE_CHARS = 200000
+
+
+class TestRailConnectorConfig(ConnectorConfig):
+    batch_size: Annotated[int, FieldPolicy(FieldClass.COSMETIC)] = INDEX_BATCH_SIZE
+    # A blank string or None fetches every project. A list ([] fetches none)
+    # comes only from the API.
+    project_ids: Annotated[
+        str | list[int] | None,
+        FieldPolicy(
+            FieldClass.SCOPE,
+            scope=ScopeInclude(empty_means_all=True, empty_list_means_none=True),
+        ),
+    ] = None
+    # Cases per page. With max_pages it caps the cases fetched per project and
+    # suite, so a change can fetch more or fewer cases.
+    cases_page_size: Annotated[
+        int | None, FieldPolicy(FieldClass.SCOPE, scope=ScopeOpaque())
+    ] = None
+    # A cap on case pages per project and suite.
+    max_pages: Annotated[
+        int | None,
+        FieldPolicy(
+            FieldClass.SCOPE,
+            scope=ScopeOrdered(widens_when_larger=True, none_means=DEFAULT_MAX_PAGES),
+        ),
+    ] = None
+    # Cases with more text than this are skipped.
+    skip_doc_absolute_chars: Annotated[
+        int | None,
+        FieldPolicy(
+            FieldClass.SCOPE,
+            scope=ScopeOrdered(
+                widens_when_larger=True,
+                none_means=DEFAULT_SKIP_DOC_ABSOLUTE_CHARS,
+            ),
+        ),
+    ] = None
+
+    # The constructor treats a blank string and 0 like None (use the default).
+    @field_validator(
+        "cases_page_size", "max_pages", "skip_doc_absolute_chars", mode="before"
+    )
+    @classmethod
+    def _blank_to_none(cls, value: Any) -> Any:
+        if isinstance(value, str) and not value.strip():
+            return None
+        return value
+
+    @field_validator(
+        "cases_page_size", "max_pages", "skip_doc_absolute_chars", mode="after"
+    )
+    @classmethod
+    def _zero_to_none(cls, value: int | None) -> int | None:
+        return value or None

@@ -1,14 +1,16 @@
 from collections.abc import Sequence
 from datetime import datetime, timezone
-from enum import Enum
-from typing import Any
+from enum import Enum, StrEnum
+from typing import TYPE_CHECKING, Any, Literal
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
 from onyx.configs.constants import DocumentSource
-from onyx.db.models import SearchSettings
 from onyx.indexing.models import BaseChunk, IndexingSetting
 from onyx.tools.tool_implementations.web_search.models import WEB_SEARCH_PREFIX
+
+if TYPE_CHECKING:
+    from onyx.db.models import SearchSettings
 
 
 class QueryExpansions(BaseModel):
@@ -28,7 +30,7 @@ class SearchSettingsCreationRequest(IndexingSetting):
 
     @classmethod
     def from_db_model(
-        cls, search_settings: SearchSettings
+        cls, search_settings: "SearchSettings"
     ) -> "SearchSettingsCreationRequest":
         indexing_setting = IndexingSetting.from_db_model(search_settings)
         return cls(**indexing_setting.model_dump())
@@ -40,7 +42,7 @@ class SavedSearchSettings(IndexingSetting):
     use_port_flow: bool | None = None
 
     @classmethod
-    def from_db_model(cls, search_settings: SearchSettings) -> "SavedSearchSettings":
+    def from_db_model(cls, search_settings: "SearchSettings") -> "SavedSearchSettings":
         return cls(
             # Indexing Setting
             model_name=search_settings.model_name,
@@ -51,8 +53,8 @@ class SavedSearchSettings(IndexingSetting):
             provider_type=search_settings.provider_type,
             index_name=search_settings.index_name,
             multipass_indexing=search_settings.multipass_indexing,
-            embedding_precision=search_settings.embedding_precision,
             reduced_dimension=search_settings.reduced_dimension,
+            vector_quantization=search_settings.vector_quantization,
             switchover_type=search_settings.switchover_type,
             use_port_flow=search_settings.use_port_flow,
             enable_contextual_rag=search_settings.enable_contextual_rag,
@@ -61,7 +63,8 @@ class SavedSearchSettings(IndexingSetting):
 
 
 class ContextualRagModelUpdateResponse(BaseModel):
-    contextual_rag_model_configuration_id: int
+    # PRESENT's model after the update. Turning Contextual Retrieval off keeps it.
+    contextual_rag_model_configuration_id: int | None
 
 
 class Tag(BaseModel):
@@ -125,7 +128,8 @@ class BaseFilters(BaseModel):
 
 
 class UserFileFilters(BaseModel):
-    # Scopes search to user files tagged with a given project/persona in Vespa.
+    # Scopes search to user files tagged with a given project/persona in the
+    # document index.
     # These are NOT simply the IDs of the current project or persona — they are
     # only set when the persona's/project's user files overflowed the LLM
     # context window and must be searched via vector DB instead of being loaded
@@ -149,10 +153,49 @@ class AssistantKnowledgeFilters(BaseModel):
     hierarchy_node_ids: list[int] | None = None
 
 
+class CCPairAccessMode(str, Enum):
+    # The cc-pair filter is off. It is built only to hide guarded pairs
+    # (SYNC_RESTRICTED, or awaiting a first permission sync) from the old ACL
+    # filter.
+    OFF = "off"
+    # Results use the old ACL filter; the cc-pair filter is only compared.
+    SHADOW = "shadow"
+    # Results use the cc-pair filter.
+    ENFORCE = "enforce"
+
+
+class CCPairAccessFilter(BaseModel):
+    """Query-time access by cc-pair. A chunk is visible if it is in an open
+    pair, or in an ACL pair and public or matching user_acl. Chunks with no
+    cc-pair (user files) fall back to the old ACL filter."""
+
+    mode: CCPairAccessMode
+    open_cc_pair_ids: list[int]
+    acl_cc_pair_ids: list[int]
+    # The user's user_email: and external_group: entries. No group: entries,
+    # since group access comes from open_cc_pair_ids.
+    user_acl: list[str]
+    # Guarded pairs that grant the user nothing: SYNC_RESTRICTED pairs, and
+    # pairs awaiting a first permission sync, whose chunks can still be
+    # public. The old ACL filter cannot express this, so it hides their chunks
+    # unless an open or ACL pair of the chunk grants access.
+    hidden_restricted_cc_pair_ids: list[int] = []
+
+
+class UserAccessFilters(BaseModel):
+    # NOTE: These strings must be formatted in the same way as the output of
+    # DocumentAccess::to_acl.
+    access_control_list: list[str]
+    # None when query-time cc-pair access is off.
+    cc_pair_access: CCPairAccessFilter | None
+
+
 class IndexFilters(BaseFilters, UserFileFilters, AssistantKnowledgeFilters):
     # NOTE: These strings must be formatted in the same way as the output of
     # DocumentAccess::to_acl.
     access_control_list: list[str] | None
+    # Only read when access_control_list is not None.
+    cc_pair_access: CCPairAccessFilter | None = None
     tenant_id: str | None = None
     # Operator-forced document-set scope (NAMES, not IDs). When set, retrieval is
     # restricted to these sets via a standalone AND clause — distinct from
@@ -176,9 +219,6 @@ class BasicChunkRequest(BaseModel):
 class ChunkSearchRequest(BasicChunkRequest):
     # Final filters are calculated from these
     user_selected_filters: BaseFilters | None = None
-
-    # Use with caution!
-    bypass_acl: bool = False
 
 
 # From the Chat Session we know what project (if any) this search should include
@@ -210,12 +250,13 @@ class InferenceChunk(BaseChunk):
     # TODO(andrei): Ideally we could improve this to where each value is just a
     # list of strings.
     metadata: dict[str, str | list[str]]
-    # Matched sections in the chunk. Uses Vespa syntax e.g. <hi>TEXT</hi>
+    # Matched sections in the chunk. Matches are wrapped in <hi>TEXT</hi>
     # to specify that a set of words should be highlighted. For example:
     # ["<hi>the</hi> <hi>answer</hi> is 42", "he couldn't find an <hi>answer</hi>"]
     match_highlights: list[str]
     doc_summary: str
     chunk_context: str
+    source_types: tuple[DocumentSource, ...] | None = None
 
     # when the doc was last updated
     updated_at: datetime | None
@@ -317,10 +358,11 @@ class SearchDoc(BaseModel):
     score: float | None = None
     is_relevant: bool | None = None
     relevance_explanation: str | None = None
-    # Matched sections in the doc. Uses Vespa syntax e.g. <hi>TEXT</hi>
+    # Matched sections in the doc. Matches are wrapped in <hi>TEXT</hi>
     # to specify that a set of words should be highlighted. For example:
     # ["<hi>the</hi> <hi>answer</hi> is 42", "the answer is <hi>42</hi>""]
     match_highlights: list[str]
+    source_types: tuple[DocumentSource, ...] | None = None
     # when the doc was last updated
     updated_at: datetime | None = None
     primary_owners: list[str] | None = None
@@ -354,6 +396,7 @@ class SearchDoc(BaseModel):
                 link=chunk.source_links[0] if chunk.source_links else None,
                 blurb=chunk.blurb,
                 source_type=chunk.source_type,
+                source_types=chunk.source_types,
                 boost=chunk.boost,
                 hidden=chunk.hidden,
                 metadata=chunk.metadata,
@@ -401,69 +444,20 @@ class SearchDoc(BaseModel):
         return initial_dict
 
 
-class RetrievalCandidateChunk(BaseModel):
-    document_id: str
-    chunk_id: int
-    # 1-based position in the lane's ranked result list
-    rank: int
-
-
-class RetrievalCandidateLane(BaseModel):
-    """One executed retrieval query, captured before rank fusion.
-
-    Lanes are not deduplicated: the same query text can run with a different
-    hybrid alpha.
-    """
-
-    query: str
-    hybrid_alpha: float | None
-    returned_chunks: list[RetrievalCandidateChunk]
-
-
-class SearchReceiptScope(BaseModel):
-    """Scope facts reported in a search receipt. Only set when every filter
-    that narrowed retrieval is representable by these three fields."""
-
-    user_filters: dict[str, Any] | None
-    persona_document_sets: list[str]
-    acl_enforced: bool
-
-
-class SearchRetrievalDiagnostics(BaseModel):
-    """Optional retrieval metadata, only collected when requested via
-    `SearchToolOverrideKwargs.include_retrieval_candidates`."""
-
-    retrieval_candidates: list[RetrievalCandidateLane]
-    # Distinct document ids, in order, after fusion + adjacent-chunk merge + the
-    # num_hits cap, before LLM section selection.
-    merged_candidate_document_ids_after_cap: list[str]
-    # None when the effective scope has parts SearchReceiptScope cannot express
-    # (auto-detected source/time filters, project or persona-attached scope,
-    # federated sources).
-    receipt_scope: SearchReceiptScope | None
-
-
 class SearchDocsResponse(BaseModel):
+    type: Literal["search_result"] = "search_result"
+    queries: list[str] = Field(default_factory=list)
+    sources: list[str] = Field(default_factory=list)
+    time_filter_start: datetime | None = None
+    time_filter_end: datetime | None = None
     search_docs: list[SearchDoc]
     # Maps the citation number to the document id
     # Since these are no longer just links on the frontend but instead document cards, mapping it to the
     # document id is  the most staightforward way.
     citation_mapping: dict[int, str]
 
-    # For cases where the frontend only needs to display a subset of the search docs
-    # The whole list is typically still needed for later steps but this set should be saved separately
+    # None uses all retrieved documents; an empty list selects no documents.
     displayed_docs: list[SearchDoc] | None = None
-
-    # Never sent to the model directly; consumed by onyx.chat.search_receipts.
-    retrieval_diagnostics: SearchRetrievalDiagnostics | None = None
-
-    @field_validator("displayed_docs", mode="before")
-    @classmethod
-    def normalize_empty_displayed_docs(
-        cls,
-        value: list[SearchDoc] | None,
-    ) -> list[SearchDoc] | None:
-        return value or None
 
 
 class SavedSearchDoc(SearchDoc):
@@ -541,3 +535,42 @@ class PersonaSearchInfo(BaseModel):
     search_start_date: datetime | None
     attached_document_ids: list[str]
     hierarchy_node_ids: list[int]
+
+
+class SearchCycle(BaseModel):
+    """One internal_search cycle this turn, as context for the next decision."""
+
+    cycle_number: int
+    queries: list[str]
+    searched_sources: list[str]
+
+
+class DocumentTimeField(StrEnum):
+    CREATED_AT = "created_at"
+    UPDATED_AT = "updated_at"
+
+
+class TimeFilter(BaseModel):
+    """The document date the conversation scopes on (created vs updated) and
+    the inclusive (start, end) window; either bound may be None (open)."""
+
+    field: DocumentTimeField
+    start: datetime | None = None
+    end: datetime | None = None
+
+    def apply_to(self, filters: BaseFilters) -> BaseFilters:
+        """Return a copy of `filters` with this window intersected onto the
+        matching range field, so the inferred window can narrow but never widen
+        a caller-selected restriction. A disjoint inferred window is dropped —
+        the explicit range wins over silently matching nothing."""
+        filters = filters.model_copy()
+        window = TimeRange(start=self.start, end=self.end)
+        if self.field is DocumentTimeField.CREATED_AT:
+            merged = window.intersect(filters.created_at_range)
+            if not merged.is_empty():
+                filters.created_at_range = merged
+        else:
+            merged = window.intersect(filters.updated_at_range)
+            if not merged.is_empty():
+                filters.updated_at_range = merged
+        return filters

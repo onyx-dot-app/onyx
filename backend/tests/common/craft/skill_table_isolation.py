@@ -1,4 +1,4 @@
-"""Skill/external-app table snapshot helpers for Craft tests."""
+"""Skill, plugin and external-app table snapshot helpers for Craft tests."""
 
 from __future__ import annotations
 
@@ -9,12 +9,10 @@ from sqlalchemy.orm import Session, class_mapper
 
 from onyx.db.models import (
     ExternalApp,
-    ExternalAppUserCredential,
-    GatedActionPolicy,
     GatedApp,
+    Marketplace,
+    Plugin,
     Skill,
-    Skill__User,
-    Skill__UserGroup,
 )
 
 # Parent -> child order (FKs all point child -> parent). Restore/insert in this
@@ -23,10 +21,8 @@ _SKILL_ISOLATION_MODELS: tuple[type[Any], ...] = (
     Skill,
     ExternalApp,
     GatedApp,
-    Skill__User,
-    Skill__UserGroup,
-    GatedActionPolicy,
-    ExternalAppUserCredential,
+    Marketplace,
+    Plugin,
 )
 
 
@@ -79,5 +75,4 @@ def restore_skill_tables(
         for row in snapshot[model]:
             session.merge(model(**row))
         session.flush()
-
     session.commit()

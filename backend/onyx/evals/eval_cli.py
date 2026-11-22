@@ -14,6 +14,7 @@ import requests
 from onyx.configs.app_configs import (
     POSTGRES_API_SERVER_POOL_OVERFLOW,
     POSTGRES_API_SERVER_POOL_SIZE,
+    REQUEST_TIMEOUT_SECONDS,
 )
 from onyx.configs.constants import POSTGRES_WEB_APP_NAME
 from onyx.db.engine.sql_engine import SqlEngine
@@ -76,8 +77,8 @@ def run_local(
     """
     Run evaluation with local configurations.
 
-    Tool forcing and assertions are configured per-test in the data file using:
-    - force_tools: List of tool type names to force
+    Tool preference and assertions are configured per-test in the data file using:
+    - preferred_tool: Tool type to prefer
     - expected_tools: List of tool type names expected to be called
     - require_all_tools: If true, all expected tools must be called
 
@@ -138,7 +139,7 @@ def run_remote(
     """
     Trigger an eval pipeline execution on a remote server.
 
-    Tool forcing and assertions are configured per-test in the dataset.
+    Tool preference and assertions are configured per-test in the dataset.
 
     Args:
         base_url: Base URL of the remote server (e.g., "https://test.onyx.app")
@@ -164,7 +165,9 @@ def run_remote(
         "Authorization": f"Bearer {api_key}",
         "Content-Type": "application/json",
     }
-    response = requests.post(url, headers=headers, json=payload)
+    response = requests.post(
+        url, headers=headers, json=payload, timeout=REQUEST_TIMEOUT_SECONDS
+    )
 
     response.raise_for_status()
     return response.json()

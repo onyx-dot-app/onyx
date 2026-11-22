@@ -1,9 +1,15 @@
 import { fireEvent, screen, waitFor } from "@testing-library/react";
 import { render } from "@tests/setup/test-utils";
-import { prepareSkillBundleUpload } from "@/lib/skills/bundleUpload";
+import {
+  prepareSkillBundleUpload,
+  SkillFolderRootError,
+} from "@/lib/skills/bundleUpload";
 import SkillBundlePicker from "./SkillBundlePicker";
 
 jest.mock("@/lib/skills/bundleUpload", () => ({
+  ...jest.requireActual<typeof import("@/lib/skills/bundleUpload")>(
+    "@/lib/skills/bundleUpload"
+  ),
   prepareSkillBundleUpload: jest.fn(),
 }));
 
@@ -72,6 +78,37 @@ describe("SkillBundlePicker", () => {
     jest.restoreAllMocks();
   });
 
+  it("passes separate ZIP uploads to the batch flow", async () => {
+    const files = [
+      new File(["zip"], "alpha.zip", { type: "application/zip" }),
+      new File(["zip"], "beta.zip", { type: "application/zip" }),
+    ];
+    const onBatchChange = jest.fn();
+    const onChange = jest.fn();
+    render(
+      <SkillBundlePicker
+        value={null}
+        onChange={onChange}
+        onBatchChange={onBatchChange}
+        onError={jest.fn()}
+      />
+    );
+    fireEvent.drop(screen.getByTestId("skill-bundle-dropzone"), {
+      dataTransfer: {
+        files,
+        items: files.map((file) => ({
+          kind: "file",
+          type: file.type,
+          getAsFile: () => file,
+        })),
+        types: ["Files"],
+      },
+    });
+    await waitFor(() => expect(onBatchChange).toHaveBeenCalledWith(files));
+    expect(onChange).not.toHaveBeenCalled();
+    expect(mockedPrepareSkillBundleUpload).not.toHaveBeenCalled();
+  });
+
   it("owns preparation state without waiting for consumer work", async () => {
     const zip = new File(["zip"], "example.zip", { type: "application/zip" });
     const prepared = {
@@ -96,7 +133,9 @@ describe("SkillBundlePicker", () => {
     dropFile(zip);
 
     await waitFor(() => {
-      expect(mockedPrepareSkillBundleUpload).toHaveBeenCalledWith([zip]);
+      expect(mockedPrepareSkillBundleUpload).toHaveBeenCalledWith([zip], {
+        allowPlugin: false,
+      });
       expect(onChange).toHaveBeenCalledWith(prepared);
     });
     expect(onPreparingChange).toHaveBeenCalledWith(true);
@@ -155,6 +194,34 @@ describe("SkillBundlePicker", () => {
       expect.any(Error)
     );
   });
+
+  it.each([
+    ["skill", "The selected folder must contain SKILL.md at its top level."],
+    [
+      "plugin",
+      "The selected folder must contain SKILL.md or a plugin.json manifest at its top level.",
+    ],
+  ] as const)(
+    "words a %s folder without a top-level entry from the catalog",
+    async (upload, message) => {
+      jest.spyOn(console, "error").mockImplementation();
+      const error = new SkillFolderRootError(upload);
+      error.message = "untranslated";
+      mockedPrepareSkillBundleUpload.mockRejectedValue(error);
+      const onError = jest.fn();
+
+      render(
+        <SkillBundlePicker
+          value={null}
+          onChange={jest.fn()}
+          onError={onError}
+        />
+      );
+      dropFile(new File(["body"], "notes.md", { type: "text/markdown" }));
+
+      await waitFor(() => expect(onError).toHaveBeenCalledWith(message));
+    }
+  );
 
   it("passes recursively dropped directory files with their full paths", async () => {
     const skillMd = new File(["instructions"], "SKILL.md");

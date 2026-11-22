@@ -37,6 +37,19 @@ inputs:
     description: "Docker Hub token"
     required: false
     default: ""
+  dhi-required:
+    description: >-
+      "true" fails the build when the dhi.io login fails. "false" builds on the
+      public bases with a warning instead. Passed to the dhi-base-images action.
+    required: false
+    default: "true"
+  persist-pr-digest:
+    description: "Also persist the prebuilt digest for future runs of this PR."
+    default: "false"
+outputs:
+  digest:
+    description: "Digest of the pushed image. Consumers pull <runs-on-ecr-cache>@<digest>, never the mutable tag."
+    value: ${{ steps.prebuilt.outputs.digest || steps.build.outputs.digest }}
 runs:
   using: "composite"
   steps:
@@ -70,8 +83,26 @@ runs:
       with:
         docker-username: ${{ inputs.docker-username }}
         docker-token: ${{ inputs.docker-token }}
+        required: ${{ inputs.dhi-required }}
+
+    - name: Find a prebuilt Model Server image
+      id: prebuilt
+      uses: ./.github/actions/prebuilt-image
+      with:
+        name: model-server
+        context: ./backend
+        dockerfile: ./backend/Dockerfile.model_server
+        build-config: |
+          BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
+          ${{ env.DHI_PYTHON_BUILD_ARGS }}
+          platforms=${{ inputs.platforms }}
+        extra-paths: .github/actions/build-model-server-image/action.yml
+        image-repo: ${{ inputs.runs-on-ecr-cache }}
+        persist-pr-digest: ${{ inputs.persist-pr-digest }}
 
     - name: Build and push Model Server Docker image
+      id: build
+      if: steps.prebuilt.outputs.digest == ''
       uses: docker/build-push-action@f9f3042f7e2789586610d6e8b85c8f03e5195baf # ratchet:docker/build-push-action@v6
       with:
         context: ./backend
@@ -82,16 +113,29 @@ runs:
           BASE_IMAGE_REGISTRY=${{ env.BASE_IMAGE_REGISTRY }}
           ${{ env.DHI_PYTHON_BUILD_ARGS }}
         tags: ${{ inputs.runs-on-ecr-cache }}:${{ inputs.tag-prefix }}-${{ inputs.run-id }}
+        # Reproducible builds would otherwise retag one digest every run and hit ECR's 1000-tags-per-image cap.
+        labels: ci.run-id=${{ inputs.run-id }}
         # Attestations attach as ECR referrers to the image digest, which is
         # stable across runs and caps out at 100 per subject.
         provenance: false
         sbom: false
+        # Any pull_request job can push to the RunsOn ECR cache, so only fork PR runs,
+        # which get no secrets, import it. Other runs import only the published image.
         cache-from: |
-          type=registry,ref=${{ inputs.runs-on-ecr-cache }}:model-server-cache-${{ inputs.github-sha }}
-          type=registry,ref=${{ inputs.runs-on-ecr-cache }}:model-server-cache-${{ steps.format-branch.outputs.cache-suffix }}
-          type=registry,ref=${{ inputs.runs-on-ecr-cache }}:model-server-cache
+          ${{ github.event.pull_request.head.repo.fork && format('type=registry,ref={0}:model-server-cache-{1}', inputs.runs-on-ecr-cache, inputs.github-sha) || '' }}
+          ${{ github.event.pull_request.head.repo.fork && format('type=registry,ref={0}:model-server-cache-{1}', inputs.runs-on-ecr-cache, steps.format-branch.outputs.cache-suffix) || '' }}
+          ${{ github.event.pull_request.head.repo.fork && format('type=registry,ref={0}:model-server-cache', inputs.runs-on-ecr-cache) || '' }}
           type=registry,ref=${{ env.BASE_IMAGE_REGISTRY }}/onyxdotapp/onyx-model-server:latest
         cache-to: |
           type=registry,ref=${{ inputs.runs-on-ecr-cache }}:model-server-cache-${{ inputs.github-sha }},mode=max
           type=registry,ref=${{ inputs.runs-on-ecr-cache }}:model-server-cache-${{ steps.format-branch.outputs.cache-suffix }},mode=max
           type=registry,ref=${{ inputs.runs-on-ecr-cache }}:model-server-cache,mode=max
+
+    - name: Save the Model Server image digest
+      if: steps.build.outcome == 'success'
+      uses: ./.github/actions/prebuilt-image
+      with:
+        name: model-server
+        save-key: ${{ steps.prebuilt.outputs.save-key }}
+        save-digest: ${{ steps.build.outputs.digest }}
+        persist-pr-digest: ${{ inputs.persist-pr-digest }}

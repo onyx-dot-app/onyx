@@ -14,6 +14,8 @@ class LlmProviderNames(str, Enum):
     """
 
     OPENAI = "openai"
+    TYPESAFE = "typesafe"
+    ZOOM_AI = "zoom_ai"
     ANTHROPIC = "anthropic"
     GOOGLE = "google"
     BEDROCK = "bedrock"
@@ -21,6 +23,7 @@ class LlmProviderNames(str, Enum):
     VERTEX_AI = "vertex_ai"
     OPENROUTER = "openrouter"
     AZURE = "azure"
+    OLLAMA = "ollama"
     OLLAMA_CHAT = "ollama_chat"
     LM_STUDIO = "lm_studio"
     MISTRAL = "mistral"
@@ -29,6 +32,7 @@ class LlmProviderNames(str, Enum):
     OPENAI_COMPATIBLE = "openai_compatible"
     NEBIUS_TOKENFACTORY = "nebius_tokenfactory"
     PORTKEY = "portkey"
+    VERCEL_AI_GATEWAY = "vercel_ai_gateway"
     OCI = "oci"
 
     def __str__(self) -> str:
@@ -39,7 +43,17 @@ class LlmProviderNames(str, Enum):
         return self.value
 
 
+# Models per provider in the user-facing listing and per page of
+# /llm/provider/{id}/models. Bounds the response for providers that sync
+# tens of thousands of models.
+LLM_PROVIDER_MODEL_PAGE_SIZE = 50
+
+# Characters per token, for bounds that need no tokenizer.
+APPROX_CHARS_PER_TOKEN = 4
+
 WELL_KNOWN_PROVIDER_NAMES = [
+    LlmProviderNames.TYPESAFE,
+    LlmProviderNames.ZOOM_AI,
     LlmProviderNames.OPENAI,
     LlmProviderNames.ANTHROPIC,
     LlmProviderNames.VERTEX_AI,
@@ -53,12 +67,15 @@ WELL_KNOWN_PROVIDER_NAMES = [
     LlmProviderNames.OPENAI_COMPATIBLE,
     LlmProviderNames.NEBIUS_TOKENFACTORY,
     LlmProviderNames.PORTKEY,
+    LlmProviderNames.VERCEL_AI_GATEWAY,
     LlmProviderNames.OCI,
 ]
 
 
 # Proper capitalization for known providers and vendors
 PROVIDER_DISPLAY_NAMES: dict[str, str] = {
+    LlmProviderNames.TYPESAFE: "TypeSafe AI",
+    LlmProviderNames.ZOOM_AI: "Zoom AI Services",
     LlmProviderNames.OPENAI: "OpenAI",
     LlmProviderNames.ANTHROPIC: "Anthropic",
     LlmProviderNames.GOOGLE: "Google",
@@ -67,7 +84,7 @@ PROVIDER_DISPLAY_NAMES: dict[str, str] = {
     LlmProviderNames.VERTEX_AI: "Vertex AI",
     LlmProviderNames.OPENROUTER: "OpenRouter",
     LlmProviderNames.AZURE: "Azure",
-    "ollama": "Ollama",
+    LlmProviderNames.OLLAMA: "Ollama",
     LlmProviderNames.OLLAMA_CHAT: "Ollama",
     LlmProviderNames.LM_STUDIO: "LM Studio",
     LlmProviderNames.LITELLM_PROXY: "LiteLLM Proxy",
@@ -75,6 +92,7 @@ PROVIDER_DISPLAY_NAMES: dict[str, str] = {
     LlmProviderNames.OPENAI_COMPATIBLE: "OpenAI-Compatible",
     LlmProviderNames.NEBIUS_TOKENFACTORY: "Nebius TokenFactory",
     LlmProviderNames.PORTKEY: "Portkey",
+    LlmProviderNames.VERCEL_AI_GATEWAY: "Vercel AI Gateway",
     LlmProviderNames.OCI: "OCI",
     "groq": "Groq",
     "anyscale": "Anyscale",
@@ -168,10 +186,22 @@ AGGREGATOR_PROVIDERS: set[str] = {
     LlmProviderNames.OPENAI_COMPATIBLE,
     LlmProviderNames.NEBIUS_TOKENFACTORY,
     LlmProviderNames.PORTKEY,
+    LlmProviderNames.VERCEL_AI_GATEWAY,
     LlmProviderNames.OCI,
 }
 
+# Providers whose model catalog lists the models they release. Only these
+# offer auto-update; other aggregators and proxies have no set list.
+AUTO_UPDATE_PROVIDERS: frozenset[str] = frozenset(
+    {
+        LlmProviderNames.OPENAI,
+        LlmProviderNames.ANTHROPIC,
+        LlmProviderNames.VERTEX_AI,
+    }
+)
+
 # Dynamic providers fetch models directly from source APIs (not LiteLLM).
+
 # A subset of AGGREGATOR_PROVIDERS.
 DYNAMIC_LLM_PROVIDERS: frozenset[str] = frozenset(
     {
@@ -187,12 +217,14 @@ DYNAMIC_LLM_PROVIDERS: frozenset[str] = frozenset(
 # Providers whose `available-models` endpoint reads a context limit from the
 # source API and persists it as `max_input_tokens`. Those values are
 # authoritative and must never be second-guessed against LiteLLM's model map.
-# Nebius TokenFactory and Portkey do this without being dynamic providers, so
-# this is deliberately a superset of DYNAMIC_LLM_PROVIDERS rather than a reuse.
+# Nebius TokenFactory, Portkey, and Vercel AI Gateway do this without being
+# dynamic providers, so this is deliberately a superset of
+# DYNAMIC_LLM_PROVIDERS rather than a reuse.
 SOURCE_API_CONTEXT_LIMIT_PROVIDERS: frozenset[str] = DYNAMIC_LLM_PROVIDERS | frozenset(
     {
         LlmProviderNames.NEBIUS_TOKENFACTORY,
         LlmProviderNames.PORTKEY,
+        LlmProviderNames.VERCEL_AI_GATEWAY,
     }
 )
 

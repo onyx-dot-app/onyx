@@ -1,4 +1,4 @@
-"""External dependency tests for the new DocumentIndex interface.
+"""External dependency tests for the DocumentIndex interface.
 
 These tests assume OpenSearch is running.
 """
@@ -10,11 +10,13 @@ from unittest.mock import patch
 
 import pytest
 
+from onyx.access.models import DocumentAccess
+from onyx.access.utils import prefix_user_email
 from onyx.configs.constants import PUBLIC_DOC_PAT
 from onyx.context.search.models import IndexFilters, InferenceChunk
-from onyx.db.enums import EmbeddingPrecision
-from onyx.document_index.interfaces_new import DocumentIndex as DocumentIndexNew
-from onyx.document_index.interfaces_new import (
+from onyx.db.enums import VectorQuantization
+from onyx.document_index.interfaces import (
+    DocumentIndex,
     DocumentSectionRequest,
     MetadataUpdateRequest,
     TenantState,
@@ -32,7 +34,7 @@ from tests.external_dependency_unit.document_index.conftest import (
 
 
 def _retrieve_chunks_with_expected_boost(
-    document_index: DocumentIndexNew,
+    document_index: DocumentIndex,
     document_id: str,
     expected_chunk_count: int,
     expected_boost: int,
@@ -82,15 +84,15 @@ def opensearch_document_index(
         ),
         index_name=test_index_name,
         embedding_dim=EMBEDDING_DIM,
-        embedding_precision=EmbeddingPrecision.FLOAT,
+        vector_quantization=VectorQuantization.NONE,
     )
 
 
 @pytest.fixture(scope="module")
-def document_indices(
+def document_index(
     opensearch_document_index: OpenSearchDocumentIndex,
-) -> Generator[list[DocumentIndexNew], None, None]:
-    yield [opensearch_document_index]
+) -> Generator[DocumentIndex, None, None]:
+    yield opensearch_document_index
 
 
 # ------------------------------------------------------------------------------
@@ -98,14 +100,14 @@ def document_indices(
 # ------------------------------------------------------------------------------
 
 
-class TestDocumentIndexNew:
+class TestDocumentIndex:
     """
-    Tests the new DocumentIndex interface against a real OpenSearch.
+    Tests the DocumentIndex interface against a real OpenSearch.
     """
 
     def test_index_single_new_doc(
         self,
-        document_indices: list[DocumentIndexNew],
+        document_index: DocumentIndex,
         tenant_context: None,  # noqa: ARG002
     ) -> None:
         """
@@ -113,22 +115,21 @@ class TestDocumentIndexNew:
         already_existed=False.
         """
         # Precondition.
-        for document_index in document_indices:
-            doc_id = f"test_single_new_{uuid.uuid4().hex[:8]}"
-            chunk = make_chunk(doc_id)
-            metadata = make_indexing_metadata([doc_id], old_counts=[0], new_counts=[1])
+        doc_id = f"test_single_new_{uuid.uuid4().hex[:8]}"
+        chunk = make_chunk(doc_id)
+        metadata = make_indexing_metadata([doc_id], old_counts=[0], new_counts=[1])
 
-            # Under test.
-            results = document_index.index(chunks=[chunk], indexing_metadata=metadata)
+        # Under test.
+        results = document_index.index(chunks=[chunk], indexing_metadata=metadata)
 
-            # Postcondition.
-            assert len(results) == 1
-            assert results[0].document_id == doc_id
-            assert results[0].already_existed is False
+        # Postcondition.
+        assert len(results) == 1
+        assert results[0].document_id == doc_id
+        assert results[0].already_existed is False
 
     def test_index_existing_doc_already_existed_true(
         self,
-        document_indices: list[DocumentIndexNew],
+        document_index: DocumentIndex,
         tenant_context: None,  # noqa: ARG002
     ) -> None:
         """
@@ -136,36 +137,35 @@ class TestDocumentIndexNew:
         already_existed=True.
         """
         # Precondition.
-        for document_index in document_indices:
-            doc_id = f"test_existing_{uuid.uuid4().hex[:8]}"
-            chunk = make_chunk(doc_id)
+        doc_id = f"test_existing_{uuid.uuid4().hex[:8]}"
+        chunk = make_chunk(doc_id)
 
-            # First index — brand new document.
-            metadata_first = make_indexing_metadata(
-                [doc_id], old_counts=[0], new_counts=[1]
-            )
-            document_index.index(chunks=[chunk], indexing_metadata=metadata_first)
+        # First index — brand new document.
+        metadata_first = make_indexing_metadata(
+            [doc_id], old_counts=[0], new_counts=[1]
+        )
+        document_index.index(chunks=[chunk], indexing_metadata=metadata_first)
 
-            # Allow OpenSearch refresh interval to settle.
-            time.sleep(1)
+        # Allow OpenSearch refresh interval to settle.
+        time.sleep(1)
 
-            # Re-index — old_chunk_cnt=1 signals the document already existed.
-            metadata_second = make_indexing_metadata(
-                [doc_id], old_counts=[1], new_counts=[1]
-            )
+        # Re-index — old_chunk_cnt=1 signals the document already existed.
+        metadata_second = make_indexing_metadata(
+            [doc_id], old_counts=[1], new_counts=[1]
+        )
 
-            # Under test.
-            results = document_index.index(
-                chunks=[chunk], indexing_metadata=metadata_second
-            )
+        # Under test.
+        results = document_index.index(
+            chunks=[chunk], indexing_metadata=metadata_second
+        )
 
-            # Postcondition.
-            assert len(results) == 1
-            assert results[0].already_existed is True
+        # Postcondition.
+        assert len(results) == 1
+        assert results[0].already_existed is True
 
     def test_index_multiple_docs(
         self,
-        document_indices: list[DocumentIndexNew],
+        document_index: DocumentIndex,
         tenant_context: None,  # noqa: ARG002
     ) -> None:
         """
@@ -173,30 +173,29 @@ class TestDocumentIndexNew:
         document.
         """
         # Precondition.
-        for document_index in document_indices:
-            doc1 = f"test_multi_1_{uuid.uuid4().hex[:8]}"
-            doc2 = f"test_multi_2_{uuid.uuid4().hex[:8]}"
-            chunks = [
-                make_chunk(doc1, chunk_id=0),
-                make_chunk(doc1, chunk_id=1),
-                make_chunk(doc2, chunk_id=0),
-            ]
-            metadata = make_indexing_metadata(
-                [doc1, doc2], old_counts=[0, 0], new_counts=[2, 1]
-            )
+        doc1 = f"test_multi_1_{uuid.uuid4().hex[:8]}"
+        doc2 = f"test_multi_2_{uuid.uuid4().hex[:8]}"
+        chunks = [
+            make_chunk(doc1, chunk_id=0),
+            make_chunk(doc1, chunk_id=1),
+            make_chunk(doc2, chunk_id=0),
+        ]
+        metadata = make_indexing_metadata(
+            [doc1, doc2], old_counts=[0, 0], new_counts=[2, 1]
+        )
 
-            # Under test.
-            results = document_index.index(chunks=chunks, indexing_metadata=metadata)
+        # Under test.
+        results = document_index.index(chunks=chunks, indexing_metadata=metadata)
 
-            # Postcondition.
-            result_map = {r.document_id: r.already_existed for r in results}
-            assert len(result_map) == 2
-            assert result_map[doc1] is False
-            assert result_map[doc2] is False
+        # Postcondition.
+        result_map = {r.document_id: r.already_existed for r in results}
+        assert len(result_map) == 2
+        assert result_map[doc1] is False
+        assert result_map[doc2] is False
 
     def test_index_deduplicates_doc_ids_in_results(
         self,
-        document_indices: list[DocumentIndexNew],
+        document_index: DocumentIndex,
         tenant_context: None,  # noqa: ARG002
     ) -> None:
         """
@@ -204,21 +203,20 @@ class TestDocumentIndexNew:
         DocumentInsertionRecord.
         """
         # Precondition.
-        for document_index in document_indices:
-            doc_id = f"test_dedup_{uuid.uuid4().hex[:8]}"
-            chunks = [make_chunk(doc_id, chunk_id=i) for i in range(5)]
-            metadata = make_indexing_metadata([doc_id], old_counts=[0], new_counts=[5])
+        doc_id = f"test_dedup_{uuid.uuid4().hex[:8]}"
+        chunks = [make_chunk(doc_id, chunk_id=i) for i in range(5)]
+        metadata = make_indexing_metadata([doc_id], old_counts=[0], new_counts=[5])
 
-            # Under test.
-            results = document_index.index(chunks=chunks, indexing_metadata=metadata)
+        # Under test.
+        results = document_index.index(chunks=chunks, indexing_metadata=metadata)
 
-            # Postcondition.
-            assert len(results) == 1
-            assert results[0].document_id == doc_id
+        # Postcondition.
+        assert len(results) == 1
+        assert results[0].document_id == doc_id
 
     def test_index_mixed_new_and_existing_docs(
         self,
-        document_indices: list[DocumentIndexNew],
+        document_index: DocumentIndex,
         tenant_context: None,  # noqa: ARG002
     ) -> None:
         """
@@ -226,64 +224,60 @@ class TestDocumentIndexNew:
         correct already_existed flag for each.
         """
         # Precondition.
-        for document_index in document_indices:
-            existing_doc = f"test_mixed_exist_{uuid.uuid4().hex[:8]}"
-            new_doc = f"test_mixed_new_{uuid.uuid4().hex[:8]}"
+        existing_doc = f"test_mixed_exist_{uuid.uuid4().hex[:8]}"
+        new_doc = f"test_mixed_new_{uuid.uuid4().hex[:8]}"
 
-            # Pre-index the existing document.
-            pre_chunk = make_chunk(existing_doc)
-            pre_metadata = make_indexing_metadata(
-                [existing_doc], old_counts=[0], new_counts=[1]
-            )
-            document_index.index(chunks=[pre_chunk], indexing_metadata=pre_metadata)
+        # Pre-index the existing document.
+        pre_chunk = make_chunk(existing_doc)
+        pre_metadata = make_indexing_metadata(
+            [existing_doc], old_counts=[0], new_counts=[1]
+        )
+        document_index.index(chunks=[pre_chunk], indexing_metadata=pre_metadata)
 
-            # Allow OpenSearch refresh interval to settle.
-            time.sleep(1)
+        # Allow OpenSearch refresh interval to settle.
+        time.sleep(1)
 
-            # Now index a batch with the existing doc and a new doc.
-            chunks = [
-                make_chunk(existing_doc, chunk_id=0),
-                make_chunk(new_doc, chunk_id=0),
-            ]
-            metadata = make_indexing_metadata(
-                [existing_doc, new_doc], old_counts=[1, 0], new_counts=[1, 1]
-            )
+        # Now index a batch with the existing doc and a new doc.
+        chunks = [
+            make_chunk(existing_doc, chunk_id=0),
+            make_chunk(new_doc, chunk_id=0),
+        ]
+        metadata = make_indexing_metadata(
+            [existing_doc, new_doc], old_counts=[1, 0], new_counts=[1, 1]
+        )
 
-            # Under test.
-            results = document_index.index(chunks=chunks, indexing_metadata=metadata)
+        # Under test.
+        results = document_index.index(chunks=chunks, indexing_metadata=metadata)
 
-            # Postcondition.
-            result_map = {r.document_id: r.already_existed for r in results}
-            assert len(result_map) == 2
-            assert result_map[existing_doc] is True
-            assert result_map[new_doc] is False
+        # Postcondition.
+        result_map = {r.document_id: r.already_existed for r in results}
+        assert len(result_map) == 2
+        assert result_map[existing_doc] is True
+        assert result_map[new_doc] is False
 
     def test_index_accepts_generator(
         self,
-        document_indices: list[DocumentIndexNew],
+        document_index: DocumentIndex,
         tenant_context: None,  # noqa: ARG002
     ) -> None:
         """
         Tests that index() accepts a generator (any iterable), not just a list.
         """
         # Precondition.
-        for document_index in document_indices:
-            doc_id = f"test_gen_{uuid.uuid4().hex[:8]}"
-            metadata = make_indexing_metadata([doc_id], old_counts=[0], new_counts=[3])
+        doc_id = f"test_gen_{uuid.uuid4().hex[:8]}"
+        metadata = make_indexing_metadata([doc_id], old_counts=[0], new_counts=[3])
 
-            def chunk_gen(doc_id: str = doc_id) -> Iterator[DocMetadataAwareIndexChunk]:
-                for i in range(3):
-                    yield make_chunk(doc_id, chunk_id=i)
+        def chunk_gen(doc_id: str = doc_id) -> Iterator[DocMetadataAwareIndexChunk]:
+            for i in range(3):
+                yield make_chunk(doc_id, chunk_id=i)
 
-            # Under test.
-            results = document_index.index(
-                chunks=chunk_gen(), indexing_metadata=metadata
-            )
+        # Under test.
+        results = document_index.index(chunks=chunk_gen(), indexing_metadata=metadata)
 
-            # Postcondition.
-            assert len(results) == 1
-            assert results[0].document_id == doc_id
-            assert results[0].already_existed is False
+        # Postcondition.
+        assert len(results) == 1
+        assert results[0].document_id == doc_id
+        assert results[0].already_existed is False
 
     def test_mt_cloud_opensearch_index_verification_only_happens_once(
         self,
@@ -308,7 +302,7 @@ class TestDocumentIndexNew:
                 tenant_state=tenant_state,
                 index_name=test_index_name,
                 embedding_dim=EMBEDDING_DIM,
-                embedding_precision=EmbeddingPrecision.FLOAT,
+                vector_quantization=VectorQuantization.NONE,
             )
             assert mock_verify_and_create_index_if_necessary.call_count == 1
 
@@ -317,7 +311,7 @@ class TestDocumentIndexNew:
                 tenant_state=tenant_state,
                 index_name=test_index_name,
                 embedding_dim=EMBEDDING_DIM,
-                embedding_precision=EmbeddingPrecision.FLOAT,
+                vector_quantization=VectorQuantization.NONE,
             )
 
             # Postcondition.
@@ -325,7 +319,7 @@ class TestDocumentIndexNew:
 
     def test_update_changes_boost_across_multiple_docs_in_single_request(
         self,
-        document_indices: list[DocumentIndexNew],
+        document_index: DocumentIndex,
         tenant_context: None,  # noqa: ARG002
     ) -> None:
         """
@@ -334,61 +328,60 @@ class TestDocumentIndexNew:
         doc.
         """
         # Precondition.
-        for document_index in document_indices:
-            doc1 = f"test_update_boost_multi_1_{uuid.uuid4().hex[:8]}"
-            doc2 = f"test_update_boost_multi_2_{uuid.uuid4().hex[:8]}"
-            chunks = [
-                make_chunk(doc1, chunk_id=0),
-                make_chunk(doc1, chunk_id=1),
-                make_chunk(doc1, chunk_id=2),
-                make_chunk(doc2, chunk_id=0),
-                make_chunk(doc2, chunk_id=1),
-            ]
-            metadata = make_indexing_metadata(
-                [doc1, doc2], old_counts=[0, 0], new_counts=[3, 2]
-            )
-            document_index.index(chunks=chunks, indexing_metadata=metadata)
+        doc1 = f"test_update_boost_multi_1_{uuid.uuid4().hex[:8]}"
+        doc2 = f"test_update_boost_multi_2_{uuid.uuid4().hex[:8]}"
+        chunks = [
+            make_chunk(doc1, chunk_id=0),
+            make_chunk(doc1, chunk_id=1),
+            make_chunk(doc1, chunk_id=2),
+            make_chunk(doc2, chunk_id=0),
+            make_chunk(doc2, chunk_id=1),
+        ]
+        metadata = make_indexing_metadata(
+            [doc1, doc2], old_counts=[0, 0], new_counts=[3, 2]
+        )
+        document_index.index(chunks=chunks, indexing_metadata=metadata)
 
-            # Allow OpenSearch refresh interval to settle.
-            time.sleep(1)
+        # Allow OpenSearch refresh interval to settle.
+        time.sleep(1)
 
-            # Under test.
-            update_request = MetadataUpdateRequest(
-                document_ids=[doc1, doc2],
-                doc_id_to_chunk_cnt={doc1: 3, doc2: 2},
-                boost=7,
-            )
-            document_index.update([update_request])
+        # Under test.
+        update_request = MetadataUpdateRequest(
+            document_ids=[doc1, doc2],
+            doc_id_to_chunk_cnt={doc1: 3, doc2: 2},
+            boost=7,
+        )
+        document_index.update([update_request])
 
-            # Postcondition. Poll until the eventually-consistent indexes
-            # reflect the updates rather than racing a fixed sleep against
-            # OpenSearch's ~1s refresh window.
-            filters = IndexFilters(
-                access_control_list=[PUBLIC_DOC_PAT],
-                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
-            )
-            retrieved_doc1 = _retrieve_chunks_with_expected_boost(
-                document_index=document_index,
-                document_id=doc1,
-                expected_chunk_count=3,
-                expected_boost=7,
-                filters=filters,
-            )
-            retrieved_doc2 = _retrieve_chunks_with_expected_boost(
-                document_index=document_index,
-                document_id=doc2,
-                expected_chunk_count=2,
-                expected_boost=7,
-                filters=filters,
-            )
-            assert len(retrieved_doc1) == 3
-            assert len(retrieved_doc2) == 2
-            for chunk in retrieved_doc1 + retrieved_doc2:
-                assert chunk.boost == 7
+        # Postcondition. Poll until the eventually-consistent indexes
+        # reflect the updates rather than racing a fixed sleep against
+        # OpenSearch's ~1s refresh window.
+        filters = IndexFilters(
+            access_control_list=[PUBLIC_DOC_PAT],
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+        )
+        retrieved_doc1 = _retrieve_chunks_with_expected_boost(
+            document_index=document_index,
+            document_id=doc1,
+            expected_chunk_count=3,
+            expected_boost=7,
+            filters=filters,
+        )
+        retrieved_doc2 = _retrieve_chunks_with_expected_boost(
+            document_index=document_index,
+            document_id=doc2,
+            expected_chunk_count=2,
+            expected_boost=7,
+            filters=filters,
+        )
+        assert len(retrieved_doc1) == 3
+        assert len(retrieved_doc2) == 2
+        for chunk in retrieved_doc1 + retrieved_doc2:
+            assert chunk.boost == 7
 
     def test_update_applies_each_request_independently(
         self,
-        document_indices: list[DocumentIndexNew],
+        document_index: DocumentIndex,
         tenant_context: None,  # noqa: ARG002
     ) -> None:
         """
@@ -396,65 +389,133 @@ class TestDocumentIndexNew:
         each apply their own fields to their own documents.
         """
         # Precondition.
-        for document_index in document_indices:
-            doc1 = f"test_update_indep_1_{uuid.uuid4().hex[:8]}"
-            doc2 = f"test_update_indep_2_{uuid.uuid4().hex[:8]}"
-            chunks = [
-                make_chunk(doc1, chunk_id=0),
-                make_chunk(doc1, chunk_id=1),
-                make_chunk(doc2, chunk_id=0),
+        doc1 = f"test_update_indep_1_{uuid.uuid4().hex[:8]}"
+        doc2 = f"test_update_indep_2_{uuid.uuid4().hex[:8]}"
+        chunks = [
+            make_chunk(doc1, chunk_id=0),
+            make_chunk(doc1, chunk_id=1),
+            make_chunk(doc2, chunk_id=0),
+        ]
+        metadata = make_indexing_metadata(
+            [doc1, doc2], old_counts=[0, 0], new_counts=[2, 1]
+        )
+        document_index.index(chunks=chunks, indexing_metadata=metadata)
+
+        # Allow OpenSearch refresh interval to settle.
+        time.sleep(1)
+
+        # Under test - two separate requests, each updating a different doc.
+        req1 = MetadataUpdateRequest(
+            document_ids=[doc1],
+            doc_id_to_chunk_cnt={doc1: 2},
+            boost=3,
+        )
+        req2 = MetadataUpdateRequest(
+            document_ids=[doc2],
+            doc_id_to_chunk_cnt={doc2: 1},
+            boost=9,
+        )
+        document_index.update([req1, req2])
+
+        # Postcondition. Poll until the eventually-consistent indexes
+        # reflect the updates rather than racing a fixed sleep against
+        # OpenSearch's ~1s refresh window.
+        filters = IndexFilters(
+            access_control_list=[PUBLIC_DOC_PAT],
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+        )
+        retrieved_doc1 = _retrieve_chunks_with_expected_boost(
+            document_index=document_index,
+            document_id=doc1,
+            expected_chunk_count=2,
+            expected_boost=3,
+            filters=filters,
+        )
+        retrieved_doc2 = _retrieve_chunks_with_expected_boost(
+            document_index=document_index,
+            document_id=doc2,
+            expected_chunk_count=1,
+            expected_boost=9,
+            filters=filters,
+        )
+        assert len(retrieved_doc1) == 2
+        assert len(retrieved_doc2) == 1
+        for chunk in retrieved_doc1:
+            assert chunk.boost == 3
+        assert retrieved_doc2[0].boost == 9
+
+    def test_update_access_revokes_public(
+        self,
+        document_index: DocumentIndex,
+        tenant_context: None,  # noqa: ARG002
+    ) -> None:
+        """
+        Tests that an access update which makes a public document private
+        removes it from public results. The document stays visible to the
+        users in its new ACL.
+        """
+        # Precondition.
+        doc_id = f"test_update_revoke_public_{uuid.uuid4().hex[:8]}"
+        user_email = "revoke_public_user@example.com"
+        chunks = [make_chunk(doc_id, chunk_id=0), make_chunk(doc_id, chunk_id=1)]
+        metadata = make_indexing_metadata([doc_id], old_counts=[0], new_counts=[2])
+        document_index.index(chunks=chunks, indexing_metadata=metadata)
+
+        public_filters = IndexFilters(
+            access_control_list=[PUBLIC_DOC_PAT],
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+        )
+        _retrieve_chunks_with_expected_boost(
+            document_index=document_index,
+            document_id=doc_id,
+            expected_chunk_count=2,
+            expected_boost=0,
+            filters=public_filters,
+        )
+
+        # Under test.
+        private_access = DocumentAccess.build(
+            user_emails=[user_email],
+            user_groups=[],
+            external_user_emails=[],
+            external_user_group_ids=[],
+            is_public=False,
+        )
+        document_index.update(
+            [
+                MetadataUpdateRequest(
+                    document_ids=[doc_id],
+                    doc_id_to_chunk_cnt={doc_id: 2},
+                    access=private_access,
+                )
             ]
-            metadata = make_indexing_metadata(
-                [doc1, doc2], old_counts=[0, 0], new_counts=[2, 1]
-            )
-            document_index.index(chunks=chunks, indexing_metadata=metadata)
+        )
 
-            # Allow OpenSearch refresh interval to settle.
-            time.sleep(1)
-
-            # Under test - two separate requests, each updating a different doc.
-            req1 = MetadataUpdateRequest(
-                document_ids=[doc1],
-                doc_id_to_chunk_cnt={doc1: 2},
-                boost=3,
+        # Postcondition.
+        deadline = time.time() + 10.0
+        public_retrieved: list[InferenceChunk] = []
+        while time.time() < deadline:
+            public_retrieved = document_index.id_based_retrieval(
+                chunk_requests=[DocumentSectionRequest(document_id=doc_id)],
+                filters=public_filters,
             )
-            req2 = MetadataUpdateRequest(
-                document_ids=[doc2],
-                doc_id_to_chunk_cnt={doc2: 1},
-                boost=9,
-            )
-            document_index.update([req1, req2])
+            if not public_retrieved:
+                break
+            time.sleep(0.25)
+        assert public_retrieved == []
 
-            # Postcondition. Poll until the eventually-consistent indexes
-            # reflect the updates rather than racing a fixed sleep against
-            # OpenSearch's ~1s refresh window.
-            filters = IndexFilters(
-                access_control_list=[PUBLIC_DOC_PAT],
+        user_retrieved = document_index.id_based_retrieval(
+            chunk_requests=[DocumentSectionRequest(document_id=doc_id)],
+            filters=IndexFilters(
+                access_control_list=[PUBLIC_DOC_PAT, prefix_user_email(user_email)],
                 tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
-            )
-            retrieved_doc1 = _retrieve_chunks_with_expected_boost(
-                document_index=document_index,
-                document_id=doc1,
-                expected_chunk_count=2,
-                expected_boost=3,
-                filters=filters,
-            )
-            retrieved_doc2 = _retrieve_chunks_with_expected_boost(
-                document_index=document_index,
-                document_id=doc2,
-                expected_chunk_count=1,
-                expected_boost=9,
-                filters=filters,
-            )
-            assert len(retrieved_doc1) == 2
-            assert len(retrieved_doc2) == 1
-            for chunk in retrieved_doc1:
-                assert chunk.boost == 3
-            assert retrieved_doc2[0].boost == 9
+            ),
+        )
+        assert len(user_retrieved) == 2
 
     def test_update_with_no_fields_does_not_modify_chunks(
         self,
-        document_indices: list[DocumentIndexNew],
+        document_index: DocumentIndex,
         tenant_context: None,  # noqa: ARG002
     ) -> None:
         """
@@ -462,41 +523,40 @@ class TestDocumentIndexNew:
         no-op and the chunks remain retrievable with their original values.
         """
         # Precondition.
-        for document_index in document_indices:
-            doc_id = f"test_update_noop_{uuid.uuid4().hex[:8]}"
-            chunks = [make_chunk(doc_id, chunk_id=0), make_chunk(doc_id, chunk_id=1)]
-            metadata = make_indexing_metadata([doc_id], old_counts=[0], new_counts=[2])
-            document_index.index(chunks=chunks, indexing_metadata=metadata)
+        doc_id = f"test_update_noop_{uuid.uuid4().hex[:8]}"
+        chunks = [make_chunk(doc_id, chunk_id=0), make_chunk(doc_id, chunk_id=1)]
+        metadata = make_indexing_metadata([doc_id], old_counts=[0], new_counts=[2])
+        document_index.index(chunks=chunks, indexing_metadata=metadata)
 
-            # Allow OpenSearch refresh interval to settle.
-            time.sleep(1)
+        # Allow OpenSearch refresh interval to settle.
+        time.sleep(1)
 
-            # Under test - no fields set.
-            update_request = MetadataUpdateRequest(
-                document_ids=[doc_id],
-                doc_id_to_chunk_cnt={doc_id: 2},
-            )
-            document_index.update([update_request])
+        # Under test - no fields set.
+        update_request = MetadataUpdateRequest(
+            document_ids=[doc_id],
+            doc_id_to_chunk_cnt={doc_id: 2},
+        )
+        document_index.update([update_request])
 
-            # Allow OpenSearch refresh interval to settle.
-            time.sleep(1)
+        # Allow OpenSearch refresh interval to settle.
+        time.sleep(1)
 
-            # Postcondition - chunks still retrievable with their default boost.
-            filters = IndexFilters(
-                access_control_list=[PUBLIC_DOC_PAT],
-                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
-            )
-            retrieved = document_index.id_based_retrieval(
-                chunk_requests=[DocumentSectionRequest(document_id=doc_id)],
-                filters=filters,
-            )
-            assert len(retrieved) == 2
-            for chunk in retrieved:
-                assert chunk.boost == 0
+        # Postcondition - chunks still retrievable with their default boost.
+        filters = IndexFilters(
+            access_control_list=[PUBLIC_DOC_PAT],
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+        )
+        retrieved = document_index.id_based_retrieval(
+            chunk_requests=[DocumentSectionRequest(document_id=doc_id)],
+            filters=filters,
+        )
+        assert len(retrieved) == 2
+        for chunk in retrieved:
+            assert chunk.boost == 0
 
     def test_update_skips_doc_with_unknown_chunk_count(
         self,
-        document_indices: list[DocumentIndexNew],
+        document_index: DocumentIndex,
         tenant_context: None,  # noqa: ARG002
     ) -> None:
         """
@@ -506,50 +566,47 @@ class TestDocumentIndexNew:
         """
         # Precondition - index one real doc; pair it with a phantom doc whose
         # chunk count is unknown (absent from doc_id_to_chunk_cnt -> -1).
-        for document_index in document_indices:
-            real_doc = f"test_update_unknown_real_{uuid.uuid4().hex[:8]}"
-            phantom_doc = f"test_update_unknown_phantom_{uuid.uuid4().hex[:8]}"
-            chunks = [
-                make_chunk(real_doc, chunk_id=0),
-                make_chunk(real_doc, chunk_id=1),
-            ]
-            metadata = make_indexing_metadata(
-                [real_doc], old_counts=[0], new_counts=[2]
-            )
-            document_index.index(chunks=chunks, indexing_metadata=metadata)
+        real_doc = f"test_update_unknown_real_{uuid.uuid4().hex[:8]}"
+        phantom_doc = f"test_update_unknown_phantom_{uuid.uuid4().hex[:8]}"
+        chunks = [
+            make_chunk(real_doc, chunk_id=0),
+            make_chunk(real_doc, chunk_id=1),
+        ]
+        metadata = make_indexing_metadata([real_doc], old_counts=[0], new_counts=[2])
+        document_index.index(chunks=chunks, indexing_metadata=metadata)
 
-            # Allow OpenSearch refresh interval to settle.
-            time.sleep(1)
+        # Allow OpenSearch refresh interval to settle.
+        time.sleep(1)
 
-            # Under test - phantom_doc has no entry in doc_id_to_chunk_cnt, so
-            # its chunk count resolves to -1 (unknown). This must not raise.
-            update_request = MetadataUpdateRequest(
-                document_ids=[real_doc, phantom_doc],
-                doc_id_to_chunk_cnt={real_doc: 2},
-                boost=5,
-            )
-            document_index.update([update_request])
+        # Under test - phantom_doc has no entry in doc_id_to_chunk_cnt, so
+        # its chunk count resolves to -1 (unknown). This must not raise.
+        update_request = MetadataUpdateRequest(
+            document_ids=[real_doc, phantom_doc],
+            doc_id_to_chunk_cnt={real_doc: 2},
+            boost=5,
+        )
+        document_index.update([update_request])
 
-            # Postcondition - the real doc is still updated despite the phantom
-            # doc being skipped.
-            filters = IndexFilters(
-                access_control_list=[PUBLIC_DOC_PAT],
-                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
-            )
-            retrieved = _retrieve_chunks_with_expected_boost(
-                document_index=document_index,
-                document_id=real_doc,
-                expected_chunk_count=2,
-                expected_boost=5,
-                filters=filters,
-            )
-            assert len(retrieved) == 2
-            for chunk in retrieved:
-                assert chunk.boost == 5
+        # Postcondition - the real doc is still updated despite the phantom
+        # doc being skipped.
+        filters = IndexFilters(
+            access_control_list=[PUBLIC_DOC_PAT],
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+        )
+        retrieved = _retrieve_chunks_with_expected_boost(
+            document_index=document_index,
+            document_id=real_doc,
+            expected_chunk_count=2,
+            expected_boost=5,
+            filters=filters,
+        )
+        assert len(retrieved) == 2
+        for chunk in retrieved:
+            assert chunk.boost == 5
 
     def test_update_skips_doc_with_zero_chunk_count(
         self,
-        document_indices: list[DocumentIndexNew],
+        document_index: DocumentIndex,
         tenant_context: None,  # noqa: ARG002
     ) -> None:
         """
@@ -559,43 +616,40 @@ class TestDocumentIndexNew:
         """
         # Precondition - index one real doc; pair it with a phantom doc whose
         # chunk count is explicitly 0.
-        for document_index in document_indices:
-            real_doc = f"test_update_zero_real_{uuid.uuid4().hex[:8]}"
-            phantom_doc = f"test_update_zero_phantom_{uuid.uuid4().hex[:8]}"
-            chunks = [
-                make_chunk(real_doc, chunk_id=0),
-                make_chunk(real_doc, chunk_id=1),
-            ]
-            metadata = make_indexing_metadata(
-                [real_doc], old_counts=[0], new_counts=[2]
-            )
-            document_index.index(chunks=chunks, indexing_metadata=metadata)
+        real_doc = f"test_update_zero_real_{uuid.uuid4().hex[:8]}"
+        phantom_doc = f"test_update_zero_phantom_{uuid.uuid4().hex[:8]}"
+        chunks = [
+            make_chunk(real_doc, chunk_id=0),
+            make_chunk(real_doc, chunk_id=1),
+        ]
+        metadata = make_indexing_metadata([real_doc], old_counts=[0], new_counts=[2])
+        document_index.index(chunks=chunks, indexing_metadata=metadata)
 
-            # Allow OpenSearch refresh interval to settle.
-            time.sleep(1)
+        # Allow OpenSearch refresh interval to settle.
+        time.sleep(1)
 
-            # Under test - phantom_doc has a chunk count of 0. This must not
-            # raise.
-            update_request = MetadataUpdateRequest(
-                document_ids=[real_doc, phantom_doc],
-                doc_id_to_chunk_cnt={real_doc: 2, phantom_doc: 0},
-                boost=6,
-            )
-            document_index.update([update_request])
+        # Under test - phantom_doc has a chunk count of 0. This must not
+        # raise.
+        update_request = MetadataUpdateRequest(
+            document_ids=[real_doc, phantom_doc],
+            doc_id_to_chunk_cnt={real_doc: 2, phantom_doc: 0},
+            boost=6,
+        )
+        document_index.update([update_request])
 
-            # Postcondition - the real doc is still updated despite the phantom
-            # doc being skipped.
-            filters = IndexFilters(
-                access_control_list=[PUBLIC_DOC_PAT],
-                tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
-            )
-            retrieved = _retrieve_chunks_with_expected_boost(
-                document_index=document_index,
-                document_id=real_doc,
-                expected_chunk_count=2,
-                expected_boost=6,
-                filters=filters,
-            )
-            assert len(retrieved) == 2
-            for chunk in retrieved:
-                assert chunk.boost == 6
+        # Postcondition - the real doc is still updated despite the phantom
+        # doc being skipped.
+        filters = IndexFilters(
+            access_control_list=[PUBLIC_DOC_PAT],
+            tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+        )
+        retrieved = _retrieve_chunks_with_expected_boost(
+            document_index=document_index,
+            document_id=real_doc,
+            expected_chunk_count=2,
+            expected_boost=6,
+            filters=filters,
+        )
+        assert len(retrieved) == 2
+        for chunk in retrieved:
+            assert chunk.boost == 6

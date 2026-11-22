@@ -37,6 +37,7 @@ const mockUserContext: UserContextType = {
   updateUserAutoScroll: async () => {},
   updateUserShortcuts: async () => {},
   updateUserPasteAsTile: async () => {},
+  updateUserInterruptOnSend: async () => {},
   toggleAgentPinnedStatus: async () => true,
   updateUserTemperatureOverrideEnabled: async () => {},
   updateUserPersonalization: async () => {},

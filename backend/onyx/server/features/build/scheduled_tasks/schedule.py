@@ -1,13 +1,15 @@
 """Pure helpers for compiling, validating, and reasoning about schedules.
 
-Single source of truth for the cron semantics described in
-``docs/craft/features/scheduled-tasks/overview.md``:
+Single source of truth for cron semantics:
 
 - The DB stores a canonical 5-field cron string + ``editor_mode`` (UI hint).
   All three editor modes (interval, daily/weekly, advanced) compile to the
   same cron form on save.
 - ``compute_next_run_at`` returns UTC datetimes. Comparison happens in UTC,
   and cron expressions are evaluated in UTC.
+- A cron with no future fire is rejected at create and edit.
+- Pause sets ``next_run_at`` to NULL. Resume computes it forward from now, so
+  missed fires do not run. A past-due task fires once, then advances.
 - Editor payloads are strictly typed via the Pydantic models below. Anything
   reaching ``compile_to_cron`` has already been validated by Pydantic at the
   HTTP boundary, so the function is a pure transformation — no
@@ -20,13 +22,15 @@ them inside ``backend/onyx/db/scheduled_task.py`` for persisted reads/writes.
 from __future__ import annotations
 
 import re
-from datetime import datetime
+from datetime import datetime, timedelta
 from typing import Literal
+from uuid import UUID
 
 from cron_descriptor import ExpressionDescriptor
 from croniter import croniter
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
+from onyx.configs.app_configs import SCHEDULED_TASK_FIRE_WINDOW_SECONDS
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.utils.datetime import datetime_to_utc
@@ -179,7 +183,8 @@ def compile_to_cron(payload: EditorPayload) -> str:
                 return "0 0 * * *"
             return f"0 */{every} * * *"
         # unit == "days" — model validator guaranteed time_of_day is set.
-        assert payload.time_of_day is not None
+        if payload.time_of_day is None:
+            raise RuntimeError("A schedule in days needs time_of_day.")
         hour, minute = _split_hh_mm(payload.time_of_day)
         return f"{minute} {hour} */{every} * *"
 
@@ -218,6 +223,42 @@ def compute_next_run_at(cron: str, after: datetime) -> datetime:
         ) from e
 
     return datetime_to_utc(next_fire)
+
+
+def offset_seconds(task_id: UUID) -> int:
+    """Seconds after each cron time at which ``task_id`` fires. Stable per task."""
+    if SCHEDULED_TASK_FIRE_WINDOW_SECONDS <= 0:
+        return 0
+    return task_id.int % SCHEDULED_TASK_FIRE_WINDOW_SECONDS
+
+
+def compute_next_dispatch_at(
+    cron: str,
+    after: datetime,
+    task_id: UUID,
+    handled_dispatch_at: datetime | None = None,
+) -> datetime:
+    """The next fire of ``cron`` plus the task's offset, strictly after ``after``.
+
+    Shifting ``after`` back by the offset keeps every fire, even when the
+    offset is longer than the cron interval. ``handled_dispatch_at`` is the
+    dispatch time that just fired; its cron fire is never chosen again, also
+    when it was saved with another offset (an older row, or a changed window).
+    """
+    offset = timedelta(seconds=offset_seconds(task_id))
+    floor = datetime_to_utc(after) - offset
+    if handled_dispatch_at is not None:
+        handled = datetime_to_utc(handled_dispatch_at)
+        handled_fire = handled - offset
+        if compute_next_run_at(cron, handled_fire - timedelta(seconds=1)) != (
+            handled_fire
+        ):
+            # Saved with another offset: the fire is the last one at or before it.
+            handled_fire = croniter(cron, handled + timedelta(seconds=1)).get_prev(
+                datetime
+            )
+        floor = max(floor, datetime_to_utc(handled_fire))
+    return compute_next_run_at(cron, floor) + offset
 
 
 def next_n_fires(

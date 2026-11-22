@@ -23,7 +23,10 @@ import pytest
 from redis import Redis
 
 from onyx.redis.redis_pool import get_raw_redis_client, redis_pool
-from onyx.redis.tenant_redis_client import TenantRedisClient
+from onyx.redis.tenant_redis_client import (
+    TenantRedisClient,
+    TenantRedisPipeline,
+)
 
 
 def _unique_tenant() -> str:
@@ -411,6 +414,79 @@ class TestEval:
 
 
 class TestPipeline:
+    def test_queued_reads_and_hash_writes(
+        self,
+        tenant_redis: TenantRedisClient,
+        tenant_id: str,
+        raw_redis: Redis,
+    ) -> None:
+        key: str = _unique_key("read")
+        hash_key: str = _unique_key("hash")
+        pipe: TenantRedisPipeline
+        with tenant_redis.pipeline() as pipe:
+            assert pipe.set(key, "value").get(key).get(_unique_key()) is pipe
+            assert pipe.hset(hash_key, {b"field": b"content"}) is pipe
+            assert pipe.hget(hash_key, b"field").hget(hash_key, "missing") is pipe
+            assert pipe.hgetall(hash_key).hgetall(_unique_key()) is pipe
+            assert pipe.execute() == [
+                True,
+                b"value",
+                None,
+                1,
+                b"content",
+                None,
+                {b"field": b"content"},
+                {},
+            ]
+        assert raw_redis.hget(f"{tenant_id}:{hash_key}", "field") == b"content"
+        assert raw_redis.hget(hash_key, "field") is None
+
+    def test_queued_reads_isolate_tenants(
+        self, tenant_redis: TenantRedisClient, raw_redis: Redis
+    ) -> None:
+        other_id: str = _unique_tenant()
+        other: TenantRedisClient = TenantRedisClient(other_id, raw_redis)
+        key: str = _unique_key()
+        hash_key: str = _unique_key("hash")
+        try:
+            tenant_redis.set(key, "mine")
+            tenant_redis.hset(hash_key, "field", "mine")
+            other.set(key, "other")
+            other.hset(hash_key, "field", "other")
+            pipe: TenantRedisPipeline
+            with other.pipeline() as pipe:
+                assert pipe.get(key).hget(hash_key, "field").hgetall(
+                    hash_key
+                ).execute() == [
+                    b"other",
+                    b"other",
+                    {b"field": b"other"},
+                ]
+            with tenant_redis.pipeline() as pipe:
+                assert pipe.get(key).hget(hash_key, "field").hgetall(
+                    hash_key
+                ).execute() == [
+                    b"mine",
+                    b"mine",
+                    {b"field": b"mine"},
+                ]
+        finally:
+            other.delete(key, hash_key)
+
+    def test_reset_discards_queued_writes(
+        self, tenant_redis: TenantRedisClient
+    ) -> None:
+        key: str = _unique_key()
+        tenant_redis.set(key, "before")
+        pipe: TenantRedisPipeline
+        with tenant_redis.pipeline() as pipe:
+            pipe.set(key, "discarded")
+            pipe.reset()
+            assert pipe.get(key).execute() == [b"before"]
+        with tenant_redis.pipeline() as pipe:
+            pipe.set(key, "discarded")
+        assert tenant_redis.get(key) == b"before"
+
     def test_pipeline_set_targets_prefixed_key(
         self,
         tenant_redis: TenantRedisClient,
@@ -462,3 +538,19 @@ class TestPipeline:
 
         members = raw_redis.smembers(f"{tenant_id}:{key}")
         assert members == {b"a", b"b", b"c"}
+
+
+def test_renew_if_value_renews_only_the_tenant_key(
+    tenant_redis: TenantRedisClient, tenant_id: str, raw_redis: Redis
+) -> None:
+    key = _unique_key()
+    tenant_redis.set(key, "owner", ex=10)
+    raw_redis.set(key, "owner", ex=10)
+    try:
+        assert not tenant_redis.renew_if_value(key, b"other", 60)
+        assert tenant_redis.renew_if_value(key, b"owner", 60)
+        assert cast(int, raw_redis.ttl(f"{tenant_id}:{key}")) > 10
+        assert cast(int, raw_redis.ttl(key)) <= 10
+        assert not tenant_redis.renew_if_value(_unique_key(), b"owner", 60)
+    finally:
+        raw_redis.delete(key)

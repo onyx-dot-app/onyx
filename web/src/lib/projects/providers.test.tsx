@@ -1,21 +1,25 @@
 import React, { PropsWithChildren } from "react";
-import { act, renderHook } from "@testing-library/react";
+import { act, renderHook, waitFor } from "@testing-library/react";
 import { NextIntlClientProvider } from "next-intl";
 import englishMessages from "@/i18n/messages/en.json";
 import { ProjectsProvider, useProjectsContext } from "@/lib/projects/providers";
-import type { ProjectFile } from "@/lib/projects/types";
+import { type ProjectFile, UserFileStatus } from "@/lib/projects/types";
+import { ChatFileType } from "@/app/app/types";
 
 const mockUploadFiles = jest.fn();
 const mockGetRecentFiles = jest.fn();
 const mockToastWarning = jest.fn();
+const mockGetUserFileStatuses = jest.fn();
 
 jest.mock("next/navigation", () => ({
-  useSearchParams: () => ({
-    get: () => null,
-  }),
+  ...jest.requireActual<typeof import("@tests/setup/mocks/nextNavigation")>(
+    "@tests/setup/mocks/nextNavigation"
+  ).nextNavigationMock,
+  usePathname: () => "/app",
+  useSearchParams: () => new URLSearchParams(),
 }));
 
-jest.mock("@/lib/position/hooks", () => ({
+jest.mock("@/lib/navigation/hooks", () => ({
   useAppPosition: () => ({ openNewSession: jest.fn() }),
 }));
 
@@ -61,7 +65,8 @@ jest.mock("@/lib/projects/svc", () => {
     renameProject: jest.fn(),
     deleteProject: jest.fn(),
     deleteUserFile: jest.fn(),
-    getUserFileStatuses: jest.fn().mockResolvedValue([]),
+    getUserFileStatuses: (...args: unknown[]) =>
+      mockGetUserFileStatuses(...args),
     unlinkFileFromProject: jest.fn(),
     linkFileToProject: jest.fn(),
   };
@@ -84,6 +89,7 @@ describe("ProjectsContext beginUpload size precheck", () => {
       rejected_files: [],
     });
     mockGetRecentFiles.mockResolvedValue([]);
+    mockGetUserFileStatuses.mockResolvedValue([]);
   });
 
   it("only sends valid files to the upload API when oversized files are present", async () => {
@@ -196,4 +202,183 @@ describe("ProjectsContext beginUpload size precheck", () => {
     // disabled forever waiting on a phantom "uploading" file.
     expect(onFailure).toHaveBeenCalledWith([tempId]);
   });
+});
+
+describe("ProjectsContext beginUpload with files of one name", () => {
+  function serverFile(id: string, tempId: string | undefined): ProjectFile {
+    return {
+      id,
+      name: "notes.txt",
+      project_id: null,
+      user_id: null,
+      file_id: `store-${id}`,
+      created_at: "2026-01-01T00:00:00Z",
+      status: UserFileStatus.PROCESSING,
+      file_type: "text/plain",
+      last_accessed_at: "2026-01-01T00:00:00Z",
+      chat_file_type: ChatFileType.PLAIN_TEXT,
+      token_count: null,
+      chunk_count: null,
+      temp_id: tempId,
+    };
+  }
+
+  beforeEach(() => {
+    mockUploadFiles.mockReset();
+    mockGetRecentFiles.mockReset();
+    mockToastWarning.mockReset();
+    mockGetRecentFiles.mockResolvedValue([]);
+    mockGetUserFileStatuses.mockResolvedValue([]);
+  });
+
+  it("gives each file its own server file by temporary ID", async () => {
+    const { result } = renderHook(() => useProjectsContext(), { wrapper });
+    const first = new File(["one"], "notes.txt", { type: "text/plain" });
+    const second = new File(["two"], "notes.txt", { type: "text/plain" });
+    // The server answers in another order.
+    mockUploadFiles.mockImplementation(
+      async (_files: File[], _projectId: unknown, tempIds: string[]) => ({
+        user_files: [
+          serverFile("server-second", tempIds[1]),
+          serverFile("server-first", tempIds[0]),
+        ],
+        rejected_files: [],
+      })
+    );
+
+    let optimisticFiles: ProjectFile[] = [];
+    await act(async () => {
+      optimisticFiles = await result.current.beginUpload([first, second], null);
+    });
+
+    const tempIds = optimisticFiles.map((f) => f.temp_id);
+    expect(new Set(tempIds).size).toBe(2);
+    expect(mockUploadFiles.mock.calls[0]?.[2]).toEqual(tempIds);
+    await waitFor(() =>
+      expect(
+        tempIds.map(
+          (tempId) =>
+            result.current.allRecentFiles.find((f) => f.temp_id === tempId)?.id
+        )
+      ).toEqual(["server-first", "server-second"])
+    );
+  });
+
+  it("fails only the file that the server rejected", async () => {
+    const { result } = renderHook(() => useProjectsContext(), { wrapper });
+    const first = new File(["one"], "notes.txt", { type: "text/plain" });
+    const second = new File(["two"], "notes.txt", { type: "text/plain" });
+    mockUploadFiles.mockImplementation(
+      async (_files: File[], _projectId: unknown, tempIds: string[]) => ({
+        user_files: [serverFile("server-second", tempIds[1])],
+        rejected_files: [{ file_name: "notes.txt", reason: "Unsupported" }],
+      })
+    );
+    const onFailure = jest.fn();
+
+    let optimisticFiles: ProjectFile[] = [];
+    await act(async () => {
+      optimisticFiles = await result.current.beginUpload(
+        [first, second],
+        null,
+        undefined,
+        onFailure
+      );
+    });
+
+    await waitFor(() =>
+      expect(onFailure).toHaveBeenCalledWith([optimisticFiles[0]?.temp_id])
+    );
+  });
+});
+
+describe("ProjectsContext attached file status polling", () => {
+  beforeEach(() => {
+    mockGetRecentFiles.mockReset();
+    mockGetUserFileStatuses.mockReset();
+    mockGetUserFileStatuses.mockResolvedValue([]);
+    mockGetRecentFiles.mockResolvedValue([]);
+  });
+
+  function makePendingFile(id: string): ProjectFile {
+    return {
+      id,
+      name: `${id}.txt`,
+      project_id: null,
+      user_id: null,
+      file_id: `store-${id}`,
+      created_at: "2026-01-01T00:00:00Z",
+      status: UserFileStatus.INDEXING,
+      file_type: "text/plain",
+      last_accessed_at: "2026-01-01T00:00:00Z",
+      chat_file_type: ChatFileType.PLAIN_TEXT,
+      token_count: 10,
+      chunk_count: null,
+    };
+  }
+
+  function completedStatuses(ids: string[]): ProjectFile[] {
+    return ids.map((id) => ({
+      ...makePendingFile(id),
+      status: UserFileStatus.COMPLETED,
+    }));
+  }
+
+  it("refreshes a pending file attached from recents until it is ready", async () => {
+    const pendingFile = makePendingFile("file-1");
+    mockGetUserFileStatuses.mockResolvedValue([
+      { ...pendingFile, status: UserFileStatus.COMPLETED },
+    ]);
+
+    const { result } = renderHook(() => useProjectsContext(), { wrapper });
+
+    await act(async () => {
+      result.current.setCurrentMessageFiles([pendingFile]);
+    });
+
+    await waitFor(() =>
+      expect(result.current.currentMessageFiles[0]?.status).toBe(
+        UserFileStatus.COMPLETED
+      )
+    );
+    expect(mockGetUserFileStatuses).toHaveBeenCalledWith(["file-1"]);
+  });
+
+  it("keeps a file attached while an earlier status request is in flight", async () => {
+    const first = makePendingFile("file-1");
+    const second = makePendingFile("file-2");
+    let resolveFirstPoll: (value: ProjectFile[]) => void = () => {};
+    mockGetUserFileStatuses
+      .mockImplementationOnce(
+        () =>
+          new Promise<ProjectFile[]>((resolve) => {
+            resolveFirstPoll = resolve;
+          })
+      )
+      .mockImplementation(async (ids: string[]) => completedStatuses(ids));
+
+    const { result } = renderHook(() => useProjectsContext(), { wrapper });
+
+    await act(async () => {
+      result.current.setCurrentMessageFiles([first]);
+    });
+    await waitFor(() =>
+      expect(mockGetUserFileStatuses).toHaveBeenCalledWith(["file-1"])
+    );
+
+    await act(async () => {
+      result.current.setCurrentMessageFiles([first, second]);
+    });
+    await act(async () => {
+      resolveFirstPoll(completedStatuses(["file-1"]));
+    });
+
+    await waitFor(
+      () =>
+        expect(result.current.currentMessageFiles.map((f) => f.status)).toEqual(
+          [UserFileStatus.COMPLETED, UserFileStatus.COMPLETED]
+        ),
+      { timeout: 5000 }
+    );
+  }, 10000);
 });

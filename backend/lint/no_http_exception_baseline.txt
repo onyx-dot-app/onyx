@@ -1,0 +1,6 @@
+# Per-file counts of HTTPException and fastapi/starlette status-constant uses that
+# predate the check in backend/lint/check_no_http_exception.py. Do not add
+# entries or raise a count: raise OnyxError instead (backend/AGENTS.md, "Error
+# Handling"). After you remove violations, regenerate with:
+#   python3 backend/lint/check_no_http_exception.py --write-baseline
+backend/onyx/server/utils.py 2

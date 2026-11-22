@@ -2,11 +2,11 @@ from __future__ import annotations
 
 from collections.abc import Sequence
 from concurrent.futures import ThreadPoolExecutor
-from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
 import requests
+from pydantic import BaseModel, ConfigDict, SkipValidation
 
 from onyx.connectors.cross_connector_utils.miscellaneous_utils import time_str_to_utc
 from onyx.tools.tool_implementations.open_url.models import (
@@ -14,6 +14,8 @@ from onyx.tools.tool_implementations.open_url.models import (
     WebContentProvider,
 )
 from onyx.utils.logger import setup_logger
+from onyx.utils.url import validate_outbound_http_url
+from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
@@ -24,10 +26,11 @@ _DEFAULT_MAX_WORKERS = 5
 _DEFAULT_TIMEOUT_SECONDS = 55  # 10 max urls, 2 max batches
 
 
-@dataclass
-class ExtractedContentFields:
-    text: str
-    title: str
+class ExtractedContentFields(BaseModel):
+    model_config = ConfigDict(strict=True)
+
+    text: SkipValidation[str]
+    title: SkipValidation[str]
     published_date: datetime | None
 
 
@@ -76,6 +79,9 @@ class FirecrawlClient(WebContentProvider):
     # Note: explicitly deciding not to retry here, Firecrawl does not seem to ever recover on failed site crawls
     # Retrying causes other issues like timing out and dropping the entire batch when it's not needed.
     def _get_webpage_content(self, url: str) -> WebContent:
+        if MULTI_TENANT:
+            validate_outbound_http_url(self._base_url)
+
         payload = {
             "url": url,
             "formats": ["markdown"],
@@ -86,6 +92,8 @@ class FirecrawlClient(WebContentProvider):
             headers=self._headers,
             json=payload,
             timeout=self._timeout_seconds,
+            # A redirect would skip the base_url check and resend the key.
+            allow_redirects=False,
         )
 
         if response.status_code != 200:

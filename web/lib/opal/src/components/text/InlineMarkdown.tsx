@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import rehypeSanitize, { defaultSchema } from "rehype-sanitize";
-import Link from "next/link";
+import { NavLink } from "@opal/navigation/components";
 import type { Route } from "next";
 
 import type { RichStr } from "@opal/types";
@@ -59,9 +59,9 @@ const INLINE_COMPONENTS = {
     const isRelative = href.startsWith("/") || href.startsWith("#");
     if (isRelative) {
       return (
-        <Link href={href as Route} className="underline underline-offset-2">
+        <NavLink href={href as Route} className="underline underline-offset-2">
           {children}
-        </Link>
+        </NavLink>
       );
     }
     const isHttp = /^https?:/i.test(href);
@@ -76,7 +76,10 @@ const INLINE_COMPONENTS = {
     );
   },
   code: ({ children }: { children?: ReactNode }) => (
-    <code className="[font-family:var(--font-dm-mono)] bg-background-tint-02 rounded-sm px-1 py-0.5">
+    <code
+      dir="ltr"
+      className="[font-family:var(--font-dm-mono)] bg-background-tint-02 rounded-sm px-1 py-0.5"
+    >
       {children}
     </code>
   ),

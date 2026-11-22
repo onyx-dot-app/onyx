@@ -282,7 +282,9 @@ def test_container_kwargs_has_required_security_options(
 def test_sandbox_exec_wrapper_pairs_uid_with_user_environment(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    mock_run = MagicMock(return_value=dsm.ExecResult(0, b"", b""))
+    mock_run = MagicMock(
+        return_value=dsm.ExecResult(exit_code=0, stdout=b"", stderr=b"")
+    )
     monkeypatch.setattr(dsm, "run_in_container", mock_run)
     container = MagicMock()
 
@@ -309,10 +311,43 @@ def _empty_byte_stream() -> Generator[bytes, None, int]:
     return 0
 
 
+@pytest.mark.parametrize("include_web", [False, True])
+def test_outputs_manifest_uses_trusted_cli(
+    monkeypatch: pytest.MonkeyPatch,
+    include_web: bool,
+) -> None:
+    manager, _ = _bare_manager_with_image("onyxdotapp/sandbox:test")
+    container = MagicMock()
+    monkeypatch.setattr(manager, "_require_container", lambda _: container)
+    run = MagicMock(
+        return_value=dsm.ExecResult(exit_code=0, stdout=b'{"entries":[]}', stderr=b"")
+    )
+    monkeypatch.setattr(dsm, "_run_in_container_as_sandbox_user", run)
+
+    result = manager.get_outputs_manifest(SANDBOX_ID, USER_ID, include_web=include_web)
+
+    assert result.entries == []
+    run.assert_called_once_with(
+        container,
+        [
+            "/usr/local/bin/python3",
+            "-E",
+            "-s",
+            "-m",
+            "sandbox_daemon.outputs_manifest",
+            str(USER_ID),
+            *(["--include-web"] if include_web else []),
+        ],
+        workdir="/opt",
+    )
+
+
 def test_sandbox_stream_exec_wrappers_pair_uid_with_user_environment(
     monkeypatch: pytest.MonkeyPatch,
 ) -> None:
-    mock_stdin = MagicMock(return_value=dsm.ExecResult(0, b"", b""))
+    mock_stdin = MagicMock(
+        return_value=dsm.ExecResult(exit_code=0, stdout=b"", stderr=b"")
+    )
     stream = _empty_byte_stream()
     mock_stdout = MagicMock(return_value=stream)
     monkeypatch.setattr(dsm, "stream_stdin_to_container", mock_stdin)
@@ -715,10 +750,11 @@ def test_proxy_kwargs_env_contains_proxy_and_ca_keys(
     assert env["HTTP_PROXY"] == "http://sandbox-proxy:8080"
     assert env["http_proxy"] == "http://sandbox-proxy:8080"
     # NO_PROXY is loopback only; api-server traffic goes through the proxy too.
-    assert env["NO_PROXY"] == "127.0.0.1,localhost"
+    assert env["NO_PROXY"] == "127.0.0.1,localhost,::1,[::1]"
     # Case-doubled like the other proxy vars; HTTP libs split on which they
     # read.
     assert env["no_proxy"] == env["NO_PROXY"]
+    assert env["NODE_USE_ENV_PROXY"] == "1"
     # SDK CA envs all point at the bundle the init script writes.
     for key in (
         "NODE_EXTRA_CA_CERTS",
@@ -787,6 +823,7 @@ def test_proxy_kwargs_env_is_a_locked_allowlist(
         "http_proxy",
         "NO_PROXY",
         "no_proxy",
+        "NODE_USE_ENV_PROXY",
         "NODE_EXTRA_CA_CERTS",
         "REQUESTS_CA_BUNDLE",
         "SSL_CERT_FILE",

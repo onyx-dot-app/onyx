@@ -11,9 +11,6 @@ from typing import Any, Dict, cast
 
 import psycopg2.errors
 from prometheus_client import Gauge, start_http_server
-from redis.exceptions import LockNotOwnedError
-from redis.lock import Lock
-from redis.lock import Lock as RedisLock
 from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from slack_sdk.http_retry import (
@@ -26,9 +23,12 @@ from slack_sdk.socket_mode.response import SocketModeResponse
 from sqlalchemy.exc import ProgrammingError
 from sqlalchemy.orm import Session
 
+from onyx.cache.factory import get_cache_backend
+from onyx.cache.interface import CacheLock, CacheLockLostError
 from onyx.configs.app_configs import DEV_MODE, POD_NAME, POD_NAMESPACE
 from onyx.configs.constants import MessageType, OnyxRedisLocks
 from onyx.configs.onyxbot_configs import NOTIFY_SLACKBOT_NO_ANSWER
+from onyx.configs.slack_configs import SLACK_API_URL
 from onyx.connectors.slack.utils import expert_info_from_slack_id
 from onyx.db.engine.sql_engine import (
     SqlEngine,
@@ -38,7 +38,7 @@ from onyx.db.engine.sql_engine import (
 from onyx.db.engine.tenant_utils import get_all_tenant_ids
 from onyx.db.models import SlackBot
 from onyx.db.search_settings import get_current_search_settings
-from onyx.db.slack_bot import fetch_slack_bot, fetch_slack_bots
+from onyx.db.slack_bot import fetch_slack_bot_or_none, fetch_slack_bots
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.natural_language_processing.search_nlp_models import (
     EmbeddingModel,
@@ -90,13 +90,14 @@ from onyx.onyxbot.slack.utils import (
     remove_onyx_bot_tag,
     respond_in_thread_or_channel,
 )
-from onyx.redis.redis_pool import get_redis_client
 from onyx.server.manage.models import SlackBotTokens
 from onyx.tracing.setup import setup_tracing
+from onyx.utils.encryption import validate_encryption_configuration
+from onyx.utils.fleet_telemetry import start_telemetry
 from onyx.utils.logger import setup_logger
 from onyx.utils.variable_functionality import (
     fetch_ee_implementation_or_noop,
-    set_is_ee_based_on_env_variable,
+    set_is_ee_if_available,
 )
 from shared_configs.configs import (
     DISALLOWED_SLACK_BOT_TENANT_LIST,
@@ -149,7 +150,7 @@ class SlackbotHandler:
         self.slack_bot_tokens: Dict[tuple[str, int], SlackBotTokens] = {}
 
         # Store Redis lock objects here so we can release them properly
-        self.redis_locks: Dict[str, Lock] = {}
+        self.redis_locks: Dict[str, CacheLock] = {}
 
         self.running = True
         self.pod_id = os.environ.get("HOSTNAME", "unknown_pod")
@@ -232,10 +233,7 @@ class SlackbotHandler:
             logger.debug(
                 "No Slack bot tokens found for tenant=%s, bot %s", tenant_id, bot.id
             )
-            if tenant_bot_pair in self.socket_clients:
-                self.socket_clients[tenant_bot_pair].close()
-                del self.socket_clients[tenant_bot_pair]
-                del self.slack_bot_tokens[tenant_bot_pair]
+            self._drop_bot(tenant_id, bot.id)
             return
 
         slack_bot_tokens = SlackBotTokens(
@@ -264,11 +262,12 @@ class SlackbotHandler:
                 )
                 warm_up_bi_encoder(embedding_model=embedding_model)
 
+            # Dropped before the start, so a failed start cannot leave the old
+            # client mapped as live.
+            self._drop_bot(tenant_id, bot.id)
+            # Stored before the start, so a failed start waits for a token change
+            # instead of retrying every cycle.
             self.slack_bot_tokens[tenant_bot_pair] = slack_bot_tokens
-
-            # Close any existing connection first
-            if tenant_bot_pair in self.socket_clients:
-                self.socket_clients[tenant_bot_pair].close()
 
             socket_client = self.start_socket_client(
                 bot.id, tenant_id, slack_bot_tokens
@@ -330,14 +329,11 @@ class SlackbotHandler:
                 )
                 break
 
-            redis_client = get_redis_client(tenant_id=tenant_id)
-            # Acquire a Redis lock (non-blocking)
-            # thread_local=False because the shutdown event is handled
-            # on an arbitrary thread
-            rlock: RedisLock = redis_client.lock(
+            # Acquire a cache lock (non-blocking). The shutdown event releases it
+            # on an arbitrary thread, which a cache lock allows.
+            rlock: CacheLock = get_cache_backend(tenant_id=tenant_id).lock(
                 OnyxRedisLocks.SLACK_BOT_LOCK,
                 timeout=TENANT_LOCK_EXPIRATION,
-                thread_local=False,
             )
             lock_acquired = rlock.acquire(blocking=False)
 
@@ -406,6 +402,19 @@ class SlackbotHandler:
                             "No Slack bots for tenant %s; lock released (if held).",
                             tenant_id,
                         )
+            except Exception:
+                # Setup failed before the tenant was registered, so no later pass
+                # releases its lock. A cache lock may never expire: release it now.
+                if tenant_id not in self.tenant_ids:
+                    orphaned = self.redis_locks.pop(tenant_id, None)
+                    if orphaned is not None:
+                        try:
+                            orphaned.release()
+                        except Exception:
+                            logger.warning(
+                                "Error releasing lock for tenant %s", tenant_id
+                            )
+                raise
             finally:
                 CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
@@ -420,7 +429,7 @@ class SlackbotHandler:
                 if tenant_id in self.redis_locks and not DEV_MODE:
                     try:
                         self.redis_locks[tenant_id].release()
-                    except LockNotOwnedError:
+                    except CacheLockLostError:
                         # Expected: lock expired or was stolen; nothing to release.
                         pass
                     except Exception as e:
@@ -434,7 +443,6 @@ class SlackbotHandler:
             token = CURRENT_TENANT_ID_CONTEXTVAR.set(
                 tenant_id or POSTGRES_DEFAULT_SCHEMA
             )
-            redis_client = get_redis_client(tenant_id=tenant_id)
 
             try:
                 with get_session_with_current_tenant() as db_session:
@@ -470,7 +478,7 @@ class SlackbotHandler:
                             try:
                                 self.redis_locks[tenant_id].release()
                                 logger.info("Released lock for tenant %s", tenant_id)
-                            except LockNotOwnedError:
+                            except CacheLockLostError:
                                 # Expected: lock expired or was stolen.
                                 pass
                             except Exception as e:
@@ -483,6 +491,10 @@ class SlackbotHandler:
                                 self.redis_locks.pop(tenant_id, None)
                     else:
                         # Manage or reconnect Slack bot sockets
+                        self._drop_stale_bots(
+                            tenant_id=tenant_id,
+                            live_bot_ids={bot.id for bot in bots},
+                        )
                         for bot in bots:
                             self._manage_clients_per_tenant(
                                 db_session=db_session,
@@ -492,36 +504,84 @@ class SlackbotHandler:
             finally:
                 CURRENT_TENANT_ID_CONTEXTVAR.reset(token)
 
-    def _remove_tenant(self, tenant_id: str) -> None:
+    @staticmethod
+    def _discard_client(
+        client: TenantSocketModeClient, tenant_id: str, slack_bot_id: int
+    ) -> None:
         """
-        Helper to remove a tenant from `self.tenant_ids` and close any socket clients.
-        (Lock release now happens in `acquire_tenants()`, not here.)
+        Close a client, and stop its workers directly if `close()` raises.
+
+        `close()` disconnects before it stops the workers, so a raised disconnect
+        leaves them reading and acking events. `current_session_runner` stays
+        running: a bare `shutdown()` on it hangs for a connected client.
         """
-        socket_client_list = list(self.socket_clients.items())
-        # Close all socket clients for this tenant
-        for (t_id, slack_bot_id), client in socket_client_list:
-            if t_id == tenant_id:
-                client.close()
-                del self.socket_clients[(t_id, slack_bot_id)]
-                del self.slack_bot_tokens[(t_id, slack_bot_id)]
-                logger.info(
-                    "Stopped SocketModeClient for tenant: %s, app: %s",
-                    t_id,
+        try:
+            client.close()
+            return
+        except Exception:
+            logger.exception(
+                "Error closing SocketModeClient: tenant_id=%r slack_bot_id=%r",
+                tenant_id,
+                slack_bot_id,
+            )
+
+        for stop_worker in (
+            client.current_app_monitor.shutdown,
+            client.message_processor.shutdown,
+            client.message_workers.shutdown,
+        ):
+            try:
+                stop_worker()
+            except Exception:
+                logger.exception(
+                    "Error stopping SocketModeClient worker: tenant_id=%r slack_bot_id=%r",
+                    tenant_id,
                     slack_bot_id,
                 )
 
-        # Remove from active set
-        if tenant_id in self.tenant_ids:
-            self.tenant_ids.remove(tenant_id)
+    def _drop_bot(self, tenant_id: str, bot_id: int) -> None:
+        """Forget a bot's tokens and close its socket client, if it has one."""
+        self.slack_bot_tokens.pop((tenant_id, bot_id), None)
+        client: TenantSocketModeClient | None = self.socket_clients.pop(
+            (tenant_id, bot_id), None
+        )
+        if client is None:
+            return
+
+        self._discard_client(client, tenant_id, bot_id)
+        logger.info(
+            "Dropped SocketModeClient: tenant_id=%r slack_bot_id=%r",
+            tenant_id,
+            bot_id,
+        )
+
+    def _drop_stale_bots(self, tenant_id: str, live_bot_ids: set[int]) -> None:
+        """
+        Drop this tenant's bots that are not in `live_bot_ids`.
+
+        A deleted bot's socket stays open and Slack still sends it events. They
+        are acked before the bot row is read, so Slack never retries them.
+        """
+        tracked_pairs: set[tuple[str, int]] = (
+            self.socket_clients.keys() | self.slack_bot_tokens.keys()
+        )
+        for t_id, bot_id in tracked_pairs:
+            if t_id != tenant_id or bot_id in live_bot_ids:
+                continue
+            self._drop_bot(tenant_id, bot_id)
+
+    def _remove_tenant(self, tenant_id: str) -> None:
+        """Drop every bot of the tenant and stop tracking it. Callers release its lock."""
+        self._drop_stale_bots(tenant_id=tenant_id, live_bot_ids=set())
+        self.tenant_ids.discard(tenant_id)
 
     @staticmethod
     def send_heartbeats(pod_id: str, tenant_ids: set[str]) -> None:
         current_time = int(time.time())
         logger.debug("Sending heartbeats for %s active tenants", len(tenant_ids))
         for tenant_id in tenant_ids:
-            redis_client = get_redis_client(tenant_id=tenant_id)
             heartbeat_key = f"{OnyxRedisLocks.SLACK_BOT_HEARTBEAT_PREFIX}:{pod_id}"
-            redis_client.set(
+            get_cache_backend(tenant_id=tenant_id).set(
                 heartbeat_key, current_time, ex=TENANT_HEARTBEAT_EXPIRATION
             )
 
@@ -567,6 +627,7 @@ class SlackbotHandler:
                     slack_bot_id,
                     e,
                 )
+                SlackbotHandler._discard_client(socket_client, tenant_id, slack_bot_id)
                 return None
 
             # Log other Slack API errors but continue
@@ -606,6 +667,16 @@ class SlackbotHandler:
                 slack_bot_id,
                 e,
             )
+            SlackbotHandler._discard_client(socket_client, tenant_id, slack_bot_id)
+            return None
+        except Exception:
+            # Returned, not raised, so one bot's failure does not end the pass.
+            logger.exception(
+                "Unexpected error opening Slack socket connection: tenant_id=%r slack_bot_id=%r",
+                tenant_id,
+                slack_bot_id,
+            )
+            SlackbotHandler._discard_client(socket_client, tenant_id, slack_bot_id)
             return None
 
         return socket_client
@@ -620,7 +691,7 @@ class SlackbotHandler:
         x = 0
         for (tenant_id, slack_bot_id), client in socket_client_list:
             x += 1
-            client.close()
+            SlackbotHandler._discard_client(client, tenant_id, slack_bot_id)
             logger.info(
                 "Stopped SocketModeClient %s/%s: pod_id=%r tenant_id=%r slack_bot_id=%r",
                 x,
@@ -657,7 +728,7 @@ class SlackbotHandler:
                 try:
                     self.redis_locks[tenant_id].release()
                     logger.info("Released lock for tenant %s", tenant_id)
-                except LockNotOwnedError:
+                except CacheLockLostError:
                     # Expected during shutdown: lock expired or was stolen.
                     pass
                 except Exception as e:
@@ -696,21 +767,14 @@ def prefilter_requests(req: SocketModeRequest, client: TenantSocketModeClient) -
     # skip cases where the bot is disabled in the web UI
     tenant_id = get_current_tenant_id()
 
-    bot_token_user_id, bot_token_bot_id = get_onyx_bot_auth_ids(
-        tenant_id, client.slack_bot_id, client.web_client
-    )
-    logger.info(
-        "prefilter_requests: bot_token_user_id=%r bot_token_bot_id=%r",
-        bot_token_user_id,
-        bot_token_bot_id,
-    )
-
     with get_session_with_current_tenant() as db_session:
-        slack_bot = fetch_slack_bot(
+        slack_bot: SlackBot | None = fetch_slack_bot_or_none(
             db_session=db_session, slack_bot_id=client.slack_bot_id
         )
-        if not slack_bot:
-            logger.error(
+        if slack_bot is None:
+            # A deleted bot's socket stays open until the next acquisition cycle
+            # closes it, so it can still deliver events.
+            logger.warning(
                 "Slack bot with ID '%s' not found. Skipping request.",
                 client.slack_bot_id,
             )
@@ -722,6 +786,16 @@ def prefilter_requests(req: SocketModeRequest, client: TenantSocketModeClient) -
                 client.slack_bot_id,
             )
             return False
+
+    # Resolved after the row checks, since a cache miss calls Slack.
+    bot_token_user_id, bot_token_bot_id = get_onyx_bot_auth_ids(
+        tenant_id, client.slack_bot_id, client.web_client
+    )
+    logger.info(
+        "prefilter_requests: bot_token_user_id=%r bot_token_bot_id=%r",
+        bot_token_user_id,
+        bot_token_bot_id,
+    )
 
     if req.type == "events_api":
         # Verify channel is valid
@@ -1312,7 +1386,9 @@ def _get_socket_client(
         # This app-level token will be used only for establishing a connection
         app_token=slack_bot_tokens.app_token,
         web_client=WebClient(
-            token=slack_bot_tokens.bot_token, retry_handlers=slack_retry_handlers
+            token=slack_bot_tokens.bot_token,
+            base_url=SLACK_API_URL,
+            retry_handlers=slack_retry_handlers,
         ),
         tenant_id=tenant_id,
         slack_bot_id=slack_bot_id,
@@ -1323,11 +1399,18 @@ if __name__ == "__main__":
     # Initialize the SqlEngine
     SqlEngine.init_engine(pool_size=20, max_overflow=5)
 
+    # Start telemetry before the handler starts message-processing threads.
+    start_telemetry("slack")
+
+    # Before the handler: it starts threads that take tenant locks, and a failed
+    # check must not leave those locks held.
+    set_is_ee_if_available()
+    validate_encryption_configuration()
+
     # Initialize the tenant handler which will manage tenant connections
     logger.info("Starting SlackbotHandler")
     tenant_handler = SlackbotHandler()
 
-    set_is_ee_based_on_env_variable()
     setup_tracing()
 
     try:

@@ -8,8 +8,9 @@ at that provider. It is the `(oauth_name, account_id)` pair.
 from collections.abc import Sequence
 
 from fastapi_users import exceptions
-from sqlalchemy import or_, select, tuple_
+from sqlalchemy import delete, or_, select, tuple_
 from sqlalchemy.dialects.postgresql import insert as pg_insert
+from sqlalchemy.orm import Session
 from sqlalchemy.sql.elements import ColumnElement
 
 from onyx.auth.invited_users import (
@@ -330,6 +331,22 @@ def record_oauth_identity(
         db_session.commit()
 
 
+def forget_oauth_identities(tenant_id: str, oauth_name: str) -> None:
+    """Drop this workspace's catalog copies of one provider's links, so a deleted
+    provider's subjects stop resolving to this workspace."""
+    if not MULTI_TENANT:
+        return
+
+    with get_catalog_session() as db_session:
+        db_session.execute(
+            delete(UserTenantMappingOAuthAccount).where(
+                UserTenantMappingOAuthAccount.tenant_id == tenant_id,
+                UserTenantMappingOAuthAccount.oauth_name == oauth_name,
+            )
+        )
+        db_session.commit()
+
+
 def _association_ownership_filter(
     identities: Sequence[tuple[str, str]],
 ) -> ColumnElement[bool]:
@@ -610,11 +627,15 @@ def remove_users_from_tenant(emails: list[str], tenant_id: str) -> None:
             db_session.rollback()
 
 
+def delete_user_tenant_mappings__no_commit(db_session: Session, tenant_id: str) -> None:
+    db_session.query(UserTenantMapping).filter(
+        UserTenantMapping.tenant_id == tenant_id
+    ).delete()
+
+
 def remove_all_users_from_tenant(tenant_id: str) -> None:
     with get_catalog_session() as db_session:
-        db_session.query(UserTenantMapping).filter(
-            UserTenantMapping.tenant_id == tenant_id
-        ).delete()
+        delete_user_tenant_mappings__no_commit(db_session, tenant_id)
         db_session.commit()
 
 

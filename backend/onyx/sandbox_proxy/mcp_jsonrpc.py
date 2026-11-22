@@ -3,7 +3,8 @@
 Every tool invocation is a JSON-RPC ``tools/call`` carrying the exact tool
 name, so the gate parses the body (precedent:
 ``external_apps/matching/graphql_parsing.py``) rather than guessing from the
-URL. Protocol plumbing passes ungated; anything else on a matched MCP host is
+URL. Protocol plumbing requires app access without action approval. Anything
+else on a matched MCP host is
 UNCLASSIFIABLE and fails closed — credential injection covers the whole host,
 so an unrecognized request must never forward with credentials.
 """
@@ -11,10 +12,14 @@ so an unrecognized request must never forward with credentials.
 from __future__ import annotations
 
 import json
-from enum import Enum
 from typing import Any
 
-from pydantic import BaseModel, ConfigDict
+from mitmproxy import http
+
+from onyx.sandbox_proxy.models import McpRpcClassification, McpRpcKind
+
+# The action of an MCP request that does not parse. It is always blocked.
+MCP_UNCLASSIFIABLE_ACTION_TYPE = "mcp.unclassifiable"
 
 _TOOL_CALL_METHOD = "tools/call"
 
@@ -40,25 +45,11 @@ _PLUMBING_METHODS = frozenset(
 _NOTIFICATION_PREFIX = "notifications/"
 
 
-class McpRpcKind(str, Enum):
-    PLUMBING = "PLUMBING"  # forward ungated (creds injected)
-    TOOL_CALL = "TOOL_CALL"  # gate per tool name
-    UNCLASSIFIABLE = "UNCLASSIFIABLE"  # fail closed — deny
-
-
-class McpRpcClassification(BaseModel):
-    model_config = ConfigDict(frozen=True)
-
-    kind: McpRpcKind
-    # Tool names of every `tools/call` in the (possibly batched) body, in order.
-    tool_names: tuple[str, ...] = ()
-
-
 _PLUMBING = McpRpcClassification(kind=McpRpcKind.PLUMBING)
 _UNCLASSIFIABLE = McpRpcClassification(kind=McpRpcKind.UNCLASSIFIABLE)
 
 
-def classify_mcp_request(http_method: str, body: bytes | None) -> McpRpcClassification:
+def classify_mcp_request(request: http.Request) -> McpRpcClassification:
     """Classify one intercepted request to a matched craft MCP host.
 
     Bodyless ``GET`` (SSE stream) and ``DELETE`` (session termination) are the
@@ -70,9 +61,18 @@ def classify_mcp_request(http_method: str, body: bytes | None) -> McpRpcClassifi
     * any message a well-formed ``tools/call`` (string ``params.name``) →
       ``TOOL_CALL`` over all such names;
     * anything else (unknown method, malformed body, a ``tools/call`` missing its
-      name) → ``UNCLASSIFIABLE``.
+      name, a message or ``params`` with two keys that differ only in case) →
+      ``UNCLASSIFIABLE``.
     """
-    verb = (http_method or "").upper()
+    # Upgraded streams bypass HTTP request checks. MCP uses HTTP and SSE only.
+    if "upgrade" in request.headers or "upgrade" in {
+        token.strip().lower()
+        for token in request.headers.get("connection", "").split(",")
+    }:
+        return _UNCLASSIFIABLE
+
+    verb = (request.method or "").upper()
+    body = request.raw_content
     if verb in ("GET", "DELETE"):
         return _PLUMBING if not body else _UNCLASSIFIABLE
     if verb != "POST":
@@ -84,6 +84,8 @@ def classify_mcp_request(http_method: str, body: bytes | None) -> McpRpcClassifi
 
     tool_names: list[str] = []
     for message in messages:
+        if _has_ambiguous_keys(message) or _has_ambiguous_keys(message.get("params")):
+            return _UNCLASSIFIABLE
         rpc_method = message.get("method")
         if not isinstance(rpc_method, str):
             return _UNCLASSIFIABLE
@@ -109,7 +111,7 @@ def _parse_messages(body: bytes | None) -> list[dict[str, Any]] | None:
     if not body:
         return None
     try:
-        payload = json.loads(body)
+        payload = json.loads(body, object_pairs_hook=_JsonObject)
     except (ValueError, TypeError, RecursionError):
         # RecursionError: a deeply-nested body must fail closed, not crash the
         # evaluator into the gate's fail-open path.
@@ -121,6 +123,20 @@ def _parse_messages(body: bytes | None) -> list[dict[str, Any]] | None:
             return None
         return payload
     return None
+
+
+class _JsonObject(dict[str, Any]):
+    """A JSON object that remembers a repeated key. A server can read the
+    first value of a repeated key, or match keys without case, and then run
+    a different method or tool from the one the gate classified."""
+
+    def __init__(self, pairs: list[tuple[str, Any]]) -> None:
+        super().__init__(pairs)
+        self.ambiguous = len({key.casefold() for key, _ in pairs}) != len(pairs)
+
+
+def _has_ambiguous_keys(value: object) -> bool:
+    return isinstance(value, _JsonObject) and value.ambiguous
 
 
 def _is_plumbing(method: str) -> bool:

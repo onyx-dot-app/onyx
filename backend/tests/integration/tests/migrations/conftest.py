@@ -1,38 +1,30 @@
-"""
-pytest-alembic configuration for testing Alembic migrations.
-
-This module provides fixtures required by pytest-alembic to test the main
-schema migrations (alembic). For alembic_tenants, see test_alembic_tenants.py.
-
-Usage:
-    Run all built-in pytest-alembic tests:
-        pytest tests/integration/tests/migrations/test_alembic_main.py -v
-
-See: https://pytest-alembic.readthedocs.io/en/latest/
-"""
-
 from collections.abc import Generator
-from typing import Any
+from contextlib import contextmanager
 
 import pytest
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import Engine
+from sqlalchemy.schema import CreateSchema
 
-from onyx.configs.app_configs import (
-    POSTGRES_HOST,
-    POSTGRES_PASSWORD,
-    POSTGRES_PORT,
-    POSTGRES_USER,
+from onyx.cache import factory as cache_factory
+from onyx.configs import app_configs
+from onyx.configs.constants import CacheBackendType
+from onyx.db.engine.sql_engine import SYNC_DB_API, SqlEngine, build_connection_string
+from shared_configs.configs import (
+    POSTGRES_DEFAULT_SCHEMA,
+    POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
 )
-from onyx.db.engine.sql_engine import SYNC_DB_API, build_connection_string
-from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
+from tests.external_dependency_unit.db.shard_test_utils import (
+    admin_engine,
+    temporary_database,
+)
 
 # Override the parent integration conftest's autouse session fixtures.
 # Migration tests only need Postgres (provided by the workflow) and the
 # pytest-alembic fixtures below — they must NOT pre-migrate the schema
 # (would break pytest-alembic's test_upgrade) and must NOT start the
-# FastAPI app (its lifespan calls setup_onyx() which requires Vespa, and
-# the database-tests workflow doesn't start Vespa).
+# FastAPI app (its lifespan calls setup_onyx() which requires OpenSearch,
+# and the database-tests workflow doesn't start OpenSearch).
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -50,56 +42,26 @@ def _test_client() -> Generator[None, None, None]:
     yield None
 
 
-def _create_sync_engine() -> Engine:
-    """Create a synchronous SQLAlchemy engine for pytest-alembic."""
-    conn_str = build_connection_string(
-        db="postgres",
-        user=POSTGRES_USER,
-        password=POSTGRES_PASSWORD,
-        host=POSTGRES_HOST,
-        port=POSTGRES_PORT,
-        db_api=SYNC_DB_API,
-    )
-    return create_engine(conn_str)
-
-
 @pytest.fixture
-def alembic_config() -> dict[str, Any]:
-    """
-    Configure pytest-alembic for the main schema migrations.
-
-    Returns pytest-alembic configuration options.
-    See: https://pytest-alembic.readthedocs.io/en/latest/setup.html
-    """
-    return {
-        "file": "alembic.ini",
-        "script_location": "alembic",
-        # Pass additional attributes to the alembic config
-        # These will be available in env.py via context.config.attributes
-        "attributes": {
-            "schema_name": POSTGRES_DEFAULT_SCHEMA,
-        },
-    }
-
-
-@pytest.fixture
-def alembic_engine() -> Generator[Engine, None, None]:
-    """
-    Provide a synchronous SQLAlchemy engine for pytest-alembic.
-
-    pytest-alembic requires a synchronous engine to run migrations.
-    The engine is configured to connect to the test database.
-
-    Note: pytest-alembic will internally perform commits, so ensure
-    the database is in an appropriate state before running tests.
-    """
-    engine = _create_sync_engine()
-
-    # Ensure the default schema exists
-    with engine.connect() as conn:
-        conn.execute(text(f'CREATE SCHEMA IF NOT EXISTS "{POSTGRES_DEFAULT_SCHEMA}"'))
-        conn.commit()
-
-    yield engine
-
-    engine.dispose()
+def alembic_engine(monkeypatch: pytest.MonkeyPatch) -> Generator[Engine, None, None]:
+    with contextmanager(temporary_database)("pytest_alembic") as database:
+        # These revisions create and drop a Postgres role, which is cluster-wide.
+        monkeypatch.setattr(app_configs, "DB_READONLY_USER", database)
+        engine = create_engine(build_connection_string(db=database, db_api=SYNC_DB_API))
+        monkeypatch.setattr(SqlEngine, "_engine", engine)
+        monkeypatch.setattr(cache_factory, "CACHE_BACKEND", CacheBackendType.POSTGRES)
+        try:
+            if POSTGRES_DEFAULT_SCHEMA != POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE:
+                with engine.begin() as connection:
+                    connection.execute(
+                        CreateSchema(POSTGRES_DEFAULT_SCHEMA, if_not_exists=True)
+                    )
+            yield engine
+        finally:
+            engine.dispose()
+    admin = admin_engine()
+    try:
+        with admin.connect() as connection:
+            connection.execute(text(f'DROP ROLE IF EXISTS "{database}"'))
+    finally:
+        admin.dispose()

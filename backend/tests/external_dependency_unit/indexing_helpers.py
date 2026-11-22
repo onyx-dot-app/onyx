@@ -6,10 +6,15 @@ and `test_document_deletion_file_cleanup`. The setup + teardown logic is
 substantial and identical across all three, so it lives here.
 
 Tests keep their own `cc_pair` fixture (dependencies differ per file), but
-the body is just `make_cc_pair` + `cleanup_cc_pair`.
+the body is just `make_cc_pair` + `cleanup_cc_pair`. The index monitoring
+tests share `make_index_attempt` and `throughput_clock_at`.
 """
 
+from collections.abc import Iterator
+from contextlib import contextmanager
+from datetime import datetime
 from io import BytesIO
+from unittest.mock import patch
 from uuid import uuid4
 
 from sqlalchemy.orm import Session
@@ -17,7 +22,12 @@ from sqlalchemy.orm import Session
 from onyx.configs.constants import DocumentSource, FileOrigin
 from onyx.connectors.models import Document, InputType, TextSection
 from onyx.context.search.models import SavedSearchSettings
-from onyx.db.enums import AccessType, ConnectorCredentialPairStatus, IndexModelStatus
+from onyx.db.enums import (
+    AccessType,
+    ConnectorCredentialPairStatus,
+    IndexingStatus,
+    IndexModelStatus,
+)
 from onyx.db.file_record import get_filerecord_by_file_id_optional
 from onyx.db.models import (
     Connector,
@@ -33,6 +43,7 @@ from onyx.db.models import Document as DBDocument
 from onyx.db.search_settings import create_search_settings, get_current_search_settings
 from onyx.file_store.file_store import get_default_file_store
 from onyx.kg.models import KGStage
+from onyx.server.documents import cc_pair_throughput
 
 
 def make_doc(
@@ -129,6 +140,41 @@ def make_cc_pair(
     else:
         db_session.flush()
     return pair
+
+
+@contextmanager
+def throughput_clock_at(now: datetime) -> Iterator[None]:
+    """Pins the throughput window's clock."""
+    with patch.object(cc_pair_throughput, "datetime", wraps=datetime) as frozen:
+        frozen.now.return_value = now
+        yield
+
+
+def make_index_attempt(
+    db_session: Session,
+    cc_pair: ConnectorCredentialPair,
+    status: IndexingStatus,
+    started: datetime,
+    finished: datetime | None,
+    docs: int = 0,
+    is_backfill: bool = False,
+) -> IndexAttempt:
+    """An attempt created when it started, so window queries place it there."""
+    attempt = IndexAttempt(
+        connector_credential_pair_id=cc_pair.id,
+        search_settings_id=get_current_search_settings(db_session).id,
+        from_beginning=False,
+        status=status,
+        time_started=started,
+        time_finished=finished,
+        total_docs_indexed=docs,
+        is_backfill=is_backfill,
+    )
+    db_session.add(attempt)
+    db_session.flush()
+    attempt.time_created = started
+    db_session.commit()
+    return attempt
 
 
 def cleanup_cc_pair(db_session: Session, pair: ConnectorCredentialPair) -> None:
@@ -243,10 +289,12 @@ def seed_cc_pair_documents(
     *,
     prefix: str = "portdoc-",
     unique: bool = False,
+    chunk_count: int | None = None,
 ) -> list[str]:
     """Create `count` documents linked to the cc_pair; returns their ids, sorted.
     `unique=True` adds a random suffix so a test seeding a real index across runs
-    never collides."""
+    never collides. `chunk_count` is stored on each document; the pre-swap sample
+    skips documents whose count is 0."""
     if unique:
         doc_ids = sorted(
             f"{prefix}{i:03d}-{uuid4().hex[:6]}" for i in range(1, count + 1)
@@ -255,7 +303,12 @@ def seed_cc_pair_documents(
         doc_ids = [f"{prefix}{i:03d}" for i in range(1, count + 1)]
     for doc_id in doc_ids:
         db_session.add(
-            DBDocument(id=doc_id, semantic_id=doc_id, kg_stage=KGStage.NOT_STARTED)
+            DBDocument(
+                id=doc_id,
+                semantic_id=doc_id,
+                kg_stage=KGStage.NOT_STARTED,
+                chunk_count=chunk_count,
+            )
         )
     db_session.flush()
     for doc_id in doc_ids:

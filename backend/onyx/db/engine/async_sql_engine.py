@@ -4,7 +4,6 @@ from collections.abc import AsyncGenerator
 from contextlib import asynccontextmanager
 from typing import Any, AsyncContextManager
 
-from fastapi import HTTPException
 from sqlalchemy import event, pool
 from sqlalchemy.ext.asyncio import AsyncEngine, AsyncSession, create_async_engine
 
@@ -18,6 +17,7 @@ from onyx.configs.app_configs import (
 from onyx.db.engine.iam_auth import make_provide_iam_token_async
 from onyx.db.engine.pg_ssl import create_pg_ssl_context
 from onyx.db.engine.shard_registry import (
+    EngineCreationHooks,
     ShardSpec,
     get_default_shard_name,
     get_shard_spec,
@@ -33,6 +33,8 @@ from onyx.db.engine.sql_engine import (
     build_connection_string,
     is_valid_schema_name,
 )
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -40,6 +42,18 @@ from shared_configs.contextvars import get_current_tenant_id
 # exactly one entry and behaves as the previous process-global singleton did.
 _ASYNC_ENGINES: dict[str, AsyncEngine] = {}
 _ASYNC_ENGINES_LOCK = threading.Lock()
+
+
+def _snapshot_async_engines() -> list[tuple[str, AsyncEngine]]:
+    # Under the engines lock: a consistent snapshot without relying on the
+    # GIL making dict iteration atomic.
+    with _ASYNC_ENGINES_LOCK:
+        return list(_ASYNC_ENGINES.items())
+
+
+async_engine_hooks: EngineCreationHooks[AsyncEngine] = EngineCreationHooks(
+    _snapshot_async_engines
+)
 
 
 def _build_async_engine(spec: ShardSpec) -> AsyncEngine:
@@ -112,7 +126,8 @@ def get_async_engine_for_shard(shard_name: str) -> AsyncEngine:
 
         engine = _build_async_engine(get_shard_spec(shard_name))
         _ASYNC_ENGINES[shard_name] = engine
-        return engine
+    async_engine_hooks.notify(shard_name, engine)
+    return engine
 
 
 async def get_async_engine_for_tenant(tenant_id: str) -> AsyncEngine:
@@ -180,7 +195,7 @@ async def get_async_session(
         tenant_id = get_current_tenant_id()
 
     if not is_valid_schema_name(tenant_id):
-        raise HTTPException(status_code=400, detail="Invalid tenant ID")
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, "Invalid tenant ID")
 
     # Routes to the tenant's shard, not just its schema. With one shard configured
     # this is the same engine the process has always used.
@@ -192,16 +207,16 @@ async def get_async_session(
             yield session
         return
 
-    # Create connection with schema translation to handle querying the right schema
+    # Apply the schema translation through an engine view, not a dedicated
+    # Connection: a connection-bound session pins one pooled connection for the
+    # dependency's whole lifetime, which on streaming endpoints is the entire
+    # response.
     schema_translate_map = {None: tenant_id}
-    async with engine.connect() as connection:
-        connection = await connection.execution_options(
-            schema_translate_map=schema_translate_map
-        )
-        async with AsyncSession(
-            bind=connection, expire_on_commit=False
-        ) as async_session:
-            yield async_session
+    tenant_engine = engine.execution_options(schema_translate_map=schema_translate_map)
+    async with AsyncSession(
+        bind=tenant_engine, expire_on_commit=False
+    ) as async_session:
+        yield async_session
 
 
 def get_async_session_context_manager(

@@ -1,12 +1,6 @@
-// A card owns how it looks, not what the surrounding app calls it. `data-*` is
-// the app's namespace — test hooks and analytics markers — so the card forwards
-// it rather than swallowing it.
-//
-// This is worth asserting because the failure mode is silent: a dropped
-// attribute still type-checks and still renders, and only surfaces as an
-// unrelated selector failure somewhere downstream.
-import { render, screen } from "@tests/setup/test-utils";
+import { render, screen, setupUser } from "@tests/setup/test-utils";
 import { Card } from "@opal/components";
+import { Interactive } from "@opal/core";
 
 describe("Card data attributes", () => {
   it("forwards data-* to the root", () => {
@@ -48,18 +42,47 @@ describe("Card data attributes", () => {
     );
   });
 
-  it("does not forward className or style", () => {
-    render(
-      // @ts-expect-error — WithoutStyles keeps these off the public API.
-      <Card className="injected" style={{ padding: 999 }}>
-        <p>Body</p>
-      </Card>
-    );
+  it.each([false, true])(
+    "forwards interaction props and merges classes (expandable: %s)",
+    async (expandable) => {
+      const user = setupUser();
+      const onClick = jest.fn();
+      const onKeyDown = jest.fn();
+      const mode = expandable
+        ? { expandable: true as const, expandedContent: <p>More</p> }
+        : { expandable: false as const };
+      render(
+        <Interactive.Simple
+          onClick={onClick}
+          onKeyDown={onKeyDown}
+          role="button"
+          tabIndex={0}
+          aria-label="Preview skill"
+          group="group/SkillCard"
+        >
+          <Card {...mode} className="custom-card">
+            Body
+          </Card>
+        </Interactive.Simple>
+      );
 
-    const card = screen.getByText("Body").parentElement;
-    expect(card).not.toHaveClass("injected");
-    expect(card?.getAttribute("style")).not.toContain("999");
-  });
+      const card = screen.getByRole("button", { name: "Preview skill" });
+      expect(card).toHaveClass(
+        expandable ? "opal-card-expandable" : "opal-card",
+        "custom-card",
+        "group/SkillCard"
+      );
+      await user.click(card);
+      expect(onClick).toHaveBeenCalledTimes(1);
+      card.focus();
+      await user.keyboard("{Enter}");
+      expect(onKeyDown).toHaveBeenCalledWith(
+        expect.objectContaining({ key: "Enter" })
+      );
+      expect(card).not.toHaveAttribute("expandable");
+      expect(card).not.toHaveAttribute("expandedContent");
+    }
+  );
 });
 
 describe("Card disabled", () => {

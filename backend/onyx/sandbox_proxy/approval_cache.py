@@ -17,7 +17,7 @@ from typing import TYPE_CHECKING
 from uuid import UUID
 
 from onyx.cache.interface import CACHE_TRANSIENT_ERRORS, CacheBackend
-from onyx.db.enums import ApprovalDecision, GatedAppKind
+from onyx.db.enums import ApprovalDecision
 from onyx.external_apps.matching.engine import actions_requiring_approval
 from onyx.utils.logger import setup_logger
 
@@ -43,10 +43,8 @@ def _wake_key(approval_id: UUID) -> str:
     return f"approval:wake:{approval_id}"
 
 
-def _session_grant_key(
-    session_id: UUID, kind: GatedAppKind, target_id: int, action_type: str
-) -> str:
-    return f"approval:session-grant:{session_id}:{kind.value}:{target_id}:{action_type}"
+def _session_grant_key(session_id: UUID, integration_id: int, action_type: str) -> str:
+    return f"approval:session-grant:{session_id}:integration:{integration_id}:{action_type}"
 
 
 def announce_approval(approval_id: UUID, session_id: UUID, cache: CacheBackend) -> None:
@@ -57,13 +55,12 @@ def announce_approval(approval_id: UUID, session_id: UUID, cache: CacheBackend) 
 def cache_session_grant_actions(
     *,
     session_id: UUID,
-    kind: GatedAppKind,
-    target_id: int,
+    integration_id: int,
     action_types: Iterable[str],
     source_approval_id: UUID,
     cache: CacheBackend,
 ) -> None:
-    """Cache the same target/action types for this BuildSession.
+    """Cache the same integration/action types for this BuildSession.
 
     One key per action keeps matching simple and conservative: a future
     multi-action request is auto-approved only when every ASK action it invokes
@@ -71,7 +68,7 @@ def cache_session_grant_actions(
     """
     for action_type in set(action_types):
         cache.set(
-            _session_grant_key(session_id, kind, target_id, action_type),
+            _session_grant_key(session_id, integration_id, action_type),
             str(source_approval_id),
             ex=SESSION_GRANT_TTL_S,
         )
@@ -80,8 +77,7 @@ def cache_session_grant_actions(
 def hydrate_session_grants(
     *,
     session_id: UUID,
-    kind: GatedAppKind,
-    target_id: int,
+    integration_id: int,
     rows: Iterable["ActionApproval"],
     cache: CacheBackend | None,
 ) -> set[str]:
@@ -103,8 +99,7 @@ def hydrate_session_grants(
             for source_approval_id, action_types in per_row:
                 cache_session_grant_actions(
                     session_id=session_id,
-                    kind=kind,
-                    target_id=target_id,
+                    integration_id=integration_id,
                     action_types=action_types,
                     source_approval_id=source_approval_id,
                     cache=cache,
@@ -112,10 +107,9 @@ def hydrate_session_grants(
         except CACHE_TRANSIENT_ERRORS as e:
             logger.warning(
                 "approval.session_grant_cache_hydrate_failed session_id=%s "
-                "target=%s:%s error=%s",
+                "integration=%s error=%s",
                 session_id,
-                kind.value,
-                target_id,
+                integration_id,
                 str(e),
             )
     return granted
@@ -124,8 +118,7 @@ def hydrate_session_grants(
 def cached_session_grants_cover(
     *,
     session_id: UUID,
-    kind: GatedAppKind,
-    target_id: int,
+    integration_id: int,
     action_types: Iterable[str],
     cache: CacheBackend,
 ) -> bool:
@@ -138,7 +131,7 @@ def cached_session_grants_cover(
     if not unique_action_types:
         return False
     keys = [
-        _session_grant_key(session_id, kind, target_id, action_type)
+        _session_grant_key(session_id, integration_id, action_type)
         for action_type in unique_action_types
     ]
     for key in keys:

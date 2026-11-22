@@ -15,7 +15,7 @@
  *
  *   2. A computed `variant` resolving to `"disabled"`. Opal's Card now has a
  *      `disabled` prop, so these read as `disabled={…}` alongside
- *      `border="solid"`. SkillCard, both discord-bot pages.
+ *      `border="solid"`. Both discord-bot pages.
  *
  *   3. Passing a `className`, which Opal's Card takes none of by design. These
  *      need a decision before they can move anywhere:
@@ -65,7 +65,7 @@
  * ```
  */
 
-import { Section, SectionProps } from "@/layouts/general-layouts";
+import { Section, SectionProps } from "@opal/layouts";
 import { cn } from "@opal/utils";
 
 type CardVariant =

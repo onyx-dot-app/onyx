@@ -6,10 +6,9 @@ from celery import Celery
 from redis.lock import Lock as RedisLock
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import DB_YIELD_PER_DEFAULT
 from onyx.configs.constants import (
+    CELERY_DOCUMENT_SYNC_BEAT_LOCK_TIMEOUT,
     CELERY_DOCUMENT_SYNC_TASK_EXPIRES,
-    CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT,
     OnyxCeleryPriority,
     OnyxCeleryQueues,
     OnyxCeleryTask,
@@ -19,6 +18,7 @@ from onyx.db.document import (
     construct_document_id_select_by_needs_sync_or_secondary_pending,
     count_documents_by_needs_sync_or_secondary_pending,
     count_secondary_only_sync_pending_documents,
+    stream_document_ids_with_secondary_pending,
 )
 from onyx.db.port_attempt import any_future_port_in_progress
 from onyx.redis.redis_tenant_work_gating import maybe_mark_tenant_active
@@ -109,14 +109,16 @@ def generate_document_sync_tasks(
         not port_running and count_secondary_only_sync_pending_documents(db_session) > 0
     )
 
-    for doc_id, is_secondary_pending in db_session.execute(stmt).yield_per(
-        DB_YIELD_PER_DEFAULT
+    for doc_id, is_secondary_pending in stream_document_ids_with_secondary_pending(
+        db_session, stmt
     ):
         doc_id = cast(str, doc_id)
         current_time = time.monotonic()
 
         # Reacquire lock periodically to prevent timeout
-        if current_time - last_lock_time >= (CELERY_VESPA_SYNC_BEAT_LOCK_TIMEOUT / 4):
+        if current_time - last_lock_time >= (
+            CELERY_DOCUMENT_SYNC_BEAT_LOCK_TIMEOUT / 4
+        ):
             lock.reacquire()
             last_lock_time = current_time
 

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import {
   setCursorToEnd as setCursorToEndUtil,
   setCursorAfterNode,
@@ -6,23 +7,28 @@ import {
   insertTextAtCursor as insertTextAtCursorUtil,
   insertNodeAtCursor as insertNodeAtCursorUtil,
   getTextContent,
-  deleteTokenBeforeCursor,
+  readContent,
+  deleteTokenAtCursor,
   stripLeadingBr,
   captureSnapshot,
   restoreSnapshot,
   snapshotsEqual,
   pushBoundedSnapshot,
+  type CaretText,
   type EditableSnapshot,
 } from "@/lib/contentEditable";
 import {
   createRichInputTileNode,
   getAdjacentRichTile,
   shouldCreatePasteTile,
-  getPasteTilePreview,
-  getPasteTileMeta,
-  isSkillTile,
-  SKILL_TILE_TYPE,
+  getPasteTileText,
+  isMentionTile,
+  MENTION_TILE_TYPE,
+  setRichTileText,
+  type RichTileText,
 } from "@/lib/richInputTile";
+import { MENTION_TRIGGER, placeMentions } from "@/lib/chat/mentions";
+import type { ComposedMention, Mention, PlacedMention } from "@/lib/chat/types";
 
 type PasteTileData = { text: string; tile: HTMLElement };
 
@@ -54,16 +60,24 @@ export interface UseContentEditableOptions {
 export interface UseContentEditableReturn {
   ref: React.RefObject<HTMLDivElement | null>;
   message: string;
-  setMessage: (text: string) => void;
+  /** One mention per mention tile in the input, in text order, at the
+   * offset of its `@name` in `message`. */
+  mentions: PlacedMention[];
+  /** Replaces the content and puts a mention tile where
+   * `lib/chat/mentions.ts:placeMentions` places each of `mentions`. */
+  setMessage: (text: string, mentions?: readonly ComposedMention[]) => void;
   clearMessage: () => void;
+  /** Delete `token` around the caret: `token.before` ends at the caret. */
+  deleteToken: (token: CaretText) => boolean;
   handleInput: (event: React.SyntheticEvent<HTMLDivElement>) => string;
   handleCompositionStart: () => void;
   handleCompositionEnd: () => void;
   insertTextAtCursor: (text: string) => void;
   insertTileAtCursor: (text: string) => HTMLElement | null;
   expandTile: (tile: HTMLElement) => void;
-  /** Insert a skill tile, replacing `beforeToken` (the `/<query>` before the caret). */
-  insertSkillTile: (slug: string, name: string, beforeToken: string) => boolean;
+  /** Insert a mention tile and a space, replacing `token` (the `@<query>`
+   * word around the caret). */
+  insertMentionTile: (mention: Mention, token: CaretText) => boolean;
   pasteText: (text: string) => void;
   /** Whether to show the "paste again to expand" hint — true while a paste tile exists. */
   pasteExpandHintVisible: boolean;
@@ -88,9 +102,12 @@ export function useContentEditable({
   onContentChange,
   disabled = false,
 }: UseContentEditableOptions): UseContentEditableReturn {
+  const t = useTranslations("chat.input.richTile");
   const ref = useRef<HTMLDivElement>(null);
   const [message, setMessageState] = useState(initialContent);
   const messageRef = useRef(initialContent);
+  // Owned by the DOM like `message`; mirrored so drafts and sends react to it.
+  const [mentions, setMentionsState] = useState<PlacedMention[]>([]);
   const isComposingRef = useRef(false);
   const onContentChangeRef = useRef(onContentChange);
   const rafRef = useRef<number | null>(null);
@@ -119,7 +136,7 @@ export function useContentEditable({
   useEffect(() => {
     if (disabled) return;
     ref.current?.focus();
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  }, []);
 
   useEffect(() => {
     return () => {
@@ -140,16 +157,15 @@ export function useContentEditable({
       const sel = window.getSelection();
       const tiles = el.querySelectorAll("[data-rich-tile]");
       tiles.forEach((tile) => {
-        const htmlTile = tile as HTMLElement;
         if (
           sel &&
           sel.rangeCount > 0 &&
           !sel.isCollapsed &&
           sel.getRangeAt(0).intersectsNode(tile)
         ) {
-          htmlTile.classList.add("rich-input-tile-in-selection");
+          tile.classList.add("rich-input-tile-in-selection");
         } else {
-          htmlTile.classList.remove("rich-input-tile-in-selection");
+          tile.classList.remove("rich-input-tile-in-selection");
         }
       });
     }
@@ -179,6 +195,37 @@ export function useContentEditable({
     wrapper.style.height = `${clamped}px`;
   }, [wrapperRef, minHeight, maxHeight]);
 
+  const setMentions = useCallback((next: PlacedMention[]) => {
+    setMentionsState((current) =>
+      current.length === next.length &&
+      current.every(
+        (mention, index) =>
+          mention.type === next[index]?.type &&
+          mention.name === next[index]?.name &&
+          mention.index === next[index]?.index
+      )
+        ? current
+        : next
+    );
+  }, []);
+
+  // The tile reads and serializes as the `@name` it stands for.
+  const createMentionTile = useCallback(
+    (mention: Mention): HTMLSpanElement => {
+      const text = `${MENTION_TRIGGER}${mention.name}`;
+      return createRichInputTileNode({
+        type: MENTION_TILE_TYPE,
+        text,
+        preview: text,
+        meta: "",
+        mention,
+        label: text,
+        removeLabel: t("mentionTile.removeButton.ariaLabel", { name: text }),
+      });
+    },
+    [t]
+  );
+
   const syncFromDOM = useCallback((): string => {
     const el = ref.current;
     if (!el) return "";
@@ -187,24 +234,31 @@ export function useContentEditable({
       el.innerHTML = "";
     }
 
-    const text = getTextContent(el);
+    const { text, tiles } = readContent(el);
     messageRef.current = text;
     setMessageState(text);
+    setMentions(
+      tiles.flatMap(({ tile, index }): PlacedMention[] => {
+        const type = tile.getAttribute("data-mention-type");
+        const name = tile.getAttribute("data-mention-name");
+        return type === "skill" && name ? [{ type, name, index }] : [];
+      })
+    );
     setPasteExpandHintVisible(
       !!el.querySelector('[data-rich-tile][data-tile-type="paste"]')
     );
     onContentChangeRef.current?.(text);
     return text;
-  }, []);
+  }, [setMentions]);
 
   /** Push the current state as an undo restore point (starts a new undo unit). */
-  const pushUndoSnapshot = useCallback(() => {
+  const pushUndoSnapshot = useCallback((previous?: EditableSnapshot) => {
     const el = ref.current;
     if (!el) return;
     redoStackRef.current = [];
     lastEditKindRef.current = null;
     const stack = undoStackRef.current;
-    const snapshot = captureSnapshot(el);
+    const snapshot = previous ?? captureSnapshot(el);
     const top = stack[stack.length - 1];
     if (top && snapshotsEqual(top, snapshot)) return;
     pushBoundedSnapshot(stack, snapshot);
@@ -404,17 +458,31 @@ export function useContentEditable({
   }, [performUndo, performRedo, noteEdit]);
 
   const setMessage = useCallback(
-    (text: string) => {
-      if (!ref.current) return;
+    (text: string, picked: readonly ComposedMention[] = []) => {
+      const el = ref.current;
+      if (!el) return;
 
       pushUndoSnapshot();
       clearTileSelection();
       setTilePopover(null);
       setPasteExpandHintVisible(false);
 
-      ref.current.textContent = text;
+      el.textContent = "";
+      let textStart = 0;
+      const placed = placeMentions(text, picked);
+      for (const mention of placed) {
+        el.append(
+          text.slice(textStart, mention.index),
+          createMentionTile(mention)
+        );
+        textStart =
+          mention.index + MENTION_TRIGGER.length + mention.name.length;
+      }
+      el.append(text.slice(textStart));
+      el.normalize();
       messageRef.current = text;
       setMessageState(text);
+      setMentions(placed);
       resize();
       onContentChangeRef.current?.(text);
 
@@ -431,7 +499,13 @@ export function useContentEditable({
         }
       });
     },
-    [resize, clearTileSelection, pushUndoSnapshot]
+    [
+      resize,
+      clearTileSelection,
+      pushUndoSnapshot,
+      setMentions,
+      createMentionTile,
+    ]
   );
 
   const clearMessage = useCallback(() => {
@@ -446,9 +520,24 @@ export function useContentEditable({
     ref.current.innerHTML = "";
     messageRef.current = "";
     setMessageState("");
+    setMentions([]);
     resize();
     onContentChangeRef.current?.("");
-  }, [resize, clearTileSelection, clearUndoHistory]);
+  }, [resize, clearTileSelection, clearUndoHistory, setMentions]);
+
+  const deleteToken = useCallback(
+    (token: CaretText): boolean => {
+      const el = ref.current;
+      if (!el) return false;
+      const snapshot = captureSnapshot(el);
+      if (!deleteTokenAtCursor(el, token)) return false;
+      pushUndoSnapshot(snapshot);
+      syncFromDOM();
+      resize();
+      return true;
+    },
+    [pushUndoSnapshot, syncFromDOM, resize]
+  );
 
   const insertTextAtCursor = useCallback(
     (text: string) => {
@@ -461,15 +550,20 @@ export function useContentEditable({
     [syncFromDOM, resize, pushUndoSnapshot]
   );
 
+  const pasteTileText = useCallback(
+    (text: string): RichTileText =>
+      getPasteTileText(text, (values) => t("pasteTile.ariaLabel", values)),
+    [t]
+  );
+
   const insertTileAtCursor = useCallback(
     (text: string): HTMLElement | null => {
       if (!ref.current) return null;
       pushUndoSnapshot();
       const tile = createRichInputTileNode({
         type: "paste",
-        text,
-        preview: getPasteTilePreview(text),
-        meta: getPasteTileMeta(text),
+        ...pasteTileText(text),
+        removeLabel: t("pasteTile.removeButton.ariaLabel"),
       });
       insertNodeAtCursorUtil(ref.current, tile);
       setCursorAfterNode(tile);
@@ -478,7 +572,7 @@ export function useContentEditable({
       resize();
       return tile;
     },
-    [syncFromDOM, resize, pushUndoSnapshot]
+    [syncFromDOM, resize, pushUndoSnapshot, pasteTileText, t]
   );
 
   const expandTile = useCallback(
@@ -520,29 +614,21 @@ export function useContentEditable({
     [syncFromDOM, resize, pushUndoSnapshot]
   );
 
-  const insertSkillTile = useCallback(
-    (slug: string, name: string, beforeToken: string): boolean => {
+  const insertMentionTile = useCallback(
+    (mention: Mention, token: CaretText): boolean => {
       const el = ref.current;
       if (!el) return false;
       pushUndoSnapshot();
-      // Replacing a typed `/<query>`: bail if it can't be verifiably removed,
-      // since the tile serializes back to `/<slug> ` and would duplicate it. An
-      // empty `beforeToken` (e.g. paste) just inserts at the caret.
-      if (beforeToken && !deleteTokenBeforeCursor(el, beforeToken))
-        return false;
-      const tile = createRichInputTileNode({
-        type: SKILL_TILE_TYPE,
-        text: `/${slug} `,
-        preview: `Skill: ${name}`,
-        meta: "",
-        skillSlug: slug,
-      });
-      insertNodeAtCursorUtil(el, tile); // also places the caret after the tile
+      // Bail if the typed `@<query>` can't be verifiably removed, since the
+      // tile would then sit beside its own partial text.
+      if (!deleteTokenAtCursor(el, token)) return false;
+      insertNodeAtCursorUtil(el, createMentionTile(mention));
+      insertTextAtCursorUtil(el, " ");
       syncFromDOM();
       resize();
       return true;
     },
-    [syncFromDOM, resize, pushUndoSnapshot]
+    [syncFromDOM, resize, pushUndoSnapshot, createMentionTile]
   );
 
   const findMatchingPasteTile = useCallback(
@@ -555,7 +641,7 @@ export function useContentEditable({
       return (
         tiles.find(
           (tile) =>
-            !isSkillTile(tile) && tile.getAttribute("data-text") === text
+            !isMentionTile(tile) && tile.getAttribute("data-text") === text
         ) ?? null
       );
     },
@@ -616,11 +702,10 @@ export function useContentEditable({
       const target = event.target as HTMLElement;
       if (target.closest("[data-rich-tile-remove]")) return;
 
-      const tile = target.closest("[data-rich-tile]") as HTMLElement | null;
+      const tile = target.closest<HTMLElement>("[data-rich-tile]");
       if (tile) {
-        // Skill tiles don't use the paste-edit popover; their click handling
-        // (re-pick) lives in the host input bar.
-        if (isSkillTile(tile)) return;
+        // Mention tiles don't use the paste-edit popover.
+        if (isMentionTile(tile)) return;
         const text = tile.getAttribute("data-text") ?? "";
         setTilePopover({ text, tile });
       } else {
@@ -677,19 +762,17 @@ export function useContentEditable({
       }
 
       noteEdit("tile-edit");
-      tile.setAttribute("data-text", newText);
-      tile.title = newText.length > 200 ? newText.slice(0, 200) + "…" : newText;
-
-      const preview = tile.querySelector(".rich-input-tile-preview");
-      if (preview) {
-        preview.textContent = getPasteTilePreview(newText);
-      }
-      const meta = tile.querySelector(".rich-input-tile-meta");
-      if (meta) {
-        meta.textContent = getPasteTileMeta(newText);
-      }
+      setRichTileText(tile, pasteTileText(newText));
+      syncFromDOM();
     },
-    [tilePopover, syncFromDOM, resize, pushUndoSnapshot, noteEdit]
+    [
+      tilePopover,
+      syncFromDOM,
+      resize,
+      pushUndoSnapshot,
+      noteEdit,
+      pasteTileText,
+    ]
   );
 
   const handleTileKeyDown = useCallback(
@@ -712,12 +795,12 @@ export function useContentEditable({
       const isNav = event.key === "ArrowLeft" || event.key === "ArrowRight";
       const isDelete = event.key === "Backspace" || event.key === "Delete";
 
-      // Enter on selected tile → open popover (paste tiles only; skill tiles
+      // Enter on selected tile → open popover (paste tiles only; mention tiles
       // have no editable text, so Enter is a no-op that keeps them selected).
       if (event.key === "Enter" && selectedTileRef.current) {
         event.preventDefault();
         const tile = selectedTileRef.current;
-        if (isSkillTile(tile)) return true;
+        if (isMentionTile(tile)) return true;
         const text = tile.getAttribute("data-text") ?? "";
         setTilePopover({ text, tile });
         return true;
@@ -880,15 +963,17 @@ export function useContentEditable({
   return {
     ref,
     message,
+    mentions,
     setMessage,
     clearMessage,
+    deleteToken,
     handleInput,
     handleCompositionStart,
     handleCompositionEnd,
     insertTextAtCursor,
     insertTileAtCursor,
     expandTile,
-    insertSkillTile,
+    insertMentionTile,
     pasteText,
     pasteExpandHintVisible,
     handleCopy,

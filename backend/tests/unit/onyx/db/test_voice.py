@@ -416,7 +416,7 @@ class TestDeleteVoiceProvider:
 
     def test_hard_deletes_provider_when_found(self, mock_db_session: MagicMock) -> None:
         provider = _make_voice_provider(id=1)
-        mock_db_session.scalar.return_value = provider
+        mock_db_session.scalar.side_effect = [provider, None]
 
         delete_voice_provider(mock_db_session, 1)
 

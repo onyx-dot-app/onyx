@@ -2,8 +2,10 @@
 
 These mirror Zoom's documented responses and nothing else. A field is `| None`
 only where Zoom types it `string | null`, and it has a default only where
-Zoom's own text says the field is conditional.
+Zoom's own text says the field is conditional or Zoom was seen leaving it out.
 """
+
+from enum import Enum
 
 from pydantic import BaseModel, Field
 
@@ -23,30 +25,17 @@ class ZoomAccessToken(BaseModel):
 
 
 class ZoomTranscript(BaseModel):
-    """Response shape of `GET /meetings/{meetingId}/transcript`."""
+    """A session's transcript. Zoom never sends this shape;
+    `ZoomRecordingEntry.transcript` builds it from the recording's file list.
+    """
 
-    meeting_id: str
-    account_id: str
-    meeting_topic: str
-    host_id: str
-    can_download: bool
-    transcript_created_time: str
-
-    auto_delete: bool | None = None
-    auto_delete_date: str | None = None
     download_url: str | None = None
-    download_restriction_reason: str | None = None
+    is_ready: bool = True
+    meeting_topic: str | None = None
 
     @property
     def is_downloadable(self) -> bool:
-        """Zoom documents these three fields as mutually exclusive, then returns
-        all three together in its own example, so all three must agree here.
-        """
-        return (
-            self.can_download
-            and self.download_restriction_reason is None
-            and bool(self.download_url)
-        )
+        return self.is_ready and bool(self.download_url)
 
 
 class ZoomSessionDetails(BaseModel):
@@ -63,6 +52,13 @@ class ZoomSessionDetails(BaseModel):
     @property
     def session_id(self) -> str:
         return str(self.id)
+
+
+class ZoomMeetingDetails(BaseModel):
+    """Response of `GET /meetings/{meetingId}`, read for a meeting's host when
+    pruning."""
+
+    host_id: str | None = None
 
 
 class ZoomPastMeetingDetails(ZoomSessionDetails):
@@ -170,17 +166,42 @@ class ZoomUser(BaseModel):
 class ZoomUserPage(BaseModel):
     """One page of either user listing. The client builds this rather than
     validating a response, because `/users` and `/groups/{groupId}/members`
-    return the same users under different keys.
+    return the same users under different keys. `total_records` is carried
+    because comparing against it is the only way to catch a listing that
+    stopped early.
     """
 
     users: list[ZoomUser] = Field(default_factory=list)
     next_page_token: str | None = None
+    total_records: int | None = None
+
+
+TRANSCRIPT_FILE_TYPE = "TRANSCRIPT"
+_COMPLETED_FILE_STATUS = "completed"
+
+
+class ZoomRecordingFile(BaseModel):
+    """One entry of a recording's `recording_files` array, cut to the fields
+    this connector reads."""
+
+    file_type: str
+
+    status: str | None = None
+    download_url: str | None = None
+
+    @property
+    def is_transcript(self) -> bool:
+        return self.file_type.upper() == TRANSCRIPT_FILE_TYPE
+
+    @property
+    def is_ready(self) -> bool:
+        return self.status is None or self.status.lower() == _COMPLETED_FILE_STATUS
 
 
 class ZoomRecordingEntry(BaseModel):
-    """Every scalar field of one entry in the `meetings` array of
-    `GET /users/{userId}/recordings`. The entry also carries `recording_files`,
-    thirteen more fields describing each file, which nothing here reads.
+    """One recording. Zoom sends it as an entry in the `meetings` array of
+    `GET /users/{userId}/recordings`, and as the whole body of
+    `GET /meetings/{meetingId}/recordings`.
     """
 
     uuid: str
@@ -200,47 +221,37 @@ class ZoomRecordingEntry(BaseModel):
     auto_delete: bool | None = None
     auto_delete_date: str | None = None
 
+    recording_files: list[ZoomRecordingFile] = Field(default_factory=list)
+
     @property
     def session_id(self) -> str:
         # A recording uploaded through the web portal has no meeting number.
         return str(self.id) if self.id is not None else self.uuid
 
+    @property
+    def transcript(self) -> ZoomTranscript | None:
+        """None means Zoom recorded the session without transcribing it."""
+        file = next((f for f in self.recording_files if f.is_transcript), None)
+        if file is None:
+            return None
+        return ZoomTranscript(
+            download_url=file.download_url,
+            is_ready=file.is_ready,
+            meeting_topic=self.topic,
+        )
+
 
 class ZoomRecordingPage(BaseModel):
     """One page of `GET /users/{userId}/recordings`. The client builds this
-    rather than validating a response, so Zoom's `from`, `to` and page counters
-    are not carried across.
+    rather than validating a response, so Zoom's `from` and `to` are not
+    carried across. `total_records` is, because comparing against it is the only
+    way to catch a listing that stopped early, and pruning deletes every
+    recording a listing leaves out.
     """
 
     recordings: list[ZoomRecordingEntry] = Field(default_factory=list)
     next_page_token: str | None = None
-
-
-class ZoomParticipant(BaseModel):
-    """Every documented field of one entry from
-    `GET /past_meetings/{meetingId}/participants` or
-    `GET /past_webinars/{webinarId}/participants`. Zoom describes the two
-    identically, so both validate here.
-
-    Zoom empties `user_email` for anyone outside the host's account, and `id`
-    for anyone who joined without logging in. It sends both fields either way,
-    so neither is optional.
-    """
-
-    duration: int
-    failover: bool
-    id: str
-    join_time: str
-    leave_time: str
-    name: str
-    status: str
-    user_email: str
-    user_id: str
-
-    internal_user: bool = False
-
-    # Zoom sends this only when the request asks for it through include_fields.
-    registrant_id: str | None = None
+    total_records: int | None = None
 
 
 # Zoom has no cancelled state: cancelling a registration sets the status to
@@ -253,66 +264,66 @@ APPROVED_REGISTRANT_STATUS = "approved"
 # a string on others.
 ZOOM_MEETING_TOO_OLD_CODE = "12702"
 ZOOM_NOT_FOUND_CODE = "3001"
+# Zoom's generic bad-request code; only the message says what was wrong.
+ZOOM_INVALID_REQUEST_CODE = "300"
+ZOOM_USER_NOT_FOUND_CODE = "1001"
 ZOOM_NOT_ENTITLED_CODE = "200"
+# Undocumented in the spec; the shape is a 400 with a message that lists the
+# missing scopes.
+ZOOM_MISSING_SCOPE_CODE = "4711"
 
 
-class ZoomRegistrant(BaseModel):
-    """Every documented scalar field of one entry from
-    `GET /meetings/{meetingId}/registrants` or
-    `GET /webinars/{webinarId}/registrants`. Zoom marks only `email` and
-    `first_name` as always sent; the rest are answers to a registration form
-    the host can shorten or skip. Zoom also returns `custom_questions`, the
-    host's own questions and their answers, which nothing here reads.
+class ZoomShareRecording(str, Enum):
+    """Zoom's enum is closed, so a value outside it fails validation instead of
+    being read as shared."""
+
+    PUBLICLY = "publicly"
+    INTERNALLY = "internally"
+    NONE = "none"
+
+
+class ZoomRecordingSettings(BaseModel):
+    """The fields of `GET /meetings/{meetingId}/recordings/settings` that decide
+    who may watch. Zoom marks none of them required or nullable. A recording on
+    "Private to me" answers with `share_recording` alone, so the rest default
+    to what absence means. The passcode is left out on purpose: it must never
+    be logged.
+    """
+
+    share_recording: ZoomShareRecording
+    recording_authentication: bool = False
+    authentication_option: str = ""
+    authentication_name: str = ""
+    on_demand: bool = False
+
+
+class ZoomRecordingRegistrant(BaseModel):
+    """One viewer who registered to watch, from
+    `GET /meetings/{meetingId}/recordings/registrants`. Zoom requires `email`
+    but not `status`, and a blank status never counts as approved.
     """
 
     email: str
-    first_name: str
-
-    id: str | None = None
-    address: str | None = None
-    city: str | None = None
-    comments: str | None = None
-    country: str | None = None
-    create_time: str | None = None
-    industry: str | None = None
-    job_title: str | None = None
-    join_url: str | None = None
-    last_name: str | None = None
-    no_of_employees: str | None = None
-    org: str | None = None
-    phone: str | None = None
-    purchasing_time_frame: str | None = None
-    role_in_purchase_process: str | None = None
-    state: str | None = None
-    status: str | None = None
-    zip: str | None = None
-
-    # The webinar listing does not document this one.
-    participant_pin_code: int | None = None
+    status: str = ""
 
 
-class ZoomInvitee(BaseModel):
-    """Both documented fields of one entry of `settings.meeting_invitees[]` from
-    `GET /meetings/{meetingId}`. Webinars have no equivalent field."""
-
-    email: str
-    internal_user: bool = False
-
-
-class ZoomPanelist(BaseModel):
-    """Every documented field of one entry from
-    `GET /webinars/{webinarId}/panelists` — a webinar speaker, who does not
-    necessarily register or appear as a participant. The name tag and virtual
-    background fields arrive only when the host set them up.
+class ZoomRecordingAuthenticationRule(BaseModel):
+    """One sign-in rule from `GET /users/{userId}/settings`. `domains` is comma
+    separated and only on a domain rule. `type` stays a plain string so a type
+    Zoom adds later fails one rule's lookup rather than the whole catalogue.
     """
 
     id: str
-    email: str
-    name: str
-    join_url: str
+    type: str = ""
+    name: str = ""
+    domains: str = ""
 
-    name_tag_description: str | None = None
-    name_tag_id: str | None = None
-    name_tag_name: str | None = None
-    name_tag_pronouns: str | None = None
-    virtual_background_id: str | None = None
+
+class ZoomRecordingAuthenticationSettings(BaseModel):
+    """The rules are account-wide, so any one user's answer serves every
+    recording."""
+
+    recording_authentication: bool = False
+    authentication_options: list[ZoomRecordingAuthenticationRule] = Field(
+        default_factory=list
+    )

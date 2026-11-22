@@ -67,7 +67,11 @@ func RunStatus(ctx context.Context, deps Deps, opts Options, jsonOut bool) error
 }
 
 func (in *installer) runStatus(ctx context.Context, jsonOut bool) error {
-	in.root = paths.Resolve(in.opts.Dir)
+	root, err := paths.Resolve(in.opts.Dir)
+	if err != nil {
+		return exitcodes.New(exitcodes.BadRequest, err.Error())
+	}
+	in.root = root
 	st := Status{Dir: in.root.Dir, Source: string(in.root.Source)}
 
 	if !paths.IsInstall(in.root.Dir) {

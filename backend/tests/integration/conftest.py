@@ -1,14 +1,18 @@
 import ast
 import os
+import socket
 import subprocess
-from collections.abc import Callable, Generator
+import threading
+from collections.abc import Callable, Generator, Iterator
 from pathlib import Path
 from typing import Any
 from unittest.mock import patch
+from uuid import uuid4
 
 import pytest
+import uvicorn
 
-# Integration tests rely on this mode to enable mock_llm_response paths.
+# Enables test-only server behavior, e.g. ToolCallDebug packets.
 os.environ["INTEGRATION_TESTS_MODE"] = "true"
 
 # Backend directory (`/workspace/backend`) — root for alembic / craft / etc.
@@ -41,7 +45,7 @@ from fastapi.testclient import TestClient  # noqa: E402
 
 # Import `onyx.main` BEFORE calling fetch_versioned_implementation ourselves.
 # onyx.main's module body (line 706) already calls fetch_versioned_implementation
-# under set_is_ee_based_on_env_variable(). If our fixture is the first to invoke
+# under set_is_ee_if_available(). If our fixture is the first to invoke
 # the dispatcher, the recursion goes:
 #   fixture -> fetch_versioned_implementation -> import ee.onyx.main
 #     -> ee.onyx.main line 53 `from onyx.main import get_application`
@@ -56,7 +60,6 @@ from onyx.db.engine.sql_engine import (  # noqa: E402
     SqlEngine,
     get_session_with_current_tenant,
 )
-from onyx.db.search_settings import get_current_search_settings  # noqa: E402
 from onyx.utils.variable_functionality import (  # noqa: E402
     fetch_versioned_implementation,
 )
@@ -65,6 +68,9 @@ from tests.integration.common_utils import http_client  # noqa: E402
 from tests.integration.common_utils.constants import (  # noqa: E402
     ADMIN_USER_NAME,
     GENERAL_HEADERS,
+)
+from tests.integration.common_utils.document_index import (  # noqa: E402
+    DocumentIndexClient,
 )
 from tests.integration.common_utils.managers.api_key import APIKeyManager  # noqa: E402
 from tests.integration.common_utils.managers.document import (  # noqa: E402
@@ -75,6 +81,10 @@ from tests.integration.common_utils.managers.image_generation import (  # noqa: 
 )
 from tests.integration.common_utils.managers.llm_provider import (  # noqa: E402
     LLMProviderManager,
+)
+from tests.integration.common_utils.managers.mock_llm import (  # noqa: E402
+    MockLLMManager,
+    MockLLMScript,
 )
 from tests.integration.common_utils.managers.user import (  # noqa: E402
     DEFAULT_PASSWORD,
@@ -96,7 +106,9 @@ from tests.integration.common_utils.test_models import (  # noqa: E402
     DATestUser,
     SimpleTestDocument,
 )
-from tests.integration.common_utils.vespa import vespa_fixture  # noqa: E402
+from tests.integration.mock_services.mock_llm_server.server import (  # noqa: E402
+    run_in_thread,
+)
 
 BASIC_USER_NAME = "basic_user"
 
@@ -141,7 +153,7 @@ _CELERY_WORKER_PROGRAMS: list[tuple[str, str]] = [
     (
         "light",
         "vespa_metadata_sync,connector_deletion,doc_permissions_upsert,"
-        "checkpoint_cleanup,index_attempt_cleanup,index_reclaim,opensearch_migration",
+        "checkpoint_cleanup,index_attempt_cleanup,index_reclaim",
     ),
     (
         "heavy",
@@ -155,6 +167,7 @@ _CELERY_WORKER_PROGRAMS: list[tuple[str, str]] = [
     ),
     ("scheduled_tasks", "scheduled_tasks"),
     ("docfetching", "connector_doc_fetching"),
+    ("docconversion", "docconversion"),
     ("monitoring", "monitoring"),
 ]
 
@@ -298,9 +311,9 @@ def _test_client(
 ) -> Generator[TestClient, None, None]:
     # In-process api_server. Use the versioned dispatcher so MT / EE
     # builds get ee.onyx.main.get_application — that's the one that
-    # registers add_api_server_tenant_id_middleware (required to populate
+    # registers tenant_id_middleware (required to populate
     # CURRENT_TENANT_ID_CONTEXTVAR from the auth cookie in cloud mode).
-    # `set_is_ee_based_on_env_variable()` already ran at onyx.main module
+    # `set_is_ee_if_available()` already ran at onyx.main module
     # load above; the dispatcher hits the lru_cache and resolves to the
     # right implementation.
     # Patch setup_prometheus_metrics to avoid "Duplicated timeseries" if
@@ -318,6 +331,36 @@ def _test_client(
             yield test_client
         finally:
             http_client.set_test_client(None)
+
+
+@pytest.fixture(scope="module")
+def streaming_api(_test_client: TestClient) -> Iterator[str]:
+    """Serve the initialized application without buffering streaming responses."""
+    started = threading.Event()
+
+    class StreamingServer(uvicorn.Server):
+        async def startup(self, sockets: list[socket.socket] | None = None) -> None:
+            await super().startup(sockets)
+            started.set()
+
+    server = StreamingServer(
+        uvicorn.Config(
+            _test_client.app,
+            host="127.0.0.1",
+            port=0,
+            lifespan="off",
+            log_level="warning",
+        )
+    )
+    assert _test_client.portal is not None
+    worker = _test_client.portal.start_task_soon(server.serve)
+    try:
+        assert started.wait(15), "Streaming API did not start"
+        port = server.servers[0].sockets[0].getsockname()[1]
+        yield f"http://127.0.0.1:{port}"
+    finally:
+        server.should_exit = True
+        worker.result(timeout=15)
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -344,10 +387,8 @@ instantiate the session directly within the test.
 
 
 @pytest.fixture
-def vespa_client() -> vespa_fixture:
-    with get_session_with_current_tenant() as db_session:
-        search_settings = get_current_search_settings(db_session)
-        return vespa_fixture(index_name=search_settings.index_name)
+def document_index_client() -> DocumentIndexClient:
+    return DocumentIndexClient()
 
 
 @pytest.fixture
@@ -449,6 +490,36 @@ def reset_multitenant() -> None:
 @pytest.fixture
 def llm_provider(admin_user: DATestUser) -> DATestLLMProvider:
     return LLMProviderManager.create(user_performing_action=admin_user)
+
+
+@pytest.fixture(scope="session")
+def mock_llm_server() -> Generator[str, None, None]:
+    with run_in_thread() as base_url:
+        yield base_url
+
+
+@pytest.fixture
+def mock_llm(
+    mock_llm_server: str, admin_user: DATestUser
+) -> Generator[MockLLMScript, None, None]:
+    """Make a new script on the mock LLM server the default LLM for one test.
+    Teardown restores the previous default provider and fails on unmatched
+    requests or unused required replies."""
+    handle = MockLLMScript(mock_llm_server, uuid4().hex)
+    try:
+        previous_default = LLMProviderManager.get_default_model(admin_user)
+        provider = MockLLMManager.create(handle.api_base, admin_user)
+    except Exception:
+        handle.close()
+        raise
+
+    yield handle
+
+    try:
+        MockLLMManager.delete(provider, previous_default, admin_user)
+        handle.verify()
+    finally:
+        handle.close()
 
 
 @pytest.fixture

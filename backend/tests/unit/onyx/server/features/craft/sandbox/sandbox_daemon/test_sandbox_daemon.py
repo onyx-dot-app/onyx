@@ -1,28 +1,30 @@
 """In-pod sandbox_daemon server tests.
 
 Behavior tests over the FastAPI sandbox_daemon (push + snapshot endpoints) using
-``fastapi.testclient``. The sandbox_daemon module is loaded dynamically under the
-``sandbox_daemon`` package name because its in-container layout (``COPY sandbox_daemon/
-/workspace/sandbox_daemon``) isn't reflected in the backend Python path.
+``fastapi.testclient``. Tests add the sandbox image directory to the import path,
+so Python uses the same ``sandbox_daemon`` package name as the container.
 """
 
 from __future__ import annotations
 
+import asyncio
 import base64
 import hashlib
-import importlib.util
+import importlib
 import io
+import json
 import os
 import shutil
 import sqlite3
 import sys
 import tarfile
 import time
-import types
+import tracemalloc
 from collections.abc import Generator
 from pathlib import Path
 from types import ModuleType
-from uuid import UUID
+from typing import Any
+from uuid import UUID, uuid4
 
 import httpx
 import pytest
@@ -30,12 +32,14 @@ from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PrivateKey
 from cryptography.hazmat.primitives.serialization import Encoding, PublicFormat
 from fastapi.testclient import TestClient
 
-from onyx.server.features.build.sandbox.image.sandbox_daemon.contract import (
+import onyx.server.features.build.sandbox.kubernetes.sidecar_client as sidecar
+from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
     SIDECAR_FILESYSTEM_LIST_PATH,
     SIDECAR_HEALTH_PATH,
     SIDECAR_OPENCODE_HISTORY_CREATE_PATH,
     SIDECAR_OPENCODE_HISTORY_MARK_RESTORED_PATH,
     SIDECAR_OPENCODE_HISTORY_RESTORE_PATH,
+    SIDECAR_OUTPUTS_MANIFEST_PATH,
     SIDECAR_READY_PATH,
     SIDECAR_SNAPSHOT_CREATE_PATH,
     FilesystemListRequest,
@@ -47,53 +51,6 @@ _REPO_ROOT = find_ancestor_containing("backend/onyx")
 _DAEMON_DIR = (
     _REPO_ROOT / "backend/onyx/server/features/build/sandbox/image/sandbox_daemon"
 )
-
-
-def _load_sandbox_daemon_modules() -> tuple[ModuleType, ModuleType]:
-    """Load ``sandbox_daemon.extract`` and ``sandbox_daemon.server`` from the sandbox_daemon
-    directory.
-
-    The sandbox_daemon's source imports ``from sandbox_daemon.extract import ...`` because
-    in the container the directory is copied to ``/workspace/sandbox_daemon/``.
-    The test runner doesn't have that path, so we register the modules under
-    the expected names in ``sys.modules`` before loading server.py.
-    """
-    if (
-        "sandbox_daemon.server" in sys.modules
-        and "sandbox_daemon.contract" in sys.modules
-        and "sandbox_daemon.extract" in sys.modules
-        and "sandbox_daemon.filesystem" in sys.modules
-    ):
-        return sys.modules["sandbox_daemon.extract"], sys.modules[
-            "sandbox_daemon.server"
-        ]
-
-    if "sandbox_daemon" not in sys.modules:
-        sys.modules["sandbox_daemon"] = types.ModuleType("sandbox_daemon")
-
-    for name in (
-        "contract",
-        "extract",
-        "snapshot",
-        "opencode_history",
-        "filesystem",
-        "manifest",
-        "server",
-    ):
-        spec = importlib.util.spec_from_file_location(
-            f"sandbox_daemon.{name}", str(_DAEMON_DIR / f"{name}.py")
-        )
-        assert spec is not None and spec.loader is not None
-        mod = importlib.util.module_from_spec(spec)
-        sys.modules[f"sandbox_daemon.{name}"] = mod
-        spec.loader.exec_module(mod)
-
-    return sys.modules["sandbox_daemon.extract"], sys.modules["sandbox_daemon.server"]
-
-
-# ---------------------------------------------------------------------------
-# Key / signing helpers
-# ---------------------------------------------------------------------------
 
 
 def _new_keypair() -> tuple[Ed25519PrivateKey, str]:
@@ -168,9 +125,14 @@ def _write_test_sqlite_db(path: Path, body: str) -> None:
 
 
 @pytest.fixture
-def sandbox_daemon_modules() -> tuple[ModuleType, ModuleType]:
-    """Load extract + server modules once per test."""
-    return _load_sandbox_daemon_modules()
+def sandbox_daemon_modules(
+    monkeypatch: pytest.MonkeyPatch,
+) -> tuple[ModuleType, ModuleType]:
+    monkeypatch.syspath_prepend(str(_DAEMON_DIR.parent))
+    return (
+        importlib.import_module("sandbox_daemon.extract"),
+        importlib.import_module("sandbox_daemon.server"),
+    )
 
 
 @pytest.fixture
@@ -568,37 +530,6 @@ def test_push_with_sha_mismatch_returns_400(
     )
     assert resp.status_code == 400
     assert "SHA-256" in resp.text or "mismatch" in resp.text.lower()
-
-
-def test_push_over_size_cap_returns_413(
-    configured_sandbox_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
-    client: TestClient,
-) -> None:
-    """Content-Length > 100 MiB -> 413, body never streamed."""
-    extract_mod, _, priv, allowed_root = configured_sandbox_daemon
-    mount_path = str(allowed_root / "skills")
-
-    # Use a small body but advertise a huge Content-Length. The daemon rejects
-    # based on the header before reading the body.
-    body = _build_targz_bytes({"x": b"x"})
-    huge = str(extract_mod.MAX_BUNDLE_BYTES + 1)
-    sha = hashlib.sha256(body).hexdigest()
-    ts = str(int(time.time()))
-    sig = _sign(priv, mount_path=mount_path, sha256_hex=sha, timestamp=ts)
-
-    resp = client.post(
-        "/push",
-        params={"mount_path": mount_path},
-        content=body,
-        headers={
-            "Content-Type": "application/gzip",
-            "Content-Length": huge,
-            "X-Bundle-Sha256": sha,
-            "X-Push-Signature": sig,
-            "X-Push-Timestamp": ts,
-        },
-    )
-    assert resp.status_code == 413
 
 
 def test_push_to_mount_path_outside_allowed_prefix_returns_400(
@@ -1459,12 +1390,19 @@ def test_snapshot_create_excludes_generated_dirs_from_size_check_and_archive(
     (session_path / "outputs/apps/admin/node_modules/pkg").mkdir(parents=True)
     (session_path / "outputs/apps/admin/.next/cache").mkdir(parents=True)
     (session_path / "attachments/node_modules/pkg").mkdir(parents=True)
+    (session_path / "outputs/user/.document-thumbnails").mkdir(parents=True)
+    (session_path / "outputs/user/.document-thumbnails/owned.txt").write_bytes(b"keep")
+    (session_path / "outputs/.document-thumbnails/report").mkdir(parents=True)
     (session_path / "outputs/apps/admin/app/page.tsx").write_text("ok\n")
     (session_path / "outputs/apps/admin/node_modules/pkg/index.js").write_bytes(
         b"x" * 1024
     )
     (session_path / "outputs/apps/admin/.next/cache/blob").write_bytes(b"y" * 1024)
     (session_path / "attachments/node_modules/pkg/index.js").write_text("keep\n")
+    (session_path / "outputs/.document-thumbnails/report/slide-1.jpg").write_bytes(
+        b"z" * 1024
+    )
+    (session_path / "outputs/.document-thumbnails/report/.conversion.lock").touch()
     monkeypatch.setattr(snapshot_mod, "SESSIONS_ROOT", sessions_root)
     monkeypatch.setattr(snapshot_mod, "MAX_SNAPSHOT_UNCOMPRESSED_BYTES", 16)
 
@@ -1473,11 +1411,15 @@ def test_snapshot_create_excludes_generated_dirs_from_size_check_and_archive(
     with tarfile.open(fileobj=io.BytesIO(archive_bytes), mode="r:gz") as tar:
         members = tar.getnames()
     assert "outputs/apps/admin/app/page.tsx" in members
+    assert "outputs/user/.document-thumbnails/owned.txt" in members
     assert "attachments/node_modules/pkg/index.js" in members
     assert not any(
         member.startswith("outputs/apps/admin/node_modules") for member in members
     )
     assert not any(member.startswith("outputs/apps/admin/.next") for member in members)
+    assert not any(
+        member.startswith("outputs/.document-thumbnails") for member in members
+    )
 
 
 @pytest.mark.parametrize(
@@ -1596,3 +1538,294 @@ def test_push_signature_cannot_be_replayed_against_snapshot_endpoint(
         timestamp=ts,
     )
     assert resp.status_code == 401
+
+
+@pytest.mark.parametrize("include_web", [False, True])
+def test_output_manifest_client_and_daemon_contract(
+    client: TestClient,
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+    keypair: tuple[Ed25519PrivateKey, str],
+    include_web: bool,
+) -> None:
+    session_id = uuid4()
+    sessions_root = tmp_path / "sessions"
+    outputs = sessions_root / str(session_id) / "outputs"
+    outputs.mkdir(parents=True)
+    (outputs / "deck.pptx").write_bytes(b"presentation")
+    (outputs / "web").mkdir()
+    (outputs / "web" / "page.tsx").write_text("source")
+    monkeypatch.setattr(
+        sys.modules["sandbox_daemon.outputs_manifest"], "SESSIONS_ROOT", sessions_root
+    )
+    monkeypatch.setattr(sidecar, "get_push_key_pair", lambda: keypair)
+    bodies: list[bytes] = []
+
+    def dispatch(request: httpx.Request) -> httpx.Response:
+        assert request.url.path == SIDECAR_OUTPUTS_MANIFEST_PATH
+        bodies.append(request.content)
+        return client.request(
+            request.method,
+            request.url.path,
+            content=request.content,
+            headers=request.headers,
+        )
+
+    http_client_class = httpx.Client
+
+    def in_process_client(*, timeout: float) -> httpx.Client:
+        return http_client_class(
+            transport=httpx.MockTransport(dispatch), timeout=timeout
+        )
+
+    monkeypatch.setattr(sidecar.httpx, "Client", in_process_client)
+    transport = sidecar.SidecarClient(host=lambda _: "sandbox.test")
+    result = transport.outputs_manifest(
+        sandbox_id=uuid4(), session_id=session_id, include_web=include_web
+    )
+    expected_body: dict[str, object] = {"session_id": str(session_id)}
+    if include_web:
+        expected_body["include_web"] = True
+    assert [entry.path for entry in result.entries] == (
+        ["deck.pptx", "web/page.tsx"] if include_web else ["deck.pptx"]
+    )
+    assert result.entries[0].size == len(b"presentation")
+    assert result.complete
+
+    assert len(bodies) == 1
+    assert json.loads(bodies[0]) == expected_body
+    assert result.entries[0].mtime_ns == (outputs / "deck.pptx").stat().st_mtime_ns
+    assert result.entries[0].ctime_ns == (outputs / "deck.pptx").stat().st_ctime_ns
+
+
+# ---------------------------------------------------------------------------
+# Streamed push
+# ---------------------------------------------------------------------------
+
+
+@pytest.fixture
+def spool_dir(
+    configured_sandbox_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
+    tmp_path: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> Path:
+    """Folder that receives the daemon's spooled push bodies."""
+    _, server_mod, _, _ = configured_sandbox_daemon
+    path = tmp_path / "spool"
+    monkeypatch.setattr(server_mod, "_PUSH_SPOOL_DIR", path)
+    return path
+
+
+def _signed_push_headers(
+    priv: Ed25519PrivateKey, mount_path: str, sha256_hex: str
+) -> dict[str, str]:
+    ts = str(int(time.time()))
+    return {
+        "Content-Type": "application/gzip",
+        "X-Bundle-Sha256": sha256_hex,
+        "X-Push-Signature": _sign(
+            priv, mount_path=mount_path, sha256_hex=sha256_hex, timestamp=ts
+        ),
+        "X-Push-Timestamp": ts,
+    }
+
+
+def _write_large_archive(path: Path, file_count: int, file_bytes: int) -> str:
+    """Write an incompressible tar.gz (gzip level 0) and return its SHA-256."""
+    block = os.urandom(1024 * 1024)
+
+    class _Repeat(io.RawIOBase):
+        def __init__(self, size: int) -> None:
+            self._left = size
+
+        def readable(self) -> bool:
+            return True
+
+        def readinto(self, buffer: Any) -> int:
+            n = min(len(buffer), self._left, len(block))
+            buffer[:n] = block[:n]
+            self._left -= n
+            return n
+
+    with tarfile.open(path, mode="w:gz", compresslevel=0) as tar:
+        for index in range(file_count):
+            info = tarfile.TarInfo(name=f"big-skill/part-{index}.bin")
+            info.size = file_bytes
+            tar.addfile(info, io.BufferedReader(_Repeat(file_bytes)))
+    digest = hashlib.sha256()
+    with path.open("rb") as archive:
+        for chunk in iter(lambda: archive.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
+
+
+async def _asgi_push_from_file(
+    app: Any,
+    *,
+    archive: io.BufferedReader,
+    size: int,
+    mount_path: str,
+    headers: dict[str, str],
+) -> int:
+    """Send a push to the ASGI app in 1 MiB chunks read from disk, the way a
+    server hands the body to the app. Returns the response status."""
+    raw_headers = [
+        (key.lower().encode(), value.encode())
+        for key, value in {**headers, "Content-Length": str(size)}.items()
+    ]
+    scope = {
+        "type": "http",
+        "asgi": {"version": "3.0"},
+        "http_version": "1.1",
+        "method": "POST",
+        "scheme": "http",
+        "path": "/push",
+        "raw_path": b"/push",
+        "query_string": f"mount_path={mount_path}".encode(),
+        "headers": raw_headers,
+        "client": ("127.0.0.1", 1),
+        "server": ("127.0.0.1", 8731),
+    }
+    status: list[int] = []
+
+    async def receive() -> dict[str, Any]:
+        chunk = archive.read(1024 * 1024)
+        return {"type": "http.request", "body": chunk, "more_body": bool(chunk)}
+
+    async def send(message: dict[str, Any]) -> None:
+        if message["type"] == "http.response.start":
+            status.append(message["status"])
+
+    await app(scope, receive, send)
+    return status[0]
+
+
+def test_large_push_streams_with_bounded_memory(
+    configured_sandbox_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
+    spool_dir: Path,
+    tmp_path: Path,
+) -> None:
+    """The handler spools the body to disk and extracts from the file, so
+    traced memory stays far below the body size."""
+    _, server_mod, priv, allowed_root = configured_sandbox_daemon
+    mount_path = str(allowed_root / "skills")
+    archive_path = tmp_path / "push.tar.gz"
+    file_bytes = 8 * 1024 * 1024
+    sha = _write_large_archive(archive_path, file_count=8, file_bytes=file_bytes)
+    body_bytes = archive_path.stat().st_size
+    assert body_bytes > 64 * 1024 * 1024
+
+    tracemalloc.start()
+    try:
+        with archive_path.open("rb") as archive:
+            status = asyncio.run(
+                _asgi_push_from_file(
+                    server_mod.app,
+                    archive=archive,
+                    size=body_bytes,
+                    mount_path=mount_path,
+                    headers=_signed_push_headers(priv, mount_path, sha),
+                )
+            )
+        _, peak = tracemalloc.get_traced_memory()
+    finally:
+        tracemalloc.stop()
+
+    assert status == 200
+    assert peak < 16 * 1024 * 1024, f"peak traced memory {peak} bytes"
+    extracted = Path(mount_path) / "big-skill"
+    assert sorted(p.stat().st_size for p in extracted.iterdir()) == [file_bytes] * 8
+    assert list(spool_dir.iterdir()) == []
+
+
+def test_push_body_over_the_cap_is_refused_and_keeps_the_live_tree(
+    configured_sandbox_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
+    client: TestClient,
+    spool_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A body with no Content-Length is counted while it streams."""
+    _, server_mod, priv, allowed_root = configured_sandbox_daemon
+    mount_path = str(allowed_root / "skills")
+    keep = _build_targz_bytes({"keep.txt": b"keep"})
+    assert _push_request(client, priv=priv, mount_path=mount_path, body=keep).is_success
+    live = Path(mount_path).resolve()
+    body = _build_targz_bytes({"big.bin": os.urandom(8192)})
+    monkeypatch.setattr(server_mod, "MAX_ARCHIVE_BYTES", len(body) - 1)
+
+    def chunks() -> Generator[bytes, None, None]:
+        for start in range(0, len(body), 1000):
+            yield body[start : start + 1000]
+
+    resp = client.post(
+        "/push",
+        params={"mount_path": mount_path},
+        content=chunks(),
+        headers=_signed_push_headers(
+            priv, mount_path, hashlib.sha256(body).hexdigest()
+        ),
+    )
+
+    assert resp.status_code == 413
+    assert Path(mount_path).resolve() == live
+    assert list(spool_dir.iterdir()) == []
+
+
+def test_push_with_a_content_length_over_the_cap_is_refused_before_it_is_spooled(
+    configured_sandbox_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
+    client: TestClient,
+    spool_dir: Path,
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """The client sends a Content-Length. The daemon refuses a declared size
+    past the cap before it takes the push lock or touches the spool."""
+    _, server_mod, priv, allowed_root = configured_sandbox_daemon
+    body = _build_targz_bytes({"big.bin": os.urandom(8192)})
+    monkeypatch.setattr(server_mod, "MAX_ARCHIVE_BYTES", len(body) - 1)
+    spool_dir.mkdir(parents=True)
+    leftover = spool_dir / "left-by-a-killed-sidecar.tar.gz"
+    leftover.write_bytes(b"partial")
+
+    resp = _push_request(
+        client, priv=priv, mount_path=str(allowed_root / "skills"), body=body
+    )
+
+    assert resp.status_code == 413
+    assert leftover.exists()
+
+
+@pytest.mark.parametrize("case", ["sha_mismatch", "traversal", "corrupt_gzip"])
+def test_refused_push_removes_the_spooled_body_and_keeps_the_live_tree(
+    configured_sandbox_daemon: tuple[ModuleType, ModuleType, Ed25519PrivateKey, Path],
+    client: TestClient,
+    spool_dir: Path,
+    case: str,
+) -> None:
+    _, _, priv, allowed_root = configured_sandbox_daemon
+    mount_path = str(allowed_root / "skills")
+    keep = _build_targz_bytes({"keep.txt": b"keep"})
+    assert _push_request(client, priv=priv, mount_path=mount_path, body=keep).is_success
+    live = Path(mount_path).resolve()
+    (spool_dir / "left-by-a-killed-sidecar.tar.gz").write_bytes(b"partial")
+
+    if case == "sha_mismatch":
+        body = _build_targz_bytes({"a.txt": b"a"})
+        resp = client.post(
+            "/push",
+            params={"mount_path": mount_path},
+            content=body,
+            headers=_signed_push_headers(priv, mount_path, "0" * 64),
+        )
+    else:
+        body = (
+            _build_targz_bytes({"../escape.txt": b"oops"})
+            if case == "traversal"
+            else _build_targz_bytes({"a.bin": os.urandom(65536)})[:1000]
+        )
+        resp = _push_request(client, priv=priv, mount_path=mount_path, body=body)
+
+    assert resp.status_code == 400, resp.text
+    assert Path(mount_path).resolve() == live
+    assert (live / "keep.txt").read_bytes() == b"keep"
+    assert list(live.parent.iterdir()) == [live]
+    assert list(spool_dir.iterdir()) == []

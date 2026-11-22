@@ -1,18 +1,17 @@
 import io
 import zipfile
 from pathlib import Path
-from unittest.mock import Mock
 
 import pytest
 
-from onyx.db.models import Skill
-from onyx.file_store.file_store import FileStore
 from onyx.skills import built_in as built_in_module
 from onyx.skills.built_in import BuiltInSkillDefinition
-from onyx.skills.content import (
-    read_builtin_skill_instructions,
-    read_custom_skill_bundle_instructions,
+from onyx.skills.bundle import (
+    compute_bundle_manifest,
+    custom_bundle_contents_from_stored,
+    inspect_custom_bundle,
 )
+from onyx.skills.content import read_builtin_skill_instructions
 
 
 def _build_zip(entries: list[tuple[str, bytes]]) -> bytes:
@@ -48,23 +47,26 @@ def test_read_builtin_skill_instructions_strips_frontmatter(
     )
 
 
-def test_read_custom_skill_bundle_instructions_reads_bundle_from_file_store() -> None:
+def test_stored_contents_match_the_bundle() -> None:
+    """The editor shows the same instructions and files from the database as
+    from the bundle."""
     zip_bytes = _build_zip(
         [
             (
                 "SKILL.md",
-                b"---\nname: Preview\ndescription: Demo\n---\n\n# Instructions\n\nDo it.",
+                b"---\nname: preview\ndescription: Demo\n---\n\n# Instructions\n\nDo it.",
             ),
             ("scripts/run.py", b"print('hi')"),
+            ("refs/b.md", b"b"),
         ]
     )
-    file_store = Mock(spec=FileStore)
-    file_store.read_file.return_value = io.BytesIO(zip_bytes)
+    with zipfile.ZipFile(io.BytesIO(zip_bytes)) as zf:
+        skill_md = zf.read("SKILL.md").decode("utf-8")
 
-    instructions = read_custom_skill_bundle_instructions(
-        Skill(name="preview-test", bundle_file_id="bundle-file-id"),
-        file_store,
+    from_db = custom_bundle_contents_from_stored(
+        skill_md, compute_bundle_manifest(zip_bytes)
     )
 
-    file_store.read_file.assert_called_once_with("bundle-file-id")
-    assert instructions == "# Instructions\n\nDo it."
+    assert from_db == inspect_custom_bundle(zip_bytes)
+    assert from_db.instructions_markdown == "# Instructions\n\nDo it."
+    assert [entry.path for entry in from_db.files] == ["refs/b.md", "scripts/run.py"]

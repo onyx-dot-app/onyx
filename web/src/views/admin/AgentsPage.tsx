@@ -1,9 +1,9 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { SvgOnyxOctagon, SvgPlus } from "@opal/icons";
 import { Button } from "@opal/components";
 import { SettingsLayouts } from "@opal/layouts";
-import Link from "next/link";
 import { useTranslations } from "next-intl";
 
 import AgentsTable from "./AgentsPage/AgentsTable";
@@ -14,6 +14,7 @@ import AgentsTable from "./AgentsPage/AgentsTable";
 
 export default function AgentsPage() {
   const t = useTranslations("admin.agents");
+  const navigation = useNavigation();
 
   return (
     <SettingsLayouts.Root>
@@ -21,11 +22,15 @@ export default function AgentsPage() {
         title={t("header.title")}
         description={t("header.description")}
         icon={SvgOnyxOctagon}
-        rightChildren={
-          <Button href="/app/agents/create?admin=true" icon={SvgPlus}>
+        actions={[
+          <Button
+            key="primary"
+            {...navigation.linkTo("/app/agents/create?admin=true")}
+            icon={SvgPlus}
+          >
             {t("newAgentButton.label")}
-          </Button>
-        }
+          </Button>,
+        ]}
       />
       <SettingsLayouts.Body>
         <AgentsTable />

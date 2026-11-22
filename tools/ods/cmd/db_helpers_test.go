@@ -30,6 +30,10 @@ func dbSetup(t *testing.T) string {
 	if runtime.GOOS == "windows" {
 		t.Skip("the fake binaries are shell scripts")
 	}
+	gitPath := dbGitPath(t)
+	previousProject, previousIsolated := rootProject, rootIsolated
+	rootProject, rootIsolated = "", true
+	t.Cleanup(func() { rootProject, rootIsolated = previousProject, previousIsolated })
 	for _, key := range dbPostgresEnv {
 		t.Setenv(key, "")
 	}
@@ -39,6 +43,7 @@ func dbSetup(t *testing.T) string {
 	t.Setenv("XDG_CONFIG_HOME", filepath.Join(home, "config"))
 	binDir := t.TempDir()
 	t.Setenv("PATH", binDir)
+	dbFakeRepo(t, binDir, gitPath)
 	return binDir
 }
 
@@ -85,7 +90,11 @@ func dbFakeDocker(t *testing.T, binDir, behaviour string) (string, func() [][]st
 	t.Helper()
 	calls := dbFakeBinary(t, binDir, "docker", behaviour+"\n"+
 		`if [ "$1" = inspect ]; then echo true; fi`)
-	return docker.ProjectName() + "-relational_db-1", calls
+	target, err := resolveRuntimeTarget()
+	if err != nil {
+		t.Fatal(err)
+	}
+	return docker.ContainerName(target.Project, "relational_db"), calls
 }
 
 // dbDockerExecs keeps only the `docker exec` and `docker cp` invocations,

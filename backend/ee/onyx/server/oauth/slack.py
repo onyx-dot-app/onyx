@@ -1,29 +1,33 @@
 import base64
 import uuid
-from typing import cast
 
 import requests
-from fastapi import Depends, HTTPException
+from fastapi import Depends
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from sqlalchemy.orm import Session
 
 from ee.onyx.server.oauth.api_router import router
 from onyx.auth.permissions import require_permission
+from onyx.cache.factory import get_cache_backend
 from onyx.configs.app_configs import (
     DEV_MODE,
     OAUTH_SLACK_CLIENT_ID,
     OAUTH_SLACK_CLIENT_SECRET,
+    REQUEST_TIMEOUT_SECONDS,
     WEB_DOMAIN,
 )
 from onyx.configs.constants import DocumentSource
+from onyx.configs.slack_configs import (
+    SLACK_OAUTH_ACCESS_URL,
+    SLACK_OAUTH_AUTHORIZE_URL,
+)
 from onyx.db.credentials import create_credential
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.redis.redis_pool import get_redis_client
 from onyx.server.documents.models import CredentialBase
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -42,7 +46,7 @@ class SlackOAuth:
     CLIENT_ID = OAUTH_SLACK_CLIENT_ID
     CLIENT_SECRET = OAUTH_SLACK_CLIENT_SECRET
 
-    TOKEN_URL = "https://slack.com/api/oauth.v2.access"
+    TOKEN_URL = SLACK_OAUTH_ACCESS_URL
 
     # SCOPE is per https://docs.onyx.app/admins/connectors/official/slack/slack_indexed
     BOT_SCOPE = (
@@ -75,7 +79,7 @@ class SlackOAuth:
     @classmethod
     def _generate_oauth_url_helper(cls, redirect_uri: str, state: str) -> str:
         url = (
-            f"https://slack.com/oauth/v2/authorize"
+            f"{SLACK_OAUTH_AUTHORIZE_URL}"
             f"?client_id={cls.CLIENT_ID}"
             f"&redirect_uri={redirect_uri}"
             f"&scope={cls.BOT_SCOPE}"
@@ -110,12 +114,12 @@ def handle_slack_oauth_callback(
     tenant_id: str | None = Depends(get_current_tenant_id),
 ) -> JSONResponse:
     if not SlackOAuth.CLIENT_ID or not SlackOAuth.CLIENT_SECRET:
-        raise HTTPException(
-            status_code=500,
-            detail="Slack client ID or client secret is not configured.",
+        raise OnyxError(
+            OnyxErrorCode.INTERNAL_ERROR,
+            "Slack client ID or client secret is not configured.",
         )
 
-    r = get_redis_client(tenant_id=tenant_id)
+    cache = get_cache_backend(tenant_id=tenant_id)
 
     # recover the state
     padded_state = state + "=" * (
@@ -131,11 +135,11 @@ def handle_slack_oauth_callback(
 
     r_key = f"da_oauth:{oauth_uuid_str}"
 
-    session_json_bytes = cast(bytes, r.get(r_key))
+    session_json_bytes = cache.get(r_key)
     if not session_json_bytes:
-        raise HTTPException(
-            status_code=400,
-            detail=f"Slack OAuth failed - OAuth state key not found: key={r_key}",
+        raise OnyxError(
+            OnyxErrorCode.BAD_REQUEST,
+            f"Slack OAuth failed - OAuth state key not found: key={r_key}",
         )
 
     session_json = session_json_bytes.decode("utf-8")
@@ -163,14 +167,15 @@ def handle_slack_oauth_callback(
                 "code": code,
                 "redirect_uri": redirect_uri,
             },
+            timeout=REQUEST_TIMEOUT_SECONDS,
         )
 
         response_data = response.json()
 
         if not response_data.get("ok"):
-            raise HTTPException(
-                status_code=400,
-                detail=f"Slack OAuth failed: {response_data.get('error')}",
+            raise OnyxError(
+                OnyxErrorCode.BAD_REQUEST,
+                f"Slack OAuth failed: {response_data.get('error')}",
             )
 
         # Extract token and team information
@@ -195,7 +200,7 @@ def handle_slack_oauth_callback(
             },
         )
     finally:
-        r.delete(r_key)
+        cache.delete(r_key)
 
     # return the result
     return JSONResponse(

@@ -295,7 +295,7 @@ class TestChangeFileId:
 
         with (
             patch(
-                "onyx.file_store.postgres_file_store.get_filerecord_by_file_id",
+                "onyx.file_store.postgres_file_store.get_filerecord_by_file_id_for_update",
                 return_value=old_fr,
             ),
             patch(

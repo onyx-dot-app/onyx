@@ -5,7 +5,9 @@ from unittest.mock import MagicMock, patch
 from uuid import UUID, uuid4
 
 from onyx.db.enums import SandboxStatus
-from onyx.server.features.build.sandbox.models import FilesystemEntry
+from onyx.server.features.build.sandbox.image.sandbox_daemon.models import (
+    FilesystemEntry,
+)
 from onyx.server.features.build.session.manager import SessionManager
 from tests.common.craft.stubs import StubSandboxManager
 

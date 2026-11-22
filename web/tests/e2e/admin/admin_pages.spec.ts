@@ -40,9 +40,13 @@ async function discoverAdminPages(page: Page): Promise<string[]> {
  * during the screenshot yields non-deterministic baseline diffs. Excluding the
  * page here keeps the sweep stable; a shared visual baseline isn't a good fit
  * for a list whose contents depend on concurrent test state.
+ *
+ * ADMIN_ROUTES.SERVICE_STATUS.path shows live cluster numbers, update times
+ * and search charts, which change between runs.
  */
 const VISUAL_REGRESSION_EXCLUDED_PATHS = new Set<string>([
   ADMIN_ROUTES.INDEXING_STATUS.path,
+  ADMIN_ROUTES.SERVICE_STATUS.path,
 ]);
 
 for (const theme of THEMES) {

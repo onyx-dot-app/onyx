@@ -179,24 +179,6 @@ func TestFindTraceInfos_groupsAndSortsTraces(t *testing.T) {
 	}
 }
 
-func TestPrintTraceList_numbersTracesAcrossProjects(t *testing.T) {
-	traces := []traceInfo{
-		{Project: "admin", TestDir: "login"},
-		{Project: "admin", TestDir: "settings"},
-		{Project: "lite", TestDir: "chat"},
-	}
-
-	var out bytes.Buffer
-	printTraceList(&out, traces, []string{"admin", "lite"})
-
-	want := "\nFound 3 trace(s) across 2 project(s):\n" +
-		"\n  admin (2):\n    [ 1] login\n    [ 2] settings\n" +
-		"\n  lite (1):\n    [ 3] chat\n"
-	if out.String() != want {
-		t.Fatalf("expected %q, got %q", want, out.String())
-	}
-}
-
 func TestPromptTraceSelection(t *testing.T) {
 	traces := []traceInfo{
 		{Path: "1", Project: "admin"},

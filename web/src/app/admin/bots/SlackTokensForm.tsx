@@ -1,31 +1,33 @@
 "use client";
 
-import { TextFormField } from "@/components/Field";
+import { useNavigation } from "@opal/navigation";
+import { FieldLabel, TextFormField } from "@/components/Field";
+import PasswordInputTypeInField from "@/refresh-components/form/PasswordInputTypeInField";
 import { useTranslations } from "next-intl";
 import { Form, Formik } from "formik";
 import * as Yup from "yup";
-import { createSlackBot, updateSlackBot } from "./new/lib";
+import { createSlackBot, updateSlackBot } from "@/app/admin/bots/new/lib";
 import { Button, Divider } from "@opal/components";
 import { useEffect } from "react";
 import { DOCS_ADMINS_PATH } from "@/lib/constants";
 import { toast } from "@opal/layouts";
+import { parseErrorDetail } from "@/lib/fetcher";
 
 export const SlackTokensForm = ({
   isUpdate,
   initialValues,
   existingSlackBotId,
   refreshSlackBot,
-  router,
   onValuesChange,
 }: {
   isUpdate: boolean;
   initialValues: any;
   existingSlackBotId?: number;
   refreshSlackBot?: () => void;
-  router: any;
   onValuesChange?: (values: any) => void;
 }) => {
   const t = useTranslations("admin.slackBots");
+  const navigation = useNavigation();
 
   useEffect(() => {
     if (onValuesChange) {
@@ -58,17 +60,32 @@ export const SlackTokensForm = ({
           if (refreshSlackBot) {
             refreshSlackBot();
           }
-          const responseJson = await response.json();
-          const botId = isUpdate ? existingSlackBotId : responseJson.id;
+          let botId = existingSlackBotId;
+          if (!isUpdate) {
+            const body: unknown = await response.json().catch((): null => null);
+            if (
+              typeof body === "object" &&
+              body !== null &&
+              "id" in body &&
+              typeof body.id === "number"
+            ) {
+              botId = body.id;
+            }
+          }
+
           toast.success(
             isUpdate
               ? t("tokensForm.updated.toast")
               : t("tokensForm.created.toast")
           );
-          router.push(`/admin/bots/${encodeURIComponent(botId)}`);
+          if (botId !== undefined) {
+            navigation.go(`/admin/bots/${encodeURIComponent(botId)}`);
+          }
         } else {
-          const responseJson = await response.json();
-          let errorMsg = responseJson.detail || responseJson.message;
+          let errorMsg = await parseErrorDetail(
+            response,
+            response.statusText || t("error.unknownOccurred.message")
+          );
 
           if (errorMsg.includes("Invalid bot token:")) {
             errorMsg = t("tokensForm.invalidBotToken.message");
@@ -113,22 +130,50 @@ export const SlackTokensForm = ({
               })}
             </div>
           )}
-          <TextFormField
-            name="bot_token"
-            label={t("tokensForm.botToken.label")}
-            type="password"
-          />
-          <TextFormField
-            name="app_token"
-            label={t("tokensForm.appToken.label")}
-            type="password"
-          />
-          <TextFormField
-            name="user_token"
-            label={t("tokensForm.userToken.label")}
-            type="password"
-            subtext={t("tokensForm.userToken.subtext")}
-          />
+          {/* On update, the tokens arrive masked from the backend. */}
+          <div className="w-full">
+            <FieldLabel
+              name="bot_token"
+              label={t("tokensForm.botToken.label")}
+            />
+            <div className="mt-1">
+              <PasswordInputTypeInField
+                name="bot_token"
+                existingValue={
+                  isUpdate ? (initialValues.bot_token ?? undefined) : undefined
+                }
+              />
+            </div>
+          </div>
+          <div className="w-full">
+            <FieldLabel
+              name="app_token"
+              label={t("tokensForm.appToken.label")}
+            />
+            <div className="mt-1">
+              <PasswordInputTypeInField
+                name="app_token"
+                existingValue={
+                  isUpdate ? (initialValues.app_token ?? undefined) : undefined
+                }
+              />
+            </div>
+          </div>
+          <div className="w-full">
+            <FieldLabel
+              name="user_token"
+              label={t("tokensForm.userToken.label")}
+              subtext={t("tokensForm.userToken.subtext")}
+            />
+            <div className="mt-1">
+              <PasswordInputTypeInField
+                name="user_token"
+                existingValue={
+                  isUpdate ? (initialValues.user_token ?? undefined) : undefined
+                }
+              />
+            </div>
+          </div>
           <div className="flex justify-end w-full mt-4">
             <Button
               disabled={

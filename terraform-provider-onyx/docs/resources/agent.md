@@ -93,18 +93,18 @@ resource "onyx_agent" "onboarding" {
 - `datetime_aware` (Boolean) Tell the agent the current date and time.
 - `default_model_configuration_id` (String) Id of the model configuration the agent uses. Leave unset to use the deployment default.
 - `description` (String) One line describing the agent, shown on its card.
-- `display_priority` (Number) Sort position in the assistant list. Lower sorts first. Onyx reads this from the agent only when it is created, so a later change is applied through its own endpoint as a second call. Removing the attribute leaves the last value in place rather than clearing it.
+- `display_priority` (Number) Sort position in the assistant list. Lower sorts first. Onyx reads this from the agent only when it is created, so a later change is applied through its own endpoint as a second call. Removing the attribute leaves the last value in place rather than clearing it. The second call needs full admin access, so an API key with scoped permissions cannot change it.
 - `document_set_ids` (Set of String) Ids of the document sets the agent can search, e.g. `[onyx_document_set.handbook.id]`.
 - `groups` (Set of Number) User group ids that may use the agent when it is not public. Enterprise Edition only.
 - `icon_name` (String) Name of the built-in icon shown on the agent's card.
 - `is_featured` (Boolean) Whether Onyx promotes the agent to users. Requires agent-management permission.
 - `is_listed` (Boolean) Whether the agent appears in the assistant list. A hidden agent still works for anyone holding a link to it. Onyx sets this through its own endpoint, so Terraform applies it as a second call after the agent is written.
 - `is_public` (Boolean) Whether every user can use the agent. When `false`, only `users` and `groups` can.
-- `label_ids` (Set of Number) Ids of the labels the agent is filed under. Labels are created in the admin panel.
+- `label_ids` (Set of Number) Ids of the labels the agent is filed under. Manage labels with `onyx_agent_label`.
 - `replace_base_system_prompt` (Boolean) Use `system_prompt` on its own instead of adding it to Onyx's base prompt. Replacing the base prompt drops the instructions that make citations and search work, so leave it off unless the agent needs full control.
 - `search_start_date` (String) Ignore documents older than this date, as `YYYY-MM-DD` or a full timestamp.
 
-~> Onyx does not return this field, so Terraform cannot detect a change made outside it. The configured value is re-sent on every apply.
+~> Onyx returns this field as a full timestamp, so Terraform keeps the configured value and does not detect a change made outside it. The configured value is re-sent on every apply.
 - `starter_messages` (Attributes List) Suggested opening prompts, shown in the order given. (see [below for nested schema](#nestedatt--starter_messages))
 - `system_prompt` (String) The agent's instructions, added to the system prompt.
 - `task_prompt` (String) Extra instructions appended to each user message.

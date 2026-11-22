@@ -1,8 +1,9 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
 import { PageSelector } from "@/components/PageSelector";
 import { useTranslations } from "next-intl";
-import { useRouter } from "next/navigation";
+import { useSettings } from "@/lib/settings/hooks";
 import { useEffect, useState } from "react";
 import {
   Table,
@@ -27,14 +28,14 @@ function ClickableTableRow({
   children: React.ReactNode;
   [key: string]: any;
 }) {
-  const router = useRouter();
+  const navigation = useNavigation();
 
   useEffect(() => {
-    router.prefetch(url);
-  }, [router, url]);
+    navigation.prefetch(url);
+  }, [navigation, url]);
 
   const navigate = () => {
-    router.push(url);
+    navigation.go(url);
   };
 
   return (
@@ -46,6 +47,7 @@ function ClickableTableRow({
 
 export const SlackBotTable = ({ slackBots }: { slackBots: SlackBot[] }) => {
   const t = useTranslations("admin.slackBots");
+  const { appName } = useSettings();
   const [page, setPage] = useState(1);
 
   // sort by id for consistent ordering
@@ -116,7 +118,7 @@ export const SlackBotTable = ({ slackBots }: { slackBots: SlackBot[] }) => {
                 colSpan={5}
                 className="text-center text-muted-foreground"
               >
-                {t("table.empty.message")}
+                {t("table.empty.message", { appName })}
               </TableCell>
             </TableRow>
           )}

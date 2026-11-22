@@ -1,0 +1,74 @@
+@reference "#reference.css";
+
+/* ---------------------------------------------------------------------------
+   InputTypeInTag (Figma Input/Tags), shared with InputMultiSelect
+
+   Chips-in-input built on the .opal-input chrome and the editable Tag.
+   Overrides the wrapper's justify-between/items-center: wrapped tag rows
+   must pack from the top-left.
+   --------------------------------------------------------------------------- */
+
+.opal-input.opal-input-type-in-tag {
+  @apply cursor-text items-start justify-start;
+  min-width: 160px;
+}
+
+.opal-input-type-in-tag[data-variant="disabled"] {
+  cursor: not-allowed;
+}
+
+/* Read-only, the chips are the whole field: the trigger element fills the
+   rest of the row so the whole chrome is the click target, and the wrapper's
+   focus-within ring stands in for its own outline. */
+.opal-input-type-in-tag[data-read-only] {
+  @apply cursor-pointer;
+}
+
+.opal-input-type-in-tag-trigger {
+  @apply flex min-w-0 flex-1 items-center outline-none;
+  min-height: var(--opal-input-type-in-tag-row-height);
+}
+
+/* Tag rows pack from the top, grow the field up to --max-rows, then scroll
+   inside it. The bleed (negative margin, matching padding) keeps an armed
+   tag's outer ring inside the scroll clip: a 24px tag on a 20px row, plus its
+   2px ring, reaches 4px past the row. */
+.opal-input-type-in-tag-tags {
+  /* 20px rows, the title line's text height. A 24px tag lays out as 20px
+     (its -2px block margins), so an 8px row gap leaves 4px between tags. */
+  --opal-input-type-in-tag-row-height: 20px;
+  --opal-input-type-in-tag-row-gap: 8px;
+  --opal-input-type-in-tag-rows: 1;
+  --opal-input-type-in-tag-max-rows: 2;
+  --opal-input-type-in-tag-bleed: 4px;
+  @apply flex min-w-0 flex-1 flex-wrap content-start items-center overflow-y-auto overscroll-contain;
+  row-gap: var(--opal-input-type-in-tag-row-gap);
+  column-gap: 4px;
+  margin: calc(-1 * var(--opal-input-type-in-tag-bleed));
+  padding: var(--opal-input-type-in-tag-bleed);
+  min-height: calc(
+    var(--opal-input-type-in-tag-rows) *
+      var(--opal-input-type-in-tag-row-height) +
+      (var(--opal-input-type-in-tag-rows) - 1) *
+      var(--opal-input-type-in-tag-row-gap) + 2 *
+      var(--opal-input-type-in-tag-bleed)
+  );
+  max-height: calc(
+    var(--opal-input-type-in-tag-max-rows) *
+      var(--opal-input-type-in-tag-row-height) +
+      (var(--opal-input-type-in-tag-max-rows) - 1) *
+      var(--opal-input-type-in-tag-row-gap) + 2 *
+      var(--opal-input-type-in-tag-bleed)
+  );
+}
+
+/* A tag takes a 20px layout box on its 20px row, so it does not grow the
+   title line; it draws 2px past the row on each side. */
+.opal-input-type-in-tag-tags .opal-tag {
+  margin-block: -2px;
+}
+
+.opal-input-type-in-tag-field {
+  /* The title line's 20px text box, as in InputTypeIn. */
+  @apply h-5 w-auto min-w-20 flex-1 px-0.5 py-0;
+}

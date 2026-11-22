@@ -7,6 +7,7 @@ from onyx.llm.factory import _resolve_provider_and_model
 
 _FETCH_MC = "onyx.llm.factory.fetch_model_configuration_by_id"
 _FETCH_PROVIDER = "onyx.llm.factory.fetch_existing_llm_provider"
+_FETCH_MC_BY_NAME = "onyx.llm.factory.fetch_model_configuration_by_provider_id_and_name"
 
 
 def _mc(name: str, provider: MagicMock) -> MagicMock:
@@ -32,7 +33,7 @@ def test_model_configuration_id_beats_name_resolution() -> None:
             model_configuration_override_id=202,
         )
 
-    assert resolved == (responses_provider, "gateway/gpt-model")
+    assert resolved == (responses_provider, "gateway/gpt-model", mc)
     fetch_mc.assert_called_once()
     fetch_provider.assert_not_called()
 
@@ -58,10 +59,12 @@ def test_stale_model_configuration_id_falls_back_to_default_not_name() -> None:
 
 def test_no_id_uses_name_resolution_unchanged() -> None:
     name_provider = MagicMock()
+    mc = _mc("gateway/gpt-model", name_provider)
 
     with (
         patch(_FETCH_MC) as fetch_mc,
         patch(_FETCH_PROVIDER, return_value=name_provider),
+        patch(_FETCH_MC_BY_NAME, return_value=mc) as fetch_mc_by_name,
     ):
         resolved = _resolve_provider_and_model(
             persona=MagicMock(),
@@ -70,5 +73,9 @@ def test_no_id_uses_name_resolution_unchanged() -> None:
             db_session=MagicMock(),
         )
 
-    assert resolved == (name_provider, "gateway/gpt-model")
+    assert resolved == (name_provider, "gateway/gpt-model", mc)
     fetch_mc.assert_not_called()
+    assert fetch_mc_by_name.call_args.args[1:] == (
+        name_provider.id,
+        "gateway/gpt-model",
+    )

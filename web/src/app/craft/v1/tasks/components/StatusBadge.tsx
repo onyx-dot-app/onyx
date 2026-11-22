@@ -1,7 +1,9 @@
 "use client";
 
+import { useTranslations } from "next-intl";
 import { cn } from "@opal/utils";
 import { Text } from "@opal/components";
+import type { BadgeProps } from "@opal/components";
 import {
   SvgAlertCircle,
   SvgCheckCircle,
@@ -13,7 +15,7 @@ import {
 import type {
   ScheduledTaskRunStatus,
   ScheduledTaskStatus,
-} from "@/app/craft/v1/tasks/interfaces";
+} from "@/app/craft/v1/tasks/types";
 
 // ---------------------------------------------------------------------------
 // Task status (active / paused)
@@ -54,7 +56,6 @@ interface RunStatusBadgeProps {
 }
 
 interface RunStatusDisplay {
-  label: string;
   icon: React.FunctionComponent<{ size?: number; className?: string }>;
   className: string;
   iconClassName: string;
@@ -64,42 +65,42 @@ function getRunStatusDisplay(status: ScheduledTaskRunStatus): RunStatusDisplay {
   switch (status) {
     case "SUCCEEDED":
       return {
-        label: "Succeeded",
         icon: SvgCheckCircle,
         className: "bg-status-success-01",
         iconClassName: "text-status-success-05",
       };
     case "FAILED":
       return {
-        label: "Failed",
         icon: SvgAlertCircle,
         className: "bg-status-error-01",
         iconClassName: "text-status-error-05",
       };
     case "RUNNING":
       return {
-        label: "Running",
         icon: SvgLoader,
         className: "bg-status-info-01",
         iconClassName: "text-status-info-05 animate-spin",
       };
     case "QUEUED":
       return {
-        label: "Queued",
+        icon: SvgClock,
+        className: "bg-background-tint-02",
+        iconClassName: "text-text-03",
+      };
+    case "CANCELLED":
+      return {
         icon: SvgClock,
         className: "bg-background-tint-02",
         iconClassName: "text-text-03",
       };
     case "SKIPPED":
       return {
-        label: "Skipped",
         icon: SvgClock,
         className: "bg-background-tint-02",
         iconClassName: "text-text-03",
       };
     case "AWAITING_APPROVAL":
       return {
-        label: "Awaiting approval",
         icon: SvgClock,
         className: "bg-status-warning-01",
         iconClassName: "text-status-warning-05",
@@ -108,6 +109,7 @@ function getRunStatusDisplay(status: ScheduledTaskRunStatus): RunStatusDisplay {
 }
 
 export function RunStatusBadge({ status }: RunStatusBadgeProps) {
+  const t = useTranslations("scheduledTasks");
   const display = getRunStatusDisplay(status);
   const Icon = display.icon;
   return (
@@ -120,7 +122,7 @@ export function RunStatusBadge({ status }: RunStatusBadgeProps) {
     >
       <Icon size={12} className={display.iconClassName} />
       <Text font="figure-small-label" color="text-03">
-        {display.label}
+        {t("runStatus", { status })}
       </Text>
     </div>
   );

@@ -2,8 +2,8 @@
 
 **Import:** `import { InputList, type InputListProps } from "@opal/components";`
 
-A list-of-strings input: type a value, press Enter, and it lands as a removable `Tag` chip below
-the field. Duplicates are ignored; IME composition is respected. Unlike `InputMultiSelect`, the chips
+A list-of-strings input: type a value, press Enter, and it lands as a removable `Tag` below
+the field. Duplicates are ignored; IME composition is respected. Unlike `InputTypeInTag`, the chips
 render _under_ the input rather than inline within it — use this when the list is the content and
 the field is just the entry point (e.g. a list of domains or scopes in a form).
 
@@ -16,3 +16,7 @@ the field is just the entry point (e.g. a list of domains or scopes in a form).
 | `placeholder` | `string`                     | `""`    | Input placeholder               |
 | `disabled`    | `boolean`                    | `false` | Disables input and chip removal |
 | `error`       | `boolean`                    | `false` | Error chrome on the input       |
+| `tooltip`     | `string \| RichStr`          | —       | Shown on hover over the input, in any state |
+
+Inside `InputHorizontal` or `InputVertical`, the row's `disabled` also disables
+the list, and its `disabledTooltip` replaces `tooltip` while disabled.

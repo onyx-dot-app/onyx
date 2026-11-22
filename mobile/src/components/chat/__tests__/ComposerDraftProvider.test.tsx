@@ -61,16 +61,16 @@ describe("ComposerDraftProvider", () => {
       result.current.setText("a", "keep me");
       result.current.addFiles("a", ["f1"]);
     });
-    act(() => result.current.consumeAttachments("a"));
+    act(() =>
+      result.current.consumeAttachments("a", result.current.drafts["a"]),
+    );
     expect(result.current.drafts["a"]).toEqual({
       text: "keep me",
       clientIds: [],
     });
 
-    act(() => {
-      result.current.setText("b", "gone");
-      result.current.consume("b");
-    });
+    act(() => result.current.setText("b", "gone"));
+    act(() => result.current.consume("b", result.current.drafts["b"]));
     expect(result.current.drafts["b"]).toBeUndefined();
   });
 });

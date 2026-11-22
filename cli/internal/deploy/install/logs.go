@@ -26,7 +26,11 @@ func RunLogs(ctx context.Context, deps Deps, opts Options, logOpts LogOptions) e
 }
 
 func (in *installer) runLogs(ctx context.Context, l LogOptions) error {
-	in.root = paths.Resolve(in.opts.Dir)
+	root, err := paths.Resolve(in.opts.Dir)
+	if err != nil {
+		return exitcodes.New(exitcodes.BadRequest, err.Error())
+	}
+	in.root = root
 	if !paths.IsInstall(in.root.Dir) {
 		in.infof("No Onyx install found at %s", in.root.Dir)
 		for _, alt := range in.root.Ambiguous {

@@ -96,7 +96,7 @@ def _create_mock_image_generation_llm_config() -> LLMConfig:
     """Create a mock LLMConfig for image generation."""
     return LLMConfig(
         model_provider="openai",
-        model_name="gpt-image-1",
+        model_name="gpt-image-2.5-flare",
         temperature=0.0,
         api_key="mock-api-key",
         api_base=None,

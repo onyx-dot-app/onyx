@@ -3102,6 +3102,14 @@
     "display_name": "GPT-5 Nano",
     "model_vendor": "openai"
   },
+  "oci/openai.gpt-oss-120b": {
+    "display_name": "GPT Open-Source 120B",
+    "model_vendor": "openai"
+  },
+  "oci/openai.gpt-oss-20b": {
+    "display_name": "GPT Open-Source 20B",
+    "model_vendor": "openai"
+  },
   "oci/xai.grok-3": {
     "display_name": "Grok 3",
     "model_vendor": "xai"
@@ -3136,6 +3144,22 @@
   },
   "oci/xai.grok-4.20-multi-agent": {
     "display_name": "Grok 4.20 Multi-Agent",
+    "model_vendor": "xai"
+  },
+  "oci/xai.grok-4.20-non-reasoning": {
+    "display_name": "Grok 4.20 Non-Reasoning",
+    "model_vendor": "xai"
+  },
+  "oci/xai.grok-4.20-reasoning": {
+    "display_name": "Grok 4.20 Reasoning",
+    "model_vendor": "xai"
+  },
+  "oci/xai.grok-4.3": {
+    "display_name": "Grok 4.3",
+    "model_vendor": "xai"
+  },
+  "oci/xai.grok-4.6": {
+    "display_name": "Grok 4.6",
     "model_vendor": "xai"
   },
   "oci/xai.grok-code-fast-1": {

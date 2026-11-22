@@ -1,42 +1,34 @@
 "use client";
 
+import { useNavigation, useSearchParams } from "@opal/navigation";
 import { useCallback, useMemo } from "react";
 import { useTranslations } from "next-intl";
-import { useRouter, useSearchParams } from "next/navigation";
 import ScheduleTaskForm, {
   defaultFormInitial,
   type ScheduleTaskFormInitial,
 } from "@/app/craft/v1/tasks/components/ScheduleTaskForm";
-import type {
-  EditorMode,
-  EditorPayload,
-} from "@/app/craft/v1/tasks/interfaces";
+import type { EditorMode, EditorPayload } from "@/app/craft/v1/tasks/types";
 import { TASKS_PATH } from "@/app/craft/v1/tasks/constants";
 
-const VALID_MODES: ReadonlySet<EditorMode> = new Set<EditorMode>([
-  "interval",
-  "daily_weekly",
-]);
+const VALID_MODES: readonly EditorMode[] = ["interval", "daily_weekly"];
 
 export default function NewScheduledTaskPage() {
   const t = useTranslations("craft.tasks.newPage");
-  const router = useRouter();
+  const navigation = useNavigation();
   const searchParams = useSearchParams();
   const handleBack = useCallback(() => {
-    router.push(TASKS_PATH);
-  }, [router]);
+    navigation.go(TASKS_PATH);
+  }, [navigation]);
 
   const initial: ScheduleTaskFormInitial = useMemo(() => {
     const base = defaultFormInitial();
-    const starter = searchParams?.get("starter") ?? null;
-    const promptParam = searchParams?.get("prompt") ?? null;
-    const modeParam = searchParams?.get("mode") ?? null;
-    const payloadParam = searchParams?.get("payload") ?? null;
+    const starter = searchParams.get("starter") ?? null;
+    const promptParam = searchParams.get("prompt") ?? null;
+    const modeParam = searchParams.get("mode") ?? null;
+    const payloadParam = searchParams.get("payload") ?? null;
 
-    let mode: EditorMode = base.mode;
-    if (modeParam && VALID_MODES.has(modeParam as EditorMode)) {
-      mode = modeParam as EditorMode;
-    }
+    const mode =
+      VALID_MODES.find((validMode) => validMode === modeParam) ?? base.mode;
 
     let payload: EditorPayload = base.payload;
     if (payloadParam) {

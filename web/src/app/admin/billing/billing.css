@@ -155,34 +155,3 @@
   padding-top: 1rem;
   width: 100%;
 }
-
-/* -----------------------------------------------------------------------------
- * View Transition Animations
- * -------------------------------------------------------------------------- */
-
-@keyframes billing-fade-in {
-  from {
-    opacity: 0;
-    transform: translateY(8px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.billing-view-enter {
-  animation: billing-fade-in 0.25s ease-out;
-}
-
-.billing-view-expand {
-  animation: billing-fade-in 0.25s ease-out;
-}
-
-.billing-view-collapse {
-  animation: billing-fade-in 0.25s ease-out;
-}
-
-.billing-card-enter {
-  animation: billing-fade-in 0.25s ease-out;
-}

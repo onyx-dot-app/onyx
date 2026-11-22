@@ -2,19 +2,19 @@
 
 Used as a safety net when DISABLE_VECTOR_DB is True. Any code path that
 accidentally reaches the vector DB layer will fail loudly instead of timing
-out against a nonexistent Vespa/OpenSearch instance.
+out against a nonexistent OpenSearch instance.
 """
 
 from collections.abc import Iterable
 
 from onyx.context.search.enums import QueryType
 from onyx.context.search.models import IndexFilters, InferenceChunk
-from onyx.db.enums import EmbeddingPrecision
-from onyx.document_index.interfaces_new import (
+from onyx.document_index.interfaces import (
     DocumentIndex,
     DocumentInsertionRecord,
     DocumentSectionRequest,
     IndexingMetadata,
+    KeywordTermCounts,
     MetadataUpdateRequest,
 )
 from onyx.indexing.models import DocMetadataAwareIndexChunk
@@ -34,7 +34,6 @@ class DisabledDocumentIndex(DocumentIndex):
     def verify_and_create_index_if_necessary(
         self,
         embedding_dim: int,  # noqa: ARG002
-        embedding_precision: EmbeddingPrecision,  # noqa: ARG002
     ) -> None:
         # No-op: there are no indices to create when the vector DB is disabled.
         return None
@@ -50,6 +49,12 @@ class DisabledDocumentIndex(DocumentIndex):
         self,
         document_id: str,  # noqa: ARG002
         chunk_count: int | None = None,  # noqa: ARG002
+    ) -> int:
+        raise RuntimeError(VECTOR_DB_DISABLED_ERROR)
+
+    def delete_documents(
+        self,
+        document_ids: list[str],  # noqa: ARG002
     ) -> int:
         raise RuntimeError(VECTOR_DB_DISABLED_ERROR)
 
@@ -85,6 +90,12 @@ class DisabledDocumentIndex(DocumentIndex):
         num_to_retrieve: int,  # noqa: ARG002
         include_hidden: bool = False,  # noqa: ARG002
     ) -> list[InferenceChunk]:
+        raise RuntimeError(VECTOR_DB_DISABLED_ERROR)
+
+    def count_keyword_terms(
+        self,
+        query: str,  # noqa: ARG002
+    ) -> KeywordTermCounts:
         raise RuntimeError(VECTOR_DB_DISABLED_ERROR)
 
     def semantic_retrieval(

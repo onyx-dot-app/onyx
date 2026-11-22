@@ -1,0 +1,57 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "lib": [
+      "ES2022",
+      "DOM",
+      "DOM.Iterable"
+    ],
+    "module": "ESNext",
+    "moduleResolution": "Bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "noFallthroughCasesInSwitch": true,
+    "isolatedModules": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "resolveJsonModule": true,
+    "types": [
+      "vite/client"
+    ],
+    "baseUrl": ".",
+    "paths": {
+      "@opal/*": [
+        "../web/lib/opal/src/*"
+      ],
+      "@/*": [
+        "./src/*"
+      ],
+      "next/link": [
+        "./src/shims/next-link.tsx"
+      ],
+      "next/navigation": [
+        "./src/shims/next-navigation.ts"
+      ],
+      "react": [
+        "../web/node_modules/@types/react"
+      ],
+      "react/*": [
+        "../web/node_modules/@types/react/*"
+      ],
+      "react-dom": [
+        "../web/node_modules/@types/react-dom"
+      ],
+      "react-dom/*": [
+        "../web/node_modules/@types/react-dom/*"
+      ],
+      "@radix-ui/react-tooltip": [
+        "../web/node_modules/@radix-ui/react-tooltip"
+      ]
+    }
+  },
+  "include": [
+    "src",
+    "vite.config.ts"
+  ]
+}

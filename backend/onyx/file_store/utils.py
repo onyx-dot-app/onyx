@@ -7,12 +7,19 @@ from uuid import UUID
 import requests
 from sqlalchemy.orm import Session
 
-from onyx.configs.app_configs import WEB_DOMAIN
-from onyx.configs.constants import FileOrigin
+from onyx.configs.app_configs import REQUEST_TIMEOUT_SECONDS, WEB_DOMAIN
+from onyx.configs.constants import CHAT_SESSION_ID_FILE_METADATA_KEY, FileOrigin
 from onyx.db.models import UserFile
+from onyx.db.projects import get_project_user_files_by_file_ids
 from onyx.db.user_file import get_user_file_by_id
+from onyx.file_processing.file_types import guess_mime_type
 from onyx.file_store.file_store import get_default_file_store
-from onyx.file_store.models import ChatFileType, FileDescriptor, InMemoryChatFile
+from onyx.file_store.models import (
+    ChatFileType,
+    FileDescriptor,
+    InMemoryChatFile,
+    UserFileMetadata,
+)
 from onyx.server.query_and_chat.chat_utils import mime_type_to_chat_file_type
 from onyx.utils.b64 import get_image_type
 from onyx.utils.logger import setup_logger
@@ -88,12 +95,9 @@ def load_chat_file_by_id(file_id: str) -> InMemoryChatFile:
     )
 
 
-def load_user_file(file_id: UUID, db_session: Session) -> InMemoryChatFile:
+def load_user_file_content(user_file: UserFileMetadata) -> InMemoryChatFile:
+    """Read file content without an ORM record or caller-owned database session."""
     status = "not_loaded"
-
-    user_file = get_user_file_by_id(file_id, db_session)
-    if not user_file:
-        raise ValueError(f"User file with id {file_id} not found")
 
     # Get the file record to determine the appropriate chat file type
     file_store = get_default_file_store()
@@ -103,7 +107,7 @@ def load_user_file(file_id: UUID, db_session: Session) -> InMemoryChatFile:
     chat_file_type = mime_type_to_chat_file_type(file_record.file_type)
 
     # Try to load plaintext version first
-    plaintext_file_name = user_file_id_to_plaintext_file_name(file_id)
+    plaintext_file_name = user_file_id_to_plaintext_file_name(user_file.id)
 
     # check for plain text normalized version first, then use original file otherwise
     try:
@@ -155,7 +159,7 @@ def load_user_file(file_id: UUID, db_session: Session) -> InMemoryChatFile:
         return chat_file
     finally:
         logger.debug(
-            "load_user_file finished: file_id=%s chat_file_type=%s status=%s",
+            "load_user_file_content finished: file_id=%s chat_file_type=%s status=%s",
             user_file.file_id,
             chat_file_type,
             status,
@@ -163,27 +167,13 @@ def load_user_file(file_id: UUID, db_session: Session) -> InMemoryChatFile:
 
 
 def load_in_memory_chat_files(
-    user_file_ids: list[UUID],
-    db_session: Session,
+    user_files: list[UserFileMetadata],
 ) -> list[InMemoryChatFile]:
-    """
-    Loads the actual content of user files specified by individual IDs and those
-    within specified project IDs into memory.
-
-    Args:
-        user_file_ids: A list of specific UserFile IDs to load.
-        db_session: The SQLAlchemy database session.
-
-    Returns:
-        A list of InMemoryChatFile objects, each containing the file content (as bytes),
-        file ID, file type, and filename. Prioritizes loading plaintext versions if available.
-    """
-    # Use parallel execution to load files concurrently
+    """Load captured files concurrently without sharing a database session."""
     return cast(
         list[InMemoryChatFile],
         run_functions_tuples_in_parallel(
-            # 1. Load files specified by individual IDs
-            [(load_user_file, (file_id, db_session)) for file_id in user_file_ids]
+            [(load_user_file_content, (user_file,)) for user_file in user_files]
         ),
     )
 
@@ -239,41 +229,64 @@ def validate_user_files_ownership(
     return current_user_files
 
 
-def save_file_from_url(url: str) -> str:
-    response = requests.get(url)
+def chat_output_file_type(file_name: str) -> str:
+    """The MIME type of a chat output file, from its name."""
+    return guess_mime_type(file_name) or "application/octet-stream"
+
+
+def save_chat_output_file(
+    content: bytes,
+    *,
+    display_name: str,
+    file_type: str,
+    chat_session_id: UUID,
+) -> str:
+    """Save a generated image or code interpreter output, stamped with the
+    chat session: `access.py:user_can_access_chat_file` gives the file to the
+    users who may read that session. A file without the stamp is open to
+    every signed-in user (see `user_can_access_chat_file`). Returns the file
+    ID."""
+    return get_default_file_store().save_file(
+        content=BytesIO(content),
+        display_name=display_name,
+        file_origin=FileOrigin.CHAT_IMAGE_GEN,
+        file_type=file_type,
+        file_metadata={CHAT_SESSION_ID_FILE_METADATA_KEY: str(chat_session_id)},
+    )
+
+
+def save_file_from_url(url: str, chat_session_id: UUID) -> str:
+    response = requests.get(url, timeout=(10, REQUEST_TIMEOUT_SECONDS))
     response.raise_for_status()
-
-    file_io = BytesIO(response.content)
-    file_store = get_default_file_store()
-    file_id = file_store.save_file(
-        content=file_io,
+    return save_chat_output_file(
+        response.content,
         display_name="GeneratedImage",
-        file_origin=FileOrigin.CHAT_IMAGE_GEN,
         file_type="image/png;base64",
+        chat_session_id=chat_session_id,
     )
-    return file_id
 
 
-def save_file_from_base64(base64_string: str) -> str:
-    file_store = get_default_file_store()
-    file_id = file_store.save_file(
-        content=BytesIO(base64.b64decode(base64_string)),
+def save_file_from_base64(base64_string: str, chat_session_id: UUID) -> str:
+    return save_chat_output_file(
+        base64.b64decode(base64_string),
         display_name="GeneratedImage",
-        file_origin=FileOrigin.CHAT_IMAGE_GEN,
         file_type=get_image_type(base64_string),
+        chat_session_id=chat_session_id,
     )
-    return file_id
 
 
 def save_file(
-    url: str | None = None,
-    base64_data: str | None = None,
+    url: str | None,
+    base64_data: str | None,
+    chat_session_id: UUID,
 ) -> str:
     """Save a file from either a URL or base64 encoded string.
 
     Args:
         url: URL to download file from
         base64_data: Base64 encoded file data
+        chat_session_id: Owning chat session, stamped so the file is readable
+            only by users who may read that session
 
     Returns:
         The unique ID of the saved file
@@ -285,28 +298,33 @@ def save_file(
         raise ValueError("Cannot specify both url and base64_data")
 
     if url is not None:
-        return save_file_from_url(url)
+        return save_file_from_url(url, chat_session_id=chat_session_id)
     elif base64_data is not None:
-        return save_file_from_base64(base64_data)
+        return save_file_from_base64(base64_data, chat_session_id=chat_session_id)
     else:
         raise ValueError("Must specify either url or base64_data")
 
 
-def save_files(urls: list[str], base64_files: list[str]) -> list[str]:
+def save_files(
+    urls: list[str],
+    base64_files: list[str],
+    chat_session_id: UUID,
+) -> list[str]:
     # NOTE: be explicit about typing so that if we change things, we get notified
     funcs: list[
         tuple[
-            Callable[[str | None, str | None], str],
-            tuple[str | None, str | None],
+            Callable[[str | None, str | None, UUID], str],
+            tuple[str | None, str | None, UUID],
         ]
-    ] = [(save_file, (url, None)) for url in urls] + [
-        (save_file, (None, base64_file)) for base64_file in base64_files
+    ] = [(save_file, (url, None, chat_session_id)) for url in urls] + [
+        (save_file, (None, base64_file, chat_session_id))
+        for base64_file in base64_files
     ]
 
     return run_functions_tuples_in_parallel(funcs)
 
 
-@log_function_time(print_only=True)
+@log_function_time()
 def verify_user_files(
     user_files: list[FileDescriptor],
     user_id: UUID | None,
@@ -326,7 +344,6 @@ def verify_user_files(
     Raises:
         ValueError: If any file does not belong to the user or is not found
     """
-    from onyx.db.models import Project__UserFile
     from onyx.db.projects import check_project_ownership
 
     user_file_descriptors: list[tuple[UUID, str]] = []
@@ -372,14 +389,8 @@ def verify_user_files(
             )
 
         # Verify all project files belong to the specified project
-        user_files_in_project = (
-            db_session.query(UserFile)
-            .join(Project__UserFile)
-            .filter(
-                Project__UserFile.project_id == project_id,
-                UserFile.file_id.in_(project_file_ids),
-            )
-            .all()
+        user_files_in_project = get_project_user_files_by_file_ids(
+            project_id, project_file_ids, db_session
         )
 
         # Check if all files were found in the project

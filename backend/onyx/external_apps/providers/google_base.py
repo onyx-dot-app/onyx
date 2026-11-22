@@ -87,7 +87,6 @@ class GoogleOAuthProvider(OAuthExternalAppProvider, abstract=True):
                 # access_type=offline issues a refresh_token; prompt=consent
                 # forces fresh consent so Google reissues it on re-auth.
                 extra_authorize_params={
-                    "response_type": "code",
                     "access_type": "offline",
                     "prompt": "consent",
                 },

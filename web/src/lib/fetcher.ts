@@ -24,17 +24,40 @@ export class RedirectError extends FetchError {
 }
 
 /** Extract the backend error `detail` from a failed Response, falling back
- * to `fallback` when the body isn't JSON or carries no detail. */
+ * to `fallback` when the body isn't JSON or carries no text detail. */
 export async function parseErrorDetail(
   res: Response,
   fallback: string
 ): Promise<string> {
-  try {
-    const body = await res.json();
-    return body?.detail ?? fallback;
-  } catch {
-    return fallback;
+  const body: unknown = await res.json().catch((): null => null);
+  if (
+    typeof body === "object" &&
+    body !== null &&
+    "detail" in body &&
+    typeof body.detail === "string" &&
+    body.detail !== ""
+  ) {
+    return body.detail;
   }
+  return fallback;
+}
+
+/** A `FetchError` for a failed Response, keeping its JSON body when it has one. */
+export async function fetchErrorFrom(
+  res: Response,
+  message: string
+): Promise<FetchError> {
+  const info: ErrorResponseBody | null = await res
+    .json()
+    .catch((): null => null);
+  return new FetchError(message, res.status, info);
+}
+
+/** The backend's text `detail` of a failed request; `null` when it gave none. */
+export function fetchErrorDetail(error: unknown): string | null {
+  if (!(error instanceof FetchError)) return null;
+  const detail: unknown = error.info?.detail;
+  return typeof detail === "string" && detail !== "" ? detail : null;
 }
 
 const DEFAULT_AUTH_ERROR_MSG =
@@ -87,9 +110,7 @@ export const skipRetryOnAuthError: NonNullable<
   }, delay);
 };
 
-export const errorHandlingFetcher = async <T>(url: string): Promise<T> => {
-  const res = await fetch(url);
-
+async function parseFetcherResponse<T>(res: Response): Promise<T> {
   if (res.status === 403) {
     const redirect = new RedirectError(
       DEFAULT_AUTH_ERROR_MSG,
@@ -109,4 +130,16 @@ export const errorHandlingFetcher = async <T>(url: string): Promise<T> => {
   }
 
   return res.json();
-};
+}
+
+// One argument only: SWR spreads an array key into its fetcher's arguments.
+export const errorHandlingFetcher = async <T>(url: string): Promise<T> =>
+  parseFetcherResponse<T>(await fetch(url));
+
+/** `errorHandlingFetcher` with request options, such as an abort signal. */
+export async function errorHandlingFetchWith<T>(
+  url: string,
+  init: RequestInit
+): Promise<T> {
+  return parseFetcherResponse<T>(await fetch(url, init));
+}

@@ -62,12 +62,12 @@ describe("LLM resolver helpers", () => {
         provider: "openai",
         model_configurations: [
           {
-            name: "gpt-4o-mini",
+            name: "gpt-6-luna",
             is_visible: true,
             max_input_tokens: null,
             supports_image_input: true,
             supports_reasoning: false,
-            effectiveDisplayName: "gpt-4o-mini",
+            effectiveDisplayName: "gpt-6-luna",
           },
         ],
       }),
@@ -96,7 +96,7 @@ describe("LLM resolver helpers", () => {
     expect(descriptor).toEqual({
       name: "Default OpenAI",
       provider: "openai",
-      modelName: "gpt-4o-mini",
+      modelName: "gpt-6-luna",
     });
   });
 

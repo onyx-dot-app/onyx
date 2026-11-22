@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { NavLink } from "@opal/navigation/components";
 import type { Route } from "next";
 import "@opal/core/interactive/shared.css";
 import React from "react";
@@ -7,8 +7,9 @@ import type { ButtonType, Rounding, WithoutStyles } from "@opal/types";
 import {
   containerSizeVariants,
   roundingToRem,
+  spacingToRem,
   type ContainerSizeVariants,
-  type ExtremaSizeVariants,
+  type OverridableExtremaSizeVariants,
   widthVariants,
 } from "@opal/shared";
 
@@ -40,6 +41,8 @@ interface InteractiveContainerProps extends WithoutStyles<
    */
   type?: ButtonType;
 
+  form?: string;
+
   /**
    * When `true`, applies a 1px border using the theme's border color.
    *
@@ -63,11 +66,12 @@ interface InteractiveContainerProps extends WithoutStyles<
   size?: ContainerSizeVariants;
 
   /**
-   * Width preset controlling the container's horizontal size.
+   * The container's horizontal size: `"fit"`, `"full"`, or a fixed length as
+   * a spacing step (`N / 4` rem).
    *
    * @default "fit"
    */
-  width?: ExtremaSizeVariants;
+  width?: OverridableExtremaSizeVariants;
 }
 
 // ---------------------------------------------------------------------------
@@ -85,6 +89,7 @@ interface InteractiveContainerProps extends WithoutStyles<
 function InteractiveContainer({
   ref,
   type,
+  form,
   border,
   rounding = 3,
   size = "lg",
@@ -97,6 +102,7 @@ function InteractiveContainer({
     href,
     target,
     rel,
+    download,
     ...rest
   } = props as typeof props & {
     className?: string;
@@ -104,6 +110,7 @@ function InteractiveContainer({
     href?: string;
     target?: string;
     rel?: string;
+    download?: string | true;
   };
   const { height, minWidth, padding } = containerSizeVariants[size];
   const sharedProps = {
@@ -113,18 +120,42 @@ function InteractiveContainer({
       height,
       minWidth,
       padding,
-      widthVariants[width],
+      typeof width === "number" ? "shrink-0" : widthVariants[width],
       slotClassName
     ),
     "data-border": border ? ("true" as const) : undefined,
     // Radius is written straight in rather than looked up as a class, so the
     // step can come from a runtime value. A Slot-injected radius still wins.
-    style: { borderRadius: roundingToRem(rounding), ...slotStyle },
+    style: {
+      borderRadius: roundingToRem(rounding),
+      ...(typeof width === "number" && { width: spacingToRem(width) }),
+      ...slotStyle,
+    },
   };
+
+  // A download is a file, not a page: the router must not prefetch or render it.
+  if (href && download !== undefined) {
+    // SAFETY: this branch renders an anchor, so the ref targets one.
+    const anchorRef = ref as React.Ref<HTMLAnchorElement>;
+    // SAFETY: the shared DOM props hold no div-only attribute.
+    const anchorProps = sharedProps as React.HTMLAttributes<HTMLAnchorElement>;
+    return (
+      <a
+        ref={anchorRef}
+        href={href}
+        download={download}
+        target={target}
+        rel={rel}
+        {...anchorProps}
+      >
+        {rest.children}
+      </a>
+    );
+  }
 
   if (href) {
     return (
-      <Link
+      <NavLink
         ref={ref as React.Ref<HTMLAnchorElement>}
         href={href as Route}
         target={target}
@@ -142,6 +173,7 @@ function InteractiveContainer({
       <button
         ref={ref as React.Ref<HTMLButtonElement>}
         type={type}
+        form={form}
         disabled={nativeDisabled}
         {...(sharedProps as React.HTMLAttributes<HTMLButtonElement>)}
       />

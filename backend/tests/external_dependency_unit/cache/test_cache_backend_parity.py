@@ -6,6 +6,7 @@ in conftest.py.
 """
 
 import time
+from concurrent.futures import ThreadPoolExecutor
 from uuid import uuid4
 
 from onyx.cache.interface import TTL_KEY_NOT_FOUND, TTL_NO_EXPIRY, CacheBackend
@@ -13,6 +14,40 @@ from onyx.cache.interface import TTL_KEY_NOT_FOUND, TTL_NO_EXPIRY, CacheBackend
 
 def _key() -> str:
     return f"parity_{uuid4().hex[:12]}"
+
+
+class TestCounterParity:
+    def test_counts_from_one(self, cache: CacheBackend) -> None:
+        k = _key()
+        assert [cache.incr(k), cache.incr(k), cache.incr(k)] == [1, 2, 3]
+        assert cache.get(k) == b"3"
+        assert cache.ttl(k) == TTL_NO_EXPIRY
+
+    def test_ex_sets_the_ttl_on_every_call(self, cache: CacheBackend) -> None:
+        k = _key()
+        assert cache.incr(k, ex=30) == 1
+        assert 0 < cache.ttl(k) <= 30
+        assert cache.incr(k, ex=600) == 2
+        assert 30 < cache.ttl(k) <= 600
+
+    def test_no_ex_keeps_the_ttl(self, cache: CacheBackend) -> None:
+        k = _key()
+        cache.incr(k, ex=600)
+        assert cache.incr(k) == 2
+        assert 0 < cache.ttl(k) <= 600
+
+    def test_expired_counter_restarts(self, cache: CacheBackend) -> None:
+        k = _key()
+        assert cache.incr(k, ex=1) == 1
+        time.sleep(1.2)
+        assert cache.incr(k) == 1
+        assert cache.ttl(k) == TTL_NO_EXPIRY
+
+    def test_concurrent_increments_are_not_lost(self, cache: CacheBackend) -> None:
+        k = _key()
+        with ThreadPoolExecutor(max_workers=8) as pool:
+            counts = list(pool.map(lambda _: cache.incr(k, ex=60), range(40)))
+        assert sorted(counts) == list(range(1, 41))
 
 
 class TestKVParity:
@@ -51,6 +86,40 @@ class TestKVParity:
         assert not cache.exists(k)
         cache.set(k, b"x")
         assert cache.exists(k)
+
+
+class TestCompareAndSetParity:
+    def test_replace_if_value(self, cache: CacheBackend) -> None:
+        k = _key()
+        assert not cache.replace_if_value(k, b"old", b"new")
+        cache.set(k, b"old", ex=60)
+        assert not cache.replace_if_value(k, b"other", b"new")
+        assert cache.get(k) == b"old"
+        # ex=None stores the new value without a TTL.
+        assert cache.replace_if_value(k, b"old", b"new")
+        assert cache.get(k) == b"new"
+        assert cache.ttl(k) == TTL_NO_EXPIRY
+        assert cache.replace_if_value(k, b"new", "newer", ex=60)
+        assert 0 < cache.ttl(k) <= 60
+        cache.delete(k)
+
+    def test_replace_if_value_ignores_an_expired_value(
+        self, cache: CacheBackend
+    ) -> None:
+        k = _key()
+        cache.set(k, b"old", ex=1)
+        time.sleep(1.5)
+        assert not cache.replace_if_value(k, b"old", b"new")
+        assert cache.get(k) is None
+
+    def test_delete_if_value(self, cache: CacheBackend) -> None:
+        k = _key()
+        assert not cache.delete_if_value(k, b"v")
+        cache.set(k, b"v")
+        assert not cache.delete_if_value(k, b"other")
+        assert cache.get(k) == b"v"
+        assert cache.delete_if_value(k, b"v")
+        assert cache.get(k) is None
 
 
 class TestTTLParity:
@@ -96,3 +165,20 @@ class TestListParity:
     def test_blpop_timeout(self, cache: CacheBackend) -> None:
         result = cache.blpop([f"parity_empty_{uuid4().hex[:8]}"], timeout=1)
         assert result is None
+
+
+def test_conditional_expiry_preserves_current_owner(cache: CacheBackend) -> None:
+    key = f"conditional-expiry:{uuid4()}"
+    try:
+        assert not cache.renew_if_value(key, b"first", 60)
+        cache.set(key, b"first", ex=10)
+        assert not cache.renew_if_value(key, b"other", 60)
+        assert cache.renew_if_value(key, b"first", 60)
+        assert cache.ttl(key) > 10
+        cache.set(key, b"replacement", ex=10)
+        assert not cache.renew_if_value(key, b"first", 60)
+        assert cache.get(key) == b"replacement"
+        cache.expire(key, 0)
+        assert not cache.renew_if_value(key, b"replacement", 60)
+    finally:
+        cache.delete(key)

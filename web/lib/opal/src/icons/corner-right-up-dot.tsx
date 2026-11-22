@@ -3,14 +3,14 @@ const SvgCornerRightUpDot = ({ size, ...props }: IconProps) => (
   <svg
     width={size}
     height={size}
-    viewBox="0 0 9 14"
+    viewBox="0 0 16 16"
     fill="none"
     xmlns="http://www.w3.org/2000/svg"
     stroke="currentColor"
     {...props}
   >
     <path
-      d="M4.25002 12.75L4.25002 6.25M4.25002 12.75L7.75 9.25M4.25002 12.75L0.75 9.25M4.25002 3.75C3.42158 3.75 2.75 3.07843 2.75 2.25C2.75 1.42157 3.42158 0.75 4.25002 0.75C5.07845 0.75 5.75 1.42157 5.75 2.25C5.75 3.07843 5.07845 3.75 4.25002 3.75Z"
+      d="M12.9997 7.94975V3H8.05M12.9997 3L7.5 8.5M4.50001 13C3.67158 13 3 12.3284 3 11.5C3 10.6716 3.67158 10 4.50001 10C5.32845 10 6 10.6716 6 11.5C6 12.3284 5.32845 13 4.50001 13Z"
       strokeWidth={1.5}
       strokeLinecap="round"
       strokeLinejoin="round"

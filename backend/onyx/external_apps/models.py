@@ -1,16 +1,8 @@
+from typing import Any
+
 from pydantic import BaseModel
 
-from onyx.db.enums import EndpointPolicy, ExternalAppType
-
-
-class ActionPolicyView(BaseModel):
-    """One action of a built-in app, with its effective policy — the admin's
-    stored override if set, otherwise the action's ``default_policy``."""
-
-    action_id: str
-    normalised_name: str
-    description: str
-    state: EndpointPolicy
+from onyx.db.enums import ActionPolicy, ExternalAppType
 
 
 class OrgCredentialFieldDescriptor(BaseModel):
@@ -32,7 +24,7 @@ class EndpointDescriptor(BaseModel):
     description: str
     # The policy a new app's instance of this action defaults to; the create
     # form seeds each action's selector with it (the admin can still override).
-    default_policy: EndpointPolicy
+    default_policy: ActionPolicy
 
 
 class BuiltInExternalAppDescriptor(BaseModel):
@@ -49,3 +41,10 @@ class BuiltInExternalAppDescriptor(BaseModel):
     # The catalog of actions an admin can govern (empty for providers without
     # a catalog).
     actions: list[EndpointDescriptor]
+
+
+class PresetGrant(BaseModel):
+    # Provider credentials with an absolute ``expires_at`` (ISO string).
+    credentials: dict[str, Any]
+    # None when the provider gives no signal.
+    granted_scopes: list[str] | None

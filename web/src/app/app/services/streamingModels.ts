@@ -1,4 +1,5 @@
-import { OnyxDocument } from "@/lib/search/interfaces";
+import { OnyxDocument } from "@/lib/search/types";
+import type { RecordedMention } from "@/lib/chat/types";
 
 // Base interface for all streaming objects
 interface BaseObj {
@@ -6,13 +7,13 @@ interface BaseObj {
 }
 
 export enum PacketType {
+  USER_MESSAGE = "user_message",
   MESSAGE_START = "message_start",
   MESSAGE_DELTA = "message_delta",
   MESSAGE_END = "message_end",
 
   STOP = "stop",
   SECTION_END = "section_end",
-  TOP_LEVEL_BRANCHING = "top_level_branching",
   ERROR = "error",
 
   // Specific tool packets
@@ -30,6 +31,7 @@ export enum PacketType {
 
   // Tool call argument delta (streams tool args before tool executes)
   TOOL_CALL_ARGUMENT_DELTA = "tool_call_argument_delta",
+  TOOL_CALL_DEBUG = "tool_call_debug",
 
   // Custom tool packets
   CUSTOM_TOOL_START = "custom_tool_start",
@@ -43,6 +45,8 @@ export enum PacketType {
   MEMORY_TOOL_START = "memory_tool_start",
   MEMORY_TOOL_DELTA = "memory_tool_delta",
   MEMORY_TOOL_NO_ACCESS = "memory_tool_no_access",
+  POSTGRES_TOOL_START = "postgres_tool_start",
+  POSTGRES_TOOL_DOCUMENTS = "postgres_tool_documents",
 
   // Reasoning packets
   REASONING_START = "reasoning_start",
@@ -63,14 +67,30 @@ export enum PacketType {
   INTERMEDIATE_REPORT_DELTA = "intermediate_report_delta",
   INTERMEDIATE_REPORT_CITED_DOCS = "intermediate_report_cited_docs",
 
-  // Coding Agent packets
-  CODING_AGENT_START = "coding_agent_start",
-  CODING_AGENT_THINKING_DELTA = "coding_agent_thinking_delta",
-  CODING_AGENT_FINAL = "coding_agent_final",
+  // Sandbox tool packets: exec_command and write_stdin share the output and
+  // end packets
+  EXEC_COMMAND_START = "exec_command_start",
+  WRITE_STDIN_START = "write_stdin_start",
+  EXEC_OUTPUT_DELTA = "exec_output_delta",
+  EXEC_END = "exec_end",
+  FILE_TOOL_PROGRESS = "file_tool_progress",
+  APPLY_PATCH_START = "apply_patch_start",
+  APPLY_PATCH_END = "apply_patch_end",
+  PUBLISH_FILES_START = "publish_files_start",
+  PUBLISH_FILES_END = "publish_files_end",
 
-  // Bash Tool packets
-  BASH_TOOL_START = "bash_tool_start",
-  BASH_TOOL_DELTA = "bash_tool_delta",
+  // Code mode packets: one program that calls other tools. The nested calls
+  // stream their own tool packets at the same placement with sub_turn_index.
+  CODE_MODE_START = "code_mode_start",
+  CODE_MODE_DELTA = "code_mode_delta",
+
+  // Tool call approvals: the run waits for the user's decision on a request
+  TOOL_APPROVAL_REQUEST = "tool_approval_request",
+  TOOL_APPROVAL_RESOLVED = "tool_approval_resolved",
+
+  // Questions: the run waits for the user's answers to a question call
+  TOOL_QUESTION_REQUEST = "tool_question_request",
+  TOOL_QUESTION_RESOLVED = "tool_question_resolved",
 }
 
 export const CODE_INTERPRETER_TOOL_TYPES = {
@@ -83,7 +103,17 @@ export const CODE_INTERPRETER_TOOL_TYPES = {
 export const isCodeInterpreterToolType = (toolType: string): boolean =>
   (Object.values(CODE_INTERPRETER_TOOL_TYPES) as string[]).includes(toolType);
 
+// tool_type of the argument deltas that stream a code mode program
+export const CODE_MODE_TOOL_TYPE = "execute_code";
+
 // Basic Message Packets
+export interface UserMessage extends BaseObj {
+  type: "user_message";
+  id: string;
+  message: string;
+  mentions: RecordedMention[];
+}
+
 export interface MessageStart extends BaseObj {
   id: string;
   type: "message_start";
@@ -106,6 +136,12 @@ export interface MessageEnd extends BaseObj {
 export enum StopReason {
   FINISHED = "finished",
   USER_CANCELLED = "user_cancelled",
+  /** The turn reached its execution deadline. */
+  TIMED_OUT = "timed_out",
+  /** The stream ended while tool calls wait for the user: approval decisions
+   * or answers to questions. The response continues in a new stream after
+   * them. */
+  AWAITING_USER = "awaiting_user",
 }
 
 export interface Stop extends BaseObj {
@@ -115,11 +151,6 @@ export interface Stop extends BaseObj {
 
 export interface SectionEnd extends BaseObj {
   type: "section_end";
-}
-
-export interface TopLevelBranching extends BaseObj {
-  type: "top_level_branching";
-  num_parallel_branches: number;
 }
 
 export interface PacketError extends BaseObj {
@@ -154,7 +185,7 @@ export interface SearchToolDocumentsDelta extends BaseObj {
 
 export type ImageShape = "square" | "landscape" | "portrait";
 
-interface GeneratedImage {
+export interface GeneratedImage {
   file_id: string;
   url: string;
   revised_prompt: string;
@@ -206,13 +237,17 @@ export interface FetchToolDocuments extends BaseObj {
 // Custom Tool Packets
 export interface CustomToolErrorInfo {
   is_auth_error: boolean;
-  status_code: number;
+  is_unreachable: boolean;
+  status_code: number | null;
   message: string;
 }
 
 export interface CustomToolStart extends BaseObj {
   type: "custom_tool_start";
+  // The name the model calls; custom and MCP tools use a qualified name.
   tool_name: string;
+  // The name users see.
+  display_name: string;
   tool_id?: number | null;
 }
 
@@ -262,6 +297,46 @@ export interface MemoryToolDelta extends BaseObj {
 
 export interface MemoryToolNoAccess extends BaseObj {
   type: "memory_tool_no_access";
+}
+
+// Postgres Tool Packets
+// The arguments of a postgres_query call, as the model sent them.
+export type PostgresToolQueryValue = string | number | boolean | null;
+export interface PostgresToolQuery {
+  table?: PostgresToolQueryValue;
+  count?: PostgresToolQueryValue;
+  group_by?: PostgresToolQueryValue;
+  limit?: PostgresToolQueryValue;
+  cursor?: PostgresToolQueryValue;
+  source_type?: PostgresToolQueryValue;
+  title_contains?: PostgresToolQueryValue;
+  description_contains?: PostgresToolQueryValue;
+  name_contains?: PostgresToolQueryValue;
+  content_contains?: PostgresToolQueryValue;
+  updated_after?: PostgresToolQueryValue;
+  updated_before?: PostgresToolQueryValue;
+  created_after?: PostgresToolQueryValue;
+  created_before?: PostgresToolQueryValue;
+  sent_after?: PostgresToolQueryValue;
+  sent_before?: PostgresToolQueryValue;
+  owned_by?: PostgresToolQueryValue;
+  parent_hierarchy_node_id?: PostgresToolQueryValue;
+  parent_id?: PostgresToolQueryValue;
+  node_type?: PostgresToolQueryValue;
+  message_type?: PostgresToolQueryValue;
+  chat_message_id?: PostgresToolQueryValue;
+  cited_only?: PostgresToolQueryValue;
+}
+
+export interface PostgresToolStart extends BaseObj {
+  type: "postgres_tool_start";
+  // The call's arguments, for the step's query summary.
+  query?: PostgresToolQuery;
+}
+
+export interface PostgresToolDocuments extends BaseObj {
+  type: "postgres_tool_documents";
+  documents: OnyxDocument[];
 }
 
 // Reasoning Packets
@@ -324,35 +399,162 @@ export interface IntermediateReportCitedDocs extends BaseObj {
   cited_docs: OnyxDocument[] | null;
 }
 
-// Coding Agent Packets
-export interface CodingAgentStart extends BaseObj {
-  type: "coding_agent_start";
-  query: string;
-  repo: string | null;
-}
-
-export interface CodingAgentThinkingDelta extends BaseObj {
-  type: "coding_agent_thinking_delta";
-  content: string;
-}
-
-export interface CodingAgentFinal extends BaseObj {
-  type: "coding_agent_final";
-  answer: string;
-}
-
-// Bash Tool Packets
-export interface BashToolStart extends BaseObj {
-  type: "bash_tool_start";
+// Sandbox Tool Packets
+export interface ExecCommandStart extends BaseObj {
+  type: "exec_command_start";
   cmd: string;
+  workdir: string | null;
 }
 
-export interface BashToolDelta extends BaseObj {
-  type: "bash_tool_delta";
-  stdout: string;
-  stderr: string;
+export interface WriteStdinStart extends BaseObj {
+  type: "write_stdin_start";
+  session_id: string;
+  // Empty when the call only polls the session for output
+  chars: string;
+}
+
+// Live stdout and stderr in arrival order: a preview that exec_end's output
+// replaces. A replay sends no deltas.
+export interface ExecOutputDelta extends BaseObj {
+  type: "exec_output_delta";
+  text: string;
+}
+
+export type ExecCompletion =
+  | "exited"
+  | "signaled"
+  | "canceled"
+  | "deadline_exceeded";
+
+export interface ExecEnd extends BaseObj {
+  type: "exec_end";
   exit_code: number | null;
-  timed_out: boolean;
+  completion: ExecCompletion | null;
+  // Set while the process keeps running after the call returned
+  session_id: string | null;
+  wall_time_seconds: number | null;
+  truncated: boolean;
+  // The saved output the model saw (head and tail when cut to its character
+  // budget), or, when the output went to the sandbox VM, its head and tail
+  // with a plain note; null only with error
+  output: string | null;
+  // Set when the call failed and has no process result
+  error: string | null;
+}
+
+// The names of the backend's file tools (sandbox_tools.py)
+export type FileToolName = "apply_patch" | "edit" | "write";
+
+// What a file tool call's arguments hold while the model streams them; the
+// call's start packet follows
+export interface FileToolProgress extends BaseObj {
+  type: "file_tool_progress";
+  tool_name: FileToolName;
+  // The files the arguments name so far, in order
+  paths: string[];
+}
+
+export interface ApplyPatchStart extends BaseObj {
+  type: "apply_patch_start";
+  patch: string;
+  // The file tool that made the change; it names the card
+  tool_name: FileToolName;
+}
+
+export interface ApplyPatchFileChange {
+  path: string;
+  change: "add" | "update" | "delete";
+  move_path: string | null;
+}
+
+export interface ApplyPatchEnd extends BaseObj {
+  type: "apply_patch_end";
+  files: ApplyPatchFileChange[];
+  error: string | null;
+}
+
+// A file that a publish_files call asks for, as the model wrote it
+export interface PublishFileArgument {
+  path: string;
+  title: string | null;
+}
+
+export interface PublishFilesStart extends BaseObj {
+  type: "publish_files_start";
+  // Empty when the call's arguments are not valid
+  files: PublishFileArgument[];
+  description: string | null;
+}
+
+// A file that publish_files copied from the sandbox; it downloads from
+// /api/chat/file/{file_id}
+export interface PublishedFile {
+  file_id: string;
+  // The file name, which the download keeps
+  name: string;
+  title: string | null;
+  // Absolute and normalized in the sandbox
+  path: string;
+  // The path to show: relative to the chat's working directory, or the whole
+  // path outside it
+  display_path: string;
+  size: number;
+  mime_type: string;
+  // The artifact: every publish of one path in the chat. Null in details
+  // saved without it; such a file is its own artifact.
+  artifact_id: string | null;
+  // The publish's number in its artifact, from 1. Null with artifact_id.
+  version: number | null;
+  // A JPEG of the first page of a PDF, PowerPoint or Word file that rendered
+  // when it was published, from /api/chat/file/{thumbnail_file_id}
+  thumbnail_file_id: string | null;
+}
+
+export interface PublishFilesEnd extends BaseObj {
+  type: "publish_files_end";
+  // In the order of the start's files; empty when the call failed
+  files: PublishedFile[];
+  error: string | null;
+}
+
+// Code Mode Packets
+export type CodeModeStatus =
+  | "running"
+  | "completed"
+  | "failed"
+  | "timed_out"
+  | "terminated"
+  | "cancelled";
+
+export interface CodeModeStart extends BaseObj {
+  type: "code_mode_start";
+  // Empty on later observations of a cell
+  code: string;
+  // From the call arguments: null for execute_code, whose cell gets its id when it runs
+  cell_id?: number | null;
+  // 0 starts a cell (execute_code); 1 continues one (wait_code)
+  observation?: number;
+}
+
+export interface CodeModeDelta extends BaseObj {
+  type: "code_mode_delta";
+  // Appended to the stdout of earlier deltas, or replaces it when replace_stdout is set
+  stdout: string;
+  // Set on a final delta whose saved stdout differs from the streamed stdout
+  replace_stdout?: boolean;
+  result?: string | null;
+  error?: string | null;
+  // Set only on the final delta
+  status?: CodeModeStatus | null;
+  duration_seconds?: number | null;
+  tool_call_count?: number | null;
+  // Keys the program saved with store(); set only on the final delta
+  stored_keys?: string[] | null;
+  // Exact cell and observation; set only on the final delta
+  cell_id?: number | null;
+  observation?: number | null;
+  // Set on the closing record of a cell that ran past its last observation
+  response_ended?: boolean;
 }
 
 export type ChatObj = MessageStart | MessageDelta | MessageEnd;
@@ -366,9 +568,12 @@ export interface ChatHeartbeat extends BaseObj {
 
 export type ChatHeartbeatObj = ChatHeartbeat;
 
-export type SectionEndObj = SectionEnd;
+// Ends the replayed prefix of a continuation stream; carries no run state
+export interface ReplayEnd extends BaseObj {
+  type: "replay_end";
+}
 
-export type TopLevelBranchingObj = TopLevelBranching;
+export type SectionEndObj = SectionEnd;
 
 export type PacketErrorObj = PacketError;
 
@@ -414,6 +619,29 @@ export type MemoryToolObj =
   | MemoryToolNoAccess
   | SectionEnd
   | PacketError;
+export type ExecToolObj =
+  | ExecCommandStart
+  | WriteStdinStart
+  | ExecOutputDelta
+  | ExecEnd
+  | SectionEnd
+  | PacketError;
+export type ApplyPatchToolObj =
+  | FileToolProgress
+  | ApplyPatchStart
+  | ApplyPatchEnd
+  | SectionEnd
+  | PacketError;
+export type PostgresToolObj =
+  | PostgresToolStart
+  | PostgresToolDocuments
+  | SectionEnd
+  | PacketError;
+export type PublishFilesToolObj =
+  | PublishFilesStart
+  | PublishFilesEnd
+  | SectionEnd
+  | PacketError;
 export type NewToolObj =
   | SearchToolObj
   | ImageGenerationToolObj
@@ -421,7 +649,11 @@ export type NewToolObj =
   | FetchToolObj
   | CustomToolObj
   | FileReaderToolObj
-  | MemoryToolObj;
+  | MemoryToolObj
+  | ExecToolObj
+  | ApplyPatchToolObj
+  | PostgresToolObj
+  | PublishFilesToolObj;
 
 export type ReasoningObj =
   | ReasoningStart
@@ -448,28 +680,113 @@ export type ResearchAgentObj =
   | IntermediateReportCitedDocs
   | SectionEnd;
 
-export type CodingAgentObj =
-  | CodingAgentStart
-  | CodingAgentThinkingDelta
-  | CodingAgentFinal
-  | BashToolStart
-  | BashToolDelta
+// Nested tool packets of a code mode group are in NewToolObj
+export type CodeModeObj =
+  | CodeModeStart
+  | CodeModeDelta
+  | ToolCallArgumentDelta
   | SectionEnd
   | PacketError;
 
+export interface ToolCallDebug extends BaseObj {
+  type: "tool_call_debug";
+  tool_call_id: string;
+  tool_name: string;
+  tool_args: Record<string, unknown>;
+}
+
+// Tool Approval Packets
+export interface ToolApprovalRequest extends BaseObj {
+  type: "tool_approval_request";
+  approval_id: string;
+  tool_call_id: string;
+  tool_name: string;
+  display_name: string;
+  arguments: Record<string, unknown>;
+  /** The background subagent that made the request; null for the reply's own
+   * calls. Such a request waits on its own: no stop of the reply closes it. */
+  agent_name: string | null;
+}
+
+export interface ToolApprovalResolved extends BaseObj {
+  type: "tool_approval_resolved";
+  approval_id: string;
+  // "approved_for_chat": approved by a grant for the chat's later calls of the
+  // tool. "disabled": an approval found the tool disabled, so the call did not
+  // run. "cancelled": the call stopped waiting because its run or cell stopped.
+  outcome:
+    | "approved"
+    | "approved_for_chat"
+    | "rejected"
+    | "disabled"
+    | "cancelled";
+}
+
+export type ToolApprovalObj = ToolApprovalRequest | ToolApprovalResolved;
+
+// Question Packets
+export interface ToolQuestionOption {
+  label: string;
+  description: string;
+}
+
+export interface ToolQuestion {
+  id: string;
+  /** A short label, at most 12 characters. */
+  header: string;
+  question: string;
+  /** In the model's order; a recommended option comes first. */
+  options: ToolQuestionOption[];
+}
+
+/** The user's answer to one question: a listed option, a note, or both. */
+export interface ToolQuestionAnswer {
+  question_id: string;
+  option_label?: string | null;
+  user_note?: string | null;
+}
+
+/** A question call waits for the user's answers; placed at the call. */
+export interface ToolQuestionRequest extends BaseObj {
+  type: "tool_question_request";
+  question_request_id: string;
+  tool_call_id: string;
+  questions: ToolQuestion[];
+}
+
+/**
+ * How a question call ended: answered on its card (`answers`) or by a message
+ * that the user typed in the chat (`message`), or cancelled because its run
+ * stopped first.
+ */
+export interface ToolQuestionResolved extends BaseObj {
+  type: "tool_question_resolved";
+  question_request_id: string;
+  outcome: "answered" | "cancelled";
+  answered_via?: "card" | "message" | null;
+  answers?: ToolQuestionAnswer[] | null;
+  message?: string | null;
+}
+
+export type ToolQuestionObj = ToolQuestionRequest | ToolQuestionResolved;
+
 // Union type for all possible streaming objects
 export type ObjTypes =
+  | UserMessage
+  | ToolCallDebug
   | ChatObj
   | NewToolObj
   | ReasoningObj
   | StopObj
   | ChatHeartbeatObj
+  | ReplayEnd
   | SectionEndObj
-  | TopLevelBranchingObj
   | CitationObj
   | DeepResearchPlanObj
   | ResearchAgentObj
-  | CodingAgentObj
+  | CodeModeObj
+  | ToolApprovalObj
+  | ToolQuestionObj
   | PacketErrorObj
   | CitationObj;
 
@@ -532,9 +849,29 @@ export interface FileReaderToolPacket {
   placement: Placement;
   obj: FileReaderToolObj;
 }
+export interface ExecToolPacket {
+  placement: Placement;
+  obj: ExecToolObj;
+}
+
+export interface ApplyPatchToolPacket {
+  placement: Placement;
+  obj: ApplyPatchToolObj;
+}
+
+export interface PublishFilesToolPacket {
+  placement: Placement;
+  obj: PublishFilesToolObj;
+}
+
 export interface MemoryToolPacket {
   placement: Placement;
   obj: MemoryToolObj;
+}
+
+export interface PostgresToolPacket {
+  placement: Placement;
+  obj: PostgresToolObj;
 }
 
 export interface ReasoningPacket {
@@ -547,11 +884,6 @@ export interface SectionEndPacket {
   obj: SectionEndObj;
 }
 
-export interface TopLevelBranchingPacket {
-  placement: Placement;
-  obj: TopLevelBranchingObj;
-}
-
 export interface DeepResearchPlanPacket {
   placement: Placement;
   obj: DeepResearchPlanObj;
@@ -562,7 +894,9 @@ export interface ResearchAgentPacket {
   obj: ResearchAgentObj;
 }
 
-export interface CodingAgentPacket {
-  placement: Placement;
-  obj: CodingAgentObj;
+/** Transport cursor for the complete packet prefix preceding this record. */
+export interface StreamCursor {
+  stream_id: number;
+  next_cursor: number;
+  replay_complete: boolean;
 }

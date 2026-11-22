@@ -2,13 +2,15 @@
 
 from collections.abc import Mapping
 from contextlib import nullcontext
+from types import MappingProxyType
 from typing import Any
 from unittest.mock import MagicMock, patch
 
 import pytest
 
-from onyx.tracing.framework.span_data import GenerationSpanData
+from onyx.tracing.framework.span_data import FunctionSpanData, GenerationSpanData
 from onyx.tracing.langfuse_tracing_processor import LangfuseTracingProcessor
+from onyx.tracing.masking import MASKING_LENGTH
 
 
 def _make_trace(metadata: Mapping[str, Any]) -> MagicMock:
@@ -128,3 +130,89 @@ def test_calculate_cost_prices_cache_creation_at_write_rate() -> None:
     )
 
     assert processor._calculate_cost(data) == pytest.approx(0.0105)
+
+
+@pytest.mark.parametrize("config_kind", ["dict", "proxy", "none"])
+def test_on_span_end_exports_cache_metadata_from_optional_mapping(
+    config_kind: str,
+) -> None:
+    client, observation = _make_client_with_observation()
+    processor = LangfuseTracingProcessor(client=client)
+    metadata: dict[str, str] = {
+        "cacheable_prefix_msgs": "2",
+        "cacheable_prefix_tokens": "100",
+        "history_msgs": "3",
+    }
+    config: Mapping[str, Any] | None = (
+        MappingProxyType(metadata) if config_kind == "proxy" else metadata
+    )
+    if config_kind == "none":
+        config = None
+    span = _make_span("trace-123", "span-1")
+    span.span_data = GenerationSpanData(model="test-model", model_config=config)
+    span.error = None
+    processor._spans[span.span_id] = observation
+
+    processor.on_span_end(span)
+
+    observation.update.assert_called_once()
+    update: dict[str, Any] = observation.update.call_args.kwargs
+    if config is None:
+        assert "metadata" not in update
+    else:
+        assert update["metadata"] == metadata
+    observation.end.assert_called_once()
+
+
+def test_on_span_end_exports_function_span_metadata() -> None:
+    client, observation = _make_client_with_observation()
+    processor = LangfuseTracingProcessor(client=client)
+    span = _make_span("trace-123", "span-1")
+    span.span_data = FunctionSpanData(
+        name="echo", input="{}", output="ok", metadata={"code_mode.index": 1}
+    )
+    span.error = None
+    processor._spans[span.span_id] = observation
+
+    processor.on_span_end(span)
+
+    update: dict[str, Any] = observation.update.call_args.kwargs
+    assert update["metadata"] == {"code_mode.index": 1}
+
+
+def test_on_span_end_bounds_a_large_function_output() -> None:
+    client, observation = _make_client_with_observation()
+    processor = LangfuseTracingProcessor(client=client)
+    span = _make_span("trace-123", "span-1")
+    output = "HEAD" + "x" * (2 * MASKING_LENGTH) + "TAIL"
+    span.span_data = FunctionSpanData(name="echo", input="{}", output=output)
+    span.error = None
+    processor._spans[span.span_id] = observation
+
+    processor.on_span_end(span)
+
+    exported = observation.update.call_args.kwargs["output"]
+    assert isinstance(exported, str)
+    assert len(exported) < MASKING_LENGTH + 100
+    assert exported.startswith("HEAD")
+    assert "TAIL[TRUNCATED" in exported
+
+
+def test_on_span_end_masks_a_bearer_token_across_the_cut() -> None:
+    client, observation = _make_client_with_observation()
+    processor = LangfuseTracingProcessor(client=client)
+    span = _make_span("trace-123", "span-1")
+    token = "Z" * 40
+    # The kept tail starts in the middle of the token.
+    tail = "y" * (MASKING_LENGTH // 5 - len(token) // 2)
+    output = "x" * (2 * MASKING_LENGTH) + "Authorization: Bearer " + token + tail
+    span.span_data = FunctionSpanData(name="echo", input="{}", output=output)
+    span.error = None
+    processor._spans[span.span_id] = observation
+
+    processor.on_span_end(span)
+
+    exported = observation.update.call_args.kwargs["output"]
+    assert isinstance(exported, str)
+    assert "[TRUNCATED" in exported
+    assert "Z" not in exported

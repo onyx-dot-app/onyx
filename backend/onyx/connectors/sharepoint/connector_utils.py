@@ -1,103 +1,111 @@
-from typing import Any
+from urllib.parse import urlsplit
 
-from office365.graph_client import GraphClient
-from office365.onedrive.driveitems.driveItem import DriveItem
-from office365.sharepoint.client_context import ClientContext
-from pydantic import BaseModel, Field, field_serializer
+from onyx.connectors.exceptions import ConnectorValidationError
+from onyx.connectors.sharepoint.config import is_site_url_well_formed
+from onyx.server.security.models import connector_ssrf_enforced
+from onyx.server.security.store import get_security_settings
+from onyx.utils.url import SSRFException, validate_outbound_http_url
 
-from onyx.connectors.models import ExternalAccess
-from onyx.db.enums import HierarchyNodeType
-from onyx.utils.variable_functionality import (
-    fetch_versioned_implementation_with_fallback,
-)
+# OneDrive sites live on '<tenant>-my.<suffix>' instead of '<tenant>.<suffix>'.
+ONEDRIVE_HOST_SUFFIX = "-my"
 
 
-class SharepointGroup(BaseModel):
-    model_config = {"frozen": True}
-
-    name: str
-    login_name: str
-    principal_type: int
-
-
-class SharepointGroupExpansion(BaseModel):
-    nested_groups: set[SharepointGroup]
-
-    @field_serializer("nested_groups")
-    def serialize_nested_groups(
-        self, nested_groups: set[SharepointGroup]
-    ) -> list[SharepointGroup]:
-        return list(nested_groups)
+def tenant_domain_from_site_urls(site_urls: list[str]) -> str | None:
+    """The first label of a site hostname, e.g. "contoso" for
+    https://contoso.sharepoint.com/sites/eng. None when no URL parses."""
+    for site_url in site_urls:
+        try:
+            hostname = urlsplit(site_url.strip()).hostname
+        except ValueError:
+            continue
+        if not hostname:
+            continue
+        tenant = hostname.split(".")[0]
+        if tenant:
+            return tenant
+    return None
 
 
-class SharepointPermissionCache(BaseModel):
-    group_expansions: dict[str, SharepointGroupExpansion] = Field(default_factory=dict)
+def _expected_site_hostnames(
+    tenant_domain: str, sharepoint_domain_suffix: str
+) -> set[str]:
+    """The hosts the REST token is valid for. OneDrive lives on the ``-my``
+    sibling of the tenant host, so both forms of the tenant label are
+    accepted."""
+    tenant = tenant_domain.lower().removesuffix(ONEDRIVE_HOST_SUFFIX)
+    suffix = sharepoint_domain_suffix.lower()
+    return {f"{tenant}.{suffix}", f"{tenant}{ONEDRIVE_HOST_SUFFIX}.{suffix}"}
 
 
-def get_sharepoint_external_access(
-    ctx: ClientContext,
-    graph_client: GraphClient,
-    permission_cache: SharepointPermissionCache,
-    drive_item: DriveItem | None = None,
-    drive_name: str | None = None,
-    site_page: dict[str, Any] | None = None,
-    add_prefix: bool = False,
-    treat_sharing_link_as_public: bool = False,
-) -> ExternalAccess:
-    if drive_item and drive_item.id is None:
-        raise ValueError("DriveItem ID is required")
+class SiteUrlFormatError(ConnectorValidationError):
+    """A site URL that is not https with a site path."""
 
-    # Get external access using the EE implementation
-    def noop_fallback(
-        *args: Any,  # noqa: ARG001
-        **kwargs: Any,  # noqa: ARG001
-    ) -> ExternalAccess:
-        return ExternalAccess.empty()
 
-    get_external_access_func = fetch_versioned_implementation_with_fallback(
-        "onyx.external_permissions.sharepoint.permission_utils",
-        "get_external_access_from_sharepoint",
-        fallback=noop_fallback,
+class SiteUrlBlockedError(ConnectorValidationError):
+    """A site URL the outbound URL guard rejects."""
+
+
+class SiteUrlHostError(ConnectorValidationError):
+    """A site URL off the cloud's suffix or the tenant's host."""
+
+
+def validate_content_types(
+    include_site_documents: bool, include_site_pages: bool
+) -> None:
+    if not include_site_documents and not include_site_pages:
+        raise ConnectorValidationError(
+            "At least one content type must be enabled. Turn on 'Index Documents' "
+            "or 'Index ASPX Sites' (or both)."
+        )
+
+
+def validate_site_url(
+    site_url: str, sharepoint_domain_suffix: str, tenant_domain: str | None
+) -> None:
+    """A full site URL, on the tenant's host, that the shared connector SSRF
+    policy lets the server call."""
+    if not is_site_url_well_formed(site_url):
+        raise SiteUrlFormatError(
+            f"`{site_url}` is not a full SharePoint or OneDrive site URL "
+            "(https://tenant.sharepoint.com/sites/name or /teams/name, "
+            "https://tenant-my.sharepoint.com/personal/name)."
+        )
+    enforced: bool = connector_ssrf_enforced(
+        get_security_settings().ssrf_protection_level
     )
-
-    external_access = get_external_access_func(
-        ctx,
-        graph_client,
-        drive_name,
-        drive_item,
-        site_page,
-        add_prefix,
-        treat_sharing_link_as_public,
-        permission_cache,
-    )
-
-    return external_access
+    try:
+        validate_outbound_http_url(
+            site_url,
+            https_only=True,
+            allow_private_network=not enforced,
+            block_link_local_only=not enforced,
+        )
+    except (SSRFException, ValueError) as e:
+        raise SiteUrlBlockedError(f"Invalid site URL '{site_url}': {e}") from e
+    validate_site_url_host(site_url, sharepoint_domain_suffix, tenant_domain)
 
 
-def get_sharepoint_hierarchy_node_external_access(
-    ctx: ClientContext,
-    graph_client: GraphClient,
-    permission_cache: SharepointPermissionCache,
-    node_type: HierarchyNodeType,
-    drive_name: str | None = None,
-    folder_url: str | None = None,
-) -> ExternalAccess:
-    def noop_fallback(
-        *args: Any,  # noqa: ARG001
-        **kwargs: Any,  # noqa: ARG001
-    ) -> ExternalAccess:
-        return ExternalAccess.empty()
+def validate_site_url_host(
+    site_url: str, sharepoint_domain_suffix: str, tenant_domain: str | None
+) -> None:
+    """Reject a site URL the REST token must not be sent to.
 
-    get_external_access_func = fetch_versioned_implementation_with_fallback(
-        "onyx.external_permissions.sharepoint.permission_utils",
-        "get_hierarchy_node_external_access_from_sharepoint",
-        fallback=noop_fallback,
-    )
-    return get_external_access_func(
-        ctx,
-        graph_client,
-        node_type,
-        drive_name,
-        folder_url,
-        permission_cache,
-    )
+    The token is minted for one tenant, so a host like
+    'tenant.attacker.example/sites/x' would leak it to the attacker, and
+    another tenant under the same cloud suffix would receive a token it has
+    no claim to. Without a tenant domain only the suffix is checked.
+    """
+    suffix = sharepoint_domain_suffix.lower()
+    hostname = (urlsplit(site_url).hostname or "").lower()
+    if hostname != suffix and not hostname.endswith(f".{suffix}"):
+        raise SiteUrlHostError(
+            f"Site URL '{site_url}' must be on the '{suffix}' domain."
+        )
+    if tenant_domain is None:
+        return
+    expected = _expected_site_hostnames(tenant_domain, sharepoint_domain_suffix)
+    if hostname not in expected:
+        raise SiteUrlHostError(
+            f"Site URL '{site_url}' is not on this tenant's SharePoint host "
+            f"(expected one of: {', '.join(sorted(expected))})."
+        )

@@ -28,6 +28,8 @@ from onyx.db.scoped_permissions import (
     scoped_group_ids_subquery,
     within_managed_scope_clause,
 )
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.server.features.document_set.models import (
     DocumentSetCreationRequest,
     DocumentSetUpdateRequest,
@@ -238,6 +240,27 @@ def filter_document_set_names_by_user_access(
     return set(db_session.scalars(stmt).all())
 
 
+def require_document_set_access(
+    db_session: Session, document_set_names: list[str] | None, user: User | None
+) -> None:
+    """Reject document-set names the user cannot view.
+
+    Anonymous users are scoped to public documents elsewhere, so they are not
+    checked here.
+    """
+    if not document_set_names or user is None or user.is_anonymous:
+        return
+    accessible = filter_document_set_names_by_user_access(
+        db_session=db_session, document_set_names=document_set_names, user=user
+    )
+    unauthorized = sorted(set(document_set_names) - set(accessible))
+    if unauthorized:
+        raise OnyxError(
+            OnyxErrorCode.INSUFFICIENT_PERMISSIONS,
+            f"User does not have access to document sets: {unauthorized}",
+        )
+
+
 def filter_document_set_ids_by_user_access(
     db_session: Session,
     document_set_ids: list[int],
@@ -316,7 +339,7 @@ def check_if_cc_pairs_are_owned_by_groups(
             ids=missing_cc_pair_ids,
         )
         for cc_pair in cc_pairs:
-            if cc_pair.access_type == AccessType.PRIVATE:
+            if cc_pair.access_type in (AccessType.PRIVATE, AccessType.PERSONAL):
                 raise ValueError(
                     f"Connector Credential Pair with ID: '{cc_pair.id}' is not owned by the specified groups"
                 )
@@ -417,7 +440,7 @@ def update_document_set(
 ) -> tuple[DocumentSetDBModel, list[DocumentSet__ConnectorCredentialPair]]:
     """If successful, this sets document_set_row.is_up_to_date = False.
     That will be processed via Celery in check_for_vespa_sync_task
-    and trigger a long running background sync to Vespa.
+    and trigger a long running background sync to the document index.
     """
     # Check if we have either CC pairs or federated connectors (or both)
     if (
@@ -545,7 +568,7 @@ def mark_document_set_as_to_be_deleted(
 ) -> None:
     """Cleans up all document_set -> cc_pair relationships and marks the document set
     as needing an update. The actual document set row will be deleted by the background
-    job which syncs these changes to Vespa."""
+    job which syncs these changes to the document index."""
 
     try:
         document_set_row = get_document_set_by_id_for_user(
@@ -570,7 +593,7 @@ def mark_document_set_as_to_be_deleted(
         )
 
         # delete all federated connector mappings so the cleanup task can fully
-        # remove the document set once the Vespa sync completes
+        # remove the document set once the document index sync completes
         delete_stmt = delete(FederatedConnector__DocumentSet).where(
             FederatedConnector__DocumentSet.document_set_id == document_set_id
         )

@@ -26,7 +26,10 @@ export default function SkillsStaleNotice({
     setReloading(true);
     try {
       const state = await reloadSessionSkills(sessionId);
-      updateSessionData(sessionId, { skillsStale: state.skills_stale });
+      updateSessionData(sessionId, {
+        skillsStale: state.skills_stale,
+        skillOmissions: state.skill_omissions,
+      });
     } catch (error) {
       toast.error(
         error instanceof Error ? error.message : t("toast.reloadFailed")
@@ -40,7 +43,7 @@ export default function SkillsStaleNotice({
 
   return (
     <MessageCard
-      variant="warning"
+      variant="info"
       title={t("notice.title")}
       description={t("notice.description")}
       rightChildren={

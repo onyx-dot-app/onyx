@@ -15,15 +15,19 @@ from __future__ import annotations
 from datetime import datetime
 
 import requests
-from redis.exceptions import RedisError
 from sqlalchemy.exc import ProgrammingError, SQLAlchemyError
 
-from ee.onyx.configs.app_configs import LICENSE_ENFORCEMENT_ENABLED
 from ee.onyx.db.license import get_cached_license_metadata, refresh_license_cache
 from ee.onyx.server.license.models import CustomerTier
 from ee.onyx.server.tenants.billing import fetch_billing_information
 from ee.onyx.server.tenants.models import BillingInformation, SubscriptionStatusResponse
-from ee.onyx.server.tenants.tier_management import get_cached_tier, update_tenant_tier
+from ee.onyx.server.tenants.tier_management import (
+    get_cached_tier,
+    has_recent_tenant_tier_miss,
+    mark_tenant_tier_miss,
+    update_tenant_tier,
+)
+from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -31,8 +35,7 @@ from onyx.error_handling.exceptions import OnyxError
 from onyx.server.settings.models import ApplicationStatus, Tier
 from onyx.server.settings.tier_order import tier_at_least
 from onyx.utils.logger import setup_logger
-from onyx.utils.variable_functionality import global_version
-from shared_configs.configs import MULTI_TENANT
+from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
@@ -69,16 +72,9 @@ def tier_from_license_metadata(metadata: object | None) -> Tier:
 
 
 def _self_hosted_tier() -> Tier:
-    if not LICENSE_ENFORCEMENT_ENABLED:
-        # Mirrors apply_license_status_to_settings (settings/api.py:87-92):
-        # legacy / dev-mode self-host where EE code is loaded via
-        # ENABLE_PAID_ENTERPRISE_EDITION_FEATURES but no license is required.
-        # Treat as ENTERPRISE so tier_gate doesn't 402 EE endpoints.
-        return Tier.ENTERPRISE if global_version.is_ee_version() else Tier.COMMUNITY
-
     try:
         metadata = get_cached_license_metadata()
-    except RedisError as e:
+    except CACHE_TRANSIENT_ERRORS as e:
         # Treat cache failure as a miss so the existing DB-fallback path
         # below still has a chance to resolve the correct tier.
         logger.warning("Self-hosted tier: license cache read failed: %s", e)
@@ -117,17 +113,13 @@ def _extract_billing_state(
 def _lazy_refresh_from_cp(
     tenant_id: str,
 ) -> tuple[CustomerTier, datetime | None] | None:
-    try:
-        billing = fetch_billing_information(tenant_id)
-    except (requests.RequestException, ValueError) as e:
-        logger.warning(
-            "Tier lazy-refresh failed for tenant %s. CP request or payload failed: %s",
-            tenant_id,
-            e,
-        )
-        return None
-
-    return _extract_billing_state(billing)
+    billing = fetch_billing_information(tenant_id)
+    state = _extract_billing_state(billing)
+    if state is None and not (
+        isinstance(billing, SubscriptionStatusResponse) and not billing.subscribed
+    ):
+        raise ValueError("Control-plane response has no customer tier")
+    return state
 
 
 def get_tier(tenant_id: str | None = None) -> Tier:
@@ -136,9 +128,13 @@ def get_tier(tenant_id: str | None = None) -> Tier:
 
     tid = tenant_id or get_current_tenant_id()
 
+    if tid == POSTGRES_DEFAULT_SCHEMA:
+        return Tier.BUSINESS
+
     try:
         cached = get_cached_tier(tid)
-    except RedisError as e:
+        recent_miss = cached is None and has_recent_tenant_tier_miss(tid)
+    except CACHE_TRANSIENT_ERRORS as e:
         # Don't try CP either — likely a wider outage; keep failures cheap.
         logger.warning(
             "Tier Redis read failed for tenant %s; falling back to BUSINESS: %s",
@@ -150,12 +146,19 @@ def get_tier(tenant_id: str | None = None) -> Tier:
     if cached is not None:
         return _cloud_tier(cached.customer_tier)
 
-    fresh = _lazy_refresh_from_cp(tid)
+    if recent_miss:
+        return Tier.BUSINESS
+
+    try:
+        fresh = _lazy_refresh_from_cp(tid)
+    except (requests.RequestException, ValueError, TypeError) as e:
+        logger.warning("Tier lazy-refresh failed for tenant %s: %s", tid, e)
+        return Tier.BUSINESS
     if fresh is not None:
         fresh_tier, fresh_trial_end = fresh
         try:
             update_tenant_tier(tid, fresh_tier, fresh_trial_end)
-        except RedisError as e:
+        except CACHE_TRANSIENT_ERRORS as e:
             logger.warning(
                 "Tier Redis write failed for tenant %s after CP refresh: %s",
                 tid,
@@ -163,7 +166,10 @@ def get_tier(tenant_id: str | None = None) -> Tier:
             )
         return _cloud_tier(fresh_tier)
 
-    # Don't cache the fallback — next call retries the refresh.
+    try:
+        mark_tenant_tier_miss(tid)
+    except CACHE_TRANSIENT_ERRORS as e:
+        logger.warning("Tier miss marker write failed for tenant %s: %s", tid, e)
     return Tier.BUSINESS
 
 
@@ -174,14 +180,8 @@ def require_business_tier_for_sync_access(access_type: AccessType) -> None:
     is a Business+ feature. Failing at create/edit time means cc-pairs with
     SYNC access only exist on tenants that can actually run the sync —
     instead of letting the row land and silently never sync.
-
-    Mirrors `apply_license_status_to_settings`: with
-    LICENSE_ENFORCEMENT_ENABLED=False, treat the tenant as ENTERPRISE so
-    legacy EE deployments without a license aren't broken.
     """
-    if access_type != AccessType.SYNC:
-        return
-    if not LICENSE_ENFORCEMENT_ENABLED:
+    if not access_type.is_perm_synced():
         return
     if not tier_at_least(get_tier(), Tier.BUSINESS):
         raise OnyxError(
@@ -190,13 +190,33 @@ def require_business_tier_for_sync_access(access_type: AccessType) -> None:
         )
 
 
+def require_business_tier_for_personal_access(access_type: AccessType) -> None:
+    """Raise FEATURE_NOT_AVAILABLE if PERSONAL access is requested below
+    BUSINESS. Owner-only connectors are a Business+ feature."""
+    if access_type != AccessType.PERSONAL:
+        return
+    if not tier_at_least(get_tier(), Tier.BUSINESS):
+        raise OnyxError(
+            OnyxErrorCode.FEATURE_NOT_AVAILABLE,
+            "Owner-only access requires the Business or Enterprise plan.",
+        )
+
+
+def require_business_tier_for_connector_group_restrictions() -> None:
+    """Gate turning on data-access group restrictions for perm-synced
+    connectors. Groups and perm sync are Business+, so the setting would be
+    inert below that."""
+    if not tier_at_least(get_tier(), Tier.BUSINESS):
+        raise OnyxError(
+            OnyxErrorCode.FEATURE_NOT_AVAILABLE,
+            "Group restrictions on permission-synced connectors require the "
+            "Business or Enterprise plan.",
+        )
+
+
 def require_business_tier_for_multi_sso() -> None:
     """Gate a second simultaneously enabled SSO provider to Business or
-    above. A single enabled provider works at every tier.
-    LICENSE_ENFORCEMENT_ENABLED=False passes, matching the sync-access
-    guard."""
-    if not LICENSE_ENFORCEMENT_ENABLED:
-        return
+    above. A single enabled provider works at every tier."""
     if not tier_at_least(get_tier(), Tier.BUSINESS):
         raise OnyxError(
             OnyxErrorCode.FEATURE_NOT_AVAILABLE,

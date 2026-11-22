@@ -10,7 +10,7 @@ const (
 	deployCloudTag   = "v4.7.0-cloud.3"
 	deployCloudRunID = 900
 	deployRunURL     = "https://github.com/onyx-dot-app/onyx/actions/runs/900"
-	deployPRURL      = "https://github.com/onyx-dot-app/onyx-infra/pull/12"
+	deployPRURL      = "https://github.com/example-org/infra-repo/pull/12"
 )
 
 func deployPRs(prs string) deployGHReply {
@@ -35,6 +35,8 @@ func TestWatchCloudRelease(t *testing.T) {
 		// pollsUntilTimeout means the PR poll count depends on timing, so only
 		// at least one poll is required.
 		pollsUntilTimeout bool
+		// clearRepoEnv makes the watcher resolve the infra repo through gh.
+		clearRepoEnv bool
 	}{
 		{
 			name: "build succeeds and the bump PR opens after a poll",
@@ -54,7 +56,7 @@ func TestWatchCloudRelease(t *testing.T) {
 				"run-view": {deployRun(t, succeeded)},
 				"pr-list":  {noPR},
 			},
-			wantErr:           "no bump PR for v4.7.0-cloud.3 appeared within 500ms; check https://github.com/onyx-dot-app/onyx-infra/actions/workflows/bump-cloud-version.yml",
+			wantErr:           "no bump PR for v4.7.0-cloud.3 appeared within 500ms; check https://github.com/example-org/infra-repo/actions/workflows/bump-cloud-version.yml",
 			wantStdout:        deployRunURL + "\n",
 			pollsUntilTimeout: true,
 		},
@@ -128,6 +130,30 @@ func TestWatchCloudRelease(t *testing.T) {
 			wantPRPolls: 1,
 		},
 		{
+			name: "build succeeds but the infra repo lookup fails",
+			replies: map[string][]deployGHReply{
+				"run-list":     {deployRuns(t, cloudRun)},
+				"run-view":     {deployRun(t, succeeded)},
+				"variable-get": {deployGHFailure("HTTP 403")},
+			},
+			clearRepoEnv: true,
+			wantErr:      "could not read the CLOUD_DEPLOYMENT_REPO variable",
+			wantStdout:   deployRunURL + "\n",
+		},
+		{
+			name: "failed build whose infra repo lookup fails keeps the build error",
+			replies: map[string][]deployGHReply{
+				"run-list":     {deployRuns(t, cloudRun)},
+				"run-view":     {deployRun(t, failed)},
+				"run-jobs":     {dispatched},
+				"variable-get": {deployGHFailure("HTTP 403")},
+			},
+			clearRepoEnv: true,
+			wantErr:      `build run 900 concluded with status "failure"`,
+			wantStdout:   deployRunURL + "\n",
+			wantLogs:     []string{"Could not resolve the internal infra repo", "HTTP 403"},
+		},
+		{
 			name: "deployment run lookup fails",
 			replies: map[string][]deployGHReply{
 				"run-list": {deployGHFailure("HTTP 500")},
@@ -138,6 +164,9 @@ func TestWatchCloudRelease(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			gh := deployNewFakeGH(t, c.replies)
+			if c.clearRepoEnv {
+				t.Setenv(cloudDeploymentRepoEnv, "")
+			}
 			out := deployCaptureOutput(t)
 
 			err := watchCloudRelease(deployFastPolling(), deployCloudTag)
@@ -167,7 +196,7 @@ func TestWatchCloudRelease(t *testing.T) {
 // requires at least one poll.
 func deployAssertBumpPRPolls(t *testing.T, calls []string, wantPolls int, untilTimeout bool) {
 	t.Helper()
-	want := "pr list -R onyx-dot-app/onyx-infra --head bump-version/" + deployCloudTag + " --state all --json number,state,url"
+	want := "pr list -R example-org/infra-repo --head bump-version/" + deployCloudTag + " --state all --json number,state,url"
 	var got int
 	for _, call := range calls {
 		if strings.HasPrefix(call, "pr list") {

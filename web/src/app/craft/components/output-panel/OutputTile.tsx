@@ -1,0 +1,230 @@
+"use client";
+
+import { useRef } from "react";
+import { useInView } from "motion/react";
+import { useTranslations } from "next-intl";
+import { SelectCard, Text } from "@opal/components";
+import { toPlainString } from "@opal/components/text/InlineMarkdown";
+import type { RichStr } from "@opal/types";
+import { cn } from "@opal/utils";
+import { SvgFolder, SvgGlobe } from "@opal/icons";
+import {
+  OutputImageThumbnail,
+  OutputTileFrame,
+  OutputUnseenMarker,
+} from "@/sections/output-panel/OutputTile";
+import { MarkdownContent } from "@/app/craft/components/output-panel/MarkdownFilePreview";
+import { getFileIcon } from "@/lib/utils";
+import { useFilePreview } from "@/lib/build/hooks";
+import { SWR_KEYS } from "@/lib/swr-keys";
+import {
+  downloadArtifactFile,
+  fetchFileContent,
+  fetchOutputThumbnail,
+} from "@/app/craft/services/apiServices";
+import type { OutputFile, OutputCard } from "@/app/craft/types/streamingTypes";
+
+interface OutputTileProps {
+  sessionId: string;
+  file: OutputFile;
+  isActive: boolean;
+  showPath?: boolean;
+  isUnseen?: boolean;
+  onFileOpen: (path: string, fileName: string) => void;
+}
+
+export function OutputTile({
+  sessionId,
+  file,
+  isActive,
+  onFileOpen,
+  showPath = false,
+  isUnseen = false,
+}: OutputTileProps) {
+  const ref = useRef<HTMLDivElement>(null);
+  const inView = useInView(ref, { margin: "200px" });
+  const image = /\.(png|jpe?g|gif|webp|svg|avif)$/i.test(file.path);
+  const text =
+    /\.(txt|md|csv|json|html?|css|js|ts|tsx|jsx|py|yaml|yml|xml|sql|sh|log)$/i.test(
+      file.path
+    );
+  const document = /\.(pdf|pptx?)$/i.test(file.path);
+  const canPreview =
+    (image && file.size <= 2 * 1024 * 1024) ||
+    (text && file.size <= 256 * 1024) ||
+    (document && file.size <= 20 * 1024 * 1024);
+  const { data, error } = useFilePreview(
+    SWR_KEYS.buildSessionOutputThumbnail(sessionId, file.path),
+    () =>
+      document
+        ? fetchOutputThumbnail(sessionId, file.path).then((content) => ({
+            content,
+            mimeType: "image/jpeg",
+            isImage: true,
+          }))
+        : fetchFileContent(sessionId, file.path),
+    { revision: file.revision, isActive: isActive && inView && canPreview }
+  );
+  const name = file.path.split("/").at(-1) ?? file.path;
+  const FileIcon = getFileIcon(name);
+  const preview = data && !data.error && canPreview ? data : undefined;
+
+  return (
+    <OutputTileFrame
+      ref={ref}
+      label={file.path}
+      name={showPath ? file.path.replace(/^outputs\//, "") : name}
+      isUnseen={isUnseen}
+      onOpen={() => onFileOpen(file.path, name)}
+      onDownload={() => downloadArtifactFile(sessionId, file.path)}
+      preview={
+        <>
+          {preview?.isImage ? (
+            <OutputImageThumbnail
+              key={preview.content}
+              src={preview.content}
+              fallback={
+                <FileIcon
+                  size={32}
+                  className="size-8 stroke-text-03 @[40rem]:size-10 [&_*]:stroke-1"
+                />
+              }
+            />
+          ) : preview?.content ? (
+            <div
+              className="relative h-full w-full overflow-hidden bg-background-neutral-00 text-start pointer-events-none"
+              inert
+            >
+              <div className="absolute start-0 top-0 w-[222%] origin-top-left scale-45 p-5 rtl:origin-top-right">
+                {/\.md$/i.test(file.path) ? (
+                  <MarkdownContent
+                    content={preview.content.slice(0, 4000)}
+                    thumbnail
+                  />
+                ) : (
+                  <div className="whitespace-pre-wrap">
+                    <Text
+                      font="secondary-mono"
+                      color="text-04"
+                      as="p"
+                      wordWrap="wrap-anywhere"
+                    >
+                      {preview.content.slice(0, 4000)}
+                    </Text>
+                  </div>
+                )}
+              </div>
+            </div>
+          ) : canPreview && !data && !error ? (
+            <div className="h-full w-full bg-background-neutral-02" />
+          ) : (
+            <FileIcon
+              size={32}
+              className="size-8 stroke-text-03 @[40rem]:size-10 [&_*]:stroke-1"
+            />
+          )}
+        </>
+      }
+    />
+  );
+}
+
+export function OutputFolderTile({
+  name,
+  onOpen,
+  isUnseen = false,
+}: {
+  name: string | RichStr;
+  onOpen: () => void;
+  isUnseen?: boolean;
+}) {
+  return (
+    <SelectCard
+      role="button"
+      aria-label={toPlainString(name)}
+      tabIndex={0}
+      state="empty"
+      padding={3}
+      rounding={2}
+      onClick={onOpen}
+    >
+      <div className="flex min-w-0 items-center gap-2">
+        <SvgFolder size={20} className="shrink-0 stroke-text-03" aria-hidden />
+        <div className="min-w-0 flex-1">
+          <Text
+            font="secondary-body"
+            color="text-04"
+            maxLines={1}
+            wordWrap="wrap-anywhere"
+          >
+            {name}
+          </Text>
+        </div>
+        {isUnseen && <OutputUnseenMarker className="shrink-0" />}
+      </div>
+    </SelectCard>
+  );
+}
+
+export function OutputAppTile({
+  name,
+  isUnseen,
+  onOpen,
+}: {
+  name: string | RichStr;
+  isUnseen: boolean;
+  onOpen: () => void;
+}) {
+  return (
+    <OutputTileFrame
+      label={toPlainString(name)}
+      name={name}
+      isUnseen={isUnseen}
+      onOpen={onOpen}
+      preview={
+        <SvgGlobe
+          size={32}
+          className="size-8 stroke-text-03 @[40rem]:size-10 [&_*]:stroke-1"
+        />
+      }
+    />
+  );
+}
+
+export function OutputUnavailableTile({
+  card,
+  showPath = false,
+}: {
+  card: OutputCard;
+  showPath?: boolean;
+}) {
+  const t = useTranslations("craft.turnOutputs");
+  const name =
+    card.kind === "app"
+      ? t("appTitle")
+      : showPath
+        ? card.path.replace(/^outputs\//, "")
+        : card.name;
+  const Icon = card.kind === "app" ? SvgGlobe : getFileIcon(card.name);
+  return (
+    <OutputTileFrame
+      label={card.kind === "app" ? name : card.path}
+      name={name}
+      preview={
+        <div className="flex flex-col items-center gap-2 p-2 text-center">
+          <Icon
+            size={32}
+            className={cn(
+              "stroke-text-03",
+              card.kind === "file" && "[&_*]:stroke-1"
+            )}
+            aria-hidden
+          />
+          <Text font="secondary-body" color="text-03">
+            {t("unavailable")}
+          </Text>
+        </div>
+      }
+    />
+  );
+}

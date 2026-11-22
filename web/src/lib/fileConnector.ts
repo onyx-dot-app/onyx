@@ -3,13 +3,18 @@ import type { ErrorResponseBody } from "@/lib/fetcher";
 export interface ConnectorFileInfo {
   file_id: string;
   file_name: string;
-  file_size?: number;
+  file_size: number | null;
   upload_date?: string;
 }
 
 export interface ConnectorFilesResponse {
   files: ConnectorFileInfo[];
+  /** Every file of the connector, not just the ones in `files`. */
+  total_items: number;
 }
+
+/** Files per page wherever a connector's file list is listed. */
+export const CONNECTOR_FILES_PAGE_SIZE = 20;
 
 export interface FileUploadResponse {
   file_paths: string[];

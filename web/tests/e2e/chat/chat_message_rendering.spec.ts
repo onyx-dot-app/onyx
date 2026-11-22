@@ -37,10 +37,10 @@ const LONG_AI_RESPONSE = `Onyx is an open-source Gen-AI and Enterprise Search pl
 
 Onyx uses a **connector-based architecture** where each data source has a dedicated connector. These connectors run as background workers and can index simultaneously without interfering with each other. The supported connectors include:
 
-- **Confluence** — Full page and space indexing with attachment support
-- **Google Drive** — File and folder indexing with shared drive support
-- **Slack** — Channel message indexing with thread support
-- **GitHub** — Repository, issue, and pull request indexing
+- **Confluence**: Full page and space indexing with attachment support
+- **Google Drive**: File and folder indexing with shared drive support
+- **Slack**: Channel message indexing with thread support
+- **GitHub**: Repository, issue, and pull request indexing
 
 Each connector runs on its own schedule and can be configured independently for polling frequency.
 
@@ -67,12 +67,34 @@ The typical indexing latency depends on your configuration:
 The chat system uses a **Retrieval-Augmented Generation (RAG)** pipeline:
 
 1. User query is analyzed and expanded
-2. Relevant documents are retrieved from the vector database (Vespa)
+2. Relevant documents are retrieved from the vector database (OpenSearch)
 3. Documents are ranked and filtered by relevance and permissions
 4. The LLM generates a response grounded in the retrieved documents
 5. Citations are attached to specific claims in the response
 
 When documents contain conflicting information, the system presents the most relevant and recent information first, and includes citations so users can verify the source material themselves.`;
+
+const TABLE_COPY_AI_RESPONSE = `Here is a table:
+
+| Tool | Status |
+| --- | --- |
+| [Onyx](https://onyx.app) | Available |
+| Search | Beta |`;
+
+const LONG_CELL =
+  "Whether the scan results were taken off the security tab on purpose, even though the recent runs reported issues";
+
+const WIDE_TABLES_AI_RESPONSE = `A short table with one long cell:
+
+| Date | Question |
+| --- | --- |
+| Jun 12 | ${LONG_CELL} |
+
+A table with many long columns:
+
+| One | Two | Three | Four | Five | Six |
+| --- | --- | --- | --- | --- | --- |
+| ${Array(6).fill(LONG_CELL).join(" | ")} |`;
 
 const MARKDOWN_AI_RESPONSE = `Here's a quick overview with various formatting:
 
@@ -247,12 +269,41 @@ for (const theme of THEMES) {
 
         await sendMessage(page, "Give me an overview of Onyx features");
 
-        const aiMessage = page.getByTestId("onyx-ai-message").first();
-        await expect(aiMessage).toContainText("Key Features");
-        await expect(aiMessage).toContainText("OnyxClient");
-        await expect(aiMessage).toContainText("Privacy");
+        await chat.expectAnswerHeading("Key Features");
+        await chat.expectAnswerTable(["Feature", "Status", "Notes"], 5);
+        await chat.expectAnswerCode("from onyx import OnyxClient");
+        await chat.expectAnswerListItem(
+          "Privacy: Your data stays within your infrastructure"
+        );
 
         await chat.screenshotContainer(`chat-markdown-code-response-${theme}`);
+      });
+
+      test("table copy button writes the table as TSV", async ({ page }) => {
+        await page
+          .context()
+          .grantPermissions(["clipboard-read", "clipboard-write"]);
+        await chat.goto();
+        await mockChatEndpoint(page, buildMockStream(TABLE_COPY_AI_RESPONSE));
+
+        await sendMessage(page, "Show me a table");
+        await chat.expectAnswerTable(["Tool", "Status"], 3);
+
+        await chat.copyAnswerTable();
+        await chat.expectClipboardText(
+          "Tool\tStatus\nOnyx (https://onyx.app)\tAvailable\nSearch\tBeta"
+        );
+      });
+
+      test("wide tables wrap and scroll inside the answer column", async ({
+        page,
+      }) => {
+        await chat.goto();
+        await mockChatEndpoint(page, buildMockStream(WIDE_TABLES_AI_RESPONSE));
+
+        await sendMessage(page, "Show me wide tables");
+        await chat.expectAnswerTableWraps(0);
+        await chat.expectAnswerTableScrolls(1);
       });
 
       test("AI response with LaTeX math renders correctly", async ({
@@ -498,9 +549,9 @@ Key advantages include:
 
 The Q3 2025 priorities focus on three main areas [[D1]](https://company.atlassian.net/wiki/spaces/ENG/pages/123):
 
-1. **Platform stability** — Improving error handling and retry mechanisms across all connectors
-2. **New integrations** — Adding support for ServiceNow and Zendesk connectors
-3. **Performance** — Optimizing vector search latency and reducing indexing time
+1. **Platform stability**: Improving error handling and retry mechanisms across all connectors
+2. **New integrations**: Adding support for ServiceNow and Zendesk connectors
+3. **Performance**: Optimizing vector search latency and reducing indexing time
 
 The platform architecture document provides additional context on how these improvements fit into the overall system design [[D2]](https://drive.google.com/file/d/abc123). The microservices architecture allows each component to be scaled independently.`;
 
@@ -529,6 +580,7 @@ The platform architecture document provides additional context on how these impr
         await expect(aiMessage).toContainText("Platform stability");
         await expect(aiMessage).toContainText("New integrations");
         await expect(aiMessage).toContainText("Performance");
+        await chat.expectInlineCitationsFitLine(2);
 
         await chat.screenshotContainer(
           `chat-internal-search-with-citations-${theme}`

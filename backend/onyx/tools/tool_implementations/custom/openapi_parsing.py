@@ -1,8 +1,10 @@
+from collections.abc import Mapping
 from typing import Any, cast
 from urllib.parse import quote, urlencode
 
-from pydantic import BaseModel
+from pydantic import BaseModel, JsonValue
 
+from onyx.llm.models import ToolDefinition
 from onyx.tools.tool_name import sanitize_tool_name
 
 REQUEST_BODY = "requestBody"
@@ -14,9 +16,9 @@ class PathSpec(BaseModel):
 
 
 class MethodSpec(BaseModel):
-    # Sanitized, LLM-safe name; used in tool definitions and dispatch.
+    # Sanitized operationId used in the parsed operation schema.
     name: str
-    # Original operationId, retained for user-visible display only.
+    # Original operationId used for display and stable tool identity.
     raw_name: str
     summary: str
     path: str
@@ -50,7 +52,10 @@ class MethodSpec(BaseModel):
         ]
 
     def build_url(
-        self, base_url: str, path_params: dict[str, str], query_params: dict[str, str]
+        self,
+        base_url: str,
+        path_params: Mapping[str, JsonValue],
+        query_params: Mapping[str, JsonValue],
     ) -> str:
         encoded_path_params = {
             name: quote(str(value), safe="") for name, value in path_params.items()
@@ -59,39 +64,33 @@ class MethodSpec(BaseModel):
         try:
             url = url.format(**encoded_path_params)
         except KeyError as e:
-            raise ValueError(f"Missing path parameter: {e}")
+            raise ValueError(f"Missing path parameter: {e}") from e
         if query_params:
             url += f"?{urlencode(query_params)}"
         return url
 
-    def to_tool_definition(self) -> dict[str, Any]:
-        tool_definition: Any = {
-            "type": "function",
-            "function": {
-                "name": self.name,
-                "description": self.summary,
-                "parameters": {"type": "object", "properties": {}},
-            },
-        }
-
-        request_body_schema = self.get_request_body_schema()
-        if request_body_schema:
-            tool_definition["function"]["parameters"]["properties"][REQUEST_BODY] = (
-                request_body_schema
+    def to_tool_definition(self) -> ToolDefinition:
+        properties: dict[str, JsonValue] = {}
+        if request_body_schema := self.get_request_body_schema():
+            properties[REQUEST_BODY] = request_body_schema
+        for param in self.get_query_param_schemas() + self.get_path_param_schemas():
+            # OpenAPI puts a parameter's description beside its schema; it wins
+            # over the schema's own, which often comes from a shared component.
+            # A `true` schema admits any value, as `{}` does.
+            description = param.get("description")
+            schema = {} if param["schema"] is True else param["schema"]
+            properties[param["name"]] = (
+                {**schema, "description": description}
+                if isinstance(schema, dict)
+                and isinstance(description, str)
+                and description
+                else param["schema"]
             )
-
-        query_param_schemas = self.get_query_param_schemas()
-        if query_param_schemas:
-            tool_definition["function"]["parameters"]["properties"].update(
-                {param["name"]: param["schema"] for param in query_param_schemas}
-            )
-
-        path_param_schemas = self.get_path_param_schemas()
-        if path_param_schemas:
-            tool_definition["function"]["parameters"]["properties"].update(
-                {param["name"]: param["schema"] for param in path_param_schemas}
-            )
-        return tool_definition
+        return ToolDefinition(
+            name=self.name,
+            description=self.summary,
+            parameters={"type": "object", "properties": properties},
+        )
 
     def validate_spec(self) -> None:
         # Validate url construction
@@ -190,6 +189,8 @@ def openapi_to_url(openapi_schema: dict[str, dict | str]) -> str:
     servers = cast(list[dict[str, Any]], openapi_schema.get("servers", []))
     for server in servers:
         url = server.get("url")
+        if url is not None and not isinstance(url, str):
+            raise ValueError("`servers[].url` must be a string")
         if url:
             urls.append(url)
 

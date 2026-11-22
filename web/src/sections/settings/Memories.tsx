@@ -9,6 +9,7 @@ import FileTile from "@/refresh-components/tiles/FileTile";
 import ButtonTile from "@/refresh-components/tiles/ButtonTile";
 import MemoriesModal from "@/refresh-components/modals/MemoriesModal";
 import { MemoryItem } from "@/lib/types";
+import { useSettings } from "@/lib/settings/hooks";
 
 interface MemoriesProps {
   memories: MemoryItem[];
@@ -17,6 +18,7 @@ interface MemoriesProps {
 
 export default function Memories({ memories, onSaveMemories }: MemoriesProps) {
   const t = useTranslations("settings.memory");
+  const { appName } = useSettings();
   const memoriesModal = useCreateModal();
   const [targetMemoryId, setTargetMemoryId] = useState<number | null>(null);
 
@@ -32,7 +34,7 @@ export default function Memories({ memories, onSaveMemories }: MemoriesProps) {
           padding={2}
           rounding={3}
           // Keep the card visually engaged while the modal it opened is up —
-          // the same treatment OpenButton and Divider give their popovers.
+          // the same treatment SelectButton and Divider give their popovers.
           interaction={memoriesModal.isOpen ? "hover" : "rest"}
           onClick={() => {
             setTargetMemoryId(null);
@@ -42,7 +44,7 @@ export default function Memories({ memories, onSaveMemories }: MemoriesProps) {
           <Section flexDirection="row" gap={1} justifyContent="between">
             <Section padding={1} width="full" alignItems="start">
               <Text font="secondary-body" color="text-03">
-                {t("empty.description")}
+                {t("empty.description", { appName })}
               </Text>
             </Section>
             <Button

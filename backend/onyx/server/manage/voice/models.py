@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Literal
 
 from pydantic import BaseModel, Field, field_validator
 
@@ -52,6 +52,7 @@ class VoiceProviderUpsertRequest(BaseModel):
 
     id: int | None = Field(default=None, description="Existing provider ID to update.")
     name: str
+    validation_mode: Literal["voice", "decision"] = "voice"
     provider_type: str  # "openai", "azure", "elevenlabs", "zoom"
     api_key: str | None = Field(
         default=None,
@@ -109,6 +110,7 @@ class VoiceProviderTestRequest(BaseModel):
         description="Existing provider ID to use when testing stored credentials.",
     )
     provider_type: str
+    validation_mode: Literal["voice", "decision"] = "voice"
     api_key: str | None = Field(
         default=None,
         description="API key for testing. If not provided, use_stored_key must be true.",

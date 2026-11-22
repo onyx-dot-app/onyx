@@ -1,0 +1,450 @@
+"""A new request restores registered research conversations and their source references."""
+
+from functools import partial
+from uuid import uuid4
+
+import pytest
+from sqlalchemy import delete
+from sqlalchemy.orm import Session
+
+from onyx.agents.agent_coordination import AgentCoordinator
+from onyx.agents.models import (
+    AgentInfo,
+    ExecutionStatus,
+    RunStatus,
+    StepRecord,
+    ToolExecutionRecord,
+)
+from onyx.agents.runtime import Agent
+from onyx.agents.tools import AgentTool, ToolInvocation
+from onyx.cache.factory import get_cache_backend
+from onyx.chat.chat_utils import capture_chat_history, convert_chat_history
+from onyx.chat.models import MessageRendering, ResponseRecord, SavedAgentContext
+from onyx.chat.prompt_utils import prepare_prompt
+from onyx.chat.restoration import restore_chat_agent
+from onyx.chat.run_store import ChatRunStore
+from onyx.configs.constants import DocumentSource, MessageType
+from onyx.context.search.models import SearchDoc
+from onyx.db.chat import create_db_search_doc
+from onyx.db.chat_response import (
+    reserve_child_response__no_commit,
+    save_response_content,
+)
+from onyx.db.chat_subagents import load_agent_history, load_chat_branch
+from onyx.db.models import ChatMessage, ChatSession, User
+from onyx.deep_research.models import ResearchConfiguration
+from onyx.deep_research.research_agent import ResearchAgent
+from onyx.llm.cancellation import CancellationSignal
+from onyx.llm.interfaces import GenerationContext, LLMUserIdentity
+from onyx.llm.models import (
+    AssistantMessage,
+    GenerationRequest,
+    Message,
+    ReasoningEffort,
+    TextContent,
+    ToolCall,
+    ToolDefinition,
+    ToolResult,
+    ToolResultMessage,
+    UserMessage,
+)
+from onyx.tracing.flows import LLMFlow
+from shared_configs.contextvars import get_current_tenant_id
+from tests.unit.onyx.agents.fakes import FakeModelClient
+
+
+def _steps(
+    run_id: str,
+    messages: list[Message],
+    status: ExecutionStatus = ExecutionStatus.COMPLETE,
+) -> list[StepRecord]:
+    steps: list[StepRecord] = []
+    for message in messages:
+        if isinstance(message, AssistantMessage):
+            message.id = message.id or f"{run_id}:{len(steps)}"
+            steps.append(StepRecord(message=message, generation_status=status))
+        else:
+            assert isinstance(message, ToolResultMessage)
+            steps[-1].tools[message.tool_call_id] = ToolExecutionRecord(
+                status=ExecutionStatus.ERROR
+                if message.is_error
+                else ExecutionStatus.COMPLETE,
+                result=message,
+            )
+    return steps
+
+
+def test_research_restores_across_request_contexts(db_session: Session) -> None:
+    session = ChatSession(id=uuid4(), description="restored research")
+    db_session.add(session)
+    db_session.flush()
+    question = ChatMessage(
+        chat_session_id=session.id,
+        message="Investigate cedar",
+        token_count=3,
+        message_type=MessageType.USER,
+    )
+    db_session.add(question)
+    db_session.flush()
+    previous = ChatMessage(
+        parent_message_id=question.id,
+        chat_session_id=session.id,
+        message="",
+        token_count=0,
+        message_type=MessageType.ASSISTANT,
+    )
+    db_session.add(previous)
+    db_session.flush()
+    next_question = ChatMessage(
+        chat_session_id=session.id,
+        parent_message_id=previous.id,
+        message="Continue",
+        token_count=1,
+        message_type=MessageType.USER,
+    )
+    db_session.add(next_question)
+    db_session.flush()
+    response = ChatMessage(
+        chat_session_id=session.id,
+        parent_message_id=next_question.id,
+        message="",
+        token_count=0,
+        message_type=MessageType.ASSISTANT,
+    )
+    db_session.add(response)
+    db_session.flush()
+    # The later response is the selected one.
+    question.latest_child_message_id = previous.id
+    previous.latest_child_message_id = next_question.id
+    next_question.latest_child_message_id = response.id
+    root_id = str(session.id)
+    agent_id = str(uuid4())
+    source = SearchDoc(
+        document_id="source",
+        chunk_ind=0,
+        semantic_identifier="Source",
+        blurb="Evidence",
+        source_type=DocumentSource.WEB,
+        boost=1,
+        hidden=False,
+        metadata={},
+        match_highlights=[],
+    )
+    document = create_db_search_doc(source, db_session, commit=False)
+    previous.search_docs.append(document)
+    settings = ResearchConfiguration(
+        language_section="",
+        reasoning_effort=ReasoningEffort.LOW,
+    )
+    previous_run_id = str(previous.id)
+    transcript = ResponseRecord(
+        run_id=previous_run_id,
+        agent_id=root_id,
+        input_messages=[UserMessage(content="Investigate cedar")],
+        status=RunStatus.COMPLETE,
+        steps=_steps(
+            previous_run_id,
+            [
+                AssistantMessage(
+                    content=[ToolCall(id="delegate", name="delegate", arguments={})]
+                )
+            ],
+        ),
+        answer_step_index=None,
+    )
+    save_response_content(
+        previous, transcript, db_session=db_session, persist_content=True
+    )
+    child_response_id = reserve_child_response__no_commit(
+        db_session,
+        previous.id,
+        agent=AgentInfo(
+            id=agent_id,
+            parent_id=root_id,
+            path="/root/research",
+            description="Check evidence",
+            restoration_config=settings,
+        ),
+        instruction=UserMessage(content="Investigate cedar"),
+        previous_response_id=None,
+        parent_response_id=previous.id,
+        parent_message_id=f"{previous_run_id}:0",
+        parent_tool_call_id="delegate",
+        delivers_result=False,
+    )
+    first_response_id = str(child_response_id)
+    transcript.child_runs.append(
+        ResponseRecord(
+            run_id=first_response_id,
+            agent_id=agent_id,
+            agent_path="/root/research",
+            agent_description="Check evidence",
+            restoration_config=settings,
+            status=RunStatus.COMPLETE,
+            input_messages=[UserMessage(content="Investigate cedar")],
+            steps=_steps(
+                first_response_id,
+                [AssistantMessage(content=[TextContent(text="Cedar evidence [1].")])],
+            ),
+            parent_run_id=previous_run_id,
+            parent_message_id=f"{previous_run_id}:0",
+            parent_tool_call_id="delegate",
+        )
+    )
+    child_message = transcript.child_runs[0].messages[0]
+    assert isinstance(child_message, AssistantMessage)
+    assert child_message.id is not None
+    save_response_content(
+        previous,
+        transcript,
+        db_session=db_session,
+        persist_content=True,
+        presentation={
+            child_message.id: MessageRendering(citation_documents={1: "source"})
+        },
+    )
+    db_session.commit()
+    response_id, session_id, previous_id = response.id, session.id, previous.id
+    db_session.expunge_all()
+    requests: list[GenerationRequest] = []
+
+    def generate(
+        request: GenerationRequest, _signal: CancellationSignal
+    ) -> AssistantMessage:
+        requests.append(request)
+        return AssistantMessage(
+            content=[TextContent(text="Additional cedar evidence [1].")]
+        )
+
+    research_llm = FakeModelClient(generate)
+    root_replies = iter(
+        [
+            AssistantMessage(
+                content=[ToolCall(id="reuse", name="reuse", arguments={})]
+            ),
+            AssistantMessage(content=[TextContent(text="Done")]),
+        ]
+    )
+
+    saved_run_id: str
+
+    def reuse(invocation: ToolInvocation) -> ToolResult:
+        receipt = invocation.agents.send_message(
+            agent_id,
+            message="Check the evidence again",
+            max_steps=1,
+        )
+        assert receipt.run_id is None
+        return ToolResult(content="Follow-up submitted")
+
+    root = Agent(
+        FakeModelClient(lambda *_: next(root_replies)),
+        generation_context=GenerationContext(flow=LLMFlow.CHAT_RESPONSE),
+        agent_id=root_id,
+        tools=[
+            AgentTool(
+                definition=ToolDefinition(
+                    name="reuse", description="Read saved research", parameters={}
+                ),
+                execute=reuse,
+            )
+        ],
+    )
+    coordinator: AgentCoordinator | None = None
+    try:
+        saved_child = load_agent_history(load_chat_branch(response_id), agent_id)
+        assert saved_child.sources[1].document_id == "source"
+        persisted_run_id = saved_child.previous_run_id
+        assert persisted_run_id is not None
+        saved_run_id = persisted_run_id
+        branch = load_chat_branch(response_id)
+        identity = LLMUserIdentity()
+
+        def restore_research(history: SavedAgentContext, _depth: int) -> ResearchAgent:
+            configuration = history.configuration
+            assert isinstance(configuration, ResearchConfiguration)
+            return ResearchAgent(
+                tools=[],
+                llm=research_llm,
+                token_counter=len,
+                user_identity=identity,
+                language_section=configuration.language_section,
+                reasoning_effort=configuration.reasoning_effort,
+                messages=history.messages,
+                checkpoint=history.checkpoint,
+                sources=history.sources,
+                previous_run_id=history.previous_run_id,
+                agent_id=history.agent_id,
+            )
+
+        run_store = ChatRunStore(
+            tenant_id=get_current_tenant_id(),
+            chat_session_id=session_id,
+            response_id=response_id,
+            visible_response_ids=branch.message_ids,
+            cache=get_cache_backend(),
+            follow_up_steps=4,
+            user=User(),
+            restore_subagent=restore_research,
+        )
+        coordinator = run_store.bind(
+            AgentCoordinator(),
+            build_agent=partial(
+                restore_chat_agent,
+                llm=research_llm,
+                tools=[],
+                user_identity=identity,
+                subagent_factory=lambda _depth: pytest.fail("No agent tools"),
+            ),
+        )
+        for info in run_store.list_agents():
+            coordinator.register(info)
+        coordinator.register(
+            AgentInfo(
+                id=root.id,
+                path="/root",
+                parent_id=None,
+                description="",
+                restoration_config=None,
+                latest_run_id=str(previous_id),
+            )
+        )
+        assert root.id == root_id
+        historical = coordinator.child_completion(saved_run_id, root.id).result(
+            timeout=2
+        )
+        assert historical.steps[0].message.text == "Cedar evidence [1]."
+        run = root.start(
+            background=False,
+            max_steps=2,
+            messages=[UserMessage(content="Continue")],
+            coordinator=coordinator,
+        )
+        assert run.result().output.text == "Done"
+        assert run.wait_for_idle(timeout=5)
+        run_store.poll_control()
+        following = coordinator.newest_run(agent_id)
+        assert following is not None and following.id != saved_run_id
+        assert following.result().output.text == "Additional cedar evidence [1]."
+        assert following.wait_for_idle(timeout=5)
+        assert len(requests) == 1
+        assert any(
+            "Investigate cedar" in message.text for message in requests[0].messages
+        )
+        assert any(
+            "Cedar evidence [1]." in message.text for message in requests[0].messages
+        )
+        assert any(
+            "Check the evidence again" in message.text
+            for message in requests[0].messages
+        )
+        assert coordinator.close(timeout=10)
+        continued = load_agent_history(load_chat_branch(response_id), agent_id)
+        assert continued.previous_run_id != saved_run_id
+        assert any(
+            message.text == "Additional cedar evidence [1]."
+            for message in continued.messages
+        )
+    finally:
+        if coordinator is not None:
+            assert coordinator.close(timeout=10)
+        db_session.execute(
+            delete(ChatMessage).where(ChatMessage.chat_session_id == session_id)
+        )
+        db_session.execute(delete(ChatSession).where(ChatSession.id == session_id))
+        db_session.delete(db_session.merge(document))
+        db_session.commit()
+
+
+def test_saved_tools_survive_replay_and_request_preparation(
+    db_session: Session,
+) -> None:
+    session = ChatSession(id=uuid4(), description="History context")
+    db_session.add(session)
+    db_session.flush()
+    question = ChatMessage(
+        chat_session_id=session.id,
+        message="Find evidence",
+        token_count=2,
+        message_type=MessageType.USER,
+    )
+    db_session.add(question)
+    db_session.flush()
+    response = ChatMessage(
+        chat_session_id=session.id,
+        parent_message_id=question.id,
+        message="Answer",
+        token_count=1,
+        message_type=MessageType.ASSISTANT,
+    )
+    db_session.add(response)
+    db_session.flush()
+    image_content = '[{"file_id":"image","revised_prompt":"Evidence chart"}]'
+    stored_response_id = str(response.id)
+    transcript = ResponseRecord(
+        run_id=stored_response_id,
+        agent_id=str(session.id),
+        status=RunStatus.COMPLETE,
+        input_messages=[UserMessage(content=question.message)],
+        steps=_steps(
+            stored_response_id,
+            [
+                AssistantMessage(
+                    content=[
+                        ToolCall(id="search", name="web_search", arguments={}),
+                        ToolCall(id="image", name="generate_image", arguments={}),
+                    ]
+                ),
+                ToolResultMessage(
+                    tool_call_id="search",
+                    tool_name="web_search",
+                    content="Stored evidence",
+                ),
+                ToolResultMessage(
+                    tool_call_id="image",
+                    tool_name="generate_image",
+                    content=image_content,
+                ),
+                AssistantMessage(content=[TextContent(text="Answer")]),
+            ],
+        ),
+        answer_step_index=1,
+    )
+    session_id, question_id, response_id = session.id, question.id, response.id
+    try:
+        save_response_content(
+            response, transcript, db_session=db_session, persist_content=True
+        )
+        db_session.commit()
+        db_session.expunge_all()
+        saved_question = db_session.get(ChatMessage, question_id)
+        saved_response = db_session.get(ChatMessage, response_id)
+        assert saved_question is not None and saved_response is not None
+        history = convert_chat_history(
+            capture_chat_history([saved_question, saved_response], {}, len),
+            files=[],
+            vm_paths={},
+        ).messages
+        original_messages = [message.model_dump() for message in history]
+        history.append(UserMessage(content="Next question"))
+        request = prepare_prompt(
+            history,
+            system_prompt=None,
+            custom_agent_prompt=None,
+            reminder_message=None,
+            context_files=None,
+            token_counter=len,
+        )
+        assert [m.text for m in request if isinstance(m, ToolResultMessage)] == [
+            "Stored evidence",
+            image_content,
+        ]
+        assert [m.text for m in history if isinstance(m, ToolResultMessage)] == [
+            "Stored evidence",
+            image_content,
+        ]
+        assert [message.model_dump() for message in history[:-1]] == original_messages
+    finally:
+        db_session.rollback()
+        db_session.execute(delete(ChatSession).where(ChatSession.id == session_id))
+        db_session.commit()

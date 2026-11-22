@@ -18,6 +18,10 @@ const nextConfig = {
     // TypeScript 7 has no classic JS API, so `next build` must type-check
     // through the `tsc` CLI.
     useTypeScriptCli: true,
+    // Next truncates larger bodies before they reach the API catch-all. This
+    // applies when requests reach Next directly (local dev); nginx and the Helm
+    // ingress send /api to the backend. Skill uploads allow a 25 MiB ZIP.
+    proxyClientMaxBodySize: "32mb",
   },
   transpilePackages: ["@onyx-ai/opal", "@onyx-ai/shared"],
   typedRoutes: true,
@@ -73,10 +77,11 @@ const nextConfig = {
   async rewrites() {
     return [
       {
-        source: "/api/build/sessions/:sessionId/webapp/_next/webpack-hmr",
+        source:
+          "/api/build/sessions/:sessionId/webapp/_next/:hmrEndpoint(hmr|webpack-hmr)",
         destination: `${
           process.env.INTERNAL_URL || "http://localhost:8080"
-        }/build/sessions/:sessionId/webapp/_next/webpack-hmr`,
+        }/build/sessions/:sessionId/webapp/_next/:hmrEndpoint`,
       },
       {
         source: "/ph_ingest/static/:path*",
@@ -146,6 +151,74 @@ const nextConfig = {
         destination: "/admin/craft/preferences",
         permanent: true,
       },
+      // Old plugin and action pages. Their ids are not integration ids.
+      {
+        source: "/admin/mcp-actions/:path*",
+        destination: "/admin/integrations",
+        permanent: false,
+      },
+      {
+        source: "/admin/openapi-actions",
+        destination: "/admin/integrations",
+        permanent: false,
+      },
+      {
+        source: "/admin/craft/apps",
+        destination: "/admin/integrations",
+        permanent: false,
+      },
+      {
+        source: "/admin/plugins",
+        destination: "/admin/integrations",
+        permanent: false,
+      },
+      {
+        source: "/admin/plugins/mcp/:id",
+        destination: "/admin/integrations",
+        permanent: false,
+      },
+      {
+        source: "/admin/plugins/openapi/:id",
+        destination: "/admin/integrations",
+        permanent: false,
+      },
+      {
+        source: "/admin/plugins/external-app/:id",
+        destination: "/admin/integrations",
+        permanent: false,
+      },
+      // The member plugin and skill pages moved to Customize. Next.js passes
+      // the query of the old URL on to the new one.
+      {
+        source: "/app/plugins",
+        destination: "/app/customize/plugins",
+        permanent: false,
+      },
+      {
+        source: "/app/plugins/:pluginId",
+        destination: "/app/customize/plugins/:pluginId",
+        permanent: false,
+      },
+      {
+        source: "/craft/v1/skills",
+        destination: "/app/customize/skills",
+        permanent: false,
+      },
+      {
+        source: "/craft/v1/skills/new",
+        destination: "/app/customize/skills/new",
+        permanent: false,
+      },
+      {
+        source: "/craft/v1/skills/edit/:id",
+        destination: "/app/customize/skills/:id?edit=1",
+        permanent: false,
+      },
+      {
+        source: "/craft/v1/plugins",
+        destination: "/app/customize/integrations",
+        permanent: false,
+      },
       {
         source: "/admin/assistants/:path*",
         destination: "/admin/agents/:path*",
@@ -207,6 +280,20 @@ const nextConfig = {
       {
         source: "/admin/configuration/web-search",
         destination: "/admin/web-search",
+        permanent: true,
+      },
+      // The connector catalog moved from /admin/add-connector to
+      // /admin/connectors, beside the per-source wizard at /admin/connectors/:source.
+      {
+        source: "/admin/add-connector",
+        destination: "/admin/connectors",
+        permanent: true,
+      },
+      // The indexing status page moved from /admin/indexing/status to
+      // /admin/indexing-status; the /indexing/ segment held nothing else.
+      {
+        source: "/admin/indexing/status",
+        destination: "/admin/indexing-status",
         permanent: true,
       },
       // Replaces the redirect page that used to live at
@@ -299,6 +386,25 @@ module.exports = (phase) => {
     withSentryConfig(
       {
         ...nextConfig,
+        ...(isDevServer && {
+          async rewrites() {
+            return [
+              {
+                source: "/.well-known/oauth-authorization-server/:path*",
+                destination: `${
+                  process.env.INTERNAL_URL || "http://localhost:8080"
+                }/oauth-provider/metadata`,
+              },
+              {
+                source: "/.well-known/oauth-protected-resource/:path*",
+                destination: `${
+                  process.env.MCP_INTERNAL_URL || "http://127.0.0.1:8090"
+                }/.well-known/oauth-protected-resource/:path*`,
+              },
+              ...(await nextConfig.rewrites()),
+            ];
+          },
+        }),
         reactCompiler:
           !isDevServer || process.env.ENABLE_REACT_COMPILER === "1",
       },

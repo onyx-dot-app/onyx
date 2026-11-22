@@ -23,6 +23,7 @@ from onyx.server.metrics.celery_task_metrics import (
     on_celery_task_retry,
     on_celery_task_revoked,
 )
+from onyx.server.metrics.child_process_relay import start_relay_reader
 from onyx.server.metrics.indexing_task_metrics import (
     on_indexing_task_postrun,
     on_indexing_task_prerun,
@@ -126,7 +127,9 @@ def on_worker_init(sender: Worker, **kwargs: Any) -> None:
 
 @worker_ready.connect
 def on_worker_ready(sender: Any, **kwargs: Any) -> None:
-    start_metrics_server("docfetching")
+    if start_metrics_server("docfetching") is not None:
+        # The connectors run in spawned processes, which no scraper reaches.
+        start_relay_reader()
     app_base.on_worker_ready(sender, **kwargs)
 
 

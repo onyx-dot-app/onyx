@@ -4,17 +4,66 @@ inputs:
   devcontainer-image:
     description: "Fully qualified devcontainer image reference (registry:tag)"
     required: true
+  compose-services:
+    description: "Space-separated services to start from deployment/docker_compose while uv installs dependencies."
+    required: false
+    default: ""
+  save-cache:
+    description: "Save the uv cache when the key missed. Set it on one job per run, so parallel shards do not all upload."
+    required: false
+    default: "false"
 runs:
   using: "composite"
   steps:
+    # The RunsOn S3 cache has no size cap. On GitHub-hosted runners runs-on/cache
+    # falls back to the 10 GB GitHub cache, so skip it there.
+    - name: Restore uv cache
+      id: uv-cache
+      if: runner.environment == 'self-hosted'
+      uses: runs-on/cache/restore@a5f51d6f3fece787d03b7b4e981c82538a0654ed
+      with:
+        path: ${{ runner.temp }}/uv-cache
+        key: ${{ runner.os }}-${{ runner.arch }}-uv-devcontainer-${{ hashFiles('uv.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-${{ runner.arch }}-uv-devcontainer-
+
+    # The cache is a separate bind mount from /workspace, so uv cannot hardlink
+    # across them. UV_LINK_MODE=copy skips the failed hardlink attempt.
     - name: Sync deps in devcontainer
       shell: bash
       env:
         DEVCONTAINER_IMAGE: ${{ inputs.devcontainer-image }}
+        COMPOSE_SERVICES: ${{ inputs.compose-services }}
         WORKSPACE: ${{ github.workspace }}
+        UV_CACHE_HOST_DIR: ${{ runner.temp }}/uv-cache
       run: |
+        set -e
+        mkdir -p "${UV_CACHE_HOST_DIR}"
         docker run --rm \
           -v "${WORKSPACE}:/workspace" \
+          -v "${UV_CACHE_HOST_DIR}:/uv-cache" \
+          -e UV_CACHE_DIR=/uv-cache \
+          -e UV_LINK_MODE=copy \
           -w /workspace \
           "${DEVCONTAINER_IMAGE}" \
-          uv sync --frozen --no-group model_server
+          uv sync --frozen --no-group model_server &
+        sync_pid=$!
+
+        compose_status=0
+        if [[ -n "$COMPOSE_SERVICES" ]]; then
+          read -ra services <<< "$COMPOSE_SERVICES"
+          cd "$WORKSPACE/deployment/docker_compose"
+          docker compose up -d --wait --wait-timeout 300 "${services[@]}" || compose_status=$?
+        fi
+        wait "$sync_pid"
+        exit "$compose_status"
+
+    - name: Save uv cache
+      if: >-
+        runner.environment == 'self-hosted' &&
+        inputs.save-cache == 'true' &&
+        steps.uv-cache.outputs.cache-hit != 'true'
+      uses: runs-on/cache/save@a5f51d6f3fece787d03b7b4e981c82538a0654ed
+      with:
+        path: ${{ runner.temp }}/uv-cache
+        key: ${{ steps.uv-cache.outputs.cache-primary-key }}

@@ -2,17 +2,18 @@ import time
 from collections.abc import Callable, Generator
 from contextlib import contextmanager
 from typing import Any
+from uuid import UUID
 
 from sqlalchemy import Engine, event
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy.orm.session import SessionTransaction
 
-from onyx.chat.chat_state import ChatStateContainer
 from onyx.chat.models import ChatFullResponse
-from onyx.chat.process_message import gather_stream_full, handle_stream_message_objects
+from onyx.chat.process_message import run_chat_turn
 from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.db.chat import create_chat_session
 from onyx.db.engine.sql_engine import get_sqlalchemy_engine
+from onyx.db.tools import get_builtin_tool
 from onyx.db.users import get_user_by_email
 from onyx.evals.models import (
     ChatFullEvalResult,
@@ -24,18 +25,50 @@ from onyx.evals.models import (
     EvalToolResult,
     MultiTurnEvalResult,
     ToolAssertion,
+    evaluation_input,
 )
 from onyx.evals.provider import get_provider
+from onyx.integrations.models import ApprovalMode
+from onyx.integrations.policy import agent_integration_ids
 from onyx.llm.override_models import LLMOverride
 from onyx.server.query_and_chat.models import (
     AUTO_PLACE_AFTER_LATEST_MESSAGE,
     ChatSessionCreationRequest,
     SendMessageRequest,
 )
+from onyx.tools.built_in_tools import BUILT_IN_TOOL_MAP
+from onyx.tools.models import CapabilityEntry, IntegrationEntry, ToolOptions
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
 logger = setup_logger()
+
+
+def _tool_options(
+    db_session: Session,
+    user_id: UUID,
+    allowed_tool_ids: list[int],
+    preferred_tool: str | None,
+) -> ToolOptions:
+    """Limits the built-in tools to the configured ones and keeps each
+    integration that the default agent uses for the user."""
+    allowed: list[CapabilityEntry | IntegrationEntry] = [
+        CapabilityEntry(tool_id=tool_id) for tool_id in allowed_tool_ids
+    ]
+    allowed.extend(
+        IntegrationEntry(integration_id=integration_id)
+        for integration_id in agent_integration_ids(
+            db_session, user_id, DEFAULT_PERSONA_ID, {}
+        )
+    )
+    return ToolOptions(
+        allowed=allowed,
+        preferred=None
+        if preferred_tool is None
+        else CapabilityEntry(
+            tool_id=get_builtin_tool(db_session, BUILT_IN_TOOL_MAP[preferred_tool]).id
+        ),
+    )
 
 
 @contextmanager
@@ -78,7 +111,7 @@ def _chat_full_response_to_eval_result(
     full: ChatFullResponse,
     stream_start_time: float,
 ) -> ChatFullEvalResult:
-    """Map ChatFullResponse from gather_stream_full to eval result components."""
+    """Map ChatFullResponse from run_chat_turn to eval result components."""
     tools_called = [tc.tool_name for tc in full.tool_calls]
     tool_call_details: list[dict[str, Any]] = [
         {"tool_name": tc.tool_name, "tool_arguments": tc.tool_arguments}
@@ -155,10 +188,10 @@ def _get_answer_with_tools(
     Args:
         eval_input: Dictionary containing:
             - 'message': The user message to send
-            - 'force_tools' (optional): List of tool types to force for this input
+            - 'preferred_tool' (optional): Tool type to prefer for this input
             - 'expected_tools' (optional): List of tool types expected to be called
             - 'require_all_tools' (optional): If true, all expected tools must be called
-            - 'model' (optional): Model version to use (e.g., "gpt-4o", "claude-3-5-sonnet")
+            - 'model' (optional): Model version to use (e.g., "gpt-6-sol", "claude-3-5-sonnet")
             - 'model_provider' (optional): Model provider (e.g., "openai", "anthropic")
             - 'temperature' (optional): Temperature for the model
         configuration: Evaluation configuration options
@@ -166,25 +199,11 @@ def _get_answer_with_tools(
     Returns:
         EvalToolResult containing the answer and tool call information
     """
+    eval_input = evaluation_input(eval_input)
     engine = get_sqlalchemy_engine()
     with isolated_ephemeral_session_factory(engine) as SessionLocal:
         with SessionLocal() as db_session:
             full_configuration = configuration.get_configuration(db_session)
-
-            # Handle per-input tool forcing (from data file)
-            forced_tool_ids: list[int] = []
-            input_force_tools = eval_input.get("force_tools", [])
-            if input_force_tools:
-                from onyx.db.tools import get_builtin_tool
-                from onyx.tools.built_in_tools import BUILT_IN_TOOL_MAP
-
-                for tool_type in input_force_tools:
-                    if tool_type in BUILT_IN_TOOL_MAP:
-                        tool_id = get_builtin_tool(
-                            db_session, BUILT_IN_TOOL_MAP[tool_type]
-                        ).id
-                        if tool_id not in forced_tool_ids:
-                            forced_tool_ids.append(tool_id)
 
             # Build tool assertions from per-input config
             tool_assertions: ToolAssertion | None = None
@@ -219,12 +238,15 @@ def _get_answer_with_tools(
                     f"User not found for email: {configuration.search_permissions_email}"
                 )
 
-            forced_tool_id = forced_tool_ids[0] if forced_tool_ids else None
             request = SendMessageRequest(
                 message=eval_input["message"],
                 llm_override=llm_override,
-                allowed_tool_ids=full_configuration.allowed_tool_ids,
-                forced_tool_id=forced_tool_id,
+                tool_options=_tool_options(
+                    db_session,
+                    user.id,
+                    full_configuration.allowed_tool_ids,
+                    eval_input.get("preferred_tool"),
+                ),
                 chat_session_info=ChatSessionCreationRequest(
                     persona_id=DEFAULT_PERSONA_ID,
                     description="Eval session",
@@ -232,13 +254,12 @@ def _get_answer_with_tools(
             )
 
             stream_start_time = time.time()
-            state_container = ChatStateContainer()
-            packets = handle_stream_message_objects(
+            # Nobody answers approval requests in an eval run.
+            full = run_chat_turn(
                 new_msg_req=request,
                 user=user,
-                external_state_container=state_container,
+                approval_mode=ApprovalMode.RUN_WITHOUT_ASKING,
             )
-            full = gather_stream_full(packets, state_container)
 
             result = _chat_full_response_to_eval_result(full, stream_start_time)
 
@@ -281,12 +302,13 @@ def _get_multi_turn_answer_with_tools(
                 - 'model' (optional): Model version override for this turn
                 - 'model_provider' (optional): Provider override for this turn
                 - 'temperature' (optional): Temperature override for this turn
-                - 'force_tools' (optional): List of tool types to force
+                - 'preferred_tool' (optional): Tool type to prefer
         configuration: Evaluation configuration options
 
     Returns:
         MultiTurnEvalResult containing per-turn results and aggregate metrics
     """
+    eval_input = evaluation_input(eval_input)
     messages_data = eval_input.get("messages", [])
     if not messages_data:
         raise ValueError("Multi-turn eval requires 'messages' array in input")
@@ -300,7 +322,7 @@ def _get_multi_turn_answer_with_tools(
             model=msg_data.get("model"),
             model_provider=msg_data.get("model_provider"),
             temperature=msg_data.get("temperature"),
-            force_tools=msg_data.get("force_tools", []),
+            preferred_tool=msg_data.get("preferred_tool"),
         )
         for msg_data in messages_data
     ]
@@ -339,20 +361,6 @@ def _get_multi_turn_answer_with_tools(
                     msg.message[:50],
                 )
 
-                # Handle per-turn tool forcing
-                forced_tool_ids: list[int] = []
-                if msg.force_tools:
-                    from onyx.db.tools import get_builtin_tool
-                    from onyx.tools.built_in_tools import BUILT_IN_TOOL_MAP
-
-                    for tool_type in msg.force_tools:
-                        if tool_type in BUILT_IN_TOOL_MAP:
-                            tool_id = get_builtin_tool(
-                                db_session, BUILT_IN_TOOL_MAP[tool_type]
-                            ).id
-                            if tool_id not in forced_tool_ids:
-                                forced_tool_ids.append(tool_id)
-
                 # Build tool assertions for this turn
                 tool_assertions: ToolAssertion | None = None
                 if msg.expected_tools:
@@ -375,27 +383,27 @@ def _get_multi_turn_answer_with_tools(
                         ),
                     )
 
-                # Create request for this turn using SendMessageRequest (same API as handle_stream_message_objects)
+                # Create request for this turn using SendMessageRequest (same API as run_chat_turn)
                 # Use AUTO_PLACE_AFTER_LATEST_MESSAGE to chain messages
-                forced_tool_id = forced_tool_ids[0] if forced_tool_ids else None
                 request = SendMessageRequest(
                     chat_session_id=chat_session_id,
                     parent_message_id=AUTO_PLACE_AFTER_LATEST_MESSAGE,
                     message=msg.message,
                     llm_override=llm_override,
-                    allowed_tool_ids=full_configuration.allowed_tool_ids,
-                    forced_tool_id=forced_tool_id,
+                    tool_options=_tool_options(
+                        db_session,
+                        user_id,
+                        full_configuration.allowed_tool_ids,
+                        msg.preferred_tool,
+                    ),
                 )
 
-                # Stream and gather results for this turn via handle_stream_message_objects + gather_stream_full
                 stream_start_time = time.time()
-                state_container = ChatStateContainer()
-                packets = handle_stream_message_objects(
+                full = run_chat_turn(
                     new_msg_req=request,
                     user=user,
-                    external_state_container=state_container,
+                    approval_mode=ApprovalMode.RUN_WITHOUT_ASKING,
                 )
-                full = gather_stream_full(packets, state_container)
 
                 result = _chat_full_response_to_eval_result(full, stream_start_time)
 

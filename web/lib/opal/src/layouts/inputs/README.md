@@ -3,8 +3,8 @@
 **Import:** `import { InputVertical, InputHorizontal, ... } from "@opal/layouts";`
 
 Layout primitives for form fields. Arrange title, description, input controls, and Formik error
-messages in vertical or horizontal orientations with optional `<label>` wrapping. Uses
-`sizePreset="main-ui"` internally for all text sizing.
+messages in vertical or horizontal orientations with optional `<label>` wrapping. Titles use
+`font="main-ui-action"`; descriptions, sub-descriptions and error messages use `secondary-body`.
 
 ## Components
 
@@ -22,15 +22,19 @@ Low-level `<label>` wrapper with cursor styling. Most consumers should use `Inpu
 
 Stacks title, description, input, error, and sub-description vertically.
 
-| Prop             | Type                   | Default | Description                                                                                                          |
-| ---------------- | ---------------------- | ------- | -------------------------------------------------------------------------------------------------------------------- |
-| `withLabel`      | `boolean \| string`    | `false` | `false`: no label. `true`: implicit label (click-forwarding). `string`: label with `htmlFor` + Formik error display. |
-| `disabled`       | `boolean`              | `false` | Passes through to the label wrapper                                                                                  |
-| `title`          | `string \| RichStr`    | —       | Section title                                                                                                        |
-| `tag`            | `TagProps`             | —       | Tag rendered beside the title                                                                                        |
-| `description`    | `string \| RichStr`    | —       | Section description                                                                                                  |
-| `subDescription` | `string \| RichStr`    | —       | Text below the input                                                                                                 |
-| `suffix`         | `"optional" \| string` | —       | Suffix after the title                                                                                               |
+| Prop             | Type                             | Default | Description                                                                                                          |
+| ---------------- | -------------------------------- | ------- | -------------------------------------------------------------------------------------------------------------------- |
+| `withLabel`      | `boolean \| string`              | `false` | `false`: no label. `true`: implicit label (click-forwarding). `string`: label with `htmlFor` + Formik error display. |
+| `disabled`       | `boolean`                        | `false` | Disables the input inside and dims the row's text. See [Disabled rows](#disabled-rows)                               |
+| `disabledTooltip` | `string \| RichStr`             | —       | Why the row is disabled. Shown beside the input on row hover                                                          |
+| `title`          | `string \| RichStr`              | —       | Section title                                                                                                        |
+| `tag`            | `TagProps`                       | —       | Tag rendered beside the title                                                                                        |
+| `description`    | `string \| RichStr`              | —       | Section description                                                                                                  |
+| `subDescription` | `string \| RichStr`              | —       | Text below the input                                                                                                 |
+| `rightChildren`  | `string \| RichStr \| ReactNode` | —       | Right of the title row. Text or markdown renders as secondary text; any other node (e.g. a button) renders as given  |
+| `suffix`         | `"optional" \| string`           | —       | Suffix after the title                                                                                               |
+| `error`          | `string \| RichStr`              | —       | A red message under the input, for inputs outside Formik. Wins over `warning` and the Formik message.                |
+| `warning`        | `string \| RichStr`              | —       | An amber message under the input, for inputs outside Formik. Replaces the Formik message.                            |
 
 ### Horizontal
 
@@ -39,7 +43,8 @@ Places title/description on the left, input control on the right.
 | Prop          | Type                    | Default | Description                                                                                                                                                                                                                                                      |
 | ------------- | ----------------------- | ------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
 | `withLabel`   | `boolean \| string`     | `false` | Same as Vertical                                                                                                                                                                                                                                                 |
-| `disabled`    | `boolean`               | `false` | Passes through to the label wrapper                                                                                                                                                                                                                              |
+| `disabled`    | `boolean`               | `false` | Same as Vertical                                                                                                                                                                                                                                                 |
+| `disabledTooltip` | `string \| RichStr` | —     | Same as Vertical                                                                                                                                                                                                                                                 |
 | `center`      | `boolean`               | `false` | Vertically center the input with the label                                                                                                                                                                                                                       |
 | `icon`        | `IconFunctionComponent` | —       | Optional icon rendered beside the title                                                                                                                                                                                                                          |
 | `responsive`  | `boolean`               | `false` | Stack the control between title and description on narrow viewports (floats back to the right at `sm`). Best for text inputs; avoid for compact controls like toggles.                                                                                           |
@@ -48,6 +53,33 @@ Places title/description on the left, input control on the right.
 | `tag`         | `TagProps`              | —       | Tag rendered beside the title                                                                                                                                                                                                                                    |
 | `description` | `string \| RichStr`     | —       | Section description                                                                                                                                                                                                                                              |
 | `suffix`      | `"optional" \| string`  | —       | Suffix after the title                                                                                                                                                                                                                                           |
+| `error`       | `string \| RichStr`     | —       | A red message under the input, for inputs outside Formik. Wins over `warning` and the Formik message.                                                                                                                                                            |
+| `warning`     | `string \| RichStr`     | —       | An amber message under the input, for inputs outside Formik. Replaces the Formik message.                                                                                                                                                                        |
+
+With `withLabel`, hovering anywhere on the row also paints an `InputSwitch` child's hover state, since the whole row is the switch's hit area.
+
+### Disabled rows
+
+Disable a labeled input on its row, not on the input or with a `Disabled` wrapper:
+
+```tsx
+<InputHorizontal
+  title="Search Mode"
+  withLabel
+  disabled={!businessTier}
+  disabledTooltip="Available on the Business plan"
+>
+  <InputSwitch checked={enabled} onCheckedChange={save} />
+</InputHorizontal>
+```
+
+- The row passes `disabled` and `disabledTooltip` to the Opal input inside it through context. The
+  input is disabled if its own `disabled` or the row's is set, and draws its own disabled colours.
+- While the row is disabled, hovering anywhere on it shows `disabledTooltip` beside the input, in
+  place of the input's own `tooltip`. Leaving the row closes it.
+- The row dims only its text (title, tag, description, sub-description), not the input.
+- Keep a short disable (while a change saves) on the input itself, so the row does not dim.
+- Use `Disabled` for regions that are not one input, such as a card of several rows.
 
 ### InputErrorText
 
@@ -70,6 +102,7 @@ Wraps children in standard `p-2 w-full` padding.
 
 ```tsx
 import { InputVertical, InputHorizontal } from "@opal/layouts";
+import { InputSwitch, InputSingleSelect } from "@opal/components";
 
 // Vertical with Formik field binding
 <InputVertical withLabel="email" title="Email" description="Your email address">

@@ -2,16 +2,22 @@
 
 import time
 from collections.abc import Iterable
-from dataclasses import dataclass
 from datetime import datetime
 from typing import Any
 
 import httpx
+import pydantic_core
 from fastmcp.server.auth.auth import AccessToken
-from pydantic import BaseModel, TypeAdapter, ValidationError
+from fastmcp.tools import ToolResult
+from pydantic import BaseModel, ConfigDict, TypeAdapter, ValidationError
 
-from onyx.configs.app_configs import MCP_SERVER_API_REQUEST_TIMEOUT_SECONDS
+from onyx.configs.app_configs import (
+    MCP_SERVER_API_REQUEST_TIMEOUT_SECONDS,
+    MCP_SERVER_SEARCH_RETRIEVAL_ONLY,
+    OPEN_URLS_MAX_URLS_PER_REQUEST,
+)
 from onyx.configs.constants import DocumentSource
+from onyx.context.search.models import Tag
 from onyx.mcp_server.api import mcp_server
 from onyx.mcp_server.utils import (
     AgentEntry,
@@ -22,6 +28,7 @@ from onyx.mcp_server.utils import (
     require_access_token,
 )
 from onyx.server.features.search.models import (
+    RawSearchRequest,
     SearchRequest,
     SearchResponse,
     SearchResult,
@@ -78,6 +85,8 @@ def _to_mcp_dict(result: SearchResult) -> dict[str, Any]:
         "source_type": result.source_type,
         "content": result.content,
         "updated_at": result.updated_at,
+        # Omitted when empty to keep results small.
+        **({"metadata": result.metadata} if result.metadata else {}),
     }
 
 
@@ -99,6 +108,11 @@ def _extract_error_detail(response: httpx.Response) -> str:
 def _error_payload(error: str) -> dict[str, Any]:
     """Build the standard MCP error response envelope used by every tool."""
     return {"error": error, "results": []}
+
+
+def _as_tool_result(payload: dict[str, Any]) -> ToolResult:
+    """Send the payload once, as text, instead of text plus structuredContent."""
+    return ToolResult(content=pydantic_core.to_json(payload, fallback=str).decode())
 
 
 _TIME_CUTOFF_ADAPTER: TypeAdapter[datetime | None] = TypeAdapter(datetime | None)
@@ -147,8 +161,9 @@ class _FilterError(Exception):
     """
 
 
-@dataclass
-class _ResolvedFilters:
+class _ResolvedFilters(BaseModel):
+    model_config = ConfigDict(strict=True)
+
     persona_id: int | None
     source_types: list[DocumentSource] | None
 
@@ -274,10 +289,12 @@ async def search_indexed_documents(
     query: str,
     source_types: list[str] | None = None,
     document_set_names: list[str] | None = None,
+    tags: list[Tag] | None = None,
     time_cutoff: str | None = None,
     skip_query_expansion: bool = False,
     agent: str | None = None,
-) -> dict[str, Any]:
+    retrieval_only: bool = False,
+) -> ToolResult:
     """
     Search the user's knowledge base indexed in Onyx.
     Use this tool for information that is not public knowledge and specific to the user,
@@ -293,6 +310,9 @@ async def search_indexed_documents(
     the user gave you; no lookup call is needed first. A value that does not
     resolve returns an error naming close matches or what is available, so you
     can retry with a valid one rather than searching unscoped.
+    `tags` restricts results to documents with any of the given metadata
+    key/value pairs, for example `{"tag_key": "assignee", "tag_value": "Jane Doe"}`.
+    Take keys and values from the `metadata` of earlier results.
     `time_cutoff` accepts an ISO 8601 timestamp; only documents updated on or
     after that moment are returned. Naive (timezone-less) timestamps are
     treated as UTC server-side.
@@ -305,12 +325,20 @@ async def search_indexed_documents(
     `agent` and `document_set_names` are mutually exclusive: explicit document
     sets replace an agent's knowledge scope rather than narrowing it, so passing
     both is rejected.
+    `retrieval_only` skips every LLM step (query expansion, filter detection,
+    federated Slack search and document selection) and returns up to 10
+    sections in retrieval order, each with up to 5 chunks of surrounding
+    context on each side. Use it when you rank results yourself: it is faster and has no LLM
+    cost. The server can force it on.
 
-    Returns ``{"results": [{title, url, source_type, content, updated_at},
-    ...]}``. Results are ordered by LLM-judged relevance. ``content`` is the
-    full chunk of the document the LLM selected; in the rare case the LLM
+    Returns ``{"results": [{title, url, source_type, content, updated_at,
+    metadata}, ...]}``. ``metadata`` holds source fields such as a Jira
+    reporter or assignee, and is omitted when the document has none.
+    Results are ordered by LLM-judged relevance. ``content`` is the full
+    chunk of the document the LLM selected; in the rare case the LLM
     selection step yields no full chunk for a doc, it falls back to the
-    short search blurb.
+    short search blurb. With `retrieval_only`, results keep retrieval order
+    and ``content`` is the retrieved section and its surrounding chunks.
 
     Example usage:
     ```
@@ -332,12 +360,14 @@ async def search_indexed_documents(
     """
     _start = time.monotonic()
     tool = MCPServerToolName.SEARCH_INDEXED_DOCUMENTS
+    use_retrieval_only = retrieval_only or MCP_SERVER_SEARCH_RETRIEVAL_ONLY
     logger.info(
-        "Onyx MCP Server: document search: query='%s', sources=%s, document_sets=%s, agent=%s",
+        "Onyx MCP Server: document search: query='%s', sources=%s, document_sets=%s, agent=%s, retrieval_only=%s",
         query,
         source_types,
         document_set_names,
         agent,
+        use_retrieval_only,
     )
 
     _record_requested_sources(source_types)
@@ -347,6 +377,7 @@ async def search_indexed_documents(
     # through as a filter would read as a scoped search that is not scoped.
     source_types = source_types or None
     document_set_names = document_set_names or None
+    tags = tags or None
     agent = (agent or "").strip() or None
 
     # Get authenticated user from FastMCP's access token
@@ -363,14 +394,16 @@ async def search_indexed_documents(
                 agent=agent,
             )
         except _FilterError as err:
-            return _error_payload(str(err))
+            return _as_tool_result(_error_payload(str(err)))
         except _NoIndexedSources:
             logger.info("Onyx MCP Server: No indexed sources available for tenant")
             outcome = MCPToolCallStatus.SUCCESS
             result_count = 0
-            return _error_payload(
-                "No document sources are indexed yet. Add connectors or upload data "
-                "through Onyx before calling search_indexed_documents."
+            return _as_tool_result(
+                _error_payload(
+                    "No document sources are indexed yet. Add connectors or upload "
+                    "data through Onyx before calling search_indexed_documents."
+                )
             )
 
         try:
@@ -383,18 +416,32 @@ async def search_indexed_documents(
             )
             parsed_cutoff = None
 
-        request = SearchRequest(
-            query=query,
-            sources=filters.source_types,
-            document_sets=document_set_names,
-            time_cutoff=parsed_cutoff,
-            skip_query_expansion=skip_query_expansion,
-            persona_id=filters.persona_id,
-        )
-        endpoint = f"{build_api_server_url_for_http_requests(respect_env_override_if_set=True)}/search"
+        request: SearchRequest | RawSearchRequest
+        if use_retrieval_only:
+            route = "/search/raw"
+            request = RawSearchRequest(
+                query=query,
+                sources=filters.source_types,
+                document_sets=document_set_names,
+                tags=tags,
+                time_cutoff=parsed_cutoff,
+                persona_id=filters.persona_id,
+            )
+        else:
+            route = "/search"
+            request = SearchRequest(
+                query=query,
+                sources=filters.source_types,
+                document_sets=document_set_names,
+                tags=tags,
+                time_cutoff=parsed_cutoff,
+                skip_query_expansion=skip_query_expansion,
+                persona_id=filters.persona_id,
+            )
+        endpoint = f"{build_api_server_url_for_http_requests(respect_env_override_if_set=True)}{route}"
         response = await _post_model(endpoint, request, access_token)
         if not response.is_success:
-            return _error_payload(_extract_error_detail(response))
+            return _as_tool_result(_error_payload(_extract_error_detail(response)))
 
         payload = SearchResponse.model_validate_json(response.content)
         results = [_to_mcp_dict(result) for result in payload.results]
@@ -403,10 +450,10 @@ async def search_indexed_documents(
         logger.info(
             "Onyx MCP Server: Internal search returned %s results", len(results)
         )
-        return {"results": results}
+        return _as_tool_result({"results": results})
     except Exception as err:
         logger.error("Onyx MCP Server: Document search error: %s", err, exc_info=True)
-        return _error_payload(f"Document search failed: {str(err)}")
+        return _as_tool_result(_error_payload(f"Document search failed: {str(err)}"))
     finally:
         record_mcp_server_tool_outcome(tool, _start, outcome)
         if result_count is not None:
@@ -485,6 +532,7 @@ async def open_urls(
     Useful for following up on web search results when snippets do not provide enough information.
 
     Returns the full text content of each URL along with metadata like title and content type.
+    Accepts a limited number of URLs per call (20 by default).
 
     Example usage:
     ```
@@ -501,6 +549,11 @@ async def open_urls(
     outcome = MCPToolCallStatus.ERROR
 
     try:
+        if len(urls) > OPEN_URLS_MAX_URLS_PER_REQUEST:
+            return _error_payload(
+                f"Too many URLs ({len(urls)}); pass at most "
+                f"{OPEN_URLS_MAX_URLS_PER_REQUEST} per call."
+            )
         response = await _post_model(
             f"{build_api_server_url_for_http_requests(respect_env_override_if_set=True)}/web-search/open-urls",
             OpenUrlsToolRequest(urls=urls),

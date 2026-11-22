@@ -2,11 +2,9 @@ from collections.abc import Generator
 from contextlib import contextmanager
 from uuid import UUID
 
-from redis.lock import Lock as RedisLock
-
+from onyx.cache.factory import get_cache_backend
+from onyx.cache.interface import CacheLock
 from onyx.configs.constants import OnyxRedisLocks
-from onyx.redis.redis_pool import get_redis_client
-from onyx.redis.tenant_redis_client import TenantRedisClient
 from onyx.server.features.build.timeouts import SESSION_FLOW_LOCK_LEASE_SECONDS
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -18,21 +16,17 @@ class SessionCreationLockAcquisitionError(RuntimeError):
     """Raised when session creation cannot acquire its per-user lock."""
 
 
-def get_session_creation_lock(
-    redis_client: TenantRedisClient,
-    user_id: UUID,
-) -> RedisLock:
-    return redis_client.lock(
+def get_session_creation_lock(tenant_id: str, user_id: UUID) -> CacheLock:
+    return get_cache_backend(tenant_id=tenant_id).lock(
         f"{OnyxRedisLocks.SESSION_CREATE_LOCK_PREFIX}:{user_id}",
         timeout=SESSION_FLOW_LOCK_LEASE_SECONDS,
     )
 
 
 @contextmanager
-def session_creation_lock(user_id: UUID) -> Generator[None, None, None]:
+def session_creation_lock(user_id: UUID) -> Generator[CacheLock, None, None]:
     """Serialize session creation for one user in the current tenant."""
-    redis_client = get_redis_client(tenant_id=get_current_tenant_id())
-    lock = get_session_creation_lock(redis_client, user_id)
+    lock = get_session_creation_lock(get_current_tenant_id(), user_id)
     if not lock.acquire(
         blocking=True,
         blocking_timeout=SESSION_FLOW_LOCK_WAIT_SECONDS,
@@ -42,7 +36,7 @@ def session_creation_lock(user_id: UUID) -> Generator[None, None, None]:
         )
 
     try:
-        yield
+        yield lock
     finally:
         if lock.owned():
             lock.release()

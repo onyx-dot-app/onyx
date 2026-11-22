@@ -41,10 +41,19 @@ func markInstall(t *testing.T, root string) {
 	}
 }
 
+func mustResolve(t *testing.T, dirFlag string) InstallRoot {
+	t.Helper()
+	root, err := Resolve(dirFlag)
+	if err != nil {
+		t.Fatalf("Resolve: %v", err)
+	}
+	return root
+}
+
 func TestResolveFlagWinsOverEverything(t *testing.T) {
 	isolate(t)
 	t.Setenv("ONYX_DEPLOYMENT_DIR", "/elsewhere")
-	got := Resolve("/explicit")
+	got := mustResolve(t, "/explicit")
 	if got.Dir != "/explicit" || got.Source != SourceFlag {
 		t.Fatalf("got %+v", got)
 	}
@@ -54,13 +63,13 @@ func TestResolveEnvPrecedence(t *testing.T) {
 	isolate(t)
 	t.Setenv("ONYX_DEPLOYMENT_DIR", "/deployment-dir")
 	t.Setenv("INSTALL_PREFIX", "/install-prefix")
-	got := Resolve("")
+	got := mustResolve(t, "")
 	if got.Dir != "/deployment-dir" || got.Source != SourceEnvDeploymentDir {
 		t.Fatalf("got %+v", got)
 	}
 
 	t.Setenv("ONYX_DEPLOYMENT_DIR", "")
-	got = Resolve("")
+	got = mustResolve(t, "")
 	if got.Dir != "/install-prefix" || got.Source != SourceEnvInstallPrefix {
 		t.Fatalf("got %+v", got)
 	}
@@ -68,7 +77,7 @@ func TestResolveEnvPrecedence(t *testing.T) {
 
 func TestResolveDefaultsToXDGDir(t *testing.T) {
 	_, xdg := isolate(t)
-	got := Resolve("")
+	got := mustResolve(t, "")
 	want := filepath.Join(xdg, "onyx")
 	if got.Dir != want || got.Source != SourceDefault {
 		t.Fatalf("got %+v, want dir %s", got, want)
@@ -81,7 +90,7 @@ func TestResolveDefaultsToXDGDir(t *testing.T) {
 func TestResolvePrefersLegacyInstallInCwd(t *testing.T) {
 	cwd, _ := isolate(t)
 	markInstall(t, filepath.Join(cwd, "onyx_data"))
-	got := Resolve("")
+	got := mustResolve(t, "")
 	if got.Dir != "onyx_data" || got.Source != SourceLegacyCwd {
 		t.Fatalf("got %+v", got)
 	}
@@ -94,7 +103,7 @@ func TestResolveFlagsAmbiguityWhenBothExist(t *testing.T) {
 	cwd, xdg := isolate(t)
 	markInstall(t, filepath.Join(cwd, "onyx_data"))
 	markInstall(t, filepath.Join(xdg, "onyx"))
-	got := Resolve("")
+	got := mustResolve(t, "")
 	if got.Source != SourceLegacyCwd {
 		t.Fatalf("got %+v", got)
 	}
@@ -109,7 +118,7 @@ func TestResolveIgnoresNonInstallLegacyDir(t *testing.T) {
 	if err := os.MkdirAll(filepath.Join(cwd, "onyx_data"), 0755); err != nil {
 		t.Fatalf("mkdir: %v", err)
 	}
-	got := Resolve("")
+	got := mustResolve(t, "")
 	if got.Source != SourceDefault || got.Dir != filepath.Join(xdg, "onyx") {
 		t.Fatalf("got %+v", got)
 	}

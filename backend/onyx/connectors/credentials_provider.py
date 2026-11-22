@@ -2,14 +2,16 @@ import uuid
 from types import TracebackType
 from typing import Any
 
-from redis.lock import Lock as RedisLock
-from sqlalchemy import select
-
+from onyx.cache.factory import get_cache_backend
+from onyx.cache.interface import CacheLock
 from onyx.configs.constants import DocumentSource
+from onyx.connectors.credential_families import (
+    to_source_credential_json,
+    to_stored_credential_json,
+)
 from onyx.connectors.interfaces import CredentialsProviderInterface
+from onyx.db.credentials import fetch_credential_or_raise
 from onyx.db.engine.sql_engine import get_session_with_tenant
-from onyx.db.models import Credential
-from onyx.redis.redis_pool import get_redis_client
 from onyx.utils.credential_audit import emit_credential_access
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -23,16 +25,20 @@ class OnyxDBCredentialsProvider(
 
     LOCK_TTL = 900  # TTL of the lock
 
-    def __init__(self, tenant_id: str, connector_name: str, credential_id: int):
+    def __init__(self, tenant_id: str, source: DocumentSource, credential_id: int):
+        """``source`` is the source of the connector using the credential. It
+        picks the keys the connector reads and writes, which for a family
+        credential may not be the credential's own source."""
         self._tenant_id = tenant_id
-        self._connector_name = connector_name
+        self._source = source
         self._credential_id = credential_id
 
-        self.redis_client = get_redis_client(tenant_id=tenant_id)
-
-        # lock used to prevent overlapping renewal of credentials
-        self.lock_key = f"da_lock:connector:{connector_name}:credential_{credential_id}"
-        self._lock: RedisLock = self.redis_client.lock(self.lock_key, self.LOCK_TTL)
+        # Keyed by credential only: connectors of different sources can share a
+        # family credential, and their renewals must not overlap either.
+        self.lock_key = f"da_lock:credential_{credential_id}"
+        self._lock: CacheLock = get_cache_backend(tenant_id=tenant_id).lock(
+            self.lock_key, timeout=self.LOCK_TTL
+        )
 
     def __enter__(self) -> "OnyxDBCredentialsProvider":
         acquired = self._lock.acquire(blocking_timeout=self.LOCK_TTL)
@@ -59,9 +65,7 @@ class OnyxDBCredentialsProvider(
 
     def get_credentials(self) -> dict[str, Any]:
         with get_session_with_tenant(tenant_id=self._tenant_id) as db_session:
-            credential = db_session.execute(
-                select(Credential).where(Credential.id == self._credential_id)
-            ).scalar_one()
+            credential = fetch_credential_or_raise(db_session, self._credential_id)
 
             if credential is None:
                 raise ValueError(
@@ -74,27 +78,34 @@ class OnyxDBCredentialsProvider(
             # Audit the connector credential decrypt (best-effort, never raises).
             emit_credential_access(
                 credential_type="connector",
-                provider=self._connector_name,
+                provider=str(self._source),
                 row_id=self._credential_id,
             )
-            return credential.credential_json.get_value(apply_mask=False)
+            return to_source_credential_json(
+                self._source, credential.credential_json.get_value(apply_mask=False)
+            )
 
     def set_credentials(self, credential_json: dict[str, Any]) -> None:
         with get_session_with_tenant(tenant_id=self._tenant_id) as db_session:
             try:
-                credential = db_session.execute(
-                    select(Credential)
-                    .where(Credential.id == self._credential_id)
-                    .with_for_update()
-                ).scalar_one()
+                credential = fetch_credential_or_raise(
+                    db_session, self._credential_id, for_update=True
+                )
 
                 if credential is None:
                     raise ValueError(
                         f"No credential found: credential={self._credential_id}"
                     )
 
+                current_stored_json = (
+                    credential.credential_json.get_value(apply_mask=False)
+                    if credential.credential_json
+                    else {}
+                )
                 credential.credential_json = (  # ty: ignore[invalid-assignment]
-                    credential_json
+                    to_stored_credential_json(
+                        self._source, credential_json, current_stored_json
+                    )
                 )
                 db_session.commit()
             except Exception:
@@ -112,15 +123,9 @@ def build_db_credentials_provider(
 
     ``instantiate_connector`` and source-operation gateways route through this
     one site so the decrypt-audit, refresh write-back, and rotation-lock
-    guarantees stay uniform. ``str(source)`` (the historical
-    ``DocumentSource.X`` form, not ``source.value``) feeds the rotation lock
-    key. EE perm-sync code still builds ``source.value``-keyed providers inline;
-    connector migration reroutes those through the gateway and thus through
-    here.
+    guarantees stay uniform.
     """
-    return OnyxDBCredentialsProvider(
-        get_current_tenant_id(), str(source), credential_id
-    )
+    return OnyxDBCredentialsProvider(get_current_tenant_id(), source, credential_id)
 
 
 class OnyxStaticCredentialsProvider(

@@ -34,18 +34,24 @@ output "license_tier" {
 - `craft_default_enabled` (Boolean)
 - `craft_instructions` (String)
 - `deep_research_enabled` (Boolean)
+- `default_language` (String) Workspace UI language. Null before Onyx v5.0.0.
 - `disable_default_assistant` (Boolean)
 - `ee_features_enabled` (Boolean)
+- `embedding_rate_limit_period_seconds` (Number) Embedding rate limit window, in seconds. Null before Onyx v5.0.0.
+- `embedding_rate_limit_requests` (Number) Indexing embedding request limit for each window. Null means no limit, or Onyx before v5.0.0.
 - `file_token_count_threshold_k` (Number)
 - `gpu_enabled` (Boolean)
+- `hide_provider_grouping` (Boolean)
 - `hide_query_history_from_admin_panel` (Boolean)
-- `image_analysis_max_size_mb` (Number)
+- `image_analysis_max_size_mb` (Number, Deprecated) Deprecated: Onyx no longer has this setting. Always null.
 - `image_extraction_and_analysis_enabled` (Boolean)
 - `invite_only_enabled` (Boolean)
+- `llm_gateway_enabled` (Boolean) Whether the LLM gateway is on. Null before Onyx v5.0.0.
 - `maximum_chat_retention_days` (Number)
 - `multi_model_chat_enabled` (Boolean)
 - `opensearch_indexing_enabled` (Boolean)
 - `query_history_type` (String)
+- `reasoning_override_enabled` (Boolean)
 - `search_ui_enabled` (Boolean)
 - `seat_count` (Number)
 - `show_extra_connectors` (Boolean)

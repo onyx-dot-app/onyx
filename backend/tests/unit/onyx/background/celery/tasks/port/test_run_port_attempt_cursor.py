@@ -61,9 +61,7 @@ def _patched(copy_result: tuple[int, bool], attempt: MagicMock) -> Any:
             side_effect=[["d1", "d2", "d3"], []]  # one batch, then exhausted
         ),
         "commit_port_cursor": MagicMock(),
-        "mark_port_succeeded": MagicMock(),
-        "mark_port_failed": MagicMock(),
-        "mark_port_canceled": MagicMock(),
+        "mark_port_terminal": MagicMock(),
     }
     return patches
 
@@ -84,7 +82,7 @@ def test_cursor_not_advanced_when_batch_aborts() -> None:
         port_tasks.run_port_attempt(port_attempt_id=1)
 
     patches["commit_port_cursor"].assert_not_called()
-    patches["mark_port_succeeded"].assert_not_called()
+    patches["mark_port_terminal"].assert_not_called()
 
 
 def test_cursor_advanced_when_batch_completes() -> None:
@@ -99,7 +97,8 @@ def test_cursor_advanced_when_batch_completes() -> None:
     _, kwargs = patches["commit_port_cursor"].call_args
     assert kwargs["last_processed_doc_id"] == "d3"
     assert kwargs["docs_ported"] == 3
-    patches["mark_port_succeeded"].assert_called_once()
+    patches["mark_port_terminal"].assert_called_once()
+    assert patches["mark_port_terminal"].call_args.args[2] == PortAttemptStatus.SUCCESS
 
 
 def test_copy_batch_bails_between_retries_on_abort() -> None:
@@ -136,7 +135,6 @@ def test_cancels_when_no_longer_port_target() -> None:
         port_tasks.run_port_attempt(port_attempt_id=1)
 
     patches["request_port_cancel"].assert_called_once()
-    patches["mark_port_canceled"].assert_not_called()
     patches["mark_port_in_progress"].assert_not_called()
     patches["commit_port_cursor"].assert_not_called()
-    patches["mark_port_succeeded"].assert_not_called()
+    patches["mark_port_terminal"].assert_not_called()

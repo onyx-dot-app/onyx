@@ -1,35 +1,35 @@
 "use client";
 
+import { useNavigation } from "@opal/navigation";
+import { IconLoader } from "@opal/loaders";
 import { useAdminRouteTitle } from "@/lib/adminNavLabels";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { useRouter } from "next/navigation";
 import { SettingsLayouts, toast } from "@opal/layouts";
 import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { useSettings } from "@/lib/settings/hooks";
-import { useTierAtLeast } from "@/hooks/useTierAtLeast";
-import { Tier } from "@/lib/settings/types";
+import { useTierAtLeast } from "@/lib/tiers/hooks";
+import { Tier } from "@/lib/tiers/types";
 import { useHookSpecs } from "@/ee/hooks/useHookSpecs";
 import { useHooks } from "@/ee/hooks/useHooks";
 import useFilter from "@/hooks/useFilter";
 import { useCreateModal, useModalClose } from "@opal/components";
 import { Button, LinkButton, SelectCard, Text } from "@opal/components";
 import { Disabled, Hoverable } from "@opal/core";
-import { markdown } from "@opal/utils";
-import { Content, IllustrationContent } from "@opal/layouts";
+import { escapeMarkdown, markdown } from "@opal/utils";
+import { Content, ContentIndent, IllustrationContent } from "@opal/layouts";
 import { Modal } from "@opal/components";
 import {
   SvgArrowExchange,
   SvgArrowRightDot,
   SvgBubbleText,
-  SvgFileBroadcast,
+  SvgFiles,
   SvgShareWebhook,
   SvgPlug,
   SvgRefreshCw,
   SvgSettings,
   SvgTrash,
   SvgUnplug,
-  SvgSimpleLoader,
 } from "@opal/icons";
 import type { IconFunctionComponent } from "@opal/types";
 import { SvgNoResult, SvgEmpty } from "@opal/illustrations";
@@ -56,7 +56,7 @@ import { noProp } from "@/lib/utils";
 const route = ADMIN_ROUTES.HOOKS;
 
 const HOOK_POINT_ICONS: Record<string, IconFunctionComponent> = {
-  document_ingestion: SvgFileBroadcast,
+  document_ingestion: SvgFiles,
   document_push: SvgArrowRightDot,
   query_processing: SvgBubbleText,
 };
@@ -81,6 +81,7 @@ function DisconnectConfirmModal({
   onDisconnectAndDelete,
 }: DisconnectConfirmModalProps) {
   const t = useTranslations("admin.hooks");
+  const { appName } = useSettings();
   const onClose = useModalClose();
 
   return (
@@ -98,7 +99,10 @@ function DisconnectConfirmModal({
           <div className="flex flex-col gap-2">
             <Text font="main-ui-body" color="text-03">
               {markdown(
-                t("disconnectModal.body.description", { name: hook.name })
+                t("disconnectModal.body.description", {
+                  name: escapeMarkdown(hook.name),
+                  appName: escapeMarkdown(appName),
+                })
               )}
             </Text>
             <Text font="main-ui-body" color="text-03">
@@ -189,19 +193,18 @@ function UnconnectedHookCard({ spec, onConnect }: UnconnectedHookCardProps) {
       <div className="w-full flex flex-row">
         <div className="flex-1 p-2">
           <Content
-            sizePreset="main-ui"
-            variant="section"
+            font="main-ui-action"
             icon={Icon}
             title={hookPointName(spec, t)}
             description={hookPointDescription(spec, t)}
           />
 
           {spec.docs_url && (
-            <div className="ms-6">
+            <ContentIndent font="main-ui-action">
               <LinkButton href={spec.docs_url} target="_blank">
                 {t("docsLink.label")}
               </LinkButton>
-            </div>
+            </ContentIndent>
           )}
         </div>
 
@@ -361,8 +364,7 @@ function ConnectedHookCard({
           <div className="w-full flex flex-row">
             <div className="flex-1 p-2">
               <Content
-                sizePreset="main-ui"
-                variant="section"
+                font="main-ui-action"
                 icon={HookIcon}
                 title={
                   !hook.is_active || hook.is_reachable === false
@@ -380,11 +382,11 @@ function ConnectedHookCard({
               />
 
               {spec?.docs_url && (
-                <div className="ms-6">
+                <ContentIndent font="main-ui-action">
                   <LinkButton href={spec.docs_url} target="_blank">
                     {t("docsLink.label")}
                   </LinkButton>
-                </div>
+                </ContentIndent>
               )}
             </div>
 
@@ -466,12 +468,14 @@ export default function HooksPage() {
   const t = useTranslations("admin.hooks");
   const locale = useLocale();
   const adminRouteTitle = useAdminRouteTitle();
-  const router = useRouter();
+  const navigation = useNavigation();
   const settings = useSettings();
   const enterpriseTier = useTierAtLeast(Tier.ENTERPRISE);
 
   const [connectSpec, setConnectSpec] = useState<HookPointMeta | null>(null);
   const [editHook, setEditHook] = useState<HookResponse | null>(null);
+  const createModal = useCreateModal();
+  const editModal = useCreateModal();
 
   const { specs, isLoading: specsLoading, error: specsError } = useHookSpecs();
   const {
@@ -529,15 +533,21 @@ export default function HooksPage() {
     if (settings.isLoading) return;
     if (!enterpriseTier) {
       toast.info(t("page.enterpriseRequired.message"));
-      router.replace("/");
+      navigation.go("/", { replace: true });
     } else if (!settings.hooks_enabled) {
       toast.info(t("page.notEnabled.message"));
-      router.replace("/");
+      navigation.go("/", { replace: true });
     }
-  }, [settings.isLoading, enterpriseTier, settings.hooks_enabled, router, t]);
+  }, [
+    settings.isLoading,
+    enterpriseTier,
+    settings.hooks_enabled,
+    navigation,
+    t,
+  ]);
 
   if (settings.isLoading || !enterpriseTier || !settings.hooks_enabled) {
-    return <SvgSimpleLoader />;
+    return <IconLoader />;
   }
 
   const isLoading = specsLoading || hooksLoading;
@@ -561,8 +571,9 @@ export default function HooksPage() {
     );
   }
 
+  // The create spec stays set while its modal animates out; ignore it then.
   const connectSpec_ =
-    connectSpec ??
+    (createModal.isOpen ? connectSpec : null) ??
     (editHook
       ? specs?.find((s: HookPointMeta) => s.hook_point === editHook.hook_point)
       : undefined);
@@ -570,41 +581,43 @@ export default function HooksPage() {
   return (
     <>
       {/* Create modal */}
-      {!!connectSpec && (
-        <HookFormModal
-          key={connectSpec?.hook_point ?? "create"}
-          onOpenChange={(open: boolean) => {
-            if (!open) setConnectSpec(null);
-          }}
-          spec={connectSpec ?? undefined}
-          onSuccess={handleHookSuccess}
-        />
-      )}
+      <createModal.Provider>
+        {!!connectSpec && (
+          <HookFormModal
+            key={connectSpec?.hook_point ?? "create"}
+            onOpenChange={(open: boolean) => {
+              if (!open) createModal.toggle(false);
+            }}
+            spec={connectSpec ?? undefined}
+            onSuccess={handleHookSuccess}
+          />
+        )}
+      </createModal.Provider>
 
       {/* Edit modal */}
-      {!!editHook && (
-        <HookFormModal
-          key={editHook?.id ?? "edit"}
-          onOpenChange={(open: boolean) => {
-            if (!open) setEditHook(null);
-          }}
-          hook={editHook ?? undefined}
-          spec={connectSpec_ ?? undefined}
-          onSuccess={handleHookSuccess}
-        />
-      )}
+      <editModal.Provider>
+        {!!editHook && (
+          <HookFormModal
+            key={editHook?.id ?? "edit"}
+            onOpenChange={(open: boolean) => {
+              if (!open) editModal.toggle(false);
+            }}
+            hook={editHook ?? undefined}
+            spec={connectSpec_ ?? undefined}
+            onSuccess={handleHookSuccess}
+          />
+        )}
+      </editModal.Provider>
 
-      <SettingsLayouts.Root>
+      <SettingsLayouts.Root loading={isLoading}>
         <SettingsLayouts.Header
           icon={route.icon}
           title={adminRouteTitle(route)}
-          description={t("page.description")}
+          description={t("page.description", { appName: settings.appName })}
           divider
         />
         <SettingsLayouts.Body>
-          {isLoading ? (
-            <SvgSimpleLoader />
-          ) : specsError || hooksError ? (
+          {specsError || hooksError ? (
             <Text font="secondary-body" color="text-03">
               {specsError
                 ? t("page.loadSpecsFailed.message")
@@ -617,7 +630,7 @@ export default function HooksPage() {
                   placeholder={t("page.search.placeholder")}
                   value={search}
                   variant="internal"
-                  searchIcon
+                  icon="search"
                   onChange={(e) => setSearch(e.target.value)}
                 />
               </div>
@@ -647,7 +660,10 @@ export default function HooksPage() {
                         key={hook.id}
                         hook={hook}
                         spec={spec}
-                        onEdit={() => setEditHook(hook)}
+                        onEdit={() => {
+                          setEditHook(hook);
+                          editModal.toggle(true);
+                        }}
                         onDeleted={() => handleHookDeleted(hook.id)}
                         onToggled={handleHookSuccess}
                       />
@@ -658,7 +674,10 @@ export default function HooksPage() {
                     <UnconnectedHookCard
                       key={spec.hook_point}
                       spec={spec}
-                      onConnect={() => setConnectSpec(spec)}
+                      onConnect={() => {
+                        setConnectSpec(spec);
+                        createModal.toggle(true);
+                      }}
                     />
                   ))}
                 </div>

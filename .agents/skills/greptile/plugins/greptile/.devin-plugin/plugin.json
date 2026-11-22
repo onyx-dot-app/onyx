@@ -1,0 +1,22 @@
+{
+  "name": "greptile",
+  "displayName": "Greptile",
+  "version": "1.3.1",
+  "description": "Review your branch with Greptile, read and resolve its PR review comments, and search your organization's knowledge base from Devin",
+  "shortDescription": "Review code and PR feedback",
+  "license": "MIT",
+  "author": {
+    "name": "Greptile",
+    "url": "https://greptile.com"
+  },
+  "homepage": "https://www.greptile.com/docs/mcp-v2/overview",
+  "repository": "https://github.com/greptileai/skills",
+  "logo": "assets/logo.svg",
+  "keywords": [
+    "code-review",
+    "pull-requests",
+    "github",
+    "gitlab",
+    "knowledge-base"
+  ]
+}

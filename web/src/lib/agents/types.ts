@@ -1,7 +1,8 @@
-import { ValidSources } from "@/lib/types";
+import { ValidSources } from "@/lib/connectors/types/source";
 import { ToolSnapshot } from "@/lib/tools/types";
 import { DocumentSetSummary, MinimalUserSnapshot } from "@/lib/types";
 import type { PermissionsOf } from "@/lib/permissions/resource-actions";
+import type { LinkValue } from "@/lib/integrations/types";
 
 // ── Domain / application types ────────────────────────────────────────────────
 
@@ -56,6 +57,21 @@ export interface PersonaOwnerGroup {
   name: string;
 }
 
+/** `persona__integration.action_settings`. A missing key inherits. */
+export interface AgentActionSettings {
+  default?: LinkValue;
+  actions?: Record<string, LinkValue>;
+}
+
+export interface AgentIntegrationInput {
+  integration_id: number;
+  action_settings: AgentActionSettings;
+}
+
+export interface AgentIntegrationLink extends AgentIntegrationInput {
+  integration_name: string;
+}
+
 export interface MinimalAgent {
   id: number;
   name: string;
@@ -105,6 +121,7 @@ export interface FullAgent extends Agent {
   sharing_status: PersonaSharingStatus;
   admin_count: number;
   ownership_vacant: boolean;
+  integrations: AgentIntegrationLink[];
 }
 
 // ── Upsert / API parameter types ──────────────────────────────────────────────
@@ -125,6 +142,7 @@ export interface AgentUpsertParameters {
   users?: string[];
   groups?: number[];
   tool_ids: number[];
+  integrations: AgentIntegrationInput[];
   remove_image?: boolean;
   search_start_date: Date | null;
   uploaded_image_id: string | null;
@@ -149,6 +167,7 @@ export interface AgentUpsertRequest {
   users?: string[];
   groups?: number[];
   tool_ids: number[];
+  integrations: AgentIntegrationInput[];
   remove_image?: boolean;
   uploaded_image_id: string | null;
   icon_name: string | null;
@@ -165,4 +184,10 @@ export interface AgentUpsertRequest {
 export interface PaginatedAgentsResponse {
   items: Agent[];
   total_items: number;
+}
+
+export interface DefaultAssistantConfiguration {
+  tool_ids: number[];
+  system_prompt: string | null;
+  default_system_prompt: string;
 }

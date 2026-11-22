@@ -197,6 +197,18 @@
       input:checked + .toggle-slider:before {
         transform: translateX(20px);
       }
+
+      .toggle-switch input:disabled + .toggle-slider {
+        opacity: 0.5;
+        cursor: not-allowed;
+      }
+
+      .managed-notice {
+        font-size: 12px;
+        color: var(--text-light-03);
+        padding: 0 12px 12px;
+        display: none;
+      }
     </style>
   </head>
   <body>
@@ -217,6 +229,9 @@
             <input type="checkbox" id="defaultNewTabToggle" />
             <span class="toggle-slider"></span>
           </label>
+        </div>
+        <div id="newTabManagedNotice" class="managed-notice">
+          Managed by your organization.
         </div>
       </div>
 

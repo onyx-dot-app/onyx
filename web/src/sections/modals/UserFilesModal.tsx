@@ -1,12 +1,14 @@
 "use client";
 
+import { Section } from "@opal/layouts";
+import { IconLoader } from "@opal/loaders";
 import React, { useRef, useState, useEffect, useMemo } from "react";
 import { InputTypeIn } from "@opal/components";
 import { ProjectFile } from "@/lib/projects/providers";
-import Text from "@/refresh-components/texts/Text";
 import type { IconProps } from "@opal/types";
 import { getFileExtension, isImageExtension } from "@/lib/utils";
 import { UserFileStatus } from "@/lib/projects/types";
+import { isFilePending } from "@/lib/projects/utils";
 import { Modal } from "@opal/components";
 import { useModal } from "@opal/components";
 import TextSeparator from "@/refresh-components/TextSeparator";
@@ -19,11 +21,9 @@ import {
   SvgPlusCircle,
   SvgTrash,
   SvgXCircle,
-  SvgSimpleLoader,
 } from "@opal/icons";
 import { Hoverable } from "@opal/core";
-import { AttachmentItemButton, Text as OpalText } from "@opal/components";
-import { Section } from "@/layouts/general-layouts";
+import { AttachmentItemButton, Text } from "@opal/components";
 import useFilter from "@/hooks/useFilter";
 import { Button } from "@opal/components";
 import ScrollIndicatorDiv from "@/refresh-components/ScrollIndicatorDiv";
@@ -34,7 +34,7 @@ function getIcon(
   file: ProjectFile,
   isProcessing: boolean
 ): React.FunctionComponent<IconProps> {
-  if (isProcessing) return SvgSimpleLoader;
+  if (isProcessing) return IconLoader;
   const ext = getFileExtension(file.name).toLowerCase();
   if (isImageExtension(ext)) return SvgImage;
   return SvgFileText;
@@ -51,10 +51,13 @@ interface FileStatusLabels {
 function getDescription(file: ProjectFile, labels: FileStatusLabels): string {
   const s = String(file.status || "");
   const typeLabel = getFileExtension(file.name);
-  if (s === UserFileStatus.PROCESSING) return labels.processing;
+  if (s === UserFileStatus.PROCESSING || s === UserFileStatus.INDEXING)
+    return labels.processing;
   if (s === UserFileStatus.UPLOADING) return labels.uploading;
   if (s === UserFileStatus.DELETING) return labels.deleting;
-  if (s === UserFileStatus.COMPLETED) return typeLabel;
+  // SKIPPED files are stored but not indexed, and are ready to use.
+  if (s === UserFileStatus.COMPLETED || s === UserFileStatus.SKIPPED)
+    return typeLabel;
   return file.status ?? typeLabel;
 }
 
@@ -76,9 +79,7 @@ function FileAttachment({
   const t = useTranslations("chat.modals.userFiles");
   const locale = useLocale();
   const isProcessing =
-    String(file.status) === UserFileStatus.PROCESSING ||
-    String(file.status) === UserFileStatus.UPLOADING ||
-    String(file.status) === UserFileStatus.DELETING;
+    isFilePending(file.status) || file.status === UserFileStatus.DELETING;
 
   const Icon = getIcon(file, isProcessing);
   const description = getDescription(file, {
@@ -102,9 +103,9 @@ function FileAttachment({
         centerChildren={
           rightText ? (
             <Section alignItems="end">
-              <OpalText font="secondary-body" color="text-03" maxLines={1}>
+              <Text font="secondary-body" color="text-03" maxLines={1}>
                 {rightText}
-              </OpalText>
+              </Text>
             </Section>
           ) : undefined
         }
@@ -232,7 +233,7 @@ export default function UserFilesModal({
                 placeholder={t("searchInput.placeholder")}
                 value={query}
                 onChange={(e) => setQuery(e.target.value)}
-                searchIcon
+                icon="search"
                 autoComplete="off"
                 tabIndex={0}
                 onFocus={(e) => {
@@ -258,7 +259,7 @@ export default function UserFilesModal({
           >
             {/* File display section */}
             {filtered.length === 0 ? (
-              <Text text03>{t("emptyState.description")}</Text>
+              <Text color="text-03">{t("emptyState.description")}</Text>
             ) : (
               <ScrollIndicatorDiv className="p-1 gap-1 max-h-[70vh]">
                 {filtered.map((projectFle) => {
@@ -311,7 +312,7 @@ export default function UserFilesModal({
             {/* Left side: file count and controls */}
             {onPickRecent && (
               <Section flexDirection="row" justifyContent="start" gap={2}>
-                <Text as="p" text03>
+                <Text as="p" color="text-03">
                   {t("selectedCount.label", { count: selectedCount })}
                 </Text>
                 <Button

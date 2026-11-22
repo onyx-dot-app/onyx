@@ -1,5 +1,5 @@
 import {
-  detectSlashTrigger,
+  detectPickerTrigger,
   filterPickerSections,
   flattenSections,
   pickerEntryConnectionPath,
@@ -7,47 +7,99 @@ import {
   pickerEntryPromptPrefix,
   toPickerSections,
   type PickerSections,
+  type PickerSkill,
+  type PickerSkillSources,
 } from "@/lib/skills/picker";
 import {
   appFixture,
   builtinFixture,
-  customFixture,
   mcpServerFixture,
 } from "@/lib/skills/__fixtures__/picker";
-import type { SkillsList } from "@/lib/skills/types";
 
-describe("detectSlashTrigger", () => {
+describe("detectPickerTrigger", () => {
+  /** The text with the caret at its end. */
+  const atEnd = (before: string) => ({ before, after: "" });
+
   it("returns null when no slash present", () => {
-    expect(detectSlashTrigger("hello world")).toBeNull();
+    expect(detectPickerTrigger(atEnd("hello world"), "/")).toBeNull();
   });
 
   it("matches a leading slash with empty query", () => {
-    expect(detectSlashTrigger("/")).toEqual({ slashIndex: 0, query: "" });
-  });
-
-  it("matches a leading slash with a query", () => {
-    expect(detectSlashTrigger("/sla")).toEqual({ slashIndex: 0, query: "sla" });
-  });
-
-  it("matches a slash after whitespace", () => {
-    expect(detectSlashTrigger("hello /sl")).toEqual({
-      slashIndex: 6,
-      query: "sl",
+    expect(detectPickerTrigger(atEnd("/"), "/")).toEqual({
+      triggerIndex: 0,
+      query: "",
+      token: { before: "/", after: "" },
     });
   });
 
+  it("matches a slash after whitespace", () => {
+    expect(detectPickerTrigger(atEnd("hello /sl"), "/")).toEqual({
+      triggerIndex: 6,
+      query: "sl",
+      token: { before: "/sl", after: "" },
+    });
+  });
+
+  it("queries the whole word, through the caret to the next whitespace", () => {
+    expect(
+      detectPickerTrigger({ before: "hi /sl", after: "ack now" }, "/")
+    ).toEqual({
+      triggerIndex: 3,
+      query: "slack",
+      token: { before: "/sl", after: "ack" },
+    });
+    expect(detectPickerTrigger({ before: "/", after: "pptx" }, "/")).toEqual({
+      triggerIndex: 0,
+      query: "pptx",
+      token: { before: "/", after: "pptx" },
+    });
+  });
+
+  it("rejects a caret before the trigger", () => {
+    expect(detectPickerTrigger({ before: "", after: "/pptx" }, "/")).toBeNull();
+  });
+
   it("rejects a slash not preceded by whitespace", () => {
-    expect(detectSlashTrigger("http://x")).toBeNull();
+    expect(detectPickerTrigger(atEnd("http://x"), "/")).toBeNull();
   });
 
   it("rejects when query contains whitespace", () => {
-    expect(detectSlashTrigger("/foo bar")).toBeNull();
+    expect(detectPickerTrigger(atEnd("/foo bar"), "/")).toBeNull();
+  });
+
+  describe("with a `@` trigger", () => {
+    it("matches a leading or space-preceded `@`", () => {
+      expect(detectPickerTrigger(atEnd("@"), "@")).toEqual({
+        triggerIndex: 0,
+        query: "",
+        token: { before: "@", after: "" },
+      });
+      expect(detectPickerTrigger(atEnd("use @code-re"), "@")).toEqual({
+        triggerIndex: 4,
+        query: "code-re",
+        token: { before: "@code-re", after: "" },
+      });
+    });
+
+    it("rejects a mid-word `@`, as in an email", () => {
+      expect(detectPickerTrigger(atEnd("a@b"), "@")).toBeNull();
+      expect(detectPickerTrigger(atEnd("@@b"), "@")).toBeNull();
+      expect(detectPickerTrigger(atEnd("(@b"), "@")).toBeNull();
+    });
+
+    it("ignores `/` tokens", () => {
+      expect(detectPickerTrigger(atEnd("/pptx"), "@")).toBeNull();
+    });
   });
 });
 
 describe("toPickerSections", () => {
-  function skillsList(over: Partial<SkillsList> = {}): SkillsList {
+  function skillsList(over: PickerSkillSources = {}): PickerSkillSources {
     return { builtins: [], customs: [], ...over };
+  }
+
+  function pickerSkill(name: string): PickerSkill {
+    return { kind: "skill", slug: name, name, description: `${name} skill` };
   }
 
   it("returns empty sections when no data", () => {
@@ -82,62 +134,20 @@ describe("toPickerSections", () => {
     ]);
   });
 
-  it("appends enabled customs to `skills`", () => {
+  it("lists each custom skill the sandbox gets after built-ins of the same name", () => {
     const data = skillsList({
       builtins: [builtinFixture({ name: "pptx" })],
       customs: [
-        customFixture({ name: "my-custom" }),
-        customFixture({ name: "disabled-one", enabled: false }),
+        pickerSkill("review"),
+        pickerSkill("plan"),
+        pickerSkill("pptx"),
       ],
     });
     expect(toPickerSections(data, []).skills.map((s) => s.slug)).toEqual([
-      "my-custom",
+      "plan",
       "pptx",
+      "review",
     ]);
-  });
-
-  it("filters out invalid customs", () => {
-    const data = skillsList({
-      customs: [
-        customFixture({ name: "valid-skill" }),
-        customFixture({ name: "invalid-skill", is_valid: false }),
-      ],
-    });
-    expect(toPickerSections(data, []).skills.map((s) => s.slug)).toEqual([
-      "valid-skill",
-    ]);
-  });
-
-  it("requires both selection and app readiness for associated customs", () => {
-    const dependency = {
-      external_app_id: 42,
-      name: "Acme CRM",
-      enabled: true,
-      ready: false,
-    };
-    const data = skillsList({
-      customs: [
-        customFixture({
-          name: "ready-app-skill",
-          enabled: true,
-          external_app: { ...dependency, ready: true },
-        }),
-        customFixture({
-          name: "disconnected-app-skill",
-          enabled: true,
-          external_app: dependency,
-        }),
-        customFixture({
-          name: "unselected-ready-app-skill",
-          enabled: false,
-          external_app: { ...dependency, ready: true },
-        }),
-      ],
-    });
-
-    expect(
-      toPickerSections(data, []).skills.map((skill) => skill.slug)
-    ).toEqual(["ready-app-skill"]);
   });
 
   it("builds the Apps section from the external-apps payload with auth state", () => {
@@ -167,14 +177,7 @@ describe("toPickerSections", () => {
   it("builds the MCP section from the craft listing, keyed off craft_connected", () => {
     const servers = [
       mcpServerFixture({ id: 9, name: "Zulip MCP" }),
-      // A credential row can exist while the proxy still cannot authenticate
-      // the user, so `user_can_authenticate` must not drive this.
-      mcpServerFixture({
-        id: 4,
-        name: "Asana MCP",
-        user_can_authenticate: true,
-        craft_connected: false,
-      }),
+      mcpServerFixture({ id: 4, name: "Asana MCP", craft_connected: false }),
     ];
     const { mcpServers } = toPickerSections(undefined, undefined, servers);
     expect(

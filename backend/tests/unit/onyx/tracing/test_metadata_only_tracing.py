@@ -1,51 +1,25 @@
 """Metadata-only traces retain metering data without capturing model content."""
 
-from typing import Any
 from unittest.mock import MagicMock
 
 from onyx.tracing.flows import LLMFlow
 from onyx.tracing.framework.create import ensure_trace
-from onyx.tracing.framework.processor_interface import TracingProcessor
 from onyx.tracing.framework.provider import DefaultTraceProvider
 from onyx.tracing.framework.setup import get_trace_provider, set_trace_provider
 from onyx.tracing.framework.span_data import GenerationSpanData
-from onyx.tracing.framework.spans import NoOpSpan, Span
-from onyx.tracing.framework.traces import NoOpTrace, Trace, TraceContentMode
+from onyx.tracing.framework.spans import NoOpSpan
+from onyx.tracing.framework.traces import NoOpTrace, TraceContentMode
 from onyx.tracing.llm_utils import (
     llm_generation_span,
     record_llm_span_output,
     traced_llm_call,
 )
-
-
-class _CaptureProcessor(TracingProcessor):
-    def __init__(self) -> None:
-        self.started_traces: list[Trace] = []
-        self.ended_traces: list[Trace] = []
-        self.ended_spans: list[Span[Any]] = []
-
-    def on_trace_start(self, trace: Trace) -> None:
-        self.started_traces.append(trace)
-
-    def on_trace_end(self, trace: Trace) -> None:
-        self.ended_traces.append(trace)
-
-    def on_span_start(self, span: Span[Any]) -> None:
-        pass
-
-    def on_span_end(self, span: Span[Any]) -> None:
-        self.ended_spans.append(span)
-
-    def shutdown(self) -> None:
-        pass
-
-    def force_flush(self) -> None:
-        pass
+from tests.unit.onyx.tracing.capture import CaptureProcessor
 
 
 def test_metadata_only_trace_removes_generation_content() -> None:
     provider = DefaultTraceProvider()
-    processor = _CaptureProcessor()
+    processor = CaptureProcessor()
     provider.register_processor(processor)
 
     with provider.create_trace(
@@ -120,7 +94,7 @@ def test_full_span_overrides_metadata_only_trace() -> None:
 
 def test_metadata_only_span_without_trace_remains_redacted_noop() -> None:
     provider = DefaultTraceProvider()
-    processor = _CaptureProcessor()
+    processor = CaptureProcessor()
     provider.register_processor(processor)
 
     span = provider.create_span(
@@ -186,7 +160,7 @@ def test_llm_helper_inherits_metadata_only_trace() -> None:
 def test_ensure_trace_reuses_active_trace() -> None:
     original_provider = get_trace_provider()
     provider = DefaultTraceProvider()
-    processor = _CaptureProcessor()
+    processor = CaptureProcessor()
     provider.register_processor(processor)
     set_trace_provider(provider)
 
@@ -206,7 +180,7 @@ def test_ensure_trace_reuses_active_trace() -> None:
 def test_llm_helper_does_not_create_workflow_trace() -> None:
     original_provider = get_trace_provider()
     provider = DefaultTraceProvider()
-    processor = _CaptureProcessor()
+    processor = CaptureProcessor()
     provider.register_processor(processor)
     set_trace_provider(provider)
 

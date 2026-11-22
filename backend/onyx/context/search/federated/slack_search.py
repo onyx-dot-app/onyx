@@ -1,7 +1,7 @@
 import json
 import re
 import time
-from datetime import datetime
+from datetime import UTC, datetime
 from typing import Any, cast
 
 from pydantic import BaseModel, ConfigDict, ValidationError
@@ -9,12 +9,14 @@ from slack_sdk import WebClient
 from slack_sdk.errors import SlackApiError
 from sqlalchemy.orm import Session
 
+from onyx.cache.factory import get_cache_backend
 from onyx.configs.app_configs import (
     ENABLE_CONTEXTUAL_RAG,
     MAX_SLACK_THREAD_CONTEXT_MESSAGES,
     SLACK_THREAD_CONTEXT_BATCH_SIZE,
 )
 from onyx.configs.chat_configs import DOC_TIME_DECAY
+from onyx.configs.slack_configs import SLACK_API_URL, SLACK_DOMAIN
 from onyx.connectors.models import IndexingDocument, TextSection
 from onyx.context.search.federated.models import (
     ChannelMetadata,
@@ -42,7 +44,6 @@ from onyx.indexing.models import DocAwareChunk
 from onyx.llm.factory import get_default_llm
 from onyx.llm.interfaces import LLM
 from onyx.onyxbot.slack.models import ChannelType, SlackContext
-from onyx.redis.redis_pool import get_redis_client
 from onyx.server.federated.models import FederatedConnectorDetail
 from onyx.utils.logger import setup_logger
 from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
@@ -71,13 +72,12 @@ def fetch_and_cache_channel_metadata(
     Note: We ALWAYS fetch all channel types (including private) and cache them together.
     This ensures a single cache entry per team, avoiding duplicate API calls.
     """
-    # Use tenant-specific Redis client
-    redis_client = get_redis_client()
-    # (tenant_id prefix is added automatically by TenantRedis)
+    # The cache backend adds the tenant prefix.
+    cache = get_cache_backend()
     cache_key = f"slack_federated_search:{team_id}:channels:metadata"
 
     try:
-        cached = redis_client.get(cache_key)
+        cached = cache.get(cache_key)
         if cached:
             logger.debug("Channel metadata cache HIT for team %s", team_id)
             cached_str: str = (
@@ -99,7 +99,7 @@ def fetch_and_cache_channel_metadata(
 
     # Cache miss - fetch from Slack API with retry logic
     logger.debug("Channel metadata cache MISS for team %s - fetching from API", team_id)
-    slack_client = WebClient(token=access_token)
+    slack_client = WebClient(token=access_token, base_url=SLACK_API_URL)
     channel_metadata: dict[str, ChannelMetadata] = {}
 
     # Retry logic with exponential backoff
@@ -152,7 +152,7 @@ def fetch_and_cache_channel_metadata(
 
             # Cache the results
             try:
-                redis_client.set(
+                cache.set(
                     cache_key,
                     json.dumps(channel_metadata),
                     ex=CHANNEL_METADATA_CACHE_TTL,
@@ -262,12 +262,12 @@ def get_cached_user_profile(
     Uses Redis caching to avoid repeated API calls and rate limiting.
     Returns the user's real_name or email, or None if not found.
     """
-    redis_client = get_redis_client()
+    cache = get_cache_backend()
     cache_key = f"slack_federated_search:{team_id}:user:{user_id}"
 
     # Check cache first
     try:
-        cached = redis_client.get(cache_key)
+        cached = cache.get(cache_key)
         if cached is not None:
             cached_str = (
                 cached.decode("utf-8") if isinstance(cached, bytes) else str(cached)
@@ -278,7 +278,7 @@ def get_cached_user_profile(
         logger.debug("Error reading user profile cache: %s", e)
 
     # Cache miss - fetch from Slack API
-    slack_client = WebClient(token=access_token)
+    slack_client = WebClient(token=access_token, base_url=SLACK_API_URL)
     try:
         response = slack_client.users_profile_get(user=user_id)
         response.validate()
@@ -287,7 +287,7 @@ def get_cached_user_profile(
 
         # Cache the result (empty string for not found)
         try:
-            redis_client.set(
+            cache.set(
                 cache_key,
                 name or "",
                 ex=USER_PROFILE_CACHE_TTL,
@@ -313,7 +313,7 @@ def get_cached_user_profile(
 
         # Cache negative result to avoid repeated lookups for missing users
         try:
-            redis_client.set(cache_key, "", ex=USER_PROFILE_CACHE_TTL)
+            cache.set(cache_key, "", ex=USER_PROFILE_CACHE_TTL)
         except Exception:
             pass
 
@@ -403,7 +403,7 @@ def _should_skip_channel(
 
             # Fallback: API call only if not in cache (should be rare)
             token_to_use = bot_token or access_token
-            channel_client = WebClient(token=token_to_use)
+            channel_client = WebClient(token=token_to_use, base_url=SLACK_API_URL)
             channel_info = channel_client.conversations_info(channel=channel_id)
 
             if isinstance(channel_info.data, dict):
@@ -445,7 +445,7 @@ def _fetch_thread_from_url(
     channel_id = thread_fetch.channel_id
     thread_ts = thread_fetch.thread_ts
 
-    slack_client = WebClient(token=access_token)
+    slack_client = WebClient(token=access_token, base_url=SLACK_API_URL)
     try:
         response = slack_client.conversations_replies(
             channel=channel_id,
@@ -495,13 +495,15 @@ def _fetch_thread_from_url(
         parent_text[:50].rstrip() + "..." if len(parent_text) > 50 else parent_text
     ).replace("\n", " ")
 
-    doc_time = datetime.fromtimestamp(float(message_ts))
+    doc_time = datetime.fromtimestamp(float(message_ts), tz=UTC)
     decay_factor = DOC_TIME_DECAY
-    doc_age_years = (datetime.now() - doc_time).total_seconds() / (365 * 24 * 60 * 60)
+    doc_age_years = (datetime.now(UTC) - doc_time).total_seconds() / (
+        365 * 24 * 60 * 60
+    )
     recency_bias = max(1 / (1 + decay_factor * doc_age_years), 0.75)
 
     permalink = (
-        f"https://slack.com/archives/{channel_id}/p{message_ts.replace('.', '')}"
+        f"https://{SLACK_DOMAIN}/archives/{channel_id}/p{message_ts.replace('.', '')}"
     )
 
     slack_message = SlackMessage(
@@ -565,7 +567,7 @@ def query_slack(
     # Detect if query asks for most recent results
     sort_by_time = is_recency_query(query_string)
 
-    slack_client = WebClient(token=access_token)
+    slack_client = WebClient(token=access_token, base_url=SLACK_API_URL)
     try:
         search_params: dict[str, Any] = {
             "query": final_query,
@@ -645,8 +647,8 @@ def query_slack(
         document_id = f"{channel_id}_{message_id}"
 
         decay_factor = DOC_TIME_DECAY
-        doc_time = datetime.fromtimestamp(float(message_id))
-        doc_age_years = (datetime.now() - doc_time).total_seconds() / (
+        doc_time = datetime.fromtimestamp(float(message_id), tz=UTC)
+        doc_age_years = (datetime.now(UTC) - doc_time).total_seconds() / (
             365 * 24 * 60 * 60
         )
         recency_bias = max(1 / (1 + decay_factor * doc_age_years), 0.75)
@@ -779,7 +781,7 @@ def _fetch_thread_context(
     if thread_id is None:
         return ThreadContextResult.success(message.text)
 
-    slack_client = WebClient(token=access_token, timeout=30)
+    slack_client = WebClient(token=access_token, base_url=SLACK_API_URL, timeout=30)
     try:
         response = slack_client.conversations_replies(
             channel=channel_id,
@@ -993,7 +995,7 @@ def convert_slack_score(slack_score: float) -> float:
     return max(0.0, min(1.0, slack_score / 90_000))
 
 
-@log_function_time(print_only=True)
+@log_function_time()
 def slack_retrieval(
     query: ChunkIndexRequest,
     access_token: str,

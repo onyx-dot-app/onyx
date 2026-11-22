@@ -1,11 +1,20 @@
 import datetime
+from collections.abc import Sequence
+from typing import NamedTuple
 from uuid import UUID
 
-from sqlalchemy import exists, func, select, update
+from sqlalchemy import and_, column, exists, func, or_, select, true, update, values
+from sqlalchemy.dialects.postgresql import UUID as PGUUID
+from sqlalchemy.engine import Row
 from sqlalchemy.orm import Session, joinedload, selectinload
 
+from onyx.configs.constants import USER_FILE_PROCESSING_MAX_ATTEMPTS
 from onyx.db.enums import UserFileStatus
 from onyx.db.models import Persona, Project__UserFile, User, UserFile
+from onyx.file_store.models import ChatFileInput, FileDescriptor, UserFileMetadata
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 
 def fetch_chunk_counts_for_user_files(
@@ -109,7 +118,95 @@ def get_user_file_by_id(
 ) -> UserFile | None:
     """Fetch a UserFile row by id. Accepts str for callers whose input may not
     even be a UserFile id (e.g. a storage file_id) — those resolve to None."""
+    if isinstance(user_file_id, str):
+        try:
+            user_file_id = UUID(user_file_id)
+        except ValueError:
+            return None
     return db_session.query(UserFile).filter(UserFile.id == user_file_id).first()
+
+
+def get_user_file_by_pk(db_session: Session, user_file_id: UUID) -> UserFile | None:
+    """Primary-key lookup. Unlike `get_user_file_by_id`, this returns the row the
+    session already holds without a query."""
+    return db_session.get(UserFile, user_file_id)
+
+
+def lock_user_file_statuses_nowait(
+    db_session: Session, user_file_ids: Sequence[UUID]
+) -> Sequence[Row[tuple[UUID, UserFileStatus]]]:
+    """Lock the given rows and return their (id, status). Raises OperationalError
+    when another transaction holds a lock on any of them."""
+    stmt = (
+        select(UserFile.id, UserFile.status)
+        .where(UserFile.id.in_(user_file_ids))
+        .with_for_update(nowait=True)
+    )
+    return db_session.execute(stmt).all()
+
+
+def fetch_user_files_with_assistant_files(
+    db_session: Session, user_file_ids: Sequence[UUID | str]
+) -> list[UserFile]:
+    """Fetch user files with their assistants, and the files of each assistant,
+    eagerly loaded."""
+    return (
+        db_session.query(UserFile)
+        .options(selectinload(UserFile.assistants).selectinload(Persona.user_files))
+        .filter(UserFile.id.in_(user_file_ids))
+        .all()
+    )
+
+
+def fetch_user_file_ids_by_status(
+    db_session: Session, status: UserFileStatus
+) -> Sequence[UUID]:
+    return (
+        db_session.execute(select(UserFile.id).where(UserFile.status == status))
+        .scalars()
+        .all()
+    )
+
+
+def fetch_user_file_ids_needing_sync(db_session: Session) -> Sequence[UUID]:
+    """COMPLETED files that wait for a project sync, a persona sync or a
+    secondary-index reconcile."""
+    return (
+        db_session.execute(
+            select(UserFile.id).where(
+                and_(
+                    or_(
+                        UserFile.needs_project_sync.is_(True),
+                        UserFile.needs_persona_sync.is_(True),
+                        # re-enqueue un-reconciled files so the reconciler retries
+                        UserFile.secondary_reconcile_pending.is_(True),
+                    ),
+                    UserFile.status == UserFileStatus.COMPLETED,
+                )
+            )
+        )
+        .scalars()
+        .all()
+    )
+
+
+def delete_user_file__no_commit(db_session: Session, user_file: UserFile) -> None:
+    db_session.delete(user_file)
+
+
+def capture_user_file_metadata(
+    user_files: Sequence[UserFile],
+) -> list[UserFileMetadata]:
+    """Copy loaded fields while the caller owns the database session."""
+    return [UserFileMetadata.model_validate(user_file) for user_file in user_files]
+
+
+def get_user_file_metadata(user_file_id: UUID, db_session: Session) -> UserFileMetadata:
+    """Capture one file for content loading after the session closes."""
+    user_file: UserFile | None = get_user_file_by_id(user_file_id, db_session)
+    if user_file is None:
+        raise ValueError(f"User file with id {user_file_id} not found")
+    return UserFileMetadata.model_validate(user_file)
 
 
 def get_file_id_by_user_file_id(user_file_id: str, db_session: Session) -> str | None:
@@ -191,6 +288,57 @@ def fetch_port_scope_user_ids(db_session: Session) -> list[UUID]:
     ]
 
 
+class PortedUserScope(NamedTuple):
+    user_id: UUID
+    up_to_doc_id: str | None
+
+
+def sample_ported_user_file_ids(
+    db_session: Session,
+    user_scopes: Sequence[PortedUserScope],
+    per_scope_limit: int,
+) -> list[str]:
+    """Gets up to `per_scope_limit` user file IDs per user that its port copied.
+
+    Only COMPLETED, non-incognito files inside the port's snapshot bound count, which
+    is the scope the port itself copies. A user with a None `up_to_doc_id` is skipped:
+    that port found no files when it started, and files completed since belong to the
+    dual-write. Files with a NULL chunk_count are included; the column was added
+    without a backfill.
+
+    One LATERAL query serves every user. This runs on each 15-second swap-gate tick,
+    and a tenant can have thousands of users with files.
+    """
+    scope_rows = [
+        (scope.user_id, UUID(scope.up_to_doc_id))
+        for scope in user_scopes
+        if scope.up_to_doc_id is not None
+    ]
+    if per_scope_limit <= 0 or not scope_rows:
+        return []
+    scopes = values(
+        column("user_id", PGUUID(as_uuid=True)),
+        column("up_to_id", PGUUID(as_uuid=True)),
+        name="user_scope",
+    ).data(scope_rows)
+
+    per_user = (
+        select(UserFile.id)
+        .where(
+            UserFile.user_id == scopes.c.user_id,
+            UserFile.status == UserFileStatus.COMPLETED,
+            UserFile.incognito.is_(False),
+            or_(UserFile.chunk_count.is_(None), UserFile.chunk_count > 0),
+            UserFile.id <= scopes.c.up_to_id,
+        )
+        .order_by(UserFile.id)
+        .limit(per_scope_limit)
+        .lateral("sampled_user_file")
+    )
+    stmt = select(per_user.c.id).select_from(scopes.join(per_user, true()))
+    return [str(file_id) for file_id in db_session.scalars(stmt)]
+
+
 def get_user_file_ids_for_user_batch(
     db_session: Session,
     user_id: UUID,
@@ -243,6 +391,32 @@ def filter_existing_user_file_ids(
             UserFile.user_id == user_id,
             UserFile.status == UserFileStatus.COMPLETED,
             UserFile.id.in_([UUID(i) for i in ids]),
+        )
+    )
+    return {str(uf_id) for uf_id in rows}
+
+
+def filter_existing_user_file_ids_any_owner(
+    db_session: Session, ids: list[str]
+) -> set[str]:
+    """Returns the subset of `ids` that are COMPLETED user files, regardless of owner.
+
+    IDs that are not UUIDs are ignored, so connector document IDs can be mixed in.
+    """
+    if not ids:
+        return set()
+    parsed: list[UUID] = []
+    for raw_id in ids:
+        try:
+            parsed.append(UUID(raw_id))
+        except ValueError:
+            continue
+    if not parsed:
+        return set()
+    rows = db_session.scalars(
+        select(UserFile.id).where(
+            UserFile.status == UserFileStatus.COMPLETED,
+            UserFile.id.in_(parsed),
         )
     )
     return {str(uf_id) for uf_id in rows}
@@ -302,3 +476,154 @@ def any_user_file_reconcile_pending_for_users(
             )
         )
     )
+
+
+def consume_user_file_processing_attempt(
+    db_session: Session, user_file: UserFile
+) -> bool:
+    """Count one pickup and commit it before the slow work. Past the cap the
+    file is marked FAILED and False comes back."""
+    user_file.processing_attempts += 1
+    exhausted = user_file.processing_attempts > USER_FILE_PROCESSING_MAX_ATTEMPTS
+    if exhausted:
+        # A delete may have landed since the caller's status check. The row
+        # must stay DELETING or the delete sweep never finds it again.
+        db_session.execute(
+            update(UserFile)
+            .where(
+                UserFile.id == user_file.id,
+                UserFile.status != UserFileStatus.DELETING,
+            )
+            .values(status=UserFileStatus.FAILED)
+        )
+    db_session.commit()
+    return not exhausted
+
+
+def get_user_file_processing_info(
+    file_ids: list[UUID], db_session: Session
+) -> dict[str, tuple[int, UserFileStatus]]:
+    """Read token counts and processing status without loading ORM relationships."""
+    if not file_ids:
+        return {}
+    rows = db_session.execute(
+        select(UserFile.id, UserFile.token_count, UserFile.status).where(
+            UserFile.id.in_(file_ids)
+        )
+    )
+    return {str(file_id): (tokens or 0, status) for file_id, tokens, status in rows}
+
+
+def prepare_chat_file_inputs(
+    descriptors: list[FileDescriptor], db_session: Session
+) -> list[ChatFileInput]:
+    """Capture processing status before reading attachment content."""
+    # The lookup uses the canonical UUID string; clients may send other forms.
+    canonical_ids: dict[str, str] = {}
+    for descriptor in descriptors:
+        raw_id = descriptor.get("user_file_id")
+        if raw_id:
+            try:
+                canonical_ids[raw_id] = str(UUID(raw_id))
+            except ValueError:
+                logger.warning("Invalid user-file ID: %s", raw_id)
+    metadata = get_user_file_processing_info(
+        [UUID(canonical) for canonical in canonical_ids.values()], db_session
+    )
+    inputs: list[ChatFileInput] = []
+    for descriptor in descriptors:
+        tokens, status = metadata.get(
+            canonical_ids.get(descriptor.get("user_file_id") or "", ""),
+            (0, UserFileStatus.COMPLETED),
+        )
+        inputs.append(
+            ChatFileInput(
+                descriptor=descriptor,
+                token_count=tokens,
+                content_pending=status
+                in (UserFileStatus.PROCESSING, UserFileStatus.INDEXING),
+                indexed=status != UserFileStatus.SKIPPED,
+            )
+        )
+    return inputs
+
+
+def fetch_recent_user_files(db_session: Session, user_id: UUID) -> list[UserFile]:
+    """The user's usable files, most recently accessed first."""
+    return (
+        db_session.query(UserFile)
+        .filter(UserFile.user_id == user_id)
+        .filter(UserFile.status != UserFileStatus.FAILED)
+        .filter(UserFile.status != UserFileStatus.DELETING)
+        # Incognito uploads live only inside their session, never in recents.
+        .filter(UserFile.incognito.is_(False))
+        .order_by(UserFile.last_accessed_at.desc())
+        .all()
+    )
+
+
+def claim_next_processing_user_file__no_commit(db_session: Session) -> UUID | None:
+    """Lock the oldest PROCESSING file and move it to INDEXING. The caller's
+    commit releases the row lock. Returns None when no file is eligible."""
+    file_id = db_session.execute(
+        select(UserFile.id)
+        .where(UserFile.status == UserFileStatus.PROCESSING)
+        .order_by(UserFile.created_at)
+        .limit(1)
+        .with_for_update(skip_locked=True)
+    ).scalar_one_or_none()
+    if file_id is None:
+        return None
+
+    db_session.execute(
+        update(UserFile)
+        .where(UserFile.id == file_id)
+        .values(status=UserFileStatus.INDEXING)
+    )
+    return file_id
+
+
+def lock_next_deleting_user_file_id(
+    db_session: Session, exclude_ids: set[UUID] | None = None
+) -> UUID | None:
+    """Lock the oldest DELETING file that is not in exclude_ids, until the
+    caller's transaction ends."""
+    stmt = (
+        select(UserFile.id)
+        .where(UserFile.status == UserFileStatus.DELETING)
+        .order_by(UserFile.created_at)
+        .limit(1)
+        .with_for_update(skip_locked=True)
+    )
+    if exclude_ids:
+        stmt = stmt.where(UserFile.id.notin_(exclude_ids))
+    return db_session.execute(stmt).scalar_one_or_none()
+
+
+def lock_next_sync_user_file_id(
+    db_session: Session, exclude_ids: set[UUID] | None = None
+) -> UUID | None:
+    """Lock the oldest COMPLETED file that needs a project or persona sync and
+    is not in exclude_ids, until the caller's transaction ends."""
+    stmt = (
+        select(UserFile.id)
+        .where(
+            and_(
+                or_(
+                    UserFile.needs_project_sync.is_(True),
+                    UserFile.needs_persona_sync.is_(True),
+                ),
+                UserFile.status == UserFileStatus.COMPLETED,
+            )
+        )
+        .order_by(UserFile.created_at)
+        .limit(1)
+        .with_for_update(skip_locked=True)
+    )
+    if exclude_ids:
+        stmt = stmt.where(UserFile.id.notin_(exclude_ids))
+    return db_session.execute(stmt).scalar_one_or_none()
+
+
+def add_user_file__no_commit(db_session: Session, row: UserFile) -> None:
+    db_session.add(row)

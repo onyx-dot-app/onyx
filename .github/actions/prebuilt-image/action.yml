@@ -1,0 +1,179 @@
+name: "Prebuilt Image"
+description: >-
+  Finds an image that an earlier run built from the same inputs, so a pull
+  request build can skip. With save-key and save-digest set, records the image
+  that this run built instead.
+inputs:
+  name:
+    description: "Short image name"
+    required: true
+  context:
+    description: "Docker build context. Not used when saving."
+    required: false
+    default: ""
+  dockerfile:
+    description: "Dockerfile path. Not used when saving."
+    required: false
+    default: ""
+  build-config:
+    description: "Everything else that changes the image: build args, platforms"
+    required: false
+    default: ""
+  extra-paths:
+    description: "The files that set the build options, such as target and build args. Not used when saving."
+    required: false
+    default: ""
+  image-repo:
+    description: "Repository that holds the image, from runs-on/action. Not used when saving."
+    required: false
+    default: ""
+  persist-pr-digest:
+    description: "Also persist the digest as an artifact scoped to a same-repository PR. Requires actions: read."
+    default: "false"
+  save-key:
+    description: "The save-key output of the find call"
+    required: false
+    default: ""
+  save-digest:
+    description: "Digest of the image this run built"
+    required: false
+    default: ""
+outputs:
+  digest:
+    description: "Digest of a reusable image in image-repo, or empty when the caller must build"
+    value: ${{ steps.verify.outputs.digest || steps.artifact.outputs.digest }}
+  save-key:
+    description: "Cache key to save this run's build under, or empty when the image inputs cannot be hashed"
+    value: ${{ steps.key.outputs.save-key }}
+runs:
+  using: "composite"
+  steps:
+    - name: Hash image inputs
+      id: key
+      if: inputs.save-digest == ''
+      shell: bash
+      env:
+        NAME: ${{ inputs.name }}
+        CONTEXT: ${{ inputs.context }}
+        DOCKERFILE: ${{ inputs.dockerfile }}
+        BUILD_CONFIG: ${{ inputs.build-config }}
+        EXTRA_PATHS: ${{ inputs.extra-paths }}
+        RUN_SUFFIX: ${{ github.run_id }}-${{ github.run_attempt }}
+      run: |
+        set -euo pipefail
+        paths=("$DOCKERFILE" "$CONTEXT/.dockerignore")
+        read -r -a extras <<< "$EXTRA_PATHS"
+        paths+=("${extras[@]}")
+        if grep -Eiq -- '--mount=type=bind|^[[:space:]]*(COPY|ADD)[[:space:]].*\[' "$DOCKERFILE"; then
+          paths+=("$CONTEXT")
+        else
+          # The sources of each COPY and ADD that reads the build context.
+          while read -r -a words; do
+            sources=()
+            for word in "${words[@]:1}"; do
+              [[ "$word" == --* ]] || sources+=("$word")
+            done
+            unset 'sources[${#sources[@]}-1]'
+            for source in "${sources[@]}"; do
+              path=$(realpath -m --relative-to=. "$CONTEXT/$source")
+              if [ -z "$(git ls-files -- "$path")" ]; then
+                echo "::notice::git does not track $path, so the $NAME image always builds."
+                exit 0
+              fi
+              paths+=("$path")
+            done
+          done < <(sed -e ':a' -e '/\\$/N; s/\\\n//; ta' "$DOCKERFILE" \
+            | grep -Ei '^[[:space:]]*(COPY|ADD)[[:space:]]' | grep -v -- '--from=')
+        fi
+        hash=$({ git ls-files -s -- "${paths[@]}"; printf '%s' "$BUILD_CONFIG"; } \
+          | sha256sum | cut -c1-32)
+        echo "Inputs of the $NAME image:"
+        printf '  %s\n' "${paths[@]}"
+        prefix="prebuilt-image-${NAME}-${RUNNER_ARCH}-${hash}-"
+        echo "prefix=${prefix}" >> "$GITHUB_OUTPUT"
+        echo "save-key=${prefix}${RUN_SUFFIX}" >> "$GITHUB_OUTPUT"
+
+    # Fork pull requests can write RunsOn's S3 cache and the ECR cache. They
+    # cannot write a main branch entry in GitHub's cache, so the digests live
+    # there. Push runs on main always build, so the newest main entry stays fresh.
+    - name: Restore the digest of an earlier build
+      if: github.event_name == 'pull_request' && steps.key.outputs.prefix != ''
+      uses: actions/cache/restore@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      with:
+        path: .prebuilt-image/${{ inputs.name }}
+        key: ${{ steps.key.outputs.prefix }}
+        restore-keys: ${{ steps.key.outputs.prefix }}
+
+    # The ECR cache can expire an untagged image, so confirm it still exists.
+    - name: Check that the image still exists
+      id: verify
+      if: inputs.save-digest == ''
+      shell: bash
+      env:
+        DIGEST_FILE: .prebuilt-image/${{ inputs.name }}/digest
+        IMAGE_REPO: ${{ inputs.image-repo }}
+      run: |
+        if [ -f "$DIGEST_FILE" ]; then
+          digest=$(cat "$DIGEST_FILE")
+          if [[ ! "$digest" =~ ^sha256:[a-f0-9]{64}$ ]]; then
+            exit 0
+          fi
+          if docker buildx imagetools inspect "${IMAGE_REPO}@${digest}" > /dev/null; then
+            echo "Reusing ${IMAGE_REPO}@${digest}"
+            echo "digest=${digest}" >> "$GITHUB_OUTPUT"
+          fi
+        fi
+
+    - name: Restore a verified digest from this PR
+      id: artifact
+      if: >-
+        inputs.persist-pr-digest == 'true' &&
+        github.event_name == 'pull_request' &&
+        github.event.pull_request.head.repo.id == github.event.repository.id &&
+        steps.key.outputs.prefix != '' && steps.verify.outputs.digest == ''
+      shell: bash
+      env:
+        GH_TOKEN: ${{ github.token }}
+        PR_NUMBER: ${{ github.event.pull_request.number }}
+        HEAD_BRANCH: ${{ github.head_ref }}
+        ARTIFACT_NAME: ${{ steps.key.outputs.prefix }}pr-${{ github.event.pull_request.number }}
+        IMAGE_REPO: ${{ inputs.image-repo }}
+      run: |
+        if ! bash "$GITHUB_ACTION_PATH/restore-pr-digest.sh"; then
+          echo "::notice::Could not restore the image digest artifact. Building the image."
+        fi
+
+    - name: Write the digest of this build
+      id: write-digest
+      if: inputs.save-digest != '' && inputs.save-key != ''
+      shell: bash
+      env:
+        NAME: ${{ inputs.name }}
+        DIGEST: ${{ inputs.save-digest }}
+        SAVE_KEY: ${{ inputs.save-key }}
+      run: |
+        mkdir -p ".prebuilt-image/${NAME}"
+        echo "$DIGEST" > ".prebuilt-image/${NAME}/digest"
+        echo "prefix=${SAVE_KEY%"$GITHUB_RUN_ID-$GITHUB_RUN_ATTEMPT"}" >> "$GITHUB_OUTPUT"
+
+    - name: Save the digest of this build
+      if: inputs.save-digest != '' && inputs.save-key != ''
+      uses: actions/cache/save@55cc8345863c7cc4c66a329aec7e433d2d1c52a9
+      with:
+        path: .prebuilt-image/${{ inputs.name }}
+        key: ${{ inputs.save-key }}
+
+    - name: Persist the digest for future runs of this PR
+      if: >-
+        inputs.persist-pr-digest == 'true' && github.event_name == 'pull_request' &&
+        github.event.pull_request.head.repo.id == github.event.repository.id &&
+        (steps.write-digest.outputs.prefix != '' ||
+        (steps.key.outputs.prefix != '' && steps.verify.outputs.digest != ''))
+      uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a
+      continue-on-error: true
+      with:
+        name: ${{ steps.write-digest.outputs.prefix || steps.key.outputs.prefix }}pr-${{ github.event.pull_request.number }}
+        path: .prebuilt-image/${{ inputs.name }}/digest
+        include-hidden-files: true
+        retention-days: 7
+        overwrite: true

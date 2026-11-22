@@ -1,9 +1,25 @@
 """Tool visibility configuration and utility functions."""
 
+from __future__ import annotations
+
 from pydantic import BaseModel
 
 from onyx.db.models import Tool
 from onyx.tools.constants import MEMORY_TOOL_ID, OPEN_URL_TOOL_ID
+
+
+def is_openapi_tool(tool: Tool) -> bool:
+    return (
+        isinstance(tool.openapi_schema, dict)
+        and tool.in_code_tool_id is None
+        and tool.mcp_server_id is None
+    )
+
+
+def is_default_chat_tool_selected(tool: Tool) -> bool:
+    """Keep legacy disabled OpenAPI attachments off default Chat until selected."""
+    return not is_openapi_tool(tool) or tool.enabled
+
 
 # Tool class name constant for OktaProfileTool (not in main constants.py as it's hidden)
 OKTA_PROFILE_TOOL_ID = "OktaProfileTool"

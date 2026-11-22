@@ -34,8 +34,9 @@ function baseInput(
     lastStepIsResearchAgent: false,
     parallelActiveStepSupportsCollapsedStreaming: false,
     parallelActiveStepHasCollapsedContent: false,
-    isGeneratingImage: false,
     finalAnswerComing: false,
+    codeModeWorking: false,
+    awaitingUser: false,
     ...overrides,
   };
 }
@@ -87,16 +88,29 @@ describe("useTimelineUIState — the 7 states", () => {
     );
   });
 
-  it("stays streaming while generating an image even with display content", () => {
-    // isGeneratingImage keeps it in the streaming branch instead of DISPLAY_CONTENT_ONLY.
+  it("leaves streaming once display content arrives after the steps", () => {
     expect(
       run({
         hasPackets: true,
         hasDisplayContent: true,
-        isGeneratingImage: true,
         lastTurnGroup: sequentialTurn,
       }).uiState,
+    ).toBe(TimelineUIState.COMPLETED_COLLAPSED);
+  });
+
+  it("keeps a wait for the user active after display content", () => {
+    expect(
+      run({
+        hasPackets: true,
+        hasDisplayContent: true,
+        lastTurnGroup: sequentialTurn,
+        awaitingUser: true,
+      }).uiState,
     ).toBe(TimelineUIState.STREAMING_SEQUENTIAL);
+    // A question has no step: text, then only the question.
+    expect(run({ hasDisplayContent: true, awaitingUser: true }).uiState).toBe(
+      TimelineUIState.EMPTY,
+    );
   });
 });
 

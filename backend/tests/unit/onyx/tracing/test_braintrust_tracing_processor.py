@@ -3,7 +3,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from onyx.tracing.framework.span_data import GenerationSpanData
+from onyx.tracing.framework.span_data import FunctionSpanData, GenerationSpanData
 
 # The connector tests also define a top-level package named braintrust. Stub the
 # optional SDK so full-suite collection cannot bind this import to that package.
@@ -29,3 +29,32 @@ def test_generation_cost_prices_cache_creation_at_write_rate() -> None:
     metrics = processor._generation_log_data(span)["metrics"]
 
     assert metrics["cost_cents"] == pytest.approx(1.05)
+
+
+def test_function_spans_log_their_metadata() -> None:
+    span = MagicMock()
+    span.span_data = FunctionSpanData(
+        name="echo",
+        input="{}",
+        output="ok",
+        metadata={"code_mode.call_id": "code:0", "code_mode.index": 0},
+    )
+    data = BraintrustTracingProcessor()._function_log_data(span)
+    assert data["metadata"] == {"code_mode.call_id": "code:0", "code_mode.index": 0}
+
+
+def test_generation_starts_with_its_own_flow_and_root_attribution() -> None:
+    processor = BraintrustTracingProcessor()
+    root = MagicMock()
+    processor._spans["root"] = root
+    processor._trace_metadata["root"] = {"flow": "parent", "tenant_id": "tenant"}
+    span = MagicMock()
+    span.trace_id = "root"
+    span.parent_id = None
+    span.started_at = None
+    span.span_data = GenerationSpanData(model_config={"flow": "chat_response"})
+    processor.on_span_start(span)
+    kwargs = root.start_span.call_args.kwargs
+    assert kwargs["name"] == "chat_response"
+    assert kwargs["metadata"] == {"flow": "chat_response", "tenant_id": "tenant"}
+    assert processor._trace_metadata["root"]["flow"] == "parent"

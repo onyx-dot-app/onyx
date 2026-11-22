@@ -8,11 +8,12 @@ from sqlalchemy.orm import Session
 from onyx.db.enums import SkillSharePermission
 from onyx.db.models import User
 from onyx.db.skill import (
-    SkillManagementPolicy,
+    fetch_editable_skill,
     fetch_skill,
     list_skills,
     set_skill_public_permission,
 )
+from onyx.error_handling.exceptions import OnyxError
 from tests.external_dependency_unit.craft.db_helpers import (
     add_user_to_group,
     make_group,
@@ -24,7 +25,6 @@ from tests.external_dependency_unit.craft.db_helpers import (
 
 def _user_skills(user: User, db_session: Session):
     return list_skills(
-        policy=SkillManagementPolicy.VIEW,
         user=user,
         db_session=db_session,
     )
@@ -39,9 +39,8 @@ class TestSkillVisibility:
         admin = make_user(db_session, is_admin=True)
         skill = make_skill(db_session, is_public=False)
 
-        result = fetch_skill(
+        result = fetch_editable_skill(
             skill.id,
-            policy=SkillManagementPolicy.EDIT,
             user=admin,
             db_session=db_session,
         )
@@ -69,16 +68,15 @@ class TestSkillVisibility:
         skill = make_skill(db_session, is_public=False)
         share_skill_with_group(db_session, skill, group, permission)
 
-        result = fetch_skill(
+        result = fetch_editable_skill(
             skill.id,
-            policy=SkillManagementPolicy.EDIT,
             user=user,
             db_session=db_session,
         )
 
         assert (result is not None) is is_editable
 
-    def test_public_permission_null_controls_org_visibility(
+    def test_public_permission_controls_org_visibility(
         self,
         db_session: Session,
         test_user: User,  # noqa: ARG002
@@ -88,7 +86,6 @@ class TestSkillVisibility:
         assert (
             fetch_skill(
                 skill.id,
-                policy=SkillManagementPolicy.VIEW,
                 user=user,
                 db_session=db_session,
             )
@@ -97,32 +94,25 @@ class TestSkillVisibility:
 
         set_skill_public_permission(
             skill=skill,
-            public_permission=SkillSharePermission.EDITOR,
+            public_permission=SkillSharePermission.VIEWER,
             db_session=db_session,
         )
-        editor_result = fetch_skill(
-            skill.id,
-            policy=SkillManagementPolicy.EDIT,
-            user=user,
-            db_session=db_session,
-        )
-        assert editor_result is not None
-        assert editor_result.id == skill.id
+        assert fetch_skill(skill.id, user=user, db_session=db_session) is not None
+        assert fetch_editable_skill(skill.id, user=user, db_session=db_session) is None
 
-        set_skill_public_permission(
-            skill=skill,
-            public_permission=None,
-            db_session=db_session,
-        )
-        assert (
-            fetch_skill(
-                skill.id,
-                policy=SkillManagementPolicy.VIEW,
-                user=user,
+        # The organization cannot edit, and publishing is one-way.
+        with pytest.raises(OnyxError, match="edit access"):
+            set_skill_public_permission(
+                skill=skill,
+                public_permission=SkillSharePermission.EDITOR,
                 db_session=db_session,
             )
-            is None
-        )
+        with pytest.raises(OnyxError, match="cannot be made private"):
+            set_skill_public_permission(
+                skill=skill,
+                public_permission=None,
+                db_session=db_session,
+            )
 
     def test_user_loses_skill_after_group_removal(
         self,
@@ -150,7 +140,7 @@ class TestSkillVisibility:
         db_session: Session,
         test_user: User,  # noqa: ARG002
     ) -> None:
-        # Current behavior pinned: ONLY a global MANAGE_SKILLS holder bypasses the visibility
+        # Current behavior pinned: ONLY a global MANAGE_PLUGINS holder bypasses the visibility
         # filter. Curators (and global curators) walk the same path as
         # regular users — no admin-style "see every row" override.
         curator = make_user(db_session, is_group_manager=True)
@@ -188,9 +178,8 @@ class TestSkillVisibility:
         private_skill = make_skill(db_session, is_public=False)
         share_skill_with_group(db_session, private_skill, group)
 
-        result = fetch_skill(
+        result = fetch_editable_skill(
             private_skill.id,
-            policy=SkillManagementPolicy.EDIT,
             user=curator,
             db_session=db_session,
         )
@@ -209,9 +198,8 @@ class TestSkillVisibility:
         private_skill = make_skill(db_session, is_public=False)
         share_skill_with_group(db_session, private_skill, group)
 
-        result = fetch_skill(
+        result = fetch_editable_skill(
             private_skill.id,
-            policy=SkillManagementPolicy.EDIT,
             user=curator,
             db_session=db_session,
         )
@@ -233,9 +221,8 @@ class TestSkillVisibility:
         share_skill_with_group(db_session, private_skill, curated_group)
         share_skill_with_group(db_session, private_skill, other_group)
 
-        result = fetch_skill(
+        result = fetch_editable_skill(
             private_skill.id,
-            policy=SkillManagementPolicy.EDIT,
             user=curator,
             db_session=db_session,
         )
@@ -255,9 +242,8 @@ class TestSkillVisibility:
         private_skill = make_skill(db_session, is_public=False)
         share_skill_with_group(db_session, private_skill, group)
 
-        result = fetch_skill(
+        result = fetch_editable_skill(
             private_skill.id,
-            policy=SkillManagementPolicy.EDIT,
             user=curator,
             db_session=db_session,
         )
@@ -273,9 +259,8 @@ class TestSkillVisibility:
         curator = make_user(db_session, is_group_manager=True)
         public_skill = make_skill(db_session, is_public=True)
 
-        result = fetch_skill(
+        result = fetch_editable_skill(
             public_skill.id,
-            policy=SkillManagementPolicy.EDIT,
             user=curator,
             db_session=db_session,
         )

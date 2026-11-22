@@ -5,6 +5,7 @@ import { errorHandlingFetcher, skipRetryOnAuthError } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { formatDateForApiParam } from "@/lib/dateUtils";
 import { buildApiPath } from "@/lib/urlBuilder";
+import type { Period } from "@/lib/spendingLimits/types";
 
 export interface UsagePerDayByModel {
   day: string; // "YYYY-MM-DD"
@@ -19,6 +20,9 @@ export interface UsagePerDayByModel {
 export interface ModelPrice {
   model: string;
   provider: string | null;
+  /** The saved model configuration this price is for; providers of one type
+   *  can price the same model name differently. */
+  model_configuration_id: number | null;
   input_per_mtok: number | null; // $/1M tokens; null if the model is unpriced
   output_per_mtok: number | null;
   cache_per_mtok: number | null; // null => cache reads bill at the input rate
@@ -30,7 +34,7 @@ export interface UserUsageResponse {
   // The user's cost budget, remaining allowance, and next fixed reset.
   budget_cents: number | null;
   budget_remaining_cents: number | null;
-  budget_period_hours: number | null;
+  budget_period: Period | null;
   budget_reset_at: string | null;
   selected_model_price: ModelPrice | null;
   available_model_prices: ModelPrice[];

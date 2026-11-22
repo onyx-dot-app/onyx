@@ -1,6 +1,6 @@
 VALID_MODEL_LIST = [
-    "gpt-4o-mini",
-    "gpt-4o",
+    "gpt-6-luna",
+    "gpt-6-sol",
     "gpt-4-1106-preview",
     "gpt-4-vision-preview",
     "gpt-4",

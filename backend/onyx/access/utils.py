@@ -1,11 +1,16 @@
+from collections.abc import Iterable
+
 from onyx.configs.constants import DocumentSource
+
+USER_EMAIL_ACL_PREFIX = "user_email:"
+EXTERNAL_GROUP_ACL_PREFIX = "external_group:"
 
 
 def prefix_user_email(user_email: str) -> str:
     """Prefixes a user email to eliminate collision with group names.
     This applies to both a Onyx user and an External user, this is to make the query time
     more efficient"""
-    return f"user_email:{user_email}"
+    return f"{USER_EMAIL_ACL_PREFIX}{user_email}"
 
 
 def prefix_user_group(user_group_name: str) -> str:
@@ -16,7 +21,7 @@ def prefix_user_group(user_group_name: str) -> str:
 
 def prefix_external_group(ext_group_name: str) -> str:
     """Prefixes an external group name to eliminate collision with user emails / Onyx groups."""
-    return f"external_group:{ext_group_name}"
+    return f"{EXTERNAL_GROUP_ACL_PREFIX}{ext_group_name}"
 
 
 def build_ext_group_name_for_onyx(ext_group_name: str, source: DocumentSource) -> str:
@@ -25,6 +30,14 @@ def build_ext_group_name_for_onyx(ext_group_name: str, source: DocumentSource) -
     NOTE: the name is lowercased to handle case sensitivity for group names
     """
     return f"{source.value}_{ext_group_name}".lower()
+
+
+def build_ext_group_names_for_storage(
+    group_ids: Iterable[str], source: DocumentSource
+) -> set[str]:
+    """The stored form of the group ids a connector yielded for `source`.
+    Connectors yield bare ids on every path, and every storage write calls this."""
+    return {build_ext_group_name_for_onyx(group_id, source) for group_id in group_ids}
 
 
 def build_domain_group_id(domain: str) -> str:

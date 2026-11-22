@@ -2,7 +2,7 @@ import asyncio
 import base64
 import hashlib
 from typing import Any, Literal
-from urllib.parse import parse_qs, urlparse
+from urllib.parse import parse_qs, urlencode, urlparse
 
 import httpx
 import pytest
@@ -55,23 +55,50 @@ class _MemoryTokenStorage:
         self.client_info = client_info
 
 
-class _RecordingAuthorizationStorage(oauth.OnyxTokenStorage):
+class _RecordingAuthorizationStorage(oauth.IntegrationTokenStorage):
     def __init__(
         self,
         token_endpoint_auth_method: Literal[
             "client_secret_post", "client_secret_basic"
         ] = "client_secret_post",
     ) -> None:
-        super().__init__(connection_config_id=101)
         self.tokens: OAuthToken | None = None
         self.client_info = _client_information(
             token_endpoint_auth_method=token_endpoint_auth_method
         )
         self.persisted_client_information: OAuthClientInformationFull | None = None
 
+    @property
+    def refresh_lock_name(self) -> str:
+        return "test-refresh-lock"
+
+    def bind_oauth_context(self, context: oauth.OAuthContext) -> None:
+        del context
+
+    async def get_tokens(self) -> OAuthToken | None:
+        return self.tokens
+
+    async def get_client_info(self) -> OAuthClientInformationFull | None:
+        return self.client_info
+
+    async def set_client_info(self, info: OAuthClientInformationFull) -> None:
+        self.client_info = info
+
     async def set_tokens(self, tokens: OAuthToken) -> None:
         del tokens
         raise AssertionError("authorization must persist registration with its tokens")
+
+    async def set_refreshed_tokens(
+        self, tokens: OAuthToken, redeemed_refresh_token: str | None
+    ) -> bool:
+        del tokens, redeemed_refresh_token
+        raise AssertionError("no refresh in these tests")
+
+    async def discard_persisted_tokens(
+        self, redeemed_refresh_token: str | None
+    ) -> bool:
+        del redeemed_refresh_token
+        return False
 
     async def set_authorization_result(
         self,
@@ -101,6 +128,7 @@ def _provider(
             "connection_config_id": 101,
             "transport": "STREAMABLE_HTTP",
             "oauth_provider_mode": "AUTO_DISCOVERY",
+            "oauth_cimd_enabled": True,
         },
         authorization_request_handler=authorization_request_handler,
     )
@@ -229,6 +257,44 @@ def test_authorization_code_exchange_honors_client_auth_method_and_persists(
             f"Basic {expected_credentials}"
         )
     assert parse_qs(token_request.content.decode()) == expected_body
+
+
+def test_authorization_code_exchange_accepts_form_encoded_token_response(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    storage = _RecordingAuthorizationStorage()
+
+    def handle_token_request(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(
+            200,
+            content=urlencode(
+                {
+                    "access_token": "new-access-token",
+                    "refresh_token": "new-refresh-token",
+                    "token_type": "Bearer",
+                    "expires_in": "3600",
+                    "refresh_token_expires_in": "28800",
+                }
+            ).encode(),
+            headers={"content-type": "application/x-www-form-urlencoded"},
+            request=request,
+        )
+
+    monkeypatch.setattr(
+        oauth,
+        "mcp_ssrf_httpx_client_factory",
+        lambda **_kwargs: httpx.AsyncClient(
+            transport=httpx.MockTransport(handle_token_request)
+        ),
+    )
+
+    tokens = asyncio.run(
+        _provider(storage).complete_authorization_code_exchange("auth-code", "v" * 128)
+    )
+
+    assert tokens.access_token == "new-access-token"
+    assert tokens.refresh_token == "new-refresh-token"
+    assert storage.tokens == tokens
 
 
 def test_failed_token_exchange_does_not_persist_authorization(

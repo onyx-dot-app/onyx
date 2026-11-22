@@ -169,6 +169,40 @@ variable "enable_upload_bucket" {
   default     = false
 }
 
+variable "enable_sandbox_archive_bucket" {
+  type        = bool
+  description = "Create an S3 bucket for Craft sandbox session archives, encrypted with its own KMS key. No node or pod role gets access to it."
+  default     = false
+}
+
+variable "sandbox_archive_bucket_name" {
+  type        = string
+  description = "Name of the sandbox archive bucket. Null derives <name>-sandbox-archive-<workspace>."
+  default     = null
+}
+
+variable "sandbox_archive_expiration_days" {
+  type        = number
+  description = "Days after which sandbox archives are deleted"
+  default     = 30
+
+  validation {
+    condition     = var.sandbox_archive_expiration_days >= 1
+    error_message = "sandbox_archive_expiration_days must be at least 1."
+  }
+}
+
+variable "sandbox_archive_noncurrent_expiration_days" {
+  type        = number
+  description = "Days to keep overwritten or deleted sandbox archive versions"
+  default     = 7
+
+  validation {
+    condition     = var.sandbox_archive_noncurrent_expiration_days >= 1
+    error_message = "sandbox_archive_noncurrent_expiration_days must be at least 1."
+  }
+}
+
 variable "irsa_additional_service_account_names" {
   type        = list(string)
   description = "Additional service accounts in the Onyx namespace that may assume the workload IRSA role. Use the rendered ServiceAccount name for chart-created workloads, such as onyx-sandbox-proxy, that also need RDS IAM auth."
@@ -279,19 +313,19 @@ variable "vespa_node_enabled" {
 
 variable "vespa_node_instance_types" {
   type        = list(string)
-  description = "Instance types for the Vespa EKS node group Null uses the t-shirt size default."
+  description = "Instance types for the dedicated document-index EKS node group. Null uses the t-shirt size default."
   default     = null
 }
 
 variable "vespa_node_disk_size_gb" {
   type        = number
-  description = "Root EBS volume (GiB) for the Vespa/document-index node. Null keeps the node-group default (100 GiB). Null uses the t-shirt size default."
+  description = "Root EBS volume (GiB) for the dedicated document-index node. Null keeps the node-group default (100 GiB). Null uses the t-shirt size default."
   default     = null
 }
 
 variable "vespa_node_subnet_ids" {
   type        = list(string)
-  description = "Subnet IDs for the Vespa node group (must be in same AZ as Vespa PV)"
+  description = "Subnet IDs for the dedicated document-index node group (must be in same AZ as the index PV)"
   default     = []
 }
 
@@ -367,6 +401,54 @@ variable "craft_sandbox_node_disk_size_gb" {
   default     = 200
 }
 
+variable "craft_sandbox_node_disk_iops" {
+  type        = number
+  description = "Provisioned IOPS for the gp3 root volume of Craft sandbox nodes. 6000 is the tested value for Firecracker sandboxes."
+  default     = 3000
+}
+
+variable "craft_sandbox_node_disk_throughput" {
+  type        = number
+  description = "Provisioned throughput (MiB/s) for the gp3 root volume of Craft sandbox nodes. 500 is the tested value for Firecracker sandboxes."
+  default     = 125
+}
+
+variable "craft_sandbox_runtime" {
+  type        = string
+  description = "How Craft sandboxes run: \"pod\" (default) or \"firecracker\". \"firecracker\" needs Intel c8i, m8i or r8i (or -flex) or Intel .metal craft_sandbox_node_instance_types. The eks module checks the types."
+  default     = "pod"
+}
+
+variable "enable_craft_pod_sandbox_node_group" {
+  type        = bool
+  description = "With craft_sandbox_runtime = \"firecracker\", also create a small pod sandbox node group without the onyx.app/kvm taint. Pod sandboxes and the image prepuller run there."
+  default     = false
+}
+
+variable "craft_pod_sandbox_node_instance_types" {
+  type        = list(string)
+  description = "Instance types for the pod sandbox node group next to a Firecracker group."
+  default     = ["m8i.xlarge"]
+}
+
+variable "craft_pod_sandbox_node_min_size" {
+  type        = number
+  description = "Min size of the pod sandbox node group next to a Firecracker group."
+  default     = 1
+}
+
+variable "craft_pod_sandbox_node_max_size" {
+  type        = number
+  description = "Max size of the pod sandbox node group next to a Firecracker group."
+  default     = 2
+}
+
+variable "craft_pod_sandbox_node_desired_size" {
+  type        = number
+  description = "Desired size of the pod sandbox node group next to a Firecracker group."
+  default     = 1
+}
+
 # OpenSearch Configuration Variables
 variable "enable_opensearch" {
   type        = bool
@@ -376,8 +458,8 @@ variable "enable_opensearch" {
 
 variable "opensearch_engine_version" {
   type        = string
-  description = "OpenSearch engine version"
-  default     = "3.3"
+  description = "OpenSearch engine version. 1-bit vector quantization needs 3.6 or later; Amazon OpenSearch Service offers 3.7. A domain on 1.3 or 2.x must upgrade to 2.19 before 3.x."
+  default     = "3.7"
 }
 
 variable "opensearch_instance_type" {
@@ -526,9 +608,15 @@ variable "enable_network_policy" {
   default     = false
 }
 
+variable "manage_core_addons" {
+  type        = bool
+  description = "New clusters only. Install vpc-cni (with NetworkPolicy enforcement on), kube-proxy and CoreDNS as EKS addons. The upstream EKS module v21 creates no default addons, so without them the nodes of a new cluster never become Ready. Keep false on a cluster that already runs these components. Cannot be combined with enable_network_policy."
+  default     = false
+}
+
 variable "vpc_cni_addon_version" {
   type        = string
-  description = "VPC CNI addon version to pin when enable_network_policy is true. Set to the cluster's currently-running version (aws eks describe-addon --addon-name vpc-cni) to avoid an unintended CNI upgrade on adoption."
+  description = "VPC CNI addon version to pin when enable_network_policy or manage_core_addons is true. Set to the cluster's currently-running version (aws eks describe-addon --addon-name vpc-cni) to avoid an unintended CNI upgrade on adoption."
   default     = "v1.20.4-eksbuild.2"
 }
 
@@ -536,4 +624,22 @@ variable "alarm_actions" {
   type        = list(string)
   description = "SNS topic ARNs for RDS/ElastiCache CloudWatch alarm + ok actions. Empty = infra alarms exist but notify nothing."
   default     = []
+}
+
+variable "iam_role_permissions_boundary" {
+  type        = string
+  description = "ARN of a permissions boundary to attach to every IAM role the stack creates (VPC flow logs, EKS cluster and node groups, IRSA and add-on roles). Null attaches none."
+  default     = null
+}
+
+variable "iam_role_path" {
+  type        = string
+  description = "IAM path for every role the stack creates. Null keeps the default path (/). Changing it on an existing stack replaces the roles."
+  default     = null
+}
+
+variable "cluster_admin_principal_arn" {
+  type        = string
+  description = "IAM principal that gets EKS cluster-admin and administers the cluster's KMS key. Null keeps the default: whoever runs Terraform."
+  default     = null
 }

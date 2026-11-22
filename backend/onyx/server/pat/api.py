@@ -17,6 +17,8 @@ from onyx.server.pat.models import (
     PatScopeOption,
     TokenResponse,
 )
+from onyx.server.settings.store import load_settings
+from onyx.server.settings.tier_order import get_current_tier, tier_at_least
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -39,6 +41,24 @@ def _validate_assignable_scopes(scopes: list[Permission] | None) -> None:
             OnyxErrorCode.INVALID_INPUT,
             f"Unsupported token scope(s): {', '.join(s.value for s in unsupported)}",
         )
+    tier = get_current_tier()
+    below_tier = [
+        s for s in scopes if not tier_at_least(tier, SELECTABLE_PAT_SCOPES[s].min_tier)
+    ]
+    if below_tier:
+        raise OnyxError(
+            OnyxErrorCode.FEATURE_NOT_AVAILABLE,
+            f"Token scope(s) not available on the {tier.value.title()} plan: "
+            f"{', '.join(s.value for s in below_tier)}",
+        )
+    if (
+        Permission.USE_LLM_GATEWAY in scopes
+        and not load_settings(raise_on_error=True).llm_gateway_enabled
+    ):
+        raise OnyxError(
+            OnyxErrorCode.INVALID_INPUT,
+            "The LLM gateway is disabled for this workspace.",
+        )
 
 
 @router.get("/scopes")
@@ -46,7 +66,17 @@ def list_selectable_scopes(
     _: User = Depends(require_permission(Permission.BASIC_ACCESS)),
 ) -> list[PatScopeOption]:
     """The scopes a user may assign when minting a token, with display metadata."""
-    return list(SELECTABLE_PAT_SCOPES.values())
+    tier = get_current_tier()
+    options = [
+        option
+        for option in SELECTABLE_PAT_SCOPES.values()
+        if tier_at_least(tier, option.min_tier)
+    ]
+    if not load_settings(raise_on_error=True).llm_gateway_enabled:
+        options = [
+            option for option in options if option.scope != Permission.USE_LLM_GATEWAY
+        ]
+    return options
 
 
 @router.get("")

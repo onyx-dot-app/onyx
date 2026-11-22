@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from onyx.auth.permissions import require_permission
@@ -23,6 +23,8 @@ from onyx.db.slack_channel_config import (
     remove_slack_channel_config,
     update_slack_channel_config,
 )
+from onyx.error_handling.error_codes import OnyxErrorCode
+from onyx.error_handling.exceptions import OnyxError
 from onyx.onyxbot.slack.config import validate_channel_name
 from onyx.server.manage.models import (
     SlackBot,
@@ -69,10 +71,7 @@ def _form_channel_config(
             current_slack_bot_id=slack_channel_config_creation_request.slack_bot_id,
         )
     except ValueError as e:
-        raise HTTPException(
-            status_code=400,
-            detail=str(e),
-        )
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, str(e))
 
     if (
         slack_channel_config_creation_request.is_ephemeral
@@ -123,10 +122,7 @@ def create_slack_channel_config(
     )
 
     if channel_config["channel_name"] is None:
-        raise HTTPException(
-            status_code=400,
-            detail="Channel name is required",
-        )
+        raise OnyxError(OnyxErrorCode.BAD_REQUEST, "Channel name is required")
 
     persona_id = None
     if slack_channel_config_creation_request.persona_id is not None:
@@ -171,10 +167,7 @@ def patch_slack_channel_config(
             db_session=db_session, slack_channel_config_id=slack_channel_config_id
         )
         if existing_slack_channel_config is None:
-            raise HTTPException(
-                status_code=404,
-                detail="Slack channel config not found",
-            )
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "Slack channel config not found")
 
         existing_persona_id = existing_slack_channel_config.persona_id
         if existing_persona_id is not None:

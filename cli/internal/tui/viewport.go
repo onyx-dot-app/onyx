@@ -9,6 +9,7 @@ import (
 	"charm.land/lipgloss/v2"
 
 	"github.com/onyx-dot-app/onyx/cli/internal/markdown"
+	"github.com/onyx-dot-app/onyx/cli/internal/sanitize"
 )
 
 // entryKind is the type of chat entry.
@@ -20,13 +21,16 @@ const (
 	entryInfo
 	entryError
 	entryCitation
+	entryCard
 )
 
 // chatEntry is a single rendered entry in the chat history.
 type chatEntry struct {
-	kind     entryKind
-	content  string // raw content (for agent: the markdown source)
-	rendered string // pre-rendered output
+	kind       entryKind
+	content    string // raw content (for agent: the markdown source)
+	rendered   string // pre-rendered output
+	cardID     string // for entryCard: the approval request or question request the entry shows
+	responseID int    // the agent message whose response the entry shows; 0 for none
 }
 
 // pickerKind distinguishes what the picker is selecting.
@@ -64,6 +68,11 @@ type viewport struct {
 	streamRendered string // cached rendered output during streaming
 	lastRenderTime time.Time
 	lastRenderLen  int // length of streamBuf at last render (skip if unchanged)
+
+	// The entries of the streaming response start at streamStart. responseID
+	// is its agent message ID, 0 until the stream reports it.
+	streamStart int
+	responseID  int
 
 	streaming      bool
 	showSources    bool
@@ -104,6 +113,7 @@ func (v *viewport) setWidth(w int) {
 }
 
 func (v *viewport) addUserMessage(msg string) {
+	msg = sanitize.Terminal(msg)
 	rendered := "\n" + userPrefixStyle.Render("❯ ") + msg
 	v.entries = append(v.entries, chatEntry{
 		kind:     entryUser,
@@ -113,6 +123,8 @@ func (v *viewport) addUserMessage(msg string) {
 }
 
 func (v *viewport) startAgent() {
+	v.streamStart = len(v.entries)
+	v.responseID = 0
 	v.streaming = true
 	v.streamBuf = ""
 	v.streamRendered = ""
@@ -123,7 +135,7 @@ func (v *viewport) startAgent() {
 }
 
 func (v *viewport) appendToken(token string) {
-	v.streamBuf += token
+	v.streamBuf += sanitize.Terminal(token)
 
 	if !v.streamMarkdown {
 		return
@@ -161,6 +173,40 @@ func (v *viewport) finishAgent() {
 	v.lastRenderLen = 0
 }
 
+// showResponse records the agent message ID of the streaming response. A
+// replay of a response that this view already shows replaces its entries.
+func (v *viewport) showResponse(id int) {
+	kept := make([]chatEntry, 0, len(v.entries))
+	for i, entry := range v.entries {
+		if i < v.streamStart && entry.responseID == id {
+			continue
+		}
+		kept = append(kept, entry)
+	}
+	v.streamStart -= len(v.entries) - len(kept)
+	v.entries = kept
+	v.responseID = id
+}
+
+// endResponse ties the entries of the finished response to its message ID.
+func (v *viewport) endResponse() {
+	for i := v.streamStart; i < len(v.entries); i++ {
+		v.entries[i].responseID = v.responseID
+	}
+	v.responseID = 0
+}
+
+// withdrawUserMessage removes the last user message and the entries after it,
+// for a message that the server did not accept.
+func (v *viewport) withdrawUserMessage() {
+	for i := len(v.entries) - 1; i >= 0; i-- {
+		if v.entries[i].kind == entryUser {
+			v.entries = v.entries[:i]
+			return
+		}
+	}
+}
+
 func (v *viewport) renderAgentContent(content string) string {
 	rendered := v.renderMarkdown(content)
 	rendered = strings.TrimLeft(rendered, "\n")
@@ -183,6 +229,7 @@ func (v *viewport) renderMarkdown(md string) string {
 }
 
 func (v *viewport) addInfo(msg string) {
+	msg = sanitize.Terminal(msg)
 	rendered := infoStyle.Render("● " + msg)
 	v.entries = append(v.entries, chatEntry{
 		kind:     entryInfo,
@@ -192,6 +239,7 @@ func (v *viewport) addInfo(msg string) {
 }
 
 func (v *viewport) addWarning(msg string) {
+	msg = sanitize.Terminal(msg)
 	rendered := warnStyle.Render("● " + msg)
 	v.entries = append(v.entries, chatEntry{
 		kind:     entryError,
@@ -201,12 +249,31 @@ func (v *viewport) addWarning(msg string) {
 }
 
 func (v *viewport) addError(msg string) {
+	msg = sanitize.Terminal(msg)
 	rendered := errorStyle.Render("● Error: ") + msg
 	v.entries = append(v.entries, chatEntry{
 		kind:     entryError,
 		content:  msg,
 		rendered: rendered,
 	})
+}
+
+// setCard replaces the entry for an approval request or a question request,
+// or appends one.
+// A new entry follows the text streamed before it. rendered must already be
+// sanitized.
+func (v *viewport) setCard(cardID, rendered string) {
+	for i := range v.entries {
+		if v.entries[i].kind == entryCard && v.entries[i].cardID == cardID {
+			v.entries[i].rendered = rendered
+			return
+		}
+	}
+	if v.streaming && v.streamBuf != "" {
+		v.finishAgent()
+		v.streaming = true
+	}
+	v.entries = append(v.entries, chatEntry{kind: entryCard, rendered: rendered, cardID: cardID})
 }
 
 func (v *viewport) addCitations(citations map[int]string) {
@@ -222,7 +289,7 @@ func (v *viewport) addCitations(citations map[int]string) {
 	for _, num := range keys {
 		parts = append(parts, fmt.Sprintf("[%d] %s", num, citations[num]))
 	}
-	text := fmt.Sprintf("Sources (%d): %s", len(citations), strings.Join(parts, "  "))
+	text := sanitize.Terminal(fmt.Sprintf("Sources (%d): %s", len(citations), strings.Join(parts, "  ")))
 
 	v.entries = append(v.entries, chatEntry{
 		kind:     entryCitation,
@@ -232,6 +299,10 @@ func (v *viewport) addCitations(citations map[int]string) {
 }
 
 func (v *viewport) showPicker(kind pickerKind, items []pickerItem) {
+	for i := range items {
+		items[i].label = sanitize.Line(items[i].label)
+		items[i].detail = sanitize.Line(items[i].detail)
+	}
 	v.pickerItems = items
 	v.pickerType = kind
 	v.pickerActive = true
@@ -258,6 +329,8 @@ func (v *viewport) scrollDown(n int) {
 
 func (v *viewport) clearAll() {
 	v.entries = nil
+	v.streamStart = 0
+	v.responseID = 0
 	v.streaming = false
 	v.streamBuf = ""
 	v.pickerItems = nil
@@ -267,6 +340,8 @@ func (v *viewport) clearAll() {
 
 func (v *viewport) clearDisplay() {
 	v.entries = nil
+	v.streamStart = 0
+	v.responseID = 0
 	v.scrollOffset = 0
 	v.streaming = false
 	v.streamBuf = ""

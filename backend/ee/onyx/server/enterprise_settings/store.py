@@ -19,7 +19,7 @@ from onyx.configs.constants import (
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
-from onyx.file_store.file_store import get_default_file_store
+from onyx.file_store.file_store import FileStore, get_default_file_store
 from onyx.key_value_store.factory import get_kv_store
 from onyx.key_value_store.interface import KvKeyNotFoundError
 from onyx.utils.logger import setup_logger
@@ -221,6 +221,18 @@ def upload_logo(file: UploadFile | str, is_logotype: bool = False) -> bool:
         file_id=_LOGOTYPE_FILENAME if is_logotype else _LOGO_FILENAME,
     )
     return True
+
+
+def reset_settings() -> None:
+    """Back to stock branding: default settings, no analytics script, no logos."""
+    store_settings(EnterpriseSettings())
+    try:
+        get_kv_store().delete(KV_CUSTOM_ANALYTICS_SCRIPT_KEY)
+    except KvKeyNotFoundError:
+        logger.debug("No custom analytics script to remove")
+    file_store: FileStore = get_default_file_store()
+    for file_id in (_LOGO_FILENAME, _LOGOTYPE_FILENAME):
+        file_store.delete_file(file_id, error_on_missing=False)
 
 
 def get_logo_filename() -> str:

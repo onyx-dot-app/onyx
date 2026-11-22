@@ -1,11 +1,11 @@
+import asyncio
 import contextvars
 import hashlib
 import os
-import random
 import secrets
 import string
 import uuid
-from collections.abc import AsyncGenerator, Sequence
+from collections.abc import AsyncGenerator, Awaitable, Sequence
 from contextlib import asynccontextmanager
 from datetime import datetime, timedelta, timezone
 from functools import partial
@@ -17,7 +17,6 @@ from email_validator import EmailNotValidError, EmailUndeliverableError, validat
 from fastapi import (
     APIRouter,
     Depends,
-    HTTPException,
     Query,
     Request,
     Response,
@@ -39,7 +38,6 @@ from fastapi_users import (
 from fastapi_users.authentication import (
     AuthenticationBackend,
     BearerTransport,
-    CookieTransport,
     JWTStrategy,
     RedisStrategy,  # ty: ignore[possibly-missing-import]
     Strategy,
@@ -58,6 +56,9 @@ from httpx_oauth.exceptions import GetIdEmailError
 from httpx_oauth.integrations.fastapi import OAuth2AuthorizeCallback
 from httpx_oauth.oauth2 import BaseOAuth2, GetAccessTokenError, OAuth2Token
 from pydantic import BaseModel
+
+# no-direct-redis: allow session store for AUTH_BACKEND=redis
+from redis.exceptions import WatchError
 from sqlalchemy.exc import IntegrityError
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import Session
@@ -81,7 +82,7 @@ from onyx.auth.oidc_client import log_token_exchange_failure
 from onyx.auth.pat import get_hashed_pat_from_request
 from onyx.auth.permissions import get_effective_permissions, has_global_permission
 from onyx.auth.pkce import generate_pkce_pair
-from onyx.auth.schemas import AuthBackend, UserCreate
+from onyx.auth.schemas import UserCreate
 from onyx.auth.session_tokens import (
     SESSION_TOKEN_GRACE_PERIOD_SECONDS,
     SessionRejection,
@@ -89,7 +90,9 @@ from onyx.auth.session_tokens import (
     build_session_token_value,
     build_session_tombstone_value,
     classify_session_token_value,
+    clear_unrecognized_session_cookie,
     compute_session_expires_at,
+    cookie_transport,
     may_be_session_token,
     physical_session_ttl_seconds,
     record_session_rejection,
@@ -102,6 +105,7 @@ from onyx.configs.app_configs import (
     EMAIL_CONFIGURED,
     INTEGRATION_TESTS_MODE,
     REDIS_AUTH_KEY_PREFIX,
+    REDIS_USER_SESSIONS_KEY_PREFIX,
     REQUIRE_EMAIL_VERIFICATION,
     SESSION_EXPIRE_TIME_SECONDS,
     USER_AUTH_SECRET,
@@ -116,11 +120,13 @@ from onyx.configs.constants import (
     FASTAPI_USERS_AUTH_COOKIE_NAME,
     PASSWORD_SPECIAL_CHARS,
     UNNAMED_KEY_PLACEHOLDER,
+    AuthBackend,
     MilestoneRecordType,
     OnyxRedisLocks,
 )
-from onyx.db.api_key import fetch_api_key_auth_result
+from onyx.db.api_key import fetch_api_key_auth_result, is_api_key_email_address
 from onyx.db.auth import (
+    delete_access_tokens_for_user,
     get_access_token_db,
     get_default_admin_user_emails,
     get_user_count,
@@ -137,13 +143,22 @@ from onyx.db.engine.sql_engine import (
 )
 from onyx.db.enums import AccountType, PatType, Permission
 from onyx.db.models import AccessToken, OAuthAccount, User
-from onyx.db.pat import resolve_pat
+from onyx.db.pat import resolve_pat, revoke_all_pats_for_user__no_commit
 from onyx.db.pinned_personas import seed_pinned_personas_from_featured
+from onyx.db.sandbox import (
+    get_sandbox_purge_targets,
+    get_user_sandbox_blob_paths,
+)
+from onyx.db.sso_provider import lock_sso_provider_for_share
 from onyx.db.users import (
+    UserDeleteCleanup,
     assign_user_to_default_groups__no_commit,
+    delete_user_from_db__no_commit,
     fetch_user_by_id,
+    finish_user_delete,
     get_user_by_email,
     get_user_by_oauth_account,
+    get_user_from_async_session,
     is_limited_user,
     promote_placeholder_to_web_login__no_commit,
     reconcile_user_email__no_commit,
@@ -154,10 +169,21 @@ from onyx.error_handling.exceptions import (
     log_onyx_error,
     onyx_error_to_json_response,
 )
+from onyx.oauth_provider.auth import (
+    authenticate_oauth_provider_request,
+    extract_oauth_provider_bearer,
+)
 from onyx.redis.redis_pool import (
+    # no-direct-redis: allow session store for AUTH_BACKEND=redis
     get_async_redis_connection,
     retrieve_auth_token_data,
     retrieve_ws_token_data,
+)
+from onyx.server.features.build.sandbox.firecracker.purge import (
+    purge_harness_sandboxes,
+)
+from onyx.server.features.build.sandbox.snapshot_manager import (
+    delete_sandbox_blobs_best_effort,
 )
 from onyx.server.security.store import get_security_settings
 from onyx.server.settings.store import load_settings
@@ -165,10 +191,8 @@ from onyx.server.utils import BasicAuthenticationError
 from onyx.utils.audit import AuditAction, AuditActor, AuditOutcome, emit_audit_event
 from onyx.utils.logger import setup_logger
 from onyx.utils.telemetry import (
-    RecordType,
     mt_cloud_identify_user,
     mt_cloud_telemetry,
-    optional_telemetry,
 )
 from onyx.utils.timing import log_function_time
 from onyx.utils.url import add_url_params, sanitize_next_url
@@ -261,27 +285,32 @@ def get_display_email(email: str | None, space_less: bool = False) -> str:
     return email or ""
 
 
+_GENERATED_PASSWORD_DEFAULT_LENGTH = 12
+
+
 def generate_password() -> str:
-    lowercase_letters = string.ascii_lowercase
-    uppercase_letters = string.ascii_uppercase
-    digits = string.digits
-    special_characters = string.punctuation
-
-    # Ensure at least one of each required character type
-    password = [
-        secrets.choice(uppercase_letters),
-        secrets.choice(digits),
-        secrets.choice(special_characters),
-    ]
-
-    # Fill the rest with a mix of characters
-    remaining_length = 12 - len(password)
-    all_characters = lowercase_letters + uppercase_letters + digits + special_characters
-    password.extend(secrets.choice(all_characters) for _ in range(remaining_length))
-
-    # Shuffle the password to randomize the position of the required characters
-    random.shuffle(password)
-
+    """Random password that satisfies the configured password policy, so
+    `validate_password` accepts it (admin reset, JWT user provisioning)."""
+    settings = get_security_settings()
+    length = min(
+        max(_GENERATED_PASSWORD_DEFAULT_LENGTH, settings.password_min_length),
+        settings.password_max_length,
+    )
+    # One of each class satisfies every require_* flag. The policy floors
+    # password_max_length at 4, so all four always fit. Specials come only from
+    # PASSWORD_SPECIAL_CHARS, the set validate_password accepts.
+    character_classes = (
+        string.ascii_lowercase,
+        string.ascii_uppercase,
+        string.digits,
+        PASSWORD_SPECIAL_CHARS,
+    )
+    password = [secrets.choice(chars) for chars in character_classes]
+    all_characters = "".join(character_classes)
+    password.extend(
+        secrets.choice(all_characters) for _ in range(length - len(password))
+    )
+    secrets.SystemRandom().shuffle(password)
     return "".join(password)
 
 
@@ -589,11 +618,38 @@ async def resolve_tenant_for_user(email: str, request: Request | None = None) ->
     )(email=email, request=request)
 
 
+def _finish_user_delete_in_own_session(cleanup: UserDeleteCleanup) -> None:
+    """File store and sandbox calls block, so they run off the event loop."""
+    with get_session_with_current_tenant() as db_session:
+        finish_user_delete(cleanup, db_session)
+
+
 class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
     reset_password_token_secret = USER_AUTH_SECRET
     verification_token_secret = USER_AUTH_SECRET
     verification_token_lifetime_seconds = AUTH_COOKIE_EXPIRE_TIME_SECONDS
     user_db: SQLAlchemyUserDatabase[User, uuid.UUID]
+
+    async def delete(
+        self,
+        user: User,
+        request: Request | None = None,
+    ) -> None:
+        await self.on_before_delete(user, request)
+        sandbox_blob_paths = await self.user_db.session.run_sync(
+            partial(get_user_sandbox_blob_paths, user_id=user.id)
+        )
+        purge_targets = await self.user_db.session.run_sync(
+            partial(get_sandbox_purge_targets, user_id=user.id)
+        )
+        cleanup = await self.user_db.session.run_sync(
+            partial(delete_user_from_db__no_commit, user)
+        )
+        await self.user_db.session.commit()
+        await asyncio.to_thread(_finish_user_delete_in_own_session, cleanup)
+        await asyncio.to_thread(delete_sandbox_blobs_best_effort, sandbox_blob_paths)
+        await asyncio.to_thread(purge_harness_sandboxes, purge_targets)
+        await self.on_after_delete(user, request)
 
     @asynccontextmanager
     async def _tenant_session_with_bound_user_db(
@@ -836,7 +892,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                         raise error
 
                     if MULTI_TENANT:
-                        user_by_session = await db_session.get(User, user.id)
+                        user_by_session = await get_user_from_async_session(
+                            db_session, user.id
+                        )
                         if user_by_session:
                             user = user_by_session
 
@@ -867,7 +925,9 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     # the user we just got by email. Note that this only applies
                     # to multi-tenant, due to the overwriting of the user_db
                     if MULTI_TENANT:
-                        user_by_session = await db_session.get(User, user.id)
+                        user_by_session = await get_user_from_async_session(
+                            db_session, user.id
+                        )
                         if user_by_session:
                             user = user_by_session
 
@@ -919,11 +979,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         """
         seat_added = False
         with get_session_with_current_tenant() as sync_db:
-            sync_user = (
-                sync_db.query(User)
-                .filter(User.id == user_id)  # ty: ignore[invalid-argument-type]
-                .first()
-            )
+            sync_user = fetch_user_by_id(sync_db, user_id)
             if sync_user:
                 if _upgrade_will_add_seat(
                     sync_user, will_become_active=bool(sync_user.is_active)
@@ -990,6 +1046,16 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             )
         return
 
+    async def _hold_sso_provider(self, sso_provider_id: int | None) -> None:
+        """Share-lock the login's provider row in the current write transaction.
+        A provider delete then waits for this write and removes its link too,
+        and a row that is already gone fails the login before the write.
+        Legacy env-configured logins have no row and pass None."""
+        if sso_provider_id is None:
+            return
+        if not await lock_sso_provider_for_share(self.user_db.session, sso_provider_id):
+            raise OnyxError(OnyxErrorCode.NOT_FOUND, "unknown OIDC provider")
+
     async def _rewrite_oauth_link(
         self, user: User, link: OAuthAccount, oauth_account_dict: dict[str, Any]
     ) -> User:
@@ -1001,7 +1067,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             oauth_account_dict,
         )
 
-    @log_function_time(print_only=True)
+    @log_function_time()
     async def oauth_callback(  # ty: ignore[invalid-method-override]
         self,
         oauth_name: str,
@@ -1016,6 +1082,8 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         is_verified_by_default: bool = False,
         allowed_email_domains_override: Sequence[str] | None = None,
         enforce_verified_domain: bool = False,
+        sso_provider_id: int | None = None,
+        start_new_team: bool = False,
     ) -> User:
         referral_source = (
             getattr(request.state, "referral_source", None)  # ods: ignore[getattr]
@@ -1037,10 +1105,11 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             request=request,
             oauth_name=oauth_name,
             account_id=account_id,
+            start_new_team=start_new_team,
         )
 
         if not tenant_id:
-            raise HTTPException(status_code=401, detail="User not found")
+            raise OnyxError(OnyxErrorCode.UNAUTHENTICATED, "User not found")
 
         async with self._tenant_session_with_bound_user_db(tenant_id) as db_session:
             verify_email_in_whitelist(account_email, tenant_id, oauth_name, account_id)
@@ -1112,20 +1181,23 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                             return user
 
                         # An owned row must not take a second provider, and a
-                        # rename stops the address identifying the row. All else
-                        # is claimable, password signups included. The same provider
-                        # with a new subject is admin-gated: the subject alone does
-                        # not prove who holds the address now.
+                        # rename stops the address identifying the row. Each has
+                        # an admin-gated window, since neither proves the holder.
                         relink_allowed: bool = (
                             stale_link is not None
                             and oauth_security_settings.allow_same_provider_subject_relink
                         )
+                        renamed_claim_allowed: bool = (
+                            not user.oauth_accounts
+                            and oauth_security_settings.allow_renamed_account_claim
+                        )
                         if not associate_by_email and (
-                            user.prior_emails
+                            (user.prior_emails and not renamed_claim_allowed)
                             or (user.oauth_accounts and not relink_allowed)
                         ):
                             raise exceptions.UserAlreadyExists()
 
+                    await self._hold_sso_provider(sso_provider_id)
                     # Rewrite rather than append: an appended link would leave the
                     # dead subject and its refresh token on the row.
                     if stale_link is None:
@@ -1167,6 +1239,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                     }
 
                     user = await self.user_db.create(user_dict)
+                    await self._hold_sso_provider(sso_provider_id)
                     await self.user_db.add_oauth_account(user, oauth_account_dict)
                     await seed_pinned_personas_from_featured(
                         db_session=db_session, user=user
@@ -1181,11 +1254,13 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                             existing_oauth_account.account_id == account_id
                             and existing_oauth_account.oauth_name == oauth_name
                         ):
+                            await self._hold_sso_provider(sso_provider_id)
                             user = await self._rewrite_oauth_link(
                                 user, existing_oauth_account, oauth_account_dict
                             )
 
-            assert user is not None
+            if user is None:
+                raise RuntimeError("OAuth callback has no user after account lookup.")
 
             if override is not None:
                 # A pinned login skipped the provisioning that records
@@ -1196,6 +1271,8 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
             # Keyed on the stored email rather than the one the IdP just sent.
             # The membership row moves onto the new address at the rekey below.
+            # Held so a delete forgets this copy after it lands, not before.
+            await self._hold_sso_provider(sso_provider_id)
             fetch_ee_implementation_or_noop(
                 "onyx.db.user_tenant_mapping", "record_oauth_identity", None
             )(user.email, tenant_id, oauth_name, account_id)
@@ -1262,7 +1339,8 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 # the upgraded fields.
                 self.user_db.session.expire(user)
                 user = await self.user_db.get(refreshed_user_id)
-                assert user is not None
+                if user is None:
+                    raise RuntimeError("OAuth callback could not reload the user.")
 
             # this is needed if an organization toggles track_external_idp_expiry from
             # true to false; otherwise the oidc expiry will always be old and the user
@@ -1405,11 +1483,6 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             )
 
         logger.debug("User %s has registered.", user.id)
-        optional_telemetry(
-            record_type=RecordType.SIGN_UP,
-            data={"action": "create"},
-            user_id=str(user.id),
-        )
 
         emit_audit_event(
             AuditAction.REGISTER,
@@ -1427,6 +1500,12 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         token: str,
         request: Optional[Request] = None,  # noqa: ARG002
     ) -> None:
+        # Return silently so the response matches the one for an unknown address.
+        if not user.account_type.allows_password_login() or is_api_key_email_address(
+            user.email
+        ):
+            logger.warning("Refused password reset for non-login account %s", user.id)
+            return
         if not EMAIL_CONFIGURED:
             logger.error(
                 "Email is not configured. Please configure email in the admin panel"
@@ -1461,6 +1540,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         user: User,
         request: Optional[Request] = None,  # noqa: ARG002
     ) -> None:
+        await self.revoke_sessions(user)
         emit_audit_event(
             AuditAction.PASSWORD_RESET,
             AuditOutcome.SUCCESS,
@@ -1525,7 +1605,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
         finally:
             CURRENT_TENANT_ID_CONTEXTVAR.reset(contextvar_token)
 
-    @log_function_time(print_only=True)
+    @log_function_time()
     async def authenticate(
         self, credentials: OAuth2PasswordRequestForm
     ) -> Optional[User]:
@@ -1584,7 +1664,7 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
                 _audit_login_failure()
                 return None
 
-            if not user.account_type.is_web_login():
+            if not user.account_type.allows_password_login():
                 _audit_login_failure(AuditOutcome.DENIED)
                 raise BasicAuthenticationError(
                     detail="NO_WEB_LOGIN_AND_HAS_NO_PASSWORD",
@@ -1605,30 +1685,32 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
             return user
 
     async def reset_password_as_admin(self, user_id: uuid.UUID) -> str:
-        """Admin-only. Generate a random password for a user and return it."""
+        """Admin-only. Generate a random password for a user, sign out all of
+        their sessions, revoke their PATs, and return the password."""
         user = await self.get(user_id)
         new_password = generate_password()
         await self._update(user, {"password": new_password})
+        await self.revoke_sessions(user)
         return new_password
 
     async def change_password_if_old_matches(
-        self, user: User, old_password: str, new_password: str
+        self,
+        user: User,
+        old_password: str,
+        new_password: str,
+        keep_token: str | None = None,
     ) -> None:
         """
-        For normal users to change password if they know the old one.
+        For normal users to change password if they know the old one. Signs
+        out the user's other sessions and revokes their PATs; ``keep_token`` is
+        the caller's session.
         Raises 400 if old password doesn't match.
         """
         verified, updated_password_hash = self.password_helper.verify_and_update(
             old_password, user.hashed_password
         )
         if not verified:
-            # Raise some HTTPException (or your custom exception) if old password is invalid:
-            from fastapi import HTTPException, status
-
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid current password",
-            )
+            raise OnyxError(OnyxErrorCode.INVALID_INPUT, "Invalid current password")
 
         # If the hash was upgraded behind the scenes, we can keep it before setting the new password:
         if updated_password_hash:
@@ -1636,6 +1718,49 @@ class UserManager(UUIDIDMixin, BaseUserManager[User, uuid.UUID]):
 
         # Now apply and validate the new password
         await self._update(user, {"password": new_password})
+        await self.revoke_sessions(user, keep_token=keep_token)
+
+    async def _update(self, user: User, update_dict: dict[str, Any]) -> User:
+        """
+        Every password write also revokes all of ``user``'s PATs, in the same
+        commit as the new hash. API keys belong to service accounts and are
+        not affected.
+        """
+        new_password = update_dict.get("password")
+        if new_password is None:
+            return await super()._update(user, update_dict)
+
+        # Validate before staging, so a rejected password leaves nothing pending.
+        await self.validate_password(new_password, user)
+        revoked_pat_count = await revoke_all_pats_for_user__no_commit(
+            self.user_db.session, user.id
+        )
+        updated_user = await super()._update(user, update_dict)
+        logger.info(
+            "Revoked %d personal access token(s) for user %s after a password change",
+            revoked_pat_count,
+            user.id,
+        )
+        return updated_user
+
+    async def revoke_sessions(self, user: User, keep_token: str | None = None) -> None:
+        """
+        Signs out every session of ``user`` (cookie and mobile bearer) except
+        ``keep_token``. JWT sessions are stateless and stay valid until expiry.
+        """
+        if AUTH_BACKEND == AuthBackend.REDIS:
+            await TenantAwareRedisStrategy().revoke_user_sessions(
+                str(user.id), keep_token=keep_token
+            )
+        elif AUTH_BACKEND == AuthBackend.POSTGRES:
+            await delete_access_tokens_for_user(
+                self.user_db.session, user.id, keep_token=keep_token
+            )
+        else:
+            logger.warning(
+                "Cannot revoke sessions for user %s: JWT sessions are stateless",
+                user.id,
+            )
 
 
 async def get_user_manager(
@@ -1643,15 +1768,6 @@ async def get_user_manager(
 ) -> AsyncGenerator[UserManager, None]:
     yield UserManager(user_db)
 
-
-# The cookie outlives the logical expiry by the grace window so a dead token is
-# still presented and can be classified (expired/terminated) instead of the
-# browser silently dropping it.
-cookie_transport = CookieTransport(
-    cookie_max_age=SESSION_EXPIRE_TIME_SECONDS + SESSION_TOKEN_GRACE_PERIOD_SECONDS,
-    cookie_secure=WEB_DOMAIN.startswith("https"),
-    cookie_name=FASTAPI_USERS_AUTH_COOKIE_NAME,
-)
 
 # Native mobile clients can't use the HttpOnly auth cookie above, so they
 # authenticate with the SAME stateful session token returned/refreshed as a
@@ -1663,6 +1779,13 @@ cookie_transport = CookieTransport(
 # strategy's read_token simply finds nothing and the request falls through to
 # Onyx's own API-key/PAT handlers (see `optional_user`).
 bearer_transport = BearerTransport(tokenUrl="auth/mobile/login")
+
+
+def get_session_token_from_request(request: Request) -> str | None:
+    """The session token ``optional_user`` accepted for this request, if any.
+    None for API key / PAT requests."""
+    token = request.scope.get("state", {}).get("authenticated_session_token")
+    return token if isinstance(token, str) and token else None
 
 
 T = TypeVar("T", covariant=True)
@@ -1679,6 +1802,9 @@ class RefreshableStrategy(Protocol):
         Returns either the same token with extended expiration or a new token.
         """
         ...
+
+
+_REFRESH_WATCH_ATTEMPTS = 3
 
 
 class TenantAwareRedisStrategy(RedisStrategy[User, uuid.UUID]):
@@ -1699,6 +1825,7 @@ class TenantAwareRedisStrategy(RedisStrategy[User, uuid.UUID]):
         self.key_prefix = key_prefix
 
     async def write_token(self, user: User) -> str:
+        # no-direct-redis: allow session store for AUTH_BACKEND=redis
         redis = await get_async_redis_connection()
 
         # The token names the workspace every later request runs against, so it
@@ -1717,7 +1844,59 @@ class TenantAwareRedisStrategy(RedisStrategy[User, uuid.UUID]):
             ),
             ex=physical_session_ttl_seconds(self.lifetime_seconds),
         )
+        await self._index_session(str(user.id), token)
         return token
+
+    async def _index_session(self, user_id: str, token: str) -> None:
+        # Per-user set of session tokens, so revoke_user_sessions needs no scan.
+        # It lives as long as the user's newest session; members whose token
+        # key has expired are pruned here.
+        # no-direct-redis: allow session store for AUTH_BACKEND=redis
+        redis = await get_async_redis_connection()
+        index_key = f"{REDIS_USER_SESSIONS_KEY_PREFIX}{user_id}"
+        members = list(
+            await cast(Awaitable[set[bytes | str]], redis.smembers(index_key))
+        )
+        if members:
+            pipe = redis.pipeline(transaction=False)
+            for member in members:
+                member_token = member.decode() if isinstance(member, bytes) else member
+                pipe.exists(f"{self.key_prefix}{member_token}")
+            exists = await pipe.execute()
+            expired = [m for m, found in zip(members, exists, strict=True) if not found]
+            if expired:
+                await cast(Awaitable[int], redis.srem(index_key, *expired))
+        await cast(Awaitable[int], redis.sadd(index_key, token))
+        ttl = physical_session_ttl_seconds(self.lifetime_seconds)
+        if ttl is not None:
+            await redis.expire(index_key, ttl)
+
+    async def revoke_user_sessions(
+        self, user_id: str, keep_token: str | None = None
+    ) -> None:
+        """
+        Tombstones every indexed session of the user except ``keep_token``.
+        Sessions written before the index existed are not covered until they
+        are refreshed.
+        """
+        # no-direct-redis: allow session store for AUTH_BACKEND=redis
+        redis = await get_async_redis_connection()
+        index_key = f"{REDIS_USER_SESSIONS_KEY_PREFIX}{user_id}"
+        members = await cast(Awaitable[set[bytes | str]], redis.smembers(index_key))
+        for member in members:
+            token = member.decode() if isinstance(member, bytes) else member
+            if token == keep_token:
+                continue
+            token_key = f"{self.key_prefix}{token}"
+            raw_value = await redis.get(token_key)
+            result = classify_session_token_value(raw_value)
+            if not isinstance(result, SessionRejection) and result.sub == user_id:
+                await redis.set(
+                    token_key,
+                    build_session_tombstone_value(raw_value, fallback_user_id=user_id),
+                    ex=SESSION_TOKEN_GRACE_PERIOD_SECONDS,
+                )
+            await cast(Awaitable[int], redis.srem(index_key, member))
 
     async def read_token(
         self, token: Optional[str], user_manager: BaseUserManager[User, uuid.UUID]
@@ -1725,6 +1904,7 @@ class TenantAwareRedisStrategy(RedisStrategy[User, uuid.UUID]):
         if token is None:
             return None
 
+        # no-direct-redis: allow session store for AUTH_BACKEND=redis
         redis = await get_async_redis_connection()
         raw_value = await redis.get(f"{self.key_prefix}{token}")
         if raw_value is None and not may_be_session_token(token):
@@ -1749,6 +1929,7 @@ class TenantAwareRedisStrategy(RedisStrategy[User, uuid.UUID]):
         Overwrites the token with a tombstone so other tabs' rejections classify
         as a sign-out rather than an anomalous drop.
         """
+        # no-direct-redis: allow session store for AUTH_BACKEND=redis
         redis = await get_async_redis_connection()
         token_key = f"{self.key_prefix}{token}"
         previous_raw_value = await redis.get(token_key)
@@ -1759,6 +1940,10 @@ class TenantAwareRedisStrategy(RedisStrategy[User, uuid.UUID]):
             ),
             ex=SESSION_TOKEN_GRACE_PERIOD_SECONDS,
         )
+        await cast(
+            Awaitable[int],
+            redis.srem(f"{REDIS_USER_SESSIONS_KEY_PREFIX}{user.id}", token),
+        )
 
     async def refresh_token(self, token: Optional[str], user: User) -> str:
         """Refreshes a token by extending its expiration time in Redis."""
@@ -1766,28 +1951,49 @@ class TenantAwareRedisStrategy(RedisStrategy[User, uuid.UUID]):
             # If no token provided, create a new one
             return await self.write_token(user)
 
+        # no-direct-redis: allow session store for AUTH_BACKEND=redis
         redis = await get_async_redis_connection()
         token_key = f"{self.key_prefix}{token}"
 
-        raw_value = await redis.get(token_key)
-        result = classify_session_token_value(raw_value)
-        if isinstance(result, SessionRejection) or result.sub is None:
-            # Only a live session is extendable; mint a fresh one otherwise.
-            return await self.write_token(user)
+        # WATCH makes the extend fail if a revoke/logout tombstone lands
+        # between the read and the write, so a revoked session is never revived.
+        for _ in range(_REFRESH_WATCH_ATTEMPTS):
+            async with redis.pipeline(transaction=True) as pipe:
+                await pipe.watch(token_key)
+                raw_value = await pipe.get(token_key)
+                result = classify_session_token_value(raw_value)
+                if isinstance(result, SessionRejection) or result.sub is None:
+                    # Never extend or replace a revoked, expired or unknown
+                    # session.
+                    if isinstance(result, SessionRejection):
+                        record_session_rejection(result)
+                    raise build_session_rejection_error() or OnyxError(
+                        OnyxErrorCode.UNAUTHENTICATED
+                    )
 
-        # Extend the logical expiry; keep the original issue time.
-        now = datetime.now(timezone.utc)
-        await redis.set(
-            token_key,
-            build_session_token_value(
-                user_id=result.sub,
-                tenant_id=result.tenant_id,
-                issued_at=result.issued_at or now,
-                expires_at=compute_session_expires_at(now, self.lifetime_seconds),
-            ),
-            ex=physical_session_ttl_seconds(self.lifetime_seconds),
-        )
+                # Extend the logical expiry; keep the original issue time.
+                now = datetime.now(timezone.utc)
+                pipe.multi()
+                pipe.set(
+                    token_key,
+                    build_session_token_value(
+                        user_id=result.sub,
+                        tenant_id=result.tenant_id,
+                        issued_at=result.issued_at or now,
+                        expires_at=compute_session_expires_at(
+                            now, self.lifetime_seconds
+                        ),
+                    ),
+                    ex=physical_session_ttl_seconds(self.lifetime_seconds),
+                )
+                try:
+                    await pipe.execute()
+                except WatchError:
+                    continue
+            await self._index_session(result.sub, token)
+            return token
 
+        # Persistent contention: leave the session as it is.
         return token
 
 
@@ -1811,8 +2017,8 @@ class RefreshableDatabaseStrategy(DatabaseStrategy[User, uuid.UUID, AccessToken]
         access_token = await self._access_token_db.get_by_token(token)
 
         if access_token is None:
-            # Token not found, create new one
-            return await self.write_token(user)
+            # Deleted by logout or revocation; never mint a replacement.
+            raise OnyxError(OnyxErrorCode.SESSION_TERMINATED)
 
         # Update expiration time
         new_expires = datetime.now(timezone.utc) + timedelta(
@@ -1852,11 +2058,30 @@ class SingleTenantJWTStrategy(JWTStrategy[User, uuid.UUID]):
             public_key=public_key,
         )
 
-    async def write_token(self, user: User) -> str:
-        data = {
+    def get_session_id(self, token: str, user: User) -> str | None:
+        try:
+            data = decode_jwt(
+                token,
+                self.decode_key,
+                self.token_audience,
+                algorithms=[self.algorithm],
+            )
+        except jwt.PyJWTError:
+            return None
+        if data.get("sub") != str(user.id):
+            return None
+
+        sid = data.get("sid")
+        if isinstance(sid, str) and sid:
+            return sid
+        return hashlib.sha256(token.encode("utf-8")).hexdigest()
+
+    async def write_token(self, user: User, session_id: str | None = None) -> str:
+        data: dict[str, Any] = {
             "sub": str(user.id),
             "aud": self.token_audience,
             "iat": int(datetime.now(timezone.utc).timestamp()),
+            "sid": session_id or secrets.token_urlsafe(32),
         }
         return generate_jwt(
             data, self.encode_key, self.lifetime_seconds, algorithm=self.algorithm
@@ -1873,11 +2098,12 @@ class SingleTenantJWTStrategy(JWTStrategy[User, uuid.UUID]):
 
     async def refresh_token(
         self,
-        token: Optional[str],  # noqa: ARG002
-        user: User,  # noqa: ARG002
+        token: Optional[str],
+        user: User,
     ) -> str:
         """Issue a fresh JWT with a new expiry."""
-        return await self.write_token(user)
+        session_id = self.get_session_id(token, user) if token else None
+        return await self.write_token(user, session_id)
 
 
 def get_redis_strategy() -> TenantAwareRedisStrategy:
@@ -1948,11 +2174,17 @@ class FastAPIUserWithRefreshRouter(FastAPIUsers[models.UP, models.ID]):
 
         router = APIRouter()
 
+        # Authenticate only via this router's own transport. Otherwise a
+        # same-origin script could send the HttpOnly cookie to the bearer
+        # router and read the session token from the response body.
         get_current_user_token = self.authenticator.current_user_token(
-            active=True, verified=requires_verification
+            active=True,
+            verified=requires_verification,
+            get_enabled_backends=lambda: [backend],
         )
 
         refresh_responses: OpenAPIResponseType = {
+            # http-exception: allow OpenAPI response key, not a raised error
             status.HTTP_401_UNAUTHORIZED: {
                 "description": "Missing token or inactive user."
             },
@@ -1995,11 +2227,13 @@ class FastAPIUserWithRefreshRouter(FastAPIUsers[models.UP, models.ID]):
                             user.email,
                         )
                         return await backend.transport.get_login_response(new_token)
+                    except OnyxError:
+                        raise
                     except Exception as e:
+                        # No logout/login fallback: it could mint a session
+                        # after a concurrent revoke. The client logs in again.
                         logger.error("Error refreshing session token: %s", str(e))
-                        # Fallback to logout and login if refresh fails
-                        await backend.logout(strategy, user, token)
-                        return await backend.login(strategy, user)
+                        raise OnyxError(OnyxErrorCode.SESSION_TERMINATED)
 
                 # Fallback: logout and login again
                 logger.info(
@@ -2007,11 +2241,12 @@ class FastAPIUserWithRefreshRouter(FastAPIUsers[models.UP, models.ID]):
                 )
                 await backend.logout(strategy, user, token)
                 return await backend.login(strategy, user)
+            except OnyxError:
+                raise
             except Exception as e:
                 logger.error("Unexpected error in refresh endpoint: %s", str(e))
-                raise HTTPException(
-                    status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Token refresh failed: {str(e)}",
+                raise OnyxError(
+                    OnyxErrorCode.BAD_REQUEST, f"Token refresh failed: {str(e)}"
                 )
 
         return router
@@ -2026,7 +2261,9 @@ fastapi_users = FastAPIUserWithRefreshRouter[User, uuid.UUID](
 # take care of that in `double_check_user` ourself. This is needed, since
 # we want the /me endpoint to still return a user even if they are not
 # yet verified, so that the frontend knows they exist
-optional_fastapi_current_user = fastapi_users.current_user(active=True, optional=True)
+optional_fastapi_current_user = fastapi_users.authenticator.current_user_token(
+    active=True, optional=True
+)
 
 
 _JWT_EMAIL_CLAIM_KEYS = ("email", "preferred_username", "upn")
@@ -2223,6 +2460,14 @@ async def _resolve_optional_user(
     user: User | None,
     user_manager: BaseUserManager[User, uuid.UUID],
 ) -> User | None:
+    mcp_token = extract_oauth_provider_bearer(request)
+    if mcp_token is not None:
+        mcp_user = await authenticate_oauth_provider_request(
+            request, async_db_session, mcp_token
+        )
+        await _maybe_refresh_oauth_tokens(mcp_user, async_db_session, user_manager)
+        return mcp_user
+
     if user is not None:
         request.state.usage_credential = UsageCredentialIdentity(
             UsageCredentialType.SESSION
@@ -2253,7 +2498,8 @@ async def _resolve_optional_user(
                 )
         elif hashed_api_key := get_hashed_api_key_from_request(request):
             api_key = await fetch_api_key_auth_result(hashed_api_key, async_db_session)
-            if api_key is not None:
+            # Deactivating a service account revokes its key, as for PATs.
+            if api_key is not None and api_key.user.is_active:
                 user = api_key.user
                 request.state.usage_credential = UsageCredentialIdentity(
                     UsageCredentialType.API_KEY,
@@ -2261,6 +2507,7 @@ async def _resolve_optional_user(
                     api_key.api_key_name,
                     api_key.api_key_display,
                 )
+                request.state.discord_bot_api_key = api_key.is_discord_bot
     except ValueError:
         logger.warning("Issue with validating authentication token")
         return None
@@ -2284,15 +2531,40 @@ async def _resolve_optional_user(
 async def optional_user(
     request: Request,
     async_db_session: AsyncSession = Depends(get_async_session),
-    user: User | None = Depends(optional_fastapi_current_user),
+    user_token: tuple[User | None, str | None] = Depends(optional_fastapi_current_user),
     user_manager: BaseUserManager[User, uuid.UUID] = Depends(get_user_manager),
 ) -> AsyncGenerator[User | None, None]:
+    user, token = user_token
+    if user is not None and token is not None:
+        request.state.authenticated_session_token = token
     user = await _resolve_optional_user(
         request,
         async_db_session,
         user,
         user_manager,
     )
+    # End the auth read transaction here so its DB connection is not held for
+    # the whole turn: FastAPI closes this session only after the response
+    # finishes, and streaming chat responses can run for minutes.
+    # is_active is False when a best-effort write above (e.g. the OAuth token
+    # refresh) failed and left the transaction needing rollback. Auth must not
+    # fail on that, so leave that cleanup — and any commit failure here — to
+    # the dependency teardown.
+    if (
+        async_db_session.in_transaction()
+        and async_db_session.is_active
+        and not (
+            async_db_session.new or async_db_session.dirty or async_db_session.deleted
+        )
+    ):
+        try:
+            await async_db_session.commit()
+        except Exception:
+            logger.warning(
+                "Early release of the auth DB connection failed; "
+                "it is released at request teardown instead.",
+                exc_info=True,
+            )
     token = CURRENT_USER_ID_CONTEXTVAR.set(str(user.id) if user is not None else None)
     credential_token = CURRENT_USAGE_CREDENTIAL_CONTEXTVAR.set(
         getattr(request.state, "usage_credential", None)  # ods: ignore[getattr]
@@ -2370,9 +2642,16 @@ async def current_limited_user(
 
 
 async def current_chat_accessible_user(
+    response: Response,
     user: User | None = Depends(optional_user),
 ) -> AsyncGenerator[User, None]:
+    """
+    Endpoints that return their own ``Response`` (streaming) do not carry the
+    unrecognized-cookie clear; ``/me`` on the next page load clears it.
+    """
     tenant_id = get_current_tenant_id()
+    if user is None:
+        clear_unrecognized_session_cookie(response)
     user = await double_check_user(
         user, allow_anonymous_access=anonymous_user_enabled(tenant_id=tenant_id)
     )
@@ -2414,7 +2693,7 @@ async def _get_user_from_token_data(token_data: dict) -> User | None:
         return None
 
     async with get_async_session_context_manager() as async_db_session:
-        user = await async_db_session.get(User, user_uuid)
+        user = await get_user_from_async_session(async_db_session, user_uuid)
         if user is None or not user.is_active:
             return None
         return user
@@ -2709,6 +2988,7 @@ async def complete_login_flow(
     is_verified_by_default: bool,
     allowed_email_domains_override: Sequence[str] | None = None,
     enforce_verified_domain: bool = False,
+    sso_provider_id: int | None = None,
 ) -> RedirectResponse:
     """Shared post-token OAuth/OIDC login: read the verified identity, create or
     authenticate the user, and return a web or mobile redirect.
@@ -2770,6 +3050,9 @@ async def complete_login_flow(
             is_verified_by_default=is_verified_by_default,
             allowed_email_domains_override=allowed_email_domains_override,  # ty: ignore[unknown-argument]
             enforce_verified_domain=enforce_verified_domain,  # ty: ignore[unknown-argument]
+            sso_provider_id=sso_provider_id,  # ty: ignore[unknown-argument]
+            # Playground: the sign-up page put the choice into the signed state.
+            start_new_team=state_data.get("start_new_team") == "true",  # ty: ignore[unknown-argument]
         )
     except UserAlreadyExists:
         raise OnyxError(
@@ -2883,7 +3166,7 @@ def get_oauth_router(
     @router.get(
         "/authorize",
         name=f"oauth:{oauth_client.name}.{backend.name}.authorize",
-        response_model=OAuth2AuthorizeResponse,
+        response_model=OAuth2AuthorizeResponse,  # no-response-model: allow the handler also returns a Response, so the annotation is a union
     )
     async def authorize(
         request: Request,
@@ -2914,6 +3197,9 @@ def get_oauth_router(
             "referral_source": referral_source or "default_referral",
             CSRF_TOKEN_KEY: csrf_token,
         }
+        # Playground: "start a new team" rides the signed state through the IdP.
+        if request.query_params.get("start_new_team") == "true":
+            state_data["start_new_team"] = "true"
         # No-op for web; for mobile, marks the signed state for complete_mobile_sso.
         apply_mobile_state(
             state_data, mobile_redirect_uri, app_state, app_code_challenge
@@ -2987,12 +3273,13 @@ def get_oauth_router(
 
         return OAuth2AuthorizeResponse(authorization_url=authorization_url)
 
-    @log_function_time(print_only=True)
+    @log_function_time()
     @router.get(
         "/callback",
         name=callback_route_name,
         description="The response varies based on the authentication backend used.",
         responses={
+            # http-exception: allow OpenAPI response key, not a raised error
             status.HTTP_400_BAD_REQUEST: {
                 "model": ErrorModel,
                 "content": {

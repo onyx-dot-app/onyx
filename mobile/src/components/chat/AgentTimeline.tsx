@@ -29,7 +29,10 @@ import { timelineTokens } from "@/components/chat/timeline/primitives/timelineTo
 import { TimelineHeaderRow } from "@/components/chat/timeline/primitives/TimelineHeaderRow";
 import { TimelineRoot } from "@/components/chat/timeline/primitives/TimelineRoot";
 import { useTimelineExpansion } from "@/hooks/timeline/useTimelineExpansion";
-import { useTimelineHeader } from "@/hooks/timeline/useTimelineHeader";
+import {
+  AwaitingUser,
+  useTimelineHeader,
+} from "@/hooks/timeline/useTimelineHeader";
 import { useTimelineMetrics } from "@/hooks/timeline/useTimelineMetrics";
 import {
   TimelineUIState,
@@ -51,13 +54,16 @@ export interface AgentTimelineProps {
   buttonTitle?: string;
   // Backend duration for a hydrated (already finished) turn.
   processingDurationSeconds?: number;
-  isGeneratingImage?: boolean;
   generatedImageCount?: number;
   // Backend `pre_answer_processing_seconds`; freezes the live timer once present.
   toolProcessingDuration?: number;
   // Epoch ms this node's stream started. Absent on history, where the timer falls back to the
   // backend duration.
   streamingStartTime?: number;
+  // A code mode program works between tool calls; it has no step.
+  codeModeWorking?: boolean;
+  // A tool call waits for the user's decision or answers.
+  awaitingUser?: AwaitingUser | null;
 }
 
 function TimelineContainer({
@@ -95,10 +101,11 @@ function areAgentTimelinePropsEqual(
     prev.collapsible === next.collapsible &&
     prev.buttonTitle === next.buttonTitle &&
     prev.chatState === next.chatState &&
-    prev.isGeneratingImage === next.isGeneratingImage &&
     prev.generatedImageCount === next.generatedImageCount &&
     prev.toolProcessingDuration === next.toolProcessingDuration &&
-    prev.streamingStartTime === next.streamingStartTime
+    prev.streamingStartTime === next.streamingStartTime &&
+    prev.codeModeWorking === next.codeModeWorking &&
+    prev.awaitingUser === next.awaitingUser
   );
 }
 
@@ -112,15 +119,17 @@ export const AgentTimeline = memo(function AgentTimeline({
   collapsible = true,
   buttonTitle,
   processingDurationSeconds,
-  isGeneratingImage = false,
   generatedImageCount = 0,
   toolProcessingDuration,
   streamingStartTime,
+  codeModeWorking = false,
+  awaitingUser = null,
 }: AgentTimelineProps) {
   const { headerText, hasPackets, userStopped } = useTimelineHeader(
     turnGroups,
     stopReason,
-    isGeneratingImage,
+    codeModeWorking,
+    awaitingUser,
   );
 
   const {
@@ -129,7 +138,6 @@ export const AgentTimeline = memo(function AgentTimeline({
     lastTurnGroup,
     lastStep,
     lastStepIsResearchAgent,
-    lastStepIsCodingAgent,
     lastStepSupportsCollapsedStreaming,
   } = useTimelineMetrics(turnGroups, userStopped);
 
@@ -197,8 +205,9 @@ export const AgentTimeline = memo(function AgentTimeline({
       lastStepIsResearchAgent,
       parallelActiveStepSupportsCollapsedStreaming,
       parallelActiveStepHasCollapsedContent,
-      isGeneratingImage,
       finalAnswerComing,
+      codeModeWorking,
+      awaitingUser: awaitingUser !== null,
     }),
     [
       stopPacketSeen,
@@ -213,8 +222,9 @@ export const AgentTimeline = memo(function AgentTimeline({
       lastStepIsResearchAgent,
       parallelActiveStepSupportsCollapsedStreaming,
       parallelActiveStepHasCollapsedContent,
-      isGeneratingImage,
       finalAnswerComing,
+      codeModeWorking,
+      awaitingUser,
     ],
   );
 
@@ -232,10 +242,9 @@ export const AgentTimeline = memo(function AgentTimeline({
 
   const collapsedRenderTypeOverride = useMemo(() => {
     if (lastStepIsResearchAgent) return RenderType.HIGHLIGHT;
-    if (lastStepIsCodingAgent) return RenderType.HIGHLIGHT;
     if (lastStepIsSearchTool) return RenderType.INLINE;
     return RenderType.COMPACT;
-  }, [lastStepIsResearchAgent, lastStepIsCodingAgent, lastStepIsSearchTool]);
+  }, [lastStepIsResearchAgent, lastStepIsSearchTool]);
 
   if (uiState === TimelineUIState.EMPTY) {
     return (

@@ -7,7 +7,7 @@ from __future__ import annotations
 
 import pytest
 
-from onyx.db.enums import EndpointPolicy, ExternalAppType
+from onyx.db.enums import ExternalAppType
 from onyx.external_apps.providers import gmail, google_calendar, google_drive, registry
 from onyx.external_apps.providers.gmail import GmailAction
 from onyx.external_apps.providers.google_drive import GoogleDriveAction
@@ -111,12 +111,12 @@ _SKILL_TEMPLATES = {
 
 def _render_skill(
     app_type: ExternalAppType,
-    stored: dict[str, EndpointPolicy] | None = None,
+    blocked: set[str] | None = None,
 ) -> str:
     template = (
         BUILTIN_SKILLS_PATH / _SKILL_TEMPLATES[app_type] / "SKILL.md.template"
     ).read_text()
-    return render_external_app_skill(template, app_type, stored or {})
+    return render_external_app_skill(template, app_type, blocked or set())
 
 
 @pytest.mark.usefixtures("cloud")
@@ -164,12 +164,12 @@ def test_gmail_skill_documents_everything_self_hosted() -> None:
 
 @pytest.mark.usefixtures("cloud")
 def test_cloud_note_precedes_the_unavailable_list_with_deny_merged() -> None:
-    """An admin DENY must not displace the cloud note (or vice versa): the note
-    renders first, and the unavailable list carries both the withheld action
-    and the DENY override."""
+    """An admin block must not displace the cloud note (or vice versa): the
+    note renders first, and the unavailable list carries both the withheld
+    action and the blocked one."""
     rendered = _render_skill(
         ExternalAppType.GOOGLE_DRIVE,
-        {GoogleDriveAction.FILES_CREATE: EndpointPolicy.DENY},
+        {GoogleDriveAction.FILES_CREATE.value},
     )
     assert rendered.index("drive.file") < rendered.index(
         "These actions are unavailable"

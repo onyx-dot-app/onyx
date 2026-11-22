@@ -17,6 +17,7 @@ The background jobs take care of:
 | Heavy                     | `apps/heavy.py`                | `connector_pruning`, `connector_doc_permissions_sync`, `connector_external_group_sync`, `csv_generation`, `sandbox`  |
 | Docprocessing             | `apps/docprocessing.py`        | `docprocessing`, `port`                                                                                              |
 | Docfetching               | `apps/docfetching.py`          | `connector_doc_fetching`                                                                                             |
+| Docconversion             | `apps/docconversion.py`        | `docconversion`                                                                                                      |
 | User File Processing      | `apps/user_file_processing.py` | `user_file_processing`, `user_file_project_sync`, `user_file_delete`                                                 |
 | Monitoring                | `apps/monitoring.py`           | `monitoring`                                                                                                         |
 | Background (consolidated) | `apps/background.py`           | All queues above except `celery`                                                                                     |
@@ -106,6 +107,6 @@ Observability and metrics collections:
 
 ## Prometheus Metrics
 
-Workers can expose Prometheus metrics via a standalone HTTP server. Currently docfetching and docprocessing have push-based task lifecycle metrics; the monitoring worker runs pull-based collectors for queue depth and connector health.
+The docfetching, docconversion, docprocessing, heavy, light, monitoring, primary, and scheduled_tasks workers each expose Prometheus metrics on a standalone HTTP server. The user_file_processing worker and beat do not. The docfetching, docprocessing, heavy, light, primary, and scheduled_tasks workers emit push-based task lifecycle metrics; docfetching and docprocessing also emit per-connector indexing metrics. The monitoring worker runs pull-based collectors for queue depth, worker heartbeats, and Redis health.
 
-For the full metric reference, integration guide, and PromQL examples, see [`docs/METRICS.md`](../../../docs/METRICS.md#celery-worker-metrics).
+To add a metric or wire a new worker, see [`onyx/server/metrics/README.md`](../server/metrics/README.md). For ports, settings, and example alerts, see the [Monitoring docs](https://docs.onyx.app/deployment/production/monitoring).

@@ -12,16 +12,29 @@ from typing import Any
 from uuid import UUID, uuid4
 
 import pytest
+from sqlalchemy import delete
 from sqlalchemy.orm import Session
 
-from onyx.db.enums import ApprovalDecision, EndpointPolicy
-from onyx.db.models import ActionApproval, BuildSession
-from onyx.server.features.build.db.action_approval import (
+from onyx.db.action_approval import (
     get_action_approval,
     get_action_approval_for_user,
     insert_action_approval,
     list_session_pending_action_approvals,
     try_record_decision,
+)
+from onyx.db.enums import (
+    ActionPolicy,
+    ApprovalDecidedVia,
+    ApprovalDecision,
+    ExternalAppType,
+    IntegrationAuthMode,
+    IntegrationKind,
+)
+from onyx.db.models import (
+    ActionApproval,
+    BuildSession,
+    ExternalApp,
+    Integration,
 )
 from tests.common.craft.payloads import action_entry, default_action_entries
 from tests.external_dependency_unit.craft.db_helpers import (
@@ -63,8 +76,8 @@ def test_insert_action_approval_sorts_actions_strictest_first(
     user = make_user(db_session)
     bs = build_session_with_user(user=user)
     laxest_first = [
-        action_entry("x.read", policy=EndpointPolicy.ALWAYS),
-        action_entry("x.write", policy=EndpointPolicy.ASK),
+        action_entry("x.read", policy=ActionPolicy.ALWAYS),
+        action_entry("x.write", policy=ActionPolicy.ASK),
     ]
     row = insert_action_approval(
         db_session,
@@ -191,3 +204,58 @@ def test_list_session_pending_action_approvals_filters_by_created_after(
     returned_ids = {r.approval_id for r in rows}
     assert new_row.approval_id in returned_ids
     assert old_row.approval_id not in returned_ids
+
+
+@pytest.mark.parametrize("pre_decided", [False, True])
+def test_deleting_app_preserves_action_approval(
+    db_session: Session,
+    tenant_context: None,  # noqa: ARG001
+    build_session_with_user: Callable[..., BuildSession],
+    pre_decided: bool,
+) -> None:
+    user = make_user(db_session)
+    session = build_session_with_user(user=user)
+    app = ExternalApp(
+        name="Audit test",
+        app_type=ExternalAppType.CUSTOM,
+        enabled=True,
+        upstream_url_patterns=[],
+        auth_template={},
+        organization_credentials={},
+    )
+    db_session.add(app)
+    db_session.flush()
+    integration = Integration(
+        kind=IntegrationKind.API,
+        name="Audit test",
+        auth_mode=IntegrationAuthMode.NONE,
+        external_app_id=app.id,
+    )
+    db_session.add(integration)
+    db_session.flush()
+    row = insert_action_approval(
+        db_session,
+        session_id=session.id,
+        actions=default_action_entries(),
+        app_name=app.name,
+        payload={},
+        integration_id=integration.id,
+        decision=ApprovalDecision.APPROVED if pre_decided else None,
+        decided_via=ApprovalDecidedVia.SESSION_GRANT if pre_decided else None,
+    )
+    db_session.commit()
+    assert row.integration_id == integration.id
+    if pre_decided:
+        assert row.decision == ApprovalDecision.APPROVED
+        assert row.decided_via == ApprovalDecidedVia.SESSION_GRANT
+        assert row.decided_at is not None and row.decided_at.tzinfo is not None
+    else:
+        assert row.decision is None
+        assert row.decided_via is None
+        assert row.decided_at is None
+    # Deleting the app deletes its integration.
+    db_session.execute(delete(ExternalApp).where(ExternalApp.id == app.id))
+    db_session.commit()
+    db_session.refresh(row)
+    assert row.integration_id is None
+    assert row.app_name == "Audit test"

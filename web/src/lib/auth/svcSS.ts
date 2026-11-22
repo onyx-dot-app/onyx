@@ -9,7 +9,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { AuthTypeMetadata, type SSOProviderType } from "@/lib/auth/types";
 import { loginPath, ORIGINAL_PATH_HEADER } from "@/lib/auth/paths";
 import { User } from "@/lib/types";
-import { hasAnyAdminPermission } from "@/lib/permissions";
+import { hasAnyAdminPermission } from "@/lib/permissions/utils";
 import { getCurrentUserSS } from "@/lib/users/svcSS";
 
 export async function getAuthTypeMetadataSS(): Promise<AuthTypeMetadata> {
@@ -37,6 +37,7 @@ export async function getAuthTypeMetadataSS(): Promise<AuthTypeMetadata> {
       provider_type: SSOProviderType;
       authorize_url: string;
     }[];
+    default_language?: string | null;
   } = await res.json();
 
   const multiTenant: boolean = NEXT_PUBLIC_CLOUD_ENABLED
@@ -62,21 +63,28 @@ export async function getAuthTypeMetadataSS(): Promise<AuthTypeMetadata> {
       providerType: provider.provider_type,
       authorizeUrl: provider.authorize_url,
     })),
+    defaultLanguage: data.default_language ?? undefined,
   };
 }
 
-async function getGoogleOAuthUrlSS(nextUrl: string | null): Promise<string> {
+async function getGoogleOAuthUrlSS(
+  nextUrl: string | null,
+  startNewTeam: boolean
+): Promise<string> {
   const url = UrlBuilder.fromClientUrl("/api/auth/oauth/authorize");
   if (nextUrl) url.addParam("next", nextUrl);
+  // Playground: the person chose "start a new team" on /auth/error.
+  if (startNewTeam) url.addParam("start_new_team", true);
   url.addParam("redirect", true);
   return url.toString();
 }
 
 export async function getAuthUrlSS(
   multiTenant: boolean,
-  nextUrl: string | null
+  nextUrl: string | null,
+  startNewTeam = false
 ): Promise<string> {
-  return multiTenant ? getGoogleOAuthUrlSS(nextUrl) : "";
+  return multiTenant ? getGoogleOAuthUrlSS(nextUrl, startNewTeam) : "";
 }
 
 async function logoutStandardSS(headers: Headers): Promise<Response> {

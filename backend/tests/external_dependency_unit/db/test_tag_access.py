@@ -44,7 +44,8 @@ def test_tags_require_document_access(
 ) -> None:
     prefix = uuid4().hex
     pair = make_cc_pair(db_session, commit=False)
-    pair.access_type = AccessType.PRIVATE
+    # Source ACL columns only count on a perm-synced pair.
+    pair.access_type = AccessType.PRIVATE if access == "owner" else AccessType.SYNC
     document = Document(
         id=prefix,
         semantic_id=prefix,

@@ -1,4 +1,5 @@
 from enum import Enum as PyEnum
+from typing import Any
 
 from onyx.configs.constants import DocumentSource
 
@@ -17,6 +18,16 @@ GOOGLE_SCOPES = {
         "https://www.googleapis.com/auth/admin.directory.group.readonly",
     ],
 }
+
+# A credential shared by Gmail and Drive (a Google family credential) consents to
+# both sources' scopes, so re-authorizing it for one source keeps the other
+# working.
+GOOGLE_FAMILY_SCOPES = sorted(
+    {scope for source_scopes in GOOGLE_SCOPES.values() for scope in source_scopes}
+)
+
+GOOGLE_AUTH_URI = "https://accounts.google.com/o/oauth2/auth"
+GOOGLE_TOKEN_URI = "https://oauth2.googleapis.com/token"
 
 # This is the Oauth token
 DB_CREDENTIALS_DICT_TOKEN_KEY = "google_tokens"
@@ -40,6 +51,23 @@ class GoogleOAuthAuthenticationMethod(str, PyEnum):
     UPLOADED = "uploaded"
 
 
+class GoogleCredentialKind(str, PyEnum):
+    SERVICE_ACCOUNT = "service_account"
+    OAUTH = "oauth"
+
+
+def google_credential_kind(
+    credential_json: dict[str, Any],
+) -> GoogleCredentialKind | None:
+    """The kind of a Google credential, read from its keys only. None when it
+    holds neither a token nor a service account key."""
+    if DB_CREDENTIALS_DICT_SERVICE_ACCOUNT_KEY in credential_json:
+        return GoogleCredentialKind.SERVICE_ACCOUNT
+    if DB_CREDENTIALS_DICT_TOKEN_KEY in credential_json:
+        return GoogleCredentialKind.OAUTH
+    return None
+
+
 USER_FIELDS = "nextPageToken, users(primaryEmail)"
 
 # Error message substrings
@@ -55,3 +83,6 @@ ONYX_SCOPE_INSTRUCTIONS = (
 
 # This is the maximum number of threads that can be retrieved at once
 SLIM_BATCH_SIZE = 500
+
+# A file resource as the Drive API returns it.
+GoogleDriveFileType = dict[str, Any]

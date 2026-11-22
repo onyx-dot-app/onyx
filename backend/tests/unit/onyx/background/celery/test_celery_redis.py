@@ -84,3 +84,48 @@ class TestCeleryGetBrokerClient:
 
         call_args = mock_redis_cls.from_url.call_args
         assert call_args[0][0] == "redis://custom-host:6380/3"
+
+    @patch("onyx.background.celery.celery_redis.RedisPool")
+    @patch("onyx.background.celery.celery_redis.Redis")
+    @patch(
+        "onyx.background.celery.celery_redis.REDIS_SENTINEL_HOSTS",
+        [("sentinel-1", 26379)],
+    )
+    def test_sentinel_broker_url_resolves_master_via_sentinel(
+        self, mock_redis_cls: MagicMock, mock_redis_pool_cls: MagicMock
+    ) -> None:
+        sentinel_pool = MagicMock()
+        mock_redis_pool_cls.create_pool.return_value = sentinel_pool
+        mock_client = MagicMock()
+        mock_redis_cls.return_value = mock_client
+
+        app = _make_mock_app(
+            "sentinel://:pw@sentinel-1:26379/15;sentinel://:pw@sentinel-2:26379/15"
+        )
+        result = celery_redis.celery_get_broker_client(app)
+
+        assert result is mock_client
+        mock_redis_cls.from_url.assert_not_called()
+        mock_redis_cls.assert_called_once_with(connection_pool=sentinel_pool)
+        pool_kwargs = mock_redis_pool_cls.create_pool.call_args.kwargs
+        assert pool_kwargs["db"] == celery_redis.REDIS_DB_NUMBER_CELERY
+        assert pool_kwargs["replica"] is False
+
+    @patch("onyx.background.celery.celery_redis.RedisPool")
+    @patch("onyx.background.celery.celery_redis.Redis")
+    @patch(
+        "onyx.background.celery.celery_redis.REDIS_SENTINEL_HOSTS",
+        [("sentinel-1", 26379)],
+    )
+    def test_non_sentinel_url_uses_from_url_even_with_sentinel_hosts(
+        self, mock_redis_cls: MagicMock, mock_redis_pool_cls: MagicMock
+    ) -> None:
+        mock_redis_cls.from_url.return_value = MagicMock()
+
+        app = _make_mock_app("redis://override-host:6379/15")
+        celery_redis.celery_get_broker_client(app)
+
+        mock_redis_pool_cls.create_pool.assert_not_called()
+        assert (
+            mock_redis_cls.from_url.call_args[0][0] == "redis://override-host:6379/15"
+        )

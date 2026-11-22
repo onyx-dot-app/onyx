@@ -3,15 +3,19 @@
 import React, { RefObject, useState, useCallback, useMemo } from "react";
 import { useTranslations } from "next-intl";
 import { Packet, StreamingCitation } from "@/app/app/services/streamingModels";
-import { FeedbackType, Message } from "@/app/app/interfaces";
-import { OnyxDocument } from "@/lib/search/interfaces";
+import { FeedbackType, Message } from "@/app/app/types";
+import { OnyxDocument } from "@/lib/search/types";
 import { TooltipGroup } from "@/components/tooltip/CustomTooltip";
 import {
   useChatSessionStore,
   useCurrentMessageTree,
-  useDocumentSidebarVisible,
+  useSourcesShown,
   useSelectedNodeForDocDisplay,
 } from "@/app/app/stores/useChatSessionStore";
+import {
+  RIGHT_PANEL_SOURCES_TAB,
+  type ChatRightPanelAction,
+} from "@/lib/chat/rightPanel";
 import { messageModelName } from "@/app/app/message/multiModel";
 import { useDistinctModelsUsed } from "@/lib/multiModel/hooks";
 import { convertMarkdownTablesToTsv } from "@/app/app/message/copyingUtils";
@@ -21,7 +25,7 @@ import MessageSwitcher from "@/app/app/message/MessageSwitcher";
 import { useIncognitoOptional } from "@/providers/IncognitoProvider";
 import SourceTag from "@/refresh-components/buttons/source-tag/SourceTag";
 import { citationsToSourceInfoArray } from "@/refresh-components/buttons/source-tag/sourceTagUtils";
-import { CopyButton, OpenButton, SelectButton } from "@opal/components";
+import { CopyButton, SelectButton } from "@opal/components";
 import ModelSelector from "@/sections/model-selector/ModelSelector";
 import { SvgRefreshCw, SvgThumbsDown, SvgThumbsUp } from "@opal/icons";
 import { LlmManager } from "@/lib/hooks";
@@ -35,15 +39,15 @@ import TTSButton from "@/app/app/message/messageComponents/TTSButton";
 import { useVoiceMode } from "@/providers/VoiceModeProvider";
 import { useVoiceStatus } from "@/hooks/useVoiceStatus";
 import { findModelConfigId } from "@/lib/languageModels/options";
-import { getModelIcon } from "@/lib/languageModels";
+import { getModelIcon } from "@/lib/languageModels/utils";
 
 interface SouurcesTagWrapperProps {
   citations: StreamingCitation[];
   documentMap: Map<string, OnyxDocument>;
   nodeId: number;
   selectedMessageForDocDisplay: number | null;
-  documentSidebarVisible: boolean;
-  updateCurrentDocumentSidebarVisible: (visible: boolean) => void;
+  sourcesPanelVisible: boolean;
+  updateCurrentRightPanel: (action: ChatRightPanelAction) => void;
   updateCurrentSelectedNodeForDocDisplay: (nodeId: number | null) => void;
 }
 
@@ -53,8 +57,8 @@ const SourcesTagWrapper = React.memo(function SourcesTagWrapper({
   documentMap,
   nodeId,
   selectedMessageForDocDisplay,
-  documentSidebarVisible,
-  updateCurrentDocumentSidebarVisible,
+  sourcesPanelVisible,
+  updateCurrentRightPanel,
   updateCurrentSelectedNodeForDocDisplay,
 }: SouurcesTagWrapperProps) {
   const t = useTranslations("chat.messages");
@@ -66,18 +70,21 @@ const SourcesTagWrapper = React.memo(function SourcesTagWrapper({
 
   // Handle click to toggle sidebar
   const handleSourceClick = useCallback(() => {
-    if (selectedMessageForDocDisplay === nodeId && documentSidebarVisible) {
-      updateCurrentDocumentSidebarVisible(false);
+    if (selectedMessageForDocDisplay === nodeId && sourcesPanelVisible) {
+      updateCurrentRightPanel({ type: "closePanel" });
       updateCurrentSelectedNodeForDocDisplay(null);
     } else {
       updateCurrentSelectedNodeForDocDisplay(nodeId);
-      updateCurrentDocumentSidebarVisible(true);
+      updateCurrentRightPanel({
+        type: "showTab",
+        tabId: RIGHT_PANEL_SOURCES_TAB,
+      });
     }
   }, [
     nodeId,
     selectedMessageForDocDisplay,
-    documentSidebarVisible,
-    updateCurrentDocumentSidebarVisible,
+    sourcesPanelVisible,
+    updateCurrentRightPanel,
     updateCurrentSelectedNodeForDocDisplay,
   ]);
 
@@ -109,7 +116,7 @@ export interface MessageToolbarProps {
 
   // Copy functionality
   rawPackets: Packet[];
-  finalAnswerRef: RefObject<HTMLDivElement | null>;
+  answerRefs: RefObject<(HTMLDivElement | null)[]>;
 
   // Feedback
   currentFeedback?: FeedbackType | null;
@@ -138,7 +145,7 @@ export default function MessageToolbar({
   getNextMessage,
   onMessageSelection,
   rawPackets,
-  finalAnswerRef,
+  answerRefs,
   currentFeedback,
   onRegenerate,
   parentMessage,
@@ -157,6 +164,13 @@ export default function MessageToolbar({
     return msg ? (messageModelName(msg) ?? undefined) : undefined;
   }, [messageTree, nodeId]);
   const distinctModelsUsed = useDistinctModelsUsed();
+  // A follow-up to agent results has no prompt to regenerate from.
+  const isFollowUp = parentMessage?.type === "agent_results";
+  const readOnlyModelName = !llmManager
+    ? currentModelName
+    : isFollowUp
+      ? (ownModelName ?? currentModelName)
+      : undefined;
 
   // Incognito responses take no feedback: votes would persist reviewable
   // signal tied to a chat hidden from the owner's surfaces. The session's
@@ -168,10 +182,10 @@ export default function MessageToolbar({
   const incognitoEnabled =
     (useIncognitoOptional()?.incognitoEnabled ?? false) || sessionIncognito;
   // Document sidebar state - managed internally to reduce prop drilling
-  const documentSidebarVisible = useDocumentSidebarVisible();
+  const sourcesPanelVisible = useSourcesShown();
   const selectedMessageForDocDisplay = useSelectedNodeForDocDisplay();
-  const updateCurrentDocumentSidebarVisible = useChatSessionStore(
-    (state) => state.updateCurrentDocumentSidebarVisible
+  const updateCurrentRightPanel = useChatSessionStore(
+    (state) => state.updateCurrentRightPanel
   );
   const updateCurrentSelectedNodeForDocDisplay = useChatSessionStore(
     (state) => state.updateCurrentSelectedNodeForDocDisplay
@@ -289,7 +303,11 @@ export default function MessageToolbar({
                   removeThinkingTokens(getTextContent(rawPackets)) as string
                 )
               }
-              getHtmlContent={() => finalAnswerRef.current?.innerHTML || ""}
+              getHtmlContent={() =>
+                answerRefs.current
+                  .map((element) => element?.innerHTML || "")
+                  .join("\n")
+              }
               data-testid="AgentMessage/copy-button"
             />
             {!incognitoEnabled && (
@@ -328,27 +346,30 @@ export default function MessageToolbar({
               />
             )}
 
-            {/* Read-only model label for the shared view: no llmManager to
-                power the interactive selector, so surface which model answered. */}
-            {!llmManager && currentModelName && (
-              <OpenButton
+            {/* Read-only model label where the regenerate selector is not
+                available, so the answer still shows which model answered. */}
+            {readOnlyModelName && (
+              <SelectButton
+                chevron
                 disabled
                 icon={getModelIcon(
                   currentModelProvider ?? "",
-                  currentModelName
+                  readOnlyModelName
                 )}
               >
-                {currentModelName}
-              </OpenButton>
+                {readOnlyModelName}
+              </SelectButton>
             )}
 
             {onRegenerate &&
               messageId !== undefined &&
               parentMessage &&
+              !isFollowUp &&
               llmManager && (
                 <div data-testid="AgentMessage/regenerate">
                   <ModelSelector
                     providerOptions={llmManager.llmProviders}
+                    modelPaging={llmManager.modelPaging}
                     value={
                       // The response's model may live under a different
                       // provider than the global selection, so resolve it
@@ -381,13 +402,14 @@ export default function MessageToolbar({
                         );
                       const displayName = mc?.effectiveDisplayName ?? rawName;
                       return (
-                        <OpenButton
+                        <SelectButton
+                          chevron
                           icon={SvgRefreshCw}
                           tooltip={t("toolbar.regenerateButton.tooltip")}
                           foldable={distinctModelsUsed <= 1}
                         >
                           {displayName}
-                        </OpenButton>
+                        </SelectButton>
                       );
                     }}
                     onChange={(opt) => {
@@ -413,10 +435,8 @@ export default function MessageToolbar({
                 documentMap={documentMap}
                 nodeId={nodeId}
                 selectedMessageForDocDisplay={selectedMessageForDocDisplay}
-                documentSidebarVisible={documentSidebarVisible}
-                updateCurrentDocumentSidebarVisible={
-                  updateCurrentDocumentSidebarVisible
-                }
+                sourcesPanelVisible={sourcesPanelVisible}
+                updateCurrentRightPanel={updateCurrentRightPanel}
                 updateCurrentSelectedNodeForDocDisplay={
                   updateCurrentSelectedNodeForDocDisplay
                 }

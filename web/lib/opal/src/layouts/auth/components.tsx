@@ -1,5 +1,6 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders/icon-loader/components";
 import "@opal/layouts/auth/styles.css";
 import {
   Button,
@@ -11,7 +12,7 @@ import {
 import { Form } from "formik";
 import { Content } from "@opal/layouts";
 import type { IconFunctionComponent, RichStr } from "@opal/types";
-import { SvgArrowRightCircle, SvgSimpleLoader } from "@opal/icons";
+import { SvgArrowRightCircle } from "@opal/icons";
 
 const ICON_SIZE_PX = 44;
 
@@ -55,8 +56,8 @@ function Card({
               <Icon size={ICON_SIZE_PX} />
             </div>
             <Content
-              sizePreset="headline"
-              variant="heading"
+              font="heading-headline"
+              orientation="stacked"
               title={title}
               description={description}
             />
@@ -143,7 +144,7 @@ function Submit({
         (isValid !== undefined && !isValid) ||
         (dirty !== undefined && !dirty)
       }
-      icon={isSubmitting ? SvgSimpleLoader : undefined}
+      icon={isSubmitting ? IconLoader : undefined}
       rightIcon={SvgArrowRightCircle}
     >
       {children}
@@ -170,6 +171,8 @@ function Message({
 }: MessageProps) {
   return (
     <MessageCard
+      outerPadding={1}
+      innerPadding={1}
       variant={messageType}
       title={title}
       description={description}

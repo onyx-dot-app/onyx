@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	log "github.com/sirupsen/logrus"
@@ -11,7 +12,6 @@ import (
 
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/docker"
 	"github.com/onyx-dot-app/onyx/tools/ods/internal/paths"
-	"github.com/onyx-dot-app/onyx/tools/ods/internal/postgres"
 )
 
 // DBDumpOptions holds options for the db dump command.
@@ -36,7 +36,7 @@ snapshots directory (~/.local/share/onyx-dev/snapshots/) if no file is specified
 Examples:
   ods db dump                           # Creates onyx_<timestamp>.dump in snapshots dir
   ods db dump mybackup.dump             # Creates mybackup.dump in snapshots dir
-  ods db dump /path/to/backup.sql       # Creates backup.sql at specified path
+  ods db dump /path/to/backup.sql --format sql # Creates SQL at the specified path
   ods db dump --format sql              # Creates SQL format instead of custom format`,
 		Args: cobra.MaximumNArgs(1),
 		Run: func(cmd *cobra.Command, args []string) {
@@ -56,14 +56,21 @@ Examples:
 }
 
 func runDBDump(opts *DBDumpOptions) error {
-	// Find PostgreSQL container.
-	container, err := docker.FindPostgresContainer(docker.ProjectName())
-	if err != nil {
-		return fatalErrorf("Failed to find PostgreSQL container: %w", err)
+	ext := strings.ToLower(filepath.Ext(opts.Output))
+	if ext == ".sql" && opts.Format != "sql" || ext == ".dump" && opts.Format != "custom" {
+		return fatalErrorf("Output extension %s does not match dump format %q; use --format sql with .sql or --format custom with .dump", ext, opts.Format)
 	}
-	log.Infof("Found PostgreSQL container: %s", container)
-
-	config := postgres.NewConfigFromEnv()
+	// Find PostgreSQL container.
+	target, container, config, err := resolveDBContainerTarget()
+	if err != nil {
+		return err
+	}
+	log.Infof("Selected project %s, PostgreSQL container %s", target.Project, container)
+	release, err := lockRuntimeTarget(target, false)
+	if err != nil {
+		return err
+	}
+	defer release()
 
 	// Determine output file path.
 	outputPath := determineOutputPath(opts.Output, opts.Format)
@@ -89,12 +96,10 @@ func runDBDump(opts *DBDumpOptions) error {
 	// Run pg_dump in container.
 	env := config.Env()
 	pgDumpArgs := append([]string{"pg_dump"}, args...)
+	defer func() { _ = docker.Exec(container, "rm", "-f", containerTmpFile) }()
 	if err := docker.ExecWithEnv(container, env, pgDumpArgs...); err != nil {
 		return fatalErrorf("Failed to run pg_dump: %w", err)
 	}
-	// Remove the dump from the container, also when the copy fails.
-	defer func() { _ = docker.Exec(container, "rm", "-f", containerTmpFile) }()
-
 	// Copy the dump file from container to host.
 	if err := docker.CopyFromContainer(container, containerTmpFile, outputPath); err != nil {
 		return fatalErrorf("Failed to copy dump file: %w", err)

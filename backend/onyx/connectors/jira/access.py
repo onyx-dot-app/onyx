@@ -5,9 +5,8 @@ Permissioning / AccessControl logic for JIRA Projects + Issues.
 from collections.abc import Callable
 from typing import cast
 
-from jira import JIRA
-
 from onyx.access.models import ExternalAccess
+from onyx.connectors.jira.source_operations import JiraSourceOperations
 from onyx.utils.variable_functionality import (
     fetch_versioned_implementation,
     global_version,
@@ -15,20 +14,16 @@ from onyx.utils.variable_functionality import (
 
 
 def get_project_permissions(
-    jira_client: JIRA,
+    source_operations: JiraSourceOperations,
     jira_project: str,
-    add_prefix: bool = False,
 ) -> ExternalAccess | None:
     """
     Fetch the project + issue level permissions / access-control.
     This functionality requires Enterprise Edition.
 
     Args:
-        jira_client: The JIRA client instance.
+        source_operations: The Jira gateway.
         jira_project: The JIRA project string.
-        add_prefix: When True, prefix group IDs with source type (for indexing path).
-                   When False (default), leave unprefixed (for permission sync path
-                   where upsert_document_external_perms handles prefixing).
 
     Returns:
         ExternalAccess object for the page. None if EE is not enabled or no restrictions found.
@@ -40,7 +35,7 @@ def get_project_permissions(
 
     ee_get_project_permissions = cast(
         Callable[
-            [JIRA, str, bool],
+            [JiraSourceOperations, str],
             ExternalAccess | None,
         ],
         fetch_versioned_implementation(
@@ -48,8 +43,4 @@ def get_project_permissions(
         ),
     )
 
-    return ee_get_project_permissions(
-        jira_client,
-        jira_project,
-        add_prefix,
-    )
+    return ee_get_project_permissions(source_operations, jira_project)

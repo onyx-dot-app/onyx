@@ -1,4 +1,4 @@
-from datetime import datetime
+from datetime import UTC, date, datetime
 from enum import Enum
 from typing import Any
 
@@ -15,14 +15,14 @@ class KGConfigSettings(BaseModel):
     KG_VENDOR: str | None = None
     KG_VENDOR_DOMAINS: list[str] = []
     KG_IGNORE_EMAIL_DOMAINS: list[str] = []
-    KG_COVERAGE_START: str = datetime(1970, 1, 1).strftime("%Y-%m-%d")
+    KG_COVERAGE_START: str = date(1970, 1, 1).isoformat()
     KG_MAX_COVERAGE_DAYS: int = 10000
     KG_MAX_PARENT_RECURSION_DEPTH: int = KG_DEFAULT_MAX_PARENT_RECURSION_DEPTH
     KG_BETA_PERSONA_ID: int | None = None
 
     @property
     def KG_COVERAGE_START_DATE(self) -> datetime:
-        return datetime.strptime(self.KG_COVERAGE_START, "%Y-%m-%d")
+        return datetime.strptime(self.KG_COVERAGE_START, "%Y-%m-%d").replace(tzinfo=UTC)
 
 
 class KGGroundingType(str, Enum):
@@ -88,75 +88,6 @@ class KGEntityTypeDefinition(BaseModel):
     entity_values: list[str] = []
 
 
-class KGChunkFormat(BaseModel):
-    connector_id: int | None = None
-    document_id: str
-    chunk_id: int
-    title: str
-    content: str
-    primary_owners: list[str]
-    secondary_owners: list[str]
-    source_type: str
-    metadata: dict[str, str | list[str]] | None = None
-
-
-class KGPerson(BaseModel):
-    name: str
-    company: str
-    employee: bool
-
-
-class NormalizedEntities(BaseModel):
-    entities: list[str]
-    entities_w_attributes: list[str]
-    entity_normalization_map: dict[str, str]
-
-
-class NormalizedRelationships(BaseModel):
-    relationships: list[str]
-    relationship_normalization_map: dict[str, str]
-
-
-class KGMetadataContent(BaseModel):
-    document_id: str
-    source_type: str
-    source_metadata: dict[str, Any] | None = None
-
-
-class KGClassificationInstructions(BaseModel):
-    classification_enabled: bool
-    classification_options: str
-    classification_class_definitions: dict[str, KGEntityTypeClassificationInfo]
-
-
-class KGExtractionInstructions(BaseModel):
-    deep_extraction: bool
-    active: bool
-
-
-class KGEntityTypeInstructions(BaseModel):
-    metadata_attribute_conversion: dict[str, KGAttributeProperty]
-    classification_instructions: KGClassificationInstructions
-    extraction_instructions: KGExtractionInstructions
-    entity_filter_attributes: dict[str, Any] | None = None
-
-
-class KGEnhancedDocumentMetadata(BaseModel):
-    entity_type: str | None
-    metadata_attribute_conversion: dict[str, KGAttributeProperty] | None
-    document_metadata: dict[str, Any] | None
-    deep_extraction: bool
-    classification_enabled: bool
-    classification_instructions: KGClassificationInstructions | None
-    skip: bool
-
-
-class KGConnectorData(BaseModel):
-    id: int
-    source: str
-    kg_coverage_days: int | None
-
-
 class KGStage(str, Enum):
     EXTRACTED = "extracted"
     NORMALIZED = "normalized"
@@ -165,26 +96,3 @@ class KGStage(str, Enum):
     NOT_STARTED = "not_started"
     EXTRACTING = "extracting"
     DO_NOT_EXTRACT = "do_not_extract"
-
-
-class KGClassificationResult(BaseModel):
-    document_entity: str
-    classification_class: str
-
-
-class KGImpliedExtractionResults(BaseModel):
-    document_entity: str
-    implied_entities: set[str]
-    implied_relationships: set[str]
-    company_participant_emails: set[str]
-    account_participant_emails: set[str]
-
-
-class KGDocumentDeepExtractionResults(BaseModel):
-    classification_result: KGClassificationResult | None
-    deep_extracted_entities: set[str]
-    deep_extracted_relationships: set[str]
-
-
-class KGException(Exception):
-    pass

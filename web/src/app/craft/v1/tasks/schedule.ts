@@ -18,7 +18,7 @@ import type {
   EditorPayload,
   IntervalPayload,
   IntervalUnit,
-} from "@/app/craft/v1/tasks/interfaces";
+} from "@/app/craft/v1/tasks/types";
 
 // ---------------------------------------------------------------------------
 // Validation
@@ -29,9 +29,20 @@ export interface ScheduleValidationOk {
   cron: string;
 }
 
+/** Stable validation codes; callers map each to `craft.tasks.scheduleEditor.errors.<code>`. */
+export type ScheduleErrorCode =
+  | "intervalNotPositiveInteger"
+  | "minutesIntervalTooLong"
+  | "hoursIntervalTooLong"
+  | "dayIntervalTimeRequired"
+  | "timeRequired"
+  | "weekdayOutOfRange"
+  | "cronRequired"
+  | "cronFieldCount";
+
 export interface ScheduleValidationErr {
   ok: false;
-  error: string;
+  error: ScheduleErrorCode;
 }
 
 export type ScheduleValidation = ScheduleValidationOk | ScheduleValidationErr;
@@ -227,30 +238,27 @@ export function compileLocalPayloadToUtcCron(
 
 function compileInterval(payload: IntervalPayload): ScheduleValidation {
   const every = Number(payload?.every);
-  if (!Number.isFinite(every) || every < 1) {
-    return { ok: false, error: "Interval must be at least 1." };
+  if (!Number.isInteger(every) || every < 1) {
+    return { ok: false, error: "intervalNotPositiveInteger" };
   }
   const unit: IntervalUnit = payload.unit;
 
   if (unit === "minutes") {
     if (every > 59) {
-      return { ok: false, error: "Use hours/days for intervals over 59 min." };
+      return { ok: false, error: "minutesIntervalTooLong" };
     }
     return { ok: true, cron: `*/${every} * * * *` };
   }
   if (unit === "hours") {
     if (every > 23) {
-      return { ok: false, error: "Use days for intervals over 23 hours." };
+      return { ok: false, error: "hoursIntervalTooLong" };
     }
     return { ok: true, cron: `0 */${every} * * *` };
   }
   // days — requires time_of_day
   const time = parseTimeOfDay(payload.time_of_day);
   if (!time) {
-    return {
-      ok: false,
-      error: "Pick a time of day for day-cadence intervals.",
-    };
+    return { ok: false, error: "dayIntervalTimeRequired" };
   }
   return { ok: true, cron: `${time.minute} ${time.hour} */${every} * *` };
 }
@@ -258,12 +266,12 @@ function compileInterval(payload: IntervalPayload): ScheduleValidation {
 function compileDailyWeekly(payload: DailyWeeklyPayload): ScheduleValidation {
   const time = parseTimeOfDay(payload?.time_of_day);
   if (!time) {
-    return { ok: false, error: "Pick a time of day." };
+    return { ok: false, error: "timeRequired" };
   }
   const weekdays = Array.isArray(payload?.weekdays) ? payload.weekdays : [];
   for (const d of weekdays) {
     if (!Number.isInteger(d) || d < 0 || d > 6) {
-      return { ok: false, error: "Weekday values must be 0-6 (Sun..Sat)." };
+      return { ok: false, error: "weekdayOutOfRange" };
     }
   }
   const dayField =
@@ -280,13 +288,10 @@ function compileDailyWeekly(payload: DailyWeeklyPayload): ScheduleValidation {
 
 function compileAdvanced(payload: AdvancedPayload): ScheduleValidation {
   const expr = (payload?.cron ?? "").trim();
-  if (!expr) return { ok: false, error: "Enter a cron expression." };
+  if (!expr) return { ok: false, error: "cronRequired" };
   const fields = expr.split(/\s+/);
   if (fields.length !== 5) {
-    return {
-      ok: false,
-      error: "Cron must have exactly 5 fields (minute hour day month weekday).",
-    };
+    return { ok: false, error: "cronFieldCount" };
   }
   return { ok: true, cron: expr };
 }

@@ -2,7 +2,6 @@ from onyx.prompts.deep_research.dr_tool_prompts import (
     GENERATE_PLAN_TOOL_NAME,
     GENERATE_REPORT_TOOL_NAME,
     RESEARCH_AGENT_TOOL_NAME,
-    THINK_TOOL_NAME,
 )
 
 # ruff: noqa: E501, W605 start
@@ -59,63 +58,9 @@ Your response must only be a numbered list of steps with no additional prefix or
 """.strip()
 
 
-ORCHESTRATOR_PROMPT = f"""
-You are an orchestrator agent for deep research. Your job is to conduct research by calling the {RESEARCH_AGENT_TOOL_NAME} tool with high level research tasks. \
-This delegates the lower level research work to the {RESEARCH_AGENT_TOOL_NAME} which will provide back the results of the research.
-
-For context, the date is {{current_datetime}}.
-
-Before calling {GENERATE_REPORT_TOOL_NAME}, reason to double check that all aspects of the user's query have been well researched and that all key topics around the plan have been researched. \
-There are cases where new discoveries from research may lead to a deviation from the original research plan.
-In these cases, ensure that the new directions are thoroughly investigated prior to calling {GENERATE_REPORT_TOOL_NAME}.
-
-NEVER output normal response tokens, you must only call tools.
-
-# Tools
-You have currently used {{current_cycle_count}} of {{max_cycles}} max research cycles. You do not need to use all cycles.
-
-## {RESEARCH_AGENT_TOOL_NAME}
-The research task provided to the {RESEARCH_AGENT_TOOL_NAME} should be reasonably high level with a clear direction for investigation. \
-It should not be a single short query, rather it should be 1 (or 2 if necessary) descriptive sentences that outline the direction of the investigation. \
-The research task should be in the same language as the overall research plan.
-
-CRITICAL - the {RESEARCH_AGENT_TOOL_NAME} only receives the task and has no additional context about the user's query, research plan, other research agents, or message history. \
-You absolutely must provide all of the context needed to complete the task in the argument to the {RESEARCH_AGENT_TOOL_NAME}.{{internal_search_research_task_guidance}}
-
-You should call the {RESEARCH_AGENT_TOOL_NAME} MANY times before completing with the {GENERATE_REPORT_TOOL_NAME} tool.
-
-You are encouraged to call the {RESEARCH_AGENT_TOOL_NAME} in parallel if the research tasks are not dependent on each other, which is typically the case. NEVER call more than 3 {RESEARCH_AGENT_TOOL_NAME} calls in parallel.
-
-## {GENERATE_REPORT_TOOL_NAME}
-You should call the {GENERATE_REPORT_TOOL_NAME} tool if any of the following conditions are met:
-- You have researched all of the relevant topics of the research plan.
-- You have shifted away from the original research plan and believe that you are done.
-- You have all of the information needed to thoroughly answer all aspects of the user's query.
-- The last research cycle yielded minimal new information and future cycles are unlikely to yield more information.
-
-## {THINK_TOOL_NAME}
-CRITICAL - use the {THINK_TOOL_NAME} to reason between every call to the {RESEARCH_AGENT_TOOL_NAME} and before calling {GENERATE_REPORT_TOOL_NAME}. You should treat this as chain-of-thought reasoning to think deeply on what to do next. \
-Be curious, identify knowledge gaps and consider new potential directions of research. Use paragraph format, do not use bullet points or lists.
-
-NEVER use the {THINK_TOOL_NAME} in parallel with other {RESEARCH_AGENT_TOOL_NAME} or {GENERATE_REPORT_TOOL_NAME}.
-
-Before calling {GENERATE_REPORT_TOOL_NAME}, double check that all aspects of the user's query have been researched and that all key topics around the plan have been researched (unless you have gone in a different direction).
-
-# Research Plan
-{{research_plan}}
-""".strip()
-
-
 INTERNAL_SEARCH_RESEARCH_TASK_GUIDANCE = """
  If necessary, clarify if the research agent should focus mostly on organization internal searches, web searches, or a combination of both. If the task doesn't require a clear priority, don't add sourcing guidance.
 """.strip("\n")
-
-
-USER_ORCHESTRATOR_PROMPT = """
-Remember to refer to the system prompt and follow how to use the tools. Call the {THINK_TOOL_NAME} between every call to the {RESEARCH_AGENT_TOOL_NAME} and before calling {GENERATE_REPORT_TOOL_NAME}. Never run more than 3 {RESEARCH_AGENT_TOOL_NAME} calls in parallel.
-
-Don't mention this reminder or underlying details about the system.
-""".strip()
 
 
 FINAL_REPORT_PROMPT = """
@@ -150,8 +95,7 @@ Provide inline citations in the format [1], [2], [3], etc. based on the citation
 """.strip()
 
 
-# Reasoning Model Variants of the prompts
-ORCHESTRATOR_PROMPT_REASONING = f"""
+ORCHESTRATOR_PROMPT = f"""
 You are an orchestrator agent for deep research. Your job is to conduct research by calling the {RESEARCH_AGENT_TOOL_NAME} tool with high level research tasks. \
 This delegates the lower level research work to the {RESEARCH_AGENT_TOOL_NAME} which will provide back the results of the research.
 
@@ -165,7 +109,7 @@ Between calls, think deeply on what to do next. Be curious, identify knowledge g
 NEVER output normal response tokens, you must only call tools.
 
 # Tools
-You have currently used {{current_cycle_count}} of {{max_cycles}} max research cycles. You do not need to use all cycles.
+You may use up to {{max_cycles}} research cycles. You do not need to use all cycles.
 
 ## {RESEARCH_AGENT_TOOL_NAME}
 The research task provided to the {RESEARCH_AGENT_TOOL_NAME} should be reasonably high level with a clear direction for investigation. \
@@ -188,14 +132,6 @@ You should call the {GENERATE_REPORT_TOOL_NAME} tool if any of the following con
 
 # Research Plan
 {{research_plan}}
-""".strip()
-
-
-USER_ORCHESTRATOR_PROMPT_REASONING = """
-Remember to refer to the system prompt and follow how to use the tools. \
-You are encouraged to call the {RESEARCH_AGENT_TOOL_NAME} in parallel when the research tasks are not dependent on each other, but never call more than 3 {RESEARCH_AGENT_TOOL_NAME} calls in parallel.
-
-Don't mention this reminder or underlying details about the system.
 """.strip()
 
 

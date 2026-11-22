@@ -1,0 +1,334 @@
+"""The gateway owns the credential: an API key is sent as is, an expiring
+OAuth token is refreshed once under the provider's lock and written back,
+and Linear's refusals and listing faults surface as typed errors."""
+
+import threading
+import time
+from typing import Any
+from unittest.mock import MagicMock, patch
+
+import pytest
+import requests
+
+from onyx.connectors.credentials_provider import OnyxStaticCredentialsProvider
+from onyx.connectors.linear.source_operations import (
+    LinearAuthError,
+    LinearRateLimitError,
+    LinearSourceOperations,
+    LinearTokenLockError,
+    LinearTokenRefreshError,
+    LinearUnreachableError,
+)
+
+OPS = "onyx.connectors.linear.source_operations"
+
+
+def _provider(credentials: dict[str, Any]) -> MagicMock:
+    provider = MagicMock()
+    provider.get_credentials.return_value = credentials
+    provider.__enter__.return_value = provider
+    return provider
+
+
+def _page(nodes: list[dict[str, Any]], end_cursor: str | None) -> MagicMock:
+    response = MagicMock()
+    response.json.return_value = {
+        "data": {
+            "teams": {
+                "nodes": nodes,
+                "pageInfo": {
+                    "hasNextPage": end_cursor is not None,
+                    "endCursor": end_cursor,
+                },
+            }
+        }
+    }
+    return response
+
+
+def test_an_api_key_is_read_once_and_sent_as_is() -> None:
+    provider = _provider({"linear_api_key": "lin_api_test"})
+    ops = LinearSourceOperations(credentials_provider=provider)
+
+    assert ops._api_key() == "lin_api_test"
+    assert ops._api_key() == "lin_api_test"
+    assert provider.get_credentials.call_count == 1
+    provider.__enter__.assert_not_called()
+
+
+@patch(f"{OPS}.refresh_oauth_token")
+def test_an_expiring_token_is_refreshed_under_the_lock_and_written_back(
+    refresh: MagicMock,
+) -> None:
+    expiring = {
+        "access_token": "old",
+        "refresh_token": "r",
+        "expire_at": int(time.time()) + 60,
+    }
+    fresh = {
+        "access_token": "new",
+        "refresh_token": "r2",
+        "expire_at": int(time.time()) + 3600,
+    }
+    refresh.return_value = fresh
+    provider = _provider(expiring)
+    ops = LinearSourceOperations(credentials_provider=provider)
+
+    assert ops._api_key() == "Bearer new"
+
+    provider.__enter__.assert_called_once()
+    refresh.assert_called_once_with(expiring)
+    provider.set_credentials.assert_called_once_with(fresh)
+    assert ops._api_key() == "Bearer new"
+    assert refresh.call_count == 1
+
+
+@patch(f"{OPS}.refresh_oauth_token")
+def test_a_token_another_sync_already_refreshed_is_reused(refresh: MagicMock) -> None:
+    expiring = {
+        "access_token": "old",
+        "refresh_token": "r",
+        "expire_at": int(time.time()) + 60,
+    }
+    fresh = {
+        "access_token": "new",
+        "refresh_token": "r2",
+        "expire_at": int(time.time()) + 3600,
+    }
+    provider = _provider(expiring)
+    # The second read, under the lock, sees the other sync's refresh.
+    provider.get_credentials.side_effect = [expiring, fresh]
+    ops = LinearSourceOperations(credentials_provider=provider)
+
+    assert ops._api_key() == "Bearer new"
+
+    refresh.assert_not_called()
+    provider.set_credentials.assert_not_called()
+
+
+@patch(f"{OPS}.refresh_oauth_token")
+def test_parallel_calls_refresh_the_token_once(refresh: MagicMock) -> None:
+    """A static provider's rotation lock does nothing, so the gateway's own
+    lock keeps two threads from redeeming one refresh token. A second refresh
+    would meet the first at the barrier."""
+    expiring = {
+        "access_token": "old",
+        "refresh_token": "r",
+        "expire_at": int(time.time()) + 60,
+    }
+    fresh = {
+        "access_token": "new",
+        "refresh_token": "r2",
+        "expire_at": int(time.time()) + 3600,
+    }
+    refreshes_meet = threading.Barrier(2, timeout=0.5)
+
+    def refresh_token(_credentials: dict[str, Any]) -> dict[str, Any]:
+        try:
+            refreshes_meet.wait()
+        except threading.BrokenBarrierError:
+            pass
+        return fresh
+
+    refresh.side_effect = refresh_token
+    ops = LinearSourceOperations(
+        credentials_provider=OnyxStaticCredentialsProvider(None, "linear", expiring)
+    )
+    both_started = threading.Barrier(2, timeout=10)
+    keys: list[str] = []
+
+    def call() -> None:
+        both_started.wait()
+        keys.append(ops._api_key())
+
+    threads = [threading.Thread(target=call) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+
+    assert refresh.call_count == 1
+    assert keys == ["Bearer new", "Bearer new"]
+
+
+def test_a_refused_credential_is_a_typed_error() -> None:
+    response = MagicMock()
+    response.status_code = 401
+    response.ok = False
+    response.text = "Authentication required"
+    ops = LinearSourceOperations(
+        credentials_provider=OnyxStaticCredentialsProvider(
+            None, "linear", {"linear_api_key": "bad"}
+        )
+    )
+    with (
+        patch(f"{OPS}.requests.post", return_value=response) as post,
+        pytest.raises(LinearAuthError),
+    ):
+        ops.get_viewer()
+
+    post.assert_called_once()
+
+
+def _api_key_ops() -> LinearSourceOperations:
+    return LinearSourceOperations(
+        credentials_provider=OnyxStaticCredentialsProvider(
+            None, "linear", {"linear_api_key": "k"}
+        )
+    )
+
+
+def test_a_rate_limit_code_is_a_typed_error_and_not_retried() -> None:
+    response = MagicMock()
+    response.status_code = 400
+    response.ok = False
+    response.text = (
+        '{"errors": [{"message": "Rate limit exceeded", '
+        '"extensions": {"code": "RATELIMITED"}}]}'
+    )
+    with (
+        patch(f"{OPS}.requests.post", return_value=response) as post,
+        pytest.raises(LinearRateLimitError) as raised,
+    ):
+        _api_key_ops().get_viewer()
+
+    post.assert_called_once()
+    assert raised.value.status_code == 400
+    assert raised.value.method == "POST"
+    assert raised.value.body == response.text
+
+
+def test_no_answer_after_retries_is_a_typed_error() -> None:
+    with (
+        patch(f"{OPS}.requests.post", side_effect=requests.ReadTimeout("slow")) as post,
+        pytest.raises(LinearUnreachableError) as raised,
+    ):
+        _api_key_ops().get_viewer()
+
+    assert post.call_count == 5
+    assert raised.value.timed_out
+
+
+def test_a_rate_limit_in_a_200_answer_is_a_typed_error() -> None:
+    response = MagicMock()
+    response.json.return_value = {
+        "errors": [{"message": "limited", "extensions": {"code": "RATELIMITED"}}]
+    }
+    with (
+        patch(f"{OPS}._make_query", return_value=response),
+        pytest.raises(LinearRateLimitError),
+    ):
+        _api_key_ops().get_viewer()
+
+
+def test_a_refused_credential_in_a_200_answer_is_a_typed_error() -> None:
+    response = MagicMock()
+    response.json.return_value = {
+        "errors": [
+            {"message": "refused", "extensions": {"code": "AUTHENTICATION_ERROR"}}
+        ]
+    }
+    with (
+        patch(f"{OPS}._make_query", return_value=response),
+        pytest.raises(LinearAuthError),
+    ):
+        _api_key_ops().get_viewer()
+
+
+@patch(f"{OPS}.refresh_oauth_token")
+def test_a_busy_refresh_lock_is_a_typed_error(refresh: MagicMock) -> None:
+    provider = _provider({"access_token": "old", "refresh_token": "r", "expire_at": 0})
+    provider.__enter__.side_effect = RuntimeError("Could not acquire lock")
+    ops = LinearSourceOperations(credentials_provider=provider)
+
+    with pytest.raises(LinearTokenLockError):
+        ops._api_key()
+
+    refresh.assert_not_called()
+
+
+@patch(f"{OPS}.refresh_oauth_token")
+def test_a_failed_refresh_keeps_its_own_error(refresh: MagicMock) -> None:
+    refresh.side_effect = LinearTokenRefreshError(
+        "Failed to refresh token", status_code=400, body="invalid_grant"
+    )
+    provider = _provider({"access_token": "old", "refresh_token": "r", "expire_at": 0})
+    ops = LinearSourceOperations(credentials_provider=provider)
+
+    with pytest.raises(LinearTokenRefreshError):
+        ops._api_key()
+
+    provider.__exit__.assert_called_once()
+
+
+def test_a_cursor_that_stops_advancing_is_refused() -> None:
+    ops = LinearSourceOperations(
+        credentials_provider=OnyxStaticCredentialsProvider(
+            None, "linear", {"linear_api_key": "k"}
+        )
+    )
+    with (
+        patch(f"{OPS}._make_query", return_value=_page([], "same")),
+        pytest.raises(RuntimeError, match="stopped advancing"),
+    ):
+        ops.list_teams()
+
+
+def test_a_walk_reads_the_key_before_every_page() -> None:
+    ops = LinearSourceOperations(
+        credentials_provider=OnyxStaticCredentialsProvider(
+            None, "linear", {"linear_api_key": "k"}
+        )
+    )
+    with (
+        patch.object(LinearSourceOperations, "_api_key", return_value="k") as key,
+        patch(f"{OPS}._make_query", side_effect=[_page([], "c1"), _page([], None)]),
+    ):
+        assert ops.list_teams() == []
+
+    assert key.call_count == 2
+
+
+def test_team_members_are_paged_per_team() -> None:
+    ops = LinearSourceOperations(
+        credentials_provider=OnyxStaticCredentialsProvider(
+            None, "linear", {"linear_api_key": "k"}
+        )
+    )
+
+    def membership_page(email: str, end_cursor: str | None) -> MagicMock:
+        response = MagicMock()
+        response.json.return_value = {
+            "data": {
+                "team": {
+                    "memberships": {
+                        "nodes": [
+                            {
+                                "user": {
+                                    "email": email,
+                                    "active": True,
+                                    "guest": False,
+                                    "app": False,
+                                }
+                            }
+                        ],
+                        "pageInfo": {
+                            "hasNextPage": end_cursor is not None,
+                            "endCursor": end_cursor,
+                        },
+                    }
+                }
+            }
+        }
+        return response
+
+    pages = [membership_page("ann@x", "c1"), membership_page("bob@x", None)]
+    with patch(f"{OPS}._make_query", side_effect=pages) as query:
+        members = ops.list_team_members(team_id="t1")
+
+    assert [member.email for member in members] == ["ann@x", "bob@x"]
+    sent = [call.args[0]["variables"] for call in query.call_args_list]
+    assert sent == [
+        {"teamId": "t1", "first": 100, "after": None},
+        {"teamId": "t1", "first": 100, "after": "c1"},
+    ]

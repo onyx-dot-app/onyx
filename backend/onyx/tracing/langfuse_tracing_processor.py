@@ -41,16 +41,10 @@ class LangfuseTracingProcessor(TracingProcessor):
 
     Args:
         client: A Langfuse client instance. If None, uses get_client().
-        enable_masking: Whether to mask sensitive data before sending.
     """
 
-    def __init__(
-        self,
-        client: Optional[Langfuse] = None,
-        enable_masking: bool = True,
-    ) -> None:
+    def __init__(self, client: Optional[Langfuse] = None) -> None:
         self._client: Optional[Langfuse] = client
-        self._enable_masking = enable_masking
         self._lock = threading.Lock()  # Protects all dict access
         self._spans: dict[str, LangfuseObservationWrapper] = {}
         self._trace_spans: dict[
@@ -110,14 +104,12 @@ class LangfuseTracingProcessor(TracingProcessor):
             return nullcontext()
         return propagate_attributes(**attributes)
 
-    def _mask_if_enabled(self, data: Any) -> Any:
-        """Apply masking to data if masking is enabled."""
-        if not self._enable_masking:
-            return data
+    def _bound_and_mask(self, data: Any) -> Any:
+        """Mask secrets in data and bound it to MASKING_LENGTH."""
         try:
-            from onyx.tracing.masking import mask_sensitive_data
+            from onyx.tracing.masking import bound_trace_data
 
-            return mask_sensitive_data(data)
+            return bound_trace_data(data)
         except Exception as e:
             logger.warning("Failed to mask data: %s", e)
             return data
@@ -146,6 +138,7 @@ class LangfuseTracingProcessor(TracingProcessor):
 
             input_cents, output_cents = compute_cost_cents(
                 model=data.model,
+                served_model=data.routed_model,
                 provider=provider,
                 prompt_tokens=input_tokens,
                 completion_tokens=output_tokens,
@@ -214,8 +207,8 @@ class LangfuseTracingProcessor(TracingProcessor):
             if langfuse_span:
                 # Update the root span with input/output and end it
                 langfuse_span.update(
-                    input=self._mask_if_enabled(trace_first_input),
-                    output=self._mask_if_enabled(trace_last_output),
+                    input=self._bound_and_mask(trace_first_input),
+                    output=self._bound_and_mask(trace_last_output),
                 )
                 langfuse_span.end()
         except Exception as e:
@@ -341,8 +334,8 @@ class LangfuseTracingProcessor(TracingProcessor):
                 cost = self._calculate_cost(data)
 
                 update_kwargs: dict[str, Any] = {
-                    "input": self._mask_if_enabled(input_data),
-                    "output": self._mask_if_enabled(output_data),
+                    "input": self._bound_and_mask(input_data),
+                    "output": self._bound_and_mask(output_data),
                 }
                 if usage:
                     update_kwargs["usage_details"] = usage
@@ -353,6 +346,14 @@ class LangfuseTracingProcessor(TracingProcessor):
                     generation_metadata["reasoning"] = data.reasoning
                 if data.tools:
                     generation_metadata["tools"] = data.tools
+                if data.model_config is not None:
+                    for key in [
+                        "cacheable_prefix_msgs",
+                        "cacheable_prefix_tokens",
+                        "history_msgs",
+                    ]:
+                        if key in data.model_config:
+                            generation_metadata[key] = data.model_config[key]
                 if generation_metadata:
                     update_kwargs["metadata"] = generation_metadata
                 if data.time_to_first_action_seconds is not None:
@@ -366,8 +367,9 @@ class LangfuseTracingProcessor(TracingProcessor):
                 input_data = data.input
                 output_data = data.output
                 langfuse_span.update(
-                    input=self._mask_if_enabled(input_data),
-                    output=self._mask_if_enabled(output_data),
+                    input=self._bound_and_mask(input_data),
+                    output=self._bound_and_mask(output_data),
+                    metadata=dict(data.metadata) if data.metadata else None,
                 )
 
             elif isinstance(data, AgentSpanData):

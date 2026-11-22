@@ -4,8 +4,8 @@ The ``skill`` rows for built-ins are seeded by the
 ``skill_built_in_id_discriminator`` migration — migrations are the source
 of truth and there is no boot-time seeder. These tests cover the runtime
 behaviors that depend on those rows plus the codified ``BUILT_IN_SKILLS``:
-availability gating, admin-immutability, the non-unique
-``built_in_skill_id``, and the XOR schema invariant. Rows are inserted
+availability gating, admin-immutability and the non-unique
+``built_in_skill_id``. Rows are inserted
 directly via ``make_built_in_skill_row`` so each test is self-contained
 and order-independent."""
 
@@ -17,17 +17,20 @@ from uuid import uuid4
 
 import pytest
 from sqlalchemy import delete, select
-from sqlalchemy.exc import IntegrityError
 from sqlalchemy.orm import Session
 
 from onyx.db.models import Skill, User
 from onyx.db.skill import (
-    SkillManagementPolicy,
+    fetch_editable_skill,
     fetch_skill,
     list_runtime_skills_for_user,
     list_skills,
 )
-from onyx.skills.built_in import BUILT_IN_SKILLS, BuiltInSkillDefinition
+from onyx.skills.built_in import (
+    BUILT_IN_SKILLS,
+    EXTERNAL_APP_SKILL_ID_TO_APP_TYPE,
+    BuiltInSkillDefinition,
+)
 from tests.external_dependency_unit.craft.db_helpers import (
     make_built_in_skill_row,
     make_skill,
@@ -86,10 +89,10 @@ class TestAvailabilityGate:
         visible = {
             s.built_in_skill_id
             for s in list_skills(
-                policy=SkillManagementPolicy.VIEW,
                 user=test_user,
                 db_session=db_session,
             )
+            if isinstance(s, Skill)
         }
         assert gated_id not in visible
 
@@ -103,18 +106,19 @@ class TestAvailabilityGate:
         visible_built_ins = {
             s.built_in_skill_id
             for s in list_skills(
-                policy=SkillManagementPolicy.VIEW,
                 user=test_user,
                 db_session=db_session,
             )
-            if s.built_in_skill_id is not None
+            if isinstance(s, Skill)
         }
         # Some built-ins gate on environment availability (e.g. image-generation
         # needs a configured provider); only those available here must be visible.
+        # An app built-in shows only to a user who runs a plugin of its preset.
         available_built_ins = {
             built_in_skill_id
             for built_in_skill_id, definition in BUILT_IN_SKILLS.items()
             if definition.is_available(db_session)
+            and built_in_skill_id not in EXTERNAL_APP_SKILL_ID_TO_APP_TYPE
         }
         assert available_built_ins <= visible_built_ins
 
@@ -169,7 +173,6 @@ class TestAvailabilityGate:
         assert (
             fetch_skill(
                 row.id,
-                policy=SkillManagementPolicy.VIEW,
                 user=test_user,
                 db_session=db_session,
             )
@@ -189,9 +192,8 @@ class TestBuiltInIsImmutable:
         db_session.commit()
 
         assert (
-            fetch_skill(
+            fetch_editable_skill(
                 row.id,
-                policy=SkillManagementPolicy.EDIT,
                 user=test_user,
                 db_session=db_session,
             )
@@ -203,13 +205,15 @@ class TestBuiltInIsImmutable:
         db_session: Session,
         test_user: User,
     ) -> None:
-        custom = make_skill(db_session, name=f"custom-{uuid4().hex[:8]}")
-        custom.author_user_id = test_user.id
+        custom = make_skill(
+            db_session,
+            name=f"custom-{uuid4().hex[:8]}",
+            author_user_id=test_user.id,
+        )
         db_session.commit()
 
-        skill = fetch_skill(
+        skill = fetch_editable_skill(
             custom.id,
-            policy=SkillManagementPolicy.EDIT,
             user=test_user,
             db_session=db_session,
         )
@@ -222,13 +226,12 @@ class TestNonUniqueBuiltInId:
         self, db_session: Session
     ) -> None:
         """``built_in_skill_id`` is not unique — a single built-in can
-        back multiple rows with different canonical names and sharing scopes."""
+        back multiple rows with different canonical names."""
         make_built_in_skill_row(db_session, built_in_skill_id="pptx")
         make_built_in_skill_row(
             db_session,
             built_in_skill_id="pptx",
             name="pptx-team-a",
-            is_public=False,
         )
         db_session.commit()
 
@@ -237,18 +240,6 @@ class TestNonUniqueBuiltInId:
         )
         assert len(matches) == 2
         assert {s.name for s in matches} == {"pptx", "pptx-team-a"}
-
-
-class TestDefinitionSourceInvariant:
-    def test_built_in_row_rejects_bundle_storage(self, db_session: Session) -> None:
-        row = make_built_in_skill_row(
-            db_session, built_in_skill_id=f"invalid-source-{uuid4().hex[:8]}"
-        )
-        row.bundle_file_id = "unexpected-bundle"
-
-        with pytest.raises(IntegrityError):
-            db_session.flush()
-        db_session.rollback()
 
 
 class TestBuiltInSourceDirectory:

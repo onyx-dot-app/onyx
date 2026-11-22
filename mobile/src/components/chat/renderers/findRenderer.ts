@@ -1,5 +1,7 @@
 // Priority-ordered renderer dispatch, mirroring web `renderMessageComponent`. First match wins.
 //
+// It reads a group's own packets (GroupedPacket.packets); nested calls do not decide the renderer.
+//
 // Only chat and reasoning are wired; the tool slots between them return null on purpose. Reasoning
 // sits last and matches section_end/error, which in web are already claimed by whichever tool group
 // they close — delete the intervening predicates and reasoning inherits every closed tool group,
@@ -11,7 +13,6 @@ import {
   ToolCallArgumentDelta,
 } from "@/chat/streamingModels";
 import {
-  isCodingAgentPackets,
   isDeepResearchPlanPackets,
   isMemoryToolPackets,
 } from "@/chat/timeline/packetHelpers";
@@ -86,9 +87,6 @@ export function findRenderer(packets: Packet[]): DispatchRenderer | null {
   }
   if (packets.some(isResearchAgentPacket)) {
     return null; // PR 9x: research agent
-  }
-  if (isCodingAgentPackets(packets)) {
-    return null; // PR 9x: coding agent
   }
 
   // Web splits this on `is_internet_search`; both slots are unwired, so one predicate covers the pair.

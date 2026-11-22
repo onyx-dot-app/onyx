@@ -1,0 +1,6 @@
+# Direct uses of Redis in application code, as `<count> <path>` lines.
+# The rule is in backend/AGENTS.md ("Key Rules"): use CacheBackend.
+# Do not edit by hand, and do not raise a count. After you move code to
+# CacheBackend, lower the counts with:
+#   python3 backend/lint/check_no_direct_redis.py --write-baseline
+

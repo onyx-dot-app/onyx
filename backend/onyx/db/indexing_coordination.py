@@ -1,10 +1,11 @@
 """Database-based indexing coordination to replace Redis fencing."""
 
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import case, func, select, update
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
+from onyx.db.backfill_models import BackfillSpec
 from onyx.db.enums import IndexingStatus
 from onyx.db.index_attempt import (
     count_error_rows_for_index_attempt,
@@ -38,8 +39,10 @@ class IndexingCoordination:
         db_session: Session,
         cc_pair_id: int,
         search_settings_id: int,
-        celery_task_id: str,
+        # None creates the attempt without its docfetching task, to send later.
+        celery_task_id: str | None,
         from_beginning: bool = False,
+        backfill: BackfillSpec | None = None,
     ) -> int | None:
         """
         Try to create a new index attempt for the given CC pair and search settings.
@@ -52,7 +55,8 @@ class IndexingCoordination:
             # Check for existing active full-run attempts (the "fence" check).
             # Targeted reindex attempts are allowed to overlap with a full crawl
             # by design (per-doc row-locks handle write conflicts), so they're
-            # excluded here.
+            # excluded here. A backfill runs the connector like a full run, so
+            # it fences and is fenced.
             existing_attempt = db_session.execute(
                 select(IndexAttempt)
                 .where(
@@ -82,14 +86,16 @@ class IndexingCoordination:
                 from_beginning=from_beginning,
                 db_session=db_session,
                 celery_task_id=celery_task_id,
+                backfill=backfill,
             )
 
             logger.info(
-                "Created Index Attempt: cc_pair=%s search_settings=%s attempt_id=%s celery_task_id=%s",
+                "Created Index Attempt: cc_pair=%s search_settings=%s attempt_id=%s celery_task_id=%s is_backfill=%s",
                 cc_pair_id,
                 search_settings_id,
                 attempt_id,
                 celery_task_id,
+                backfill is not None,
             )
 
             return attempt_id
@@ -117,19 +123,15 @@ class IndexingCoordination:
         return attempt.cancellation_requested if attempt else False
 
     @staticmethod
-    def request_cancellation(
+    def request_cancellation__no_commit(
         db_session: Session,
         index_attempt_id: int,
     ) -> None:
-        """
-        Request cancellation of an indexing attempt.
-        This replaces Redis termination signals.
-        """
+        """Flags the attempt for cancellation; its task reads the flag. The
+        caller commits."""
         attempt = get_index_attempt(db_session, index_attempt_id)
         if attempt:
             attempt.cancellation_requested = True
-            db_session.commit()
-
             logger.info("Requested cancellation for attempt %s", index_attempt_id)
 
     @staticmethod
@@ -152,6 +154,17 @@ class IndexingCoordination:
                 index_attempt_id,
                 total_batches,
             )
+
+    @staticmethod
+    def get_completed_batches(db_session: Session, index_attempt_id: int) -> int:
+        """Reads the count from the database. A column query skips the
+        session's identity map, so an attempt loaded earlier cannot make it stale."""
+        completed = db_session.scalar(
+            select(IndexAttempt.completed_batches).where(
+                IndexAttempt.id == index_attempt_id
+            )
+        )
+        return completed or 0
 
     @staticmethod
     def update_batch_completion_and_docs(
@@ -203,6 +216,226 @@ class IndexingCoordination:
                 "Failed to update batch completion for attempt %s", index_attempt_id
             )
             raise
+
+    @staticmethod
+    def record_stub_batch_stored(
+        db_session: Session, index_attempt_id: int, batch_num: int
+    ) -> int:
+        """Counts stub batch `batch_num` as stored and returns the new count.
+        One lister stores batches in order, so `batch_num` must equal the
+        current count. A gap would let a claim hand out a missing batch."""
+        stored = db_session.execute(
+            update(IndexAttempt)
+            .where(
+                IndexAttempt.id == index_attempt_id,
+                IndexAttempt.stub_batches_stored == batch_num,
+            )
+            .values(stub_batches_stored=IndexAttempt.stub_batches_stored + 1)
+            .returning(IndexAttempt.stub_batches_stored)
+        ).scalar_one_or_none()
+        if stored is None:
+            db_session.rollback()
+            raise RuntimeError(
+                f"Stub batch {batch_num} of attempt {index_attempt_id} is out of order"
+            )
+        db_session.commit()
+        return stored
+
+    @staticmethod
+    def start_stub_batches(
+        db_session: Session,
+        index_attempt_id: int,
+        first_batch_num: int,
+        stored_batches: int,
+    ) -> None:
+        """Marks the attempt as one that lists stub batches, and sets its
+        counters before the listing starts. `first_batch_num` is the
+        attempt's first stub batch number. `stored_batches` stub batches,
+        taken over from an earlier attempt, have the numbers from there up."""
+        db_session.execute(
+            update(IndexAttempt)
+            .where(IndexAttempt.id == index_attempt_id)
+            .values(
+                uses_conversion_stage=True,
+                stub_batches_stored=first_batch_num + stored_batches,
+                stub_batches_sent=first_batch_num,
+                stub_batches_converted=first_batch_num,
+            )
+        )
+        db_session.commit()
+
+    @staticmethod
+    def record_stubs_listed(
+        db_session: Session, index_attempt_id: int, listed: int, skipped: int
+    ) -> None:
+        """Adds to the attempt's counts of listed documents and of those
+        dropped as unchanged."""
+        db_session.execute(
+            update(IndexAttempt)
+            .where(IndexAttempt.id == index_attempt_id)
+            .values(
+                stubs_listed=IndexAttempt.stubs_listed + listed,
+                stubs_skipped=IndexAttempt.stubs_skipped + skipped,
+            )
+        )
+        db_session.commit()
+
+    @staticmethod
+    def claim_stub_batches(
+        db_session: Session,
+        index_attempt_id: int,
+        window: int,
+        task_id: str | None = None,
+    ) -> list[int]:
+        """Claims the next stored stub batches for conversion and returns their
+        numbers. It claims no more than are stored and not sent, and keeps
+        the batches sent but not converted at or under `window`.
+
+        One statement: the CTE locks the row and reads `sent` before the
+        update, so concurrent callers never get the same number. When it
+        claims a batch, the same statement records the caller as the last task
+        that dispatched. A caller with no task of its own (the watchdog) keeps
+        the task id and moves the time. A claim of nothing changes neither: a
+        restart that sends nothing must not look like a healthy chain. It is
+        built from the model, so a tenant session's schema applies to it."""
+        claimed = func.greatest(
+            0,
+            func.least(
+                IndexAttempt.stub_batches_stored - IndexAttempt.stub_batches_sent,
+                window
+                - (
+                    IndexAttempt.stub_batches_sent - IndexAttempt.stub_batches_converted
+                ),
+            ),
+        )
+        before = (
+            select(
+                IndexAttempt.id.label("id"),
+                IndexAttempt.stub_batches_sent.label("sent"),
+            )
+            .where(IndexAttempt.id == index_attempt_id)
+            .with_for_update()
+            .cte("before")
+        )
+        claim = (
+            update(IndexAttempt)
+            .where(IndexAttempt.id == before.c.id)
+            .values(
+                stub_batches_sent=IndexAttempt.stub_batches_sent + claimed,
+                last_dispatch_task_id=case(
+                    (
+                        claimed > 0,
+                        func.coalesce(task_id, IndexAttempt.last_dispatch_task_id),
+                    ),
+                    else_=IndexAttempt.last_dispatch_task_id,
+                ),
+                last_dispatch_at=case(
+                    (claimed > 0, func.now()),
+                    else_=IndexAttempt.last_dispatch_at,
+                ),
+            )
+            .returning(before.c.sent, IndexAttempt.stub_batches_sent)
+        )
+        row = db_session.execute(claim).one_or_none()
+        db_session.commit()
+        if row is None:
+            return []
+        sent_before, sent_after = row
+        return list(range(sent_before, sent_after))
+
+    @staticmethod
+    def record_stub_batch_conversion_failed(
+        db_session: Session, index_attempt_id: int
+    ) -> tuple[int, int]:
+        """Counts one stub batch whose conversion failed as a whole. Returns
+        the failed count and the converted count."""
+        row = db_session.execute(
+            update(IndexAttempt)
+            .where(IndexAttempt.id == index_attempt_id)
+            .values(
+                total_failures_batch_level=IndexAttempt.total_failures_batch_level + 1
+            )
+            .returning(
+                IndexAttempt.total_failures_batch_level,
+                IndexAttempt.stub_batches_converted,
+            )
+        ).one()
+        db_session.commit()
+        return row[0], row[1]
+
+    @staticmethod
+    def record_stub_batch_converted(db_session: Session, index_attempt_id: int) -> int:
+        """Counts one sent stub batch as converted and returns the new count.
+        The count never passes `sent`, so a redelivered task cannot open the
+        window past its size."""
+        converted = db_session.execute(
+            update(IndexAttempt)
+            .where(
+                IndexAttempt.id == index_attempt_id,
+                IndexAttempt.stub_batches_converted < IndexAttempt.stub_batches_sent,
+            )
+            .values(stub_batches_converted=IndexAttempt.stub_batches_converted + 1)
+            .returning(IndexAttempt.stub_batches_converted)
+        ).scalar_one_or_none()
+        if converted is None:
+            db_session.rollback()
+            logger.warning(
+                "Stub batch conversion not counted: attempt=%s has none in flight",
+                index_attempt_id,
+            )
+            return IndexingCoordination._get_stub_batches_converted(
+                db_session, index_attempt_id
+            )
+        db_session.commit()
+        return converted
+
+    @staticmethod
+    def settle_stub_batches_converted(
+        db_session: Session, index_attempt_id: int
+    ) -> int:
+        """Counts every sent stub batch as converted and returns how many
+        that added. Call it only when no conversion task of the attempt exists
+        and no sent stub batch is in the store: a task that stopped after it
+        deleted its stub batch never counted it. It is built from the model,
+        so a tenant session's schema applies to it."""
+        before = (
+            select(
+                IndexAttempt.id.label("id"),
+                IndexAttempt.stub_batches_converted.label("converted"),
+            )
+            .where(IndexAttempt.id == index_attempt_id)
+            .with_for_update()
+            .cte("before")
+        )
+        settle = (
+            update(IndexAttempt)
+            .where(IndexAttempt.id == before.c.id)
+            .values(stub_batches_converted=IndexAttempt.stub_batches_sent)
+            .returning(IndexAttempt.stub_batches_sent - before.c.converted)
+        )
+        added = db_session.execute(settle).scalar_one_or_none()
+        db_session.commit()
+        return max(0, added or 0)
+
+    @staticmethod
+    def record_heartbeat(db_session: Session, index_attempt_id: int) -> None:
+        """Counts progress that no worker heartbeat shows, for example a
+        send by the watchdog."""
+        db_session.execute(
+            update(IndexAttempt)
+            .where(IndexAttempt.id == index_attempt_id)
+            .values(heartbeat_counter=IndexAttempt.heartbeat_counter + 1)
+        )
+        db_session.commit()
+
+    @staticmethod
+    def _get_stub_batches_converted(db_session: Session, index_attempt_id: int) -> int:
+        converted = db_session.scalar(
+            select(IndexAttempt.stub_batches_converted).where(
+                IndexAttempt.id == index_attempt_id
+            )
+        )
+        return converted or 0
 
     @staticmethod
     def get_coordination_status(
@@ -258,6 +491,8 @@ class IndexingCoordination:
                         [IndexingStatus.NOT_STARTED, IndexingStatus.IN_PROGRESS]
                     ),
                     IndexAttempt.celery_task_id.isnot(None),
+                    # The targeted reindex stale-job sweep owns synthetic attempts.
+                    IndexAttempt.targeted_reindex_job_id.is_(None),
                 )
             )
             .scalars()

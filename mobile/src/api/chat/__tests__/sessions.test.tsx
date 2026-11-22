@@ -5,7 +5,12 @@ import { act, renderHook, waitFor } from "@testing-library/react-native";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 
 import { apiFetch, type ApiFetchInit } from "@/api/client";
-import { useChatSessions, type ChatSessionSummary } from "@/api/chat/sessions";
+import {
+  getChatSession,
+  getChatSessionStatus,
+  useChatSessions,
+  type ChatSessionSummary,
+} from "@/api/chat/sessions";
 
 // `jest.mock` is hoisted above the imports by babel-jest.
 jest.mock("@/api/client");
@@ -90,5 +95,34 @@ describe("useChatSessions", () => {
     const secondUrl = apiFetchMock.mock.calls[1]![0];
     expect(secondUrl).toContain("before=2026-06-05T00%3A00%3A00Z");
     expect(secondUrl).not.toContain("before=2026-06-10T00%3A00%3A00Z");
+  });
+});
+
+// Older servers name a running stream without `response_ids`.
+describe("running streams from older servers", () => {
+  beforeEach(() => {
+    apiFetchMock.mockReset();
+  });
+
+  it("reads a missing response_ids as an empty list", async () => {
+    apiFetchMock.mockResolvedValueOnce({
+      is_processing: true,
+      current_stream: { stream_id: 7 },
+    });
+    expect((await getChatSessionStatus("s")).current_stream).toEqual({
+      stream_id: 7,
+      response_ids: [],
+    });
+
+    apiFetchMock.mockResolvedValueOnce({
+      chat_session_id: "s",
+      messages: [],
+      packets: [],
+      current_stream: { stream_id: 8 },
+    });
+    expect((await getChatSession("s")).current_stream).toEqual({
+      stream_id: 8,
+      response_ids: [],
+    });
   });
 });

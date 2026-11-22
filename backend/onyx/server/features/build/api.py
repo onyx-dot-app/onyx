@@ -5,15 +5,12 @@ from onyx.db.enums import Permission
 from onyx.db.models import User
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.features.build.action_policies import (
+    router as action_policies_router,
+)
 from onyx.server.features.build.approvals.api import router as approvals_router
 from onyx.server.features.build.debug import router as debug_router
-from onyx.server.features.build.external_apps.api import (
-    admin_router as external_apps_admin_router,
-)
 from onyx.server.features.build.external_apps.api import router as external_apps_router
-from onyx.server.features.build.external_apps.oauth import (
-    router as external_apps_oauth_router,
-)
 from onyx.server.features.build.interactive_turns.api import router as turns_router
 from onyx.server.features.build.models import BaseInstructionsResponse
 from onyx.server.features.build.sandbox.util.agent_instructions import (
@@ -24,6 +21,7 @@ from onyx.server.features.build.scheduled_tasks.api import (
 )
 from onyx.server.features.build.session.api import router as sessions_router
 from onyx.server.features.build.session.messages import router as messages_router
+from onyx.server.features.build.static_preview import router as static_preview_router
 from onyx.server.features.build.user_library.api import router as user_library_router
 from onyx.server.features.build.utils import is_craft_enabled_for_user
 from onyx.utils.logger import setup_logger
@@ -50,7 +48,6 @@ admin_router = APIRouter(
     prefix="/build/admin",
     dependencies=[Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS))],
 )
-admin_router.include_router(external_apps_admin_router, tags=["build"])
 
 
 @admin_router.get("/base-instructions")
@@ -67,11 +64,12 @@ def get_base_instructions(
 
 
 router.include_router(sessions_router, tags=["build"])
+router.include_router(static_preview_router, tags=["build"])
 router.include_router(messages_router, tags=["build"])
 router.include_router(turns_router, tags=["build"])
 router.include_router(user_library_router, tags=["build"])
 router.include_router(scheduled_tasks_router, tags=["build"])
 router.include_router(external_apps_router, tags=["build"])
-router.include_router(external_apps_oauth_router, tags=["build"])
 router.include_router(debug_router, tags=["build-debug"])
 router.include_router(approvals_router, tags=["build"])
+router.include_router(action_policies_router, tags=["build"])

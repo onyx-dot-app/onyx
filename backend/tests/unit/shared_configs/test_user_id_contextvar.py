@@ -48,14 +48,22 @@ def _authenticated_app(user_id: Any | None) -> FastAPI:
     class _FakeUser:
         id = user_id
 
-    async def fake_auth() -> _FakeUser | None:
-        return _FakeUser() if user_id is not None else None
+    async def fake_auth() -> tuple[_FakeUser | None, str | None]:
+        if user_id is None:
+            return (None, None)
+        return (_FakeUser(), "session-token")
 
     async def skip_oauth_refresh(*_: Any) -> None:
         return None
 
+    class _FakeSession:
+        # optional_user checks for an open transaction before its early
+        # connection release; report none so no commit is attempted.
+        def in_transaction(self) -> bool:
+            return False
+
     def fake_dependency() -> object:
-        return object()
+        return _FakeSession()
 
     app = FastAPI()
     app.dependency_overrides[optional_fastapi_current_user] = fake_auth

@@ -26,12 +26,6 @@ def _at_level(level: SSRFProtectionLevel) -> AbstractContextManager[MagicMock]:
     return patch("onyx.auth.sso_url_guard.get_security_settings", return_value=settings)
 
 
-@pytest.mark.parametrize("host", ["169.254.169.254", "127.0.0.1", "10.0.0.1"])
-def test_strict_level_rejects_private_targets(host: str) -> None:
-    with _at_level(SSRFProtectionLevel.VALIDATE_ALL), pytest.raises(UnsafeSSOUrl):
-        validate_idp_url(f"https://{host}{_CONFIG_PATH}", field="openid_config_url")
-
-
 @pytest.mark.parametrize(
     "url",
     [
@@ -44,16 +38,46 @@ def test_rejects_unencrypted_or_credentialed_urls(url: str) -> None:
         validate_idp_url(url, field="openid_config_url")
 
 
-def test_strict_level_allows_a_public_address() -> None:
-    with _at_level(SSRFProtectionLevel.VALIDATE_ALL):
-        validate_idp_url(f"https://8.8.8.8{_CONFIG_PATH}", field="openid_config_url")
-
-
 def test_disabled_level_allows_a_private_idp() -> None:
     """Relaxing the SSRF Protection setting is how a self-hosted operator points
     at an IdP on their own network."""
     with _at_level(SSRFProtectionLevel.DISABLED):
         validate_idp_url(f"https://10.0.0.1{_CONFIG_PATH}", field="openid_config_url")
+
+
+@pytest.mark.parametrize("level", list(SSRFProtectionLevel))
+@pytest.mark.parametrize(
+    "host",
+    [
+        "127%2E0%2E0%2E1",
+        "%31%32%37.0.0.1",
+        "169%2E254%2E169%2E254",
+        "169.254.169.254%2Eexample.com",
+        "169.254.169.254\\.example.com",
+        "\uff11\uff16\uff19.254.169.254",
+        "169.254.169.254\t",
+    ],
+)
+def test_rejects_hosts_a_client_could_decode_differently(
+    level: SSRFProtectionLevel, host: str
+) -> None:
+    """HTTP clients may percent-decode, IDNA-map or strip parts of a host, so the
+    guard rejects any host it cannot judge exactly as a client would."""
+    with _at_level(level), pytest.raises(UnsafeSSOUrl):
+        validate_idp_url(f"https://{host}{_CONFIG_PATH}", field="openid_config_url")
+
+
+@pytest.mark.parametrize("level", list(SSRFProtectionLevel))
+@pytest.mark.parametrize(
+    "url",
+    [
+        f"https://8.8.8.8{_CONFIG_PATH}",
+        f"https://8.8.8.8:8443/realms/a%20b{_CONFIG_PATH}?x=%2F",
+    ],
+)
+def test_public_idp_urls_still_pass(level: SSRFProtectionLevel, url: str) -> None:
+    with _at_level(level):
+        validate_idp_url(url, field="openid_config_url")
 
 
 @pytest.mark.asyncio

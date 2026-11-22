@@ -196,31 +196,47 @@ def _expected_course_a_access(
     canvas_group = {canvas_group_group_id(group_x_id)}
 
     return {
-        PAGE_A_TITLE: ExternalAccess(set(), course_group, False),
-        ANN_ALL_TITLE: ExternalAccess(set(), course_group, False),
+        PAGE_A_TITLE: ExternalAccess(
+            external_user_emails=set(),
+            external_user_group_ids=course_group,
+            is_public=False,
+        ),
+        ANN_ALL_TITLE: ExternalAccess(
+            external_user_emails=set(),
+            external_user_group_ids=course_group,
+            is_public=False,
+        ),
         ANN_SEC1_TITLE: ExternalAccess(
-            context.staff_emails,
-            {
+            external_user_emails=context.staff_emails,
+            external_user_group_ids={
                 canvas_section_group_id(section_id)
                 for section_id in ann_sec1_section_ids
             },
-            False,
+            is_public=False,
         ),
-        ASG_EVERYONE_TITLE: ExternalAccess(set(), course_group, False),
+        ASG_EVERYONE_TITLE: ExternalAccess(
+            external_user_emails=set(),
+            external_user_group_ids=course_group,
+            is_public=False,
+        ),
         ASG_SEC1_TITLE: ExternalAccess(
-            context.staff_emails,
-            {
+            external_user_emails=context.staff_emails,
+            external_user_group_ids={
                 canvas_section_group_id(section_id)
                 for section_id in asg_sec1_section_ids
             },
-            False,
+            is_public=False,
         ),
         ASG_STU2_TITLE: ExternalAccess(
-            context.staff_emails | {STUDENT_2_EMAIL},
-            set(),
-            False,
+            external_user_emails=context.staff_emails | {STUDENT_2_EMAIL},
+            external_user_group_ids=set(),
+            is_public=False,
         ),
-        ASG_GROUP_TITLE: ExternalAccess(context.staff_emails, canvas_group, False),
+        ASG_GROUP_TITLE: ExternalAccess(
+            external_user_emails=context.staff_emails,
+            external_user_group_ids=canvas_group,
+            is_public=False,
+        ),
     }
 
 

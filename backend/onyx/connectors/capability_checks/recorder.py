@@ -3,7 +3,8 @@
 The blocking paths (cc-pair validation, indexing-run start) already probe the
 source; this module records what they found as a fallback-shaped capability
 report, so reports accumulate before any check-running infrastructure exists. It
-runs no checks of its own.
+runs no checks of its own. Pairing validation for a source with named checks
+stores the full named report instead (``creation.py``).
 
 Deliberately import-light: the hook sites live in ``factory.py`` and the
 docfetching hot path, so this module must not pull in the check registry (which
@@ -18,14 +19,20 @@ from onyx.configs.constants import DocumentSource
 from onyx.connectors.capability_checks.applicability import (
     get_applicable_capabilities,
 )
+from onyx.connectors.capability_checks.generic_row import (
+    GENERIC_CHECK_NAME,
+    GENERIC_PASS_LINE,
+    generic_row_error,
+)
 from onyx.connectors.capability_checks.models import (
     CapabilityCheckResult,
     CapabilityCheckStatus,
     CredentialCapability,
     CredentialCapabilityReport,
+    check_error_kind,
     compute_capability_verdicts,
-    compute_connector_config_hash,
 )
+from onyx.connectors.config_hash import compute_connector_config_hash
 from onyx.connectors.exceptions import ConnectorValidationError
 from onyx.db.credential_capability import (
     upsert_completed_capability_report_unless_granular,
@@ -45,7 +52,7 @@ def _outcome_status(error: Exception | None) -> CapabilityCheckStatus:
         return CapabilityCheckStatus.FAILED
     # ``UnexpectedValidationError`` and unrecognized exceptions alike: never
     # proof of a broken credential.
-    return CapabilityCheckStatus.INDETERMINATE
+    return CapabilityCheckStatus.INCOMPLETE
 
 
 def _synthesize_results(
@@ -56,26 +63,39 @@ def _synthesize_results(
 ) -> list[CapabilityCheckResult]:
     """Builds fallback-shaped results mirroring what the blocking path ran.
 
+    The INDEXING row is the generic row, as the fallback check gives it. A
+    passing source with no settings probe gets none: it tested nothing.
     Perm-sync rows appear only when the caller knows ``validate_perm_sync`` ran
     (the success path with sync access). On failure the outcome cannot be
     attributed between the settings and perm-sync probes, so only the INDEXING
     row carries it.
     """
-    status = _outcome_status(error)
+    # Inline import: the factory imports this module.
+    from onyx.connectors.factory import source_has_settings_probe
+
+    typed = generic_row_error(error) if error is not None else None
+    status = _outcome_status(typed)
     message = str(error) if error is not None else ""
+    # The original class, for support: ``typed`` wraps it.
     error_type = type(error).__name__ if error is not None else None
-    results = [
-        CapabilityCheckResult(
-            capability=CredentialCapability.INDEXING,
-            check_id=f"{source.value}_connector_settings",
-            display_name="Connector settings validation",
-            required=True,
-            status=status,
-            message=message,
-            error_type=error_type,
-            is_fallback=True,
+    error_kind = check_error_kind(typed) if typed is not None else None
+    results: list[CapabilityCheckResult] = []
+    if typed is not None or source_has_settings_probe(source):
+        results.append(
+            CapabilityCheckResult(
+                capability=CredentialCapability.INDEXING,
+                check_id=f"{source.value}_connector_settings",
+                display_name=GENERIC_CHECK_NAME,
+                required=True,
+                status=status,
+                message=message,
+                error_type=error_type,
+                error_kind=error_kind,
+                summary=typed.summary if typed is not None else GENERIC_PASS_LINE,
+                description=typed.description if typed is not None else None,
+                is_fallback=True,
+            )
         )
-    ]
     if perm_sync_validated:
         results.extend(
             CapabilityCheckResult(
@@ -86,6 +106,7 @@ def _synthesize_results(
                 status=status,
                 message=message,
                 error_type=error_type,
+                error_kind=error_kind,
                 is_fallback=True,
             )
             for capability in applicable - {CredentialCapability.INDEXING}
@@ -112,6 +133,8 @@ def record_blocking_validation_outcome(
     """
     try:
         applicable = get_applicable_capabilities(source)
+        # An empty result list is still written: it replaces an earlier failed
+        # fallback report for a source without a settings probe.
         results = _synthesize_results(source, applicable, error, perm_sync_validated)
         report = CredentialCapabilityReport(
             credential_id=credential_id,

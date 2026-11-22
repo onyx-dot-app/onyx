@@ -42,7 +42,7 @@ func handleSlashCommand(m Model, text string) (Model, tea.Cmd) {
 
 	case "/sessions", "/resume":
 		if strings.TrimSpace(arg) != "" {
-			return cmdResume(m, arg)
+			return cmdResume(m, arg, nil)
 		}
 		return cmdSessions(m)
 
@@ -53,22 +53,10 @@ func handleSlashCommand(m Model, text string) (Model, tea.Cmd) {
 		return cmdNew(m)
 
 	case "/connectors":
-		url := config.OnyxWebURL(m.config.ServerURL) + "/admin/indexing/status"
-		if browser.OpenBrowser(url) {
-			m.viewport.addInfo("Opened " + url + " in browser")
-		} else {
-			m.viewport.addWarning("Failed to open browser. Visit: " + url)
-		}
-		return m, nil
+		return cmdOpenWebPage(m, "/admin/indexing/status"), nil
 
 	case "/settings":
-		url := config.OnyxWebURL(m.config.ServerURL) + "/app/settings/general"
-		if browser.OpenBrowser(url) {
-			m.viewport.addInfo("Opened " + url + " in browser")
-		} else {
-			m.viewport.addWarning("Failed to open browser. Visit: " + url)
-		}
-		return m, nil
+		return cmdOpenWebPage(m, "/app/settings/general"), nil
 
 	case "/experiments":
 		m.viewport.addInfo(config.ExperimentsText(m.config.Features))
@@ -83,11 +71,38 @@ func handleSlashCommand(m Model, text string) (Model, tea.Cmd) {
 	}
 }
 
+// openBrowser is a variable so tests can observe launches.
+var openBrowser = browser.OpenBrowser
+
+// cmdOpenWebPage opens a page of the Onyx web app. Over SSH it only prints
+// the URL, so a remote session never starts a program on the server host.
+func cmdOpenWebPage(m Model, path string) Model {
+	url := config.OnyxWebURL(m.config.ServerURL) + path
+	switch {
+	case RemoteMode:
+		m.viewport.addInfo("Visit: " + url)
+	case openBrowser(url):
+		m.viewport.addInfo("Opened " + url + " in browser")
+	default:
+		m.viewport.addWarning("Failed to open browser. Visit: " + url)
+	}
+	return m
+}
+
 func cmdNew(m Model) (Model, tea.Cmd) {
 	if m.isStreaming {
 		m, _ = m.cancelStream()
+		m, _ = m.finishStream(nil)
+	}
+	if m.followCancel != nil {
+		m.followCancel()
 	}
 	m.chatSessionID = nil
+	m.approvals = nil
+	m.questions = nil
+	m.resolvedRequests = nil
+	m.approvalsVersion = ""
+	m.approvalsLoadVersion = ""
 	parentID := -1
 	m.parentMessageID = &parentID
 	m.needsRename = false
@@ -183,9 +198,11 @@ func applyAgentSelection(m Model, lookup func() (*models.AgentSummary, error)) (
 	m.status.setAgent(target.Name)
 	m.viewport.addInfo("Switched to agent: " + target.Name)
 
-	// Save preference
-	m.config.DefaultAgentID = target.ID
-	_ = config.Save(m.config)
+	// Over SSH the selection is session-only: the config file belongs to the host operator.
+	if !RemoteMode {
+		m.config.DefaultAgentID = target.ID
+		_ = config.Save(m.config)
+	}
 
 	return m, nil
 }
@@ -297,7 +314,9 @@ func cmdSessions(m Model) (Model, tea.Cmd) {
 	}
 }
 
-func cmdResume(m Model, sessionIDStr string) (Model, tea.Cmd) {
+// cmdResume loads a session. origin is the stream that asks to reload its
+// session, or nil when the user opens one.
+func cmdResume(m Model, sessionIDStr string, origin <-chan models.StreamEvent) (Model, tea.Cmd) {
 	client := m.client
 	return m, func() tea.Msg {
 		targetID := sessionIDStr
@@ -306,7 +325,7 @@ func cmdResume(m Model, sessionIDStr string) (Model, tea.Cmd) {
 		if len(sessionIDStr) < 36 {
 			sessions, err := client.ListChatSessions(context.Background())
 			if err != nil {
-				return SessionResumedMsg{Err: err}
+				return SessionResumedMsg{Err: err, Origin: origin}
 			}
 			for _, s := range sessions {
 				if strings.HasPrefix(s.ID, sessionIDStr) {
@@ -316,11 +335,27 @@ func cmdResume(m Model, sessionIDStr string) (Model, tea.Cmd) {
 			}
 		}
 
+		// Status comes first: a response that ends before the snapshot is in
+		// the snapshot, and one that ends after the status is followed.
+		// A failed status query counts as running. Following a session that
+		// runs nothing ends at once, and its readiness check reports the failure.
+		status, _ := client.ChatSessionStatus(context.Background(), targetID)
 		detail, err := client.GetChatSession(context.Background(), targetID)
 		if err != nil {
-			return SessionResumedMsg{Err: fmt.Errorf("session not found: %s", sessionIDStr)}
+			return SessionResumedMsg{Err: fmt.Errorf("session not found: %s: %w", sessionIDStr, err), Origin: origin}
 		}
-		return SessionResumedMsg{Detail: detail}
+		return SessionResumedMsg{Detail: detail, Status: status, Origin: origin}
+	}
+}
+
+// cmdReload loads the open chat's saved session for a status read.
+func cmdReload(m Model, reload sessionReload) (Model, tea.Cmd) {
+	reload.streams = m.streams
+	m, load := cmdResume(m, reload.sessionID, nil)
+	return m, func() tea.Msg {
+		msg := load().(SessionResumedMsg)
+		msg.Reload = &reload
+		return msg
 	}
 }
 

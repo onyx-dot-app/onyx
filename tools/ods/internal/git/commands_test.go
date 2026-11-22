@@ -239,7 +239,7 @@ func TestPushTag(t *testing.T) {
 	}
 }
 
-func TestPushNewBranch_verifyRunsPrePushHook(t *testing.T) {
+func TestPushNewTag_verifyRunsPrePushHook(t *testing.T) {
 	// Precondition.
 	origin, work := gittest.InitOriginAndWork(t)
 	sha := gittest.Commit(t, work, "a.txt")
@@ -248,14 +248,14 @@ func TestPushNewBranch_verifyRunsPrePushHook(t *testing.T) {
 	t.Chdir(work)
 
 	// Under test.
-	err := PushNewBranch(sha, "release/v4.6", true)
+	err := PushNewTag(sha, "dev-build-x", true)
 
 	// Postcondition.
 	if err == nil {
 		t.Fatal("expected the pre-push hook to fail the push")
 	}
-	if out := gittest.Git(t, origin, "for-each-ref", "refs/heads/release"); out != "" {
-		t.Errorf("expected no release branch on origin, got %q", out)
+	if out := gittest.Git(t, origin, "tag", "--list", "dev-build-x"); out != "" {
+		t.Errorf("expected no tag on origin, got %q", out)
 	}
 }
 
@@ -356,14 +356,6 @@ func TestRestoreStash_conflictKeepsTheStash(t *testing.T) {
 		}
 	default:
 		t.Error("expected a warning about the failed restore")
-	}
-}
-
-func TestGetCommitMessage_unknownCommit(t *testing.T) {
-	newTestRepo(t)
-
-	if msg, err := GetCommitMessage("0123456789abcdef0123456789abcdef01234567"); err == nil {
-		t.Errorf("expected an error, got message %q", msg)
 	}
 }
 

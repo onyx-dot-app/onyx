@@ -1,4 +1,5 @@
-from onyx.llm.models import OPENAI_REASONING_EFFORT, ReasoningEffort
+from onyx.llm.models import ReasoningEffort
+from onyx.llm.multi_llm import OPENAI_REASONING_EFFORT
 
 # Valid OpenAI reasoning effort values per the API documentation
 # https://platform.openai.com/docs/api-reference/responses

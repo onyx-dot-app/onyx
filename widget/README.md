@@ -4,7 +4,10 @@ An embeddable, lightweight chat widget that brings AI-powered conversations to a
 
 ## Security Note
 
-⚠️ **Always use a limited-scope API key for the widget.** The API key is visible in client-side code, so it should have restricted permissions and rate limits. Never use admin or full-access keys.
+The widget runs in the browser, so whatever credential it holds is visible to the visitor. Pick one of the two modes below.
+
+- **JWT passthrough** — the host page supplies the visitor's own identity-provider token, and each visitor acts as their own Onyx user. No shared secret goes in the page. Use this when the host page already signs the visitor in with the same IdP as Onyx. Single-tenant (self-hosted) deployments only. See [JWT passthrough](https://docs.onyx.app/deployment/configuration/website_widget#jwt-passthrough-self-hosted-only).
+- **API key** — ⚠️ **always use a limited-scope API key.** The key is visible in client-side code, so it should have restricted permissions and rate limits. Never use admin or full-access keys.
 
 ## Features
 
@@ -16,6 +19,8 @@ An embeddable, lightweight chat widget that brings AI-powered conversations to a
 - 🌐 **Two Deployment Modes** - Cloud CDN or self-hosted
 - ♿ **Markdown Support** - Rich text formatting in responses
 - 💾 **Session Persistence** - Conversations survive page reloads
+- 👍 **Copy and Feedback** - Copy an answer with its formatting; rate it with thumbs up or down
+- ✅ **Approvals and Questions** - Approve or reject the agent's tool calls, and answer its questions on a card or in a typed message
 - 🎯 **Two Display Modes** - Floating launcher or inline embed
 
 ## Quick Start
@@ -26,7 +31,7 @@ Add these two lines to your website:
 
 ```html
 <!-- Load the widget -->
-<script type="module" src="https://cdn.onyx.app/widget/1.0/dist/onyx-widget.js"></script>
+<script type="module" src="https://cdn.onyx.app/widget/1.1/dist/onyx-widget.js"></script>
 
 <!-- Configure and display -->
 <onyx-chat-widget
@@ -104,7 +109,7 @@ That's it! The widget will appear as a floating button in the bottom-right corne
 | Attribute     | Type   | Description                                                          |
 | ------------- | ------ | -------------------------------------------------------------------- |
 | `backend-url` | string | Your Onyx backend API URL (or set `VITE_WIDGET_BACKEND_URL` in .env) |
-| `api-key`     | string | API key for authentication (or set `VITE_WIDGET_API_KEY` in .env)    |
+| `api-key`     | string | API key for authentication (or set `VITE_WIDGET_API_KEY` in .env). Omit it when you use a `tokenProvider` — see [Authentication](#authentication). |
 
 **Note**: For cloud deployment, these must be provided as HTML attributes. For self-hosted deployment, they can be set in `.env` file during build and will be baked into the bundle.
 
@@ -120,8 +125,18 @@ That's it! The widget will appear as a floating button in the bottom-right corne
 | `text-color`       | string  | `#000000bf`   | Text color (75% opacity black)           |
 | `mode`             | string  | `"launcher"`  | Display mode: `"launcher"` or `"inline"` |
 | `include-citations`| boolean | `false`       | Include citation markers in responses    |
+| `start-expanded`   | boolean | `false`       | Inline mode: show the full chat panel before the first message, instead of the compact input bar |
 
 **Note**: These attributes must be provided as HTML attributes. Only `backend-url` and `api-key` can optionally be set via environment variables for self-hosted builds.
+
+**Note on `include-citations`**: the attribute is a boolean flag, so its presence alone means `true`. `include-citations="false"` still turns citations **on**. Omit the attribute to turn them off.
+
+Citations are off by default. While they are off, Onyx strips the citation markers from the answer text and sends no citation data, so the widget renders no source links. Add the bare attribute to get inline `[n]` markers and clickable source badges:
+
+```html
+<onyx-chat-widget backend-url="https://onyx.example.com/api" include-citations>
+</onyx-chat-widget>
+```
 
 ### Configuration Examples
 
@@ -162,6 +177,41 @@ That's it! The widget will appear as a floating button in the bottom-right corne
 </div>
 ```
 
+## Authentication
+
+The widget sends a bearer credential on every backend call. It gets that credential one of two ways.
+
+### API key
+
+Set the `api-key` attribute. The same key is used for every visitor, so all conversations run as one Onyx service account.
+
+### JWT passthrough (`tokenProvider`)
+
+Assign a `tokenProvider` function and leave `api-key` off. The widget calls it before every request attempt, retries included, so the host controls expiry and refresh. Each visitor is a separate Onyx user, and per-user document permissions apply.
+
+The stored transcript is scoped to the token subject, so a second person signing in on the same tab starts a fresh conversation instead of seeing the previous one.
+
+```html
+<onyx-chat-widget id="onyx-widget" backend-url="https://onyx.example.com/api">
+</onyx-chat-widget>
+
+<script type="module">
+  const widget = document.getElementById("onyx-widget");
+  widget.tokenProvider = async () => {
+    const result = await msalInstance.acquireTokenSilent({
+      scopes: ["api://onyx/.default"],
+    });
+    return result.accessToken;
+  };
+</script>
+```
+
+`tokenProvider` is a JavaScript property, not an HTML attribute, because attributes cannot hold functions. Assign it at any time — the widget reads the property when it sends a request, not when it mounts.
+
+Onyx must be configured to accept these tokens. The setup, the required claims, and the CORS and provisioning caveats are in the [website widget docs](https://docs.onyx.app/deployment/configuration/website_widget#jwt-passthrough-self-hosted-only).
+
+**Precedence**: when both are present, `tokenProvider` wins. When neither resolves to a credential, the widget shows an error instead of sending the request.
+
 ## Display Modes
 
 ### Launcher Mode (Default)
@@ -185,7 +235,21 @@ The widget is embedded directly in your page layout. Perfect for dedicated suppo
 </div>
 ```
 
-**CSS Tip**: The widget will fill its container's dimensions in inline mode.
+**CSS Tip**: The widget will fill its container's dimensions in inline mode. Give the container an explicit height; otherwise the panel grows with the conversation.
+
+Before the first message, inline mode shows a compact input bar. Add `start-expanded` to show the full chat panel at the container's size from the start:
+
+```html
+<div style="height: 600px;">
+  <onyx-chat-widget mode="inline" start-expanded></onyx-chat-widget>
+</div>
+```
+
+## Keyboard Events
+
+Key presses typed into the widget do not propagate to the host page (except Escape). The widget uses Shadow DOM, so a page-level handler sees `event.target` as `<onyx-chat-widget>`, not the text field. Without this, handlers that block Backspace outside text fields would also block it in the widget.
+
+Handlers registered in the capture phase still run first. If such a handler blocks keys outside text fields, check `event.composedPath()[0]` instead of `event.target`.
 
 ## Development
 
@@ -244,6 +308,10 @@ widget/
 │   │   └── build-config.ts      # Build-time config injection
 │   ├── services/
 │   │   ├── api-service.ts       # API client (SSE streaming)
+│   │   ├── approvals.ts         # Tool-call approval status and copy
+│   │   ├── approval-card.ts     # Approval card template
+│   │   ├── questions.ts         # The agent's questions: status and answers
+│   │   ├── question-card.ts     # Question card template
 │   │   └── stream-parser.ts     # SSE packet processor
 │   ├── types/
 │   │   ├── api-types.ts         # Backend packet types
@@ -314,6 +382,48 @@ Response: Server-Sent Events stream
 {"type": "message_delta", "content": " world!"}
 {"type": "stop"}
 ```
+
+#### 3. Tool Approvals and Questions
+
+A response stops with `{"type": "stop", "stop_reason": "awaiting_user"}` when
+it waits for the user. The widget shows a card for each request, and the
+response continues on a new stream after the user replies.
+
+```
+POST /chat/approvals/{approval_id}/decision
+{"decision": "approve_once"}        // or "approve_session", "reject"
+
+Response:
+{
+  "approval_id": "uuid-here",
+  "decision": "APPROVED",           // or "REJECTED"
+  "decided_via": "USER",            // or "PRE_APPROVAL", "SESSION_GRANT", "POLICY"
+  "continuation": {"stream_id": 9, "response_ids": [7]}  // null while more waits
+}
+
+POST /chat/question-requests/{question_request_id}/answers
+{"answers": [{"question_id": "env", "option_label": "Staging"}]}
+// or {"answers": [{"question_id": "env", "user_note": "Both"}]}
+// or {"message": "Use staging"}   // the text that the user typed in the chat
+
+Response:
+{
+  "question_request_id": "uuid-here",
+  "continuation": {"stream_id": 9, "response_ids": [7]}  // null while more waits
+}
+```
+
+A `tool_question_request` packet opens a question card. The card shows one
+question at a time, and Back and Next move between the questions. For each
+question, the user picks one option or picks "Other" and types an answer in
+place of an option. Submit replaces
+Next on the last question, and it is enabled when each question has an answer.
+A message that the user types while a question waits goes to the answers
+route, not to `send-chat-message`. It answers every question of the response
+that waits, and the question's card shows the text. A `tool_question_resolved` packet
+shows how the question ended: answered on the card, answered in the chat, or
+cancelled. A 409 `APPROVAL_PENDING` means that an approval request of the
+response still waits; the draft stays.
 
 ## Deployment
 

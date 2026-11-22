@@ -157,7 +157,7 @@ def test_mcp_document_search_flow(
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="User group permissions are Enterprise-only",
 )
 def test_mcp_search_respects_acl_filters(
@@ -171,8 +171,8 @@ def test_mcp_search_respects_acl_filters(
     privileged_user = UserManager.create(name="mcp-acl-user-b")
 
     api_key = APIKeyManager.create(user_performing_action=admin_user)
-    restricted_cc_pair = CCPairManager.create_from_scratch(
-        access_type=AccessType.PRIVATE,
+    user_group = UserGroupManager.create(
+        user_ids=[privileged_user.id],
         user_performing_action=admin_user,
     )
     # A second, public source so the blocked user has *some* visible source —
@@ -182,9 +182,9 @@ def test_mcp_search_respects_acl_filters(
         user_performing_action=admin_user,
     )
 
-    user_group = UserGroupManager.create(
-        user_ids=[privileged_user.id],
-        cc_pair_ids=[restricted_cc_pair.id],
+    restricted_cc_pair = CCPairManager.create_from_scratch(
+        access_type=AccessType.PRIVATE,
+        data_access=[user_group.id],
         user_performing_action=admin_user,
     )
     UserGroupManager.wait_for_sync(

@@ -8,7 +8,6 @@
  */
 
 import { worldTest as test, expect, actAsManager } from "./fixtures";
-import { ADMIN_ROUTES } from "@/lib/admin-routes";
 import { AdminConnectorDetailPage } from "@tests/e2e/pages/AdminConnectorDetailPage";
 import { AdminDocumentSetsPage } from "@tests/e2e/pages/AdminDocumentSetsPage";
 import { IndexingStatusPage } from "@tests/e2e/admin/connector/IndexingStatusPage";
@@ -29,16 +28,17 @@ test.describe("scoped manager affordances", () => {
     await detail.expectLoaded();
   });
 
-  test("delete is offered on the groupless connector, not the shared one", async ({
+  test("delete is offered on the Editor connector and the groupless one", async ({
     page,
     world,
   }) => {
     await actAsManager(page, world.manager);
     const detail = new AdminConnectorDetailPage(page);
 
+    // the managed group is an Editor on this connector, and Editors may delete
     await detail.goto(world.managedCcPairId);
     await detail.openManageMenu();
-    await detail.expectDeleteOffered(false);
+    await detail.expectDeleteOffered(true);
 
     await detail.goto(world.grouplessCcPairId);
     await detail.openManageMenu();
@@ -53,7 +53,7 @@ test.describe("scoped manager affordances", () => {
     const status = new IndexingStatusPage(page);
 
     await status.goto();
-    await status.expandSourceGroup("File");
+    await status.waitForConnector(world.publicCcPairName);
 
     await status.expectRowInert(world.publicCcPairName);
     await status.expectRowOpens(world.managedCcPairName, world.managedCcPairId);
@@ -90,21 +90,20 @@ test.describe("scoped manager affordances", () => {
     );
   });
 
-  test("actions list shows own and agent-connected, not the orphan", async ({
+  test("actions list offers edit only on the manager's own action", async ({
     page,
     world,
   }) => {
     const managerClient = await actAsManager(page, world.manager);
     const visible = await managerClient.listOpenApiTools();
-    const ids = new Set(visible.map((tool) => tool.id));
+    const editable = new Map(
+      visible.map((tool) => [tool.id, tool.permissions.edit === true])
+    );
 
-    expect(ids.has(world.ownActionId)).toBe(true);
-    expect(ids.has(world.connectedActionId)).toBe(true);
-    expect(ids.has(world.orphanActionId)).toBe(false);
-
-    await page.goto(ADMIN_ROUTES.OPENAPI_ACTIONS.path);
-    await expect(
-      page.getByText(`orphan-action-`, { exact: false })
-    ).toHaveCount(0);
+    // a scoped manager manages only the integrations in its own "My uploads"
+    expect(editable.get(world.ownActionId)).toBe(true);
+    // Organization library integrations reach every member, read-only here
+    expect(editable.get(world.connectedActionId)).toBe(false);
+    expect(editable.get(world.orphanActionId)).toBe(false);
   });
 });

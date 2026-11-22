@@ -2,15 +2,15 @@ package client
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"net/url"
 )
 
 // CloudEmbeddingProvider mirrors the backend models, keyed by provider_type.
-// GET masks APIKey and the upsert has no changed-flag guard, so a GET-derived
-// APIKey written back would permanently corrupt the stored key.
+// GET masks APIKey, so a GET-derived APIKey must never be written back.
+// APIKeyChanged is request-only: unset, the server guesses from the mask.
 type CloudEmbeddingProvider struct {
+	APIKeyChanged  *bool   `json:"api_key_changed,omitempty"`
 	ProviderType   string  `json:"provider_type"`
 	APIKey         *string `json:"api_key"`
 	APIURL         *string `json:"api_url"`
@@ -37,23 +37,15 @@ func (c *Client) ListEmbeddingProviders(ctx context.Context) ([]CloudEmbeddingPr
 	return providers, nil
 }
 
-// GetEmbeddingProvider scans the list (no get-by-id endpoint); missing
-// providers return a synthetic 404 *APIError.
+// GetEmbeddingProvider reads the provider for a provider_type. A provider
+// that is not configured answers 404.
 func (c *Client) GetEmbeddingProvider(ctx context.Context, providerType string) (*CloudEmbeddingProvider, error) {
-	providers, err := c.ListEmbeddingProviders(ctx)
-	if err != nil {
+	var provider CloudEmbeddingProvider
+	path := "/admin/embedding/embedding-provider/" + url.PathEscape(providerType)
+	if err := c.doJSON(ctx, http.MethodGet, path, nil, &provider); err != nil {
 		return nil, err
 	}
-	for i := range providers {
-		if providers[i].ProviderType == providerType {
-			return &providers[i], nil
-		}
-	}
-	return nil, &APIError{
-		StatusCode: http.StatusNotFound,
-		ErrorCode:  "NOT_FOUND",
-		Detail:     fmt.Sprintf("embedding provider %q not found", providerType),
-	}
+	return &provider, nil
 }
 
 // DeleteEmbeddingProvider deletes the provider for a provider_type. The

@@ -14,14 +14,14 @@ import pytest
 from sqlalchemy.orm import Session
 
 from onyx.auth.constants import API_KEY_HEADER_ALTERNATIVE_NAME, API_KEY_HEADER_NAME
-from onyx.sandbox_proxy.credential_injection import InjectionContext
-from onyx.sandbox_proxy.identity import ResolvedSandbox
-from onyx.sandbox_proxy.resolvers import onyx_pat as onyx_pat_mod
-from onyx.sandbox_proxy.resolvers.onyx_pat import OnyxPatResolver
-from onyx.server.features.build.db.sandbox import (
+from onyx.db.sandbox import (
     create_sandbox__no_commit,
     ensure_sandbox_pat,
 )
+from onyx.sandbox_proxy.models import InjectionContext
+from onyx.sandbox_proxy.resolvers import onyx_pat as onyx_pat_mod
+from onyx.sandbox_proxy.resolvers.onyx_pat import OnyxPatResolver
+from onyx.sandbox_proxy.sandbox_identity.models import ResolvedSandbox
 from shared_configs.contextvars import POSTGRES_DEFAULT_SCHEMA
 from tests.external_dependency_unit.conftest import create_test_user
 

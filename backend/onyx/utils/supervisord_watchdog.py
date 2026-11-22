@@ -4,7 +4,7 @@ import argparse
 import subprocess
 import time
 
-from onyx.redis.redis_pool import get_redis_client
+from onyx.cache.factory import get_cache_backend
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -17,13 +17,13 @@ MAX_LOOKUP_FAILURES = 5
 def main(key: str, program: str, conf: str) -> None:
     """This script will restart the watchdog'd supervisord process via supervisorctl.
 
-    This process continually looks up a specific redis key. If it is missing for a
+    This process continually looks up a specific cache key. If it is missing for a
     consecutive number of times and the last successful lookup is more
     than a threshold time, the specified program will be restarted.
     """
     logger.info("supervisord_watchdog starting: program=%s conf=%s", program, conf)
 
-    r = get_redis_client()
+    cache = get_cache_backend()
 
     last_heartbeat = time.monotonic()
     num_lookup_failures = 0
@@ -36,7 +36,7 @@ def main(key: str, program: str, conf: str) -> None:
 
             # check for the key ... handle any exception gracefully
             try:
-                heartbeat = r.exists(key)
+                heartbeat = cache.exists(key)
             except Exception:
                 logger.exception(
                     "Exception checking for celery beat heartbeat: key=%s.", key

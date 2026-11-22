@@ -53,7 +53,7 @@ async function withApiContext(
 // Page load & layout
 // ---------------------------------------------------------------------------
 
-test.describe("Users page — layout", () => {
+test.describe("Users page: layout", () => {
   test("renders page title, invite button, search, and stats bar", async ({
     usersPage,
   }) => {
@@ -99,7 +99,7 @@ test.describe("Users page — layout", () => {
 // Search (uses existing DB users — at least admin_user@example.com)
 // ---------------------------------------------------------------------------
 
-test.describe("Users page — search", () => {
+test.describe("Users page: search", () => {
   test("search filters table rows by email", async ({ usersPage }) => {
     await usersPage.goto();
     await usersPage.search(TEST_ADMIN_CREDENTIALS.email);
@@ -136,7 +136,7 @@ test.describe("Users page — search", () => {
 // Filters (uses existing DB users)
 // ---------------------------------------------------------------------------
 
-test.describe("Users page — filters", () => {
+test.describe("Users page: filters", () => {
   test("account types filter shows expected account types", async ({
     usersPage,
   }) => {
@@ -214,7 +214,7 @@ test.describe("Users page — filters", () => {
 // Sorting (uses existing DB users)
 // ---------------------------------------------------------------------------
 
-test.describe("Users page — sorting", () => {
+test.describe("Users page: sorting", () => {
   test("clicking Name sort twice reverses row order", async ({ usersPage }) => {
     await usersPage.goto();
 
@@ -254,7 +254,7 @@ test.describe("Users page — sorting", () => {
 // Pagination (uses existing DB users — need > 8 for multi-page)
 // ---------------------------------------------------------------------------
 
-test.describe("Users page — pagination", () => {
+test.describe("Users page: pagination", () => {
   test("clicking page 2 navigates to second page", async ({ usersPage }) => {
     await usersPage.goto();
 
@@ -275,7 +275,7 @@ test.describe("Users page — pagination", () => {
 // Invite users (creates ephemeral data)
 // ---------------------------------------------------------------------------
 
-test.describe("Users page — invite users", () => {
+test.describe("Users page: invite users", () => {
   test("invite modal opens with correct structure", async ({ usersPage }) => {
     await usersPage.goto();
     await usersPage.openInviteModal();
@@ -349,7 +349,7 @@ test.describe("Users page — invite users", () => {
 // Row actions — deactivate / activate (creates ephemeral data)
 // ---------------------------------------------------------------------------
 
-test.describe("Users page — deactivate & activate", () => {
+test.describe("Users page: deactivate & activate", () => {
   let testUserEmail: string;
 
   test.beforeAll(async ({ browser }) => {
@@ -414,7 +414,7 @@ test.describe("Users page — deactivate & activate", () => {
 // Row actions — delete user (creates ephemeral data)
 // ---------------------------------------------------------------------------
 
-test.describe("Users page — delete user", () => {
+test.describe("Users page: delete user", () => {
   test("delete an inactive user", async ({ usersPage, api }) => {
     const email = uniqueEmail("delete");
     await api.registerUser(email, TEST_PASSWORD);
@@ -449,7 +449,7 @@ test.describe("Users page — delete user", () => {
 // Row actions — cancel invite (creates ephemeral data)
 // ---------------------------------------------------------------------------
 
-test.describe("Users page — cancel invite", () => {
+test.describe("Users page: cancel invite", () => {
   test("cancel a pending invite", async ({ usersPage, api }) => {
     const email = uniqueEmail("cancel-inv");
     await api.inviteUsers([email]);
@@ -482,7 +482,7 @@ test.describe("Users page — cancel invite", () => {
 // Inline role editing (creates ephemeral data)
 // ---------------------------------------------------------------------------
 
-test.describe("Users page — inline role editing", () => {
+test.describe("Users page: inline role editing", () => {
   let testUserEmail: string;
 
   test.beforeAll(async ({ browser }) => {
@@ -504,7 +504,7 @@ test.describe("Users page — inline role editing", () => {
 // Group management (creates ephemeral data)
 // ---------------------------------------------------------------------------
 
-test.describe("Users page — group management", () => {
+test.describe("Users page: group management", () => {
   let testUserEmail: string;
   let testGroupId: number;
   const groupName = `E2E-UsersTest-${Date.now()}`;
@@ -531,11 +531,11 @@ test.describe("Users page — group management", () => {
     await usersPage.saveGroupsModal();
     await usersPage.expectToast("User updated");
 
-    // Verify group shows in the row
+    // The groups cell can fold the new group into "+N", so check the modal.
     await usersPage.goto();
     await usersPage.search(testUserEmail);
-    const rowWithGroup = usersPage.getRowByEmail(testUserEmail);
-    await expect(rowWithGroup).toContainText(groupName);
+    await usersPage.openEditGroupsModal(testUserEmail);
+    await usersPage.expectJoinedGroup(groupName);
   });
 
   test("remove user from group via edit groups modal", async ({
@@ -575,7 +575,7 @@ test.describe("Users page — group management", () => {
 // Stats bar
 // ---------------------------------------------------------------------------
 
-test.describe("Users page — stats bar", () => {
+test.describe("Users page: stats bar", () => {
   test("stats bar shows active users count", async ({ usersPage }) => {
     await usersPage.goto();
     // Number and label are separate elements; check for the label

@@ -12,18 +12,18 @@ from uuid import UUID
 
 from sqlalchemy.orm import Session as DBSession
 
-from onyx.db.enums import BuildSessionStatus
-from onyx.db.external_app import get_connectable_apps_for_user
-from onyx.db.models import BuildSession, Sandbox, User
-from onyx.server.features.build.db.build_session import (
+from onyx.db.build_session import (
     reserve_nextjs_port__no_commit,
     session_runtime_stale,
 )
-from onyx.server.features.build.db.sandbox import (
+from onyx.db.enums import BuildSessionStatus
+from onyx.db.models import BuildSession, Sandbox, User
+from onyx.db.sandbox import (
     get_latest_snapshot_for_session,
     get_sandbox_by_user_id,
     update_sandbox_heartbeat,
 )
+from onyx.integrations.craft import list_connectable_apps
 from onyx.server.features.build.sandbox.base import SandboxManager
 from onyx.server.features.build.sandbox.util.agent_instructions import (
     build_connectable_apps_list,
@@ -116,7 +116,7 @@ def ensure_session_ready(
 
     snapshot = get_latest_snapshot_for_session(db_session, session_id)
     connectable_apps_section = build_connectable_apps_list(
-        get_connectable_apps_for_user(db_session, user)
+        list_connectable_apps(db_session, user)
     )
     mcp_servers = resolve_craft_mcp_servers(db_session, user)
     nextjs_port = session.nextjs_port

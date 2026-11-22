@@ -8,6 +8,7 @@ from onyx.connectors.cross_connector_utils.rate_limit_wrapper import (
     RateLimitTriedTooManyTimesError,
     rate_limit_builder,
 )
+from onyx.connectors.cross_connector_utils.server_wait import bound_server_wait
 from onyx.utils.logger import setup_logger
 from onyx.utils.retry_after import parse_retry_after_seconds
 
@@ -65,6 +66,10 @@ def is_rate_limit_error(exception: Exception) -> bool:
 
 
 def get_rate_limit_retry_delay_seconds(exception: Exception) -> float:
+    return bound_server_wait(_raw_retry_delay_seconds(exception), "hubspot")
+
+
+def _raw_retry_delay_seconds(exception: Exception) -> float:
     headers = getattr(exception, "headers", None)  # ods: ignore[getattr]
 
     retry_after = parse_retry_after_seconds(_extract_header(headers, "Retry-After"))

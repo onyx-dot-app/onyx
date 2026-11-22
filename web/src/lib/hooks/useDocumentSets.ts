@@ -3,9 +3,10 @@ import { DocumentSetSummary } from "@/lib/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
-export function useDocumentSets() {
+/** `enabled: false` skips the request and reports not loading. */
+export function useDocumentSets(enabled: boolean = true) {
   const { data, error, mutate } = useSWR<DocumentSetSummary[]>(
-    SWR_KEYS.documentSets,
+    enabled ? SWR_KEYS.documentSets : null,
     errorHandlingFetcher,
     {
       revalidateOnFocus: false,
@@ -16,7 +17,7 @@ export function useDocumentSets() {
 
   return {
     documentSets: data ?? [],
-    isLoading: !error && !data,
+    isLoading: enabled && !error && !data,
     error,
     refresh: mutate,
   };

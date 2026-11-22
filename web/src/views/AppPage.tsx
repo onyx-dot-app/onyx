@@ -2,19 +2,27 @@
 
 import {
   redirect,
+  useNavigation,
   usePathname,
-  useRouter,
   useSearchParams,
-} from "next/navigation";
+} from "@opal/navigation";
+import { SourceMetadata, ValidSources } from "@/lib/connectors/types/source";
 import { loginPath } from "@/lib/auth/paths";
 import { endIncognitoSession } from "@/app/app/services/lib";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+} from "react";
 import { SEARCH_PARAM_NAMES } from "@/app/app/services/searchParams";
-import { Section } from "@/layouts/general-layouts";
-import { useFederatedConnectors, useLlmManager } from "@/lib/hooks";
+import { useLlmManager } from "@/lib/hooks";
+import { useFederatedConnectors } from "@/lib/connectors/hooks";
 import { useSendChatMessageFromURL } from "@/lib/chat/hooks";
 import OnyxInitializingLoader from "@/components/OnyxInitializingLoader";
-import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/interfaces";
+import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/types";
 import { useToolConfiguration } from "@/lib/tools/hooks";
 import { useSettings } from "@/lib/settings/hooks";
 import Dropzone from "react-dropzone";
@@ -28,11 +36,14 @@ import { useUser } from "@/providers/UserProvider";
 import { useCurrentUser } from "@/lib/users/hooks";
 import { NoAgentModal } from "@/lib/agents/components";
 import PreviewModal from "@/sections/modals/PreviewModal";
-import { Modal } from "@opal/components";
 import { useSendMessageToParent } from "@/lib/extension/hooks";
-import { SourceMetadata } from "@/lib/search/interfaces";
-import { FederatedConnectorDetail, ValidSources } from "@/lib/types";
+import { FederatedConnectorDetail } from "@/lib/types";
 import DocumentsSidebar from "@/sections/document-sidebar/DocumentsSidebar";
+import {
+  CHAT_FILES_PANEL,
+  CurrentChatRightPanel,
+} from "@/sections/chat/ChatRightPanel";
+import { PublishedFilesPanelContext } from "@/sections/chat/PublishedFileCards";
 import useChatController from "@/hooks/useChatController";
 import useMultiModelChat from "@/hooks/useMultiModelChat";
 import MultiModelSelector from "@/sections/model-selector/MultiModelSelector";
@@ -50,41 +61,52 @@ import {
 import {
   useCurrentChatState,
   useIsReady,
-  useDocumentSidebarVisible,
+  useIsFetchingChatMessages,
+  useSourcesShown,
   useCurrentIsStreamDraining,
+  useFilesShown,
+  useSelectedNodeForDocDisplay,
 } from "@/app/app/stores/useChatSessionStore";
 import FederatedOAuthModal from "@/components/chat/FederatedOAuthModal";
+import { messageRowId } from "@/lib/chat/rowIds";
+import { useScrollToNewTurn } from "@/lib/chatScroll/hooks";
 import ChatScrollContainer, {
   ChatScrollContainerHandle,
-} from "@/sections/chat/ChatScrollContainer";
+} from "@/lib/chatScroll/components/ChatScrollContainer";
 import {
   ProjectContextPanel,
   ProjectChatSessionList,
 } from "@/lib/projects/components";
 import { useProjectsContext } from "@/lib/projects/providers";
+import type { ComposedMessage, UnsentMessage } from "@/lib/chat/types";
 import { useActiveProject, useProjects } from "@/lib/projects/hooks";
 import { getProjectTokenCount } from "@/lib/projects/svc";
 import { cn } from "@opal/utils";
 import Suggestions from "@/sections/Suggestions";
-import OnboardingFlow from "@/sections/onboarding/OnboardingFlow";
-import { OnboardingStep } from "@/interfaces/onboarding";
-import { useShowOnboarding } from "@/hooks/useShowOnboarding";
-import { SvgChevronDown, SvgFileText } from "@opal/icons";
-import { Button, ShadowDiv, Spacer } from "@opal/components";
+import { OnboardingFlow } from "@/lib/onboarding/components";
+import { OnboardingStep } from "@/lib/onboarding/types";
+import { STEP_CONFIG } from "@/lib/onboarding/constants";
+import { useShowOnboarding } from "@/lib/onboarding/hooks";
+import { SvgChevronDown } from "@opal/icons";
+import { Button, Presence, ShadowDiv, Spacer } from "@opal/components";
+import { ChatMessageLoader } from "@opal/loaders";
 import {
   IllustrationContent,
   RootLayout,
   toast,
   useToastFromQuery,
+  Section,
 } from "@opal/layouts";
 import { SvgNotFound, SvgNoAccess } from "@opal/illustrations";
 import { useChatSessionSupportsRetrieval } from "@/lib/app/hooks";
-import { useAppPosition } from "@/lib/position/hooks";
+import { useAppPosition } from "@/lib/navigation/hooks";
 import useScreenSize from "@/hooks/useScreenSize";
 import { useSidebarState } from "@opal/layouts";
 import { useQueryController } from "@/providers/QueryControllerProvider";
 import WelcomeMessage from "@/app/app/components/WelcomeMessage";
 import ChatUI from "@/sections/chat/ChatUI";
+import ScheduledRunBanner from "@/sections/scheduledTasks/ScheduledRunBanner";
+import { FULL_WIDTH_TRANSITION } from "@/lib/chat/layout";
 import { useFullWidthChat } from "@/providers/FullWidthChatProvider";
 import { paidTierGated } from "@/ce";
 import EESearchUI from "@/ee/sections/SearchUI";
@@ -139,7 +161,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   // });
 
   const t = useTranslations("chat.app");
-  const router = useRouter();
+  const navigation = useNavigation();
   const appPosition = useAppPosition();
   const { isMobile } = useScreenSize();
 
@@ -149,8 +171,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       type: "success",
     },
   });
-  const searchParams = useSearchParams();
   const pathname = usePathname();
+  const searchParams = useSearchParams();
 
   // Use SWR hooks for data fetching
   const {
@@ -194,15 +216,16 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       params.has(SEARCH_PARAM_NAMES.PROJECT_ID)
     ) {
       params.delete(SEARCH_PARAM_NAMES.PROJECT_ID);
-      router.replace(`?${params.toString()}`, { scroll: false });
+      navigation.go(`?${params.toString()}`, { replace: true, scroll: false });
     }
-  }, [searchParams, router]);
+  }, [searchParams, navigation]);
 
   const toolConfiguration = useToolConfiguration();
 
   const { deepResearchEnabled, toggleDeepResearch } = useDeepResearchToggle({
     chatSessionId: currentChatSessionId,
     agentId: activeAgent?.id,
+    toolConfiguration,
   });
 
   // Incognito lives in context so the top-bar toggle and this page stay in
@@ -282,6 +305,10 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     setCurrentMessageFiles([]);
   }, [setCurrentMessageFiles]);
 
+  const restoreInputBar = useCallback((unsent: UnsentMessage) => {
+    chatInputBarRef.current?.restore(unsent);
+  }, []);
+
   // Add refs needed by useChatSessionController
   const chatSessionIdRef = useRef<string | null>(currentChatSessionId);
   const loadedIdSessionRef = useRef<string | null>(currentChatSessionId);
@@ -294,12 +321,22 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   // Access chat state directly from the store
   const currentChatState = useCurrentChatState();
   const isReady = useIsReady();
-  const documentSidebarVisible = useDocumentSidebarVisible();
-  const updateCurrentDocumentSidebarVisible = useChatSessionStore(
-    (state) => state.updateCurrentDocumentSidebarVisible
+  const sourcesPanelVisible = useSourcesShown();
+  const updateCurrentRightPanel = useChatSessionStore(
+    (state) => state.updateCurrentRightPanel
   );
+  const selectedNodeForDocDisplay = useSelectedNodeForDocDisplay();
+  const publishedFilesPanelOpen = useFilesShown();
   const messageHistory = useCurrentMessageHistory();
   const messageTree = useCurrentMessageTree();
+  // A chat opened for the first time has nothing to show until its fetch
+  // returns. A cached chat keeps rendering while it refreshes. The store takes
+  // the URL's chat one effect late, so that frame counts as loading too.
+  const isFetchingChatMessages = useIsFetchingChatMessages();
+  const storeSessionId = useChatSessionStore((state) => state.currentSessionId);
+  const showFirstOpenLoader =
+    messageHistory.length === 0 &&
+    (isFetchingChatMessages || storeSessionId !== currentChatSessionId);
 
   // The mode pins on creation, so lock the toggle whenever a session exists,
   // even an empty one: submitting would reuse it with its pinned mode.
@@ -346,7 +383,17 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   // Determine anchor: second-to-last message (last user message before current response)
   const anchorMessage = messageHistory.at(-2) ?? messageHistory[0];
   const anchorNodeId = anchorMessage?.nodeId;
-  const anchorSelector = anchorNodeId ? `#message-${anchorNodeId}` : undefined;
+  // The row keeps the id it was first shown with (see messageRowId).
+  const anchorSelector = anchorMessage
+    ? `#${messageRowId(anchorMessage)}`
+    : undefined;
+  // A send glides to the new turn: its message at the top.
+  useScrollToNewTurn(
+    scrollContainerRef,
+    storeSessionId,
+    anchorSelector,
+    currentChatState === "loading"
+  );
 
   // Auto-scroll preference from user settings. Pause while the
   // typewriter is running its post-finish adaptive drain — the user is
@@ -354,7 +401,11 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   // is jarring.
   const autoScrollPreference = user?.preferences?.auto_scroll !== false;
   const isStreamDraining = useCurrentIsStreamDraining();
-  const autoScrollEnabled = autoScrollPreference && !isStreamDraining;
+  // The setting decides whether a running reply is followed. With nothing
+  // running, growth is layout settling (an action row, a card growing in),
+  // so a view at the end keeps to it, and a reopened chat lands at the end.
+  const autoScrollEnabled =
+    autoScrollPreference || currentChatState === "input";
   const isStreaming = currentChatState === "streaming";
 
   const multiModel = useMultiModelChat(llmManager);
@@ -389,7 +440,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       setFolded(preMultiModelFoldedRef.current);
       preMultiModelFoldedRef.current = null;
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [multiModel.isMultiModelActive]);
 
   // Sync single-model selection to llmManager so the submission path uses
@@ -419,40 +469,34 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     }
   }, [multiModel.selectedModels]);
 
-  const {
-    onSubmit,
-    stopGenerating,
-    handleMessageSpecificFileUpload,
-    availableContextTokens,
-  } = useChatController({
-    llmManager,
-    toolConfiguration,
-    availableAgents: agents,
-    activeAgent,
-    existingChatSessionId: currentChatSessionId,
-    selectedDocuments,
-    searchParams,
-    resetInputBar,
-  });
+  const { onSubmit, stopGenerating, handleMessageSpecificFileUpload } =
+    useChatController({
+      llmManager,
+      toolConfiguration,
+      availableAgents: agents,
+      activeAgent,
+      existingChatSessionId: currentChatSessionId,
+      selectedDocuments,
+      searchParams,
+      resetInputBar,
+      restoreInputBar,
+    });
 
-  const {
-    onMessageSelection,
-    currentSessionFileTokenCount,
-    sessionFetchError,
-  } = useChatSessionController({
-    existingChatSessionId: currentChatSessionId,
-    searchParams,
-    firstMessage,
-    setSelectedDocuments,
-    setCurrentMessageFiles,
-    chatSessionIdRef,
-    loadedIdSessionRef,
-    chatInputBarRef,
-    isInitialLoad,
-    submitOnLoadPerformed,
-    refreshChatSessions,
-    onSubmit,
-  });
+  const { onMessageSelection, sessionFetchError, queue } =
+    useChatSessionController({
+      existingChatSessionId: currentChatSessionId,
+      searchParams,
+      firstMessage,
+      setSelectedDocuments,
+      setCurrentMessageFiles,
+      chatSessionIdRef,
+      loadedIdSessionRef,
+      chatInputBarRef,
+      isInitialLoad,
+      submitOnLoadPerformed,
+      refreshChatSessions,
+      onSubmit,
+    });
 
   // A link can arrive carrying both a prompt and a search scope. Declared here
   // because it submits, so it needs `onSubmit` above it.
@@ -471,14 +515,14 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   // left behind by the previous agent.
   useEffect(() => {
     // Already closed.
-    if (!documentSidebarVisible) return;
+    if (!sourcesPanelVisible) return;
 
     // Retrieval is not known yet. Closing now would need a reopen later.
     if (retrievalEnabled === null) return;
 
     // Not reading a conversation, so there are no sources to show.
     if (!appPosition.isChattable()) {
-      updateCurrentDocumentSidebarVisible(false);
+      updateCurrentRightPanel({ type: "hideSources" });
       return;
     }
 
@@ -488,13 +532,13 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     // The user picked documents by hand.
     if (selectedDocuments.length > 0) return;
 
-    updateCurrentDocumentSidebarVisible(false);
+    updateCurrentRightPanel({ type: "hideSources" });
   }, [
-    documentSidebarVisible,
+    sourcesPanelVisible,
     appPosition,
     retrievalEnabled,
     selectedDocuments,
-    updateCurrentDocumentSidebarVisible,
+    updateCurrentRightPanel,
   ]);
 
   const handleResubmitLastMessage = useCallback(() => {
@@ -511,6 +555,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     // We call onSubmit, passing a `messageOverride`
     onSubmit({
       message: lastUserMsg.message,
+      mentions: lastUserMsg.mentions ?? [],
       currentMessageFiles: currentMessageFiles,
       deepResearch:
         deepResearchEnabledForCurrentWorkflow && !multiModel.isMultiModelActive,
@@ -533,13 +578,13 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   }
 
   const onChat = useCallback(
-    (message: string) => {
+    (composed: ComposedMessage) => {
       if (multiModel.isMultiModelActive) {
         foldSidebarForMultiModel();
       }
       resetInputBar();
       onSubmit({
-        message,
+        ...composed,
         currentMessageFiles,
         deepResearch:
           deepResearchEnabledForCurrentWorkflow &&
@@ -595,13 +640,13 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   );
 
   const handleAppInputBarSubmit = useCallback(
-    async (message: string) => {
+    async (composed: ComposedMessage) => {
       // If we're in an existing chat session, always use chat mode
       // (appMode only applies to new sessions)
       if (currentChatSessionId) {
         resetInputBar();
         onSubmit({
-          message,
+          ...composed,
           currentMessageFiles,
           deepResearch:
             deepResearchEnabledForCurrentWorkflow &&
@@ -610,16 +655,11 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
             ? multiModel.selectedModels
             : undefined,
         });
-        if (showOnboarding || !onboardingDismissed) {
+        // An existing chat hides the onboarding steps; a message here must
+        // not end onboarding that is still in progress.
+        if (!showOnboarding && !onboardingDismissed) {
           finishOnboarding();
         }
-        return;
-      }
-
-      // Incognito always routes to chat: the search path runs its own
-      // persistence and none of the incognito safeguards.
-      if (incognitoEnabledRef.current) {
-        onChat(message);
         return;
       }
 
@@ -627,7 +667,12 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
       // resetInputBar is called inside onChat for chat-routed queries.
       // For search-routed queries, the input bar is intentionally kept
       // so the user can see and refine their search query.
-      await submitQuery(message, onChat);
+      // Incognito always routes to chat: the search path runs its own
+      // persistence and none of the incognito safeguards. Search cannot use
+      // mentions, so a message with mentions routes to chat too.
+      await submitQuery(composed.message, () => onChat(composed), {
+        chatOnly: incognitoEnabledRef.current || composed.mentions.length > 0,
+      });
     },
     [
       currentChatSessionId,
@@ -646,14 +691,40 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     ]
   );
 
-  // Memoized callbacks for DocumentsSidebar
-  const handleMobileDocumentSidebarClose = useCallback(() => {
-    updateCurrentDocumentSidebarVisible(false);
-  }, [updateCurrentDocumentSidebarVisible]);
+  // A stable element, so the panel's memo holds while messages stream
+  const sourcesView = useMemo(
+    () =>
+      retrievalEnabled ? (
+        /* IMPORTANT: this is a memoized component, and it's very important
+        for performance reasons that this stays true. MAKE SURE that all
+        function props are wrapped in useCallback. */
+        <DocumentsSidebar
+          setPresentingDocument={setPresentingDocument}
+          selectedDocuments={selectedDocuments}
+        />
+      ) : null,
+    [retrievalEnabled, selectedDocuments]
+  );
 
-  const handleDesktopDocumentSidebarClose = useCallback(() => {
-    setTimeout(() => updateCurrentDocumentSidebarVisible(false), 300);
-  }, [updateCurrentDocumentSidebarVisible]);
+  const sourcesHaveContent =
+    !!retrievalEnabled &&
+    selectedNodeForDocDisplay !== null &&
+    (messageTree?.get(selectedNodeForDocDisplay)?.documents?.length ?? 0) > 0;
+
+  // A stable element: the app chrome's slot renders again only when one of
+  // these inputs changes, not on each streamed packet or panel change
+  const rightPanelOpen =
+    (!!retrievalEnabled && sourcesPanelVisible) || publishedFilesPanelOpen;
+  const rightPanel = useMemo(
+    () => (
+      <CurrentChatRightPanel
+        open={rightPanelOpen}
+        sources={sourcesView}
+        hasSources={sourcesHaveContent}
+      />
+    ),
+    [rightPanelOpen, sourcesView, sourcesHaveContent]
+  );
 
   // When no chat session exists but a project is selected, fetch the
   // total tokens for the project's files so upload UX can compare
@@ -684,15 +755,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     };
   }, [currentChatSessionId, currentProjectId, currentProjectDetails?.files]);
 
-  // Handle error case where no agents are available.
-  // Only show this after agents have loaded to prevent flash during initial load.
-  if (!activeAgent && !isLoadingAgents) {
-    return <NoAgentModal />;
-  }
-
-  const hasAgentStarterMessages =
-    (activeAgent?.starter_messages?.length ?? 0) > 0;
-
   const isWelcomeFocus =
     (appPosition.isNewSession() || appPosition.isAgent()) &&
     (state.phase === "idle" || state.phase === "classifying");
@@ -702,7 +764,39 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     (showOnboarding || !user?.personalization?.name) &&
     !onboardingDismissed;
 
+  // While onboarding is open, the bottom row keeps the height it had when
+  // onboarding appeared. New onboarding steps then grow upward instead of
+  // moving the input down.
+  const bottomRowRef = useRef<HTMLDivElement>(null);
+  const [onboardingBottomRowPx, setOnboardingBottomRowPx] = useState<
+    number | null
+  >(null);
+  useLayoutEffect(() => {
+    if (!onboardingVisible) {
+      setOnboardingBottomRowPx(null);
+      return;
+    }
+    if (onboardingBottomRowPx === null && bottomRowRef.current) {
+      setOnboardingBottomRowPx(bottomRowRef.current.offsetHeight);
+    }
+  }, [onboardingVisible, onboardingBottomRowPx]);
+
+  // Handle error case where no agents are available.
+  // Only show this after agents have loaded to prevent flash during initial load.
+  if (!activeAgent && !isLoadingAgents) {
+    return <NoAgentModal />;
+  }
+
+  const hasAgentStarterMessages =
+    (activeAgent?.starter_messages?.length ?? 0) > 0;
+
   const gridStyle = {
+    // The chat column's width, set once here: the messages, the first-open
+    // skeleton, the greeting row and the composer all read it. Full width
+    // keeps a max-width (100%), so the switch animates instead of jumping.
+    "--app-chat-column-width": fullWidthActive
+      ? "100%"
+      : "var(--width-chat-message-max)",
     // minmax(0, 1fr) (instead of "1fr") lets the single column shrink to the
     // grid's width. A bare "1fr" is minmax(auto, 1fr), whose auto minimum is
     // the content's min-content — wide content (e.g. the onboarding cards) would
@@ -711,7 +805,11 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
     // Onboarding: welcome floored at content height, form row compressible
     // (scrolls), bottom row absorbs slack. Centered when short, pinned when tall.
     gridTemplateRows: onboardingVisible
-      ? "minmax(min-content, 1fr) minmax(0, max-content) minmax(0, 1fr)"
+      ? `minmax(min-content, 1fr) minmax(0, max-content) ${
+          onboardingBottomRowPx === null
+            ? "minmax(0, 1fr)"
+            : `minmax(0, ${onboardingBottomRowPx}px)`
+        }`
       : isSearch
         ? "0fr auto 1fr"
         : appPosition.isChat()
@@ -724,7 +822,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
   if (!isReady) return <OnyxInitializingLoader />;
 
   return (
-    <>
+    <PublishedFilesPanelContext.Provider value={CHAT_FILES_PANEL}>
       <AppPopup />
 
       {presentingDocument && (
@@ -736,50 +834,13 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
       <FederatedOAuthModal />
 
-      {retrievalEnabled &&
-        (isMobile ? (
-          documentSidebarVisible && (
-            <Modal
-              open
-              onOpenChange={() => updateCurrentDocumentSidebarVisible(false)}
-            >
-              <Modal.Content>
-                <Modal.Header
-                  icon={SvgFileText}
-                  title={t("sourcesModal.title")}
-                  onClose={() => updateCurrentDocumentSidebarVisible(false)}
-                />
-                <Modal.Body>
-                  {/* IMPORTANT: this is a memoized component, and it's very important
-                for performance reasons that this stays true. MAKE SURE that all function
-                props are wrapped in useCallback. */}
-                  <DocumentsSidebar
-                    setPresentingDocument={setPresentingDocument}
-                    modal
-                    closeSidebar={handleMobileDocumentSidebarClose}
-                    selectedDocuments={selectedDocuments}
-                  />
-                </Modal.Body>
-              </Modal.Content>
-            </Modal>
-          )
-        ) : (
-          <RootLayout.RightPanel>
-            <div
-              className={cn(
-                "overflow-hidden transition-all duration-300 ease-in-out h-full",
-                documentSidebarVisible ? "w-100" : "w-0"
-              )}
-            >
-              <DocumentsSidebar
-                setPresentingDocument={setPresentingDocument}
-                modal={false}
-                closeSidebar={handleDesktopDocumentSidebarClose}
-                selectedDocuments={selectedDocuments}
-              />
-            </div>
-          </RootLayout.RightPanel>
-        ))}
+      {/* Mounted whenever the chat loads, so a reply card opens its file
+          whatever the Files list holds. Closed, the panel takes no room and
+          renders only when its state or files change. A chat that failed to
+          load shows no panel. */}
+      <RootLayout.RightPanel>
+        {sessionFetchError === null && rightPanel}
+      </RootLayout.RightPanel>
 
       <div className="w-full h-full overflow-hidden">
         {/* noPaste: the input bar already uploads pasted files itself. Without
@@ -804,91 +865,160 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
               >
                 {/* ── Top row: ChatUI / WelcomeMessage / ProjectUI ── */}
                 {/* No horizontal padding: the scroll container reaches the edge so
-                    its scrollbar sits flush; non-chat siblings add their own px. */}
-                <div className="row-start-1 min-h-0 overflow-hidden flex flex-col items-center">
+                    its scrollbar sits flush; non-chat siblings add their own px.
+                    A leaving view leaves the flow, so the entering one does
+                    not start below it and jump up when it unmounts. */}
+                <div className="row-start-1 min-h-0 overflow-hidden flex flex-col items-center relative *:data-[presence-phase=leaving]:absolute *:data-[presence-phase=leaving]:inset-0">
                   {/* ChatUI */}
-                  <Fade
+                  <Presence
                     show={
                       appPosition.isChat() &&
                       !!currentChatSessionId &&
                       !!activeAgent &&
-                      !sessionFetchError
+                      !sessionFetchError &&
+                      !showFirstOpenLoader
                     }
-                    className="h-full w-full flex flex-col items-center"
+                    from="none"
+                    width="full"
+                    height="full"
                   >
-                    <ChatScrollContainer
-                      ref={scrollContainerRef}
-                      sessionId={currentChatSessionId!}
-                      anchorSelector={anchorSelector}
-                      autoScroll={autoScrollEnabled}
-                      isStreaming={isStreaming}
-                      onScrollButtonVisibilityChange={setShowScrollButton}
-                      fullWidth={fullWidthActive}
-                    >
-                      <ChatUI
-                        activeAgent={activeAgent!}
-                        llmManager={llmManager}
-                        deepResearchEnabled={
-                          deepResearchEnabledForCurrentWorkflow
-                        }
-                        currentMessageFiles={currentMessageFiles}
-                        setPresentingDocument={setPresentingDocument}
-                        onSubmit={onSubmit}
-                        onMessageSelection={onMessageSelection}
-                        stopGenerating={stopGenerating}
-                        onResubmit={handleResubmitLastMessage}
-                        anchorNodeId={anchorNodeId}
-                        selectedModels={multiModel.selectedModels}
-                        fullWidthChat={fullWidthActive}
-                      />
-                    </ChatScrollContainer>
-                  </Fade>
+                    <Section justifyContent="start" gap={0}>
+                      {currentChatSessionId && (
+                        <ScheduledRunBanner
+                          chatSessionId={currentChatSessionId}
+                        />
+                      )}
+                      {/* The store's session, not the URL's: the store takes
+                          the URL's chat one effect late, and the scroll reset
+                          must see the messages of the chat it opens. */}
+                      <ChatScrollContainer
+                        ref={scrollContainerRef}
+                        sessionId={storeSessionId ?? undefined}
+                        anchorSelector={anchorSelector}
+                        autoScroll={autoScrollEnabled}
+                        pauseFollowing={isStreamDraining}
+                        isStreaming={isStreaming}
+                        onScrollButtonVisibilityChange={setShowScrollButton}
+                        fullWidth={fullWidthActive}
+                      >
+                        <ChatUI
+                          activeAgent={activeAgent!}
+                          llmManager={llmManager}
+                          deepResearchEnabled={
+                            deepResearchEnabledForCurrentWorkflow
+                          }
+                          currentMessageFiles={currentMessageFiles}
+                          setPresentingDocument={setPresentingDocument}
+                          onSubmit={onSubmit}
+                          onMessageSelection={onMessageSelection}
+                          stopGenerating={stopGenerating}
+                          onResubmit={handleResubmitLastMessage}
+                          anchorNodeId={anchorNodeId}
+                          selectedModels={multiModel.selectedModels}
+                          fullWidthChat={fullWidthActive}
+                        />
+                      </ChatScrollContainer>
+                    </Section>
+                  </Presence>
+
+                  {/* First open: the chat is loading and nothing is cached yet */}
+                  <Presence
+                    show={
+                      appPosition.isChat() &&
+                      !!currentChatSessionId &&
+                      !sessionFetchError &&
+                      showFirstOpenLoader
+                    }
+                    from="none"
+                    width="full"
+                    height="full"
+                  >
+                    <div className="h-full w-full px-2 sm:px-4 pt-6 pb-12">
+                      <Section justifyContent="start" gap={0}>
+                        {/* A conversation's shape in the chat column, from the
+                        top down like a real chat. More turns than fit, so it
+                        fills any height; the ones that overflow are clipped
+                        (not scrollable) and fade out at the bottom. The bottom
+                        keeps clear of the input bar. */}
+                        <ShadowDiv
+                          role="status"
+                          aria-label={t("firstOpenLoader.ariaLabel")}
+                          variant="mask"
+                          shadowDirection="bottom-only"
+                          containerClassName={cn(
+                            "w-full flex-1 md:max-w-(--app-chat-column-width)",
+                            FULL_WIDTH_TRANSITION
+                          )}
+                          className="flex-1 min-h-0 overflow-y-hidden"
+                        >
+                          <Section gap={12} height="fit">
+                            {Array.from({ length: 8 }, (_, turn) => (
+                              <Section key={turn} gap={12} height="fit">
+                                <ChatMessageLoader orientation="end" />
+                                <ChatMessageLoader orientation="start" />
+                              </Section>
+                            ))}
+                          </Section>
+                        </ShadowDiv>
+                      </Section>
+                    </div>
+                  </Presence>
 
                   {/* Session fetch error (404 / 403) */}
-                  <Fade
+                  <Presence
                     show={appPosition.isChat() && sessionFetchError !== null}
-                    className="h-full w-full flex flex-col items-center justify-center px-2 sm:px-4"
+                    from="none"
+                    width="full"
+                    height="full"
                   >
-                    {sessionFetchError && (
-                      <Section
-                        flexDirection="column"
-                        alignItems="center"
-                        gap={4}
-                      >
-                        <IllustrationContent
-                          illustration={
-                            sessionFetchError.type === "access_denied"
-                              ? SvgNoAccess
-                              : SvgNotFound
-                          }
-                          title={
-                            sessionFetchError.type === "not_found"
-                              ? t("sessionNotFound.title")
-                              : sessionFetchError.type === "access_denied"
-                                ? t("sessionAccessDenied.title")
-                                : t("sessionGenericError.title")
-                          }
-                          description={
-                            sessionFetchError.type === "not_found"
-                              ? t("sessionNotFound.description")
-                              : sessionFetchError.type === "access_denied"
-                                ? t("sessionAccessDenied.description")
-                                : sessionFetchError.detail
-                          }
-                        />
-                        <Button href="/app" prominence="secondary">
-                          {t("newChatButton.label")}
-                        </Button>
+                    <div className="h-full w-full px-2 sm:px-4">
+                      <Section>
+                        {sessionFetchError && (
+                          <Section
+                            flexDirection="column"
+                            alignItems="center"
+                            gap={4}
+                          >
+                            <IllustrationContent
+                              illustration={
+                                sessionFetchError.type === "access_denied"
+                                  ? SvgNoAccess
+                                  : SvgNotFound
+                              }
+                              title={
+                                sessionFetchError.type === "not_found"
+                                  ? t("sessionNotFound.title")
+                                  : sessionFetchError.type === "access_denied"
+                                    ? t("sessionAccessDenied.title")
+                                    : t("sessionGenericError.title")
+                              }
+                              description={
+                                sessionFetchError.type === "not_found"
+                                  ? t("sessionNotFound.description")
+                                  : sessionFetchError.type === "access_denied"
+                                    ? t("sessionAccessDenied.description")
+                                    : sessionFetchError.detail
+                              }
+                            />
+                            <Button
+                              {...appPosition.linkToNewSession()}
+                              prominence="secondary"
+                            >
+                              {t("newChatButton.label")}
+                            </Button>
+                          </Section>
+                        )}
                       </Section>
-                    )}
-                  </Fade>
+                    </div>
+                  </Presence>
 
                   {/* ProjectUI */}
                   {appPosition.isProject() && (
                     <div className="w-full max-h-[50vh] overflow-y-auto overscroll-y-none px-2 sm:px-4">
                       <ProjectContextPanel
                         projectTokenCount={projectContextTokenCount}
-                        availableContextTokens={availableContextTokens}
+                        agentId={activeAgent?.id}
+                        hasAnyProvider={llmManager.hasAnyProvider}
                         setPresentingDocument={setPresentingDocument}
                       />
                     </div>
@@ -904,8 +1034,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       justifyContent="between"
                       alignItems="end"
                       className={cn(
-                        !fullWidthActive &&
-                          "max-w-(--app-page-main-content-width)"
+                        "max-w-(--app-chat-column-width)",
+                        FULL_WIDTH_TRANSITION
                       )}
                     >
                       <WelcomeMessage
@@ -944,8 +1074,8 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                     className={cn(
                       "relative w-full flex flex-col",
                       onboardingVisible && "min-h-0",
-                      !fullWidthActive &&
-                        "md:max-w-(--app-page-main-content-width)"
+                      "md:max-w-(--app-chat-column-width)",
+                      FULL_WIDTH_TRANSITION
                     )}
                   >
                     {/* Scroll to bottom button - positioned absolutely above AppInputBar */}
@@ -962,7 +1092,12 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
                     {/* OnboardingUI */}
                     {onboardingVisible && (
-                      <ShadowDiv mask className="overscroll-contain">
+                      <ShadowDiv
+                        variant="mask"
+                        // 8px of side room: onboarding steps slide in from the
+                        // end side without being clipped or scrolling sideways.
+                        className="overscroll-contain -mx-2 px-2 overflow-x-hidden"
+                      >
                         <OnboardingFlow
                           showOnboarding={showOnboarding}
                           handleHideOnboarding={hideOnboarding}
@@ -1011,6 +1146,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         </div>
                       )}
                       <AppInputBar
+                        queue={queue}
                         toolConfiguration={toolConfiguration}
                         ref={chatInputBarRef}
                         deepResearchEnabled={
@@ -1026,12 +1162,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         stopGenerating={stopGenerating}
                         onSubmit={handleAppInputBarSubmit}
                         chatState={currentChatState}
-                        currentSessionFileTokenCount={
-                          currentChatSessionId
-                            ? currentSessionFileTokenCount
-                            : projectContextTokenCount
-                        }
-                        availableContextTokens={availableContextTokens}
                         activeAgent={activeAgent}
                         handleFileUpload={handleMessageSpecificFileUpload}
                         setPresentingDocument={setPresentingDocument}
@@ -1040,10 +1170,12 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         disabled={
                           (!llmManager.isLoadingProviders &&
                             llmManager.hasAnyProvider === false) ||
-                          (showOnboarding &&
+                          // Only while the onboarding steps are on screen.
+                          (onboardingVisible &&
+                            showOnboarding &&
                             !isLoadingOnboarding &&
-                            onboardingState.currentStep !==
-                              OnboardingStep.Complete)
+                            onboardingState.stepIndex <
+                              STEP_CONFIG[OnboardingStep.OptionalSetup].index)
                         }
                       />
                       <div
@@ -1057,7 +1189,10 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                 </div>
 
                 {/* ── Bottom: SearchResults + SourceFilter / Suggestions / ProjectChatList ── */}
-                <div className="row-start-3 min-h-0 overflow-hidden flex flex-col items-center w-full px-2 sm:px-4">
+                <div
+                  ref={bottomRowRef}
+                  className="row-start-3 min-h-0 overflow-hidden flex flex-col items-center w-full px-2 sm:px-4"
+                >
                   {/* Agent description below input */}
                   {(appPosition.isNewSession() || appPosition.isAgent()) &&
                     !isPlainChat && (
@@ -1100,6 +1235,6 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
           )}
         </Dropzone>
       </div>
-    </>
+    </PublishedFilesPanelContext.Provider>
   );
 }

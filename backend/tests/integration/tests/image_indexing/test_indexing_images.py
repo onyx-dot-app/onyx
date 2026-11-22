@@ -7,6 +7,7 @@ from onyx.connectors.models import InputType
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType
 from onyx.server.documents.models import DocumentSource
+from tests.integration.common_utils.document_index import DocumentIndexClient
 from tests.integration.common_utils.managers.cc_pair import CCPairManager
 from tests.integration.common_utils.managers.connector import ConnectorManager
 from tests.integration.common_utils.managers.credential import CredentialManager
@@ -15,7 +16,6 @@ from tests.integration.common_utils.managers.file import FileManager
 from tests.integration.common_utils.managers.llm_provider import LLMProviderManager
 from tests.integration.common_utils.managers.settings import SettingsManager
 from tests.integration.common_utils.test_models import DATestSettings, DATestUser
-from tests.integration.common_utils.vespa import vespa_fixture
 
 FILE_NAME = "Sample.pdf"
 FILE_PATH = "tests/integration/common_utils/test_files"
@@ -25,7 +25,7 @@ DOCX_FILE_NAME = "three_images.docx"
 def test_image_indexing(
     reset: None,  # noqa: ARG001
     admin_user: DATestUser,
-    vespa_client: vespa_fixture,
+    document_index_client: DocumentIndexClient,
 ) -> None:
     os.makedirs(FILE_PATH, exist_ok=True)
     test_file_path = os.path.join(FILE_PATH, FILE_NAME)
@@ -35,9 +35,15 @@ def test_image_indexing(
         file_path=test_file_path, file_name=FILE_NAME, user_performing_action=admin_user
     )
 
-    LLMProviderManager.create(
+    llm_provider = LLMProviderManager.create(
         name="test_llm",
         user_performing_action=admin_user,
+    )
+    assert llm_provider.default_model_name is not None
+    LLMProviderManager.set_default_vision(
+        llm_provider.id,
+        user_performing_action=admin_user,
+        model_name=llm_provider.default_model_name,
     )
 
     SettingsManager.update_settings(
@@ -97,12 +103,13 @@ def test_image_indexing(
     )
 
     with get_session_with_current_tenant() as db_session:
-        # really gets the chunks from Vespa, which is why there are two;
+        # really gets the chunks from the document index, which is why there
+        # are two;
         # one for the raw text and one for the summarized image.
         documents = DocumentManager.fetch_documents_for_cc_pair(
             cc_pair_id=cc_pair.id,
             db_session=db_session,
-            vespa_client=vespa_client,
+            document_index_client=document_index_client,
         )
 
         assert len(documents) == 2
@@ -120,7 +127,7 @@ def test_image_indexing(
 def test_docx_image_indexing(
     reset: None,  # noqa: ARG001
     admin_user: DATestUser,
-    vespa_client: vespa_fixture,
+    document_index_client: DocumentIndexClient,
 ) -> None:
     """Test that images from docx files are correctly extracted and indexed."""
     os.makedirs(FILE_PATH, exist_ok=True)
@@ -133,9 +140,15 @@ def test_docx_image_indexing(
         user_performing_action=admin_user,
     )
 
-    LLMProviderManager.create(
+    llm_provider = LLMProviderManager.create(
         name="test_llm_docx",
         user_performing_action=admin_user,
+    )
+    assert llm_provider.default_model_name is not None
+    LLMProviderManager.set_default_vision(
+        llm_provider.id,
+        user_performing_action=admin_user,
+        model_name=llm_provider.default_model_name,
     )
 
     SettingsManager.update_settings(
@@ -195,11 +208,12 @@ def test_docx_image_indexing(
     )
 
     with get_session_with_current_tenant() as db_session:
-        # Fetch documents from Vespa - expect text content plus 3 images
+        # Fetch documents from the document index - expect text content plus
+        # 3 images
         documents = DocumentManager.fetch_documents_for_cc_pair(
             cc_pair_id=cc_pair.id,
             db_session=db_session,
-            vespa_client=vespa_client,
+            document_index_client=document_index_client,
         )
 
         # Should have documents for text content plus 3 images

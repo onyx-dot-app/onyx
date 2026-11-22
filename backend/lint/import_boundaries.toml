@@ -1,0 +1,343 @@
+# Import boundaries for backend/. Checked by lint/check_import_boundaries.py
+# (pre-commit hook `import-boundaries`).
+#
+# A contract:
+#   name     Short id shown in the failure message.
+#   rule     The boundary in one line.
+#   reason   Why the boundary exists, in one line.
+#   instead  Where the code or the import goes instead.
+#   type     "forbidden" (default) or "independence".
+#
+# forbidden: files under `source` (path prefixes relative to backend/, less
+# `source_exclude`) must not import a module under `forbidden`. A module under
+# `allowed` is exempt. With `standalone = true`, the source ships as its own
+# package, and a relative import that stays inside one `source` directory is
+# also exempt.
+#
+# independence: each sub-directory of `container` must not import another
+# sub-directory, except those in `shared`. A sub-directory in `hubs` is a
+# framework over the others: it may import them and they may import it.
+#
+# All import statements count: module level, inside functions, and under
+# TYPE_CHECKING. A deliberate import needs an exception with a reason:
+#
+#   [[contract.exception]]
+#   importer = "onyx/path/file.py"
+#   imports = "ee.onyx.module"
+#   reason = "Why this one import is correct."
+#
+# An exception that matches no import fails the check, so the list only shrinks.
+
+[[contract]]
+name = "shared-configs-is-a-leaf"
+rule = "shared_configs must not import another backend package"
+reason = "The API server image and the model server image both ship shared_configs, and each has only part of the other code."
+instead = "Keep shared_configs to settings and context variables. Put the logic in onyx/ and import shared_configs from there."
+source = ["shared_configs/"]
+forbidden = ["onyx", "ee", "model_server", "scripts", "lint", "tests", "alembic_tenants"]
+
+[[contract]]
+name = "model-server-image"
+rule = "model_server may import from onyx only the modules that Dockerfile.model_server copies"
+reason = "The model server image has no other onyx, ee, scripts or tests code, so any other import fails at start."
+instead = "Put code that both servers need in shared_configs. To share one more onyx module, add its COPY line to Dockerfile.model_server and its name to `allowed`."
+source = ["model_server/"]
+forbidden = ["onyx", "ee", "scripts", "lint", "tests"]
+allowed = [
+    "onyx.__version__",
+    "onyx.configs.sentry",
+    "onyx.utils.logger",
+    "onyx.utils.middleware",
+    "onyx.utils.platform_utils",
+    "onyx.utils.tenant",
+]
+
+[[contract]]
+name = "app-not-model-server-or-tooling"
+rule = "onyx and ee must not import model_server, scripts or lint"
+reason = "The backend image has no model_server or lint package and only a few named scripts. The API server reaches the model server over HTTP."
+instead = "Call the model server through its HTTP client in onyx/natural_language_processing. Move code that a script and the app share into onyx/."
+source = ["onyx/", "ee/"]
+forbidden = ["model_server", "scripts", "lint"]
+
+[[contract]]
+name = "no-test-code-in-shipped-packages"
+rule = "ee, model_server, shared_configs, scripts, lint and alembic must not import tests"
+reason = "No image ships tests/, and test helpers are not written for production use."
+instead = "Move the helper into the package that needs it and import it from the test."
+source = ["ee/", "model_server/", "shared_configs/", "scripts/", "lint/", "alembic/", "alembic_tenants/"]
+forbidden = ["tests"]
+
+[[contract.exception]]
+importer = "scripts/benchmark_google_drive_connector.py"
+imports = "tests.integration.mock_services.mock_google_drive_server"
+reason = "The benchmark points the connector at the mock Drive server, which is part of the integration tests."
+
+[[contract]]
+name = "sandbox-daemon-is-standalone"
+rule = "The sandbox image code must not import a backend package"
+reason = "sandbox_daemon ships alone in the sandbox image as the top-level package `sandbox_daemon`."
+instead = "Keep the code inside sandbox_daemon/. Where the API server needs the same value, define it on both sides and name the twin in a comment."
+source = ["onyx/server/features/build/sandbox/image/"]
+standalone = true
+forbidden = ["onyx", "ee", "shared_configs", "model_server", "scripts", "lint", "tests"]
+
+[[contract]]
+name = "builtin-skills-are-standalone"
+rule = "A built-in skill script must not import a backend package"
+reason = "Built-in skill scripts run inside the sandbox, which has no backend code."
+instead = "Keep the helper inside the skill directory. Reach Onyx from a skill through its HTTP API."
+source = ["onyx/skills/builtin/"]
+standalone = true
+forbidden = ["onyx", "ee", "shared_configs", "model_server", "scripts", "lint", "tests"]
+
+[[contract]]
+name = "backend-does-not-import-builtin-skills"
+rule = "onyx and ee must not import onyx.skills.builtin"
+reason = "Built-in skill scripts need packages that the backend environment does not have, and the backend ships them as files."
+instead = "Read a skill as files through onyx/skills. Put code that the backend runs outside onyx/skills/builtin."
+source = ["onyx/", "ee/"]
+source_exclude = ["onyx/skills/builtin/"]
+forbidden = ["onyx.skills.builtin"]
+
+[[contract]]
+name = "entry-points-are-not-libraries"
+rule = "onyx and ee must not import a process entry point"
+reason = "An entry point builds its application at import and sits at the top of the graph, so an import of it makes a cycle."
+instead = "Move the shared function into the package that owns it, for example onyx/server or onyx/setup.py, and import it from both places."
+source = ["onyx/", "ee/"]
+# ee/onyx/main.py is the Enterprise entry point. It extends the Community application.
+source_exclude = ["ee/onyx/main.py"]
+forbidden = ["onyx.main", "ee.onyx.main", "onyx.mcp_server_main", "onyx.webhook_server_main"]
+
+[[contract]]
+name = "mcp-server-is-a-separate-process"
+rule = "Only onyx/mcp_server_main.py may import onyx.mcp_server"
+reason = "The MCP server runs as its own process and calls the API server over HTTP."
+instead = "Put code that the API server also needs in the package that owns it. Import it from onyx/mcp_server."
+source = ["onyx/", "ee/"]
+source_exclude = ["onyx/mcp_server/", "onyx/mcp_server_main.py"]
+forbidden = ["onyx.mcp_server"]
+
+[[contract]]
+name = "webhook-server-is-a-separate-process"
+rule = "Only onyx/webhook_server_main.py may import onyx.webhook_server"
+reason = "The webhook server runs as its own process with its own application."
+instead = "Put code that the API server also needs in the package that owns it. Import it from onyx/webhook_server."
+source = ["onyx/", "ee/"]
+source_exclude = ["onyx/webhook_server/", "onyx/webhook_server_main.py"]
+forbidden = ["onyx.webhook_server"]
+
+[[contract]]
+name = "deprecated-db-code-is-for-migrations"
+rule = "Only alembic migrations may import onyx.db._deprecated"
+reason = "The directory holds retired code that old migrations still run. It is not a pattern for new code."
+instead = "Use the current module, for example onyx/file_store for file storage."
+source = ["onyx/", "ee/", "scripts/", "model_server/"]
+source_exclude = ["onyx/db/_deprecated/"]
+forbidden = ["onyx.db._deprecated"]
+
+[[contract]]
+name = "community-does-not-import-enterprise"
+rule = "onyx must not import ee"
+reason = "Community Edition runs without the ee package, so a direct import breaks it."
+instead = "Call fetch_versioned_implementation or fetch_ee_implementation_or_noop from onyx/utils/variable_functionality.py with the module path and the name."
+source = ["onyx/"]
+forbidden = ["ee"]
+
+[[contract]]
+name = "onyx-does-not-import-tests"
+rule = "onyx must not import tests"
+reason = "No image ships tests/, and test helpers are not written for production use."
+instead = "Move the helper into onyx/ and import it from the test, as onyx/connectors/load_all.py does."
+source = ["onyx/"]
+forbidden = ["tests"]
+
+[[contract]]
+name = "model-server-shared-modules"
+rule = "An onyx module that the model server image copies may import only the other copied modules and shared_configs"
+reason = "The model server image has no other onyx code, so any other import fails there."
+instead = "Have the entry point pass the value or the function in, as init_sentry takes instance_id_resolver. Keep `source` and `allowed` equal to the COPY lines in Dockerfile.model_server."
+source = [
+    "onyx/__init__.py",
+    "onyx/configs/__init__.py",
+    "onyx/configs/sentry.py",
+    "onyx/utils/logger.py",
+    "onyx/utils/middleware.py",
+    "onyx/utils/platform_utils.py",
+    "onyx/utils/tenant.py",
+]
+forbidden = ["onyx", "ee", "model_server", "scripts", "lint", "tests"]
+allowed = [
+    "onyx.__version__",
+    "onyx.configs.sentry",
+    "onyx.utils.logger",
+    "onyx.utils.middleware",
+    "onyx.utils.platform_utils",
+    "onyx.utils.tenant",
+]
+
+[[contract]]
+name = "migrations-do-not-import-enterprise"
+rule = "alembic must not import ee"
+reason = "Community Edition runs the same migrations without the ee package."
+instead = "Keep a migration self-contained. Put an Enterprise data change behind fetch_versioned_implementation in onyx/."
+source = ["alembic/", "alembic_tenants/"]
+# The two multi-tenant runners are Enterprise tools, not migrations.
+source_exclude = ["alembic/check_tenant_snapshot.py", "alembic/run_multitenant_migrations.py"]
+forbidden = ["ee"]
+
+[[contract]]
+name = "connectors-are-independent"
+rule = "A connector must not import another connector"
+reason = "Each connector changes alone, and a copied import ties two sources together."
+instead = "Move the shared code to the helper package for the vendor, or to cross_connector_utils/."
+type = "independence"
+container = "onyx/connectors"
+shared = ["cross_connector_utils", "google_utils", "microsoft_utils"]
+# capability_checks and edit_plan run every connector through one framework.
+hubs = ["capability_checks", "edit_plan"]
+
+[[contract.exception]]
+importer = "onyx/connectors/wikipedia/connector.py"
+imports = "onyx.connectors.mediawiki.wiki"
+reason = "Wikipedia is a MediaWiki site: its connector subclasses MediaWikiConnector and adds only the hostname."
+
+[[contract]]
+name = "permission-sync-sources-are-independent"
+rule = "A permission-sync source must not import another source"
+reason = "Each source changes alone, and a copied import ties two sources together."
+instead = "Move the shared code to the helper package for the vendor, such as microsoft_utils/."
+type = "independence"
+container = "ee/onyx/external_permissions"
+shared = ["microsoft_utils"]
+
+[[contract]]
+name = "configs-is-a-low-layer"
+rule = "onyx.configs may import only onyx.configs and onyx.utils"
+reason = "Every package imports the settings, so an import of a higher package from here makes a cycle."
+instead = "Define the enum or the default value in onyx/configs/constants.py and import it from the higher package."
+source = ["onyx/configs/"]
+forbidden = ["onyx", "ee"]
+allowed = ["onyx.__version__", "onyx.configs", "onyx.utils"]
+
+[[contract.exception]]
+importer = "onyx/configs/llm_configs.py"
+imports = "onyx.server.settings.store.load_settings"
+reason = "The function reads a workspace setting, and the settings store is under onyx/server. Remove this when the store moves to a lower package."
+
+[[contract]]
+name = "background-is-a-top-layer"
+rule = "Only onyx.server and the entry points may import onyx.background, except the Celery client app"
+reason = "Workers sit above the packages they run. A lower package that imports a task module ties itself to the worker code."
+instead = "To enqueue a task, import the client app from onyx/background/celery/versioned_apps/client.py and send the task by name. Put a shared constant in onyx/configs/constants.py and a database helper in onyx/db."
+source = ["onyx/", "ee/"]
+source_exclude = [
+    "onyx/background/",
+    "onyx/server/",
+    "onyx/main.py",
+    "onyx/setup.py",
+    "ee/onyx/background/",
+    "ee/onyx/server/",
+    "ee/onyx/main.py",
+]
+forbidden = ["onyx.background", "ee.onyx.background"]
+allowed = ["onyx.background.celery.versioned_apps.client"]
+
+[[contract]]
+name = "celery-task-packages-are-independent"
+rule = "A Celery task package must not import another task package"
+reason = "Each task package owns one job. An import of a sibling ties two jobs together and loads the task module of the sibling."
+instead = "Move the shared code to onyx/background/celery/tasks/shared/, or to onyx/db for a database helper."
+type = "independence"
+container = "onyx/background/celery/tasks"
+shared = ["shared"]
+
+[[contract.exception]]
+importer = "onyx/background/celery/tasks/docfetching/tasks.py"
+imports = "onyx.background.celery.tasks.docprocessing"
+reason = "Fetch and processing are two stages of one indexing pipeline. Fetch starts the processing tasks and shares their heartbeat and log builder."
+
+[[contract.exception]]
+importer = "onyx/background/celery/tasks/docprocessing/tasks.py"
+imports = "onyx.background.celery.tasks.docfetching.task_creation_utils"
+reason = "Fetch and processing are two stages of one indexing pipeline. The processing scheduler creates the next fetch attempt."
+
+[[contract.exception]]
+importer = "onyx/background/celery/tasks/docconversion/tasks.py"
+imports = "onyx.background.celery.tasks.docprocessing.heartbeat"
+reason = "Conversion is a stage of the same indexing pipeline as processing. Its tasks keep the attempt alive with the same heartbeat."
+
+[[contract]]
+name = "provider-sdk-boundary"
+rule = "Keep provider SDK imports in the adapters that own provider calls"
+reason = "Application code must call an adapter that records a generation span with an LLMFlow."
+instead = "Use the shared LLM client with a flow or add a tagged span in the provider adapter."
+source = ["onyx/", "ee/", "model_server/", "scripts/"]
+source_exclude = [
+    "onyx/llm/",
+    "onyx/tracing/",
+    "onyx/image_gen/providers/",
+    "onyx/voice/providers/",
+    "onyx/natural_language_processing/search_nlp_models.py",
+    "ee/onyx/server/gateway/",
+]
+external_forbidden = [
+    "anthropic",
+    "azure.cognitiveservices.speech",
+    "cohere",
+    "google.genai",
+    "google.generativeai",
+    "huggingface_hub",
+    "litellm",
+    "openai",
+    "sentence_transformers",
+    "transformers",
+    "vertexai",
+    "voyageai",
+]
+
+[[contract.exception]]
+importer = "onyx/image_gen/interfaces.py"
+imports = "litellm.types.utils.ImageResponse"
+reason = "Uses the SDK response type for annotations."
+
+[[contract.exception]]
+importer = "onyx/server/manage/llm/api.py"
+imports = "litellm"
+reason = "Lists provider names from the SDK registry."
+
+[[contract.exception]]
+importer = "model_server/encoders.py"
+imports = "litellm.exceptions.RateLimitError"
+reason = "Maps the SDK exception to a model-server response."
+
+[[contract.exception]]
+importer = "model_server/encoders.py"
+imports = "sentence_transformers"
+reason = "Uses the local embedding model type."
+
+[[contract.exception]]
+importer = "model_server/main.py"
+imports = "transformers.logging"
+reason = "Configures local model logging."
+
+[[contract.exception]]
+importer = "model_server/embedding_model_loader.py"
+imports = "huggingface_hub"
+reason = "Downloads local embedding model files and checks the cache."
+
+[[contract.exception]]
+importer = "model_server/embedding_model_loader.py"
+imports = "sentence_transformers"
+reason = "Loads local embedding models. The embedding client records the span."
+
+[[contract.exception]]
+importer = "model_server/voyage_nano.py"
+imports = "sentence_transformers"
+reason = "Constructs the local Voyage embedding model. The embedding client records the span."
+
+[[contract.exception]]
+importer = "scripts/test-openapi-key.py"
+imports = "openai.OpenAI"
+reason = "Existing standalone key diagnostic. Its direct SDK call needs a generation span."

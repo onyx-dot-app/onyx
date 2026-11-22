@@ -10,15 +10,15 @@ dispatcher never raises.
 
 from __future__ import annotations
 
-from dataclasses import dataclass
-from enum import Enum
 from typing import Protocol
 
 from mitmproxy import http
-from pydantic import BaseModel, ConfigDict
 
-from onyx.external_apps.matching.engine import AllMatchedActions
-from onyx.sandbox_proxy.identity import ResolvedSandbox
+from onyx.sandbox_proxy.models import (
+    InjectionContext,
+    InjectionOutcome,
+    InjectionResult,
+)
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
@@ -34,19 +34,6 @@ class CredentialUnavailableError(Exception):
     def __init__(self, message: str, *, sandbox_detail: str | None = None) -> None:
         super().__init__(message)
         self.sandbox_detail = sandbox_detail
-
-
-@dataclass(frozen=True)
-class InjectionContext:
-    """Per-request inputs every resolver receives.
-
-    `matched_actions` is the actions matched for this request (carrying
-    `external_app_id`), or `None` on off-catalog forwards. `sandbox.tenant_id` is
-    what resolvers key their per-tenant lookups by.
-    """
-
-    sandbox: ResolvedSandbox
-    matched_actions: AllMatchedActions | None
 
 
 class CredentialResolver(Protocol):
@@ -66,23 +53,6 @@ class CredentialResolver(Protocol):
     def resolve(self, request: http.Request, ctx: InjectionContext) -> dict[str, str]:
         """Render auth headers; raise `CredentialUnavailableError` to fail closed."""
         ...
-
-
-class InjectionOutcome(Enum):
-    PASS_THROUGH = "pass_through"
-    CLAIMED = "claimed"
-    INJECTED = "injected"
-    BLOCKED = "blocked"
-
-
-class InjectionResult(BaseModel):
-    """Outcome of one dispatch. `block_detail` is agent-facing prose for the
-    403 body, present only on BLOCKED when the resolver supplied one."""
-
-    model_config = ConfigDict(frozen=True)
-
-    outcome: InjectionOutcome
-    block_detail: str | None = None
 
 
 class CredentialInjectionDispatcher:
@@ -131,6 +101,7 @@ class CredentialInjectionDispatcher:
 
         for name, value in headers.items():
             flow.request.headers[name] = value
+        _pin_host_header(flow.request)
         # Header NAMES only — never log the injected secret values.
         logger.debug(
             "credential_injected resolver=%s host=%s header_count=%s header_names=%s",
@@ -156,3 +127,15 @@ class CredentialInjectionDispatcher:
                     request.host,
                 )
         return None
+
+
+_DEFAULT_PORTS = {"http": 80, "https": 443}
+
+
+def _pin_host_header(request: http.Request) -> None:
+    """The sandbox sets the Host header, and an upstream can route on it. A
+    credential goes only to the host that the gate matched."""
+    host = f"[{request.host}]" if ":" in request.host else request.host
+    if _DEFAULT_PORTS.get(request.scheme) != request.port:
+        host = f"{host}:{request.port}"
+    request.host_header = host

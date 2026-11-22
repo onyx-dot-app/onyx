@@ -28,7 +28,11 @@ const baselineHeader = `# Minimum statement coverage per package, in percent.
 type Baseline struct {
 	// Total is the floor for the module as a whole.
 	Total float64 `yaml:"total"`
-	// Packages maps a module-relative package path to its floor.
+	// Step is the rounding step of the floors, in percentage points. Zero
+	// means the finest step, 0.1.
+	Step float64 `yaml:"step,omitempty"`
+	// Packages maps a module-relative package path to its floor. A package
+	// whose floor rounds down to zero is left out.
 	Packages map[string]float64 `yaml:"packages"`
 }
 
@@ -56,6 +60,9 @@ func LoadBaseline(path string) (*Baseline, error) {
 // passes every comparison, so a hand-edited baseline must fail loudly rather
 // than silently turn the gate off.
 func (b *Baseline) validate() error {
+	if math.IsNaN(b.Step) || b.Step < 0 || b.Step > 100 {
+		return fmt.Errorf("step must be between 0 and 100, got %v", b.Step)
+	}
 	if err := validateFloor("total", b.Total); err != nil {
 		return err
 	}
@@ -75,15 +82,19 @@ func validateFloor(name string, floor float64) error {
 }
 
 // NewBaseline builds a baseline from a measured profile. Every percentage is
-// rounded down to one decimal, so a floor is never above what the run actually
-// achieved and re-running the same tests cannot fail the check.
-func NewBaseline(profile *Profile) *Baseline {
+// rounded down to the kind's floor step, so a floor is never above what the
+// run actually achieved and re-running the same tests cannot fail the check.
+// A coarse step keeps a floor from tracking each small change in coverage.
+func NewBaseline(profile *Profile, kind Kind) *Baseline {
 	baseline := &Baseline{
-		Total:    floorPercent(profile.Total()),
+		Total:    floorPercent(profile.Total(), kind.FloorStep),
+		Step:     kind.FloorStep,
 		Packages: make(map[string]float64, len(profile.Packages)),
 	}
 	for _, pkg := range profile.Packages {
-		baseline.Packages[pkg.Package] = floorPercent(pkg.Percent())
+		if floor := floorPercent(pkg.Percent(), kind.FloorStep); floor > 0 {
+			baseline.Packages[pkg.Package] = floor
+		}
 	}
 	return baseline
 }
@@ -99,6 +110,7 @@ func (b *Baseline) Reference() *Reference {
 		Label:    "floor",
 		Total:    b.Total,
 		Packages: b.Packages,
+		Step:     b.Step,
 	}
 }
 
@@ -123,7 +135,14 @@ func (b *Baseline) Save(path string, kind Kind) error {
 	return nil
 }
 
-// floorPercent rounds a percentage down to one decimal place.
-func floorPercent(percent float64) float64 {
-	return math.Floor(percent*10) / 10
+// floorPercent rounds a percentage down to a multiple of step. A step of zero
+// or below 0.1 rounds down to one decimal place.
+func floorPercent(percent, step float64) float64 {
+	if step < 0.1 {
+		step = 0.1
+	}
+	// Work in tenths so a step such as 0.1 has no binary rounding error. The
+	// percent itself is not rounded: a floor above it would fail the same run.
+	tenths := math.Round(step * 10)
+	return math.Floor(percent*10/tenths) * tenths / 10
 }

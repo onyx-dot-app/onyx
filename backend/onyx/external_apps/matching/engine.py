@@ -1,22 +1,24 @@
-"""Composes recognition + policy resolution into a single verdict for an
-outbound request."""
+"""Recognize app actions independently of saved permission settings."""
 
+import re
 from collections.abc import Iterable, Mapping
 from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
-from sqlalchemy.orm import Session
 
-from onyx.db.enums import POLICY_SEVERITY, EndpointPolicy, ExternalAppType, GatedAppKind
-from onyx.db.gated_app import get_action_policies
-from onyx.db.models import ExternalApp
+from onyx.db.enums import (
+    POLICY_SEVERITY,
+    ActionPolicy,
+    ExternalAppType,
+    IntegrationKind,
+)
 from onyx.external_apps.matching.request import MatchContext, ProxiedRequest
 from onyx.external_apps.matching.rules import rule_matches
-from onyx.external_apps.providers.registry import (
-    effective_policy,
-    get_endpoint_catalog,
-    get_provider_for_app,
-)
+from onyx.external_apps.providers.actions import EndpointSpec, GraphQLOp
+from onyx.external_apps.providers.registry import get_endpoint_catalog
+from onyx.utils.logger import setup_logger
+
+logger = setup_logger()
 
 # action_type for a domain-matched request that hit no catalog action.
 WHOLE_DOMAIN_ACTION_TYPE = "unspecified"
@@ -31,29 +33,18 @@ class MatchedAction(BaseModel):
     action_type: str
     display_name: str
     description: str
-    policy: EndpointPolicy
+    policy: ActionPolicy
 
 
 class GatedTarget(BaseModel):
-    """The connected app/server a gated request is attributed to.
-
-    ``id`` indexes the table named by ``kind`` — ``external_app`` or
-    ``mcp_server``. Lookups key off ``(kind, id)``, never ``app_name``: the
-    latter isn't unique across instances (self-hosted GitLab/Jira share an
-    app_type, and two MCP servers can share a display name).
-    """
+    """The integration a gated request is attributed to. Lookups key off
+    ``integration_id``, never ``app_name``, which is not unique."""
 
     model_config = ConfigDict(frozen=True)
 
-    kind: GatedAppKind
-    id: int
+    integration_id: int
+    kind: IntegrationKind
     app_name: str
-
-    @property
-    def key(self) -> tuple[GatedAppKind, int]:
-        """The ``(kind, id)`` pair — same shape as ``GatedApp.target_key``, so
-        live matches compare directly against persisted grants."""
-        return self.kind, self.id
 
 
 class AllMatchedActions(BaseModel):
@@ -112,7 +103,7 @@ def actions_requiring_approval(actions: Iterable[ActionLike]) -> list[str]:
             action_type = action.action_type
         else:
             try:
-                policy = EndpointPolicy(action["policy"])
+                policy = ActionPolicy(action["policy"])
             except (KeyError, TypeError, ValueError):
                 continue
             raw_action_type = action.get("action_type")
@@ -120,94 +111,69 @@ def actions_requiring_approval(actions: Iterable[ActionLike]) -> list[str]:
                 continue
             action_type = raw_action_type
 
-        if policy is EndpointPolicy.ASK:
+        if policy is ActionPolicy.ASK:
             action_types.add(action_type)
     return sorted(action_types)
 
 
-def _app_name(app: ExternalApp) -> str:
-    provider = get_provider_for_app(app)
-    if provider is not None:
-        return provider.spec.app_name
-    # CUSTOM apps have no provider; use their independently editable display name.
-    if app.app_type == ExternalAppType.CUSTOM:
-        return app.name
-    return app.app_type.value
+def url_matches_patterns(url: str, regexes: Iterable[str]) -> bool:
+    """True when ``url`` fully matches one of ``regexes``. A malformed
+    built-in regex is skipped."""
+    for regex in regexes:
+        try:
+            if re.fullmatch(regex, url):
+                return True
+        except re.error:
+            logger.warning("skipping malformed upstream_url_pattern %r", regex)
+    return False
+
+
+def _has_unknown_graphql_field(
+    matched_endpoints: Iterable[EndpointSpec], context: MatchContext
+) -> bool:
+    """Whether a GraphQL request also invokes a root field that no matched
+    action covers. A document or batch can mix a known read with an unknown
+    mutation, and the unknown field must not take the read's policy."""
+    known = {
+        (rule.operation_type, rule.field)
+        for endpoint in matched_endpoints
+        for rule in endpoint.matches
+        if isinstance(rule, GraphQLOp)
+    }
+    if not known:
+        return False
+    return any(invocation not in known for invocation in context.graphql_invocations)
 
 
 def recognize_actions(
-    db_session: Session,
-    app: ExternalApp,
+    app_type: ExternalAppType,
     request: ProxiedRequest,
-) -> AllMatchedActions | None:
-    """Which catalog action(s) ``request`` invokes within ``app`` — pure
-    recognition, no credential knowledge.
-
-    Returns an ``AllMatchedActions`` over every catalog action whose rules fire (each
-    carrying its ``effective_policy`` — stored override else catalog default),
-    sorted strictest-first so ``actions[0]`` is the verdict, or ``None`` when no
-    catalog action matches. The credential gate and the whole-domain fallback are
-    the caller's job (see ``apply_credential_gate``). ``payload`` is left empty here; refill
-    it via ``model_copy``.
-    """
+) -> tuple[MatchedAction, ...]:
+    """Identify actions with catalog defaults, strictest first. The proxy
+    resolves saved policies."""
     context = MatchContext(request)
-    stored = get_action_policies(db_session, GatedAppKind.EXTERNAL_APP, app.id)
-    catalog = get_endpoint_catalog(app.app_type)
+    catalog = get_endpoint_catalog(app_type)
+    matched_endpoints = [
+        endpoint
+        for endpoint in catalog
+        if any(rule_matches(rule, context) for rule in endpoint.matches)
+    ]
     matched = [
         MatchedAction(
             action_type=endpoint.id,
             display_name=endpoint.normalised_name,
             description=endpoint.description,
-            policy=effective_policy(endpoint, stored),
+            policy=endpoint.default_policy,
         )
-        for endpoint in catalog
-        if any(rule_matches(rule, context) for rule in endpoint.matches)
+        for endpoint in matched_endpoints
     ]
-    if not matched:
-        return None
-    return AllMatchedActions(
-        actions=tuple(matched),
-        target=GatedTarget(
-            kind=GatedAppKind.EXTERNAL_APP, id=app.id, app_name=_app_name(app)
-        ),
-    )
-
-
-def apply_credential_gate(
-    app: ExternalApp,
-    request: ProxiedRequest,
-    matched_actions: AllMatchedActions | None,
-    *,
-    is_available: bool,
-) -> AllMatchedActions | None:
-    """Apply the credential gate to a pure ``recognize_actions`` result, given
-    whether the app ``is_available`` (is active and injectable — the caller resolves
-    that). Pure: no DB or credential access.
-
-    - ``is_available`` + a catalog action matched → those actions, unchanged.
-    - ``is_available`` + nothing matched → gate the whole domain under a default ``ASK``.
-    - not ``is_available`` → keep only a recorded ``DENY`` (an explicit block fires with
-      or without a credential), else ``None`` (forward the request bare, no prompt).
-    """
-    if not is_available:
-        if matched_actions is None:
-            return None
-        deny = tuple(
-            a for a in matched_actions.actions if a.policy is EndpointPolicy.DENY
-        )
-        return matched_actions.model_copy(update={"actions": deny}) if deny else None
-    if matched_actions is not None:
-        return matched_actions
-    return AllMatchedActions(
-        actions=(
+    if not matched or _has_unknown_graphql_field(matched_endpoints, context):
+        matched.append(
             MatchedAction(
                 action_type=WHOLE_DOMAIN_ACTION_TYPE,
                 display_name="Perform action",
                 description=f"{request.method} {request.path}",
-                policy=EndpointPolicy.ASK,
-            ),
-        ),
-        target=GatedTarget(
-            kind=GatedAppKind.EXTERNAL_APP, id=app.id, app_name=_app_name(app)
-        ),
-    )
+                policy=ActionPolicy.ASK,
+            )
+        )
+    return tuple(sorted(matched, key=lambda a: POLICY_SEVERITY[a.policy], reverse=True))

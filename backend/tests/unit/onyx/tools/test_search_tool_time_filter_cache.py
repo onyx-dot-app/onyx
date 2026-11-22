@@ -1,98 +1,94 @@
-from __future__ import annotations
-
 from datetime import datetime, timezone
 from unittest.mock import MagicMock, patch
 
-from onyx.secondary_llm_flows.time_filter import (
-    DocumentTimeField,
-    TimeFilter,
-    decide_time_filter,
+import pytest
+
+from onyx.context.search.models import DocumentTimeField, TimeFilter
+from onyx.llm.models import ToolResultMessage
+from onyx.tools.tool_implementations.search.models import (
+    SearchContext,
+    SearchPlanningResult,
 )
-from onyx.tools.tool_implementations.search.search_tool import SearchTool
+from onyx.tools.tool_implementations.search.search_tool import (
+    SearchTool,
+    update_search_context,
+)
 
 
-def _make_tool() -> SearchTool:
-    """A SearchTool with only the state _expand_queries_and_decide_scope reads,
-    avoiding the heavy __init__ (DB, emitter, etc.)."""
+@pytest.mark.parametrize("restricted", [True, False])
+def test_time_filter_is_reused_after_completed_search(restricted: bool) -> None:
     tool = SearchTool.__new__(SearchTool)
     tool.llm = MagicMock()
     tool.auto_detect_filters = True
-    tool._scope_decision_settled = True  # skip the source-scope job
-    tool._cached_expansion = None
-    tool._time_filter = None
-    tool._time_filter_computed = False
-    return tool
-
-
-def test_time_filter_runs_once_and_caches_for_the_turn() -> None:
-    tool = _make_tool()
-    decided = TimeFilter(
-        field=DocumentTimeField.UPDATED_AT,
-        start=datetime(2025, 1, 1, tzinfo=timezone.utc),
+    context = SearchContext(scope_decision_settled=True)
+    decided = (
+        TimeFilter(
+            field=DocumentTimeField.UPDATED_AT,
+            start=datetime(2025, 1, 1, tzinfo=timezone.utc),
+        )
+        if restricted
+        else None
     )
-
-    scheduled: list[list] = []
-
-    def fake_parallel(jobs: list) -> list:
-        funcs = [job[0] for job in jobs]
-        scheduled.append(funcs)
-        return [decided if func is decide_time_filter else None for func in funcs]
-
     with patch(
-        "onyx.tools.tool_implementations.search.search_tool."
-        "run_functions_tuples_in_parallel",
-        side_effect=fake_parallel,
-    ):
+        "onyx.tools.tool_implementations.search.search_tool.decide_time_filter",
+        return_value=decided,
+    ) as decide:
         first = tool._expand_queries_and_decide_scope(
             skip_query_expansion=True,
+            search_context=context,
             message_history=[],
             user_info=None,
             memories=[],
-            decide_args=(),
+            candidate_sources=[],
+            llm_queries=[],
+        )
+        context = update_search_context(
+            context,
+            [
+                ToolResultMessage(
+                    tool_call_id="search",
+                    tool_name="internal_search",
+                    content="",
+                    metadata=SearchPlanningResult(
+                        original_queries=("query",),
+                        searched_sources=(),
+                        time_filter=first.time_filter,
+                        time_filter_computed=first.time_filter_computed,
+                    ),
+                )
+            ],
         )
         second = tool._expand_queries_and_decide_scope(
             skip_query_expansion=True,
+            search_context=context,
             message_history=[],
             user_info=None,
             memories=[],
-            decide_args=(),
+            candidate_sources=[],
+            llm_queries=[],
         )
-
-    # Only the first cycle schedules the time-filter job; the second has
-    # nothing to run.
-    assert len(scheduled) == 1
-    assert decide_time_filter in scheduled[0]
-
-    assert first.time_filter == decided
-    assert second.time_filter == decided
-    assert tool._time_filter_computed is True
+    decide.assert_called_once()
+    assert first.time_filter == second.time_filter == decided
+    assert context.time_filter_computed
+    assert not second.time_filter_computed
 
 
 def test_time_filter_skipped_when_auto_detect_disabled() -> None:
-    tool = _make_tool()
+    tool = SearchTool.__new__(SearchTool)
+    tool.llm = MagicMock()
     tool.auto_detect_filters = False
-
-    scheduled: list[list] = []
-
-    def fake_parallel(jobs: list) -> list:
-        scheduled.append([job[0] for job in jobs])
-        return [None for _ in jobs]
-
     with patch(
-        "onyx.tools.tool_implementations.search.search_tool."
-        "run_functions_tuples_in_parallel",
-        side_effect=fake_parallel,
-    ):
+        "onyx.tools.tool_implementations.search.search_tool.decide_time_filter"
+    ) as decide:
         result = tool._expand_queries_and_decide_scope(
             skip_query_expansion=True,
+            search_context=SearchContext(),
             message_history=[],
             user_info=None,
             memories=[],
-            decide_args=(),
+            candidate_sources=[],
+            llm_queries=[],
         )
-
-    assert scheduled == [] or all(
-        decide_time_filter not in funcs for funcs in scheduled
-    )
+    decide.assert_not_called()
     assert result.time_filter is None
-    assert tool._time_filter_computed is False
+    assert not result.time_filter_computed

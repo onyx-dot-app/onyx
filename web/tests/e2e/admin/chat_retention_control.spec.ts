@@ -1,6 +1,6 @@
 import { test, expect } from "@tests/e2e/fixtures/eeFeatures";
 import { loginAs } from "@tests/e2e/utils/auth";
-import { ChatPreferencesPage } from "@tests/e2e/pages/ChatPreferencesPage";
+import { AdminSecurityPage } from "@tests/e2e/pages/AdminSecurityPage";
 
 test.describe("Chat retention control @exclusive", () => {
   test.beforeEach(async ({ page }) => {
@@ -10,9 +10,7 @@ test.describe("Chat retention control @exclusive", () => {
 
   test.afterEach(async ({ page, eeEnabled }) => {
     if (!eeEnabled) return;
-    await new ChatPreferencesPage(page)
-      .resetRetentionToForever()
-      .catch(() => {});
+    await new AdminSecurityPage(page).resetRetentionToForever().catch(() => {});
   });
 
   test("dropdown lists the configured retention presets", async ({
@@ -20,10 +18,10 @@ test.describe("Chat retention control @exclusive", () => {
     eeEnabled,
   }) => {
     test.skip(!eeEnabled, "Chat retention requires an Enterprise license");
-    const chatPrefs = new ChatPreferencesPage(page);
-    await chatPrefs.gotoAdvancedOptions();
+    const security = new AdminSecurityPage(page);
+    await security.goto();
 
-    await chatPrefs.openRetentionDropdown();
+    await security.openRetentionDropdown();
     for (const label of [
       "Forever",
       "7 days",
@@ -33,7 +31,7 @@ test.describe("Chat retention control @exclusive", () => {
       "1 year",
       "Custom Retention",
     ]) {
-      await expect(chatPrefs.retentionOption(label)).toBeVisible();
+      await expect(security.retentionOption(label)).toBeVisible();
     }
 
     await page.keyboard.press("Escape");
@@ -44,19 +42,19 @@ test.describe("Chat retention control @exclusive", () => {
     eeEnabled,
   }) => {
     test.skip(!eeEnabled, "Chat retention requires an Enterprise license");
-    const chatPrefs = new ChatPreferencesPage(page);
-    await chatPrefs.resetRetentionToForever();
-    await chatPrefs.gotoAdvancedOptions();
+    const security = new AdminSecurityPage(page);
+    await security.resetRetentionToForever();
+    await security.goto();
 
-    await chatPrefs.setCustomRetention("45");
+    await security.setCustomRetention("45");
 
     // In-place conversion: the dropdown is gone, replaced by the input.
-    await expect(chatPrefs.retentionCustomInput).toBeVisible();
-    await expect(chatPrefs.retentionTrigger).toHaveCount(0);
+    await expect(security.retentionCustomInput).toBeVisible();
+    await expect(security.retentionTrigger).toHaveCount(0);
 
     // 45 is not a preset, so it round-trips back into the custom input.
-    await chatPrefs.reloadAdvancedOptions();
-    await expect(chatPrefs.retentionCustomInput).toHaveValue("45");
+    await security.reload();
+    await expect(security.retentionCustomInput).toHaveValue("45");
   });
 
   test("Restore Default returns retention to Forever", async ({
@@ -64,14 +62,14 @@ test.describe("Chat retention control @exclusive", () => {
     eeEnabled,
   }) => {
     test.skip(!eeEnabled, "Chat retention requires an Enterprise license");
-    const chatPrefs = new ChatPreferencesPage(page);
-    await chatPrefs.resetRetentionToForever();
-    await chatPrefs.gotoAdvancedOptions();
+    const security = new AdminSecurityPage(page);
+    await security.resetRetentionToForever();
+    await security.goto();
 
-    await chatPrefs.setCustomRetention("45");
-    await chatPrefs.restoreRetentionDefault();
+    await security.setCustomRetention("45");
+    await security.restoreRetentionDefault();
 
-    await expect(chatPrefs.retentionTrigger).toContainText("Forever");
+    await expect(security.retentionTrigger).toHaveValue("Forever");
   });
 
   test("reducing retention prompts confirmation; cancel keeps the current value", async ({
@@ -79,16 +77,16 @@ test.describe("Chat retention control @exclusive", () => {
     eeEnabled,
   }) => {
     test.skip(!eeEnabled, "Chat retention requires an Enterprise license");
-    const chatPrefs = new ChatPreferencesPage(page);
-    await chatPrefs.resetRetentionToForever();
-    await chatPrefs.gotoAdvancedOptions();
+    const security = new AdminSecurityPage(page);
+    await security.resetRetentionToForever();
+    await security.goto();
 
-    await chatPrefs.selectRetentionPreset("30 days");
-    await expect(chatPrefs.reduceRetentionModal).toBeVisible();
+    await security.selectRetentionPreset("30 days");
+    await expect(security.reduceRetentionModal).toBeVisible();
 
-    await chatPrefs.cancelRetentionReduction();
+    await security.cancelRetentionReduction();
 
     // The value was not changed.
-    await expect(chatPrefs.retentionTrigger).toContainText("Forever");
+    await expect(security.retentionTrigger).toHaveValue("Forever");
   });
 });

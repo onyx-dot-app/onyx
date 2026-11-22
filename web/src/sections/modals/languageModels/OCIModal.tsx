@@ -2,10 +2,15 @@
 
 import { useTranslations } from "next-intl";
 import { useSWRConfig } from "swr";
-import { FileUploadFormField } from "@/components/Field";
 import InputTypeInField from "@/refresh-components/form/InputTypeInField";
-import { Section } from "@/layouts/general-layouts";
-import { InputDivider, InputPadder, InputVertical, toast } from "@opal/layouts";
+import { InputSingleUploadField } from "@opal/form";
+import {
+  InputDivider,
+  InputPadder,
+  InputVertical,
+  toast,
+  Section,
+} from "@opal/layouts";
 import {
   LLMProviderFormProps,
   LLMProviderName,
@@ -82,7 +87,6 @@ function OCIModalInternals({
           >
             <InputTypeInField
               name={FIELD_OCI_COMPARTMENT_ID}
-              // oxlint-disable-next-line i18n/no-raw-jsx-text -- OCID prefix, not copy
               placeholder="ocid1.compartment.oc1.."
             />
           </InputVertical>
@@ -94,7 +98,6 @@ function OCIModalInternals({
           >
             <InputTypeInField
               name={FIELD_OCI_TENANCY}
-              // oxlint-disable-next-line i18n/no-raw-jsx-text -- OCID prefix, not copy
               placeholder="ocid1.tenancy.oc1.."
             />
           </InputVertical>
@@ -106,7 +109,6 @@ function OCIModalInternals({
           >
             <InputTypeInField
               name={FIELD_OCI_USER}
-              // oxlint-disable-next-line i18n/no-raw-jsx-text -- OCID prefix, not copy
               placeholder="ocid1.user.oc1.."
             />
           </InputVertical>
@@ -118,7 +120,6 @@ function OCIModalInternals({
           >
             <InputTypeInField
               name={FIELD_OCI_FINGERPRINT}
-              // oxlint-disable-next-line i18n/no-raw-jsx-text -- fingerprint format, not copy
               placeholder="12:34:56:78:90:ab:cd:ef:12:34:56:78:90:ab:cd:ef"
             />
           </InputVertical>
@@ -131,7 +132,10 @@ function OCIModalInternals({
           title={t("oci.privateKeyField.title")}
           subDescription={t("oci.privateKeyField.description")}
         >
-          <FileUploadFormField name={FIELD_OCI_KEY} label="" />
+          <InputSingleUploadField
+            name={FIELD_OCI_KEY}
+            accept=".pem,application/x-pem-file"
+          />
         </InputVertical>
       </InputPadder>
 
@@ -194,16 +198,12 @@ export default function OCIModal({
         OCI_COMPARTMENT_ID: Yup.string().required(
           t("oci.validation.compartmentIdRequired")
         ),
-        OCI_TENANCY: Yup.string().required(
-          t("oci.validation.tenancyRequired")
-        ),
+        OCI_TENANCY: Yup.string().required(t("oci.validation.tenancyRequired")),
         OCI_USER: Yup.string().required(t("oci.validation.userRequired")),
         OCI_FINGERPRINT: Yup.string().required(
           t("oci.validation.fingerprintRequired")
         ),
-        OCI_KEY: Yup.string().required(
-          t("oci.validation.privateKeyRequired")
-        ),
+        OCI_KEY: Yup.string().required(t("oci.validation.privateKeyRequired")),
       }),
     },
   });

@@ -1,14 +1,13 @@
 import React from "react";
-import { fireEvent, screen } from "@testing-library/react";
+import { fireEvent, screen, within } from "@testing-library/react";
 import { render } from "@tests/setup/test-utils";
 import { TooltipProvider } from "@radix-ui/react-tooltip";
 import BuildMessageList from "@/app/craft/components/BuildMessageList";
-import type { BuildMessage } from "@/app/craft/types/streamingTypes";
-import type { StreamItem } from "@/app/craft/types/displayTypes";
-
-jest.mock("@/lib/app/components", () => ({
-  Logo: () => <div data-testid="onyx-logo" />,
-}));
+import type {
+  BuildMessage,
+  OutputCard,
+} from "@/app/craft/types/streamingTypes";
+import type { TimelineEvent } from "@/lib/timeline/events";
 
 jest.mock("@/components/chat/MinimalMarkdown", () => ({
   __esModule: true,
@@ -40,15 +39,44 @@ jest.mock("motion/react", () => ({
   },
 }));
 
-function scrollRef() {
-  const el = document.createElement("div");
-  el.scrollTo = jest.fn();
-  return { current: el };
+function text(content: string): TimelineEvent {
+  return {
+    type: "update",
+    update: {
+      sessionUpdate: "agent_message_chunk",
+      content: { type: "text", text: content },
+    },
+  };
+}
+
+function thought(content: string): TimelineEvent {
+  return {
+    type: "update",
+    update: {
+      sessionUpdate: "agent_thought_chunk",
+      content: { type: "text", text: content },
+    },
+  };
+}
+
+const endTurn: TimelineEvent = { type: "stop", stopReason: "end_turn" };
+
+// Opens a folded run card. Its fold button is named by the step count.
+function openRun() {
+  const fold = screen.queryByRole("button", { name: /^\d+ steps?$/ });
+  if (fold?.getAttribute("aria-expanded") === "false") fireEvent.click(fold);
+}
+
+// Opens every closed step.
+function openSteps() {
+  for (const step of screen.queryAllByRole("button", { expanded: false })) {
+    fireEvent.click(step);
+  }
 }
 
 function renderList(props: {
   messages?: BuildMessage[];
-  streamItems?: StreamItem[];
+  timelineEvents?: TimelineEvent[];
   isStreaming?: boolean;
 }) {
   return render(
@@ -56,10 +84,8 @@ function renderList(props: {
       <BuildMessageList
         sessionId="session-1"
         messages={props.messages ?? []}
-        streamItems={props.streamItems ?? []}
+        timelineEvents={props.timelineEvents ?? []}
         isStreaming={props.isStreaming}
-        autoScrollEnabled={false}
-        scrollContainerRef={scrollRef()}
       />
     </TooltipProvider>
   );
@@ -70,23 +96,149 @@ const savedAssistantMessage: BuildMessage = {
   type: "assistant",
   content: "Final answer",
   timestamp: new Date("2026-01-01T00:00:00Z"),
-  message_metadata: {
-    streamItems: [
-      {
-        type: "thinking",
-        id: "thought-1",
-        content: "Checking the app structure.",
-        isStreaming: false,
-      },
-      {
-        type: "text",
-        id: "text-1",
-        content: "Final answer",
-        isStreaming: false,
-      },
-    ],
-  },
+  timelineEvents: [
+    thought("Checking the app structure."),
+    text("Final answer"),
+    endTurn,
+  ],
 };
+
+test("shows a cursor after refresh with only completed tools until the turn settles", () => {
+  const timelineEvents: TimelineEvent[] = [
+    {
+      type: "update",
+      update: {
+        sessionUpdate: "tool_call",
+        toolCallId: "completed-tool",
+        title: "Running command",
+        kind: "execute",
+        status: "completed",
+        rawInput: { command: "ls", description: "List files" },
+        rawOutput: "report.txt",
+      },
+    },
+  ];
+  const props = {
+    sessionId: "session-1",
+    messages: [],
+    timelineEvents,
+  };
+  const { rerender } = render(<BuildMessageList {...props} isStreaming />);
+  expect(screen.getByTestId("blinking-bar")).toBeInTheDocument();
+  rerender(<BuildMessageList {...props} isStreaming={false} />);
+  expect(screen.queryByTestId("blinking-bar")).not.toBeInTheDocument();
+});
+
+test("uses the text cursor without adding a second progress cursor", async () => {
+  renderList({
+    isStreaming: true,
+    timelineEvents: [text("Writing")],
+  });
+  // The text cursor is the inline `[*]()` marker in the (mocked) markdown.
+  // Live text types out.
+  expect(await screen.findByText(/Writing \[\*\]\(\)/)).toBeInTheDocument();
+  expect(screen.queryByTestId("blinking-bar")).not.toBeInTheDocument();
+});
+
+test("shows a cursor when a live turn has only saved history", () => {
+  renderList({ messages: [savedAssistantMessage], isStreaming: true });
+  expect(screen.getByTestId("blinking-bar")).toBeInTheDocument();
+});
+
+// Output ownership follows settled turns, independently of assistant prose.
+test("renders a settled output-only turn but never places its cards before a live response", () => {
+  const message: BuildMessage = {
+    id: "user",
+    type: "user",
+    content: "Make a report",
+    timestamp: new Date(),
+    turn_index: 0,
+  };
+  const output: OutputCard = {
+    id: "report",
+    kind: "file",
+    path: "outputs/report.md",
+    name: "report.md",
+    turn_index: 0,
+    revision: 1,
+    size_bytes: 12,
+    deleted: false,
+    viewed_revision: null,
+  };
+  const props = {
+    sessionId: "session-1",
+    messages: [message],
+    timelineEvents: [],
+    outputCards: [output],
+    onOutputOpen: jest.fn(),
+    onTurnOutputsOpen: jest.fn(),
+  };
+  const { rerender } = render(<BuildMessageList {...props} isStreaming />);
+  expect(
+    screen.queryByRole("button", { name: output.name })
+  ).not.toBeInTheDocument();
+  rerender(<BuildMessageList {...props} isStreaming={false} />);
+  expect(screen.getByRole("button", { name: output.name })).toBeInTheDocument();
+  expect(screen.getByText(message.content)).toBeInTheDocument();
+});
+
+test("moves a file card to its latest persisted turn and retains an output-only turn", () => {
+  const messages: BuildMessage[] = [
+    { ...savedAssistantMessage, turn_index: 0 },
+    {
+      id: "assistant-2",
+      type: "assistant",
+      content: "",
+      timestamp: new Date(),
+      turn_index: 1,
+    },
+  ];
+  const output: OutputCard = {
+    id: "report",
+    kind: "file",
+    path: "outputs/report.md",
+    name: "report.md",
+    turn_index: 0,
+    revision: 1,
+    size_bytes: 12,
+    deleted: false,
+    viewed_revision: null,
+  };
+  const onOutputOpen = jest.fn();
+  const props = {
+    sessionId: "session-1",
+    messages,
+    timelineEvents: [],
+    onOutputOpen,
+    onTurnOutputsOpen: jest.fn(),
+  };
+  const { rerender } = render(
+    <BuildMessageList {...props} outputCards={[output]} />
+  );
+  expect(
+    within(screen.getByTestId("craft-turn-outputs-0")).getByRole("button", {
+      name: output.name,
+    })
+  ).toBeInTheDocument();
+  rerender(
+    <BuildMessageList
+      {...props}
+      outputCards={[{ ...output, turn_index: 1, revision: 2 }]}
+    />
+  );
+  expect(screen.queryByTestId("craft-turn-outputs-0")).not.toBeInTheDocument();
+  fireEvent.click(
+    within(screen.getByTestId("craft-turn-outputs-1")).getByRole("button", {
+      name: output.name,
+    })
+  );
+  expect(onOutputOpen).toHaveBeenCalledWith({
+    ...output,
+    turn_index: 1,
+    revision: 2,
+  });
+  expect(screen.getByText("Final answer")).toBeInTheDocument();
+});
 
 describe("BuildMessageList thinking visibility", () => {
   it("renders image attachments on user messages", () => {
@@ -119,9 +271,10 @@ describe("BuildMessageList thinking visibility", () => {
   it("shows restored thought packets as collapsed thinking rows", () => {
     renderList({ messages: [savedAssistantMessage] });
 
-    fireEvent.click(screen.getByRole("button", { name: /Thinking/ }));
+    openRun();
+    openSteps();
 
-    expect(screen.getByText("Thinking")).toBeInTheDocument();
+    expect(screen.getByText("Thought")).toBeInTheDocument();
     expect(screen.getByText("Checking the app structure.")).toBeInTheDocument();
     expect(screen.getByText("Final answer")).toBeInTheDocument();
   });
@@ -129,71 +282,56 @@ describe("BuildMessageList thinking visibility", () => {
   it("does not open restored thought packets by default", () => {
     renderList({ messages: [savedAssistantMessage] });
 
-    expect(screen.getByText("Thinking")).toBeInTheDocument();
+    // The saved run is folded; opening it shows the thought step closed.
+    openRun();
+    expect(screen.getByText("Thought")).toBeInTheDocument();
     expect(
       screen.queryByText("Checking the app structure.")
     ).not.toBeInTheDocument();
     expect(screen.getByText("Final answer")).toBeInTheDocument();
   });
 
-  it("keeps completed thought packets collapsed in the active stream", () => {
+  it("keeps completed thought packets collapsed in the active stream", async () => {
     renderList({
       isStreaming: true,
-      streamItems: [
-        {
-          type: "thinking",
-          id: "settled-thought",
-          content: "Checking the app structure.",
-          isStreaming: false,
-        },
-        {
-          type: "text",
-          id: "stream-text",
-          content: "Final answer",
-          isStreaming: false,
-        },
+      timelineEvents: [
+        thought("Checking the app structure."),
+        text("Final answer"),
       ],
     });
 
-    expect(screen.getByText("Thinking")).toBeInTheDocument();
+    // Live text types out with its cursor, and the run folds once text
+    // follows it.
+    expect(await screen.findByText(/^Final answer/)).toBeInTheDocument();
+    expect(
+      await screen.findByRole("button", { name: "1 step", expanded: false })
+    ).toBeInTheDocument();
+    openRun();
+    expect(screen.getByText("Thought")).toBeInTheDocument();
     expect(
       screen.queryByText("Checking the app structure.")
     ).not.toBeInTheDocument();
-    expect(screen.getByText("Final answer")).toBeInTheDocument();
   });
 
   it("shows live thought packets as collapsed progress by default", () => {
     renderList({
       isStreaming: true,
-      streamItems: [
-        {
-          type: "thinking",
-          id: "live-thought",
-          content: "Checking the app structure.",
-          isStreaming: true,
-        },
-      ],
+      timelineEvents: [thought("Checking the app structure.")],
     });
 
-    expect(screen.getByText("Thinking...")).toBeInTheDocument();
+    expect(screen.getByText("Thinking")).toBeInTheDocument();
     expect(
       screen.queryByText("Checking the app structure.")
     ).not.toBeInTheDocument();
 
-    fireEvent.click(screen.getByRole("button", { name: /Thinking/ }));
+    openSteps();
 
     expect(screen.getByText("Checking the app structure.")).toBeInTheDocument();
   });
 
   it("shows stream error packets inline", () => {
     renderList({
-      streamItems: [
-        {
-          type: "error",
-          id: "error-1",
-          content: "provider model not found",
-        },
-      ],
+      timelineEvents: [{ type: "error", message: "provider model not found" }],
     });
 
     expect(screen.getByRole("alert")).toHaveTextContent(
@@ -201,3 +339,81 @@ describe("BuildMessageList thinking visibility", () => {
     );
   });
 });
+
+// Finalization uses the existing assistant block until canonical history is ready.
+test("keeps a finalization cursor when attachment completes before any assistant output", () => {
+  const messages: BuildMessage[] = [
+    {
+      id: "user",
+      type: "user",
+      content: "Make a report",
+      timestamp: new Date(),
+      turn_index: 0,
+    },
+  ];
+  render(
+    <BuildMessageList
+      sessionId="session-1"
+      messages={messages}
+      timelineEvents={[]}
+      isStreaming
+      isFinalizing
+    />
+  );
+  expect(screen.getByTestId("blinking-bar")).toBeInTheDocument();
+  expect(screen.queryByText("Working")).not.toBeInTheDocument();
+});
+
+test("keeps one assistant cursor during finalization and removes it when finalization stops", () => {
+  const props = {
+    sessionId: "session-1",
+    messages: [savedAssistantMessage],
+    timelineEvents: [],
+  };
+  const { rerender } = render(
+    <TooltipProvider>
+      <BuildMessageList {...props} isStreaming isFinalizing />
+    </TooltipProvider>
+  );
+  expect(screen.getAllByText("Final answer")).toHaveLength(1);
+  expect(screen.getAllByTestId("blinking-bar")).toHaveLength(1);
+  rerender(
+    <TooltipProvider>
+      <BuildMessageList {...props} isFinalizing={false} />
+    </TooltipProvider>
+  );
+  expect(screen.getByText("Final answer")).toBeInTheDocument();
+  expect(screen.queryByTestId("blinking-bar")).not.toBeInTheDocument();
+});
+
+it.each(["report.docx", "table.xlsx", "archive.zip"])(
+  "opens uploaded %s through the output-panel file action",
+  (name) => {
+    const onFileOpen = jest.fn();
+    render(
+      <BuildMessageList
+        sessionId="session-1"
+        messages={[
+          {
+            id: "upload",
+            type: "user",
+            timestamp: new Date(),
+            content: "Review this document",
+            attachments: [
+              {
+                path: `uploads/${name}`,
+                name,
+                mimeType: "application/octet-stream",
+              },
+            ],
+          },
+        ]}
+        timelineEvents={[]}
+        isStreaming={false}
+        onFileOpen={onFileOpen}
+      />
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Expand document" }));
+    expect(onFileOpen).toHaveBeenCalledWith(`uploads/${name}`, name);
+  }
+);

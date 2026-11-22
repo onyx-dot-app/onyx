@@ -1,9 +1,14 @@
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, computed_field, field_validator
 
+from onyx.db.enums import ActionPolicy, IntegrationAuthMethod, IntegrationAuthMode
 from onyx.db.models import Tool
-from onyx.server.features.tool.tool_visibility import get_tool_visibility_config
+from onyx.server.features.integrations.models import CredentialField
+from onyx.server.features.tool.tool_visibility import (
+    get_tool_visibility_config,
+    is_openapi_tool,
+)
 from onyx.utils.encryption import mask_string
 
 
@@ -38,6 +43,11 @@ class ToolSnapshot(BaseModel):
     oauth_config_id: int | None = None
     oauth_config_name: str | None = None
     enabled: bool = True
+    user_enabled_in_chat: bool = True
+    default_chat_enabled: bool | None = Field(
+        None,
+        description="Whether this tool is selected for the default assistant.",
+    )
 
     # Server-stamped affordance map; fail-closed empty (only the admin actions list stamps it).
     permissions: dict[str, bool] = Field(default_factory=dict)
@@ -46,10 +56,25 @@ class ToolSnapshot(BaseModel):
     chat_selectable: bool = True
     agent_creation_selectable: bool = True
     default_enabled: bool = False
+    default_action_policy: ActionPolicy | None = None
+    # The integration of an OpenAPI or MCP tool; chat tool options name it.
+    integration_id: int | None = None
+
+    @computed_field  # type: ignore[prop-decorator]
+    @property
+    def plugin_ids(self) -> list[str]:
+        """The integration id under the old name, for the released mobile
+        app. It sends each value back in a ``plugin`` tool option."""
+        return [] if self.integration_id is None else [str(self.integration_id)]
 
     @classmethod
     def from_model(
-        cls, tool: Tool, *, permissions: dict[str, bool] | None = None
+        cls,
+        tool: Tool,
+        *,
+        permissions: dict[str, bool] | None = None,
+        default_action_policy: ActionPolicy | None = None,
+        integration_id: int | None = None,
     ) -> "ToolSnapshot":
         # Get visibility config for this tool
         config = get_tool_visibility_config(tool)
@@ -67,15 +92,21 @@ class ToolSnapshot(BaseModel):
             mcp_server_id=tool.mcp_server_id,
             user_id=str(tool.user_id) if tool.user_id else None,
             oauth_config_id=tool.oauth_config_id,
-            oauth_config_name=tool.oauth_config.name if tool.oauth_config else None,
-            enabled=tool.enabled,
+            oauth_config_name=None,
+            enabled=tool.enabled or is_openapi_tool(tool),
             # Populate visibility settings from config or use defaults
             chat_selectable=config.chat_selectable if config else True,
             agent_creation_selectable=(
                 config.agent_creation_selectable if config else True
             ),
             default_enabled=config.default_enabled if config else False,
+            default_action_policy=default_action_policy,
+            integration_id=integration_id,
         )
+
+
+class ToolUserPreferences(BaseModel):
+    enabled_in_chat: bool
 
 
 class Header(BaseModel):
@@ -84,6 +115,8 @@ class Header(BaseModel):
 
 
 class CustomToolCreate(BaseModel):
+    default_chat_enabled: bool | None = None
+    enabled: bool = True
     name: str
     description: str | None = None
     definition: dict[str, Any]
@@ -91,11 +124,33 @@ class CustomToolCreate(BaseModel):
     passthrough_auth: bool
     oauth_config_id: int | None = None
 
+    @field_validator("enabled")
+    @classmethod
+    def require_enabled(cls, enabled: bool) -> bool:
+        if not enabled:
+            raise ValueError(
+                "OpenAPI plugins remain available to custom agents. "
+                "Use the default Chat configuration to control main Chat availability."
+            )
+        return enabled
+
 
 class CustomToolUpdate(BaseModel):
+    default_chat_enabled: bool | None = None
     name: str | None = None
     description: str | None = None
     definition: dict[str, Any] | None = None
     custom_headers: list[Header] | None = None
     passthrough_auth: bool | None = None
     oauth_config_id: int | None = None
+
+
+class CustomToolAuthSettings(BaseModel):
+    """The integration sign-in that a custom tool request maps to."""
+
+    auth_mode: IntegrationAuthMode
+    auth_method: IntegrationAuthMethod | None
+    header_template: dict[str, str] | None
+    credential_fields: list[CredentialField] | None
+    # The values of the organization connection, by header name.
+    organization_fields: dict[str, str]

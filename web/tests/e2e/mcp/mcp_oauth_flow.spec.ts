@@ -1,6 +1,4 @@
 import { test, expect } from "@playwright/test";
-import { ADMIN_ROUTES } from "@/lib/admin-routes";
-import type { Page } from "@playwright/test";
 import { loginAs, loginAsWorkerUser, apiLogin } from "@tests/e2e/utils/auth";
 import { ensureOnboardingComplete } from "@tests/e2e/utils/chatActions";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
@@ -8,175 +6,74 @@ import {
   startMcpOauthServer,
   McpServerProcess,
 } from "@tests/e2e/utils/mcpServer";
-import { TEST_ADMIN_CREDENTIALS } from "@tests/e2e/constants";
-import { AdminMcpServersPage } from "@tests/e2e/pages/AdminMcpServersPage";
-import { ToolsPopover } from "@tests/e2e/pages/ToolsPopover";
+import { AdminIntegrationsPage } from "@tests/e2e/pages/AdminIntegrationsPage";
+import { ChatPage } from "@tests/e2e/chat/ChatPage";
+import { ChatIntegrationsPopover } from "@tests/e2e/pages/ChatIntegrationsPopover";
+import { IntegrationConnectPrompt } from "@tests/e2e/pages/IntegrationConnectPrompt";
+import { CustomizeIntegrationPage } from "@tests/e2e/pages/CustomizeIntegrationPage";
+import { CustomizePage } from "@tests/e2e/pages/CustomizePage";
 import {
   McpOAuthFlow,
   getMcpOAuthConfig,
   type McpOAuthConfig,
 } from "@tests/e2e/mcp/McpOAuthFlow";
-import { expectMcpToolInvoked } from "@tests/e2e/mcp/mcpToolInvocation";
+import {
+  expectMcpToolInvoked,
+  qualifiedMcpToolName,
+} from "@tests/e2e/mcp/mcpToolInvocation";
 
-// Resolved lazily, not at import. Playwright loads every spec during collection
-// for all projects, so calling getMcpOAuthConfig() at module scope would throw
-// in jobs that don't set the OAuth env (e.g. the lite project) even though they
-// never run this spec. Memoize on first use inside a test, preserving the
-// fail-loudly behavior for the jobs that do run it.
+// Resolved lazily: Playwright loads every spec for every project, and jobs
+// without the OAuth env never run this spec.
 let _oauthConfig: McpOAuthConfig | null = null;
 function oauthConfig(): McpOAuthConfig {
   return (_oauthConfig ??= getMcpOAuthConfig());
 }
 
-const DEFAULT_MCP_SERVER_URL =
-  process.env.MCP_TEST_SERVER_URL || "http://127.0.0.1:8004/mcp";
-let runtimeMcpServerUrl = DEFAULT_MCP_SERVER_URL;
-
 const MCP_OAUTH_FLOW_TEST_TIMEOUT_MS = Number(
   process.env.MCP_OAUTH_TEST_TIMEOUT_MS || 300_000
 );
-
-const TOOL_NAMES = { admin: "tool_0", curator: "tool_1" };
-
-type Credentials = { email: string; password: string };
-
-type FlowArtifacts = {
-  serverId: number;
-  serverName: string;
-  agentId: number;
-  agentName: string;
-  toolName: string;
-  toolId: number | null;
-};
+const TOOL_NAME = "tool_0";
+// Onyx saves only https OAuth endpoints. The local mock issuer is http and
+// supports dynamic client registration, so only a real issuer gets a client.
+function manualOAuthClient(): {
+  clientId: string;
+  clientSecret: string;
+} | null {
+  if (!process.env.MCP_OAUTH_ISSUER?.startsWith("https://")) return null;
+  return {
+    clientId: oauthConfig().clientId,
+    clientSecret: oauthConfig().clientSecret,
+  };
+}
 
 function buildMcpServerUrl(baseUrl: string): string {
   const trimmed = baseUrl.replace(/\/+$/, "");
   return trimmed.endsWith("/mcp") ? trimmed : `${trimmed}/mcp`;
 }
 
-/** Confirm the current session belongs to the expected user. Admin status comes
- *  from effective_permissions now that roles are gone. */
-async function verifySessionUser(
-  page: Page,
-  expected: { email: string; isAdmin: boolean }
-): Promise<void> {
-  const response = await page.request.get(`${oauthConfig().appBaseUrl}/api/me`);
-  expect(response.ok()).toBeTruthy();
-  const data = await response.json();
-  expect(data.email).toBe(expected.email);
-  const permissions: string[] = data.effective_permissions ?? [];
-  expect(permissions.includes("admin")).toBe(expected.isAdmin);
-}
-
-async function waitForUserRecord(
-  client: OnyxApiClient,
-  email: string,
-  timeoutMs = 10_000
-): Promise<{ id: string }> {
-  const deadline = Date.now() + timeoutMs;
-  for (;;) {
-    const record = await client.getUserByEmail(email);
-    if (record) {
-      return record;
-    }
-    if (Date.now() >= deadline) {
-      throw new Error(`Timed out waiting for user record ${email}`);
-    }
-    await new Promise((resolve) => setTimeout(resolve, 500));
-  }
-}
-
 /**
- * Create an OAuth MCP server through the admin UI, completing the IdP handshake,
- * and enable its tool on the server card. Returns the new server's id.
+ * An MCP server where each user signs in with OAuth. The admin adds it on the
+ * integration pages; members connect from the integration page and from
+ * chat; a scoped manager adds one "For me" from the Integrations tab.
  */
-async function configureOauthServer(
-  page: Page,
-  oauthFlow: McpOAuthFlow,
-  options: {
-    serverName: string;
-    serverDescription: string;
-    serverUrl: string;
-    toolName: string;
-    group?: string;
-  }
-): Promise<number> {
-  const adminMcp = new AdminMcpServersPage(page);
-  await adminMcp.goto();
-  await adminMcp.openAddServerModal();
-  await adminMcp.fillServerDetails({
-    name: options.serverName,
-    description: options.serverDescription,
-    url: options.serverUrl,
-    group: options.group,
-  });
-  const serverId = await adminMcp.submitAddServer();
-
-  await adminMcp.selectAuthMethod("OAuth");
-  await adminMcp.fillOAuthCredentials(
-    oauthConfig().clientId,
-    oauthConfig().clientSecret
-  );
-  // Wait for the connect click to actually start the OAuth navigation before
-  // handing off to completeFlow. Otherwise the page is still on
-  // /admin/mcp-actions (which matches the return path) with the server name
-  // already visible, and completeFlow's "already returned" early-out fires
-  // before the IdP handshake even begins.
-  await oauthFlow.clickAndWaitForPossibleUrlChange(
-    () => adminMcp.clickConnect(),
-    "OAuth connect click"
-  );
-
-  await oauthFlow.completeFlow({
-    expectReturnPathContains: ADMIN_ROUTES.MCP_ACTIONS.path,
-    confirmConnected: async () => {
-      await adminMcp.expectServerCard(options.serverName);
-    },
-  });
-
-  await adminMcp.expectServerCard(options.serverName);
-  await adminMcp.setCardToolEnabled(options.toolName, true);
-  return serverId;
-}
-
-/** Confirm the server is present in chat, then prove the tool actually runs. */
-async function verifyToolUsableFromChat(
-  page: Page,
-  artifacts: { serverName: string; toolName: string; toolId: number | null },
-  agentId: number
-): Promise<void> {
-  const actions = new ToolsPopover(page);
-  // Confirm the (now-authenticated) server is listed in the chat actions popover.
-  await actions.ensureServerVisible(artifacts.serverName, { agentId });
-  // Prove the tool is usable by forcing an invocation from chat. This is the
-  // real end-to-end check (browser → backend → per-user OAuth token → mock
-  // server → tool output) and the tool is attached to the agent via API, so it
-  // runs regardless of the popover toggle. We deliberately do NOT drill into
-  // the popover's tool list here: the OAuth server's row re-renders on
-  // background auth-status revalidation and collapses the drilled-in view,
-  // making in-popover tool assertions flaky. That drill-in UI is already
-  // covered by the (stable) API-key and per-user-key specs.
-  await expectMcpToolInvoked(page, artifacts.toolName, artifacts.toolId);
-}
-
 test.describe("MCP OAuth flows", () => {
   test.describe.configure({ mode: "serial" });
   test.setTimeout(MCP_OAUTH_FLOW_TEST_TIMEOUT_MS);
 
   let serverProcess: McpServerProcess | null = null;
-  let adminArtifacts: FlowArtifacts | null = null;
-  let curatorArtifacts: FlowArtifacts | null = null;
-  let curatorCredentials: Credentials | null = null;
-  let curatorTwoCredentials: Credentials | null = null;
-  let curatorGroupId: number | null = null;
-  let curatorTwoGroupId: number | null = null;
-  let curatorGroupName = "";
+  let serverUrl = buildMcpServerUrl(
+    process.env.MCP_TEST_SERVER_URL || "http://127.0.0.1:8004/mcp"
+  );
+  let serverName = "";
+  let integrationId: number | null = null;
+  let agentId: number | null = null;
+  let agentName = "";
+  const createdIntegrationIds: number[] = [];
+  const curators: { email: string; password: string; groupId: number }[] = [];
+  let chatUser: { email: string; password: string } | null = null;
 
   test.beforeAll(async ({ browser }, workerInfo) => {
-    if (workerInfo.project.name !== "admin") {
-      return;
-    }
-
+    if (workerInfo.project.name !== "admin") return;
     if (!process.env.MCP_TEST_SERVER_URL) {
       const basePort = Number(process.env.MCP_TEST_SERVER_PORT || "8004");
       serverProcess = await startMcpOauthServer({
@@ -185,365 +82,189 @@ test.describe("MCP OAuth flows", () => {
         publicHost: process.env.MCP_TEST_SERVER_PUBLIC_HOST,
       });
       const explicitPublicUrl = process.env.MCP_TEST_SERVER_PUBLIC_URL;
-      if (explicitPublicUrl) {
-        runtimeMcpServerUrl = buildMcpServerUrl(explicitPublicUrl);
-      } else {
-        const { host, port } = serverProcess.address;
-        runtimeMcpServerUrl = buildMcpServerUrl(`http://${host}:${port}`);
-      }
-    } else {
-      runtimeMcpServerUrl = buildMcpServerUrl(process.env.MCP_TEST_SERVER_URL);
+      const { host, port } = serverProcess.address;
+      serverUrl = buildMcpServerUrl(
+        explicitPublicUrl ?? `http://${host}:${port}`
+      );
     }
 
     const adminContext = await browser.newContext({
       storageState: "admin_auth.json",
     });
     const adminClient = new OnyxApiClient(adminContext.request);
-
-    try {
-      const existingServers = await adminClient.listMcpServers();
-      for (const server of existingServers) {
-        if (server.server_url === runtimeMcpServerUrl) {
-          await adminClient.deleteMcpServer(server.id);
-        }
-      }
-    } catch (error) {
-      console.warn("Failed to cleanup existing MCP servers", error);
+    const password = "TestPassword123!";
+    chatUser = { email: `pw-oauth-chat-${Date.now()}@example.com`, password };
+    await adminClient.registerUser(chatUser.email, password);
+    for (const suffix of ["a", "b"]) {
+      const email = `pw-curator-${Date.now()}-${suffix}@example.com`;
+      await adminClient.registerUser(email, password);
+      const record = await adminClient.getUserByEmail(email);
+      if (!record) throw new Error(`No user record for ${email}`);
+      const groupId = await adminClient.createUserGroup(
+        `Playwright Curator ${Date.now()}-${suffix}`,
+        [record.id]
+      );
+      // The manager edge gives scoped manage:actions.
+      await adminClient.setGroupManager(groupId, record.id);
+      curators.push({ email, password, groupId });
     }
-
-    const basePassword = "TestPassword123!";
-    curatorCredentials = {
-      email: `pw-curator-${Date.now()}@example.com`,
-      password: basePassword,
-    };
-    await adminClient.registerUser(
-      curatorCredentials.email,
-      curatorCredentials.password
-    );
-    const curatorRecord = await waitForUserRecord(
-      adminClient,
-      curatorCredentials.email
-    );
-    curatorGroupName = `Playwright Curator Group ${Date.now()}`;
-    curatorGroupId = await adminClient.createUserGroup(curatorGroupName, [
-      curatorRecord.id,
-    ]);
-    // roles are gone: the is_manager edge is what confers scoped MANAGE_ACTIONS
-    await adminClient.setGroupManager(curatorGroupId, curatorRecord.id);
-    curatorTwoCredentials = {
-      email: `pw-curator-${Date.now()}-b@example.com`,
-      password: basePassword,
-    };
-    await adminClient.registerUser(
-      curatorTwoCredentials.email,
-      curatorTwoCredentials.password
-    );
-    const curatorTwoRecord = await waitForUserRecord(
-      adminClient,
-      curatorTwoCredentials.email
-    );
-    curatorTwoGroupId = await adminClient.createUserGroup(
-      `Playwright Curator Group ${Date.now()}-2`,
-      [curatorTwoRecord.id]
-    );
-    await adminClient.setGroupManager(curatorTwoGroupId, curatorTwoRecord.id);
-
     await adminContext.close();
   });
 
   test.afterAll(async ({ browser }, workerInfo) => {
-    if (workerInfo.project.name !== "admin") {
-      return;
-    }
-
-    if (serverProcess) {
-      await serverProcess.stop();
-    }
-
+    if (workerInfo.project.name !== "admin") return;
     const adminContext = await browser.newContext({
       storageState: "admin_auth.json",
     });
     const adminClient = new OnyxApiClient(adminContext.request);
-
-    if (adminArtifacts?.agentId) {
-      await adminClient.deleteAgent(adminArtifacts.agentId);
-    }
-    if (adminArtifacts?.serverId) {
-      await adminClient.deleteMcpServer(adminArtifacts.serverId);
-    }
-    if (curatorArtifacts?.agentId) {
-      await adminClient.deleteAgent(curatorArtifacts.agentId);
-    }
-    if (curatorArtifacts?.serverId) {
-      await adminClient.deleteMcpServer(curatorArtifacts.serverId);
-    }
-    if (curatorGroupId) {
-      await adminClient.deleteUserGroup(curatorGroupId);
-    }
-    if (curatorTwoGroupId) {
-      await adminClient.deleteUserGroup(curatorTwoGroupId);
-    }
-
+    if (agentId !== null) await adminClient.deleteAgent(agentId);
+    for (const id of createdIntegrationIds)
+      await adminClient.deleteIntegration(id);
+    for (const curator of curators)
+      await adminClient.deleteUserGroup(curator.groupId);
     await adminContext.close();
+    if (serverProcess) await serverProcess.stop();
   });
 
-  test("Admin can configure an OAuth MCP server and use tools end-to-end", async ({
+  test("Admin adds an OAuth MCP server and connects from its integration page", async ({
     page,
   }, testInfo) => {
-    test.skip(
-      testInfo.project.name !== "admin",
-      "MCP OAuth flows run only in admin project"
-    );
-
+    test.skip(testInfo.project.name !== "admin", "Runs in the admin project");
     await page.context().clearCookies();
     await loginAs(page, "admin");
-    await verifySessionUser(page, {
-      email: TEST_ADMIN_CREDENTIALS.email,
-      isAdmin: true,
+
+    serverName = `PW MCP OAuth ${Date.now()}`;
+    const integrations = new AdminIntegrationsPage(page);
+    await integrations.goto();
+    await integrations.openAdd("MCP server");
+    await integrations.fillMcpServer({
+      name: serverName,
+      url: serverUrl,
     });
+    await integrations.expectOAuthProbe();
+    await integrations.selectSignIn("Each user signs in", "OAuth");
+    const client = manualOAuthClient();
+    if (client) {
+      await integrations.fillOAuthClient(client.clientId, client.clientSecret);
+    }
+    await integrations.chooseOwner("For the organization");
+    integrationId = await integrations.submit();
+    createdIntegrationIds.push(integrationId);
+
     const adminClient = new OnyxApiClient(page.request);
 
-    const oauthFlow = new McpOAuthFlow(page, oauthConfig());
-    const serverName = `PW MCP Admin ${Date.now()}`;
-    const agentName = `PW Admin Assistant ${Date.now()}`;
+    // MCP actions load after a connection, so the admin connects first.
+    const member = new CustomizeIntegrationPage(page);
+    await member.goto(integrationId, "Configuration");
+    await member.expectStatus("Not connected");
+    await new McpOAuthFlow(page, oauthConfig()).completeFlowInNewTab(() =>
+      member.startConnect(serverName)
+    );
+    await member.expectStatus("Connected");
 
-    const serverId = await configureOauthServer(page, oauthFlow, {
-      serverName,
-      serverDescription: "Playwright MCP OAuth server (admin)",
-      serverUrl: runtimeMcpServerUrl,
-      toolName: TOOL_NAMES.admin,
+    await adminClient.refreshIntegrationActions(integrationId);
+    // These tests cover OAuth and invocation, not approval.
+    await adminClient.setIntegrationActionPolicies(integrationId, {
+      [TOOL_NAME]: "allow",
     });
-    const adminToolId = await adminClient.findMcpToolId(
-      serverId,
-      TOOL_NAMES.admin
-    );
-
-    // Create the agent via API (private by default) rather than the editor UI.
-    const agentId = await adminClient.createAgentWithMcpTools(
+    agentName = `PW OAuth Agent ${Date.now()}`;
+    agentId = await adminClient.createAgentWithIntegrations(
       agentName,
-      [adminToolId],
-      {
-        instructions: "Assist with MCP OAuth testing.",
-        description: "Playwright admin MCP assistant.",
-      }
+      [integrationId],
+      { isPublic: true }
     );
-    const createdAgent = await adminClient.getAssistant(agentId);
-    expect(createdAgent.is_public).toBe(false);
-
-    await page.goto(`/app?agentId=${agentId}`, { waitUntil: "load" });
-
-    const artifacts = {
-      serverName,
-      toolName: TOOL_NAMES.admin,
-      toolId: adminToolId,
-    };
-
-    // Per-user OAuth servers require the user to authenticate from chat before
-    // their tools become usable: the admin-page "connect" only stores the
-    // server's client config, not a per-user token for this user (backend
-    // mcp/api.py resolves the server's `user_can_authenticate` from the user's
-    // stored credentials). So authenticate from chat first, then verify the tool runs.
-    const actions = new ToolsPopover(page);
-    await oauthFlow.reauthenticateFromChat(
-      actions,
-      serverName,
-      `/app?agentId=${agentId}`
-    );
-    await verifyToolUsableFromChat(page, artifacts, agentId);
-
-    // Exercise the distinct authenticated path: the server row now drills into
-    // its tool list, where the Re-Authenticate row starts a fresh OAuth attempt.
-    // A second successful invocation proves the callback restored usable state
-    // rather than leaving the popover or persisted credentials disconnected.
-    await oauthFlow.reauthenticateFromChat(
-      actions,
-      serverName,
-      `/app?agentId=${agentId}`
-    );
-    await verifyToolUsableFromChat(page, artifacts, agentId);
-
-    // Server card is still present on the admin actions page.
-    await page.goto(ADMIN_ROUTES.MCP_ACTIONS.path);
-    await page.waitForURL(`**${ADMIN_ROUTES.MCP_ACTIONS.path}**`);
-    await expect(
-      page.getByText(serverName, { exact: false }).first()
-    ).toBeVisible();
-
-    // Publish the agent so the end-user flow can use it.
-    await adminClient.updateAgentSharing(agentId, {
-      isPublic: true,
-      userIds: createdAgent.users.map((user) => user.id),
-      groupIds: createdAgent.groups,
-    });
-
-    adminArtifacts = {
-      serverId,
-      serverName,
-      agentId,
-      agentName,
-      toolName: TOOL_NAMES.admin,
-      toolId: adminToolId,
-    };
   });
 
-  test("Curator flow with access isolation", async ({
-    page,
-    browser,
-  }, testInfo) => {
-    test.skip(
-      testInfo.project.name !== "admin",
-      "MCP OAuth flows run only in admin project"
-    );
-    test.skip(
-      !curatorCredentials || !curatorTwoCredentials,
-      "Curator credentials were not initialized"
-    );
-
-    await page.context().clearCookies();
-    await apiLogin(
-      page,
-      curatorCredentials!.email,
-      curatorCredentials!.password
-    );
-    await verifySessionUser(page, {
-      email: curatorCredentials!.email,
-      isAdmin: false,
-    });
-    const curatorClient = new OnyxApiClient(page.request);
-
-    const oauthFlow = new McpOAuthFlow(page, oauthConfig());
-    const serverName = `PW MCP Curator ${Date.now()}`;
-    const agentName = `PW Curator Assistant ${Date.now()}`;
-
-    let curatorServerProcess: McpServerProcess | null = null;
-    let curatorServerUrl = runtimeMcpServerUrl;
-
-    try {
-      if (!process.env.MCP_TEST_SERVER_URL) {
-        const basePort =
-          (serverProcess?.address.port ??
-            Number(process.env.MCP_TEST_SERVER_PORT || "8004")) + 1;
-        curatorServerProcess = await startMcpOauthServer({ port: basePort });
-        const { host, port } = curatorServerProcess.address;
-        curatorServerUrl = `http://${host}:${port}/mcp`;
-      }
-
-      const serverId = await configureOauthServer(page, oauthFlow, {
-        serverName,
-        serverDescription: "Playwright MCP OAuth server (curator)",
-        serverUrl: curatorServerUrl,
-        toolName: TOOL_NAMES.curator,
-        // a scoped manager may only create servers private to a group they manage
-        group: curatorGroupName,
-      });
-      const curatorToolId = await curatorClient.findMcpToolId(
-        serverId,
-        TOOL_NAMES.curator
-      );
-
-      const agentId = await curatorClient.createAgentWithMcpTools(
-        agentName,
-        [curatorToolId],
-        {
-          instructions: "Curator MCP OAuth assistant.",
-          description: "Playwright curator MCP assistant.",
-          // same scope rule as the server: a managed group is required
-          groupIds: [curatorGroupId!],
-        }
-      );
-
-      await page.goto(`/app?agentId=${agentId}`, { waitUntil: "load" });
-      // The curator is a freshly-registered user, so dismiss the "What should
-      // Onyx call you?" onboarding modal before driving the chat UI (the admin
-      // and worker users are already onboarded via global-setup).
-      await ensureOnboardingComplete(page);
-
-      // Per-user OAuth: the curator must authenticate from chat before the
-      // server is usable (their admin-page connect only stores the server
-      // client config, not a per-user token). Confirm the server is listed,
-      // then authenticate, then confirm it's still listed (authenticated).
-      // We don't drill into the popover tool list — that view re-renders on
-      // background auth-status revalidation and is flaky for OAuth servers
-      // (covered by the API-key / per-user-key specs instead).
-      const actions = new ToolsPopover(page);
-      await actions.ensureServerVisible(serverName, { agentId });
-
-      await oauthFlow.reauthenticateFromChat(
-        actions,
-        serverName,
-        `/app?agentId=${agentId}`
-      );
-      await actions.ensureServerVisible(serverName, { agentId });
-
-      curatorArtifacts = {
-        serverId,
-        serverName,
-        agentId,
-        agentName,
-        toolName: TOOL_NAMES.curator,
-        toolId: curatorToolId,
-      };
-
-      // Isolation: the second curator manages a different group, so the first
-      // curator's group-private server is neither listed nor readable.
-      const curatorTwoContext = await browser.newContext();
-      const curatorTwoPage = await curatorTwoContext.newPage();
-      await apiLogin(
-        curatorTwoPage,
-        curatorTwoCredentials!.email,
-        curatorTwoCredentials!.password
-      );
-      await curatorTwoPage.goto(ADMIN_ROUTES.MCP_ACTIONS.path);
-      // anchor on the page rendering, else the absence check races the load
-      await expect(
-        curatorTwoPage.getByRole("button", { name: /Add MCP Server/i })
-      ).toBeVisible({ timeout: 30_000 });
-      await expect(
-        curatorTwoPage.getByText(serverName, { exact: false })
-      ).toHaveCount(0);
-
-      const editResponse = await curatorTwoPage.request.get(
-        `${oauthConfig().appBaseUrl}/api/admin/mcp/servers/${serverId}`
-      );
-      expect(editResponse.status()).toBe(403);
-      await curatorTwoContext.close();
-    } finally {
-      await curatorServerProcess?.stop().catch(() => {});
-    }
-  });
-
-  test("End user can authenticate and invoke MCP tools via chat", async ({
+  test("A member connects from the integration page and uses the tool", async ({
     page,
   }, testInfo) => {
-    test.skip(
-      testInfo.project.name !== "admin",
-      "MCP OAuth flows run only in admin project"
-    );
-    test.skip(!adminArtifacts, "Admin flow must complete before user test");
-
+    test.skip(testInfo.project.name !== "admin", "Runs in the admin project");
+    test.skip(integrationId === null, "The admin test must run first");
     await page.context().clearCookies();
     await loginAsWorkerUser(page, testInfo.workerIndex);
 
-    const { agentId, serverName, toolName, toolId } = adminArtifacts!;
+    const customize = new CustomizePage(page);
+    await customize.goto("Integrations");
+    await customize.search(serverName);
+    await customize.openIntegration(serverName);
+    const detail = new CustomizeIntegrationPage(page);
+    await detail.openTab("Configuration");
+    if (await detail.connectButton(serverName).isVisible()) {
+      await new McpOAuthFlow(page, oauthConfig()).completeFlowInNewTab(() =>
+        detail.startConnect(serverName)
+      );
+    }
+    await detail.expectStatus("Connected");
 
-    await page.goto(`/app?agentId=${agentId}`, { waitUntil: "load" });
-
-    const oauthFlow = new McpOAuthFlow(page, oauthConfig());
-    const actions = new ToolsPopover(page);
-    await actions.ensureServerVisible(serverName, { agentId });
-
-    // The end user has not authenticated yet, so re-authenticating from chat
-    // kicks off the OAuth handshake.
-    await oauthFlow.reauthenticateFromChat(
-      actions,
-      serverName,
-      `/app?agentId=${agentId}`
-    );
-
-    await verifyToolUsableFromChat(
+    await new ChatPage(page).gotoAgent(agentId!, agentName);
+    await expectMcpToolInvoked(
       page,
-      { serverName, toolName, toolId },
-      agentId
+      qualifiedMcpToolName(integrationId!, serverName, TOOL_NAME)
     );
+  });
+
+  test("A member connects from the chat connect prompt", async ({
+    page,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "admin", "Runs in the admin project");
+    test.skip(integrationId === null, "The admin test must run first");
+    await page.context().clearCookies();
+    await apiLogin(page, chatUser!.email, chatUser!.password);
+    await page.goto(`/app?agentId=${agentId}`);
+    await ensureOnboardingComplete(page);
+
+    const prompt = new IntegrationConnectPrompt(page);
+    await prompt.expectCount(1);
+    await new McpOAuthFlow(page, oauthConfig()).connectFromPrompt(
+      prompt,
+      serverName
+    );
+
+    const popover = new ChatIntegrationsPopover(page);
+    await popover.expectConnected(serverName);
+    await popover.close();
+    await expectMcpToolInvoked(
+      page,
+      qualifiedMcpToolName(integrationId!, serverName, TOOL_NAME)
+    );
+  });
+
+  test("A scoped manager adds a personal OAuth server that another manager cannot see", async ({
+    page,
+    browser,
+  }, testInfo) => {
+    test.skip(testInfo.project.name !== "admin", "Runs in the admin project");
+    const [owner, other] = curators;
+    test.skip(!owner || !other, "The curators were not created");
+
+    await page.context().clearCookies();
+    await apiLogin(page, owner!.email, owner!.password);
+    await page.goto("/app");
+    await ensureOnboardingComplete(page);
+
+    const plugins = new CustomizePage(page);
+    await plugins.goto("Integrations");
+    const personalName = `PW MCP Personal ${Date.now()}`;
+    const createdId = await plugins.addMcpServer({
+      name: personalName,
+      url: serverUrl,
+      oauth: { client: manualOAuthClient() },
+    });
+    createdIntegrationIds.push(createdId);
+
+    await plugins.goto("Integrations");
+    await plugins.expectIntegrationVisible(personalName);
+
+    const otherContext = await browser.newContext();
+    const otherPage = await otherContext.newPage();
+    await apiLogin(otherPage, other!.email, other!.password);
+    const otherIntegrations = new AdminIntegrationsPage(otherPage);
+    await otherIntegrations.goto();
+    await otherIntegrations.expectIntegrationAbsent(personalName);
+    const read = await otherPage.request.get(
+      `/api/admin/integrations/${createdId}`
+    );
+    expect([403, 404]).toContain(read.status());
+    await otherContext.close();
   });
 });

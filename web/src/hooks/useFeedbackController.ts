@@ -2,7 +2,7 @@
 
 import { useCallback } from "react";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
-import { FeedbackType } from "@/app/app/interfaces";
+import { FeedbackType } from "@/app/app/types";
 import { handleChatFeedback, removeChatFeedback } from "@/app/app/services/lib";
 import { getMessageByMessageId } from "@/app/app/services/messageTree";
 import { toast } from "@opal/layouts";

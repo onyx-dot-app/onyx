@@ -1,6 +1,5 @@
 """HTTP client for ``opencode serve`` — the only transport Onyx Craft
-uses to drive in-sandbox agent turns. Design lives in
-``docs/craft/features/opencode-serve-client.md``.
+uses to drive in-sandbox agent turns.
 
 Public surface:
 
@@ -8,6 +7,31 @@ Public surface:
 - :class:`ClientTimeouts`
 
 Sandbox-event types come from :mod:`onyx.server.features.build.sandbox.event_schema`.
+
+Event-stream rules. Each rule prevents a bug that this translator had:
+
+1. A turn has many steps. opencode sets ``time.completed`` on the
+   ``message.updated`` of EVERY step (tool-call step, answer step, ...). Only
+   ``session.idle`` or ``session.status`` with ``status.type == "idle"`` ends
+   the turn. ``message.updated`` only caches role, finish reason, and errors.
+2. ``session.status.status`` is a tagged union (``idle``/``busy``/``retry``).
+   Compare ``status["type"]``, not ``status``. Build test fixtures from
+   captured payloads, not hand-typed shapes.
+3. ``message.part.delta`` can arrive up to ~300 ms before the
+   ``message.updated`` that gives its role. ``_is_assistant_message``
+   REST-fetches an unknown message once (``get_message``) and caches the
+   result. Do not buffer deltas until metadata arrives: a stream drop would
+   lose them.
+4. ``/event`` does not support ``Last-Event-ID``. After a reconnect, the
+   cumulative ``part.text`` on the next ``message.part.updated`` fills the gap
+   (``_reconcile_part_text``).
+5. The stream is a hint; opencode's REST state is the truth. When the stream
+   is ambiguous, read REST state. Do not add compensating stream logic.
+
+``permission.asked`` for ``connect_app`` drives the connect-card flow. Every
+other category is auto-allowed with a WARN log: production ``opencode.json``
+allows all categories, so an ask means the config is missing a category.
+The HTTP Basic username is ``OPENCODE_SERVER_USERNAME`` (``"opencode"``).
 """
 
 from __future__ import annotations
@@ -15,20 +39,23 @@ from __future__ import annotations
 import queue
 import time
 from collections.abc import Callable, Generator, Iterable
-from dataclasses import dataclass, field
 from pathlib import PurePosixPath
 from typing import Any, cast
 from uuid import uuid4
 
 import httpx
+from pydantic import BaseModel, ConfigDict, Field, ValidationError
 
 from onyx.cache.factory import get_cache_backend
+from onyx.cache.interface import CacheBackend
 from onyx.server.features.build import connect_app
 from onyx.server.features.build.configs import (
     OPENCODE_PROMPT_INACTIVITY_TIMEOUT_SECONDS,
+    OPENCODE_SERVE_ABORT_TIMEOUT,
     OPENCODE_SERVE_CONNECT_TIMEOUT,
     OPENCODE_SERVE_EVENT_READ_TIMEOUT,
     OPENCODE_SERVE_REQUEST_TIMEOUT,
+    OPENCODE_SERVE_SESSION_INIT_TIMEOUT,
     OPENCODE_SERVER_USERNAME,
     SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS,
     SSE_KEEPALIVE_INTERVAL,
@@ -46,7 +73,10 @@ from onyx.server.features.build.sandbox.event_schema import (
     AgentMessageChunk,
     AgentThoughtChunk,
     Error,
+    OnyxSearchMeta,
+    OnyxToolMeta,
     PromptResponse,
+    TextPartMetadata,
     ToolCallProgress,
     ToolCallStart,
 )
@@ -80,21 +110,23 @@ SandboxEvent = (
 
 
 # ---------------------------------------------------------------------------
-# Public dataclasses
+# Public models
 # ---------------------------------------------------------------------------
 
 
-@dataclass
-class ClientTimeouts:
+class ClientTimeouts(BaseModel):
     """HTTP timeouts for one ``OpencodeServeClient`` instance.
 
-    Defaults pull from ``configs.py`` so deployment can tune via env without
-    touching the client.
+    Defaults come from ``configs.py``. Session initialization has a separate
+    budget for cold directory startup.
     """
+
+    model_config = ConfigDict(strict=True)
 
     connect_timeout: float = OPENCODE_SERVE_CONNECT_TIMEOUT
     request_timeout: float = OPENCODE_SERVE_REQUEST_TIMEOUT
     event_read_timeout: float = OPENCODE_SERVE_EVENT_READ_TIMEOUT
+    session_init_timeout: float = OPENCODE_SERVE_SESSION_INIT_TIMEOUT
 
 
 # ---------------------------------------------------------------------------
@@ -103,17 +135,19 @@ class ClientTimeouts:
 # ---------------------------------------------------------------------------
 
 
-@dataclass
-class _TurnState:
+class _TurnState(BaseModel):
     """Mutable per-turn state used by the translator.
 
-    Lives only for the duration of one ``send_message`` call. Not exposed
-    outside this module.
+    Each prompt driver or live subscriber owns one instance.
     """
 
+    model_config = ConfigDict(strict=True)
+
     session_id: str
+    # Live readers replace identified parts; durable writers consume deltas.
+    emit_part_snapshots: bool = False
     # ToolCallStart is emitted only on the FIRST sighting of a callID.
-    seen_tool_calls: set[str] = field(default_factory=set)
+    seen_tool_calls: set[str] = Field(default_factory=set)
     # PromptResponse is yielded at most once per turn; subsequent backstop
     # signals are no-ops.
     terminator_yielded: bool = False
@@ -121,25 +155,25 @@ class _TurnState:
     # already yielded as AgentMessageChunk content. Used to gap-fill when a
     # ``message.part.updated`` for a text part reveals more text than we've
     # delivered (which happens after an ``/event`` reconnect).
-    local_text: dict[str, str] = field(default_factory=dict)
+    local_text: dict[str, str] = Field(default_factory=dict)
     # MessageIDs of every assistant message in this turn. opencode creates
     # one assistant message per step, so a single user turn that involves
     # a tool call yields at least two: the message containing the
     # pre-tool thoughts + tool call, and a follow-up message containing
     # the post-tool synthesized answer. Text parts whose ``messageID``
     # isn't in this set are filtered (user echoes, prior-turn messages).
-    assistant_message_ids: set[str] = field(default_factory=set)
+    assistant_message_ids: set[str] = Field(default_factory=set)
     # PartID → "text" | "reasoning" | "tool" | ... (the delta routes on this).
-    part_types: dict[str, str] = field(default_factory=dict)
+    part_types: dict[str, str] = Field(default_factory=dict)
     # MessageIDs we've ruled out as assistant (user role, malformed body,
     # or fetch failed). Kept so subsequent deltas short-circuit without
     # re-issuing the REST hydrate.
-    user_message_ids: set[str] = field(default_factory=set)
+    user_message_ids: set[str] = Field(default_factory=set)
     # `task` callID → claimed child session (parallel tasks get distinct children).
-    task_child_by_call: dict[str, str] = field(default_factory=dict)
+    task_child_by_call: dict[str, str] = Field(default_factory=dict)
     # Descendant sessions share this parent turn stream but not opencode-local
     # ids. Keep each child session's message/part/tool caches isolated.
-    child_states: dict[str, _TurnState] = field(default_factory=dict)
+    child_states: dict[str, _TurnState] = Field(default_factory=dict)
     # Last LLM finish reason seen on any assistant message.updated. Only the
     # terminator (fired from session.idle/status) consumes it — message.updated
     # itself is per-step and can't terminate the turn.
@@ -147,9 +181,10 @@ class _TurnState:
     # connect_app permission id → monotonic deadline. Timeout fallback only (the
     # decision endpoint answers directly); reject an undecided request for a clean
     # decline. A late reject after the user answered is a harmless no-op.
-    pending_connect_app_deadlines: dict[str, float] = field(default_factory=dict)
+    pending_connect_app_deadlines: dict[str, float] = Field(default_factory=dict)
+    connect_app_request_ids: set[str] = Field(default_factory=set)
     # Set from BOTH message.updated and hydration — text deltas race ahead of message.updated.
-    summary_message_ids: set[str] = field(default_factory=set)
+    summary_message_ids: set[str] = Field(default_factory=set)
 
 
 # ---------------------------------------------------------------------------
@@ -175,6 +210,7 @@ _TOOL_KIND: dict[str, str] = {
     "todo_write": "other",
     "webfetch": "fetch",
     "websearch": "search",
+    "web_search": "search",
     # opencode 1.15.x additions:
     "lsp": "other",
     "skill": "other",
@@ -198,6 +234,7 @@ _TOOL_TITLE: dict[str, str] = {
     "todo_write": "Updating todos",
     "webfetch": "Fetching web content",
     "websearch": "Searching web",
+    "web_search": "Searching web",
     # opencode 1.15.x additions:
     "lsp": "Checking code",
     "skill": "Running skill",
@@ -416,6 +453,7 @@ def _emit_text_delta(
             {
                 "sessionUpdate": "agent_thought_chunk",
                 "content": {"type": "text", "text": delta},
+                "_meta": TextPartMetadata(partId=part_id),
             }
         )
     elif part_type == "text":
@@ -424,6 +462,7 @@ def _emit_text_delta(
             {
                 "sessionUpdate": "agent_message_chunk",
                 "content": {"type": "text", "text": delta},
+                "_meta": TextPartMetadata(partId=part_id),
             }
         )
     # Other part types (step-start, step-finish, tool, ...) don't carry
@@ -461,7 +500,9 @@ def _state_for_session(state: _TurnState, session_id: str) -> _TurnState:
         return state
     child_state = state.child_states.get(session_id)
     if child_state is None:
-        child_state = _TurnState(session_id=session_id)
+        child_state = _TurnState(
+            session_id=session_id, emit_part_snapshots=state.emit_part_snapshots
+        )
         state.child_states[session_id] = child_state
     return child_state
 
@@ -808,14 +849,18 @@ def _reconcile_part_text(
     if not isinstance(expected, str):
         return
     local = state.local_text.get(part_id, "")
-    if len(expected) > len(local):
+    if len(expected) >= len(local):
         tail = expected[len(local) :]
         state.local_text[part_id] = expected
-        if tail:
+        if tail or (state.emit_part_snapshots and expected):
+            metadata = TextPartMetadata(partId=part_id)
+            if state.emit_part_snapshots:
+                metadata["snapshotText"] = expected
             yield emit_class.model_validate(
                 {
                     "sessionUpdate": session_update,
                     "content": {"type": "text", "text": tail},
+                    "_meta": metadata,
                 }
             )
     elif len(expected) < len(local):
@@ -838,8 +883,35 @@ def _merge_field_meta(event: SandboxEvent, extra: dict[str, Any]) -> None:
     events; merge rather than overwrite so both survive ``model_dump``."""
     existing = getattr(event, "field_meta", None)  # ods: ignore[getattr]
     merged: dict[str, Any] = dict(existing) if isinstance(existing, dict) else {}
-    merged.update(extra)
+    for key, value in extra.items():
+        # ``onyx`` is a namespace: merge its keys so neither side's are lost.
+        current = merged.get(key)
+        if key == "onyx" and isinstance(current, dict) and isinstance(value, dict):
+            merged[key] = {**current, **value}
+        else:
+            merged[key] = value
     setattr(event, "field_meta", merged)  # noqa: B010
+
+
+def _onyx_search_meta(tool: str, part_state: dict[str, Any]) -> OnyxSearchMeta | None:
+    """The ``web_search`` plugin's queries and results, from its ``metadata``.
+
+    The plugin (``opencode-plugins/web-search.ts``) returns them as
+    ``metadata.onyxSearch``. Anything malformed is dropped, not raised: the
+    text output still reaches the model and the frontend."""
+    if tool != "web_search":
+        return None
+    metadata = part_state.get("metadata")
+    if not isinstance(metadata, dict):
+        return None
+    search = metadata.get("onyxSearch")
+    if not isinstance(search, dict):
+        return None
+    try:
+        return OnyxSearchMeta.model_validate(search)
+    except ValidationError:
+        logger.warning("opencode-serve: web_search metadata did not validate")
+        return None
 
 
 def _emit_tool_events(
@@ -858,11 +930,12 @@ def _emit_tool_events(
 
     raw_status = part_state.get("status", "pending")
     status = _tool_status(raw_status)
-    if status == "completed":
-        metadata = part_state.get("metadata")
-        exit_code = metadata.get("exit") if isinstance(metadata, dict) else None
-        if isinstance(exit_code, int) and exit_code != 0:
-            status = "failed"
+    metadata = part_state.get("metadata")
+    exit_code = metadata.get("exit") if isinstance(metadata, dict) else None
+    if not isinstance(exit_code, int):
+        exit_code = None
+    if status == "completed" and exit_code is not None and exit_code != 0:
+        status = "failed"
     raw_input = part_state.get("input") or None
     raw_output = _wrap_raw_output(part_state)
     content = _synthesize_tool_content(tool, part_state)
@@ -875,8 +948,16 @@ def _emit_tool_events(
         # _meta is an ACP-reserved extensibility field. We use it to carry
         # the raw opencode tool name so the frontend can resolve a precise
         # title (otherwise tools with kind="other" — todowrite, task, lsp,
-        # skill, … — all fall through to "Running tool").
-        "_meta": {"toolName": tool},
+        # skill, … — all fall through to "Running tool"). ``onyx`` holds the
+        # Onyx data ACP has no field for (see ``OnyxToolMeta``).
+        "_meta": {
+            "toolName": tool,
+            "onyx": OnyxToolMeta(
+                cancelled=True if raw_status == "cancelled" else None,
+                search=_onyx_search_meta(tool, part_state),
+                exitCode=exit_code if tool == "bash" else None,
+            ).to_meta(),
+        },
     }
     if raw_input is not None:
         common["rawInput"] = raw_input
@@ -961,8 +1042,7 @@ class OpencodeServeClient:
     sourcing the per-pod password, resolving the pod IP, and choosing the
     LLM model live in the sandbox manager. This client just speaks HTTP.
 
-    See ``docs/craft/features/opencode-serve-client.md`` for the full
-    design.
+    See the module docstring for the event-stream rules.
     """
 
     def __init__(
@@ -1044,6 +1124,8 @@ class OpencodeServeClient:
     # Cold-pod retry tunables — short window, total worst-case ~1.5s.
     _COLD_POD_RETRIES = 3
     _COLD_POD_BASE_DELAY = 0.25
+    # Each read-timeout retry costs a full read timeout, so allow only one.
+    _READ_TIMEOUT_RETRIES = 1
 
     def _http_with_cold_pod_retry(
         self,
@@ -1051,6 +1133,7 @@ class OpencodeServeClient:
         path: str,
         *,
         idempotent: bool = False,
+        retry_read_timeout: bool = False,
         **kwargs: Any,
     ) -> httpx.Response:
         """``self._http.request`` with bounded retries for transient
@@ -1068,6 +1151,10 @@ class OpencodeServeClient:
         (e.g. ``POST /session``) can create duplicate state — exactly the
         orphan-session bug this transport was designed to avoid.
 
+        ``ReadTimeout`` is retried once, only when both ``idempotent`` and
+        ``retry_read_timeout`` are set: the server may still complete the
+        first request, and each retry costs a full read timeout.
+
         Never retries HTTP error responses — those are application-level
         signals the caller must handle.
         """
@@ -1076,7 +1163,10 @@ class OpencodeServeClient:
             if idempotent
             else (httpx.ConnectError,)
         )
+        if idempotent and retry_read_timeout:
+            retryable = (*retryable, httpx.ReadTimeout)
         last_exc: BaseException | None = None
+        read_timeout_retries = 0
         for attempt in range(self._COLD_POD_RETRIES + 1):
             try:
                 return self._http.request(method, path, **kwargs)
@@ -1084,6 +1174,10 @@ class OpencodeServeClient:
                 last_exc = e
                 if attempt == self._COLD_POD_RETRIES:
                     break
+                if isinstance(e, httpx.ReadTimeout):
+                    if read_timeout_retries >= self._READ_TIMEOUT_RETRIES:
+                        break
+                    read_timeout_retries += 1
                 delay = self._COLD_POD_BASE_DELAY * (attempt + 1)
                 logger.info(
                     "[SESSION-LIFECYCLE] cold-pod retry %d/%d for %s %s after %s: %s",
@@ -1095,7 +1189,8 @@ class OpencodeServeClient:
                     e,
                 )
                 time.sleep(delay)
-        assert last_exc is not None
+        if last_exc is None:
+            raise RuntimeError("Cold-pod retry loop ended without an error.")
         raise last_exc
 
     def _request(
@@ -1104,6 +1199,7 @@ class OpencodeServeClient:
         path: str,
         *,
         idempotent: bool = False,
+        retry_read_timeout: bool = False,
         **kwargs: Any,
     ) -> httpx.Response:
         """Unary request with cold-pod retry plus a one-shot password reload
@@ -1112,7 +1208,11 @@ class OpencodeServeClient:
         processing, so the server never saw the body. An unchanged reload is a
         genuine auth failure — return it for the caller to surface."""
         r = self._http_with_cold_pod_retry(
-            method, path, idempotent=idempotent, **kwargs
+            method,
+            path,
+            idempotent=idempotent,
+            retry_read_timeout=retry_read_timeout,
+            **kwargs,
         )
         if r.status_code != 401 or self._reload_password is None:
             return r
@@ -1127,7 +1227,11 @@ class OpencodeServeClient:
         )
         self._apply_password(new_password)
         return self._http_with_cold_pod_retry(
-            method, path, idempotent=idempotent, **kwargs
+            method,
+            path,
+            idempotent=idempotent,
+            retry_read_timeout=retry_read_timeout,
+            **kwargs,
         )
 
     def ensure_session(
@@ -1159,6 +1263,12 @@ class OpencodeServeClient:
         response") are retried with short backoff before bubbling up.
         """
         directory_params = {"directory": directory}
+        # Both lookup and creation can initialize a cold directory-scoped Instance.
+        initialization_timeout = httpx.Timeout(
+            self._timeouts.session_init_timeout,
+            connect=self._timeouts.connect_timeout,
+            pool=self._timeouts.connect_timeout,
+        )
         if opencode_session_id:
             # GET is idempotent — safe to retry on either ConnectError or
             # RemoteProtocolError.
@@ -1166,6 +1276,7 @@ class OpencodeServeClient:
                 "GET",
                 f"/session/{opencode_session_id}",
                 params=directory_params,
+                timeout=initialization_timeout,
                 idempotent=True,
             )
             if r.status_code == 200:
@@ -1201,6 +1312,7 @@ class OpencodeServeClient:
             "POST",
             "/session",
             params=directory_params,
+            timeout=initialization_timeout,
             json=body,
             idempotent=False,
         )
@@ -1253,6 +1365,7 @@ class OpencodeServeClient:
             "/instance/dispose",
             params={"directory": directory},
             idempotent=True,
+            retry_read_timeout=True,
         )
         _raise_for_status(r, "instance dispose")
 
@@ -1284,6 +1397,7 @@ class OpencodeServeClient:
                 f"/session/{opencode_session_id}/abort",
                 params={"directory": directory},
                 json={},
+                timeout=OPENCODE_SERVE_ABORT_TIMEOUT,
             )
         except httpx.HTTPError as e:
             logger.warning(
@@ -1435,6 +1549,13 @@ class OpencodeServeClient:
             raise
         finally:
             self._event_bus.unsubscribe(sub)
+            if state.connect_app_request_ids:
+                try:
+                    cache = get_cache_backend(tenant_id=get_current_tenant_id())
+                    for request_id in state.connect_app_request_ids:
+                        connect_app.clear_pending(request_id, cache)
+                except Exception:
+                    logger.exception("connect_app cleanup failed for ended turn")
 
     def _wait_for_event_stream_ready(
         self,
@@ -1776,7 +1897,14 @@ class OpencodeServeClient:
 
         build_session_id = directory.rstrip("/").rsplit("/", 1)[-1]
         request_id = str(uuid4())
+        deadline = time.monotonic() + SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
+        cache: CacheBackend | None = None
         try:
+            request = connect_app.ConnectAppRequest(
+                request_id=request_id,
+                external_app_id=external_app_id,
+                reason=meta.get("reason") or None,
+            )
             cache = get_cache_backend(tenant_id=get_current_tenant_id())
             connect_app.stash_pending(
                 request_id,
@@ -1785,30 +1913,32 @@ class OpencodeServeClient:
                     opencode_session_id=state.session_id,
                     perm_id=perm_id,
                     directory=directory,
+                    request=request,
+                    expires_at=time.time() + SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS,
                 ),
                 cache,
             )
+            state.connect_app_request_ids.add(request_id)
             connect_app.announce_request(
                 build_session_id,
-                connect_app.ConnectAppRequest(
-                    request_id=request_id,
-                    external_app_id=external_app_id,
-                    reason=meta.get("reason") or None,
-                ),
+                request,
                 cache,
             )
         except Exception:
             logger.exception(
                 "connect_app announce failed for app=%s; denying", external_app_id
             )
+            if cache is not None:
+                try:
+                    connect_app.clear_pending(request_id, cache)
+                except Exception:
+                    logger.exception("connect_app cleanup failed for %s", request_id)
             self.answer_permission(
                 state.session_id, perm_id, allow=False, directory=directory
             )
             return
 
-        state.pending_connect_app_deadlines[perm_id] = (
-            time.monotonic() + SANDBOX_APPROVAL_WAIT_TIMEOUT_SECONDS
-        )
+        state.pending_connect_app_deadlines[perm_id] = deadline
 
     def _reject_expired_connect_app_permissions(
         self, state: _TurnState, now: float, *, directory: str

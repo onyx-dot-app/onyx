@@ -15,7 +15,8 @@ that runs from the API server process.  Two responsibilities:
 import threading
 import time
 from collections.abc import Callable
-from dataclasses import dataclass, field
+
+from pydantic import BaseModel, ConfigDict
 
 from onyx.utils.logger import setup_logger
 
@@ -34,13 +35,14 @@ PERIODIC_TASK_KV_PREFIX = "periodic_poller:last_claimed:"
 _NEVER_RAN: float = -1e18
 
 
-@dataclass
-class _PeriodicTaskDef:
+class _PeriodicTaskDef(BaseModel):
+    model_config = ConfigDict(strict=True)
+
     name: str
     interval_seconds: float
     lock_id: int
     run_fn: Callable[[], None]
-    last_run_at: float = field(default=_NEVER_RAN)
+    last_run_at: float = _NEVER_RAN
 
 
 def _run_auto_llm_update() -> None:
@@ -51,11 +53,11 @@ def _run_auto_llm_update() -> None:
 
     from onyx.db.engine.sql_engine import get_session_with_current_tenant
     from onyx.llm.well_known_providers.auto_update_service import (
-        sync_llm_models_from_github,
+        sync_auto_update_providers,
     )
 
     with get_session_with_current_tenant() as db_session:
-        sync_llm_models_from_github(db_session)
+        sync_auto_update_providers(db_session)
 
 
 def _run_cache_cleanup() -> None:
@@ -116,20 +118,41 @@ def _run_scheduled_eval() -> None:
             )
 
 
+def _run_oauth_provider_cleanup() -> None:
+    from onyx.background.celery.tasks.oauth_provider.tasks import (
+        cleanup_oauth_provider_clients,
+        cleanup_oauth_provider_grants,
+    )
+    from shared_configs.contextvars import get_current_tenant_id
+
+    cleanup_oauth_provider_grants.run(tenant_id=get_current_tenant_id())
+    cleanup_oauth_provider_clients.run()
+
+
+def _run_fleet_telemetry() -> None:
+    from onyx.utils.fleet_telemetry_collector import collect_snapshots
+    from shared_configs.contextvars import get_current_tenant_id
+
+    collect_snapshots(get_current_tenant_id())
+
+
 _CACHE_CLEANUP_INTERVAL_SECONDS = 300
+_OAUTH_PROVIDER_CLEANUP_INTERVAL_SECONDS = 24 * 3600
 # The lead-up reclaim rate. No beat runs here, so this thread sets the cadence.
 _LICENSE_RECLAIM_INTERVAL_SECONDS = 6 * 3600
 
 
 def _build_periodic_tasks() -> list[_PeriodicTaskDef]:
-    from onyx.cache.interface import CacheBackendType
     from onyx.configs.app_configs import (
         AUTO_LLM_CONFIG_URL,
-        AUTO_LLM_UPDATE_INTERVAL_SECONDS,
         CACHE_BACKEND,
+        DISABLE_TELEMETRY,
         SCHEDULED_EVAL_DATASET_NAMES,
     )
+    from onyx.configs.constants import CacheBackendType
+    from onyx.utils.fleet_telemetry import COLLECTION_INTERVAL_SECONDS
     from onyx.utils.variable_functionality import global_version
+    from shared_configs.configs import AUTO_LLM_UPDATE_INTERVAL_SECONDS
 
     tasks: list[_PeriodicTaskDef] = []
     if CACHE_BACKEND == CacheBackendType.POSTGRES:
@@ -170,6 +193,23 @@ def _build_periodic_tasks() -> list[_PeriodicTaskDef]:
                 run_fn=_run_license_reclaim,
             )
         )
+    tasks.append(
+        _PeriodicTaskDef(
+            name="oauth-provider-cleanup",
+            interval_seconds=_OAUTH_PROVIDER_CLEANUP_INTERVAL_SECONDS,
+            lock_id=PERIODIC_TASK_LOCK_BASE + 4,
+            run_fn=_run_oauth_provider_cleanup,
+        )
+    )
+    if not DISABLE_TELEMETRY:
+        tasks.append(
+            _PeriodicTaskDef(
+                name="fleet-telemetry",
+                interval_seconds=COLLECTION_INTERVAL_SECONDS,
+                lock_id=PERIODIC_TASK_LOCK_BASE + 5,
+                run_fn=_run_fleet_telemetry,
+            )
+        )
     return tasks
 
 
@@ -190,11 +230,12 @@ def _try_claim_task(task_def: _PeriodicTaskDef) -> bool:
     from sqlalchemy import text
 
     from onyx.db.engine.sql_engine import get_session_with_current_tenant
-    from onyx.db.models import KVStore
+    from onyx.db.kv_store import add_kv_store_row__no_commit, fetch_kv_store_row
 
     kv_key = PERIODIC_TASK_KV_PREFIX + task_def.name
 
     with get_session_with_current_tenant() as db_session:
+        # db-ops-outside-db: allow advisory lock, not a table query
         acquired = db_session.execute(
             text("SELECT pg_try_advisory_xact_lock(:id)"),
             {"id": task_def.lock_id},
@@ -202,7 +243,7 @@ def _try_claim_task(task_def: _PeriodicTaskDef) -> bool:
         if not acquired:
             return False
 
-        row = db_session.query(KVStore).filter_by(key=kv_key).first()
+        row = fetch_kv_store_row(db_session, kv_key)
         if row and row.value is not None:
             last_claimed = datetime.fromisoformat(str(row.value))
             elapsed = (datetime.now(timezone.utc) - last_claimed).total_seconds()
@@ -213,7 +254,7 @@ def _try_claim_task(task_def: _PeriodicTaskDef) -> bool:
         if row:
             row.value = now_ts
         else:
-            db_session.add(KVStore(key=kv_key, value=now_ts))
+            add_kv_store_row__no_commit(db_session, kv_key, now_ts)
         db_session.commit()
 
     return True

@@ -29,7 +29,7 @@ def _get_basic_group_member_emails(admin_user: DATestUser) -> set[str]:
 
 
 @pytest.mark.skipif(
-    os.environ.get("ENABLE_PAID_ENTERPRISE_EDITION_FEATURES", "").lower() != "true",
+    os.environ.get("RUN_EE_TESTS", "").lower() != "true",
     reason="Permission propagation tests require enterprise features",
 )
 def test_basic_permission_granted_on_registration(

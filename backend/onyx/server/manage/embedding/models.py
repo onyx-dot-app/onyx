@@ -2,6 +2,7 @@ from typing import TYPE_CHECKING
 
 from pydantic import BaseModel
 
+from onyx.natural_language_processing.vertex_auth import VertexEmbeddingConfig
 from shared_configs.enums import EmbeddingProvider
 
 if TYPE_CHECKING:
@@ -19,9 +20,14 @@ class TestEmbeddingRequest(BaseModel):
     model_name: str | None = None
     api_version: str | None = None
     deployment_name: str | None = None
+    vertex_config: VertexEmbeddingConfig | None = None
 
     # This disables the "model_" protected namespace for pydantic
     model_config = {"protected_namespaces": ()}
+
+
+class TestEmbeddingResponse(BaseModel):
+    dimension: int
 
 
 class CloudEmbeddingProvider(BaseModel):
@@ -30,6 +36,7 @@ class CloudEmbeddingProvider(BaseModel):
     api_url: str | None = None
     api_version: str | None = None
     deployment_name: str | None = None
+    vertex_config: VertexEmbeddingConfig | None = None
 
     @classmethod
     def from_request(
@@ -45,6 +52,11 @@ class CloudEmbeddingProvider(BaseModel):
             api_url=cloud_provider_model.api_url,
             api_version=cloud_provider_model.api_version,
             deployment_name=cloud_provider_model.deployment_name,
+            vertex_config=(
+                VertexEmbeddingConfig.model_validate(cloud_provider_model.vertex_config)
+                if cloud_provider_model.vertex_config is not None
+                else None
+            ),
         )
 
 
@@ -58,3 +70,4 @@ class CloudEmbeddingProviderCreationRequest(BaseModel):
     api_url: str | None = None
     api_version: str | None = None
     deployment_name: str | None = None
+    vertex_config: VertexEmbeddingConfig | None = None

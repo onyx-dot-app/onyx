@@ -29,7 +29,7 @@
   --tw-prose-body: var(--text-04);
   --tw-prose-headings: var(--text-04);
   --tw-prose-lead: var(--text-04);
-  --tw-prose-links: var(--action-selection-05);
+  --tw-prose-links: var(--text-04);
   --tw-prose-bold: var(--text-05);
   --tw-prose-counters: var(--text-03);
   --tw-prose-bullets: var(--text-03);
@@ -297,10 +297,10 @@ pre[class*="language-"] {
 .markdown-table-breakout {
   overflow-x: auto;
 
-  /* Always reserve scrollbar height so hover doesn't shift content.
-     Thumb is transparent by default, revealed on hover. */
-  scrollbar-width: thin; /* Firefox — always shows track */
-  scrollbar-color: transparent transparent; /* invisible thumb + track */
+  /* The thumb shows whenever the table overflows, so the extra columns
+     are discoverable without hovering. */
+  scrollbar-width: thin;
+  scrollbar-color: var(--border-03) transparent;
 }
 .markdown-table-breakout::-webkit-scrollbar {
   height: 6px;
@@ -309,14 +309,8 @@ pre[class*="language-"] {
   background: transparent;
 }
 .markdown-table-breakout::-webkit-scrollbar-thumb {
-  background: transparent;
-  border-radius: 3px;
-}
-.markdown-table-breakout:hover {
-  scrollbar-color: var(--border-03) transparent; /* Firefox — reveal thumb */
-}
-.markdown-table-breakout:hover::-webkit-scrollbar-thumb {
   background: var(--border-03);
+  border-radius: 3px;
 }
 
 /* Fade the scroll-end edge via an ::after overlay on the non-scrolling
@@ -359,4 +353,43 @@ pre[class*="language-"] {
 .markdown-table-breakout th:last-child,
 .markdown-table-breakout td:last-child {
   padding-inline-end: 0.75rem;
+}
+
+/* The table sizes to its content and fills at least the column. Long text
+   wraps at 16rem, so several columns show at once and a wider table
+   scrolls instead of squeezing every column narrow. A table
+   narrower than the column spreads the spare width across its cells. */
+.markdown-table-breakout table {
+  width: max-content;
+  min-width: 100%;
+}
+.markdown-table-breakout :is(th, td) {
+  max-width: 16rem;
+  vertical-align: top;
+  /* A long URL or path breaks inside the cell instead of widening it. */
+  overflow-wrap: anywhere;
+}
+/* KaTeX lays formulas out on one line; let math cells keep their width. */
+.markdown-table-breakout :is(th, td):has(.katex) {
+  max-width: none;
+}
+
+/* Copy button in the top inline-end corner, above the fade overlay. The
+   wrapper paints nothing and takes no clicks, so the header under it stays
+   readable and selectable while the button is hidden. */
+.markdown-table-copy {
+  position: absolute;
+  top: 0.25rem;
+  inset-inline-end: 0.25rem;
+  z-index: 3;
+  pointer-events: none;
+}
+/* Hoverable sets pointer-events: none on the item while it is hidden. */
+.markdown-table-copy > * {
+  pointer-events: auto;
+}
+/* Inside the hover item, so the background hides with the button. */
+.markdown-table-copy-surface {
+  border-radius: 0.5rem;
+  background: var(--background-neutral-01);
 }

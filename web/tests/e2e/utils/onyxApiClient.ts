@@ -1,4 +1,31 @@
 import { APIRequestContext, expect, APIResponse } from "@playwright/test";
+import { CI_OPENAI_MODEL } from "@tests/e2e/constants";
+import {
+  MOCK_LLM_API_KEY,
+  MOCK_LLM_DEFAULT_MODEL,
+  MOCK_LLM_MAX_INPUT_TOKENS,
+  MOCK_LLM_MODELS,
+  MOCK_LLM_PROVIDER_NAME,
+  mockLlmApiBase,
+} from "@tests/e2e/utils/mockLlm";
+import type { ProjectFile, UserFileStatus } from "@/lib/projects/types";
+import type { AgentIntegrationLink } from "@/lib/agents/types";
+import type {
+  AdminIntegrationDetail,
+  InstallationPolicy,
+  IntegrationActionsResponse,
+  IntegrationCreate,
+  MemberIntegration,
+  PolicyValue,
+} from "@/lib/integrations/types";
+
+// type-only import: loading the enum at runtime would pull app modules into the test runner
+type UserFileStatusValue = `${UserFileStatus}`;
+
+/** A `/user/projects/file/statuses` entry, with the status as its wire string. */
+type UserFileStatusEntry = Omit<ProjectFile, "status"> & {
+  status: UserFileStatusValue;
+};
 
 const E2E_LLM_PROVIDER_API_KEY =
   process.env.E2E_LLM_PROVIDER_API_KEY ||
@@ -16,34 +43,6 @@ const E2E_IMAGE_GEN_API_KEY =
   process.env.E2E_IMAGE_GEN_API_KEY ||
   process.env.OPENAI_API_KEY ||
   E2E_LLM_PROVIDER_API_KEY;
-
-/** Subset of the backend `MCPToolCreateRequest` needed to provision a server. */
-export interface McpServerCreateRequest {
-  name: string;
-  description?: string;
-  server_url: string;
-  auth_type: "NONE" | "API_TOKEN" | "OAUTH" | "PT_OAUTH";
-  auth_performer: "ADMIN" | "PER_USER";
-  api_token?: string;
-  oauth_client_id?: string;
-  oauth_client_secret?: string;
-  transport?: "STREAMABLE_HTTP" | "SSE";
-  auth_template?: {
-    headers: Record<string, string>;
-    required_fields?: string[];
-  };
-  admin_credentials?: Record<string, string>;
-  admin_credentials_changed?: Record<string, boolean>;
-  existing_server_id?: number;
-}
-
-/** A tool row returned by the `db-tools` endpoint (server prefix stripped). */
-export interface McpDbTool {
-  id: number;
-  name: string;
-  display_name: string;
-  description: string;
-}
 
 /** Options for creating an agent (persona) directly via the API. */
 export interface CreateAgentOptions {
@@ -66,7 +65,9 @@ export interface CreateAgentOptions {
  * **Connectors:**
  * - `createFileConnector(name)` - Creates a file connector with mock credentials
  * - `findCCPairByName(source, name)` - Looks up a connector-credential pair ID by source + name
- * - `deleteCCPair(ccPairId)` - Deletes a connector-credential pair (with polling until complete)
+ * - `deleteCCPair(ccPairId)` - Starts deletion of a connector-credential pair
+ * - `createCredential(source, name, credentialJson)` - Creates an admin-public credential for a source
+ * - `deleteCredential(credentialId)` - Deletes an unlinked credential
  *
  * **Document Sets:**
  * - `createDocumentSet(name, ccPairIds)` - Creates a document set from connector pairs
@@ -74,7 +75,7 @@ export interface CreateAgentOptions {
  *
  * **LLM Providers:**
  * - `listLlmProviders()` - Lists LLM providers (admin endpoint, includes is_public)
- * - `ensurePublicProvider(name?)` - Idempotently creates a public default LLM provider
+ * - `ensurePublicProvider()` - Idempotently makes the public mock LLM provider the default
  * - `createRestrictedProvider(name, groupId)` - Creates a restricted LLM provider assigned to a group
  * - `setProviderAsDefault(id)` - Sets an LLM provider as the default for chat
  * - `deleteProvider(id)` - Deletes an LLM provider
@@ -83,6 +84,7 @@ export interface CreateAgentOptions {
  * - `getUserGroups()` - Lists all user groups (including default system groups)
  * - `createUserGroup(name)` - Creates a user group
  * - `addUsersToGroup(groupId, userIds)` - Adds users to a user group
+ * - `getUserGroupPermissions(groupId)` - Lists group permission grants
  * - `setUserGroupPermissions(groupId, permissions)` - Replaces group permission grants
  * - `deleteUserGroup(id)` - Deletes a user group
  *
@@ -103,6 +105,7 @@ export interface CreateAgentOptions {
  * **Projects:**
  * - `createProject(name)` - Creates a project with a name
  * - `deleteProject(projectId)` - Deletes a project
+ * - `waitForUserFilesCompleted(fileIds)` - Waits until uploaded user files finish processing
  *
  * **Usage Example:**
  * ```typescript
@@ -304,7 +307,9 @@ export class OnyxApiClient {
     groups: number[] = []
   ): Promise<number> {
     const response = await this.post(
-      "/manage/admin/connector-with-mock-credential",
+      // Created paused: an index attempt on the empty file list fails, and the
+      // repeated-error alert toast then covers the page for later tests.
+      "/manage/admin/connector-with-mock-credential?paused=true",
       {
         name: connectorName,
         source: "file",
@@ -327,11 +332,8 @@ export class OnyxApiClient {
 
     const ccPairId = responseData.data;
     this.log(
-      `Created file connector: ${connectorName} (CC Pair ID: ${ccPairId})`
+      `Created paused file connector: ${connectorName} (CC Pair ID: ${ccPairId})`
     );
-
-    // Pause the connector immediately to prevent indexing during tests
-    await this.pauseConnector(ccPairId);
 
     return ccPairId;
   }
@@ -386,6 +388,53 @@ export class OnyxApiClient {
       }
     }
     return null;
+  }
+
+  /**
+   * Creates an admin-public credential for a source. The endpoint stores the
+   * JSON without contacting the source, so placeholder values are fine for
+   * tests that only need a credential to exist.
+   *
+   * @param source - The connector source (e.g. "confluence")
+   * @param name - Display name for the credential
+   * @param credentialJson - The credential fields the source's template expects
+   * @returns The new credential's ID
+   * @throws Error if the credential creation fails
+   */
+  async createCredential(
+    source: string,
+    name: string,
+    credentialJson: Record<string, string>
+  ): Promise<number> {
+    const response = await this.post("/manage/credential", {
+      credential_json: credentialJson,
+      admin_public: true,
+      curator_public: true,
+      groups: [],
+      source,
+      name,
+    });
+
+    const { id } = await this.handleResponse<{ id: number }>(
+      response,
+      "Failed to create credential"
+    );
+    this.log(`Created credential: ${name} (ID: ${id})`);
+    return id;
+  }
+
+  /**
+   * Deletes a credential that is not linked to any connector.
+   *
+   * @param credentialId - The credential ID to delete
+   */
+  async deleteCredential(credentialId: number): Promise<void> {
+    const response = await this.delete(`/manage/credential/${credentialId}`);
+    await this.handleResponseSoft(
+      response,
+      `Failed to delete credential ${credentialId}`
+    );
+    this.log(`Deleted credential: ${credentialId}`);
   }
 
   /**
@@ -450,23 +499,17 @@ export class OnyxApiClient {
     this.log(`Document set ${documentSetId} deletion confirmed`);
   }
 
-  /**
-   * Initiates deletion of a connector-credential pair.
-   *
-   * Fetches the CC pair details to get connector/credential IDs, then fires
-   * the deletion-attempt endpoint. Deletion runs asynchronously on a Celery
-   * worker; this method does NOT wait for it to finish, so the pair may
-   * still appear briefly after this resolves. Intended for test-teardown
-   * fire-and-forget cleanup — use `waitForDeletion` directly if a caller
-   * needs to observe the deleted state.
-   *
-   * @param ccPairId - The connector-credential pair ID to delete
-   */
-  async deleteCCPair(ccPairId: number): Promise<void> {
-    // Get CC pair details to extract connector_id and credential_id
+  /** Start deletion of a CC pair. A file connector can wait for its row to be removed. */
+  async deleteCCPair(
+    ccPairId: number,
+    {
+      waitForConnectorDeletion = false,
+    }: { waitForConnectorDeletion?: boolean } = {}
+  ): Promise<void> {
     const getResponse = await this.get(`/manage/admin/cc-pair/${ccPairId}`);
-
-    if (
+    if (waitForConnectorDeletion) {
+      await expect(getResponse).toBeOK();
+    } else if (
       !(await this.handleResponseSoft(
         getResponse,
         `Failed to get CC pair ${ccPairId} details`
@@ -487,7 +530,14 @@ export class OnyxApiClient {
       credential_id: credentialId,
     });
 
-    if (
+    if (waitForConnectorDeletion) {
+      await expect(deleteResponse).toBeOK();
+      await this.waitForDeletion(
+        `/manage/connector/${connectorId}`,
+        "Connector",
+        connectorId
+      );
+    } else if (
       !(await this.handleResponseSoft(
         deleteResponse,
         `Failed to delete CC pair ${ccPairId}`
@@ -520,7 +570,7 @@ export class OnyxApiClient {
           name: providerName,
           provider: "openai",
           api_key: E2E_LLM_PROVIDER_API_KEY,
-          default_model_name: "gpt-4o",
+          default_model_name: CI_OPENAI_MODEL,
           is_public: false,
           groups: [groupId],
           personas: [],
@@ -555,7 +605,7 @@ export class OnyxApiClient {
           personas: agentIds,
           model_configurations: [
             {
-              name: "gpt-4o",
+              name: CI_OPENAI_MODEL,
               custom_display_name: providerName,
               is_visible: true,
             },
@@ -591,7 +641,7 @@ export class OnyxApiClient {
           is_public: true,
           groups: [],
           personas: [],
-          model_configurations: [{ name: "gpt-4o", is_visible: true }],
+          model_configurations: [{ name: CI_OPENAI_MODEL, is_visible: true }],
         },
       }
     );
@@ -608,66 +658,75 @@ export class OnyxApiClient {
   /**
    * Lists LLM providers visible to the admin (includes `is_public`).
    *
-   * @returns Array of LLM providers with id and is_public fields
+   * @returns Array of LLM providers with id, name, and is_public fields
    */
   async listLlmProviders(): Promise<
     Array<{
       id: number;
+      name: string;
       is_public?: boolean;
     }>
   > {
     const response = await this.get("/admin/llm/provider");
     const data = await this.handleResponse<{
-      providers: Array<{ id: number; is_public?: boolean }>;
+      providers: Array<{ id: number; name: string; is_public?: boolean }>;
     }>(response, "Failed to list LLM providers");
     return data.providers;
   }
 
   /**
-   * Ensure at least one public LLM provider exists and is set as default.
+   * Ensure the public mock LLM provider exists, points at the mock LLM
+   * server's default script, and is the default for chat.
    *
-   * Idempotent — returns `null` if a public provider already exists,
+   * Idempotent — returns `null` if the provider already existed,
    * or the new provider ID if one was created.
    *
-   * @param providerName - Name for the provider (default: "PW Default Provider")
    * @returns The provider ID if one was created, or `null` if already present
    */
-  async ensurePublicProvider(
-    providerName: string = "PW Default Provider"
-  ): Promise<number | null> {
+  async ensurePublicProvider(): Promise<number | null> {
     const providers = await this.listLlmProviders();
-    const hasPublic = providers.some((p) => p.is_public);
+    const existing = providers.find((p) => p.name === MOCK_LLM_PROVIDER_NAME);
 
-    if (hasPublic) {
-      return null;
-    }
-
-    const defaultModelName = "gpt-4o";
     const response = await this.request.put(
-      `${this.baseUrl}/admin/llm/provider?is_creation=true`,
+      `${this.baseUrl}/admin/llm/provider${existing ? "" : "?is_creation=true"}`,
       {
         data: {
-          name: providerName,
-          provider: "openai",
-          api_key: E2E_LLM_PROVIDER_API_KEY,
+          id: existing?.id,
+          name: MOCK_LLM_PROVIDER_NAME,
+          provider: "openai_compatible",
+          api_key: MOCK_LLM_API_KEY,
+          api_key_changed: true,
+          api_base: mockLlmApiBase(),
           is_public: true,
           groups: [],
           personas: [],
-          model_configurations: [{ name: defaultModelName, is_visible: true }],
+          model_configurations: MOCK_LLM_MODELS.map((model) => ({
+            name: model.name,
+            custom_display_name: model.displayName,
+            is_visible: true,
+            max_input_tokens: MOCK_LLM_MAX_INPUT_TOKENS,
+            supports_image_input: true,
+          })),
         },
       }
     );
 
     const responseData = await this.handleResponse<{ id: number }>(
       response,
-      "Failed to create public provider"
+      "Failed to upsert the mock LLM provider"
     );
 
     // Set as default so get_default_llm() works (needed for tokenization, etc.)
-    await this.setProviderAsDefault(responseData.id, defaultModelName);
+    await this.setProviderAsDefault(
+      responseData.id,
+      MOCK_LLM_DEFAULT_MODEL.name
+    );
 
+    if (existing) {
+      return null;
+    }
     this.log(
-      `Created public LLM provider: ${providerName} (ID: ${responseData.id})`
+      `Created mock LLM provider: ${MOCK_LLM_PROVIDER_NAME} (ID: ${responseData.id})`
     );
     return responseData.id;
   }
@@ -718,43 +777,61 @@ export class OnyxApiClient {
   }
 
   /**
-   * Creates or updates a per-model cost override.
+   * Creates a cost override for a provider's first model configuration.
    *
-   * @param model - Model id the negotiated rate applies to
-   * @returns The model id, for asserting the row renders
+   * @param providerId - LLM provider whose first model gets the override
+   * @returns The model configuration id (for cleanup) and the display name
+   * the override card shows
    */
-  async upsertCostOverride(model: string): Promise<string> {
-    const response = await this.put("/admin/cost-overrides", {
-      model,
+  async createCostOverride(
+    providerId: number
+  ): Promise<{ modelConfigurationId: number; modelDisplayName: string }> {
+    const providersResponse = await this.get("/admin/llm/provider");
+    const { providers } = await this.handleResponse<{
+      providers: Array<{
+        id: number;
+        model_configurations: Array<{ id: number }>;
+      }>;
+    }>(providersResponse, "Failed to list LLM providers");
+    const modelConfigurationId = providers.find((p) => p.id === providerId)
+      ?.model_configurations[0]?.id;
+    if (modelConfigurationId === undefined) {
+      throw new Error(`Provider ${providerId} has no model configuration`);
+    }
+
+    const response = await this.post("/admin/cost-overrides", {
+      model_configuration_id: modelConfigurationId,
       input_cost_per_mtok: 2.5,
       output_cost_per_mtok: 10,
     });
-
-    await this.handleResponse(
+    const override = await this.handleResponse<{ model_display_name: string }>(
       response,
-      `Failed to upsert cost override ${model}`
+      `Failed to create cost override for model ${modelConfigurationId}`
     );
 
-    this.log(`Upserted cost override: ${model}`);
-    return model;
+    this.log(`Created cost override: ${modelConfigurationId}`);
+    return {
+      modelConfigurationId,
+      modelDisplayName: override.model_display_name,
+    };
   }
 
   /**
-   * Deletes a per-model cost override.
+   * Deletes a model configuration's cost override.
    *
-   * @param model - Model id whose override should be removed
+   * @param modelConfigurationId - Model configuration whose override is removed
    */
-  async deleteCostOverride(model: string): Promise<void> {
+  async deleteCostOverride(modelConfigurationId: number): Promise<void> {
     const response = await this.delete(
-      `/admin/cost-overrides/${encodeURIComponent(model)}`
+      `/admin/cost-overrides/${modelConfigurationId}`
     );
 
     await this.handleResponseSoft(
       response,
-      `Failed to delete cost override ${model}`
+      `Failed to delete cost override ${modelConfigurationId}`
     );
 
-    this.log(`Deleted cost override: ${model}`);
+    this.log(`Deleted cost override: ${modelConfigurationId}`);
   }
 
   /**
@@ -806,6 +883,19 @@ export class OnyxApiClient {
       `Failed to add users to group ${groupId}`
     );
     this.log(`Added ${userIds.length} user(s) to user group: ${groupId}`);
+  }
+
+  /**
+   * Lists the toggleable permissions granted to a user group.
+   */
+  async getUserGroupPermissions(groupId: number): Promise<string[]> {
+    const response = await this.get(
+      `/manage/admin/user-group/${groupId}/permissions`
+    );
+    return await this.handleResponse<string[]>(
+      response,
+      `Failed to get permissions for user group ${groupId}`
+    );
   }
 
   /**
@@ -938,9 +1028,11 @@ export class OnyxApiClient {
 
   private async getGroupUserIds(groupId: number): Promise<string[]> {
     const response = await this.get("/manage/admin/user-group");
-    const groups = await response.json();
-    const group = groups.find((g: { id: number }) => g.id === groupId);
-    return (group?.users ?? []).map((user: { id: string }) => user.id);
+    const groups = await this.handleResponse<
+      Array<{ id: number; users: Array<{ id: string }> }>
+    >(response, "Failed to list user groups");
+    const group = groups.find((g) => g.id === groupId);
+    return (group?.users ?? []).map((user) => user.id);
   }
 
   async setGroupCcPairs(
@@ -1034,7 +1126,7 @@ export class OnyxApiClient {
       (u) => u.email.toLowerCase() === email.toLowerCase()
     );
     if (!target) {
-      throw new Error(`User ${email} not found — cannot add to Admin group`);
+      throw new Error(`User ${email} not found. Cannot add to Admin group`);
     }
 
     const response = await this.request.post(
@@ -1048,23 +1140,14 @@ export class OnyxApiClient {
     this.log(`Added ${email} to Admin group`);
   }
 
-  async deleteMcpServer(serverId: number): Promise<boolean> {
-    const response = await this.request.delete(
-      `${this.baseUrl}/admin/mcp/server/${serverId}`
-    );
-    const success = await this.handleResponseSoft(
-      response,
-      `Failed to delete MCP server ${serverId}`
-    );
-    if (success) {
-      this.log(`Deleted MCP server ${serverId}`);
-    }
-    return success;
-  }
-
   async createCustomTool(
     name: string,
-    description: string = "E2E test tool"
+    description: string = "E2E test tool",
+    endpoint: { baseUrl: string; path: string; operationId: string } = {
+      baseUrl: "https://example.com",
+      path: "/test",
+      operationId: "testOp",
+    }
   ): Promise<number> {
     const response = await this.post("/admin/tool/custom", {
       name,
@@ -1073,15 +1156,15 @@ export class OnyxApiClient {
         openapi: "3.0.0",
         info: { title: name, description: description, version: "1.0.0" },
         paths: {
-          "/test": {
+          [endpoint.path]: {
             get: {
-              operationId: "testOp",
+              operationId: endpoint.operationId,
               summary: "Test endpoint",
               responses: { "200": { description: "OK" } },
             },
           },
         },
-        servers: [{ url: "https://example.com" }],
+        servers: [{ url: endpoint.baseUrl }],
       },
       passthrough_auth: false,
     });
@@ -1092,26 +1175,6 @@ export class OnyxApiClient {
     );
     this.log(`Created custom tool: ${name} (ID: ${data.id})`);
     return data.id;
-  }
-
-  async createMcpServer(
-    name: string,
-    serverUrl: string = "https://example.com/mcp"
-  ): Promise<number> {
-    const response = await this.post("/admin/mcp/servers/create", {
-      name,
-      description: "E2E test MCP server",
-      server_url: serverUrl,
-      auth_type: "NONE",
-      auth_performer: "ADMIN",
-    });
-
-    const data = await this.handleResponse<{ server_id: number }>(
-      response,
-      "Failed to create MCP server"
-    );
-    this.log(`Created MCP server: ${name} (ID: ${data.server_id})`);
-    return data.server_id;
   }
 
   async createServiceAccount(
@@ -1159,8 +1222,137 @@ export class OnyxApiClient {
     return success;
   }
 
+  async deleteIntegration(integrationId: number): Promise<boolean> {
+    const response = await this.request.delete(
+      `${this.baseUrl}/admin/integrations/${integrationId}`
+    );
+    const success = await this.handleResponseSoft(
+      response,
+      `Failed to delete integration ${integrationId}`
+    );
+    if (success) {
+      this.log(`Deleted integration ${integrationId}`);
+    }
+    return success;
+  }
+
+  /** Adds an integration; syncs its actions. */
+  async createIntegration(
+    body: IntegrationCreate
+  ): Promise<AdminIntegrationDetail> {
+    const response = await this.post("/admin/integrations", body);
+    const data = await this.handleResponse<AdminIntegrationDetail>(
+      response,
+      `Failed to create integration ${body.name}`
+    );
+    this.log(`Created integration ${body.name} (ID: ${data.id})`);
+    return data;
+  }
+
+  /** Discovers the actions of an MCP server again. */
+  async refreshIntegrationActions(
+    integrationId: number
+  ): Promise<IntegrationActionsResponse> {
+    const response = await this.post(
+      `/admin/integrations/${integrationId}/actions/refresh`
+    );
+    return await this.handleResponse<IntegrationActionsResponse>(
+      response,
+      `Failed to refresh actions of integration ${integrationId}`
+    );
+  }
+
+  /** Sets the admin policy of each named action. */
+  async setIntegrationActionPolicies(
+    integrationId: number,
+    actions: Record<string, PolicyValue | null>,
+    defaultPolicy: PolicyValue | null = null
+  ): Promise<void> {
+    const response = await this.put(
+      `/admin/integrations/${integrationId}/actions`,
+      { default_policy: defaultPolicy, actions }
+    );
+    await this.handleResponse(
+      response,
+      `Failed to set action policies of integration ${integrationId}`
+    );
+  }
+
+  /** Sets the company install setting of an integration. */
+  async setIntegrationInstallationPolicy(
+    integrationId: number,
+    installationPolicy: InstallationPolicy
+  ): Promise<void> {
+    const response = await this.put(
+      `/admin/integrations/${integrationId}/installation-policy`,
+      { installation_policy: installationPolicy }
+    );
+    await this.handleResponse(
+      response,
+      `Failed to set the install setting of integration ${integrationId}`
+    );
+  }
+
+  /** Turns an integration on or off for the user of this client. */
+  async setIntegrationEnabled(
+    integrationId: number,
+    enabled: boolean
+  ): Promise<MemberIntegration> {
+    const response = await this.put(`/integrations/${integrationId}/enabled`, {
+      enabled,
+    });
+    return await this.handleResponse<MemberIntegration>(
+      response,
+      `Failed to turn integration ${integrationId} ${enabled ? "on" : "off"}`
+    );
+  }
+
+  /** The integrations of the user of this client, with their states. */
+  async listMemberIntegrations(): Promise<MemberIntegration[]> {
+    const response = await this.get("/integrations");
+    return await this.handleResponse<MemberIntegration[]>(
+      response,
+      "Failed to list the integrations of the user"
+    );
+  }
+
+  /** Creates an agent that links the given integrations. */
+  async createAgentWithIntegrations(
+    name: string,
+    integrationIds: number[],
+    options: CreateAgentOptions = {}
+  ): Promise<number> {
+    const response = await this.post("/persona", {
+      name,
+      description: options.description ?? `${name} (e2e)`,
+      system_prompt: options.instructions ?? "",
+      task_prompt: "",
+      datetime_aware: true,
+      document_set_ids: [],
+      is_public: options.isPublic ?? false,
+      users: options.userIds ?? [],
+      groups: options.groupIds ?? [],
+      tool_ids: [],
+      integrations: integrationIds.map((integration_id) => ({
+        integration_id,
+        action_settings: { default: "inherit", actions: {} },
+      })),
+    });
+    const data = await this.handleResponse<{ id: number }>(
+      response,
+      `Failed to create agent ${name}`
+    );
+    this.log(`Created agent ${name} (ID: ${data.id})`);
+    return data.id;
+  }
+
   async listOpenApiTools(): Promise<
-    Array<{ id: number; name: string; description: string }>
+    Array<{
+      id: number;
+      name: string;
+      description: string;
+      permissions: Record<string, boolean>;
+    }>
   > {
     const response = await this.get("/tool/openapi");
     return await this.handleResponse(response, "Failed to list OpenAPI tools");
@@ -1225,6 +1417,7 @@ export class OnyxApiClient {
       in_code_tool_id?: string | null;
       mcp_server_id?: number | null;
     }>;
+    integrations: AgentIntegrationLink[];
   }> {
     const response = await this.get(`/persona/${agentId}`);
     return await this.handleResponse(
@@ -1261,131 +1454,6 @@ export class OnyxApiClient {
       `Updated assistant sharing: ${agentId} (is_public=${String(
         options.isPublic
       )})`
-    );
-  }
-
-  async listMcpServers(): Promise<any[]> {
-    const response = await this.get(`/admin/mcp/servers`);
-    const data = await this.handleResponse<{ mcp_servers: any[] }>(
-      response,
-      "Failed to list MCP servers"
-    );
-    return data.mcp_servers;
-  }
-
-  // ---------------------------------------------------------------------------
-  // MCP server provisioning (API-driven test setup)
-  // ---------------------------------------------------------------------------
-
-  /**
-   * Create (or update, via `existing_server_id`) an MCP server with its auth
-   * configuration in a single call. Covers admin shared-key, per-user template,
-   * and OAuth-stub servers. Mirrors the frontend `upsertMCPServer` payload.
-   * Returns the new server id.
-   */
-  async createMcpServerWithAuth(
-    request: McpServerCreateRequest
-  ): Promise<number> {
-    const response = await this.post("/admin/mcp/servers/create", {
-      transport: "STREAMABLE_HTTP",
-      ...request,
-    });
-    const data = await this.handleResponse<{ server_id: number }>(
-      response,
-      `Failed to create MCP server ${request.name}`
-    );
-    this.log(`Created MCP server ${request.name} (ID: ${data.server_id})`);
-    return data.server_id;
-  }
-
-  /**
-   * Discover the tools exposed by a live MCP server and persist them to the DB.
-   * `source=mcp` triggers discovery, enables the tools, and flips the server
-   * status to CONNECTED. Returns the discovered tool snapshots.
-   */
-  async discoverMcpTools(serverId: number): Promise<Array<{ id: number }>> {
-    const response = await this.get(
-      `/admin/mcp/server/${serverId}/tools/snapshots?source=mcp`
-    );
-    const tools = await this.handleResponse<Array<{ id: number }>>(
-      response,
-      `Failed to discover tools for MCP server ${serverId}`
-    );
-    this.log(`Discovered ${tools.length} tool(s) for MCP server ${serverId}`);
-    return tools;
-  }
-
-  /** List the DB tool rows for an MCP server (names have the server prefix stripped). */
-  async getMcpDbTools(serverId: number): Promise<McpDbTool[]> {
-    const response = await this.get(`/admin/mcp/server/${serverId}/db-tools`);
-    const data = await this.handleResponse<{ tools: McpDbTool[] }>(
-      response,
-      `Failed to list DB tools for MCP server ${serverId}`
-    );
-    return data.tools ?? [];
-  }
-
-  /**
-   * Resolve a tool's DB id by its (prefix-stripped) name, polling briefly in
-   * case discovery just completed.
-   */
-  async findMcpToolId(
-    serverId: number,
-    toolName: string,
-    timeoutMs: number = 15_000
-  ): Promise<number> {
-    const deadline = Date.now() + timeoutMs;
-    let lastSeen: string[] = [];
-    for (;;) {
-      const tools = await this.getMcpDbTools(serverId);
-      lastSeen = tools.map((tool) => tool.name);
-      const match = tools.find((tool) => tool.name === toolName);
-      if (match) {
-        return match.id;
-      }
-      if (Date.now() >= deadline) {
-        throw new Error(
-          `Tool ${toolName} not found on server ${serverId}. Saw: ${lastSeen.join(
-            ", "
-          )}`
-        );
-      }
-      await new Promise((resolve) => setTimeout(resolve, 500));
-    }
-  }
-
-  /** Enable exactly the named tools on a server (all others are disabled). */
-  async syncMcpTools(
-    serverId: number,
-    selectedToolNames: string[]
-  ): Promise<void> {
-    const response = await this.post("/admin/mcp/servers/update", {
-      server_id: serverId,
-      selected_tools: selectedToolNames,
-    });
-    await this.handleResponse(
-      response,
-      `Failed to sync tools for MCP server ${serverId}`
-    );
-    this.log(
-      `Synced ${selectedToolNames.length} tool(s) on MCP server ${serverId}`
-    );
-  }
-
-  /** Save the calling user's per-user credentials for a template-based server. */
-  async saveUserMcpCredentials(
-    serverId: number,
-    credentials: Record<string, string>,
-    transport: "STREAMABLE_HTTP" | "SSE" = "STREAMABLE_HTTP"
-  ): Promise<void> {
-    const response = await this.post("/mcp/user-credentials", {
-      server_id: serverId,
-      credentials,
-      transport,
-    });
-    await this.handleResponse(
-      response,
-      `Failed to save user MCP credentials for server ${serverId}`
     );
   }
 
@@ -1434,13 +1502,12 @@ export class OnyxApiClient {
 
   /**
    * Add the given tool ids to the default assistant (preserving existing ones).
-   * The PATCH endpoint expects the full replacement list, so we read-merge-write.
+   * Sends only the change, so parallel specs cannot overwrite each other.
    */
   async addToolsToDefaultAssistant(toolIds: number[]): Promise<void> {
-    const { tool_ids: current } = await this.getDefaultAssistantConfig();
-    const merged = Array.from(new Set([...current, ...toolIds]));
-    const response = await this.patch("/admin/default-assistant", {
-      tool_ids: merged,
+    const response = await this.patch("/admin/default-assistant/tools", {
+      tool_ids: toolIds,
+      enabled: true,
     });
     await this.handleResponse(
       response,
@@ -1581,20 +1648,20 @@ export class OnyxApiClient {
    * API: POST /api/admin/image-generation/config
    * Schema (ImageGenerationConfigCreate):
    *   - image_provider_id: string (required) - unique key
-   *   - model_name: string (required) - e.g., "gpt-image-1"
+   *   - model_name: string (required) - e.g., "gpt-image-2.5-flare"
    *   - provider: string - e.g., "openai"
    *   - api_key: string
    *   - is_default: boolean
    *
    * @param imageProviderId - Unique identifier for the image generation config
-   * @param modelName - Model name (defaults to "gpt-image-1")
+   * @param modelName - Model name (defaults to "gpt-image-2.5-flare")
    * @param provider - Provider name (defaults to "openai")
    * @param isDefault - Whether this should be the default config (defaults to true)
    * @returns The image_provider_id
    */
   async createImageGenerationConfig(
     imageProviderId: string,
-    modelName: string = "gpt-image-1",
+    modelName: string = "gpt-image-2.5-flare",
     provider: string = "openai",
     isDefault: boolean = true
   ): Promise<string> {
@@ -1901,6 +1968,24 @@ export class OnyxApiClient {
     this.log(`Deleted chat session: ${chatId}`);
   }
 
+  /** Creates the worker user's empty Craft session through the real backend. */
+  async createCraftSession(name: string): Promise<string> {
+    const response = await this.post("/build/sessions", { name });
+    const session = await this.handleResponse<{ id: string }>(
+      response,
+      "Failed to create Craft session"
+    );
+    return session.id;
+  }
+
+  /** Removes the isolated Craft fixture session. */
+  async deleteCraftSession(sessionId: string): Promise<void> {
+    await this.handleResponseSoft(
+      await this.delete(`/build/sessions/${sessionId}`),
+      `Failed to delete Craft session ${sessionId}`
+    );
+  }
+
   // === Project Methods ===
 
   /**
@@ -1920,6 +2005,57 @@ export class OnyxApiClient {
     );
     this.log(`Created project: ${name} (ID: ${data.id})`);
     return data.id;
+  }
+
+  /**
+   * Polls until every given user file finishes processing. A page only polls
+   * the files it uploaded itself, so a file uploaded through the API must be
+   * done before the page loads, or the page shows "Processing..." forever.
+   *
+   * @param fileIds - The user file IDs to wait on
+   * @param timeout - Maximum time to wait in milliseconds (default: 60000)
+   * @throws Error if a file ends in a status other than COMPLETED, or on timeout
+   */
+  async waitForUserFilesCompleted(
+    fileIds: string[],
+    timeout: number = 60000
+  ): Promise<void> {
+    const pendingStatuses: ReadonlySet<UserFileStatusValue> = new Set([
+      "PROCESSING",
+      "INDEXING",
+    ]);
+    let files: UserFileStatusEntry[] = [];
+    await expect
+      .poll(
+        async () => {
+          const response = await this.post("/user/projects/file/statuses", {
+            file_ids: fileIds,
+          });
+          files = await this.handleResponse<UserFileStatusEntry[]>(
+            response,
+            "Failed to fetch user file statuses"
+          );
+          return (
+            files.length === fileIds.length &&
+            files.every((f) => !pendingStatuses.has(f.status))
+          );
+        },
+        {
+          message: `User files ${fileIds.join(", ")} did not finish processing`,
+          timeout,
+        }
+      )
+      .toBe(true);
+
+    const notCompleted = files.filter((f) => f.status !== "COMPLETED");
+    if (notCompleted.length > 0) {
+      throw new Error(
+        `User files did not complete: ${notCompleted
+          .map((f) => `${f.id}=${f.status}`)
+          .join(", ")}`
+      );
+    }
+    this.log(`User files completed: ${fileIds.join(", ")}`);
   }
 
   /**

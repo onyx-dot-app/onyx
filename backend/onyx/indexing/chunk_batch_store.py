@@ -39,7 +39,8 @@ class ChunkBatchStore:
 
     @property
     def _dir(self) -> Path:
-        assert self._tmpdir is not None, "ChunkBatchStore used outside context manager"
+        if self._tmpdir is None:
+            raise RuntimeError("ChunkBatchStore used outside context manager")
         return self._tmpdir
 
     # -- storage primitives --------------------------------------------------

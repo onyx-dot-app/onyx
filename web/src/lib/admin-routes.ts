@@ -1,27 +1,29 @@
 import { Permission } from "@/lib/types";
-import { Tier } from "@/lib/settings/types";
+import { Tier } from "@/lib/tiers/types";
 import { IconFunctionComponent } from "@opal/types";
 import {
-  SvgActions,
+  SvgLink,
+  SvgBlocks,
   SvgActivity,
   SvgArrowExchange,
   SvgAudio,
   SvgShareWebhook,
   SvgBarChart,
-  SvgBookOpen,
   SvgBubbleText,
   SvgClipboard,
   SvgCpu,
   SvgDownload,
+  SvgHardDrive,
   SvgEmpty,
   SvgFileText,
   SvgFiles,
   SvgGlobe,
   SvgHistory,
   SvgImage,
-  SvgMcp,
+  SvgLinkedDots,
   SvgOnyxOctagon,
   SvgPaintBrush,
+  SvgProgressBars,
   SvgPieChart,
   SvgPlug,
   SvgSearchMenu,
@@ -29,7 +31,6 @@ import {
   SvgSliders,
   SvgTerminal,
   SvgThumbsUp,
-  SvgUploadCloud,
   SvgUser,
   SvgUserCheck,
   SvgUserKey,
@@ -47,8 +48,9 @@ export interface FeatureFlags {
   tier: Tier | undefined;
   customAnalyticsEnabled: boolean;
   hasSubscription: boolean;
+  // The playground has no billing: the trial is free and sales handles the rest.
+  isPlayground: boolean;
   hooksEnabled: boolean;
-  opensearchEnabled: boolean;
   queryHistoryEnabled: boolean;
   craftAvailable: boolean;
 }
@@ -81,6 +83,7 @@ export interface FeatureFlags {
  *   visible (subject to the permission and tier checks above).** When
  *   provided, the predicate is evaluated against the resolved feature flags;
  *   returning `false` hides the route from the sidebar.
+ * - `beta`: Shows a Beta tag on the sidebar entry.
  */
 export interface AdminRouteEntry {
   path: string;
@@ -91,6 +94,7 @@ export interface AdminRouteEntry {
   section: string;
   requiredTier: Tier | null;
   visibleWhen: ((flags: FeatureFlags) => boolean) | null;
+  beta?: boolean;
 }
 
 export const ADMIN_ROUTES = {
@@ -104,6 +108,17 @@ export const ADMIN_ROUTES = {
     section: "",
     requiredTier: null,
     visibleWhen: null,
+  },
+  DECISION_MODELS: {
+    path: "/admin/decision-models",
+    icon: SvgUserCheck,
+    title: "Decision Models",
+    sidebarLabel: "Decision Models",
+    requiredPermission: Permission.MANAGE_LLMS,
+    section: "",
+    requiredTier: null,
+    visibleWhen: null,
+    beta: true,
   },
   WEB_SEARCH: {
     path: "/admin/web-search",
@@ -155,6 +170,16 @@ export const ADMIN_ROUTES = {
     requiredTier: null,
     visibleWhen: null,
   },
+  LLM_GATEWAY: {
+    path: "/admin/llm-gateway",
+    icon: SvgGlobe,
+    title: "LLM Gateway",
+    sidebarLabel: "LLM Gateway",
+    requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
+    section: "",
+    requiredTier: Tier.BUSINESS,
+    visibleWhen: null,
+  },
   // ── Craft ─────────────────────────────────────────────────────────
   CRAFT_ACCESS: {
     path: "/admin/craft/access",
@@ -170,7 +195,7 @@ export const ADMIN_ROUTES = {
     path: "/admin/craft/apps",
     icon: SvgPlug,
     title: "Apps",
-    sidebarLabel: "Apps",
+    sidebarLabel: "",
     requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
     section: "Craft",
     requiredTier: null,
@@ -198,54 +223,44 @@ export const ADMIN_ROUTES = {
       !f.enableCloud && f.customAnalyticsEnabled,
   },
 
-  // ── Agents & Actions ──────────────────────────────────────────────
+  // ── Agents & Plugins ──────────────────────────────────────────────
   AGENTS: {
     path: "/admin/agents",
     icon: SvgOnyxOctagon,
     title: "Agents",
     sidebarLabel: "Agents",
     requiredPermission: Permission.MANAGE_AGENTS,
-    section: "Agents & Actions",
+    section: "Agents & Plugins",
     requiredTier: null,
     visibleWhen: null,
   },
-  MCP_ACTIONS: {
-    path: "/admin/mcp-actions",
-    icon: SvgMcp,
-    title: "MCP Actions",
-    sidebarLabel: "MCP Actions",
-    requiredPermission: Permission.MANAGE_ACTIONS,
-    section: "Agents & Actions",
+  SKILLS: {
+    path: "/admin/skills",
+    icon: SvgBlocks,
+    title: "Skills",
+    sidebarLabel: "Skills",
+    requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
+    section: "Agents & Plugins",
     requiredTier: null,
     visibleWhen: null,
   },
-  OPENAPI_ACTIONS: {
-    path: "/admin/openapi-actions",
-    icon: SvgActions,
-    title: "OpenAPI Actions",
-    sidebarLabel: "OpenAPI Actions",
+  INTEGRATIONS: {
+    path: "/admin/integrations",
+    icon: SvgLink,
+    title: "Integrations",
+    sidebarLabel: "Integrations",
     requiredPermission: Permission.MANAGE_ACTIONS,
-    section: "Agents & Actions",
+    section: "Agents & Plugins",
     requiredTier: null,
     visibleWhen: null,
   },
 
   // ── Documents & Knowledge ─────────────────────────────────────────
-  INDEXING_STATUS: {
-    path: "/admin/indexing/status",
-    icon: SvgBookOpen,
-    title: "Existing Connectors",
-    sidebarLabel: "Existing Connectors",
-    requiredPermission: Permission.MANAGE_CONNECTORS,
-    section: "Documents & Knowledge",
-    requiredTier: null,
-    visibleWhen: (f: FeatureFlags) => f.vectorDbEnabled,
-  },
-  ADD_CONNECTOR: {
-    path: "/admin/add-connector",
-    icon: SvgUploadCloud,
-    title: "Add Connector",
-    sidebarLabel: "Add Connector",
+  CONNECTORS: {
+    path: "/admin/connectors",
+    icon: SvgLinkedDots,
+    title: "Connectors",
+    sidebarLabel: "Connectors",
     requiredPermission: Permission.MANAGE_CONNECTORS,
     section: "Documents & Knowledge",
     requiredTier: null,
@@ -301,46 +316,36 @@ export const ADMIN_ROUTES = {
     requiredTier: null,
     visibleWhen: (f: FeatureFlags) => f.vectorDbEnabled,
   },
-  // ── Integrations ──────────────────────────────────────────────────
-  API_KEYS: {
-    path: "/admin/service-accounts",
-    icon: SvgUserKey,
-    title: "Service Accounts",
-    sidebarLabel: "Service Accounts",
-    requiredPermission: Permission.MANAGE_SERVICE_ACCOUNT_API_KEYS,
-    section: "Integrations",
-    requiredTier: Tier.BUSINESS,
-    visibleWhen: null,
+  INDEXING_STATUS: {
+    path: "/admin/indexing-status",
+    icon: SvgProgressBars,
+    title: "Indexing Status",
+    sidebarLabel: "Indexing Status",
+    requiredPermission: Permission.MANAGE_CONNECTORS,
+    section: "Documents & Knowledge",
+    requiredTier: null,
+    visibleWhen: (f: FeatureFlags) => f.vectorDbEnabled,
   },
+  // ── Channels ──────────────────────────────────────────────────────
   SLACK_BOTS: {
     path: "/admin/bots",
     icon: SvgSlack,
-    title: "Slack Integration",
-    sidebarLabel: "Slack Integration",
+    title: "Slack Bot",
+    sidebarLabel: "Slack Bot",
     requiredPermission: Permission.MANAGE_BOTS,
-    section: "Integrations",
+    section: "Channels",
     requiredTier: null,
     visibleWhen: null,
   },
   DISCORD_BOTS: {
     path: "/admin/discord-bot",
     icon: SvgDiscord,
-    title: "Discord Integration",
-    sidebarLabel: "Discord Integration",
+    title: "Discord Bot",
+    sidebarLabel: "Discord Bot",
     requiredPermission: Permission.MANAGE_BOTS,
-    section: "Integrations",
+    section: "Channels",
     requiredTier: null,
     visibleWhen: null,
-  },
-  HOOKS: {
-    path: "/admin/hooks",
-    icon: SvgShareWebhook,
-    title: "Hook Extensions",
-    sidebarLabel: "Hook Extensions",
-    requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
-    section: "Integrations",
-    requiredTier: Tier.ENTERPRISE,
-    visibleWhen: (f: FeatureFlags) => f.hooksEnabled,
   },
 
   // ── Permissions ───────────────────────────────────────────────────
@@ -374,6 +379,16 @@ export const ADMIN_ROUTES = {
     requiredTier: Tier.ENTERPRISE,
     visibleWhen: null,
   },
+  API_KEYS: {
+    path: "/admin/service-accounts",
+    icon: SvgUserKey,
+    title: "Service Accounts",
+    sidebarLabel: "Service Accounts",
+    requiredPermission: Permission.MANAGE_SERVICE_ACCOUNT_API_KEYS,
+    section: "Permissions",
+    requiredTier: Tier.BUSINESS,
+    visibleWhen: null,
+  },
   OAUTH_TEST: {
     path: "/admin/oauth-test",
     icon: SvgUserKey,
@@ -395,7 +410,7 @@ export const ADMIN_ROUTES = {
     requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
     section: "Organization",
     requiredTier: null,
-    visibleWhen: (f: FeatureFlags) => f.hasSubscription,
+    visibleWhen: (f: FeatureFlags) => f.hasSubscription && !f.isPlayground,
   },
   THEME: {
     path: "/admin/theme",
@@ -430,6 +445,17 @@ export const ADMIN_ROUTES = {
     visibleWhen: null,
   },
 
+  HOOKS: {
+    path: "/admin/hooks",
+    icon: SvgShareWebhook,
+    title: "Hook Extensions",
+    sidebarLabel: "Hook Extensions",
+    requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
+    section: "Organization",
+    requiredTier: Tier.ENTERPRISE,
+    visibleWhen: (f: FeatureFlags) => f.hooksEnabled,
+  },
+
   // ── Usage ─────────────────────────────────────────────────────────
   USAGE: {
     path: "/admin/performance/usage",
@@ -439,6 +465,16 @@ export const ADMIN_ROUTES = {
     requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
     section: "Usage",
     requiredTier: Tier.BUSINESS,
+    visibleWhen: null,
+  },
+  SPENDING_LIMITS: {
+    path: "/admin/spending-limits",
+    icon: SvgWallet,
+    title: "Spending Limits",
+    sidebarLabel: "Spending Limits",
+    requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
+    section: "Usage",
+    requiredTier: Tier.ENTERPRISE,
     visibleWhen: null,
   },
   WORKSPACE_ANALYTICS: {
@@ -481,6 +517,17 @@ export const ADMIN_ROUTES = {
     requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
     section: "Usage",
     requiredTier: Tier.ENTERPRISE,
+    visibleWhen: (f: FeatureFlags) => !f.enableCloud,
+  },
+  // Cloud shares the search cluster across tenants, so it has no status page.
+  SERVICE_STATUS: {
+    path: "/admin/service-status",
+    icon: SvgHardDrive,
+    title: "Service Status",
+    sidebarLabel: "Service Status",
+    requiredPermission: Permission.FULL_ADMIN_PANEL_ACCESS,
+    section: "Usage",
+    requiredTier: Tier.BUSINESS,
     visibleWhen: (f: FeatureFlags) => !f.enableCloud,
   },
 
@@ -533,7 +580,7 @@ export function sidebarItem(route: AdminRouteEntry) {
  */
 export const VECTOR_DB_REQUIRED_ROUTE_PREFIXES: readonly string[] = [
   ADMIN_ROUTES.INDEXING_STATUS.path,
-  ADMIN_ROUTES.ADD_CONNECTOR.path,
+  ADMIN_ROUTES.CONNECTORS.path,
   // Covers /sets, /explorer, and /feedback — all require a vector DB.
   ADMIN_ROUTES.DOCUMENTS.path,
   ADMIN_ROUTES.INDEX_SETTINGS.path,

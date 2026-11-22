@@ -30,9 +30,8 @@ from onyx.db.port_attempt import (
     _user_file_port_has_pending_work,
     all_user_scopes_ported,
     create_port_attempt,
-    mark_port_canceled,
     mark_port_in_progress,
-    mark_port_succeeded,
+    mark_port_terminal,
 )
 from onyx.db.port_orphan_candidate import (
     clear_port_orphan_candidates,
@@ -265,7 +264,7 @@ def test_swap_gate_blocks_on_unsettled_user_then_releases(
     assert all_user_scopes_ported(db_session, future_ss_id, [port_user.id]) is False
 
     mark_port_in_progress(db_session, attempt.id)
-    mark_port_succeeded(db_session, attempt.id)
+    mark_port_terminal(db_session, attempt.id, PortAttemptStatus.SUCCESS)
 
     assert all_user_scopes_ported(db_session, future_ss_id, [port_user.id]) is True
     assert _port_swap_ready(db_session, future_ss, [], [port_user.id]) is True
@@ -282,7 +281,7 @@ def test_swap_gate_not_deadlocked_by_canceled_user(
     attempt = create_port_attempt(
         db_session, None, future_ss_id, port_user_id=port_user.id
     )
-    mark_port_canceled(db_session, attempt.id)
+    mark_port_terminal(db_session, attempt.id, PortAttemptStatus.CANCELED)
 
     assert all_user_scopes_ported(db_session, future_ss_id, [port_user.id]) is True
     assert _port_swap_ready(db_session, future_ss, [], [port_user.id]) is True
@@ -302,7 +301,7 @@ def test_swap_gate_blocks_on_secondary_pending_then_releases(
         db_session, None, future_ss_id, port_user_id=port_user.id
     )
     mark_port_in_progress(db_session, attempt.id)
-    mark_port_succeeded(db_session, attempt.id)
+    mark_port_terminal(db_session, attempt.id, PortAttemptStatus.SUCCESS)
     assert all_user_scopes_ported(db_session, future_ss_id, [port_user.id]) is True
 
     uf.secondary_reconcile_pending = True
@@ -329,7 +328,7 @@ def test_swap_gate_ignores_reconcile_flag_on_non_completed_file(
         db_session, None, future_ss_id, port_user_id=port_user.id
     )
     mark_port_in_progress(db_session, attempt.id)
-    mark_port_succeeded(db_session, attempt.id)
+    mark_port_terminal(db_session, attempt.id, PortAttemptStatus.SUCCESS)
 
     uf.secondary_reconcile_pending = True
     db_session.commit()
@@ -359,7 +358,7 @@ def test_user_file_port_pending_until_attempt_succeeds(
         db_session, None, future_ss_id, port_user_id=port_user.id
     )
     mark_port_in_progress(db_session, attempt.id)
-    mark_port_succeeded(db_session, attempt.id)
+    mark_port_terminal(db_session, attempt.id, PortAttemptStatus.SUCCESS)
     assert _user_file_port_has_pending_work(db_session, future_ss_id) is False
 
 

@@ -22,12 +22,14 @@ Forwarded to `@radix-ui/react-popover` `Root`. Most common:
 
 ### `Popover.Content`
 
-| Prop         | Type                                                          | Default    | Description                                     |
-| ------------ | ------------------------------------------------------------- | ---------- | ----------------------------------------------- |
-| `width`      | `"fit" \| "sm" \| "md" \| "lg" \| "xl" \| "2xl" \| "trigger"` | `"fit"`    | Popover width preset                            |
-| `container`  | `HTMLElement \| null`                                         | —          | Portal container (use to render inside a modal) |
-| `align`      | `"start" \| "center" \| "end"`                                | `"center"` | Alignment along the side axis                   |
-| `sideOffset` | `number`                                                      | `4`        | Distance in pixels between trigger and popover  |
+| Prop         | Type                                        | Default    | Description                                                                                                                                                              |
+| ------------ | ------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `width`      | `ContextualMenuWidth \| "fit" \| "trigger"` | `"fit"`    | A contextual-menu step shared with Dropdown (`30` is 7.5rem … `160` is 40rem, the `--block-width-contextual-menu-*` tokens), the content's width, or the trigger's width |
+| `container`  | `HTMLElement \| null`                       | —          | Portal container (use to render inside a modal)                                                                                                                          |
+| `align`      | `"start" \| "center" \| "end"`              | `"center"` | Alignment along the side axis                                                                                                                                            |
+| `sideOffset` | `number`                                    | `4`        | Distance in pixels between trigger and popover                                                                                                                           |
+| `padding`    | `Spacing`                                   | `1`        | Inner padding as a Spacing step (`N / 4` rem)                                                                                                                            |
+| `gap`        | `Spacing`                                   | `0`        | Gap between children as a Spacing step (`N / 4` rem)                                                                                                                     |
 
 ### `Popover.Menu`
 
@@ -35,6 +37,7 @@ Forwarded to `@radix-ui/react-popover` `Root`. Most common:
 | -------------------- | --------------------------- | ------- | ----------------------------------------------------------------------------------------------------------------- |
 | `children`           | `ReactNode[]`               | —       | Menu items. `null` renders a separator; `undefined`/`false` is filtered. Leading/trailing separators are removed. |
 | `footer`             | `ReactNode`                 | —       | Footer area below the scroll region, separated by a divider                                                       |
+| `gap`                | `Spacing`                   | `4`     | Spacing steps around the footer divider                                                                           |
 | `scrollContainerRef` | `RefObject<HTMLDivElement>` | —       | Ref for programmatic scrolling                                                                                    |
 
 ## Usage
@@ -57,7 +60,7 @@ import { Popover } from "@opal/components";
   <Popover.Trigger asChild>
     <Button>Menu</Button>
   </Popover.Trigger>
-  <Popover.Content width="lg">
+  <Popover.Content width={60}>
     <Popover.Menu footer={<Button>Apply</Button>}>
       <LineItemButton title="Option 1" />
       <LineItemButton title="Option 2" />

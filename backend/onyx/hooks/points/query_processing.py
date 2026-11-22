@@ -34,9 +34,9 @@ class QueryProcessingResponse(BaseModel):
 class QueryProcessingSpec(HookPointSpec):
     """Hook point that runs on every user query before it enters the pipeline.
 
-    Call site: inside handle_stream_message_objects() in
-    backend/onyx/chat/process_message.py, immediately after message_text is
-    assigned from the request and before create_new_chat_message() saves it.
+    chat/process_message.py:process_chat_query applies this hook during normal
+    turn preparation and pending-message submission, before either saves text.
+    Queued execution and regeneration reuse the processed text.
 
     This is the earliest possible point in the query pipeline:
     - Raw query — unmodified, exactly as the user typed it
@@ -49,13 +49,18 @@ class QueryProcessingSpec(HookPointSpec):
     - PII removal: scrub sensitive data before the LLM sees it
     - Access control: reject queries from certain users or groups
     - Query auditing: log or track queries based on business rules
+
+    Scope: chat queries submitted through the Onyx app only. Requests to the
+    LLM gateway (/api/gateway/*) never fire this hook — content that external
+    tools send to model providers through the gateway bypasses it entirely.
     """
 
     hook_point = HookPoint.QUERY_PROCESSING
     display_name = "Query Processing"
     description = (
-        "Runs on every user query before it enters the pipeline. "
-        "Allows rewriting, filtering, or rejecting queries."
+        "Runs on every user chat query before it enters the pipeline. "
+        "Allows rewriting, filtering, or rejecting queries. "
+        "Does not run for LLM gateway requests."
     )
     default_timeout_seconds = 5.0  # user is actively waiting — keep tight
     fail_hard_description = (

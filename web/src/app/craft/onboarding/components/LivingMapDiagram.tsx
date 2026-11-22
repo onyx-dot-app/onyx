@@ -16,7 +16,7 @@ import {
   SvgUsers,
 } from "@opal/icons";
 import {
-  SvgGithub,
+  SvgGitHub,
   SvgGmail,
   SvgGoogleDocs,
   SvgGoogleDrive,
@@ -25,7 +25,7 @@ import {
 } from "@opal/logos";
 import type { IconFunctionComponent } from "@opal/types";
 import { cn } from "@opal/utils";
-import CometEdge from "@/app/craft/components/CometEdge";
+import CometEdge from "@/refresh-components/CometEdge";
 
 // ---------------------------------------------------------------------------
 // The Living Map, filmed by a camera. The whole Craft system is one fixed
@@ -242,7 +242,7 @@ const OUTPUT_CARD_LAYOUT: Record<
 > = {
   googleDoc: { y: 170, icon: SvgGoogleDocs },
   liveApp: { y: 280, icon: SvgDashboard, tint: true },
-  githubPr: { y: 390, icon: SvgGithub },
+  githubPr: { y: 390, icon: SvgGitHub },
 };
 
 // ---------------------------------------------------------------------------

@@ -1,12 +1,13 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import { useId, useState } from "react";
 import { useTranslations } from "next-intl";
 import useSWR from "swr";
-import { Button, Card, CopyButton, Tag, Text } from "@opal/components";
+import { Button, Card, CopyButton, Badge, Text } from "@opal/components";
 import { Hoverable } from "@opal/core";
 import { InputVertical, Section, toast } from "@opal/layouts";
-import { SvgSimpleLoader } from "@opal/icons";
+
 import {
   fetchDomainRecords,
   verifyDomainViaDns,
@@ -83,8 +84,8 @@ function DomainCard({ status, busy, onVerify }: DomainCardProps) {
           <Text font="main-ui-action" color="text-05" as="span">
             {status.domain}
           </Text>
-          <Tag
-            color={status.verified ? "green" : "amber"}
+          <Badge
+            color={status.verified ? "success" : "pending"}
             title={
               status.verified
                 ? t("domainVerification.status.verified")
@@ -135,7 +136,7 @@ function DomainCard({ status, busy, onVerify }: DomainCardProps) {
                 prominence="secondary"
                 onClick={onVerify}
                 disabled={busy || !status.claimed}
-                icon={busy ? SvgSimpleLoader : undefined}
+                icon={busy ? IconLoader : undefined}
                 tooltip={
                   status.claimed
                     ? undefined
@@ -233,7 +234,8 @@ export default function SSODomainVerification({
         )}
         {isLoading && rows.length === 0 ? (
           <Section flexDirection="row" alignItems="center" height="fit" gap={2}>
-            <SvgSimpleLoader className="text-text-03" />
+            {/* The message beside it already announces the loading state. */}
+            <IconLoader aria-hidden className="text-text-03" />
             <Text font="main-ui-body" color="text-03">
               {t("domainVerification.loading.message")}
             </Text>

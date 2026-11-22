@@ -47,6 +47,14 @@ interface InteractiveStatelessProps
   interaction?: InteractiveStatelessInteraction;
 
   /**
+   * Keeps the resting colours but drops the hover, focus and pressed states,
+   * for a surface that is not clickable right now (e.g. an open card that a
+   * click only folds while closed). Children stay fully interactive, unlike
+   * the HTML `inert` attribute.
+   */
+  passive?: boolean;
+
+  /**
    * Tailwind group class (e.g. `"group/Card"`) for `group-hover:*` utilities.
    */
   group?: string;
@@ -58,6 +66,8 @@ interface InteractiveStatelessProps
    */
   type?: ButtonType;
 
+  form?: string;
+
   /**
    * URL to navigate to when clicked. Passed through Slot to the child.
    */
@@ -67,6 +77,12 @@ interface InteractiveStatelessProps
    * Link target (e.g. `"_blank"`). Only used when `href` is provided.
    */
   target?: string;
+
+  /**
+   * Saves the `href` target as a file instead of opening it: a file name, or
+   * `true` to keep the server's name. Only used when `href` is provided.
+   */
+  download?: string | true;
 }
 
 // ---------------------------------------------------------------------------
@@ -92,7 +108,9 @@ function InteractiveStateless({
   type,
   href,
   target,
+  download,
   disabled,
+  passive,
   ...props
 }: InteractiveStatelessProps) {
   const isDisabled = !!disabled;
@@ -101,13 +119,15 @@ function InteractiveStateless({
   // so Radix Slot-injected handlers don't bypass this guard.
   const classes = cn(
     "interactive",
-    !props.onClick && !href && !type && "cursor-default! select-auto!",
+    (passive || (!props.onClick && !href && !type)) &&
+      "cursor-default! select-auto!",
     group
   );
 
   const dataAttrs = {
     "data-interactive-variant": variant,
     "data-interactive-prominence": prominence,
+    "data-passive": passive ? "true" : undefined,
     "data-interaction": interaction !== "rest" ? interaction : undefined,
     "data-disabled": isDisabled ? "true" : undefined,
     "aria-disabled": isDisabled || undefined,
@@ -118,6 +138,7 @@ function InteractiveStateless({
   const linkAttrs = href
     ? {
         href: isDisabled ? undefined : href,
+        download: isDisabled ? undefined : download,
         target,
         rel: target === "_blank" ? "noopener noreferrer" : undefined,
       }

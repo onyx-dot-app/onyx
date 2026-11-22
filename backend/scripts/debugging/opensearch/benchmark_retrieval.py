@@ -20,7 +20,7 @@ from onyx.context.search.enums import QueryType
 from onyx.context.search.models import IndexFilters
 from onyx.db.engine.sql_engine import SqlEngine, get_session_with_current_tenant
 from onyx.db.search_settings import get_current_search_settings
-from onyx.document_index.interfaces_new import TenantState
+from onyx.document_index.interfaces import TenantState
 from onyx.document_index.opensearch.opensearch_document_index import (
     OpenSearchDocumentIndex,
 )
@@ -104,7 +104,7 @@ def main() -> None:
         tenant_state=tenant_state,
         index_name=search_settings.index_name,
         embedding_dim=indexing_setting.final_embedding_dim,
-        embedding_precision=indexing_setting.embedding_precision,
+        vector_quantization=indexing_setting.vector_quantization,
     )
     filters = IndexFilters(
         access_control_list=[],

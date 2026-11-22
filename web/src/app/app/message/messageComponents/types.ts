@@ -1,0 +1,98 @@
+import { JSX } from "react";
+import type { NestedCall } from "@/lib/timeline/chat/packetHelpers";
+import { MinimalAgent } from "@/lib/agents/types";
+import { Packet, StopReason } from "../../services/streamingModels";
+import { OnyxDocument, MinimalOnyxDocument } from "@/lib/search/types";
+import { ProjectFile } from "@/lib/projects/types";
+import { LlmDescriptor } from "@/lib/hooks";
+import type { IconFunctionComponent, RichStr } from "@opal/types";
+import { CitationMap } from "@/app/app/types";
+import { TimelineSurfaceBackground } from "@/lib/timeline/components/primitives/TimelineSurface";
+
+export enum RenderType {
+  HIGHLIGHT = "highlight",
+  FULL = "full",
+  COMPACT = "compact",
+  INLINE = "inline",
+}
+
+/**
+ * Controls whether a renderer expects to be wrapped by timeline UI.
+ * - timeline: parent should render StepContainer around the result.
+ * - content: renderer already contains its own layout (headers/containers).
+ */
+export type TimelineLayout = "timeline" | "content";
+
+export interface FullChatState {
+  agent: MinimalAgent;
+  // Document-related context for citations
+  docs?: OnyxDocument[] | null;
+  userFiles?: ProjectFile[];
+  citations?: CitationMap;
+  setPresentingDocument?: (document: MinimalOnyxDocument) => void;
+  // Regenerate functionality
+  regenerate?: (modelOverRide: LlmDescriptor) => Promise<void>;
+  overriddenModel?: string;
+  /** Provider slug for `overriddenModel`, used to resolve its icon in the
+   * read-only (shared) footer where there's no `llmManager` to look it up. */
+  overriddenModelProvider?: string;
+  researchType?: string | null;
+}
+
+export interface RendererResult {
+  icon: IconFunctionComponent | null;
+  /** The header while the step runs, and after it fails or is stopped. */
+  status: string | RichStr | null;
+  /** The header once the step is done. Defaults to `status`. */
+  doneStatus?: string | RichStr | null;
+  /**
+   * The header's identity: a new key swaps the header through an animation,
+   * and a new header with the same key updates in place. Defaults to the
+   * header's text; a live header that changes often keeps one key.
+   */
+  statusKey?: string;
+  content: JSX.Element;
+
+  // can be used to override the look on the "expanded" view
+  // used for things that should just show text w/o an icon or header
+  // e.g. ReasoningRenderer
+  expandedText?: JSX.Element;
+
+  // Whether this renderer supports collapsible mode (collapse button shown only when true)
+  supportsCollapsible?: boolean;
+  /** Whether the step should remain collapsible even in single-step timelines */
+  alwaysCollapsible?: boolean;
+  /** Whether the result should be wrapped by timeline UI or rendered as-is */
+  timelineLayout?: TimelineLayout;
+  /** Override the surface background (e.g. "error" for auth failures). */
+  surfaceBackground?: TimelineSurfaceBackground;
+}
+
+// All renderers return an array of results (even single-step renderers return a 1-element array)
+export type RendererOutput = RendererResult[];
+
+export type MessageRenderer<
+  T extends Packet,
+  S extends Partial<FullChatState>,
+> = React.ComponentType<{
+  /** The step's own packets, without the packets of nested calls */
+  packets: T[];
+  /** Tool calls nested under the step, ordered by sub_turn_index */
+  nestedCalls: NestedCall[];
+  state: S;
+  /** Node id for the message currently being rendered */
+  messageNodeId?: number;
+  /** True when timeline/thinking UI is already shown above this text block */
+  hasTimelineThinking?: boolean;
+  onComplete: () => void;
+  renderType: RenderType;
+  animate: boolean;
+  restoredTextLength?: number;
+  stopPacketSeen: boolean;
+  stopReason?: StopReason;
+  /** Whether this is the last step in the timeline (for connector line decisions) */
+  isLastStep?: boolean;
+  /** Hover state from parent */
+  isHover?: boolean;
+  children: (result: RendererOutput) => JSX.Element;
+}>;

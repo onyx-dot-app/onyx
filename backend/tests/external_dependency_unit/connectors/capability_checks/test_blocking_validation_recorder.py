@@ -31,6 +31,7 @@ from onyx.connectors.exceptions import (
 )
 from onyx.connectors.factory import validate_ccpair_for_user
 from onyx.connectors.interfaces import BaseConnector
+from onyx.connectors.models import ConnectorStopSignal
 from onyx.db.credential_capability import (
     get_capability_report_row,
     upsert_completed_capability_report,
@@ -39,9 +40,12 @@ from onyx.db.enums import (
     AccessType,
     CapabilityCheckTrigger,
     CapabilityReportRunStatus,
+    ConnectorCredentialPairStatus,
     IndexingStatus,
 )
 from onyx.db.models import ConnectorCredentialPair, IndexAttempt
+from onyx.db.search_settings import get_current_search_settings
+from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE
 from tests.external_dependency_unit.indexing_helpers import (
     cleanup_cc_pair,
     make_cc_pair,
@@ -52,13 +56,15 @@ from tests.external_dependency_unit.indexing_helpers import (
 def blocking_validation(
     db_session: Session, monkeypatch: pytest.MonkeyPatch
 ) -> Generator[tuple[ConnectorCredentialPair, MagicMock], None, None]:
-    """A Slack cc-pair plus a mocked connector behind the blocking validation.
+    """A Box cc-pair plus a mocked connector behind the blocking
+    validation. The source has no named checks, so creation keeps the legacy
+    validation and its fallback-shaped record.
 
     Committed on purpose: the recorder reads and writes through its own session,
     which cannot see this session's uncommitted rows. Teardown removes the pair;
     report rows cascade with the credential.
     """
-    cc_pair = make_cc_pair(db_session, source=DocumentSource.SLACK)
+    cc_pair = make_cc_pair(db_session, source=DocumentSource.BOX)
     connector_mock = MagicMock(spec=BaseConnector)
     monkeypatch.setattr(
         factory, "instantiate_connector", MagicMock(return_value=connector_mock)
@@ -79,7 +85,11 @@ def test_success_records_a_fallback_shaped_passed_report(
 
     # Under test.
     result = validate_ccpair_for_user(
-        cc_pair.connector_id, cc_pair.credential_id, AccessType.PUBLIC, db_session
+        cc_pair.connector_id,
+        cc_pair.credential_id,
+        AccessType.PUBLIC,
+        db_session,
+        user=None,
     )
 
     # Postcondition.
@@ -94,7 +104,7 @@ def test_success_records_a_fallback_shaped_passed_report(
     assert row.report is not None
     assert row.report["verdicts"]["indexing"] == "passed"
     (check_result,) = row.report["check_results"]
-    assert check_result["check_id"] == "slack_connector_settings"
+    assert check_result["check_id"] == "box_connector_settings"
     assert check_result["is_fallback"] is True
     assert check_result["status"] == "passed"
 
@@ -118,6 +128,7 @@ def test_caller_supplied_trigger_lands_on_the_report_row(
         AccessType.PUBLIC,
         db_session,
         trigger=CapabilityCheckTrigger.PERM_SYNC_ATTEMPT,
+        user=None,
     )
 
     # Postcondition.
@@ -142,7 +153,11 @@ def test_validation_failure_records_failed_and_still_raises(
     # Under test.
     with pytest.raises(ConnectorValidationError, match="missing scope"):
         validate_ccpair_for_user(
-            cc_pair.connector_id, cc_pair.credential_id, AccessType.PUBLIC, db_session
+            cc_pair.connector_id,
+            cc_pair.credential_id,
+            AccessType.PUBLIC,
+            db_session,
+            user=None,
         )
 
     # Postcondition.
@@ -159,7 +174,7 @@ def test_validation_failure_records_failed_and_still_raises(
 
 
 @pytest.mark.usefixtures("tenant_context")
-def test_unexpected_failure_records_indeterminate(
+def test_unexpected_failure_records_incomplete(
     db_session: Session,
     blocking_validation: tuple[ConnectorCredentialPair, MagicMock],
 ) -> None:
@@ -176,7 +191,11 @@ def test_unexpected_failure_records_indeterminate(
     # Under test.
     with pytest.raises(UnexpectedValidationError):
         validate_ccpair_for_user(
-            cc_pair.connector_id, cc_pair.credential_id, AccessType.PUBLIC, db_session
+            cc_pair.connector_id,
+            cc_pair.credential_id,
+            AccessType.PUBLIC,
+            db_session,
+            user=None,
         )
 
     # Postcondition.
@@ -195,7 +214,7 @@ def test_wrapped_creation_failure_records_the_original_exception(
 ) -> None:
     """
     Verifies the creation gate raises its wrapper while the report keeps the
-    original exception: an unexpected error is INDETERMINATE, never FAILED.
+    original exception: an unexpected error is INCOMPLETE, never FAILED.
     """
     # Precondition.
     cc_pair, connector_mock = blocking_validation
@@ -204,7 +223,11 @@ def test_wrapped_creation_failure_records_the_original_exception(
     # Under test.
     with pytest.raises(ConnectorValidationError, match="boom"):
         validate_ccpair_for_user(
-            cc_pair.connector_id, cc_pair.credential_id, AccessType.PUBLIC, db_session
+            cc_pair.connector_id,
+            cc_pair.credential_id,
+            AccessType.PUBLIC,
+            db_session,
+            user=None,
         )
 
     # Postcondition.
@@ -232,7 +255,11 @@ def test_sync_success_mirrors_the_outcome_onto_perm_sync(
 
     # Under test.
     validate_ccpair_for_user(
-        cc_pair.connector_id, cc_pair.credential_id, AccessType.SYNC, db_session
+        cc_pair.connector_id,
+        cc_pair.credential_id,
+        AccessType.SYNC,
+        db_session,
+        user=None,
     )
 
     # Postcondition.
@@ -241,8 +268,15 @@ def test_sync_success_mirrors_the_outcome_onto_perm_sync(
     )
     assert row is not None
     assert row.report is not None
-    check_ids = {result["check_id"] for result in row.report["check_results"]}
-    assert check_ids == {"slack_connector_settings", "slack_perm_sync"}
+    rows = sorted(
+        (result["check_id"], result["capability"])
+        for result in row.report["check_results"]
+    )
+    assert rows == [
+        ("box_connector_settings", "indexing"),
+        ("box_perm_sync", "doc_permission_sync"),
+        ("box_perm_sync", "external_group_sync"),
+    ]
     assert row.report["verdicts"]["doc_permission_sync"] == "passed"
 
 
@@ -258,7 +292,7 @@ def test_no_clobber_of_a_granular_report(
     cc_pair, _ = blocking_validation
     granular = CredentialCapabilityReport(
         credential_id=cc_pair.credential_id,
-        source=DocumentSource.SLACK,
+        source=DocumentSource.BOX,
         connector_id=cc_pair.connector_id,
         checked_at=datetime.now(timezone.utc),
         trigger=CapabilityCheckTrigger.MANUAL,
@@ -266,7 +300,7 @@ def test_no_clobber_of_a_granular_report(
         check_results=[
             CapabilityCheckResult(
                 capability=CredentialCapability.INDEXING,
-                check_id="slack_token_auth",
+                check_id="box_named_check",
                 display_name="Bot token is valid",
                 required=True,
                 status=CapabilityCheckStatus.FAILED,
@@ -278,7 +312,7 @@ def test_no_clobber_of_a_granular_report(
         db_session,
         credential_id=cc_pair.credential_id,
         connector_id=cc_pair.connector_id,
-        source=DocumentSource.SLACK,
+        source=DocumentSource.BOX,
         trigger=CapabilityCheckTrigger.MANUAL,
         report=granular,
         # Connector-scoped writes must carry the config hash they ran with.
@@ -290,7 +324,11 @@ def test_no_clobber_of_a_granular_report(
 
     # Under test.
     validate_ccpair_for_user(
-        cc_pair.connector_id, cc_pair.credential_id, AccessType.PUBLIC, db_session
+        cc_pair.connector_id,
+        cc_pair.credential_id,
+        AccessType.PUBLIC,
+        db_session,
+        user=None,
     )
 
     # Postcondition.
@@ -301,7 +339,7 @@ def test_no_clobber_of_a_granular_report(
     assert row.trigger == CapabilityCheckTrigger.MANUAL
     assert row.report is not None
     (check_result,) = row.report["check_results"]
-    assert check_result["check_id"] == "slack_token_auth"
+    assert check_result["check_id"] == "box_named_check"
 
 
 @pytest.mark.usefixtures("tenant_context")
@@ -321,7 +359,11 @@ def test_recorder_failure_never_breaks_validation(
     # Under test and postcondition.
     assert (
         validate_ccpair_for_user(
-            cc_pair.connector_id, cc_pair.credential_id, AccessType.PUBLIC, db_session
+            cc_pair.connector_id,
+            cc_pair.credential_id,
+            AccessType.PUBLIC,
+            db_session,
+            user=None,
         )
         is True
     )
@@ -396,3 +438,134 @@ def test_docfetching_failure_records_through_the_indexing_attempt_hook(
     (check_result,) = row.report["check_results"]
     assert check_result["is_fallback"] is True
     assert check_result["error_type"] == "RuntimeError"
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_a_stop_during_docfetching_validation_leaves_the_pair_active(
+    db_session: Session,
+    docfetching_validation: tuple[IndexAttempt, MagicMock],
+) -> None:
+    """A canceled attempt can stop while validation waits for the source-API
+    limiter. The stop is no validation outcome: the pair stays active and no
+    report is recorded."""
+    # Precondition.
+    attempt, instantiate_mock = docfetching_validation
+    instantiate_mock.return_value.validate_connector_settings.side_effect = (
+        ConnectorStopSignal("canceled")
+    )
+    cc_pair = attempt.connector_credential_pair
+    assert cc_pair.status == ConnectorCredentialPairStatus.ACTIVE
+
+    # Under test.
+    with pytest.raises(ConnectorStopSignal):
+        run_docfetching._get_connector_runner(
+            db_session=db_session,
+            attempt=attempt,
+            batch_size=16,
+            start_time=datetime.now(timezone.utc),
+            end_time=datetime.now(timezone.utc),
+            include_permissions=False,
+            leave_connector_active=False,
+        )
+
+    # Postcondition.
+    db_session.expire_all()
+    assert cc_pair.status == ConnectorCredentialPairStatus.ACTIVE
+    assert (
+        get_capability_report_row(
+            db_session, cc_pair.credential_id, cc_pair.connector_id
+        )
+        is None
+    )
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_a_stop_during_docfetching_validation_cancels_the_attempt(
+    db_session: Session,
+    docfetching_validation: tuple[IndexAttempt, MagicMock],
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A stop while validation waits for the source-API limiter ends the
+    attempt as canceled, as a stop during extraction does, not as failed."""
+    # Precondition.
+    attempt, instantiate_mock = docfetching_validation
+    instantiate_mock.return_value.validate_connector_settings.side_effect = (
+        ConnectorStopSignal("canceled")
+    )
+    attempt.search_settings_id = get_current_search_settings(db_session).id
+    attempt.status = IndexingStatus.IN_PROGRESS
+    db_session.commit()
+    monkeypatch.setattr(run_docfetching, "get_document_batch_storage", MagicMock())
+
+    # Under test.
+    run_docfetching.connector_document_extraction(
+        app=MagicMock(),
+        index_attempt_id=attempt.id,
+        cc_pair_id=attempt.connector_credential_pair_id,
+        search_settings_id=attempt.search_settings_id,
+        tenant_id=POSTGRES_DEFAULT_SCHEMA_STANDARD_VALUE,
+        callback=None,
+    )
+
+    # Postcondition.
+    db_session.expire_all()
+    refreshed = db_session.get(IndexAttempt, attempt.id)
+    assert refreshed is not None
+    assert refreshed.status == IndexingStatus.CANCELED
+    assert (
+        refreshed.connector_credential_pair.status
+        == ConnectorCredentialPairStatus.ACTIVE
+    )
+
+
+@pytest.mark.usefixtures("tenant_context")
+def test_pass_without_a_settings_probe_replaces_an_earlier_failure(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch
+) -> None:
+    """
+    Verifies a later pass on a source with no settings probe replaces the
+    failed fallback report that an earlier pass wrote.
+    """
+    # Precondition.
+    cc_pair = make_cc_pair(db_session, source=DocumentSource.GITLAB)
+    instantiate_mock = MagicMock(side_effect=RuntimeError("bad url"))
+    monkeypatch.setattr(factory, "instantiate_connector", instantiate_mock)
+    monkeypatch.setattr(factory, "INTEGRATION_TESTS_MODE", False)
+    try:
+        with pytest.raises(ConnectorValidationError):
+            validate_ccpair_for_user(
+                cc_pair.connector_id,
+                cc_pair.credential_id,
+                AccessType.PUBLIC,
+                db_session,
+                user=None,
+            )
+        failed_row = get_capability_report_row(
+            db_session, cc_pair.credential_id, cc_pair.connector_id
+        )
+        assert failed_row is not None
+        assert failed_row.report is not None
+        assert failed_row.report["check_results"]
+        instantiate_mock.side_effect = None
+        instantiate_mock.return_value = MagicMock(spec=BaseConnector)
+
+        # Under test.
+        validate_ccpair_for_user(
+            cc_pair.connector_id,
+            cc_pair.credential_id,
+            AccessType.PUBLIC,
+            db_session,
+            user=None,
+        )
+
+        # Postcondition.
+        db_session.expire_all()
+        row = get_capability_report_row(
+            db_session, cc_pair.credential_id, cc_pair.connector_id
+        )
+        assert row is not None
+        assert row.report is not None
+        assert row.report["check_results"] == []
+        assert row.report["verdicts"]["indexing"] != "failed"
+    finally:
+        cleanup_cc_pair(db_session, cc_pair)

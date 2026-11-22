@@ -2,7 +2,7 @@
 // Render an SVG icon (lucide-static or @tabler/icons) to a recolored PNG for
 // slide decks.
 //
-// Render:  node icon.js circle-check --color 1E2761 --size 512 -o outputs/icons/check.png
+// Render:  node icon.js circle-check --color 1E2761 --size 512 -o icons/check.png
 // Search:  node icon.js --list "shield" [--set lucide|tabler]
 //
 // Deps (lucide-static, @tabler/icons, sharp) are baked into the sandbox image
@@ -198,7 +198,7 @@ async function runRender(iconName, opts) {
   // Both sets draw with stroke/fill="currentColor"; substitute the literal hex.
   const svg = fs.readFileSync(file, "utf8").replace(/currentColor/g, opts.color);
 
-  const outPath = opts.out || path.join("outputs", "icons", `${iconName}.png`);
+  const outPath = opts.out || path.join("icons", `${iconName}.png`);
   fs.mkdirSync(path.dirname(outPath), { recursive: true });
   // density scales SVG rasterization so the icon renders vector-crisp at the
   // target size instead of being upscaled from 24px.
@@ -215,14 +215,14 @@ const USAGE = `Usage:
 Options:
   --color, -c   Hex color, with or without '#' (default ${DEFAULT_COLOR})
   --size, -s    Raster size in pixels, 16-2048 (default ${DEFAULT_SIZE})
-  --out, -o     Output PNG path (default outputs/icons/<icon-name>.png)
+  --out, -o     Output PNG path (default icons/<icon-name>.png)
   --list        Fuzzy-search icon names by keyword instead of rendering
   --set         Restrict lookup/search to one set (lucide or tabler)
 
 Icon names are kebab-case file names, e.g. circle-check, trending-up, shield-check.
 
 Examples:
-  node icon.js circle-check --color 1E2761 -o outputs/icons/check.png
+  node icon.js circle-check --color 1E2761 -o icons/check.png
   node icon.js --list "shield" --set tabler`;
 
 function parseArgs(argv) {

@@ -1,22 +1,25 @@
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping, Sequence
 from typing import Any, Literal, cast
 
 from pydantic import ValidationError
 from sqlalchemy.orm import Session
 
 from onyx.chat.citation_utils import extract_citation_order_from_text
-from onyx.coding_agent.mock_tools import CODING_AGENT_QUERY_KEY, CODING_AGENT_REPO_KEY
+from onyx.chat.models import ChatApprovals
+from onyx.chat.presentation import replay_response
 from onyx.configs.constants import MessageType
 from onyx.context.search.models import SavedSearchDoc, SearchDoc
 from onyx.db.chat import (
     get_db_search_doc_by_id,
     translate_db_search_doc_to_saved_search_doc,
 )
-from onyx.db.models import ChatMessage
-from onyx.db.tools import get_tool_by_id
-from onyx.deep_research.dr_mock_tools import (
+from onyx.db.chat_response import read_chat_execution, read_response_replay_data
+from onyx.db.models import ChatMessage, Tool
+from onyx.db.tools import get_tools_by_ids
+from onyx.deep_research.tool_definitions import (
     RESEARCH_AGENT_IN_CODE_ID,
     RESEARCH_AGENT_TASK_KEY,
 )
@@ -25,15 +28,11 @@ from onyx.server.query_and_chat.streaming_models import (
     AgentResponseDelta,
     AgentResponseStart,
     CitationInfo,
-    CodingAgentFinal,
-    CodingAgentStart,
     CustomToolArgs,
     CustomToolDelta,
-    CustomToolErrorInfo,
     CustomToolStart,
     FileReaderResult,
     FileReaderStart,
-    GeneratedImage,
     ImageGenerationFinal,
     ImageGenerationToolStart,
     IntermediateReportDelta,
@@ -54,11 +53,8 @@ from onyx.server.query_and_chat.streaming_models import (
     SearchToolQueriesDelta,
     SearchToolStart,
     SectionEnd,
-    TopLevelBranching,
 )
-from onyx.tools.tool_implementations.coding_agent.coding_agent_tool import (
-    CodingAgentTool,
-)
+from onyx.tools.models import CustomToolErrorInfo, GeneratedImage
 from onyx.tools.tool_implementations.file_reader.file_reader_tool import FileReaderTool
 from onyx.tools.tool_implementations.images.image_generation_tool import (
     ImageGenerationTool,
@@ -186,6 +182,7 @@ def create_image_generation_packets(
 
 def create_custom_tool_packets(
     tool_name: str,
+    display_name: str,
     response_type: str,
     turn_index: int,
     tab_index: int = 0,
@@ -200,7 +197,9 @@ def create_custom_tool_packets(
     packets.append(
         Packet(
             placement=Placement(turn_index=turn_index, tab_index=tab_index),
-            obj=CustomToolStart(tool_name=tool_name, tool_id=tool_id),
+            obj=CustomToolStart(
+                tool_name=tool_name, display_name=display_name, tool_id=tool_id
+            ),
         )
     )
 
@@ -322,44 +321,6 @@ def create_research_agent_packets(
             obj=SectionEnd(),
         )
     )
-
-    return packets
-
-
-def create_coding_agent_packets(
-    query: str,
-    repo: str,
-    answer: str | None,
-    turn_index: int,
-    tab_index: int = 0,
-) -> list[Packet]:
-    """Recreate the packet stream for a saved coding-agent tool call.
-
-    Mirrors what the live ``CodingAgentTool`` emits:
-    - ``CodingAgentStart(query, repo)`` opens the agent's section.
-    - ``CodingAgentFinal(answer)`` carries the inner agent's answer, which
-      the renderer displays as the agent's "Response" step.
-    - ``SectionEnd`` marks completion.
-
-    The outer chat-message bubble (rendered from ``chat_message.message`` via
-    ``create_message_packets`` at ``max_tool_turn + 1``) is the regular chat
-    agent's answer — separate from the coding agent's response, which stays
-    inside the agent's own timeline section.
-
-    Bash sub-calls aren't persisted (they're not top-level tool calls), so
-    they aren't replayed here — the renderer shows "Coding Task" only.
-    """
-    placement = Placement(turn_index=turn_index, tab_index=tab_index)
-    packets: list[Packet] = [
-        Packet(placement=placement, obj=CodingAgentStart(query=query, repo=repo)),
-    ]
-
-    if answer:
-        packets.append(
-            Packet(placement=placement, obj=CodingAgentFinal(answer=answer)),
-        )
-
-    packets.append(Packet(placement=placement, obj=SectionEnd()))
 
     return packets
 
@@ -526,15 +487,53 @@ def create_search_packets(
     return packets
 
 
+def load_session_tools(
+    messages: Sequence[ChatMessage], db_session: Session
+) -> dict[int, Tool]:
+    """The tools that the messages' tool calls used, by id, in one query."""
+    tool_ids = {
+        tool_call.tool_id
+        for message in messages
+        for tool_call in message.tool_calls or []
+        if tool_call.tool_id is not None
+    }
+    return {tool.id: tool for tool in get_tools_by_ids(list(tool_ids), db_session)}
+
+
 def translate_assistant_message_to_packets(
     chat_message: ChatMessage,
+    tools_by_id: Mapping[int, Tool],
     db_session: Session,
+    chat_approvals: ChatApprovals | None = None,
+    *,
+    child_responses: Mapping[int, list[ChatMessage]],
 ) -> list[Packet]:
     """
     Translates an assistant message and tool calls to packet format.
     It needs to be a list of list of packets combined into indices for "steps".
     The final answer and citations are also a "step".
+
+    `tools_by_id` holds the tools of the message's tool calls (see
+    `load_session_tools`), `chat_approvals` the approval requests and
+    questions of the page's responses (see `load_chat_approvals`), and
+    `child_responses` their child responses (see `load_child_responses`), so a
+    session replay does not query them per message.
     """
+    read = read_chat_execution(chat_message, child_responses)
+    if read is not None:
+        execution, tool_calls = read
+        replay = read_response_replay_data(
+            execution, tool_calls, chat_message, db_session, chat_approvals
+        )
+        return replay_response(
+            execution.response,
+            replay.tools,
+            execution.presentation,
+            replay.documents,
+            approvals=replay.approvals,
+            agent_approvals=replay.agent_approvals,
+            questions=replay.questions,
+        )
     packet_list: list[Packet] = []
 
     if chat_message.message_type != MessageType.ASSISTANT:
@@ -576,16 +575,16 @@ def translate_assistant_message_to_packets(
                 )
 
             # Process each tool call in this turn (single pass).
-            # We buffer packets for the turn so we can conditionally prepend a TopLevelBranching
-            # packet (which must appear before any tool output in the turn).
-            research_agent_count = 0
             turn_tool_packets: list[Packet] = []
             for tool_call in tool_calls_in_turn:
-                # Here we do a try because some tools may get deleted before the session is reloaded.
                 try:
-                    tool = get_tool_by_id(tool_call.tool_id, db_session)
-                    if tool.in_code_tool_id == RESEARCH_AGENT_IN_CODE_ID:
-                        research_agent_count += 1
+                    tool = (
+                        tools_by_id.get(tool_call.tool_id)
+                        if tool_call.tool_id is not None
+                        else None
+                    )
+                    if tool is None:
+                        continue
 
                     # Handle different tool types
                     if tool.in_code_tool_id in [
@@ -660,27 +659,6 @@ def translate_assistant_message_to_packets(
                             create_research_agent_packets(
                                 research_task=research_task,
                                 report_content=tool_call.tool_call_response,
-                                turn_index=turn_num,
-                                tab_index=tool_call.tab_index,
-                            )
-                        )
-
-                    elif tool.in_code_tool_id == CodingAgentTool.__name__:
-                        coding_query = cast(
-                            str,
-                            tool_call.tool_call_arguments.get(CODING_AGENT_QUERY_KEY)
-                            or "",
-                        )
-                        coding_repo = cast(
-                            str,
-                            tool_call.tool_call_arguments.get(CODING_AGENT_REPO_KEY)
-                            or "",
-                        )
-                        turn_tool_packets.extend(
-                            create_coding_agent_packets(
-                                query=coding_query,
-                                repo=coding_repo,
-                                answer=tool_call.tool_call_response,
                                 turn_index=turn_num,
                                 tab_index=tool_call.tab_index,
                             )
@@ -780,7 +758,8 @@ def translate_assistant_message_to_packets(
                         }
                         turn_tool_packets.extend(
                             create_custom_tool_packets(
-                                tool_name=tool.display_name or tool.name,
+                                tool_name=tool.name,
+                                display_name=tool.display_name or tool.name,
                                 response_type=custom_response_type,
                                 turn_index=turn_num,
                                 tab_index=tool_call.tab_index,
@@ -796,16 +775,6 @@ def translate_assistant_message_to_packets(
                     logger.warning("Error processing tool call %s: %s", tool_call.id, e)
                     continue
 
-            if research_agent_count > 1:
-                # Emit TopLevelBranching before processing any tool output in the turn.
-                packet_list.append(
-                    Packet(
-                        placement=Placement(turn_index=turn_num),
-                        obj=TopLevelBranching(
-                            num_parallel_branches=research_agent_count
-                        ),
-                    )
-                )
             packet_list.extend(turn_tool_packets)
 
     # Determine the next turn_index for the final message
@@ -818,8 +787,13 @@ def translate_assistant_message_to_packets(
     citation_info_list: list[CitationInfo] = []
 
     if citations:
+        # A citation points at one of the answer's own search docs, which are
+        # already loaded; only a doc outside them needs a query.
+        loaded_docs_by_id = {doc.id: doc for doc in chat_message.search_docs}
         for citation_num, search_doc_id in citations.items():
-            search_doc = get_db_search_doc_by_id(search_doc_id, db_session)
+            search_doc = loaded_docs_by_id.get(
+                search_doc_id
+            ) or get_db_search_doc_by_id(search_doc_id, db_session)
             if search_doc:
                 citation_info_list.append(
                     CitationInfo(

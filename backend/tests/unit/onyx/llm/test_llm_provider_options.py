@@ -137,18 +137,15 @@ def test_model_configurations_oci_are_sorted_by_name(
 
 
 def test_get_oci_model_names_are_chat_models_without_prefix() -> None:
-    """The list comes straight from LiteLLM's `oci/` catalog: chat models
-    only (the catalog also carries embeddings), with the provider prefix
-    stripped so names match what the OCI API expects."""
-    import litellm
-
+    """The list comes from the vendored `oci` catalog: chat models only (the
+    catalog also carries embeddings), without a provider prefix so names
+    match what the OCI API expects."""
     model_names = get_oci_model_names()
 
     assert model_names
     assert model_names == sorted(model_names)
     for name in model_names:
         assert not name.startswith("oci/")
-        assert litellm.model_cost[f"oci/{name}"]["mode"] == "chat"
     assert not any("embed" in name for name in model_names)
 
 

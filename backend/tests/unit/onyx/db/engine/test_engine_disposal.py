@@ -8,19 +8,21 @@ and the api server hung.
 
 These tests exercise each disposal function directly. A higher-level
 integration check would re-run the FastAPI lifespan, but the lifespan touches
-auth, telemetry, vespa, and the file store — far more scaffolding than the
+auth, telemetry, OpenSearch, and the file store — far more scaffolding than the
 behavior we care about here, which is that ``dispose()`` is in fact called and
 the cached engine references are released.
 """
 
 from __future__ import annotations
 
+import asyncio
 from contextlib import ExitStack
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
 import onyx.db.engine.async_sql_engine as async_sql_engine
+from onyx.agents.concurrency import WorkTracker
 from onyx.db.engine.async_sql_engine import reset_sqlalchemy_async_engine
 from onyx.db.engine.sql_engine import SqlEngine
 
@@ -99,7 +101,13 @@ async def test_reset_async_engine_is_a_noop_when_uninitialized() -> None:
 
 
 @pytest.mark.asyncio
-async def test_lifespan_shutdown_disposes_all_three_engines() -> None:
+@pytest.mark.parametrize(
+    "drained, body_fails", [(True, False), (False, False), (True, True)]
+)
+@pytest.mark.parametrize("shutdown_fails", [False, True])
+async def test_lifespan_shutdown_disposes_all_three_engines(
+    drained: bool, body_fails: bool, shutdown_fails: bool
+) -> None:
     """End-to-end check: the FastAPI lifespan's shutdown phase must dispose
     each engine. The lifespan touches a lot of other startup machinery; we
     patch it out so this test is hermetic and only asserts the disposal calls.
@@ -156,20 +164,88 @@ async def test_lifespan_shutdown_disposes_all_three_engines() -> None:
         stack.enter_context(patch.object(onyx_main, "get_session_with_current_tenant"))
         stack.enter_context(patch.object(onyx_main, "setup_onyx"))
         stack.enter_context(patch.object(onyx_main, "get_default_file_store"))
-        stack.enter_context(patch.object(onyx_main, "get_or_generate_uuid"))
-        stack.enter_context(patch.object(onyx_main, "optional_telemetry"))
+        stack.enter_context(patch.object(onyx_main, "start_telemetry"))
         stack.enter_context(patch.object(onyx_main, "MULTI_TENANT", False))
-        stack.enter_context(patch.object(onyx_main, "RATE_LIMITING_ENABLED", False))
-        stack.enter_context(patch.object(onyx_main, "DISABLE_VECTOR_DB", False))
+        stack.enter_context(patch.object(onyx_main, "RATE_LIMITING_ENABLED", True))
+        stack.enter_context(
+            patch.object(onyx_main, "setup_auth_limiter", new=AsyncMock())
+        )
+        close_limiter = stack.enter_context(
+            patch.object(onyx_main, "close_auth_limiter", new=AsyncMock())
+        )
+        stack.enter_context(patch.object(onyx_main, "DISABLE_VECTOR_DB", True))
+        stack.enter_context(
+            patch("onyx.background.periodic_poller.recover_stuck_user_files")
+        )
+        stack.enter_context(
+            patch("onyx.background.periodic_poller.start_periodic_poller")
+        )
+        stop_poller = stack.enter_context(
+            patch("onyx.background.periodic_poller.stop_periodic_poller")
+        )
+        shutdown_tracing = stack.enter_context(
+            patch("onyx.tracing.setup.shutdown_tracing")
+        )
+        chat_work = WorkTracker()
+        chat_work.started()
+        stack.enter_context(patch.object(onyx_main, "chat_turn_work", chat_work))
+        wait_started = asyncio.Event()
+        loop = asyncio.get_running_loop()
+        wait_idle = chat_work.wait_idle
+
+        def wait_for_chat(timeout: float) -> bool:
+            loop.call_soon_threadsafe(wait_started.set)
+            return wait_idle(timeout if drained else 0)
+
+        wait_chat = stack.enter_context(
+            patch.object(chat_work, "wait_idle", side_effect=wait_for_chat)
+        )
+
+        async def finish_chat() -> None:
+            await asyncio.wait_for(wait_started.wait(), timeout=5)
+            try:
+                shutdown_tracing.assert_not_called()
+                reset_sync.assert_not_called()
+                reset_ro.assert_not_called()
+                reset_async.assert_not_called()
+            finally:
+                chat_work.finished()
+
         stack.enter_context(patch.object(onyx_main, "OAUTH_CLIENT_ID", ""))
         stack.enter_context(patch.object(onyx_main, "OAUTH_CLIENT_SECRET", ""))
         stack.enter_context(patch.object(onyx_main, "SYSTEM_RECURSION_LIMIT", None))
 
-        async with onyx_main.lifespan(MagicMock()):
-            # Inside the lifespan body: startup ran, shutdown not yet.
-            reset_sync.assert_not_called()
-            reset_ro.assert_not_called()
-            reset_async.assert_not_called()
+        if shutdown_fails:
+            shutdown_tracing.side_effect = RuntimeError("Tracing shutdown failed")
+            reset_async.side_effect = RuntimeError("Async disposal failed")
+            reset_sync.side_effect = RuntimeError("Sync disposal failed")
+            close_limiter.side_effect = RuntimeError("Rate limiter close failed")
+
+        completion: asyncio.Task[None] | None = None
+        try:
+            async with onyx_main.lifespan(MagicMock()):
+                if drained:
+                    completion = asyncio.create_task(finish_chat())
+                reset_sync.assert_not_called()
+                reset_ro.assert_not_called()
+                reset_async.assert_not_called()
+                if body_fails:
+                    raise RuntimeError("Lifespan body failed")
+        except RuntimeError as error:
+            assert body_fails
+            assert str(error) == "Lifespan body failed"
+        else:
+            assert not body_fails
+        finally:
+            if completion is not None:
+                await completion
+            else:
+                chat_work.finished()
+        wait_chat.assert_called_once_with(onyx_main.CHAT_EXECUTION_TIMEOUT_S)
+        assert wait_idle(0)
+        shutdown_tracing.assert_called_once_with()
+        stop_poller.assert_called_once_with()
+        close_limiter.assert_awaited_once_with()
 
         # After exiting the context manager: shutdown ran.
         reset_async.assert_awaited_once_with()

@@ -1,17 +1,15 @@
 """EE Settings API - provides license-aware settings override."""
 
-from redis.exceptions import RedisError
 from sqlalchemy.exc import SQLAlchemyError
 
-from ee.onyx.configs.app_configs import LICENSE_ENFORCEMENT_ENABLED
 from ee.onyx.db.license import get_cached_license_metadata, refresh_license_cache
+from ee.onyx.server.license.models import LicenseMetadata
 from ee.onyx.utils.tier import get_tier, tier_from_license_metadata
 from onyx.cache.interface import CACHE_TRANSIENT_ERRORS
-from onyx.configs.app_configs import ENTERPRISE_EDITION_ENABLED
+from onyx.db.connector_credential_pair import has_perm_synced_cc_pairs
 from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.server.settings.models import ApplicationStatus, Settings, Tier
 from onyx.utils.logger import setup_logger
-from onyx.utils.variable_functionality import global_version
 from shared_configs.configs import MULTI_TENANT
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -21,74 +19,37 @@ logger = setup_logger()
 _BLOCKING_STATUS = ApplicationStatus.GATED_ACCESS
 
 
-def check_ee_features_enabled() -> bool:
-    """EE version: checks if EE features should be available.
-
-    Returns True if:
-    - LICENSE_ENFORCEMENT_ENABLED is False (legacy/rollout mode)
-    - Cloud mode (MULTI_TENANT) - cloud handles its own gating
-    - Self-hosted with a valid (non-expired) license
-
-    Returns False if:
-    - Self-hosted with no license (never subscribed)
-    - Self-hosted with expired license
-    """
-    if not LICENSE_ENFORCEMENT_ENABLED:
-        # License enforcement disabled - allow EE features (legacy behavior)
-        return True
-
-    if MULTI_TENANT:
-        # Cloud mode - EE features always available (gating handled by is_tenant_gated)
-        return True
-
-    # Self-hosted with enforcement - check for valid license
-    tenant_id = get_current_tenant_id()
+def _has_perm_synced_cc_pairs() -> bool:
     try:
-        metadata = get_cached_license_metadata(tenant_id)
-        if not metadata:
-            # Cache miss — warm from DB so cold-start doesn't block EE features
-            try:
-                with get_session_with_current_tenant() as db_session:
-                    metadata = refresh_license_cache(db_session, tenant_id)
-            except SQLAlchemyError as db_error:
-                logger.warning("Failed to load license from DB: %s", db_error)
+        with get_session_with_current_tenant() as db_session:
+            return has_perm_synced_cc_pairs(db_session)
+    except SQLAlchemyError as e:
+        logger.warning("Failed to check for perm-synced connectors: %s", e)
+        # Fail closed: an unreadable DB must not unlock the deployment.
+        return True
 
-        if metadata and metadata.status != _BLOCKING_STATUS:
-            # Has a valid license (GRACE_PERIOD/PAYMENT_REMINDER still allow EE features)
-            return True
-    except RedisError as e:
-        logger.warning("Failed to check license for EE features: %s", e)
-        # Fail closed - if Redis is down, other things will break anyway
-        return False
 
-    # No license or GATED_ACCESS - no EE features
-    return False
+def is_access_gated(metadata: LicenseMetadata | None) -> bool:
+    """Whether a self-hosted deployment is locked: its license is past the
+    grace period, or it has none while a perm-synced connector needs one. With
+    no license, a failed connector check counts as locked."""
+    if metadata is not None:
+        return metadata.status == _BLOCKING_STATUS
+    return _has_perm_synced_cc_pairs()
 
 
 def apply_license_status_to_settings(settings: Settings) -> Settings:
     """EE version: checks license status for self-hosted deployments.
 
-    For self-hosted, looks up license metadata and overrides application_status
-    if the license indicates GATED_ACCESS (fully expired).
+    For self-hosted, looks up license metadata and sets application_status to
+    GATED_ACCESS when is_access_gated says the deployment is locked.
 
     Also sets ee_features_enabled based on license status to control
     visibility of EE features in the UI.
 
     For multi-tenant (cloud), the settings already have the correct status
     from the control plane, so no override is needed.
-
-    If LICENSE_ENFORCEMENT_ENABLED is false, ee_features_enabled is set to True
-    (since EE code was loaded via ENABLE_PAID_ENTERPRISE_EDITION_FEATURES).
     """
-    if not LICENSE_ENFORCEMENT_ENABLED:
-        # License enforcement disabled - EE code is loaded via
-        # ENABLE_PAID_ENTERPRISE_EDITION_FEATURES, so EE features are on
-        settings.tier = (
-            Tier.ENTERPRISE if global_version.is_ee_version() else Tier.COMMUNITY
-        )
-        settings.ee_features_enabled = True
-        return settings
-
     if MULTI_TENANT:
         # Cloud mode - EE features always available (gating handled by is_tenant_gated)
         # Cloud tier lives in a separate Redis hash, fetched via get_tier().
@@ -111,26 +72,21 @@ def apply_license_status_to_settings(settings: Settings) -> Settings:
                     "Failed to load license from DB for settings: %s", db_error
                 )
 
-        if metadata:
-            if metadata.status == _BLOCKING_STATUS:
-                settings.application_status = metadata.status
-                settings.ee_features_enabled = False
-            elif metadata.used_seats > metadata.seats:
-                # License is valid but seat limit exceeded
-                settings.application_status = ApplicationStatus.SEAT_LIMIT_EXCEEDED
-                settings.seat_count = metadata.seats
-                settings.used_seats = metadata.used_seats
-                settings.ee_features_enabled = True
-            else:
-                # Has a valid license (GRACE_PERIOD/PAYMENT_REMINDER still allow EE features)
-                settings.ee_features_enabled = True
-        else:
-            # No license found in cache or DB.
-            if ENTERPRISE_EDITION_ENABLED:
-                # Legacy EE flag is set → prior EE usage (e.g. permission
-                # syncing) means indexed data may need protection.
-                settings.application_status = _BLOCKING_STATUS
+        if is_access_gated(metadata):
+            # The UI stays locked until a license or a downgrade.
+            settings.application_status = _BLOCKING_STATUS
             settings.ee_features_enabled = False
+        elif metadata is None:
+            settings.ee_features_enabled = False
+        elif metadata.used_seats > metadata.seats:
+            # License is valid but seat limit exceeded
+            settings.application_status = ApplicationStatus.SEAT_LIMIT_EXCEEDED
+            settings.seat_count = metadata.seats
+            settings.used_seats = metadata.used_seats
+            settings.ee_features_enabled = True
+        else:
+            # Has a valid license (GRACE_PERIOD/PAYMENT_REMINDER still allow EE features)
+            settings.ee_features_enabled = True
         settings.tier = tier_from_license_metadata(metadata)
     except CACHE_TRANSIENT_ERRORS as e:
         logger.warning("Failed to check license metadata for settings: %s", e)

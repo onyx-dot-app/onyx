@@ -81,6 +81,7 @@ function ChatSurfaceContent({ focus }: { focus: ChatFocus }) {
     chatState,
     submit,
     stop,
+    answersQuestions,
     isHydrating,
     conversationPersonaId,
   } = useChatController(sessionId, personaId, projectId);
@@ -112,8 +113,7 @@ function ChatSurfaceContent({ focus }: { focus: ChatFocus }) {
     sessionId == null || conversationPersonaKnown ? liveAgent : null;
   // Project chats are always created with the default persona (see `personaId` above), so the tool
   // controls must describe that persona — not whichever agent the sidebar happens to have selected.
-  // Otherwise the menu lists another agent's tools and a forced id from it kills the turn
-  // server-side ("Forced tool N not found in tools").
+  // The selected tool must belong to the same agent used for the request.
   const composerAgent = isProject
     ? (agents.find((candidate) => candidate.id === personaId) ?? null)
     : conversationAgent;
@@ -138,7 +138,7 @@ function ChatSurfaceContent({ focus }: { focus: ChatFocus }) {
   // Gate on hasBlockingFiles so a still-uploading file can't be sent; a starter keeps the text
   // (consumeAttachments), a send clears both.
   const sendWithAttachments = (message?: string) => {
-    if (draft.hasBlockingFiles) return;
+    if (draft.hasBlockingFiles || !composerTools.toolOptionsReady) return;
     const clearDraft =
       message == null ? draft.consume : draft.consumeAttachments;
     // Captured before the create await: picking a different agent while it is in flight must not
@@ -147,14 +147,9 @@ function ChatSurfaceContent({ focus }: { focus: ChatFocus }) {
     submit(
       message ?? draft.text,
       draft.descriptors,
-      () => {
-        // `onAccepted` runs only once the session exists — a failed create throws before it — and
-        // everything from here to the route change is synchronous. That makes it the one moment
-        // we can say "this send created the session", which a null → non-null id alone cannot.
-        if (sessionId == null) composerTools.notePendingSend(sentWithAgent);
-        clearDraft();
-      },
+      clearDraft,
       composerTools.resolveToolOptions(),
+      () => composerTools.notePendingSend(sentWithAgent),
     );
   };
 
@@ -167,6 +162,10 @@ function ChatSurfaceContent({ focus }: { focus: ChatFocus }) {
         onStop={stop}
         chatState={chatState}
         attachments={draft}
+        answersQuestions={answersQuestions}
+        toolsReady={composerTools.toolOptionsReady}
+        toolsFailed={composerTools.toolOptionsFailed}
+        onRetryTools={composerTools.retryToolOptions}
       />
     </Animated.View>
   );

@@ -1,20 +1,15 @@
 import { useTranslations } from "next-intl";
-import { Modal } from "@opal/components";
+import { CopyButton, Modal } from "@opal/components";
+import { Section } from "@opal/layouts";
 import { SvgAlertTriangle } from "@opal/icons";
-import { CodePreview } from "@/sections/modals/PreviewModal/variants/CodePreview";
-import { CopyButton } from "@opal/components";
-import FloatingFooter from "@/sections/modals/PreviewModal/FloatingFooter";
+import { CodeFilePreview } from "@/sections/file-preview/CodeFilePreview";
+import FloatingFooter from "@/sections/file-preview/FloatingFooter";
 
 interface ExceptionTraceModalProps {
   onOutsideClick: () => void;
   exceptionTrace: string;
   language?: string;
-  /**
-   * Modal header. Defaults to "Full Exception Trace" — the original
-   * caller (`IndexAttemptsTable`) renders multi-line Python tracebacks.
-   * Pass a more specific label (e.g. "Sync Error") for shorter, less
-   * trace-shaped error messages.
-   */
+  /** Modal header. Defaults to "Full Exception Trace". */
   title?: string;
 }
 
@@ -25,6 +20,7 @@ export default function ExceptionTraceModal({
   title,
 }: ExceptionTraceModalProps) {
   const t = useTranslations("chat.modals.preview");
+  const previewT = useTranslations("chat.filePreview");
 
   return (
     <Modal open onOpenChange={onOutsideClick}>
@@ -36,20 +32,24 @@ export default function ExceptionTraceModal({
           height="fit"
         />
 
-        <div className="flex flex-col flex-1 min-h-0 overflow-hidden w-full bg-background-tint-01">
-          <CodePreview content={exceptionTrace} language={language} normalize />
-        </div>
-
-        <FloatingFooter
-          right={
-            <CopyButton
-              size="sm"
-              tooltip={t("copyButton.tooltip")}
-              getCopyText={() => exceptionTrace}
-            />
-          }
-          codeBackground
-        />
+        <Section
+          gap={0}
+          alignItems="stretch"
+          className="relative min-h-0 flex-1 overflow-hidden"
+        >
+          <CodeFilePreview text={exceptionTrace} language={language} />
+          <FloatingFooter
+            right={
+              <CopyButton
+                size="sm"
+                tooltip={previewT("copyButton.tooltip")}
+                aria-label={previewT("copyButton.tooltip")}
+                getCopyText={() => exceptionTrace}
+              />
+            }
+            codeBackground
+          />
+        </Section>
       </Modal.Content>
     </Modal>
   );

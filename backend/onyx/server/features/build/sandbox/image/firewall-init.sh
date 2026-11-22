@@ -9,6 +9,7 @@
 # Required env: SANDBOX_PROXY_HOST, SANDBOX_PROXY_PORT, SANDBOX_PROXY_BOOTSTRAP_MODE.
 # Optional env: SANDBOX_PROXY_CA_BUNDLE_SRC (default /sandbox-ca/ca.crt),
 #               SANDBOX_PROXY_CA_BUNDLE_DST (default /etc/ssl/sandbox/ca-bundle.crt).
+#               SANDBOX_NET_ADMIN_LOCKDOWN (default true; false requires cluster enforcement).
 
 set -euo pipefail
 
@@ -25,13 +26,28 @@ CA_DST="${SANDBOX_PROXY_CA_BUNDLE_DST:-/etc/ssl/sandbox/ca-bundle.crt}"
 # Resolved once in step_apply_iptables before the lockdown closes DNS, then
 # reused in step_self_verify.
 PROXY_IP=""
+PROXY_TABLE="iptables"
 
 case "$SANDBOX_PROXY_BOOTSTRAP_MODE" in
     initcontainer|entrypoint) ;;
     *) die "unknown SANDBOX_PROXY_BOOTSTRAP_MODE=$SANDBOX_PROXY_BOOTSTRAP_MODE" ;;
 esac
 
-for bin in iptables ip6tables update-ca-certificates getent; do
+NET_ADMIN_LOCKDOWN="${SANDBOX_NET_ADMIN_LOCKDOWN-true}"
+case "$NET_ADMIN_LOCKDOWN" in
+    true) ;;
+    false)
+        [[ "$SANDBOX_PROXY_BOOTSTRAP_MODE" == "initcontainer" ]] \
+            || die "disabling network lockdown requires Kubernetes network enforcement"
+        ;;
+    *) die "SANDBOX_NET_ADMIN_LOCKDOWN must be true or false" ;;
+esac
+
+required_bins=(update-ca-certificates)
+if [[ "$NET_ADMIN_LOCKDOWN" == "true" ]]; then
+    required_bins+=(iptables ip6tables getent)
+fi
+for bin in "${required_bins[@]}"; do
     command -v "$bin" >/dev/null 2>&1 || die "required binary '$bin' missing"
 done
 if [[ "$SANDBOX_PROXY_BOOTSTRAP_MODE" == "entrypoint" ]] \
@@ -59,34 +75,45 @@ step_install_ca() {
 
 
 step_apply_iptables() {
-    if [[ "$SANDBOX_PROXY_HOST" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
+    if [[ "$SANDBOX_PROXY_HOST" == *:* ]] \
+            || [[ "$SANDBOX_PROXY_HOST" =~ ^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+$ ]]; then
         PROXY_IP="$SANDBOX_PROXY_HOST"
     else
-        # `ahostsv4` (not `hosts`) so we only get AF_INET answers. The iptables
-        # rule below is IPv4-only -- a dual-stack resolver that returns the AAAA
-        # first (e.g. Docker Desktop's host.docker.internal) would make the
-        # `iptables -d <ipv6>` call fail with "host/network not found" and the
-        # init would die mid-bootstrap.
-        PROXY_IP="$(getent ahostsv4 "$SANDBOX_PROXY_HOST" | awk '{print $1; exit}')"
-        [[ -n "$PROXY_IP" ]] || die "could not resolve proxy host $SANDBOX_PROXY_HOST to an IPv4 address"
+        # Prefer IPv4 for existing deployments. `hosts` also resolves AAAA
+        # records without AI_ADDRCONFIG excluding IPv6 in an initContainer.
+        PROXY_IP="$(getent ahostsv4 "$SANDBOX_PROXY_HOST" | awk 'NR == 1 {print $1}' || true)"
+        if [[ -z "$PROXY_IP" ]]; then
+            PROXY_IP="$(getent hosts "$SANDBOX_PROXY_HOST" | awk '/:/ && !found {print $1; found=1}' || true)"
+        fi
+        [[ -n "$PROXY_IP" ]] || die "could not resolve proxy host $SANDBOX_PROXY_HOST"
     fi
-    log "resolved proxy ip=$PROXY_IP"
+    if [[ "$PROXY_IP" == *:* ]]; then
+        PROXY_TABLE="ip6tables"
+    fi
+    log "resolved proxy ip=$PROXY_IP table=$PROXY_TABLE"
 
-    iptables -F OUTPUT
-    iptables -P OUTPUT DROP
-    iptables -P INPUT ACCEPT
-    iptables -P FORWARD DROP
+    # Both families stay locked down, including the unused family.
+    local table
+    for table in iptables ip6tables; do
+        "$table" -F OUTPUT
+        "$table" -P OUTPUT DROP
+        "$table" -P INPUT ACCEPT
+        "$table" -P FORWARD DROP
+        "$table" -A OUTPUT -o lo -j ACCEPT
+        "$table" -A OUTPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
+    done
 
-    iptables -A OUTPUT -o lo -j ACCEPT
-    iptables -A OUTPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT
-    iptables -A OUTPUT -p tcp -d "$PROXY_IP" --dport "$SANDBOX_PROXY_PORT" -j ACCEPT
+    # Neighbor discovery must work before the first allowed TCP connection.
+    # Hop limit 255 restricts these messages to the directly attached link.
+    for icmp_type in 135 136; do
+        ip6tables -A OUTPUT -p ipv6-icmp --icmpv6-type "$icmp_type" \
+            -m hl --hl-eq 255 -j ACCEPT
+    done
+    "$PROXY_TABLE" -A OUTPUT -p tcp -d "$PROXY_IP" --dport "$SANDBOX_PROXY_PORT" -j ACCEPT
     iptables -A OUTPUT -j REJECT --reject-with icmp-admin-prohibited
+    ip6tables -A OUTPUT -j REJECT --reject-with icmp6-adm-prohibited
 
-    # IPv6 lockdown is mandatory; partial lockdown = security regression.
-    ip6tables -F OUTPUT
-    ip6tables -P OUTPUT DROP
-
-    log "iptables egress lockdown installed (allow ${PROXY_IP}:${SANDBOX_PROXY_PORT})"
+    log "egress lockdown installed (allow ${PROXY_IP}:${SANDBOX_PROXY_PORT})"
 }
 
 
@@ -96,30 +123,34 @@ step_apply_iptables() {
 
 
 step_self_verify() {
-    # Inspecting the chain (not probing the network): a network probe can't
-    # distinguish "lockdown working" from "no internet" — fail-open.
-    log "self-verify: inspecting iptables OUTPUT chain"
-    local rules
-    rules="$(iptables -S OUTPUT)"
-
-    grep -qE "^-P OUTPUT DROP$" <<<"$rules" \
-        || die "self-verify: OUTPUT default policy is not DROP"
-    # iptables normalises single IPs to /32; accept the bare form too.
-    grep -qE "^-A OUTPUT .*-d ${PROXY_IP//./\\.}(/32)?[[:space:]].*--dport ${SANDBOX_PROXY_PORT}[[:space:]].*-j ACCEPT$" <<<"$rules" \
-        || die "self-verify: no ACCEPT rule for ${PROXY_IP}:${SANDBOX_PROXY_PORT}"
-    grep -qE "^-A OUTPUT -m conntrack --ctstate (RELATED,ESTABLISHED|ESTABLISHED,RELATED) -j ACCEPT$" <<<"$rules" \
-        || die "self-verify: no conntrack ESTABLISHED/RELATED rule"
-
-    grep -qE "^-P OUTPUT DROP$" <(ip6tables -S OUTPUT) \
-        || die "self-verify: ip6tables OUTPUT default policy is not DROP"
-
-    log "self-verify: iptables OUTPUT chain looks correct"
+    # Inspect rules instead of relying on internet availability.
+    local table icmp_type
+    for table in iptables ip6tables; do
+        "$table" -S OUTPUT | grep -qE "^-P OUTPUT DROP$" \
+            || die "self-verify: $table OUTPUT default policy is not DROP"
+        "$table" -C OUTPUT -o lo -j ACCEPT \
+            || die "self-verify: $table loopback rule missing"
+        "$table" -C OUTPUT -m conntrack --ctstate ESTABLISHED,RELATED -j ACCEPT \
+            || die "self-verify: $table conntrack rule missing"
+    done
+    "$PROXY_TABLE" -C OUTPUT -p tcp -d "$PROXY_IP" --dport "$SANDBOX_PROXY_PORT" -j ACCEPT \
+        || die "self-verify: proxy ACCEPT rule missing"
+    for icmp_type in 135 136; do
+        ip6tables -C OUTPUT -p ipv6-icmp --icmpv6-type "$icmp_type" \
+            -m hl --hl-eq 255 -j ACCEPT \
+            || die "self-verify: neighbor discovery rule missing"
+    done
+    log "self-verify: both OUTPUT chains look correct"
 }
 
 
 step_install_ca
-step_apply_iptables
-step_self_verify
+if [[ "$NET_ADMIN_LOCKDOWN" == "true" ]]; then
+    step_apply_iptables
+    step_self_verify
+else
+    log "iptables disabled; cluster must enforce proxy-only egress before workload startup"
+fi
 
 
 case "$SANDBOX_PROXY_BOOTSTRAP_MODE" in

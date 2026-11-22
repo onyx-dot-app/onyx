@@ -34,21 +34,19 @@ function ResourceContent({
             {leftContent}
             <div className="flex-1 min-w-0">
               <Content
+                font="main-ui-action"
                 title={title}
                 description={description}
-                sizePreset="main-ui"
-                variant="section"
               />
             </div>
           </>
         ) : (
           <div className="flex-1 min-w-0">
             <Content
+              font="main-ui-action"
               icon={icon}
               title={title}
               description={description}
-              sizePreset="main-ui"
-              variant="section"
             />
           </div>
         )}

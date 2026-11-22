@@ -1,29 +1,43 @@
 from collections.abc import Callable
 from typing import cast
+from uuid import UUID
 
-from sqlalchemy import and_, or_, select
-from sqlalchemy import cast as sa_cast
-from sqlalchemy.dialects import postgresql
 from sqlalchemy.orm import Session
 
+from onyx.access.cc_pair_access import get_cc_pair_access_mode
 from onyx.access.models import DocumentAccess
-from onyx.access.utils import prefix_user_email
-from onyx.configs.constants import PUBLIC_DOC_PAT, DocumentSource, FileOrigin
-from onyx.db.document import get_access_info_for_document, get_access_info_for_documents
-from onyx.db.models import (
-    ChatMessage,
-    ChatSession,
-    ChatSessionSharedStatus,
-    Connector,
-    Document,
-    DocumentByConnectorCredentialPair,
-    FileRecord,
-    Persona,
-    Persona__User,
-    Persona__UserFile,
-    User,
-    UserFile,
+from onyx.access.utils import (
+    EXTERNAL_GROUP_ACL_PREFIX,
+    USER_EMAIL_ACL_PREFIX,
+    prefix_user_email,
 )
+from onyx.configs.constants import (
+    CHAT_ARTIFACT_FILE_ORIGINS,
+    CHAT_SESSION_ID_FILE_METADATA_KEY,
+    PUBLIC_DOC_PAT,
+    DocumentSource,
+    FileOrigin,
+)
+from onyx.context.search.models import CCPairAccessMode, InferenceChunk
+from onyx.db.access import (
+    get_chat_output_file_row,
+    get_document_ids_for_file,
+    get_document_ids_from_file_connector_config,
+    user_can_access_chat_message_file,
+    user_can_access_persona_attached_file,
+    user_can_read_chat_session,
+    user_owns_user_file,
+)
+from onyx.db.connector_credential_pair import (
+    get_cc_pair_access_sets_for_user,
+    has_guarded_cc_pairs,
+)
+from onyx.db.document import (
+    get_access_info_for_document,
+    get_access_info_for_documents,
+    get_cc_pair_ids_for_documents,
+)
+from onyx.db.models import User, UserFile
 from onyx.db.user_file import fetch_user_files_with_access_relationships
 from onyx.utils.variable_functionality import (
     fetch_ee_implementation_or_noop,
@@ -142,6 +156,19 @@ def get_acl_for_user(user: User, db_session: Session | None = None) -> set[str]:
     return versioned_acl_for_user_fn(user, db_session)
 
 
+def censor_chunks_for_user(
+    chunks: list[InferenceChunk], user: User
+) -> list[InferenceChunk]:
+    """EE post-query censoring for sources whose access is decided per user at
+    read time. Every path that hands chunk content to a user runs it, not only
+    search, since the index ACL alone lets those chunks through."""
+    return fetch_ee_implementation_or_noop(
+        "onyx.external_permissions.post_query_censoring",
+        "_post_query_chunk_censoring",
+        chunks,
+    )(chunks=chunks, user=user)
+
+
 def source_should_fetch_permissions_during_indexing(source: DocumentSource) -> bool:
     _source_should_fetch_permissions_during_indexing_func = cast(
         Callable[[DocumentSource], bool],
@@ -223,97 +250,58 @@ def user_can_access_chat_file(file_id: str, user: User, db_session: Session) -> 
 
     The endpoint is overloaded across several asset classes, so we check
     each in turn (cheapest first, so common paths short-circuit before the
-    JSONB scan in `_documents_from_file_connector_config`):
+    JSONB scan in `get_document_ids_from_file_connector_config`):
 
     - `UserFile` owned by the user.
     - `UserFile` attached to a `Persona` the user can read (public, owned,
       or directly shared via `Persona.users`).
     - `ChatMessage.files` of a session the user owns or that is shared as
       `ChatSessionSharedStatus.PUBLIC`.
-    - `FileRecord` with origin `CHAT_IMAGE_GEN` (see inline TODO).
+    - A chat output file whose chat session the user may read (owned, or
+      shared as `PUBLIC`): a generated image by its stamped session, a
+      published file and its thumbnail by their artifact's chat.
     - `Document` whose ACL grants access (covers connector-ingested files).
 
     TODO(auth-perf): split `/chat/file` into per-asset-class endpoints so the
     URL carries the access context and one indexed lookup suffices, instead
     of fanning out 4–5 queries across unrelated classes on every request.
     """
-    owns_user_file = db_session.query(
-        select(UserFile.id)
-        .where(UserFile.file_id == file_id, UserFile.user_id == user.id)
-        .exists()
-    ).scalar()
-    if owns_user_file:
+    if user_owns_user_file(db_session, file_id, user.id):
         return True
 
-    if _user_can_access_persona_attached_file(file_id, user, db_session):
+    if user_can_access_persona_attached_file(db_session, file_id, user.id):
         return True
 
-    chat_file_stmt = (
-        select(ChatMessage.id)
-        .join(ChatSession, ChatMessage.chat_session_id == ChatSession.id)
-        .where(ChatMessage.files.op("@>")([{"id": file_id}]))
-        .where(
-            or_(
-                ChatSession.user_id == user.id,
-                and_(
-                    ChatSession.shared_status == ChatSessionSharedStatus.PUBLIC,
-                    ChatSession.deleted.is_(False),
-                ),
+    if user_can_access_chat_message_file(db_session, file_id, user.id):
+        return True
+
+    # Generated images never reach ChatMessage.files, a code-interpreter file
+    # reaches it only when the reply cites the id, and a published file only
+    # when its response is saved, so the stamp and the artifact are the real
+    # access paths for them. Kept above the connector branch so
+    # previews hit a PK lookup.
+    record = get_chat_output_file_row(db_session, file_id)
+    if record is not None:
+        origin, file_metadata, artifact_session_id = record
+        if origin in CHAT_ARTIFACT_FILE_ORIGINS:
+            return artifact_session_id is not None and user_can_read_chat_session(
+                db_session, artifact_session_id, user.id
             )
+        raw_session_id = (
+            file_metadata.get(CHAT_SESSION_ID_FILE_METADATA_KEY)
+            if isinstance(file_metadata, dict)
+            else None
         )
-        .limit(1)
-    )
-    if db_session.execute(chat_file_stmt).first() is not None:
-        return True
-
-    # TODO(jtahara): every CHAT_IMAGE_GEN file is public, which overrides the session
-    # checks above. Generated images never reach ChatMessage.files, and a
-    # code-interpreter file reaches it only when the reply cites the id, so
-    # this branch is the real access path for the rest. Scoping it needs
-    # chat_session_id stamped into FileRecord.file_metadata at save time.
-    # Kept above the connector branch so previews hit a PK lookup.
-    is_chat_image_gen = db_session.query(
-        select(FileRecord.file_id)
-        .where(
-            FileRecord.file_id == file_id,
-            FileRecord.file_origin == FileOrigin.CHAT_IMAGE_GEN,
-        )
-        .exists()
-    ).scalar()
-    if is_chat_image_gen:
-        return True
+        if raw_session_id is None:
+            # An unstamped generated image is open to every signed-in user.
+            return origin == FileOrigin.CHAT_IMAGE_GEN
+        try:
+            chat_session_id = UUID(str(raw_session_id))
+        except ValueError:
+            return False
+        return user_can_read_chat_session(db_session, chat_session_id, user.id)
 
     return _user_can_access_connector_file(file_id, user, db_session)
-
-
-def _user_can_access_persona_attached_file(
-    file_id: str, user: User, db_session: Session
-) -> bool:
-    """Grant access if `file_id` belongs to a `UserFile` attached to a
-    `Persona` the user can read (public, owned, or directly shared via
-    `Persona.users`).
-    """
-    stmt = (
-        select(UserFile.id)
-        .join(Persona__UserFile, Persona__UserFile.user_file_id == UserFile.id)
-        .join(Persona, Persona.id == Persona__UserFile.persona_id)
-        .outerjoin(
-            Persona__User,
-            (Persona__User.persona_id == Persona.id)
-            & (Persona__User.user_id == user.id),
-        )
-        .where(
-            UserFile.file_id == file_id,
-            Persona.deleted.is_(False),
-            or_(
-                Persona.is_public.is_(True),
-                Persona.user_id == user.id,
-                Persona__User.user_id.is_not(None),
-            ),
-        )
-        .limit(1)
-    )
-    return db_session.execute(stmt).first() is not None
 
 
 def _user_can_access_connector_file(
@@ -334,70 +322,55 @@ def _user_can_access_connector_file(
     varied across releases and any origin filter would either miss legacy
     files or sprawl.
     """
-    document_ids: list[str] = list(
-        db_session.execute(select(Document.id).where(Document.file_id == file_id))
-        .scalars()
-        .all()
-    )
+    document_ids: list[str] = get_document_ids_for_file(db_session, file_id)
     if not document_ids:
-        document_ids = _documents_from_file_connector_config(file_id, db_session)
+        document_ids = get_document_ids_from_file_connector_config(db_session, file_id)
     if not document_ids:
         return False
 
     user_acl = get_acl_for_user(user, db_session)
     doc_access = get_access_for_documents(document_ids, db_session)
-    return any(
-        not user_acl.isdisjoint(access.to_acl()) for access in doc_access.values()
-    )
-
-
-def _documents_from_file_connector_config(
-    file_id: str, db_session: Session
-) -> list[str]:
-    """Return one representative document per cc_pair (connector +
-    credential) whose `Connector.connector_specific_config['file_locations']`
-    lists `file_id`. Sampling per cc_pair (not per connector) is required
-    because ACLs are scoped to the cc_pair: the same connector paired with
-    different credentials can have different ACLs, and a user with access
-    via one credential must not be denied because we sampled a doc from
-    another.
-
-    TODO(delete-me): exists only because the File connector leaves
-    `Document.file_id=NULL` for non-tabular uploads (see comment in
-    `onyx/connectors/file/connector.py`). The `@>` lookup also can't use
-    a btree index, so every fast-path miss does a JSONB scan. Once the
-    connector stamps `Document.file_id` unconditionally and a backfill
-    runs, this helper and its caller branch can go away.
-    """
-    cc_pair_keys = db_session.execute(
-        select(
-            DocumentByConnectorCredentialPair.connector_id,
-            DocumentByConnectorCredentialPair.credential_id,
-        )
-        .join(
-            Connector,
-            Connector.id == DocumentByConnectorCredentialPair.connector_id,
-        )
-        .where(
-            Connector.connector_specific_config["file_locations"].op("@>")(
-                sa_cast([file_id], postgresql.JSONB)
+    if get_cc_pair_access_mode(db_session) != CCPairAccessMode.ENFORCE:
+        if not has_guarded_cc_pairs(db_session):
+            return any(
+                not user_acl.isdisjoint(access.to_acl())
+                for access in doc_access.values()
             )
+        # The old ACL rule, without guarded pairs that grant the user nothing
+        # (see the OpenSearch restricted cc-pair guard).
+        access_sets = get_cc_pair_access_sets_for_user(db_session, user)
+        granting_cc_pair_ids = (
+            access_sets.open_cc_pair_ids | access_sets.acl_cc_pair_ids
         )
-        .distinct()
-    ).all()
-    if not cc_pair_keys:
-        return []
+        doc_id_to_cc_pair_ids = get_cc_pair_ids_for_documents(db_session, document_ids)
+        for document_id, access in doc_access.items():
+            cc_pair_ids = set(doc_id_to_cc_pair_ids.get(document_id, []))
+            if not access_sets.hidden_restricted_cc_pair_ids.isdisjoint(
+                cc_pair_ids
+            ) and granting_cc_pair_ids.isdisjoint(cc_pair_ids):
+                continue
+            if not user_acl.isdisjoint(access.to_acl()):
+                return True
+        return False
 
-    document_ids: list[str] = []
-    for connector_id, credential_id in cc_pair_keys:
-        doc_id = db_session.execute(
-            select(DocumentByConnectorCredentialPair.id)
-            .where(
-                DocumentByConnectorCredentialPair.connector_id == connector_id,
-                DocumentByConnectorCredentialPair.credential_id == credential_id,
-            )
-            .limit(1)
-        ).scalar()
-        if doc_id is not None:
-            document_ids.append(doc_id)
-    return document_ids
+    # The query-time cc-pair rule of the OpenSearch filter, applied in Python.
+    access_sets = get_cc_pair_access_sets_for_user(db_session, user)
+    doc_id_to_cc_pair_ids = get_cc_pair_ids_for_documents(db_session, document_ids)
+    user_acl_without_groups = {
+        entry
+        for entry in user_acl
+        if entry.startswith((USER_EMAIL_ACL_PREFIX, EXTERNAL_GROUP_ACL_PREFIX))
+    }
+    for document_id, access in doc_access.items():
+        cc_pair_ids = set(doc_id_to_cc_pair_ids.get(document_id, []))
+        if not cc_pair_ids:
+            if not user_acl.isdisjoint(access.to_acl()):
+                return True
+            continue
+        if not access_sets.open_cc_pair_ids.isdisjoint(cc_pair_ids):
+            return True
+        if not access_sets.acl_cc_pair_ids.isdisjoint(cc_pair_ids) and (
+            access.is_public or not user_acl_without_groups.isdisjoint(access.to_acl())
+        ):
+            return True
+    return False

@@ -1,50 +1,54 @@
 "use client";
 
+import { IconLoader } from "@opal/loaders";
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import { useLocale, useTranslations } from "next-intl";
-import { format, startOfDay, subDays } from "date-fns";
-import useSWR from "swr";
+import { startOfDay, subDays } from "date-fns";
+import useSWR, { useSWRConfig } from "swr";
 import {
   Button,
   Calendar,
-  LineItemButton,
+  Dropdown,
   MessageCard,
   Pagination,
-  Popover,
   Text,
+  type DropdownMenuItem,
+  type DropdownView,
 } from "@opal/components";
-import { ContentAction, PageLoader, Section, toast } from "@opal/layouts";
+import { ContentAction, Section, toast } from "@opal/layouts";
+import { PageLoader } from "@opal/loaders";
 import {
   SvgCalendar,
+  SvgChevronLeft,
   SvgDownload,
   SvgDownloadCloud,
-  SvgSimpleLoader,
   SvgSpreadsheetFile,
   SvgX,
 } from "@opal/icons";
 import { humanReadableFormat, humanReadableFormatWithTime } from "@opal/time";
-import type { IconFunctionComponent, RichStr } from "@opal/types";
 import { errorHandlingFetcher } from "@/lib/fetcher";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { UsageReport } from "@/app/ee/admin/performance/usage/types";
 import {
-  PendingReport,
   ReportPeriod,
-} from "@/views/admin/WorkspaceAnalyticsPage/interfaces";
+  UsageReportJob,
+} from "@/views/admin/WorkspaceAnalyticsPage/types";
 import {
   generateUsageReport,
   usageReportDownloadUrl,
 } from "@/views/admin/WorkspaceAnalyticsPage/svc";
 
-function presetPeriod(label: string, days: number): ReportPeriod {
+function presetPeriod(days: number): ReportPeriod {
   const to = startOfDay(new Date());
-  return { label, range: { from: subDays(to, days - 1), to } };
+  return { range: { from: subDays(to, days - 1), to } };
 }
 
 const PAGE_SIZE = 8;
 const POLL_INTERVAL_MS = 3_000;
-const SLOW_REPORT_AFTER_MS = 20_000;
-const REPORT_TIMEOUT_MS = 5 * 60_000;
+
+function isOpen(job: UsageReportJob): boolean {
+  return job.status === "PENDING" || job.status === "STARTED";
+}
 
 function periodLabel(
   report: UsageReport,
@@ -59,32 +63,22 @@ function periodLabel(
     : allTimeLabel;
 }
 
-interface PendingReportRowProps {
-  rangeLabel: string;
-  slow: boolean;
-}
-
-function PendingReportRow({ rangeLabel, slow }: PendingReportRowProps) {
+function PendingReportRow() {
   const t = useTranslations("admin.analytics");
   return (
     <div
-      className="rounded-12 border border-border-01 bg-background-tint-01 motion-safe:animate-pulse"
+      className="rounded-12 border border-border-01 bg-background-tint-01"
       data-testid="pending-report-row"
     >
       <ContentAction
-        sizePreset="main-ui"
-        variant="section"
+        font="main-ui-action"
         icon={SvgSpreadsheetFile}
         title={t("reports.pendingRow.title")}
-        description={
-          slow
-            ? t("reports.pendingRow.slowDescription")
-            : t("reports.pendingRow.description", { range: rangeLabel })
-        }
+        description={t("reports.pendingRow.slowDescription")}
         padding={1}
         center
         rightChildren={
-          <SvgSimpleLoader
+          <IconLoader
             size={16}
             className="shrink-0 animate-spin stroke-text-03 motion-reduce:animate-none"
           />
@@ -112,8 +106,7 @@ function ReportRow({ report, justArrived }: ReportRowProps) {
       }
     >
       <ContentAction
-        sizePreset="main-ui"
-        variant="section"
+        font="main-ui-action"
         icon={SvgSpreadsheetFile}
         title={label}
         description={t("reports.row.description", {
@@ -136,28 +129,6 @@ function ReportRow({ report, justArrived }: ReportRowProps) {
   );
 }
 
-interface PeriodMenuItemProps {
-  title: string | RichStr;
-  onClick: () => void;
-  icon?: IconFunctionComponent;
-}
-
-function PeriodMenuItem({ title, onClick, icon }: PeriodMenuItemProps) {
-  return (
-    <LineItemButton
-      title={title}
-      onClick={onClick}
-      {...(icon && { icon })}
-      rounding={3}
-      selectVariant="select-heavy"
-      sizePreset="main-ui"
-      state="empty"
-      variant="section"
-      width="full"
-    />
-  );
-}
-
 interface GenerateReportMenuProps {
   disabled: boolean;
   pending: boolean;
@@ -171,7 +142,7 @@ function GenerateReportMenu({
 }: GenerateReportMenuProps) {
   const t = useTranslations("admin.analytics");
   const [open, setOpen] = useState(false);
-  const [view, setView] = useState<"presets" | "calendar">("presets");
+  const calendarRef = useRef<HTMLDivElement>(null);
   const [pendingStart, setPendingStart] = useState<Date | undefined>(undefined);
   const [draftRange, setDraftRange] = useState<
     { from: Date; to?: Date } | undefined
@@ -186,164 +157,225 @@ function GenerateReportMenu({
   ];
 
   function reset() {
-    setView("presets");
     setPendingStart(undefined);
     setDraftRange(undefined);
   }
 
+  // The custom page: a way back, then the calendar as one row of its own.
+  const calendarView: DropdownView = {
+    items: [
+      {
+        kind: "action",
+        id: "back",
+        icon: SvgChevronLeft,
+        title: t("reports.period.custom.label"),
+        onSelect: (views) => {
+          reset();
+          views.pop();
+        },
+      },
+      {
+        kind: "custom",
+        id: "calendar",
+        keepOpen: true,
+        // ArrowRight steps into the calendar; its days take the keyboard
+        // from there.
+        onSecondary: () =>
+          calendarRef.current?.querySelector("button")?.focus(),
+        render: ({ props }) => (
+          <div
+            {...props}
+            role="menuitem"
+            tabIndex={-1}
+            ref={calendarRef}
+            // Escape from a focused day closes the list.
+            onKeyDown={(e) => {
+              if (e.key === "Escape") {
+                setOpen(false);
+                reset();
+              }
+            }}
+          >
+            <Section
+              flexDirection="column"
+              justifyContent="start"
+              alignItems="stretch"
+              gap={0.25}
+              padding={0.5}
+              width="full"
+              height="fit"
+            >
+              <Text font="secondary-body" color="text-03">
+                {pendingStart
+                  ? t("reports.calendar.pickEnd.label")
+                  : t("reports.calendar.pickStart.label")}
+              </Text>
+              <Calendar
+                mode="range"
+                selected={draftRange}
+                onDayClick={(day) => {
+                  if (!pendingStart) {
+                    setDraftRange({ from: day });
+                    setPendingStart(day);
+                    return;
+                  }
+                  const from = day < pendingStart ? day : pendingStart;
+                  const to = day < pendingStart ? pendingStart : day;
+                  onGenerate({ range: { from, to } });
+                  setOpen(false);
+                  reset();
+                }}
+                numberOfMonths={1}
+                disabled={(date) => date > new Date()}
+              />
+            </Section>
+          </div>
+        ),
+      },
+    ],
+  };
+  const items: DropdownMenuItem[] = [
+    ...presetDays.map(
+      (preset): DropdownMenuItem => ({
+        kind: "action",
+        id: `preset-${preset.days}`,
+        title: preset.label,
+        onSelect: () => onGenerate(presetPeriod(preset.days)),
+      })
+    ),
+    {
+      kind: "action",
+      id: "all-time",
+      title: allTimeLabel,
+      onSelect: () => onGenerate({}),
+    },
+    {
+      kind: "group",
+      items: [
+        {
+          kind: "action",
+          id: "custom",
+          icon: SvgCalendar,
+          title: t("reports.period.custom.label"),
+          onSelect: (views) => views.push("calendar"),
+        },
+      ],
+    },
+  ];
+
   return (
-    <Popover
+    <Dropdown
+      width={80}
+      align="end"
       open={open}
       onOpenChange={(nextOpen) => {
         setOpen(nextOpen);
         if (!nextOpen) reset();
       }}
     >
-      <Popover.Trigger asChild>
+      <Dropdown.Trigger asChild>
         <Button icon={SvgDownloadCloud} disabled={disabled}>
           {pending
             ? t("reports.generateButton.pendingLabel")
             : t("reports.generateButton.label")}
         </Button>
-      </Popover.Trigger>
-      <Popover.Content
-        align="end"
-        side="bottom"
-        width={view === "presets" ? "lg" : "fit"}
-      >
-        {view === "presets" ? (
-          // Children must stay a flat array: Popover.Menu filters over it and
-          // renders each `null` as a divider.
-          <Popover.Menu>
-            {[
-              ...presetDays.map((preset) => (
-                <Popover.Close asChild key={preset.label}>
-                  <PeriodMenuItem
-                    title={preset.label}
-                    onClick={() =>
-                      onGenerate(presetPeriod(preset.label, preset.days))
-                    }
-                  />
-                </Popover.Close>
-              )),
-              <Popover.Close asChild key="all-time">
-                <PeriodMenuItem
-                  title={allTimeLabel}
-                  onClick={() => onGenerate({ label: allTimeLabel })}
-                />
-              </Popover.Close>,
-              null,
-              <PeriodMenuItem
-                key="custom"
-                icon={SvgCalendar}
-                title={t("reports.period.custom.label")}
-                onClick={() => setView("calendar")}
-              />,
-            ]}
-          </Popover.Menu>
-        ) : (
-          <Section
-            flexDirection="column"
-            justifyContent="start"
-            alignItems="stretch"
-            gap={0.25}
-            padding={0.5}
-            width="full"
-            height="fit"
-          >
-            <Text font="secondary-body" color="text-03">
-              {pendingStart
-                ? t("reports.calendar.pickEnd.label")
-                : t("reports.calendar.pickStart.label")}
-            </Text>
-            <Calendar
-              mode="range"
-              selected={draftRange}
-              onDayClick={(day) => {
-                if (!pendingStart) {
-                  setDraftRange({ from: day });
-                  setPendingStart(day);
-                  return;
-                }
-                const from = day < pendingStart ? day : pendingStart;
-                const to = day < pendingStart ? pendingStart : day;
-                onGenerate({
-                  label: `${format(from, "MMM d, y")} – ${format(to, "MMM d, y")}`,
-                  range: { from, to },
-                });
-                setOpen(false);
-                reset();
-              }}
-              numberOfMonths={1}
-              disabled={(date) => date > new Date()}
-            />
-          </Section>
-        )}
-      </Popover.Content>
-    </Popover>
+      </Dropdown.Trigger>
+      <Dropdown.Data
+        label={t("reports.generateButton.label")}
+        items={items}
+        views={{ calendar: calendarView }}
+      />
+    </Dropdown>
   );
 }
 
 export default function UsageReports() {
+  const locale = useLocale();
   const t = useTranslations("admin.analytics");
   const [page, setPage] = useState(1);
   const [requesting, setRequesting] = useState(false);
-  const [pendingReport, setPendingReport] = useState<PendingReport | null>(
+  const [requestedReportId, setRequestedReportId] = useState<string | null>(
     null
   );
   const [arrivedReportName, setArrivedReportName] = useState<string | null>(
     null
   );
-  const slowTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const reportTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const abortRef = useRef<AbortController | null>(null);
 
-  const pending = pendingReport !== null;
+  const { mutate: mutateKey } = useSWRConfig();
+  // A worker records the report in the transaction that deletes its job, so
+  // reports read after a jobs response include every job that response lacks.
+  // Read reports again after the first jobs read of a visit and when an open
+  // job ends. A forced read also drops any older reports read in flight.
+  const visitReadJobsRef = useRef(false);
+  const openJobIdsRef = useRef<Set<string>>(new Set());
+  const {
+    data: jobs,
+    error: jobsError,
+    isLoading: jobsLoading,
+    mutate: mutateJobs,
+  } = useSWR<UsageReportJob[]>(SWR_KEYS.usageReportJobs, errorHandlingFetcher, {
+    // The mount effect reads jobs, so cached jobs never replace a fresh read.
+    revalidateOnMount: false,
+    refreshInterval: (latest) => (latest?.some(isOpen) ? POLL_INTERVAL_MS : 0),
+    onSuccess: (latest) => {
+      const open = new Set(latest.filter(isOpen).map((job) => job.report_id));
+      const ended = [...openJobIdsRef.current].some((id) => !open.has(id));
+      openJobIdsRef.current = open;
+      if (visitReadJobsRef.current && !ended) return;
+      visitReadJobsRef.current = true;
+      void mutateKey(SWR_KEYS.usageReport).catch((error: unknown) => {
+        console.error("Failed to refresh the usage report list:", error);
+      });
+    },
+  });
+  useEffect(() => {
+    void mutateJobs();
+    return () => {
+      // A back navigation can show this page again with its state kept.
+      visitReadJobsRef.current = false;
+    };
+  }, [mutateJobs]);
+  // Only the admin's own request blocks Generate. Jobs of other admins, or
+  // from before a reload, show as rows but do not block a new request.
+  const pending = (jobs ?? []).some(
+    (job) => job.report_id === requestedReportId && isOpen(job)
+  );
   const {
     data: reports,
     error: listError,
-    isLoading: listLoading,
     mutate,
   } = useSWR<UsageReport[]>(SWR_KEYS.usageReport, errorHandlingFetcher, {
-    refreshInterval: pending ? POLL_INTERVAL_MS : 0,
+    // Reports load only after a jobs read, from the jobs onSuccess above.
+    revalidateOnMount: false,
   });
+  const listLoading = !reports && !listError;
 
   useEffect(() => {
     if (listError) console.error("Failed to load usage reports:", listError);
   }, [listError]);
 
-  function clearPendingTimers() {
-    if (slowTimerRef.current) {
-      clearTimeout(slowTimerRef.current);
-      slowTimerRef.current = null;
-    }
-    if (reportTimeoutRef.current) {
-      clearTimeout(reportTimeoutRef.current);
-      reportTimeoutRef.current = null;
-    }
-  }
-
   useEffect(() => {
-    if (!reports || !pendingReport) return;
-    const completed = reports.find((report) =>
-      report.report_name.includes(pendingReport.id)
+    if (!requestedReportId) return;
+    const completed = reports?.find((report) =>
+      report.report_name.includes(requestedReportId)
     );
     if (completed) {
-      setPendingReport(null);
+      setRequestedReportId(null);
       setArrivedReportName(completed.report_name);
       setPage(1);
       toast.success(t("reports.toasts.ready"));
-      clearPendingTimers();
+    } else if (
+      jobs?.some(
+        (job) => job.report_id === requestedReportId && job.status === "FAILURE"
+      )
+    ) {
+      setRequestedReportId(null);
+      toast.error(t("reports.failedRow.title"));
     }
-  }, [reports, pendingReport, t]);
+  }, [reports, jobs, requestedReportId, t]);
 
-  useEffect(
-    () => () => {
-      clearPendingTimers();
-      abortRef.current?.abort();
-    },
-    []
-  );
+  useEffect(() => () => abortRef.current?.abort(), []);
 
   async function requestReport(period: ReportPeriod): Promise<void> {
     setRequesting(true);
@@ -351,20 +383,17 @@ export default function UsageReports() {
     abortRef.current = abort;
     try {
       const reportId = await generateUsageReport(period, abort.signal);
-      setPendingReport({ id: reportId, label: period.label, slow: false });
+      setRequestedReportId(reportId);
       setArrivedReportName(null);
-      slowTimerRef.current = setTimeout(
-        () =>
-          setPendingReport((current) =>
-            current ? { ...current, slow: true } : current
-          ),
-        SLOW_REPORT_AFTER_MS
-      );
-      reportTimeoutRef.current = setTimeout(() => {
-        setPendingReport(null);
-        toast.error(t("reports.toasts.timedOut"));
-        reportTimeoutRef.current = null;
-      }, REPORT_TIMEOUT_MS);
+      // Generation already started, so a failed refresh must not surface as
+      // "failed to start report generation". Keep the button disabled until
+      // the job list shows the new job. Read reports after jobs, as above.
+      try {
+        await mutateJobs();
+        await mutate();
+      } catch (error) {
+        console.error("Failed to refresh the usage report list:", error);
+      }
     } catch (error) {
       if (abort.signal.aborted) return;
       console.error("Failed to start usage report generation:", error);
@@ -377,12 +406,6 @@ export default function UsageReports() {
     } finally {
       if (!abort.signal.aborted) setRequesting(false);
     }
-
-    // Generation already succeeded, so a failed revalidation must not surface
-    // as "failed to start report generation".
-    void mutate().catch((error: unknown) => {
-      console.error("Failed to refresh the usage report list:", error);
-    });
   }
 
   const orderedReports = useMemo(
@@ -419,7 +442,7 @@ export default function UsageReports() {
           width="full"
           height="fit"
         >
-          <Text font="heading-h3">{t("reports.title")}</Text>
+          <Text font="heading-section">{t("reports.title")}</Text>
           <Text font="secondary-body" color="text-03">
             {t("reports.description")}
           </Text>
@@ -431,14 +454,14 @@ export default function UsageReports() {
         />
       </div>
 
-      {listLoading ? (
-        <PageLoader />
-      ) : listError ? (
+      {listError || jobsError ? (
         <MessageCard
           variant="error"
           icon={SvgX}
           title={t("reports.listError.title")}
         />
+      ) : listLoading || jobsLoading ? (
+        <PageLoader />
       ) : (
         <Section
           flexDirection="column"
@@ -448,13 +471,23 @@ export default function UsageReports() {
           width="full"
           height="fit"
         >
-          {pending && page === 1 && (
-            <PendingReportRow
-              rangeLabel={pendingReport.label}
-              slow={pendingReport.slow}
-            />
-          )}
-          {orderedReports.length === 0 && !pending ? (
+          {page === 1 &&
+            (jobs ?? []).map((job) =>
+              job.status === "FAILURE" ? (
+                <MessageCard
+                  key={job.report_id}
+                  variant="error"
+                  icon={SvgX}
+                  title={t("reports.failedRow.title")}
+                  description={t("reports.failedRow.description", {
+                    time: humanReadableFormatWithTime(job.time_created, locale),
+                  })}
+                />
+              ) : isOpen(job) ? (
+                <PendingReportRow key={job.report_id} />
+              ) : null
+            )}
+          {orderedReports.length === 0 && !jobs?.length ? (
             <div className="rounded-12 border border-dashed border-border-02 p-4">
               <Text font="secondary-body" color="text-03" as="p">
                 {t("reports.empty.description")}
