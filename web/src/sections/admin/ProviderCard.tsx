@@ -212,6 +212,27 @@ export default function ProviderCard({
                 : onDisconnect || onEdit) && (
                 <div className="px-1 pb-1">
                   <Section flexDirection="row" justifyContent="end" gap={1}>
+                    {/* Settings sits first, left of delete or disconnect. */}
+                    {onEdit && (
+                      <Hoverable.Item
+                        group="ProviderCard"
+                        variant="appear-on-hover"
+                      >
+                        <Button
+                          icon={SvgSettings}
+                          tooltip={t("providerCard.editButton.tooltip")}
+                          aria-label={t("providerCard.editButton.ariaLabel", {
+                            title,
+                          })}
+                          prominence="tertiary"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onEdit();
+                          }}
+                          size="md"
+                        />
+                      </Hoverable.Item>
+                    )}
                     {isDisconnected && onDelete && (
                       <Hoverable.Item
                         group="ProviderCard"
@@ -248,26 +269,6 @@ export default function ProviderCard({
                           onClick={(e) => {
                             e.stopPropagation();
                             onDisconnect();
-                          }}
-                          size="md"
-                        />
-                      </Hoverable.Item>
-                    )}
-                    {onEdit && (
-                      <Hoverable.Item
-                        group="ProviderCard"
-                        variant="appear-on-hover"
-                      >
-                        <Button
-                          icon={SvgSettings}
-                          tooltip={t("providerCard.editButton.tooltip")}
-                          aria-label={t("providerCard.editButton.ariaLabel", {
-                            title,
-                          })}
-                          prominence="tertiary"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onEdit();
                           }}
                           size="md"
                         />
