@@ -139,23 +139,9 @@ test.describe("Image Generation Provider Disconnect", () => {
       }
     );
 
-    // Click disconnect
+    // A non-default model disconnects at once, with no confirmation
     await disconnectButton.click();
-
-    // Verify confirmation modal appears
-    const confirmDialog = page.getByRole("dialog");
-    await expect(confirmDialog).toBeVisible({ timeout: 5000 });
-    await expect(confirmDialog).toContainText("Disconnect GPT Image 1.5");
-
-    await expectElementScreenshot(confirmDialog, {
-      name: "image-gen-disconnect-non-default-modal",
-    });
-
-    // Click Disconnect in the confirmation modal
-    const confirmButton = confirmDialog.getByRole("button", {
-      name: "Disconnect",
-    });
-    await confirmButton.click();
+    await expect(page.getByRole("dialog")).toHaveCount(0);
 
     // Legacy cards show only while connected
     await expect(card).toHaveCount(0, { timeout: 10000 });

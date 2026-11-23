@@ -22,6 +22,8 @@ from tests.integration.common_utils.test_models import DATestLLMProvider, DATest
 
 CHAT_MODEL = "gpt-5.4-mini"
 IMAGE_MODEL = "gpt-image-2"
+# A catalog image model that the provider does not turn on.
+HIDDEN_IMAGE_MODEL = "gpt-image-1.5"
 
 
 @pytest.fixture(scope="module")
@@ -36,6 +38,7 @@ def llm_provider(admin_user: DATestUser) -> DATestLLMProvider:
         user_performing_action=admin_user,
         api_key="sk-linked-test",
         default_model_name=CHAT_MODEL,
+        model_names=[IMAGE_MODEL],
     )
 
 
@@ -50,15 +53,13 @@ def _chat_model_names(admin_user: DATestUser, llm_provider_id: int) -> list[str]
     return [mc.name for mc in provider.model_configurations]
 
 
-def test_lists_catalog_image_models_for_connected_provider(
+def test_lists_only_turned_on_image_models(
     admin_user: DATestUser, llm_provider: DATestLLMProvider
 ) -> None:
-    models = {
-        m["name"]: m for m in _provider_entry(admin_user, llm_provider.id)["models"]
-    }
-    assert models[IMAGE_MODEL]["is_recommended"] is True
-    assert models[CHAT_MODEL]["is_recommended"] is False
-    assert "gpt-image-1" not in models  # deprecated
+    models = {m["name"] for m in _provider_entry(admin_user, llm_provider.id)["models"]}
+    assert IMAGE_MODEL in models
+    assert CHAT_MODEL not in models  # cannot generate images
+    assert HIDDEN_IMAGE_MODEL not in models  # not turned on
 
 
 def test_link_reuses_provider_and_survives_provider_edit(

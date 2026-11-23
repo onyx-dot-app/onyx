@@ -21,8 +21,9 @@ is on (`ee/onyx/server/tenants/provisioning.py`).
   once, inline right after the step that made it, in stream order. With code mode on, a program can generate
   images too, and they show the same way.
 - **An admin** opens the image generation admin page. It lists the image
-  models of each connected LLM provider under its name: the catalog image
-  models and the models that no catalog knows. A provider with no model that can generate
+  models of each connected LLM provider under its name: the models an admin
+  turned on for the provider on the Language Models page that can generate
+  images, or that no catalog knows. A provider with no model that can generate
   images (Anthropic) is not listed. One click links a model to its LLM provider with no
   credentials, and the first linked model becomes the default. Only public providers with no agent restrictions are listed
   or can be linked, because the tool is available to all users and agents.
@@ -91,14 +92,12 @@ images. OpenAI and Azure use LiteLLM, and Vertex AI uses `genai.Client` for
 edits. Every call is traced with `LLMFlow.IMAGE_GENERATION` or
 `LLMFlow.IMAGE_EDIT` ([[observability]]).
 
-**Model catalogue.** `llm/model_catalog.py:iter_image_generation_models` gives
-the catalog image models: entries with an image mode and no deprecated status,
-without supplement-only entries (upstream pruned them).
-`GET /admin/image-generation/llm-providers` lists them with the provider's
-stored models, but only those that
+**Model list.** `GET /admin/image-generation/llm-providers` lists the
+provider's visible models (turned on on the Language Models page), and a
+linked model after it is turned off, but only those that
 `llm/model_catalog.py:can_generate_images` passes: a model a catalog knows must have
 an image mode, and a name no catalog knows passes. `POST /config/link` refuses
-the rest. A linked config has the ID
+a model that is not visible or does not pass. A linked config has the ID
 `llm-<llm_provider_id>-<model slug>`. Linked image models get the
 `IMAGE_GENERATION` model flow, so chat model lists skip them.
 `web/src/views/admin/ImageGenerationPage/constants.ts` now only names the

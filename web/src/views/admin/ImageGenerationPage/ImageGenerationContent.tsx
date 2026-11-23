@@ -174,13 +174,15 @@ interface AvailableModelCardProps {
   title: string;
   description: string;
   ariaLabel: string;
-  /** Already connected: a plain card that says so, with no action. */
+  /** Already connected: a filled card that says so. */
   connected: boolean;
   onConnect: () => void;
+  /** Disconnects a connected model. */
+  onDisconnect?: () => void;
 }
 
 /** A model of a provider, as the Language Models page shows a new provider.
- *  A connected model stays in the grid as a plain card that says so. */
+ *  A connected model stays in the grid, filled, and disconnects on click. */
 function AvailableModelCard({
   icon,
   title,
@@ -188,15 +190,22 @@ function AvailableModelCard({
   ariaLabel,
   connected,
   onConnect,
+  onDisconnect,
 }: AvailableModelCardProps) {
   const t = useTranslations("admin.shared");
   const tPage = useTranslations("admin.imageGeneration");
 
-  // A connected model has nothing to do, so its card is not interactive. A
-  // plain card paints the same surface as a filled select card.
+  // A connected model's card is filled, says so, and disconnects on click,
+  // as its card under Available Models does.
   if (connected) {
     return (
-      <Card border="solid" padding={2} rounding={4} aria-label={ariaLabel}>
+      <SelectCard
+        state="filled"
+        padding={2}
+        rounding={4}
+        aria-label={ariaLabel}
+        onClick={onDisconnect}
+      >
         <ContentAction
           font="main-ui-action"
           icon={icon}
@@ -224,7 +233,7 @@ function AvailableModelCard({
             </Section>
           }
         />
-      </Card>
+      </SelectCard>
     );
   }
 
@@ -437,6 +446,30 @@ export default function ImageGenerationContent() {
     }
   };
 
+  // Only the default asks first: it needs a replacement default (or none).
+  // Any other model disconnects at once.
+  const openDisconnect = async (config: ImageGenerationConfigView) => {
+    if (defaultConfig?.image_provider_id !== config.image_provider_id) {
+      try {
+        await deleteImageGenerationConfig(config.image_provider_id);
+        refetchAll();
+      } catch (error) {
+        toast.error(
+          error instanceof Error ? error.message : t("disconnectError.message")
+        );
+      }
+      return;
+    }
+    setDisconnectProvider({
+      image_provider_id: config.image_provider_id,
+      title: configTitle(config),
+      llmProviderOwned: config.llm_provider_owned,
+      isDefault: defaultConfig?.image_provider_id === config.image_provider_id,
+    });
+    setReplacementProviderId(null);
+    disconnectModal.toggle(true);
+  };
+
   const handleEdit = (provider: ImageProvider) => {
     const config = configs.find(
       (c) => c.image_provider_id === provider.image_provider_id
@@ -620,17 +653,7 @@ export default function ImageGenerationContent() {
                       disconnectModal.isOpen &&
                       disconnectProvider?.image_provider_id === imageProviderId
                     }
-                    onDisconnect={() => {
-                      setDisconnectProvider({
-                        image_provider_id: imageProviderId,
-                        title,
-                        llmProviderOwned: config.llm_provider_owned,
-                        isDefault:
-                          defaultConfig?.image_provider_id === imageProviderId,
-                      });
-                      setReplacementProviderId(null);
-                      disconnectModal.toggle(true);
-                    }}
+                    onDisconnect={() => void openDisconnect(config)}
                     onEdit={
                       legacyProvider
                         ? () => handleEdit(legacyProvider)
@@ -696,6 +719,14 @@ export default function ImageGenerationContent() {
                             // under Available Models has that name.
                             ariaLabel={`image-gen-available-${llmProvider.llm_provider_id}-${model.name}`}
                             connected={model.image_provider_id !== null}
+                            onDisconnect={() => {
+                              const config = configs.find(
+                                (c) =>
+                                  c.image_provider_id ===
+                                  model.image_provider_id
+                              );
+                              if (config) void openDisconnect(config);
+                            }}
                             onConnect={() =>
                               void handleLink(llmProvider, model)
                             }
