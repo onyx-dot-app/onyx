@@ -554,6 +554,7 @@ const AgentMessage = React.memo(function AgentMessage({
     >
       {sections.map((section, sectionIndex) => {
         const isLastSection = sectionIndex === sections.length - 1;
+        const ended = !isLastSection || isComplete;
         return (
           <React.Fragment key={section.userMessage?.id ?? "initial"}>
             {section.userMessage && (
@@ -567,7 +568,7 @@ const AgentMessage = React.memo(function AgentMessage({
 
             <Response
               items={[
-                ...buildSectionSegments(section, toolTurnGroups).map(
+                ...buildSectionSegments(section, toolTurnGroups, ended).map(
                   (segment, index, segments): ResponseItem => {
                     switch (segment.kind) {
                       case "text": {
@@ -762,7 +763,7 @@ type SectionSegment =
   | { kind: "record"; record: ToolRequestRecord }
   /** Generated images and auth cards, which lead the section's answer. */
   | { kind: "extras" }
-  /** Files from every publish_files call, which follow the section's answer. */
+  /** Files from every publish_files call, after the ended section's answer. */
   | { kind: "files" };
 
 /** The packet turn of a timeline turn; code mode renumbers timeline turns. */
@@ -780,11 +781,14 @@ const LIVE_RUN_KEY = "live";
  * form one run. Text between steps shows once every earlier step of the
  * section is revealed, so it never appears ahead of the steps before it; an
  * earlier section's steps never gate it. The last run holds the live header;
- * a section with no run gets an empty one for the waiting state.
+ * a section with no run gets an empty one for the waiting state. The files
+ * that the section published show last, once it `ended`: its response
+ * stopped and its answer rendered, or a later section began.
  */
 function buildSectionSegments(
   section: ResponseSection,
-  allTurnGroups: TurnGroup[]
+  allTurnGroups: TurnGroup[],
+  ended: boolean
 ): SectionSegment[] {
   const revealed = new Set(
     section.toolGroups.flatMap((group) => group.steps.map((step) => step.key))
@@ -860,7 +864,7 @@ function buildSectionSegments(
   if (!segments.some((s) => s.kind === "run")) {
     segments.push({ kind: "run", key: LIVE_RUN_KEY, turnGroups: [] });
   }
-  if (section.publishedFiles.length > 0) {
+  if (ended && section.publishedFiles.length > 0) {
     segments.push({ kind: "files" });
   }
   return segments;

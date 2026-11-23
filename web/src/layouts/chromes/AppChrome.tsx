@@ -72,6 +72,8 @@ import { useTierAtLeast } from "@/lib/tiers/hooks";
 import { Tier } from "@/lib/tiers/types";
 import { useFullWidthChat } from "@/providers/FullWidthChatProvider";
 import { useIncognito } from "@/providers/IncognitoProvider";
+import { AppWorkspaceElementsContext } from "@/layouts/chromes/AppWorkspace";
+import { PANEL_TOGGLE_RESERVE } from "@/lib/outputPanel/layout";
 
 // ---------------------------------------------------------------------------
 // Header
@@ -392,7 +394,16 @@ function Header() {
         isMobile) &&
         !appPosition.isSharedChat() && (
           <RootLayout.Header>
-            <div className="w-full h-full flex flex-row flex-wrap justify-center items-start p-2 sm:px-4">
+            {/* A chat's header keeps out of the room for the chat's right
+                panel toggle, which the panel places over the header's end */}
+            <div
+              className="w-full h-full flex flex-row flex-wrap justify-center items-start p-2 sm:px-4"
+              style={
+                appPosition.isChat()
+                  ? { paddingInlineEnd: PANEL_TOGGLE_RESERVE }
+                  : undefined
+              }
+            >
               {/*
           Left:
           - (mobile) sidebar toggle
@@ -646,6 +657,15 @@ export interface AppChromeProps {
 
 export default function AppChrome({ children }: AppChromeProps) {
   const [rightPanel, setRightPanel] = useState<ReactNode>(null);
+  const workspaceRef = useRef<HTMLDivElement>(null);
+  const pageRef = useRef<HTMLDivElement>(null);
+  const [panelToggleSlot, setPanelToggleSlot] = useState<HTMLElement | null>(
+    null
+  );
+  const workspaceElements = useMemo(
+    () => ({ workspace: workspaceRef, page: pageRef, panelToggleSlot }),
+    [panelToggleSlot]
+  );
 
   const appPosition = useAppPosition();
   useAppDocumentTitle();
@@ -702,8 +722,14 @@ export default function AppChrome({ children }: AppChromeProps) {
         onMouseDown={handleMouseDown}
         onMouseUp={handleMouseUp}
       >
-        <div className="flex flex-row flex-1 min-h-0">
+        <div
+          ref={workspaceRef}
+          className="relative flex flex-row flex-1 min-h-0"
+        >
+          <div ref={setPanelToggleSlot} />
           <div
+            ref={pageRef}
+            data-app-page
             className={cn(
               "@container relative isolate flex-1 flex flex-col min-h-0",
               showBackground && "bg-cover bg-center bg-fixed"
@@ -762,7 +788,10 @@ export default function AppChrome({ children }: AppChromeProps) {
             </RootLayout.MainContent>
             <Footer />
           </div>
-          {rightPanel}
+          {/* The slot's panel measures the workspace and covers the page */}
+          <AppWorkspaceElementsContext.Provider value={workspaceElements}>
+            {rightPanel}
+          </AppWorkspaceElementsContext.Provider>
         </div>
       </RootLayout.App>
     </RootLayoutRightPanelSlotContext.Provider>

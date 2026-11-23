@@ -51,7 +51,9 @@
   per agent, and users cannot pick or force them. Commands run in the user's
   private VM, in the chat's session directory, whose files stay for later
   turns. The user sees each command and its output as it streams, and the
-  files that each patch, edit or write changed, on the same patch card. Every
+  files that each patch, edit or write changed, on the same patch card. While
+  the model writes a `write` or `edit` call, the card names the file; an
+  `apply_patch` card names the files and counts them. Every
   model also gets `publish_files`, which gives files from the VM to the user
   as download cards; owners and viewers of a shared chat can download them,
   and a hard chat delete deletes them.
@@ -71,8 +73,8 @@ It does not own:
 - The Code Interpreter service. It is a separate deployment with its own
   release line. This repository has only the client and a pinned image tag in
   the Docker Compose files.
-- Access to generated files. They use the chat-session stamp that
-  [[file-store-and-user-files]] defines.
+- Access to generated and published files. They use the chat-session stamp
+  and the `chat_artifact` versions that [[file-store-and-user-files]] defines.
 - The Craft sandboxes ([[craft-sandboxes]]). They are a separate system and do
   not use the Code Interpreter client. The sandbox tools call their
   `HarnessSandbox` client, which [[craft-sandboxes]] owns.
@@ -309,16 +311,27 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files (no tool
                                         under ONYX_VM_FILES_ROOT; other paths are refused
                                         with a hint to copy the file into the working
                                         directory; a regular file of at most
-                                        PUBLISH_FILES_MAX_BYTES, 100 MiB), then
-                                        file_store/utils.save_chat_output_file with
-                                        FileOrigin.CHAT_ARTIFACT and the SandboxTurn's chat
-                                        session (the root chat's: subagents share the turn;
-                                        file ID chat-artifact-<session>-<hex>).
+                                        PUBLISH_FILES_MAX_BYTES, 100 MiB); for a .pdf,
+                                        .pptx or .docx of at most 20 MiB,
+                                        HarnessSandbox.render_first_page (typed argv
+                                        execs, no shell: soffice to a PDF for Office
+                                        files, then pdftoppm to a 640 px JPEG, in a
+                                        scratch directory under ONYX_VM_FILES_ROOT; all
+                                        renders of the call share one 30 s budget from
+                                        when the call has its sandbox (after
+                                        SandboxTurn.start_call), and files after it get
+                                        none; None on failure); then
+                                        db/chat.save_chat_artifact: a CHAT_ARTIFACT file
+                                        record and the next version of the chat_artifact
+                                        of its VM path in the SandboxTurn's chat session
+                                        (the root chat's: subagents share the turn), with
+                                        the title, in one commit.
                                         A failure, or a Stop during or after the copies,
                                         deletes the files that the call saved: all or none.
-                                        Saves PublishedFiles (file ID, name, title, absolute
-                                        path, size, MIME type); each publish is a new file,
-                                        and files of one name are versions of one file.
+                                        Saves PublishedFiles (file ID, artifact ID, version,
+                                        name, title, absolute path, size, MIME type,
+                                        thumbnail file ID); each
+                                        publish is a new file and version.
                                         save_chat_turn adds the files to the response's
                                         ChatMessage.files ([[chat-persistence]])
   Agent.prepare_tool_result (ChatAgent) sandbox/spill.py:spill_large_result, in a chat whose

@@ -71,6 +71,8 @@ WORKSPACES = "/home/onyx/workspaces"
 _DENIED_VM_PATHS = ("/proc", "/sys", "/dev", "/run/craft-fc")
 # The daemon streams output in chunks of at most this size (guestd server.go).
 _STREAM_CHUNK_BYTES = 64 << 10
+# What the fake pdftoppm writes; tests compare the bytes.
+FAKE_JPEG = b"\xff\xd8\xff\xe0fake-first-page\xff\xd9"
 
 
 def _abort(
@@ -713,8 +715,9 @@ class WriteFailure:
 @dataclass
 class FakeExecution:
     """A scripted command: echo, fail <code>, cat (echoes stdin), sleep,
-    mkdir or seq <n>. `bash -c <script>` runs the script's words as one of
-    these."""
+    mkdir, seq <n>, soffice (a PDF of any existing source) or pdftoppm (a
+    FAKE_JPEG of a source that starts with "%PDF"). `bash -c <script>` runs
+    the script's words as one of these."""
 
     execution_id: str
     argv: list[str]
@@ -778,6 +781,15 @@ def _skipped(path: str, exclude: set[str], *, skip_hidden: bool) -> bool:
     return bool(exclude & set(parts)) or (
         skip_hidden and any(p.startswith(".") for p in parts)
     )
+
+
+def _vm_file_key(sandbox_id: str, path: str) -> tuple[str, str, str]:
+    """The `files` key of an absolute path that a command names: a session
+    file under WORKSPACES, else a VM file."""
+    session, _, rel = path.removeprefix(WORKSPACES + "/").partition("/")
+    if path.startswith(WORKSPACES + "/") and rel:
+        return sandbox_id, session, rel
+    return sandbox_id, "", path
 
 
 class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
@@ -883,6 +895,8 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
             "mkdir",
             "true",
             "seq",
+            "soffice",
+            "pdftoppm",
         ):
             abort_daemon(context, SandboxDaemonErrorReason.START_FAILED, "no program")
         running = [
@@ -918,6 +932,24 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
         elif argv[0] == "fail":
             execution.stderr = b"failed\n"
             execution.end(sandboxd_pb2.EXITED, int(argv[1]))
+        elif argv[0] == "soffice":
+            # Like LibreOffice: exit 0 even when the source does not load.
+            outdir = argv[argv.index("--outdir") + 1]
+            source = self.agent.files.get(_vm_file_key(sandbox_id, argv[-1]))
+            if source is not None:
+                stem = posixpath.splitext(posixpath.basename(argv[-1]))[0]
+                self.agent.files[(sandbox_id, "", f"{outdir}/{stem}.pdf")] = (
+                    b"%PDF-" + source
+                )
+            execution.end(sandboxd_pb2.EXITED, 0)
+        elif argv[0] == "pdftoppm":
+            source = self.agent.files.get(_vm_file_key(sandbox_id, argv[-2]))
+            if source is None or not source.startswith(b"%PDF"):
+                execution.stderr = b"Syntax Error: Couldn't read xref table\n"
+                execution.end(sandboxd_pb2.EXITED, 1)
+            else:
+                self.agent.files[(sandbox_id, "", f"{argv[-1]}.jpg")] = FAKE_JPEG
+                execution.end(sandboxd_pb2.EXITED, 0)
         self.agent.executions.setdefault(sandbox_id, {})[execution.execution_id] = (
             execution
         )

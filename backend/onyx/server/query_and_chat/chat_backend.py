@@ -96,6 +96,7 @@ from onyx.db.chat import (
     get_chat_message,
     get_chat_message_page_ids,
     get_chat_messages_by_session,
+    get_chat_published_files,
     get_chat_session_by_id,
     get_chat_sessions_by_user,
     get_incognito_session_ids_for_user,
@@ -559,7 +560,6 @@ def get_chat_session(
             if before_message_id is None
             else (),
         )
-
     session_messages = get_chat_messages_by_session(
         chat_session_id=session_id,
         user_id=user_id,
@@ -600,6 +600,14 @@ def get_chat_session(
         )
         for msg in responses
     ]
+    # The client keeps the list from a latest-page load, and the shared view
+    # from its full load; an older page does not need it. Read after the
+    # replay, so the list holds every file that a replayed call published.
+    published_files = (
+        get_chat_published_files(session_id, db_session)
+        if before_message_id is None and (limit is not None or is_shared)
+        else None
+    )
     if is_shared:
         # A shared view shows no skills the owner picked: not on questions and
         # not on messages accepted during a response.
@@ -640,6 +648,7 @@ def get_chat_session(
         is_processing=is_processing,
         incognito=chat_session.incognito_record_mode is not None,
         has_older_messages=has_older_messages,
+        published_files=published_files,
         # Only the owner's composer reads the options; a shared view shows none.
         tool_options=chat_session.tool_options
         if user_id is not None and chat_session.user_id == user_id

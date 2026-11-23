@@ -1662,6 +1662,7 @@
         "removingBadge": {
           "label": "Removing"
         },
+        "unknownSize": "Unknown",
         "saveButton": {
           "label": "Save Changes",
           "saving": "Saving..."
@@ -1934,9 +1935,7 @@
           "size": "Size",
           "other": "Other",
           "countWithSize": "{count} ({size})",
-          "bytes": "Bytes",
-          "loadError": "Couldn't load the document types.",
-          "sizeValue": "{value} {unit}"
+          "loadError": "Couldn't load the document types."
         }
       },
       "toasts": {
@@ -11775,9 +11774,6 @@
       "sessionNotFound": {
         "description": "This chat session doesn't exist or has been deleted.",
         "title": "Chat not found"
-      },
-      "sourcesModal": {
-        "title": "Sources"
       }
     },
     "appChrome": {
@@ -12682,25 +12678,6 @@
         "toggleRow": {
           "ariaLabel": "Toggle timeline"
         },
-        "toolNames": {
-          "codeInterpreter": "Code Interpreter",
-          "customTool": "Custom Tool",
-          "generateImage": "Generate Image",
-          "generatePlan": "Generate plan",
-          "internalSearch": "Internal Search",
-          "knowledgeBaseQuery": "Knowledge Base Query",
-          "memory": "Memory",
-          "openUrls": "Open URLs",
-          "researchAgent": "Research agent",
-          "thinking": "Thinking",
-          "tool": "Tool",
-          "webSearch": "Web Search",
-          "terminal": "Terminal",
-          "applyPatch": "Apply Patch",
-          "editFile": "Edit File",
-          "writeFile": "Write File",
-          "publishFiles": "Publish Files"
-        },
         "webSearch": {
           "searching": {
             "status": "Searching the web"
@@ -12717,7 +12694,10 @@
             }
           },
           "stdin": {
-            "status": "{kind, select, send {{phase, select, running {Sending input to session {sessionId}} failed {Could not send input to session {sessionId}} canceled {Canceled} done {Sent input to session {sessionId}} other {Sent input to session {sessionId}}}} check {{phase, select, running {Checking session {sessionId}} failed {Could not check session {sessionId}} canceled {Canceled} done {Checked session {sessionId}} other {Checked session {sessionId}}}} other {Session {sessionId}}}"
+            "status": "{kind, select, send {{phase, select, running {Sending input to session {sessionId}} failed {Could not send input to session {sessionId}} canceled {Canceled} done {Sent input to session {sessionId}} other {Sent input to session {sessionId}}}} check {{phase, select, running {Checking session {sessionId}} failed {Could not check session {sessionId}} canceled {Canceled} done {Checked session {sessionId}} other {Checked session {sessionId}}}} other {Session {sessionId}}}",
+            "noSession": {
+              "status": "{kind, select, send {{phase, select, running {Sending input to the session} failed {Could not send input to the session} canceled {Canceled} done {Sent input to the session} other {Sent input to the session}}} check {{phase, select, running {Checking the session} failed {Could not check the session} canceled {Canceled} done {Checked the session} other {Checked the session}}} other {Session}}"
+            }
           },
           "output": {
             "title": "Output"
@@ -12744,7 +12724,18 @@
             "failed": {
               "status": "Edit failed"
             },
-            "title": "Patch"
+            "title": "Patch",
+            "progress": {
+              "named": {
+                "status": "{tool, select, write {Writing {path}…} other {Editing {path}…}}"
+              },
+              "unnamed": {
+                "status": "{tool, select, write {Writing a file…} other {Editing a file…}}"
+              },
+              "patching": {
+                "status": "{count, plural, =0 {Patching files…} one {Patching # file…} other {Patching # files…}}"
+              }
+            }
           },
           "stopped": {
             "status": "Stopped"
@@ -12859,61 +12850,8 @@
         }
       },
       "preview": {
-        "code": {
-          "headerDescription": "{language} - {lineCount, plural, one {# line} other {# lines}} · {fileSize}"
-        },
-        "copyButton": {
-          "tooltip": "Copy content"
-        },
-        "csv": {
-          "footer": "{columnCount, plural, one {# column} other {# columns}} • {rowCount, plural, one {# row} other {# rows}}",
-          "headerDescription": "CSV - {rowCount, plural, one {# row} other {# rows}} • {fileSize}",
-          "rowSeparator": "{count, plural, one {# row} other {# rows}}"
-        },
-        "docx": {
-          "headerDescription": "{count, plural, one {Word Document • # word} other {Word Document • # words}}",
-          "headerDescriptionFallback": "Word Document",
-          "legacyDocMessage": "Legacy .doc format cannot be previewed. Download the file to view it.",
-          "loadError": {
-            "message": "Could not preview this document. Download the file to view it."
-          }
-        },
-        "downloadButton": {
-          "label": "Download File",
-          "tooltip": "Download"
-        },
         "exceptionTrace": {
           "defaultTitle": "Full Exception Trace"
-        },
-        "header": {
-          "fallbackTitle": "Document"
-        },
-        "lineCount": {
-          "label": "{count, plural, one {# line} other {# lines}}"
-        },
-        "loadError": {
-          "message": "Failed to load document."
-        },
-        "pdf": {
-          "iframeTitle": "PDF Viewer"
-        },
-        "text": {
-          "headerDescription": "{lineCount, plural, one {# line} other {# lines}} · {fileSize}"
-        },
-        "unsupported": {
-          "message": "This file format is not supported for preview."
-        },
-        "xlsx": {
-          "headerDescription": "Spreadsheet - {count, plural, one {# sheet} other {# sheets}}",
-          "parseError": {
-            "message": "Unable to preview this spreadsheet."
-          },
-          "sheetCount": "{count, plural, one {# sheet} other {# sheets}}"
-        },
-        "zoomControls": {
-          "level": "{zoom}%",
-          "zoomInTooltip": "Zoom In",
-          "zoomOutTooltip": "Zoom Out"
         }
       },
       "share": {
@@ -13060,6 +12998,114 @@
         },
         "selectedCount": {
           "label": "{count, plural, one {# file selected} other {# files selected}}"
+        }
+      }
+    },
+    "filePreview": {
+      "header": {
+        "fallbackTitle": "Document"
+      },
+      "code": {
+        "headerDescription": "{language} - {lineCount, plural, one {# line} other {# lines}} · {fileSize}"
+      },
+      "text": {
+        "headerDescription": "{lineCount, plural, one {# line} other {# lines}} · {fileSize}"
+      },
+      "lineCount": {
+        "label": "{count, plural, one {# line} other {# lines}}"
+      },
+      "wordCount": {
+        "label": "{count, plural, one {# word} other {# words}}"
+      },
+      "copyButton": {
+        "tooltip": "Copy content"
+      },
+      "downloadButton": {
+        "label": "Download File",
+        "tooltip": "Download"
+      },
+      "retryButton": {
+        "label": "Try again"
+      },
+      "error": {
+        "title": "Unable to load preview",
+        "description": "The preview could not be loaded. Try again or download the file to open it."
+      },
+      "renderError": {
+        "title": "Cannot preview this file",
+        "description": "The file could not be shown here. Download the file to open it."
+      },
+      "unsupported": {
+        "title": "Preview for this file type is not currently supported",
+        "description": "Download the file to view its contents."
+      },
+      "tooLarge": {
+        "title": "File too large to preview",
+        "description": "Files up to {size, number} MB can be previewed here. Download the file to open it."
+      },
+      "spreadsheet": {
+        "headerDescription": "Spreadsheet - {count, plural, one {# sheet} other {# sheets}}",
+        "truncated": "Preview limited to {rows, number} rows, {columns, number} columns, and {cells, number} cells. Download the original for all data.",
+        "malformed": "This CSV contains an invalid quoted field. Download the original to inspect it.",
+        "empty": "No content"
+      },
+      "image": {
+        "loading": {
+          "label": "Loading image..."
+        },
+        "actualSize": {
+          "label": "Actual size"
+        }
+      },
+      "pdf": {
+        "controls": {
+          "label": "PDF controls"
+        },
+        "thumbnails": {
+          "toggle": "Toggle page thumbnails",
+          "label": "Page thumbnails",
+          "resize": "Resize page thumbnails"
+        },
+        "page": {
+          "previous": "Previous page",
+          "next": "Next page",
+          "counter": "{current, number} / {total, number}",
+          "preview": "Page {page, number} preview",
+          "select": "Go to page {page, number}"
+        },
+        "zoom": {
+          "out": "Zoom out",
+          "in": "Zoom in",
+          "label": "Zoom",
+          "fitWidth": "Fit width",
+          "fitPage": "Fit page"
+        },
+        "error": {
+          "description": "The PDF file could not be loaded."
+        }
+      },
+      "pptx": {
+        "controls": {
+          "label": "Presentation controls"
+        },
+        "thumbnails": {
+          "toggle": "Toggle slide thumbnails",
+          "resize": "Resize slide thumbnails"
+        },
+        "slides": {
+          "label": "Slides"
+        },
+        "previous": {
+          "label": "Previous slide"
+        },
+        "next": {
+          "label": "Next slide"
+        },
+        "slide": {
+          "counter": "Slide {current} of {total}"
+        },
+        "empty": {
+          "label": "No slides in this presentation"
         }
       }
     },
@@ -13400,12 +13446,57 @@
     },
     "publishedFiles": {
       "card": {
-        "updated": {
-          "description": "Updated version · {details}"
-        },
         "preview": {
           "ariaLabel": "Preview {name}"
         }
+      },
+      "panel": {
+        "preview": {
+          "ariaLabel": "Preview of {name}"
+        }
+      },
+      "viewAllButton": {
+        "label": "View all {count} files"
+      }
+    },
+    "rightPanel": {
+      "filesTab": {
+        "label": "Files",
+        "description": "Files the model published in this chat",
+        "empty": "This chat has no files yet",
+        "tile": {
+          "ariaLabel": "Open {name}"
+        },
+        "search": {
+          "placeholder": "Search files",
+          "empty": "No files match the search"
+        }
+      },
+      "fileTab": {
+        "olderVersion": "<isolate>{name}</isolate> (v{version} of {latest})"
+      },
+      "sourcesTab": {
+        "label": "Sources"
+      },
+      "toggleButton": {
+        "label": "Toggle panel"
+      },
+      "downloadButton": {
+        "label": "Download",
+        "tooltip": "Download file"
+      },
+      "reloadButton": {
+        "label": "Refresh files",
+        "error": "Could not reload the files. Try again."
+      },
+      "expandButton": {
+        "label": "Expand panel"
+      },
+      "restoreButton": {
+        "label": "Restore panel"
+      },
+      "resizeHandle": {
+        "label": "Resize panel"
       }
     }
   },
@@ -13681,10 +13772,6 @@
       },
       "lineCount": {
         "label": "{count, plural, one {# line} other {# lines}}"
-      },
-      "size": {
-        "bytes": "{count} Bytes",
-        "kilobytes": "{size} KB"
       },
       "viewFullButton": {
         "tooltip": "View Full Text"
@@ -15023,18 +15110,6 @@
       "browser": {
         "label": "Apps"
       },
-      "list": {
-        "label": "Output tabs"
-      },
-      "close": {
-        "label": "Close {name}"
-      },
-      "reordered": {
-        "label": "Tab moved to position {position} of {count}"
-      },
-      "open": {
-        "label": "Open a tab"
-      },
       "outputs": {
         "label": "Outputs"
       }
@@ -15160,8 +15235,7 @@
       "scope": {
         "turn": "Turn {turn, number} outputs",
         "all": "All outputs"
-      },
-      "unseen": "New or updated"
+      }
     },
     "turnOutputs": {
       "showAll": "View all {count} outputs",
@@ -15230,6 +15304,28 @@
       "description": "This session cannot use {names}. Your skills must fit in {maxSize} and {maxFiles, number} files. Turn off skills you do not need to make room.",
       "manage": "Manage skills",
       "dismiss": "Dismiss"
+    }
+  },
+  "outputPanel": {
+    "tabStrip": {
+      "list": {
+        "label": "Output tabs"
+      },
+      "close": {
+        "label": "Close {name}"
+      },
+      "reordered": {
+        "label": "Tab moved to position {position} of {count}"
+      },
+      "open": {
+        "label": "Open a tab"
+      }
+    },
+    "tile": {
+      "download": {
+        "label": "Download"
+      },
+      "unseen": "New or updated"
     }
   },
   "knowledge": {

@@ -61,9 +61,8 @@ test.describe("Craft outputs", () => {
     await outputs.goto();
     await outputs.open();
     await outputs.openTab("Apps");
-    await outputs.expectHeaderStable(async () => {
-      await outputs.expandToFullMode();
-    });
+    // A narrow workspace always covers the chat: no size to choose
+    await expect(outputs.expand).toBeHidden();
     await outputs.screenshot("craft-outputs-narrow");
     await outputs.close();
   });

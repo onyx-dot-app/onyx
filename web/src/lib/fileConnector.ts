@@ -3,7 +3,7 @@ import type { ErrorResponseBody } from "@/lib/fetcher";
 export interface ConnectorFileInfo {
   file_id: string;
   file_name: string;
-  file_size?: number;
+  file_size: number | null;
   upload_date?: string;
 }
 

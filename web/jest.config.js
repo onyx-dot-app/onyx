@@ -29,6 +29,8 @@ const esmPackages = [
   "until-async",
   // Language Detection
   "linguist-languages",
+  // PowerPoint slides
+  "@jvmr",
   // Markdown & Syntax Highlighting
   "react-markdown",
   "remark-.*", // All remark packages
@@ -99,6 +101,9 @@ const sharedConfig = {
     // Mock specific components that have complex dependencies
     "^@/providers/UserProvider$":
       "<rootDir>/tests/setup/mocks/components/UserProvider.tsx",
+    // An ESM-only package: its exports have no require condition
+    "^@jvmr/pptx-to-html$":
+      "<rootDir>/node_modules/@jvmr/pptx-to-html/dist/index.js",
     // Path aliases (must come after specific mocks)
     "^@/(.*)$": "<rootDir>/src/$1",
     "^@tests/(.*)$": "<rootDir>/tests/$1",

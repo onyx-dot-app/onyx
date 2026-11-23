@@ -44,10 +44,9 @@ from onyx.server.features.build.sandbox.models import (
     HarnessSandboxRef,
     SandboxPathInfo,
     SkillsBundle,
+    session_workspace,
 )
 
-# Parent of each chat session's working directory in the sandbox.
-SESSION_WORKSPACE_ROOT = "/home/onyx/workspaces"
 # The directory of the chat's files in its session directory: copies of file
 # store files (tools/tool_implementations/sandbox/file_copies.py).
 CHAT_FILES_DIR = "attachments"
@@ -66,6 +65,19 @@ ONYX_VM_FILES_ROOT = "/tmp/onyx"  # noqa: S108 - a path in the sandbox VM.
 # deletes the directory again and raises HarnessSandboxError.
 TOOL_RESULTS_ROOT = f"{ONYX_VM_FILES_ROOT}/tool-results"
 
+# render_first_page: a JPEG of a file's first page, at most this many pixels on
+# its longer side, drawn in a scratch directory of its own under this root.
+RENDER_FIRST_PAGE_SIZE_PX = 640
+RENDER_FIRST_PAGE_ROOT = f"{ONYX_VM_FILES_ROOT}/renders"
+# The suffixes it draws: a PDF directly, Office files through LibreOffice.
+RENDER_FIRST_PAGE_SUFFIXES = frozenset({".pdf", ".pptx", ".docx"})
+# Largest file that callers render, and largest JPEG that it reads back.
+RENDER_FIRST_PAGE_MAX_INPUT_BYTES = 20 << 20
+RENDER_FIRST_PAGE_MAX_OUTPUT_BYTES = 4 << 20
+# The renders of one publish_files call end by this budget, which starts once
+# the call has its sandbox. A file after it publishes without a thumbnail.
+RENDER_FIRST_PAGE_BUDGET_SECONDS = 30.0
+
 # Most exec session records per sandbox; the least recently used goes
 # first. The guest daemon caps the running commands.
 MAX_EXEC_SESSIONS_PER_SANDBOX = 64
@@ -82,10 +94,6 @@ EXEC_DEFAULT_ENV: dict[str, str] = {
 }
 
 INTERRUPT_CHAR = "\x03"
-
-
-def session_workspace(session_id: UUID) -> str:
-    return f"{SESSION_WORKSPACE_ROOT}/{session_id}"
 
 
 def session_tool_results(session_id: UUID) -> str:
@@ -307,6 +315,18 @@ class HarnessSandbox(abc.ABC):
         """Start the sandbox if needed, set up the chat session's directory,
         and return file calls bound to the running VM instance. Raises
         HarnessSandboxError for a purged session."""
+
+    @abc.abstractmethod
+    def render_first_page(
+        self, ref: HarnessSandboxRef, path: str, *, until: float
+    ) -> bytes | None:
+        """A JPEG of the first page of a file with a RENDER_FIRST_PAGE_SUFFIXES
+        suffix, at a path that `read_file` accepts, RENDER_FIRST_PAGE_SIZE_PX
+        on its longer side, drawn by the VM's poppler and LibreOffice by
+        `until` (time.monotonic()). Callers pass files up to
+        RENDER_FIRST_PAGE_MAX_INPUT_BYTES. Returns None, and logs why, on any
+        failure. A cancel of the current signal kills the render and raises
+        AgentCancelled."""
 
     @abc.abstractmethod
     def touch(self, ref: HarnessSandboxRef) -> None:

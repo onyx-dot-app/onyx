@@ -50,18 +50,38 @@ export function countryCodeToFlag(code: string | null | undefined): string {
   return String.fromCodePoint(first, second);
 }
 
+// Embedding, override and isolate controls, and the directional marks.
+const BIDI_CONTROLS = /[\u202A-\u202E\u2066-\u2069\u200E\u200F\u061C]/g;
+
+/**
+ * Text without its bidi controls, for display or parsing only.
+ *
+ * Bidi rule for untrusted text: strip the controls from paths and labels with
+ * this function, so they show their characters in their own order. Show all
+ * untrusted text in an element with a `dir` attribute, which isolates it so it
+ * cannot reorder the text around it: `dir="ltr"` for code and paths,
+ * `dir="auto"` for labels. Patches and errors are isolated but keep their
+ * exact characters. A label that is the only text of its own flex item has
+ * no neighbors to reorder, so it needs only the strip.
+ */
+export function stripBidiControls(text: string): string {
+  return text.replace(BIDI_CONTROLS, "");
+}
+
 /**
  * Inline markdown for a code span holding any text, backticks included: the
- * fence is one backtick longer than the longest run inside. Use inside
- * `markdown()`, e.g. `markdown(\`Read ${codeSpan(path)}\`)`.
+ * fence is one backtick longer than the longest run inside. Line breaks show
+ * as spaces, since a code span cannot cross a line. Use inside `markdown()`,
+ * e.g. `markdown(\`Read ${codeSpan(path)}\`)`.
  */
 export function codeSpan(text: string): string {
+  const line = text.replace(/[\r\n]+/g, " ");
   const longestRun = Math.max(
     0,
-    ...(text.match(/`+/g) ?? []).map((run) => run.length)
+    ...(line.match(/`+/g) ?? []).map((run) => run.length)
   );
   const fence = "`".repeat(longestRun + 1);
-  return `${fence} ${text} ${fence}`;
+  return `${fence} ${line} ${fence}`;
 }
 
 export function escapeMarkdown(value: string): string {

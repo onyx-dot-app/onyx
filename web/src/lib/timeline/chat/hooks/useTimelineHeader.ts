@@ -56,6 +56,7 @@ function stepHeaderText(
     case PacketType.EXEC_COMMAND_START:
     case PacketType.WRITE_STDIN_START:
       return t("header.runningCommand.label");
+    case PacketType.FILE_TOOL_PROGRESS:
     case PacketType.APPLY_PATCH_START:
       return t("header.editingFiles.label");
     case PacketType.PUBLISH_FILES_START:

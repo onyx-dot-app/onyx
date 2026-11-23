@@ -1662,6 +1662,7 @@
         "removingBadge": {
           "label": "제거 중"
         },
+        "unknownSize": "알 수 없음",
         "saveButton": {
           "label": "변경 사항 저장",
           "saving": "저장 중..."
@@ -1934,9 +1935,7 @@
           "size": "크기",
           "other": "기타",
           "countWithSize": "{count} ({size})",
-          "bytes": "바이트",
-          "loadError": "문서 유형을 불러오지 못했습니다.",
-          "sizeValue": "{value} {unit}"
+          "loadError": "문서 유형을 불러오지 못했습니다."
         }
       },
       "toasts": {
@@ -11775,9 +11774,6 @@
       "sessionNotFound": {
         "description": "이 채팅 세션이 없거나 삭제되었습니다.",
         "title": "채팅을 찾을 수 없음"
-      },
-      "sourcesModal": {
-        "title": "출처"
       }
     },
     "appChrome": {
@@ -12682,25 +12678,6 @@
         "toggleRow": {
           "ariaLabel": "타임라인 전환"
         },
-        "toolNames": {
-          "codeInterpreter": "코드 인터프리터",
-          "customTool": "사용자 지정 도구",
-          "generateImage": "이미지 생성",
-          "generatePlan": "계획 생성",
-          "internalSearch": "내부 검색",
-          "knowledgeBaseQuery": "지식 베이스 쿼리",
-          "memory": "메모리",
-          "openUrls": "URL 열기",
-          "researchAgent": "리서치 에이전트",
-          "thinking": "생각 중",
-          "tool": "도구",
-          "webSearch": "웹 검색",
-          "terminal": "터미널",
-          "applyPatch": "패치 적용",
-          "editFile": "파일 편집",
-          "writeFile": "파일 쓰기",
-          "publishFiles": "파일 게시"
-        },
         "webSearch": {
           "searching": {
             "status": "웹 검색 중"
@@ -12717,7 +12694,10 @@
             }
           },
           "stdin": {
-            "status": "{kind, select, send {{phase, select, running {세션 {sessionId}에 입력을 보내는 중} failed {세션 {sessionId}에 입력을 보내지 못함} canceled {취소됨} done {세션 {sessionId}에 입력을 보냄} other {세션 {sessionId}에 입력을 보냄}}} check {{phase, select, running {세션 {sessionId} 확인 중} failed {세션 {sessionId}을(를) 확인하지 못함} canceled {취소됨} done {세션 {sessionId} 확인함} other {세션 {sessionId} 확인함}}} other {세션 {sessionId}}}"
+            "status": "{kind, select, send {{phase, select, running {세션 {sessionId}에 입력을 보내는 중} failed {세션 {sessionId}에 입력을 보내지 못함} canceled {취소됨} done {세션 {sessionId}에 입력을 보냄} other {세션 {sessionId}에 입력을 보냄}}} check {{phase, select, running {세션 {sessionId} 확인 중} failed {세션 {sessionId}을(를) 확인하지 못함} canceled {취소됨} done {세션 {sessionId} 확인함} other {세션 {sessionId} 확인함}}} other {세션 {sessionId}}}",
+            "noSession": {
+              "status": "{kind, select, send {{phase, select, running {세션에 입력을 보내는 중} failed {세션에 입력을 보내지 못함} canceled {취소됨} done {세션에 입력을 보냄} other {세션에 입력을 보냄}}} check {{phase, select, running {세션 확인 중} failed {세션을 확인하지 못함} canceled {취소됨} done {세션 확인함} other {세션 확인함}}} other {세션}}"
+            }
           },
           "output": {
             "title": "출력"
@@ -12744,7 +12724,18 @@
             "failed": {
               "status": "편집 실패"
             },
-            "title": "패치"
+            "title": "패치",
+            "progress": {
+              "named": {
+                "status": "{tool, select, write {{path} 쓰는 중…} other {{path} 편집 중…}}"
+              },
+              "unnamed": {
+                "status": "{tool, select, write {파일 쓰는 중…} other {파일 편집 중…}}"
+              },
+              "patching": {
+                "status": "{count, plural, =0 {파일 패치 중…} one {파일 #개 패치 중…} other {파일 #개 패치 중…}}"
+              }
+            }
           },
           "stopped": {
             "status": "중지됨"
@@ -12859,61 +12850,8 @@
         }
       },
       "preview": {
-        "code": {
-          "headerDescription": "{language} - {lineCount, plural, one {#줄} other {#줄}} · {fileSize}"
-        },
-        "copyButton": {
-          "tooltip": "내용 복사"
-        },
-        "csv": {
-          "footer": "{columnCount, plural, one {#개 열} other {#개 열}} • {rowCount, plural, one {#개 행} other {#개 행}}",
-          "headerDescription": "CSV - {rowCount, plural, one {#개 행} other {#개 행}} • {fileSize}",
-          "rowSeparator": "{count, plural, one {#개 행} other {#개 행}}"
-        },
-        "docx": {
-          "headerDescription": "{count, plural, one {Word 문서 • 단어 #개} other {Word 문서 • 단어 #개}}",
-          "headerDescriptionFallback": "Word 문서",
-          "legacyDocMessage": "이전 .doc 형식은 미리 볼 수 없습니다. 파일을 다운로드하여 확인하세요.",
-          "loadError": {
-            "message": "이 문서를 미리 볼 수 없습니다. 파일을 다운로드하여 확인하세요."
-          }
-        },
-        "downloadButton": {
-          "label": "파일 다운로드",
-          "tooltip": "다운로드"
-        },
         "exceptionTrace": {
           "defaultTitle": "전체 예외 트레이스"
-        },
-        "header": {
-          "fallbackTitle": "문서"
-        },
-        "lineCount": {
-          "label": "{count, plural, one {#줄} other {#줄}}"
-        },
-        "loadError": {
-          "message": "문서를 불러오지 못했습니다."
-        },
-        "pdf": {
-          "iframeTitle": "PDF 뷰어"
-        },
-        "text": {
-          "headerDescription": "{lineCount, plural, one {#줄} other {#줄}} · {fileSize}"
-        },
-        "unsupported": {
-          "message": "이 파일 형식은 미리 보기를 지원하지 않습니다."
-        },
-        "xlsx": {
-          "headerDescription": "스프레드시트 - {count, plural, one {시트 #개} other {시트 #개}}",
-          "parseError": {
-            "message": "이 스프레드시트를 미리 볼 수 없습니다."
-          },
-          "sheetCount": "{count, plural, one {시트 #개} other {시트 #개}}"
-        },
-        "zoomControls": {
-          "level": "{zoom}%",
-          "zoomInTooltip": "확대",
-          "zoomOutTooltip": "축소"
         }
       },
       "share": {
@@ -13060,6 +12998,114 @@
         },
         "selectedCount": {
           "label": "{count, plural, one {파일 #개 선택됨} other {파일 #개 선택됨}}"
+        }
+      }
+    },
+    "filePreview": {
+      "header": {
+        "fallbackTitle": "문서"
+      },
+      "code": {
+        "headerDescription": "{language} - {lineCount, plural, one {#줄} other {#줄}} · {fileSize}"
+      },
+      "text": {
+        "headerDescription": "{lineCount, plural, one {#줄} other {#줄}} · {fileSize}"
+      },
+      "lineCount": {
+        "label": "{count, plural, one {#줄} other {#줄}}"
+      },
+      "wordCount": {
+        "label": "{count, plural, one {단어 #개} other {단어 #개}}"
+      },
+      "copyButton": {
+        "tooltip": "내용 복사"
+      },
+      "downloadButton": {
+        "label": "파일 다운로드",
+        "tooltip": "다운로드"
+      },
+      "retryButton": {
+        "label": "다시 시도"
+      },
+      "error": {
+        "title": "미리보기를 불러올 수 없음",
+        "description": "미리보기를 불러오지 못했습니다. 다시 시도하거나 파일을 다운로드하여 여세요."
+      },
+      "renderError": {
+        "title": "이 파일은 미리 볼 수 없습니다",
+        "description": "여기에서 파일을 표시할 수 없습니다. 파일을 다운로드하여 여세요."
+      },
+      "unsupported": {
+        "title": "이 파일 형식의 미리보기는 현재 지원되지 않습니다",
+        "description": "파일을 다운로드하여 내용을 확인하세요."
+      },
+      "tooLarge": {
+        "title": "파일이 너무 커서 미리볼 수 없음",
+        "description": "여기서는 최대 {size, number} MB의 파일을 미리볼 수 있습니다. 파일을 다운로드하여 여세요."
+      },
+      "spreadsheet": {
+        "headerDescription": "스프레드시트 - {count, plural, one {시트 #개} other {시트 #개}}",
+        "truncated": "미리보기는 {rows, number}행, {columns, number}열, {cells, number}셀로 제한됩니다. 모든 데이터를 보려면 원본을 다운로드하세요.",
+        "malformed": "이 CSV에는 따옴표로 묶인 잘못된 필드가 있습니다. 확인하려면 원본을 다운로드하세요.",
+        "empty": "내용 없음"
+      },
+      "image": {
+        "loading": {
+          "label": "이미지를 불러오는 중..."
+        },
+        "actualSize": {
+          "label": "실제 크기"
+        }
+      },
+      "pdf": {
+        "controls": {
+          "label": "PDF 컨트롤"
+        },
+        "thumbnails": {
+          "toggle": "페이지 썸네일 표시 전환",
+          "label": "페이지 썸네일",
+          "resize": "페이지 썸네일 크기 조정"
+        },
+        "page": {
+          "previous": "이전 페이지",
+          "next": "다음 페이지",
+          "counter": "{current, number} / {total, number}",
+          "preview": "{page, number}페이지 미리보기",
+          "select": "{page, number}페이지로 이동"
+        },
+        "zoom": {
+          "out": "축소",
+          "in": "확대",
+          "label": "확대/축소",
+          "fitWidth": "너비에 맞추기",
+          "fitPage": "페이지에 맞추기"
+        },
+        "error": {
+          "description": "PDF 파일을 불러올 수 없습니다."
+        }
+      },
+      "pptx": {
+        "controls": {
+          "label": "프레젠테이션 컨트롤"
+        },
+        "thumbnails": {
+          "toggle": "슬라이드 썸네일 표시 전환",
+          "resize": "슬라이드 썸네일 크기 조정"
+        },
+        "slides": {
+          "label": "슬라이드"
+        },
+        "previous": {
+          "label": "이전 슬라이드"
+        },
+        "next": {
+          "label": "다음 슬라이드"
+        },
+        "slide": {
+          "counter": "슬라이드 {current} / {total}"
+        },
+        "empty": {
+          "label": "이 프레젠테이션에 슬라이드가 없습니다"
         }
       }
     },
@@ -13400,12 +13446,57 @@
     },
     "publishedFiles": {
       "card": {
-        "updated": {
-          "description": "업데이트된 버전 · {details}"
-        },
         "preview": {
           "ariaLabel": "{name} 미리 보기"
         }
+      },
+      "panel": {
+        "preview": {
+          "ariaLabel": "{name} 미리 보기"
+        }
+      },
+      "viewAllButton": {
+        "label": "파일 {count}개 모두 보기"
+      }
+    },
+    "rightPanel": {
+      "filesTab": {
+        "label": "파일",
+        "description": "이 채팅에서 모델이 게시한 파일",
+        "empty": "이 채팅에는 아직 파일이 없습니다",
+        "tile": {
+          "ariaLabel": "{name} 열기"
+        },
+        "search": {
+          "placeholder": "파일 검색",
+          "empty": "검색과 일치하는 파일이 없습니다"
+        }
+      },
+      "fileTab": {
+        "olderVersion": "<isolate>{name}</isolate> (v{version}/{latest})"
+      },
+      "sourcesTab": {
+        "label": "출처"
+      },
+      "toggleButton": {
+        "label": "패널 표시 전환"
+      },
+      "downloadButton": {
+        "label": "다운로드",
+        "tooltip": "파일 다운로드"
+      },
+      "reloadButton": {
+        "label": "파일 새로 고침",
+        "error": "파일을 다시 불러오지 못했습니다. 다시 시도하세요."
+      },
+      "expandButton": {
+        "label": "패널 확장"
+      },
+      "restoreButton": {
+        "label": "패널 복원"
+      },
+      "resizeHandle": {
+        "label": "패널 크기 조정"
       }
     }
   },
@@ -13681,10 +13772,6 @@
       },
       "lineCount": {
         "label": "{count, plural, one {#줄} other {#줄}}"
-      },
-      "size": {
-        "bytes": "{count}바이트",
-        "kilobytes": "{size} KB"
       },
       "viewFullButton": {
         "tooltip": "전체 텍스트 보기"
@@ -15023,18 +15110,6 @@
       "browser": {
         "label": "앱"
       },
-      "list": {
-        "label": "출력 탭"
-      },
-      "close": {
-        "label": "{name} 닫기"
-      },
-      "reordered": {
-        "label": "탭을 {count}개 중 {position}번째 위치로 이동했습니다"
-      },
-      "open": {
-        "label": "탭 열기"
-      },
       "outputs": {
         "label": "출력"
       }
@@ -15160,8 +15235,7 @@
       "scope": {
         "turn": "턴 {turn, number} 출력",
         "all": "모든 출력"
-      },
-      "unseen": "새 항목 또는 업데이트됨"
+      }
     },
     "turnOutputs": {
       "showAll": "출력 {count}개 모두 보기",
@@ -15230,6 +15304,28 @@
       "description": "이 세션에서는 {names}을(를) 사용할 수 없습니다. 스킬은 {maxSize} 및 파일 {maxFiles, number}개 이내여야 합니다. 필요 없는 스킬을 끄고 공간을 확보하세요.",
       "manage": "스킬 관리",
       "dismiss": "닫기"
+    }
+  },
+  "outputPanel": {
+    "tabStrip": {
+      "list": {
+        "label": "출력 탭"
+      },
+      "close": {
+        "label": "{name} 닫기"
+      },
+      "reordered": {
+        "label": "탭을 {count}개 중 {position}번째 위치로 이동했습니다"
+      },
+      "open": {
+        "label": "탭 열기"
+      }
+    },
+    "tile": {
+      "download": {
+        "label": "다운로드"
+      },
+      "unseen": "새 항목 또는 업데이트됨"
     }
   },
   "knowledge": {
