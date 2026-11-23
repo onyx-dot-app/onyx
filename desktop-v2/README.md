@@ -91,7 +91,14 @@ Linux builds are a preview (see [Windows and Linux](#windows-and-linux)). It liv
   health checks (`GET /api/version` for the API and `GET /` for the web UI, every 5 seconds
   for up to a minute while the page has not finished loading), the main window hides and a small window shows "Can't
   reach <host>" with the reason: no network, DNS, TLS certificate, timeout, connection refused
-  or a 5xx error. It checks again after 2, 4, 8, 15, 30, then every 60 seconds, at once when
+  or a 5xx error. The API check passes only for the Onyx version JSON. Any other answer (a
+  network sign-in page, another site) shows "does not look like an Onyx server", and the
+  web UI's own `/api` route shows that `/api` does not reach the API server. These reasons,
+  and a 5xx error, also replace a page that already loaded. On Linux, a main-window load that
+  WebKitGTK cannot finish (for example, connection refused) shows this window instead of
+  WebKitGTK's error page. If the app's own check passes but the web view still fails (for
+  example, a certificate that only the web view does not trust), the window checks again
+  only on **Retry**. Otherwise it checks again after 2, 4, 8, 15, 30, then every 60 seconds, at once when
   the network comes back, and on **Retry**. When the server answers, the main window loads the
   page again, after the server also answers the session check (`GET /api/me`). A session
   check that fails keeps the window and its backoff. A page that already loaded stays when
@@ -101,8 +108,10 @@ Linux builds are a preview (see [Windows and Linux](#windows-and-linux)). It liv
 - Sign out and **Change server** remove the session on this computer at once. If the server
   cannot be reached to end the session, a dialog says so, and the app tries the server
   sign-out again in the background while it runs. The token stays in memory only: it is not
-  written back to the keychain, so after a quit the server session ends only when it expires. The launcher shows one line for the same errors:
-  "Can't reach <host>. Check your connection." (`src-tauri/src/reachability.rs`).
+  written back to the keychain, so after a quit the server session ends only when it expires. The launcher, onboarding and sign-in show one line for each of the same errors,
+  for example "Can't find <host>. Check the server address." (`src-tauri/src/reachability.rs`).
+- If the HTTP client cannot start (for example, a broken OpenSSL configuration), a dialog
+  says so and the app quits.
 
 Closing the main window keeps the app running in the menu bar; the Dock icon, the tray's
 **Open Onyx** or a second launch brings it back.
@@ -348,7 +357,9 @@ bun run dev
 ```
 
 Point onboarding at any Onyx server v4.2 or later. The default is `http://localhost:3000`. A remote
-server needs `https://`; `http://` works only for a server on this computer.
+server needs `https://`; `http://` works only for a server on this computer: `localhost`, a
+loopback IP address, or on macOS also a `*.localhost` name. Windows and Linux can send
+`*.localhost` names to DNS, so they need `https://` for them.
 
 ## Checks
 

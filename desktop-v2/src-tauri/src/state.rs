@@ -54,10 +54,10 @@ impl Drop for UploadEntry<'_> {
 }
 
 impl AppState {
-    pub fn new(config: ConfigStore, policy: Policy) -> Self {
+    pub fn new(config: ConfigStore, policy: Policy, api: Api) -> Self {
         Self {
             config,
-            api: Api::new(),
+            api,
             policy: Mutex::new(policy),
             token: Mutex::new(None),
             epoch: AtomicU64::new(0),
