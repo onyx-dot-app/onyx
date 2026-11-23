@@ -33,13 +33,16 @@ class VertexCredentialsCache:
                 if cached is not None:
                     return cached
             try:
-                # A failure is not cached, so the next call resolves again.
                 resolved = auth.resolve_credentials()
-            finally:
+            except BaseException:
+                # A failure is not cached, so the next call resolves again.
                 with self._lock:
                     self._resolving.pop(key, None)
+                raise
+            # One step, so a new caller finds either the entry or the lock.
             with self._lock:
                 self._entries[key] = resolved
+                self._resolving.pop(key, None)
                 while len(self._entries) > self._max_entries:
                     self._entries.popitem(last=False)
             return resolved

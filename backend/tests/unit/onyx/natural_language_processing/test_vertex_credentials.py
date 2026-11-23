@@ -125,6 +125,35 @@ def test_concurrent_misses_for_one_key_resolve_once() -> None:
     assert all(result is results[0] for result in results)
 
 
+def test_a_key_is_always_cached_or_in_flight_once_resolving_starts() -> None:
+    cache = VertexCredentialsCache()
+    auth = _auth()
+    key = auth.credentials_key()
+    # (cached, in flight) each time the cache's lock is released.
+    states: list[tuple[bool, bool]] = []
+
+    class RecordingLock:
+        def __init__(self) -> None:
+            self._lock = threading.Lock()
+
+        def __enter__(self) -> None:
+            self._lock.acquire()
+
+        def __exit__(self, *_exc: object) -> None:
+            states.append((key in cache._entries, key in cache._resolving))
+            self._lock.release()
+
+    with (
+        patch.object(cache, "_lock", RecordingLock()),
+        patch(_FROM_INFO, side_effect=_new_credentials),
+    ):
+        cache.resolve(auth)
+
+    in_flight = states.index((False, True))
+    assert (False, False) not in states[in_flight:]
+    assert states[-1] == (True, False)
+
+
 def test_failed_resolve_is_not_cached() -> None:
     cache = VertexCredentialsCache()
     with patch(
