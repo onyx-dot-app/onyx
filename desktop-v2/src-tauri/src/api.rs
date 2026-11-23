@@ -1303,6 +1303,7 @@ mod tests {
     fn send(server: &str) -> bool {
         tauri::async_runtime::block_on(async {
             Api::new()
+                .unwrap()
                 .send_message(server, "token", "chat", "hello", false, &[])
                 .await
                 .is_ok()
