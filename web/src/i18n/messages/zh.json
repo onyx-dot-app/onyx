@@ -15772,7 +15772,8 @@
       "scrollRight": "向右滚动标签"
     },
     "toast": {
-      "moreCount": "还有 {count} 条"
+      "moreCount": "还有 {count} 条",
+      "closeAll": "全部关闭"
     },
     "sidebar": {
       "open": "打开侧边栏",
@@ -15937,6 +15938,27 @@
         "atkinson": "Atkinson Hyperlegible Next",
         "system": "系统",
         "placeholder": "选择字体"
+      },
+      "accessibility": {
+        "title": "无障碍"
+      },
+      "motion": {
+        "title": "动效",
+        "description": "跟随系统的动效设置，或在整个应用中减少动画。",
+        "placeholder": "选择动效设置",
+        "system": "跟随系统",
+        "reduced": "减少"
+      },
+      "popupDismissal": {
+        "title": "通知",
+        "description": "选择通知是自动关闭，还是保留到您手动关闭。",
+        "placeholder": "选择通知何时关闭",
+        "auto_dismiss": "自动关闭",
+        "stay_on_screen": "保留在屏幕上"
+      },
+      "dynamicConversations": {
+        "title": "动态对话",
+        "description": "在滚动浏览长对话时加载和卸载消息。这样可以提升性能，但屏幕阅读器无法访问已卸载的消息。关闭此选项可保持所有消息处于加载状态。"
       }
     },
     "chats": {

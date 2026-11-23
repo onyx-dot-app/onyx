@@ -15772,7 +15772,8 @@
       "scrollRight": "Faire défiler les onglets vers la droite"
     },
     "toast": {
-      "moreCount": "+{count} de plus"
+      "moreCount": "+{count} de plus",
+      "closeAll": "Tout fermer"
     },
     "sidebar": {
       "open": "Ouvrir la barre latérale",
@@ -15937,6 +15938,27 @@
         "atkinson": "Atkinson Hyperlegible Next",
         "system": "Système",
         "placeholder": "Sélectionnez une police"
+      },
+      "accessibility": {
+        "title": "Accessibilité"
+      },
+      "motion": {
+        "title": "Animations",
+        "description": "Suivez le réglage de mouvement de votre système ou réduisez les animations dans toute l'application.",
+        "placeholder": "Sélectionnez un réglage d'animation",
+        "system": "Système",
+        "reduced": "Réduites"
+      },
+      "popupDismissal": {
+        "title": "Affichage des notifications",
+        "description": "Choisissez si les notifications se ferment d'elles-mêmes ou restent affichées jusqu'à ce que vous les fermiez.",
+        "placeholder": "Sélectionnez quand les notifications se ferment",
+        "auto_dismiss": "Fermeture automatique",
+        "stay_on_screen": "Rester à l'écran"
+      },
+      "dynamicConversations": {
+        "title": "Conversations dynamiques",
+        "description": "Charge et décharge les messages lorsque vous faites défiler de longues conversations. Cela améliore les performances, mais les lecteurs d'écran ne peuvent pas accéder aux messages déchargés. Désactivez cette option pour garder tous les messages chargés."
       }
     },
     "chats": {

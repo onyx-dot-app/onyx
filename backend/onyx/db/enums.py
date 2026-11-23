@@ -437,6 +437,21 @@ class ResponseFont(str, PyEnum):
     DEFAULT = "default"
 
 
+class MotionPreference(str, PyEnum):
+    """Follow the OS reduced-motion setting, or always reduce motion. Values
+    match web/src/lib/appearance/preferences.ts."""
+
+    SYSTEM = "system"
+    REDUCED = "reduced"
+
+
+class PopupDismissal(str, PyEnum):
+    """Whether toasts close by themselves or stay until the user closes them."""
+
+    AUTO_DISMISS = "auto_dismiss"
+    STAY_ON_SCREEN = "stay_on_screen"
+
+
 class SupportedLanguage(str, PyEnum):
     EN = "en"
     ES = "es"

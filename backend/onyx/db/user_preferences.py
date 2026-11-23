@@ -13,6 +13,8 @@ from onyx.db.enums import (
     AccountType,
     DefaultAppMode,
     InterfaceFont,
+    MotionPreference,
+    PopupDismissal,
     ResponseFont,
     ThemePreference,
 )
@@ -126,6 +128,9 @@ class UserPreferenceValues(TypedDict, total=False):
     default_app_mode: DefaultAppMode
     interface_font: InterfaceFont
     response_font: ResponseFont
+    motion: MotionPreference
+    popup_dismissal: PopupDismissal
+    dynamic_conversations: bool
     use_memories: bool
     enable_memory_tool: bool
     instructions: str | None

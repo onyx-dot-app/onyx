@@ -15772,7 +15772,8 @@
       "scrollRight": "タブを右にスクロール"
     },
     "toast": {
-      "moreCount": "他 {count} 件"
+      "moreCount": "他 {count} 件",
+      "closeAll": "すべて閉じる"
     },
     "sidebar": {
       "open": "サイドバーを開く",
@@ -15937,6 +15938,27 @@
         "atkinson": "Atkinson Hyperlegible Next",
         "system": "システム",
         "placeholder": "フォントを選択"
+      },
+      "accessibility": {
+        "title": "アクセシビリティ"
+      },
+      "motion": {
+        "title": "モーション",
+        "description": "システムのモーション設定に従うか、アプリ全体でアニメーションを減らします。",
+        "placeholder": "モーション設定を選択",
+        "system": "システム",
+        "reduced": "減らす"
+      },
+      "popupDismissal": {
+        "title": "通知",
+        "description": "通知を自動で閉じるか、閉じるまで表示し続けるかを選択します。",
+        "placeholder": "通知を閉じるタイミングを選択",
+        "auto_dismiss": "自動で閉じる",
+        "stay_on_screen": "画面に表示し続ける"
+      },
+      "dynamicConversations": {
+        "title": "動的な会話",
+        "description": "長い会話をスクロールすると、メッセージを読み込んだり解放したりします。パフォーマンスは向上しますが、解放されたメッセージにはスクリーンリーダーからアクセスできません。すべてのメッセージを読み込んだままにするには、オフにしてください。"
       }
     },
     "chats": {

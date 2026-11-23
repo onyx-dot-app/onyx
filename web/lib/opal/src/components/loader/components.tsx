@@ -75,7 +75,8 @@ const MARK_PATHS = [
 /**
  * Onyx-branded loading mark: rotates a full turn while crossfading between the
  * octagon outline and the diamond logo (2s loop), holding the static outline
- * under `prefers-reduced-motion`. Uses `currentColor`, so `color` themes it.
+ * under reduced motion (the OS setting or `data-motion="reduced"`). Uses
+ * `currentColor`, so `color` themes it.
  * For a full-page loading state with a label, use `PageLoader`.
  */
 function OnyxLoader({ size = 64, color = "border-02" }: OnyxLoaderProps) {

@@ -15772,7 +15772,8 @@
       "scrollRight": "Tabs nach rechts scrollen"
     },
     "toast": {
-      "moreCount": "+{count} weitere"
+      "moreCount": "+{count} weitere",
+      "closeAll": "Alle schließen"
     },
     "sidebar": {
       "open": "Seitenleiste öffnen",
@@ -15937,6 +15938,27 @@
         "atkinson": "Atkinson Hyperlegible Next",
         "system": "System",
         "placeholder": "Schriftart auswählen"
+      },
+      "accessibility": {
+        "title": "Barrierefreiheit"
+      },
+      "motion": {
+        "title": "Bewegung",
+        "description": "Folgen Sie der Bewegungseinstellung Ihres Systems oder reduzieren Sie Animationen in der gesamten App.",
+        "placeholder": "Bewegungseinstellung auswählen",
+        "system": "System",
+        "reduced": "Reduziert"
+      },
+      "popupDismissal": {
+        "title": "Benachrichtigungen",
+        "description": "Legen Sie fest, ob Benachrichtigungen sich selbst schließen oder angezeigt bleiben, bis Sie sie schließen.",
+        "placeholder": "Auswählen, wann Benachrichtigungen schließen",
+        "auto_dismiss": "Automatisch schließen",
+        "stay_on_screen": "Angezeigt lassen"
+      },
+      "dynamicConversations": {
+        "title": "Dynamische Unterhaltungen",
+        "description": "Nachrichten werden beim Scrollen durch lange Unterhaltungen geladen und entladen. Das verbessert die Leistung, aber Screenreader können entladene Nachrichten nicht erreichen. Deaktivieren Sie diese Option, damit alle Nachrichten geladen bleiben."
       }
     },
     "chats": {

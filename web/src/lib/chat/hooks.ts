@@ -27,6 +27,7 @@ import useSWR, { useSWRConfig } from "swr";
 import { useTranslations } from "next-intl";
 import { useShallow } from "zustand/react/shallow";
 import { toast } from "@opal/layouts";
+import { prefersReducedMotion } from "@opal/utils";
 import {
   errorHandlingFetcher,
   errorHandlingFetchWith,
@@ -221,11 +222,8 @@ export function useNudgedCard(requestId: string) {
   useEffect(() => {
     if (nudge === null) return;
     useToolRequestUi.getState().clearNudge(nudge);
-    const reduceMotion = window.matchMedia(
-      "(prefers-reduced-motion: reduce)"
-    ).matches;
     ref.current?.scrollIntoView({
-      behavior: reduceMotion ? "auto" : "smooth",
+      behavior: prefersReducedMotion() ? "auto" : "smooth",
       block: "center",
     });
     // Restart a shake that is still running.

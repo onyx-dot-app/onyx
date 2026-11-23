@@ -21,7 +21,7 @@ import {
 } from "@/app/app/message/multiModel";
 import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import useScreenSize from "@/hooks/useScreenSize";
-import { cn } from "@opal/utils";
+import { cn, prefersReducedMotion } from "@opal/utils";
 import { useSWRConfig } from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 
@@ -129,7 +129,7 @@ export default function MultiModelResponseView({
     if (elRect.bottom < scRect.top || elRect.top > scRect.bottom) {
       scroller.scrollTo({
         top: scroller.scrollTop + elRect.top - scRect.top - 16,
-        behavior: "smooth",
+        behavior: prefersReducedMotion() ? "auto" : "smooth",
       });
     }
   }, [preferredIndexFromTree]);
@@ -433,7 +433,7 @@ export default function MultiModelResponseView({
         const anim = el.animate(
           [{ maxHeight: `${from}px` }, { maxHeight: `${to}px` }],
           {
-            duration: 350,
+            duration: prefersReducedMotion() ? 0 : 350,
             easing: "cubic-bezier(0.2, 0, 0, 1)",
             fill: "forwards",
           }
@@ -524,7 +524,7 @@ export default function MultiModelResponseView({
   useEffect(() => {
     if (layoutKindRef.current === layoutKind) return;
     layoutKindRef.current = layoutKind;
-    if (readOnly || !rootEl) return;
+    if (readOnly || !rootEl || prefersReducedMotion()) return;
     const anim = rootEl.animate([{ opacity: 0.5 }, { opacity: 1 }], {
       duration: 150,
       easing: "ease-out",
@@ -557,7 +557,7 @@ export default function MultiModelResponseView({
   // resizes reposition instantly so crossing the break never plays a slide.
   const [carouselSliding, setCarouselSliding] = useState(false);
   const navToCarouselPos = useCallback((pos: number) => {
-    setCarouselSliding(true);
+    setCarouselSliding(!prefersReducedMotion());
     setCarouselPos(pos);
   }, []);
   // Breaking into the carousel keeps continuity with the wide layout: land on
@@ -714,7 +714,7 @@ export default function MultiModelResponseView({
           style={{
             gap: `${PANEL_GAP}px`,
             transition:
-              selectionEntered || selectionExiting
+              (selectionEntered || selectionExiting) && !prefersReducedMotion()
                 ? "transform 0.45s cubic-bezier(0.2, 0, 0, 1)"
                 : "none",
             transform: trackTransform,
@@ -739,7 +739,8 @@ export default function MultiModelResponseView({
                   width: `${selectionEntered ? finalW : startW}px`,
                   flexShrink: 0,
                   transition:
-                    selectionEntered || selectionExiting
+                    (selectionEntered || selectionExiting) &&
+                    !prefersReducedMotion()
                       ? "width 0.45s cubic-bezier(0.2, 0, 0, 1)"
                       : "none",
                   maxHeight: capped ? preferredPanelHeight : undefined,

@@ -15772,7 +15772,8 @@
       "scrollRight": "Scroll tabs right"
     },
     "toast": {
-      "moreCount": "+{count} more"
+      "moreCount": "+{count} more",
+      "closeAll": "Close all"
     },
     "sidebar": {
       "open": "Open Sidebar",
@@ -15937,6 +15938,27 @@
         "atkinson": "Atkinson Hyperlegible Next",
         "system": "System",
         "placeholder": "Select a font"
+      },
+      "accessibility": {
+        "title": "Accessibility"
+      },
+      "motion": {
+        "title": "Motion",
+        "description": "Follow your system's motion setting, or reduce animations everywhere in the app.",
+        "placeholder": "Select a motion setting",
+        "system": "System",
+        "reduced": "Reduced"
+      },
+      "popupDismissal": {
+        "title": "Notifications",
+        "description": "Choose whether notifications close by themselves or stay until you close them.",
+        "placeholder": "Select when notifications close",
+        "auto_dismiss": "Auto-dismiss",
+        "stay_on_screen": "Stay on screen"
+      },
+      "dynamicConversations": {
+        "title": "Dynamic Conversations",
+        "description": "Load and unload messages as you scroll long conversations. This improves performance, but screen readers can't reach unloaded messages. Turn this off to keep every message loaded."
       }
     },
     "chats": {

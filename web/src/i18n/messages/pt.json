@@ -15772,7 +15772,8 @@
       "scrollRight": "Rolar abas para a direita"
     },
     "toast": {
-      "moreCount": "+{count} mais"
+      "moreCount": "+{count} mais",
+      "closeAll": "Fechar tudo"
     },
     "sidebar": {
       "open": "Abrir barra lateral",
@@ -15937,6 +15938,27 @@
         "atkinson": "Atkinson Hyperlegible Next",
         "system": "Sistema",
         "placeholder": "Selecione uma fonte"
+      },
+      "accessibility": {
+        "title": "Acessibilidade"
+      },
+      "motion": {
+        "title": "Movimento",
+        "description": "Siga a configuração de movimento do seu sistema ou reduza as animações em todo o aplicativo.",
+        "placeholder": "Selecione uma configuração de movimento",
+        "system": "Sistema",
+        "reduced": "Reduzido"
+      },
+      "popupDismissal": {
+        "title": "Notificações",
+        "description": "Escolha se as notificações fecham sozinhas ou ficam na tela até você fechá-las.",
+        "placeholder": "Selecione quando as notificações fecham",
+        "auto_dismiss": "Fechar automaticamente",
+        "stay_on_screen": "Manter na tela"
+      },
+      "dynamicConversations": {
+        "title": "Conversas dinâmicas",
+        "description": "Carrega e descarrega mensagens enquanto você rola conversas longas. Isso melhora o desempenho, mas leitores de tela não conseguem acessar mensagens descarregadas. Desative para manter todas as mensagens carregadas."
       }
     },
     "chats": {

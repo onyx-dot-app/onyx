@@ -123,12 +123,14 @@ from onyx.db.enums import (
     MCPOAuthProviderMode,
     MCPServerStatus,
     MCPTransport,
+    MotionPreference,
     NotificationSeverity,
     PatType,
     Permission,
     PermissionSyncStatus,
     PersonaSharePermission,
     PluginInstallationPolicy,
+    PopupDismissal,
     PortAttemptStatus,
     ProcessingMode,
     QuestionAnsweredVia,
@@ -644,6 +646,31 @@ class UserPreferences(Base):
         nullable=False,
         default=ResponseFont.MATCH,
         server_default=ResponseFont.MATCH.value,
+    )
+    # Accessibility, in Settings > Appearance.
+    motion: Mapped[MotionPreference] = mapped_column(
+        Enum(
+            MotionPreference,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=False,
+        default=MotionPreference.SYSTEM,
+        server_default=MotionPreference.SYSTEM.value,
+    )
+    popup_dismissal: Mapped[PopupDismissal] = mapped_column(
+        Enum(
+            PopupDismissal,
+            native_enum=False,
+            values_callable=lambda x: [e.value for e in x],
+        ),
+        nullable=False,
+        default=PopupDismissal.AUTO_DISMISS,
+        server_default=PopupDismissal.AUTO_DISMISS.value,
+    )
+    # Off keeps every chat message mounted, so screen readers reach them all.
+    dynamic_conversations: Mapped[bool] = mapped_column(
+        Boolean, nullable=False, default=True, server_default="true"
     )
 
     # Memory settings and instructions are in Settings > Chat Preferences.

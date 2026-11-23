@@ -28,3 +28,24 @@
    Use it to keep hover-revealed controls visible on mobile, e.g.
    `opacity-0 group-hover:opacity-100 no-hover:opacity-100`. */
 @custom-variant no-hover (@media (hover: none));
+
+/* Reduced motion applies when the OS asks for it or when the app sets
+   `data-motion="reduced"` on <html> (see `prefersReducedMotion` in utils.ts).
+   These replace Tailwind's built-in variants, so `motion-reduce:` and
+   `motion-safe:` classes follow both. Stylesheets nest
+   `@variant motion-reduce { ... }` inside a rule for the same effect. */
+@custom-variant motion-reduce {
+  @media (prefers-reduced-motion: reduce) {
+    @slot;
+  }
+  :where(:root[data-motion="reduced"]) & {
+    @slot;
+  }
+}
+@custom-variant motion-safe {
+  @media (prefers-reduced-motion: no-preference) {
+    :where(:root:not([data-motion="reduced"])) & {
+      @slot;
+    }
+  }
+}

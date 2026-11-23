@@ -1,7 +1,12 @@
 import { Agent } from "@/lib/agents/types";
 import type { ReasoningEffortOverride } from "@/lib/languageModels/types";
 import type { Locale } from "@/i18n/config";
-import type { InterfaceFont, ResponseFont } from "@/lib/appearance/preferences";
+import type {
+  InterfaceFont,
+  Motion,
+  PopupDismissal,
+  ResponseFont,
+} from "@/lib/appearance/preferences";
 import type { Credential } from "@/lib/credentials/types";
 import type { Connector } from "@/lib/connectors/types";
 import { ConnectorCredentialPairStatus } from "@/lib/connectors/types";
@@ -36,6 +41,9 @@ export interface UserPreferences {
   default_app_mode: "AUTO" | "CHAT" | "SEARCH";
   interface_font: InterfaceFont;
   response_font: ResponseFont;
+  motion: Motion;
+  popup_dismissal: PopupDismissal;
+  dynamic_conversations: boolean;
   // Input preferences
   paste_as_tile?: boolean;
   interrupt_on_send?: boolean;

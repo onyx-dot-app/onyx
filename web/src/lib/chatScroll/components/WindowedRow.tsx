@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useEffect, useRef, useState } from "react";
+import React, { useContext, useEffect, useRef, useState } from "react";
 import { useOptionalScrollContainer } from "@/lib/chatScroll/components/ScrollContainerContext";
+import { DynamicConversationsContext } from "@/providers/AppearancePreferencesProvider";
 
 /** Placeholder height of a row that has never been measured. */
 export const ESTIMATED_ROW_HEIGHT_PX = 320;
@@ -29,8 +30,9 @@ export interface WindowedRowProps {
  * native scroll anchoring (`overflow-anchor`) do this themselves. In others,
  * the row moves the scroll position by the same amount.
  *
- * A row that holds focus stays mounted. Outside a ChatScrollContainer, the
- * row always renders its content.
+ * A row that holds focus stays mounted. Outside a ChatScrollContainer, or
+ * with dynamic conversations off (`DynamicConversationsContext`), the row
+ * always renders its content.
  */
 // The rows of each list (keyed by its height cache) whose content is mounted.
 // A row that remounts, such as when an older page regroups the turns, starts
@@ -55,6 +57,7 @@ export default function WindowedRow({
   children,
 }: WindowedRowProps) {
   const scrollContainer = useOptionalScrollContainer();
+  const dynamicConversations = useContext(DynamicConversationsContext);
   const scrollContainerRef = scrollContainer?.scrollContainerRef;
   const observeNearViewport = scrollContainer?.observeNearViewport;
   const rowRef = useRef<HTMLDivElement>(null);
@@ -65,7 +68,8 @@ export default function WindowedRow({
   const isIntersectingRef = useRef(startsMounted);
   const [nearViewport, setNearViewport] = useState(startsMounted);
 
-  const mounted = !scrollContainer || pinned || nearViewport;
+  const mounted =
+    !scrollContainer || !dynamicConversations || pinned || nearViewport;
 
   // An unmount keeps the record, so the row's next mount starts mounted.
   useEffect(() => {
@@ -75,14 +79,14 @@ export default function WindowedRow({
 
   useEffect(() => {
     const row = rowRef.current;
-    if (!observeNearViewport || !row) return;
+    if (!observeNearViewport || !dynamicConversations || !row) return;
 
     return observeNearViewport(row, (near) => {
       isIntersectingRef.current = near;
       if (near) setNearViewport(true);
       else if (!hasFocusRef.current) setNearViewport(false);
     });
-  }, [observeNearViewport]);
+  }, [observeNearViewport, dynamicConversations]);
 
   useEffect(() => {
     const root = scrollContainerRef?.current;
