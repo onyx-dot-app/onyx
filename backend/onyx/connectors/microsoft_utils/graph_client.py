@@ -15,6 +15,7 @@ from collections.abc import Callable
 from typing import Any
 
 import requests
+from office365.runtime.client_object import ClientObject
 from office365.runtime.client_request import ClientRequestException
 from office365.runtime.queries.client_query import ClientQuery
 
@@ -104,11 +105,11 @@ def log_and_raise_for_status(response: requests.Response) -> None:
 
 
 def sleep_and_retry(
-    query_obj: ClientQuery,
+    query_obj: ClientQuery | ClientObject,
     method_name: str,
     max_retries: int = 3,
     retryable_statuses: frozenset[int] = RETRYABLE_HTTP_STATUSES,
-    rebuild: Callable[[], ClientQuery] | None = None,
+    rebuild: Callable[[], ClientQuery | ClientObject] | None = None,
 ) -> Any:
     """
     Execute an office365 SDK query with retry logic for rate limiting and

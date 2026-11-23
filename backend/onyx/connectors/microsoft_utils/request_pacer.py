@@ -14,6 +14,7 @@ the User-Agent.
 """
 
 import re
+import weakref
 from collections.abc import Callable
 from enum import Enum
 
@@ -143,9 +144,11 @@ class MicrosoftRequestPacer:
 
 
 PacerSource = Callable[[], MicrosoftRequestPacer | None]
-# The client keeps its own pacer source, so that a retry loop can report a
-# refusal from the client and the source lives only as long as the client.
-_PACER_SOURCE_ATTRIBUTE = "_onyx_pacer_source"
+# The pacer source of each client, so that a retry loop can report a refusal
+# from the client. A source lives only as long as its client.
+_PACER_SOURCES: weakref.WeakKeyDictionary[ClientRuntimeContext, PacerSource] = (
+    weakref.WeakKeyDictionary()
+)
 
 
 def prepare_sdk_client[C: ClientRuntimeContext](
@@ -166,21 +169,21 @@ def prepare_sdk_client[C: ClientRuntimeContext](
             pacer.acquire(call or graph_call_type(request.url))
 
     client.before_execute(before_request, once=False)
-    vars(client)[_PACER_SOURCE_ATTRIBUTE] = get_pacer
+    _PACER_SOURCES[client] = get_pacer
     return client
 
 
-def sdk_client_pacer(client: object) -> MicrosoftRequestPacer | None:
+def sdk_client_pacer(client: ClientRuntimeContext) -> MicrosoftRequestPacer | None:
     """The pacer of a client from ``prepare_sdk_client``, if it has one."""
-    if not isinstance(client, ClientRuntimeContext):
-        return None
-    get_pacer = vars(client).get(_PACER_SOURCE_ATTRIBUTE)
-    return get_pacer() if callable(get_pacer) else None
+    get_pacer = _PACER_SOURCES.get(client)
+    return get_pacer() if get_pacer is not None else None
 
 
-def sdk_query_pacer(query: object) -> MicrosoftRequestPacer | None:
+def sdk_query_pacer(query: ClientQuery | ClientObject) -> MicrosoftRequestPacer | None:
     """The pacer of the client that an SDK query runs on, if the client is
     from ``prepare_sdk_client`` and has one."""
-    if not isinstance(query, (ClientQuery, ClientObject)):
+    # The SDK does not type the context.
+    context = query.context
+    if not isinstance(context, ClientRuntimeContext):
         return None
-    return sdk_client_pacer(query.context)
+    return sdk_client_pacer(context)
