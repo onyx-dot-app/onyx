@@ -5768,9 +5768,6 @@
       "connectedModels": {
         "title": "Verfügbare Modelle"
       },
-      "deselectError": {
-        "message": "Auswahl konnte nicht aufgehoben werden"
-      },
       "disconnectError": {
         "message": "Trennung fehlgeschlagen"
       },
@@ -5942,13 +5939,11 @@
       "setDefaultError": {
         "message": "Der Standard konnte nicht festgelegt werden"
       },
-      "enable": {
-        "title": "Bildgenerierung aktivieren",
-        "description": "Chat und Agenten können Bilder mit dem Standardmodell erstellen.",
-        "disabledTooltip": "Aktivieren Sie die Bildgenerierung, um ein Modell auszuwählen.",
-        "noDefaultWarning": {
-          "title": "Es ist kein Standardmodell festgelegt. Wählen Sie unten ein Modell aus, um Bilder zu erstellen."
-        }
+      "noDefaultWarning": {
+        "title": "Wählen Sie ein Modell aus, um die Bildgenerierung zu aktivieren."
+      },
+      "deselectError": {
+        "message": "Auswahl konnte nicht aufgehoben werden"
       }
     },
     "indexSettings": {

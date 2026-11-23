@@ -39,8 +39,7 @@ A provider with no model that can generate images, such as Anthropic, does not s
   </Step>
 
   <Step title="Connect a Model">
-    Open **Admin Panel → Image Generation** and turn on **Enable Image Generation**. While it is off,
-    the rest of the page is disabled. Under **Add Models**, click **Connect** on a model.
+    Open **Admin Panel → Image Generation**. Under **Add Models**, click **Connect** on a model.
     The model shows under **Available Models**. If no default model is set, the model becomes the default.
 
     <img className="rounded-image" src="/assets/admins/actions/image_generation_overview.webp" alt="Image Generation page in the Onyx Admin Panel"/>
@@ -54,7 +53,8 @@ A provider with no model that can generate images, such as Anthropic, does not s
     and its card says **Current Default**. **Add Models** only connects and disconnects models:
     a connected model's card there says **Connected**, and clicking it disconnects the model.
 
-    - To turn image generation off, turn off **Enable Image Generation**. This clears the default model.
+    - To clear the default, click its card again. Image generation is on only while a model is the default.
+    With no default model, the page shows a notice at the top to select one.
     - If you disconnect the current default model, the dialog asks you to choose a replacement default or
     **No Default**, which turns image generation off.
     - Disconnecting a model does not disconnect its LLM provider.

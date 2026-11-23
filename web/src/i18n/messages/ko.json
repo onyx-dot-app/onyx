@@ -5768,9 +5768,6 @@
       "connectedModels": {
         "title": "사용 가능한 모델"
       },
-      "deselectError": {
-        "message": "선택 해제에 실패했습니다"
-      },
       "disconnectError": {
         "message": "연결 해제에 실패했습니다"
       },
@@ -5942,13 +5939,11 @@
       "setDefaultError": {
         "message": "기본값 설정에 실패했습니다"
       },
-      "enable": {
-        "title": "이미지 생성 사용",
-        "description": "채팅과 에이전트가 기본 모델로 이미지를 생성할 수 있습니다.",
-        "disabledTooltip": "모델을 선택하려면 이미지 생성을 켜세요.",
-        "noDefaultWarning": {
-          "title": "기본 모델이 설정되지 않았습니다. 이미지를 생성하려면 아래에서 모델을 선택하세요."
-        }
+      "noDefaultWarning": {
+        "title": "이미지 생성을 사용하려면 모델을 선택하세요."
+      },
+      "deselectError": {
+        "message": "선택 해제에 실패했습니다"
       }
     },
     "indexSettings": {

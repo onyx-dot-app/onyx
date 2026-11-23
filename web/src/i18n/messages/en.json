@@ -5768,9 +5768,6 @@
       "connectedModels": {
         "title": "Available Models"
       },
-      "deselectError": {
-        "message": "Failed to deselect"
-      },
       "disconnectError": {
         "message": "Failed to disconnect"
       },
@@ -5942,13 +5939,11 @@
       "setDefaultError": {
         "message": "Failed to set default"
       },
-      "enable": {
-        "title": "Enable Image Generation",
-        "description": "Let chat and agents generate images with the default model.",
-        "disabledTooltip": "Turn on image generation to choose a model.",
-        "noDefaultWarning": {
-          "title": "No default model is set. Choose one below to generate images."
-        }
+      "noDefaultWarning": {
+        "title": "Select a model to enable image generation."
+      },
+      "deselectError": {
+        "message": "Failed to deselect"
       }
     },
     "indexSettings": {

@@ -5768,9 +5768,6 @@
       "connectedModels": {
         "title": "Modelos disponibles"
       },
-      "deselectError": {
-        "message": "No se pudo anular la selección"
-      },
       "disconnectError": {
         "message": "No se pudo desconectar"
       },
@@ -5942,13 +5939,11 @@
       "setDefaultError": {
         "message": "No se pudo establecer como predeterminado"
       },
-      "enable": {
-        "title": "Activar generación de imágenes",
-        "description": "Permite que el chat y los agentes generen imágenes con el modelo predeterminado.",
-        "disabledTooltip": "Activa la generación de imágenes para elegir un modelo.",
-        "noDefaultWarning": {
-          "title": "No hay ningún modelo predeterminado. Elige uno abajo para generar imágenes."
-        }
+      "noDefaultWarning": {
+        "title": "Selecciona un modelo para activar la generación de imágenes."
+      },
+      "deselectError": {
+        "message": "No se pudo anular la selección"
       }
     },
     "indexSettings": {

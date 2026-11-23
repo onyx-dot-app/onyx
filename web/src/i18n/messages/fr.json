@@ -5768,9 +5768,6 @@
       "connectedModels": {
         "title": "Modèles disponibles"
       },
-      "deselectError": {
-        "message": "Échec de la désélection"
-      },
       "disconnectError": {
         "message": "Échec de la déconnexion"
       },
@@ -5942,13 +5939,11 @@
       "setDefaultError": {
         "message": "Échec de la définition du modèle par défaut"
       },
-      "enable": {
-        "title": "Activer la génération d'images",
-        "description": "Permet au chat et aux agents de générer des images avec le modèle par défaut.",
-        "disabledTooltip": "Activez la génération d'images pour choisir un modèle.",
-        "noDefaultWarning": {
-          "title": "Aucun modèle par défaut n'est défini. Choisissez-en un ci-dessous pour générer des images."
-        }
+      "noDefaultWarning": {
+        "title": "Sélectionnez un modèle pour activer la génération d'images."
+      },
+      "deselectError": {
+        "message": "Échec de la désélection"
       }
     },
     "indexSettings": {

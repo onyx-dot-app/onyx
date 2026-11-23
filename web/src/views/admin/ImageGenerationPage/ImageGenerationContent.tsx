@@ -3,7 +3,6 @@
 import { PageLoader } from "@opal/loaders";
 import { useState, useMemo, useEffect, useCallback } from "react";
 import { useTranslations } from "next-intl";
-import { Disabled } from "@opal/core";
 import useSWR from "swr";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import { errorHandlingFetcher } from "@/lib/fetcher";
@@ -22,11 +21,9 @@ import {
 } from "@/views/admin/ImageGenerationPage/svc";
 import {
   Button,
-  Card,
   Collapsible,
   Divider,
   InputSingleSelect,
-  InputSwitch,
   MessageCard,
   Presence,
   SelectCard,
@@ -41,7 +38,6 @@ import {
   ContentAction,
   ReverseContent,
   IllustrationContent,
-  InputHorizontal,
   Section,
   toast,
 } from "@opal/layouts";
@@ -222,8 +218,6 @@ export default function ImageGenerationContent() {
     errorHandlingFetcher
   );
   const [linkingModelKey, setLinkingModelKey] = useState<string | null>(null);
-  // Turned on with no default model yet; see `enabled`.
-  const [turnedOn, setTurnedOn] = useState(false);
 
   const modal = useCreateModal();
   const [activeProvider, setActiveProvider] = useState<ImageProvider | null>(
@@ -318,20 +312,6 @@ export default function ImageGenerationContent() {
     }
   };
 
-  const handleDeselect = async (imageProviderId: string | null) => {
-    const config = configs.find((c) => c.image_provider_id === imageProviderId);
-    if (config) {
-      try {
-        await unsetDefaultImageGenerationConfig(config.image_provider_id);
-        refetchConfigs();
-      } catch (error) {
-        toast.error(
-          error instanceof Error ? error.message : t("deselectError.message")
-        );
-      }
-    }
-  };
-
   // Only the default asks first: it needs a replacement default (or none).
   // Any other model disconnects at once.
   const openDisconnect = async (config: ImageGenerationConfigView) => {
@@ -354,6 +334,17 @@ export default function ImageGenerationContent() {
     });
     setReplacementProviderId(null);
     disconnectModal.toggle(true);
+  };
+
+  const handleDeselect = async (imageProviderId: string) => {
+    try {
+      await unsetDefaultImageGenerationConfig(imageProviderId);
+      refetchConfigs();
+    } catch (error) {
+      toast.error(
+        error instanceof Error ? error.message : t("deselectError.message")
+      );
+    }
   };
 
   const handleEdit = (provider: ImageProvider) => {
@@ -447,10 +438,16 @@ export default function ImageGenerationContent() {
     const gone = shownConfigs.configs.filter(
       (c) => !currentIds.has(c.image_provider_id)
     );
-    setLeavingConfigs((leaving) => [
-      ...leaving.filter((c) => !currentIds.has(c.image_provider_id)),
-      ...gone,
-    ]);
+    // With none left, the whole section leaves with the last card in it
+    // (the slot swap below), so no card leaves on its own.
+    setLeavingConfigs((leaving) =>
+      configs.length === 0
+        ? []
+        : [
+            ...leaving.filter((c) => !currentIds.has(c.image_provider_id)),
+            ...gone,
+          ]
+    );
     setShownConfigs({ key: configIdsKey, configs });
     // A model's ID is the same each time it is connected, so one that left
     // animates in when it is connected again.
@@ -480,20 +477,6 @@ export default function ImageGenerationContent() {
     return <PageLoader />;
   }
 
-  // Image generation is on while a model is the default. Turning it on with
-  // no default makes the first connected model the default; with none
-  // connected yet, the first model connected becomes it.
-  const enabled = defaultConfig !== undefined || turnedOn;
-  const handleEnabledChange = async (on: boolean) => {
-    setTurnedOn(on);
-    const first = configs[0];
-    if (on && !defaultConfig && first) {
-      await handleSelect(first.image_provider_id);
-    } else if (!on && defaultConfig) {
-      await handleDeselect(defaultConfig.image_provider_id);
-    }
-  };
-
   const noDefaultOption = {
     value: NO_DEFAULT_VALUE,
     title: t("disconnectModal.noDefaultOption.label"),
@@ -503,205 +486,209 @@ export default function ImageGenerationContent() {
 
   return (
     <>
-      <Card border="solid" rounding={4}>
-        <Section gap={2} height="fit" alignItems="stretch">
-          <InputHorizontal
-            title={t("enable.title")}
-            description={t("enable.description")}
-            withLabel="image-generation-enabled"
-          >
-            <InputSwitch
-              id="image-generation-enabled"
-              checked={enabled}
-              onCheckedChange={(on) => void handleEnabledChange(on)}
-            />
-          </InputHorizontal>
-          {/* On, but nothing generates images until a model is the default. */}
-          {enabled && !defaultConfig && (
-            <MessageCard
-              variant="warning"
-              title={t("enable.noDefaultWarning.title")}
-            />
-          )}
-        </Section>
-      </Card>
+      {connectedDeprecatedProviders.map((provider) => (
+        <MessageCard
+          key={provider.image_provider_id}
+          variant="warning"
+          title={t("retiredModelWarning.title", { title: provider.title })}
+          description={t("retiredModelWarning.description", {
+            title: provider.title,
+          })}
+        />
+      ))}
 
-      {/* Everything below works only while image generation is on. */}
-      <Disabled
-        disabled={!enabled}
-        tooltip={t("enable.disabledTooltip")}
-        // The section is page-tall: the tooltip stays level with the pointer.
-        tooltipAlign="follow"
-      >
-        <Section gap={8} height="fit" alignItems="stretch">
-          {connectedDeprecatedProviders.map((provider) => (
-            <MessageCard
-              key={provider.image_provider_id}
-              variant="warning"
-              title={t("retiredModelWarning.title", { title: provider.title })}
-              description={t("retiredModelWarning.description", {
-                title: provider.title,
-              })}
-            />
-          ))}
-
-          {listedConfigs.length > 0 && (
-            <>
-              <Section
-                gap={3}
-                height="fit"
-                alignItems="stretch"
-                justifyContent="start"
+      {/* No gap here: each part below carries the space after it, inside
+          its animation, so the space opens and closes with it. */}
+      <Section gap={0} height="fit" alignItems="stretch">
+        {/* Available Models, or with none connected, the notice in its
+            place. The section leaves whole, with the last card in it. */}
+        <Presence.Swap swapKey={configs.length > 0 ? "models" : "notice"}>
+          {configs.length > 0 ? (
+            <Section gap={0} height="fit" alignItems="stretch">
+              {/* Image generation is on while a model is the default. */}
+              <Presence
+                show={!defaultConfig && configs.length > 0}
+                appear={false}
+                grow
               >
-                <Content
-                  font="main-content-emphasis"
-                  title={t("connectedModels.title")}
-                />
-                <Section gap={2} height="fit" alignItems="stretch">
-                  {listedConfigs.map((config) => {
-                    const imageProviderId = config.image_provider_id;
-                    const legacyProvider = config.llm_provider_owned
-                      ? legacyProviderById.get(imageProviderId)
-                      : undefined;
-                    const title = configTitle(config);
-                    const providerName =
-                      config.llm_provider_name ?? config.llm_provider_type;
-                    return (
-                      <Presence
-                        key={imageProviderId}
-                        show={!leavingIds.has(imageProviderId)}
-                        appear={
-                          initialConfigIds !== null &&
-                          !initialConfigIds.has(imageProviderId)
-                        }
-                        grow
-                        onExited={() =>
-                          setLeavingConfigs((leaving) =>
-                            leaving.filter(
-                              (c) => c.image_provider_id !== imageProviderId
-                            )
-                          )
-                        }
-                      >
-                        <ProviderCard
-                          icon={getModelIcon(
-                            config.llm_provider_type,
-                            config.model_name
-                          )}
-                          title={title}
-                          description={
-                            legacyProvider
-                              ? t(legacyProvider.descriptionKey)
-                              : providerName
-                          }
-                          // Connected, or the default, as the Web Search page shows its providers.
-                          // Only the switch turns image generation off, so the default has no
-                          // deselect.
-                          status={config.is_default ? "selected" : "connected"}
-                          aria-label={
-                            config.llm_provider_owned
-                              ? `image-gen-provider-${imageProviderId}`
-                              : `image-gen-model-${config.llm_provider_id}-${config.model_name}`
-                          }
-                          onSelect={() => void handleSelect(imageProviderId)}
-                          onDisconnect={() => void openDisconnect(config)}
-                          disconnectModalOpen={
-                            disconnectModal.isOpen &&
-                            disconnectProvider?.image_provider_id ===
-                              imageProviderId
-                          }
-                          onEdit={
-                            legacyProvider
-                              ? () => handleEdit(legacyProvider)
-                              : undefined
-                          }
-                        />
-                      </Presence>
-                    );
-                  })}
-                </Section>
-              </Section>
-              <Divider paddingParallel={0} paddingPerpendicular={0} />
-            </>
-          )}
-
-          {llmProvidersError ? (
-            <MessageCard variant="error" title={t("loadError.message")} />
-          ) : (
-            <Section
-              gap={3}
-              height="fit"
-              alignItems="stretch"
-              justifyContent="start"
-            >
-              <Content
-                font="main-content-emphasis"
-                title={t("availableModels.title")}
-                description={t("availableModels.description")}
-              />
-              {llmProviders.length === 0 ? (
-                <IllustrationContent
-                  illustration={SvgEmpty}
-                  title={t("noImageModels.title")}
-                  description={t("noImageModels.description")}
-                />
-              ) : (
+                <div className="pb-8">
+                  <MessageCard
+                    variant="info"
+                    title={t("noDefaultWarning.title")}
+                  />
+                </div>
+              </Presence>
+              <div className="pb-8">
                 <Section gap={8} height="fit" alignItems="stretch">
-                  {llmProviders.map((llmProvider) => {
-                    const providerName =
-                      llmProvider.llm_provider_name ?? llmProvider.provider;
-                    return (
-                      <Collapsible
-                        key={`llm-${llmProvider.llm_provider_id}`}
-                        title={providerName}
-                        font="main-ui-action"
-                        titleColor="text-03"
-                        gapping={2}
-                      >
-                        <CardGrid>
-                          {llmProvider.models.map((model) => {
-                            const title = linkedModelTitle(model);
-                            return (
-                              <AvailableModelCard
-                                key={model.name}
+                  <Section
+                    gap={3}
+                    height="fit"
+                    alignItems="stretch"
+                    justifyContent="start"
+                  >
+                    <Content
+                      font="main-content-emphasis"
+                      title={t("connectedModels.title")}
+                    />
+                    {listedConfigs.length > 0 && (
+                      <Section gap={2} height="fit" alignItems="stretch">
+                        {listedConfigs.map((config) => {
+                          const imageProviderId = config.image_provider_id;
+                          const legacyProvider = config.llm_provider_owned
+                            ? legacyProviderById.get(imageProviderId)
+                            : undefined;
+                          const title = configTitle(config);
+                          const providerName =
+                            config.llm_provider_name ??
+                            config.llm_provider_type;
+                          return (
+                            <Presence
+                              key={imageProviderId}
+                              show={!leavingIds.has(imageProviderId)}
+                              appear={
+                                initialConfigIds !== null &&
+                                !initialConfigIds.has(imageProviderId)
+                              }
+                              grow
+                              onExited={() =>
+                                setLeavingConfigs((leaving) =>
+                                  leaving.filter(
+                                    (c) =>
+                                      c.image_provider_id !== imageProviderId
+                                  )
+                                )
+                              }
+                            >
+                              <ProviderCard
                                 icon={getModelIcon(
-                                  llmProvider.provider,
-                                  model.name
+                                  config.llm_provider_type,
+                                  config.model_name
                                 )}
                                 title={title}
                                 description={
-                                  title === model.name
-                                    ? providerName
-                                    : model.name
+                                  legacyProvider
+                                    ? t(legacyProvider.descriptionKey)
+                                    : providerName
                                 }
-                                // Not image-gen-model-…: a connected model's card
-                                // under Available Models has that name.
-                                ariaLabel={`image-gen-available-${llmProvider.llm_provider_id}-${model.name}`}
-                                connected={model.image_provider_id !== null}
-                                onDisconnect={() => {
-                                  const config = configs.find(
-                                    (c) =>
-                                      c.image_provider_id ===
-                                      model.image_provider_id
-                                  );
-                                  if (config) void openDisconnect(config);
-                                }}
-                                onConnect={() =>
-                                  void handleLink(llmProvider, model)
+                                // Connected, or the default, as the Web Search page
+                                // shows its providers. A click sets or clears the default.
+                                status={
+                                  config.is_default ? "selected" : "connected"
+                                }
+                                aria-label={
+                                  config.llm_provider_owned
+                                    ? `image-gen-provider-${imageProviderId}`
+                                    : `image-gen-model-${config.llm_provider_id}-${config.model_name}`
+                                }
+                                onSelect={() =>
+                                  void handleSelect(imageProviderId)
+                                }
+                                onDeselect={() =>
+                                  void handleDeselect(imageProviderId)
+                                }
+                                onDisconnect={() => void openDisconnect(config)}
+                                disconnectModalOpen={
+                                  disconnectModal.isOpen &&
+                                  disconnectProvider?.image_provider_id ===
+                                    imageProviderId
+                                }
+                                onEdit={
+                                  legacyProvider
+                                    ? () => handleEdit(legacyProvider)
+                                    : undefined
                                 }
                               />
-                            );
-                          })}
-                        </CardGrid>
-                      </Collapsible>
-                    );
-                  })}
+                            </Presence>
+                          );
+                        })}
+                      </Section>
+                    )}
+                  </Section>
+                  <Divider paddingParallel={0} paddingPerpendicular={0} />
                 </Section>
-              )}
+              </div>
             </Section>
+          ) : (
+            <div className="pb-8">
+              <MessageCard variant="info" title={t("noDefaultWarning.title")} />
+            </div>
           )}
-        </Section>
-      </Disabled>
+        </Presence.Swap>
+
+        {llmProvidersError ? (
+          <MessageCard variant="error" title={t("loadError.message")} />
+        ) : (
+          <Section
+            gap={3}
+            height="fit"
+            alignItems="stretch"
+            justifyContent="start"
+          >
+            <Content
+              font="main-content-emphasis"
+              title={t("availableModels.title")}
+              description={t("availableModels.description")}
+            />
+            {llmProviders.length === 0 ? (
+              <IllustrationContent
+                illustration={SvgEmpty}
+                title={t("noImageModels.title")}
+                description={t("noImageModels.description")}
+              />
+            ) : (
+              <Section gap={8} height="fit" alignItems="stretch">
+                {llmProviders.map((llmProvider) => {
+                  const providerName =
+                    llmProvider.llm_provider_name ?? llmProvider.provider;
+                  return (
+                    <Collapsible
+                      key={`llm-${llmProvider.llm_provider_id}`}
+                      title={providerName}
+                      font="main-ui-action"
+                      titleColor="text-03"
+                      gapping={2}
+                    >
+                      <CardGrid>
+                        {llmProvider.models.map((model) => {
+                          const title = linkedModelTitle(model);
+                          return (
+                            <AvailableModelCard
+                              key={model.name}
+                              icon={getModelIcon(
+                                llmProvider.provider,
+                                model.name
+                              )}
+                              title={title}
+                              description={
+                                title === model.name ? providerName : model.name
+                              }
+                              // Not image-gen-model-…: a connected model's card
+                              // under Available Models has that name.
+                              ariaLabel={`image-gen-available-${llmProvider.llm_provider_id}-${model.name}`}
+                              connected={model.image_provider_id !== null}
+                              onDisconnect={() => {
+                                const config = configs.find(
+                                  (c) =>
+                                    c.image_provider_id ===
+                                    model.image_provider_id
+                                );
+                                if (config) void openDisconnect(config);
+                              }}
+                              onConnect={() =>
+                                void handleLink(llmProvider, model)
+                              }
+                            />
+                          );
+                        })}
+                      </CardGrid>
+                    </Collapsible>
+                  );
+                })}
+              </Section>
+            )}
+          </Section>
+        )}
+      </Section>
 
       <disconnectModal.Provider>
         {disconnectProvider && (

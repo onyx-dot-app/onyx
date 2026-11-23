@@ -5768,9 +5768,6 @@
       "connectedModels": {
         "title": "利用可能なモデル"
       },
-      "deselectError": {
-        "message": "選択を解除できませんでした"
-      },
       "disconnectError": {
         "message": "接続を解除できませんでした"
       },
@@ -5942,13 +5939,11 @@
       "setDefaultError": {
         "message": "デフォルトに設定できませんでした"
       },
-      "enable": {
-        "title": "画像生成を有効にする",
-        "description": "チャットとエージェントがデフォルトモデルで画像を生成できるようにします。",
-        "disabledTooltip": "モデルを選ぶには、画像生成を有効にしてください。",
-        "noDefaultWarning": {
-          "title": "デフォルトモデルが設定されていません。画像を生成するには、下でモデルを選んでください。"
-        }
+      "noDefaultWarning": {
+        "title": "画像生成を有効にするには、モデルを選択してください。"
+      },
+      "deselectError": {
+        "message": "選択を解除できませんでした"
       }
     },
     "indexSettings": {

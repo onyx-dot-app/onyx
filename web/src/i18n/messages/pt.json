@@ -5768,9 +5768,6 @@
       "connectedModels": {
         "title": "Modelos disponíveis"
       },
-      "deselectError": {
-        "message": "Falha ao desmarcar"
-      },
       "disconnectError": {
         "message": "Falha ao desconectar"
       },
@@ -5942,13 +5939,11 @@
       "setDefaultError": {
         "message": "Falha ao definir o padrão"
       },
-      "enable": {
-        "title": "Ativar geração de imagens",
-        "description": "Permite que o chat e os agentes gerem imagens com o modelo padrão.",
-        "disabledTooltip": "Ative a geração de imagens para escolher um modelo.",
-        "noDefaultWarning": {
-          "title": "Nenhum modelo padrão está definido. Escolha um abaixo para gerar imagens."
-        }
+      "noDefaultWarning": {
+        "title": "Selecione um modelo para ativar a geração de imagens."
+      },
+      "deselectError": {
+        "message": "Falha ao desmarcar"
       }
     },
     "indexSettings": {

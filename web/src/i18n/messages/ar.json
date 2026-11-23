@@ -5768,9 +5768,6 @@
       "connectedModels": {
         "title": "النماذج المتاحة"
       },
-      "deselectError": {
-        "message": "فشل إلغاء التحديد"
-      },
       "disconnectError": {
         "message": "فشل قطع الاتصال"
       },
@@ -5942,13 +5939,11 @@
       "setDefaultError": {
         "message": "فشل تعيين الافتراضي"
       },
-      "enable": {
-        "title": "تفعيل إنشاء الصور",
-        "description": "يتيح للدردشة والوكلاء إنشاء الصور باستخدام النموذج الافتراضي.",
-        "disabledTooltip": "فعّل إنشاء الصور لاختيار نموذج.",
-        "noDefaultWarning": {
-          "title": "لم يتم تعيين نموذج افتراضي. اختر نموذجًا أدناه لإنشاء الصور."
-        }
+      "noDefaultWarning": {
+        "title": "اختر نموذجًا لتفعيل إنشاء الصور."
+      },
+      "deselectError": {
+        "message": "فشل إلغاء التحديد"
       }
     },
     "indexSettings": {

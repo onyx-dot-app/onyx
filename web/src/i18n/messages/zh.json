@@ -5768,9 +5768,6 @@
       "connectedModels": {
         "title": "可用模型"
       },
-      "deselectError": {
-        "message": "取消选择失败"
-      },
       "disconnectError": {
         "message": "断开连接失败"
       },
@@ -5942,13 +5939,11 @@
       "setDefaultError": {
         "message": "设置默认项失败"
       },
-      "enable": {
-        "title": "启用图像生成",
-        "description": "允许聊天和智能体使用默认模型生成图像。",
-        "disabledTooltip": "开启图像生成后即可选择模型。",
-        "noDefaultWarning": {
-          "title": "尚未设置默认模型。请在下方选择一个模型以生成图像。"
-        }
+      "noDefaultWarning": {
+        "title": "选择一个模型以启用图像生成。"
+      },
+      "deselectError": {
+        "message": "取消选择失败"
       }
     },
     "indexSettings": {

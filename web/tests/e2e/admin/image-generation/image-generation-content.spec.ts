@@ -99,8 +99,6 @@ test.describe("Image Generation models from LLM providers", () => {
     const imageGenPage = new AdminImageGenerationPage(page);
     await imageGenPage.goto();
 
-    // Nothing is the default yet, so image generation starts off.
-    await imageGenPage.enableSwitch.click();
     const available = imageGenPage.availableModelCard(
       LLM_PROVIDER_ID,
       "gpt-image-2"

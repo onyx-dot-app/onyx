@@ -19,11 +19,6 @@ export class AdminImageGenerationPage {
     return this.page.getByText(name, { exact: true });
   }
 
-  /** The master switch; everything below it works only while it is on. */
-  get enableSwitch(): Locator {
-    return this.page.getByRole("switch", { name: "Enable Image Generation" });
-  }
-
   /** A model's card under Add Models. */
   availableModelCard(llmProviderId: number, modelName: string): Locator {
     return this.page.getByLabel(
