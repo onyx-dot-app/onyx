@@ -8099,6 +8099,13 @@
         },
         "setDefaultButton": {
           "label": "设为默认"
+        },
+        "deleteButton": {
+          "ariaLabel": "删除 {title}",
+          "tooltip": "删除"
+        },
+        "reconnectButton": {
+          "label": "重新连接"
         }
       }
     },
@@ -9058,6 +9065,9 @@
       "provider": {
         "connected": {
           "label": "已连接"
+        },
+        "disconnected": {
+          "suffix": "（已断开连接）"
         }
       },
       "setupModal": {
@@ -9075,8 +9085,6 @@
         }
       },
       "toasts": {
-        "connected": "{label} 已连接",
-        "disconnected": "{label} 已断开连接",
         "unexpectedError": "发生意外错误。"
       },
       "providers": {
@@ -9117,6 +9125,15 @@
             }
           }
         }
+      },
+      "deleteModal": {
+        "body": "**{label}** 的 API 密钥和设置将被删除。如需再次发送追踪,请重新进行设置。",
+        "description": "删除此提供商的 API 密钥和设置。",
+        "submit": {
+          "label": "删除"
+        },
+        "title": "删除 {label}",
+        "envBody": "**{label}** 的 API 密钥和设置将被删除。追踪保持关闭。如需使用环境变量配置再次发送追踪,请重新连接。"
       }
     },
     "usage": {

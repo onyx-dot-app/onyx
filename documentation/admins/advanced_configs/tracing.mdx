@@ -48,10 +48,16 @@ and [Langfuse](https://langfuse.com).
   </Step>
 </Steps>
 
-## Disconnect a provider
+## Disconnect, reconnect, or delete a provider
 
-When you disconnect a provider, Onyx stops sending new traces to it immediately.
-Traces already delivered are unaffected.
+- **Disconnect**: on a connected card, click the disconnect button. Onyx stops sending new traces to the
+  provider and keeps its API key and settings. Traces already delivered are unaffected.
+- **Reconnect**: click a disconnected card, or its **Reconnect** button. Onyx sends traces again with the
+  saved settings. You do not enter the API key again. If no API key is saved,
+  Onyx opens setup so that you can enter one.
+- **Delete**: on a disconnected card, click the delete button. Onyx removes the API key and settings. To use
+  the provider again, connect it from the start. If environment variables also configure the provider,
+  it stays off after the delete. Reconnect it to send traces with the environment variables again.
 
 ## Configuring with environment variables
 

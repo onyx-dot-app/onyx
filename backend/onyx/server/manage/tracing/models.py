@@ -13,6 +13,9 @@ class TracingProviderView(BaseModel):
     enabled: bool
     config: dict[str, str] = Field(default_factory=dict)
     masked_api_key: str | None = None
+    # Env vars configure the provider. A DB row overrides them, and removing
+    # the row makes them apply again.
+    env_configured: bool = False
 
 
 class TracingProviderUpsertRequest(BaseModel):

@@ -8099,6 +8099,13 @@
         },
         "setDefaultButton": {
           "label": "تعيين كافتراضي"
+        },
+        "deleteButton": {
+          "ariaLabel": "حذف {title}",
+          "tooltip": "حذف"
+        },
+        "reconnectButton": {
+          "label": "إعادة الاتصال"
         }
       }
     },
@@ -9058,6 +9065,9 @@
       "provider": {
         "connected": {
           "label": "متصل"
+        },
+        "disconnected": {
+          "suffix": "(غير متصل)"
         }
       },
       "setupModal": {
@@ -9075,8 +9085,6 @@
         }
       },
       "toasts": {
-        "connected": "تم الاتصال بـ {label}",
-        "disconnected": "تم قطع الاتصال بـ {label}",
         "unexpectedError": "حدث خطأ غير متوقع."
       },
       "providers": {
@@ -9117,6 +9125,15 @@
             }
           }
         }
+      },
+      "deleteModal": {
+        "body": "سيتم حذف مفتاح API وإعدادات **{label}**. لإرسال التتبعات مرة أخرى، قم بإعداده من البداية.",
+        "description": "إزالة مفتاح API وإعدادات هذا المزوّد.",
+        "submit": {
+          "label": "حذف"
+        },
+        "title": "حذف {label}",
+        "envBody": "سيتم حذف مفتاح API وإعدادات **{label}**. يبقى التتبع متوقفًا. لإرسال التتبعات مرة أخرى باستخدام إعدادات متغيرات البيئة، أعد الاتصال."
       }
     },
     "usage": {

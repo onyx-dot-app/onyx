@@ -8099,6 +8099,13 @@
         },
         "setDefaultButton": {
           "label": "Establecer como predeterminado"
+        },
+        "deleteButton": {
+          "ariaLabel": "Eliminar {title}",
+          "tooltip": "Eliminar"
+        },
+        "reconnectButton": {
+          "label": "Volver a conectar"
         }
       }
     },
@@ -9058,6 +9065,9 @@
       "provider": {
         "connected": {
           "label": "Conectado"
+        },
+        "disconnected": {
+          "suffix": "(desconectado)"
         }
       },
       "setupModal": {
@@ -9075,8 +9085,6 @@
         }
       },
       "toasts": {
-        "connected": "{label} conectado",
-        "disconnected": "{label} desconectado",
         "unexpectedError": "Ocurrió un error inesperado."
       },
       "providers": {
@@ -9117,6 +9125,15 @@
             }
           }
         }
+      },
+      "deleteModal": {
+        "body": "Se eliminarán la clave de API y la configuración de **{label}**. Para volver a enviar trazas, configúralo desde el principio.",
+        "description": "Elimina la clave de API y la configuración de este proveedor.",
+        "submit": {
+          "label": "Eliminar"
+        },
+        "title": "Eliminar {label}",
+        "envBody": "Se eliminarán la clave de API y la configuración de **{label}**. El trazado seguirá desactivado. Para volver a enviar trazas con la configuración de las variables de entorno, vuelve a conectarlo."
       }
     },
     "usage": {

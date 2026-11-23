@@ -8099,6 +8099,13 @@
         },
         "setDefaultButton": {
           "label": "デフォルトに設定"
+        },
+        "deleteButton": {
+          "ariaLabel": "{title} を削除",
+          "tooltip": "削除"
+        },
+        "reconnectButton": {
+          "label": "再接続"
         }
       }
     },
@@ -9058,6 +9065,9 @@
       "provider": {
         "connected": {
           "label": "接続済み"
+        },
+        "disconnected": {
+          "suffix": "(接続解除済み)"
         }
       },
       "setupModal": {
@@ -9075,8 +9085,6 @@
         }
       },
       "toasts": {
-        "connected": "{label} に接続しました",
-        "disconnected": "{label} を切断しました",
         "unexpectedError": "予期しないエラーが発生しました。"
       },
       "providers": {
@@ -9117,6 +9125,15 @@
             }
           }
         }
+      },
+      "deleteModal": {
+        "body": "**{label}** の API キーと設定が削除されます。再度トレースを送信するには、最初から設定してください。",
+        "description": "このプロバイダーの API キーと設定を削除します。",
+        "submit": {
+          "label": "削除"
+        },
+        "title": "{label} を削除",
+        "envBody": "**{label}** の API キーと設定が削除されます。トレースはオフのままです。環境変数の設定で再度トレースを送信するには、再接続してください。"
       }
     },
     "usage": {
