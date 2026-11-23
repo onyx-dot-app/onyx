@@ -513,14 +513,24 @@ fn web_error_kind(status: i32, certs_handled: bool) -> WebErrorKind {
 
 /// The page to load on recovery after a certificate error for `request`:
 /// the top-level navigation if it failed, else the document that loads the
-/// failed subresource.
+/// failed subresource. `None` if `request` is not on `server`: another
+/// site's bad certificate is not an outage.
 #[cfg(any(windows, test))]
-fn recovery_uri<'a>(request: &'a str, navigating: &str, document: &'a str) -> &'a str {
-    if request == navigating {
+fn recovery_uri<'a>(
+    request: &'a str,
+    navigating: &str,
+    document: &'a str,
+    server: &str,
+) -> Option<&'a str> {
+    let origin = |uri: &str| Url::parse(uri).ok().map(|url| url.origin());
+    if origin(request).is_none() || origin(request) != origin(server) {
+        return None;
+    }
+    Some(if request == navigating {
         request
     } else {
         document
-    }
+    })
 }
 
 /// WebView2 shows its own error page for a failed load, and a certificate
@@ -594,8 +604,12 @@ pub fn watch_webview_failures(window: &tauri::WebviewWindow) {
                             status.0
                         );
                         let navigating = navigating.lock().unwrap_or_else(|p| p.into_inner());
-                        let uri = recovery_uri(&request, &navigating, &document);
-                        webview_failed(&cert_app, uri, Some(Unreachable::Tls));
+                        let Ok(server) = cert_app.state::<AppState>().server() else {
+                            return Ok(());
+                        };
+                        if let Some(uri) = recovery_uri(&request, &navigating, &document, &server) {
+                            webview_failed(&cert_app, uri, Some(Unreachable::Tls));
+                        }
                         Ok(())
                     },
                 ));
@@ -787,10 +801,29 @@ mod tests {
     fn a_certificate_error_recovers_the_page_not_a_subresource() {
         let page = "https://onyx.example/app";
         let script = "https://onyx.example/static/app.js";
+        let server = "https://onyx.example";
         // The page itself failed while it loaded.
-        assert_eq!(recovery_uri(page, page, "https://onyx.example/old"), page);
+        assert_eq!(
+            recovery_uri(page, page, "https://onyx.example/old", server),
+            Some(page)
+        );
         // A subresource of the open page failed.
-        assert_eq!(recovery_uri(script, page, page), page);
+        assert_eq!(recovery_uri(script, page, page, server), Some(page));
+    }
+
+    #[test]
+    fn another_sites_certificate_error_keeps_the_page() {
+        let page = "https://onyx.example/app";
+        let image = "https://images.example/cat.png";
+        assert_eq!(
+            recovery_uri(image, page, page, "https://onyx.example"),
+            None
+        );
+        // Another site as the top-level navigation is not the server either.
+        assert_eq!(
+            recovery_uri(image, image, page, "https://onyx.example"),
+            None
+        );
     }
 
     #[test]
