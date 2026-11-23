@@ -7,6 +7,7 @@ import threading
 from collections import deque
 from collections.abc import Generator, Iterable
 from datetime import datetime, timezone
+from functools import partial
 from typing import Any, cast
 from urllib.parse import SplitResult, quote, unquote, urlsplit
 from uuid import uuid4
@@ -111,7 +112,7 @@ from onyx.file_processing.extract_file_text import get_file_ext
 from onyx.file_processing.file_types import OnyxFileExtensions, is_indexable_file_type
 from onyx.file_store.staging import RawFileCallback
 from onyx.utils.logger import setup_logger
-from onyx.utils.threadpool_concurrency import run_functions_tuples_in_parallel
+from onyx.utils.threadpool_concurrency import run_calls_in_parallel
 
 logger = setup_logger()
 SLIM_BATCH_SIZE = 1000
@@ -2717,18 +2718,14 @@ class SharepointConnector(
         if not listed:
             return
 
-        results = cast(
-            list[Document | ConnectorFailure | None],
-            run_functions_tuples_in_parallel(
-                [
-                    (
-                        self._convert_listed_target,
-                        (target, payload, include_permissions),
-                    )
-                    for target, payload in listed
-                ],
-                max_workers=SHAREPOINT_CONVERSION_WORKERS,
-            ),
+        results = run_calls_in_parallel(
+            [
+                partial(
+                    self._convert_listed_target, target, payload, include_permissions
+                )
+                for target, payload in listed
+            ],
+            max_workers=SHAREPOINT_CONVERSION_WORKERS,
         )
         for result in results:
             if result is not None:

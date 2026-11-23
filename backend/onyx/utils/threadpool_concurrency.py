@@ -406,6 +406,19 @@ def run_functions_tuples_in_parallel(
     return [result for index, result in results]
 
 
+def run_calls_in_parallel(
+    calls: Sequence[Callable[[], R]], max_workers: int | None = None
+) -> list[R]:
+    """Runs the calls on a thread pool and returns their results in the order
+    of ``calls``. The caller's contextvars ride along. The first failure is
+    raised. Give each call its arguments with ``functools.partial``, so that
+    the type checker reads them."""
+    results = run_functions_tuples_in_parallel(
+        [(call, ()) for call in calls], max_workers=max_workers
+    )
+    return cast(list[R], results)
+
+
 class BoundedParallelRunner(Generic[R]):
     """Runs calls on a thread pool with at most ``max_in_flight`` pending, and
     hands back their results as they finish.

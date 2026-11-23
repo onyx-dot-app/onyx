@@ -17,6 +17,7 @@ from onyx.utils.threadpool_concurrency import (
     ThreadSafeDict,
     call_later,
     parallel_yield,
+    run_calls_in_parallel,
     run_functions_tuples_in_parallel,
     run_in_background,
     run_with_timeout,
@@ -617,3 +618,30 @@ def test_a_real_error_keeps_its_traceback(monkeypatch: pytest.MonkeyPatch) -> No
 
     assert [level for level, _ in recorder.lines] == ["error"]
     assert recorder.tracebacks == [True]
+
+
+def test_run_calls_in_parallel_keeps_the_order_of_the_calls() -> None:
+    last_done = threading.Event()
+
+    def first() -> str:
+        # Finishes after the last call, so that completion order differs.
+        assert last_done.wait(timeout=5)
+        return "first"
+
+    def last() -> str:
+        last_done.set()
+        return "last"
+
+    assert run_calls_in_parallel([first, lambda: "middle", last], 3) == [
+        "first",
+        "middle",
+        "last",
+    ]
+
+
+def test_run_calls_in_parallel_raises_a_failure() -> None:
+    def fail() -> int:
+        raise ValueError("boom")
+
+    with pytest.raises(ValueError):
+        run_calls_in_parallel([lambda: 1, fail])
