@@ -11794,28 +11794,6 @@
       }
     },
     "appChrome": {
-      "delete": {
-        "label": "Supprimer"
-      },
-      "deleteModal": {
-        "description": "Voulez-vous vraiment supprimer ce chat ? Cette action est irréversible.",
-        "submitButton": {
-          "label": "Supprimer"
-        },
-        "title": "Supprimer le chat"
-      },
-      "exportAs": {
-        "label": "Exporter sous…"
-      },
-      "exportFailed": {
-        "message": "Échec de l'exportation du chat. Veuillez réessayer."
-      },
-      "exportMarkdown": {
-        "label": "Markdown"
-      },
-      "exportPlaintext": {
-        "label": "Texte brut"
-      },
       "incognitoExit": {
         "ariaLabel": "Quitter le chat incognito",
         "tooltip": "Quitter le chat incognito"
@@ -11842,14 +11820,14 @@
       "modeButton": {
         "ariaLabel": "Changer le mode de l'application"
       },
-      "moveToProject": {
-        "label": "Déplacer vers un projet"
-      },
       "openSidebar": {
         "ariaLabel": "Ouvrir la barre latérale"
       },
       "share": {
-        "label": "Partager"
+        "label": "Partager…"
+      },
+      "shareMenu": {
+        "label": "Partager ou exporter"
       }
     },
     "banners": {
@@ -13517,6 +13495,26 @@
       },
       "resizeHandle": {
         "label": "Redimensionner le panneau"
+      }
+    },
+    "export": {
+      "failed": {
+        "message": "Échec de l'exportation du chat. Veuillez réessayer."
+      },
+      "plaintext": {
+        "label": "Texte brut"
+      },
+      "asMarkdown": {
+        "label": "Exporter en Markdown"
+      },
+      "markdown": {
+        "label": "Markdown"
+      },
+      "asPlaintext": {
+        "label": "Exporter en texte brut"
+      },
+      "menu": {
+        "label": "Exporter sous…"
       }
     }
   },

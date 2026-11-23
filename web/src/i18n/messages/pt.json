@@ -11794,28 +11794,6 @@
       }
     },
     "appChrome": {
-      "delete": {
-        "label": "Excluir"
-      },
-      "deleteModal": {
-        "description": "Tem certeza de que deseja excluir este chat? Esta ação não pode ser desfeita.",
-        "submitButton": {
-          "label": "Excluir"
-        },
-        "title": "Excluir chat"
-      },
-      "exportAs": {
-        "label": "Exportar como…"
-      },
-      "exportFailed": {
-        "message": "Falha ao exportar o chat. Tente novamente."
-      },
-      "exportMarkdown": {
-        "label": "Markdown"
-      },
-      "exportPlaintext": {
-        "label": "Texto simples"
-      },
       "incognitoExit": {
         "ariaLabel": "Sair do chat anônimo",
         "tooltip": "Sair do chat anônimo"
@@ -11842,14 +11820,14 @@
       "modeButton": {
         "ariaLabel": "Alterar modo do aplicativo"
       },
-      "moveToProject": {
-        "label": "Mover para projeto"
-      },
       "openSidebar": {
         "ariaLabel": "Abrir barra lateral"
       },
       "share": {
-        "label": "Compartilhar"
+        "label": "Compartilhar…"
+      },
+      "shareMenu": {
+        "label": "Compartilhar ou exportar"
       }
     },
     "banners": {
@@ -13517,6 +13495,26 @@
       },
       "resizeHandle": {
         "label": "Redimensionar painel"
+      }
+    },
+    "export": {
+      "failed": {
+        "message": "Falha ao exportar o chat. Tente novamente."
+      },
+      "plaintext": {
+        "label": "Texto simples"
+      },
+      "asMarkdown": {
+        "label": "Exportar como Markdown"
+      },
+      "markdown": {
+        "label": "Markdown"
+      },
+      "asPlaintext": {
+        "label": "Exportar como texto simples"
+      },
+      "menu": {
+        "label": "Exportar como…"
       }
     }
   },

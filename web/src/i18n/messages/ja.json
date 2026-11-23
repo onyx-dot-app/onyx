@@ -11794,28 +11794,6 @@
       }
     },
     "appChrome": {
-      "delete": {
-        "label": "削除"
-      },
-      "deleteModal": {
-        "description": "このチャットを削除してもよろしいですか？この操作は元に戻せません。",
-        "submitButton": {
-          "label": "削除"
-        },
-        "title": "チャットを削除"
-      },
-      "exportAs": {
-        "label": "形式を指定してエクスポート…"
-      },
-      "exportFailed": {
-        "message": "チャットのエクスポートに失敗しました。もう一度お試しください。"
-      },
-      "exportMarkdown": {
-        "label": "Markdown"
-      },
-      "exportPlaintext": {
-        "label": "プレーンテキスト"
-      },
       "incognitoExit": {
         "ariaLabel": "シークレットチャットを終了",
         "tooltip": "シークレットチャットを終了"
@@ -11842,14 +11820,14 @@
       "modeButton": {
         "ariaLabel": "アプリモードを変更"
       },
-      "moveToProject": {
-        "label": "プロジェクトに移動"
-      },
       "openSidebar": {
         "ariaLabel": "サイドバーを開く"
       },
       "share": {
-        "label": "共有"
+        "label": "共有…"
+      },
+      "shareMenu": {
+        "label": "共有またはエクスポート"
       }
     },
     "banners": {
@@ -13517,6 +13495,26 @@
       },
       "resizeHandle": {
         "label": "パネルのサイズを変更"
+      }
+    },
+    "export": {
+      "failed": {
+        "message": "チャットのエクスポートに失敗しました。もう一度お試しください。"
+      },
+      "plaintext": {
+        "label": "プレーンテキスト"
+      },
+      "asMarkdown": {
+        "label": "Markdown としてエクスポート"
+      },
+      "markdown": {
+        "label": "Markdown"
+      },
+      "asPlaintext": {
+        "label": "プレーンテキストとしてエクスポート"
+      },
+      "menu": {
+        "label": "形式を指定してエクスポート…"
       }
     }
   },

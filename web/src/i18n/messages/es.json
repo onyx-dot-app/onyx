@@ -11794,28 +11794,6 @@
       }
     },
     "appChrome": {
-      "delete": {
-        "label": "Eliminar"
-      },
-      "deleteModal": {
-        "description": "¿Seguro que quieres eliminar este chat? Esta acción no se puede deshacer.",
-        "submitButton": {
-          "label": "Eliminar"
-        },
-        "title": "Eliminar chat"
-      },
-      "exportAs": {
-        "label": "Exportar como…"
-      },
-      "exportFailed": {
-        "message": "No se pudo exportar el chat. Inténtalo de nuevo."
-      },
-      "exportMarkdown": {
-        "label": "Markdown"
-      },
-      "exportPlaintext": {
-        "label": "Texto sin formato"
-      },
       "incognitoExit": {
         "ariaLabel": "Salir del chat de incógnito",
         "tooltip": "Salir del chat de incógnito"
@@ -11842,14 +11820,14 @@
       "modeButton": {
         "ariaLabel": "Cambiar modo de la aplicación"
       },
-      "moveToProject": {
-        "label": "Mover a proyecto"
-      },
       "openSidebar": {
         "ariaLabel": "Abrir barra lateral"
       },
       "share": {
-        "label": "Compartir"
+        "label": "Compartir…"
+      },
+      "shareMenu": {
+        "label": "Compartir o exportar"
       }
     },
     "banners": {
@@ -13517,6 +13495,26 @@
       },
       "resizeHandle": {
         "label": "Cambiar tamaño del panel"
+      }
+    },
+    "export": {
+      "failed": {
+        "message": "No se pudo exportar el chat. Inténtalo de nuevo."
+      },
+      "plaintext": {
+        "label": "Texto sin formato"
+      },
+      "asMarkdown": {
+        "label": "Exportar como Markdown"
+      },
+      "markdown": {
+        "label": "Markdown"
+      },
+      "asPlaintext": {
+        "label": "Exportar como texto sin formato"
+      },
+      "menu": {
+        "label": "Exportar como…"
       }
     }
   },
