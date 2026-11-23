@@ -1,6 +1,5 @@
 import asyncio
-import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterator
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import aiohttp
@@ -15,6 +14,8 @@ from onyx.natural_language_processing.embedding_providers import vertex_schedule
 from onyx.natural_language_processing.embedding_providers.vertex_scheduler import (
     VertexRequestScheduler,
     VertexRetrySettings,
+    _ModelSlot,
+    _WaitClock,
     is_transient_vertex_error,
 )
 from onyx.natural_language_processing.embedding_rate_limit import EmbeddingRateLimiter
@@ -25,6 +26,7 @@ from onyx.natural_language_processing.embedding_request_policy import (
 from onyx.natural_language_processing.exceptions import EmbeddingRequestFailedError
 from onyx.natural_language_processing.search_nlp_models import CloudEmbedding
 from onyx.natural_language_processing.vertex_auth import VertexEmbeddingConfig
+from onyx.utils.adaptive_semaphore import AdaptiveSemaphore
 from shared_configs.enums import EmbeddingProvider, EmbedTextType
 
 _KEY = "p/global/gemini-embedding-2"
@@ -105,8 +107,9 @@ def test_rate_limit_goes_to_the_policy_after_the_budget() -> None:
         raise _vertex_429()
 
     with pytest.raises(genai_errors.ClientError):
+        model_slot = _ModelSlot(limit, AsyncMock())
         asyncio.run(
-            scheduler._send_in_slot(request, limit, _policy(), time.monotonic())
+            scheduler._send_in_slot(request, model_slot, _policy(), _WaitClock())
         )
     assert calls == 1
     assert limit.limit < 10
@@ -174,34 +177,63 @@ def test_timeouts_are_not_sent_again() -> None:
     assert is_transient_vertex_error(aiohttp.ServerDisconnectedError())
 
 
-def test_each_resend_waits_for_the_configured_rate_limit() -> None:
+def test_each_send_takes_the_configured_rate_limit() -> None:
     scheduler = _scheduler_without_backoff()
     limiter = MagicMock(spec=EmbeddingRateLimiter)
-    limiter.acquire_async = AsyncMock()
+    limiter.try_acquire = MagicMock(return_value=0.0)
     request = AsyncMock(side_effect=[_vertex_503(), "ok"])
 
     policy = _policy(rate_limiter=limiter)
     assert asyncio.run(scheduler.send(_KEY, request, policy)) == "ok"
     assert request.await_count == 2
-    assert limiter.acquire_async.await_count == 2
+    assert limiter.try_acquire.call_count == 2
+    limiter.acquire_async.assert_not_called()
 
 
-def test_wait_for_the_configured_rate_limit_holds_no_process_slot() -> None:
+def test_permits_are_taken_in_a_process_slot_and_waits_hold_none() -> None:
     scheduler = _scheduler_without_backoff()
+    slots_at_permit: list[tuple[int, int]] = []
     slots_during_wait: list[tuple[int, int]] = []
 
-    async def acquire(*_args: object) -> None:
-        slots_during_wait.append(
-            (scheduler.model_limit(_KEY).in_flight, scheduler.process_limit.in_flight)
-        )
+    def slots() -> tuple[int, int]:
+        return scheduler.model_limit(_KEY).in_flight, scheduler.process_limit.in_flight
+
+    def try_acquire() -> float:
+        slots_at_permit.append(slots())
+        # The window is full on the first try.
+        return 5.0 if len(slots_at_permit) == 1 else 0.0
+
+    def full_window_sleeps(*_args: object) -> Iterator[float]:
+        slots_during_wait.append(slots())
+        yield 0
 
     limiter = MagicMock(spec=EmbeddingRateLimiter)
-    limiter.acquire_async = acquire
-    request = AsyncMock(side_effect=[_vertex_503(), "ok"])
+    limiter.try_acquire = MagicMock(side_effect=try_acquire)
+    limiter.full_window_sleeps = MagicMock(side_effect=full_window_sleeps)
 
-    asyncio.run(scheduler.send(_KEY, request, _policy(rate_limiter=limiter)))
-    # (model slots, process slots): before the request, and before the resend.
-    assert slots_during_wait == [(1, 0), (1, 0)]
+    assert (
+        asyncio.run(
+            scheduler.send(
+                _KEY, AsyncMock(return_value="ok"), _policy(rate_limiter=limiter)
+            )
+        )
+        == "ok"
+    )
+    # (model slots, process slots): a full window is waited out with no slot,
+    # so other requests for the model, such as searches, can go ahead.
+    assert slots_at_permit == [(1, 1), (1, 1)]
+    assert slots_during_wait == [(0, 0)]
+    assert scheduler.model_limit(_KEY).in_flight == 0
+
+
+def test_wait_clock_leaves_out_process_slot_waits() -> None:
+    with patch(
+        "onyx.natural_language_processing.embedding_providers.vertex_scheduler.time.monotonic",
+        side_effect=[0.0, 30.0],
+    ):
+        clock = _WaitClock()
+        clock.exclude_since(10.0)
+    assert clock.started_at == 20.0
 
 
 def test_rate_limited_request_backs_off_inside_its_model_slot() -> None:
@@ -494,3 +526,15 @@ def test_embeddings_keep_the_input_order() -> None:
     # The timeout fails the test if the requests do not run in parallel.
     embeddings = asyncio.run(asyncio.wait_for(scenario(), timeout=10))
     assert embeddings == [[1.0], [2.0], [3.0]]
+
+
+def test_a_model_slot_is_given_back_once() -> None:
+    limit = MagicMock(spec=AdaptiveSemaphore)
+    model_slot = _ModelSlot(limit, AsyncMock())
+
+    model_slot.release()  # Not held yet: a failed acquire gives nothing back.
+    asyncio.run(model_slot.acquire())
+    model_slot.release()
+    model_slot.release()
+
+    assert limit.release.call_count == 1
