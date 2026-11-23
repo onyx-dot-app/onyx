@@ -80,7 +80,9 @@ function ClusterSummary({ status }: ClusterSummaryProps) {
             title={
               status.version
                 ? t("version", { version: status.version })
-                : t("health", { health })
+                : // Not the health color: on one data node a yellow cluster
+                  // has the healthy style, and the tooltip explains it.
+                  t("noVersion")
             }
             icon={HEALTH_ICONS[badgeHealth]}
             color={HEALTH_COLORS[badgeHealth]}

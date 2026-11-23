@@ -2,7 +2,7 @@ from datetime import datetime
 from enum import Enum
 from typing import Annotated, Any, Literal, Union
 
-from pydantic import BaseModel, Field, JsonValue
+from pydantic import BaseModel, Field, JsonValue, PrivateAttr
 
 from onyx.chat.mention_models import RecordedMention
 from onyx.context.search.models import SearchDoc
@@ -30,6 +30,8 @@ class StreamingError(BaseModel):
     )
     is_retryable: bool = True  # Hint to frontend if retry might help
     details: dict | None = None  # Additional context (tool name, model name, etc.)
+    # True when classified from an LLM provider failure. Process-local: never serialized.
+    _from_llm: bool = PrivateAttr(default=False)
 
 
 class StreamCursor(BaseModel):

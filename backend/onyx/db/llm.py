@@ -26,6 +26,7 @@ from onyx.db.models import (
     User,
     User__UserGroup,
     UserGroup,
+    UserPreferences,
 )
 from onyx.db.models import LLMProvider as LLMProviderModel
 from onyx.db.models import Tool as ToolModel
@@ -1544,11 +1545,11 @@ def remove_llm_provider(
     # name or the provider id depending on the frontend writer, so match both.
     display_names = [provider.name] if provider.name else ["", str(provider.id)]
     db_session.execute(
-        update(User)
+        update(UserPreferences)
         .where(
             or_(
                 *(
-                    User.default_model.startswith(
+                    UserPreferences.default_model.startswith(
                         f"{display_name}__{provider.provider}__", autoescape=True
                     )
                     for display_name in display_names

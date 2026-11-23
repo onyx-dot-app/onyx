@@ -9,15 +9,13 @@ from onyx.cache.interface import CacheBackend
 from onyx.configs.app_configs import DISABLE_VECTOR_DB
 from onyx.db.engine.sql_engine import get_session
 from onyx.db.enums import Permission
-from onyx.db.models import SearchSettings, User
-from onyx.db.search_settings import (
-    get_current_search_settings,
-    get_secondary_search_settings,
+from onyx.db.models import User
+from onyx.document_index.opensearch.cluster_status import (
+    collect_cluster_status,
+    onyx_index_refs,
 )
-from onyx.document_index.opensearch.cluster_status import collect_cluster_status
 from onyx.document_index.opensearch.models import (
     ClusterStatus,
-    OnyxIndexRef,
     SearchActivity,
 )
 from onyx.document_index.opensearch.search_samples import read_search_activity
@@ -35,16 +33,6 @@ CLUSTER_STATUS_KEY = "opensearch_cluster_status"
 CLUSTER_STATUS_TTL_SECONDS = 60
 # A refresh skips the shared result only when it is at least this old.
 CLUSTER_STATUS_MIN_REFRESH_SECONDS = 10
-
-
-def _index_ref(search_settings: SearchSettings, is_current: bool) -> OnyxIndexRef:
-    return OnyxIndexRef(
-        index_name=search_settings.index_name,
-        is_current=is_current,
-        model_name=search_settings.model_name,
-        model_dim=search_settings.final_embedding_dim,
-        vector_quantization=search_settings.vector_quantization,
-    )
 
 
 def _check_available() -> None:
@@ -76,14 +64,8 @@ def read_opensearch_status(
         if not refresh or age < CLUSTER_STATUS_MIN_REFRESH_SECONDS:
             return cached
 
-    indexes: list[OnyxIndexRef] = [
-        _index_ref(get_current_search_settings(db_session), is_current=True)
-    ]
-    secondary: SearchSettings | None = get_secondary_search_settings(db_session)
-    if secondary is not None:
-        indexes.append(_index_ref(secondary, is_current=False))
     try:
-        status: ClusterStatus = collect_cluster_status(indexes)
+        status: ClusterStatus = collect_cluster_status(onyx_index_refs(db_session))
     except Exception as e:
         logger.exception("Unable to read the OpenSearch cluster status")
         raise OnyxError(

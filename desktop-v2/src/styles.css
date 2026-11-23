@@ -25,6 +25,12 @@ textarea,
   -webkit-user-select: text;
 }
 
+/* WebView2 adds its own reveal and clear buttons; password fields have their own toggle. */
+input::-ms-reveal,
+input::-ms-clear {
+  display: none;
+}
+
 /* Drag region for frameless and overlay-titlebar windows. */
 .drag-region {
   -webkit-app-region: drag;

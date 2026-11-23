@@ -14,7 +14,7 @@ class SettingsManager:
         headers.pop("Content-Type", None)
 
         response = client.get(
-            f"{API_SERVER_URL}/admin/settings",
+            f"{API_SERVER_URL}/settings",
             headers=headers,
         )
 

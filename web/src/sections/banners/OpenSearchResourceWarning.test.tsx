@@ -77,6 +77,30 @@ afterEach(() => {
   jest.useRealTimers();
 });
 
+test("the Service Status page shows neither alert and keeps the day's popup", async () => {
+  mockPathname = "/admin/service-status";
+  const fetchSpy = jest
+    .spyOn(global, "fetch")
+    .mockImplementation(async (url) =>
+      String(url).endsWith("/popup")
+        ? jsonResponse({ show_popup: true, health: unhealthy })
+        : jsonResponse(unhealthy)
+    );
+  const { rerender } = render(<Alerts />);
+  // The page lists the issues itself, so the popup is not claimed there.
+  await waitFor(() =>
+    expect(
+      fetchSpy.mock.calls.some(([url]) => String(url).endsWith("/popup"))
+    ).toBe(false)
+  );
+  expect(screen.queryByRole("dialog")).toBeNull();
+  expect(screen.queryByRole("status")).toBeNull();
+  // Elsewhere the popup still shows.
+  mockPathname = "/app";
+  rerender(<Alerts />);
+  await screen.findByRole("dialog");
+});
+
 test("the banner retries failed cache reads and clears after recovery", async () => {
   jest.useFakeTimers();
   const fetchSpy = jest
@@ -124,9 +148,8 @@ test("dismisses the entry popup while keeping the admin banner and avoids repeat
   const popup = await screen.findByRole("dialog");
   expect(within(popup).getByText(/disk usage/)).toBeInTheDocument();
   expect(within(popup).getByText(/JVM memory usage/)).toBeInTheDocument();
-  expect(
-    within(popup).getByRole("link", { name: "support@onyx.app" })
-  ).toHaveAttribute("href", "mailto:support@onyx.app");
+  // The popup is for admins, so it does not send them to an administrator.
+  expect(within(popup).queryByRole("link")).not.toBeInTheDocument();
   await user.click(within(popup).getByRole("button", { name: "Dismiss" }));
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument();
   expect(

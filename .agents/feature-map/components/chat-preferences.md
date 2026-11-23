@@ -12,21 +12,44 @@ chat retention needs Enterprise. The settings API enforces these tiers.
 
 ## User experience
 
-- **A user**, in Settings, enters a name, a role and free-text preferences
-  ("I prefer short answers"). The next message in any chat, including the open
-  one, uses them. Nobody else sees them.
+- **A user** sets a full name, a preferred name (the name Onyx calls the
+  user) and a work role in Settings > Account, and free-text instructions ("I
+  prefer short answers") in Settings > Chat Preferences. The next message in any chat,
+  including the open one, uses them. Onboarding also sets the preferred name.
+  The prompt and `{{user.name}}` use `User.addressed_name`: the preferred name,
+  else the full name. The prompt also gives a different full name on its own
+  line. The work role select offers `web/src/lib/users/workRoles.ts`; any other
+  stored text shows as "Other" with its text.
+- **A user** uploads a profile photo in Settings > Account, crops it in a
+  dialog, and can later replace or remove it from the avatar's menu. Every
+  avatar of that user shows it, else the initials. Anonymous visitors cannot set one, and deleting
+  the user deletes it. The tab also shows the user's organization role and, on
+  multi-tenant deployments, the tenant ID.
 - **A user** lets the assistant remember facts. With the memory tool on, the
   assistant saves or updates a memory during a chat when it decides to, and the
   user sees a memory event in the answer. The user can edit or delete memories
-  in Settings. When the tool adds a memory past the cap, it deletes the oldest.
+  in Settings > Chat Preferences. When the tool adds a memory past the cap, it deletes the
+  oldest.
 - **A user** can turn off "reference memories". Saved memories then stay out
   of the prompt, but the memory tool can still write them. To stop new
   memories, the user turns off the memory tool.
-- **A user** saves prompt shortcuts and inserts them into the message box. They
-  can hide a shared shortcut for themselves.
+- **A user** saves prompt shortcuts in Settings > Chat Preferences and inserts them into
+  the message box. They can hide a shared shortcut for themselves.
 - **A user** picks a UI and answer language, or follows the workspace default.
-- **A user** chooses whether Enter and the send arrow wait for the current step
-  or interrupt current work. Ctrl/Cmd+Enter always queues a follow-up.
+- **A user** chooses, in Settings > Chat Preferences, whether Enter and the send arrow wait
+  for the current step or interrupt current work. Ctrl/Cmd+Enter always queues
+  a follow-up.
+- **A user** sets the theme, language, interface and response fonts, chat
+  background, transcript width, auto-scroll and smooth streaming in
+  Settings > Appearance. The response font applies only inside chat answers.
+  Transcript width is stored per browser, not on the server. Wide widens only
+  an open conversation, not the new-session view. Mobile widths hide its control,
+  because chat is always full width there.
+- **A user** sets accessibility options in Settings > Appearance >
+  Accessibility: motion (follow the OS, or always reduce), notifications
+  (close by themselves, or stay until closed; **Close all** under the toast
+  pile clears them) and dynamic conversations (unload off-screen chat
+  messages; off keeps every message reachable by screen readers).
 - **An admin**, at Admin > Chat Preferences, sets workspace chat options. These
   include the team name and context that every prompt includes, the default
   language, the default assistant's system prompt and built-in tools, and the
@@ -46,8 +69,8 @@ chat retention needs Enterprise. The settings API enforces these tiers.
 ## Scope
 
 This component owns:
-- the per-user preference columns and their writers, and how they reach the
-  prompt context each turn;
+- the `user_preferences` table, its readers and writers, and how its values
+  reach the prompt context each turn;
 - memories and the memory tool's write path;
 - input prompts (shortcuts);
 - the workspace `Settings` store: the stored record, its read path with env
@@ -74,20 +97,76 @@ It does not own:
 
 ## Architecture
 
-**UI preferences.** Boolean `User` columns store small interface choices, such
-as `paste_as_tile` and `interrupt_on_send`. Each has its own `PATCH` endpoint in
-`server/manage/users.py` and a flat field in `UserPreferences`.
+**Storage.** `User` keeps identity, access and profile fields, including
+`personal_name` and `personal_role`. Every setting that a user picks for
+themselves is a typed column of the `UserPreferences` model, one
+`user_preferences` row per user. The free-text preferences are its
+`instructions` column; the API still calls them `user_preferences`. Pinned
+assistants have their own table, `user__pinned_persona`.
 
-**From setting to prompt.** `db/memory.py:get_memories` builds one
-`UserMemoryContext` per turn, called from
-`chat/process_message.py:prepare_chat_turn` ([[core-chat-loop]]). Nothing is
-cached on the chat session, so a change applies on the next message. A memory
+A user has no row until their first save. `db/user_preferences.py`:
+
+- `fetch_user_preferences` returns the saved row, or an unsaved row of the
+  column `default` values. Each column's `server_default` gives the same
+  value. The shared anonymous account always gets the defaults, with both
+  memory switches off.
+- `upsert_user_preferences__no_commit` is the one write path. It saves only
+  the values given, with `INSERT ... ON CONFLICT (user_id) DO UPDATE`. The
+  first save creates the row; columns not given get their defaults. The
+  caller commits. It rejects the anonymous account with `INSUFFICIENT_PERMISSIONS`.
+
+The auth layer loads `User` on every request without the preferences. Code
+that needs them reads them with one `fetch_user_preferences` call: `GET /me`,
+the settings routes, the TTS route, and a chat turn.
+
+**UI preferences.** Boolean columns store small interface choices, such as
+`paste_as_tile` and `interrupt_on_send`. Each has its own `PATCH` endpoint in
+`server/manage/users.py` and a flat field in the API model
+`server/manage/models.py:UserPreferences`.
+
+**Accessibility preferences.** `motion`, `popup_dismissal` and
+`dynamic_conversations` are `user_preferences` columns, saved through
+`PATCH /user/appearance`. Motion rides the appearance cookie (below) as
+`data-motion` on `<html>`. The Opal `motion-reduce:` and `motion-safe:`
+variants, `@variant motion-reduce` rules and `prefersReducedMotion()` from
+`@opal/utils` read it together with the OS setting. Use them in new animation
+code, not a raw `prefers-reduced-motion` query.
+`web/src/providers/AppearancePreferencesProvider.tsx` applies the rest once
+`/me` loads: `MotionConfig` for motion/react, `toast.setPersistentByDefault`
+for stay-on-screen notifications (toasts already on screen with the default
+time become persistent too), and `DynamicConversationsContext`. When dynamic
+conversations are off, `WindowedRow` keeps every chat row mounted and
+`OlderMessagesLoader` loads all older pages without waiting for a scroll.
+
+**From setting to prompt.** `chat/process_message.py:prepare_chat_turn`
+([[core-chat-loop]]) reads the preferences once per turn. It passes their chat
+defaults to `llm/factory.py:get_llm_for_persona`, and the row to
+`db/memory.py:get_memories`, which builds one `UserMemoryContext`. It copies
+both memory switches into `ChatTurnSetup`. Nothing is cached on the chat
+session, so a change applies on the next message. A memory
 that the tool saves during a turn reaches the prompt on the next turn.
 
-Language falls back from `User.language` to `Settings.default_language` through
+Language falls back from `UserPreferences.language` to `Settings.default_language` through
 `server/settings/store.py:resolve_user_language`.
-`server/manage/users.py:set_locale_cookie` copies the resolved language into
+`server/manage/users.py:set_preference_cookie` copies the resolved language into
 the `NEXT_LOCALE` cookie, so the UI and the answers use the same language.
+
+**Appearance cookie.** `PATCH /user/appearance` saves the fonts and the
+accessibility preferences. It and `GET /me` call
+`server/manage/users.py:set_appearance_cookie`, which keeps the
+`onyx_appearance` cookie (a form-encoded query string) equal to the saved
+first-paint values: the fonts and motion. `set_preference_cookie` writes both
+preference cookies with the same attributes. `web/src/app/layout.tsx` parses
+it with `web/src/lib/appearance/preferences.ts:parseAppearanceCookie` and
+renders the `data-interface-font` / `data-response-font` / `data-motion`
+attributes on `<html>`, so the first paint has the saved fonts and motion.
+`web/src/providers/AppearancePreferencesProvider.tsx` is the one client owner
+of the appearance preferences. It applies the saved values to `<html>` after a
+save or a newer `/me`, wraps the app in `MotionConfig`, sets the toast
+default and provides the dynamic-conversations flag.
+`web/src/app/globals.css` maps each attribute to the font variables that the
+typography presets read.
+
 `chat/prompt_utils.py:build_chat_prompt` substitutes `{{user.<key>}}`
 placeholders into the agent, project and task prompts on each step, and
 `prepare_chat_turn` substitutes them before it reserves tokens. Name, role and email never overwrite an
@@ -96,7 +175,7 @@ where each value lands.
 
 **Memory write path.**
 ```
-tool_constructor.py: user.enable_memory_tool -> MemoryTool in every turn
+tool_constructor.py: enable_memory_tool (ChatTurnSetup) -> MemoryTool in every turn
 MemoryTool._run                              tools/tool_implementations/memory/memory_tool.py
   incognito record mode set? -> error result to the model, nothing saved
   no user id?                -> error result, nothing saved
@@ -110,7 +189,7 @@ MemoryTool._run                              tools/tool_implementations/memory/m
 `chat/process_message.py:prepare_chat_turn` passes the full context to the
 run, so the memory tool can still see and change memories, and uses
 `without_memories()` only for the token reservation.
-`chat/execution.py:create_chat_agent` passes `user.use_memories` as
+`chat/execution.py:create_chat_agent` passes `ChatTurnSetup.use_memories` as
 `inject_memories_in_prompt`; `chat/prompt_utils.py:build_chat_prompt` and
 `tools/tool_implementations/search/search_tool.py:SearchTool._run` strip
 memories when it is false.
@@ -169,9 +248,10 @@ paths read it; find them with `git grep -n load_settings backend`.
 5. `personalization-replaces-memory-set` **A personalization save replaces the
    whole memory set.** `PATCH /user/personalization` with a `memories` list
    deletes every row whose id is not in the list
-   (`db/user_preferences.py:update_user_personalization`).
-   `web/src/hooks/useUserPersonalization.ts` sends the full list on every save,
-   even a toggle change.
+   (`db/user_preferences.py:replace_user_memories__no_commit`).
+   A request without `memories` keeps them.
+   `web/src/hooks/useUserPersonalization.ts` sends only the fields that a save
+   changes, so only a memory edit sends the list.
 6. `prompt-section-explicit-position` **A new prompt section needs an explicit
    position.** Add it in `chat/prompt_utils.py:build_user_information_prompt` at
    a chosen place, not at the end, and run a prompt eval ([[context-assembly]]).
@@ -277,8 +357,10 @@ paths read it; find them with `git grep -n load_settings backend`.
 ## Recipes
 
 - `new-user-setting` **A user setting that reaches the prompt.** Copy `personal_role`: list its
-  path with `git grep -n personal_role backend/onyx`. Add the `User` column and
-  a writer in `db/user_preferences.py`, expose it in `server/manage/users.py`,
+  path with `git grep -n personal_role backend/onyx`. A profile field is a
+  `User` column; a setting the user picks is a `UserPreferences` column, with
+  its key in `db/user_preferences.py:UserPreferenceValues`. Expose it in
+  `server/manage/users.py`,
   carry it in `UserMemoryContext`, and place it in
   `build_user_information_prompt` ([[#prompt-section-explicit-position]]).
 - `new-workspace-option` **A workspace option.** Copy `auto_detect_search_filters`: list its readers
@@ -304,8 +386,19 @@ paths read it; find them with `git grep -n load_settings backend`.
   tool tests in `backend/tests/unit/tools/`, and the settings tests in
   `backend/tests/unit/onyx/server/settings/` and `backend/tests/unit/onyx/server/`.
 - External dependency tests: the memory tool tests in
-  `backend/tests/external_dependency_unit/tools/`.
-- Integration tests: `backend/tests/integration/tests/personalization/`.
+  `backend/tests/external_dependency_unit/tools/`, and
+  `backend/tests/external_dependency_unit/chat/test_chat_user_preferences.py`
+  for how a chat turn reads the saved preferences.
+- Integration tests: `backend/tests/integration/tests/personalization/` and
+  `backend/tests/integration/tests/users/test_user_preferences.py` (defaults
+  without a row, then every settings route), and
+  `backend/tests/integration/tests/users/test_appearance_cookie.py` (the
+  appearance cookie).
+- Playwright: `web/tests/e2e/settings/font_preferences.spec.ts` (a font
+  applies at once and renders from the server after a reload; the response
+  font applies to answers in a chat) and
+  `web/tests/e2e/settings/accessibility_preferences.spec.ts` (server-rendered
+  reduced motion, a stay-on-screen toast, every row of a long chat mounted).
 - No integration test covers input prompt behaviour or
   `auto_detect_search_filters`.
 - By hand: set a name and a preference, then ask "what do you know about me".

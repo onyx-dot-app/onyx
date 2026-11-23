@@ -10,9 +10,13 @@ import {
   OnboardingState,
   OnboardingStep,
 } from "@/lib/onboarding/types";
-import { updateUserPersonalization } from "@/lib/users/svc";
+import {
+  getUserAddressedName,
+  updateUserPersonalization,
+} from "@/lib/users/svc";
 import { useUser } from "@/providers/UserProvider";
 import { MinimalAgent } from "@/lib/agents/types";
+import type { UserPersonalization } from "@/lib/types";
 import { useLanguageModelsForAgent } from "@/lib/languageModels/hooks";
 import { useProviderStatus } from "@/components/chat/ProviderContext";
 
@@ -79,7 +83,19 @@ function useOnboardingState(activeAgent?: MinimalAgent): {
     activeAgent?.id
   );
 
-  const userName = user?.personalization?.name;
+  const userName = getUserAddressedName(user);
+  // Decided once per user: the first save gives the user a full name, and
+  // later edits in this flow must keep filling it.
+  const fillsFullNameRef = useRef<{ userId: string; fills: boolean } | null>(
+    null
+  );
+  useEffect(() => {
+    if (!user || fillsFullNameRef.current?.userId === user.id) return;
+    fillsFullNameRef.current = {
+      userId: user.id,
+      fills: !user.personalization?.name,
+    };
+  }, [user]);
 
   const nameUpdateTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(
     null
@@ -272,7 +288,16 @@ function useOnboardingState(activeAgent?: MinimalAgent): {
 
       nameUpdateTimeoutRef.current = setTimeout(async () => {
         try {
-          await updateUserPersonalization({ name });
+          const personalization: Partial<UserPersonalization> = {
+            preferred_name: name,
+          };
+          // Admin views, search and sharing show the full name, so
+          // onboarding fills it when the user has none.
+          if (fillsFullNameRef.current?.fills) personalization.name = name;
+          const response = await updateUserPersonalization(personalization);
+          if (!response.ok) {
+            throw new Error(`Saving the name failed: ${response.status}`);
+          }
           await refreshUser();
         } catch (_e) {
           dispatch({

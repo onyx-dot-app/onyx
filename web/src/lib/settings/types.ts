@@ -1,5 +1,5 @@
 import { Tier } from "@/lib/tiers/types";
-import type { Notification } from "@/lib/notifications/interfaces";
+import type { Notification } from "@/lib/notifications/types";
 import type { Locale } from "@/i18n/config";
 
 export enum ApplicationStatus {

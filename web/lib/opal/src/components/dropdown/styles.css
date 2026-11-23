@@ -109,9 +109,9 @@
   }
 }
 
-@media (prefers-reduced-motion: reduce) {
-  .opal-dropdown[data-state],
-  .opal-dropdown[data-state] .opal-dropdown-content {
+.opal-dropdown[data-state],
+.opal-dropdown[data-state] .opal-dropdown-content {
+  @variant motion-reduce {
     animation: none;
   }
 }
@@ -241,9 +241,9 @@
     transform: translateX(calc(100% + 1rem));
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  .opal-dropdown-card[data-enter],
-  .opal-dropdown-card[data-exit] {
+.opal-dropdown-card[data-enter],
+.opal-dropdown-card[data-exit] {
+  @variant motion-reduce {
     animation: none;
   }
 }

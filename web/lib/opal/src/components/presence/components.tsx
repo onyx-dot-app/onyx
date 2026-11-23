@@ -2,7 +2,7 @@
 
 import "@opal/components/presence/styles.css";
 import React, { useEffect, useLayoutEffect, useRef, useState } from "react";
-import { cn } from "@opal/utils";
+import { cn, prefersReducedMotion } from "@opal/utils";
 import type { ExtremaSizeVariants, WithoutStyles } from "@opal/types";
 import { heightVariants, widthVariants } from "@opal/shared";
 
@@ -81,13 +81,6 @@ type PresenceSwapProps = WithoutStyles<React.HTMLAttributes<HTMLDivElement>> & {
 // A transition waits for `transitionend`; this is the fallback if it never
 // fires.
 const TRANSITION_FALLBACK_MS = 400;
-
-function prefersReducedMotion(): boolean {
-  return (
-    typeof window !== "undefined" &&
-    window.matchMedia("(prefers-reduced-motion: reduce)").matches
-  );
-}
 
 // ---------------------------------------------------------------------------
 // Presence

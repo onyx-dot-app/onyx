@@ -5,6 +5,7 @@
 
 import {
   PostgresToolQuery,
+  PostgresToolQueryScalar,
   PostgresToolQueryValue,
 } from "@/app/app/services/streamingModels";
 
@@ -72,10 +73,31 @@ interface DateRange {
   between: PostgresQueryLabelKey;
 }
 
-function text(value: PostgresToolQueryValue | undefined): string | null {
+function scalarText(value: PostgresToolQueryScalar | undefined): string | null {
   if (typeof value === "string" && value.trim()) return value.trim();
   if (typeof value === "number") return String(value);
   return null;
+}
+
+/** A single-valued argument; a one-item list counts as its item. */
+function text(value: PostgresToolQueryValue | undefined): string | null {
+  if (!Array.isArray(value)) return scalarText(value);
+  return value.length === 1 ? scalarText(value[0]) : null;
+}
+
+/** Every value of an any-of argument, e.g. "Jira or Linear". */
+function anyOfText(
+  value: PostgresToolQueryValue | undefined,
+  locale: string,
+  format: (value: string) => string = (part) => part
+): string | null {
+  const values = Array.isArray(value) ? value : [value];
+  const parts = values
+    .map(scalarText)
+    .filter((part): part is string => part !== null)
+    .map(format);
+  if (parts.length === 0) return null;
+  return new Intl.ListFormat(locale, { type: "disjunction" }).format(parts);
 }
 
 /** Dates are UTC days, as the tool compares them. */
@@ -88,7 +110,7 @@ export function formatQueryDate(value: string, locale: string): string {
   }).format(date);
 }
 
-/** The hierarchy node the query lists inside, if any. */
+/** The one hierarchy node the query lists inside, if there is exactly one. */
 export function postgresQueryFolderId(query: PostgresToolQuery): number | null {
   const folder = text(query.parent_hierarchy_node_id) ?? text(query.parent_id);
   return folder !== null && /^\d+$/.test(folder) ? Number(folder) : null;
@@ -112,8 +134,8 @@ export function postgresQueryChips(
   const table = TABLE_LABELS[text(query.table) ?? ""];
   if (table) add("table", table);
 
-  const source = text(query.source_type);
-  if (source) chips.push({ key: "source", label: sourceName(source) });
+  const source = anyOfText(query.source_type, locale, sourceName);
+  if (source) chips.push({ key: "source", label: source });
 
   const textFilters: [
     string,
@@ -126,7 +148,7 @@ export function postgresQueryChips(
     ["content_contains", query.content_contains, "textContains"],
   ];
   for (const [key, value, labelKey] of textFilters) {
-    const filterText = text(value);
+    const filterText = anyOfText(value, locale);
     if (filterText) add(key, labelKey, { text: filterText });
   }
 
@@ -166,11 +188,13 @@ export function postgresQueryChips(
     else if (end) add(range.key, range.until, { date: end });
   }
 
-  const owner = text(query.owned_by);
+  const owner = anyOfText(query.owned_by, locale);
   if (owner) add("owner", "owner", { owner });
-  const folder = text(query.parent_hierarchy_node_id) ?? text(query.parent_id);
-  if (folder) add("folder", "folder", { name: folderName || folder });
-  const nodeType = text(query.node_type);
+  const folderIds =
+    anyOfText(query.parent_hierarchy_node_id, locale) ??
+    anyOfText(query.parent_id, locale);
+  if (folderIds) add("folder", "folder", { name: folderName || folderIds });
+  const nodeType = anyOfText(query.node_type, locale);
   if (nodeType) add("node_type", "nodeType", { type: nodeType });
   const author = text(query.message_type);
   if (author) add("author", "author", { author });

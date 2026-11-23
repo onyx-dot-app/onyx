@@ -137,6 +137,17 @@ const nextConfig = {
         destination: "/app/:path*",
         permanent: true,
       },
+      // Released CLI binaries open these settings paths.
+      {
+        source: "/app/settings/general",
+        destination: "/app/settings/account",
+        permanent: true,
+      },
+      {
+        source: "/app/settings/accounts-access",
+        destination: "/app/settings/third-party-access",
+        permanent: true,
+      },
       // Legacy /assistants → /agents redirects (added in PR #8869).
       // Preserves backward compatibility for bookmarks, shared links, and
       // hardcoded URLs that still reference the old /assistants paths.

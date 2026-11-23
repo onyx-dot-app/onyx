@@ -12,13 +12,11 @@
   }
 }
 
-.streaming-katex .katex {
-  animation: onyx-math-appear 120ms ease-out;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .streaming-katex .katex {
-    animation: none;
+/* Only when motion is allowed: by the OS, and by the app's `data-motion`
+   attribute on <html>. */
+@media (prefers-reduced-motion: no-preference) {
+  :root:not([data-motion="reduced"]) .streaming-katex .katex {
+    animation: onyx-math-appear 120ms ease-out;
   }
 }
 

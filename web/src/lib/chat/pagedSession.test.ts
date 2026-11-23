@@ -3,8 +3,10 @@ import { useChatSessionStore } from "@/app/app/stores/useChatSessionStore";
 import {
   type BackendChatSession,
   ChatSessionSharedStatus,
+  type Message,
 } from "@/app/app/types";
 import {
+  loadOlderChatMessages,
   reloadChatPublishedFiles,
   reloadLatestChatPage,
 } from "@/lib/chat/pagedSession";
@@ -100,4 +102,42 @@ test("a chat load that ends after a newer Files reload keeps the newer list", as
   await load;
 
   expect(listedIds()).toEqual(["v2"]);
+});
+
+const oldest: Message = {
+  nodeId: 1,
+  messageId: 10,
+  type: "user",
+  message: "hi",
+  files: [],
+  toolCall: null,
+  packets: [],
+  parentNodeId: null,
+  childrenNodeIds: [],
+  latestChildNodeId: null,
+};
+
+test("an empty older page whose recovery fails stops loading older pages", async () => {
+  useChatSessionStore.setState({ sessions: new Map(), currentSessionId: null });
+  useChatSessionStore.getState().createSession("session", {
+    hasOlderMessages: true,
+    messageTree: new Map([[1, oldest]]),
+  });
+  // The older page is empty; reloading the latest page then fails.
+  jest
+    .spyOn(global, "fetch")
+    .mockResolvedValueOnce(
+      new Response(JSON.stringify({ messages: [], packets: [] }), {
+        status: 200,
+      })
+    )
+    .mockResolvedValueOnce(new Response("", { status: 500 }));
+  jest.spyOn(console, "error").mockImplementation(() => undefined);
+
+  await loadOlderChatMessages("session");
+
+  const session = useChatSessionStore.getState().sessions.get("session");
+  expect(session?.hasOlderMessages).toBe(false);
+  expect(session?.olderMessagesFailed).toBe(true);
+  expect(session?.isLoadingOlderMessages).toBe(false);
 });

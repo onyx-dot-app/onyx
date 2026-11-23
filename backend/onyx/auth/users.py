@@ -2587,8 +2587,6 @@ def get_anonymous_user() -> User:
         is_superuser=False,
         account_type=AccountType.ANONYMOUS,
         effective_permissions=[Permission.BASIC_ACCESS.value],
-        use_memories=False,
-        enable_memory_tool=False,
     )
     return user
 
