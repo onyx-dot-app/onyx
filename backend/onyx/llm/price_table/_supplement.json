@@ -34,6 +34,32 @@
   },
   "openai": {
     "models": {
+      "gpt-6.2-sol": {
+        "name": "GPT-6.2 Sol",
+        "mode": "chat",
+        "attachment": true,
+        "cost": {"input": 2.0, "output": 10.0, "cache_read": 0.1, "cache_write": 2.5},
+        "limit": {"input": 922000, "output": 128000},
+        "modalities": {"input": ["text", "image", "pdf"], "output": ["text"]},
+        "reasoning": true,
+        "supports_none_reasoning_effort": false,
+        "tool_call": true,
+        "structured_output": true,
+        "temperature": false
+      },
+      "gpt-6.2-astra": {
+        "name": "GPT-6.2 Astra",
+        "mode": "chat",
+        "attachment": true,
+        "cost": {"input": 8.0, "output": 40.0, "cache_read": 0.4, "cache_write": 10.0},
+        "limit": {"input": 922000, "output": 128000},
+        "modalities": {"input": ["text", "image", "pdf"], "output": ["text"]},
+        "reasoning": true,
+        "supports_none_reasoning_effort": false,
+        "tool_call": true,
+        "structured_output": true,
+        "temperature": false
+      },
       "gpt-6-luna": {
         "name": "GPT-6 Luna",
         "mode": "chat",
@@ -67,6 +93,22 @@
         "name": "DALL-E 3",
         "mode": "image_generation",
         "cost": {"image_input": 0.04}
+      }
+    }
+  },
+  "anthropic": {
+    "models": {
+      "claude-fable-5-2": {
+        "name": "Claude Fable 5.2",
+        "mode": "chat",
+        "attachment": true,
+        "cost": {"input": 8.0, "output": 40.0, "cache_read": 0.2, "cache_write": 10.0},
+        "limit": {"context": 1000000, "output": 128000},
+        "modalities": {"input": ["text", "image", "pdf"], "output": ["text"]},
+        "reasoning": true,
+        "tool_call": true,
+        "structured_output": true,
+        "temperature": false
       }
     }
   },
@@ -112,6 +154,39 @@
   },
   "vertex_ai": {
     "models": {
+      "gemini-4-hydrogen": {
+        "name": "Gemini 4 Hydrogen",
+        "mode": "chat",
+        "attachment": true,
+        "cost": {"input": 1.5, "output": 7.5, "cache_read": 0.075, "input_audio": 1.5},
+        "limit": {"context": 1048576, "output": 1048576},
+        "modalities": {"input": ["text", "image", "video", "audio", "pdf"], "output": ["text"]},
+        "reasoning": true,
+        "tool_call": true,
+        "structured_output": true
+      },
+      "gemini-4-carbon": {
+        "name": "Gemini 4 Carbon",
+        "mode": "chat",
+        "attachment": true,
+        "cost": {"input": 2.0, "output": 10.0, "cache_read": 0.1, "input_audio": 2.0},
+        "limit": {"context": 1048576, "output": 1048576},
+        "modalities": {"input": ["text", "image", "video", "audio", "pdf"], "output": ["text"]},
+        "reasoning": true,
+        "tool_call": true,
+        "structured_output": true
+      },
+      "gemini-4-neon": {
+        "name": "Gemini 4 Neon",
+        "mode": "chat",
+        "attachment": true,
+        "cost": {"input": 3.0, "output": 15.0, "cache_read": 0.15, "input_audio": 3.0},
+        "limit": {"context": 1048576, "output": 1048576},
+        "modalities": {"input": ["text", "image", "video", "audio", "pdf"], "output": ["text"]},
+        "reasoning": true,
+        "tool_call": true,
+        "structured_output": true
+      },
       "gemini-3-pro-image-preview": {
         "status": "deprecated"
       },
