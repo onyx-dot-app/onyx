@@ -12448,10 +12448,10 @@
         },
         "fetch": {
           "reading": {
-            "status": "Lendo"
+            "status": "Navegando"
           },
           "read": {
-            "status": "Lido"
+            "status": "Navegou"
           }
         },
         "fileReader": {
@@ -12519,6 +12519,9 @@
           },
           "publishingFiles": {
             "label": "Publicando arquivos"
+          },
+          "browsing": {
+            "label": "Navegando"
           }
         },
         "internalSearch": {

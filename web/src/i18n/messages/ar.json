@@ -12448,10 +12448,10 @@
         },
         "fetch": {
           "reading": {
-            "status": "جارٍ القراءة"
+            "status": "جارٍ التصفح"
           },
           "read": {
-            "status": "تمت القراءة"
+            "status": "تم التصفح"
           }
         },
         "fileReader": {
@@ -12519,6 +12519,9 @@
           },
           "publishingFiles": {
             "label": "جارٍ نشر الملفات"
+          },
+          "browsing": {
+            "label": "جارٍ التصفح"
           }
         },
         "internalSearch": {

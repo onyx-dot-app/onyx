@@ -12448,10 +12448,10 @@
         },
         "fetch": {
           "reading": {
-            "status": "Lecture"
+            "status": "Navigation"
           },
           "read": {
-            "status": "Lu"
+            "status": "Navigation terminée"
           }
         },
         "fileReader": {
@@ -12519,6 +12519,9 @@
           },
           "publishingFiles": {
             "label": "Publication des fichiers"
+          },
+          "browsing": {
+            "label": "Navigation"
           }
         },
         "internalSearch": {

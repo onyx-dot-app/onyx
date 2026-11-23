@@ -46,7 +46,7 @@ function stepHeaderText(
       );
     }
     case PacketType.FETCH_TOOL_START:
-      return t("header.reading.label");
+      return t("header.browsing.label");
     case PacketType.PYTHON_TOOL_START:
       return t("header.executingCode.label");
     case PacketType.IMAGE_GENERATION_TOOL_START:

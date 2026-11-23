@@ -12448,10 +12448,10 @@
         },
         "fetch": {
           "reading": {
-            "status": "正在读取"
+            "status": "正在浏览"
           },
           "read": {
-            "status": "已读取"
+            "status": "已浏览"
           }
         },
         "fileReader": {
@@ -12519,6 +12519,9 @@
           },
           "publishingFiles": {
             "label": "正在发布文件"
+          },
+          "browsing": {
+            "label": "正在浏览"
           }
         },
         "internalSearch": {

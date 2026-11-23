@@ -12448,10 +12448,10 @@
         },
         "fetch": {
           "reading": {
-            "status": "読み取り中"
+            "status": "閲覧中"
           },
           "read": {
-            "status": "読み込みました"
+            "status": "閲覧しました"
           }
         },
         "fileReader": {
@@ -12519,6 +12519,9 @@
           },
           "publishingFiles": {
             "label": "ファイルを公開しています"
+          },
+          "browsing": {
+            "label": "閲覧中"
           }
         },
         "internalSearch": {

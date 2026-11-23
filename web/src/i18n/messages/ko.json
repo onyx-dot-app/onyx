@@ -12448,10 +12448,10 @@
         },
         "fetch": {
           "reading": {
-            "status": "읽는 중"
+            "status": "탐색 중"
           },
           "read": {
-            "status": "읽었습니다"
+            "status": "탐색함"
           }
         },
         "fileReader": {
@@ -12519,6 +12519,9 @@
           },
           "publishingFiles": {
             "label": "파일 게시 중"
+          },
+          "browsing": {
+            "label": "탐색 중"
           }
         },
         "internalSearch": {
