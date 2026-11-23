@@ -11,7 +11,6 @@ import {
   useCreateModal,
 } from "@opal/components";
 import { SvgAlertTriangle } from "@opal/icons";
-import { markdown } from "@opal/utils";
 import { useOpenSearchResourceHealth } from "@/lib/opensearch-health/hooks";
 import { SWR_KEYS } from "@/lib/swr-keys";
 import {
@@ -63,14 +62,13 @@ function ResourceDetails({ health }: ResourceDetailsProps): ReactElement {
           </li>
         ))}
       </ol>
-      <div className="flex flex-col gap-2 border-t border-border-01 pt-3">
-        <Text as="p">{markdown(t("contact"))}</Text>
-        {health.stale && (
+      {health.stale && (
+        <div className="border-t border-border-01 pt-3">
           <Text as="p" font="secondary-body" color="text-03">
             {t("stale")}
           </Text>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }
