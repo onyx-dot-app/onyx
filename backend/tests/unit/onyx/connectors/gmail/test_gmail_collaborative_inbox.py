@@ -157,6 +157,14 @@ def test_lookup_returns_the_group_only_for_a_member_mailbox(
     assert group_api.list_group_member_emails.call_count == 1
 
 
+def test_lookup_matches_a_group_address_in_any_letter_case(
+    group_api: MagicMock,  # noqa: ARG001
+) -> None:
+    lookup = _lookup(["Support@Example.com"])
+
+    assert lookup.get_group(_message("m1"), _MEMBER) == _GROUP
+
+
 def test_lookup_ignores_a_group_without_collaborative_inbox(
     group_api: MagicMock,
 ) -> None:
@@ -208,6 +216,11 @@ def test_collaborative_inbox_flag_reads_the_string_boolean() -> None:
     assert is_collaborative_inbox(settings_service, _GROUP) is False
     execute.side_effect = _http_error(404)
     assert is_collaborative_inbox(settings_service, _GROUP) is False
+    # A denied read is not "no": the slim listing would list no group mail and
+    # pruning would delete it.
+    execute.side_effect = _http_error(403)
+    with pytest.raises(HttpError):
+        is_collaborative_inbox(settings_service, _GROUP)
 
 
 def test_thread_splits_into_group_documents_and_a_personal_document(
@@ -353,8 +366,8 @@ def test_group_mail_stays_a_thread_document_when_a_check_fails(
     assert documents == [_thread_document(thread, user_email)]
 
 
-def _group_mail_connector() -> GmailConnector:
-    connector = GmailConnector(collaborative_inbox_groups=[_GROUP])
+def _group_mail_connector(group_emails: list[str] | None = None) -> GmailConnector:
+    connector = GmailConnector(collaborative_inbox_groups=group_emails or [_GROUP])
     connector._creds = MagicMock()
     connector._primary_admin_email = "admin@example.com"
     return connector
@@ -379,8 +392,8 @@ class _FakeGmailBatch:
 
 
 class _FakeGmail:
-    """One mailbox. The group search returns ``group_thread_ids`` and the
-    plain thread listing returns every thread."""
+    """One mailbox. A `list:` search returns ``group_thread_ids``, and any
+    other thread listing returns every thread."""
 
     def __init__(
         self,
@@ -389,7 +402,7 @@ class _FakeGmail:
     ) -> None:
         self.threads_by_id = threads_by_id
         self.group_thread_ids = group_thread_ids
-        self.list_queries: list[str | None] = []
+        self.list_kwargs: list[dict[str, Any]] = []
         self.get_kwargs: list[dict[str, Any]] = []
 
     def users(self) -> "_FakeGmail":
@@ -398,9 +411,12 @@ class _FakeGmail:
     def threads(self) -> "_FakeGmail":
         return self
 
-    def list(self, q: str | None = None, **_: Any) -> MagicMock:  # noqa: A003
-        self.list_queries.append(q)
-        thread_ids = self.group_thread_ids if q else list(self.threads_by_id)
+    def list(self, **kwargs: Any) -> MagicMock:  # noqa: A003
+        self.list_kwargs.append(kwargs)
+        is_group_search = "list:" in (kwargs.get("q") or "")
+        thread_ids = (
+            self.group_thread_ids if is_group_search else list(self.threads_by_id)
+        )
         request = MagicMock()
         request.execute.return_value = {"threads": [{"id": i} for i in thread_ids]}
         return request
@@ -414,7 +430,10 @@ class _FakeGmail:
 
 
 def _list_slim_documents(
-    connector: GmailConnector, gmail: _FakeGmail, user_email: str = _MEMBER
+    connector: GmailConnector,
+    gmail: _FakeGmail,
+    user_email: str = _MEMBER,
+    start: float | None = None,
 ) -> list[SlimDocument]:
     def fake_get_google_service(service: GoogleService, _: object, __: str) -> object:
         assert service is GoogleService.GMAIL
@@ -431,10 +450,18 @@ def _list_slim_documents(
     ):
         return [
             item
-            for batch in connector.retrieve_all_slim_docs_perm_sync()
+            for batch in connector.retrieve_all_slim_docs_perm_sync(start=start)
             for item in batch
             if isinstance(item, SlimDocument)
         ]
+
+
+def _owner_access(user_email: str) -> ExternalAccess:
+    return ExternalAccess(
+        external_user_emails={user_email},
+        external_user_group_ids=set(),
+        is_public=False,
+    )
 
 
 def test_slim_listing_lists_group_documents_and_keeps_every_thread(
@@ -453,25 +480,10 @@ def test_slim_listing_lists_group_documents_and_keeps_every_thread(
     # A thread document indexed before the group was listed must stay listed,
     # or pruning deletes it.
     assert [(slim.id, slim.external_access) for slim in slim_documents] == [
-        (
-            "18f0aaaa",
-            ExternalAccess(
-                external_user_emails={_MEMBER},
-                external_user_group_ids=set(),
-                is_public=False,
-            ),
-        ),
-        (
-            "18f0bbbb",
-            ExternalAccess(
-                external_user_emails={_MEMBER},
-                external_user_group_ids=set(),
-                is_public=False,
-            ),
-        ),
+        ("18f0aaaa", _owner_access(_MEMBER)),
+        ("18f0bbbb", _owner_access(_MEMBER)),
         (f"{_GROUP}:abc@mail.example.com", _GROUP_ACCESS),
     ]
-    assert gmail.list_queries == [None, f"(list:{_GROUP})"]
     assert gmail.get_kwargs == [
         {
             "userId": _MEMBER,
@@ -480,6 +492,51 @@ def test_slim_listing_lists_group_documents_and_keeps_every_thread(
             "metadataHeaders": ["List-ID", "X-BeenThere", "Message-ID"],
         }
     ]
+
+
+def test_slim_listing_finds_group_mail_older_than_the_listed_range(
+    group_api: MagicMock,  # noqa: ARG001
+) -> None:
+    """The crawl indexes every message of a thread that has one message in
+    range. Gmail applies a date range and the Spam and Trash filter to each
+    message, so the group search must not carry them: it would miss an old or
+    trashed group message of a listed thread, and pruning would delete it."""
+    gmail = _FakeGmail(
+        threads_by_id={"18f0aaaa": {"id": "18f0aaaa", "messages": [_message("m1")]}},
+        group_thread_ids=["18f0aaaa"],
+    )
+
+    slim_documents = _list_slim_documents(
+        _group_mail_connector(), gmail, start=1_700_000_000
+    )
+
+    assert [slim.id for slim in slim_documents] == [
+        "18f0aaaa",
+        f"{_GROUP}:abc@mail.example.com",
+    ]
+    group_search, thread_listing = gmail.list_kwargs
+    assert group_search["q"] == f"list:{_GROUP}"
+    assert group_search["includeSpamTrash"] is True
+    assert thread_listing["q"] == "after:1700000000"
+
+
+def test_slim_listing_reads_only_the_group_threads_it_listed(
+    group_api: MagicMock,  # noqa: ARG001
+) -> None:
+    """A group thread outside the listed range is not read: an incremental
+    permission sync must not fetch every group thread of every member."""
+    gmail = _FakeGmail(
+        threads_by_id={"18f0aaaa": {"id": "18f0aaaa", "messages": [_message("m1")]}},
+        group_thread_ids=["18f0aaaa", "18f0cccc"],
+    )
+
+    slim_documents = _list_slim_documents(_group_mail_connector(), gmail)
+
+    assert [slim.id for slim in slim_documents] == [
+        "18f0aaaa",
+        f"{_GROUP}:abc@mail.example.com",
+    ]
+    assert len(gmail.get_kwargs) == 1
 
 
 def test_slim_listing_skips_the_group_search_for_a_mailbox_outside_the_group(
@@ -495,7 +552,7 @@ def test_slim_listing_skips_the_group_search_for_a_mailbox_outside_the_group(
     )
 
     assert [slim.id for slim in slim_documents] == ["18f0aaaa"]
-    assert gmail.list_queries == [None]
+    assert [kwargs.get("q") for kwargs in gmail.list_kwargs] == [None]
 
 
 def test_slim_listing_fails_when_a_group_thread_cannot_be_read(
@@ -510,30 +567,35 @@ def test_slim_listing_fails_when_a_group_thread_cannot_be_read(
         _list_slim_documents(_group_mail_connector(), gmail)
 
 
+def test_slim_listing_fails_when_a_group_stopped_qualifying(
+    group_api: MagicMock,
+) -> None:
+    """Pruning does not validate the connector first. An empty group listing
+    would delete every document of the group."""
+    group_api.is_collaborative_inbox.return_value = False
+    gmail = _FakeGmail(threads_by_id={}, group_thread_ids=[])
+
+    with pytest.raises(ConnectorValidationError, match=_GROUP):
+        _list_slim_documents(_group_mail_connector(), gmail)
+
+
 def test_validation_names_every_group_without_collaborative_inbox(
     group_api: MagicMock,
 ) -> None:
-    connector = GmailConnector(collaborative_inbox_groups=[_GROUP, _OTHER_GROUP])
-    connector._creds = MagicMock()
-    connector._primary_admin_email = "admin@example.com"
-    connector.validate_connector_settings()
+    _group_mail_connector([_GROUP, _OTHER_GROUP]).validate_connector_settings()
 
     group_api.is_collaborative_inbox.return_value = False
-    connector = GmailConnector(collaborative_inbox_groups=[_GROUP, _OTHER_GROUP])
-    connector._creds = MagicMock()
-    connector._primary_admin_email = "admin@example.com"
     with pytest.raises(ConnectorValidationError, match=f"{_OTHER_GROUP}, {_GROUP}"):
-        connector.validate_connector_settings()
+        _group_mail_connector([_GROUP, _OTHER_GROUP]).validate_connector_settings()
 
 
 def test_validation_fails_when_the_credential_lacks_the_settings_scope(
     group_api: MagicMock,
 ) -> None:
     group_api.build_groups_settings_service.return_value = None
-    connector = _group_mail_connector()
 
     with pytest.raises(InsufficientPermissionsError, match="apps.groups.settings"):
-        connector.validate_connector_settings()
+        _group_mail_connector().validate_connector_settings()
 
     # No listed group, nothing to check: no token is requested.
     group_api.build_groups_settings_service.reset_mock()

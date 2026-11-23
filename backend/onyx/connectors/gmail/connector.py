@@ -91,6 +91,8 @@ _GROUP_MAIL_THREAD_FIELDS = "id, messages(id, payload(headers))"
 _GROUP_MAIL_HEADERS = ["List-ID", "X-BeenThere", "Message-ID"]
 # Bounds the length of one threads.list query for a member of many groups.
 _GROUPS_PER_SEARCH_QUERY = 20
+# The most threads Gmail returns in one threads.list page.
+_MAX_THREADS_PER_PAGE = 500
 
 EMAIL_FIELDS = [
     "cc",
@@ -318,19 +320,27 @@ def thread_to_document(
 
 
 def thread_to_documents(
-    full_thread: Dict[str, Any],
+    full_thread: dict[str, Any],
     user_email: str,
-    group_mail: CollaborativeInboxLookup,
+    inbox_lookup: CollaborativeInboxLookup,
 ) -> list[Document]:
     """One document per Collaborative Inbox message, which the group reads, and
     one for the other messages of the thread, which the mailbox owner reads."""
     group_documents: list[Document] = []
-    personal_messages: list[Dict[str, Any]] = []
+    personal_messages: list[dict[str, Any]] = []
     for message in full_thread.get("messages", []):
-        group_document = _group_message_to_document(message, user_email, group_mail)
-        if group_document is None:
+        group_mail_ids = _get_group_mail_ids(message, user_email, inbox_lookup)
+        if group_mail_ids is None:
             personal_messages.append(message)
-        else:
+            continue
+        group_email, rfc_message_id = group_mail_ids
+        group_document = _messages_to_document(
+            document_id=_build_group_mail_document_id(group_email, rfc_message_id),
+            all_messages=[message],
+            external_access=get_group_mail_access(group_email),
+            section_link=_build_group_mail_link(rfc_message_id),
+        )
+        if group_document is not None:
             group_documents.append(group_document)
 
     personal_document = thread_to_document(
@@ -341,30 +351,25 @@ def thread_to_documents(
     return [*group_documents, personal_document]
 
 
-def _group_message_to_document(
-    message: Dict[str, Any],
+def _get_group_mail_ids(
+    message: dict[str, Any],
     user_email: str,
-    group_mail: CollaborativeInboxLookup,
-) -> Document | None:
-    """None when this copy is not Collaborative Inbox mail, or has no Message-ID
-    to build the document id from."""
-    group_email = group_mail.get_group(message, user_email)
+    inbox_lookup: CollaborativeInboxLookup,
+) -> tuple[str, str] | None:
+    """The group and the Message-ID that name the group document of this copy.
+    None when the copy is not Collaborative Inbox mail, or has no Message-ID."""
+    group_email = inbox_lookup.get_group(message, user_email)
     if group_email is None:
         return None
     rfc_message_id = get_rfc_message_id(message)
     if rfc_message_id is None:
         return None
-    return _messages_to_document(
-        document_id=_build_group_mail_document_id(group_email, rfc_message_id),
-        all_messages=[message],
-        external_access=get_group_mail_access(group_email),
-        section_link=_build_group_mail_link(rfc_message_id),
-    )
+    return group_email, rfc_message_id
 
 
 def _messages_to_document(
     document_id: str | None,
-    all_messages: list[Dict[str, Any]],
+    all_messages: list[dict[str, Any]],
     external_access: ExternalAccess | None,
     section_link: str | None = None,
 ) -> Document | None:
@@ -465,7 +470,7 @@ def _full_thread_from_id(
     thread_id: str,
     user_email: str,
     gmail_service: GmailService,
-    group_mail: CollaborativeInboxLookup,
+    inbox_lookup: CollaborativeInboxLookup,
 ) -> list[Document] | ConnectorFailure:
     try:
         thread = next(
@@ -483,7 +488,7 @@ def _full_thread_from_id(
         )
         if thread is None:
             raise ValueError(f"Thread {thread_id} not found")
-        return thread_to_documents(thread, user_email, group_mail)
+        return thread_to_documents(thread, user_email, inbox_lookup)
     except Exception as e:
         return _build_thread_failure(
             thread_id, user_email, f"Failed to retrieve thread {thread_id}", e
@@ -515,7 +520,7 @@ def _batch_get_threads(
     gmail_service: GmailService,
     user_email: str,
     thread_ids: list[str],
-    fields: str = REINDEX_THREAD_FIELDS,
+    fields: str,
     metadata_headers: list[str] | None = None,
 ) -> tuple[dict[str, dict[str, Any]], dict[str, Exception]]:
     """threads.get for many threads of one mailbox, in batch requests. With
@@ -634,7 +639,7 @@ class GmailConnector(
 
         self._creds: OAuthCredentials | ServiceAccountCredentials | None = None
         self._primary_admin_email: str | None = None
-        self._group_mail: CollaborativeInboxLookup | None = None
+        self._inbox_lookup: CollaborativeInboxLookup | None = None
 
     @property
     def primary_admin_email(self) -> str:
@@ -661,19 +666,19 @@ class GmailConnector(
         return self._creds
 
     @property
-    def group_mail(self) -> CollaborativeInboxLookup:
-        if self._group_mail is None:
-            self._group_mail = CollaborativeInboxLookup(
+    def inbox_lookup(self) -> CollaborativeInboxLookup:
+        if self._inbox_lookup is None:
+            self._inbox_lookup = CollaborativeInboxLookup(
                 self.creds, self.primary_admin_email, self.collaborative_inbox_groups
             )
-        return self._group_mail
+        return self._inbox_lookup
 
     def validate_connector_settings(self) -> None:
         if not self.collaborative_inbox_groups:
             return
-        if not self.group_mail.has_settings_access():
+        if not self.inbox_lookup.has_settings_access():
             raise InsufficientPermissionsError(GROUPS_SETTINGS_SCOPE_MISSING_MESSAGE)
-        unusable_groups = self.group_mail.get_groups_without_collaborative_inbox()
+        unusable_groups = self.inbox_lookup.get_groups_without_collaborative_inbox()
         if unusable_groups:
             raise ConnectorValidationError(
                 "These addresses are not Google Groups with Collaborative Inbox "
@@ -683,7 +688,7 @@ class GmailConnector(
     def load_credentials(self, credentials: dict[str, Any]) -> dict[str, str] | None:
         primary_admin_email = credentials[DB_CREDENTIALS_PRIMARY_ADMIN_KEY]
         self._primary_admin_email = primary_admin_email
-        self._group_mail = None
+        self._inbox_lookup = None
 
         self._creds, new_creds_dict = get_google_creds(
             credentials=credentials,
@@ -786,7 +791,7 @@ class GmailConnector(
                         slim_doc_batch = []
                 else:
                     result = _full_thread_from_id(
-                        thread["id"], user_email, gmail_service, self.group_mail
+                        thread["id"], user_email, gmail_service, self.inbox_lookup
                     )
                     if isinstance(result, ConnectorFailure):
                         yield result
@@ -926,12 +931,19 @@ class GmailConnector(
         callback: IndexingHeartbeatInterface | None = None,
     ) -> GenerateSlimDocumentOutput:
         try:
+            # Pruning deletes what this listing leaves out, and nothing
+            # validates the connector before it. A group that stopped
+            # qualifying must fail the listing, not empty it.
+            self.validate_connector_settings()
+
             pt_dict: dict[str, str | None] = {PAGE_TOKEN_KEY: None}
 
             def set_page_token(page_token: str | None) -> None:
                 pt_dict[PAGE_TOKEN_KEY] = page_token
 
             for user_email in self._get_all_user_emails():
+                group_thread_ids = self._list_group_thread_ids(user_email)
+                listed_group_thread_ids: list[str] = []
                 # Each call reads one page. List every page of this user,
                 # and start the next user from its first page. A listing
                 # that stops early would make pruning delete the threads
@@ -939,14 +951,21 @@ class GmailConnector(
                 page_token: str | None = None
                 for _ in range(MAX_SLIM_PAGES_PER_USER):
                     pt_dict[PAGE_TOKEN_KEY] = None
-                    yield from self._fetch_slim_threads(
+                    for slim_doc_batch in self._fetch_slim_threads(
                         user_email,
                         page_token,
                         set_page_token,
                         start,
                         end,
                         callback=callback,
-                    )
+                    ):
+                        listed_group_thread_ids.extend(
+                            slim_doc.id
+                            for slim_doc in slim_doc_batch
+                            if isinstance(slim_doc, SlimDocument)
+                            and slim_doc.id in group_thread_ids
+                        )
+                        yield slim_doc_batch
                     next_page_token = pt_dict[PAGE_TOKEN_KEY]
                     if next_page_token is None:
                         break
@@ -960,35 +979,28 @@ class GmailConnector(
                         f"Gmail slim listing for {user_email} read "
                         f"{MAX_SLIM_PAGES_PER_USER} pages without reaching the end"
                     )
-                yield from self._fetch_slim_group_mail(user_email, start, end, callback)
+                yield from self._fetch_slim_group_mail(
+                    user_email, listed_group_thread_ids, callback
+                )
         except Exception as e:
             if MISSING_SCOPES_ERROR_STR in str(e):
                 raise PermissionError(ONYX_SCOPE_INSTRUCTIONS) from e
             raise e
 
-    def _fetch_slim_group_mail(
-        self,
-        user_email: str,
-        time_range_start: SecondsSinceUnixEpoch | None,
-        time_range_end: SecondsSinceUnixEpoch | None,
-        callback: IndexingHeartbeatInterface | None,
-    ) -> GenerateSlimDocumentOutput:
-        """The Collaborative Inbox documents this mailbox holds a copy of."""
-        group_emails = self.group_mail.get_groups_of_member(user_email)
+    def _list_group_thread_ids(self, user_email: str) -> set[str]:
+        """The threads of this mailbox that hold mail from a Collaborative
+        Inbox group the mailbox belongs to."""
+        group_emails = self.inbox_lookup.get_groups_of_member(user_email)
         if not group_emails:
-            return
+            return set()
 
-        time_range_query = _build_time_range_query(time_range_start, time_range_end)
         gmail_service = get_google_service(GoogleService.GMAIL, self.creds, user_email)
-        listed_thread_ids: set[str] = set()
-
-        def list_thread_ids() -> Iterator[str]:
+        thread_ids: set[str] = set()
+        try:
             for group_email_batch in chunked(group_emails, _GROUPS_PER_SEARCH_QUERY):
-                # Gmail's `list:` takes the group address and matches the dotted
-                # List-ID.
-                group_query = " OR ".join(
-                    f"list:{email}" for email in group_email_batch
-                )
+                # No date range and Spam and Trash included: Gmail applies both
+                # to each message, and the crawl indexes every message of a
+                # thread that has one message in range.
                 for thread in execute_paginated_retrieval(
                     retrieval_function=gmail_service.users()  # ty: ignore[unresolved-attribute]
                     .threads()
@@ -996,58 +1008,68 @@ class GmailConnector(
                     list_key="threads",
                     userId=user_email,
                     fields=THREAD_LIST_FIELDS,
-                    q=f"({group_query}) {time_range_query or ''}".strip(),
+                    # Gmail's `list:` takes the group address and matches the
+                    # dotted List-ID.
+                    q=" OR ".join(f"list:{email}" for email in group_email_batch),
+                    includeSpamTrash=True,
+                    maxResults=_MAX_THREADS_PER_PAGE,
                     continue_on_404_or_403=True,
                 ):
-                    if thread["id"] not in listed_thread_ids:
-                        listed_thread_ids.add(thread["id"])
-                        yield thread["id"]
-
-        try:
-            for thread_id_batch in chunked(list_thread_ids(), SLIM_BATCH_SIZE):
-                threads, errors = _batch_get_threads(
-                    gmail_service,
-                    user_email,
-                    thread_id_batch,
-                    fields=_GROUP_MAIL_THREAD_FIELDS,
-                    metadata_headers=_GROUP_MAIL_HEADERS,
-                )
-                # Pruning deletes the documents a listing leaves out.
-                if errors:
-                    raise RuntimeError(
-                        f"Gmail failed to read {len(errors)} threads of "
-                        f"{user_email} while listing group mail"
-                    )
-                slim_doc_batch: list[SlimDocument | HierarchyNode] = []
-                for thread in threads.values():
-                    for message in thread.get("messages", []):
-                        group_email = self.group_mail.get_group(message, user_email)
-                        rfc_message_id = get_rfc_message_id(message)
-                        if group_email is None or rfc_message_id is None:
-                            continue
-                        slim_doc_batch.append(
-                            SlimDocument(
-                                id=_build_group_mail_document_id(
-                                    group_email, rfc_message_id
-                                ),
-                                external_access=get_group_mail_access(group_email),
-                            )
-                        )
-                if slim_doc_batch:
-                    yield slim_doc_batch
-                if callback:
-                    tag = "retrieve_all_slim_docs_perm_sync"
-                    if callback.should_stop():
-                        raise RuntimeError(f"{tag}: Stop signal detected")
-                    callback.progress(tag, len(thread_id_batch))
+                    thread_ids.add(thread["id"])
         except HttpError as e:
             if not _is_mail_service_disabled_error(e):
                 raise
-            logger.warning(
-                "Skipping the group mail listing for %s because the mailbox is "
-                "disabled.",
+        return thread_ids
+
+    def _fetch_slim_group_mail(
+        self,
+        user_email: str,
+        thread_ids: list[str],
+        callback: IndexingHeartbeatInterface | None,
+    ) -> GenerateSlimDocumentOutput:
+        """The Collaborative Inbox documents in these threads of the mailbox."""
+        if not thread_ids:
+            return
+
+        gmail_service = get_google_service(GoogleService.GMAIL, self.creds, user_email)
+        for thread_id_batch in chunked(thread_ids, SLIM_BATCH_SIZE):
+            threads, errors = _batch_get_threads(
+                gmail_service,
                 user_email,
+                thread_id_batch,
+                fields=_GROUP_MAIL_THREAD_FIELDS,
+                metadata_headers=_GROUP_MAIL_HEADERS,
             )
+            # Pruning deletes the documents a listing leaves out.
+            if errors:
+                raise RuntimeError(
+                    f"Gmail failed to read {len(errors)} threads of "
+                    f"{user_email} while listing group mail"
+                )
+            slim_doc_batch: list[SlimDocument | HierarchyNode] = []
+            for thread in threads.values():
+                for message in thread.get("messages", []):
+                    group_mail_ids = _get_group_mail_ids(
+                        message, user_email, self.inbox_lookup
+                    )
+                    if group_mail_ids is None:
+                        continue
+                    group_email, rfc_message_id = group_mail_ids
+                    slim_doc_batch.append(
+                        SlimDocument(
+                            id=_build_group_mail_document_id(
+                                group_email, rfc_message_id
+                            ),
+                            external_access=get_group_mail_access(group_email),
+                        )
+                    )
+            if slim_doc_batch:
+                yield slim_doc_batch
+            if callback:
+                tag = "retrieve_all_slim_docs_perm_sync"
+                if callback.should_stop():
+                    raise RuntimeError(f"{tag}: Stop signal detected")
+                callback.progress(tag, len(thread_id_batch))
 
     def _reindex_from_mailbox(
         self,
@@ -1058,7 +1080,9 @@ class GmailConnector(
         thread that resolves (to a document or a failure) from ``pending``."""
         gmail_service = get_google_service(GoogleService.GMAIL, self.creds, user_email)
         try:
-            found, errors = _batch_get_threads(gmail_service, user_email, list(pending))
+            found, errors = _batch_get_threads(
+                gmail_service, user_email, list(pending), REINDEX_THREAD_FIELDS
+            )
         except RefreshError as e:
             # The admin's mailbox failing means the credential is bad. Any
             # other user may be suspended or deleted; the thread can still be
@@ -1081,7 +1105,7 @@ class GmailConnector(
                 )
                 continue
             try:
-                docs = thread_to_documents(thread, user_email, self.group_mail)
+                docs = thread_to_documents(thread, user_email, self.inbox_lookup)
             except Exception as e:
                 yield _build_thread_failure(
                     thread_id,
@@ -1130,7 +1154,8 @@ class GmailConnector(
                     ),
                     failure_message=(
                         f"'{thread_id}' is not a Gmail thread id; targeted "
-                        "reindex expects the hex thread id the crawl indexes"
+                        "reindex reads threads, and a group document is "
+                        "reindexed with its thread"
                     ),
                 )
                 continue

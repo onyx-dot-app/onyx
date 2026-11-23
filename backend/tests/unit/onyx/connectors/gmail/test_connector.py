@@ -14,6 +14,7 @@ from onyx.access.models import ExternalAccess
 from onyx.configs.constants import DocumentSource
 from onyx.connectors.gmail import connector as gmail_connector_module
 from onyx.connectors.gmail.connector import (
+    REINDEX_THREAD_FIELDS,
     GmailCheckpoint,
     GmailConnector,
     _batch_get_threads,
@@ -517,7 +518,10 @@ def _batch_get(
 ) -> tuple[dict[str, dict[str, Any]], dict[str, Exception]]:
     with patch.object(gmail_connector_module.time, "sleep"):
         return _batch_get_threads(
-            cast(gmail_connector_module.GmailService, gmail), _MAILBOX, thread_ids
+            cast(gmail_connector_module.GmailService, gmail),
+            _MAILBOX,
+            thread_ids,
+            REINDEX_THREAD_FIELDS,
         )
 
 

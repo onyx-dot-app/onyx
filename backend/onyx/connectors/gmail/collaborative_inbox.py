@@ -1,5 +1,6 @@
 import re
 from collections.abc import Iterator
+from functools import cached_property
 from typing import Any
 
 from google.auth.exceptions import RefreshError
@@ -65,7 +66,7 @@ def is_collaborative_inbox(
     settings_service: GroupsSettingsService, group_email: str
 ) -> bool:
     """Whether the address is a group with Collaborative Inbox turned on. False
-    when it is not a group, or the credential cannot read its settings."""
+    when it is not a group."""
     try:
         settings = next(
             execute_single_retrieval(
@@ -75,9 +76,11 @@ def is_collaborative_inbox(
             )
         )
     except HttpError as e:
-        if e.resp.status not in (400, 403, 404):
+        # A 403 is not an answer. Read as "no", it would empty the slim
+        # listing, and pruning would delete the group's documents.
+        if e.resp.status not in (400, 404):
             raise
-        logger.warning("Could not read the group settings of %s: %s", group_email, e)
+        logger.warning("%s is not a group: %s", group_email, e)
         return False
     # The Groups Settings API returns booleans as strings.
     return settings.get(_COLLABORATIVE_INBOX_FIELD) == "true"
@@ -148,16 +151,23 @@ class CollaborativeInboxLookup:
     ) -> None:
         self._creds = creds
         self._primary_admin_email = primary_admin_email
-        self._group_emails = frozenset(group_emails)
-        self._settings_service: GroupsSettingsService | None = None
-        self._is_settings_service_built = False
-        self._admin_service: AdminService | None = None
+        self._group_emails = frozenset(email.lower() for email in group_emails)
         # None when the address is not a Collaborative Inbox group, or when the
         # credential cannot read group settings.
         self._member_emails_by_group: dict[str, frozenset[str] | None] = {}
 
+    @cached_property
+    def _settings_service(self) -> GroupsSettingsService | None:
+        return build_groups_settings_service(self._creds, self._primary_admin_email)
+
+    @cached_property
+    def _admin_service(self) -> AdminService:
+        return get_google_service(
+            GoogleService.ADMIN, self._creds, self._primary_admin_email
+        )
+
     def has_settings_access(self) -> bool:
-        return self._get_settings_service() is not None
+        return self._settings_service is not None
 
     def get_group(self, message: dict[str, Any], mailbox_email: str) -> str | None:
         """The Collaborative Inbox group that delivered this copy of the
@@ -187,28 +197,16 @@ class CollaborativeInboxLookup:
             if self._get_member_emails(group_email) is None
         ]
 
-    def _get_settings_service(self) -> GroupsSettingsService | None:
-        if not self._is_settings_service_built:
-            self._settings_service = build_groups_settings_service(
-                self._creds, self._primary_admin_email
-            )
-            self._is_settings_service_built = True
-        return self._settings_service
-
     def _get_member_emails(self, group_email: str) -> frozenset[str] | None:
         if group_email not in self._member_emails_by_group:
-            settings_service = self._get_settings_service()
-            self._member_emails_by_group[group_email] = (
-                frozenset(self._list_member_emails(group_email))
-                if settings_service is not None
-                and is_collaborative_inbox(settings_service, group_email)
-                else None
+            self._member_emails_by_group[group_email] = self._read_member_emails(
+                group_email
             )
         return self._member_emails_by_group[group_email]
 
-    def _list_member_emails(self, group_email: str) -> Iterator[str]:
-        if self._admin_service is None:
-            self._admin_service = get_google_service(
-                GoogleService.ADMIN, self._creds, self._primary_admin_email
-            )
-        return list_group_member_emails(self._admin_service, group_email)
+    def _read_member_emails(self, group_email: str) -> frozenset[str] | None:
+        if self._settings_service is None:
+            return None
+        if not is_collaborative_inbox(self._settings_service, group_email):
+            return None
+        return frozenset(list_group_member_emails(self._admin_service, group_email))
