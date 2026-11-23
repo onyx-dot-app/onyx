@@ -604,6 +604,7 @@ pub fn refresh(app: &AppHandle) {
         }
         if new.disable_launcher != old.disable_launcher {
             crate::menu::sync_launcher_items(app);
+            crate::aonyx::sync_policy(app);
         }
     }
     // Every refresh: a managed value that failed to apply is tried again. It
