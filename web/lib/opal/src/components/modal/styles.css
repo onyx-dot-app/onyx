@@ -70,8 +70,9 @@
     transform: translateY(-0.25rem) scale(0.98);
   }
 }
-@media (prefers-reduced-motion: reduce) {
-  .opal-modal-positioner[data-state] {
+.opal-modal-positioner[data-state],
+.opal-modal-overlay[data-state] {
+  @variant motion-reduce {
     animation: none;
   }
 }

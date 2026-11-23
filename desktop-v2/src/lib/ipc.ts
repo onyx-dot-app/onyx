@@ -21,8 +21,8 @@ export interface Prefs {
   launchAtLoginManaged: boolean;
   autoUpdateDisabled: boolean;
   notificationsDisabled: boolean;
-  // A managed policy exists but is not valid.
-  policyInvalid: boolean;
+  // Set when a managed policy exists but is not valid.
+  policyNotice: string | null;
   notifyAnswers: boolean;
 }
 
@@ -62,6 +62,9 @@ export const checkServer = (url: string): Promise<ServerInfo> =>
 
 export const saveServer = (url: string): Promise<void> =>
   invoke("save_server", { url });
+
+// Why managed policy stops the user from setting the server, or null.
+export const getServerLock = (): Promise<string | null> => invoke("get_server_lock");
 
 export interface SsoOption {
   label: string;
@@ -210,6 +213,8 @@ export type Unreachable =
   | { kind: "timeout" }
   | { kind: "refused" }
   | { kind: "serverError"; status: number }
+  | { kind: "notOnyx" }
+  | { kind: "apiNotRouted" }
   | { kind: "unknown" };
 
 export interface OfflineStatus {
@@ -220,6 +225,8 @@ export interface OfflineStatus {
   nextRetryMs: number | null;
   // Managed policy locks the server, so Change server is hidden.
   serverLocked: boolean;
+  // No automatic checks: only Retry checks again.
+  retryByHand: boolean;
 }
 
 export const OFFLINE_STATUS_EVENT = "offline-status";
@@ -228,6 +235,10 @@ export const getOfflineStatus = (): Promise<OfflineStatus | null> =>
   invoke("get_offline_status");
 
 export const retryConnection = (): Promise<void> => invoke("retry_connection");
+
+// Windows and Linux: sizes this local window to `contentHeight` logical pixels, inside the screen.
+export const fitWindow = (contentHeight: number): Promise<void> =>
+  invoke("fit_window", { contentHeight });
 
 export function errorMessage(error: unknown): string {
   if (typeof error === "string") return error;

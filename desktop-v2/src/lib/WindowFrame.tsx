@@ -2,6 +2,8 @@ import { useLayoutEffect, useRef, type ReactNode } from "react";
 import { getCurrentWindow, LogicalSize } from "@tauri-apps/api/window";
 import { Text } from "@opal/components";
 import { Section } from "@opal/layouts";
+import { fitWindow } from "./ipc";
+import { IS_MAC } from "./platform";
 
 interface WindowFrameProps {
   title: string;
@@ -21,6 +23,13 @@ export function WindowFrame({ title, subtitle, children }: WindowFrameProps) {
     const content = contentRef.current;
     if (!content) return;
     const fit = () => {
+      if (!IS_MAC) {
+        // Rust keeps the width the window opened with and the window on
+        // screen. Feeding back `innerWidth` grows WebKitGTK windows under
+        // fractional GDK_DPI_SCALE.
+        void fitWindow(content.offsetHeight + TITLE_BAR);
+        return;
+      }
       // Content taller than the screen scrolls instead.
       const height = Math.min(content.offsetHeight + TITLE_BAR, window.screen.availHeight - 80);
       void getCurrentWindow().setSize(new LogicalSize(window.innerWidth, height));

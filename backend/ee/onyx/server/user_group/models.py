@@ -4,7 +4,7 @@ from uuid import UUID
 from pydantic import BaseModel, Field, field_validator
 
 from onyx.auth.permissions import Permission
-from onyx.db.enums import ConnectorManageRole
+from onyx.db.enums import AccountType, ConnectorManageRole
 from onyx.db.models import UserGroup as UserGroupModel
 from onyx.server.documents.models import (
     ConnectorCredentialPairDescriptor,
@@ -13,7 +13,6 @@ from onyx.server.documents.models import (
 )
 from onyx.server.features.document_set.models import DocumentSet
 from onyx.server.features.persona.models import PersonaSnapshot
-from onyx.server.manage.models import UserInfo, UserPreferences
 
 
 class ManagedCCPairEntry(BaseModel):
@@ -34,6 +33,15 @@ class GroupManagedCCPairsUpdateRequest(BaseModel):
         return cc_pairs
 
 
+class UserGroupMember(BaseModel):
+    id: str
+    email: str
+    is_active: bool
+    is_superuser: bool
+    is_verified: bool
+    account_type: AccountType
+
+
 class UserGroupMemberCounts(NamedTuple):
     total: int
     active: int
@@ -43,7 +51,7 @@ class UserGroup(BaseModel):
     id: int
     name: str
     # Empty when the list endpoint is called with include_users=false.
-    users: list[UserInfo]
+    users: list[UserGroupMember]
     member_count: int
     active_member_count: int
     manager_ids: list[str]
@@ -92,17 +100,13 @@ class UserGroup(BaseModel):
                 if relationship.is_manager and relationship.user_id is not None
             ],
             users=[
-                UserInfo(
+                UserGroupMember(
                     id=str(user.id),
                     email=user.email,
                     is_active=user.is_active,
                     is_superuser=user.is_superuser,
                     is_verified=user.is_verified,
                     account_type=user.account_type,
-                    preferences=UserPreferences(
-                        default_model=user.default_model,
-                        chosen_assistants=user.chosen_assistants,
-                    ),
                 )
                 for user in users
             ],

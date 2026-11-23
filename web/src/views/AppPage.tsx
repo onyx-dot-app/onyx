@@ -8,6 +8,7 @@ import {
 } from "@opal/navigation";
 import { SourceMetadata, ValidSources } from "@/lib/connectors/types/source";
 import { loginPath } from "@/lib/auth/paths";
+import { getUserAddressedName } from "@/lib/users/svc";
 import { endIncognitoSession } from "@/app/app/services/lib";
 import {
   useCallback,
@@ -106,8 +107,8 @@ import { useQueryController } from "@/providers/QueryControllerProvider";
 import WelcomeMessage from "@/app/app/components/WelcomeMessage";
 import ChatUI from "@/sections/chat/ChatUI";
 import ScheduledRunBanner from "@/sections/scheduledTasks/ScheduledRunBanner";
-import { FULL_WIDTH_TRANSITION } from "@/lib/chat/layout";
-import { useFullWidthChat } from "@/providers/FullWidthChatProvider";
+import { CHAT_WIDTH_TRANSITION } from "@/lib/chat/layout";
+import { useWideChat } from "@/providers/WideChatProvider";
 import { paidTierGated } from "@/ce";
 import EESearchUI from "@/ee/sections/SearchUI";
 const SearchUI = paidTierGated(EESearchUI);
@@ -410,14 +411,12 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const multiModel = useMultiModelChat(llmManager);
 
-  const { fullWidthChat } = useFullWidthChat();
+  const { wideChat } = useWideChat();
 
-  // Full-width applies in a conversation and on the new-session view, where
-  // it widens the greeting row and the composer.
-  const fullWidthActive =
-    fullWidthChat &&
-    ((appPosition.isChat() && !!currentChatSessionId) ||
-      appPosition.isNewSession());
+  // The wide width applies only in a conversation. The new-session view keeps
+  // the reading width, with the composer centered on screen.
+  const wideChatActive =
+    wideChat && appPosition.isChat() && !!currentChatSessionId;
 
   // Auto-fold sidebar when a multi-model message is submitted.
   // Stays collapsed until the user exits multi-model mode (removes models).
@@ -761,7 +760,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const onboardingVisible =
     isWelcomeFocus &&
-    (showOnboarding || !user?.personalization?.name) &&
+    (showOnboarding || !getUserAddressedName(user)) &&
     !onboardingDismissed;
 
   // While onboarding is open, the bottom row keeps the height it had when
@@ -792,10 +791,12 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
 
   const gridStyle = {
     // The chat column's width, set once here: the messages, the first-open
-    // skeleton, the greeting row and the composer all read it. Full width
-    // keeps a max-width (100%), so the switch animates instead of jumping.
-    "--app-chat-column-width": fullWidthActive
-      ? "100%"
+    // skeleton, the greeting row and the composer all read it. Both widths
+    // are lengths, so the switch animates instead of jumping. The wide token
+    // includes the side gutter (1rem each side at md and up); the reading
+    // width does not.
+    "--app-chat-column-width": wideChatActive
+      ? "calc(var(--width-chat-wide-max) - 2rem)"
       : "var(--width-chat-message-max)",
     // minmax(0, 1fr) (instead of "1fr") lets the single column shrink to the
     // grid's width. A bare "1fr" is minmax(auto, 1fr), whose auto minimum is
@@ -899,7 +900,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                         pauseFollowing={isStreamDraining}
                         isStreaming={isStreaming}
                         onScrollButtonVisibilityChange={setShowScrollButton}
-                        fullWidth={fullWidthActive}
+                        wide={wideChatActive}
                       >
                         <ChatUI
                           activeAgent={activeAgent!}
@@ -915,7 +916,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                           onResubmit={handleResubmitLastMessage}
                           anchorNodeId={anchorNodeId}
                           selectedModels={multiModel.selectedModels}
-                          fullWidthChat={fullWidthActive}
+                          wideChat={wideChatActive}
                         />
                       </ChatScrollContainer>
                     </Section>
@@ -947,7 +948,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                           shadowDirection="bottom-only"
                           containerClassName={cn(
                             "w-full flex-1 md:max-w-(--app-chat-column-width)",
-                            FULL_WIDTH_TRANSITION
+                            CHAT_WIDTH_TRANSITION
                           )}
                           className="flex-1 min-h-0 overflow-y-hidden"
                         >
@@ -1035,7 +1036,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       alignItems="end"
                       className={cn(
                         "max-w-(--app-chat-column-width)",
-                        FULL_WIDTH_TRANSITION
+                        CHAT_WIDTH_TRANSITION
                       )}
                     >
                       <WelcomeMessage
@@ -1075,7 +1076,7 @@ export default function AppPage({ firstMessage }: ChatPageProps) {
                       "relative w-full flex flex-col",
                       onboardingVisible && "min-h-0",
                       "md:max-w-(--app-chat-column-width)",
-                      FULL_WIDTH_TRANSITION
+                      CHAT_WIDTH_TRANSITION
                     )}
                   >
                     {/* Scroll to bottom button - positioned absolutely above AppInputBar */}

@@ -215,7 +215,9 @@ mod platform {
 
 #[cfg(not(target_os = "macos"))]
 mod platform {
-    use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder, WindowEvent};
+    use tauri::{
+        AppHandle, Manager, PhysicalPosition, WebviewUrl, WebviewWindowBuilder, WindowEvent,
+    };
 
     use super::{local_navigation_allowed, local_new_window, LAUNCHER};
 
@@ -226,7 +228,7 @@ mod platform {
         let nav_app = app.clone();
         let window = WebviewWindowBuilder::new(app, LAUNCHER, url)
             .title("Onyx Launcher")
-            .inner_size(720.0, 460.0)
+            .inner_size(super::SIZE.0, super::SIZE.1)
             .decorations(false)
             .transparent(true)
             // The page draws its own rounded frame; a native shadow would
@@ -253,9 +255,55 @@ mod platform {
 
     pub fn show(app: &AppHandle) -> Result<(), String> {
         let window = app.get_webview_window(LAUNCHER).ok_or("launcher missing")?;
-        let _ = window.center();
-        window.show().map_err(|e| e.to_string())?;
-        window.set_focus().map_err(|e| e.to_string())
+        match position_on_cursor_monitor(app) {
+            Some(position) => {
+                let _ = window.set_position(position);
+            }
+            None => {
+                let _ = window.center();
+            }
+        }
+        #[cfg(target_os = "linux")]
+        {
+            present(&window)
+        }
+        #[cfg(not(target_os = "linux"))]
+        {
+            window.show().map_err(|e| e.to_string())?;
+            window.set_focus().map_err(|e| e.to_string())
+        }
+    }
+
+    /// The launcher's place on the monitor under the pointer, the one the user
+    /// works on. `center()` keeps it on the monitor it was on.
+    fn position_on_cursor_monitor(app: &AppHandle) -> Option<PhysicalPosition<i32>> {
+        let cursor = app.cursor_position().ok()?;
+        let monitor = app.monitor_from_point(cursor.x, cursor.y).ok()??;
+        // The known size: tao reports a wrong outer size for a window that
+        // was never shown on Linux. The logical size is kept on a monitor with
+        // another scale.
+        let size = tauri::LogicalSize::new(super::SIZE.0, super::SIZE.1)
+            .to_physical::<u32>(monitor.scale_factor());
+        Some(super::centered(monitor.work_area(), size))
+    }
+
+    /// Shows the launcher and asks the window manager for focus. KWin and
+    /// Openbox refuse focus to a request without a fresh X timestamp, and no
+    /// key event reaches GTK for a grabbed global shortcut.
+    #[cfg(target_os = "linux")]
+    fn present(window: &tauri::WebviewWindow) -> Result<(), String> {
+        use gdkx11::glib::Cast;
+        use gtk::prelude::{GtkWindowExt, WidgetExt};
+
+        let gtk_window = window.gtk_window().map_err(|e| e.to_string())?;
+        gtk_window.show_all();
+        let time = gtk_window
+            .window()
+            .and_then(|w| w.downcast::<gdkx11::X11Window>().ok())
+            .map(|w| gdkx11::functions::x11_get_server_time(&w))
+            .unwrap_or(gdkx11::gdk::ffi::GDK_CURRENT_TIME as u32);
+        gtk_window.present_with_time(time);
+        Ok(())
     }
 
     pub fn hide(app: &AppHandle) {
@@ -270,6 +318,23 @@ mod platform {
         app.get_webview_window(LAUNCHER)
             .is_some_and(|w| w.is_visible().unwrap_or(false))
     }
+}
+
+/// The launcher's size on Windows and Linux, in logical pixels.
+#[cfg(not(target_os = "macos"))]
+const SIZE: (f64, f64) = (720.0, 460.0);
+
+/// The top-left corner that centers a window of `size` in `work_area`.
+#[cfg(any(not(target_os = "macos"), test))]
+fn centered(
+    work_area: &tauri::PhysicalRect<i32, u32>,
+    size: tauri::PhysicalSize<u32>,
+) -> tauri::PhysicalPosition<i32> {
+    let offset = |area: u32, window: u32| (i64::from(area) - i64::from(window)) / 2;
+    tauri::PhysicalPosition::new(
+        (i64::from(work_area.position.x) + offset(work_area.size.width, size.width)) as i32,
+        (i64::from(work_area.position.y) + offset(work_area.size.height, size.height)) as i32,
+    )
 }
 
 /// Where the launcher page keeps recent questions (`Launcher.tsx`).
@@ -371,4 +436,37 @@ fn show_now(app: &AppHandle, when_signed_out: impl FnOnce(&AppHandle)) {
 pub fn is_visible(app: &AppHandle) -> bool {
     app.get_webview_window(LAUNCHER)
         .is_some_and(|w| w.is_visible().unwrap_or(false))
+}
+
+#[cfg(test)]
+mod tests {
+    use tauri::{PhysicalPosition, PhysicalRect, PhysicalSize};
+
+    use super::centered;
+
+    fn area(x: i32, y: i32, width: u32, height: u32) -> PhysicalRect<i32, u32> {
+        PhysicalRect {
+            position: PhysicalPosition::new(x, y),
+            size: PhysicalSize::new(width, height),
+        }
+    }
+
+    #[test]
+    fn centers_on_the_given_monitor() {
+        let size = PhysicalSize::new(720, 460);
+        assert_eq!(
+            centered(&area(0, 0, 1920, 1040), size),
+            PhysicalPosition::new(600, 290)
+        );
+        // A second monitor to the left of and above the primary one.
+        assert_eq!(
+            centered(&area(-2560, -400, 2560, 1400), size),
+            PhysicalPosition::new(-1640, 70)
+        );
+        // A work area smaller than the window keeps the window centered on it.
+        assert_eq!(
+            centered(&area(100, 0, 600, 400), size),
+            PhysicalPosition::new(40, -30)
+        );
+    }
 }

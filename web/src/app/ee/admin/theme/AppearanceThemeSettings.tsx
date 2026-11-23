@@ -1,5 +1,6 @@
 "use client";
 
+import { prefersReducedMotion } from "@opal/utils";
 import { useTranslations } from "next-intl";
 import { FormField } from "@/refresh-components/form/FormField";
 import {
@@ -134,7 +135,7 @@ export const AppearanceThemeSettings = forwardRef<
           field.ref.current.focus();
           // Scroll into view if needed
           field.ref.current.scrollIntoView({
-            behavior: "smooth",
+            behavior: prefersReducedMotion() ? "auto" : "smooth",
             block: "center",
           });
           break;

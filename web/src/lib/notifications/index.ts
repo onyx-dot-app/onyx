@@ -2,7 +2,7 @@ import { type Navigation } from "@opal/navigation";
 import type { Route } from "next";
 import { SvgAlertCircle, SvgAlertTriangle, SvgBullhorn } from "@opal/icons";
 import type { IconProps } from "@opal/types";
-import { NotificationType } from "@/lib/notifications/interfaces";
+import { NotificationType } from "@/lib/notifications/types";
 
 export function isExternalLink(link: string): boolean {
   return link.startsWith("http://") || link.startsWith("https://");
@@ -47,6 +47,7 @@ export function getNotificationIcon(
     case NotificationType.LICENSE_EXPIRY_WARNING:
     case NotificationType.SCHEDULED_TASK_FAILED:
     case NotificationType.SCHEDULED_TASK_AWAITING_APPROVAL:
+    case NotificationType.OPENSEARCH_CLUSTER_ISSUE:
       return SvgAlertTriangle;
 
     case NotificationType.RELEASE_NOTES:

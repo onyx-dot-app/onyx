@@ -1,5 +1,6 @@
 "use client";
 
+import { prefersReducedMotion } from "@opal/utils";
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
 import useSWR from "swr";
@@ -36,7 +37,10 @@ const route = ADMIN_ROUTES.INDEXING_STATUS;
 /** Stacked, the history sits under the list and out of view, so it scrolls there. */
 export function revealHistory(panel: HTMLDivElement | null) {
   if (panel === null || !isStacked(panel)) return;
-  panel.scrollIntoView({ block: "start", behavior: "smooth" });
+  panel.scrollIntoView({
+    block: "start",
+    behavior: prefersReducedMotion() ? "auto" : "smooth",
+  });
 }
 
 interface StackedPanelToggleProps {

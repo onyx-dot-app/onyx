@@ -10,7 +10,7 @@ from mcp.shared.auth import OAuthClientInformationFull
 from sqlalchemy import delete, select
 from sqlalchemy.orm import Session
 
-from onyx.auth.constants import OAUTH_PROVIDER_ACCESS_LIFETIME
+from onyx.auth.constants import OAUTH_PROVIDER_ACCESS_LIFETIME, OAUTH_PROVIDER_SCOPES
 from onyx.auth.pat import hash_pat
 from onyx.db.engine.async_sql_engine import (
     get_async_session_context_manager,
@@ -118,6 +118,7 @@ class _OAuthProviderRows:
             client_id=grant_client_id,
             client_name="Storage test client",
             resource=resource,
+            scopes=list(OAUTH_PROVIDER_SCOPES),
             issue_refresh=issue_refresh,
         )
         self.db_session.commit()
@@ -639,6 +640,39 @@ async def test_access_token_does_not_resolve_in_other_tenant(
     assert await _resolve_access_token(access_token) is not None
 
 
+@pytest.mark.parametrize(
+    ("approved", "granted"),
+    [
+        (["read:search", "read:chat"], ("read:search", "read:chat")),
+        # A consent page opened before read:chat was added.
+        (["read:search"], ("read:search",)),
+        (["read:chat"], None),
+    ],
+)
+def test_create_grant_keeps_the_approved_scopes(
+    db_session: Session,
+    oauth_provider_rows: _OAuthProviderRows,
+    approved: list[str],
+    granted: tuple[str, ...] | None,
+) -> None:
+    user = oauth_provider_rows.create_user()
+    client_id = f"oauth-provider-storage-scopes-{uuid4().hex}"
+    oauth_provider_rows.client_ids.append(client_id)
+
+    token_pair = create_oauth_provider_grant__no_commit(
+        db_session,
+        user_id=user.id,
+        client_id=client_id,
+        client_name="Storage test client",
+        resource=_RESOURCE,
+        scopes=approved,
+        issue_refresh=True,
+    )
+    db_session.commit()
+
+    assert (token_pair.scopes if token_pair else None) == granted
+
+
 def test_create_grant_requires_user_api_key_permission(
     db_session: Session, oauth_provider_rows: _OAuthProviderRows
 ) -> None:
@@ -652,6 +686,7 @@ def test_create_grant_requires_user_api_key_permission(
         client_id=client_id,
         client_name="Storage test client",
         resource=_RESOURCE,
+        scopes=list(OAUTH_PROVIDER_SCOPES),
         issue_refresh=True,
     )
     db_session.commit()

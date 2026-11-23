@@ -2,7 +2,7 @@
 
 **Import:** `import { OnyxLoader } from "@opal/components";`
 
-The Onyx-branded mark: the octagon outline and diamond logo crossfade while rotating a full turn on a 2s loop. It takes a `color` token (default `border-02`) and holds still under `prefers-reduced-motion`.
+The Onyx-branded mark: the octagon outline and diamond logo crossfade while rotating a full turn on a 2s loop. It takes a `color` token (default `border-02`) and holds still under reduced motion (the OS setting or `data-motion="reduced"`).
 
 ```tsx
 <OnyxLoader />

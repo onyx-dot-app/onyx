@@ -89,6 +89,27 @@
 
 .opal-icon-container-avatar-user {
   @apply bg-background-neutral-inverted-00;
+  /* The initials and the glyph scale with the circle. */
+  container-type: size;
+}
+
+.opal-icon-container-avatar-user[data-empty="true"] {
+  @apply bg-background-tint-01;
+}
+
+.opal-icon-container-avatar-initials {
+  @apply font-secondary-action text-text-inverted-05 whitespace-nowrap select-none;
+  font-size: 40cqw;
+}
+
+.opal-icon-container-avatar-empty-glyph {
+  @apply stroke-text-03;
+  width: 55%;
+  height: 55%;
+}
+
+.opal-icon-container-avatar-image {
+  @apply h-full w-full object-cover;
 }
 
 .opal-icon-container-avatar-icon {

@@ -5,7 +5,7 @@ import {
   NotificationSeverity,
   NotificationType,
   type Notification,
-} from "@/lib/notifications/interfaces";
+} from "@/lib/notifications/types";
 
 export interface BannerQueueItem {
   notification: Notification;

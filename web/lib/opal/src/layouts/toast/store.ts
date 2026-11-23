@@ -31,15 +31,22 @@ export interface ToastOptions {
   /** @default "info" */
   level?: ToastLevel;
   description?: string;
-  /** Milliseconds before auto-dismiss. Infinity keeps the toast persistent. @default 4000 */
+  /**
+   * Milliseconds before auto-dismiss. Infinity keeps the toast persistent.
+   * @default 4000, or Infinity after `toast.setPersistentByDefault(true)`
+   */
   duration?: number;
-  /** Shows the close button. @default true */
+  /** Shows the close button. A persistent toast always shows it. @default true */
   dismissible?: boolean;
   action?: ToastAction;
 }
 
 export interface Toast extends ToastOptions {
   id: string;
+  /** The resolved auto-dismiss time: the caller's, or the default. */
+  duration: number;
+  /** True when the caller gave no `duration`, so the toast follows the default. */
+  defaultDuration: boolean;
   createdAt: number;
   /** True while the exit animation plays. */
   leaving?: boolean;
@@ -93,6 +100,8 @@ const running = new Map<
 >();
 
 let nextId = 0;
+// For toasts fired without a duration. See `toast.setPersistentByDefault`.
+let defaultDuration = DEFAULT_DURATION;
 
 function notify() {
   subscribers.forEach((cb) => cb());
@@ -147,7 +156,7 @@ export function shownToasts(list: Toast[]): Toast[] {
 
 function addToast(options: ToastOptions): string {
   const id = options.id ?? `toast-${++nextId}-${Date.now()}`;
-  const duration = options.duration ?? DEFAULT_DURATION;
+  const duration = options.duration ?? defaultDuration;
 
   const level = options.level ?? "info";
 
@@ -155,7 +164,10 @@ function addToast(options: ToastOptions): string {
     ...options,
     id,
     level,
-    dismissible: options.dismissible ?? true,
+    duration,
+    defaultDuration: options.duration === undefined,
+    // A toast that never times out must be closable.
+    dismissible: duration === Infinity || (options.dismissible ?? true),
     createdAt: Date.now(),
   };
 
@@ -277,6 +289,11 @@ interface ToastFn {
    * the toast persistent.
    */
   setAutoDismiss: (id: string, duration: number) => void;
+  /**
+   * Keeps toasts fired without a `duration` on screen until the user closes
+   * them, including the ones already on screen.
+   */
+  setPersistentByDefault: (persistent: boolean) => void;
 }
 
 function toastBase(options: ToastOptions): string {
@@ -295,6 +312,21 @@ export const toast: ToastFn = Object.assign(toastBase, {
   dismiss: closeToast,
   clearAll,
   setAutoDismiss,
+  setPersistentByDefault: (persistent: boolean) => {
+    defaultDuration = persistent ? Infinity : DEFAULT_DURATION;
+    if (!persistent) return;
+    // A toast fired before the preference loaded stays too.
+    const pending = toasts.filter(
+      (t) => t.defaultDuration && t.duration !== Infinity && !t.leaving
+    );
+    if (pending.length === 0) return;
+    const ids = new Set(pending.map((t) => t.id));
+    toasts = toasts.map((t) =>
+      ids.has(t.id) ? { ...t, duration: Infinity, dismissible: true } : t
+    );
+    notify();
+    ids.forEach((id) => setAutoDismiss(id, Infinity));
+  },
 });
 
 // ---------------------------------------------------------------------------

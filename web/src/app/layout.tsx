@@ -12,7 +12,12 @@ import {
   WebVitals,
 } from "@/lib/analytics/shared";
 import Script from "next/script";
-import { DM_Mono, Hanken_Grotesk } from "next/font/google";
+import {
+  Atkinson_Hyperlegible_Next,
+  DM_Mono,
+  Hanken_Grotesk,
+} from "next/font/google";
+import localFont from "next/font/local";
 import { ThemeProvider } from "next-themes";
 import { TooltipProvider } from "@radix-ui/react-tooltip";
 import StatsOverlayLoader from "@/components/dev/StatsOverlayLoader";
@@ -28,29 +33,77 @@ import { getLocale, getMessages } from "next-intl/server";
 import { DirectionProvider } from "@radix-ui/react-direction";
 import { cookies } from "next/headers";
 import { htmlDirForLocale, messageLocale, type HtmlDir } from "@/i18n/config";
+import {
+  APPEARANCE_COOKIE_NAME,
+  appearanceAttributes,
+  parseAppearanceCookie,
+} from "@/lib/appearance/preferences";
 
-// No generic at the end of either fallback list: the generic comes last in
-// the composed --font-* variables on <html> below, after the per-locale CJK
-// tail (--font-cjk-sans, defined in globals.css). A generic here would sit
-// before the CJK fonts and swallow every CJK codepoint.
+// The fallbacks after each loaded font in the --font-* variables on <html>
+// below. The per-locale CJK tail (--font-cjk-sans, globals.css) must come
+// before the generic, or the generic swallows every CJK codepoint. next/font
+// takes only literal options, so the fallbacks live here, not in its
+// `fallback` option.
+const SANS_FALLBACK =
+  "-apple-system, BlinkMacSystemFont, Segoe UI, Roboto, var(--font-cjk-sans), sans-serif";
+const MONO_FALLBACK =
+  "SF Mono, Monaco, Cascadia Code, Roboto Mono, Consolas, Courier New, var(--font-cjk-sans), monospace";
+
 const hankenGrotesk = Hanken_Grotesk({
   subsets: ["latin"],
   display: "swap",
-  fallback: ["-apple-system", "BlinkMacSystemFont", "Segoe UI", "Roboto"],
+});
+
+// Interface font options (src/lib/appearance/preferences.ts). Not preloaded: a browser
+// downloads a font file only when rendered text uses its family, so users
+// who keep the default font never fetch these.
+const atkinsonHyperlegibleNext = Atkinson_Hyperlegible_Next({
+  style: ["normal", "italic"],
+  display: "swap",
+  preload: false,
+  // next/font has no fallback metrics for this family.
+  adjustFontFallback: false,
+});
+
+// Unmodified upstream files, SIL Open Font License 1.1 (fonts/opendyslexic/OFL.txt).
+const openDyslexic = localFont({
+  src: [
+    {
+      path: "./fonts/opendyslexic/OpenDyslexic-Regular.woff2",
+      weight: "400",
+      style: "normal",
+    },
+    {
+      path: "./fonts/opendyslexic/OpenDyslexic-Italic.woff2",
+      weight: "400",
+      style: "italic",
+    },
+    {
+      path: "./fonts/opendyslexic/OpenDyslexic-Bold.woff2",
+      weight: "700",
+      style: "normal",
+    },
+    {
+      path: "./fonts/opendyslexic/OpenDyslexic-BoldItalic.woff2",
+      weight: "700",
+      style: "italic",
+    },
+  ],
+  // Scales the glyphs so the cap height and text width come close to Hanken
+  // Grotesk at the same font size; line heights and the presets stay as they
+  // are. globals.css tightens the spacing.
+  declarations: [{ prop: "size-adjust", value: "78%" }],
+  display: "swap",
+  preload: false,
+  // The generated fallback matches the unscaled font, so it would render
+  // larger than OpenDyslexic while the font loads.
+  adjustFontFallback: false,
 });
 
 const dmMono = DM_Mono({
   weight: "400",
   subsets: ["latin"],
   display: "swap",
-  fallback: [
-    "SF Mono",
-    "Monaco",
-    "Cascadia Code",
-    "Roboto Mono",
-    "Consolas",
-    "Courier New",
-  ],
 });
 
 // force-dynamic prevents Next.js from statically prerendering pages at build
@@ -75,12 +128,19 @@ export default async function Layout({ children }: LayoutProps) {
   // from the effective language.
   const language = messageLocale(locale);
 
+  const cookieStore = await cookies();
+  // The backend keeps this cookie in step with the saved preferences (see
+  // src/lib/appearance/preferences.ts), so the first paint already has the user's fonts.
+  const appearance = parseAppearanceCookie(
+    cookieStore.get(APPEARANCE_COOKIE_NAME)?.value
+  );
+
   let dir: HtmlDir = htmlDirForLocale(language);
   // Dev-only escape hatch so QA can preview either direction without
   // switching account language: set an "onyx-dir" cookie to "rtl" or
   // "ltr" (with path=/) and reload.
   if (process.env.NODE_ENV === "development") {
-    const dirOverride = (await cookies()).get("onyx-dir")?.value;
+    const dirOverride = cookieStore.get("onyx-dir")?.value;
     if (dirOverride === "rtl" || dirOverride === "ltr") {
       dir = dirOverride;
     }
@@ -90,17 +150,22 @@ export default async function Layout({ children }: LayoutProps) {
     <html
       lang={language}
       dir={dir}
+      {...appearanceAttributes(appearance)}
       // The app-wide font variables are composed here instead of with
       // next/font's `variable` option: the CJK tail (--font-cjk-sans,
       // globals.css) must vary with the locale, so the loaded-webfont chain
-      // and the tail have to be joined in one declaration. Every
-      // `var(--font-hanken-grotesk)` / `var(--font-dm-mono)` consumer (Opal
-      // text presets, the font-hanken/font-sans utilities, app CSS) resolves
-      // through these.
+      // and the tail have to be joined in one declaration. The interface and
+      // content font variables (tokens.css, globals.css) resolve through
+      // these, and Opal text presets, the font-interface/font-sans
+      // utilities and app CSS resolve through those.
       style={
         {
-          "--font-hanken-grotesk": `${hankenGrotesk.style.fontFamily}, var(--font-cjk-sans), sans-serif`,
-          "--font-dm-mono": `${dmMono.style.fontFamily}, var(--font-cjk-sans), monospace`,
+          "--font-hanken-grotesk": `${hankenGrotesk.style.fontFamily}, ${SANS_FALLBACK}`,
+          "--font-atkinson-hyperlegible-next": `${atkinsonHyperlegibleNext.style.fontFamily}, ${SANS_FALLBACK}`,
+          "--font-opendyslexic": `${openDyslexic.style.fontFamily}, ${SANS_FALLBACK}`,
+          // The "system" interface font (globals.css).
+          "--font-system": `system-ui, ${SANS_FALLBACK}`,
+          "--font-dm-mono": `${dmMono.style.fontFamily}, ${MONO_FALLBACK}`,
         } as React.CSSProperties
       }
       suppressHydrationWarning
@@ -152,7 +217,7 @@ export default async function Layout({ children }: LayoutProps) {
         )}
       </head>
 
-      <body className={`relative font-hanken`}>
+      <body className="relative font-interface">
         <NextIntlClientProvider locale={locale} messages={messages}>
           <OpalStringsBridge>
             {/* Radix reads direction from context, not the DOM, so popovers,

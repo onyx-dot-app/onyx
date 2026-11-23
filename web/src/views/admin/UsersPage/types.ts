@@ -14,6 +14,8 @@ export interface FullUserSnapshot {
   is_active: boolean;
   password_configured: boolean;
   personal_name: string | null;
+  /** Null when the user has no profile photo. */
+  profile_image_file_id: string | null;
   created_at: string;
   updated_at: string;
   /** Most recent chat activity; null when the user has never chatted. */
@@ -36,6 +38,7 @@ export interface UserRow {
    * null for rows that aren't real users: invited/requested, API keys). */
   craft_enabled: boolean | null;
   personal_name: string | null;
+  profile_image_file_id: string | null;
   created_at: string | null;
   updated_at: string | null;
   /** Most recent chat activity; null when the user has never chatted. Unlike

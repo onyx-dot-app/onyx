@@ -130,7 +130,7 @@ class Settings(BaseModel):
     # overrides win. The deployment-level Craft gate still applies on top.
     craft_default_enabled: bool = True
 
-    # Workspace UI language for users without a stored User.language.
+    # Workspace UI language for users without a stored UserPreferences.language.
     default_language: SupportedLanguage = SupportedLanguage.EN
 
     # Workspace-wide switch for the LLM gateway (/api/gateway — direct model
