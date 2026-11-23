@@ -1,5 +1,5 @@
 {
-  "version": "1.31",
+  "version": "1.32",
   "updated_at": "2026-11-23T00:00:00Z",
   "providers": {
     "openai": {
@@ -27,16 +27,16 @@
           "display_name": "Claude Opus 5.5"
         },
         {
-          "name": "claude-fable-5-2",
-          "display_name": "Claude Fable 5.2"
-        },
-        {
           "name": "claude-sonnet-5-5",
           "display_name": "Claude Sonnet 5.5"
         },
         {
           "name": "claude-haiku-5-5",
           "display_name": "Claude Haiku 5.5"
+        },
+        {
+          "name": "claude-fable-5-2",
+          "display_name": "Claude Fable 5.2"
         }
       ]
     },
@@ -52,12 +52,12 @@
           "display_name": "Gemini 4 Hydrogen"
         },
         {
-          "name": "gemini-4-neon",
-          "display_name": "Gemini 4 Neon"
-        },
-        {
           "name": "gemini-4-carbon",
           "display_name": "Gemini 4 Carbon"
+        },
+        {
+          "name": "gemini-4-neon",
+          "display_name": "Gemini 4 Neon"
         }
       ]
     },
