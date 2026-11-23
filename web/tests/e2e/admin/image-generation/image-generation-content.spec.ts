@@ -99,6 +99,8 @@ test.describe("Image Generation models from LLM providers", () => {
     const imageGenPage = new AdminImageGenerationPage(page);
     await imageGenPage.goto();
 
+    // Nothing is the default yet, so image generation starts off.
+    await imageGenPage.enableSwitch.click();
     const available = imageGenPage.availableModelCard(
       LLM_PROVIDER_ID,
       "gpt-image-2"
@@ -109,7 +111,7 @@ test.describe("Image Generation models from LLM providers", () => {
     await expect(imageGenPage.currentDefaultBadge(connected)).toBeVisible({
       timeout: 10000,
     });
-    // The model stays in the grid and says it is connected.
+    // The model stays in Add Models and says it is connected.
     await expect(available).toContainText("Connected");
     await expect(imageGenPage.dialog).toHaveCount(0);
     expect(linkBodies).toEqual([

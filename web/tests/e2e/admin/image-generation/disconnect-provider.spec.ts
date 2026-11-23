@@ -93,7 +93,7 @@ test.describe("Image Generation Provider Disconnect", () => {
     await mockImageGenApis(page, configs);
 
     await page.goto(IMAGE_GENERATION_URL);
-    await page.waitForSelector("text=Image Generation Model", {
+    await page.waitForSelector("text=Enable Image Generation", {
       timeout: 20000,
     });
 
@@ -158,7 +158,7 @@ test.describe("Image Generation Provider Disconnect", () => {
     await mockImageGenApis(page, configs);
 
     await page.goto(IMAGE_GENERATION_URL);
-    await page.waitForSelector("text=Image Generation Model", {
+    await page.waitForSelector("text=Enable Image Generation", {
       timeout: 20000,
     });
 
@@ -201,7 +201,7 @@ test.describe("Image Generation Provider Disconnect", () => {
     await mockImageGenApis(page, [{ ...FAKE_DEFAULT_CONFIG }]);
 
     await page.goto(IMAGE_GENERATION_URL);
-    await page.waitForSelector("text=Image Generation Model", {
+    await page.waitForSelector("text=Enable Image Generation", {
       timeout: 20000,
     });
 
@@ -239,7 +239,7 @@ test.describe("Image Generation Provider Disconnect", () => {
     await mockImageGenApis(page, [{ ...FAKE_DEFAULT_CONFIG }]);
 
     await page.goto(IMAGE_GENERATION_URL);
-    await page.waitForSelector("text=Image Generation Model", {
+    await page.waitForSelector("text=Enable Image Generation", {
       timeout: 20000,
     });
 

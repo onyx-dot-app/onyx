@@ -5809,9 +5809,6 @@
           "label": "Trennen"
         }
       },
-      "emptyState": {
-        "title": "Verbinden Sie ein Modell zur Bilderzeugung, um es im Chat zu verwenden."
-      },
       "form": {
         "apiKey": {
           "idle": "Geben Sie Ihren API-Schlüssel ein.",
@@ -5893,11 +5890,6 @@
       "loadError": {
         "message": "Die Konfiguration konnte nicht geladen werden. Bitte laden Sie die Seite neu."
       },
-      "model": {
-        "description": "Wählen Sie ein Modell, um Bilder im Chat zu erzeugen.",
-        "placeholder": "Standardmodell auswählen",
-        "title": "Modell zur Bilderzeugung"
-      },
       "noImageModels": {
         "description": "Verbinden Sie auf der Seite „Sprachmodelle“ einen LLM-Anbieter, der Bildmodelle bereitstellt.",
         "title": "Keine Bildmodelle verfügbar"
@@ -5949,6 +5941,14 @@
       },
       "setDefaultError": {
         "message": "Der Standard konnte nicht festgelegt werden"
+      },
+      "enable": {
+        "title": "Bildgenerierung aktivieren",
+        "description": "Chat und Agenten können Bilder mit dem Standardmodell erstellen.",
+        "disabledTooltip": "Aktivieren Sie die Bildgenerierung, um ein Modell auszuwählen.",
+        "noDefaultWarning": {
+          "title": "Es ist kein Standardmodell festgelegt. Wählen Sie unten ein Modell aus, um Bilder zu erstellen."
+        }
       }
     },
     "indexSettings": {

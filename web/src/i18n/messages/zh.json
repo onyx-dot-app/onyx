@@ -5809,9 +5809,6 @@
           "label": "断开连接"
         }
       },
-      "emptyState": {
-        "title": "连接一个图像生成模型，以便在对话中使用。"
-      },
       "form": {
         "apiKey": {
           "idle": "输入您的 API 密钥。",
@@ -5893,11 +5890,6 @@
       "loadError": {
         "message": "加载配置失败。请刷新页面。"
       },
-      "model": {
-        "description": "选择用于在对话中生成图像的模型。",
-        "placeholder": "选择默认模型",
-        "title": "图像生成模型"
-      },
       "noImageModels": {
         "description": "请在语言模型页面连接提供图像模型的 LLM 提供商。",
         "title": "没有可用的图像模型"
@@ -5949,6 +5941,14 @@
       },
       "setDefaultError": {
         "message": "设置默认项失败"
+      },
+      "enable": {
+        "title": "启用图像生成",
+        "description": "允许聊天和智能体使用默认模型生成图像。",
+        "disabledTooltip": "开启图像生成后即可选择模型。",
+        "noDefaultWarning": {
+          "title": "尚未设置默认模型。请在下方选择一个模型以生成图像。"
+        }
       }
     },
     "indexSettings": {

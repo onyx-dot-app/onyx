@@ -5809,9 +5809,6 @@
           "label": "Disconnect"
         }
       },
-      "emptyState": {
-        "title": "Connect an image generation model to use in chat."
-      },
       "form": {
         "apiKey": {
           "idle": "Enter your API key.",
@@ -5893,11 +5890,6 @@
       "loadError": {
         "message": "Failed to load configuration. Please refresh the page."
       },
-      "model": {
-        "description": "Select a model to generate images in chat.",
-        "placeholder": "Select a default model",
-        "title": "Image Generation Model"
-      },
       "noImageModels": {
         "description": "Connect an LLM provider that serves image models on the Language Models page.",
         "title": "No image models available"
@@ -5949,6 +5941,14 @@
       },
       "setDefaultError": {
         "message": "Failed to set default"
+      },
+      "enable": {
+        "title": "Enable Image Generation",
+        "description": "Let chat and agents generate images with the default model.",
+        "disabledTooltip": "Turn on image generation to choose a model.",
+        "noDefaultWarning": {
+          "title": "No default model is set. Choose one below to generate images."
+        }
       }
     },
     "indexSettings": {

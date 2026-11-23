@@ -5809,9 +5809,6 @@
           "label": "Desconectar"
         }
       },
-      "emptyState": {
-        "title": "Conecte um modelo de geração de imagens para usar no chat."
-      },
       "form": {
         "apiKey": {
           "idle": "Insira sua chave de API.",
@@ -5893,11 +5890,6 @@
       "loadError": {
         "message": "Falha ao carregar a configuração. Atualize a página."
       },
-      "model": {
-        "description": "Selecione um modelo para gerar imagens no chat.",
-        "placeholder": "Selecione um modelo padrão",
-        "title": "Modelo de geração de imagens"
-      },
       "noImageModels": {
         "description": "Conecte na página Modelos de linguagem um provedor de LLM que ofereça modelos de imagem.",
         "title": "Nenhum modelo de imagem disponível"
@@ -5949,6 +5941,14 @@
       },
       "setDefaultError": {
         "message": "Falha ao definir o padrão"
+      },
+      "enable": {
+        "title": "Ativar geração de imagens",
+        "description": "Permite que o chat e os agentes gerem imagens com o modelo padrão.",
+        "disabledTooltip": "Ative a geração de imagens para escolher um modelo.",
+        "noDefaultWarning": {
+          "title": "Nenhum modelo padrão está definido. Escolha um abaixo para gerar imagens."
+        }
       }
     },
     "indexSettings": {

@@ -5809,9 +5809,6 @@
           "label": "Déconnecter"
         }
       },
-      "emptyState": {
-        "title": "Connectez un modèle de génération d'images à utiliser dans la discussion."
-      },
       "form": {
         "apiKey": {
           "idle": "Saisissez votre clé d'API.",
@@ -5893,11 +5890,6 @@
       "loadError": {
         "message": "Échec du chargement de la configuration. Actualisez la page."
       },
-      "model": {
-        "description": "Sélectionnez un modèle pour générer des images dans la discussion.",
-        "placeholder": "Sélectionnez un modèle par défaut",
-        "title": "Modèle de génération d'images"
-      },
       "noImageModels": {
         "description": "Connectez sur la page Modèles de langage un fournisseur LLM qui propose des modèles d'image.",
         "title": "Aucun modèle d'image disponible"
@@ -5949,6 +5941,14 @@
       },
       "setDefaultError": {
         "message": "Échec de la définition du modèle par défaut"
+      },
+      "enable": {
+        "title": "Activer la génération d'images",
+        "description": "Permet au chat et aux agents de générer des images avec le modèle par défaut.",
+        "disabledTooltip": "Activez la génération d'images pour choisir un modèle.",
+        "noDefaultWarning": {
+          "title": "Aucun modèle par défaut n'est défini. Choisissez-en un ci-dessous pour générer des images."
+        }
       }
     },
     "indexSettings": {
