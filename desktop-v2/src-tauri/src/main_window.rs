@@ -143,6 +143,43 @@ pub fn classify_popup(url: &Url, server_origin: &str) -> LinkAction {
     }
 }
 
+/// Whether a link's context menu keeps "Open Link in New Window". A server
+/// link would open in a popup without the app menu; "Open Link" opens it in
+/// the same window. Other links open in the browser, so the item stays.
+#[cfg(any(target_os = "linux", test))]
+fn keeps_new_window_item(link: &Url, server_origin: &str) -> bool {
+    classify(link, server_origin) != LinkAction::Allow
+}
+
+/// Removes "Open Link in New Window" from the context menu of server links
+/// in `window`. Popups that the page opens with `window.open` stay.
+#[cfg(target_os = "linux")]
+fn drop_new_window_item_for_server_links(window: &tauri::WebviewWindow, server_origin: &str) {
+    use webkit2gtk::{
+        ContextMenuAction, ContextMenuExt, ContextMenuItemExt, HitTestResultExt, WebViewExt,
+    };
+    let origin = server_origin.to_string();
+    let result = window.with_webview(move |webview| {
+        webview
+            .inner()
+            .connect_context_menu(move |_, menu, _, hit| {
+                let link = hit.link_uri().and_then(|uri| Url::parse(uri.as_str()).ok());
+                if link.is_some_and(|link| !keeps_new_window_item(&link, &origin)) {
+                    for item in menu.items() {
+                        if item.stock_action() == ContextMenuAction::OpenLinkInNewWindow {
+                            menu.remove(&item);
+                        }
+                    }
+                }
+                // The menu still shows.
+                false
+            });
+    });
+    if let Err(e) = result {
+        log::warn!("could not change the link context menu: {e}");
+    }
+}
+
 /// Resolves `path` against the server. Fails if the result is on another
 /// origin: `//host/x` and `/\host/x` are paths that name another host.
 pub fn server_url_join(server_url: &Url, path: &str) -> Result<Url, String> {
@@ -233,7 +270,11 @@ fn open_new_window(
                 })
                 .build()
             {
-                Ok(window) => NewWindowResponse::Create { window },
+                Ok(window) => {
+                    #[cfg(target_os = "linux")]
+                    drop_new_window_item_for_server_links(&window, origin);
+                    NewWindowResponse::Create { window }
+                }
                 Err(e) => {
                     log::warn!("could not open popup: {e}");
                     NewWindowResponse::Deny
@@ -670,6 +711,8 @@ pub async fn open_url(
     let window = builder.build().map_err(|e| e.to_string())?;
     #[cfg(target_os = "linux")]
     crate::offline::watch_webview_failures(&window);
+    #[cfg(target_os = "linux")]
+    drop_new_window_item_for_server_links(&window, &origin);
     // Entering or leaving full screen resizes the window.
     let resize_app = app.clone();
     window.on_window_event(move |event| {
@@ -923,8 +966,8 @@ pub fn spawn_session_renewal(app: &AppHandle) {
 #[cfg(test)]
 mod tests {
     use super::{
-        classify, classify_popup, download_notice, is_web_sign_in, log_safe, open_error_kind,
-        return_path, server_url_join, LinkAction,
+        classify, classify_popup, download_notice, is_web_sign_in, keeps_new_window_item, log_safe,
+        open_error_kind, return_path, server_url_join, LinkAction,
     };
     use url::Url;
 
@@ -1052,6 +1095,14 @@ mod tests {
         );
         assert_eq!(popup_action("http://evil.example/"), LinkAction::External);
         assert_eq!(popup_action("javascript:alert(1)"), LinkAction::Block);
+    }
+
+    #[test]
+    fn server_links_lose_the_new_window_menu_item() {
+        let keeps = |url: &str| keeps_new_window_item(&Url::parse(url).unwrap(), ORIGIN);
+        assert!(!keeps("http://localhost:3000/app?chatId=1"));
+        assert!(keeps("https://docs.example.com/page"));
+        assert!(keeps("mailto:a@example.com"));
     }
 
     #[test]
