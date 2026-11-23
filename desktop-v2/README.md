@@ -556,6 +556,24 @@ appears, complete, in `<name>.out.json`. Other ops:
 missing), because it can drive signed-in windows. It cannot press global shortcuts or move the window by drag (both
 need the physical mouse or keyboard).
 
+## Logs
+
+The app writes its log to `onyx.log` in the app's log folder (`init_logging` in
+`src-tauri/src/main.rs`, with `tauri-plugin-log`):
+
+| OS | Folder |
+|---|---|
+| macOS | `~/Library/Logs/app.onyx.desktop.v2/` |
+| Windows | `%LOCALAPPDATA%\app.onyx.desktop.v2\logs\` |
+| Linux | `~/.local/share/app.onyx.desktop.v2/logs/` (`$XDG_DATA_HOME` if set) |
+
+Times are UTC. The log records the app's own messages at level `info` and higher: sign-in
+failures, offline and recovery, managed policy errors, downloads and failed links. At 1 MB the
+file rotates to `onyx_<date>.log`, and the app keeps the four newest of those files. The log
+never holds a password, session token, cookie or sign-in code; URLs are written without their
+user info, query and fragment (`main_window::log_safe`). Debug builds also write the log to
+stderr. If the folder cannot be written, the app runs without a log.
+
 ## Known limits
 
 - wry calls the navigation hook for iframes too, so a cross-origin iframe in the web UI

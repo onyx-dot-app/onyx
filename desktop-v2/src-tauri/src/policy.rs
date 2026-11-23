@@ -156,6 +156,17 @@ fn as_bool(value: &RawValue) -> Option<bool> {
     }
 }
 
+/// What the log shows of a rejected value. Text is left out: it can be a URL
+/// with a password.
+fn logged(value: &RawValue) -> String {
+    match value {
+        RawValue::Str(_) => "a text value".into(),
+        RawValue::Bool(b) => b.to_string(),
+        RawValue::Int(i) => i.to_string(),
+        RawValue::Other(kind) => kind.clone(),
+    }
+}
+
 /// Builds the policy from a key lookup. An invalid value is logged. A lock or
 /// `Disable*` key with an invalid value takes its restrictive value; any
 /// other invalid key is ignored.
@@ -163,7 +174,10 @@ pub fn parse(lookup: impl Fn(&str) -> Option<RawValue>) -> Policy {
     let fail_closed = Cell::new(false);
     let ignored: RefCell<Vec<&'static str>> = RefCell::new(Vec::new());
     let ignore = |key: &'static str, value: &RawValue, why: &str| {
-        log::error!("managed setting {key} is not valid ({why}): {value:?}");
+        log::error!(
+            "managed setting {key} is not valid ({why}): {}",
+            logged(value)
+        );
         ignored.borrow_mut().push(key);
     };
     let flag = |key: &'static str| -> Option<bool> {
@@ -179,7 +193,8 @@ pub fn parse(lookup: impl Fn(&str) -> Option<RawValue>) -> Policy {
             None => false,
             Some(value) => as_bool(&value).unwrap_or_else(|| {
                 log::error!(
-                    "managed setting {key} is not valid (not a boolean; treated as true): {value:?}"
+                    "managed setting {key} is not valid (not a boolean; treated as true): {}",
+                    logged(&value)
                 );
                 fail_closed.set(true);
                 true
@@ -198,7 +213,7 @@ pub fn parse(lookup: impl Fn(&str) -> Option<RawValue>) -> Policy {
     let server_url = string(SERVER_URL).and_then(|raw| match normalize_managed_server_url(&raw) {
         Ok(url) => {
             if !raw.trim().trim_end_matches('/').eq_ignore_ascii_case(&url) {
-                log::warn!("managed setting {SERVER_URL} {raw:?} is used as {url}: Onyx keeps only the scheme, host and port");
+                log::warn!("managed setting {SERVER_URL} is used as {url}: Onyx keeps only the scheme, host and port");
             }
             Some(url)
         }
@@ -259,17 +274,23 @@ pub fn parse_json(raw: &str) -> Policy {
             return Policy::unreadable();
         }
     };
-    parse(|key| {
-        Some(match map.get(key)? {
-            serde_json::Value::String(s) => RawValue::Str(s.clone()),
-            serde_json::Value::Bool(b) => RawValue::Bool(*b),
-            serde_json::Value::Number(n) => match n.as_i64() {
-                Some(i) => RawValue::Int(i),
-                None => RawValue::Other(n.to_string()),
-            },
-            other => RawValue::Other(other.to_string()),
-        })
-    })
+    parse(|key| map.get(key).map(json_value))
+}
+
+#[cfg_attr(not(target_os = "linux"), allow(dead_code))]
+fn json_value(value: &serde_json::Value) -> RawValue {
+    match value {
+        serde_json::Value::String(s) => RawValue::Str(s.clone()),
+        serde_json::Value::Bool(b) => RawValue::Bool(*b),
+        serde_json::Value::Number(n) => match n.as_i64() {
+            Some(i) => RawValue::Int(i),
+            None => RawValue::Other(n.to_string()),
+        },
+        // The type only: a list or object can hold text such as a URL.
+        serde_json::Value::Array(_) => RawValue::Other("a list".into()),
+        serde_json::Value::Object(_) => RawValue::Other("an object".into()),
+        serde_json::Value::Null => RawValue::Other("null".into()),
+    }
 }
 
 #[cfg(target_os = "macos")]
@@ -621,6 +642,15 @@ mod tests {
 
     fn s(value: &str) -> RawValue {
         RawValue::Str(value.to_string())
+    }
+
+    #[test]
+    fn rejected_values_never_log_their_text() {
+        assert!(!logged(&s("ftp://user:secret@onyx.example")).contains("secret"));
+        let p = parse_json(r#"{"DisableLauncher": ["https://user:secret@onyx.example"]}"#);
+        assert!(p.disable_launcher && p.fail_closed);
+        let list = json_value(&serde_json::json!(["https://user:secret@onyx.example"]));
+        assert!(!logged(&list).contains("secret"));
     }
 
     #[test]
