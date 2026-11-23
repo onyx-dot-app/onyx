@@ -1506,6 +1506,12 @@ class Document(Base):
             "id",
             postgresql_where=text("secondary_only_sync_pending IS TRUE"),
         ),
+        # Date filters and the newest-first keyset order of the postgres_query tool.
+        Index(
+            "ix_document_doc_updated_at_id",
+            doc_updated_at.desc().nulls_last(),
+            id.desc(),
+        ),
     )
 
 

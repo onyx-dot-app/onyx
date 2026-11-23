@@ -11,6 +11,8 @@ own access-control mechanism (document ACL, hierarchy versioned filter,
 chat ownership).
 """
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from uuid import UUID
@@ -37,7 +39,10 @@ from sqlalchemy.sql.expression import CTE
 
 from onyx.configs.constants import DocumentSource, MessageType
 from onyx.context.search.models import TimeRange
-from onyx.db.document_access import apply_document_access_filter
+from onyx.db.document_access import (
+    apply_resolved_document_access_filter,
+    resolve_document_access_pairs,
+)
 from onyx.db.enums import ConnectorCredentialPairStatus, HierarchyNodeType
 from onyx.db.hierarchy import escape_like_pattern, hierarchy_node_own_document_id
 from onyx.db.models import (
@@ -83,6 +88,37 @@ class DocumentGroupBy(str, Enum):
 
 def _clamp_limit(limit: int) -> int:
     return max(1, min(limit, POSTGRES_TOOL_MAX_LIMIT))
+
+
+@contextmanager
+def _timeouts_as_tool_errors() -> Iterator[None]:
+    try:
+        yield
+    except OperationalError as e:
+        if isinstance(e.orig, QueryCanceled):
+            raise PostgresToolQueryTimeoutError(
+                "Query exceeded the statement timeout"
+            ) from e
+        raise
+
+
+@contextmanager
+def tool_transaction(db_session: Session) -> Iterator[None]:
+    """Run a tool call's read. One snapshot covers the access pairs that a
+    document query resolves first and the rows they then filter, so a pair
+    revoked in between cannot grant. The statement timeout covers every
+    statement, the access lookups included, and each timeout raises
+    PostgresToolQueryTimeoutError."""
+    with _timeouts_as_tool_errors():
+        db_session.connection(execution_options={"isolation_level": "REPEATABLE READ"})
+        db_session.execute(
+            select(
+                func.set_config(
+                    "statement_timeout", _POSTGRES_TOOL_STATEMENT_TIMEOUT, True
+                )
+            )
+        )
+        yield
 
 
 def _execute_with_timeout(db_session: Session, stmt: Select) -> Result:
@@ -214,13 +250,11 @@ def _date_range_filter(
 
 
 def _document_scope_filter(scope: DocumentScope) -> ColumnElement[bool]:
-    """The knowledge clause ANDed with the request filters. Source types need
-    the connector join."""
+    """The knowledge clause ANDed with the request filters, except source
+    types: those limit the pairs that grant access (`_document_source_types`)."""
     clauses: list[ColumnElement[bool]] = []
     if scope.restricts_knowledge:
         clauses.append(_document_knowledge_filter(scope, _scope_subtree(scope)))
-    if scope.source_types is not None:
-        clauses.append(Connector.source.in_(scope.source_types))
     # Undated documents follow the search filter: a created range keeps them,
     # and an updated range keeps them only for an old, open-ended start.
     created = scope.created_at_range
@@ -290,6 +324,18 @@ def _hierarchy_scope_filter(scope: DocumentScope) -> ColumnElement[bool]:
 # ============================== Document ==============================
 
 
+def _document_source_types(
+    source_type: DocumentSource | None, scope: DocumentScope | None
+) -> list[DocumentSource] | None:
+    """The sources the request and the scope both allow; None allows all."""
+    scope_sources = scope.source_types if scope is not None else None
+    if source_type is None:
+        return scope_sources
+    if scope_sources is not None and source_type not in scope_sources:
+        return []
+    return [source_type]
+
+
 def _apply_document_filters(
     db_session: Session,
     stmt: Select,
@@ -309,24 +355,29 @@ def _apply_document_filters(
 ) -> Select:
     """Apply the document ACL plus the allowlisted filters.
 
-    `apply_document_access_filter` supplies the cc_pair joins, the DELETING
-    cc_pair exclusion, and the permission checks; a document in multiple
-    cc_pairs yields duplicate rows, so callers must dedupe (`GROUP BY` /
-    `count(distinct ...)`). `hidden` documents are excluded here — admins hid
-    them from search, and this tool must not be a bypass.
+    The ACL is `apply_document_access_filter`'s, with the granting pairs
+    resolved first (`resolve_document_access_pairs`), so the planner sees each
+    pair's real size. A document in multiple cc_pairs yields duplicate rows,
+    so callers must dedupe (`GROUP BY` / `count(distinct ...)`). `hidden`
+    documents are excluded here — admins hid them from search, and this tool
+    must not be a bypass.
 
     Date filters compare against `doc_updated_at` (source-updated time), so
     documents with an unknown source timestamp fall out of any date range.
 
-    Source filtering (and source grouping) applies to the same joined cc_pair
-    row as the ACL check, so a document is attributed to a source only when
-    that source's cc_pair row grants access. This only diverges for a doc id
-    shared across cc_pairs of *different* sources — practically nonexistent,
-    since doc ids embed source-specific URLs/ids.
+    Source filtering limits the granting pairs, so a document is attributed to
+    a source only when that source's cc_pair grants access. This only diverges
+    for a doc id shared across cc_pairs of *different* sources — practically
+    nonexistent, since doc ids embed source-specific URLs/ids.
     """
-    stmt = apply_document_access_filter(
+    with _timeouts_as_tool_errors():
+        pairs = resolve_document_access_pairs(
+            db_session, user_id, _document_source_types(source_type, scope)
+        )
+    stmt = apply_resolved_document_access_filter(
         db_session,
         stmt,
+        pairs,
         user_email,
         external_group_ids,
         user_id=user_id,
@@ -334,13 +385,10 @@ def _apply_document_filters(
     )
     stmt = stmt.where(Document.hidden.is_(False))
 
-    scope_needs_connector = scope is not None and scope.source_types is not None
-    if source_type is not None or ensure_connector_join or scope_needs_connector:
+    if ensure_connector_join:
         stmt = stmt.join(
-            Connector, Connector.id == ConnectorCredentialPair.connector_id
+            Connector, Connector.id == DocumentByConnectorCredentialPair.connector_id
         )
-    if source_type is not None:
-        stmt = stmt.where(Connector.source == source_type)
     if title_contains is not None:
         stmt = stmt.where(_ilike_contains(Document.semantic_id, title_contains))
     if updated_after is not None:
