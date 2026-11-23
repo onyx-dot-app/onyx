@@ -232,11 +232,15 @@ jobs:
           if [ "${RUNNER_OS}" = "Linux" ]; then
             export CARGO_PROFILE_RELEASE_STRIP=symbols
           fi
-          ARGS=(--bundles "${BUNDLES}")
-          if [ -n "${WINDOWS_SIGN_COMMAND}" ]; then
-            ARGS+=(--config "$(bun -e 'console.log(JSON.stringify({bundle: {windows: {signCommand: process.env.WINDOWS_SIGN_COMMAND}}}))')")
-          fi
-          bun run tauri build "${ARGS[@]}" -- --locked
+          # The run number goes in the version as build metadata (0.1.0+123),
+          # so each build shows its own version. The MSI and NSIS file
+          # versions get it as the fourth number.
+          CONFIG=$(bun -e '
+            const config = { version: require("./src-tauri/tauri.conf.json").version + "+" + process.env.GITHUB_RUN_NUMBER };
+            if (process.env.WINDOWS_SIGN_COMMAND) config.bundle = { windows: { signCommand: process.env.WINDOWS_SIGN_COMMAND } };
+            console.log(JSON.stringify(config));
+          ')
+          bun run tauri build --bundles "${BUNDLES}" --config "${CONFIG}" -- --locked
 
       - name: Check Authenticode signatures
         if: runner.os == 'Windows' && github.event.pull_request.head.repo.full_name == github.repository && vars.DESKTOP_V2_WINDOWS_SIGN_COMMAND != ''
