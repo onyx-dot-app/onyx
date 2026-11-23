@@ -53,6 +53,7 @@ DEFAULT_ONYX_ENV = {
     "LOG_LEVEL": "info",
     "SKIP_WARM_UP": "true",
 }
+RECORDED_ENV_PREFIXES = ("VERTEXAI_", "INDEXING_EMBEDDING_", "EMBEDDING_", "BENCH_")
 
 
 # --------------------------------------------------------------------------
@@ -198,10 +199,23 @@ def _status(oom: bool, timed_out: bool, rc: int, result: dict[str, Any]) -> str:
         return f"crash(rc={rc})"
     if result["worker_setup_errors"]:
         return "worker_error"
+    if result["batch_exceptions"] and not result["batches_done"]:
+        return "all_batches_failed"
     return "ok"
 
 
-def run_parent(args: argparse.Namespace) -> None:
+def _recorded_env(env: dict[str, str]) -> dict[str, str]:
+    """Hides the values of overrides that are not known benchmark settings,
+    because an override such as HTTPS_PROXY can hold a credential."""
+    return {
+        k: v
+        if k in DEFAULT_ONYX_ENV or k.startswith(RECORDED_ENV_PREFIXES)
+        else "<redacted>"
+        for k, v in env.items()
+    }
+
+
+def run_parent(args: argparse.Namespace) -> str:
     import psutil
 
     CACHE.mkdir(exist_ok=True)
@@ -386,7 +400,7 @@ def run_parent(args: argparse.Namespace) -> None:
             "mem_limit_gb": args.mem_limit_gb,
             "mock_url": mock_url,
             "vertex_location": args.vertex_location,
-            "env": onyx_env,
+            "env": _recorded_env(onyx_env),
         },
         "metrics": {
             **{k: v for k, v in result.items() if k != "baseline_rss"},
@@ -420,6 +434,7 @@ def run_parent(args: argparse.Namespace) -> None:
             }
         )
     )
+    return status
 
 
 # --------------------------------------------------------------------------
@@ -815,7 +830,11 @@ def main() -> None:
     ap.add_argument("--setup-timeout", type=float, default=300)
     ap.add_argument("--chunks-dir", type=Path, default=DEFAULT_CHUNKS)
     ap.add_argument("--results", type=Path, default=DEFAULT_RESULTS)
-    run_parent(ap.parse_args())
+    args = ap.parse_args()
+    if not 0 <= args.warmup < args.duration:
+        ap.error("--warmup must be 0 or more and less than --duration")
+    if run_parent(args) != "ok":
+        sys.exit(1)
 
 
 if __name__ == "__main__":

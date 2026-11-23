@@ -295,11 +295,14 @@ class _TableParser(HTMLParser):
                 self._rows, self._header_rows, self._carry = [], 0, {}
         elif self._depth != 1:
             return
-        elif tag == "thead":
-            self._in_thead = True
+        elif tag in ("thead", "tbody", "tfoot"):
+            self._end_row()
+            self._in_thead = tag == "thead"
         elif tag == "tr":
+            self._end_row()
             self._row, self._row_is_header = [], self._in_thead
         elif tag in ("td", "th") and self._row is not None:
+            self._end_cell()
             a = dict(attrs)
             self._cell = []
             self._span = (_int(a.get("rowspan")), _int(a.get("colspan")))
@@ -311,21 +314,35 @@ class _TableParser(HTMLParser):
     def handle_endtag(self, tag: str) -> None:
         if tag == "table":
             if self._depth == 1:
+                self._end_row()
                 self._finish_table()
             self._depth -= 1
         elif self._depth != 1:
             return
         elif tag == "thead":
+            self._end_row()
             self._in_thead = False
-        elif tag in ("td", "th") and self._cell is not None and self._row is not None:
+        elif tag in ("td", "th"):
+            self._end_cell()
+        elif tag == "tr":
+            self._end_row()
+
+    # HTML lets a cell or row omit its end tag, so a new cell, row or table
+    # section also ends the open one.
+    def _end_cell(self) -> None:
+        if self._cell is not None and self._row is not None:
             self._place(" ".join("".join(self._cell).split()))
-            self._cell = None
-        elif tag == "tr" and self._row is not None:
-            self._fill_carry(len(self._row) + 1000)
-            self._rows.append(self._row)
-            if self._row_is_header and len(self._rows) == self._header_rows + 1:
-                self._header_rows += 1
-            self._row = None
+        self._cell = None
+
+    def _end_row(self) -> None:
+        self._end_cell()
+        if self._row is None:
+            return
+        self._fill_carry(len(self._row) + 1000)
+        self._rows.append(self._row)
+        if self._row_is_header and len(self._rows) == self._header_rows + 1:
+            self._header_rows += 1
+        self._row = None
 
     def handle_data(self, data: str) -> None:
         if self._cell is not None:
@@ -543,9 +560,12 @@ def _publish(staging: Path, out: Path) -> None:
     moves last, so an interrupted publish leaves no index and bench.py
     rebuilds the workload."""
     out.mkdir(parents=True, exist_ok=True)
-    (out / "index.json").unlink(missing_ok=True)
-    for old in out.glob("*.pkl"):
-        old.unlink()
+    old_index = out / "index.json"
+    if old_index.exists():
+        old_files = [d["file"] for d in json.loads(old_index.read_text())["docs"]]
+        old_index.unlink()
+        for name in old_files:
+            (out / name).unlink(missing_ok=True)
     for new in staging.glob("*.pkl"):
         new.replace(out / new.name)
     (staging / "index.json").replace(out / "index.json")

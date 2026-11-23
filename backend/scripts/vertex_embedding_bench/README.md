@@ -127,10 +127,10 @@ Each line of `results.jsonl` has these fields:
 
 | Field | Meaning |
 |---|---|
-| `status` | `ok`, `oom` (RSS went above `--mem-limit-gb`), `timeout`, `crash(rc=N)` or `worker_error` (a worker could not load a batch or build an embedder). |
+| `status` | `ok`, `oom` (RSS went above `--mem-limit-gb`), `timeout`, `crash(rc=N)`, `worker_error` (a worker could not load a batch or build an embedder) or `all_batches_failed` (no batch finished, and at least one batch raised an exception). `bench.py` exits with 1 when the status is not `ok`. |
 | `git` | Commit, branch and a hash of the uncommitted diff outside this directory. |
 | `chunk_set` | Fingerprint of the chunk set. |
-| `config` | Trial arguments and the Onyx environment. |
+| `config` | Trial arguments and the Onyx environment. The result keeps the value of an `--env` override only for the defaults and for names that start with `VERTEXAI_`, `INDEXING_EMBEDDING_`, `EMBEDDING_` or `BENCH_`. It shows other values as `<redacted>`. |
 | `metrics.steady_inputs_per_min` | Inputs that the provider embedded per minute after `--warmup` seconds. This is the main result. It equals chunks per minute only when `failed_chunks` and `batch_exceptions` are 0. Otherwise it includes inputs that the pipeline sent again or discarded. |
 | `metrics.client_avg_in_flight`, `client_peak_in_flight` | Concurrent SDK calls, mean and peak. The mean includes failed calls and calls that did not finish. |
 | `metrics.call_latency_p50_s`, `call_latency_p95_s` | SDK call latency. |

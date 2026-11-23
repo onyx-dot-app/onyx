@@ -23,9 +23,12 @@ port=${MOCK_PORT:-8799}
 # The container has no git, so pass the host's git info.
 gi=$(cd "$here" && PYTHONPATH="" "${PYTHON:-python}" -c \
   "import bench, json; print(json.dumps(bench.git_info()))")
+# The container runs as root because the image caches the tokenizer in /root.
+# Give the files it writes in the bind mount back to the host user.
 docker run --rm --cpus="$cpus" --memory="${mem}g" --memory-swap="${mem}g" \
   --add-host=host.docker.internal:host-gateway \
-  -v "$repo":/wt -e PYTHONPATH=/wt/backend -e BENCH_GIT_INFO="$gi" \
-  -w "/wt/$rel" --entrypoint python "$image" \
+  -v "$repo":/wt -e PYTHONPATH=/wt/backend -e BENCH_GIT_INFO="$gi" -e HOST_IDS="$(id -u):$(id -g)" \
+  -w "/wt/$rel" --entrypoint sh "$image" -c \
+  'python "$@"; rc=$?; chown -R "$HOST_IDS" .cache results_docker.jsonl; exit $rc' sh \
   bench.py --mock-url "http://host.docker.internal:$port" --sa-host host.docker.internal \
   --mem-limit-gb "$mem" --results results_docker.jsonl --label "${label}_cpu${cpus}" "$@"
