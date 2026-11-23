@@ -31,7 +31,8 @@ The rules:
   A file that a copy leaves out (over a limit, or not in the file store)
   keeps what is at its path.
 - Search files. A search offers the files of its shown results that a tool
-  can open (`chat/files.py:search_result_file_sizes`, at most
+  can open (`search_tool.py:SearchTool._build_search_result`: connector
+  files whose object is not confirmed missing, at most
   SEARCH_FILE_MAX_BYTES), each once per turn, while the turn's budget lasts:
   MAX_TURN_SEARCH_FILES files and MAX_TURN_SEARCH_BYTES, shared by the root
   and its subagents. The search result names exactly the offered files, so a

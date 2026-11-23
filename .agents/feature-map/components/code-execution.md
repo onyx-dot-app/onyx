@@ -508,10 +508,11 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files / artifa
                                         as ToolContext.sandbox_search_files, so
                                         direct, program and subagent searches use
                                         it. SearchTool._build_search_result offers
-                                        the shown results' files that
-                                        chat/files.py:search_result_file_sizes
-                                        accepts (after check_cancelled, so a
-                                        stopped search offers nothing); the turn
+                                        the shown results' connector files whose
+                                        object is not confirmed missing, at most
+                                        SEARCH_FILE_MAX_BYTES (after
+                                        check_cancelled, so a stopped search
+                                        offers nothing); the turn
                                         budget (MAX_TURN_SEARCH_FILES,
                                         MAX_TURN_SEARCH_BYTES) decides which get a
                                         path, named in the result with
