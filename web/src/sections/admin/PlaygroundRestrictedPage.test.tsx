@@ -26,6 +26,10 @@ function Page() {
   return (
     <div>
       <button type="button">Add provider</button>
+      {/* A card that opens an editor on Enter, like the provider cards. */}
+      <div role="button" tabIndex={0} data-testid="provider-card">
+        OpenAI
+      </div>
     </div>
   );
 }
@@ -47,6 +51,9 @@ test("a restricted page shows the notice and disables its controls", () => {
     )
   ).toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Add provider" })).toBeDisabled();
+  // Inert covers what a disabled fieldset does not: a focusable card with a
+  // key handler cannot take focus, so its editor cannot open.
+  expect(screen.getByTestId("provider-card").closest("[inert]")).not.toBeNull();
 });
 
 test("a switched-off feature shows the notice without a plan badge", () => {
@@ -74,6 +81,7 @@ test("an unrestricted page renders as it is", () => {
 
   expect(screen.queryByText("Playground Limit")).not.toBeInTheDocument();
   expect(screen.getByRole("button", { name: "Add provider" })).toBeEnabled();
+  expect(screen.getByTestId("provider-card").closest("[inert]")).toBeNull();
 });
 
 test("a page without a feature key renders as it is on the playground", () => {

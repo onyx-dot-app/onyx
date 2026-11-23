@@ -62,7 +62,11 @@ export default function AdminChrome({
   // Match-only per-page gate: if this page is a known admin route the user lacks the
   // permission for (a group manager landing on a full-admin page), send them to their
   // first permitted admin page. Unlisted detail sub-pages are left to the backend gate.
-  const matched = matchAdminRoute(pathname);
+  // The route table holds /admin/... paths; a direct /ee/admin/... visit is
+  // the same page.
+  const matched = matchAdminRoute(
+    base === "/ee/admin" ? pathname.slice("/ee".length) : pathname
+  );
   const denied =
     matched !== undefined &&
     !hasPermission(adminCapabilities, matched.requiredPermission);

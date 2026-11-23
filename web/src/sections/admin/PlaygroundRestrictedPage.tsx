@@ -1,7 +1,6 @@
 "use client";
 
-import { Disabled } from "@opal/core";
-import { MessageCard } from "@opal/components";
+import { MessageCard, ReadOnlyRegion } from "@opal/components";
 import { SvgLock } from "@opal/icons";
 import { Section } from "@opal/layouts";
 import { usePlaygroundRestriction } from "@/lib/playground/hooks";
@@ -15,9 +14,10 @@ export interface PlaygroundRestrictedPageProps {
 }
 
 /**
- * An admin page the playground restricts: the page stays readable but every
- * control on it is disabled, under one notice that says why and points to
- * sales. Off the playground, and for a feature that is not restricted, the
+ * An admin page the playground restricts: the page stays on screen but
+ * nothing on it can be used, under one notice that says why and points to
+ * sales. The region is inert, so no editor or popup can open from it.
+ * Off the playground, and for a feature that is not restricted, the
  * children render as they are.
  *
  * This is the plain version. The visual pass from the trial-states design
@@ -47,7 +47,7 @@ export default function PlaygroundRestrictedPage({
           rightChildren={plan ? <PlanTag plan={plan} /> : undefined}
         />
       </Section>
-      <Disabled disabled>{children}</Disabled>
+      <ReadOnlyRegion>{children}</ReadOnlyRegion>
     </Section>
   );
 }

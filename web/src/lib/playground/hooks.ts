@@ -45,8 +45,7 @@ export function usePlaygroundRestriction(
 ): PlaygroundRestriction {
   const t = useTranslations("common.playground");
   const restrictions = usePlaygroundRestrictions();
-  const restricted =
-    featureKey !== undefined && restrictions.has(featureKey);
+  const restricted = featureKey !== undefined && restrictions.has(featureKey);
   const plan: Tier | undefined =
     featureKey !== undefined
       ? (PLAYGROUND_FEATURE_PLAN[featureKey] ?? undefined)

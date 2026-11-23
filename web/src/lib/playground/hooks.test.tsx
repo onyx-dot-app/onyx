@@ -63,8 +63,9 @@ test("an Enterprise-only feature is restricted with the Enterprise plan", () => 
   const { result } = renderHook(
     () => usePlaygroundRestriction(PlaygroundRestrictedFeature.SSO),
     {
-    wrapper,
-  });
+      wrapper,
+    }
+  );
   expect(result.current.restricted).toBe(true);
   expect(result.current.plan).toBe(Tier.ENTERPRISE);
   expect(result.current.title).toBe("Playground Limit");
@@ -74,7 +75,10 @@ test("an Enterprise-only feature is restricted with the Enterprise plan", () => 
 test("a switched-off feature is restricted without a plan badge", () => {
   stubRestrictions([PlaygroundRestrictedFeature.SERVICE_ACCOUNT_KEYS]);
   const { result } = renderHook(
-    () => usePlaygroundRestriction(PlaygroundRestrictedFeature.SERVICE_ACCOUNT_KEYS),
+    () =>
+      usePlaygroundRestriction(
+        PlaygroundRestrictedFeature.SERVICE_ACCOUNT_KEYS
+      ),
     { wrapper }
   );
   expect(result.current.restricted).toBe(true);
@@ -86,8 +90,9 @@ test("a feature the server does not list is not restricted", () => {
   const { result } = renderHook(
     () => usePlaygroundRestriction(PlaygroundRestrictedFeature.SCIM),
     {
-    wrapper,
-  });
+      wrapper,
+    }
+  );
   expect(result.current.restricted).toBe(false);
 });
 
