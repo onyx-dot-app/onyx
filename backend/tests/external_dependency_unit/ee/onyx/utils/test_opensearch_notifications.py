@@ -29,11 +29,31 @@ from onyx.document_index.opensearch.models import (
     ClusterIssue,
     ClusterIssueKind,
     ClusterIssueSeverity,
+    ClusterNodeStatus,
     ClusterStatus,
     UsageThresholds,
 )
 from onyx.server.settings.models import Tier
 from tests.external_dependency_unit.conftest import MakeTestUser
+
+
+def _node(name: str) -> ClusterNodeStatus:
+    return ClusterNodeStatus(
+        node_id=name,
+        name=name,
+        shard_count=16,
+        memory_bytes=64 * 1024**3,
+        file_cache_bytes=31 * 1024**3,
+        vector_bytes=80 * 1024**3,
+        heap_max_bytes=32 * 1024**3,
+        heap_used_bytes=8 * 1024**3,
+        disk_total_bytes=500 * 1024**3,
+        disk_used_bytes=90 * 1024**3,
+        cpu_percent=5,
+        load_average_1m=0.5,
+        search_queue=0,
+        search_rejected=0,
+    )
 
 
 def _status(*issues: ClusterIssue) -> ClusterStatus:
@@ -334,3 +354,28 @@ def test_a_failed_state_save_does_not_hide_a_returning_issue(
     # Red is back, and an admin still has an open alert for it.
     _check()
     assert [n for n in _notifications(db_session, admin.id) if not n.dismissed]
+
+
+def test_a_generated_node_name_reads_as_a_data_node(
+    db_session: Session,
+    cluster: list[ClusterStatus | None],
+    make_user: Callable[[str, bool], User],
+) -> None:
+    admin = make_user("os_notif_name_admin", True)
+    hashed = "a4466f7b0edf0e6800cf889f7a538424"
+    status = _status(
+        ClusterIssue(
+            kind=ClusterIssueKind.VECTOR_MEMORY,
+            severity=ClusterIssueSeverity.CRITICAL,
+            node_names=[hashed],
+            value=260,
+        )
+    )
+    status.nodes = [_node(hashed)]
+    cluster.extend([status, status])
+    _check()
+    _check()
+    # Not the hash, and not "Node 1": the page's numbering can change while
+    # the notification stays.
+    [notification] = _notifications(db_session, admin.id)
+    assert notification.title == "Vector memory at 260% on a data node"
