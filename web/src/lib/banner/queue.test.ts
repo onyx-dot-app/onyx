@@ -3,7 +3,7 @@ import {
   NotificationSeverity,
   NotificationType,
   type Notification,
-} from "@/lib/notifications/interfaces";
+} from "@/lib/notifications/types";
 
 let nextId = 1;
 

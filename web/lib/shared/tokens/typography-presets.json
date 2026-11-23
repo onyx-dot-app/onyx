@@ -2,7 +2,7 @@
   "text": {
     "heading-hero": {
       "fontFamily": {
-        "value": "{font-hanken-grotesk}",
+        "value": "{font-interface}",
         "type": "fontFamily"
       },
       "fontSize": {
@@ -24,7 +24,7 @@
     },
     "heading-headline": {
       "fontFamily": {
-        "value": "{font-hanken-grotesk}",
+        "value": "{font-interface}",
         "type": "fontFamily"
       },
       "fontSize": {
@@ -46,7 +46,7 @@
     },
     "heading-section": {
       "fontFamily": {
-        "value": "{font-hanken-grotesk}",
+        "value": "{font-interface}",
         "type": "fontFamily"
       },
       "fontSize": {
@@ -68,7 +68,7 @@
     },
     "heading-section-muted": {
       "fontFamily": {
-        "value": "{font-hanken-grotesk}",
+        "value": "{font-interface}",
         "type": "fontFamily"
       },
       "fontSize": {
@@ -90,7 +90,7 @@
     },
     "main-content-body": {
       "fontFamily": {
-        "value": "{font-hanken-grotesk}",
+        "value": "{font-content}",
         "type": "fontFamily"
       },
       "fontSize": {
@@ -112,7 +112,7 @@
     },
     "main-content-emphasis": {
       "fontFamily": {
-        "value": "{font-hanken-grotesk}",
+        "value": "{font-content}",
         "type": "fontFamily"
       },
       "fontSize": {
@@ -134,7 +134,7 @@
     },
     "main-content-muted": {
       "fontFamily": {
-        "value": "{font-hanken-grotesk}",
+        "value": "{font-content}",
         "type": "fontFamily"
       },
       "fontSize": {
@@ -178,7 +178,7 @@
     },
     "main-ui-body": {
       "fontFamily": {
-        "value": "{font-hanken-grotesk}",
+        "value": "{font-interface}",
         "type": "fontFamily"
       },
       "fontSize": {
@@ -200,7 +200,7 @@
     },
     "main-ui-muted": {
       "fontFamily": {
-        "value": "{font-hanken-grotesk}",
+        "value": "{font-interface}",
         "type": "fontFamily"
       },
       "fontSize": {
@@ -222,7 +222,7 @@
     },
     "main-ui-action": {
       "fontFamily": {
-        "value": "{font-hanken-grotesk}",
+        "value": "{font-interface}",
         "type": "fontFamily"
       },
       "fontSize": {
@@ -266,7 +266,7 @@
     },
     "secondary-body": {
       "fontFamily": {
-        "value": "{font-hanken-grotesk}",
+        "value": "{font-interface}",
         "type": "fontFamily"
       },
       "fontSize": {
@@ -288,7 +288,7 @@
     },
     "secondary-action": {
       "fontFamily": {
-        "value": "{font-hanken-grotesk}",
+        "value": "{font-interface}",
         "type": "fontFamily"
       },
       "fontSize": {
@@ -332,7 +332,7 @@
     },
     "figure-small-label": {
       "fontFamily": {
-        "value": "{font-hanken-grotesk}",
+        "value": "{font-interface}",
         "type": "fontFamily"
       },
       "fontSize": {
@@ -354,7 +354,7 @@
     },
     "figure-small-value": {
       "fontFamily": {
-        "value": "{font-hanken-grotesk}",
+        "value": "{font-interface}",
         "type": "fontFamily"
       },
       "fontSize": {

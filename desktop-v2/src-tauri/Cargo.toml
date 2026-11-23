@@ -2,6 +2,8 @@
 name = "onyx-desktop-v2"
 version = "0.0.0-dev"
 description = "Onyx Desktop v2 (preview)"
+# The .deb Maintainer field.
+authors = ["Onyx <founders@onyx.app>"]
 edition = "2021"
 rust-version = "1.90"
 publish = false
@@ -41,6 +43,8 @@ keyring = { version = "3", features = ["apple-native", "windows-native", "sync-s
 # (tauri-build's manifest already loads Common Controls v6).
 rfd = { version = "0.15", default-features = false, features = ["gtk3", "common-controls-v6"] }
 log = "0.4"
+# The rotating log file (init_logging in main.rs).
+tauri-plugin-log = "2"
 libc = "0.2" # QA harness: checks its directory's owner (geteuid)
 
 [target.'cfg(target_os = "macos")'.dependencies]
@@ -54,6 +58,18 @@ objc2-app-kit = { version = "0.3", default-features = false, features = ["std", 
 
 [target.'cfg(windows)'.dependencies]
 winreg = "0.56"
+# Answer toasts that open an onyx:// link (notify.rs) and menu keys while
+# WebView2 has focus (main_window.rs); the versions tauri-winrt-notification
+# and wry use.
+webview2-com = "0.39"
+windows = { version = "0.62", features = ["Data_Xml_Dom", "UI_Notifications", "Win32_UI_Input_KeyboardAndMouse"] }
+
+# The versions tao and wry use (window focus, failed main-window loads, web
+# view settings and the context menu).
+[target.'cfg(target_os = "linux")'.dependencies]
+gtk = "0.18"
+gdkx11 = "0.18"
+webkit2gtk = { version = "=2.0.2", features = ["v2_38"] }
 
 [features]
 default = ["custom-protocol"]

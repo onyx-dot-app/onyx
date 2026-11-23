@@ -1,11 +1,11 @@
 import { test } from "@playwright/test";
 import { loginAsRandomUser } from "@tests/e2e/utils/auth";
-import { SettingsGeneralPage } from "@tests/e2e/pages/SettingsGeneralPage";
+import { SettingsAppearancePage } from "@tests/e2e/pages/SettingsAppearancePage";
 
 // One Latin-script locale and one CJK locale cover the two rendering paths
 // (the CJK case also exercises the ja catalog and the <html lang> switch the
 // :lang() line-breaking CSS keys off). marker is the locale's translation of
-// settings.appearance.title, visible on the settings page.
+// the Appearance tab label, visible on the settings page.
 const LOCALES = [
   { endonym: "Español", lang: "es", marker: "Apariencia" },
   { endonym: "日本語", lang: "ja", marker: "外観" },
@@ -24,7 +24,7 @@ for (const { endonym, lang, marker } of LOCALES) {
   }) => {
     await loginAsRandomUser(page);
 
-    const settingsPage = new SettingsGeneralPage(page);
+    const settingsPage = new SettingsAppearancePage(page);
     await settingsPage.goto();
 
     await settingsPage.switchLanguage(WORKSPACE_DEFAULT_OPTION, endonym);

@@ -115,9 +115,10 @@ describe("revealHistory", () => {
   it("scrolls the panel into view where the body row stacks", () => {
     const element = panel("column");
     revealHistory(element);
+    // The Jest setup reports reduced motion, so the scroll is instant.
     expect(element.scrollIntoView).toHaveBeenCalledWith({
       block: "start",
-      behavior: "smooth",
+      behavior: "auto",
     });
   });
 

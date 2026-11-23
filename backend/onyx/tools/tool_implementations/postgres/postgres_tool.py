@@ -51,8 +51,15 @@ from onyx.db.postgres_tool import (
     query_documents_for_tool,
     query_hierarchy_nodes_for_tool,
     query_search_docs_for_tool,
+    tool_transaction,
+    try_count_documents_for_tool,
 )
-from onyx.db.postgres_tool_models import DocumentCursor, DocumentScope, GroupCount
+from onyx.db.postgres_tool_models import (
+    DocumentCursor,
+    DocumentOrder,
+    DocumentScope,
+    GroupCount,
+)
 from onyx.llm.models import ToolDefinition, ToolResult
 from onyx.tools.constants import POSTGRES_TOOL_NAME
 from onyx.tools.interface import CITATIONS_PER_TOOL_CALL, Tool
@@ -64,6 +71,7 @@ from onyx.tools.models import (
     ToolContext,
 )
 from onyx.tools.tool_implementations.postgres.models import (
+    CHAT_HISTORY_TABLES,
     PostgresQueryArgs,
     PostgresToolTable,
 )
@@ -149,7 +157,26 @@ _DATE_FIELDS = frozenset(
     }
 )
 
-_GENERAL_FIELDS = frozenset({"table", "count", "group_by", "limit", "cursor"})
+# Filters that take one value or a list of values, any of which may match.
+_ANY_OF_FIELDS = frozenset(
+    {
+        "source_type",
+        "title_contains",
+        "owned_by",
+        "parent_hierarchy_node_id",
+        "name_contains",
+        "parent_id",
+        "node_type",
+        "description_contains",
+        "chat_session_id",
+        "content_contains",
+    }
+)
+_MAX_ANY_OF_VALUES = 20
+
+_GENERAL_FIELDS = frozenset(
+    {"table", "count", "group_by", "limit", "cursor", "order_by"}
+)
 
 
 def _prop(
@@ -161,27 +188,39 @@ def _prop(
     return prop
 
 
+def _any_of_prop(
+    item_type: str, description: str, enum: list[str] | None = None
+) -> dict[str, Any]:
+    # One value or a list: code mode type-checks calls against this schema.
+    value = _prop(item_type, "One value.", enum)
+    return {
+        "anyOf": [value, {"type": "array", "items": value}],
+        "description": f"{description} One value, or a list that matches any of its values (up to {_MAX_ANY_OF_VALUES}).",
+    }
+
+
 # fmt: off
 _PARAMETER_SCHEMA: dict[str, dict[str, Any]] = {
     "table": _prop("string", "Which table to query.", [t.value for t in PostgresToolTable]),
     "count": _prop("boolean", "Return only the number of matching rows (default false)."),
     "group_by": _prop("string", "Only with count=true: break the count down. document: 'source' or 'owner'; chat_session/chat_message: 'month'.", ["source", "owner", "month"]),
     "limit": _prop("integer", f"Max rows to return (default {POSTGRES_TOOL_DEFAULT_LIMIT}, max {POSTGRES_TOOL_MAX_LIMIT}). For document listings, the page size."),
-    "cursor": _prop("string", "document listings only: the next_cursor value from the previous page, to get the next page. Use the same filters as that call."),
-    "source_type": _prop("string", "document/hierarchy_node: connector source id, e.g. 'confluence', 'google_drive', 'slack', 'web'."),
-    "title_contains": _prop("string", "document: case-insensitive title substring, matched literally (% and _ are not wildcards; do not escape them)."),
+    "cursor": _prop("string", "document listings only: the next_cursor value from the previous page, to get the next page. Use the same filters and order_by as that call."),
+    "order_by": _prop("string", "document listings only: row order (default 'updated_desc', newest first). With limit, gives the first N in that order in one call, e.g. the 10 oldest docs. Docs with no value sort last.", [o.value for o in DocumentOrder]),
+    "source_type": _any_of_prop("string", "document/hierarchy_node: connector source id, e.g. 'confluence', 'google_drive', 'slack', 'web'."),
+    "title_contains": _any_of_prop("string", "document: case-insensitive title substring, matched literally (% and _ are not wildcards; do not escape them)."),
     "updated_after": _prop("string", "document: ISO date lower bound on when the doc changed at its source. Docs with unknown source timestamps never match date filters."),
     "updated_before": _prop("string", "document: ISO date upper bound, exclusive (use the next day's date to include a whole day)."),
-    "owned_by": _prop("string", "document: owner exactly as shown in a row's owners= field (usually a display name, sometimes an email; exact match). group_by=owner lists the stored values."),
-    "parent_hierarchy_node_id": _prop("integer", "document: only docs directly inside this folder/space node."),
-    "name_contains": _prop("string", "hierarchy_node: case-insensitive name substring."),
-    "parent_id": _prop("integer", "hierarchy_node: list child nodes of this node."),
-    "node_type": _prop("string", "hierarchy_node: e.g. 'folder', 'shared_drive', 'source'."),
-    "description_contains": _prop("string", "chat_session: case-insensitive substring of the conversation title."),
+    "owned_by": _any_of_prop("string", "document: owner exactly as shown in a row's owners= field (usually a display name, sometimes an email; exact match). group_by=owner lists the stored values."),
+    "parent_hierarchy_node_id": _any_of_prop("integer", "document: only docs directly inside this folder/space node."),
+    "name_contains": _any_of_prop("string", "hierarchy_node: case-insensitive name substring."),
+    "parent_id": _any_of_prop("integer", "hierarchy_node: list child nodes of this node."),
+    "node_type": _any_of_prop("string", "hierarchy_node: e.g. 'folder', 'shared_drive', 'source'."),
+    "description_contains": _any_of_prop("string", "chat_session: case-insensitive substring of the conversation title."),
     "created_after": _prop("string", "chat_session: ISO date lower bound."),
     "created_before": _prop("string", "chat_session: ISO date upper bound, exclusive."),
-    "chat_session_id": _prop("string", "chat_message: only messages in this session (UUID)."),
-    "content_contains": _prop("string", "chat_message: case-insensitive substring of the message text."),
+    "chat_session_id": _any_of_prop("string", "chat_message: only messages in this session (UUID)."),
+    "content_contains": _any_of_prop("string", "chat_message: case-insensitive substring of the message text."),
     "message_type": _prop("string", "chat_message: filter by author.", ["user", "assistant"]),
     "sent_after": _prop("string", "chat_message: ISO date lower bound."),
     "sent_before": _prop("string", "chat_message: ISO date upper bound, exclusive."),
@@ -189,14 +228,6 @@ _PARAMETER_SCHEMA: dict[str, dict[str, Any]] = {
     "cited_only": _prop("boolean", "search_doc: true (default) = only docs the answer actually cited, in citation order; false = everything retrieved."),
 }
 # fmt: on
-
-_CHAT_HISTORY_TABLES = frozenset(
-    {
-        PostgresToolTable.CHAT_SESSION,
-        PostgresToolTable.CHAT_MESSAGE,
-        PostgresToolTable.SEARCH_DOC,
-    }
-)
 
 _NOUN_BY_TABLE: dict[PostgresToolTable, str] = {
     PostgresToolTable.DOCUMENT: "documents",
@@ -276,6 +307,20 @@ def _parse_filter_value(field: str, value: Any) -> Any:
     return value
 
 
+def _parse_any_of(field: str, value: Any) -> list[Any]:
+    """One value or a list of values, deduplicated in order."""
+    values = value if isinstance(value, list) else [value]
+    if not values:
+        raise _reject(f"'{field}' must not be an empty list.")
+    if len(values) > _MAX_ANY_OF_VALUES:
+        raise _reject(
+            f"'{field}' takes at most {_MAX_ANY_OF_VALUES} values. Split the "
+            "query or narrow the list."
+        )
+    parsed = [_parse_filter_value(field, item) for item in values]
+    return list(dict.fromkeys(parsed))
+
+
 def _parse_args(llm_kwargs: dict[str, Any]) -> PostgresQueryArgs:
     all_filter_fields = frozenset().union(*_FILTER_FIELDS_BY_TABLE.values())
 
@@ -324,6 +369,18 @@ def _parse_args(llm_kwargs: dict[str, Any]) -> PostgresQueryArgs:
                 "'cursor' must be the next_cursor string from a previous page."
             )
 
+    order_by = DocumentOrder.UPDATED_DESC
+    if "order_by" in llm_kwargs:
+        if table != PostgresToolTable.DOCUMENT or count:
+            raise _reject("'order_by' applies only to document listings (count=false).")
+        try:
+            order_by = DocumentOrder(llm_kwargs["order_by"])
+        except ValueError:
+            raise _reject(
+                f"Invalid order_by {llm_kwargs['order_by']!r}. Valid values: "
+                f"{[o.value for o in DocumentOrder]}."
+            )
+
     limit = llm_kwargs.get("limit", POSTGRES_TOOL_DEFAULT_LIMIT)
     if isinstance(limit, bool) or not isinstance(limit, int):
         raise _reject("'limit' must be an integer.")
@@ -336,10 +393,16 @@ def _parse_args(llm_kwargs: dict[str, Any]) -> PostgresQueryArgs:
         "group_by": group_by,
         "limit": limit,
         "cursor": cursor,
+        "order_by": order_by,
     }
 
     for field in set(llm_kwargs) & allowed:
-        parsed[field] = _parse_filter_value(field, llm_kwargs[field])
+        value = llm_kwargs[field]
+        parsed[field] = (
+            _parse_any_of(field, value)
+            if field in _ANY_OF_FIELDS
+            else _parse_filter_value(field, value)
+        )
 
     if table == PostgresToolTable.SEARCH_DOC and parsed.get("chat_message_id") is None:
         raise _reject(
@@ -361,6 +424,7 @@ def _document_query_key(args: PostgresQueryArgs, scope: DocumentScope) -> str:
     """Identifies the filters and scope that a cursor belongs to."""
     query = {
         "filters": _table_filters(args),
+        "order_by": args.order_by.value,
         "scope": scope.model_dump(mode="json"),
     }
     encoded = json.dumps(query, sort_keys=True, default=str).encode()
@@ -368,8 +432,9 @@ def _document_query_key(args: PostgresQueryArgs, scope: DocumentScope) -> str:
 
 
 def _encode_cursor(cursor: DocumentCursor, query_key: str) -> str:
+    value = cursor.sort_value
     payload = {
-        "u": cursor.updated_at.isoformat() if cursor.updated_at else None,
+        "u": value.isoformat() if isinstance(value, datetime) else value,
         "i": cursor.document_id,
         "q": query_key,
     }
@@ -377,14 +442,16 @@ def _encode_cursor(cursor: DocumentCursor, query_key: str) -> str:
     return token.rstrip("=")
 
 
-def _decode_cursor(token: str, query_key: str) -> DocumentCursor:
+def _decode_cursor(token: str, query_key: str, order: DocumentOrder) -> DocumentCursor:
     try:
         padded = token + "=" * (-len(token) % 4)
         payload = json.loads(base64.urlsafe_b64decode(padded.encode()))
-        cursor = DocumentCursor(
-            updated_at=(datetime.fromisoformat(payload["u"]) if payload["u"] else None),
-            document_id=payload["i"],
-        )
+        value = payload["u"]
+        if value is not None and order.is_date:
+            value = datetime.fromisoformat(value)
+        elif value is not None and not isinstance(value, str):
+            raise TypeError("A title cursor value must be a string.")
+        cursor = DocumentCursor(sort_value=value, document_id=payload["i"])
         cursor_query_key = payload["q"]
     except (ValueError, TypeError, KeyError) as e:
         raise _reject(_INVALID_CURSOR_MESSAGE) from e
@@ -521,14 +588,26 @@ def _format_group_counts(groups: list[GroupCount], noun: str, group_by: str) -> 
     return header + "\n" + "\n".join(lines)
 
 
+_ORDER_LABELS: dict[DocumentOrder, str] = {
+    DocumentOrder.UPDATED_DESC: "newest first",
+    DocumentOrder.UPDATED_ASC: "oldest first",
+    DocumentOrder.CREATED_DESC: "newest created first",
+    DocumentOrder.CREATED_ASC: "oldest created first",
+    DocumentOrder.TITLE_ASC: "by title A-Z",
+    DocumentOrder.TITLE_DESC: "by title Z-A",
+}
+
+
 def _format_document_page(
     lines: list[str],
     *,
     total: int | None,
     continued: bool,
     next_cursor: str | None,
+    order: DocumentOrder,
 ) -> str:
-    """`total` is set on a first page that has more pages after it."""
+    """`total` is set on a first page that has more pages after it, when the
+    count finished in time."""
     if not lines:
         if continued:
             return "No more matching documents."
@@ -540,14 +619,19 @@ def _format_document_page(
             else f"{len(lines)} matching documents:"
         )
         return header + "\n" + "\n".join(lines)
-    header = (
-        f"The next {len(lines)} matching documents, newest first:"
-        if continued
-        else f"Showing {len(lines)} of {total} matching documents, newest first:"
-    )
+    label = _ORDER_LABELS[order]
+    if continued:
+        header = f"The next {len(lines)} matching documents, {label}:"
+    elif total is None:
+        header = (
+            f"The first {len(lines)} matching documents, {label} (more match; "
+            "use count=true for the total):"
+        )
+    else:
+        header = f"Showing {len(lines)} of {total} matching documents, {label}:"
     footer = (
         "More documents match. To get the next page, call again with the same "
-        "filters and cursor set to this next_cursor value.\n"
+        "filters, order_by and cursor set to this next_cursor value.\n"
         f"next_cursor: {next_cursor}"
     )
     return header + "\n" + "\n".join(lines) + "\n" + footer
@@ -638,14 +722,17 @@ class PostgresTool(Tool):
         args = _parse_args(dict(invocation.arguments))
         # Every anonymous visitor shares one user row, so ownership scoping
         # cannot separate their chat histories.
-        if self._user.is_anonymous and args.table in _CHAT_HISTORY_TABLES:
+        if self._user.is_anonymous and args.table in CHAT_HISTORY_TABLES:
             raise _reject(
                 "Chat history is unavailable to anonymous users. Only the "
                 "'document' and 'hierarchy_node' tables can be queried."
             )
 
         try:
-            with get_session_with_current_tenant() as db_session:
+            with (
+                get_session_with_current_tenant() as db_session,
+                tool_transaction(db_session),
+            ):
                 return self._execute(db_session, args, context, invocation.call_index)
         except PostgresToolQueryTimeoutError as e:
             raise ToolCallException(
@@ -739,7 +826,9 @@ class PostgresTool(Tool):
             )
         query_key = _document_query_key(args, self._scope)
         after = (
-            _decode_cursor(args.cursor, query_key) if args.cursor is not None else None
+            _decode_cursor(args.cursor, query_key, args.order_by)
+            if args.cursor is not None
+            else None
         )
         page = query_documents_for_tool(
             db_session,
@@ -747,13 +836,14 @@ class PostgresTool(Tool):
             external_group_ids,
             user_id=self._user.id,
             prior_emails=self._user.prior_emails,
+            order=args.order_by,
             after=after,
             limit=args.limit,
             **filters,
         )
         total = None
         if after is None and page.next_cursor is not None:
-            total = count_documents_for_tool(
+            total = try_count_documents_for_tool(
                 db_session,
                 user_email,
                 external_group_ids,
@@ -773,6 +863,7 @@ class PostgresTool(Tool):
                 total=total,
                 continued=after is not None,
                 next_cursor=next_cursor,
+                order=args.order_by,
             ),
             context,
             call_index,

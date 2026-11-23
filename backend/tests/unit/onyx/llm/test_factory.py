@@ -465,15 +465,6 @@ def _sentinel_policy_fn(_provider: str) -> LlmRequestPolicy:
     return LlmRequestPolicy()
 
 
-def _mock_user() -> MagicMock:
-    """get_llm_for_persona reads the user's chat-default attributes, which
-    must be concrete values for UserChatDefaults validation."""
-    user = MagicMock()
-    user.temperature_default = None
-    user.reasoning_effort_default = None
-    return user
-
-
 class TestPolicyFnForwarding:
     """Every exit of the persona chain must forward the policy function.
 
@@ -485,7 +476,8 @@ class TestPolicyFnForwarding:
         with patch("onyx.llm.factory.get_default_llm") as mock_default:
             get_llm_for_persona(
                 persona=None,
-                user=_mock_user(),
+                user=MagicMock(),
+                user_defaults=None,
                 policy_fn=_sentinel_policy_fn,
             )
             assert mock_default.call_args.kwargs["policy_fn"] is _sentinel_policy_fn
@@ -496,7 +488,8 @@ class TestPolicyFnForwarding:
         with patch("onyx.llm.factory.get_default_llm") as mock_default:
             get_llm_for_persona(
                 persona=persona,
-                user=_mock_user(),
+                user=MagicMock(),
+                user_defaults=None,
                 policy_fn=_sentinel_policy_fn,
             )
             assert mock_default.call_args.kwargs["policy_fn"] is _sentinel_policy_fn
@@ -511,7 +504,8 @@ class TestPolicyFnForwarding:
         ):
             get_llm_for_persona(
                 persona=persona,
-                user=_mock_user(),
+                user=MagicMock(),
+                user_defaults=None,
                 policy_fn=_sentinel_policy_fn,
             )
             assert mock_default.call_args.kwargs["policy_fn"] is _sentinel_policy_fn
@@ -531,7 +525,8 @@ class TestPolicyFnForwarding:
         ):
             get_llm_for_persona(
                 persona=persona,
-                user=_mock_user(),
+                user=MagicMock(),
+                user_defaults=None,
                 policy_fn=_sentinel_policy_fn,
             )
             assert mock_default.call_args.kwargs["policy_fn"] is _sentinel_policy_fn
@@ -552,7 +547,8 @@ class TestPolicyFnForwarding:
         ):
             get_llm_for_persona(
                 persona=persona,
-                user=_mock_user(),
+                user=MagicMock(),
+                user_defaults=None,
                 policy_fn=_sentinel_policy_fn,
             )
             assert (
@@ -594,7 +590,8 @@ class TestUnconfiguredOverrideModel:
         ):
             get_llm_for_persona(
                 persona=MagicMock(),
-                user=_mock_user(),
+                user=MagicMock(),
+                user_defaults=None,
                 llm_override=self._override("gateway/unlisted-model"),
             )
         assert exc_info.value.error_code is OnyxErrorCode.INVALID_INPUT
@@ -614,7 +611,8 @@ class TestUnconfiguredOverrideModel:
         ):
             get_llm_for_persona(
                 persona=MagicMock(),
-                user=_mock_user(),
+                user=MagicMock(),
+                user_defaults=None,
                 llm_override=self._override("gateway/gpt-model"),
             )
         assert from_provider.call_args.kwargs["model_name"] == "gateway/gpt-model"
@@ -632,7 +630,8 @@ class TestUnconfiguredOverrideModel:
         ):
             get_llm_for_persona(
                 persona=MagicMock(),
-                user=_mock_user(),
+                user=MagicMock(),
+                user_defaults=None,
                 llm_override=self._override("gateway/unlisted-model"),
             )
         default_llm.assert_called_once()

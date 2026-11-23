@@ -1,6 +1,9 @@
+"use client";
+
 import "@opal/components/icon-container/styles.css";
+import { useState } from "react";
 import type { IconFunctionComponent } from "@opal/types";
-import { Text } from "@opal/components";
+import { SvgUser } from "@opal/icons";
 
 // ---------------------------------------------------------------------------
 // Types
@@ -17,7 +20,7 @@ type IconContainerType = "default" | "entity" | "action";
 
 /**
  * Content union: a bare glyph, the light circle around a required icon, or
- * the dark circle with the required name's initial. Invalid combinations
+ * the user circle with a photo or initials. Invalid combinations
  * (an avatar circle without its content) are type errors.
  */
 type IconContainerContentProps =
@@ -29,20 +32,33 @@ type IconContainerContentProps =
        * work here too.
        */
       icon?: IconFunctionComponent;
-      name?: never;
+      initials?: never;
+      src?: never;
+      diameter?: never;
     }
   | {
       /** Light circle around `icon`. */
       avatar: "icon";
       icon: IconFunctionComponent;
-      name?: never;
+      initials?: never;
+      src?: never;
+      diameter?: never;
     }
   | {
-      /** Dark circle with the initial of `name`. */
+      /** User circle: the photo, else the initials, else a person glyph. */
       avatar: "user";
 
-      /** Initial source (first character after trim, uppercased). */
-      name: string;
+      /**
+       * Up to two letters, shown on the dark circle when there is no photo.
+       * Null shows a person glyph on a light circle.
+       */
+      initials: string | null;
+
+      /** Photo URL. The initials show when it is missing or fails to load. */
+      src?: string | null;
+
+      /** Circle diameter in pixels, for avatars outside the size presets. */
+      diameter?: number;
       icon?: never;
     };
 
@@ -72,22 +88,40 @@ function IconContainer({
   type = "default",
   icon: Icon,
   avatar,
-  name,
+  initials,
+  src,
+  diameter,
 }: IconContainerProps) {
+  // Keyed by URL, so a new photo URL tries again after a failure.
+  const [failedSrc, setFailedSrc] = useState<string | null>(null);
   const glyph = Icon ? <Icon className="opal-icon-container-glyph" /> : null;
+  const diameterStyle = diameter
+    ? { width: `${diameter / 16}rem`, height: `${diameter / 16}rem` }
+    : undefined;
 
   let content: React.ReactNode = glyph;
   if (avatar === "user") {
-    const initial = (name?.trim()[0] ?? "?").toUpperCase();
+    const showPhoto = !!src && src !== failedSrc;
     content = (
-      <div className="opal-icon-container-avatar opal-icon-container-avatar-user">
-        <Text
-          font="secondary-action"
-          color="text-inverted-05"
-          wordWrap="whitespace-nowrap"
-        >
-          {initial}
-        </Text>
+      <div
+        className="opal-icon-container-avatar opal-icon-container-avatar-user"
+        data-empty={!showPhoto && !initials ? "true" : undefined}
+        style={diameterStyle}
+      >
+        {showPhoto ? (
+          <img
+            src={src}
+            alt=""
+            className="opal-icon-container-avatar-image"
+            onError={() => setFailedSrc(src)}
+          />
+        ) : initials ? (
+          <span className="opal-icon-container-avatar-initials">
+            {initials}
+          </span>
+        ) : (
+          <SvgUser className="opal-icon-container-avatar-empty-glyph" />
+        )}
       </div>
     );
   } else if (avatar === "icon") {
@@ -99,7 +133,12 @@ function IconContainer({
   }
 
   return (
-    <div className="opal-icon-container" data-size={size} data-type={type}>
+    <div
+      className="opal-icon-container"
+      data-size={size}
+      data-type={type}
+      style={diameterStyle}
+    >
       {content}
     </div>
   );

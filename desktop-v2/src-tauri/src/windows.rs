@@ -74,6 +74,9 @@ fn local_window(
     let builder = builder
         .title_bar_style(tauri::TitleBarStyle::Overlay)
         .hidden_title(true);
+    // Windows keeps the Maximize button of a window that cannot be resized.
+    #[cfg(not(target_os = "macos"))]
+    let builder = builder.maximizable(false);
     let window = builder.build().map_err(|e| e.to_string())?;
     activate_app(app);
     Ok(window)
@@ -105,32 +108,125 @@ fn activate_app(app: &AppHandle) {
 #[cfg(not(target_os = "macos"))]
 fn activate_app(_app: &AppHandle) {}
 
+/// The size a local window opens at, in logical pixels.
+fn initial_size(label: &str) -> Option<(f64, f64)> {
+    match label {
+        ONBOARDING => Some((520.0, 400.0)),
+        LOGIN => Some((460.0, 520.0)),
+        PREFERENCES => Some((560.0, 600.0)),
+        OFFLINE => Some((460.0, 300.0)),
+        _ => None,
+    }
+}
+
+fn open_local(
+    app: &AppHandle,
+    label: &str,
+    page: &str,
+    title: &str,
+) -> Result<WebviewWindow, String> {
+    let size = initial_size(label).ok_or("not a local window")?;
+    local_window(app, label, page, title, size)
+}
+
 pub fn open_onboarding(app: &AppHandle) -> Result<WebviewWindow, String> {
-    local_window(
-        app,
-        ONBOARDING,
-        "onboarding.html",
-        "Welcome to Onyx",
-        (520.0, 400.0),
-    )
+    open_local(app, ONBOARDING, "onboarding.html", "Welcome to Onyx")
 }
 
 pub fn open_login(app: &AppHandle) -> Result<WebviewWindow, String> {
-    local_window(app, LOGIN, "login.html", "Sign in to Onyx", (460.0, 520.0))
+    open_local(app, LOGIN, "login.html", "Sign in to Onyx")
 }
 
 pub fn open_preferences(app: &AppHandle) -> Result<WebviewWindow, String> {
-    local_window(
-        app,
-        PREFERENCES,
-        "preferences.html",
-        "Preferences",
-        (560.0, 600.0),
-    )
+    open_local(app, PREFERENCES, "preferences.html", "Preferences")
 }
 
 pub fn open_offline(app: &AppHandle) -> Result<WebviewWindow, String> {
-    local_window(app, OFFLINE, "offline.html", "Onyx", (460.0, 300.0))
+    open_local(app, OFFLINE, "offline.html", "Onyx")
+}
+
+/// Logical pixels kept free above and below a local window: the title bar
+/// and panels.
+const SCREEN_MARGIN: f64 = 80.0;
+/// The title bar height a local window is placed with, in logical pixels.
+const TITLE_BAR: f64 = 40.0;
+
+/// A local window's height and, if it must move to stay on screen, its new
+/// outer position.
+#[derive(Debug, PartialEq)]
+pub(crate) struct Fit {
+    pub height: f64,
+    pub position: Option<(i32, i32)>,
+}
+
+/// Fits a window `width` logical pixels wide to `content` logical pixels of
+/// height inside `work_area` (physical x, y, width, height). A window that
+/// would leave the work area is centered in it.
+pub(crate) fn fit_in_work_area(
+    work_area: (i32, i32, u32, u32),
+    scale: f64,
+    position: (i32, i32),
+    width: f64,
+    content: f64,
+) -> Fit {
+    let (area_x, area_y, area_w, area_h) = work_area;
+    let (area_w, area_h) = (f64::from(area_w), f64::from(area_h));
+    let max_height = (area_h / scale - SCREEN_MARGIN).max(TITLE_BAR);
+    let height = content.clamp(1.0, max_height);
+    let outer_w = (width * scale).round();
+    let outer_h = ((height + TITLE_BAR) * scale).round();
+    let place = |start: i32, extent: f64, area_start: i32, area_extent: f64| -> i32 {
+        let end = f64::from(start) + extent;
+        if start >= area_start && end <= f64::from(area_start) + area_extent {
+            start
+        } else {
+            area_start + ((area_extent - extent) / 2.0).max(0.0) as i32
+        }
+    };
+    let x = place(position.0, outer_w, area_x, area_w);
+    let y = place(position.1, outer_h, area_y, area_h);
+    Fit {
+        height,
+        position: ((x, y) != position).then_some((x, y)),
+    }
+}
+
+/// Sizes a local window to its content: `content_height` logical pixels
+/// high, as wide as it opened, and inside its monitor's work area.
+pub fn fit_to_content(window: &WebviewWindow, content_height: f64) -> Result<(), String> {
+    let (width, _) = initial_size(window.label()).ok_or("not a local window")?;
+    let monitor = match window.current_monitor().map_err(|e| e.to_string())? {
+        Some(monitor) => Some(monitor),
+        None => window.primary_monitor().map_err(|e| e.to_string())?,
+    };
+    let Some(monitor) = monitor else {
+        return window
+            .set_size(tauri::LogicalSize::new(width, content_height))
+            .map_err(|e| e.to_string());
+    };
+    let area = monitor.work_area();
+    let position = window.outer_position().map_err(|e| e.to_string())?;
+    let fit = fit_in_work_area(
+        (
+            area.position.x,
+            area.position.y,
+            area.size.width,
+            area.size.height,
+        ),
+        monitor.scale_factor(),
+        (position.x, position.y),
+        width,
+        content_height,
+    );
+    window
+        .set_size(tauri::LogicalSize::new(width, fit.height))
+        .map_err(|e| e.to_string())?;
+    if let Some((x, y)) = fit.position {
+        window
+            .set_position(tauri::PhysicalPosition::new(x, y))
+            .map_err(|e| e.to_string())?;
+    }
+    Ok(())
 }
 
 pub fn close(app: &AppHandle, label: &str) {
@@ -171,6 +267,7 @@ fn open_failed(app: &AppHandle, title: &str, error: &str) {
         ));
     crate::dialog::show(app, dialog, |app, choice| {
         if choice == rfd::MessageDialogResult::Custom("Try Again".into()) {
+            app.state::<AppState>().forget_read_failure();
             route(app);
         } else {
             let _ = open_login(app);
@@ -203,7 +300,12 @@ pub fn route_to(app: &AppHandle, path: &str) {
         return;
     };
     let Some(token) = state.token(&server) else {
-        let _ = open_login(app);
+        // A keyring that could not be read (locked, cancelled unlock) is
+        // not signed out: say so, and let the user try again.
+        match state.read_failure(&server) {
+            Some(error) => open_failed(app, "Could not read your session", &error),
+            None => show_sign_in(app),
+        }
         return;
     };
     let app = app.clone();
@@ -282,13 +384,100 @@ pub(crate) fn show_offline(
 }
 
 /// Dock click, tray "Open Onyx" and second launches.
+/// The windows that `show_primary` brings forward, first match wins. The main
+/// window is hidden while the offline window shows. Off macOS, the web sign-in
+/// window stands in for the login window, which it hides.
+#[cfg(target_os = "macos")]
+const PRIMARY: [&str; 4] = [OFFLINE, main_window::LABEL, ONBOARDING, LOGIN];
+#[cfg(not(target_os = "macos"))]
+const PRIMARY: [&str; 5] = [
+    OFFLINE,
+    main_window::LABEL,
+    ONBOARDING,
+    crate::sso::LABEL,
+    LOGIN,
+];
+
+/// Brings the login window forward, or off macOS the web sign-in window that
+/// hides it.
+fn show_sign_in(app: &AppHandle) {
+    #[cfg(not(target_os = "macos"))]
+    if let Some(window) = app.get_webview_window(crate::sso::LABEL) {
+        bring_forward(app, &window);
+        return;
+    }
+    let _ = open_login(app);
+}
+
 pub fn show_primary(app: &AppHandle) {
-    // The main window is hidden while the offline window shows.
-    for label in [OFFLINE, main_window::LABEL, ONBOARDING, LOGIN] {
+    for label in PRIMARY {
         if let Some(window) = app.get_webview_window(label) {
             bring_forward(app, &window);
             return;
         }
     }
     route(app);
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn content_that_fits_keeps_the_window_where_it_is() {
+        let fit = fit_in_work_area((0, 0, 2560, 1920), 2.0, (1040, 400), 520.0, 400.0);
+        assert_eq!(
+            fit,
+            Fit {
+                height: 400.0,
+                position: None
+            }
+        );
+    }
+
+    #[test]
+    fn tall_content_on_a_small_screen_is_clamped_and_moved_on_screen() {
+        // Preferences on a 1024x768 screen, centered at its first size.
+        let fit = fit_in_work_area((0, 0, 1024, 768), 1.0, (232, 84), 560.0, 900.0);
+        assert_eq!(fit.height, 768.0 - SCREEN_MARGIN);
+        // The window and its title bar fit between the top and bottom edges.
+        let (x, y) = fit.position.expect("moved");
+        assert_eq!(x, 232);
+        assert!(y >= 0 && f64::from(y) + fit.height + TITLE_BAR <= 768.0);
+    }
+
+    #[test]
+    fn no_content_height_makes_a_window_larger_than_its_monitor() {
+        for scale in [1.0, 1.25, 2.0] {
+            let fit = fit_in_work_area((0, 0, 2560, 1440), scale, (0, 0), 920.0, 58_880.0);
+            assert!((fit.height + TITLE_BAR) * scale <= 1440.0, "scale {scale}");
+        }
+    }
+
+    #[test]
+    fn a_window_past_the_bottom_edge_is_centered_vertically() {
+        // A second monitor to the right, below a top panel.
+        let fit = fit_in_work_area((1920, 32, 1920, 1048), 1.0, (2650, 900), 460.0, 300.0);
+        assert_eq!(fit.position, Some((2650, 32 + 354)));
+        // Off the left edge too: centered on both axes.
+        let fit = fit_in_work_area((1920, 32, 1920, 1048), 1.0, (100, 900), 460.0, 300.0);
+        assert_eq!(fit.position, Some((1920 + 730, 32 + 354)));
+    }
+
+    #[test]
+    fn local_windows_keep_the_width_they_open_with() {
+        for label in [ONBOARDING, LOGIN, PREFERENCES, OFFLINE] {
+            assert!(initial_size(label).is_some(), "{label}");
+        }
+        assert_eq!(initial_size(LAUNCHER), None);
+    }
+
+    #[cfg(not(target_os = "macos"))]
+    #[test]
+    fn reopening_shows_the_web_sign_in_window_before_login() {
+        let position = |label: &str| PRIMARY.iter().position(|l| *l == label);
+        let web = position(crate::sso::LABEL).expect("the web sign-in window is primary");
+        let login = position(LOGIN).expect("login is primary");
+        assert!(web < login);
+    }
 }

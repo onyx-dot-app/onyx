@@ -131,7 +131,20 @@ export async function loadOlderChatMessages(sessionId: string): Promise<void> {
     // branch (it was switched elsewhere, for example in another tab). Load
     // that branch instead.
     if (page.messages.length === 0) {
-      void reloadLatestChatPage(sessionId);
+      await reloadLatestChatPage(sessionId);
+      // A reload that kept the same oldest message (it failed, or a newer
+      // message arrived meanwhile) would ask for the same empty page again.
+      const reloaded = useChatSessionStore.getState().sessions.get(sessionId);
+      if (
+        reloaded &&
+        getLatestMessageChain(reloaded.messageTree)[0]?.messageId ===
+          oldest.messageId
+      ) {
+        useChatSessionStore.getState().updateSessionData(sessionId, {
+          hasOlderMessages: false,
+          olderMessagesFailed: true,
+        });
+      }
       return;
     }
 

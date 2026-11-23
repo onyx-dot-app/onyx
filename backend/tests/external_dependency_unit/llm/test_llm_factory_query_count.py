@@ -78,7 +78,9 @@ def _query_counts(
             "default": (get_default_llm, None),
             "persona_default": (
                 lambda: get_llm_for_persona(
-                    Persona(id=-1, default_model_configuration_id=ids[_CHOSEN]), user
+                    Persona(id=-1, default_model_configuration_id=ids[_CHOSEN]),
+                    user,
+                    None,
                 ),
                 _CHOSEN_MAX_INPUT_TOKENS,
             ),
@@ -86,6 +88,7 @@ def _query_counts(
                 lambda: get_llm_for_persona(
                     Persona(id=-1, default_model_configuration_id=None),
                     user,
+                    None,
                     LLMOverride(model_provider=provider.name, model_version=_CHOSEN),
                 ),
                 _CHOSEN_MAX_INPUT_TOKENS,
@@ -94,6 +97,7 @@ def _query_counts(
                 lambda: get_llm_for_persona(
                     Persona(id=-1, default_model_configuration_id=None),
                     user,
+                    None,
                     LLMOverride(model_configuration_id=ids[_CHOSEN]),
                 ),
                 _CHOSEN_MAX_INPUT_TOKENS,
@@ -102,6 +106,7 @@ def _query_counts(
                 lambda: get_llm_for_persona(
                     Persona(id=-1, default_model_configuration_id=None),
                     user,
+                    None,
                     LLMOverride(model_provider=provider.name, model_version=_DATED),
                 ),
                 _DATED_MAX_INPUT_TOKENS,

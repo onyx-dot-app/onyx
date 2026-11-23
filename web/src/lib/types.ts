@@ -1,6 +1,12 @@
 import { Agent } from "@/lib/agents/types";
 import type { ReasoningEffortOverride } from "@/lib/languageModels/types";
 import type { Locale } from "@/i18n/config";
+import type {
+  InterfaceFont,
+  Motion,
+  PopupDismissal,
+  ResponseFont,
+} from "@/lib/appearance/preferences";
 import type { Credential } from "@/lib/credentials/types";
 import type { Connector } from "@/lib/connectors/types";
 import { ConnectorCredentialPairStatus } from "@/lib/connectors/types";
@@ -15,7 +21,7 @@ export enum ThemePreference {
   SYSTEM = "system",
 }
 
-interface UserPreferences {
+export interface UserPreferences {
   // TODO: rename to agent — https://linear.app/onyx-app/issue/ENG-3766
   chosen_assistants: number[] | null;
   visible_assistants: number[];
@@ -33,6 +39,11 @@ interface UserPreferences {
   language: Locale | null;
   chat_background: string | null;
   default_app_mode: "AUTO" | "CHAT" | "SEARCH";
+  interface_font: InterfaceFont;
+  response_font: ResponseFont;
+  motion: Motion;
+  popup_dismissal: PopupDismissal;
+  dynamic_conversations: boolean;
   // Input preferences
   paste_as_tile?: boolean;
   interrupt_on_send?: boolean;
@@ -48,7 +59,11 @@ export interface MemoryItem {
 }
 
 export interface UserPersonalization {
+  /** Full name. SCIM provisioning keeps it in sync with the IdP. */
   name: string;
+  /** The name Onyx calls the user. Empty means it uses the full name. */
+  preferred_name: string;
+  /** Work role. See `WORK_ROLE_OPTIONS` for the values the web app offers. */
   role: string;
   memories: MemoryItem[];
   use_memories: boolean;
@@ -120,6 +135,10 @@ export interface User {
   token_expires_at?: string;
   is_cloud_superuser?: boolean;
   team_name: string | null;
+  /** The workspace of this session. Set only on multi-tenant deployments. */
+  tenant_id?: string | null;
+  /** Null when the user has no profile photo. See `buildUserProfileImageUrl`. */
+  profile_image_file_id?: string | null;
   is_anonymous_user?: boolean;
   // If user does not have a configured password
   // (i.e.) they are using an oauth flow
@@ -587,11 +606,17 @@ export interface SlackBotTokens {
 }
 
 /* EE Only Types */
+/** A member as a user group lists it: identity and access, no preferences. */
+export type UserGroupMember = Pick<
+  User,
+  "id" | "email" | "is_active" | "is_superuser" | "is_verified" | "account_type"
+>;
+
 export interface UserGroup {
   id: number;
   name: string;
   // Empty when the list was fetched without members; use member_count.
-  users: User[];
+  users: UserGroupMember[];
   member_count: number;
   active_member_count: number;
   // ids of members who manage this group (drives the Make/Revoke Manager toggle)
@@ -662,6 +687,16 @@ export interface ConfigurationFieldSpec {
 
 export interface ConfigurationSchemaResponse {
   configuration: Record<string, ConfigurationFieldSpec>;
+}
+
+// The user's OAuth connection to a federated connector.
+export interface FederatedConnectorOAuthStatus {
+  federated_connector_id: number;
+  source: string;
+  name: string;
+  has_oauth_token: boolean;
+  oauth_token_expires_at?: string;
+  authorize_url?: string;
 }
 
 export interface FederatedConnectorCreateRequest {

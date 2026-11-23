@@ -8,6 +8,7 @@
     "core:event:default",
     "core:window:allow-start-dragging",
     "core:window:allow-set-size",
+    "allow-fit-window",
     "allow-get-offline-status",
     "allow-retry-connection",
     "allow-change-server"

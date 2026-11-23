@@ -14,11 +14,12 @@
 - **An admin** adds a federated Slack connector from the connector catalog. The
   admin enters the Slack app's client ID and secret and the channel scope, and
   can link the connector to document sets.
-- **A user** connects their own Slack account from their settings page, or from
-  a prompt in the chat app that they can skip. After the OAuth flow, a search in
-  chat can return Slack messages. Each message shows as a document card and a
-  numbered citation that opens the message in Slack. The user cannot tell a
-  live Slack result from an indexed one.
+- **A user** connects their own Slack account from Settings > 3rd Party Access, or
+  from a prompt in the chat app that they can skip. Settings > 3rd Party Access is the
+  only place where a user can disconnect it. After
+  the OAuth flow, a search in chat can return Slack messages. Each message
+  shows as a document card and a numbered citation that opens the message in
+  Slack. The user cannot tell a live Slack result from an indexed one.
 - **A Slack bot user** gets Slack results through the bot only when the
   agent's document sets include one linked to the federated Slack connector.
   The search then uses the tokens of the tenant's Slack bot, not the asker's own
@@ -251,7 +252,7 @@ both.
   check which bot row supplied the token and whether it has a `user_token`.
   Then walk the list in [[#slack-results-have-no-acl]].
 - `manual-slack-setup` **Set up Slack search by hand.** You need a real Slack app. Add the
-  federated connector, connect Slack from the settings page, and ask a question
+  federated connector, connect Slack from Settings > 3rd Party Access, and ask a question
   that only Slack can answer. A citation must open the Slack message. Then
   disconnect Slack and ask again: the turn must finish with no Slack sources
   and no error.

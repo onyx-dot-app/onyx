@@ -8,7 +8,7 @@ import React, {
   useState,
 } from "react";
 import { createPortal } from "react-dom";
-import { cn } from "@opal/utils";
+import { cn, prefersReducedMotion } from "@opal/utils";
 import { useOpalStrings } from "@opal/strings";
 import usePresence from "@opal/hooks/usePresence";
 import { ShadowDiv } from "@opal/components/shadow-div/components";
@@ -216,11 +216,8 @@ export const DropdownList = forwardRef<HTMLDivElement, DropdownListProps>(
       setEnter(viewDirection);
       // Reduced motion swaps at once: no old card to animate away, and no
       // exit animation whose end would clear it.
-      const reduceMotion =
-        typeof window.matchMedia === "function" &&
-        window.matchMedia("(prefers-reduced-motion: reduce)").matches;
       const last = lastCardRef.current;
-      if (last && last.key !== viewKey && !reduceMotion) {
+      if (last && last.key !== viewKey && !prefersReducedMotion()) {
         setExiting({ ...last, direction: viewDirection });
       }
     }, [isOpen, viewKey, viewDirection]);

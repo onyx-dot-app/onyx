@@ -147,7 +147,7 @@ _FIELDS: dict[str, frozenset[str]] = {
     ),
     "license": frozenset({"license_present", "first_set_at"}),
     "tenant_domain": frozenset({"domain", "first_signup_at"}),
-    "users": frozenset({"total"}),
+    "users": frozenset({"total", "active"}),
     "feedback": frozenset({"feedback_id", "positive", "channel"}),
     "query": frozenset(
         {
@@ -160,6 +160,8 @@ _FIELDS: dict[str, frozenset[str]] = {
             "first_answer_ms",
             "time_to_results_ms",
             "error_code",
+            "error_source",
+            "llm_provider",
         }
     ),
     "connector": frozenset(

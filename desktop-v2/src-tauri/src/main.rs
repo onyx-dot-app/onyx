@@ -53,11 +53,59 @@ fn exit_now(app: &tauri::AppHandle) -> ! {
     std::process::exit(code)
 }
 
+/// The app cannot talk to any server without its HTTP client, so it tells
+/// the user why and quits.
+fn startup_failed(error: &str) -> ! {
+    let text = format!(
+        "Onyx could not start secure connections: {error}\n\nCheck this computer's TLS \
+         settings (for example, OPENSSL_CONF), or contact your IT team."
+    );
+    eprintln!("{text}");
+    rfd::MessageDialog::new()
+        .set_level(rfd::MessageLevel::Error)
+        .set_title("Onyx could not start")
+        .set_description(dialog::text(text))
+        .show();
+    std::process::exit(1)
+}
+
+/// Writes `log` records to `onyx.log` in the app's log directory. The file
+/// rotates at 1 MB and four older files are kept. The app runs without a log
+/// file if the directory cannot be used.
+fn init_logging(app: &tauri::AppHandle) {
+    use tauri_plugin_log::{RotationStrategy, Target, TargetKind};
+    let builder = tauri_plugin_log::Builder::new()
+        .clear_targets()
+        .target(Target::new(TargetKind::LogDir {
+            file_name: Some("onyx".into()),
+        }))
+        .level(log::LevelFilter::Info)
+        .max_file_size(1_000_000)
+        .rotation_strategy(RotationStrategy::KeepSome(4));
+    #[cfg(debug_assertions)]
+    let builder = builder.target(Target::new(TargetKind::Stderr));
+    // Only the logger: the plugin's commands stay unregistered.
+    match builder.split(app) {
+        Ok((_plugin, level, logger)) => {
+            if let Err(e) = tauri_plugin_log::attach_logger(level, logger) {
+                eprintln!("could not start logging: {e}");
+            }
+        }
+        Err(e) => eprintln!("could not open the log file: {e}"),
+    }
+}
+
 fn main() {
+    let api = api::Api::new().unwrap_or_else(|e| startup_failed(&e));
     let builder = tauri::Builder::default()
         // Must come first: a second launch (or an onyx:// link that starts
         // the app) hands its URL to the running instance and exits.
         .plugin(tauri_plugin_single_instance::init(|app, _args, _cwd| {
+            // A clicked answer toast shows the launcher (notify.rs), not the main window.
+            #[cfg(windows)]
+            if _args.iter().any(|arg| notify::is_answer_link(arg)) {
+                return;
+            }
             windows::show_primary(app);
         }))
         .plugin(tauri_plugin_deep_link::init())
@@ -79,12 +127,14 @@ fn main() {
     let builder = builder.plugin(tauri_plugin_autostart::Builder::new().build());
     let app = builder
         .setup(|app| {
+            init_logging(app.handle());
             let config_path = app.path().app_config_dir()?.join("config.json");
             app.manage(offline::Offline::default());
             let handle = app.handle();
-            let policy = policy::read(handle);
+            let config = ConfigStore::load(config_path);
+            let policy = policy::with_remembered_server(policy::read(handle), &config);
             policy::apply_launch_at_login(handle, &policy);
-            app.manage(AppState::new(ConfigStore::load(config_path), policy));
+            app.manage(AppState::new(config, policy, api));
 
             // Windows and Linux: the main window gets its own menu (main_window.rs).
             #[cfg(target_os = "macos")]
@@ -112,6 +162,8 @@ fn main() {
                 app.deep_link().on_open_url(move |event| {
                     for url in event.urls() {
                         sso::handle_callback(&link_app, &url);
+                        #[cfg(windows)]
+                        notify::handle_link(&link_app, &url);
                     }
                 });
             }
@@ -126,6 +178,7 @@ fn main() {
         .invoke_handler(tauri::generate_handler![
             commands::check_server,
             commands::save_server,
+            commands::get_server_lock,
             commands::login,
             commands::get_auth_methods,
             commands::sign_in_with_sso,
@@ -152,6 +205,7 @@ fn main() {
             commands::aonyx_menu,
             commands::get_offline_status,
             commands::retry_connection,
+            commands::fit_window,
         ])
         .build(tauri::generate_context!())
         .expect("error while building the Onyx desktop app");

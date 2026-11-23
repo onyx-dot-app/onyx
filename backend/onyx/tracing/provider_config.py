@@ -123,6 +123,15 @@ def _langfuse_from_row(row: TracingProviderConfig) -> LangfuseConfig | None:
     )
 
 
+def env_tracing_configured(provider_type: TracingProviderType) -> bool:
+    """Whether env vars configure the provider, whatever a DB row says."""
+    if provider_type == TracingProviderType.BRAINTRUST:
+        return _env_braintrust() is not None
+    if provider_type == TracingProviderType.LANGFUSE:
+        return _env_langfuse() is not None
+    return False
+
+
 def resolve_effective_tracing_config() -> EffectiveTracingConfig:
     # In multi-tenant (cloud) the UI feature is unsupported — env vars only.
     if MULTI_TENANT:
