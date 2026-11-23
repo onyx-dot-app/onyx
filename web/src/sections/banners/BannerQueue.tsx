@@ -20,7 +20,7 @@ import { getNotificationIcon, openNotificationLink } from "@/lib/notifications";
 import {
   NotificationSeverity,
   NotificationType,
-} from "@/lib/notifications/interfaces";
+} from "@/lib/notifications/types";
 import { useBannerQueue } from "@/lib/banner/hooks";
 
 // Inset from the content area's left edge, matching the card's bottom inset.
@@ -88,6 +88,10 @@ export default function BannerQueue() {
     },
     [NotificationType.TRIAL_ENDS_TWO_DAYS]: {
       sourceLabel: t("trialEnds.source.label"),
+    },
+    [NotificationType.OPENSEARCH_CLUSTER_ISSUE]: {
+      sourceLabel: t("searchCluster.source.label"),
+      ctaLabel: t("searchCluster.cta.label"),
     },
     [NotificationType.CONNECTOR_REPEATED_ERRORS]: {
       sourceLabel: t("connectors.source.label"),

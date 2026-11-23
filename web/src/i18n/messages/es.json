@@ -11901,6 +11901,14 @@
           "label": "Licencia"
         }
       },
+      "searchCluster": {
+        "source": {
+          "label": "Clúster de búsqueda"
+        },
+        "cta": {
+          "label": "Abrir estado del servicio"
+        }
+      },
       "nextButton": {
         "ariaLabel": "Siguiente aviso"
       },

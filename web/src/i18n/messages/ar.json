@@ -11901,6 +11901,14 @@
           "label": "الترخيص"
         }
       },
+      "searchCluster": {
+        "source": {
+          "label": "مجموعة البحث"
+        },
+        "cta": {
+          "label": "فتح حالة الخدمة"
+        }
+      },
       "nextButton": {
         "ariaLabel": "الإعلان التالي"
       },

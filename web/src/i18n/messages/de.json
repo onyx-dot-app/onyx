@@ -11901,6 +11901,14 @@
           "label": "Lizenz"
         }
       },
+      "searchCluster": {
+        "source": {
+          "label": "Suchcluster"
+        },
+        "cta": {
+          "label": "Dienststatus öffnen"
+        }
+      },
       "nextButton": {
         "ariaLabel": "Nächster Banner"
       },

@@ -11901,6 +11901,14 @@
           "label": "ライセンス"
         }
       },
+      "searchCluster": {
+        "source": {
+          "label": "検索クラスター"
+        },
+        "cta": {
+          "label": "サービスステータスを開く"
+        }
+      },
       "nextButton": {
         "ariaLabel": "次のバナー"
       },

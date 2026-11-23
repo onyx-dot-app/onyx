@@ -11901,6 +11901,14 @@
           "label": "许可证"
         }
       },
+      "searchCluster": {
+        "source": {
+          "label": "搜索集群"
+        },
+        "cta": {
+          "label": "打开服务状态"
+        }
+      },
       "nextButton": {
         "ariaLabel": "下一条横幅"
       },

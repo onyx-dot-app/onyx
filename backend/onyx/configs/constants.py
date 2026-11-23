@@ -391,6 +391,8 @@ class NotificationType(str, Enum):
     SCHEDULED_TASK_AWAITING_APPROVAL = "scheduled_task_awaiting_approval"
     SCHEDULED_TASK_PRE_APPROVED_ACTION = "scheduled_task_pre_approved_action"
     APPROVAL_REQUESTED = "approval_requested"
+    # A critical issue on the OpenSearch cluster, for full admins.
+    OPENSEARCH_CLUSTER_ISSUE = "opensearch_cluster_issue"
 
 
 class BlobType(str, Enum):
