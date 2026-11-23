@@ -1245,19 +1245,14 @@ def _listable_chat(user_id: UUID) -> ColumnElement[bool]:
 
 
 def _listed_artifact(row: Row) -> ListedArtifact:
-    path = published_display_path(row.path)
     return ListedArtifact(
         file_id=row.file_id,
-        name=(row.display_name or row.file_id)[:ARTIFACTS_NAME_MAX_CHARS],
+        name=row.display_name or row.file_id,
         title=row.title,
-        path=path
-        if len(path) <= ARTIFACTS_PATH_MAX_CHARS
-        else "…" + path[-(ARTIFACTS_PATH_MAX_CHARS - 1) :],
+        path=published_display_path(row.path),
         version=row.version,
         chat_id=row.chat_session_id,
-        chat_title=row.description[:ARTIFACTS_CHAT_TITLE_MAX_CHARS]
-        if row.description is not None
-        else None,
+        chat_title=row.description,
         published_at=row.published_at,
         # A file without a recorded size shows as 0.
         size=row.file_size or 0,
@@ -1280,8 +1275,9 @@ def get_user_published_files(
     latest publish, newest first. An artifact published again while the caller pages
     moves to the first page, so later pages skip it. `query` matches the file
     name, the version's title or the chat's title, in any case, after the
-    version is chosen. None when `chat_session_id` is not a listable chat of
-    the user."""
+    version is chosen. An entry's name, path and chat title are cut to their
+    ARTIFACTS_*_MAX_CHARS, a path to its end. None when `chat_session_id` is
+    not a listable chat of the user."""
     listable = _listable_chat(user_id)
     if (
         chat_session_id is not None
@@ -1324,13 +1320,18 @@ def get_user_published_files(
                 ChatSession.description.icontains(query, autoescape=True),
             )
         )
-    return [
-        (
-            _listed_artifact(row),
-            ArtifactCursor(updated_at=row.updated_at, artifact_id=row.id),
+    page: list[tuple[ListedArtifact, ArtifactCursor]] = []
+    for row in db_session.execute(statement):
+        artifact = _listed_artifact(row)
+        artifact.name = artifact.name[:ARTIFACTS_NAME_MAX_CHARS]
+        if len(artifact.path) > ARTIFACTS_PATH_MAX_CHARS:
+            artifact.path = "…" + artifact.path[-(ARTIFACTS_PATH_MAX_CHARS - 1) :]
+        if artifact.chat_title is not None:
+            artifact.chat_title = artifact.chat_title[:ARTIFACTS_CHAT_TITLE_MAX_CHARS]
+        page.append(
+            (artifact, ArtifactCursor(updated_at=row.updated_at, artifact_id=row.id))
         )
-        for row in db_session.execute(statement)
-    ]
+    return page
 
 
 def get_user_published_file(
@@ -1339,7 +1340,7 @@ def get_user_published_file(
     """The published file `file_id`, any version of its artifact, when it is
     in a listable chat of the user (`_listable_chat`) and its object is not
     missing; else None. Any other file, such as a thumbnail or an upload, is
-    None."""
+    None. Its name, path and chat title are not cut."""
     row = db_session.execute(
         select(
             ChatArtifact.path,

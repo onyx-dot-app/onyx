@@ -11,7 +11,7 @@ import pytest
 from sqlalchemy import update
 from sqlalchemy.orm import Session
 
-from onyx.configs.constants import DEFAULT_PERSONA_ID, FileOrigin
+from onyx.configs.constants import DEFAULT_PERSONA_ID
 from onyx.db.chat import (
     get_or_create_root_message,
     get_user_published_file,
@@ -26,10 +26,15 @@ from onyx.db.models import (
     FileRecord,
     User,
 )
-from onyx.file_store.file_store import FILE_SIZE_MISSING_SENTINEL
+from onyx.file_store.file_store import (
+    FILE_SIZE_MISSING_SENTINEL,
+    get_default_file_store,
+)
 from onyx.file_store.utils import save_chat_output_file
+from onyx.server.features.build.sandbox.harness_base import chat_file_name
 from onyx.server.features.build.sandbox.models import session_workspace
 from onyx.tools.tool_implementations.sandbox.models import (
+    ARTIFACTS_CHAT_TITLE_MAX_CHARS,
     ARTIFACTS_NAME_MAX_CHARS,
     ARTIFACTS_PATH_MAX_CHARS,
     ArtifactCursor,
@@ -85,6 +90,7 @@ def _publish(
     title: str | None = None,
     *,
     published_at: datetime | None = None,
+    thumbnail: bytes | None = None,
 ) -> PublishedFile:
     """A file that publish_files saved for the chat at `path`, as the next
     publish, at a time after every earlier one unless `published_at`."""
@@ -96,7 +102,7 @@ def _publish(
         chat_session_id=chat.id,
         path=path,
         title=title,
-        thumbnail=None,
+        thumbnail=thumbnail,
     )
     at = published_at or _PUBLISHED_AT + timedelta(seconds=next(_PUBLISH_ORDER))
     db_session.execute(
@@ -324,48 +330,34 @@ def test_the_download_lookup_takes_any_version_and_refuses_other_files(
     db_session: Session, owner: User
 ) -> None:
     chat = _chat(db_session, owner, "Mine")
-    first = _publish(db_session, chat, "/w/report.md", "First")
+    first = _publish(db_session, chat, "/w/report.md", "First", thumbnail=b"jpg")
+    thumbnail_id = first.thumbnail_file_id
+    assert thumbnail_id is not None
     _publish(db_session, chat, "/w/report.md", "Second")
-    # A thumbnail's file record, as publish_files saves one.
-    thumbnail_id = str(uuid4())
-    db_session.add(
-        FileRecord(
-            file_id=thumbnail_id,
-            display_name="report.md thumbnail",
-            file_origin=FileOrigin.CHAT_ARTIFACT_THUMBNAIL,
-            file_type="image/jpeg",
-            bucket_name="unused",
-            object_key=thumbnail_id,
-            file_size=3,
-        )
-    )
-    db_session.flush()
-    db_session.execute(
-        update(ChatArtifactVersion)
-        .where(ChatArtifactVersion.file_id == first.file_id)
-        .values(thumbnail_file_id=thumbnail_id)
-    )
-    db_session.commit()
     image = save_chat_output_file(
         b"png",
         display_name="image.png",
         file_type="image/png",
         chat_session_id=chat.id,
     )
+    # Not a published file, so the user teardown leaves it.
+    try:
+        found = get_user_published_file(db_session, owner.id, first.file_id)
+        assert found is not None
+        assert (found.version, found.title, found.chat_id) == (1, "First", chat.id)
+        for file_id in (thumbnail_id, image, str(uuid4())):
+            assert get_user_published_file(db_session, owner.id, file_id) is None
 
-    found = get_user_published_file(db_session, owner.id, first.file_id)
-    assert found is not None
-    assert (found.version, found.title, found.chat_id) == (1, "First", chat.id)
-    for file_id in (thumbnail_id, image, str(uuid4())):
-        assert get_user_published_file(db_session, owner.id, file_id) is None
-
-    db_session.execute(
-        update(FileRecord)
-        .where(FileRecord.file_id == first.file_id)
-        .values(file_size=FILE_SIZE_MISSING_SENTINEL)
-    )
-    db_session.commit()
-    assert get_user_published_file(db_session, owner.id, first.file_id) is None
+        db_session.execute(
+            update(FileRecord)
+            .where(FileRecord.file_id == first.file_id)
+            .values(file_size=FILE_SIZE_MISSING_SENTINEL)
+        )
+        db_session.commit()
+        assert get_user_published_file(db_session, owner.id, first.file_id) is None
+    finally:
+        db_session.rollback()
+        get_default_file_store().delete_file(image, error_on_missing=False)
 
 
 def test_a_published_file_belongs_to_its_chats_owner(
@@ -396,19 +388,31 @@ def test_a_version_whose_file_is_not_a_published_file_is_refused(
     assert get_user_published_file(db_session, owner.id, image) is None
 
 
-def test_an_entry_keeps_a_bounded_name_and_path(
+def test_a_list_entry_is_bounded_and_the_download_lookup_is_whole(
     db_session: Session, owner: User
 ) -> None:
-    chat = _chat(db_session, owner)
-    long_name = "n" * (ARTIFACTS_NAME_MAX_CHARS + 50) + ".csv"
+    long_title = "t" * (ARTIFACTS_CHAT_TITLE_MAX_CHARS + 50)
+    chat = _chat(db_session, owner, long_title)
+    long_name = "n" * (ARTIFACTS_NAME_MAX_CHARS + 10) + ".pptx"
     deep = "/".join(["folder"] * 80)
-    _publish(db_session, chat, f"{session_workspace(chat.id)}/{deep}/{long_name}")
+    published = _publish(
+        db_session, chat, f"{session_workspace(chat.id)}/{deep}/{long_name}"
+    )
 
     [entry], _ = _list(db_session, owner)
     assert entry.name == long_name[:ARTIFACTS_NAME_MAX_CHARS]
     assert len(entry.path) == ARTIFACTS_PATH_MAX_CHARS
     assert entry.path.startswith("…")
     assert entry.path.endswith(long_name[-(ARTIFACTS_PATH_MAX_CHARS - 1) :])
+    assert entry.chat_title == long_title[:ARTIFACTS_CHAT_TITLE_MAX_CHARS]
+
+    # artifacts_download names the copy from the whole name, so it keeps its
+    # extension.
+    found = get_user_published_file(db_session, owner.id, published.file_id)
+    assert found is not None
+    assert (found.name, found.chat_title) == (long_name, long_title)
+    assert found.path == f"{deep}/{long_name}"
+    assert chat_file_name(found.file_id, found.name).endswith(".pptx")
 
 
 def test_a_later_publish_never_moves_the_latest_publish_back(

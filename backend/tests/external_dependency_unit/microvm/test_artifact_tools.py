@@ -747,16 +747,19 @@ def test_only_the_chats_owner_gets_the_sandbox_tools(
     ownerless = create_chat_session(
         db_session, "No owner", None, persona_id=DEFAULT_PERSONA_ID
     ).id
-    owned = _chat(db_session, user, "Mine")
+    try:
+        owned = _chat(db_session, user, "Mine")
 
-    def offered(chat_session_id: UUID) -> set[str]:
-        llm = ChatLLM([Delta(content="Done.")])
-        SandboxChat(
-            user=user, chat_session_id=chat_session_id, monkeypatch=monkeypatch
-        ).send(llm)
-        return {tool["function"]["name"] for tool in llm.requests[0]["tools"]}
+        def offered(chat_session_id: UUID) -> set[str]:
+            llm = ChatLLM([Delta(content="Done.")])
+            SandboxChat(
+                user=user, chat_session_id=chat_session_id, monkeypatch=monkeypatch
+            ).send(llm)
+            return {tool["function"]["name"] for tool in llm.requests[0]["tools"]}
 
-    assert {PublishFilesTool.NAME, ArtifactsListTool.NAME} <= offered(owned)
-    assert not {PublishFilesTool.NAME, ArtifactsListTool.NAME} & offered(ownerless)
-    db_session.execute(delete(ChatSession).where(ChatSession.id == ownerless))
-    db_session.commit()
+        assert {PublishFilesTool.NAME, ArtifactsListTool.NAME} <= offered(owned)
+        assert not {PublishFilesTool.NAME, ArtifactsListTool.NAME} & offered(ownerless)
+    finally:
+        db_session.rollback()
+        db_session.execute(delete(ChatSession).where(ChatSession.id == ownerless))
+        db_session.commit()

@@ -247,7 +247,7 @@ class PublishedFiles(BaseModel):
 # artifacts_list: the most entries of one page, and the default.
 ARTIFACTS_LIST_MAX_LIMIT = 50
 ARTIFACTS_LIST_DEFAULT_LIMIT = 25
-# The longest query, and the longest name, path and chat title that an entry
+# The longest query, and the longest name, path and chat title that a page
 # keeps; a version's title is at most PUBLISH_FILES_MAX_TITLE_CHARS.
 ARTIFACTS_QUERY_MAX_CHARS = 200
 ARTIFACTS_NAME_MAX_CHARS = 200
@@ -306,15 +306,17 @@ class ListedArtifact(BaseModel):
     artifacts_download looks up."""
 
     file_id: str
-    # At most ARTIFACTS_NAME_MAX_CHARS.
+    # The file record's display name; at most ARTIFACTS_NAME_MAX_CHARS in a
+    # page.
     name: str
     title: str | None
-    # published_display_path of the artifact's path; a longer one keeps its
-    # last ARTIFACTS_PATH_MAX_CHARS.
+    # published_display_path of the artifact's path; in a page, a longer one
+    # keeps its last ARTIFACTS_PATH_MAX_CHARS.
     path: str
     # More than 1: older versions exist.
     version: int
     chat_id: UUID
+    # At most ARTIFACTS_CHAT_TITLE_MAX_CHARS in a page.
     chat_title: str | None
     published_at: datetime
     size: int
