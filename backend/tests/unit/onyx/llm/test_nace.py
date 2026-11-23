@@ -4,10 +4,10 @@ import httpx
 import pytest
 from pydantic import ValidationError
 
-from onyx import __version__
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.llm.constants import WELL_KNOWN_PROVIDER_NAMES, LlmProviderNames
+from onyx.llm.decisions.client import nace_client_header_value
 from onyx.llm.factory import get_llm
 from onyx.llm.model_catalog import iter_models
 from onyx.llm.well_known_providers.nace import fetch_nace_models
@@ -50,6 +50,15 @@ def test_nace_cannot_construct_chat_client() -> None:
             max_input_tokens=100,
             deployment_name=None,
         )
+
+
+def test_nace_client_header_sanitizes_and_limits_the_version(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """Disallowed characters are replaced, then the header is cut to 64."""
+    monkeypatch.setattr("onyx.__version__", "feature/nace!" + ("a" * 70))
+    assert nace_client_header_value() == "onyx/feature-nace-" + ("a" * 46)
+    assert len(nace_client_header_value()) == 64
 
 
 def test_discovery_lists_models_once_without_catalog_aliases() -> None:
@@ -96,7 +105,7 @@ def test_discovery_lists_models_once_without_catalog_aliases() -> None:
             "https://console.nace.ai/v1/models",
             headers={
                 "Authorization": "Bearer secret",
-                "X-Nace-Client": f"onyx/{__version__}",
+                "X-Nace-Client": nace_client_header_value(),
             },
         )
 
@@ -223,6 +232,34 @@ def test_discovery_uses_saved_credentials_and_syncs_decision_models() -> None:
         assert models[0].supports_decisions is True
         assert models[0].supports_chat is False
         assert sync.call_args.kwargs["models"][0].supports_chat is False
+        assert sync.call_args.kwargs["expected_provider"] == "nace"
+
+
+def test_discovery_does_not_store_models_when_provider_type_changes() -> None:
+    """The type is checked before the fetch and again when the rows are written."""
+    from onyx.llm.well_known_providers.models import NaceModel
+    from onyx.server.manage.llm import api
+
+    stored = MagicMock(provider="nace")
+    stored.api_key.get_value.return_value = "saved-secret"
+    changed = MagicMock(provider="openai", id=7, model_configurations=[])
+    session = MagicMock()
+    locked = session.query.return_value.populate_existing.return_value.filter.return_value.with_for_update.return_value
+    locked.first.return_value = changed
+    with (
+        patch.object(api, "fetch_existing_llm_provider_by_id", return_value=stored),
+        patch.object(
+            api, "fetch_nace_models", return_value=[NaceModel(name="drex-max-v1.1")]
+        ),
+    ):
+        models = api.get_nace_available_models(
+            NaceModelsRequest(provider_id=7), MagicMock(), session
+        )
+    assert models[0].name == "drex-max-v1.1"
+    locked.first.assert_called_once()
+    session.execute.assert_not_called()
+    session.commit.assert_not_called()
+    session.rollback.assert_called_once()
 
 
 def test_discovery_rejects_another_provider_before_reading_credentials() -> None:

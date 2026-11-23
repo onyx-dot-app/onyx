@@ -838,33 +838,75 @@ def upsert_llm_provider(
     return LLMProviderView.from_model(saved_llm_provider)
 
 
+def _lock_llm_provider_for_sync(
+    db_session: Session, provider_id: int
+) -> LLMProviderModel | None:
+    """Lock and reload the provider row inside the sync transaction.
+
+    The upsert writes the type by assigning ``LLMProvider.provider`` and
+    committing that UPDATE. This ``FOR UPDATE`` waits for that write, and
+    that write waits for this lock. ``populate_existing`` replaces a copy
+    this session loaded before the model fetch.
+    """
+    return (
+        db_session.query(LLMProviderModel)
+        .populate_existing()
+        .filter(LLMProviderModel.id == provider_id)
+        .with_for_update()
+        .first()
+    )
+
+
 def sync_model_configurations(
     db_session: Session,
     provider_id: int,
     models: list[SyncModelEntry],
+    expected_provider: str | None = None,
 ) -> int:
     """Sync model configurations for a dynamic provider (OpenRouter, Bedrock, Ollama, etc.).
 
     Inserts NEW models and, for existing ones, adds any newly-reported capability
-    flag (VISION/REASONING). Flags are only added, never removed; is_visible and
+    flag (VISION/REASONING). A new hosted decision model also gets DECISION.
+    Flags are only added, never removed; is_visible and
     max_input_tokens are preserved. Caveat: an admin-removed flow is re-added on
     the next sync (ENG-4233).
+
+    When ``expected_provider`` is set, the provider row is locked and reloaded
+    in this transaction. The stored type must still match the type the caller
+    validated. A change during discovery rejects the sync, before any insert.
 
     Args:
         db_session: Database session
         provider_id: Id of the LLM provider
         models: List of SyncModelEntry objects describing the fetched models
+        expected_provider: Provider type validated before the fetch, if any
 
     Returns:
         Number of new models added
     """
-    provider = fetch_existing_llm_provider_by_id(provider_id, db_session)
+    # Hold the row lock through the inserts below. They commit on this session.
+    provider = (
+        _lock_llm_provider_for_sync(db_session, provider_id)
+        if expected_provider is not None
+        else fetch_existing_llm_provider_by_id(provider_id, db_session)
+    )
     if not provider:
         raise ValueError(f"LLM Provider with id={provider_id} not found")
+
+    stored_type = provider.provider
+    if expected_provider is not None and stored_type != expected_provider:
+        # Release the row lock. The caller logs this and still returns the fetch.
+        db_session.rollback()
+        raise ValueError(
+            f"LLM Provider with id={provider_id} is {stored_type}, "
+            f"not {expected_provider}"
+        )
 
     if provider.provider in HOSTED_DECISION_PROVIDER_NAMES and any(
         model.supports_chat for model in models
     ):
+        if expected_provider is not None:
+            db_session.rollback()
         raise ValueError(
             f"{PROVIDER_DISPLAY_NAMES[provider.provider]} does not support chat model discovery"
         )
@@ -883,6 +925,11 @@ def sync_model_configurations(
                 supported_flows.append(LLMModelFlowType.VISION)
             if model.supports_reasoning:
                 supported_flows.append(LLMModelFlowType.REASONING)
+            if (
+                model.supports_decisions
+                and provider.provider in HOSTED_DECISION_PROVIDER_NAMES
+            ):
+                supported_flows.append(LLMModelFlowType.DECISION)
 
             new_models.append(
                 NewModelConfiguration(

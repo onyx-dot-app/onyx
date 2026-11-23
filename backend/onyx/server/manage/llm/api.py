@@ -268,6 +268,7 @@ def _sync_fetched_models(
     provider_id: int,
     models: list[SyncModelEntry],
     source_label: str,
+    expected_provider: str | None = None,
 ) -> None:
     """Sync fetched models to DB for the given provider.
 
@@ -276,12 +277,14 @@ def _sync_fetched_models(
         provider_id: Id of the LLM provider
         models: List of SyncModelEntry objects describing the fetched models
         source_label: Human-readable label for log messages (e.g. "Bedrock", "LiteLLM")
+        expected_provider: Provider type validated before the fetch, if any
     """
     try:
         new_count = sync_model_configurations(
             db_session=db_session,
             provider_id=provider_id,
             models=models,
+            expected_provider=expected_provider,
         )
         if new_count > 0:
             logger.info(
@@ -1075,6 +1078,31 @@ def _initial_auto_update_models(
     ]
 
 
+def _reject_invalid_hosted_decision_provider(
+    provider: str,
+    api_key: str | None,
+    custom_config: dict[str, str] | None,
+) -> None:
+    """A hosted decision provider stores an API key and no custom config.
+
+    The request validator runs before a saved config is restored, so this
+    check uses the config that would be written.
+    """
+    if provider not in HOSTED_DECISION_PROVIDER_NAMES:
+        return
+    display_name = PROVIDER_DISPLAY_NAMES[provider]
+    if not (api_key or "").strip():
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            f"{display_name} requires an API key",
+        )
+    if custom_config:
+        raise OnyxError(
+            OnyxErrorCode.VALIDATION_ERROR,
+            f"{display_name} uses its hosted System One API",
+        )
+
+
 def _provider_retains_chat_use(provider: LLMProviderModel, db_session: Session) -> bool:
     """A chat model row or the chat default still belongs to this provider."""
     if any(
@@ -1191,14 +1219,11 @@ def put_llm_provider(
     )
     _reject_assume_role_in_multi_tenant(llm_provider_upsert_request.custom_config)
 
-    if (
-        llm_provider_upsert_request.provider in HOSTED_DECISION_PROVIDER_NAMES
-        and not (llm_provider_upsert_request.api_key or "").strip()
-    ):
-        raise OnyxError(
-            OnyxErrorCode.VALIDATION_ERROR,
-            f"{PROVIDER_DISPLAY_NAMES[llm_provider_upsert_request.provider]} requires an API key",
-        )
+    _reject_invalid_hosted_decision_provider(
+        llm_provider_upsert_request.provider,
+        llm_provider_upsert_request.api_key,
+        llm_provider_upsert_request.custom_config,
+    )
 
     if llm_provider_upsert_request.provider not in AUTO_UPDATE_PROVIDERS:
         llm_provider_upsert_request.is_auto_mode = False
@@ -2374,6 +2399,7 @@ def _hosted_decision_models(
     request: HostedDecisionModelsRequest,
     model_names: list[str],
     source_label: str,
+    provider: LlmProviderNames,
 ) -> list[OpenRouterFinalModelResponse]:
     """Decision-only rows for discovered models, synced onto a saved provider."""
     results = [
@@ -2401,6 +2427,7 @@ def _hosted_decision_models(
                 for model in results
             ],
             source_label=source_label,
+            expected_provider=provider,
         )
     return results
 
@@ -2419,6 +2446,7 @@ def get_typesafe_available_models(
         request,
         [model.name for model in fetch_typesafe_models(api_key)],
         source_label="TypeSafe AI",
+        provider=LlmProviderNames.TYPESAFE,
     )
 
 
@@ -2434,6 +2462,7 @@ def get_nace_available_models(
         request,
         [model.name for model in fetch_nace_models(api_key)],
         source_label="Nace",
+        provider=LlmProviderNames.NACE,
     )
 
 

@@ -117,6 +117,35 @@ def test_discovery_uses_saved_credentials_and_syncs_decision_models() -> None:
         assert models[0].supports_decisions is True
         assert models[0].supports_chat is False
         assert sync.call_args.kwargs["models"][0].supports_chat is False
+        assert sync.call_args.kwargs["expected_provider"] == "typesafe"
+
+
+def test_discovery_does_not_store_models_when_provider_type_changes() -> None:
+    from onyx.llm.well_known_providers.models import TypeSafeModel
+    from onyx.server.manage.llm import api
+
+    stored = MagicMock(provider="typesafe")
+    stored.api_key.get_value.return_value = "saved-secret"
+    changed = MagicMock(provider="openai", id=7, model_configurations=[])
+    session = MagicMock()
+    locked = session.query.return_value.populate_existing.return_value.filter.return_value.with_for_update.return_value
+    locked.first.return_value = changed
+    with (
+        patch.object(api, "fetch_existing_llm_provider_by_id", return_value=stored),
+        patch.object(
+            api,
+            "fetch_typesafe_models",
+            return_value=[TypeSafeModel(name="jev-preview")],
+        ),
+    ):
+        models = api.get_typesafe_available_models(
+            TypeSafeModelsRequest(provider_id=7), MagicMock(), session
+        )
+    assert models[0].name == "jev-preview"
+    locked.first.assert_called_once()
+    session.execute.assert_not_called()
+    session.commit.assert_not_called()
+    session.rollback.assert_called_once()
 
 
 def test_discovery_rejects_another_provider_before_reading_credentials() -> None:
@@ -233,6 +262,57 @@ def test_change_to_hosted_decision_rejects_remaining_chat_use(
     if not flow_types:
         assert fetch_default.call_args.args[1] == LLMModelFlowType.CHAT
     save.assert_not_called()
+
+
+@pytest.mark.parametrize("provider", ["typesafe", "nace"])
+@pytest.mark.parametrize(
+    ("stored_config", "rejected"),
+    [(None, False), ({}, False), ({"region": "us-east-1"}, True)],
+)
+def test_hosted_conversion_checks_restored_custom_config(
+    provider: str, stored_config: dict[str, str] | None, rejected: bool
+) -> None:
+    """An unchanged custom config is restored after request validation."""
+    from onyx.server.manage.llm.api import put_llm_provider
+
+    stored = _stored_openai_provider(LLMModelFlowType.DECISION)
+    stored.custom_config = stored_config
+    saved = MagicMock(
+        id=7,
+        name="Workspace OpenAI",
+        provider=provider,
+        api_key=None,
+        custom_config=None,
+    )
+    with (
+        patch(
+            "onyx.server.manage.llm.api.fetch_existing_llm_provider_by_id",
+            return_value=stored,
+        ),
+        patch(
+            "onyx.server.manage.llm.api.fetch_default_model",
+            return_value=MagicMock(llm_provider_id=99),
+        ),
+        patch(
+            "onyx.server.manage.llm.api.upsert_llm_provider",
+            return_value=saved,
+        ) as save,
+        patch("onyx.server.manage.llm.api.invalidate_provider_listing_cache"),
+    ):
+        if rejected:
+            with pytest.raises(OnyxError, match="hosted System One API") as error:
+                put_llm_provider(
+                    _hosted_decision_change(provider), False, MagicMock(), MagicMock()
+                )
+            assert error.value.error_code == OnyxErrorCode.VALIDATION_ERROR
+            save.assert_not_called()
+            return
+        result = put_llm_provider(
+            _hosted_decision_change(provider), False, MagicMock(), MagicMock()
+        )
+    assert result is saved
+    request = save.call_args.kwargs["llm_provider_upsert_request"]
+    assert request.custom_config == stored_config
 
 
 @pytest.mark.parametrize("provider", ["typesafe", "nace"])
