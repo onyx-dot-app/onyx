@@ -156,6 +156,8 @@ pub fn answer_finished(app: &AppHandle, answer: Answer, outcome: Outcome) {
         ),
         Outcome::Failed => ("Onyx couldn't answer", "See the launcher for details."),
     };
+    #[cfg(target_os = "linux")]
+    warn_if_no_session_bus();
     // Checked again: a sign-out or new chat during the checks above suppresses it.
     let shown = state.while_current(answer.epoch, || {
         crate::aonyx::while_latest(answer.id, || {
@@ -171,6 +173,36 @@ pub fn answer_finished(app: &AppHandle, answer: Answer, outcome: Outcome) {
     });
     if let Some(Some(Err(e))) = shown {
         log::warn!("could not show the answer notification: {e}");
+    }
+}
+
+/// The plugin sends notifications on a background task and drops its
+/// errors. Its D-Bus client (zbus) finds the session bus only through
+/// DBUS_SESSION_BUS_ADDRESS or the runtime directory's `bus` socket, not
+/// through X11 autolaunch, so say when neither is there.
+#[cfg(target_os = "linux")]
+fn warn_if_no_session_bus() {
+    let address = std::env::var_os("DBUS_SESSION_BUS_ADDRESS");
+    let runtime_dir = std::env::var_os("XDG_RUNTIME_DIR")
+        .map(std::path::PathBuf::from)
+        // SAFETY: geteuid has no preconditions.
+        .unwrap_or_else(|| format!("/run/user/{}", unsafe { libc::geteuid() }).into());
+    if !session_bus_findable(address.as_deref(), runtime_dir.join("bus").exists()) {
+        log::warn!(
+            "no D-Bus session bus address (DBUS_SESSION_BUS_ADDRESS is not set and {} does not \
+             exist): the answer notification cannot be shown",
+            runtime_dir.join("bus").display()
+        );
+    }
+}
+
+#[cfg(any(test, target_os = "linux"))]
+fn session_bus_findable(address: Option<&std::ffi::OsStr>, runtime_socket: bool) -> bool {
+    // zbus uses the socket only when the variable is unset; a set but
+    // empty address fails to parse.
+    match address {
+        Some(address) => !address.is_empty(),
+        None => runtime_socket,
     }
 }
 
@@ -201,6 +233,16 @@ mod tests {
         let original = tauri_plugin_notification::init::<tauri::Wry>();
         assert!(original.initialization_script_2().is_some());
         assert!(plugin::<tauri::Wry>().initialization_script_2().is_none());
+    }
+
+    #[test]
+    fn the_session_bus_is_found_by_address_or_runtime_socket() {
+        let address = std::ffi::OsStr::new("unix:path=/run/user/1000/bus");
+        assert!(session_bus_findable(Some(address), false));
+        assert!(session_bus_findable(None, true));
+        assert!(!session_bus_findable(None, false));
+        assert!(!session_bus_findable(Some(std::ffi::OsStr::new("")), false));
+        assert!(!session_bus_findable(Some(std::ffi::OsStr::new("")), true));
     }
 
     #[test]

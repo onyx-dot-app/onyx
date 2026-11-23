@@ -171,6 +171,7 @@ fn main() {
             commands::aonyx_menu,
             commands::get_offline_status,
             commands::retry_connection,
+            commands::fit_window,
         ])
         .build(tauri::generate_context!())
         .expect("error while building the Onyx desktop app");

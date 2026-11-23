@@ -226,7 +226,7 @@ mod platform {
         let nav_app = app.clone();
         let window = WebviewWindowBuilder::new(app, LAUNCHER, url)
             .title("Onyx Launcher")
-            .inner_size(720.0, 460.0)
+            .inner_size(super::SIZE.0, super::SIZE.1)
             .decorations(false)
             .transparent(true)
             // The page draws its own rounded frame; a native shadow would
@@ -253,9 +253,39 @@ mod platform {
 
     pub fn show(app: &AppHandle) -> Result<(), String> {
         let window = app.get_webview_window(LAUNCHER).ok_or("launcher missing")?;
+        #[cfg(target_os = "linux")]
+        center_on_linux(&window);
+        #[cfg(not(target_os = "linux"))]
         let _ = window.center();
         window.show().map_err(|e| e.to_string())?;
         window.set_focus().map_err(|e| e.to_string())
+    }
+
+    /// `center()` uses the window's outer size, which GTK reports wrong for
+    /// a window that was never shown, so the first show landed bottom-right.
+    /// The launcher has no frame: its outer size is `SIZE`.
+    #[cfg(target_os = "linux")]
+    fn center_on_linux(window: &tauri::WebviewWindow) {
+        let monitor = match window.current_monitor() {
+            Ok(Some(monitor)) => Some(monitor),
+            _ => window.primary_monitor().ok().flatten(),
+        };
+        let Some(monitor) = monitor else {
+            let _ = window.center();
+            return;
+        };
+        let area = monitor.work_area();
+        let (x, y) = super::centered(
+            (
+                area.position.x,
+                area.position.y,
+                area.size.width,
+                area.size.height,
+            ),
+            monitor.scale_factor(),
+            super::SIZE,
+        );
+        let _ = window.set_position(tauri::PhysicalPosition::new(x, y));
     }
 
     pub fn hide(app: &AppHandle) {
@@ -270,6 +300,22 @@ mod platform {
         app.get_webview_window(LAUNCHER)
             .is_some_and(|w| w.is_visible().unwrap_or(false))
     }
+}
+
+/// The launcher's size on Windows and Linux, in logical pixels.
+#[cfg(any(test, not(target_os = "macos")))]
+const SIZE: (f64, f64) = (720.0, 460.0);
+
+/// The top-left corner, in physical pixels, that centers a window of
+/// `size` logical pixels in `area` (physical x, y, width, height).
+#[cfg(any(test, target_os = "linux"))]
+fn centered(area: (i32, i32, u32, u32), scale: f64, size: (f64, f64)) -> (i32, i32) {
+    let (x, y, width, height) = area;
+    let offset = |extent: u32, window: f64| ((f64::from(extent) - window * scale) / 2.0).max(0.0);
+    (
+        x + offset(width, size.0) as i32,
+        y + offset(height, size.1) as i32,
+    )
 }
 
 /// Where the launcher page keeps recent questions (`Launcher.tsx`).
@@ -371,4 +417,22 @@ fn show_now(app: &AppHandle, when_signed_out: impl FnOnce(&AppHandle)) {
 pub fn is_visible(app: &AppHandle) -> bool {
     app.get_webview_window(LAUNCHER)
         .is_some_and(|w| w.is_visible().unwrap_or(false))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_launcher_centers_on_its_monitor() {
+        assert_eq!(centered((0, 0, 1024, 768), 1.0, SIZE), (152, 154));
+        assert_eq!(centered((0, 0, 2560, 1920), 2.0, SIZE), (560, 500));
+        // A second monitor below a 32 px top panel.
+        assert_eq!(
+            centered((1920, 32, 1920, 1048), 1.0, SIZE),
+            (1920 + 600, 32 + 294)
+        );
+        // A screen smaller than the launcher: the top-left corner stays on it.
+        assert_eq!(centered((0, 0, 640, 400), 1.0, SIZE), (0, 0));
+    }
 }

@@ -13,6 +13,8 @@ pub struct AppState {
     policy: Mutex<Policy>,
     // Cached so the keychain is read once per run.
     token: Mutex<Option<(String, String)>>,
+    /// The server whose stored session could not be read this run, and why.
+    read_failure: Mutex<Option<(String, String)>>,
     /// Bumped when a session ends (sign-out, server change). Work that started
     /// under an older value is stale and must not save tokens or open windows.
     epoch: AtomicU64,
@@ -60,6 +62,7 @@ impl AppState {
             api,
             policy: Mutex::new(policy),
             token: Mutex::new(None),
+            read_failure: Mutex::new(None),
             epoch: AtomicU64::new(0),
             cookie_name: Mutex::new(None),
             uploads: Mutex::new(HashMap::new()),
@@ -177,7 +180,13 @@ impl AppState {
                 return Some(token.clone());
             }
         }
-        let token = session_store::load(server)?;
+        let mut failure = self.read_failure.lock().unwrap_or_else(|p| p.into_inner());
+        let token = read_token(
+            &mut failure,
+            server,
+            session_store::KEEP_READ_FAILURE,
+            || session_store::load(server),
+        )?;
         if !self
             .config
             .get()
@@ -191,6 +200,25 @@ impl AppState {
         }
         *cache = Some((server.to_string(), token.clone()));
         Some(token)
+    }
+
+    /// Why the stored session for `server` could not be read, if a read
+    /// failed this run (Linux only, see `session_store::KEEP_READ_FAILURE`).
+    pub fn read_failure(&self, server: &str) -> Option<String> {
+        match self
+            .read_failure
+            .lock()
+            .unwrap_or_else(|p| p.into_inner())
+            .as_ref()
+        {
+            Some((failed_server, error)) if failed_server == server => Some(error.clone()),
+            _ => None,
+        }
+    }
+
+    /// Lets the next `token` call read the store again.
+    pub fn forget_read_failure(&self) {
+        *self.read_failure.lock().unwrap_or_else(|p| p.into_inner()) = None;
     }
 
     /// Saves a new sign-in's token if the session it started in (`epoch`) is
@@ -212,6 +240,7 @@ impl AppState {
             },
         )?;
         *cache = Some((server.to_string(), token.to_string()));
+        self.forget_read_failure();
         self.end_epoch();
         Ok(true)
     }
@@ -241,9 +270,10 @@ impl AppState {
         let mut cache = self.token.lock().unwrap_or_else(|p| p.into_inner());
         let token = match cache.take() {
             Some((cached_server, token)) if cached_server == server => Some(token),
-            _ => session_store::load(server),
+            _ => session_store::load(server).ok().flatten(),
         };
         let cleared = session_store::clear(server);
+        self.forget_read_failure();
         self.end_epoch();
         (token, cleared)
     }
@@ -256,7 +286,7 @@ impl AppState {
         let mut cache = self.token.lock().unwrap_or_else(|p| p.into_inner());
         let current = match cache.as_ref() {
             Some((cached_server, token)) if cached_server == server => Some(token.clone()),
-            _ => session_store::load(server),
+            _ => session_store::load(server).ok().flatten(),
         };
         if current.as_deref() != Some(rejected) {
             return Ok(false);
@@ -296,6 +326,29 @@ fn save_then_record(
         record()?;
     }
     Ok(())
+}
+
+/// Reads the stored token with `load`. A failed read for `server` that
+/// `keep_failure` keeps is not tried again: the caller gets `None`.
+fn read_token(
+    failure: &mut Option<(String, String)>,
+    server: &str,
+    keep_failure: bool,
+    load: impl FnOnce() -> Result<Option<String>, String>,
+) -> Option<String> {
+    if failure.as_ref().is_some_and(|(failed, _)| failed == server) {
+        return None;
+    }
+    match load() {
+        Ok(token) => token,
+        Err(e) => {
+            log::warn!("could not read the stored session: {e}");
+            if keep_failure {
+                *failure = Some((server.to_string(), e));
+            }
+            None
+        }
+    }
 }
 
 #[cfg(test)]
@@ -339,5 +392,40 @@ mod tests {
     #[test]
     fn no_record_where_none_is_required() {
         save_then_record(false, || Ok(()), || panic!("recorded")).unwrap();
+    }
+
+    #[test]
+    fn a_kept_read_failure_is_not_tried_again() {
+        let mut failure = None;
+        let mut reads = 0;
+        for _ in 0..3 {
+            let token = read_token(&mut failure, "https://a", true, || {
+                reads += 1;
+                Err("locked".to_string())
+            });
+            assert_eq!(token, None);
+        }
+        assert_eq!(reads, 1, "one unlock prompt per run");
+        assert_eq!(failure, Some(("https://a".into(), "locked".into())));
+
+        // Another server reads its own entry.
+        let token = read_token(&mut failure, "https://b", true, || {
+            Ok(Some("t".to_string()))
+        });
+        assert_eq!(token.as_deref(), Some("t"));
+    }
+
+    #[test]
+    fn a_failure_that_is_not_kept_is_tried_again() {
+        let mut failure = None;
+        let mut reads = 0;
+        for _ in 0..2 {
+            read_token(&mut failure, "https://a", false, || {
+                reads += 1;
+                Err("denied".to_string())
+            });
+        }
+        assert_eq!(reads, 2);
+        assert_eq!(failure, None);
     }
 }

@@ -30,6 +30,7 @@ const COMMANDS: &[&str] = &[
     "aonyx_menu",
     "get_offline_status",
     "retry_connection",
+    "fit_window",
 ];
 
 fn main() {
