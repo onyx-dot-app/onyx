@@ -362,3 +362,20 @@ def test_the_day_budget_is_960_times_the_value(
     day_key = "source_api_limit:microsoft:cc_pair:5:graph:all:day"
     assert limiter._windows.try_take_from_day(day_key, 1, 60) > 0
     assert limiter._windows.try_take_from_day(day_key, 1, 61) == 0
+
+
+def test_connectors_with_a_value_share_the_download_lane_of_the_app(
+    tenant_id: str,  # noqa: ARG001
+) -> None:
+    """The value is for Graph RU only. The download lane, its window and its
+    learned share stay on the app, for every connector on it."""
+    first = _build_with_value(cc_pair_id=6, ru_per_minute=600)
+    second = _build_with_value(cc_pair_id=7, ru_per_minute=600)
+    learned = _build(DocumentSource.SHAREPOINT, "sp")
+
+    windows = {
+        limiter.credential_window(DOWNLOAD_LIMITER_API)
+        for limiter in (first, second, learned)
+    }
+    assert len(windows) == 1 and None not in windows
+    assert first.credential_window(_API) != second.credential_window(_API)

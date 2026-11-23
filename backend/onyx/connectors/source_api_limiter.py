@@ -223,10 +223,17 @@ class RedisSourceApiLimiter(SourceApiLimiter):
         source: DocumentSource,
         bulk: bool = False,
         pause_key: str | None = None,
+        api_keys: dict[str, str] | None = None,
     ) -> None:
         self._source = source.value
         self._tenant_id = tenant_id
         self._prefix = f"{_KEY_PREFIX}:{credential_key}"
+        # The APIs whose windows, gates and learned shares use another key
+        # than ``credential_key``, such as the app's download lane for a
+        # connector with a budget of its own.
+        self._api_prefixes = {
+            api: f"{_KEY_PREFIX}:{key}" for api, key in (api_keys or {}).items()
+        }
         # The base of the pauses that this limiter reads and sets, one for
         # each API, so a pause of one API never stops the calls of another.
         # None: it has none.
@@ -241,12 +248,15 @@ class RedisSourceApiLimiter(SourceApiLimiter):
         # The epoch of each window when this thread last took a slot from it.
         self._thread_epochs = threading.local()
 
+    def _prefix_of(self, api: str) -> str:
+        return self._api_prefixes.get(api, self._prefix)
+
     def credential_window(self, api: str) -> RateWindow | None:
         budget = self._budgets.get(api)
         if budget is None or budget.per_credential is None:
             return None
         return _window(
-            f"{self._prefix}:{api}:all",
+            f"{self._prefix_of(api)}:{api}:all",
             budget.per_credential,
             budget,
             budget.start_share,
@@ -257,21 +267,23 @@ class RedisSourceApiLimiter(SourceApiLimiter):
         if budget is None or budget.per_user is None or user is None:
             return None
         return _window(
-            f"{self._prefix}:{api}:user:{user.lower()}", budget.per_user, budget
+            f"{self._prefix_of(api)}:{api}:user:{user.lower()}", budget.per_user, budget
         )
 
     def credential_guard(self, api: str) -> RateWindow | None:
         budget = self._budgets.get(api)
         if budget is None or budget.per_credential is None:
             return None
-        return _period_guard(f"{self._prefix}:{api}:all", budget.per_credential, budget)
+        return _period_guard(
+            f"{self._prefix_of(api)}:{api}:all", budget.per_credential, budget
+        )
 
     def user_guard(self, api: str, user: str | None) -> RateWindow | None:
         budget = self._budgets.get(api)
         if budget is None or budget.per_user is None or user is None:
             return None
         return _period_guard(
-            f"{self._prefix}:{api}:user:{user.lower()}", budget.per_user, budget
+            f"{self._prefix_of(api)}:{api}:user:{user.lower()}", budget.per_user, budget
         )
 
     def _all_windows(self, api: str, user: str | None) -> list[RateWindow]:
@@ -409,7 +421,7 @@ class RedisSourceApiLimiter(SourceApiLimiter):
             # The source can ask for a pause while the call waits for the day.
             self._wait_for_pause(api)
         is_bulk = bulk or self._bulk
-        gate = _gate(self._tenant_id, f"{self._prefix}:{api}", is_bulk)
+        gate = _gate(self._tenant_id, f"{self._prefix_of(api)}:{api}", is_bulk)
         ticket = _Ticket()
         turn = WaitTurn(token=ticket.token, bulk=is_bulk)
         started = time.monotonic()
@@ -509,7 +521,7 @@ class RedisSourceApiLimiter(SourceApiLimiter):
         limit = self._budgets[api].per_credential_per_day
         if limit is None:
             return False
-        key = f"{self._prefix}:{api}:all:day"
+        key = f"{self._prefix_of(api)}:{api}:all:day"
         started = time.monotonic()
         warned = False
         try:
@@ -704,8 +716,7 @@ def microsoft_connector_budgets(ru_per_minute: int) -> dict[str, SourceApiBudget
     """The budgets of a connector whose admin set its RU per minute: the
     full value from the start, and Microsoft's limit for 24 hours at the
     same tier. A 429 answer still cuts the window. The value is for Graph
-    RU only: link downloads keep the learned download lane, whose pause the
-    connector shares with the app."""
+    RU only: link downloads keep the learned download lane of the app."""
     return {
         GRAPH_LIMITER_API: SourceApiBudget(
             per_credential=ru_per_minute,
@@ -754,6 +765,9 @@ def build_source_api_limiter(
                 source=source,
                 bulk=bulk,
                 pause_key=app_key,
+                # The download lane stays on the app: every connector on the
+                # app shares its window and its learned share.
+                api_keys={DOWNLOAD_LIMITER_API: app_key},
             )
         return RedisSourceApiLimiter(
             tenant_id=get_current_tenant_id(),
