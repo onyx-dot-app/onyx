@@ -469,9 +469,12 @@ exec_command / write_stdin / apply_patch | edit + write / publish_files / artifa
                                         attachments/agent/. A name is the first 8 hex
                                         digits of the file store ID and the file's
                                         name (harness_base.chat_file_name: control
-                                        and shell characters become `_`, as the model
-                                        uses the paths in commands), so a path never
-                                        holds another file;
+                                        and shell characters and `:` become `_`, as the
+                                        model uses the paths in commands; the name has
+                                        no trailing whitespace or dots and fits 200
+                                        characters and 255 bytes, so the Python tool
+                                        stages it unchanged), so a path never holds
+                                        another file;
                                         the file messages of the branch name their
                                         paths in "In the VM:" lines
                                         (chat_utils.convert_chat_history). Each
