@@ -35,7 +35,9 @@ def _parse_json_list(response: httpx.Response) -> set[str]:
     domains_list = response.json()
     if not isinstance(domains_list, list):
         raise ValueError(f"Expected a JSON list of domains, got {type(domains_list)}")
-    return {domain.lower().strip() for domain in domains_list if domain}
+    if not all(isinstance(domain, str) for domain in domains_list):
+        raise ValueError("Expected only strings in the JSON list of domains")
+    return {domain.lower().strip() for domain in domains_list if domain.strip()}
 
 
 def disposable_domain_blocklist() -> RemoteDomainBlocklist:

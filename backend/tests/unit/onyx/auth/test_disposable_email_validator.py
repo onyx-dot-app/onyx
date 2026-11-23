@@ -3,6 +3,7 @@ Tests for disposable email validation.
 """
 
 import threading
+from collections.abc import Generator
 from unittest import mock
 
 import httpx
@@ -19,15 +20,9 @@ _ETAG = '"6a919fa3-14d4e7"'
 _LAST_MODIFIED = "Fri, 28 Aug 2026 14:48:03 GMT"
 
 
-@pytest.fixture
-def fresh_validator() -> RemoteDomainBlocklist:
-    """A validator with an empty cache, separate from the module's instance."""
-    return disposable_domain_blocklist()
-
-
 def _response(
     status_code: int,
-    json_body: list[str] | None = None,
+    json_body: list[object] | None = None,
     headers: dict[str, str] | None = None,
 ) -> httpx.Response:
     return httpx.Response(
@@ -36,6 +31,22 @@ def _response(
         headers=headers,
         request=httpx.Request("GET", _TEST_URL),
     )
+
+
+@pytest.fixture(autouse=True)
+def no_network() -> Generator[None, None, None]:
+    """Unit tests never reach the real list. A refresh that no test patches
+    further gets an empty list, so only the built-in domains apply."""
+    with mock.patch("onyx.auth.domain_blocklist.httpx.Client") as mock_client:
+        client = mock_client.return_value.__enter__.return_value
+        client.get.return_value = _response(200, json_body=[])
+        yield
+
+
+@pytest.fixture
+def fresh_validator() -> RemoteDomainBlocklist:
+    """A validator with an empty cache, separate from the module's instance."""
+    return disposable_domain_blocklist()
 
 
 def _refresh_and_get(validator: RemoteDomainBlocklist) -> set[str]:
@@ -120,6 +131,58 @@ class TestConditionalFetch:
 
         assert domains == fresh_validator._fallback_domains
 
+    def test_bad_members_keep_previous_domains_and_validators(
+        self, fresh_validator: RemoteDomainBlocklist
+    ) -> None:
+        """A list with non-string members must not replace the last good one."""
+        with mock.patch("onyx.auth.domain_blocklist.httpx.Client") as mock_client:
+            client = mock_client.return_value.__enter__.return_value
+            client.get.return_value = _response(
+                200, json_body=["fetched-domain.example"], headers={"ETag": _ETAG}
+            )
+            _refresh_and_get(fresh_validator)
+
+            client.get.return_value = _response(
+                200, json_body=[None, False, 0], headers={"ETag": '"newer"'}
+            )
+            domains = _refresh_and_get(fresh_validator)
+
+        assert "fetched-domain.example" in domains
+        # The validators still describe the cached list, not the rejected one
+        assert fresh_validator._etag == _ETAG
+
+    def test_304_keeps_an_empty_cached_list(self) -> None:
+        """Without built-in domains an empty list is a valid result, and a 304
+        for it is not a failure."""
+        blocklist = RemoteDomainBlocklist(
+            name="test",
+            url=_TEST_URL,
+            fallback_domains=set(),
+            parse=lambda response: set(response.json()),
+        )
+        with mock.patch("onyx.auth.domain_blocklist.httpx.Client") as mock_client:
+            client = mock_client.return_value.__enter__.return_value
+            client.get.return_value = _response(
+                200, json_body=[], headers={"ETag": _ETAG}
+            )
+            assert _refresh_and_get(blocklist) == set()
+
+            client.get.return_value = _response(304)
+            assert _refresh_and_get(blocklist) == set()
+
+        assert client.get.call_args.kwargs["headers"]["If-None-Match"] == _ETAG
+        assert blocklist._etag == _ETAG
+
+    def test_fallback_domains_are_normalized(self) -> None:
+        blocklist = RemoteDomainBlocklist(
+            name="test",
+            url="",
+            fallback_domains={" Example.COM "},
+            parse=lambda _response: set(),
+        )
+
+        assert blocklist.contains_email_domain("user@example.com") is True
+
 
 class TestStaleWhileRevalidate:
     """Test that callers never wait on the network for a refresh."""
@@ -144,7 +207,7 @@ class TestStaleWhileRevalidate:
 
             # Expire the cache: the next call must return the stale set
             # immediately while the refresh runs in the background
-            fresh_validator._last_fetch_time = 0
+            fresh_validator._last_fetch_time = None
             stale = fresh_validator.get_domains()
             assert "old-domain.example" in stale
             assert "new-domain.example" not in stale
@@ -214,7 +277,7 @@ class TestDisposableDomains:
     def test_fallback_domains_included(self) -> None:
         """Test that fallback domains are always included."""
         validator = disposable_domain_blocklist()
-        domains = validator.get_domains()
+        domains = _refresh_and_get(validator)
 
         # Check that our hardcoded fallback domains are present
         assert "trashlify.com" in domains
@@ -284,6 +347,7 @@ class TestDisposableDomains:
     def test_blocklist_instance_directly(self) -> None:
         """A fresh blocklist answers from the built-in domains."""
         validator = disposable_domain_blocklist()
+        validator.refresh_now()
 
         # A known domain and a legitimate one
         assert validator.contains_email_domain("test@trashlify.com") is True

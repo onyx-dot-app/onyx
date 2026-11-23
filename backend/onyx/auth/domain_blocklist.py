@@ -2,7 +2,7 @@
 A set of email domains kept in memory and refreshed from a remote list.
 
 Shared by the disposable-domain and free-mail-domain checks at sign-up. Each
-check subclasses this with its URL, its built-in domains and the parser for
+check configures this with its URL, its built-in domains and the parser for
 the list's format.
 """
 
@@ -15,6 +15,9 @@ import httpx
 from onyx.utils.logger import setup_logger
 
 logger = setup_logger()
+
+# A fetched list with the HTTP validators that describe it.
+_Fetched = tuple[set[str], str | None, str | None]
 
 
 class RemoteDomainBlocklist:
@@ -43,9 +46,12 @@ class RemoteDomainBlocklist:
         # that is not the list; the last good set is kept then.
         self._parse = parse
         self._domains: set[str] = set()
-        self._last_fetch_time: float = 0
+        # Monotonic time of the last refresh. None until the first one, and
+        # again when a caller forces one.
+        self._last_fetch_time: float | None = None
         # HTTP cache validators from the last successful fetch. Used for
         # conditional requests so unchanged lists are not re-downloaded.
+        # Set together with `_domains`, never on their own.
         self._etag: str | None = None
         self._last_modified: str | None = None
         # Guards check-and-set of the refresh thread so only one refresh
@@ -54,32 +60,30 @@ class RemoteDomainBlocklist:
         self._refresh_thread: threading.Thread | None = None
         self._cache_duration = cache_duration
         # Always included, so at least these are blocked when the fetch fails.
-        self._fallback_domains = set(fallback_domains)
+        # Normalized the same way as the email domain they are compared with.
+        self._fallback_domains = {d.strip().lower() for d in fallback_domains}
 
     def _should_refresh(self) -> bool:
         """Check if the cached domains should be refreshed."""
-        return (time.time() - self._last_fetch_time) > self._cache_duration
+        if self._last_fetch_time is None:
+            return True
+        return (time.monotonic() - self._last_fetch_time) > self._cache_duration
 
-    def _previous_or_fallback_domains(self) -> set[str]:
-        """Return the last good set if one exists, else the built-in fallback."""
-        if self._domains:
-            return self._domains
-        return self._fallback_domains.copy()
-
-    def _fetch_domains(self) -> set[str]:
+    def _fetch_domains(self) -> _Fetched | None:
         """
         Fetch the domains from the configured URL.
 
         Sends a conditional request (If-None-Match / If-Modified-Since) when
-        validators from a previous fetch are available. A 304 response keeps
-        the cached set without downloading the full list again.
+        validators from a previous fetch are available.
 
         Returns:
-            Set of domain strings (lowercased)
+            The new domains with the validators that describe them, or None
+            when the cached set stays: the list is unchanged (304), or the
+            fetch failed.
         """
         if not self._url:
             logger.debug("No URL configured for %s domains", self._name)
-            return self._fallback_domains.copy()
+            return self._fallback_domains.copy(), None, None
 
         headers: dict[str, str] = {}
         if self._etag:
@@ -92,24 +96,24 @@ class RemoteDomainBlocklist:
             with httpx.Client(timeout=10.0) as client:
                 response = client.get(self._url, headers=headers)
 
-                if response.status_code == 304 and self._domains:
-                    logger.info("%s domains unchanged (304)", self._name)
-                    return self._domains
+            # Validators are only sent after a successful fetch, so a 304 in
+            # answer to them means the cached set is current, even when empty.
+            if response.status_code == 304 and headers:
+                logger.info("%s domains unchanged (304)", self._name)
+                return None
 
-                response.raise_for_status()
+            response.raise_for_status()
 
-                domains = self._parse(response)
+            # A copy: the parser's set must not become the cache.
+            domains = set(self._parse(response))
+            domains.update(self._fallback_domains)
 
-                # Always include fallback domains
-                domains.update(self._fallback_domains)
-
-                self._etag = response.headers.get("ETag")
-                self._last_modified = response.headers.get("Last-Modified")
-
-                logger.info(
-                    "Successfully fetched %s %s domains", len(domains), self._name
-                )
-                return domains
+            logger.info("Successfully fetched %s %s domains", len(domains), self._name)
+            return (
+                domains,
+                response.headers.get("ETag"),
+                response.headers.get("Last-Modified"),
+            )
 
         except httpx.HTTPError as e:
             logger.warning("Failed to fetch %s domains (HTTP error): %s", self._name, e)
@@ -117,13 +121,14 @@ class RemoteDomainBlocklist:
             logger.warning("Failed to fetch %s domains: %s", self._name, e)
 
         # On error, keep the last good set (or the fallback if none exists)
-        return self._previous_or_fallback_domains()
+        return None
 
     def _refresh(self) -> None:
         """Fetch the list and swap the cache. Runs on the refresh thread."""
-        domains = self._fetch_domains()
-        self._domains = domains
-        self._last_fetch_time = time.time()
+        fetched = self._fetch_domains()
+        if fetched is not None:
+            self._domains, self._etag, self._last_modified = fetched
+        self._last_fetch_time = time.monotonic()
 
     def _start_refresh(self) -> threading.Thread:
         """
@@ -175,7 +180,7 @@ class RemoteDomainBlocklist:
         Normal refreshes run in the background when the cache is stale. This
         is for a caller that needs the new list before it goes on.
         """
-        self._last_fetch_time = 0
+        self._last_fetch_time = None
         self._start_refresh().join()
 
     def contains_email_domain(self, email: str) -> bool:
