@@ -218,6 +218,31 @@ def test_group_members_keeps_users_and_marks_the_whole_account_member() -> None:
     assert list_members.call_args.kwargs["roles"] == "OWNER"
 
 
+def test_group_members_fails_past_the_member_limit_and_checks_the_deadline() -> None:
+    admin_service = MagicMock()
+    admin_service.members.return_value.list.return_value.execute.return_value = {
+        "members": [
+            {"email": _MEMBER, "role": "MEMBER", "type": "USER"},
+            {"email": _OTHER_MEMBER, "role": "MEMBER", "type": "USER"},
+        ]
+    }
+    check_deadline = MagicMock()
+
+    get_group_members(
+        admin_service,
+        _GROUP,
+        include_nested_groups=True,
+        check_deadline=check_deadline,
+    )
+    assert check_deadline.call_count == 2
+
+    with (
+        patch.object(collaborative_inbox, "_MAX_GROUP_MEMBERS", 1),
+        pytest.raises(RuntimeError, match="more than 1 members"),
+    ):
+        get_group_members(admin_service, _GROUP, include_nested_groups=True)
+
+
 def test_lookup_ignores_a_group_without_collaborative_inbox(
     group_api: MagicMock,
 ) -> None:

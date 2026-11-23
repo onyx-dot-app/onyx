@@ -251,6 +251,22 @@ def test_sync_fails_when_most_groups_cannot_be_read() -> None:
         directory.sync()
 
 
+def test_an_account_past_the_user_limit_fails_the_group_that_needs_it() -> None:
+    """A cut-off user list must never be taken as the whole account."""
+    directory = _Directory(
+        {
+            _GROUP: _settings("ALL_IN_DOMAIN_CAN_VIEW"),
+            _OTHER_GROUP: _settings("ALL_OWNERS_CAN_VIEW"),
+            _THIRD_GROUP: _settings("ALL_OWNERS_CAN_VIEW"),
+        }
+    )
+
+    with patch.object(group_sync, "_MAX_ACCOUNT_USERS", 2):
+        groups = directory.sync()
+
+    _assert_failed_alone(groups)
+
+
 def test_sync_stops_at_its_deadline() -> None:
     directory = _Directory({_GROUP: _settings("ALL_IN_DOMAIN_CAN_VIEW")})
 

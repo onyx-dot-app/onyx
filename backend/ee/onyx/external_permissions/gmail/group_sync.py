@@ -1,6 +1,6 @@
 import time
-from collections.abc import Generator
-from functools import cached_property
+from collections.abc import Callable, Generator
+from functools import cached_property, partial
 
 from ee.onyx.db.external_perm import ExternalUserGroup
 from ee.onyx.external_permissions.gmail.models import GroupViewSetting
@@ -43,6 +43,9 @@ _GROUP_SETTINGS_FIELDS = f"{COLLABORATIVE_INBOX_FIELD},{_VIEW_SETTING_FIELD}"
 _OWN_ACCOUNT = "my_customer"
 # The most users the Admin SDK returns in one users.list page.
 _MAX_USERS_PER_PAGE = 500
+# Upper bound on the account's user addresses held for one sync. An address
+# measures about 125 bytes in the set, so this holds it near 60 MB.
+_MAX_ACCOUNT_USERS = 500_000
 _OWNERS = frozenset({GroupRole.OWNER})
 _OWNERS_AND_MANAGERS = frozenset({GroupRole.OWNER, GroupRole.MANAGER})
 
@@ -62,9 +65,11 @@ def _check_sync_deadline(deadline: float) -> None:
 class _AccountUsers:
     """Every user of the Workspace account, listed at most once a sync."""
 
-    def __init__(self, admin_service: AdminService, deadline: float) -> None:
+    def __init__(
+        self, admin_service: AdminService, check_deadline: Callable[[], None]
+    ) -> None:
         self._admin_service = admin_service
-        self._deadline = deadline
+        self._check_deadline = check_deadline
 
     @cached_property
     def emails(self) -> frozenset[str]:
@@ -76,9 +81,13 @@ class _AccountUsers:
             maxResults=_MAX_USERS_PER_PAGE,
             fields=USER_FIELDS,
         ):
-            _check_sync_deadline(self._deadline)
+            self._check_deadline()
             if user_email := user.get("primaryEmail"):
                 user_emails.add(user_email.lower())
+            if len(user_emails) > _MAX_ACCOUNT_USERS:
+                raise RuntimeError(
+                    f"The Workspace account has more than {_MAX_ACCOUNT_USERS} users"
+                )
         return frozenset(user_emails)
 
 
@@ -118,13 +127,22 @@ def _with_account_users(
 
 
 def _get_member_reader_emails(
-    admin_service: AdminService, group_email: str, account_users: _AccountUsers
+    admin_service: AdminService,
+    group_email: str,
+    account_users: _AccountUsers,
+    check_deadline: Callable[[], None],
 ) -> frozenset[str]:
     direct_members = get_group_members(
-        admin_service, group_email, include_nested_groups=False
+        admin_service,
+        group_email,
+        include_nested_groups=False,
+        check_deadline=check_deadline,
     )
     all_members = get_group_members(
-        admin_service, group_email, include_nested_groups=True
+        admin_service,
+        group_email,
+        include_nested_groups=True,
+        check_deadline=check_deadline,
     )
     reader_emails = _with_account_users(direct_members, account_users)
     # Google does not deliver the group's mail to a nested member from outside
@@ -140,6 +158,7 @@ def _get_reader_emails(
     admin_service: AdminService,
     group_email: str,
     account_users: _AccountUsers,
+    check_deadline: Callable[[], None],
 ) -> frozenset[str]:
     match _get_view_setting(settings_service, group_email):
         case None:
@@ -152,6 +171,7 @@ def _get_reader_emails(
                     group_email,
                     include_nested_groups=False,
                     roles=_OWNERS,
+                    check_deadline=check_deadline,
                 ),
                 account_users,
             )
@@ -162,11 +182,14 @@ def _get_reader_emails(
                     group_email,
                     include_nested_groups=False,
                     roles=_OWNERS_AND_MANAGERS,
+                    check_deadline=check_deadline,
                 ),
                 account_users,
             )
         case GroupViewSetting.ALL_MEMBERS_CAN_VIEW:
-            return _get_member_reader_emails(admin_service, group_email, account_users)
+            return _get_member_reader_emails(
+                admin_service, group_email, account_users, check_deadline
+            )
         # A group open to the web gets the readers of an account-wide one, not
         # public access in Onyx.
         case GroupViewSetting.ALL_IN_DOMAIN_CAN_VIEW | GroupViewSetting.ANYONE_CAN_VIEW:
@@ -197,14 +220,20 @@ def gmail_group_sync(
         GoogleService.ADMIN, gmail_connector.creds, gmail_connector.primary_admin_email
     )
 
-    deadline = time.monotonic() + PERMISSION_SYNC_TIMEOUT
-    account_users = _AccountUsers(admin_service, deadline)
+    check_deadline = partial(
+        _check_sync_deadline, time.monotonic() + PERMISSION_SYNC_TIMEOUT
+    )
+    account_users = _AccountUsers(admin_service, check_deadline)
     failed_group_count = 0
     for group_email in group_emails:
-        _check_sync_deadline(deadline)
+        check_deadline()
         try:
             reader_emails = _get_reader_emails(
-                settings_service, admin_service, group_email, account_users
+                settings_service,
+                admin_service,
+                group_email,
+                account_users,
+                check_deadline,
             )
         except _SyncDeadlineExceeded:
             raise

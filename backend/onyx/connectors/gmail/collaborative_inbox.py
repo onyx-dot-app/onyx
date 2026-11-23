@@ -1,4 +1,5 @@
 import re
+from collections.abc import Callable
 from functools import cached_property
 from typing import Any
 
@@ -36,6 +37,9 @@ _GROUP_MEMBER_FIELDS = "nextPageToken, members(email, role, type)"
 _USER_MEMBER_TYPE = "USER"
 # Every user of the Workspace account, as one member.
 _ACCOUNT_MEMBER_TYPE = "CUSTOMER"
+# Upper bound on the member addresses held for one group. An address measures
+# about 125 bytes in the set, so this holds it near 60 MB.
+_MAX_GROUP_MEMBERS = 500_000
 # A List-ID value is an optional phrase, then the id in angle brackets.
 _LIST_ID_RE = re.compile(r"<([^<>\s]+)>\s*$")
 
@@ -105,9 +109,11 @@ def get_group_members(
     group_email: str,
     include_nested_groups: bool,
     roles: frozenset[GroupRole] | None = None,
+    check_deadline: Callable[[], None] | None = None,
 ) -> GroupMembers:
     """The users in the group, and those of its nested groups when asked. With
-    `roles`, only the members that hold one of them."""
+    `roles`, only the members that hold one of them. `check_deadline` runs for
+    each member and raises to stop a listing that takes too long."""
     list_kwargs: dict[str, Any] = {}
     if roles is not None:
         list_kwargs["roles"] = ",".join(sorted(role.value for role in roles))
@@ -122,6 +128,8 @@ def get_group_members(
         fields=_GROUP_MEMBER_FIELDS,
         **list_kwargs,
     ):
+        if check_deadline is not None:
+            check_deadline()
         if roles is not None and member.get("role") not in roles:
             continue
         member_email = member.get("email")
@@ -129,6 +137,10 @@ def get_group_members(
             has_all_account_users = True
         elif member.get("type") == _USER_MEMBER_TYPE and member_email:
             user_emails.add(member_email.lower())
+            if len(user_emails) > _MAX_GROUP_MEMBERS:
+                raise RuntimeError(
+                    f"{group_email} has more than {_MAX_GROUP_MEMBERS} members"
+                )
     return GroupMembers(
         user_emails=frozenset(user_emails),
         has_all_account_users=has_all_account_users,
