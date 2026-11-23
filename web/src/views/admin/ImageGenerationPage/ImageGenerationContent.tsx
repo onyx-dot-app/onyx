@@ -28,6 +28,7 @@ import {
   InputSingleSelect,
   InputSwitch,
   MessageCard,
+  Presence,
   SelectCard,
   Text,
   useCreateModal,
@@ -425,6 +426,47 @@ export default function ImageGenerationContent() {
     }
   }, [disconnectModal.isOpen, disconnectProvider, defaultConfig]);
 
+  // Available Models, alphabetical. A model that is disconnected stays while
+  // it animates out; one that is connected later animates in.
+  const configIdsKey = configs.map((c) => c.image_provider_id).join("\n");
+  const [shownConfigs, setShownConfigs] = useState<{
+    key: string;
+    configs: ImageGenerationConfigView[];
+  }>({ key: "", configs: [] });
+  const [leavingConfigs, setLeavingConfigs] = useState<
+    ImageGenerationConfigView[]
+  >([]);
+  const [initialConfigIds, setInitialConfigIds] = useState<Set<string> | null>(
+    null
+  );
+  if (!configsLoading && initialConfigIds === null) {
+    setInitialConfigIds(new Set(configs.map((c) => c.image_provider_id)));
+  }
+  if (!configsLoading && shownConfigs.key !== configIdsKey) {
+    const currentIds = new Set(configs.map((c) => c.image_provider_id));
+    const gone = shownConfigs.configs.filter(
+      (c) => !currentIds.has(c.image_provider_id)
+    );
+    setLeavingConfigs((leaving) => [
+      ...leaving.filter((c) => !currentIds.has(c.image_provider_id)),
+      ...gone,
+    ]);
+    setShownConfigs({ key: configIdsKey, configs });
+    // A model's ID is the same each time it is connected, so one that left
+    // animates in when it is connected again.
+    if (gone.length > 0) {
+      setInitialConfigIds((initial) => {
+        const next = new Set(initial);
+        for (const c of gone) next.delete(c.image_provider_id);
+        return next;
+      });
+    }
+  }
+  const leavingIds = new Set(leavingConfigs.map((c) => c.image_provider_id));
+  const listedConfigs = [...configs, ...leavingConfigs].sort((a, b) =>
+    configTitle(a).localeCompare(configTitle(b))
+  );
+
   if (configError) {
     return (
       <IllustrationContent
@@ -503,7 +545,7 @@ export default function ImageGenerationContent() {
             />
           ))}
 
-          {configs.length > 0 && (
+          {listedConfigs.length > 0 && (
             <>
               <Section
                 gap={3}
@@ -516,7 +558,7 @@ export default function ImageGenerationContent() {
                   title={t("connectedModels.title")}
                 />
                 <Section gap={2} height="fit" alignItems="stretch">
-                  {configs.map((config) => {
+                  {listedConfigs.map((config) => {
                     const imageProviderId = config.image_provider_id;
                     const legacyProvider = config.llm_provider_owned
                       ? legacyProviderById.get(imageProviderId)
@@ -525,40 +567,56 @@ export default function ImageGenerationContent() {
                     const providerName =
                       config.llm_provider_name ?? config.llm_provider_type;
                     return (
-                      <ProviderCard
+                      <Presence
                         key={imageProviderId}
-                        icon={getModelIcon(
-                          config.llm_provider_type,
-                          config.model_name
-                        )}
-                        title={title}
-                        description={
-                          legacyProvider
-                            ? t(legacyProvider.descriptionKey)
-                            : providerName
+                        show={!leavingIds.has(imageProviderId)}
+                        appear={
+                          initialConfigIds !== null &&
+                          !initialConfigIds.has(imageProviderId)
                         }
-                        // Connected, or the default, as the Web Search page shows its providers.
-                        // Only the switch turns image generation off, so the default has no
-                        // deselect.
-                        status={config.is_default ? "selected" : "connected"}
-                        aria-label={
-                          config.llm_provider_owned
-                            ? `image-gen-provider-${imageProviderId}`
-                            : `image-gen-model-${config.llm_provider_id}-${config.model_name}`
+                        grow
+                        onExited={() =>
+                          setLeavingConfigs((leaving) =>
+                            leaving.filter(
+                              (c) => c.image_provider_id !== imageProviderId
+                            )
+                          )
                         }
-                        onSelect={() => void handleSelect(imageProviderId)}
-                        onDisconnect={() => void openDisconnect(config)}
-                        disconnectModalOpen={
-                          disconnectModal.isOpen &&
-                          disconnectProvider?.image_provider_id ===
-                            imageProviderId
-                        }
-                        onEdit={
-                          legacyProvider
-                            ? () => handleEdit(legacyProvider)
-                            : undefined
-                        }
-                      />
+                      >
+                        <ProviderCard
+                          icon={getModelIcon(
+                            config.llm_provider_type,
+                            config.model_name
+                          )}
+                          title={title}
+                          description={
+                            legacyProvider
+                              ? t(legacyProvider.descriptionKey)
+                              : providerName
+                          }
+                          // Connected, or the default, as the Web Search page shows its providers.
+                          // Only the switch turns image generation off, so the default has no
+                          // deselect.
+                          status={config.is_default ? "selected" : "connected"}
+                          aria-label={
+                            config.llm_provider_owned
+                              ? `image-gen-provider-${imageProviderId}`
+                              : `image-gen-model-${config.llm_provider_id}-${config.model_name}`
+                          }
+                          onSelect={() => void handleSelect(imageProviderId)}
+                          onDisconnect={() => void openDisconnect(config)}
+                          disconnectModalOpen={
+                            disconnectModal.isOpen &&
+                            disconnectProvider?.image_provider_id ===
+                              imageProviderId
+                          }
+                          onEdit={
+                            legacyProvider
+                              ? () => handleEdit(legacyProvider)
+                              : undefined
+                          }
+                        />
+                      </Presence>
                     );
                   })}
                 </Section>

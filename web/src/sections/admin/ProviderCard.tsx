@@ -155,6 +155,7 @@ export default function ProviderCard({
             <Section alignItems="end" justifyContent="start" gap={0}>
               {isDisconnected && (onReconnect ?? onConnect) ? (
                 <Button
+                  key="connect"
                   prominence="tertiary"
                   rightIcon={SvgArrowExchange}
                   onClick={(e) => {
@@ -167,7 +168,11 @@ export default function ProviderCard({
                     : t("providerCard.connectButton.label")}
                 </Button>
               ) : isConnected && onSelect ? (
+                // Each state's button has its own key, so a state change
+                // swaps the button instead of animating one button's label
+                // while its colour changes at once.
                 <Button
+                  key="set-default"
                   prominence="tertiary"
                   rightIcon={SvgArrowRightCircle}
                   onClick={(e) => {
@@ -194,6 +199,7 @@ export default function ProviderCard({
                 </Section>
               ) : isSelected ? (
                 <Button
+                  key="current-default"
                   variant="action"
                   prominence="tertiary"
                   rightIcon={SvgCheckSquare}

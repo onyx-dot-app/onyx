@@ -53,12 +53,14 @@ def create_image_generation_config__no_commit(
 def get_all_image_generation_configs(
     db_session: Session,
 ) -> list[ImageGenerationConfig]:
-    """Get all image generation configs.
+    """Get all image generation configs, in a stable order.
 
-    Returns:
-        List of all ImageGenerationConfig objects
+    An update rewrites a row, so without an order a config moves when it
+    becomes the default.
     """
-    stmt = select(ImageGenerationConfig)
+    stmt = select(ImageGenerationConfig).order_by(
+        ImageGenerationConfig.image_provider_id
+    )
     return list(db_session.scalars(stmt).all())
 
 
