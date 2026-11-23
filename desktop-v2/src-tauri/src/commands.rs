@@ -1,5 +1,9 @@
 //! Commands for the bundled local windows. Each window's capability in capabilities/
 //! grants only the commands its page uses; the remote main window cannot call any of them.
+//!
+//! A command that can open a window must be `async`. Sync commands run on the
+//! main thread inside the WebView2 message handler, and building a window
+//! there deadlocks on Windows.
 
 use serde::Serialize;
 use tauri::ipc::{Channel, InvokeBody, Request};
@@ -80,7 +84,11 @@ pub async fn check_server(url: String, state: State<'_, AppState>) -> Result<Ser
 }
 
 #[tauri::command]
-pub fn save_server(url: String, app: AppHandle, state: State<'_, AppState>) -> Result<(), String> {
+pub async fn save_server(
+    url: String,
+    app: AppHandle,
+    state: State<'_, AppState>,
+) -> Result<(), String> {
     server_locked(&state)?;
     let server = normalize_server_url(&url)?;
     state.config.update(|c| c.server_url = Some(server))?;
@@ -579,15 +587,15 @@ pub fn hide_launcher(app: AppHandle) {
 
 /// The launcher logo's easter egg: brings Aonyx onto the screen or sends it away.
 #[tauri::command]
-pub fn toggle_aonyx(app: AppHandle, state: State<'_, AppState>) {
-    if launcher_enabled(&app, &state).is_ok() {
+pub async fn toggle_aonyx(app: AppHandle) {
+    if launcher_enabled(&app, &app.state::<AppState>()).is_ok() {
         crate::aonyx::toggle(&app);
     }
 }
 
 /// A click on the pet opens (or closes) the launcher.
 #[tauri::command]
-pub fn aonyx_clicked(app: AppHandle) {
+pub async fn aonyx_clicked(app: AppHandle) {
     windows::toggle_launcher(&app);
 }
 
@@ -629,6 +637,80 @@ mod tests {
         assert_eq!(selected_agent(&without_default, None, true), Some(7));
         assert_eq!(selected_agent(&without_default, Some(8), true), Some(8));
         assert_eq!(selected_agent(&[], None, true), None);
+    }
+
+    /// Calls that can build a window (directly or through a main-thread hop).
+    const OPENS_WINDOWS: &[&str] = &[
+        "windows::open_",
+        "windows::route",
+        "windows::show_",
+        "windows::toggle_launcher",
+        "windows::end_rejected_session",
+        "launcher::toggle",
+        "launcher::show",
+        "launcher::preload",
+        "aonyx::toggle",
+        "aonyx::restore",
+        "sso::open",
+        "main_window::open(",
+        "main_window::open_url",
+        "offline::show",
+    ];
+
+    /// Each command in `source`: its signature line and body.
+    fn commands(source: &str) -> Vec<(&str, &str)> {
+        let marker = concat!("#[tauri::", "command]");
+        source
+            .split(marker)
+            .skip(1)
+            .map(|chunk| {
+                let end = chunk.find("\n}\n").unwrap_or(chunk.len());
+                let body = &chunk[..end];
+                let signature = body
+                    .lines()
+                    .find(|line| line.starts_with("pub "))
+                    .unwrap_or_default();
+                (signature, body)
+            })
+            .collect()
+    }
+
+    fn sync_commands_that_open_windows(source: &str) -> Vec<String> {
+        commands(source)
+            .into_iter()
+            .filter(|(signature, body)| {
+                !signature.contains("async fn")
+                    && OPENS_WINDOWS.iter().any(|call| body.contains(call))
+            })
+            .map(|(signature, _)| signature.to_string())
+            .collect()
+    }
+
+    #[test]
+    fn commands_that_open_windows_are_async() {
+        // A Windows checkout has CRLF line endings.
+        let source = include_str!("commands.rs").replace("\r\n", "\n");
+        assert!(commands(&source).len() > 20, "commands were not found");
+        assert_eq!(
+            sync_commands_that_open_windows(&source),
+            Vec::<String>::new()
+        );
+    }
+
+    #[test]
+    fn finds_a_sync_command_that_opens_a_window() {
+        let source = concat!(
+            "#[tauri::",
+            "command]\npub fn a(app: AppHandle) {\n    windows::open_login(&app);\n}\n",
+            "#[tauri::",
+            "command]\npub async fn b(app: AppHandle) {\n    windows::open_login(&app);\n}\n",
+            "#[tauri::",
+            "command]\npub fn c(app: AppHandle) {\n    windows::hide_launcher(&app);\n}\n",
+        );
+        assert_eq!(
+            sync_commands_that_open_windows(source),
+            vec!["pub fn a(app: AppHandle) {".to_string()]
+        );
     }
 
     #[test]
