@@ -16,7 +16,8 @@ from onyx.connectors.microsoft_utils.config import configured_ru_per_minute
         ("0", None),
         ("-5", None),
         ("6.5", None),
-        (True, None),
+        # The write path validates with the same model, which reads true as 1.
+        (True, 1),
     ],
 )
 def test_the_stored_ru_per_minute(stored: Any, expected: int | None) -> None:

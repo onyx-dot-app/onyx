@@ -217,6 +217,10 @@ def microsoft_app_identity(
         return None
     if not isinstance(credential, MicrosoftCredential):
         return None
+    return _app_identity(credential)
+
+
+def _app_identity(credential: MicrosoftCredential) -> tuple[str, str] | None:
     directory_id = credential.directory_id.strip().lower()
     client_id = credential.client_id.strip().lower()
     if not directory_id or not client_id:
@@ -231,9 +235,16 @@ def stored_microsoft_app_identity(
     shape, or in the keys of its own source. None when the stored JSON does
     not parse."""
     if stored_credential_family(stored_json) == CredentialFamily.MICROSOFT:
-        directory_id = str(stored_json.get("directory_id") or "").strip().lower()
-        client_id = str(stored_json.get("client_id") or "").strip().lower()
-        return (directory_id, client_id) if directory_id and client_id else None
+        family_json = {
+            k: v for k, v in stored_json.items() if k != CREDENTIAL_FAMILY_KEY
+        }
+        try:
+            credential = MicrosoftCredential.model_validate(family_json)
+        except ValueError:
+            # A validation error can quote the credential's values, so it is
+            # not logged.
+            return None
+        return _app_identity(credential)
     if credential_source is None:
         return None
     return microsoft_app_identity(credential_source, stored_json)

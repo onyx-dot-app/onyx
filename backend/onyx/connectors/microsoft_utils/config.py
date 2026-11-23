@@ -1,6 +1,6 @@
 from typing import Annotated, Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, ValidationError
 
 from onyx.connectors.connector_config import CredentialBinding
 from onyx.connectors.field_policy import FieldClass, FieldPolicy
@@ -21,7 +21,6 @@ class MicrosoftCloudBinding(CredentialBinding):
     graph_api_host: Annotated[str, _NATIONAL_CLOUD] = DEFAULT_GRAPH_API_HOST
 
 
-RU_PER_MINUTE_FIELD = "ru_per_minute"
 # Microsoft's limit for one day is this many times its limit for one minute.
 RU_PER_DAY_FACTOR = 960
 
@@ -42,11 +41,11 @@ class MicrosoftRateBudget(BaseModel):
 
 def configured_ru_per_minute(connector_specific_config: dict[str, Any]) -> int | None:
     """The connector's RU per minute, or None when it has none or the stored
-    value is not a positive integer. The write path validates a numeric
-    string such as "600" and stores it as sent, so the reader accepts one."""
-    value = connector_specific_config.get(RU_PER_MINUTE_FIELD)
-    if isinstance(value, str) and value.strip().isdigit():
-        value = int(value.strip())
-    if isinstance(value, bool) or not isinstance(value, int) or value < 1:
+    value is not valid. The write path validates the value with the same
+    model and stores it as sent, such as the string "600"."""
+    try:
+        return MicrosoftRateBudget.model_validate(
+            connector_specific_config
+        ).ru_per_minute
+    except ValidationError:
         return None
-    return value
