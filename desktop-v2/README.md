@@ -479,15 +479,21 @@ How the app differs from macOS:
   - The NSIS installer (`.exe`) stops when the user is not an administrator. A silent install
     (`/S`) then exits with code 740.
   - Use one installer type on a computer. When the MSI version is installed, the NSIS
-    installer offers to uninstall it. If you keep it, the NSIS installer stops (a silent
-    install exits with code 1638). The MSI stops when the NSIS version is installed. Uninstall
-    the other one first.
+    installer stops before its first page (a silent install exits with code 1638). The MSI
+    stops when the NSIS version is installed. Uninstall the other one first.
   - Both installers refuse to install an older version over a newer one. Uninstall the newer
     version first.
   - The NSIS uninstaller option **Delete the application data** also deletes the session
     tokens from the user's Credential Manager. It does this only when the uninstaller runs as
     the signed-in Windows user, not when another administrator's credentials elevate it. A
-    plain uninstall, and an MSI uninstall, keep the app's data and the token.
+    plain uninstall keeps the app's data and the token.
+  - An MSI uninstall keeps the app's data and the token. To delete the data of every user
+    profile on the computer, set `DELETEAPPDATA=1`:
+    `msiexec /x {ProductCode} /qn DELETEAPPDATA=1`. This deletes
+    `%APPDATA%\app.onyx.desktop.v2` and `%LOCALAPPDATA%\app.onyx.desktop.v2` in each profile
+    (not redirected AppData folders). The session tokens stay in each user's Credential
+    Manager, because only that user can open them. After a new install the app does not use
+    them: it asks the user to sign in and deletes the old token. An upgrade never deletes data.
 - On Linux the app registers `onyx://` at launch (the `.deb` also registers it), so AppImage
   builds get sign-in links too. This needs `xdg-mime`. The AppImage entry points to the
   AppImage's path at its last launch. If you move or rename the AppImage, quit the app, then

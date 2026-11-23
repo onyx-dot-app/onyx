@@ -15,6 +15,32 @@
         <Condition Message="Onyx v2 is already installed from the setup program (.exe). Uninstall it in Settings &gt; Apps, then run this installer again.">
             <![CDATA[Installed OR NOT ONYX_NSIS_INSTALL]]>
         </Condition>
+
+        <!-- The Finish page's "Launch" checkbox. The template's action starts
+             the file by its File table key, which fails from the UI (Return
+             value 1631). WixShellExec starts the resolved path. -->
+        <Property Id="WixShellExecTarget" Value="[#Path]" />
+        <CustomAction Id="OnyxLaunchApp" BinaryKey="WixCA" DllEntry="WixShellExec" Impersonate="yes" Return="ignore" />
+        <UI>
+            <Publish Dialog="ExitDialog" Control="Finish" Event="DoAction" Value="OnyxLaunchApp">WIXUI_EXITDIALOGOPTIONALCHECKBOX = 1 and NOT Installed</Publish>
+        </UI>
+
+        <!-- "msiexec /x ... DELETEAPPDATA=1" deletes the app's data folders of
+             every user profile, as the NSIS option "Delete the application data"
+             does for one user. Without its config a stored session token is not
+             used, and the app deletes it at the next launch. The command is
+             delete-user-data.ps1, as UTF-16LE in base64. -->
+        <Property Id="DELETEAPPDATA" Secure="yes" />
+        <CustomAction Id="OnyxDeleteUserData"
+                      Directory="TARGETDIR"
+                      Execute="deferred"
+                      Impersonate="no"
+                      Return="ignore"
+                      ExeCommand='"[System64Folder]WindowsPowerShell\v1.0\powershell.exe" -NoProfile -NonInteractive -ExecutionPolicy Bypass -EncodedCommand IwAgAFIAdQBuACAAYgB5ACAAdABoAGUAIABNAFMASQAgAGEAcwAgAEwAbwBjAGEAbABTAHkAcwB0AGUAbQAgAG8AbgAgACIAbQBzAGkAZQB4AGUAYwAgAC8AeAAgAC4ALgAuACAARABFAEwARQBUAEUAQQBQAFAARABBAFQAQQA9ADEAIgAuACAAVABoAGUAIABNAFMASQAKACMAIABlAG0AYgBlAGQAcwAgAHQAaABpAHMAIABzAGMAcgBpAHAAdAAgAHcAaQB0AGgAIAAtAEUAbgBjAG8AZABlAGQAQwBvAG0AbQBhAG4AZAAgACgAaQBuAHMAdABhAGwAbABlAHIALQBnAHUAYQByAGQAcwAuAHcAeABzACkAOwAgAHQAaABlAAoAIwAgAGkAbgBzAHQAYQBsAGwAZQByAF8AZgBpAGwAZQBzACAAdABlAHMAdAAgAGYAYQBpAGwAcwAgAHcAaABlAG4AIAB0AGgAZQAgAHQAdwBvACAAZABpAGYAZgBlAHIALgAKACQARQByAHIAbwByAEEAYwB0AGkAbwBuAFAAcgBlAGYAZQByAGUAbgBjAGUAIAA9ACAAJwBTAGkAbABlAG4AdABsAHkAQwBvAG4AdABpAG4AdQBlACcACgAkAGEAcABwACAAPQAgACcAYQBwAHAALgBvAG4AeQB4AC4AZABlAHMAawB0AG8AcAAuAHYAMgAnAAoAZgBvAHIAZQBhAGMAaAAgACgAJAB1AHMAZQByACAAaQBuACAARwBlAHQALQBDAGkAbQBJAG4AcwB0AGEAbgBjAGUAIAAtAEMAbABhAHMAcwBOAGEAbQBlACAAVwBpAG4AMwAyAF8AVQBzAGUAcgBQAHIAbwBmAGkAbABlACkAIAB7AAoAIAAgACAAIABpAGYAIAAoACQAdQBzAGUAcgAuAFMAcABlAGMAaQBhAGwAIAAtAG8AcgAgAC0AbgBvAHQAIAAkAHUAcwBlAHIALgBMAG8AYwBhAGwAUABhAHQAaAApACAAewAgAGMAbwBuAHQAaQBuAHUAZQAgAH0ACgAgACAAIAAgAGYAbwByAGUAYQBjAGgAIAAoACQAZABpAHIAIABpAG4AIAAnAEEAcABwAEQAYQB0AGEAXABSAG8AYQBtAGkAbgBnACcALAAgACcAQQBwAHAARABhAHQAYQBcAEwAbwBjAGEAbAAnACkAIAB7AAoAIAAgACAAIAAgACAAIAAgAFIAZQBtAG8AdgBlAC0ASQB0AGUAbQAgAC0ATABpAHQAZQByAGEAbABQAGEAdABoACAAKABKAG8AaQBuAC0AUABhAHQAaAAgACQAdQBzAGUAcgAuAEwAbwBjAGEAbABQAGEAdABoACAAIgAkAGQAaQByAFwAJABhAHAAcAAiACkAIAAtAFIAZQBjAHUAcgBzAGUAIAAtAEYAbwByAGMAZQAKACAAIAAgACAAfQAKAH0ACgA=' />
+        <InstallExecuteSequence>
+            <Custom Action="OnyxDeleteUserData" Before="InstallFinalize"><![CDATA[REMOVE~="ALL" AND NOT UPGRADINGPRODUCTCODE AND DELETEAPPDATA="1"]]></Custom>
+        </InstallExecuteSequence>
+
         <ComponentGroup Id="OnyxInstallerGuards" />
     </Fragment>
 </Wix>

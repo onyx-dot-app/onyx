@@ -6,6 +6,8 @@ mod ask;
 mod commands;
 mod config;
 mod dialog;
+#[cfg(test)]
+mod installer_files;
 mod launcher;
 mod login_item;
 #[cfg(target_os = "macos")]
