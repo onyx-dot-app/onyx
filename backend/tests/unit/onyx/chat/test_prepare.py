@@ -48,6 +48,7 @@ from onyx.db.models import (
     ChatSession,
     Persona,
     User,
+    UserPreferences,
     UserProject,
 )
 from onyx.error_handling.error_codes import OnyxErrorCode
@@ -273,6 +274,12 @@ def _mock_chat_preparation(
     monkeypatch.setattr(
         "onyx.chat.process_message.resolve_context_user_files",
         lambda *_args: ContextUserFiles(project=[], agent=[]),
+    )
+    monkeypatch.setattr(
+        "onyx.chat.process_message.fetch_user_preferences",
+        lambda user, _db_session: UserPreferences(
+            user_id=user.id, use_memories=True, enable_memory_tool=True
+        ),
     )
     monkeypatch.setattr(
         "onyx.chat.process_message.get_memories",

@@ -174,6 +174,7 @@ def _resolve_provider_and_model(
 def get_llm_for_persona(
     persona: Persona | None,
     user: User,
+    user_defaults: UserChatDefaults | None,
     llm_override: LLMOverride | None = None,
     additional_headers: dict[str, str] | None = None,
     policy_fn: Callable[[str], LlmRequestPolicy] | None = None,
@@ -182,12 +183,10 @@ def get_llm_for_persona(
     1. LLM override (model configuration id, else provider + model version)
     2. Persona's model configuration override
     3. Default LLM
-    """
-    user_defaults = UserChatDefaults(
-        temperature_default=user.temperature_default,
-        reasoning_effort_default=user.reasoning_effort_default,
-    )
 
+    `user_defaults` are the user's own chat defaults
+    (`UserPreferences.chat_defaults`); None applies none.
+    """
     if persona is None:
         logger.warning("No persona provided, using default LLM")
         return get_default_llm(policy_fn=policy_fn, user_defaults=user_defaults)

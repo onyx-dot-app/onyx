@@ -23,6 +23,7 @@ from onyx.db.models import SlackBot as SlackAppModel
 from onyx.db.models import SlackChannelConfig as SlackChannelConfigModel
 from onyx.db.models import StandardAnswer as StandardAnswerModel
 from onyx.db.models import StandardAnswerCategory as StandardAnswerCategoryModel
+from onyx.db.models import UserPreferences as UserPreferencesModel
 from onyx.db.port_attempt import ReindexProgressCounts
 from onyx.db.skill_models import PluginRename
 from onyx.llm.models import ReasoningEffort
@@ -228,6 +229,7 @@ class UserInfo(BaseModel):
     def from_model(
         cls,
         user: User,
+        preferences: UserPreferencesModel,
         *,
         token_expires_at: datetime | None = None,
         is_cloud_superuser: bool = False,
@@ -248,27 +250,27 @@ class UserInfo(BaseModel):
             password_configured=user.password_configured,
             preferences=(
                 UserPreferences(
-                    shortcut_enabled=user.shortcut_enabled,
-                    chosen_assistants=user.chosen_assistants,
-                    default_model=user.default_model,
-                    hidden_assistants=user.hidden_assistants,
+                    shortcut_enabled=preferences.shortcut_enabled,
+                    chosen_assistants=preferences.chosen_assistants,
+                    default_model=preferences.default_model,
+                    hidden_assistants=preferences.hidden_assistants,
                     pinned_assistants=[
                         pinned.persona_id for pinned in user.pinned_personas
                     ],
-                    visible_assistants=user.visible_assistants,
-                    auto_scroll=user.auto_scroll,
-                    temperature_override_enabled=user.temperature_override_enabled,
-                    temperature_default=user.temperature_default,
-                    reasoning_effort_default=user.reasoning_effort_default,
-                    theme_preference=user.theme_preference,
-                    language=user.language,
-                    chat_background=user.chat_background,
-                    default_app_mode=user.default_app_mode,
-                    paste_as_tile=user.paste_as_tile,
-                    interrupt_on_send=user.interrupt_on_send,
-                    voice_auto_send=user.voice_auto_send,
-                    voice_auto_playback=user.voice_auto_playback,
-                    voice_playback_speed=user.voice_playback_speed,
+                    visible_assistants=preferences.visible_assistants,
+                    auto_scroll=preferences.auto_scroll,
+                    temperature_override_enabled=preferences.temperature_override_enabled,
+                    temperature_default=preferences.temperature_default,
+                    reasoning_effort_default=preferences.reasoning_effort_default,
+                    theme_preference=preferences.theme_preference,
+                    language=preferences.language,
+                    chat_background=preferences.chat_background,
+                    default_app_mode=preferences.default_app_mode,
+                    paste_as_tile=preferences.paste_as_tile,
+                    interrupt_on_send=preferences.interrupt_on_send,
+                    voice_auto_send=preferences.voice_auto_send,
+                    voice_auto_playback=preferences.voice_auto_playback,
+                    voice_playback_speed=preferences.voice_playback_speed,
                     assistant_specific_configs=assistant_specific_configs,
                 )
             ),
@@ -285,10 +287,10 @@ class UserInfo(BaseModel):
             personalization=UserPersonalization(
                 name=user.personal_name or "",
                 role=user.personal_role or "",
-                use_memories=user.use_memories,
-                enable_memory_tool=user.enable_memory_tool,
+                use_memories=preferences.use_memories,
+                enable_memory_tool=preferences.enable_memory_tool,
                 memories=memories or [],
-                user_preferences=user.user_preferences or "",
+                user_preferences=preferences.instructions or "",
             ),
         )
 
@@ -359,9 +361,16 @@ class ChatBackgroundRequest(BaseModel):
 
 
 class VoiceSettingsUpdateRequest(BaseModel):
-    auto_send: bool | None = None
-    auto_playback: bool | None = None
-    playback_speed: float | None = Field(default=None, ge=0.5, le=2.0)
+    """None keeps the saved value. Serialization aliases name the
+    `UserPreferences` columns."""
+
+    auto_send: bool | None = Field(default=None, serialization_alias="voice_auto_send")
+    auto_playback: bool | None = Field(
+        default=None, serialization_alias="voice_auto_playback"
+    )
+    playback_speed: float | None = Field(
+        default=None, ge=0.5, le=2.0, serialization_alias="voice_playback_speed"
+    )
 
 
 class PersonalizationUpdateRequest(BaseModel):

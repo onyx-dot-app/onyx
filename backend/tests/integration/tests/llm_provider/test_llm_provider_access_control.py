@@ -434,6 +434,7 @@ def test_get_llm_for_persona_falls_back_when_access_denied(
         allowed_llm = get_llm_for_persona(
             persona=persona,
             user=admin_model,
+            user_defaults=None,
         )
         assert (
             allowed_llm.config.model_name
@@ -443,6 +444,7 @@ def test_get_llm_for_persona_falls_back_when_access_denied(
         fallback_llm = get_llm_for_persona(
             persona=persona,
             user=basic_model,
+            user_defaults=None,
         )
         assert (
             fallback_llm.config.model_name
