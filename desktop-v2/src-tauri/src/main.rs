@@ -6,6 +6,8 @@ mod ask;
 mod commands;
 mod config;
 mod dialog;
+#[cfg(test)]
+mod installer_files;
 mod launcher;
 #[cfg(any(target_os = "linux", test))]
 mod linux_cookies;
