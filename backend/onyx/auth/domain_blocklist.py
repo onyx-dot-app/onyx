@@ -65,9 +65,12 @@ class RemoteDomainBlocklist:
 
     def _should_refresh(self) -> bool:
         """Check if the cached domains should be refreshed."""
-        if self._last_fetch_time is None:
+        # One read: another thread's refresh_now() may set it to None between
+        # the check and the subtraction.
+        last_fetch_time = self._last_fetch_time
+        if last_fetch_time is None:
             return True
-        return (time.monotonic() - self._last_fetch_time) > self._cache_duration
+        return (time.monotonic() - last_fetch_time) > self._cache_duration
 
     def _fetch_domains(self) -> _Fetched | None:
         """
