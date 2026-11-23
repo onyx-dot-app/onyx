@@ -220,6 +220,8 @@ fn main() {
                 launcher::preload(handle);
             }
             policy::spawn_refresh(handle);
+            #[cfg(not(target_os = "macos"))]
+            offline::watch_idle(handle);
             notify::init(handle);
 
             {

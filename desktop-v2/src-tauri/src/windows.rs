@@ -253,6 +253,13 @@ pub fn fit_to_content(window: &WebviewWindow, content_height: f64) -> Result<(),
 
 pub fn close(app: &AppHandle, label: &str) {
     if let Some(window) = app.get_webview_window(label) {
+        // Closes the WebView2 page first: a destroyed window can leave it
+        // running.
+        #[cfg(windows)]
+        let _ = window.with_webview(|webview| {
+            // SAFETY: runs on the UI thread with the live controller.
+            let _ = unsafe { webview.controller().Close() };
+        });
         let _ = window.destroy();
     }
 }

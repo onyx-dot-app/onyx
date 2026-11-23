@@ -99,7 +99,9 @@ no space.
   web UI's own `/api` route shows that `/api` does not reach the API server. These reasons,
   and a 5xx error, also replace a page that already loaded. On Linux and Windows, a main-window load
   that the web view cannot finish (for example, connection refused) shows this window instead
-  of the web view's error page. A certificate error also shows this window, not the web
+  of the web view's error page (on Windows, the main window is blank until then). On Linux and
+  Windows, the app also checks the server every 60 seconds while the main window is on screen,
+  so an outage while no page loads also shows this window after two failed checks. A certificate error also shows this window, not the web
   view's certificate page, so the user cannot continue to the page. If the app's own check passes but the web view still fails (for
   example, a certificate that only the web view does not trust), the window checks again
   only on **Retry**. Otherwise it checks again after 2, 4, 8, 15, 30, then every 60 seconds, at once when
@@ -138,7 +140,7 @@ IT can push the app to every device with Kandji, Jamf, Intune or Group Policy, a
 in advance. With a managed server, the app skips onboarding and opens at sign-in.
 
 The app reads the policy at launch, every 5 minutes, before each update check, and each time
-Preferences opens (`src-tauri/src/policy.rs`). A managed value wins over the user's own
+Preferences opens or comes to the front (`src-tauri/src/policy.rs`). A managed value wins over the user's own
 `config.json` value. Preferences shows managed values read-only, with "Managed by your
 organization". A `ServerURL` without `LockServerURL` shows "Default set by your organization",
 and the user can change it. Sample files for each platform are in [`deploy/`](deploy/).
@@ -153,8 +155,10 @@ and the user can change it. Sample files for each platform are in [`deploy/`](de
 | `LaunchAtLogin` | bool | Turns **Launch at login** on or off, and the Preferences switch is locked. See [Launch at login](#launch-at-login). |
 | `DisableNotifications` | bool | Turns off desktop notifications. |
 
-A change to `ServerURL` or `LockServerURL` applies at the next launch. The other keys apply at
-the next policy read.
+A change to `ServerURL` or `LockServerURL` applies at the next launch. If `LockServerURL` turns
+on while the app runs, the server in use is locked until then. If the policy names another
+server, Preferences says that Onyx uses it after a restart. The other keys apply at the next
+policy read.
 
 Booleans accept `true`/`false`, `1`/`0` and `yes`/`no` (as strings too). Other values are not
 valid.

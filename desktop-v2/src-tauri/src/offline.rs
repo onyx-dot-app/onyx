@@ -24,6 +24,10 @@ const RECHECK_DELAY: Duration = Duration::from_secs(2);
 /// While a page loads, the server is checked this often, for at most `LOAD_WATCH_LIMIT`.
 const LOAD_POLL: Duration = Duration::from_secs(5);
 const LOAD_WATCH_LIMIT: Duration = Duration::from_secs(60);
+/// While the main window shows, the server is checked this often, so an
+/// outage also shows the offline window when no page loads.
+#[cfg(not(target_os = "macos"))]
+const IDLE_POLL: Duration = Duration::from_secs(60);
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -195,10 +199,15 @@ fn show_with(
         return Ok(());
     };
     let close_app = app.clone();
-    window.on_window_event(move |event| {
-        if let tauri::WindowEvent::Destroyed = event {
-            closed_by_user(&close_app, id);
+    window.on_window_event(move |event| match event {
+        // Closed like the app closes it, so its web view goes too.
+        #[cfg(windows)]
+        tauri::WindowEvent::CloseRequested { api, .. } => {
+            api.prevent_close();
+            windows::close(&close_app, windows::OFFLINE);
         }
+        tauri::WindowEvent::Destroyed => closed_by_user(&close_app, id),
+        _ => {}
     });
     let app = app.clone();
     tauri::async_runtime::spawn(async move { monitor(app, id).await });
@@ -430,6 +439,63 @@ pub fn watch_load(app: &AppHandle, url: &Url) {
     });
 }
 
+/// Checks the server while the main window shows, and shows the offline
+/// window when it fails two checks. Page loads have their own check.
+#[cfg(not(target_os = "macos"))]
+pub fn watch_idle(app: &AppHandle) {
+    let app = app.clone();
+    tauri::async_runtime::spawn(async move {
+        loop {
+            tokio::time::sleep(IDLE_POLL).await;
+            check_idle(&app).await;
+        }
+    });
+}
+
+#[cfg(not(target_os = "macos"))]
+async fn check_idle(app: &AppHandle) {
+    let state = app.state::<AppState>();
+    let epoch = state.epoch();
+    let Ok(server) = state.server() else {
+        return;
+    };
+    let due = || {
+        idle_check_due(
+            main_window_shown(app),
+            app.state::<Offline>().pending().is_some(),
+        ) && state.epoch() == epoch
+    };
+    if !due() || state.api.health(&server).await.is_ok() {
+        return;
+    }
+    tokio::time::sleep(RECHECK_DELAY).await;
+    let Err(reason) = state.api.health(&server).await else {
+        return;
+    };
+    // Not for a window that was hidden meanwhile, nor for a page that is
+    // not the server's.
+    let Some(path) = top_level_path(app, &server).filter(|_| due()) else {
+        return;
+    };
+    log::warn!("the server stopped answering while the main window was open");
+    if let Err(e) = show(app, &path, reason, epoch) {
+        log::warn!("the main window keeps its page: {e}");
+    }
+}
+
+#[cfg(not(target_os = "macos"))]
+fn main_window_shown(app: &AppHandle) -> bool {
+    app.get_webview_window(main_window::LABEL)
+        .is_some_and(|w| w.is_visible().unwrap_or(false) && !w.is_minimized().unwrap_or(false))
+}
+
+/// The idle check runs only for a main window on screen, and not while the
+/// offline window shows: that window checks on its own.
+#[cfg(any(not(target_os = "macos"), test))]
+fn idle_check_due(main_window_shown: bool, offline_showing: bool) -> bool {
+    main_window_shown && !offline_showing
+}
+
 /// The path of the main window's document, if it is on `server`.
 fn top_level_path(app: &AppHandle, server: &str) -> Option<String> {
     let url = app.get_webview_window(main_window::LABEL)?.url().ok()?;
@@ -558,10 +624,20 @@ pub fn watch_webview_failures(window: &tauri::WebviewWindow) {
                 return;
             }
         };
+        // A failed load shows a blank page, not WebView2's own error page,
+        // until the offline window replaces it.
+        // SAFETY: as above.
+        if let Err(e) = unsafe {
+            core.Settings()
+                .and_then(|s| s.SetIsBuiltInErrorPageEnabled(false))
+        } {
+            log::warn!("could not turn off the main window's error page: {e}");
+        }
         // The URI of the latest top-level navigation, to tell it apart from
         // a subresource in a certificate error.
         let navigating = std::sync::Arc::new(Mutex::new(String::new()));
         let started = navigating.clone();
+        let completed = navigating.clone();
         let handler = NavigationStartingEventHandler::create(Box::new(move |_, args| {
             let Some(args) = args else {
                 return Ok(());
@@ -644,11 +720,12 @@ pub fn watch_webview_failures(window: &tauri::WebviewWindow) {
                 WebErrorKind::Tls => Some(Unreachable::Tls),
                 WebErrorKind::Connection => None,
             };
-            // The error page keeps the failed URL as the source.
             let mut uri = PWSTR::null();
             // SAFETY: as above.
             unsafe { sender.Source(&mut uri)? };
-            let uri = take_pwstr(uri);
+            let source = take_pwstr(uri);
+            let navigating = completed.lock().unwrap_or_else(|p| p.into_inner()).clone();
+            let uri = failed_uri(&source, &navigating).to_string();
             log::warn!(
                 "the main window could not load {} (web error {})",
                 crate::main_window::log_safe(&uri),
@@ -665,6 +742,18 @@ pub fn watch_webview_failures(window: &tauri::WebviewWindow) {
     });
     if let Err(e) = result {
         log::warn!("could not watch the main window for failed loads: {e}");
+    }
+}
+
+/// The URI of a failed top-level load: the web view's source, or the
+/// latest navigation if the source is not a web page (a blank error page).
+#[cfg(any(windows, test))]
+fn failed_uri<'a>(source: &'a str, navigating: &'a str) -> &'a str {
+    let web = Url::parse(source).is_ok_and(|url| matches!(url.scheme(), "http" | "https"));
+    if web || navigating.is_empty() {
+        source
+    } else {
+        navigating
     }
 }
 
@@ -713,7 +802,30 @@ pub fn load_finished(app: &AppHandle) {
 
 #[cfg(test)]
 mod tests {
-    use super::{path_of, recovery_uri, web_error_kind, webview_failure, Loads, WebErrorKind};
+    use super::{
+        failed_uri, idle_check_due, path_of, recovery_uri, web_error_kind, webview_failure, Loads,
+        WebErrorKind,
+    };
+
+    #[test]
+    fn a_failed_load_without_a_web_source_uses_the_navigation() {
+        let nav = "https://onyx.example/app?chatId=1";
+        assert_eq!(
+            failed_uri("https://onyx.example/app", nav),
+            "https://onyx.example/app"
+        );
+        assert_eq!(failed_uri("about:blank", nav), nav);
+        assert_eq!(failed_uri("", nav), nav);
+        assert_eq!(failed_uri("about:blank", ""), "about:blank");
+    }
+
+    #[test]
+    fn the_idle_check_runs_only_for_a_shown_main_window_without_offline() {
+        assert!(idle_check_due(true, false));
+        assert!(!idle_check_due(false, false));
+        assert!(!idle_check_due(true, true));
+        assert!(!idle_check_due(false, true));
+    }
     use crate::main_window::server_url_join;
     use crate::reachability::Unreachable;
     use url::Url;
