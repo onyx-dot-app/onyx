@@ -35,7 +35,7 @@ for arg in "$@"; do
   [ "$prev" = --results ] && results=$arg
   prev=$arg
 done
-chown -R "$HOST_IDS" .cache "$results"
+chown -R -- "$HOST_IDS" .cache "$results"
 exit $rc'
 docker run --rm --cpus="$cpus" --memory="${mem}g" --memory-swap="${mem}g" \
   --add-host=host.docker.internal:host-gateway \
