@@ -27,6 +27,7 @@ import math
 import pickle
 import random
 import re
+import shutil
 import sys
 import time
 from collections.abc import Iterator
@@ -466,11 +467,15 @@ def _write(out_dir: str, stem: str, doc_id: str, chunks: list[Any]) -> dict[str,
     with open(Path(out_dir) / f"{stem}.pkl", "wb") as f:
         pickle.dump(chunks, f, protocol=pickle.HIGHEST_PROTOCOL)
     lens = [len(c.content) for c in chunks]
+    digest = hashlib.sha256()
+    for c in chunks:
+        digest.update(c.model_dump_json(exclude={"source_document"}).encode())
     return {
         "doc_id": doc_id,
         "file": f"{stem}.pkl",
         "n_chunks": len(chunks),
         "chars": sum(lens),
+        "sha256": digest.hexdigest(),
         "chunk_chars": lens,
     }
 
@@ -522,7 +527,7 @@ def select_files(corpus: Path, max_docs: int, n_largest: int, seed: int) -> list
     if max_docs <= 0 or max_docs >= len(files):
         return files
     by_size = sorted(files, key=lambda p: p.stat().st_size, reverse=True)
-    largest = by_size[:n_largest]
+    largest = by_size[: min(n_largest, max_docs)]
     rest = [p for p in files if p not in set(largest)]
     rng = random.Random(seed)
     picked = largest + rng.sample(rest, max_docs - len(largest))
@@ -531,6 +536,20 @@ def select_files(corpus: Path, max_docs: int, n_largest: int, seed: int) -> list
 
 def _pct(xs: list[int], q: float) -> int:
     return xs[min(len(xs) - 1, int(q * len(xs)))]
+
+
+def _publish(staging: Path, out: Path) -> None:
+    """Replace the workload in `out` with the one in `staging`. The index
+    moves last, so an interrupted publish leaves no index and bench.py
+    rebuilds the workload."""
+    out.mkdir(parents=True, exist_ok=True)
+    (out / "index.json").unlink(missing_ok=True)
+    for old in out.glob("*.pkl"):
+        old.unlink()
+    for new in staging.glob("*.pkl"):
+        new.replace(out / new.name)
+    (staging / "index.json").replace(out / "index.json")
+    staging.rmdir()
 
 
 def main() -> None:
@@ -555,15 +574,16 @@ def main() -> None:
     )
     args = ap.parse_args()
 
-    args.out.mkdir(parents=True, exist_ok=True)
-    for old in args.out.glob("*.pkl"):
-        old.unlink()
+    out = args.out.resolve()
+    staging = out.with_name(f"{out.name}.staging")
+    shutil.rmtree(staging, ignore_errors=True)
+    staging.mkdir(parents=True)
     t0 = time.time()
     if args.corpus_dir is not None:
         files = select_files(args.corpus_dir, args.docs, args.n_largest, args.seed)
         workload: dict[str, Any] = {"corpus": "parsed-json", "files": len(files)}
         fn: Any = corpus_doc
-        jobs: list[Any] = [(str(f), str(args.out)) for f in files]
+        jobs: list[Any] = [(str(f), str(staging)) for f in files]
     else:
         n = args.docs or 300
         rng = random.Random(args.seed)
@@ -572,7 +592,7 @@ def main() -> None:
         rng.shuffle(targets)
         workload = {"corpus": SYNTHETIC_VERSION, "docs": n, "seed": args.seed}
         fn = synthetic_doc
-        jobs = [(i, t, args.seed, str(args.out)) for i, t in enumerate(targets)]
+        jobs = [(i, t, args.seed, str(staging)) for i, t in enumerate(targets)]
         # Start the largest documents first, so that one does not finish last.
         jobs.sort(key=lambda j: -j[1])
 
@@ -593,7 +613,7 @@ def main() -> None:
             {
                 "workload": workload,
                 "model": MODEL_NAME,
-                "docs": [(e["doc_id"], e["n_chunks"], e["chars"]) for e in entries],
+                "docs": [(e["doc_id"], e["sha256"]) for e in entries],
             }
         ).encode()
     ).hexdigest()[:16]
@@ -614,7 +634,8 @@ def main() -> None:
         "stats": stats,
         "docs": entries,
     }
-    (args.out / "index.json").write_text(json.dumps(index, indent=1))
+    (staging / "index.json").write_text(json.dumps(index, indent=1))
+    _publish(staging, out)
     print(
         json.dumps(
             {

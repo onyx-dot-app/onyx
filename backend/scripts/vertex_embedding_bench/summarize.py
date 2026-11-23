@@ -38,7 +38,7 @@ COLUMNS = [
         ),
     ),
     ("dur", lambda r: int(r["config"]["duration"])),
-    ("chunks/min", lambda r: r["metrics"].get("steady_chunks_per_min")),
+    ("inputs/min", lambda r: r["metrics"].get("steady_inputs_per_min")),
     ("inflight", lambda r: r["metrics"].get("client_avg_in_flight")),
     ("lat_p50", lambda r: r["metrics"].get("call_latency_p50_s")),
     ("done_chunks", lambda r: r["metrics"].get("pipeline_chunks_ok")),

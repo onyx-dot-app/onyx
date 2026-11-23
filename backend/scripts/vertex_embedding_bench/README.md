@@ -30,7 +30,7 @@ reads the request counters from the mock. At the end, it adds one JSON line to
 | `smoke_sdk.py` | Checks the mock with the google-genai SDK and with Onyx. |
 | `load_mock.py` | Measures the raw capacity of the mock. |
 | `docker_trial.sh` | Runs one trial in a container with CPU and memory limits. |
-| `sweep_quota.sh` | Runs each quota profile at several concurrency limits. |
+| `sweep_quota.sh` | Runs each quota profile at several concurrency limits. Needs onyx PR #18315. |
 | `Dockerfile.bench` | Image for container trials. |
 | `profiles.json` | Quota and latency profiles from research. See [VERTEX_LIMITS.md](VERTEX_LIMITS.md). |
 | `profiles.default.json` | Placeholder profiles. The mock uses them when `profiles.json` is absent. |
@@ -52,7 +52,7 @@ python prepare_chunks.py
 python bench.py --profile unlimited_300ms --pod-concurrency 4 --duration 120 --label baseline
 
 # 3. Change one setting and compare.
-python bench.py --env VERTEXAI_EMBEDDING_MAX_CONCURRENCY=64 --label max64
+python bench.py --env INDEXING_EMBEDDING_MODEL_NUM_THREADS=32 --label t32
 python summarize.py --last 2
 ```
 
@@ -96,6 +96,9 @@ Kubernetes pod, run the trial in a container.
 (cd ../.. && docker build -f scripts/vertex_embedding_bench/Dockerfile.bench \
   --build-arg BASE_IMAGE=onyxdotapp/onyx-backend:latest -t onyx-backend:vertex-bench .)
 
+# Write .cache/merged_profiles.json (profiles.json and bench_profiles.json).
+python -c "import bench; bench.merged_profiles_file()"
+
 # Start a mock on the host. On Linux, add --host 0.0.0.0 so that the container can reach it.
 python mock_vertex.py --port 8799 --profiles .cache/merged_profiles.json --profile unlimited_300ms &
 
@@ -103,8 +106,7 @@ python mock_vertex.py --port 8799 --profiles .cache/merged_profiles.json --profi
 ./docker_trial.sh 1 12 base --profile unlimited_300ms --pod-concurrency 6 --duration 90
 ```
 
-`bench.py` writes `.cache/merged_profiles.json` on its first run. The container
-mounts the repository and writes to `results_docker.jsonl`. Set `IMAGE`,
+The container mounts the repository and writes to `results_docker.jsonl`. Set `IMAGE`,
 `MOCK_PORT` or `PYTHON` to change the defaults of `docker_trial.sh`.
 
 ## Profiles
@@ -125,18 +127,18 @@ Each line of `results.jsonl` has these fields:
 
 | Field | Meaning |
 |---|---|
-| `status` | `ok`, `oom` (RSS went above `--mem-limit-gb`), `timeout` or `crash(rc=N)`. |
+| `status` | `ok`, `oom` (RSS went above `--mem-limit-gb`), `timeout`, `crash(rc=N)` or `worker_error` (a worker could not load a batch or build an embedder). |
 | `git` | Commit, branch and a hash of the uncommitted diff outside this directory. |
 | `chunk_set` | Fingerprint of the chunk set. |
 | `config` | Trial arguments and the Onyx environment. |
-| `metrics.steady_chunks_per_min` | Chunks embedded per minute after `--warmup` seconds. This is the main result. |
-| `metrics.client_avg_in_flight`, `client_peak_in_flight` | Concurrent SDK calls, mean and peak. |
+| `metrics.steady_inputs_per_min` | Inputs that the provider embedded per minute after `--warmup` seconds. This is the main result. It equals chunks per minute only when `failed_chunks` and `batch_exceptions` are 0. Otherwise it includes inputs that the pipeline sent again or discarded. |
+| `metrics.client_avg_in_flight`, `client_peak_in_flight` | Concurrent SDK calls, mean and peak. The mean includes failed calls and calls that did not finish. |
 | `metrics.call_latency_p50_s`, `call_latency_p95_s` | SDK call latency. |
 | `metrics.pipeline_chunks_ok`, `failed_chunks`, `failed_docs`, `batch_exceptions` | Pipeline results. |
 | `metrics.rate_limit_wait_s`, `provider_throttle_wait_s` | Time that threads waited for the rate limiter and after 429 errors. |
-| `metrics.peak_rss_gb`, `p95_rss_gb`, `peak_rss_delta_gb` | Memory. The delta starts from the RSS at the start of the steady window. |
+| `metrics.peak_rss_gb`, `p95_rss_gb`, `peak_rss_delta_gb` | Memory. `peak_rss_gb` includes setup. The delta is the peak RSS of the trial minus the RSS at the start of the trial. |
 | `metrics.cpu_cores_used`, `max_os_threads` | CPU and threads of the Onyx process. |
-| `mock` | Mock counters for the trial: requests, `throttled_429`, `errors_5xx`, `token_requests`, `peak_in_flight`. |
+| `mock` | Mock counters for the trial, without setup traffic: requests, `throttled_429`, `errors_5xx`, `token_requests`, `peak_in_flight`. |
 
 ## Limits of the benchmark
 

@@ -241,9 +241,14 @@ class State:
         self.profile = profile
         self.latency_scale = latency_scale
         self.rng = random.Random(seed)
+        # Requests can outlive a reset, so reset() keeps this count.
+        self.in_flight = 0
+        self.generation = 0
         self.reset()
 
     def reset(self) -> None:
+        # Requests that started before the reset do not count in the new trial.
+        self.generation += 1
         self.started = time.time()
         self.requests = 0
         self.ok = 0
@@ -255,8 +260,7 @@ class State:
         self.inputs = 0
         self.input_tokens = 0
         self.token_requests = 0
-        self.in_flight = 0
-        self.peak_in_flight = 0
+        self.peak_in_flight = self.in_flight
         self.by_endpoint: collections.Counter[str] = collections.Counter()
         # Admitted requests (counted against quota) and their tokens.
         self.req_window: collections.deque[float] = collections.deque()
@@ -540,6 +544,7 @@ async def handle_model_call(
         st.errors_5xx += 1
         return 503, BODY_503
 
+    generation = st.generation
     st.in_flight += 1
     if st.in_flight > st.peak_in_flight:
         st.peak_in_flight = st.in_flight
@@ -550,12 +555,13 @@ async def handle_model_call(
     finally:
         st.in_flight -= 1
 
-    st.ok += 1
-    st.inputs += len(texts)
-    st.input_tokens += total_tokens
-    done = time.time()
-    st.ok_per_sec.add(done)
-    st.ok_window.append(done)
+    if generation == st.generation:
+        st.ok += 1
+        st.inputs += len(texts)
+        st.input_tokens += total_tokens
+        done = time.time()
+        st.ok_per_sec.add(done)
+        st.ok_window.append(done)
 
     return 200, _render(vectors, verb, dim, st.requests, texts, tok_counts, truncated)
 

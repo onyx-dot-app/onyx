@@ -23,6 +23,7 @@ from __future__ import annotations
 
 import argparse
 import hashlib
+import itertools
 import json
 import os
 import pickle
@@ -32,6 +33,7 @@ import subprocess
 import sys
 import threading
 import time
+from collections.abc import Iterable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any
@@ -148,6 +150,15 @@ def start_mock(
     raise SystemExit("mock did not start")
 
 
+def _stop_mock(proc: subprocess.Popen[bytes]) -> None:
+    proc.send_signal(signal.SIGINT)
+    try:
+        proc.wait(5)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait()
+
+
 def _free_port(start: int) -> int:
     import socket
 
@@ -176,6 +187,18 @@ STAT_KEYS = (
     "input_tokens",
     "token_requests",
 )
+
+
+def _status(oom: bool, timed_out: bool, rc: int, result: dict[str, Any]) -> str:
+    if oom:
+        return "oom"
+    if timed_out:
+        return "timeout"
+    if rc != 0 or not result:
+        return f"crash(rc={rc})"
+    if result["worker_setup_errors"]:
+        return "worker_error"
+    return "ok"
 
 
 def run_parent(args: argparse.Namespace) -> None:
@@ -221,114 +244,119 @@ def run_parent(args: argparse.Namespace) -> None:
                 file=sys.stderr,
             )
             mock_proc = start_mock(port, args.profile, args.latency_scale)
-    _http(
-        "POST", f"{mock_url}/profile/{args.profile}?latency_scale={args.latency_scale}"
-    )
-    sa_path = ensure_sa(port, args.sa_host)
+    child: subprocess.Popen[bytes] | None = None
+    try:
+        _http(
+            "POST",
+            f"{mock_url}/profile/{args.profile}?latency_scale={args.latency_scale}",
+        )
+        sa_path = ensure_sa(port, args.sa_host)
 
-    onyx_env = dict(DEFAULT_ONYX_ENV)
-    for kv in args.env:
-        k, _, v = kv.partition("=")
-        onyx_env[k] = v
-    env = dict(os.environ)
-    env.update(onyx_env)
-    env["PYTHONPATH"] = str(BACKEND) + (
-        os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else ""
-    )
-    env["GOOGLE_VERTEX_BASE_URL"] = f"{mock_url}/"
-    env.pop("GOOGLE_APPLICATION_CREDENTIALS", None)
+        onyx_env = dict(DEFAULT_ONYX_ENV)
+        for kv in args.env:
+            k, _, v = kv.partition("=")
+            onyx_env[k] = v
+        env = dict(os.environ)
+        env.update(onyx_env)
+        env["PYTHONPATH"] = str(BACKEND) + (
+            os.pathsep + env["PYTHONPATH"] if env.get("PYTHONPATH") else ""
+        )
+        env["GOOGLE_VERTEX_BASE_URL"] = f"{mock_url}/"
+        env.pop("GOOGLE_APPLICATION_CREDENTIALS", None)
 
-    label = args.label or f"trial-{int(time.time())}"
-    run_dir = CACHE / "runs" / f"{time.strftime('%Y%m%d-%H%M%S')}-{label}"
-    run_dir.mkdir(parents=True)
-    child_cfg = {
-        "chunks_dir": str(args.chunks_dir),
-        "sa_path": str(sa_path),
-        "pod_concurrency": args.pod_concurrency,
-        "duration": args.duration,
-        "warmup": args.warmup,
-        "docs_per_batch": args.docs_per_batch,
-        "min_chunks_per_doc": args.min_chunks_per_doc,
-        "max_chunks_per_doc": args.max_chunks_per_doc,
-        "seed": args.seed,
-        "reduced_dimension": args.reduced_dimension,
-        "tenant_id": args.tenant_id,
-        "vertex_location": args.vertex_location,
-        "ready_file": str(run_dir / "ready.json"),
-        "result_file": str(run_dir / "result.json"),
-    }
-    (run_dir / "config.json").write_text(json.dumps(child_cfg, indent=1))
+        label = args.label or f"trial-{int(time.time())}"
+        run_dir = CACHE / "runs" / f"{time.strftime('%Y%m%d-%H%M%S')}-{label}"
+        run_dir.mkdir(parents=True)
+        child_cfg = {
+            "chunks_dir": str(args.chunks_dir.resolve()),
+            "sa_path": str(sa_path),
+            "pod_concurrency": args.pod_concurrency,
+            "duration": args.duration,
+            "warmup": args.warmup,
+            "docs_per_batch": args.docs_per_batch,
+            "min_chunks_per_doc": args.min_chunks_per_doc,
+            "max_chunks_per_doc": args.max_chunks_per_doc,
+            "seed": args.seed,
+            "reduced_dimension": args.reduced_dimension,
+            "tenant_id": args.tenant_id,
+            "vertex_location": args.vertex_location,
+            "ready_file": str(run_dir / "ready"),
+            "go_file": str(run_dir / "go"),
+            "result_file": str(run_dir / "result.json"),
+        }
+        (run_dir / "config.json").write_text(json.dumps(child_cfg, indent=1))
 
-    _http("POST", f"{mock_url}/reset")
-    log = open(run_dir / "onyx.log", "wb")
-    t_spawn = time.time()
-    child = subprocess.Popen(
-        [
-            sys.executable,
-            str(Path(__file__).resolve()),
-            "--child",
-            str(run_dir / "config.json"),
-        ],
-        env=env,
-        stdout=log,
-        stderr=subprocess.STDOUT,
-        cwd=run_dir,
-    )
-    proc = psutil.Process(child.pid)
-    limit = args.mem_limit_gb * 1024**3 if args.mem_limit_gb else None
-    samples: list[tuple[float, int, int]] = []  # (t, rss, os_threads)
-    t_ready: float | None = None
-    stats_at_ready: dict[str, Any] = {}
-    cpu_at_ready = None
-    cpu_last = None
-    oom = False
-    timed_out = False
-    hard_deadline = t_spawn + args.duration + args.setup_timeout
-    while child.poll() is None:
-        try:
-            rss = proc.memory_info().rss
-            nthreads = proc.num_threads()
-            cpu_last = proc.cpu_times()
-        except psutil.Error:
-            break
-        now = time.time()
-        samples.append((now, rss, nthreads))
-        if t_ready is None and os.path.exists(child_cfg["ready_file"]):
-            t_ready = now
-            stats_at_ready = _http("GET", f"{mock_url}/stats")
-            cpu_at_ready = proc.cpu_times()
-        if limit and rss > limit:
-            oom = True
+        _http("POST", f"{mock_url}/reset")
+        log = open(run_dir / "onyx.log", "wb")
+        t_spawn = time.time()
+        child = subprocess.Popen(
+            [
+                sys.executable,
+                str(Path(__file__).resolve()),
+                "--child",
+                str(run_dir / "config.json"),
+            ],
+            env=env,
+            stdout=log,
+            stderr=subprocess.STDOUT,
+            cwd=run_dir,
+        )
+        proc = psutil.Process(child.pid)
+        limit = args.mem_limit_gb * 1024**3 if args.mem_limit_gb else None
+        samples: list[tuple[float, int, int]] = []  # (t, rss, os_threads)
+        t_ready: float | None = None
+        cpu_at_ready = None
+        cpu_last = None
+        oom = False
+        timed_out = False
+        hard_deadline = t_spawn + args.duration + args.setup_timeout
+        while child.poll() is None:
+            try:
+                rss = proc.memory_info().rss
+                nthreads = proc.num_threads()
+                cpu_last = proc.cpu_times()
+            except psutil.Error:
+                break
+            now = time.time()
+            samples.append((now, rss, nthreads))
+            if t_ready is None and os.path.exists(child_cfg["ready_file"]):
+                # Setup traffic is done and the workers wait for the go file,
+                # so the mock counters from here on are the trial's alone.
+                _http("POST", f"{mock_url}/reset")
+                cpu_at_ready = proc.cpu_times()
+                t_ready = time.time()
+                Path(child_cfg["go_file"]).touch()
+            if limit and rss > limit:
+                oom = True
+                child.kill()
+                break
+            if now > hard_deadline:
+                timed_out = True
+                child.kill()
+                break
+            time.sleep(0.1)
+        cpu_end = cpu_last
+        t_end = samples[-1][0] if samples else time.time()
+        child.wait()
+        stats_end = _http("GET", f"{mock_url}/stats")
+    finally:
+        if child is not None and child.poll() is None:
             child.kill()
-            break
-        if now > hard_deadline:
-            timed_out = True
-            child.kill()
-            break
-        time.sleep(0.1)
-    cpu_end = cpu_last
-    t_end = samples[-1][0] if samples else time.time()
-    child.wait()
-    stats_end = _http("GET", f"{mock_url}/stats")
-    if mock_proc is not None and not args.keep_mock:
-        mock_proc.send_signal(signal.SIGINT)
-        try:
-            mock_proc.wait(5)
-        except subprocess.TimeoutExpired:
-            mock_proc.kill()
+            child.wait()
+        if mock_proc is not None and not args.keep_mock:
+            _stop_mock(mock_proc)
 
     result: dict[str, Any] = {}
     if os.path.exists(child_cfg["result_file"]):
         result = json.loads(Path(child_cfg["result_file"]).read_text())
 
-    baseline_rss = result.get("baseline_rss") or (
-        next((r for t, r, _ in samples if t_ready and t >= t_ready), 0)
-    )
     window = [r for t, r, _ in samples if t_ready and t >= t_ready]
+    baseline_rss = result.get("baseline_rss") or (window[0] if window else 0)
     peak_rss = max((r for _, r, _ in samples), default=0)
-    mock_delta = {k: stats_end.get(k, 0) - stats_at_ready.get(k, 0) for k in STAT_KEYS}
-    mock_delta["peak_in_flight"] = stats_end.get("peak_in_flight")
-    mock_delta["throttle_reasons"] = stats_end.get("throttle_reasons")
+    window_peak_rss = max(window, default=baseline_rss)
+    mock_stats = {
+        k: stats_end.get(k) for k in (*STAT_KEYS, "peak_in_flight", "throttle_reasons")
+    }
     cpu_util = None
     if cpu_at_ready is not None and cpu_end is not None and t_ready:
         used = (cpu_end.user + cpu_end.system) - (
@@ -336,17 +364,7 @@ def run_parent(args: argparse.Namespace) -> None:
         )
         cpu_util = round(used / max(1e-6, t_end - t_ready), 3)
 
-    status = (
-        "oom"
-        if oom
-        else "timeout"
-        if timed_out
-        else (
-            "ok"
-            if child.returncode == 0 and result
-            else f"crash(rc={child.returncode})"
-        )
-    )
+    status = _status(oom, timed_out, child.returncode, result)
     gb = 1024**3
     record = {
         "ts": datetime.now(UTC).isoformat(timespec="seconds"),
@@ -375,12 +393,12 @@ def run_parent(args: argparse.Namespace) -> None:
             "baseline_rss_gb": round(baseline_rss / gb, 3),
             "peak_rss_gb": round(peak_rss / gb, 3),
             "p95_rss_gb": round(_pct([float(x) for x in window], 0.95) / gb, 3),
-            "peak_rss_delta_gb": round((peak_rss - baseline_rss) / gb, 3),
+            "peak_rss_delta_gb": round((window_peak_rss - baseline_rss) / gb, 3),
             "max_os_threads": max((n for _, _, n in samples), default=0),
             "cpu_cores_used": cpu_util,
             "rss_samples": len(samples),
         },
-        "mock": mock_delta,
+        "mock": mock_stats,
         "run_dir": str(run_dir),
     }
     with open(args.results, "a") as f:
@@ -391,13 +409,13 @@ def run_parent(args: argparse.Namespace) -> None:
             {
                 "label": label,
                 "status": status,
-                "chunks_per_min": m.get("steady_chunks_per_min"),
+                "inputs_per_min": m.get("steady_inputs_per_min"),
                 "pipeline_chunks": m.get("pipeline_chunks_ok"),
                 "failed_chunks": m.get("failed_chunks"),
                 "peak_rss_gb": m["peak_rss_gb"],
                 "peak_rss_delta_gb": m["peak_rss_delta_gb"],
-                "mock_429": mock_delta.get("throttled_429"),
-                "mock_peak_in_flight": mock_delta.get("peak_in_flight"),
+                "mock_429": mock_stats["throttled_429"],
+                "mock_peak_in_flight": mock_stats["peak_in_flight"],
                 "client_avg_in_flight": m.get("client_avg_in_flight"),
             }
         )
@@ -414,9 +432,11 @@ class _Calls:
 
     def __init__(self) -> None:
         self.lock = threading.Lock()
-        self.in_flight = 0
+        self.ids = itertools.count()
+        self.active: dict[int, float] = {}  # call id -> start
         self.peak_in_flight = 0
         self.done: list[tuple[float, float, int]] = []  # (start, end, n_inputs)
+        self.failed: list[tuple[float, float]] = []  # (start, end)
         self.errors: dict[str, int] = {}
 
     def wrap(self, fn: Any) -> Any:
@@ -427,19 +447,20 @@ class _Calls:
             n = len(contents) if isinstance(contents, list) else 1
             t0 = time.monotonic()
             with calls.lock:
-                calls.in_flight += 1
-                calls.peak_in_flight = max(calls.peak_in_flight, calls.in_flight)
+                call_id = next(calls.ids)
+                calls.active[call_id] = t0
+                calls.peak_in_flight = max(calls.peak_in_flight, len(calls.active))
             try:
                 resp = await fn(self_, *a, **kw)
             except BaseException as e:
                 key = f"{type(e).__name__}:{vars(e).get('code', '')}"
                 with calls.lock:
+                    del calls.active[call_id]
+                    calls.failed.append((t0, time.monotonic()))
                     calls.errors[key] = calls.errors.get(key, 0) + 1
                 raise
-            finally:
-                with calls.lock:
-                    calls.in_flight -= 1
             with calls.lock:
+                del calls.active[call_id]
                 calls.done.append((t0, time.monotonic(), n))
             return resp
 
@@ -449,23 +470,27 @@ class _Calls:
 def _call_metrics(
     calls: _Calls, w0: float, t_end: float, duration: float
 ) -> dict[str, Any]:
-    """Throughput and latency of the calls that ended in [w0, t_end]."""
+    """Throughput and latency of the successful calls that ended in
+    [w0, t_end]. Mean concurrency also counts failed and unfinished calls."""
     with calls.lock:
         done = list(calls.done)
+        spans = [(s, e) for s, e, _ in done] + calls.failed
+        spans += [(s, t_end) for s in calls.active.values()]
         errors = dict(calls.errors)
         client_peak = calls.peak_in_flight
     steady_inputs = sum(n for s, e, n in done if w0 <= e <= t_end)
     total_inputs = sum(n for s, e, n in done if e <= t_end)
     steady_secs = max(1e-6, t_end - w0)
-    # Mean concurrent calls in the steady window (sum of call overlap / window).
-    busy = sum(max(0.0, min(e, t_end) - max(s, w0)) for s, e, _ in done)
+    busy = sum(max(0.0, min(e, t_end) - max(s, w0)) for s, e in spans)
     lat = [e - s for s, e, _ in done if w0 <= e <= t_end]
+    # A provider input is not always a useful chunk: the pipeline can retry a
+    # failed batch per document, and it drops the chunks of failed documents.
     return {
         "steady_window_s": round(steady_secs, 1),
         "steady_inputs": steady_inputs,
-        "steady_chunks_per_min": round(steady_inputs / steady_secs * 60, 1),
+        "steady_inputs_per_min": round(steady_inputs / steady_secs * 60, 1),
         "total_inputs_embedded": total_inputs,
-        "overall_chunks_per_min": round(total_inputs / duration * 60, 1),
+        "overall_inputs_per_min": round(total_inputs / duration * 60, 1),
         "client_calls": len(done),
         "client_avg_in_flight": round(busy / steady_secs, 2),
         "client_peak_in_flight": client_peak,
@@ -501,6 +526,18 @@ class _DocQueue:
         for i in range(start, start + self.docs_per_batch):
             chunks.extend(self.load(self.docs[i % len(self.docs)]))
         return chunks
+
+
+def _add_wait_totals(into: dict[str, Any], embedders: Iterable[Any]) -> None:
+    for embedder in embedders:
+        rl, pt = embedder.embedding_model.wait_totals.snapshot()
+        into["rate_limit_wait_s"] += rl
+        into["provider_throttle_wait_s"] += pt
+
+
+def _wait_for_file(path: str) -> None:
+    while not os.path.exists(path):
+        time.sleep(0.05)
 
 
 def run_child(cfg_path: str) -> None:
@@ -592,12 +629,14 @@ def run_child(cfg_path: str) -> None:
     del warm, vecs
     with calls.lock:
         calls.done.clear()
+        calls.failed.clear()
         calls.peak_in_flight = 0
 
-    me = psutil.Process()
-    baseline_rss = me.memory_info().rss
+    Path(cfg["ready_file"]).touch()
+    # The parent takes the mock baseline before it writes the go file.
+    _wait_for_file(cfg["go_file"])
+    baseline_rss = psutil.Process().memory_info().rss
     t_start = time.monotonic()
-    Path(cfg["ready_file"]).write_text(json.dumps({"rss": baseline_rss}))
 
     lock = threading.Lock()
     tot = {
@@ -606,10 +645,12 @@ def run_child(cfg_path: str) -> None:
         "failed_chunks": 0,
         "failed_docs": 0,
         "batch_exceptions": 0,
+        "worker_setup_errors": 0,
         "rate_limit_wait_s": 0.0,
         "provider_throttle_wait_s": 0.0,
         "chunks_started": 0,
     }
+    active_embedders: dict[int, DefaultIndexingEmbedder] = {}
     exc_samples: list[str] = []
     failure_samples: list[str] = []
     batch_secs: list[float] = []
@@ -617,11 +658,19 @@ def run_child(cfg_path: str) -> None:
     def worker(i: int) -> None:
         n = 0
         while not stop.is_set():
-            chunks = queue.next_batch()
+            try:
+                chunks = queue.next_batch()
+                embedder = make_embedder()
+            except Exception as e:  # noqa: BLE001
+                with lock:
+                    tot["worker_setup_errors"] += 1
+                    if len(exc_samples) < 10:
+                        exc_samples.append(repr(e)[:300])
+                return
             with lock:
                 tot["chunks_started"] += len(chunks)
+                active_embedders[i] = embedder
             t0 = time.monotonic()
-            embedder = make_embedder()
             try:
                 with embed_and_stream(
                     chunks, embedder, cfg["tenant_id"], f"bench-{i}-{n}"
@@ -656,10 +705,9 @@ def run_child(cfg_path: str) -> None:
                     if len(exc_samples) < 10:
                         exc_samples.append(repr(e)[:300])
             finally:
-                rl, pt = embedder.embedding_model.wait_totals.snapshot()
                 with lock:
-                    tot["rate_limit_wait_s"] += rl
-                    tot["provider_throttle_wait_s"] += pt
+                    del active_embedders[i]
+                    _add_wait_totals(tot, [embedder])
             del chunks, embedder
             n += 1
 
@@ -683,6 +731,7 @@ def run_child(cfg_path: str) -> None:
 
     with lock:
         totals = dict(tot)
+        _add_wait_totals(totals, active_embedders.values())
     result = {
         "baseline_rss": baseline_rss,
         "embedding_dim": dim,

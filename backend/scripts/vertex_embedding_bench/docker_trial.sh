@@ -24,6 +24,7 @@ port=${MOCK_PORT:-8799}
 gi=$(cd "$here" && PYTHONPATH="" "${PYTHON:-python}" -c \
   "import bench, json; print(json.dumps(bench.git_info()))")
 docker run --rm --cpus="$cpus" --memory="${mem}g" --memory-swap="${mem}g" \
+  --add-host=host.docker.internal:host-gateway \
   -v "$repo":/wt -e PYTHONPATH=/wt/backend -e BENCH_GIT_INFO="$gi" \
   -w "/wt/$rel" --entrypoint python "$image" \
   bench.py --mock-url "http://host.docker.internal:$port" --sa-host host.docker.internal \

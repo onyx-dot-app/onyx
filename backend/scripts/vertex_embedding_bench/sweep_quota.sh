@@ -7,6 +7,10 @@ here=$(cd "$(dirname "$0")" && pwd)
 PYTHONPATH="$(cd "$here/../.." && pwd)${PYTHONPATH:+:$PYTHONPATH}"
 export PYTHONPATH
 py=${PYTHON:-python}
+if ! grep -q VERTEXAI_EMBEDDING_MAX_CONCURRENCY "$here/../../shared_configs/configs.py"; then
+  echo "This backend does not read VERTEXAI_EMBEDDING_MAX_CONCURRENCY. The sweep needs onyx PR #18315." >&2
+  exit 1
+fi
 cd "$here" || exit 1
 for prof in gemini_api_free vertex_free_trial_or_express gemini_api_tier1 vertex_paygo_dsq vertex_paygo_dsq_congested; do
   for k in 1 16 64; do
