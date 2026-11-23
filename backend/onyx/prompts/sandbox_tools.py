@@ -2,6 +2,7 @@
 
 from onyx.server.features.build.sandbox.harness_base import (
     AGENT_FILES_DIR,
+    ARTIFACT_FILES_DIR,
     CHAT_FILES_DIR,
     ONYX_VM_FILES_ROOT,
     PROJECT_FILES_DIR,
@@ -128,4 +129,21 @@ Usage:
 - Publishing the same path again adds a new version of that file; earlier cards keep their version.
 - Do not paste the contents of a published file into your reply.
 - Do not tell the user that a file is available unless this tool succeeded.
+- Files published earlier, in this chat and in the user's other chats, can be found and downloaded with the artifact tools.
+"""
+
+ARTIFACTS_LIST_DESCRIPTION = """Lists the files that were published with publish_files in the user's chats, this chat included: the newest version of each file, most recently published first.
+
+Usage:
+- `query` finds text in the file name, the file's title or the chat's title, in any case. `chat_id` lists the files of one chat.
+- Each entry has the file ID to download, the path relative to its chat's working directory, and its chat. A version over 1 means that older versions exist.
+- When more files exist, the result has a `next_cursor`. Send it with the same `query` and `chat_id` to get the next, older files.
+"""
+
+ARTIFACTS_DOWNLOAD_DESCRIPTION = f"""Copies a published file from the user's chats into this chat's working directory, at {ARTIFACT_FILES_DIR}/<short file ID>-<name>, and returns that path. The call ends when the copy is done.
+
+Usage:
+- `file_id` is the file ID of a listed file, or of any version in a publish_files result.
+- A file is at most {PUBLISH_FILES_MAX_BYTES >> 20} MiB. A second download of the same file uses the copy that is there.
+- The chat does not keep files in {CHAT_FILES_DIR}/: a sandbox restart removes the download, and you can download it again. Before you change the file, copy it to a path outside {CHAT_FILES_DIR}/, and publish it from that path.
 """

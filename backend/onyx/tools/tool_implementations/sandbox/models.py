@@ -2,6 +2,7 @@
 the chat file copies (file_copies.py). The saved-details unions import it,
 so it imports only models and constants."""
 
+from datetime import datetime
 from typing import Annotated, Literal
 from uuid import UUID
 
@@ -214,6 +215,18 @@ class PublishedFile(BaseModel):
     thumbnail_file_id: str | None = None
 
 
+def published_display_path(path: str) -> str:
+    """The path to show of a published file at `path`: relative to the
+    working directory of the chat that published it, or the whole path
+    outside it. publish_files accepts only that chat's working directory under
+    SESSION_WORKSPACE_ROOT."""
+    workspaces = f"{SESSION_WORKSPACE_ROOT}/"
+    if not path.startswith(workspaces):
+        return path
+    _, _, relative = path.removeprefix(workspaces).partition("/")
+    return relative or path
+
+
 class PublishedFileView(PublishedFile):
     """A published file as clients get it, in packets and the session load:
     with the path to show. Saved details keep the plain `PublishedFile`."""
@@ -221,15 +234,7 @@ class PublishedFileView(PublishedFile):
     @computed_field
     @property
     def display_path(self) -> str:
-        """The path to show: relative to the working directory of the chat
-        that published the file, or the whole path outside it. publish_files
-        accepts only that chat's working directory under
-        SESSION_WORKSPACE_ROOT."""
-        workspaces = f"{SESSION_WORKSPACE_ROOT}/"
-        if not self.path.startswith(workspaces):
-            return self.path
-        _, _, relative = self.path.removeprefix(workspaces).partition("/")
-        return relative or self.path
+        return published_display_path(self.path)
 
 
 class PublishedFiles(BaseModel):
@@ -237,3 +242,102 @@ class PublishedFiles(BaseModel):
 
     type: Literal["published_files"] = "published_files"
     files: list[PublishedFile]
+
+
+# artifacts_list: the most entries of one page, and the default.
+ARTIFACTS_LIST_MAX_LIMIT = 50
+ARTIFACTS_LIST_DEFAULT_LIMIT = 25
+# The longest query, and the longest name, path and chat title that an entry
+# keeps; a version's title is at most PUBLISH_FILES_MAX_TITLE_CHARS.
+ARTIFACTS_QUERY_MAX_CHARS = 200
+ARTIFACTS_NAME_MAX_CHARS = 200
+ARTIFACTS_PATH_MAX_CHARS = 300
+ARTIFACTS_CHAT_TITLE_MAX_CHARS = 200
+# The longest artifacts_list result; a page drops its last entries to fit.
+# Below spill.RESULT_MAX_CHARS, the spill limit of one result; the step's
+# budget (spill.STEP_MAX_CHARS) can still spill a page.
+ARTIFACTS_LIST_MAX_CHARS = 40_000
+
+
+class ArtifactsListArguments(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    # The tool checks the bounds, so the strict schema keeps to plain types.
+    query: str | None = Field(
+        default=None,
+        description="Case-insensitive text to find in the file name, the "
+        f"file's title or the chat's title, at most {ARTIFACTS_QUERY_MAX_CHARS} "
+        "characters. Omit it to list every file.",
+    )
+    chat_id: str | None = Field(
+        default=None,
+        description="List only the files of this chat (a chat_id of an entry).",
+    )
+    limit: int = Field(
+        default=ARTIFACTS_LIST_DEFAULT_LIMIT,
+        description=f"The most files to return, from 1 to {ARTIFACTS_LIST_MAX_LIMIT}.",
+    )
+    cursor: str | None = Field(
+        default=None,
+        description="The next_cursor of the previous page, with the same "
+        "query and chat_id, for the next older files.",
+    )
+
+
+class ArtifactsDownloadArguments(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
+    file_id: str = Field(
+        description="The file ID of a listed file, or of any version in a "
+        "publish_files result."
+    )
+
+
+class ArtifactCursor(BaseModel):
+    """Where a page of artifacts_list ends: the last entry's artifact and its
+    latest publish. A cursor is this model's JSON in base64url."""
+
+    updated_at: datetime
+    artifact_id: UUID
+
+
+class ListedArtifact(BaseModel):
+    """A published file in an artifacts_list page, or the file that
+    artifacts_download looks up."""
+
+    file_id: str
+    # At most ARTIFACTS_NAME_MAX_CHARS.
+    name: str
+    title: str | None
+    # published_display_path of the artifact's path; a longer one keeps its
+    # last ARTIFACTS_PATH_MAX_CHARS.
+    path: str
+    # More than 1: older versions exist.
+    version: int
+    chat_id: UUID
+    chat_title: str | None
+    published_at: datetime
+    size: int
+    mime_type: str
+
+
+class ArtifactList(BaseModel):
+    """What artifacts_list returns: newest publish first."""
+
+    artifacts: list[ListedArtifact]
+    # None: no older files.
+    next_cursor: str | None
+
+
+class DownloadedArtifact(BaseModel):
+    """What artifacts_download returns."""
+
+    # Relative to the working directory.
+    path: str
+    file_id: str
+    name: str
+    size: int
+    mime_type: str
+    chat_id: UUID
+    # The file was already at the path; nothing was written.
+    cached: bool

@@ -56,6 +56,10 @@ CHAT_FILES_DIR = "attachments"
 # The chat's project files and its agent's files, in CHAT_FILES_DIR.
 PROJECT_FILES_DIR = f"{CHAT_FILES_DIR}/project"
 AGENT_FILES_DIR = f"{CHAT_FILES_DIR}/agent"
+# Published files that the model downloaded from the user's chats
+# (artifacts_download), in CHAT_FILES_DIR. The chat file copies never clean
+# it up.
+ARTIFACT_FILES_DIR = f"{CHAT_FILES_DIR}/artifacts"
 # The longest file name, in UTF-8 bytes, of the VM's file system.
 _MAX_NAME_BYTES = 255
 # Characters that a shell reads, also inside double quotes, which chat file
