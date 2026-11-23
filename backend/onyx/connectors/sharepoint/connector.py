@@ -1944,15 +1944,12 @@ class SharepointConnector(
         walk."""
         folders = checkpoint.full_pass_folders or []
         batch = folders[-SHAREPOINT_LISTING_WORKERS:]
-        pages = cast(
-            list[DriveChildrenPage],
-            run_functions_tuples_in_parallel(
-                [
-                    (self._read_children_page, (drive.drive_id, cursor, start, end))
-                    for cursor in batch
-                ],
-                max_workers=SHAREPOINT_LISTING_WORKERS,
-            ),
+        pages = run_calls_in_parallel(
+            [
+                partial(self._read_children_page, drive.drive_id, cursor, start, end)
+                for cursor in batch
+            ],
+            max_workers=SHAREPOINT_LISTING_WORKERS,
         )
         remaining = folders[: len(folders) - len(batch)]
         files: list[DriveItemData] = []
