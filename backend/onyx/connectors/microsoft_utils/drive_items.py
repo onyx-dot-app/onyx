@@ -103,6 +103,10 @@ DRIVE_ITEM_SELECT_FIELDS = ",".join(
 # Graph closes the connection mid-body under throttling, so a streaming
 # download retries transport errors on top of its initial attempt.
 STREAM_DOWNLOAD_MAX_RETRIES = 3
+# The answers of an expired download target. A new request of /content
+# gives a new target, at most _REDIRECT_REFRESHES times.
+_EXPIRED_TARGET_STATUSES: frozenset[int] = frozenset({401, 403, 410})
+_REDIRECT_REFRESHES = 2
 # The answers of Graph's /content that point to the download host.
 _REDIRECT_STATUSES: frozenset[int] = frozenset({301, 302, 303, 307, 308})
 STREAM_CHUNK_SIZE = 64 * 1024
@@ -577,11 +581,43 @@ def download_graph_url_with_cap(
         )
 
     def _follow(location: str) -> bytes:
-        return _download_redirect_target(location, cap, pacer)
+        try:
+            return _download_redirect_target(location, cap, pacer)
+        except requests.HTTPError as error:
+            status = error.response.status_code if error.response is not None else None
+            if status in _EXPIRED_TARGET_STATUSES:
+                raise _ExpiredRedirectTarget(status) from error
+            raise
 
-    return stream_response_to_buffer_with_cap(
-        _factory, cap, description=description, pacer=pacer, on_redirect=_follow
-    )
+    # A target can expire during a long throttle wait. Then a new request of
+    # the Graph URL gives a new target, a few times at most.
+    for refresh in range(_REDIRECT_REFRESHES + 1):
+        try:
+            return stream_response_to_buffer_with_cap(
+                _factory, cap, description=description, pacer=pacer, on_redirect=_follow
+            )
+        except _ExpiredRedirectTarget as expired:
+            if refresh >= _REDIRECT_REFRESHES:
+                raise requests.HTTPError(
+                    f"The download target of {description} expired "
+                    f"(status={expired.status})"
+                ) from expired
+            logger.info(
+                "The download target of %s expired (status=%s); asking Graph "
+                "for a new one.",
+                description,
+                expired.status,
+            )
+    raise RuntimeError(f"Unreachable: no download result for {description}")
+
+
+class _ExpiredRedirectTarget(Exception):
+    """The download target of a Graph redirect refused the fetch, as an
+    expired pre-authenticated URL does."""
+
+    def __init__(self, status: int | None) -> None:
+        super().__init__(f"redirect target refused (status={status})")
+        self.status = status
 
 
 def _download_redirect_target(

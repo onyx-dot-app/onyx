@@ -2,6 +2,7 @@
 and what it tells the shared limiter."""
 
 import io
+from collections.abc import Iterator
 from typing import Any
 from unittest.mock import MagicMock
 
@@ -288,6 +289,71 @@ def test_the_redirect_of_content_is_a_link_download(
     ]
     assert limiter.paused == [(DOWNLOAD_LIMITER_API, 2.0)]
     assert limiter.refused == [DOWNLOAD_LIMITER_API]
+
+
+def test_an_expired_redirect_target_asks_graph_for_a_new_one(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    """A target that expired during a wait answers 401. The download asks
+    /content again for a new target, and each request takes its own lane."""
+    limiter = _LaneRecorder()
+    answers = iter(
+        [
+            _stream_response(302, {"Location": "https://host/download.aspx?t=1"}),
+            _stream_response(401),
+            _stream_response(302, {"Location": "https://host/download.aspx?t=2"}),
+            _stream_response(200),
+        ]
+    )
+    requested: list[str] = []
+
+    def get(url: str, **_kwargs: Any) -> requests.Response:
+        requested.append(url)
+        return next(answers)
+
+    monkeypatch.setattr("onyx.connectors.microsoft_utils.drive_items.requests.get", get)
+
+    content = download_via_graph_api(
+        lambda: "token", "d", "i", 1000, GRAPH, MicrosoftRequestPacer(limiter)
+    )
+
+    assert content == b"content"
+    assert requested == [
+        f"{GRAPH}/drives/d/items/i/content",
+        "https://host/download.aspx?t=1",
+        f"{GRAPH}/drives/d/items/i/content",
+        "https://host/download.aspx?t=2",
+    ]
+    assert limiter.acquired == [
+        (GRAPH_LIMITER_API, 1),
+        (DOWNLOAD_LIMITER_API, 1),
+        (GRAPH_LIMITER_API, 1),
+        (DOWNLOAD_LIMITER_API, 1),
+    ]
+
+
+def test_a_target_that_keeps_expiring_fails_after_the_refreshes(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    def answers() -> Iterator[requests.Response]:
+        while True:
+            yield _stream_response(302, {"Location": "https://host/download.aspx"})
+            yield _stream_response(403)
+
+    stream = answers()
+    monkeypatch.setattr(
+        "onyx.connectors.microsoft_utils.drive_items.requests.get",
+        lambda *_args, **_kwargs: next(stream),
+    )
+    limiter = _LaneRecorder()
+
+    with pytest.raises(requests.HTTPError):
+        download_via_graph_api(
+            lambda: "token", "d", "i", 1000, GRAPH, MicrosoftRequestPacer(limiter)
+        )
+
+    # The first try and two refreshes.
+    assert limiter.acquired.count((GRAPH_LIMITER_API, 1)) == 3
 
 
 def test_an_sdk_client_takes_the_cost_of_each_request_and_reports_a_refusal(
