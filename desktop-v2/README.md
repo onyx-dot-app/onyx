@@ -487,13 +487,19 @@ How the app differs from macOS:
     tokens from the user's Credential Manager. It does this only when the uninstaller runs as
     the signed-in Windows user, not when another administrator's credentials elevate it. A
     plain uninstall keeps the app's data and the token.
-  - An MSI uninstall keeps the app's data and the token. To delete the data of every user
-    profile on the computer, set `DELETEAPPDATA=1`:
-    `msiexec /x {ProductCode} /qn DELETEAPPDATA=1`. This deletes
-    `%APPDATA%\app.onyx.desktop.v2` and `%LOCALAPPDATA%\app.onyx.desktop.v2` in each profile
-    (not redirected AppData folders). The session tokens stay in each user's Credential
-    Manager, because only that user can open them. After a new install the app does not use
-    them: it asks the user to sign in and deletes the old token. An upgrade never deletes data.
+  - An MSI uninstall keeps the app's data and the token. To also delete the data of the
+    user who runs `msiexec`, set `DELETEAPPDATA=1`:
+    `msiexec /x {ProductCode} DELETEAPPDATA=1`. This deletes that user's
+    `%APPDATA%\app.onyx.desktop.v2` and `%LOCALAPPDATA%\app.onyx.desktop.v2`. It does not
+    go into junctions or symbolic links, and it keeps them. An upgrade never deletes data.
+  - An uninstall that runs as LocalSystem (SCCM, Intune) deletes no user data, also with
+    `DELETEAPPDATA=1`: each user controls their own folders, so a delete as LocalSystem is not
+    safe there. After such an uninstall, each user's data folders and session token stay
+    (the token in that user's Credential Manager). The `DELETEAPPDATA=1` uninstall also keeps
+    the token in Credential Manager. The app uses a stored token only when the user's
+    config records it, so the user must sign in again when the config is gone or the user
+    signed out. The app then deletes the old token. If the config is still there, a reinstall
+    uses the token.
 - On Linux the app registers `onyx://` at launch (the `.deb` also registers it), so AppImage
   builds get sign-in links too. This needs `xdg-mime`. The AppImage entry points to the
   AppImage's path at its last launch. If you move or rename the AppImage, quit the app, then
