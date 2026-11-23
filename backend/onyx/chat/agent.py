@@ -281,8 +281,6 @@ class ChatAgent(Agent, RestorableFeature):
             generation_context=GenerationContext(
                 flow=LLMFlow.CHAT_RESPONSE, user_identity=user_identity
             ),
-            # Before each call, also a call on a resume or in a program, the
-            # skills in the model's window copy to the sandbox.
             before_tool_call=self._want_used_skills
             if sandbox_turn is not None
             else None,

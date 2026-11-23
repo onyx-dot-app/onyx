@@ -356,7 +356,6 @@ def test_a_custom_chat_skill_copies_its_folder_and_names_it(
     assert sorted(files) == [f"{name}/SKILL.md", f"{name}/scripts/run.py"]
     copied_md = files[f"{name}/SKILL.md"].decode()
 
-    # The text the model reads and the copy name the same script path.
     key = (skill.version_id, skill.path)
     with_sandbox = read_chat_skills_md([skill], author.id, db_session, sandbox=True)
     assert with_sandbox[key].startswith(f"Skill files: {folder}/. ")

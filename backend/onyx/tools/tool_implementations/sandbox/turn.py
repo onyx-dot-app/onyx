@@ -62,20 +62,16 @@ class SandboxTurn:
         self._skills_loaded = False
         self._skills_bundle: SkillsBundle | None = None
         self.file_copies: TurnFileCopies | None = None
-        # Custom skills the model read or the user picked, by name; resolved
-        # to the user's current version once, and again after each new read.
         self._reads: dict[str, int] = {}
         self._wanted: set[str] = set()
         self._resolved: set[str] = set()
         self._custom: dict[str, ChatSkill] = {}
-        # Loaded files; a load that gave none is tried again on the next call.
         self._custom_files: dict[str, FileSet] = {}
 
     def want_skills(self, reads: Mapping[str, int]) -> None:
         """Copy these custom skills (name → reads in the model's window) to
         the VM before the next call. A new read takes the current version: the
         model read its new text."""
-        # Not the skills lock: a step does not wait for a copy in progress.
         with self._lock:
             self._resolved -= {
                 name
@@ -168,7 +164,6 @@ class SandboxTurn:
                 )
 
     def _install_custom_skills(self, ref: HarnessSandboxRef) -> None:
-        # Deferred: the skills push stack loads only when a tool runs.
         from onyx.skills.push import build_chat_custom_skill_files
 
         with self._lock:
@@ -177,16 +172,12 @@ class SandboxTurn:
         if unresolved:
             with get_session_with_tenant(tenant_id=self._tenant_id) as db_session:
                 skills = list_chat_skills(db_session, self._user, built_ins=True)
-            # The first skill of a name, as skills_read picks. A built-in is on
-            # the skills drive already.
             for name in unresolved:
                 self._custom.pop(name, None)
                 self._custom_files.pop(name, None)
                 skill = next((s for s in skills if s.name == name), None)
                 if skill is not None and skill.built_in_skill_id is None:
                     self._custom[name] = skill
-            # A read during the lookup keeps its name unresolved for the next
-            # call.
             with self._lock:
                 self._resolved |= {
                     name

@@ -228,7 +228,6 @@ def test_three_skills_load_as_three_run_time_and_chat_skills(
     assert files["beta/notes.md"] == b"beta notes"
     assert not any(path.startswith((".claude-plugin", "skills/")) for path in files)
 
-    # A chat VM copies only the skill that the model read.
     beta = next(
         skill
         for skill in list_chat_skills(db_session, author, built_ins=True)

@@ -59,11 +59,9 @@ def test_a_new_read_of_a_skill_copies_its_current_version(
 
     turn.want_skills({"report": 1})
     turn._install_custom_skills(ref)
-    # The user edits the skill. With no new read, the copy stays at v1.
     current[:] = [v2]
     turn.want_skills({"report": 1})
     turn._install_custom_skills(ref)
-    # The model reads the new text: the copy follows it.
     turn.want_skills({"report": 2})
     turn._install_custom_skills(ref)
 
@@ -90,8 +88,6 @@ def test_a_read_during_the_skill_lookup_takes_effect_on_the_next_call(
     def list_chat_skills(*_args: object, **_kwargs: object) -> list[ChatSkill]:
         found = list(current)
         if found == [v1]:
-            # The user edits the skill and the model reads it again while
-            # this lookup runs.
             current[:] = [v2]
             turn.want_skills({"report": 2})
         return found
@@ -161,6 +157,5 @@ def test_a_failed_load_is_tried_again_on_the_next_call(
     turn._install_custom_skills(ref)
     turn._install_custom_skills(ref)
 
-    # The first build failed; the second loaded and stays cached.
     files = {"report/SKILL.md": b"# report"}
     assert loaded == [None, files, files]

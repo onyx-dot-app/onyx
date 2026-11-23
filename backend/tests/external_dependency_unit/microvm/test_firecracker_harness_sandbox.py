@@ -1344,14 +1344,12 @@ def test_custom_skills_copy_to_each_vm_instance_once_per_version(
         "report/SKILL.md": b"# report",
         "report/scripts/run.py": b"print(1)",
     }
-    # No command runs in the VM: the daemon writes and renames.
     assert not node.agent.executions.get(sandbox_id)
 
     loads.clear()
     sandbox.install_skills(ref, {"report": "v1"}, load)
     assert loads == []
 
-    # A new version deletes the files that it no longer has.
     skills["report"] = {"report/SKILL.md": b"# report v2"}
     sandbox.install_skills(ref, {"report": "v2"}, load)
     assert copied() == {"report/SKILL.md": b"# report v2"}
@@ -1365,7 +1363,6 @@ def test_custom_skills_copy_to_each_vm_instance_once_per_version(
     assert loads == ["report"]
     assert copied() == {"report/SKILL.md": b"# report v2"}
 
-    # A new version can turn a file into a folder, and a folder into a file.
     skills["report"] = {"report/data": b"d", "report/SKILL.md/x": b"!"}
     sandbox.install_skills(ref, {"report": "v3"}, load)
     assert copied() == {"report/data": b"d", "report/SKILL.md/x": b"!"}
@@ -1373,13 +1370,10 @@ def test_custom_skills_copy_to_each_vm_instance_once_per_version(
     skills["report"] = reorganized
     sandbox.install_skills(ref, {"report": "v4"}, load)
     assert copied() == reorganized
-    # The copy finished, so the version is recorded.
     loads.clear()
     sandbox.install_skills(ref, {"report": "v4"}, load)
     assert loads == []
 
-    # A copy that fails part way leaves the old folder whole and no hidden
-    # folder. Its record is gone, so the next call copies again.
     monkeypatch.setattr(harness_sandbox.secrets, "token_hex", lambda _: "0" * 16)
     skills["report"] = {"report/SKILL.md": b"# report v5", "report/more.md": b"m"}
     node.agent.write_failures[f"{root}/.copy-{'0' * 16}/more.md"] = WriteFailure(
@@ -1390,8 +1384,6 @@ def test_custom_skills_copy_to_each_vm_instance_once_per_version(
     sandbox.install_skills(ref, {"report": "v5"}, load)
     assert copied() == {"report/SKILL.md": b"# report v5", "report/more.md": b"m"}
 
-    # A swap whose reply is lost happened anyway: v6 is in place, so a
-    # request for v5 copies again instead of trusting the old record.
     skills["report"] = {"report/SKILL.md": b"# report v6"}
     node.agent.lose_rename_reply = True
     sandbox.install_skills(ref, {"report": "v6"}, load)
@@ -1402,8 +1394,6 @@ def test_custom_skills_copy_to_each_vm_instance_once_per_version(
     assert loads == ["report"]
     assert copied() == {"report/SKILL.md": b"# report v5", "report/more.md": b"m"}
 
-    # A copy whose install lock expires and goes to another pod stops before
-    # its next change: the old folder stays whole and nothing is recorded.
     lock_type = type(get_cache_backend(tenant_id=ref.tenant_id).lock("probe"))
     owned = lock_type.owned
     lost = False

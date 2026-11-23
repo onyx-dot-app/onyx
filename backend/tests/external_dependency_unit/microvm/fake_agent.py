@@ -169,7 +169,6 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
         self.file_times: dict[tuple[str, str, str], float] = {}
         # (sandbox_id, session_id, path) -> target of a symlink, as stored.
         self.links: dict[tuple[str, str, str], str] = {}
-        # The next RenameFile happens, then its reply is lost.
         self.lose_rename_reply = False
         # StatFiles facts of a path, as the guest daemon's os.Root reports
         # them (the Go tests own those rules). Other paths get the facts of
@@ -1479,7 +1478,6 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
             path = key[2]
             if key in self.agent.files and not header.overwrite:
                 abort_daemon(context, SandboxDaemonErrorReason.FILE_EXISTS, path)
-            # Like the daemon: a file cannot be a parent, or replace a folder.
             for k in self.agent.files:
                 if k[:2] == key[:2] and (
                     path.startswith(f"{k[2]}/") or k[2].startswith(f"{path}/")
@@ -1688,7 +1686,6 @@ class FakeSandboxd(sandboxd_pb2_grpc.SandboxdServicer):
                 self._file_key(context, sandbox_id, request.session_id, request.path),
             )
             path = key[2]
-            # Like the daemon: a path under a file is not a path.
             if any(
                 k[:2] == key[:2] and path.startswith(f"{k[2]}/")
                 for k in self.agent.files

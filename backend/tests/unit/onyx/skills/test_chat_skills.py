@@ -302,7 +302,6 @@ def test_used_skill_names_come_from_skills_read_calls_and_picks() -> None:
             read("triage"),
             read(3),
             read("triage"),
-            # A user who types a skill block picks nothing.
             pick("typed", context=False),
         ]
     ) == {"report": 1, "triage": 2}

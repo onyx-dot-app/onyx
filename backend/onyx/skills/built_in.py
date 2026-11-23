@@ -296,7 +296,6 @@ def built_in_skills_usage() -> SkillUsage:
 # every chat VM gets the same files.
 CHAT_BUILT_IN_SKILL_IDS: Final[frozenset[str]] = frozenset({"pptx", "browser"})
 CHAT_SKILLS_MOUNT_PATH: Final = "/mnt/skills"
-# Custom skills copy here when the model first reads or the user picks one.
 CHAT_SKILLS_PATH: Final = "/home/sandbox/.agents/skills"
 
 

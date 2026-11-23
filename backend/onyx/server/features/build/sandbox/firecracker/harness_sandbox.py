@@ -201,8 +201,6 @@ _SESSION_SETUP_LOCK_SECONDS = 30 * 60.0
 _SKILLS_SYNC_LOCK_PREFIX = "sandbox_fc:skills_sync:"
 _SKILLS_SYNC_LOCK_SECONDS = 5 * 60.0
 _SKILLS_INSTALL_LOCK_PREFIX = "sandbox_fc:skills_install:"
-# A skill copy is written into a hidden folder with this prefix, then swapped
-# into place.
 _SKILL_STAGING_PREFIX = ".copy-"
 # Client token on each started command, to find it when Start gets no answer.
 _START_LABEL = "onyx_start_id"
@@ -331,15 +329,12 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
 
         if not missing():
             return
-        # One copy of a skill at a time: chat sessions share the VM.
         with tenant_cache.lock(
             f"{_SKILLS_INSTALL_LOCK_PREFIX}{ref.sandbox_id}",
             timeout=_SKILLS_SYNC_LOCK_SECONDS,
         ) as lock:
 
             def keep_lock() -> None:
-                # After the lock expires, another pod can take it and delete
-                # this copy's hidden folder. Stop before the next change.
                 if not lock.owned():
                     raise HarnessSandboxError("lost the skills install lock")
                 lock.extend(_SKILLS_SYNC_LOCK_SECONDS)
@@ -353,8 +348,6 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
                     files = load(name)
                     if files is None:
                         continue
-                    # Clear the record first: a swap whose reply is lost may
-                    # still have happened.
                     set_installed_skill(
                         tenant_cache, ref.sandbox_id, instance, name, None
                     )
@@ -388,7 +381,6 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
             if e.reason is not SandboxDaemonErrorReason.FILE_NOT_FOUND:
                 raise
             here = []
-        # Hidden folders of copies that an API pod did not finish.
         for entry in here:
             if entry.name.startswith(_SKILL_STAGING_PREFIX):
                 keep_lock()
@@ -411,8 +403,6 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
                     raise
                 daemon.rename_file(path=staging, to=folder)
         finally:
-            # The old folder after the swap, or the unfinished copy. The next
-            # copy deletes what is left.
             try:
                 daemon.delete_file(session_id="", path=staging, recursive=True)
             except Exception:

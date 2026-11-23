@@ -737,7 +737,6 @@ def test_a_turn_that_parks_for_approval_and_its_resumed_root_each_end_the_turn(
             Delta(content="Done."),
         ]
     )
-    # The resumed response runs after the send returns.
     monkeypatch.setattr(
         "onyx.chat.process_message.get_llm_for_persona", lambda **_kwargs: llm
     )
@@ -747,7 +746,6 @@ def test_a_turn_that_parks_for_approval_and_its_resumed_root_each_end_the_turn(
     assert _stops(parts) == [packets.AWAITING_USER]
     assert ended == [ref]
 
-    # The resumed root's release ends the turn again.
     approval = _approve_and_finish(db_session, chat)
     assert approval.decision is ApprovalDecision.APPROVED
     assert sent == ["team"]
@@ -800,8 +798,6 @@ def test_a_program_resumed_after_approval_has_the_skills_read_before_it(
 
     _approve_and_finish(db_session, chat)
     assert sent == ["team"]
-    # The resumed program's first sandbox call, before any model step of the
-    # resumed run, already wants the skill that the parked run read.
     assert wanted_at_call == [{"pptx"}]
 
 
