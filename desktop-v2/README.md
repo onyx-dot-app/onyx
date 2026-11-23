@@ -14,6 +14,10 @@ Linux builds are a preview (see [Windows and Linux](#windows-and-linux)). It liv
   Keyring, KWallet). macOS debug builds keep it in `~/Library/Application Support/
   app.onyx.desktop.v2/dev-session-tokens.json` (mode 600): an unsigned dev build gets a new code
   signature on every rebuild, and macOS would ask for your password each time.
+  Windows keeps Credential Manager entries after an uninstall. So on Windows the app uses a
+  stored token only if its `config.json` records that this install saved it
+  (`sessionServers`). If you delete the app's data, or install again after you deleted it, you
+  must sign in again. The app then deletes the old token.
 - The main window shows the server's own web UI. The shell sets the session cookie in the
   window before the first page load, so the web login page never shows. On macOS the cookie
   is built natively as a host-only, HttpOnly cookie (`src-tauri/src/macos_cookies.rs`):
@@ -374,6 +378,34 @@ cargo test --manifest-path src-tauri/Cargo.toml
   v1's downloads and auto-update are not affected. Releases are macOS only for now. The job
   gets the signing secrets only after the JavaScript build, and only in its signing step.
 
+### Windows code signing
+
+The Windows installers and the app are not Authenticode-signed yet, so SmartScreen shows
+"Unknown publisher". The Windows build step in `desktop-v2.yml` has a hook for it: when the
+repository variable `DESKTOP_V2_WINDOWS_SIGN_COMMAND` is set, the build passes it to Tauri as
+`bundle.windows.signCommand`. Tauri then runs the command for each file it signs (the app, the
+NSIS uninstaller, the NSIS installer and the MSI) and puts the file path in place of `%1`. Tauri
+splits the command at spaces, so a path in it cannot contain a space. A later step then fails
+the build if one of the installers, or the app inside the MSI or the NSIS installer, has no
+valid signature. Tauri restores the unsigned app in `target/release` after it packages each
+installer, so that copy is not checked.
+
+Release engineering must supply:
+
+- A code-signing certificate for the publisher name. New OV and EV certificates keep the key
+  in a hardware module, so a `.pfx` file in a secret is not an option. A cloud signing
+  service, for example Azure Artifact Signing, works with `signCommand`.
+- The sign command, for example
+  `trusted-signing-cli -e <endpoint> -a <account> -c <profile> -d "Onyx" %1`, and the tool
+  it calls, installed in the job.
+- The credentials for that command. Prefer short-lived OIDC credentials (the job already has
+  `id-token: write`) over a stored secret.
+- A decision about where to sign. Today the hook is in the pull request job, which runs branch
+  code. To sign only releases, add a Windows job to the protected `release` environment and
+  move the hook there.
+- The publisher name. `tauri.windows.conf.json` sets `bundle.publisher` to `Onyx`. Make it
+  agree with the certificate's subject name.
+
 ## Windows and Linux
 
 To build installers locally (unsigned, in `src-tauri/target/release/bundle/`):
@@ -402,6 +434,19 @@ How the app differs from macOS:
   WebView2 offline installer, so they also work on a computer with no internet access. The
   installers register `onyx://` sign-in links for all users. Debug builds register them for
   the current user at launch.
+- Installer rules (`src-tauri/windows/`):
+  - The NSIS installer (`.exe`) stops when the user is not an administrator. A silent install
+    (`/S`) then exits with code 740.
+  - Use one installer type on a computer. When the MSI version is installed, the NSIS
+    installer offers to uninstall it. If you keep it, the NSIS installer stops (a silent
+    install exits with code 1638). The MSI stops when the NSIS version is installed. Uninstall
+    the other one first.
+  - Both installers refuse to install an older version over a newer one. Uninstall the newer
+    version first.
+  - The NSIS uninstaller option **Delete the application data** also deletes the session
+    tokens from the user's Credential Manager. It does this only when the uninstaller runs as
+    the signed-in Windows user, not when another administrator's credentials elevate it. A
+    plain uninstall, and an MSI uninstall, keep the app's data and the token.
 - On Linux the app registers `onyx://` at launch (the `.deb` also registers it), so AppImage
   builds get sign-in links too. This needs `xdg-mime`.
 

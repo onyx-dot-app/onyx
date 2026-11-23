@@ -3,7 +3,7 @@ use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use crate::api::Api;
-use crate::config::ConfigStore;
+use crate::config::{ConfigStore, TOKEN_NEEDS_RECORD};
 use crate::policy::Policy;
 use crate::session_store;
 
@@ -178,6 +178,17 @@ impl AppState {
             }
         }
         let token = session_store::load(server)?;
+        if !self
+            .config
+            .get()
+            .trusts_stored_token(server, TOKEN_NEEDS_RECORD)
+        {
+            // Left by an earlier install: remove it so it signs no one in.
+            if let Err(e) = session_store::clear(server) {
+                log::warn!("could not remove a session from an earlier install: {e}");
+            }
+            return None;
+        }
         *cache = Some((server.to_string(), token.clone()));
         Some(token)
     }
@@ -191,7 +202,15 @@ impl AppState {
         if self.epoch() != epoch || self.server().ok().as_deref() != Some(server) {
             return Ok(false);
         }
-        session_store::store(server, token)?;
+        save_then_record(
+            TOKEN_NEEDS_RECORD,
+            || session_store::store(server, token),
+            || {
+                self.config.update(|c| {
+                    c.session_servers.insert(server.to_string());
+                })
+            },
+        )?;
         *cache = Some((server.to_string(), token.to_string()));
         self.end_epoch();
         Ok(true)
@@ -261,5 +280,64 @@ impl AppState {
             .token(&server)
             .ok_or_else(|| "Sign in first.".to_string())?;
         Ok((server, token))
+    }
+}
+
+/// Saves a new token, then records that this install saved it. A token that
+/// another install left must not get a record before the new token replaces
+/// it. If the record fails, the next launch rejects the new token.
+fn save_then_record(
+    needs_record: bool,
+    save: impl FnOnce() -> Result<(), String>,
+    record: impl FnOnce() -> Result<(), String>,
+) -> Result<(), String> {
+    save()?;
+    if needs_record {
+        record()?;
+    }
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::cell::RefCell;
+
+    #[test]
+    fn token_is_saved_before_it_is_recorded() {
+        let steps = RefCell::new(Vec::new());
+        save_then_record(
+            true,
+            || {
+                steps.borrow_mut().push("save");
+                Ok(())
+            },
+            || {
+                steps.borrow_mut().push("record");
+                Ok(())
+            },
+        )
+        .unwrap();
+        assert_eq!(*steps.borrow(), ["save", "record"]);
+    }
+
+    #[test]
+    fn failed_save_writes_no_record() {
+        let recorded = RefCell::new(false);
+        let result = save_then_record(
+            true,
+            || Err("no store".to_string()),
+            || {
+                *recorded.borrow_mut() = true;
+                Ok(())
+            },
+        );
+        assert!(result.is_err());
+        assert!(!*recorded.borrow());
+    }
+
+    #[test]
+    fn no_record_where_none_is_required() {
+        save_then_record(false, || Ok(()), || panic!("recorded")).unwrap();
     }
 }
