@@ -17,8 +17,9 @@ PAT_LENGTH = 192
 OAUTH_PROVIDER_ACCESS_TOKEN_PREFIX = "onyx_oat_"
 OAUTH_PROVIDER_REFRESH_TOKEN_PREFIX = "onyx_ort_"
 OAUTH_PROVIDER_CODE_PREFIX = "onyx_oac_"
-# The only scope an OAuth provider grant carries.
-OAUTH_PROVIDER_SCOPE = Permission.READ_SEARCH.value
+# Every OAuth provider grant carries all of these scopes. Grants made before
+# read:chat was added carry only read:search.
+OAUTH_PROVIDER_SCOPES = (Permission.READ_SEARCH.value, Permission.READ_CHAT.value)
 # `secrets.token_urlsafe(32)` output: token secrets, request handles and CSRF
 # tokens. An S256 PKCE challenge has the same shape.
 OAUTH_PROVIDER_SECRET_PATTERN = r"[A-Za-z0-9_-]{43}"

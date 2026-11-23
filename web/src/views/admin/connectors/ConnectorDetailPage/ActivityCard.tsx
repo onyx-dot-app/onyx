@@ -39,7 +39,7 @@ import type {
   RichStr,
   StatusColor,
 } from "@opal/types";
-import { cn } from "@opal/utils";
+import { cn, prefersReducedMotion } from "@opal/utils";
 import type { FailedItemsRoute } from "@/lib/ccPair";
 import type { CCPairRef, CCPairRun } from "@/lib/connectors/types";
 import {
@@ -401,7 +401,10 @@ export default function ActivityCard({
   );
   useEffect(() => {
     if (focused) {
-      rootRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+      rootRef.current?.scrollIntoView({
+        block: "nearest",
+        behavior: prefersReducedMotion() ? "auto" : "smooth",
+      });
     }
   }, [focused, focusRequest]);
   const selected = openPopover !== null;

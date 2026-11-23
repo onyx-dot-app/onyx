@@ -9,6 +9,8 @@ export interface TracingProviderView {
   enabled: boolean;
   config: Record<string, string>;
   masked_api_key: string | null;
+  /** Env vars configure it; a DB row overrides them. */
+  env_configured: boolean;
 }
 
 export interface TracingDisconnectTarget {

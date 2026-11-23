@@ -1,6 +1,7 @@
 import { expect, test } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import { loginAs, loginAsRandomUser, apiLogin } from "@tests/e2e/utils/auth";
+import { OnboardingNamePromptPage } from "@tests/e2e/pages/OnboardingNamePromptPage";
 import { OnyxApiClient } from "@tests/e2e/utils/onyxApiClient";
 import { expectElementScreenshot } from "@tests/e2e/utils/visualRegression";
 
@@ -311,15 +312,13 @@ test.describe("Onboarding Flow @exclusive", () => {
     test("after setting name, shows confirmation then no onboarding UI", async ({
       page,
     }) => {
-      const namePrompt = page.locator('[aria-label="non-admin-name-prompt"]');
+      const onboarding = new OnboardingNamePromptPage(page);
+      const { namePrompt, confirmation } = onboarding;
       await expect(namePrompt).toBeVisible({ timeout: 15000 });
 
       await namePrompt.getByPlaceholder("Your name").fill("E2E User");
       await namePrompt.getByRole("button", { name: "Save" }).click();
 
-      const confirmation = page.locator(
-        '[aria-label="non-admin-confirmation"]'
-      );
       await expect(confirmation).toBeVisible({ timeout: 10000 });
 
       await expectElementScreenshot(confirmation, {
@@ -329,6 +328,15 @@ test.describe("Onboarding Flow @exclusive", () => {
       await confirmation.getByRole("button").first().click();
       await expect(namePrompt).not.toBeVisible({ timeout: 5000 });
       await expect(confirmation).not.toBeVisible();
+
+      // The name is saved as the preferred name, so a page load keeps it.
+      // A user without a full name gets it as the full name too, which admin
+      // views and search show.
+      const personalization = await onboarding.fetchPersonalization();
+      expect(personalization.preferred_name).toBe("E2E User");
+      expect(personalization.name).toBe("E2E User");
+      await onboarding.reload();
+      await expect(namePrompt).not.toBeVisible();
     });
   });
 });

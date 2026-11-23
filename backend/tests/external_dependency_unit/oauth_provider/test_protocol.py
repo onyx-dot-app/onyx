@@ -8,7 +8,7 @@ from uuid import UUID, uuid4
 import httpx
 import pytest
 import pytest_asyncio
-from fastapi import Depends, FastAPI
+from fastapi import Depends, FastAPI, Request
 from fastapi_users.jwt import generate_jwt
 from fastmcp.server.auth import cimd
 from fastmcp.server.auth.ssrf import SSRFFetchError, SSRFFetchResponse
@@ -17,7 +17,7 @@ from sqlalchemy import delete, select
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from onyx.auth.permissions import require_permission
+from onyx.auth.permissions import require_permission, token_allows
 from onyx.auth.pkce import generate_pkce_pair
 from onyx.auth.users import (
     SingleTenantJWTStrategy,
@@ -107,6 +107,13 @@ async def protocol_client(
         user: User = Depends(require_permission(Permission.READ_SEARCH)),
     ) -> dict[str, str]:
         return {"user_id": str(user.id)}
+
+    @app.post("/search/postgres-query")
+    def postgres_query(
+        request: Request,
+        _: User = Depends(require_permission(Permission.READ_SEARCH)),
+    ) -> dict[str, bool]:
+        return {"read_chat": token_allows(request, Permission.READ_CHAT)}
 
     @app.get("/unrelated")
     def unrelated(
@@ -336,17 +343,22 @@ async def test_complete_consent_exchange_refresh_and_revoke(
         response = await _exchange(protocol_client, client_id, code, verifier)
         assert response.status_code == 200, response.text
         tokens = response.json()
-        assert tokens["scope"] == "read:search"
+        # A client that asks for read:search still gets every supported scope.
+        assert tokens["scope"] == "read:search read:chat"
         bearer = {"Authorization": f"Bearer {tokens['access_token']}"}
         introspected = await protocol_client.get(
             "/oauth-provider/introspect", headers=bearer
         )
         assert introspected.status_code == 200, introspected.text
         assert introspected.json()["resource"] == _RESOURCE
+        assert introspected.json()["scopes"] == ["read:search", "read:chat"]
         assert "token" not in introspected.json()
         searched = await protocol_client.post("/search", headers=bearer)
         assert searched.status_code == 200, searched.text
         assert searched.json()["user_id"] == protocol_client.headers["X-Mcp-Test-Owner"]
+        queried = await protocol_client.post("/search/postgres-query", headers=bearer)
+        assert queried.status_code == 200, queried.text
+        assert queried.json() == {"read_chat": True}
         assert (
             await protocol_client.get("/unrelated", headers=bearer)
         ).status_code == 403
@@ -904,7 +916,7 @@ async def test_private_key_jwt_metadata_client_completes_public_flow(
             protocol_client, client_id, code, verifier, redirect_uri
         )
         assert response.status_code == 200, response.text
-        assert response.json()["scope"] == "read:search"
+        assert response.json()["scope"] == "read:search read:chat"
     finally:
         _cimd_fetcher.cache_clear()
 

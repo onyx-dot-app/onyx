@@ -3,8 +3,15 @@
 import React, { useState, useEffect } from "react";
 import { useTranslations } from "next-intl";
 import { IconContainer, InputTypeIn, SelectCard } from "@opal/components";
-import { updateUserPersonalization } from "@/lib/users/svc";
+import {
+  buildUserProfileImageUrl,
+  getUserAddressedName,
+  getUserEmail,
+  getUserInitials,
+  updateUserPersonalization,
+} from "@/lib/users/svc";
 import { useUser } from "@/providers/UserProvider";
+import type { UserPersonalization } from "@/lib/types";
 import { Button } from "@opal/components";
 import { cn } from "@opal/utils";
 import { SvgCheckCircle, SvgEdit, SvgUser, SvgX } from "@opal/icons";
@@ -21,13 +28,15 @@ export default function NonAdminStep() {
   const [isEditing, setIsEditing] = useState(true);
   const [savedName, setSavedName] = useState("");
 
+  const addressedName = getUserAddressedName(user);
+
   // Initialize name from user if available
   useEffect(() => {
-    if (user?.personalization?.name && !savedName) {
-      setSavedName(user.personalization.name);
+    if (addressedName && !savedName) {
+      setSavedName(addressedName);
       setIsEditing(false);
     }
-  }, [user?.personalization?.name, savedName]);
+  }, [addressedName, savedName]);
 
   const containerClasses = cn(
     "flex items-center justify-between w-full p-3 bg-background-tint-00 rounded-16 border border-border-01 mb-4"
@@ -39,13 +48,22 @@ export default function NonAdminStep() {
   };
 
   const handleSave = () => {
-    updateUserPersonalization({ name })
-      .then(() => {
+    const personalization: Partial<UserPersonalization> = {
+      preferred_name: name,
+    };
+    // Admin views, search and sharing show the full name, so onboarding
+    // fills it when the user has none.
+    if (!user?.personalization?.name) personalization.name = name;
+    updateUserPersonalization(personalization)
+      .then((response) => {
+        if (!response.ok) {
+          throw new Error(`Saving the name failed: ${response.status}`);
+        }
         setSavedName(name);
         setShowHeader(true);
         setIsEditing(false);
         // Don't call refreshUser() here — it would cause OnboardingFlow to
-        // unmount this component (since user.personalization.name becomes set),
+        // unmount this component (since the preferred name becomes set),
         // hiding the confirmation banner before the user sees it.
         // refreshUser() is called in handleDismissConfirmation instead.
       })
@@ -147,7 +165,11 @@ export default function NonAdminStep() {
                   <IconContainer
                     size="secondary"
                     avatar="user"
-                    name={savedName ?? ""}
+                    initials={getUserInitials(
+                      savedName || null,
+                      getUserEmail(user)
+                    )}
+                    src={buildUserProfileImageUrl(user)}
                   />
                 )}
                 title={savedName}

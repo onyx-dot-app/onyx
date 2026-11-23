@@ -49,6 +49,27 @@ describe("postgresQueryChips", () => {
     ]);
   });
 
+  test("list filters show every value", () => {
+    expect(
+      labels({
+        table: "document",
+        source_type: ["jira", "linear"],
+        title_contains: ["B200", "H100", "GB300"],
+        parent_hierarchy_node_id: [4, 9],
+      })
+    ).toEqual([
+      "table.document",
+      "JIRA or LINEAR",
+      "titleContains(B200, H100, or GB300)",
+      "folder(4 or 9)",
+    ]);
+    // Only a single folder can be named.
+    expect(
+      postgresQueryFolderId({ parent_hierarchy_node_id: [4, 9] })
+    ).toBeNull();
+    expect(postgresQueryFolderId({ parent_hierarchy_node_id: [4] })).toBe(4);
+  });
+
   test("a later page and a grouped count", () => {
     expect(
       labels({ table: "document", title_contains: "B200", cursor: "abc" })

@@ -31,6 +31,7 @@ const user: UserRow = {
   is_scim_synced: false,
   craft_enabled: null,
   personal_name: null,
+  profile_image_file_id: null,
   created_at: null,
   updated_at: null,
   last_active: null,

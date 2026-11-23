@@ -37,18 +37,30 @@ describe("UsageSettings", () => {
     jest.clearAllMocks();
   });
 
-  it("keeps the shared date range picker inline with the usage title", () => {
+  it("shows the date range picker in the usage title row", () => {
     render(<UsageSettings />);
 
     const picker = screen.getByRole("group", { name: "Date range" });
+    const titleRow = screen
+      .getByText("Usage This Period")
+      .closest(".opal-content-action");
 
-    expect(picker).toBeInTheDocument();
-    expect(picker.parentElement).toHaveClass(
-      "flex-wrap",
-      "items-center",
-      "justify-between"
-    );
-    expect(screen.getByText("Usage").parentElement).toBe(picker.parentElement);
+    expect(titleRow).toContainElement(picker);
+  });
+
+  it("shows the load error inside the usage card, without the other sections", () => {
+    mockUseUserUsage.mockReturnValue({
+      data: undefined,
+      error: new Error("boom"),
+      isLoading: false,
+      isValidating: false,
+      mutate: jest.fn(),
+    } as unknown as ReturnType<typeof useUserUsage>);
+
+    render(<UsageSettings />);
+
+    expect(screen.getByText("Couldn't load usage")).toBeInTheDocument();
+    expect(screen.queryByText("Budget")).not.toBeInTheDocument();
   });
 
   it("shows the fixed budget reset date", () => {

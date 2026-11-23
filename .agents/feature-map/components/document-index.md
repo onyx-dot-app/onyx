@@ -39,7 +39,9 @@ different shard settings on AWS-managed OpenSearch.
   current and reindex indexes, and the issues with their severity. The result is
   shared for 60 seconds. Multi-tenant Cloud refuses it. A second route
   (`/admin/service-status/opensearch/searches`) returns the last 30 minutes of
-  searches: per minute the count, failures and the p10 and p90 of the
+  main search queries (hybrid, keyword and semantic, one per user search; the
+  ID fetches that follow are left out): per minute the count, failures and the
+  p10 and p90 of the
   successful searches, the window's p90, the slow p90 threshold (700 ms), each
   slow or failed search, and up to 20 random other searches per minute. The
   current minute reports its elapsed seconds, so its rate is not understated.
@@ -50,7 +52,12 @@ different shard settings on AWS-managed OpenSearch.
   threshold; hovering a minute shows its p90 and p10),
   each data node's disk and vector memory, the indexes, and an issues panel.
   An admin can dismiss a warning in their browser until it changes; critical
-  issues stay.
+  issues stay. Every 5 minutes the OpenSearch monitoring task also sends each
+  critical issue to every active full admin as an ERROR notification (bell and
+  banner) that links to the page (EE, Business tier). Red health and a missing
+  index notify at once; unanswered nodes, critical disk, critical vector memory
+  and an unreachable cluster need two checks in a row. A cleared issue's
+  notifications are dismissed, and a returning one notifies again.
 - **An operator** sees the old index deleted about a day after a switch, once
   the new index is healthy. A reclaim that fails repeatedly stops and needs a
   person.
@@ -291,8 +298,10 @@ it deletes the old one.
   (`document_index/opensearch/search_samples.py`). A daemon thread flushes it
   every 5 seconds as one member of a per-minute set in the shared cache, so a
   search pays no cache round trip. Prometheus keeps only latency buckets per
-  pod. The read returns per-minute percentiles of the successful searches
-  and lists the latest 1,000 slow or failed searches. It also lists up to 20
+  pod. Every OpenSearch search request is recorded, but the read counts only
+  the main search queries, since one user search also makes about 16 cheap ID
+  fetches that would hide a slow query. It returns per-minute percentiles of
+  the successful ones and lists the latest 1,000 slow or failed searches. It also lists up to 20
   other searches per minute, picked at random with the minute as the seed, so
   a refresh shows the same ones.
   Multi-tenant deployments record nothing.

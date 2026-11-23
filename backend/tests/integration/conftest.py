@@ -67,6 +67,7 @@ from shared_configs.configs import MULTI_TENANT  # noqa: E402
 from tests.integration.common_utils import http_client  # noqa: E402
 from tests.integration.common_utils.constants import (  # noqa: E402
     ADMIN_USER_NAME,
+    API_SERVER_URL,
     GENERAL_HEADERS,
 )
 from tests.integration.common_utils.document_index import (  # noqa: E402
@@ -474,6 +475,34 @@ def basic_user(
             )
 
         return user
+
+
+@pytest.fixture
+def user_factory(
+    admin_user: DATestUser,
+) -> Generator[Callable[[], DATestUser], None, None]:
+    """Create basic users and delete them at teardown.
+
+    Deleting a user also deletes its rows and stored files, such as its
+    profile photo.
+    """
+    created: list[DATestUser] = []
+
+    def _create() -> DATestUser:
+        user = UserManager.create()
+        created.append(user)
+        return user
+
+    yield _create
+
+    for user in created:
+        UserManager.set_status(user, False, admin_user)
+        http_client.client.request(
+            "DELETE",
+            f"{API_SERVER_URL}/manage/admin/delete-user",
+            json={"user_email": user.email},
+            headers=admin_user.headers,
+        ).raise_for_status()
 
 
 @pytest.fixture(scope="session")

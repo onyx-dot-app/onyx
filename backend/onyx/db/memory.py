@@ -7,7 +7,7 @@ from onyx.auth.login_claims_capture import get_idp_profile
 from onyx.context.models import UserInfo, UserMemoryContext
 from onyx.db.engine.sql_engine import get_session_with_current_tenant_if_none
 from onyx.db.enums import SupportedLanguage
-from onyx.db.models import Memory, User
+from onyx.db.models import Memory, User, UserPreferences
 from onyx.server.settings.store import resolve_user_language
 from onyx.utils.logger import setup_logger
 
@@ -17,7 +17,7 @@ MAX_MEMORIES_PER_USER = 10
 
 
 def supported_language_or_none(code: str | None) -> SupportedLanguage | None:
-    """User.language and Settings.default_language are both written through
+    """UserPreferences.language and Settings.default_language are both written through
     the enum, so any other value is stale or corrupt data. It is logged and
     dropped rather than allowed to break chat."""
     if not code:
@@ -29,7 +29,9 @@ def supported_language_or_none(code: str | None) -> SupportedLanguage | None:
         return None
 
 
-def get_memories(user: User, db_session: Session) -> UserMemoryContext:
+def get_memories(
+    user: User, preferences: UserPreferences, db_session: Session
+) -> UserMemoryContext:
     # `{{user.<key>}}` placeholder values: IdP directory profile plus basic
     # identity. Identity keys use setdefault so a directory field never gets
     # clobbered (they don't overlap today, but keeps precedence explicit).
@@ -37,23 +39,22 @@ def get_memories(user: User, db_session: Session) -> UserMemoryContext:
     placeholder_values = profile_views.placeholders
     if user.email:
         placeholder_values.setdefault("email", user.email)
-    if user.personal_name:
-        placeholder_values.setdefault("name", user.personal_name)
+    if user.addressed_name:
+        placeholder_values.setdefault("name", user.addressed_name)
     if user.personal_role:
         placeholder_values.setdefault("role", user.personal_role)
 
     user_info = UserInfo(
-        name=user.personal_name,
+        name=user.addressed_name,
+        full_name=user.personal_name,
         role=user.personal_role,
         email=user.email,
         organization_profile=profile_views.fields,
         placeholder_values=placeholder_values,
-        language=supported_language_or_none(resolve_user_language(user.language)),
+        language=supported_language_or_none(
+            resolve_user_language(preferences.language)
+        ),
     )
-
-    user_preferences = None
-    if user.user_preferences:
-        user_preferences = user.user_preferences
 
     memory_rows = db_session.scalars(
         select(Memory).where(Memory.user_id == user.id).order_by(Memory.id.asc())
@@ -63,7 +64,7 @@ def get_memories(user: User, db_session: Session) -> UserMemoryContext:
     return UserMemoryContext(
         user_id=user.id,
         user_info=user_info,
-        user_preferences=user_preferences,
+        user_preferences=preferences.instructions or None,
         memories=memories,
     )
 

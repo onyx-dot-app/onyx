@@ -7,7 +7,6 @@ import { SWR_KEYS } from "@/lib/swr-keys";
 import { NO_AUTH_USER_ID } from "@/lib/extension/constants";
 import { AuthTypeMetadata, SessionEndReason } from "@/lib/auth/types";
 import { FetchError } from "@/lib/fetcher";
-import { NEXT_PUBLIC_CLOUD_ENABLED } from "@/lib/constants";
 import { User } from "@/lib/types";
 import { getSecondsUntilExpiration } from "@opal/time";
 import { logout } from "@/lib/users/svc";
@@ -137,23 +136,6 @@ export function useSessionWatcher(): SessionWatcherResult {
   }, [inAuthFlow, userError, hasSeenAuthenticatedUser]);
 
   return { sessionEnded, sessionEndReason };
-}
-
-export function useIsMultiTenant(): boolean | null {
-  // Delegate to useAuthTypeMetadata so the shared SWR key always holds the
-  // camelCase-mapped shape — a raw fetcher here would poison the cache for
-  // every other consumer of the key.
-  const { authTypeMetadata, isLoading, error } = useAuthTypeMetadata();
-
-  if (NEXT_PUBLIC_CLOUD_ENABLED) {
-    return true;
-  }
-
-  if (error || isLoading) {
-    return null;
-  }
-
-  return authTypeMetadata?.multiTenant ?? null;
 }
 
 // Pass-through forwards the logged-in user's OAuth access token, so offer it

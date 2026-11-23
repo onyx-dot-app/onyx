@@ -110,6 +110,7 @@ Use the `{name}` tool for questions about metadata, counts, or the user's own ch
 - Verifying absence by metadata: before stating that no documents match a source, owner, date range, title, or folder, confirm with a count. A zero count says nothing about what documents discuss; check content with search.
 It sees metadata only (titles, dates, owners, sources, folder structure) — for questions about document *content* or meaning, use the internal search tool. \
 When the user asks for every matching document, keep the user's filters and page through all of them: call again with the returned `next_cursor` as `cursor` and the same filters until no `next_cursor` comes back. \
+When the user wants only the first few in some order (the newest, the oldest, or by title), set `order_by` and `limit` instead of paging. \
 Otherwise, when the result-set size is unknown, run with `count=true` first and narrow the filters before listing rows. \
 Listed documents carry citation numbers like [3]; cite the ones you mention the same way as search results.
 """.lstrip()

@@ -11,6 +11,8 @@ own access-control mechanism (document ACL, hierarchy versioned filter,
 chat ownership).
 """
 
+from collections.abc import Iterator
+from contextlib import contextmanager
 from datetime import datetime, timedelta, timezone
 from enum import Enum
 from uuid import UUID
@@ -19,8 +21,9 @@ from psycopg2.errors import QueryCanceled
 from pydantic import BaseModel, ConfigDict
 from sqlalchemy import (
     Select,
+    String,
     and_,
-    any_,
+    cast,
     distinct,
     exists,
     false,
@@ -29,6 +32,7 @@ from sqlalchemy import (
     select,
     true,
 )
+from sqlalchemy.dialects import postgresql
 from sqlalchemy.engine import Result
 from sqlalchemy.exc import OperationalError
 from sqlalchemy.orm import InstrumentedAttribute, Session, aliased
@@ -37,7 +41,10 @@ from sqlalchemy.sql.expression import CTE
 
 from onyx.configs.constants import DocumentSource, MessageType
 from onyx.context.search.models import TimeRange
-from onyx.db.document_access import apply_document_access_filter
+from onyx.db.document_access import (
+    apply_resolved_document_access_filter,
+    resolve_document_access_pairs,
+)
 from onyx.db.enums import ConnectorCredentialPairStatus, HierarchyNodeType
 from onyx.db.hierarchy import escape_like_pattern, hierarchy_node_own_document_id
 from onyx.db.models import (
@@ -55,7 +62,12 @@ from onyx.db.models import (
     SearchDoc,
 )
 from onyx.db.models import Tag as TagRow
-from onyx.db.postgres_tool_models import DocumentCursor, DocumentScope, GroupCount
+from onyx.db.postgres_tool_models import (
+    DocumentCursor,
+    DocumentOrder,
+    DocumentScope,
+    GroupCount,
+)
 from onyx.document_index.opensearch.constants import ASSUMED_DOCUMENT_AGE_DAYS
 from onyx.utils.variable_functionality import fetch_versioned_implementation
 
@@ -66,6 +78,9 @@ POSTGRES_TOOL_MAX_LIMIT = 100
 # the tool runs synchronously in the chat loop, so a runaway query must die
 # rather than stall the response.
 _POSTGRES_TOOL_STATEMENT_TIMEOUT = "10s"
+# A listing's total is extra information; it must not make a cheap first page
+# slow or fail it.
+_OPTIONAL_COUNT_TIMEOUT = "2s"
 
 
 class PostgresToolQueryTimeoutError(Exception):
@@ -83,6 +98,37 @@ class DocumentGroupBy(str, Enum):
 
 def _clamp_limit(limit: int) -> int:
     return max(1, min(limit, POSTGRES_TOOL_MAX_LIMIT))
+
+
+@contextmanager
+def _timeouts_as_tool_errors() -> Iterator[None]:
+    try:
+        yield
+    except OperationalError as e:
+        if isinstance(e.orig, QueryCanceled):
+            raise PostgresToolQueryTimeoutError(
+                "Query exceeded the statement timeout"
+            ) from e
+        raise
+
+
+@contextmanager
+def tool_transaction(db_session: Session) -> Iterator[None]:
+    """Run a tool call's read. One snapshot covers the access pairs that a
+    document query resolves first and the rows they then filter, so a pair
+    revoked in between cannot grant. The statement timeout covers every
+    statement, the access lookups included, and each timeout raises
+    PostgresToolQueryTimeoutError."""
+    with _timeouts_as_tool_errors():
+        db_session.connection(execution_options={"isolation_level": "REPEATABLE READ"})
+        db_session.execute(
+            select(
+                func.set_config(
+                    "statement_timeout", _POSTGRES_TOOL_STATEMENT_TIMEOUT, True
+                )
+            )
+        )
+        yield
 
 
 def _execute_with_timeout(db_session: Session, stmt: Select) -> Result:
@@ -109,10 +155,15 @@ def _execute_with_timeout(db_session: Session, stmt: Select) -> Result:
 
 def _ilike_contains(
     column: InstrumentedAttribute[str] | InstrumentedAttribute[str | None],
-    substring: str,
+    substrings: list[str],
 ) -> ColumnElement[bool]:
-    pattern = f"%{escape_like_pattern(substring)}%"
-    return column.ilike(pattern, escape="\\")
+    """The column contains any of the substrings."""
+    return or_(
+        *(
+            column.ilike(f"%{escape_like_pattern(substring)}%", escape="\\")
+            for substring in substrings
+        )
+    )
 
 
 # =========================== Knowledge scope ===========================
@@ -214,13 +265,11 @@ def _date_range_filter(
 
 
 def _document_scope_filter(scope: DocumentScope) -> ColumnElement[bool]:
-    """The knowledge clause ANDed with the request filters. Source types need
-    the connector join."""
+    """The knowledge clause ANDed with the request filters, except source
+    types: those limit the pairs that grant access (`_document_source_types`)."""
     clauses: list[ColumnElement[bool]] = []
     if scope.restricts_knowledge:
         clauses.append(_document_knowledge_filter(scope, _scope_subtree(scope)))
-    if scope.source_types is not None:
-        clauses.append(Connector.source.in_(scope.source_types))
     # Undated documents follow the search filter: a created range keeps them,
     # and an updated range keeps them only for an old, open-ended start.
     created = scope.created_at_range
@@ -290,6 +339,18 @@ def _hierarchy_scope_filter(scope: DocumentScope) -> ColumnElement[bool]:
 # ============================== Document ==============================
 
 
+def _document_source_types(
+    source_type: list[DocumentSource] | None, scope: DocumentScope | None
+) -> list[DocumentSource] | None:
+    """The sources the request and the scope both allow; None allows all."""
+    scope_sources = scope.source_types if scope is not None else None
+    if source_type is None:
+        return scope_sources
+    if scope_sources is None:
+        return source_type
+    return [source for source in source_type if source in scope_sources]
+
+
 def _apply_document_filters(
     db_session: Session,
     stmt: Select,
@@ -298,35 +359,40 @@ def _apply_document_filters(
     *,
     user_id: UUID | None,
     prior_emails: list[str] | None,
-    source_type: DocumentSource | None,
-    title_contains: str | None,
+    source_type: list[DocumentSource] | None,
+    title_contains: list[str] | None,
     updated_after: datetime | None,
     updated_before: datetime | None,
-    owned_by: str | None,
-    parent_hierarchy_node_id: int | None,
+    owned_by: list[str] | None,
+    parent_hierarchy_node_id: list[int] | None,
     scope: DocumentScope | None,
     ensure_connector_join: bool = False,
 ) -> Select:
     """Apply the document ACL plus the allowlisted filters.
 
-    `apply_document_access_filter` supplies the cc_pair joins, the DELETING
-    cc_pair exclusion, and the permission checks; a document in multiple
-    cc_pairs yields duplicate rows, so callers must dedupe (`GROUP BY` /
-    `count(distinct ...)`). `hidden` documents are excluded here — admins hid
-    them from search, and this tool must not be a bypass.
+    The ACL is `apply_document_access_filter`'s, with the granting pairs
+    resolved first (`resolve_document_access_pairs`), so the planner sees each
+    pair's real size. A document in multiple cc_pairs yields duplicate rows,
+    so callers must dedupe (`GROUP BY` / `count(distinct ...)`). `hidden`
+    documents are excluded here — admins hid them from search, and this tool
+    must not be a bypass.
 
     Date filters compare against `doc_updated_at` (source-updated time), so
     documents with an unknown source timestamp fall out of any date range.
 
-    Source filtering (and source grouping) applies to the same joined cc_pair
-    row as the ACL check, so a document is attributed to a source only when
-    that source's cc_pair row grants access. This only diverges for a doc id
-    shared across cc_pairs of *different* sources — practically nonexistent,
-    since doc ids embed source-specific URLs/ids.
+    Source filtering limits the granting pairs, so a document is attributed to
+    a source only when that source's cc_pair grants access. This only diverges
+    for a doc id shared across cc_pairs of *different* sources — practically
+    nonexistent, since doc ids embed source-specific URLs/ids.
     """
-    stmt = apply_document_access_filter(
+    with _timeouts_as_tool_errors():
+        pairs = resolve_document_access_pairs(
+            db_session, user_id, _document_source_types(source_type, scope)
+        )
+    stmt = apply_resolved_document_access_filter(
         db_session,
         stmt,
+        pairs,
         user_email,
         external_group_ids,
         user_id=user_id,
@@ -334,13 +400,10 @@ def _apply_document_filters(
     )
     stmt = stmt.where(Document.hidden.is_(False))
 
-    scope_needs_connector = scope is not None and scope.source_types is not None
-    if source_type is not None or ensure_connector_join or scope_needs_connector:
+    if ensure_connector_join:
         stmt = stmt.join(
-            Connector, Connector.id == ConnectorCredentialPair.connector_id
+            Connector, Connector.id == DocumentByConnectorCredentialPair.connector_id
         )
-    if source_type is not None:
-        stmt = stmt.where(Connector.source == source_type)
     if title_contains is not None:
         stmt = stmt.where(_ilike_contains(Document.semantic_id, title_contains))
     if updated_after is not None:
@@ -348,9 +411,15 @@ def _apply_document_filters(
     if updated_before is not None:
         stmt = stmt.where(Document.doc_updated_at < updated_before)
     if owned_by is not None:
-        stmt = stmt.where(any_(Document.primary_owners) == owned_by)
+        stmt = stmt.where(
+            Document.primary_owners.overlap(
+                cast(postgresql.array(owned_by), postgresql.ARRAY(String))
+            )
+        )
     if parent_hierarchy_node_id is not None:
-        stmt = stmt.where(Document.parent_hierarchy_node_id == parent_hierarchy_node_id)
+        stmt = stmt.where(
+            Document.parent_hierarchy_node_id.in_(parent_hierarchy_node_id)
+        )
     if scope is not None:
         stmt = stmt.where(_document_scope_filter(scope))
     return stmt
@@ -364,18 +433,37 @@ class DocumentPage(BaseModel):
     next_cursor: DocumentCursor | None
 
 
-def _after_document_cursor(cursor: DocumentCursor) -> ColumnElement[bool]:
-    """Documents after `cursor` in the listing order: `doc_updated_at` DESC
-    NULLS LAST, then `id` DESC."""
-    if cursor.updated_at is None:
-        return and_(Document.doc_updated_at.is_(None), Document.id < cursor.document_id)
+def _order_column(
+    order: DocumentOrder,
+) -> InstrumentedAttribute[datetime | None] | InstrumentedAttribute[str]:
+    if order in (DocumentOrder.UPDATED_DESC, DocumentOrder.UPDATED_ASC):
+        return Document.doc_updated_at
+    if order in (DocumentOrder.CREATED_DESC, DocumentOrder.CREATED_ASC):
+        return Document.doc_created_at
+    return Document.semantic_id
+
+
+def _after_document_cursor(
+    cursor: DocumentCursor, order: DocumentOrder
+) -> ColumnElement[bool]:
+    """Documents after `cursor` in `order`: the ordered column with NULLS
+    LAST, then `id` in the same direction."""
+    column = _order_column(order)
+    descending = order.is_descending
+    id_after = (
+        Document.id < cursor.document_id
+        if descending
+        else Document.id > cursor.document_id
+    )
+    if cursor.sort_value is None:
+        return and_(column.is_(None), id_after)
+    value_after = (
+        column < cursor.sort_value if descending else column > cursor.sort_value
+    )
     return or_(
-        Document.doc_updated_at < cursor.updated_at,
-        and_(
-            Document.doc_updated_at == cursor.updated_at,
-            Document.id < cursor.document_id,
-        ),
-        Document.doc_updated_at.is_(None),
+        value_after,
+        and_(column == cursor.sort_value, id_after),
+        column.is_(None),
     )
 
 
@@ -386,25 +474,30 @@ def query_documents_for_tool(
     *,
     user_id: UUID | None = None,
     prior_emails: list[str] | None = None,
-    source_type: DocumentSource | None = None,
-    title_contains: str | None = None,
+    source_type: list[DocumentSource] | None = None,
+    title_contains: list[str] | None = None,
     updated_after: datetime | None = None,
     updated_before: datetime | None = None,
-    owned_by: str | None = None,
-    parent_hierarchy_node_id: int | None = None,
+    owned_by: list[str] | None = None,
+    parent_hierarchy_node_id: list[int] | None = None,
     scope: DocumentScope | None = None,
+    order: DocumentOrder = DocumentOrder.UPDATED_DESC,
     after: DocumentCursor | None = None,
     limit: int = POSTGRES_TOOL_DEFAULT_LIMIT,
 ) -> DocumentPage:
     """One page of accessible documents matching the filters, with their
-    connector source, newest first. `after` continues from the previous
-    page's `next_cursor`. Keyset paging: documents indexed between pages
-    cannot shift the pages. A document whose source timestamp changes between
-    pages moves in the order, so it can be skipped or repeated."""
+    connector source, in `order`. `after` continues from the previous page's
+    `next_cursor`, which must come from the same order. Keyset paging:
+    documents indexed between pages cannot shift the pages. A document whose
+    ordered value changes between pages moves in the order, so it can be
+    skipped or repeated. Only the newest-updated order (and its reverse) can
+    read its rows from an index; the other orders sort the matching
+    documents."""
+    column = _order_column(order)
     # One row per document even when cc_pairs of two sources grant access.
-    # The ordered timestamp is selected as a column too: the cursor must not
-    # read it from a Document the session loaded earlier.
-    stmt = select(Document, func.min(Connector.source), Document.doc_updated_at)
+    # The ordered value is selected as a column too: the cursor must not read
+    # it from a Document the session loaded earlier.
+    stmt = select(Document, func.min(Connector.source), column)
     stmt = _apply_document_filters(
         db_session,
         stmt,
@@ -422,22 +515,55 @@ def query_documents_for_tool(
         ensure_connector_join=True,
     )
     if after is not None:
-        stmt = stmt.where(_after_document_cursor(after))
+        stmt = stmt.where(_after_document_cursor(after, order))
     page_size = _clamp_limit(limit)
+    if order.is_descending:
+        order_by = (column.desc().nulls_last(), Document.id.desc())
+    else:
+        order_by = (column.asc().nulls_last(), Document.id.asc())
     # One extra row tells whether another page exists.
-    stmt = (
-        stmt.group_by(Document.id)
-        .order_by(Document.doc_updated_at.desc().nulls_last(), Document.id.desc())
-        .limit(page_size + 1)
-    )
+    stmt = stmt.group_by(Document.id).order_by(*order_by).limit(page_size + 1)
     result = list(_execute_with_timeout(db_session, stmt).tuples().all())
     rows = [(doc, source) for doc, source, _ in result[:page_size]]
     if len(result) <= page_size:
         return DocumentPage(rows=rows, next_cursor=None)
-    last_doc, _, last_updated_at = result[page_size - 1]
+    last_doc, _, last_value = result[page_size - 1]
     return DocumentPage(
         rows=rows,
-        next_cursor=DocumentCursor(updated_at=last_updated_at, document_id=last_doc.id),
+        next_cursor=DocumentCursor(sort_value=last_value, document_id=last_doc.id),
+    )
+
+
+def _count_documents_stmt(
+    db_session: Session,
+    user_email: str | None,
+    external_group_ids: list[str],
+    *,
+    user_id: UUID | None,
+    prior_emails: list[str] | None,
+    source_type: list[DocumentSource] | None,
+    title_contains: list[str] | None,
+    updated_after: datetime | None,
+    updated_before: datetime | None,
+    owned_by: list[str] | None,
+    parent_hierarchy_node_id: list[int] | None,
+    scope: DocumentScope | None,
+) -> Select:
+    stmt = select(func.count(distinct(Document.id))).select_from(Document)
+    return _apply_document_filters(
+        db_session,
+        stmt,
+        user_email,
+        external_group_ids,
+        user_id=user_id,
+        prior_emails=prior_emails,
+        source_type=source_type,
+        title_contains=title_contains,
+        updated_after=updated_after,
+        updated_before=updated_before,
+        owned_by=owned_by,
+        parent_hierarchy_node_id=parent_hierarchy_node_id,
+        scope=scope,
     )
 
 
@@ -448,19 +574,17 @@ def count_documents_for_tool(
     *,
     user_id: UUID | None = None,
     prior_emails: list[str] | None = None,
-    source_type: DocumentSource | None = None,
-    title_contains: str | None = None,
+    source_type: list[DocumentSource] | None = None,
+    title_contains: list[str] | None = None,
     updated_after: datetime | None = None,
     updated_before: datetime | None = None,
-    owned_by: str | None = None,
-    parent_hierarchy_node_id: int | None = None,
+    owned_by: list[str] | None = None,
+    parent_hierarchy_node_id: list[int] | None = None,
     scope: DocumentScope | None = None,
 ) -> int:
     """Exact count of accessible documents matching the filters."""
-    stmt = select(func.count(distinct(Document.id))).select_from(Document)
-    stmt = _apply_document_filters(
+    stmt = _count_documents_stmt(
         db_session,
-        stmt,
         user_email,
         external_group_ids,
         user_id=user_id,
@@ -476,6 +600,55 @@ def count_documents_for_tool(
     return _execute_with_timeout(db_session, stmt).scalar_one()
 
 
+def try_count_documents_for_tool(
+    db_session: Session,
+    user_email: str | None,
+    external_group_ids: list[str],
+    *,
+    user_id: UUID | None = None,
+    prior_emails: list[str] | None = None,
+    source_type: list[DocumentSource] | None = None,
+    title_contains: list[str] | None = None,
+    updated_after: datetime | None = None,
+    updated_before: datetime | None = None,
+    owned_by: list[str] | None = None,
+    parent_hierarchy_node_id: list[int] | None = None,
+    scope: DocumentScope | None = None,
+) -> int | None:
+    """`count_documents_for_tool` under a short timeout, or None when it runs
+    out. A savepoint keeps the session usable after the cancel. The timeout
+    also covers the access lookups that build the statement."""
+    savepoint = db_session.begin_nested()
+    try:
+        with _timeouts_as_tool_errors():
+            db_session.execute(
+                select(
+                    func.set_config("statement_timeout", _OPTIONAL_COUNT_TIMEOUT, True)
+                )
+            )
+            stmt = _count_documents_stmt(
+                db_session,
+                user_email,
+                external_group_ids,
+                user_id=user_id,
+                prior_emails=prior_emails,
+                source_type=source_type,
+                title_contains=title_contains,
+                updated_after=updated_after,
+                updated_before=updated_before,
+                owned_by=owned_by,
+                parent_hierarchy_node_id=parent_hierarchy_node_id,
+                scope=scope,
+            )
+            count = db_session.execute(stmt).scalar_one()
+    except PostgresToolQueryTimeoutError:
+        savepoint.rollback()
+        return None
+    # Also ends the savepoint's shorter timeout.
+    savepoint.rollback()
+    return count
+
+
 def count_documents_grouped_for_tool(
     db_session: Session,
     user_email: str | None,
@@ -484,12 +657,12 @@ def count_documents_grouped_for_tool(
     *,
     user_id: UUID | None = None,
     prior_emails: list[str] | None = None,
-    source_type: DocumentSource | None = None,
-    title_contains: str | None = None,
+    source_type: list[DocumentSource] | None = None,
+    title_contains: list[str] | None = None,
     updated_after: datetime | None = None,
     updated_before: datetime | None = None,
-    owned_by: str | None = None,
-    parent_hierarchy_node_id: int | None = None,
+    owned_by: list[str] | None = None,
+    parent_hierarchy_node_id: list[int] | None = None,
     scope: DocumentScope | None = None,
 ) -> list[GroupCount]:
     """Accessible-document counts grouped by source or owner, largest first.
@@ -579,10 +752,10 @@ def _apply_hierarchy_node_filters(
     stmt: Select,
     access_filter: ColumnElement[bool],
     *,
-    source_type: DocumentSource | None,
-    name_contains: str | None,
-    parent_id: int | None,
-    node_type: HierarchyNodeType | None,
+    source_type: list[DocumentSource] | None,
+    name_contains: list[str] | None,
+    parent_id: list[int] | None,
+    node_type: list[HierarchyNodeType] | None,
     scope: DocumentScope | None,
 ) -> Select:
     # STUB nodes are internal placeholders and never surfaced (existing
@@ -590,13 +763,13 @@ def _apply_hierarchy_node_filters(
     stmt = stmt.where(HierarchyNode.node_type != HierarchyNodeType.STUB, access_filter)
 
     if source_type is not None:
-        stmt = stmt.where(HierarchyNode.source == source_type)
+        stmt = stmt.where(HierarchyNode.source.in_(source_type))
     if name_contains is not None:
         stmt = stmt.where(_ilike_contains(HierarchyNode.display_name, name_contains))
     if parent_id is not None:
-        stmt = stmt.where(HierarchyNode.parent_id == parent_id)
+        stmt = stmt.where(HierarchyNode.parent_id.in_(parent_id))
     if node_type is not None:
-        stmt = stmt.where(HierarchyNode.node_type == node_type)
+        stmt = stmt.where(HierarchyNode.node_type.in_(node_type))
     if scope is not None:
         stmt = stmt.where(_hierarchy_scope_filter(scope))
     return stmt
@@ -606,10 +779,10 @@ def _query_hierarchy_nodes(
     db_session: Session,
     access_filter: ColumnElement[bool],
     *,
-    source_type: DocumentSource | None = None,
-    name_contains: str | None = None,
-    parent_id: int | None = None,
-    node_type: HierarchyNodeType | None = None,
+    source_type: list[DocumentSource] | None = None,
+    name_contains: list[str] | None = None,
+    parent_id: list[int] | None = None,
+    node_type: list[HierarchyNodeType] | None = None,
     scope: DocumentScope | None = None,
     limit: int = POSTGRES_TOOL_DEFAULT_LIMIT,
 ) -> list[HierarchyNode]:
@@ -633,10 +806,10 @@ def _count_hierarchy_nodes(
     db_session: Session,
     access_filter: ColumnElement[bool],
     *,
-    source_type: DocumentSource | None = None,
-    name_contains: str | None = None,
-    parent_id: int | None = None,
-    node_type: HierarchyNodeType | None = None,
+    source_type: list[DocumentSource] | None = None,
+    name_contains: list[str] | None = None,
+    parent_id: list[int] | None = None,
+    node_type: list[HierarchyNodeType] | None = None,
     scope: DocumentScope | None = None,
 ) -> int:
     stmt = select(func.count()).select_from(HierarchyNode)
@@ -658,10 +831,10 @@ def query_hierarchy_nodes_for_tool(
     external_group_ids: list[str],
     *,
     user_id: UUID | None = None,
-    source_type: DocumentSource | None = None,
-    name_contains: str | None = None,
-    parent_id: int | None = None,
-    node_type: HierarchyNodeType | None = None,
+    source_type: list[DocumentSource] | None = None,
+    name_contains: list[str] | None = None,
+    parent_id: list[int] | None = None,
+    node_type: list[HierarchyNodeType] | None = None,
     scope: DocumentScope | None = None,
     limit: int = POSTGRES_TOOL_DEFAULT_LIMIT,
 ) -> list[HierarchyNode]:
@@ -687,10 +860,10 @@ def count_hierarchy_nodes_for_tool(
     external_group_ids: list[str],
     *,
     user_id: UUID | None = None,
-    source_type: DocumentSource | None = None,
-    name_contains: str | None = None,
-    parent_id: int | None = None,
-    node_type: HierarchyNodeType | None = None,
+    source_type: list[DocumentSource] | None = None,
+    name_contains: list[str] | None = None,
+    parent_id: list[int] | None = None,
+    node_type: list[HierarchyNodeType] | None = None,
     scope: DocumentScope | None = None,
 ) -> int:
     """Exact count of accessible hierarchy nodes matching the filters."""
@@ -730,7 +903,7 @@ def _apply_chat_session_filters(
     stmt: Select,
     user_id: UUID | None,
     *,
-    description_contains: str | None,
+    description_contains: list[str] | None,
     created_after: datetime | None,
     created_before: datetime | None,
     exclude_chat_session_id: UUID | None,
@@ -761,7 +934,7 @@ def query_chat_sessions_for_tool(
     db_session: Session,
     user_id: UUID | None,
     *,
-    description_contains: str | None = None,
+    description_contains: list[str] | None = None,
     created_after: datetime | None = None,
     created_before: datetime | None = None,
     exclude_chat_session_id: UUID | None = None,
@@ -787,7 +960,7 @@ def count_chat_sessions_for_tool(
     db_session: Session,
     user_id: UUID | None,
     *,
-    description_contains: str | None = None,
+    description_contains: list[str] | None = None,
     created_after: datetime | None = None,
     created_before: datetime | None = None,
     exclude_chat_session_id: UUID | None = None,
@@ -809,7 +982,7 @@ def count_chat_sessions_by_month_for_tool(
     db_session: Session,
     user_id: UUID | None,
     *,
-    description_contains: str | None = None,
+    description_contains: list[str] | None = None,
     created_after: datetime | None = None,
     created_before: datetime | None = None,
     exclude_chat_session_id: UUID | None = None,
@@ -838,8 +1011,8 @@ def _apply_chat_message_filters(
     stmt: Select,
     user_id: UUID | None,
     *,
-    chat_session_id: UUID | None,
-    content_contains: str | None,
+    chat_session_id: list[UUID] | None,
+    content_contains: list[str] | None,
     message_type: MessageType | None,
     sent_after: datetime | None,
     sent_before: datetime | None,
@@ -859,7 +1032,7 @@ def _apply_chat_message_filters(
         ChatMessage.message != "",
     )
     if chat_session_id is not None:
-        stmt = stmt.where(ChatMessage.chat_session_id == chat_session_id)
+        stmt = stmt.where(ChatMessage.chat_session_id.in_(chat_session_id))
     if content_contains is not None:
         stmt = stmt.where(_ilike_contains(ChatMessage.message, content_contains))
     if message_type is not None:
@@ -877,8 +1050,8 @@ def query_chat_messages_for_tool(
     db_session: Session,
     user_id: UUID | None,
     *,
-    chat_session_id: UUID | None = None,
-    content_contains: str | None = None,
+    chat_session_id: list[UUID] | None = None,
+    content_contains: list[str] | None = None,
     message_type: MessageType | None = None,
     sent_after: datetime | None = None,
     sent_before: datetime | None = None,
@@ -907,8 +1080,8 @@ def count_chat_messages_for_tool(
     db_session: Session,
     user_id: UUID | None,
     *,
-    chat_session_id: UUID | None = None,
-    content_contains: str | None = None,
+    chat_session_id: list[UUID] | None = None,
+    content_contains: list[str] | None = None,
     message_type: MessageType | None = None,
     sent_after: datetime | None = None,
     sent_before: datetime | None = None,
@@ -933,8 +1106,8 @@ def count_chat_messages_by_month_for_tool(
     db_session: Session,
     user_id: UUID | None,
     *,
-    chat_session_id: UUID | None = None,
-    content_contains: str | None = None,
+    chat_session_id: list[UUID] | None = None,
+    content_contains: list[str] | None = None,
     message_type: MessageType | None = None,
     sent_after: datetime | None = None,
     sent_before: datetime | None = None,

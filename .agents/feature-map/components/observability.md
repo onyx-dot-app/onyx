@@ -304,7 +304,8 @@ and starts the Kubernetes collection in a thread. Each piece has 90 s.
   [[llm-gateway#trace-inside-stream-worker]].
 - `add-trace-destination` **Add a trace destination.** Copy `tracing/langfuse_tracing_processor.py`.
   Add a builder to `tracing/dynamic_processor.py:build_delegates`, a row parser
-  to `tracing/provider_config.py`, and the checks in
+  and a case in `env_tracing_configured` to `tracing/provider_config.py` (the
+  admin page reads it to choose reconnect and delete), and the checks in
   [[#external-processor-mask-and-drop-incognito]].
 - `add-audit-action` **Add an audit action.** Append to `utils/audit.py:AuditAction`, map it to an
   OCSF class in `utils/audit.py:_OCSF_CLASS_BY_ACTION`, and document it in

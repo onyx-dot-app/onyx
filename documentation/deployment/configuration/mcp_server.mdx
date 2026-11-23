@@ -26,7 +26,7 @@ Onyx derives both its OAuth issuer and MCP resource URL from this value:
 | Public Onyx address | `https://onyx.example.com` |
 | MCP connection URL | `https://onyx.example.com/mcp/` |
 | OAuth issuer | `https://onyx.example.com/api/oauth-provider` |
-| OAuth scope | `read:search` |
+| OAuth scopes | `read:search` and `read:chat` |
 
 OAuth is available automatically when `WEB_DOMAIN` is a valid HTTPS URL.
 HTTP is accepted only for loopback development addresses such as `http://localhost:3000`.
@@ -134,7 +134,7 @@ curl --fail --silent --show-error \
 
 Check that the JSON identifies your Onyx MCP endpoint as `resource`,
 lists `https://onyx.example.com/api/oauth-provider` under `authorization_servers`,
-and advertises `read:search` under `scopes_supported`.
+and advertises `read:search` and `read:chat` under `scopes_supported`.
 
 Onyx accepts the MCP resource with or without its trailing slash.
 Use the advertised resource value when building a custom client.
@@ -148,7 +148,7 @@ curl --fail --silent --show-error \
 
 Check that `issuer` is `https://onyx.example.com/api/oauth-provider`. The response includes authorization, token,
 registration, and revocation endpoints under that issuer. It advertises the authorization code and refresh token grants,
-the `read:search` scope, PKCE `S256`, and public client authentication (`none`).
+the `read:search` and `read:chat` scopes, PKCE `S256`, and public client authentication (`none`).
 
 A login page, HTML response,
 or unexpected redirect at either discovery URL usually indicates a routing or authentication gateway problem.
@@ -172,7 +172,8 @@ to verify that a user can search their indexed documents.
 ## Authentication and access
 
 OAuth lets a user sign in to Onyx in their browser and approve an app's access without copying a token into that app.
-The supported scope, `read:search`, gives the client search access associated with the signed-in user.
+Each approval grants `read:search` and `read:chat`, even when the client asks for only one of them.
+Together they give the client the signed-in user's search access and let it query their chat history.
 OAuth does not grant administrator access or bypass document permissions. To authorize an OAuth connection,
 the user must have an active standard account with **Search** and **Create User Access Token** permissions.
 Check these permissions if a user cannot approve a connection.
@@ -253,7 +254,7 @@ it does not change the public OAuth issuer or MCP resource.
 | Callback fails or reaches the MCP service | Route `/mcp/oauth/callback` to the web app and verify the external client's registered redirect URI. |
 | `401 Unauthorized` after previously working | Reconnect if credentials expired or were revoked; check that the client saved the latest rotated refresh token. |
 | `402 Payment Required` | Check the deployment's billing or license restrictions. Repeated sign-in does not remove these restrictions. |
-| `403 Forbidden` | Check user permissions and the requested scope; OAuth supports `read:search`. |
+| `403 Forbidden` | Check user permissions and the requested scope; OAuth supports `read:search` and `read:chat`. |
 | `503 Service Unavailable` | Check API availability and the MCP service's API connection. During sign-in, a `503` can also mean Onyx could not fetch the client's Client ID Metadata Document. |
 | Search succeeds but expected documents are absent | Check indexing status and that the connected user has permission to those documents. |
 

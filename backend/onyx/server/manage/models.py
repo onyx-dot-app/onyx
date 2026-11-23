@@ -12,6 +12,10 @@ from onyx.context.search.models import CCPairAccessMode, SavedSearchSettings
 from onyx.db.enums import (
     AccountType,
     DefaultAppMode,
+    InterfaceFont,
+    MotionPreference,
+    PopupDismissal,
+    ResponseFont,
     SSOProviderType,
     SupportedLanguage,
     ThemePreference,
@@ -23,6 +27,7 @@ from onyx.db.models import SlackBot as SlackAppModel
 from onyx.db.models import SlackChannelConfig as SlackChannelConfigModel
 from onyx.db.models import StandardAnswer as StandardAnswerModel
 from onyx.db.models import StandardAnswerCategory as StandardAnswerCategoryModel
+from onyx.db.models import UserPreferences as UserPreferencesModel
 from onyx.db.port_attempt import ReindexProgressCounts
 from onyx.db.skill_models import PluginRename
 from onyx.llm.models import ReasoningEffort
@@ -151,11 +156,16 @@ class UserPreferences(BaseModel):
     theme_preference: ThemePreference | None = None
     language: str | None = None
     chat_background: str | None = None
-    default_app_mode: DefaultAppMode = DefaultAppMode.CHAT
+    default_app_mode: DefaultAppMode
+    interface_font: InterfaceFont
+    response_font: ResponseFont
+    motion: MotionPreference
+    popup_dismissal: PopupDismissal
+    dynamic_conversations: bool
 
     # Input preferences
     paste_as_tile: bool | None = None
-    interrupt_on_send: bool = False
+    interrupt_on_send: bool
 
     # Voice preferences
     voice_auto_send: bool | None = None
@@ -165,6 +175,44 @@ class UserPreferences(BaseModel):
     # controls which tools are enabled for the user for a specific assistant
     assistant_specific_configs: UserSpecificAssistantPreferences | None = None
 
+    @classmethod
+    def from_model(
+        cls,
+        preferences: UserPreferencesModel,
+        *,
+        pinned_assistants: list[int],
+        assistant_specific_configs: UserSpecificAssistantPreferences | None = None,
+    ) -> "UserPreferences":
+        """The response for saved preferences, or for the column defaults that
+        `fetch_user_preferences` returns when none are saved."""
+        return cls(
+            shortcut_enabled=preferences.shortcut_enabled,
+            chosen_assistants=preferences.chosen_assistants,
+            default_model=preferences.default_model,
+            hidden_assistants=preferences.hidden_assistants,
+            pinned_assistants=pinned_assistants,
+            visible_assistants=preferences.visible_assistants,
+            auto_scroll=preferences.auto_scroll,
+            temperature_override_enabled=preferences.temperature_override_enabled,
+            temperature_default=preferences.temperature_default,
+            reasoning_effort_default=preferences.reasoning_effort_default,
+            theme_preference=preferences.theme_preference,
+            language=preferences.language,
+            chat_background=preferences.chat_background,
+            default_app_mode=preferences.default_app_mode,
+            interface_font=preferences.interface_font,
+            response_font=preferences.response_font,
+            motion=preferences.motion,
+            popup_dismissal=preferences.popup_dismissal,
+            dynamic_conversations=preferences.dynamic_conversations,
+            paste_as_tile=preferences.paste_as_tile,
+            interrupt_on_send=preferences.interrupt_on_send,
+            voice_auto_send=preferences.voice_auto_send,
+            voice_auto_playback=preferences.voice_auto_playback,
+            voice_playback_speed=preferences.voice_playback_speed,
+            assistant_specific_configs=assistant_specific_configs,
+        )
+
 
 class MemoryItem(BaseModel):
     id: int | None = None
@@ -172,7 +220,10 @@ class MemoryItem(BaseModel):
 
 
 class UserPersonalization(BaseModel):
+    # Full name.
     name: str = ""
+    # The name Onyx calls the user; empty means it uses the full name.
+    preferred_name: str = ""
     role: str = ""
     use_memories: bool = True
     enable_memory_tool: bool = True
@@ -214,6 +265,10 @@ class UserInfo(BaseModel):
     token_expires_at: datetime | None = None
     is_cloud_superuser: bool = False
     team_name: str | None = None
+    # The workspace of this request. Set only on multi-tenant deployments.
+    tenant_id: str | None = None
+    # Build the photo URL from this; None means the user has no photo.
+    profile_image_file_id: str | None = None
     is_anonymous_user: bool | None = None
     password_configured: bool | None = None
     tenant_info: TenantInfo | None = None
@@ -228,10 +283,12 @@ class UserInfo(BaseModel):
     def from_model(
         cls,
         user: User,
+        preferences: UserPreferencesModel,
         *,
         token_expires_at: datetime | None = None,
         is_cloud_superuser: bool = False,
         team_name: str | None = None,
+        tenant_id: str | None = None,
         is_anonymous_user: bool | None = None,
         tenant_info: TenantInfo | None = None,
         assistant_specific_configs: UserSpecificAssistantPreferences | None = None,
@@ -246,33 +303,16 @@ class UserInfo(BaseModel):
             is_verified=user.is_verified,
             account_type=user.account_type,
             password_configured=user.password_configured,
-            preferences=(
-                UserPreferences(
-                    shortcut_enabled=user.shortcut_enabled,
-                    chosen_assistants=user.chosen_assistants,
-                    default_model=user.default_model,
-                    hidden_assistants=user.hidden_assistants,
-                    pinned_assistants=[
-                        pinned.persona_id for pinned in user.pinned_personas
-                    ],
-                    visible_assistants=user.visible_assistants,
-                    auto_scroll=user.auto_scroll,
-                    temperature_override_enabled=user.temperature_override_enabled,
-                    temperature_default=user.temperature_default,
-                    reasoning_effort_default=user.reasoning_effort_default,
-                    theme_preference=user.theme_preference,
-                    language=user.language,
-                    chat_background=user.chat_background,
-                    default_app_mode=user.default_app_mode,
-                    paste_as_tile=user.paste_as_tile,
-                    interrupt_on_send=user.interrupt_on_send,
-                    voice_auto_send=user.voice_auto_send,
-                    voice_auto_playback=user.voice_auto_playback,
-                    voice_playback_speed=user.voice_playback_speed,
-                    assistant_specific_configs=assistant_specific_configs,
-                )
+            preferences=UserPreferences.from_model(
+                preferences,
+                pinned_assistants=[
+                    pinned.persona_id for pinned in user.pinned_personas
+                ],
+                assistant_specific_configs=assistant_specific_configs,
             ),
             team_name=team_name,
+            tenant_id=tenant_id,
+            profile_image_file_id=user.profile_image_file_id,
             token_expires_at=token_expires_at,
             is_cloud_superuser=is_cloud_superuser,
             is_anonymous_user=is_anonymous_user,
@@ -284,11 +324,12 @@ class UserInfo(BaseModel):
             ),
             personalization=UserPersonalization(
                 name=user.personal_name or "",
+                preferred_name=user.preferred_name or "",
                 role=user.personal_role or "",
-                use_memories=user.use_memories,
-                enable_memory_tool=user.enable_memory_tool,
+                use_memories=preferences.use_memories,
+                enable_memory_tool=preferences.enable_memory_tool,
                 memories=memories or [],
-                user_preferences=user.user_preferences or "",
+                user_preferences=preferences.instructions or "",
             ),
         )
 
@@ -350,6 +391,16 @@ class LanguageRequest(BaseModel):
     language: SupportedLanguage | None
 
 
+class AppearanceRequest(BaseModel):
+    """Appearance values to save. A missing or null field keeps the saved value."""
+
+    interface_font: InterfaceFont | None = None
+    response_font: ResponseFont | None = None
+    motion: MotionPreference | None = None
+    popup_dismissal: PopupDismissal | None = None
+    dynamic_conversations: bool | None = None
+
+
 class DefaultAppModeRequest(BaseModel):
     default_app_mode: DefaultAppMode
 
@@ -359,18 +410,37 @@ class ChatBackgroundRequest(BaseModel):
 
 
 class VoiceSettingsUpdateRequest(BaseModel):
-    auto_send: bool | None = None
-    auto_playback: bool | None = None
-    playback_speed: float | None = Field(default=None, ge=0.5, le=2.0)
+    """None keeps the saved value. Serialization aliases name the
+    `UserPreferences` columns."""
+
+    auto_send: bool | None = Field(default=None, serialization_alias="voice_auto_send")
+    auto_playback: bool | None = Field(
+        default=None, serialization_alias="voice_auto_playback"
+    )
+    playback_speed: float | None = Field(
+        default=None, ge=0.5, le=2.0, serialization_alias="voice_playback_speed"
+    )
+
+
+MAX_PREFERRED_NAME_LENGTH = 100
 
 
 class PersonalizationUpdateRequest(BaseModel):
-    name: str | None = None
-    role: str | None = None
+    """None keeps the saved value. Serialization aliases name the `User` and
+    `UserPreferences` columns."""
+
+    name: str | None = Field(default=None, serialization_alias="personal_name")
+    # An empty string clears the preferred name.
+    preferred_name: str | None = Field(
+        default=None, max_length=MAX_PREFERRED_NAME_LENGTH
+    )
+    role: str | None = Field(default=None, serialization_alias="personal_role")
     use_memories: bool | None = None
     enable_memory_tool: bool | None = None
     memories: list[MemoryItem] | None = None
-    user_preferences: str | None = Field(default=None, max_length=500)
+    user_preferences: str | None = Field(
+        default=None, max_length=500, serialization_alias="instructions"
+    )
 
     @field_validator("memories", mode="before")
     @classmethod
@@ -380,6 +450,10 @@ class PersonalizationUpdateRequest(BaseModel):
         if value is not None and len(value) > MAX_MEMORIES_PER_USER:
             raise ValueError(f"Maximum of {MAX_MEMORIES_PER_USER} memories allowed")
         return value
+
+
+class UserProfileImageResponse(BaseModel):
+    profile_image_file_id: str
 
 
 class SlackBotCreationRequest(BaseModel):

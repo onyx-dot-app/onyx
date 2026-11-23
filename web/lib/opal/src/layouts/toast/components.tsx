@@ -232,14 +232,15 @@ function ToastContainer({ errorAppendix }: ToastContainerProps) {
       toast.setAutoDismiss(t.id, EXPANDED_DURATION_MS);
     }
   }, []);
-  if (allToasts.length === 0) return null;
 
+  // Stays mounted while empty: a screen reader announces only changes to a
+  // live region that already exists.
   return (
     <div
       data-testid="toast-container"
       className="opal-toast-viewport fixed inset-x-4 top-2 z-(--z-toast) mx-auto flex max-w-(--toast-width) flex-col items-center"
     >
-      <div className="opal-toast-stack">
+      <div className="opal-toast-stack" aria-live="polite">
         {[...allToasts].reverse().map((t, index) => (
           <ToastCard
             key={t.id}
@@ -261,15 +262,20 @@ function ToastContainer({ errorAppendix }: ToastContainerProps) {
           />
         ))}
       </div>
-      {/* A count, not a control: the pile does not expand (see the README's
-          design decisions). */}
+      {/* The count is not a control: the pile does not expand (see the
+          README's design decisions). */}
       {pileCount > 0 && (
         <div className="opal-toast-pile-count">
-          <Badge
-            title={strings.toastMoreCount(pileCount)}
-            color="default"
-            size={6}
-          />
+          <Section flexDirection="row" gap={0.5}>
+            <Badge
+              title={strings.toastMoreCount(pileCount)}
+              color="default"
+              size={6}
+            />
+            <Button prominence="secondary" size="sm" onClick={toast.clearAll}>
+              {strings.toastCloseAll}
+            </Button>
+          </Section>
         </div>
       )}
     </div>

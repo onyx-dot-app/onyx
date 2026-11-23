@@ -39,16 +39,15 @@ export function useCurrentUser(): {
   /** The error thrown by the fetcher, if any. */
   userError: (Error & { status?: number }) | undefined;
 } {
-  const { data, isLoading, mutate, error } = useSWR<User | null>(
-    SWR_KEYS.me,
-    errorHandlingFetcher,
-    {
-      revalidateOnFocus: false,
-      revalidateOnReconnect: false,
-      revalidateIfStale: false,
-      dedupingInterval: 300_000,
-    }
-  );
+  const { data, isLoading, mutate, error } = useSWR<
+    User | null,
+    Error & { status?: number }
+  >(SWR_KEYS.me, errorHandlingFetcher, {
+    revalidateOnFocus: false,
+    revalidateOnReconnect: false,
+    revalidateIfStale: false,
+    dedupingInterval: 300_000,
+  });
 
   return { user: data, isLoading, mutateUser: mutate, userError: error };
 }

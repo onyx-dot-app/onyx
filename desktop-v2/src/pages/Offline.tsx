@@ -32,6 +32,16 @@ function reasonText(reason: Unreachable): string {
       return "The server is not accepting connections.";
     case "serverError":
       return `The server returned an error (${reason.status}).`;
+    case "notOnyx":
+      return (
+        "The answer from this address does not come from Onyx. Check the server address. " +
+        "A network sign-in page (for example, on public Wi-Fi) can also cause this."
+      );
+    case "apiNotRouted":
+      return (
+        "This address serves the Onyx web app, but not its API. Ask your admin to send " +
+        "/api to the Onyx API server."
+      );
     case "unknown":
       return "The connection to the server failed.";
   }
@@ -95,11 +105,17 @@ function Offline() {
     : status
       ? reasonText(status.reason)
       : undefined;
+  // The server answered, but not as Onyx.
+  const answered =
+    online && (status?.reason.kind === "notOnyx" || status?.reason.kind === "apiNotRouted");
   const checking = status?.checking ?? false;
   const seconds = retryAt === null ? null : Math.max(0, Math.ceil((retryAt - now) / 1000));
 
   return (
-    <WindowFrame title={`Can't reach ${host}`} subtitle={reason}>
+    <WindowFrame
+      title={answered ? `Can't open Onyx at ${host}` : `Can't reach ${host}`}
+      subtitle={reason}
+    >
       <Section gap={4} alignItems="stretch" height="fit">
         <div role="status">
           <Text font="secondary-body" color="text-03">
@@ -107,7 +123,9 @@ function Offline() {
               ? "Checking the connection…"
               : seconds !== null
                 ? `Onyx tries again in ${seconds}s and opens when the server answers.`
-                : "Onyx opens when the server answers."}
+                : status?.retryByHand
+                  ? "Onyx does not try again by itself. Fix the problem, then select Retry."
+                  : "Onyx opens when the server answers."}
           </Text>
         </div>
         <ErrorText message={error} />

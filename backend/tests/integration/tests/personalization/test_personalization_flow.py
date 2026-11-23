@@ -1,7 +1,8 @@
+from collections.abc import Callable
+
 from onyx.configs.constants import FASTAPI_USERS_AUTH_COOKIE_NAME
 from tests.integration.common_utils.constants import API_SERVER_URL
 from tests.integration.common_utils.http_client import client
-from tests.integration.common_utils.managers.user import UserManager
 from tests.integration.common_utils.test_models import DATestUser
 
 
@@ -27,8 +28,10 @@ def _patch_personalization(headers: dict, cookies: dict, payload: dict) -> None:
     response.raise_for_status()
 
 
-def test_personalization_round_trip() -> None:
-    user = UserManager.create()
+def test_personalization_round_trip(
+    user_factory: Callable[[], DATestUser],
+) -> None:
+    user = user_factory()
     headers, cookies = _get_auth_headers(user)
 
     # baseline should have empty personalization
@@ -74,8 +77,10 @@ def test_personalization_round_trip() -> None:
     assert me_final["personalization"]["memories"] == []
 
 
-def test_enable_memory_tool_round_trip() -> None:
-    user = UserManager.create()
+def test_enable_memory_tool_round_trip(
+    user_factory: Callable[[], DATestUser],
+) -> None:
+    user = user_factory()
     headers, cookies = _get_auth_headers(user)
 
     # default should be True
@@ -93,8 +98,10 @@ def test_enable_memory_tool_round_trip() -> None:
     assert me_reenabled["personalization"]["enable_memory_tool"] is True
 
 
-def test_enable_memory_tool_independent_of_use_memories() -> None:
-    user = UserManager.create()
+def test_enable_memory_tool_independent_of_use_memories(
+    user_factory: Callable[[], DATestUser],
+) -> None:
+    user = user_factory()
     headers, cookies = _get_auth_headers(user)
 
     # set use_memories=False and enable_memory_tool=True simultaneously
@@ -112,3 +119,50 @@ def test_enable_memory_tool_independent_of_use_memories() -> None:
     me = _get_me(headers, cookies)
     assert me["personalization"]["use_memories"] is True
     assert me["personalization"]["enable_memory_tool"] is False
+
+
+def test_profile_only_update_keeps_memories(
+    user_factory: Callable[[], DATestUser],
+) -> None:
+    user = user_factory()
+    headers, cookies = _get_auth_headers(user)
+
+    _patch_personalization(
+        headers,
+        cookies,
+        {"memories": [{"content": "Works in Berlin"}, {"content": "Uses Python"}]},
+    )
+    memories_before = _get_me(headers, cookies)["personalization"]["memories"]
+    assert len(memories_before) == 2
+
+    # A profile edit sends only the profile fields it shows.
+    _patch_personalization(
+        headers, cookies, {"name": "Jane Doe", "role": "Data engineer"}
+    )
+
+    personalization = _get_me(headers, cookies)["personalization"]
+    assert personalization["name"] == "Jane Doe"
+    assert personalization["role"] == "Data engineer"
+    assert personalization["memories"] == memories_before
+
+
+def test_preferred_name_is_separate_from_full_name(
+    user_factory: Callable[[], DATestUser],
+) -> None:
+    user = user_factory()
+    headers, cookies = _get_auth_headers(user)
+
+    _patch_personalization(
+        headers, cookies, {"name": "Jonathan Smith", "preferred_name": " Jon "}
+    )
+    me = _get_me(headers, cookies)
+    assert me["personalization"]["name"] == "Jonathan Smith"
+    assert me["personalization"]["preferred_name"] == "Jon"
+
+    # Omitting the field keeps it; an empty string clears it.
+    _patch_personalization(headers, cookies, {"role": "Engineering"})
+    assert _get_me(headers, cookies)["personalization"]["preferred_name"] == "Jon"
+    _patch_personalization(headers, cookies, {"preferred_name": ""})
+    me = _get_me(headers, cookies)
+    assert me["personalization"]["preferred_name"] == ""
+    assert me["personalization"]["name"] == "Jonathan Smith"

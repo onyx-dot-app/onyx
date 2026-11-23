@@ -2,6 +2,7 @@ import { test, expect } from "@playwright/test";
 import type { Page } from "@playwright/test";
 import { loginAsRandomUser } from "../utils/auth";
 import { expectElementScreenshot } from "../utils/visualRegression";
+import { ChatPage } from "@tests/e2e/chat/ChatPage";
 
 async function sendMessageAndWaitForChat(page: Page, message: string) {
   await page.locator("#onyx-chat-input-textbox").click();
@@ -14,24 +15,21 @@ async function sendMessageAndWaitForChat(page: Page, message: string) {
     { timeout: 15000 }
   );
 
-  await expect(page.locator('[aria-label="share-chat-button"]')).toBeVisible({
+  await expect(new ChatPage(page).shareMenuButton).toBeVisible({
     timeout: 10000,
   });
-}
-
-async function openShareModal(page: Page) {
-  await page.locator('[aria-label="share-chat-button"]').click();
-  await expect(page.getByRole("dialog")).toBeVisible({ timeout: 5000 });
 }
 
 test.describe("Share Chat Session Modal", () => {
   test.describe.configure({ mode: "serial" });
 
   let page: Page;
+  let chatPage: ChatPage;
 
   test.beforeAll(async ({ browser }) => {
     page = await browser.newPage();
     await loginAsRandomUser(page);
+    chatPage = new ChatPage(page);
     await sendMessageAndWaitForChat(page, "Hello for share test");
   });
 
@@ -40,7 +38,7 @@ test.describe("Share Chat Session Modal", () => {
   });
 
   test("shows Private selected by default", async () => {
-    await openShareModal(page);
+    await chatPage.openShareModal();
 
     const dialog = page.getByRole("dialog");
     await expect(dialog).toBeVisible();
@@ -66,7 +64,7 @@ test.describe("Share Chat Session Modal", () => {
   });
 
   test("selecting Your Organization changes submit text", async () => {
-    await openShareModal(page);
+    await chatPage.openShareModal();
 
     const dialog = page.getByRole("dialog");
 
@@ -95,7 +93,7 @@ test.describe("Share Chat Session Modal", () => {
       await route.continue();
     });
 
-    await openShareModal(page);
+    await chatPage.openShareModal();
 
     const dialog = page.getByRole("dialog");
     const cancelButton = dialog.locator('[aria-label="share-modal-cancel"]');
@@ -116,7 +114,7 @@ test.describe("Share Chat Session Modal", () => {
       await route.continue();
     });
 
-    await openShareModal(page);
+    await chatPage.openShareModal();
 
     const dialog = page.getByRole("dialog");
     const closeButton = dialog.locator('div[tabindex="-1"] button');
@@ -129,7 +127,7 @@ test.describe("Share Chat Session Modal", () => {
   });
 
   test("creating a share link calls API and shows link", async () => {
-    await openShareModal(page);
+    await chatPage.openShareModal();
 
     const dialog = page.getByRole("dialog");
 
@@ -187,7 +185,7 @@ test.describe("Share Chat Session Modal", () => {
   });
 
   test("Copy Link triggers clipboard copy", async () => {
-    await openShareModal(page);
+    await chatPage.openShareModal();
 
     const dialog = page.getByRole("dialog");
 
@@ -219,7 +217,7 @@ test.describe("Share Chat Session Modal", () => {
       }
     });
 
-    await openShareModal(page);
+    await chatPage.openShareModal();
 
     const dialog = page.getByRole("dialog");
     const submitButton = dialog.locator('[aria-label="share-modal-submit"]');

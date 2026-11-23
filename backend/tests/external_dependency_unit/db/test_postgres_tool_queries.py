@@ -15,7 +15,7 @@ from datetime import datetime, timedelta, timezone
 from uuid import uuid4
 
 import pytest
-from sqlalchemy import update
+from sqlalchemy import Select, func, select, text, update
 from sqlalchemy.orm import Session
 
 from ee.onyx.db.postgres_tool import (
@@ -23,6 +23,8 @@ from ee.onyx.db.postgres_tool import (
 )
 from onyx.configs.constants import DocumentSource
 from onyx.context.search.models import Tag, TimeRange
+from onyx.db import postgres_tool as postgres_tool_db
+from onyx.db.engine.sql_engine import get_session_with_current_tenant
 from onyx.db.enums import AccessType, HierarchyNodeType
 from onyx.db.models import (
     ConnectorCredentialPair,
@@ -36,6 +38,7 @@ from onyx.db.models import Document as DbDocument
 from onyx.db.models import Tag as TagRow
 from onyx.db.postgres_tool import (
     DocumentGroupBy,
+    PostgresToolQueryTimeoutError,
     _count_hierarchy_nodes,
     _query_hierarchy_nodes,
     count_documents_for_tool,
@@ -43,11 +46,13 @@ from onyx.db.postgres_tool import (
     count_hierarchy_nodes_for_tool,
     query_documents_for_tool,
     query_hierarchy_nodes_for_tool,
+    tool_transaction,
+    try_count_documents_for_tool,
 )
 from onyx.db.postgres_tool import (
     _hierarchy_node_access_filter as mit_hierarchy_filter,
 )
-from onyx.db.postgres_tool_models import DocumentScope
+from onyx.db.postgres_tool_models import DocumentOrder, DocumentScope
 from onyx.kg.models import KGStage
 from tests.external_dependency_unit.indexing_helpers import (
     cleanup_cc_pair,
@@ -251,17 +256,17 @@ def test_document_acl_scoping(db_session: Session, doc_env: DocEnv) -> None:
     }
 
     anon = query_documents_for_tool(
-        db_session, None, [], title_contains=tag, limit=100
+        db_session, None, [], title_contains=[tag], limit=100
     ).rows
     assert _sids(anon) == public_visible
 
     alice_docs = query_documents_for_tool(
-        db_session, doc_env.alice, [], title_contains=tag, limit=100
+        db_session, doc_env.alice, [], title_contains=[tag], limit=100
     ).rows
     assert _sids(alice_docs) == public_visible | {f"Drive Email {tag}"}
 
     group_docs = query_documents_for_tool(
-        db_session, None, [doc_env.group], title_contains=tag, limit=100
+        db_session, None, [doc_env.group], title_contains=[tag], limit=100
     ).rows
     assert _sids(group_docs) == public_visible | {f"Drive Group {tag}"}
 
@@ -269,12 +274,12 @@ def test_document_acl_scoping(db_session: Session, doc_env: DocEnv) -> None:
 def test_hidden_documents_excluded(db_session: Session, doc_env: DocEnv) -> None:
     tag = doc_env.tag
     rows = query_documents_for_tool(
-        db_session, None, [], title_contains=f"Report Hidden {tag}", limit=100
+        db_session, None, [], title_contains=[f"Report Hidden {tag}"], limit=100
     ).rows
     assert rows == []
     assert (
         count_documents_for_tool(
-            db_session, None, [], title_contains=f"Report Hidden {tag}"
+            db_session, None, [], title_contains=[f"Report Hidden {tag}"]
         )
         == 0
     )
@@ -283,13 +288,13 @@ def test_hidden_documents_excluded(db_session: Session, doc_env: DocEnv) -> None
 def test_multi_cc_pair_doc_counted_once(db_session: Session, doc_env: DocEnv) -> None:
     tag = doc_env.tag
     rows = query_documents_for_tool(
-        db_session, None, [], title_contains=f"Shared Doc {tag}", limit=100
+        db_session, None, [], title_contains=[f"Shared Doc {tag}"], limit=100
     ).rows
     # Anonymous access comes only through the public WEB cc_pair.
     assert [source for _, source in rows] == [DocumentSource.WEB]
     assert (
         count_documents_for_tool(
-            db_session, None, [], title_contains=f"Shared Doc {tag}"
+            db_session, None, [], title_contains=[f"Shared Doc {tag}"]
         )
         == 1
     )
@@ -321,7 +326,7 @@ def test_doc_granted_by_two_sources_takes_one_row(
     db_session.commit()
 
     rows = query_documents_for_tool(
-        db_session, None, [], title_contains=f"Dual {tag}", limit=2
+        db_session, None, [], title_contains=[f"Dual {tag}"], limit=2
     ).rows
     assert [d.semantic_id for d, _ in rows] == [f"Dual {tag} New", f"Dual {tag} Old"]
 
@@ -331,11 +336,11 @@ def test_count_matches_row_mode(db_session: Session, doc_env: DocEnv) -> None:
         db_session,
         doc_env.alice,
         [doc_env.group],
-        title_contains=doc_env.tag,
+        title_contains=[doc_env.tag],
         limit=100,
     ).rows
     count = count_documents_for_tool(
-        db_session, doc_env.alice, [doc_env.group], title_contains=doc_env.tag
+        db_session, doc_env.alice, [doc_env.group], title_contains=[doc_env.tag]
     )
     assert count == len(rows) == 9
 
@@ -346,7 +351,7 @@ def test_group_by_source(db_session: Session, doc_env: DocEnv) -> None:
         doc_env.alice,
         [doc_env.group],
         DocumentGroupBy.SOURCE,
-        title_contains=doc_env.tag,
+        title_contains=[doc_env.tag],
     )
     # The shared doc is linked to both cc_pairs, but only its WEB (PUBLIC
     # connector) row grants access — source attribution follows the row that
@@ -364,7 +369,7 @@ def test_group_by_owner(db_session: Session, doc_env: DocEnv) -> None:
         doc_env.alice,
         [doc_env.group],
         DocumentGroupBy.OWNER,
-        title_contains=tag,
+        title_contains=[tag],
     )
     # The multi-owner doc (Report Gamma) counts once per owner; ownerless docs
     # are absent from the grouping entirely.
@@ -379,12 +384,12 @@ def test_like_wildcards_treated_literally(db_session: Session, doc_env: DocEnv) 
     # Unescaped, "%"/"_" would also match "100xydone"; escaped, only the
     # literal "100%_done" title qualifies.
     rows = query_documents_for_tool(
-        db_session, None, [], title_contains=f"100%_done {tag}", limit=100
+        db_session, None, [], title_contains=[f"100%_done {tag}"], limit=100
     ).rows
     assert _sids(rows) == {f"Progress 100%_done {tag}"}
 
     both = query_documents_for_tool(
-        db_session, None, [], title_contains=f"done {tag}", limit=100
+        db_session, None, [], title_contains=[f"done {tag}"], limit=100
     ).rows
     assert _sids(both) == {
         f"Progress 100%_done {tag}",
@@ -402,7 +407,7 @@ def test_date_filters_use_source_updated_at(
         db_session,
         None,
         [],
-        title_contains=tag,
+        title_contains=[tag],
         updated_after=now - timedelta(days=30),
         limit=100,
     ).rows
@@ -413,7 +418,7 @@ def test_date_filters_use_source_updated_at(
         db_session,
         None,
         [],
-        title_contains=tag,
+        title_contains=[tag],
         updated_before=now - timedelta(days=100),
         limit=100,
     ).rows
@@ -426,7 +431,7 @@ def test_date_filters_use_source_updated_at(
         db_session,
         None,
         [],
-        title_contains=tag,
+        title_contains=[tag],
         updated_before=beta.doc_updated_at,
         limit=100,
     ).rows
@@ -434,7 +439,7 @@ def test_date_filters_use_source_updated_at(
         db_session,
         None,
         [],
-        title_contains=tag,
+        title_contains=[tag],
         updated_after=beta.doc_updated_at,
         limit=100,
     ).rows
@@ -445,7 +450,7 @@ def test_date_filters_use_source_updated_at(
 def test_owned_by_filter(db_session: Session, doc_env: DocEnv) -> None:
     tag = doc_env.tag
     rows = query_documents_for_tool(
-        db_session, None, [], title_contains=tag, owned_by=doc_env.alice, limit=100
+        db_session, None, [], title_contains=[tag], owned_by=[doc_env.alice], limit=100
     ).rows
     assert _sids(rows) == {f"Report Alpha {tag}", f"Report Gamma {tag}"}
 
@@ -456,8 +461,8 @@ def test_source_type_filter(db_session: Session, doc_env: DocEnv) -> None:
         db_session,
         doc_env.alice,
         [doc_env.group],
-        title_contains=tag,
-        source_type=DocumentSource.GOOGLE_DRIVE,
+        title_contains=[tag],
+        source_type=[DocumentSource.GOOGLE_DRIVE],
         limit=100,
     ).rows
     # The shared doc is excluded: its google_drive cc_pair row (SYNC, no doc
@@ -474,17 +479,74 @@ def test_parent_hierarchy_node_filter(db_session: Session, doc_env: DocEnv) -> N
         db_session,
         None,
         [],
-        title_contains=doc_env.tag,
-        parent_hierarchy_node_id=doc_env.node.id,
+        title_contains=[doc_env.tag],
+        parent_hierarchy_node_id=[doc_env.node.id],
         limit=100,
     ).rows
     assert _sids(rows) == {f"Report Alpha {doc_env.tag}"}
 
 
+def test_list_filters_match_any_of_their_values(
+    db_session: Session, doc_env: DocEnv
+) -> None:
+    tag = doc_env.tag
+
+    def titles(
+        title_contains: list[str],
+        owned_by: list[str] | None = None,
+        source_type: list[DocumentSource] | None = None,
+    ) -> set[str]:
+        rows = query_documents_for_tool(
+            db_session,
+            doc_env.alice,
+            [doc_env.group],
+            title_contains=title_contains,
+            owned_by=owned_by,
+            source_type=source_type,
+            limit=100,
+        ).rows
+        return _sids(rows)
+
+    # A document matching two of the substrings is listed once.
+    assert titles(
+        title_contains=[f"Alpha {tag}", f"Drive Email {tag}", f"Report Alpha {tag}"]
+    ) == {f"Report Alpha {tag}", f"Drive Email {tag}"}
+    assert (
+        count_documents_for_tool(
+            db_session,
+            doc_env.alice,
+            [doc_env.group],
+            title_contains=[f"Alpha {tag}", f"Drive Email {tag}"],
+        )
+        == 2
+    )
+    # Gamma has both owners and is listed once.
+    assert titles(
+        title_contains=[tag], owned_by=[doc_env.alice, f"bob_{tag}@example.com"]
+    ) == {
+        f"Report Alpha {tag}",
+        f"Report Beta {tag}",
+        f"Report Gamma {tag}",
+    }
+    every_source = titles(title_contains=[tag])
+    assert (
+        titles(
+            title_contains=[tag],
+            source_type=[DocumentSource.WEB, DocumentSource.GOOGLE_DRIVE],
+        )
+        == every_source
+    )
+    # Filters on different fields still all apply.
+    assert titles(
+        title_contains=[f"Report Alpha {tag}", f"Drive Email {tag}"],
+        source_type=[DocumentSource.WEB],
+    ) == {f"Report Alpha {tag}"}
+
+
 def test_ordering_and_limit(db_session: Session, doc_env: DocEnv) -> None:
     tag = doc_env.tag
     rows = query_documents_for_tool(
-        db_session, None, [], title_contains=tag, limit=3
+        db_session, None, [], title_contains=[tag], limit=3
     ).rows
     # Newest first by doc_updated_at, NULL timestamps last.
     assert [d.semantic_id for d, _ in rows] == [
@@ -494,9 +556,31 @@ def test_ordering_and_limit(db_session: Session, doc_env: DocEnv) -> None:
     ]
 
     clamped = query_documents_for_tool(
-        db_session, None, [], title_contains=tag, limit=0
+        db_session, None, [], title_contains=[tag], limit=0
     ).rows
     assert len(clamped) == 1
+
+
+def test_tool_transaction_reads_one_snapshot_under_the_timeout() -> None:
+    with get_session_with_current_tenant() as db_session:
+        with tool_transaction(db_session):
+            settings = db_session.execute(
+                text(
+                    "SELECT current_setting('transaction_isolation'), "
+                    "current_setting('statement_timeout')"
+                )
+            ).one()
+        db_session.rollback()
+    assert tuple(settings) == ("repeatable read", "10s")
+
+
+def test_tool_transaction_converts_a_timeout_in_any_statement() -> None:
+    with get_session_with_current_tenant() as db_session:
+        with pytest.raises(PostgresToolQueryTimeoutError):
+            with tool_transaction(db_session):
+                db_session.execute(text("SET LOCAL statement_timeout = '10ms'"))
+                db_session.execute(text("SELECT pg_sleep(1)"))
+        db_session.rollback()
 
 
 # ============================== Paging ==============================
@@ -512,7 +596,8 @@ class PagingEnv:
 @pytest.fixture()
 def paging_env(db_session: Session) -> Generator[PagingEnv, None, None]:
     """101 public documents: 40 share one timestamp, 40 have distinct
-    timestamps and 21 have none, so pages cross ties and the NULL boundary."""
+    timestamps and 21 have none, so pages cross ties and the NULL boundary.
+    Creation times repeat every 10 documents, and the last 11 have none."""
     tag = uuid4().hex[:8]
     now = datetime.now(timezone.utc)
     cc_pair = make_cc_pair(db_session, source=DocumentSource.WEB)
@@ -531,6 +616,7 @@ def paging_env(db_session: Session) -> Generator[PagingEnv, None, None]:
             doc_id,
             f"Paged {tag} {i:03d}",
             doc_updated_at=updated_at,
+            doc_created_at=now - timedelta(days=i % 10) if i < 90 else None,
         )
         doc_ids.add(doc_id)
     db_session.commit()
@@ -543,12 +629,23 @@ def paging_env(db_session: Session) -> Generator[PagingEnv, None, None]:
     db_session.commit()
 
 
-def _walk_pages(db_session: Session, title: str, page_size: int) -> list[list[str]]:
+def _walk_pages(
+    db_session: Session,
+    title: str,
+    page_size: int,
+    order: DocumentOrder = DocumentOrder.UPDATED_DESC,
+) -> list[list[str]]:
     pages: list[list[str]] = []
     after = None
     while True:
         page = query_documents_for_tool(
-            db_session, None, [], title_contains=title, after=after, limit=page_size
+            db_session,
+            None,
+            [],
+            title_contains=[title],
+            order=order,
+            after=after,
+            limit=page_size,
         )
         pages.append([doc.id for doc, _ in page.rows])
         if page.next_cursor is None:
@@ -569,6 +666,59 @@ def test_paging_returns_every_document_once_in_order(
     # The pages follow the single-listing order.
     in_one_listing = _walk_pages(db_session, title, page_size=100)
     assert walked == [doc_id for page in in_one_listing for doc_id in page]
+
+
+@pytest.mark.parametrize("order", list(DocumentOrder))
+def test_every_order_pages_through_each_document_once(
+    db_session: Session, paging_env: PagingEnv, order: DocumentOrder
+) -> None:
+    docs = (
+        db_session.query(DbDocument).filter(DbDocument.id.in_(paging_env.doc_ids)).all()
+    )
+    value_of = {
+        DocumentOrder.UPDATED_DESC: lambda d: d.doc_updated_at,
+        DocumentOrder.UPDATED_ASC: lambda d: d.doc_updated_at,
+        DocumentOrder.CREATED_DESC: lambda d: d.doc_created_at,
+        DocumentOrder.CREATED_ASC: lambda d: d.doc_created_at,
+        DocumentOrder.TITLE_ASC: lambda d: d.semantic_id,
+        DocumentOrder.TITLE_DESC: lambda d: d.semantic_id,
+    }[order]
+    # The ordered column, then the id, in one direction; no value sorts last.
+    dated = sorted(
+        (d for d in docs if value_of(d) is not None),
+        key=lambda d: (value_of(d), d.id),
+        reverse=order.is_descending,
+    )
+    undated = sorted(
+        (d for d in docs if value_of(d) is None),
+        key=lambda d: d.id,
+        reverse=order.is_descending,
+    )
+    expected = [d.id for d in dated + undated]
+
+    pages = _walk_pages(db_session, f"Paged {paging_env.tag}", 7, order)
+    assert [doc_id for page in pages for doc_id in page] == expected
+
+
+@pytest.mark.parametrize("slow", ["statement", "preparation"])
+def test_optional_count_gives_up_and_keeps_the_session(
+    db_session: Session, monkeypatch: pytest.MonkeyPatch, slow: str
+) -> None:
+    def count_stmt(session: Session, *_args: object, **_kwargs: object) -> Select:
+        if slow == "preparation":
+            # As the access-pair lookup that builds the statement.
+            session.execute(select(func.pg_sleep(1)))
+            return select(func.count())
+        return select(func.pg_sleep(1))
+
+    monkeypatch.setattr(postgres_tool_db, "_OPTIONAL_COUNT_TIMEOUT", "100ms")
+    monkeypatch.setattr(postgres_tool_db, "_count_documents_stmt", count_stmt)
+    assert try_count_documents_for_tool(db_session, None, []) is None
+    # The cancel rolled back only the savepoint, with its shorter timeout.
+    assert db_session.execute(text("SELECT 1")).scalar_one() == 1
+    timeout = db_session.execute(text("SHOW statement_timeout")).scalar_one()
+    db_session.rollback()
+    assert timeout != "100ms"
 
 
 def test_paging_reads_timestamps_from_the_statement(
@@ -609,7 +759,7 @@ def test_documents_indexed_between_pages_do_not_shift_them(
 ) -> None:
     title = f"Paged {paging_env.tag}"
     first = query_documents_for_tool(
-        db_session, None, [], title_contains=title, limit=50
+        db_session, None, [], title_contains=[title], limit=50
     )
     assert first.next_cursor is not None
     # A new newest document sorts before the cursor, so later pages skip it
@@ -626,7 +776,7 @@ def test_documents_indexed_between_pages_do_not_shift_them(
     after = first.next_cursor
     while after is not None:
         page = query_documents_for_tool(
-            db_session, None, [], title_contains=title, after=after, limit=50
+            db_session, None, [], title_contains=[title], after=after, limit=50
         )
         rest.extend(doc.id for doc, _ in page.rows)
         after = page.next_cursor
@@ -738,10 +888,10 @@ def scope_env(db_session: Session, doc_env: DocEnv) -> Generator[ScopeEnv, None,
 
 def _scoped_titles(db_session: Session, tag: str, scope: DocumentScope) -> set[str]:
     rows = query_documents_for_tool(
-        db_session, None, [], title_contains=tag, limit=100, scope=scope
+        db_session, None, [], title_contains=[tag], limit=100, scope=scope
     ).rows
     count = count_documents_for_tool(
-        db_session, None, [], title_contains=tag, scope=scope
+        db_session, None, [], title_contains=[tag], scope=scope
     )
     assert count == len(rows)
     return {d.semantic_id for d, _ in rows}
@@ -856,7 +1006,7 @@ def test_scope_request_filters(db_session: Session, scope_env: ScopeEnv) -> None
         None,
         [],
         DocumentGroupBy.SOURCE,
-        title_contains=tag,
+        title_contains=[tag],
         scope=DocumentScope(hierarchy_node_ids=[scope_env.doc_env.node.id]),
     )
     assert {g.group: g.count for g in groups} == {DocumentSource.WEB.value: 2}
@@ -868,10 +1018,10 @@ def test_scope_folder_listing(db_session: Session, scope_env: ScopeEnv) -> None:
 
     def names(scope: DocumentScope) -> set[str]:
         nodes = query_hierarchy_nodes_for_tool(
-            db_session, None, [], name_contains=tag, limit=100, scope=scope
+            db_session, None, [], name_contains=[tag], limit=100, scope=scope
         )
         count = count_hierarchy_nodes_for_tool(
-            db_session, None, [], name_contains=tag, scope=scope
+            db_session, None, [], name_contains=[tag], scope=scope
         )
         assert count == len(nodes)
         return {n.display_name for n in nodes}
@@ -980,7 +1130,7 @@ def test_hierarchy_mit_filter_returns_all_non_stub(
     rows = _query_hierarchy_nodes(
         db_session,
         mit_hierarchy_filter(db_session, None, [], None),
-        name_contains=node_env.tag,
+        name_contains=[node_env.tag],
         limit=100,
     )
     names = {n.display_name for n in rows}
@@ -1002,7 +1152,7 @@ def test_hierarchy_ee_filter_applies_acl(
     rows = _query_hierarchy_nodes(
         db_session,
         ee_hierarchy_filter(db_session, node_env.alice, [], None),
-        name_contains=tag,
+        name_contains=[tag],
         limit=100,
     )
     names = {n.display_name for n in rows}
@@ -1017,7 +1167,7 @@ def test_hierarchy_ee_filter_applies_acl(
     no_access = _query_hierarchy_nodes(
         db_session,
         ee_hierarchy_filter(db_session, None, [], None),
-        name_contains=tag,
+        name_contains=[tag],
         limit=100,
     )
     assert {n.display_name for n in no_access} == {
@@ -1035,8 +1185,8 @@ def test_hierarchy_parent_and_type_filters(
     children = _query_hierarchy_nodes(
         db_session,
         mit_hierarchy_filter(db_session, None, [], None),
-        name_contains=tag,
-        parent_id=node_env.root.id,
+        name_contains=[tag],
+        parent_id=[node_env.root.id],
         limit=100,
     )
     assert {n.display_name for n in children} == {
@@ -1047,8 +1197,8 @@ def test_hierarchy_parent_and_type_filters(
     drives = _query_hierarchy_nodes(
         db_session,
         mit_hierarchy_filter(db_session, None, [], None),
-        name_contains=tag,
-        node_type=HierarchyNodeType.SHARED_DRIVE,
+        name_contains=[tag],
+        node_type=[HierarchyNodeType.SHARED_DRIVE],
         limit=100,
     )
     assert {n.display_name for n in drives} == {f"CCC Drive {tag}"}
@@ -1056,8 +1206,8 @@ def test_hierarchy_parent_and_type_filters(
     confluence = _query_hierarchy_nodes(
         db_session,
         mit_hierarchy_filter(db_session, None, [], None),
-        name_contains=tag,
-        source_type=DocumentSource.CONFLUENCE,
+        name_contains=[tag],
+        source_type=[DocumentSource.CONFLUENCE],
         limit=100,
     )
     assert {n.display_name for n in confluence} == {f"FFF Confluence {tag}"}
@@ -1067,13 +1217,13 @@ def test_hierarchy_count_and_ordering(db_session: Session, node_env: NodeEnv) ->
     rows = _query_hierarchy_nodes(
         db_session,
         mit_hierarchy_filter(db_session, None, [], None),
-        name_contains=node_env.tag,
+        name_contains=[node_env.tag],
         limit=100,
     )
     count = _count_hierarchy_nodes(
         db_session,
         mit_hierarchy_filter(db_session, None, [], None),
-        name_contains=node_env.tag,
+        name_contains=[node_env.tag],
     )
     assert count == len(rows) == 6
     # Ordered by display_name; the fixture names are alphabetized by prefix.
@@ -1085,13 +1235,13 @@ def test_hierarchy_public_dispatchers(db_session: Session, node_env: NodeEnv) ->
     public nodes always visible, STUBs never, count matches rows."""
     tag = node_env.tag
     rows = query_hierarchy_nodes_for_tool(
-        db_session, node_env.alice, [], name_contains=tag, limit=100
+        db_session, node_env.alice, [], name_contains=[tag], limit=100
     )
     names = {n.display_name for n in rows}
     assert f"AAA Folder {tag}" in names
     assert f"GGG Stub {tag}" not in names
 
     count = count_hierarchy_nodes_for_tool(
-        db_session, node_env.alice, [], name_contains=tag
+        db_session, node_env.alice, [], name_contains=[tag]
     )
     assert count == len(rows)

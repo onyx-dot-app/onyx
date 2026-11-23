@@ -3,48 +3,18 @@ import type { Page } from "@playwright/test";
 import { loginAsRandomUser } from "@tests/e2e/utils/auth";
 import { sendMessage, startNewChat } from "@tests/e2e/utils/chatActions";
 import { ChatPage } from "@tests/e2e/chat/ChatPage";
+import { SettingsAppearancePage } from "@tests/e2e/pages/SettingsAppearancePage";
 
 /** A message offset below the container's top edge, within ~150px of it. */
 function nearTop(offset: number): boolean {
   return offset >= 0 && offset < 150;
 }
 
-/**
- * Helper to toggle auto-scroll setting via the settings panel
- */
+/** Sets auto-scroll on the Appearance tab, then returns to chat in the app. */
 async function setAutoScroll(page: Page, enabled: boolean) {
-  // Open user dropdown menu (same pattern as other tests)
-  await page.locator("#onyx-user-dropdown").click();
-  await page.getByRole("menuitem", { name: "Settings" }).click();
-  // The settings page is up.
-  await expect(page.getByText("Full Name")).toBeVisible();
-
-  // Navigate to Chat Preferences tab
-  await page
-    .locator('a[href="/app/settings/chat-preferences"]')
-    .click({ force: true });
-
-  // Find the auto-scroll switch by locating the label text and then finding
-  // the switch within the same container
-  const autoScrollSwitch = page
-    .locator("label")
-    .filter({ hasText: "Chat Auto-scroll" })
-    .locator('button[role="switch"]');
-
-  await autoScrollSwitch.waitFor({ state: "visible" });
-
-  const isCurrentlyChecked =
-    (await autoScrollSwitch.getAttribute("aria-checked")) === "true";
-
-  if (isCurrentlyChecked !== enabled) {
-    await autoScrollSwitch.click();
-    // Wait for the switch state to update
-    const expectedState = enabled ? "true" : "false";
-    await expect(autoScrollSwitch).toHaveAttribute(
-      "aria-checked",
-      expectedState
-    );
-  }
+  const appearancePage = new SettingsAppearancePage(page);
+  await appearancePage.openFromUserMenu();
+  await appearancePage.setAutoScroll(enabled);
 
   await page.locator('a[href="/app"]').click({ force: true });
 }

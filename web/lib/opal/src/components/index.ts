@@ -12,6 +12,12 @@ export {
   type ButtonProps,
 } from "@opal/components/buttons/button/components";
 
+/* AvatarButton */
+export {
+  AvatarButton,
+  type AvatarButtonProps,
+} from "@opal/components/buttons/avatar-button/components";
+
 /* FilePickerButton */
 export {
   FilePickerButton,

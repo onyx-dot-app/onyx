@@ -78,6 +78,15 @@ the shared runtime, such as `ChatAgent`, `DeepResearchAgent` or `ResearchAgent`
 - Search settings (`SearchSettings`): the embedding model and index
   configuration. See [[document-index]].
 
+**"User preferences"** means three things.
+- The `user_preferences` table (`backend/onyx/db/models.py:UserPreferences`):
+  one row per user with every setting the user picks. See [[chat-preferences]].
+- The API model `backend/onyx/server/manage/models.py:UserPreferences`: the
+  `preferences` object of `GET /me`.
+- The free-text instructions a user writes in Settings > Chat Preferences >
+  Instructions. The API and `UserMemoryContext` call them `user_preferences`;
+  the table calls them `instructions`.
+
 **"Gated"** means three unrelated things.
 - `GATED_ACCESS`: a self-hosted license state, expired past the grace period.
   See [[billing]].
