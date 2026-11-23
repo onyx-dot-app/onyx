@@ -318,7 +318,6 @@ def test_chat_built_ins_need_the_sandbox_and_name_their_vm_folder(
     assert build_chat_built_ins_bundle(db_session) is bundle
     with zipfile.ZipFile(io.BytesIO(bundle.zip_bytes)) as zf:
         folders = {name.split("/", 1)[0] for name in zf.namelist()}
-        # The host builds the drive root at 0711, so `ls /mnt/skills` fails.
         assert zf.comment == b"onyx-managed:root-mode=0711"
     assert folders == set(built_ins)
 

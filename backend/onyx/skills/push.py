@@ -482,8 +482,6 @@ def _chat_built_ins_bundle(
             folders or (RuntimeSkillFolder(path="", name=name),),
             BUILT_IN_SKILLS[built_in_skill_id],
         )
-    # The model finds built-ins through their links in CHAT_SKILLS_PATH, so the
-    # drive root is not listable.
     return SkillsBundle.from_files(files, unlistable_root=True)
 
 

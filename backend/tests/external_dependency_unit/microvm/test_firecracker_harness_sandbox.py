@@ -1307,8 +1307,6 @@ def test_skills_go_to_each_vm_instance_once_per_change(
 
     assert links() == {f"{CHAT_SKILLS_PATH}/pptx": f"{CHAT_SKILLS_MOUNT_PATH}/pptx"}
 
-    # A built-in that leaves the drive loses its link. A copied skill stays,
-    # also one with a built-in's name.
     report = (sandbox_id, "", f"{CHAT_SKILLS_PATH}/report/SKILL.md")
     copied_xlsx = (sandbox_id, "", f"{CHAT_SKILLS_PATH}/xlsx/SKILL.md")
     node.agent.files[report] = b"r"

@@ -170,7 +170,6 @@ class FakeHostAgent(hostagent_pb2_grpc.HostAgentServicer):
         # (sandbox_id, session_id, path) -> target of a symlink, as stored.
         self.links: dict[tuple[str, str, str], str] = {}
         self.lose_rename_reply = False
-        # LinkFile fails with this code.
         self.link_error: grpc.StatusCode | None = None
         # StatFiles facts of a path, as the guest daemon's os.Root reports
         # them (the Go tests own those rules). Other paths get the facts of

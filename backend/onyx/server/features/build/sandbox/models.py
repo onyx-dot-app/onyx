@@ -160,9 +160,6 @@ class HarnessSandboxRef(BaseModel):
     session_id: UUID
 
 
-# The host builds a drive from a zip with this comment with its root at 0711:
-# the VM user opens paths in it but cannot list it. Matches
-# microvm/internal/managed UnlistableRootComment.
 _UNLISTABLE_ROOT_COMMENT = b"onyx-managed:root-mode=0711"
 
 
