@@ -79,7 +79,9 @@ export const FetchToolRenderer: MessageRenderer<FetchToolPacket, {}> = ({
   }
 
   const displayDocuments = documents.length > 0;
-  const displayUrls = !displayDocuments && isComplete && urls.length > 0;
+  // The URLs show as soon as the step names them; the fetched pages replace
+  // them when they arrive.
+  const displayUrls = !displayDocuments && urls.length > 0;
 
   // HIGHLIGHT mode: header embedded in content, no StepContainer
   if (isHighlight) {
