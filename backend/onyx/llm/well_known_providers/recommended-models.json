@@ -1,5 +1,5 @@
 {
-  "version": "1.28",
+  "version": "1.29",
   "updated_at": "2026-11-23T00:00:00Z",
   "providers": {
     "openai": {
@@ -10,6 +10,9 @@
         },
         {
           "name": "gpt-6-luna"
+        },
+        {
+          "name": "gpt-6.1-terra"
         },
         {
           "name": "gpt-6.2-astra"
@@ -49,6 +52,10 @@
           "display_name": "Gemini 4 Hydrogen"
         },
         {
+          "name": "gemini-4-neon",
+          "display_name": "Gemini 4 Neon"
+        },
+        {
           "name": "gemini-4-carbon",
           "display_name": "Gemini 4 Carbon"
         }
@@ -74,8 +81,8 @@
           "display_name": "Qwen4 Max"
         },
         {
-          "name": "moonshotai/kimi-k3.1-pro",
-          "display_name": "Kimi K3.1 Pro"
+          "name": "qwen/qwen3.8-flash",
+          "display_name": "Qwen3.8 Flash"
         }
       ]
     }
