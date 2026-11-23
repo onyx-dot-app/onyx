@@ -7,6 +7,7 @@ from pydantic import BaseModel
 from onyx.configs.constants import DocumentSource, MessageType
 from onyx.db.enums import HierarchyNodeType
 from onyx.db.postgres_tool import POSTGRES_TOOL_DEFAULT_LIMIT
+from onyx.db.postgres_tool_models import DocumentOrder
 
 
 class PostgresToolTable(str, Enum):
@@ -24,6 +25,8 @@ class PostgresQueryArgs(BaseModel):
     limit: int = POSTGRES_TOOL_DEFAULT_LIMIT
     # A `next_cursor` token from the previous document page.
     cursor: str | None = None
+    # Document listings only.
+    order_by: DocumentOrder = DocumentOrder.UPDATED_DESC
 
     source_type: DocumentSource | None = None
     title_contains: str | None = None
