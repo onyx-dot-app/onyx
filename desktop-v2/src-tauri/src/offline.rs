@@ -511,6 +511,18 @@ fn web_error_kind(status: i32, certs_handled: bool) -> WebErrorKind {
     }
 }
 
+/// The page to load on recovery after a certificate error for `request`:
+/// the top-level navigation if it failed, else the document that loads the
+/// failed subresource.
+#[cfg(any(windows, test))]
+fn recovery_uri<'a>(request: &'a str, navigating: &str, document: &'a str) -> &'a str {
+    if request == navigating {
+        request
+    } else {
+        document
+    }
+}
+
 /// WebView2 shows its own error page for a failed load, and a certificate
 /// page that lets the user continue, so both are caught here. A certificate
 /// error is always cancelled.
@@ -522,7 +534,8 @@ pub fn watch_webview_failures(window: &tauri::WebviewWindow) {
         COREWEBVIEW2_WEB_ERROR_STATUS,
     };
     use webview2_com::{
-        take_pwstr, NavigationCompletedEventHandler, ServerCertificateErrorDetectedEventHandler,
+        take_pwstr, NavigationCompletedEventHandler, NavigationStartingEventHandler,
+        ServerCertificateErrorDetectedEventHandler,
     };
 
     let app = window.app_handle().clone();
@@ -535,33 +548,57 @@ pub fn watch_webview_failures(window: &tauri::WebviewWindow) {
                 return;
             }
         };
+        // The URI of the latest top-level navigation, to tell it apart from
+        // a subresource in a certificate error.
+        let navigating = std::sync::Arc::new(Mutex::new(String::new()));
+        let started = navigating.clone();
+        let handler = NavigationStartingEventHandler::create(Box::new(move |_, args| {
+            let Some(args) = args else {
+                return Ok(());
+            };
+            let mut uri = PWSTR::null();
+            // SAFETY: WebView2 calls this on the UI thread with live event args.
+            unsafe { args.Uri(&mut uri)? };
+            *started.lock().unwrap_or_else(|p| p.into_inner()) = take_pwstr(uri);
+            Ok(())
+        }));
+        let mut token = 0i64;
+        // SAFETY: as above.
+        if let Err(e) = unsafe { core.add_NavigationStarting(&handler, &mut token) } {
+            log::warn!("could not watch the main window's navigations: {e}");
+        }
         // Older WebView2 runtimes have no certificate event; their
         // certificate page then counts as a failed navigation below.
         let certs_handled = match core.cast::<ICoreWebView2_14>() {
             Ok(core) => {
                 let cert_app = app.clone();
-                let handler =
-                    ServerCertificateErrorDetectedEventHandler::create(Box::new(move |_, args| {
-                        let Some(args) = args else {
+                let handler = ServerCertificateErrorDetectedEventHandler::create(Box::new(
+                    move |sender, args| {
+                        let (Some(sender), Some(args)) = (sender, args) else {
                             return Ok(());
                         };
-                        let mut uri = PWSTR::null();
+                        let mut request = PWSTR::null();
+                        let mut document = PWSTR::null();
                         let mut status = COREWEBVIEW2_WEB_ERROR_STATUS::default();
                         // SAFETY: WebView2 calls this on the UI thread with live event args.
                         unsafe {
                             args.SetAction(COREWEBVIEW2_SERVER_CERTIFICATE_ERROR_ACTION_CANCEL)?;
-                            args.RequestUri(&mut uri)?;
+                            args.RequestUri(&mut request)?;
                             args.ErrorStatus(&mut status)?;
+                            sender.Source(&mut document)?;
                         }
-                        let uri = take_pwstr(uri);
+                        let (request, document) = (take_pwstr(request), take_pwstr(document));
                         log::warn!(
                             "the main window rejected the certificate of {} (web error {})",
-                            crate::main_window::log_safe(&uri),
+                            crate::main_window::log_safe(&request),
                             status.0
                         );
-                        webview_failed(&cert_app, &uri, Some(Unreachable::Tls));
+                        let navigating = navigating.lock().unwrap_or_else(|p| p.into_inner());
+                        let uri = recovery_uri(&request, &navigating, &document);
+                        webview_failed(&cert_app, uri, Some(Unreachable::Tls));
                         Ok(())
-                    }));
+                    },
+                ));
                 let mut token = 0i64;
                 // SAFETY: as above.
                 match unsafe { core.add_ServerCertificateErrorDetected(&handler, &mut token) } {
@@ -662,7 +699,7 @@ pub fn load_finished(app: &AppHandle) {
 
 #[cfg(test)]
 mod tests {
-    use super::{path_of, web_error_kind, webview_failure, Loads, WebErrorKind};
+    use super::{path_of, recovery_uri, web_error_kind, webview_failure, Loads, WebErrorKind};
     use crate::main_window::server_url_join;
     use crate::reachability::Unreachable;
     use url::Url;
@@ -744,6 +781,16 @@ mod tests {
         for status in [0, 9, 14] {
             assert_eq!(web_error_kind(status, false), WebErrorKind::Ignored);
         }
+    }
+
+    #[test]
+    fn a_certificate_error_recovers_the_page_not_a_subresource() {
+        let page = "https://onyx.example/app";
+        let script = "https://onyx.example/static/app.js";
+        // The page itself failed while it loaded.
+        assert_eq!(recovery_uri(page, page, "https://onyx.example/old"), page);
+        // A subresource of the open page failed.
+        assert_eq!(recovery_uri(script, page, page), page);
     }
 
     #[test]
