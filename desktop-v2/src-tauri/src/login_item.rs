@@ -137,9 +137,10 @@ mod platform {
             None => std::env::current_exe().map_err(|e| e.to_string())?,
         };
         let exec = super::desktop_exec(&exe.to_string_lossy())?;
+        // Not the package name: on Linux that is "onyx-v2", for a desktop file
+        // name with no space.
         let body = format!(
-            "[Desktop Entry]\nType=Application\nName={}\nExec={exec}\nTerminal=false\nStartupNotify=false\nX-GNOME-Autostart-enabled=true\n",
-            app.package_info().name
+            "[Desktop Entry]\nType=Application\nName=Onyx v2\nExec={exec}\nTerminal=false\nStartupNotify=false\nX-GNOME-Autostart-enabled=true\n"
         );
         if let Some(dir) = path.parent() {
             std::fs::create_dir_all(dir).map_err(|e| e.to_string())?;
