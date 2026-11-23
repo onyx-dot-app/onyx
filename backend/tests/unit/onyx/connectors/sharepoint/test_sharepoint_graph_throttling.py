@@ -62,6 +62,10 @@ class _SingleUseQuery:
     """Behaves like an SDK query: once sent, it drops its request, so running
     it again sends nothing and answers an empty collection."""
 
+    # A real query has the client it runs on. This one has none, so it has
+    # no pacer.
+    context: object = None
+
     def __init__(self, answer: object) -> None:
         self._answer: object = answer
         self.sends: int = 0
