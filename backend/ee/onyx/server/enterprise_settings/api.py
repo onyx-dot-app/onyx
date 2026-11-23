@@ -43,6 +43,7 @@ from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
 from onyx.file_store.file_store import get_default_file_store
 from onyx.file_store.serving import resolve_inline_disposition
+from onyx.server.playground import PlaygroundRestrictedFeature, restrict_in_playground
 from onyx.server.settings.models import Tier
 from onyx.server.settings.tier_order import tier_at_least
 from onyx.server.utils import BasicAuthenticationError
@@ -51,7 +52,12 @@ from onyx.utils.logger import setup_logger
 from shared_configs.configs import MULTI_TENANT, POSTGRES_DEFAULT_SCHEMA
 from shared_configs.contextvars import get_current_tenant_id
 
-admin_router = APIRouter(prefix="/admin/enterprise-settings")
+admin_router = APIRouter(
+    prefix="/admin/enterprise-settings",
+    dependencies=[
+        Depends(restrict_in_playground(PlaygroundRestrictedFeature.WHITELABEL))
+    ],
+)
 basic_router = APIRouter(prefix="/enterprise-settings")
 
 logger = setup_logger()
@@ -354,7 +360,11 @@ def get_active_scim_token(
     )
 
 
-@admin_router.post("/scim/token", status_code=201)
+@admin_router.post(
+    "/scim/token",
+    status_code=201,
+    dependencies=[Depends(restrict_in_playground(PlaygroundRestrictedFeature.SCIM))],
+)
 def create_scim_token(
     body: ScimTokenCreate,
     user: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),

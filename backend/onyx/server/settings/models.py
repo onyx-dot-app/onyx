@@ -15,6 +15,7 @@ from onyx.configs.app_configs import (
 from onyx.configs.constants import QueryHistoryType
 from onyx.db.enums import PluginPublishingPolicy, SupportedLanguage
 from onyx.server.features.notifications.models import NotificationResponse
+from onyx.server.playground import PlaygroundRestrictedFeature
 from shared_configs.configs import POSTGRES_DEFAULT_SCHEMA
 
 DEFAULT_FILE_TOKEN_COUNT_THRESHOLD_K_VECTOR_DB = 200
@@ -188,6 +189,11 @@ class UserSettings(Settings):
     # reads this instead of a build-time flag, so cloud and playground share
     # one web image.
     is_playground: bool = False
+    # The features the playground restricts (onyx/server/playground.py). Empty
+    # elsewhere. The web app disables each page and control from this list.
+    playground_restrictions: list[PlaygroundRestrictedFeature] = Field(
+        default_factory=list
+    )
     # Application version, read from the ONYX_VERSION env var at startup.
     version: str | None = None
     # Git details of the server's build (server/settings/build_info.py).

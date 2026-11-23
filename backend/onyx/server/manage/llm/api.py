@@ -165,6 +165,7 @@ from onyx.server.manage.llm.utils import (
     lm_studio_capability_enabled,
     strip_openrouter_vendor_prefix,
 )
+from onyx.server.playground import PlaygroundRestrictedFeature, restrict_in_playground
 from onyx.server.settings.models import Settings
 from onyx.server.settings.store import (
     load_settings,
@@ -184,7 +185,12 @@ from shared_configs.configs import MULTI_TENANT
 
 logger = setup_logger()
 
-admin_router = APIRouter(prefix="/admin/llm")
+admin_router = APIRouter(
+    prefix="/admin/llm",
+    dependencies=[
+        Depends(restrict_in_playground(PlaygroundRestrictedFeature.LLM_PROVIDERS))
+    ],
+)
 basic_router = APIRouter(prefix="/llm")
 
 

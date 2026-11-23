@@ -185,6 +185,10 @@ from onyx.server.features.build.sandbox.firecracker.purge import (
 from onyx.server.features.build.sandbox.snapshot_manager import (
     delete_sandbox_blobs_best_effort,
 )
+from onyx.server.playground import (
+    PlaygroundRestrictedFeature,
+    is_restricted_in_playground,
+)
 from onyx.server.security.store import get_security_settings
 from onyx.server.settings.store import load_settings
 from onyx.server.utils import BasicAuthenticationError
@@ -322,6 +326,10 @@ def user_needs_to_be_verified() -> bool:
 
 def anonymous_user_enabled(*, tenant_id: str | None = None) -> bool:
     from onyx.cache.factory import get_cache_backend
+
+    # Restricted on the playground, whatever the cache says.
+    if is_restricted_in_playground(PlaygroundRestrictedFeature.ANONYMOUS_ACCESS):
+        return False
 
     cache = get_cache_backend(tenant_id=tenant_id)
     value = cache.get(OnyxRedisLocks.ANONYMOUS_USER_ENABLED)

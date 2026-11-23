@@ -9,6 +9,7 @@ from pydantic import ValidationError
 from onyx.db.enums import SupportedLanguage
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server import playground
 from onyx.server.settings import api as settings_api
 from onyx.server.settings.models import (
     CRAFT_INSTRUCTIONS_MAX_LENGTH,
@@ -186,3 +187,54 @@ def test_default_language_updates_and_is_preserved(
 def test_unsupported_default_language_rejected() -> None:
     with pytest.raises(ValidationError):
         Settings.model_validate({"default_language": "xx"})
+
+
+def test_playground_refuses_anonymous_access(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(playground, "IS_PLAYGROUND", True)
+    with pytest.raises(OnyxError) as exc_info:
+        _patch_settings(
+            {"anonymous_user_enabled": True},
+            Settings(anonymous_user_enabled=False),
+            monkeypatch,
+        )
+    assert exc_info.value.error_code == OnyxErrorCode.PLAYGROUND_RESTRICTED
+
+
+def test_playground_refuses_the_llm_gateway(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(playground, "IS_PLAYGROUND", True)
+    with pytest.raises(OnyxError) as exc_info:
+        _patch_settings(
+            {"llm_gateway_enabled": True},
+            Settings(llm_gateway_enabled=False),
+            monkeypatch,
+            ee=True,
+            tier=Tier.ENTERPRISE,
+        )
+    assert exc_info.value.error_code == OnyxErrorCode.PLAYGROUND_RESTRICTED
+
+
+def test_playground_keeps_other_settings_writable(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(playground, "IS_PLAYGROUND", True)
+    existing = Settings(anonymous_user_enabled=False, llm_gateway_enabled=False)
+    result = _patch_settings({"company_name": "x"}, existing, monkeypatch)
+    assert result.company_name == "x"
+    assert result.anonymous_user_enabled is False
+    assert result.llm_gateway_enabled is False
+
+
+def test_cloud_still_turns_anonymous_access_on(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    monkeypatch.setattr(playground, "IS_PLAYGROUND", False)
+    result = _patch_settings(
+        {"anonymous_user_enabled": True},
+        Settings(anonymous_user_enabled=False),
+        monkeypatch,
+    )
+    assert result.anonymous_user_enabled is True

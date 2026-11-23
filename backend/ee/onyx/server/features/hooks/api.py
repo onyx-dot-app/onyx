@@ -29,6 +29,7 @@ from onyx.hooks.models import (
     HookValidateStatus,
 )
 from onyx.hooks.registry import get_all_specs, get_hook_point_spec
+from onyx.server.playground import PlaygroundRestrictedFeature, restrict_in_playground
 from onyx.server.security.models import outbound_ssrf_params
 from onyx.server.security.store import get_security_settings
 from onyx.utils.logger import setup_logger
@@ -187,7 +188,10 @@ def _validate_endpoint(
 # Routers
 # ---------------------------------------------------------------------------
 
-router = APIRouter(prefix="/admin/hooks")
+router = APIRouter(
+    prefix="/admin/hooks",
+    dependencies=[Depends(restrict_in_playground(PlaygroundRestrictedFeature.HOOKS))],
+)
 
 
 # ---------------------------------------------------------------------------

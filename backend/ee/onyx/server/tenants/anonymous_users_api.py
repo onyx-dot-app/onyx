@@ -19,6 +19,7 @@ from onyx.db.engine.sql_engine import get_session_with_shared_schema
 from onyx.db.enums import Permission
 from onyx.error_handling.error_codes import OnyxErrorCode
 from onyx.error_handling.exceptions import OnyxError
+from onyx.server.playground import PlaygroundRestrictedFeature, restrict_in_playground
 from onyx.utils.logger import setup_logger
 from shared_configs.contextvars import get_current_tenant_id
 
@@ -42,7 +43,12 @@ async def get_anonymous_user_path_api(
     return AnonymousUserPath(anonymous_user_path=current_path)
 
 
-@router.post("/anonymous-user-path")
+@router.post(
+    "/anonymous-user-path",
+    dependencies=[
+        Depends(restrict_in_playground(PlaygroundRestrictedFeature.ANONYMOUS_ACCESS))
+    ],
+)
 async def set_anonymous_user_path_api(
     anonymous_user_path: str,
     _: User = Depends(require_permission(Permission.FULL_ADMIN_PANEL_ACCESS)),
