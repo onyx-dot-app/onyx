@@ -14,6 +14,7 @@ from onyx.natural_language_processing.embedding_providers import vertex_schedule
 from onyx.natural_language_processing.embedding_providers.vertex_scheduler import (
     VertexRequestScheduler,
     VertexRetrySettings,
+    _ModelSlot,
     _WaitClock,
     is_transient_vertex_error,
 )
@@ -25,6 +26,7 @@ from onyx.natural_language_processing.embedding_request_policy import (
 from onyx.natural_language_processing.exceptions import EmbeddingRequestFailedError
 from onyx.natural_language_processing.search_nlp_models import CloudEmbedding
 from onyx.natural_language_processing.vertex_auth import VertexEmbeddingConfig
+from onyx.utils.adaptive_semaphore import AdaptiveSemaphore
 from shared_configs.enums import EmbeddingProvider, EmbedTextType
 
 _KEY = "p/global/gemini-embedding-2"
@@ -105,7 +107,10 @@ def test_rate_limit_goes_to_the_policy_after_the_budget() -> None:
         raise _vertex_429()
 
     with pytest.raises(genai_errors.ClientError):
-        asyncio.run(scheduler._send_in_slot(request, limit, _policy(), _WaitClock()))
+        model_slot = _ModelSlot(limit, AsyncMock())
+        asyncio.run(
+            scheduler._send_in_slot(request, model_slot, _policy(), _WaitClock())
+        )
     assert calls == 1
     assert limit.limit < 10
 
@@ -214,9 +219,11 @@ def test_permits_are_taken_in_a_process_slot_and_waits_hold_none() -> None:
         )
         == "ok"
     )
-    # (model slots, process slots)
+    # (model slots, process slots): a full window is waited out with no slot,
+    # so other requests for the model, such as searches, can go ahead.
     assert slots_at_permit == [(1, 1), (1, 1)]
-    assert slots_during_wait == [(1, 0)]
+    assert slots_during_wait == [(0, 0)]
+    assert scheduler.model_limit(_KEY).in_flight == 0
 
 
 def test_wait_clock_leaves_out_process_slot_waits() -> None:
@@ -519,3 +526,15 @@ def test_embeddings_keep_the_input_order() -> None:
     # The timeout fails the test if the requests do not run in parallel.
     embeddings = asyncio.run(asyncio.wait_for(scenario(), timeout=10))
     assert embeddings == [[1.0], [2.0], [3.0]]
+
+
+def test_a_model_slot_is_given_back_once() -> None:
+    limit = MagicMock(spec=AdaptiveSemaphore)
+    model_slot = _ModelSlot(limit, AsyncMock())
+
+    model_slot.release()  # Not held yet: a failed acquire gives nothing back.
+    asyncio.run(model_slot.acquire())
+    model_slot.release()
+    model_slot.release()
+
+    assert limit.release.call_count == 1

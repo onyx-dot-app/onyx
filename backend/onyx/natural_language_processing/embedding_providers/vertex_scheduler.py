@@ -114,6 +114,28 @@ class _WaitClock:
         self.started_at += time.monotonic() - since
 
 
+class _ModelSlot:
+    """A request's slot in its model limit. The request leaves it while the
+    configured rate limit is full, so a project that waits for its own limit
+    does not hold up the other requests for the model, such as searches."""
+
+    def __init__(
+        self, limit: AdaptiveSemaphore, acquire: Callable[[], Awaitable[None]]
+    ) -> None:
+        self.limit = limit
+        self._acquire = acquire
+        self._held = False
+
+    async def acquire(self) -> None:
+        await self._acquire()
+        self._held = True
+
+    def release(self) -> None:
+        if self._held:
+            self._held = False
+            self.limit.release()
+
+
 class VertexRequestScheduler:
     def __init__(
         self,
@@ -155,13 +177,19 @@ class VertexRequestScheduler:
         policy: EmbeddingRequestPolicy,
     ) -> _T:
         limit = self.model_limit(project_location_model)
+        model_slot = _ModelSlot(
+            limit, partial(self._acquire_unless_stopped, limit, policy.should_stop)
+        )
         # Outside the policy, so its wait limit does not count the slot wait.
-        async with self._slot(limit, policy.should_stop):
+        await model_slot.acquire()
+        try:
             clock = _WaitClock()
             return await policy.send_async(
-                partial(self._send_in_slot, request, limit, policy, clock),
+                partial(self._send_in_slot, request, model_slot, policy, clock),
                 takes_rate_limit=False,
             )
+        finally:
+            model_slot.release()
 
     @asynccontextmanager
     async def _slot(
@@ -196,17 +224,20 @@ class VertexRequestScheduler:
     async def _send_in_slot(
         self,
         request: Callable[[], Awaitable[_T]],
-        limit: AdaptiveSemaphore,
+        model_slot: _ModelSlot,
         policy: EmbeddingRequestPolicy,
         clock: _WaitClock,
     ) -> _T:
-        """Runs in the model slot. Only a request in flight holds a process
-        slot. So a project that waits for its rate limit, or that backs off,
-        takes no process capacity from the other projects."""
+        """Runs in the model slot, which a provider backoff keeps. Only a
+        request in flight holds a process slot, so a project that waits or
+        backs off takes no process capacity from the other projects."""
+        limit = model_slot.limit
         retries = _SlotRetries(self._settings, policy)
         while True:
             try:
-                result = await self._send_with_permit(request, policy, clock)
+                result = await self._send_with_permit(
+                    request, model_slot, policy, clock
+                )
             except Exception as e:
                 wait = retries.wait_before_resend(e, limit)
                 if wait is None:
@@ -223,13 +254,15 @@ class VertexRequestScheduler:
     async def _send_with_permit(
         self,
         request: Callable[[], Awaitable[_T]],
+        model_slot: _ModelSlot,
         policy: EmbeddingRequestPolicy,
         clock: _WaitClock,
     ) -> _T:
         """Takes the configured rate limit only while it holds a process slot,
         so each permit goes to a request that is sent at once. A permit taken
         before a slot wait could age out of its window, and the queued
-        requests could then exceed the limit together."""
+        requests could then exceed the limit together. A full window is
+        waited out with no slot."""
         full_window_waits = 0
         while True:
             slot_wait_started = time.monotonic()
@@ -237,9 +270,13 @@ class VertexRequestScheduler:
                 clock.exclude_since(slot_wait_started)
                 if policy.try_take_rate_limit():
                     return await request()
+            model_slot.release()
             await policy.wait_for_full_rate_limit_async(
                 full_window_waits, clock.started_at
             )
+            slot_wait_started = time.monotonic()
+            await model_slot.acquire()
+            clock.exclude_since(slot_wait_started)
             full_window_waits += 1
 
 
