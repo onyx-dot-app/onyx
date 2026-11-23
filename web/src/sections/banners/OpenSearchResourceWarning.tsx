@@ -21,6 +21,7 @@ import {
 } from "@/lib/opensearch-health/types";
 import { useUser } from "@/providers/UserProvider";
 import { isAuthPath } from "@/lib/auth/paths";
+import { ADMIN_ROUTES } from "@/lib/admin-routes";
 
 const ISSUE_MESSAGE_KEYS: Record<
   ResourceIssue,
@@ -74,8 +75,14 @@ function ResourceDetails({ health }: ResourceDetailsProps): ReactElement {
   );
 }
 
+// The Service Status page shows the same issues in its own panel.
+function isServiceStatusPath(pathname: string | null): boolean {
+  return pathname === ADMIN_ROUTES.SERVICE_STATUS.path;
+}
+
 export function OpenSearchResourceBanner(): ReactElement | null {
   const t = useTranslations("opensearchHealth");
+  const pathname = usePathname();
   const { user, isAdmin } = useUser();
   const { data, error } = useOpenSearchResourceHealth();
   const detailsModal = useCreateModal();
@@ -83,7 +90,8 @@ export function OpenSearchResourceBanner(): ReactElement | null {
   useEffect(() => {
     detailsModal.toggle(false);
   }, [user?.id, hasIssues, detailsModal.toggle]);
-  if (!isAdmin || !data?.issues.length) return null;
+  if (!isAdmin || !data?.issues.length || isServiceStatusPath(pathname))
+    return null;
 
   return (
     <div role="status" className="shrink-0 p-2">
@@ -125,9 +133,13 @@ async function claimPopup(): Promise<ResourcePopupResponse> {
 export function OpenSearchResourcePopup(): ReactElement | null {
   const pathname = usePathname();
   const { user, isAdmin } = useUser();
-  // Login refreshes the user before redirecting; claim only after entering the app.
+  // Login refreshes the user before redirecting; claim only after entering the
+  // app. Not on the Service Status page either: it already shows the issues,
+  // and a claim there would use up the day's popup.
   const userId: string | undefined =
-    isAdmin && !isAuthPath(pathname) ? user?.id : undefined;
+    isAdmin && !isAuthPath(pathname) && !isServiceStatusPath(pathname)
+      ? user?.id
+      : undefined;
   const [warning, setWarning] = useState<{
     userId: string;
     health: ResourceHealth;
