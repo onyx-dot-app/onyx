@@ -156,6 +156,23 @@ _DATE_FIELDS = frozenset(
     }
 )
 
+# Filters that take one value or a list of values, any of which may match.
+_ANY_OF_FIELDS = frozenset(
+    {
+        "source_type",
+        "title_contains",
+        "owned_by",
+        "parent_hierarchy_node_id",
+        "name_contains",
+        "parent_id",
+        "node_type",
+        "description_contains",
+        "chat_session_id",
+        "content_contains",
+    }
+)
+_MAX_ANY_OF_VALUES = 20
+
 _GENERAL_FIELDS = frozenset(
     {"table", "count", "group_by", "limit", "cursor", "order_by"}
 )
@@ -170,6 +187,17 @@ def _prop(
     return prop
 
 
+def _any_of_prop(
+    item_type: str, description: str, enum: list[str] | None = None
+) -> dict[str, Any]:
+    # One value or a list: code mode type-checks calls against this schema.
+    value = _prop(item_type, "One value.", enum)
+    return {
+        "anyOf": [value, {"type": "array", "items": value}],
+        "description": f"{description} One value, or a list that matches any of its values (up to {_MAX_ANY_OF_VALUES}).",
+    }
+
+
 # fmt: off
 _PARAMETER_SCHEMA: dict[str, dict[str, Any]] = {
     "table": _prop("string", "Which table to query.", [t.value for t in PostgresToolTable]),
@@ -178,20 +206,20 @@ _PARAMETER_SCHEMA: dict[str, dict[str, Any]] = {
     "limit": _prop("integer", f"Max rows to return (default {POSTGRES_TOOL_DEFAULT_LIMIT}, max {POSTGRES_TOOL_MAX_LIMIT}). For document listings, the page size."),
     "cursor": _prop("string", "document listings only: the next_cursor value from the previous page, to get the next page. Use the same filters and order_by as that call."),
     "order_by": _prop("string", "document listings only: row order (default 'updated_desc', newest first). With limit, gives the first N in that order in one call, e.g. the 10 oldest docs. Docs with no value sort last.", [o.value for o in DocumentOrder]),
-    "source_type": _prop("string", "document/hierarchy_node: connector source id, e.g. 'confluence', 'google_drive', 'slack', 'web'."),
-    "title_contains": _prop("string", "document: case-insensitive title substring, matched literally (% and _ are not wildcards; do not escape them)."),
+    "source_type": _any_of_prop("string", "document/hierarchy_node: connector source id, e.g. 'confluence', 'google_drive', 'slack', 'web'."),
+    "title_contains": _any_of_prop("string", "document: case-insensitive title substring, matched literally (% and _ are not wildcards; do not escape them)."),
     "updated_after": _prop("string", "document: ISO date lower bound on when the doc changed at its source. Docs with unknown source timestamps never match date filters."),
     "updated_before": _prop("string", "document: ISO date upper bound, exclusive (use the next day's date to include a whole day)."),
-    "owned_by": _prop("string", "document: owner exactly as shown in a row's owners= field (usually a display name, sometimes an email; exact match). group_by=owner lists the stored values."),
-    "parent_hierarchy_node_id": _prop("integer", "document: only docs directly inside this folder/space node."),
-    "name_contains": _prop("string", "hierarchy_node: case-insensitive name substring."),
-    "parent_id": _prop("integer", "hierarchy_node: list child nodes of this node."),
-    "node_type": _prop("string", "hierarchy_node: e.g. 'folder', 'shared_drive', 'source'."),
-    "description_contains": _prop("string", "chat_session: case-insensitive substring of the conversation title."),
+    "owned_by": _any_of_prop("string", "document: owner exactly as shown in a row's owners= field (usually a display name, sometimes an email; exact match). group_by=owner lists the stored values."),
+    "parent_hierarchy_node_id": _any_of_prop("integer", "document: only docs directly inside this folder/space node."),
+    "name_contains": _any_of_prop("string", "hierarchy_node: case-insensitive name substring."),
+    "parent_id": _any_of_prop("integer", "hierarchy_node: list child nodes of this node."),
+    "node_type": _any_of_prop("string", "hierarchy_node: e.g. 'folder', 'shared_drive', 'source'."),
+    "description_contains": _any_of_prop("string", "chat_session: case-insensitive substring of the conversation title."),
     "created_after": _prop("string", "chat_session: ISO date lower bound."),
     "created_before": _prop("string", "chat_session: ISO date upper bound, exclusive."),
-    "chat_session_id": _prop("string", "chat_message: only messages in this session (UUID)."),
-    "content_contains": _prop("string", "chat_message: case-insensitive substring of the message text."),
+    "chat_session_id": _any_of_prop("string", "chat_message: only messages in this session (UUID)."),
+    "content_contains": _any_of_prop("string", "chat_message: case-insensitive substring of the message text."),
     "message_type": _prop("string", "chat_message: filter by author.", ["user", "assistant"]),
     "sent_after": _prop("string", "chat_message: ISO date lower bound."),
     "sent_before": _prop("string", "chat_message: ISO date upper bound, exclusive."),
@@ -286,6 +314,20 @@ def _parse_filter_value(field: str, value: Any) -> Any:
     return value
 
 
+def _parse_any_of(field: str, value: Any) -> list[Any]:
+    """One value or a list of values, deduplicated in order."""
+    values = value if isinstance(value, list) else [value]
+    if not values:
+        raise _reject(f"'{field}' must not be an empty list.")
+    if len(values) > _MAX_ANY_OF_VALUES:
+        raise _reject(
+            f"'{field}' takes at most {_MAX_ANY_OF_VALUES} values. Split the "
+            "query or narrow the list."
+        )
+    parsed = [_parse_filter_value(field, item) for item in values]
+    return list(dict.fromkeys(parsed))
+
+
 def _parse_args(llm_kwargs: dict[str, Any]) -> PostgresQueryArgs:
     all_filter_fields = frozenset().union(*_FILTER_FIELDS_BY_TABLE.values())
 
@@ -362,7 +404,12 @@ def _parse_args(llm_kwargs: dict[str, Any]) -> PostgresQueryArgs:
     }
 
     for field in set(llm_kwargs) & allowed:
-        parsed[field] = _parse_filter_value(field, llm_kwargs[field])
+        value = llm_kwargs[field]
+        parsed[field] = (
+            _parse_any_of(field, value)
+            if field in _ANY_OF_FIELDS
+            else _parse_filter_value(field, value)
+        )
 
     if table == PostgresToolTable.SEARCH_DOC and parsed.get("chat_message_id") is None:
         raise _reject(

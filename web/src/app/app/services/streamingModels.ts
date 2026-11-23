@@ -301,7 +301,11 @@ export interface MemoryToolNoAccess extends BaseObj {
 
 // Postgres Tool Packets
 // The arguments of a postgres_query call, as the model sent them.
-export type PostgresToolQueryValue = string | number | boolean | null;
+export type PostgresToolQueryScalar = string | number | boolean | null;
+// Text and id filters may hold a list of values, any of which may match.
+export type PostgresToolQueryValue =
+  | PostgresToolQueryScalar
+  | PostgresToolQueryScalar[];
 export interface PostgresToolQuery {
   table?: PostgresToolQueryValue;
   count?: PostgresToolQueryValue;

@@ -256,7 +256,7 @@ def test_chat_session_ownership_and_deleted(
 ) -> None:
     tag = chat_env.tag
     a_sessions = query_chat_sessions_for_tool(
-        db_session, chat_env.user_a.id, description_contains=tag, limit=100
+        db_session, chat_env.user_a.id, description_contains=[tag], limit=100
     )
     assert _descs(a_sessions) == {
         f"Scania SharePoint indexing {tag}",
@@ -264,7 +264,7 @@ def test_chat_session_ownership_and_deleted(
     }
 
     b_sessions = query_chat_sessions_for_tool(
-        db_session, chat_env.user_b.id, description_contains=tag, limit=100
+        db_session, chat_env.user_b.id, description_contains=[tag], limit=100
     )
     assert _descs(b_sessions) == {f"Bob private chat {tag}"}
 
@@ -288,7 +288,7 @@ def test_hidden_history_sessions_excluded(
 
     try:
         sessions = query_chat_sessions_for_tool(
-            db_session, user_id, description_contains=tag, limit=100
+            db_session, user_id, description_contains=[tag], limit=100
         )
         assert _descs(sessions) == {
             f"Scania SharePoint indexing {tag}",
@@ -296,7 +296,7 @@ def test_hidden_history_sessions_excluded(
         }
         assert (
             query_chat_messages_for_tool(
-                db_session, user_id, content_contains=f"hidden history {tag}"
+                db_session, user_id, content_contains=[f"hidden history {tag}"]
             )
             == []
         )
@@ -315,14 +315,14 @@ def test_chat_session_filters_and_current_exclusion(
 
     # ILIKE is case-insensitive.
     scania = query_chat_sessions_for_tool(
-        db_session, user_id, description_contains=f"sharepoint indexing {tag}"
+        db_session, user_id, description_contains=[f"sharepoint indexing {tag}"]
     )
     assert _descs(scania) == {f"Scania SharePoint indexing {tag}"}
 
     recent = query_chat_sessions_for_tool(
         db_session,
         user_id,
-        description_contains=tag,
+        description_contains=[tag],
         created_after=now - timedelta(days=30),
     )
     assert _descs(recent) == {f"Scania SharePoint indexing {tag}"}
@@ -330,7 +330,7 @@ def test_chat_session_filters_and_current_exclusion(
     old = query_chat_sessions_for_tool(
         db_session,
         user_id,
-        description_contains=tag,
+        description_contains=[tag],
         created_before=now - timedelta(days=50),
     )
     assert _descs(old) == {f"Pricing discussion {tag}"}
@@ -338,7 +338,7 @@ def test_chat_session_filters_and_current_exclusion(
     excluded = query_chat_sessions_for_tool(
         db_session,
         user_id,
-        description_contains=tag,
+        description_contains=[tag],
         exclude_chat_session_id=chat_env.session_scania.id,
     )
     assert _descs(excluded) == {f"Pricing discussion {tag}"}
@@ -349,15 +349,15 @@ def test_chat_session_count_and_month_grouping(
 ) -> None:
     user_id = chat_env.user_a.id
     count = count_chat_sessions_for_tool(
-        db_session, user_id, description_contains=chat_env.tag
+        db_session, user_id, description_contains=[chat_env.tag]
     )
     rows = query_chat_sessions_for_tool(
-        db_session, user_id, description_contains=chat_env.tag, limit=100
+        db_session, user_id, description_contains=[chat_env.tag], limit=100
     )
     assert count == len(rows) == 2
 
     months = count_chat_sessions_by_month_for_tool(
-        db_session, user_id, description_contains=chat_env.tag
+        db_session, user_id, description_contains=[chat_env.tag]
     )
     # 10d vs 100d ago always land in different months.
     assert len(months) == 2
@@ -371,7 +371,7 @@ def test_chat_message_scoping_and_invariants(
 ) -> None:
     tag = chat_env.tag
     a_messages = query_chat_messages_for_tool(
-        db_session, chat_env.user_a.id, content_contains=tag, limit=100
+        db_session, chat_env.user_a.id, content_contains=[tag], limit=100
     )
     # The system-note and deleted-session messages match the tag but are
     # excluded; Bob's message is another user's.
@@ -386,7 +386,7 @@ def test_chat_message_scoping_and_invariants(
     scania_messages = query_chat_messages_for_tool(
         db_session,
         chat_env.user_a.id,
-        chat_session_id=chat_env.session_scania.id,
+        chat_session_id=[chat_env.session_scania.id],
         limit=100,
     )
     assert _texts(scania_messages) == {
@@ -395,7 +395,7 @@ def test_chat_message_scoping_and_invariants(
     }
 
     b_messages = query_chat_messages_for_tool(
-        db_session, chat_env.user_b.id, content_contains=tag, limit=100
+        db_session, chat_env.user_b.id, content_contains=[tag], limit=100
     )
     assert _texts(b_messages) == {f"Bob secret question {tag}"}
 
@@ -410,7 +410,7 @@ def test_chat_message_filters_and_ordering(
     user_only = query_chat_messages_for_tool(
         db_session,
         user_id,
-        content_contains=tag,
+        content_contains=[tag],
         message_type=MessageType.USER,
         limit=100,
     )
@@ -422,7 +422,7 @@ def test_chat_message_filters_and_ordering(
     recent = query_chat_messages_for_tool(
         db_session,
         user_id,
-        content_contains=tag,
+        content_contains=[tag],
         sent_after=now - timedelta(days=30),
         limit=100,
     )
@@ -434,14 +434,14 @@ def test_chat_message_filters_and_ordering(
     excluded = query_chat_messages_for_tool(
         db_session,
         user_id,
-        content_contains=tag,
+        content_contains=[tag],
         exclude_chat_session_id=chat_env.session_scania.id,
         limit=100,
     )
     assert _texts(excluded) == {f"Old question about pricing {tag}"}
 
     ordered = query_chat_messages_for_tool(
-        db_session, user_id, content_contains=tag, limit=100
+        db_session, user_id, content_contains=[tag], limit=100
     )
     assert [m.message for m in ordered] == [
         f"Scania indexing throughput answer {tag}",
@@ -455,12 +455,12 @@ def test_chat_message_count_and_month_grouping(
 ) -> None:
     user_id = chat_env.user_a.id
     count = count_chat_messages_for_tool(
-        db_session, user_id, content_contains=chat_env.tag
+        db_session, user_id, content_contains=[chat_env.tag]
     )
     assert count == 3
 
     months = count_chat_messages_by_month_for_tool(
-        db_session, user_id, content_contains=chat_env.tag
+        db_session, user_id, content_contains=[chat_env.tag]
     )
     assert len(months) == 2
     assert sum(g.count for g in months) == 3
