@@ -80,10 +80,7 @@ class EmbeddingRequestPolicy(BaseModel):
         started_at = time.monotonic()
         throttle_attempt = 0
         while True:
-            if self.rate_limiter is not None:
-                await self.rate_limiter.acquire_async(
-                    self.should_stop, started_at, self._add_rate_limit_wait
-                )
+            await self.acquire_rate_limit_async(started_at)
             try:
                 return await request()
             except Exception as e:
@@ -98,6 +95,15 @@ class EmbeddingRequestPolicy(BaseModel):
                 finally:
                     self._add_provider_throttle_wait(time.monotonic() - start)
                 throttle_attempt += 1
+
+    async def acquire_rate_limit_async(self, started_at: float) -> None:
+        """Waits for the configured rate limit, if there is one. `send_async`
+        calls this before each request. A request that sends again by itself
+        calls it before each resend, with the time it started to wait."""
+        if self.rate_limiter is not None:
+            await self.rate_limiter.acquire_async(
+                self.should_stop, started_at, self._add_rate_limit_wait
+            )
 
     def _throttle_sleeps(self, attempt: int, started_at: float) -> Iterator[float]:
         return wait_sleeps(

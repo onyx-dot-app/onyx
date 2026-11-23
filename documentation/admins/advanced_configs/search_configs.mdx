@@ -169,6 +169,23 @@ Ensure the Vertex AI API is enabled and allow time for new IAM grants to propaga
 Do not set `GOOGLE_APPLICATION_CREDENTIALS` to a JSON key file when you intend to use the GKE pod identity:
 ADC checks that variable before the metadata server.
 
+##### Request Concurrency
+
+Onyx sends Gemini Embedding 2 requests to Vertex AI in parallel. Two environment variables limit the requests in flight.
+Set them on the API server and on the indexing workers. Each process has its own limits.
+
+| Environment variable | Default | Limits |
+| --- | --- | --- |
+| `VERTEXAI_EMBEDDING_MAX_CONCURRENCY` | 128 | The Gemini Embedding 2 requests in flight in one process, for all projects. |
+| `VERTEXAI_EMBEDDING_INITIAL_CONCURRENCY` | 16 | The first limit for Gemini Embedding 2 requests to each Vertex AI project and location in one process. |
+
+The limit for each project, location, and model increases while requests succeed.
+When Vertex AI sends a rate-limit error, the limit decreases by 30%, not more than one time each 2 seconds.
+It does not go above `VERTEXAI_EMBEDDING_MAX_CONCURRENCY`.
+
+Decrease `VERTEXAI_EMBEDDING_MAX_CONCURRENCY` if your indexing pods do not have sufficient memory or CPU.
+To keep indexing below a request rate, set the [Embedding Rate Limit](#embedding-rate-limit).
+
 ### Self-hosted Models
 
 Self-hosted models run on Onyx's model servers, so your documents do not leave your deployment.
