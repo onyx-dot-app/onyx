@@ -14115,6 +14115,13 @@
       },
       "availableFor": "متاح في {plan}"
     },
+    "playground": {
+      "restricted": {
+        "description": "هذه الميزة غير متاحة في الـ Playground. نسخة Onyx الخاصة بك تتضمنها. [تحدث إلى المبيعات]({salesUrl})",
+        "title": "حد الـ Playground",
+        "tooltip": "غير متاحة في الـ Playground. نسخة Onyx الخاصة بك تتضمنها."
+      }
+    },
     "placeholders": {
       "email": "albarid@sharikatuk.com",
       "url": "https://",

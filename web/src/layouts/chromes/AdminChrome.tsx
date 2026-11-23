@@ -26,6 +26,7 @@ import {
   hasPermission,
 } from "@/lib/permissions/utils";
 import LiteModeIndexingNotice from "@/sections/admin/LiteModeIndexingNotice";
+import PlaygroundRestrictedPage from "@/sections/admin/PlaygroundRestrictedPage";
 import { useTranslations } from "next-intl";
 import { AdminTopBarSlotContext } from "@/layouts/chromes/AdminTopBarSlot";
 
@@ -137,7 +138,9 @@ export default function AdminChrome({
         <AdminTopBarSlotContext.Provider value={isMobile ? topBarSlot : null}>
           <RootLayout.MainContent>
             <PendingRoute base={base} loader={<PageLoader />}>
-              {content}
+              <PlaygroundRestrictedPage featureKey={matched?.featureKey}>
+                {content}
+              </PlaygroundRestrictedPage>
             </PendingRoute>
           </RootLayout.MainContent>
         </AdminTopBarSlotContext.Provider>

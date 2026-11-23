@@ -14115,6 +14115,13 @@
       },
       "availableFor": "{plan}可用"
     },
+    "playground": {
+      "restricted": {
+        "description": "此功能在 Playground 中不可用。您自己的 Onyx 包含此功能。[联系销售]({salesUrl})",
+        "title": "Playground 限制",
+        "tooltip": "在 Playground 中不可用。您自己的 Onyx 包含此功能。"
+      }
+    },
     "placeholders": {
       "email": "youxiang@nide-gongsi.com",
       "url": "https://",

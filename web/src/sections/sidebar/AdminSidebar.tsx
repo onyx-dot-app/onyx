@@ -33,6 +33,10 @@ import {
 } from "@/lib/constants";
 import { Tier } from "@/lib/tiers/types";
 import { useBetaTag, usePlans } from "@/lib/tiers/hooks";
+import {
+  PLAYGROUND_FEATURE_PLAN,
+  type PlaygroundRestrictedFeature,
+} from "@/lib/playground/types";
 import useFilter from "@/hooks/useFilter";
 import { AccountPopover } from "@/lib/app/components";
 import {
@@ -47,6 +51,7 @@ import BrandedSidebarHeader from "@/sections/sidebar/BrandedSidebarHeader";
 
 export default function AdminSidebar() {
   const t = useTranslations("sidebar");
+  const playgroundT = useTranslations("common.playground");
   const plans = usePlans();
   const { folded, setFolded } = useSidebarState();
   const searchRef = useRef<HTMLInputElement>(null);
@@ -112,8 +117,21 @@ export default function AdminSidebar() {
   const betaTag: BadgeProps = useBetaTag();
   const sectionTag = (sectionId: AdminNavSectionId | null) =>
     sectionId && BETA_SECTION_IDS.has(sectionId) ? betaTag : undefined;
-  const itemTag = (beta: boolean | undefined) =>
-    beta ? <Badge {...betaTag} /> : undefined;
+  // A restricted page carries the badge of the plan that includes it, so
+  // the user sees what their own Onyx would include.
+  const itemTag = (
+    beta: boolean | undefined,
+    restrictedFeatureKey: PlaygroundRestrictedFeature | undefined
+  ) => {
+    const plan = restrictedFeatureKey
+      ? PLAYGROUND_FEATURE_PLAN[restrictedFeatureKey]
+      : null;
+    return plan ? (
+      <Badge {...plans[plan].tag} />
+    ) : beta ? (
+      <Badge {...betaTag} />
+    ) : undefined;
+  };
 
   // Search the labels the user reads, not the underlying ids.
   const itemExtractor = useCallback(
@@ -163,18 +181,20 @@ export default function AdminSidebar() {
               }
               tag={sectionTag(group.sectionId)}
             >
-              {group.items.map(({ link, icon, nameId, beta }) => (
-                <SidebarTab
-                  key={link}
-                  icon={icon}
-                  // SAFETY: sidebar links are the paths in `ADMIN_ROUTES`.
-                  {...navigation.linkTo(link as Route, { scroll: false })}
-                  selected={pathname.startsWith(link)}
-                  rightChildren={itemTag(beta)}
-                >
-                  {navLabels[nameId]}
-                </SidebarTab>
-              ))}
+              {group.items.map(
+                ({ link, icon, nameId, beta, restrictedFeatureKey }) => (
+                  <SidebarTab
+                    key={link}
+                    icon={icon}
+                    // SAFETY: sidebar links are the paths in `ADMIN_ROUTES`.
+                    {...navigation.linkTo(link as Route, { scroll: false })}
+                    selected={pathname.startsWith(link)}
+                    rightChildren={itemTag(beta, restrictedFeatureKey)}
+                  >
+                    {navLabels[nameId]}
+                  </SidebarTab>
+                )
+              )}
             </SidebarLayouts.Section>
           </React.Fragment>
         ))}
@@ -185,12 +205,18 @@ export default function AdminSidebar() {
             disabled
             // One tooltip over a tall block: it stays level with the pointer.
             tooltipAlign="follow"
+            // The plan tooltips link to billing, which the playground does not
+            // have. There, the reason is the playground itself.
             tooltip={
-              plans[
-                disabled.every((item) => item.requiredTier === Tier.ENTERPRISE)
-                  ? Tier.ENTERPRISE
-                  : Tier.BUSINESS
-              ].tooltip
+              flags.isPlayground
+                ? playgroundT("restricted.tooltip")
+                : plans[
+                    disabled.every(
+                      (item) => item.requiredTier === Tier.ENTERPRISE
+                    )
+                      ? Tier.ENTERPRISE
+                      : Tier.BUSINESS
+                  ].tooltip
             }
           >
             {disabledGroups.map((group, groupIndex) => (
@@ -205,7 +231,7 @@ export default function AdminSidebar() {
                   <SidebarTab
                     key={link}
                     icon={icon}
-                    rightChildren={itemTag(beta)}
+                    rightChildren={itemTag(beta, undefined)}
                   >
                     {navLabels[nameId]}
                   </SidebarTab>

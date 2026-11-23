@@ -14115,6 +14115,13 @@
       },
       "availableFor": "Disponível no {plan}"
     },
+    "playground": {
+      "restricted": {
+        "description": "Este recurso não está disponível no playground. O seu próprio Onyx o inclui. [Falar com vendas]({salesUrl})",
+        "title": "Limite do playground",
+        "tooltip": "Não disponível no playground. O seu próprio Onyx o inclui."
+      }
+    },
     "placeholders": {
       "email": "email@suaempresa.com",
       "url": "https://",

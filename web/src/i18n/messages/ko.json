@@ -14115,6 +14115,13 @@
       },
       "availableFor": "{plan}에서 사용 가능"
     },
+    "playground": {
+      "restricted": {
+        "description": "이 기능은 플레이그라운드에서 사용할 수 없습니다. 자체 Onyx에서는 사용할 수 있습니다. [영업팀에 문의]({salesUrl})",
+        "title": "플레이그라운드 제한",
+        "tooltip": "플레이그라운드에서는 사용할 수 없습니다. 자체 Onyx에서는 사용할 수 있습니다."
+      }
+    },
     "placeholders": {
       "email": "ireum@hoesa.com",
       "url": "https://",
