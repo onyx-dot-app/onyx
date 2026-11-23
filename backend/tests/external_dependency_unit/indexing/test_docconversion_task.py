@@ -44,6 +44,7 @@ from onyx.connectors.models import (
 )
 from onyx.db.enums import HierarchyNodeType, IndexingStatus
 from onyx.db.hierarchy import ensure_source_node_exists
+from onyx.db.index_attempt import get_index_attempt_errors
 from onyx.db.indexing_coordination import IndexingCoordination
 from onyx.db.models import (
     ConnectorCredentialPair,
@@ -478,12 +479,7 @@ def test_a_stop_signal_during_conversion_logs_once_and_is_no_failure(
     dropped = [text for level, text in logged if "Conversion dropped" in text]
     assert len(dropped) == 1 and "(stop signal)" in dropped[0]
     assert ("info", dropped[0]) in logged
-    errors = run.db_session.scalars(
-        select(IndexAttemptError).where(
-            IndexAttemptError.index_attempt_id == run.attempt_id
-        )
-    ).all()
-    assert errors == []
+    assert get_index_attempt_errors(run.attempt_id, run.db_session) == []
     assert run.docs.get_batch(0) is None
     assert run.sends(OnyxCeleryTask.DOCPROCESSING_TASK) == []
 

@@ -29,6 +29,7 @@ from onyx.connectors.microsoft_utils.drive_items import (
     scrub_url_credentials,
 )
 from onyx.connectors.microsoft_utils.request_pacer import MicrosoftCall
+from onyx.connectors.models import ConnectorStopSignal
 
 CAP = 10 * 1024 * 1024  # 10 MiB cap; well above the byte payloads used in tests
 
@@ -452,7 +453,10 @@ def test_a_throttled_download_url_reports_waits_and_retries_the_link(
         call.args[0] == "https://example/download?tempauth=x"
         for call in mock_get.call_args_list
     )
-    assert mock_time.sleep.call_args.args == (9,)
+    # The pacer's next acquire is the wait: it waits for the lane's pause
+    # and ends on a stop. The download does not sleep on its own.
+    mock_time.sleep.assert_not_called()
+    assert pacer.acquire.call_count == 2
     assert pacer.report_response.call_args_list[0].args == (
         status,
         "9",
@@ -483,3 +487,27 @@ def test_a_download_url_throttled_past_the_retries_fails_the_item(
     assert mock_get.call_count == tries
     assert not any("/content" in call.args[0] for call in mock_get.call_args_list)
     assert mock_time.sleep.call_count == tries - 1
+
+
+@patch("onyx.connectors.microsoft_utils.drive_items.time")
+@patch("onyx.connectors.microsoft_utils.drive_items.requests.get")
+def test_a_stop_during_the_wait_for_a_throttled_link_ends_it(
+    mock_get: MagicMock, mock_time: MagicMock
+) -> None:
+    """A long Retry-After does not hold the worker: the wait is the pacer's
+    acquire, which raises the stop signal."""
+    mock_get.side_effect = [_make_response(status=429, headers={"Retry-After": "600"})]
+    pacer = MagicMock()
+    pacer.acquire.side_effect = [None, ConnectorStopSignal("stop")]
+
+    with pytest.raises(ConnectorStopSignal):
+        extract_drive_item_content(
+            _linked_item(),
+            size_threshold=CAP,
+            graph_api_base="https://graph.example/v1.0",
+            get_access_token=lambda: "token",
+            pacer=pacer,
+        )
+
+    mock_time.sleep.assert_not_called()
+    assert mock_get.call_count == 1

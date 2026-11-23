@@ -65,6 +65,7 @@ from onyx.file_processing.image_utils import (
 from onyx.file_store.staging import RawFileCallback
 from onyx.utils.datetime import datetime_to_utc
 from onyx.utils.logger import setup_logger
+from onyx.utils.retry_after import parse_retry_after_seconds
 
 logger = setup_logger()
 
@@ -452,6 +453,14 @@ def stream_response_to_buffer_with_cap(
                         max_retries + 1,
                         sleep_time,
                     )
+                    if (
+                        pacer is not None
+                        and resp.status_code in THROTTLE_STATUSES
+                        and parse_retry_after_seconds(resp.headers.get("Retry-After"))
+                    ):
+                        # The pacer set the pause of the lane. The next
+                        # acquire waits for it and ends the wait on a stop.
+                        sleep_time = None
             if redirect_to is not None:
                 break
             # The response is closed by now, so the wait holds no socket.

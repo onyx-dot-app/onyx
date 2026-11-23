@@ -4,7 +4,7 @@ conversion makes only the calls it needs."""
 
 import threading
 import time
-from collections.abc import Iterator
+from collections.abc import Callable, Iterator
 from datetime import timedelta
 from typing import Any
 from uuid import uuid4
@@ -199,12 +199,14 @@ def _with_shared_limiter(
     mock: MockSharepoint,
     connector: SharepointConnector,
     monkeypatch: pytest.MonkeyPatch,
+    should_stop: Callable[[], bool] | None = None,
 ) -> list[tuple[str, float]]:
     """Gives the connector the limiter of its app, as the factory does, and
     returns the list of the (lane, Retry-After) pauses that it reports."""
     limiter = build_source_api_limiter(
         DocumentSource.SHAREPOINT,
         credential_id=int(uuid4().int % 1_000_000_000),
+        should_stop=should_stop,
         load_credential_json=mock.credentials,
     )
     assert isinstance(limiter, RedisSourceApiLimiter)
@@ -254,7 +256,8 @@ def test_a_throttled_listed_link_pauses_only_the_download_lane(
     mock = own_mock_sharepoint
     connector = mock.build_connector(include_site_pages=False)
     stubs = list_stubs(connector).stubs
-    reported = _with_shared_limiter(mock, connector, monkeypatch)
+    stop = threading.Event()
+    reported = _with_shared_limiter(mock, connector, monkeypatch, stop.is_set)
     retry_after = 3
     mock.patch_config(
         {
@@ -268,22 +271,33 @@ def test_a_throttled_listed_link_pauses_only_the_download_lane(
     graph_units = _units(GRAPH_LIMITER_API)
     download_units = _units(DOWNLOAD_LIMITER_API)
     converted: dict[str, Document] = {}
+    errors: list[BaseException] = []
 
     def convert() -> None:
-        converted.update(_convert(connector, stubs))
+        try:
+            converted.update(_convert(connector, stubs))
+        except BaseException as error:  # noqa: BLE001 - the test reports it
+            errors.append(error)
 
     runner = threading.Thread(target=convert, daemon=True)
     runner.start()
-    deadline = time.monotonic() + 30
-    while _pause_left(limiter_tenant, DOWNLOAD_LIMITER_API) <= 0:
-        assert time.monotonic() < deadline, "no download pause was set"
-        time.sleep(0.05)  # test-flakes: allow the test polls Redis for the pause
-    graph_units_in_pause = _units(GRAPH_LIMITER_API)
-    started = time.monotonic()
-    assert connector.ops.list_site_urls().site_urls
-    graph_call_seconds = time.monotonic() - started
-    runner.join(timeout=60)
+    try:
+        deadline = time.monotonic() + 30
+        while _pause_left(limiter_tenant, DOWNLOAD_LIMITER_API) <= 0:
+            assert time.monotonic() < deadline, "no download pause was set"
+            time.sleep(0.05)  # test-flakes: allow the test polls Redis for the pause
+        graph_units_in_pause = _units(GRAPH_LIMITER_API)
+        started = time.monotonic()
+        site_urls = connector.ops.list_site_urls().site_urls
+        graph_call_seconds = time.monotonic() - started
+        runner.join(timeout=60)
+    finally:
+        # The stop signal ends the conversion when the test fails early.
+        stop.set()
+        runner.join(timeout=60)
     assert not runner.is_alive()
+    assert not errors, errors[0]
+    assert site_urls
 
     assert graph_call_seconds < retry_after / 2
     assert _units(GRAPH_LIMITER_API) > graph_units_in_pause
