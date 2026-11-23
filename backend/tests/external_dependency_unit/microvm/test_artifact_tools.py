@@ -79,6 +79,7 @@ from tests.external_dependency_unit.conftest import MakeTestUser
 from tests.external_dependency_unit.microvm.conftest import (
     TENANT_ID,
     AddNode,
+    Idle,
     NewFileCopyPool,
 )
 from tests.external_dependency_unit.microvm.fake_agent import (
@@ -115,12 +116,17 @@ def node(add_node: AddNode) -> RunningFakeAgent:
 
 @pytest.fixture
 def user(
-    db_session: Session, tenant_cache: CacheBackend, make_test_user: MakeTestUser
+    db_session: Session,
+    tenant_cache: CacheBackend,
+    make_test_user: MakeTestUser,
+    idle: Idle,
 ) -> Generator[User, None, None]:
     user = make_test_user("artifact_tools")
     yield user
-    # A turn's last calls and saves run on their own threads.
+    # A turn's last calls and saves, and a download's copy after a timeout or
+    # a Stop, run on their own threads.
     assert chat_turn_work.wait_idle(timeout=30)
+    _wait_until(idle)
     _forget_sandboxes(db_session, tenant_cache, user.id)
 
 
