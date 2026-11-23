@@ -226,7 +226,8 @@ calls the index directly for admin document inspection.
    list means none. Do not feed `details` fields back into the prompt. In chat,
    `ChatAgent._finalize_tool` stages, for the Python tool when the chat offers
    it, the files that `SearchDocsResponse.openable_file_names` maps to their
-   names ([[code-execution]]). `SearchTool._build_search_result` fills that
+   names ([[code-execution]]); a file that fails to read is logged and
+   skipped, though the result still names it. `SearchTool._build_search_result` fills that
    map with one file record query over the documents' `SearchDoc.file_id`
    (which `populate_file_ids_on_sections` fills): connector files that the
    file store still has. The field is live only; saved and streamed results
