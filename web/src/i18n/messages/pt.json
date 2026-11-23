@@ -17832,7 +17832,7 @@
         "title": "Nenhum plugin correspondente",
         "clear": "Mostrar todos os plugins"
       },
-      "intro": "Um plugin agrupa habilidades e as integrações de que elas precisam. Envie um plugin do Claude Code ou do Codex, adicione um marketplace do GitHub ou adicione uma habilidade. Cada habilidade que você adiciona vem em seu próprio plugin.",
+      "intro": "Um plugin agrupa habilidades e as integrações de que elas precisam. Envie um plugin do Claude Code ou do Codex, adicione um marketplace do GitHub ou adicione uma habilidade. Um plugin que só contém um SKILL.md na raiz fica na aba Habilidades.",
       "integrations": "{available} de {needed} integrações disponíveis",
       "nameHeld": "Desativado: {names} usa o mesmo nome de habilidade"
     },
