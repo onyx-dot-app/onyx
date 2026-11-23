@@ -91,6 +91,7 @@ from tests.external_dependency_unit.indexing_helpers import (
 from tests.external_dependency_unit.microvm.conftest import (
     TENANT_ID,
     AddNode,
+    Idle,
     NewFileCopyPool,
     forget_sandbox_keys,
 )
@@ -140,18 +141,16 @@ def node(add_node: AddNode) -> RunningFakeAgent:
 
 
 @pytest.fixture
-def idle(new_file_copy_pool: NewFileCopyPool) -> Callable[[], bool]:
-    """Whether the test's copies have ended."""
-    return new_file_copy_pool().idle
-
-
-@pytest.fixture
 def user(
-    db_session: Session, tenant_cache: CacheBackend, make_test_user: MakeTestUser
+    db_session: Session,
+    tenant_cache: CacheBackend,
+    make_test_user: MakeTestUser,
+    idle: Idle,
 ) -> Generator[User, None, None]:
     user = make_test_user("search_files")
     yield user
     assert chat_turn_work.wait_idle(timeout=30)
+    _wait_until(idle)
     db_session.rollback()
     for sandbox_id in db_session.scalars(
         select(Sandbox.id).where(Sandbox.user_id == user.id)
@@ -179,7 +178,6 @@ def chat(
     user: User,
     sandbox: FirecrackerHarnessSandbox,  # noqa: ARG001
     node: RunningFakeAgent,  # noqa: ARG001
-    idle: Callable[[], bool],  # noqa: ARG001
 ) -> SandboxChat:
     return _new_chat(db_session, user, monkeypatch)
 
@@ -324,7 +322,7 @@ def test_a_search_names_the_vm_path_and_the_file_arrives(
     node: RunningFakeAgent,
     make_file: MakeFile,
     internal: SearchPipelineController,
-    idle: Callable[[], bool],
+    idle: Idle,
 ) -> None:
     file = make_file(b"region,revenue\nwest,10\n")
     internal.add_search_results(QUERY, [file.result()])
@@ -351,7 +349,7 @@ def test_a_file_is_copied_once_for_each_chat(
     node: RunningFakeAgent,
     make_file: MakeFile,
     internal: SearchPipelineController,
-    idle: Callable[[], bool],
+    idle: Idle,
 ) -> None:
     file = make_file(b"a,b\n1,2\n")
     internal.add_search_results(QUERY, [file.result()])
@@ -402,7 +400,7 @@ def test_a_file_in_place_gives_its_turn_budget_back(
     node: RunningFakeAgent,
     make_file: MakeFile,
     internal: SearchPipelineController,
-    idle: Callable[[], bool],
+    idle: Idle,
 ) -> None:
     placed, added = make_file(b"placed"), make_file(b"added")
     internal.add_search_results(QUERY, [placed.result()])
@@ -432,7 +430,7 @@ def test_a_search_in_a_program_copies_its_file(
     node: RunningFakeAgent,
     make_file: MakeFile,
     internal: SearchPipelineController,
-    idle: Callable[[], bool],
+    idle: Idle,
 ) -> None:
     file = make_file(b"x,y\n")
     internal.add_search_results(QUERY, [file.result()])
@@ -464,7 +462,7 @@ def test_files_over_a_limit_get_no_path(
     node: RunningFakeAgent,
     make_file: MakeFile,
     internal: SearchPipelineController,
-    idle: Callable[[], bool],
+    idle: Idle,
 ) -> None:
     small, large, other = make_file(b"123"), make_file(b"12345"), make_file(b"456")
     internal.add_search_results(QUERY, [large.result(), small.result()])
@@ -493,7 +491,7 @@ def test_a_sandbox_chat_stages_no_search_files_for_python(
     chat: SandboxChat,
     make_file: MakeFile,
     internal: SearchPipelineController,
-    idle: Callable[[], bool],
+    idle: Idle,
 ) -> None:
     file = make_file(b"a\n")
     internal.add_search_results(QUERY, [file.result()])
@@ -529,7 +527,7 @@ def test_the_cap_evicts_the_oldest_search_files_but_not_this_turns(
     node: RunningFakeAgent,
     make_file: MakeFile,
     internal: SearchPipelineController,
-    idle: Callable[[], bool],
+    idle: Idle,
 ) -> None:
     kept, added = make_file(b"kept"), make_file(b"adds")
     internal.add_search_results(QUERY, [kept.result()])
@@ -563,7 +561,7 @@ def test_the_chat_file_copy_never_deletes_search_or_artifact_files(
     user: User,
     sandbox: FirecrackerHarnessSandbox,  # noqa: ARG001
     node: RunningFakeAgent,
-    idle: Callable[[], bool],
+    idle: Idle,
 ) -> None:
     file_id = get_default_file_store().save_file(
         content=io.BytesIO(b"project"),
@@ -668,7 +666,7 @@ def test_a_chat_delete_purges_its_search_files(
     node: RunningFakeAgent,
     make_file: MakeFile,
     internal: SearchPipelineController,
-    idle: Callable[[], bool],
+    idle: Idle,
 ) -> None:
     monkeypatch.setattr(purge, "HARNESS_SANDBOX_ENABLED", True)
     file = make_file(b"gone soon")
@@ -695,7 +693,7 @@ def test_a_file_without_access_at_copy_time_is_not_copied(
     node: RunningFakeAgent,
     make_file: MakeFile,
     internal: SearchPipelineController,
-    idle: Callable[[], bool],
+    idle: Idle,
 ) -> None:
     readable, revoked = make_file(b"readable"), make_file(b"revoked")
     internal.add_search_results(QUERY, [readable.result(), revoked.result()])
@@ -724,7 +722,7 @@ def test_a_stopped_search_offers_no_file(
     node: RunningFakeAgent,
     make_file: MakeFile,
     internal: SearchPipelineController,
-    idle: Callable[[], bool],
+    idle: Idle,
 ) -> None:
     file = make_file(b"never")
     internal.add_search_results(QUERY, [file.result()])
@@ -860,7 +858,7 @@ def test_a_file_with_no_recorded_size_meets_the_limits_by_its_real_size(
     node: RunningFakeAgent,
     make_file: MakeFile,
     internal: SearchPipelineController,
-    idle: Callable[[], bool],
+    idle: Idle,
 ) -> None:
     small, large = make_file(b"1234"), make_file(b"12345")
     db_session.execute(
@@ -889,7 +887,7 @@ def test_a_truncated_listing_evicts_nothing(
     node: RunningFakeAgent,
     make_file: MakeFile,
     internal: SearchPipelineController,
-    idle: Callable[[], bool],
+    idle: Idle,
 ) -> None:
     file = make_file(b"new")
     internal.add_search_results(QUERY, [file.result()])
@@ -929,7 +927,7 @@ def test_an_eviction_that_fails_stops_the_intake(
     node: RunningFakeAgent,
     make_file: MakeFile,
     internal: SearchPipelineController,
-    idle: Callable[[], bool],
+    idle: Idle,
 ) -> None:
     """The first delete fails: no other delete and no write follow, so the
     chat's search files do not go over the cap."""
@@ -971,7 +969,7 @@ def test_when_the_turns_files_fill_the_cap_only_what_fits_is_written(
     node: RunningFakeAgent,
     make_file: MakeFile,
     internal: SearchPipelineController,
-    idle: Callable[[], bool],
+    idle: Idle,
 ) -> None:
     first, second, large = make_file(b"11111"), make_file(b"22222"), make_file(b"9" * 9)
     internal.add_search_results(QUERY, [first.result(), second.result()])
@@ -1003,7 +1001,7 @@ def test_a_file_refused_at_copy_time_gives_its_budget_back(
     node: RunningFakeAgent,
     make_file: MakeFile,
     internal: SearchPipelineController,
-    idle: Callable[[], bool],
+    idle: Idle,
 ) -> None:
     revoked, later = make_file(b"revoked"), make_file(b"later")
     db_session.execute(
@@ -1036,7 +1034,7 @@ def test_a_subagent_search_copies_its_file(
     node: RunningFakeAgent,
     make_file: MakeFile,
     internal: SearchPipelineController,
-    idle: Callable[[], bool],
+    idle: Idle,
 ) -> None:
     file = make_file(b"from a subagent")
     internal.add_search_results(QUERY, [file.result()])
@@ -1110,7 +1108,7 @@ def test_a_renamed_users_synced_document_is_copied(
     make_file: MakeFile,
     cc_pair: ConnectorCredentialPair,
     internal: SearchPipelineController,
-    idle: Callable[[], bool],
+    idle: Idle,
 ) -> None:
     """A synced ACL names the user's earlier email; search and the copy both
     match it."""
@@ -1146,7 +1144,7 @@ def test_a_failed_size_lookup_skips_only_its_file(
     node: RunningFakeAgent,
     make_file: MakeFile,
     internal: SearchPipelineController,
-    idle: Callable[[], bool],
+    idle: Idle,
 ) -> None:
     broken, fine = make_file(b"broken"), make_file(b"fine")
     db_session.execute(
