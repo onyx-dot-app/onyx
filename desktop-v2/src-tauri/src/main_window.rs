@@ -573,6 +573,25 @@ fn hand_over_session(
     Ok(())
 }
 
+/// The main window's size before the window-state plugin saved one, in logical pixels.
+const SIZE: (f64, f64) = (1280.0, 840.0);
+const MIN_SIZE: (f64, f64) = (800.0, 600.0);
+
+/// `SIZE`, made smaller to fit the primary monitor's work area at its scale.
+#[cfg(windows)]
+fn first_run_size(app: &AppHandle) -> (f64, f64) {
+    let Ok(Some(monitor)) = app.primary_monitor() else {
+        return SIZE;
+    };
+    let area = monitor.work_area().size;
+    crate::windows::fit_size(
+        (area.width, area.height),
+        monitor.scale_factor(),
+        SIZE,
+        MIN_SIZE,
+    )
+}
+
 /// Opens (or reuses) the main window logged in as `token`, at `path` on the server.
 pub async fn open(app: &AppHandle, server: &str, token: &str, path: &str) -> Result<(), String> {
     let server_url = Url::parse(server).map_err(|e| e.to_string())?;
@@ -626,11 +645,15 @@ pub async fn open_url(
 
     allow_window_dragging(app, &origin);
 
+    #[cfg(windows)]
+    let size = first_run_size(app);
+    #[cfg(not(windows))]
+    let size = SIZE;
     let blank = WebviewUrl::External("about:blank".parse().map_err(|_| "bad url")?);
     let builder = WebviewWindowBuilder::new(app, LABEL, blank)
         .title("Onyx")
-        .inner_size(1280.0, 840.0)
-        .min_inner_size(800.0, 600.0)
+        .inner_size(size.0, size.1)
+        .min_inner_size(MIN_SIZE.0, MIN_SIZE.1)
         .center()
         .initialization_script(LINK_SHIM_JS)
         .initialization_script(SIGN_IN_GUARD_JS)
@@ -668,7 +691,7 @@ pub async fn open_url(
     let builder = builder.menu(crate::menu::build_window_menu(app).map_err(|e| e.to_string())?);
 
     let window = builder.build().map_err(|e| e.to_string())?;
-    #[cfg(target_os = "linux")]
+    #[cfg(any(target_os = "linux", windows))]
     crate::offline::watch_webview_failures(&window);
     // Entering or leaving full screen resizes the window.
     let resize_app = app.clone();

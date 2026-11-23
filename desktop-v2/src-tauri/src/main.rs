@@ -96,6 +96,8 @@ fn init_logging(app: &tauri::AppHandle) {
 }
 
 fn main() {
+    #[cfg(windows)]
+    notify::pass_on_foreground();
     let api = api::Api::new().unwrap_or_else(|e| startup_failed(&e));
     let builder = tauri::Builder::default()
         // Must come first: a second launch (or an onyx:// link that starts
