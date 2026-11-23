@@ -12211,7 +12211,7 @@
           "text": "{toolName}이(가) 차단되었습니다"
         },
         "completedStatus": {
-          "text": "{toolName} 완료"
+          "text": "{toolName} 실행 완료"
         },
         "downloadFileLink": {
           "label": "다운로드"
@@ -12241,7 +12241,7 @@
           "label": "응답"
         },
         "runningStatus": {
-          "text": "{toolName} 실행 중..."
+          "text": "{toolName} 실행 중"
         },
         "unreachableStatus": {
           "text": "{toolName}이(가) 서버에 연결할 수 없습니다"

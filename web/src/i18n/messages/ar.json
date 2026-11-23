@@ -12211,7 +12211,7 @@
           "text": "تم حظر {toolName}"
         },
         "completedStatus": {
-          "text": "اكتمل {toolName}"
+          "text": "تم تنفيذ {toolName}"
         },
         "downloadFileLink": {
           "label": "تنزيل"
@@ -12241,7 +12241,7 @@
           "label": "الاستجابة"
         },
         "runningStatus": {
-          "text": "{toolName} قيد التشغيل..."
+          "text": "جارٍ تنفيذ {toolName}"
         },
         "unreachableStatus": {
           "text": "تعذّر على {toolName} الوصول إلى الخادم الخاص به"

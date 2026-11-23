@@ -12211,7 +12211,7 @@
           "text": "{toolName} はブロックされました"
         },
         "completedStatus": {
-          "text": "{toolName} が完了しました"
+          "text": "{toolName} を実行しました"
         },
         "downloadFileLink": {
           "label": "ダウンロード"
@@ -12241,7 +12241,7 @@
           "label": "レスポンス"
         },
         "runningStatus": {
-          "text": "{toolName} を実行中..."
+          "text": "{toolName} を実行中"
         },
         "unreachableStatus": {
           "text": "{toolName} はサーバーに接続できませんでした"

@@ -12211,7 +12211,7 @@
           "text": "{toolName} fue bloqueado"
         },
         "completedStatus": {
-          "text": "{toolName} completado"
+          "text": "Se ejecutó {toolName}"
         },
         "downloadFileLink": {
           "label": "Descargar"
@@ -12241,7 +12241,7 @@
           "label": "Respuesta"
         },
         "runningStatus": {
-          "text": "{toolName} en ejecución..."
+          "text": "Ejecutando {toolName}"
         },
         "unreachableStatus": {
           "text": "{toolName} no pudo conectar con su servidor"

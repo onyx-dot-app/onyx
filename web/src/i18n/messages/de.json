@@ -12211,7 +12211,7 @@
           "text": "{toolName} wurde blockiert"
         },
         "completedStatus": {
-          "text": "{toolName} abgeschlossen"
+          "text": "{toolName} ausgeführt"
         },
         "downloadFileLink": {
           "label": "Herunterladen"
@@ -12241,7 +12241,7 @@
           "label": "Antwort"
         },
         "runningStatus": {
-          "text": "{toolName} wird ausgeführt..."
+          "text": "Führt {toolName} aus"
         },
         "unreachableStatus": {
           "text": "{toolName} konnte seinen Server nicht erreichen"

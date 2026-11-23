@@ -12211,7 +12211,7 @@
           "text": "{toolName} 已被阻止"
         },
         "completedStatus": {
-          "text": "{toolName} 已完成"
+          "text": "已执行 {toolName}"
         },
         "downloadFileLink": {
           "label": "下载"
@@ -12241,7 +12241,7 @@
           "label": "响应"
         },
         "runningStatus": {
-          "text": "{toolName} 正在运行..."
+          "text": "正在执行 {toolName}"
         },
         "unreachableStatus": {
           "text": "{toolName} 无法连接到其服务器"
