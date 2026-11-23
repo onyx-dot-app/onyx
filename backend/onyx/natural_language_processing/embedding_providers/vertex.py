@@ -23,6 +23,7 @@ from onyx.natural_language_processing.embedding_rate_limit import (
 from onyx.natural_language_processing.embedding_request_policy import (
     EmbeddingRequestPolicy,
 )
+from onyx.natural_language_processing.exceptions import EmbeddingRequestFailedError
 from onyx.utils.logger import setup_logger
 from shared_configs.configs import VERTEXAI_EMBEDDING_LOCAL_BATCH_SIZE
 from shared_configs.model_server_models import Embedding
@@ -34,6 +35,8 @@ if TYPE_CHECKING:
 logger = setup_logger()
 
 _CLIENT_CLOSE_TIMEOUT_SECONDS = 5.0
+# The SDK sets no timeout, and a hung request holds its scheduler slot.
+_REQUEST_TIMEOUT_SECONDS = 60.0
 # `embed()` does not retry these. It retries the other errors.
 _ERRORS_THAT_END_THE_CALL = (ConnectorStopSignal, EmbeddingWaitTimeoutError)
 
@@ -48,6 +51,7 @@ async def embed_with_vertex(
     reduced_dimension: int | None,
 ) -> list[Embedding]:
     from google import genai
+    from google.genai import types as genai_types
 
     resolved_model = model or DEFAULT_VERTEX_MODEL
     # ADC discovery can contact the GKE metadata server.
@@ -57,6 +61,9 @@ async def embed_with_vertex(
         project=resolved.project_id,
         location=resolved.location,
         credentials=resolved.credentials,
+        http_options=genai_types.HttpOptions(
+            timeout=int(_REQUEST_TIMEOUT_SECONDS * 1000)
+        ),
     )
     config = _embed_config(resolved_model, embedding_type, reduced_dimension)
     single_input = is_gemini_embedding_2_model(resolved_model)
@@ -100,8 +107,28 @@ async def embed_with_vertex(
             "VertexAI embedding completed: %s embeddings generated", len(embeddings)
         )
         return embeddings
+    except Exception as e:
+        if _resending_does_not_help(e):
+            raise EmbeddingRequestFailedError(f"{type(e).__name__}: {e}") from e
+        raise
     finally:
         await _close(client)
+
+
+def _resending_does_not_help(error: Exception) -> bool:
+    # CloudEmbedding.embed resends a failed call with all of its inputs,
+    # including the ones that succeeded. It does not resend this error type.
+    # Transient errors stay resendable: the scheduler's short resends do not
+    # cover an outage of a few seconds.
+    from google.genai import errors as genai_errors
+
+    if isinstance(error, TimeoutError):
+        return True
+    return isinstance(error, genai_errors.ClientError) and error.code not in (
+        401,
+        403,
+        429,
+    )
 
 
 async def _embed_in_parallel(
