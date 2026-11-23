@@ -184,8 +184,13 @@ resource "aws_opensearch_domain" "main" {
     # unrelated tag update into a hard failure whenever the stored value doesn't
     # meet OpenSearch's current complexity rules. Ignore it here; it's set on
     # create and rotated externally thereafter.
+    #
+    # override_main_response_version is service-managed: AWS reports it on every
+    # domain but rejects it as an input on OpenSearch 3.x, so any diff on it
+    # fails the whole domain update.
     ignore_changes = [
       advanced_security_options[0].master_user_options[0].master_user_password,
+      advanced_options["override_main_response_version"],
     ]
     precondition {
       condition     = !var.internal_user_database_enabled || var.master_user_name != null
