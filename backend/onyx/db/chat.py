@@ -1032,7 +1032,8 @@ def save_chat_artifact(
     `chat_session_id` as the next version of the chat's artifact at `path`,
     with `thumbnail`, a JPEG of its first page, if set. The file and its
     thumbnail get the chat's access, the chat's file list, and its hard
-    delete. A thumbnail that fails to save is left out."""
+    delete; the artifact gets the chat's owner. A thumbnail that fails to
+    save is left out."""
     file_store = get_default_file_store()
     file_id = str(uuid4())
     thumbnail_file_id: str | None = None
@@ -1058,10 +1059,22 @@ def save_chat_artifact(
         # the versions they committed.
         artifact_id = db_session.execute(
             postgresql.insert(ChatArtifact)
-            .values(chat_session_id=chat_session_id, path=path)
+            .values(
+                chat_session_id=chat_session_id,
+                user_id=select(ChatSession.user_id)
+                .where(ChatSession.id == chat_session_id)
+                .scalar_subquery(),
+                path=path,
+            )
             .on_conflict_do_update(
                 index_elements=[ChatArtifact.chat_session_id, ChatArtifact.path],
-                set_={"updated_at": func.now()},
+                # A publish that waited on the row lock can have started
+                # before the one it waited for; it never moves the time back.
+                set_={
+                    "updated_at": func.greatest(
+                        ChatArtifact.updated_at, func.clock_timestamp()
+                    )
+                },
             )
             .returning(ChatArtifact.id)
         ).scalar_one()
