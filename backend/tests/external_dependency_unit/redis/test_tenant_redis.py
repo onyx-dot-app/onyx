@@ -562,6 +562,34 @@ class TestPipeline:
         finally:
             raw_redis.delete(key)
 
+    def test_pipeline_hincrby_targets_the_prefixed_key(
+        self,
+        tenant_redis: TenantRedisClient,
+        tenant_id: str,
+        raw_redis: Redis,
+    ) -> None:
+        key = _unique_key("pipe_hincrby")
+        with tenant_redis.pipeline() as pipe:
+            assert pipe.hincrby(key, "f", 3).hincrby(key, "f", -1).execute() == [3, 2]
+        assert raw_redis.hget(f"{tenant_id}:{key}", "f") == b"2"
+        assert raw_redis.hget(key, "f") is None
+
+
+def test_hincrby_targets_the_prefixed_key(
+    tenant_redis: TenantRedisClient, tenant_id: str, raw_redis: Redis
+) -> None:
+    key = _unique_key("hincrby")
+    assert tenant_redis.hincrby(key, "f", 5) == 5
+    assert tenant_redis.hincrby(key, "f", -2) == 3
+    assert raw_redis.hget(f"{tenant_id}:{key}", "f") == b"3"
+    assert raw_redis.hget(key, "f") is None
+
+
+def test_time_is_the_server_time(tenant_redis: TenantRedisClient) -> None:
+    seconds, microseconds = tenant_redis.time()
+    assert abs(seconds - time.time()) < 60
+    assert 0 <= microseconds < 1_000_000
+
 
 def test_renew_if_value_renews_only_the_tenant_key(
     tenant_redis: TenantRedisClient, tenant_id: str, raw_redis: Redis

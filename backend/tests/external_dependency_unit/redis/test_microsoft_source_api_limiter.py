@@ -364,6 +364,28 @@ def test_the_day_budget_is_960_times_the_value(
     assert limiter._windows.try_take_from_day(day_key, 1, 61) == 0
 
 
+def test_the_day_budget_refunds_a_refused_call_and_drops_old_hours(
+    tenant_id: str,
+) -> None:
+    client = get_redis_client(tenant_id=tenant_id)
+    windows = RedisRateWindows(client)
+    key = "day:test"
+    hour = client.time()[0] // 3600
+    # An hour that left the day, and one that is still in it.
+    client.hset(key, mapping={str(hour - 25): "1000", str(hour - 24): "5"})
+
+    assert windows.try_take_from_day(key, 4, 10) == 0
+    assert not client.hexists(key, str(hour - 25))
+    assert client.hget(key, str(hour - 24)) == b"5"
+    assert client.hget(key, str(hour)) == b"4"
+
+    # 9 units are in the day, so 2 more are over the limit of 10.
+    assert 0 < windows.try_take_from_day(key, 2, 10) <= 3600
+    # The refused call took nothing back out of the stored units.
+    assert client.hget(key, str(hour)) == b"4"
+    assert windows.try_take_from_day(key, 1, 10) == 0
+
+
 def test_connectors_with_a_value_share_the_download_lane_of_the_app(
     tenant_id: str,  # noqa: ARG001
 ) -> None:
