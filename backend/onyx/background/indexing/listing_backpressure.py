@@ -119,8 +119,20 @@ class ListingBackpressure:
         return paused
 
     def _seconds_over_target(self, now: float) -> float:
-        """Reads the attempt's progress and returns how much longer than the
-        target the backlog needs to drain, or 0 for no pause."""
+        """Returns how much longer than the target the backlog needs to
+        drain, or 0 for no pause.
+
+        Warm-up: no pause until conversion finishes
+        LISTING_BACKPRESSURE_WARMUP_BATCHES batches after the first check,
+        because conversion is slow at the start. Drain rate: the batches
+        converted per second over about the last
+        LISTING_BACKPRESSURE_RATE_WINDOW_SECONDS, from samples taken after
+        the warm-up. Backlog: the stub batches stored minus the batches
+        converted. The listing pauses only when conversion runs at or above
+        LISTING_BACKPRESSURE_MIN_DRAIN_DOCS_PER_MINUTE (the batch rate times
+        the documents per stored batch) and backlog / rate is longer than
+        LISTING_BACKPRESSURE_TARGET_SECONDS. With slow conversion, a pause
+        only makes the run longer. With no data, the result is 0."""
         progress = _read_stub_batch_progress(self._index_attempt_id)
         stored, converted = progress.stored, progress.converted
         if self._first_converted is None:
