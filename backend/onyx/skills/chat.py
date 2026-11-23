@@ -213,8 +213,7 @@ _PICKED_SKILL_NAME: Final = re.compile(r"\A<skill>\n<name>(.+?)</name>\n")
 
 
 def used_skill_names(messages: Iterable[Message]) -> Counter[str]:
-    """How many times `messages` read each skill with `skills_read` or
-    picked it."""
+    """Count of `skills_read` calls and picks per skill name."""
     names: Counter[str] = Counter()
     for message in messages:
         if isinstance(message, AssistantMessage):

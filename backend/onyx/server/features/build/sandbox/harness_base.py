@@ -238,11 +238,9 @@ class HarnessSandbox(abc.ABC):
         versions: Mapping[str, str],
         load: Callable[[str], FileSet | None],
     ) -> None:
-        """Copy each skill (name → version key) to a writable folder under
-        CHAT_SKILLS_PATH, from the files (`<name>/<path>`) that `load(name)`
-        gives. Skips a skill that this VM instance has at that key, or that
-        `load` gives no files for. A skill that fails is logged, not
-        raised."""
+        """Copy each skill (name to version key) into CHAT_SKILLS_PATH from
+        `load(name)`, skipping ones this VM instance already has. Logs
+        failures instead of raising."""
 
     @abc.abstractmethod
     def exec_command(

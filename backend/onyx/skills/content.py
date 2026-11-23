@@ -135,9 +135,7 @@ def read_chat_skills_md(
     *,
     sandbox: bool,
 ) -> dict[SkillKey, str]:
-    """``sandbox``: the turn has the sandbox tools, so a custom skill's text
-    names the folder that its files copy to, with ``${CLAUDE_SKILL_DIR}``
-    resolved to it as in the copy."""
+    """With ``sandbox``, a custom skill's text names its VM folder."""
     skill_md = read_versions_skill_md(
         {
             (skill.version_id, skill.path)

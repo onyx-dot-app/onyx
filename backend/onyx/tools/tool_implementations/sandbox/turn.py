@@ -69,9 +69,8 @@ class SandboxTurn:
         self._custom_files: dict[str, FileSet] = {}
 
     def want_skills(self, reads: Mapping[str, int]) -> None:
-        """Copy these custom skills (name → reads in the model's window) to
-        the VM before the next call. A new read takes the current version: the
-        model read its new text."""
+        """Copy these skills (name to read count) before the next call. A
+        higher count re-resolves the skill's version."""
         with self._lock:
             self._resolved -= {
                 name

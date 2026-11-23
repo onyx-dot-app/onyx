@@ -369,10 +369,8 @@ class FirecrackerHarnessSandbox(HarnessSandbox, SandboxActivityProbe):
         files: FileSet,
         keep_lock: Callable[[], None],
     ) -> None:
-        """Write the skill's files (`<name>/<path>`) into a hidden folder next
-        to its folder, then swap the two in one step and delete the old one.
-        A copy that fails leaves the old folder as it was. `keep_lock` runs
-        before each change and raises when the install lock is lost."""
+        """Write the files into a hidden folder, then swap it with the skill's
+        folder. `keep_lock` raises when the install lock is lost."""
         if any(not path.startswith(f"{name}/") for path in files):
             raise HarnessSandboxError(f"skill {name!r} has files outside its folder")
         try:

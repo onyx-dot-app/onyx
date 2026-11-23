@@ -734,9 +734,8 @@ class SandboxDaemonClient:
         return r.deleted
 
     def rename_file(self, *, path: str, to: str, exchange: bool = False) -> None:
-        """Move an absolute VM path to another name in its directory. Without
-        exchange, an entry at `to` raises FILE_EXISTS; with exchange, the two
-        trade places in one step and a missing one raises FILE_NOT_FOUND."""
+        """Rename an absolute VM path within its directory, or swap the two
+        entries with exchange."""
         try:
             self._stub.RenameFile(
                 sandboxd_pb2.RenameFileRequest(path=path, to=to, exchange=exchange),

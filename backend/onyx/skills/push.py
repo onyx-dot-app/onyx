@@ -488,9 +488,7 @@ def _chat_built_ins_bundle(
 def build_chat_custom_skill_files(
     skill: ChatSkill, user: User, db_session: Session
 ) -> FileSet | None:
-    """The files of one custom chat skill, in a folder named by the skill, from
-    the version the user runs. None when the user no longer runs that version
-    or its bundle does not load."""
+    """The skill's files at the version the user runs, or None."""
     runtime_skill = next(
         (
             runtime_skill
