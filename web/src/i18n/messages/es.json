@@ -6,7 +6,7 @@
       "account": "Sesión iniciada como {email}",
       "workspace": "Espacio de trabajo: {workspaceName}",
       "appAddress": "Dirección de la aplicación: {origin}",
-      "access": "Leer resultados de documentos a los que tienes acceso. Usar la búsqueda web y abrir páginas web.",
+      "access": "Leer resultados de documentos a los que tienes acceso. Usar la búsqueda web y abrir páginas web. Leer tu historial de chats.",
       "allow": "Permitir acceso",
       "deny": "Denegar",
       "pending": "Guardando tu elección...",

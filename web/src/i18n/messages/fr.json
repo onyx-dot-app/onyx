@@ -6,7 +6,7 @@
       "account": "Connecté en tant que {email}",
       "workspace": "Espace de travail : {workspaceName}",
       "appAddress": "Adresse de l'application : {origin}",
-      "access": "Lire les résultats des documents auxquels vous avez accès. Utiliser la recherche web et ouvrir des pages web.",
+      "access": "Lire les résultats des documents auxquels vous avez accès. Utiliser la recherche web et ouvrir des pages web. Lire votre historique de discussions.",
       "allow": "Autoriser l'accès",
       "deny": "Refuser",
       "pending": "Enregistrement de votre choix...",
