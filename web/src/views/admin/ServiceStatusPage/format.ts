@@ -59,6 +59,24 @@ export function barColor(
   return "green";
 }
 
+// OpenSearch names a node after its host when no name is set: a container
+// or instance hash, which means nothing to an admin.
+const GENERATED_NAME = /^[0-9a-f]{12,}$/i;
+
+/**
+ * A node's name for the page: its own, or "Node N" from its place in the
+ * node list when OpenSearch generated the name from the host. The data node
+ * rows and the issues use it, so both name a node the same way.
+ */
+export function nodeLabel(
+  name: string,
+  nodeNames: string[],
+  unnamed: (number: number) => string
+): string {
+  if (!GENERATED_NAME.test(name)) return name;
+  return unnamed(nodeNames.indexOf(name) + 1);
+}
+
 export const SIZING_GUIDE_URL =
   "https://docs.onyx.app/deployment/getting_started/resourcing";
 

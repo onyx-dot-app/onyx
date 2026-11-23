@@ -12,14 +12,11 @@ import type {
 } from "@/lib/service-status/types";
 import {
   barColor,
+  nodeLabel,
   diskPercent,
   toSize,
   vectorPercent,
 } from "@/views/admin/ServiceStatusPage/format";
-
-// OpenSearch names a node after its host when no name is set: a container
-// or instance hash, which means nothing to an admin.
-const GENERATED_NAME = /^[0-9a-f]{12,}$/i;
 
 interface UsageCellProps {
   label: string;
@@ -74,11 +71,12 @@ interface NodeRowsProps {
 
 function NodeRows({ nodes, thresholds }: NodeRowsProps) {
   const t = useTranslations("admin.serviceStatus.nodes");
+  const nodeNames = nodes.map((node) => node.name);
   return (
     <Section gap={3} alignItems="stretch" width="full">
       <ColumnLabels title={t("title")} labels={[t("disk"), t("vector")]} />
       <Section gap={2} alignItems="stretch" width="full">
-        {nodes.map((node, index) => (
+        {nodes.map((node) => (
           <Card
             key={node.node_id}
             border="solid"
@@ -100,9 +98,9 @@ function NodeRows({ nodes, thresholds }: NodeRowsProps) {
                   width="fit"
                 >
                   <Text as="p" font="main-ui-action" color="text-04">
-                    {GENERATED_NAME.test(node.name)
-                      ? t("unnamed", { number: index + 1 })
-                      : node.name}
+                    {nodeLabel(node.name, nodeNames, (number) =>
+                      t("unnamed", { number })
+                    )}
                   </Text>
                   <CopyButton
                     getCopyText={() => node.name}
