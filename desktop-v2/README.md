@@ -4,6 +4,8 @@ A native desktop app for Onyx, built with Tauri 2.12. macOS is the main platform
 Linux builds are a preview (see [Windows and Linux](#windows-and-linux)). It lives beside
 `desktop/`, which keeps shipping unchanged and stays the default desktop app. v2 has its own bundle ID
 (`app.onyx.desktop.v2`) and name ("Onyx v2"), so both apps can be installed at the same time.
+On Linux the package name is `onyx-v2` (`src-tauri/tauri.linux.conf.json`), so file names have
+no space.
 
 ## What it does
 
@@ -395,7 +397,9 @@ cargo test --manifest-path src-tauri/Cargo.toml
   an unsigned app on first launch: right-click it, choose **Open**, then **Open** again.
 - The same pull requests also run the checks on Windows and Linux, and build unsigned x64
   installers as artifacts: NSIS (`.exe`) and MSI on Windows, AppImage and `.deb` on Linux.
-  These installers are not signed. They are for review only, not for customers. Each one has
+  These installers are not signed. They are for review only, not for customers. Their version
+  has the workflow run number as build metadata (for example `0.1.0+454`), so the About dialog,
+  the package and the installed programs list tell builds apart. Each one has
   a GitHub build provenance attestation (`gh attestation verify <file> --repo
   onyx-dot-app/onyx`). Pull requests from forks get no installer artifacts.
 - Run the workflow by hand on `main` with a version (for example `0.2.0`) to publish a signed
@@ -513,9 +517,12 @@ How the app differs from macOS:
     config records it, so the user must sign in again when the config is gone or the user
     signed out. The app then deletes the old token. If the config is still there, a reinstall
     uses the token.
-- On Linux the app registers `onyx://` at launch (the `.deb` also registers it), so AppImage
-  builds get sign-in links too. This needs `xdg-mime`. The AppImage entry points to the
-  AppImage's path at its last launch. If you move or rename the AppImage, quit the app, then
+- On Linux the `.deb` registers `onyx://` in its desktop file (`onyx-v2.desktop`). AppImage
+  and other builds that do not run from `/usr/bin` register it for the current user at launch,
+  so they get sign-in links too. This needs `xdg-mime`. A `.deb` install removes the per-user
+  `onyx://` entry that earlier versions wrote, so after `apt remove` no entry points to the
+  removed app. The AppImage
+  entry points to the AppImage's path at its last launch. If you move or rename the AppImage, quit the app, then
   launch it once from its new path. A launch while the app runs only shows the running app.
 - Linux builds need glibc 2.35 or newer (Ubuntu 22.04, Debian 12 and later). CI builds them on
   Ubuntu 22.04 and fails if a file in the `.deb` or the AppImage needs a newer glibc.
@@ -609,7 +616,8 @@ The app writes its log to `onyx.log` in the app's log folder (`init_logging` in
 | Windows | `%LOCALAPPDATA%\app.onyx.desktop.v2\logs\` |
 | Linux | `~/.local/share/app.onyx.desktop.v2/logs/` (`$XDG_DATA_HOME` if set) |
 
-Times are UTC. The log records the app's own messages at level `info` and higher: sign-in
+Times are UTC. The log records the app's own messages at level `info` and higher: the app
+version and OS at startup, the saved server, sign-in (password or SSO) and sign-out, sign-in
 failures, offline and recovery, managed policy errors, downloads and failed links. At 1 MB the
 file rotates to `onyx_<date>.log`, and the app keeps the four newest of those files. The log
 never holds a password, session token, cookie or sign-in code; URLs are written without their
