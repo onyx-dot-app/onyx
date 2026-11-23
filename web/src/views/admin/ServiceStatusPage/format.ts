@@ -64,17 +64,16 @@ export function barColor(
 const GENERATED_NAME = /^[0-9a-f]{12,}$/i;
 
 /**
- * A node's name for the page: its own, or "Node N" from its place in the
- * node list when OpenSearch generated the name from the host. The data node
- * rows and the issues use it, so both name a node the same way.
+ * A node's name for the page: its own, or "Node N" when OpenSearch generated
+ * the name from the host. number is the node's place in the node list, so
+ * the data node rows and the issues name a node the same way.
  */
 export function nodeLabel(
   name: string,
-  nodeNames: string[],
+  number: number,
   unnamed: (number: number) => string
 ): string {
-  if (!GENERATED_NAME.test(name)) return name;
-  return unnamed(nodeNames.indexOf(name) + 1);
+  return GENERATED_NAME.test(name) ? unnamed(number) : name;
 }
 
 export const SIZING_GUIDE_URL =

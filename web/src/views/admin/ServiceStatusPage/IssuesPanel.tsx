@@ -198,8 +198,11 @@ interface IssueListProps {
 function IssueList({ issues, nodeNames }: IssueListProps) {
   const t = useTranslations("admin.serviceStatus.issues");
   const tNodes = useTranslations("admin.serviceStatus.nodes");
+  // Issues carry node names only, so they number a node by its first match.
   const labelNode = (name: string) =>
-    nodeLabel(name, nodeNames, (number) => tNodes("unnamed", { number }));
+    nodeLabel(name, nodeNames.indexOf(name) + 1, (number) =>
+      tNodes("unnamed", { number })
+    );
   const [dismissed, setDismissed] = useState<Set<string>>(new Set());
 
   useEffect(() => {

@@ -71,12 +71,11 @@ interface NodeRowsProps {
 
 function NodeRows({ nodes, thresholds }: NodeRowsProps) {
   const t = useTranslations("admin.serviceStatus.nodes");
-  const nodeNames = nodes.map((node) => node.name);
   return (
     <Section gap={3} alignItems="stretch" width="full">
       <ColumnLabels title={t("title")} labels={[t("disk"), t("vector")]} />
       <Section gap={2} alignItems="stretch" width="full">
-        {nodes.map((node) => (
+        {nodes.map((node, index) => (
           <Card
             key={node.node_id}
             border="solid"
@@ -98,7 +97,9 @@ function NodeRows({ nodes, thresholds }: NodeRowsProps) {
                   width="fit"
                 >
                   <Text as="p" font="main-ui-action" color="text-04">
-                    {nodeLabel(node.name, nodeNames, (number) =>
+                    {/* The row's own place, so two nodes with the same
+                        generated name still get distinct labels. */}
+                    {nodeLabel(node.name, index + 1, (number) =>
                       t("unnamed", { number })
                     )}
                   </Text>

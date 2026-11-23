@@ -356,7 +356,7 @@ def test_a_failed_state_save_does_not_hide_a_returning_issue(
     assert [n for n in _notifications(db_session, admin.id) if not n.dismissed]
 
 
-def test_a_generated_node_name_reads_as_node_n(
+def test_a_generated_node_name_reads_as_a_data_node(
     db_session: Session,
     cluster: list[ClusterStatus | None],
     make_user: Callable[[str, bool], User],
@@ -375,6 +375,7 @@ def test_a_generated_node_name_reads_as_node_n(
     cluster.extend([status, status])
     _check()
     _check()
-    # The page shows the same node as "Node 1".
+    # Not the hash, and not "Node 1": the page's numbering can change while
+    # the notification stays.
     [notification] = _notifications(db_session, admin.id)
-    assert notification.title == "Vector memory at 260% on Node 1"
+    assert notification.title == "Vector memory at 260% on a data node"

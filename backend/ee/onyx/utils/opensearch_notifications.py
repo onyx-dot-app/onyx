@@ -46,7 +46,7 @@ from shared_configs.configs import MULTI_TENANT
 logger = setup_logger()
 
 SERVICE_STATUS_LINK = "/admin/service-status"
-# The page's rule for a name OpenSearch generated from the host.
+# A node name OpenSearch generated from the host, as the page detects it.
 GENERATED_NODE_NAME = re.compile(r"[0-9a-f]{12,}", re.IGNORECASE)
 STATE_KEY = "opensearch_cluster_issue_state"
 LEASE_KEY = "opensearch_cluster_issue_lease"
@@ -72,7 +72,7 @@ SUSTAINED: frozenset[str] = frozenset(
 
 def _copy(kind: str, issue: ClusterIssue | None) -> tuple[str, str]:
     """The notification's title and description."""
-    nodes: str = ", ".join(issue.node_names) if issue else ""
+    nodes: str = _nodes_text(issue.node_names) if issue else ""
     value: int = round(issue.value) if issue else 0
     if kind == ClusterIssueKind.CLUSTER_RED.value:
         return (
@@ -114,13 +114,18 @@ def _read_state(cache: CacheBackend) -> ClusterIssueState:
     return ClusterIssueState.model_validate_json(raw) if raw else ClusterIssueState()
 
 
-def _node_label(name: str, node_names: list[str]) -> str:
-    """The node's name as the Service Status page shows it: "Node N", from its
-    place in the node list, when OpenSearch generated the name from the host
-    (a container or instance hash that means nothing to an admin)."""
-    if not GENERATED_NODE_NAME.fullmatch(name) or name not in node_names:
-        return name
-    return f"Node {node_names.index(name) + 1}"
+def _nodes_text(node_names: list[str]) -> str:
+    """The nodes for a notification title. A name OpenSearch generated from
+    the host (a container or instance hash) means nothing to an admin, and the
+    page's "Node N" can change while the notification stays, so it reads as
+    "a data node"; the page shows which one."""
+    readable: list[str] = [
+        name for name in node_names if not GENERATED_NODE_NAME.fullmatch(name)
+    ]
+    generated: int = len(node_names) - len(readable)
+    if generated:
+        readable.append("a data node" if generated == 1 else f"{generated} data nodes")
+    return ", ".join(readable)
 
 
 def _read_issues(db_session: Session) -> dict[str, ClusterIssue] | None:
@@ -131,15 +136,8 @@ def _read_issues(db_session: Session) -> dict[str, ClusterIssue] | None:
     except Exception:
         logger.exception("Unable to read the OpenSearch cluster for notifications")
         return None
-    node_names: list[str] = [node.name for node in status.nodes]
     return {
-        issue.kind.value: issue.model_copy(
-            update={
-                "node_names": [
-                    _node_label(name, node_names) for name in issue.node_names
-                ]
-            }
-        )
+        issue.kind.value: issue
         for issue in status.issues
         if issue.severity == ClusterIssueSeverity.CRITICAL
         and issue.kind.value in IMMEDIATE | SUSTAINED
