@@ -41,9 +41,9 @@ class GmailConnectorConfig(ConnectorConfig):
 def gmail_planning_rule(
     old: GmailConnectorConfig, new: GmailConnectorConfig
 ) -> ConnectorChangeOverride | None:
-    # The crawl splits out a new group's mail as it indexes it, so adding a
-    # group needs no step. A removed group needs the default full re-index to
-    # put its mail back into the thread documents.
+    # By design, an added group applies to mail indexed from then on. Older mail
+    # stays in its owner-only thread documents: a re-index reads every mailbox,
+    # so the admin starts it. A removed group keeps the default full re-index.
     old_groups = set(old.collaborative_inbox_groups or [])
     new_groups = set(new.collaborative_inbox_groups or [])
     if old_groups == new_groups or old_groups - new_groups:
