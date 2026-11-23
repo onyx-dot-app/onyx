@@ -27,6 +27,7 @@ from onyx.connectors.gmail.collaborative_inbox import (
     CollaborativeInboxLookup,
     build_groups_settings_service,
     get_delivering_group,
+    get_rfc_message_id,
     is_collaborative_inbox,
 )
 from onyx.connectors.gmail.config import GmailConnectorConfig
@@ -37,7 +38,12 @@ from onyx.connectors.gmail.connector import (
 )
 from onyx.connectors.google_utils.resources import GoogleService
 from onyx.connectors.google_utils.shared_constants import MISSING_SCOPES_ERROR_STR
-from onyx.connectors.models import Document, SlimDocument
+from onyx.connectors.models import (
+    ConnectorFailure,
+    Document,
+    DocumentFailure,
+    SlimDocument,
+)
 from onyx.db.models import Document as DBDocument
 from onyx.indexing.indexing_pipeline import get_docs_to_update
 
@@ -392,16 +398,19 @@ class _FakeGmailBatch:
 
 
 class _FakeGmail:
-    """One mailbox. A `list:` search returns ``group_thread_ids``, and any
-    other thread listing returns every thread."""
+    """One mailbox. A `list:` search returns ``group_thread_ids`` or fails with
+    ``group_search_error``, an `rfc822msgid:` search returns the threads that
+    hold that message, and any other thread listing returns every thread."""
 
     def __init__(
         self,
         threads_by_id: dict[str, dict[str, Any] | HttpError],
         group_thread_ids: list[str],
+        group_search_error: HttpError | None = None,
     ) -> None:
         self.threads_by_id = threads_by_id
         self.group_thread_ids = group_thread_ids
+        self.group_search_error = group_search_error
         self.list_kwargs: list[dict[str, Any]] = []
         self.get_kwargs: list[dict[str, Any]] = []
 
@@ -413,11 +422,24 @@ class _FakeGmail:
 
     def list(self, **kwargs: Any) -> MagicMock:  # noqa: A003
         self.list_kwargs.append(kwargs)
-        is_group_search = "list:" in (kwargs.get("q") or "")
-        thread_ids = (
-            self.group_thread_ids if is_group_search else list(self.threads_by_id)
-        )
+        query: str = kwargs.get("q") or ""
         request = MagicMock()
+        if query.startswith("rfc822msgid:"):
+            thread_ids = [
+                thread_id
+                for thread_id, thread in self.threads_by_id.items()
+                if not isinstance(thread, HttpError)
+                and any(
+                    get_rfc_message_id(message) == query.removeprefix("rfc822msgid:")
+                    for message in thread["messages"]
+                )
+            ]
+        elif "list:" in query:
+            if self.group_search_error is not None:
+                request.execute.side_effect = self.group_search_error
+            thread_ids = self.group_thread_ids
+        else:
+            thread_ids = list(self.threads_by_id)
         request.execute.return_value = {"threads": [{"id": i} for i in thread_ids]}
         return request
 
@@ -565,6 +587,125 @@ def test_slim_listing_fails_when_a_group_thread_cannot_be_read(
 
     with pytest.raises(RuntimeError, match="while listing group mail"):
         _list_slim_documents(_group_mail_connector(), gmail)
+
+
+def test_slim_listing_fails_when_only_the_group_search_is_denied(
+    group_api: MagicMock,  # noqa: ARG001
+) -> None:
+    """A mailbox that lists its threads can be read. Its group documents would
+    go unlisted, and pruning would delete them."""
+    gmail = _FakeGmail(
+        threads_by_id={"18f0aaaa": {"id": "18f0aaaa", "messages": [_message("m1")]}},
+        group_thread_ids=["18f0aaaa"],
+        group_search_error=_http_error(403),
+    )
+
+    with pytest.raises(RuntimeError, match="denied the group mail search"):
+        _list_slim_documents(_group_mail_connector(), gmail)
+
+
+def test_slim_listing_skips_a_mailbox_it_cannot_read(
+    group_api: MagicMock,  # noqa: ARG001
+) -> None:
+    gmail = _FakeGmail(
+        threads_by_id={}, group_thread_ids=[], group_search_error=_http_error(404)
+    )
+
+    assert _list_slim_documents(_group_mail_connector(), gmail) == []
+
+
+def test_slim_listing_fails_past_the_group_thread_limit(
+    group_api: MagicMock,  # noqa: ARG001
+) -> None:
+    gmail = _FakeGmail(threads_by_id={}, group_thread_ids=["18f0aaaa", "18f0bbbb"])
+
+    with (
+        patch.object(gmail_connector_module, "_MAX_GROUP_THREADS_PER_MAILBOX", 1),
+        pytest.raises(RuntimeError, match="more than 1 group mail threads"),
+    ):
+        _list_slim_documents(_group_mail_connector(), gmail)
+
+
+def _reindex(
+    connector: GmailConnector,
+    gmail_by_mailbox: dict[str, _FakeGmail],
+    document_id: str,
+) -> list[Document | ConnectorFailure]:
+    def fake_get_google_service(
+        service: GoogleService, _: object, user_email: str
+    ) -> object:
+        assert service is GoogleService.GMAIL
+        return gmail_by_mailbox[user_email]
+
+    failure = ConnectorFailure(
+        failed_document=DocumentFailure(document_id=document_id),
+        failure_message="embedding failed",
+    )
+    with (
+        patch.object(
+            GmailConnector, "_get_all_user_emails", return_value=list(gmail_by_mailbox)
+        ),
+        patch.object(
+            gmail_connector_module,
+            "get_google_service",
+            side_effect=fake_get_google_service,
+        ),
+        patch.object(gmail_connector_module.time, "sleep"),
+    ):
+        return [
+            item
+            for item in connector.reindex([failure])
+            if isinstance(item, (Document, ConnectorFailure))
+        ]
+
+
+def test_reindex_finds_a_group_document_by_its_message_id(
+    group_api: MagicMock,  # noqa: ARG001
+) -> None:
+    """A group document id holds no thread id, and thread ids differ per
+    mailbox, so the retry searches a member's mailbox for the Message-ID."""
+    thread = {"id": "18f0aaaa", "messages": [_message("m1"), _message("m2", "b@x")]}
+    outsider_gmail = _FakeGmail(threads_by_id={"18f0cccc": thread}, group_thread_ids=[])
+    member_gmail = _FakeGmail(threads_by_id={"18f0aaaa": thread}, group_thread_ids=[])
+
+    results = _reindex(
+        _group_mail_connector(),
+        {_OUTSIDER: outsider_gmail, _MEMBER: member_gmail},
+        f"{_GROUP}:abc@mail.example.com",
+    )
+
+    (document,) = results
+    assert isinstance(document, Document)
+    assert document.id == f"{_GROUP}:abc@mail.example.com"
+    assert document.external_access == _GROUP_ACCESS
+    # A mailbox outside the group is not searched.
+    assert outsider_gmail.list_kwargs == []
+
+
+@pytest.mark.parametrize(
+    ("document_id", "message"),
+    [
+        (f"{_GROUP}:gone@mail.example.com", "holds the group message"),
+        (f"{_OTHER_GROUP}:abc@mail.example.com", "neither a Gmail thread id nor"),
+    ],
+    ids=["no mailbox holds the message", "group not listed on the connector"],
+)
+def test_reindex_reports_a_group_document_it_cannot_find(
+    group_api: MagicMock,  # noqa: ARG001
+    document_id: str,
+    message: str,
+) -> None:
+    member_gmail = _FakeGmail(
+        threads_by_id={"18f0aaaa": {"id": "18f0aaaa", "messages": [_message("m1")]}},
+        group_thread_ids=[],
+    )
+
+    (failure,) = _reindex(_group_mail_connector(), {_MEMBER: member_gmail}, document_id)
+
+    assert isinstance(failure, ConnectorFailure)
+    assert failure.failed_document is not None
+    assert failure.failed_document.document_id == document_id
+    assert message in failure.failure_message
 
 
 def test_slim_listing_fails_when_a_group_stopped_qualifying(

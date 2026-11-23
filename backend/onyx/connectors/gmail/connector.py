@@ -93,6 +93,9 @@ _GROUP_MAIL_HEADERS = ["List-ID", "X-BeenThere", "Message-ID"]
 _GROUPS_PER_SEARCH_QUERY = 20
 # The most threads Gmail returns in one threads.list page.
 _MAX_THREADS_PER_PAGE = 500
+# Upper bound on the group thread ids the slim listing holds for one mailbox.
+# An id measures about 100 bytes in the set, so this holds it near 50 MB.
+_MAX_GROUP_THREADS_PER_MAILBOX = 500_000
 
 EMAIL_FIELDS = [
     "cc",
@@ -959,6 +962,13 @@ class GmailConnector(
                         end,
                         callback=callback,
                     ):
+                        if group_thread_ids is None:
+                            # A mailbox that lists its threads can be read, so
+                            # the denied search hides group documents.
+                            raise RuntimeError(
+                                f"Gmail denied the group mail search of {user_email} "
+                                "but listed its threads"
+                            )
                         listed_group_thread_ids.extend(
                             slim_doc.id
                             for slim_doc in slim_doc_batch
@@ -966,6 +976,11 @@ class GmailConnector(
                             and slim_doc.id in group_thread_ids
                         )
                         yield slim_doc_batch
+                    if len(listed_group_thread_ids) >= SLIM_BATCH_SIZE:
+                        yield from self._fetch_slim_group_mail(
+                            user_email, listed_group_thread_ids, callback
+                        )
+                        listed_group_thread_ids = []
                     next_page_token = pt_dict[PAGE_TOKEN_KEY]
                     if next_page_token is None:
                         break
@@ -987,9 +1002,10 @@ class GmailConnector(
                 raise PermissionError(ONYX_SCOPE_INSTRUCTIONS) from e
             raise e
 
-    def _list_group_thread_ids(self, user_email: str) -> set[str]:
+    def _list_group_thread_ids(self, user_email: str) -> set[str] | None:
         """The threads of this mailbox that hold mail from a Collaborative
-        Inbox group the mailbox belongs to."""
+        Inbox group the mailbox belongs to. None when Gmail denies the search,
+        as it does for a mailbox the connector cannot read."""
         group_emails = self.inbox_lookup.get_groups_of_member(user_email)
         if not group_emails:
             return set()
@@ -1013,12 +1029,17 @@ class GmailConnector(
                     q=" OR ".join(f"list:{email}" for email in group_email_batch),
                     includeSpamTrash=True,
                     maxResults=_MAX_THREADS_PER_PAGE,
-                    continue_on_404_or_403=True,
                 ):
                     thread_ids.add(thread["id"])
+                    if len(thread_ids) > _MAX_GROUP_THREADS_PER_MAILBOX:
+                        raise RuntimeError(
+                            f"{user_email} holds more than "
+                            f"{_MAX_GROUP_THREADS_PER_MAILBOX} group mail threads"
+                        )
         except HttpError as e:
-            if not _is_mail_service_disabled_error(e):
-                raise
+            if is_access_denied(e) or _is_mail_service_disabled_error(e):
+                return None
+            raise
         return thread_ids
 
     def _fetch_slim_group_mail(
@@ -1132,6 +1153,74 @@ class GmailConnector(
                 error,
             )
 
+    def _split_group_mail_document_id(self, document_id: str) -> tuple[str, str] | None:
+        """The group and the Message-ID in the id of a group document. None
+        when the id does not name a group of this connector."""
+        group_email, _, rfc_message_id = document_id.partition(":")
+        listed_groups = {email.lower() for email in self.collaborative_inbox_groups}
+        if group_email not in listed_groups or not rfc_message_id:
+            return None
+        return group_email, rfc_message_id
+
+    def _reindex_group_mail(
+        self,
+        document_id: str,
+        group_email: str,
+        rfc_message_id: str,
+        user_emails: list[str],
+    ) -> Document | ConnectorFailure:
+        """The group document, built from the first member mailbox that holds
+        a copy of the message."""
+        for user_email in user_emails:
+            if group_email not in self.inbox_lookup.get_groups_of_member(user_email):
+                continue
+            gmail_service = get_google_service(
+                GoogleService.GMAIL, self.creds, user_email
+            )
+            try:
+                thread_ids = [
+                    thread["id"]
+                    for thread in execute_paginated_retrieval(
+                        retrieval_function=gmail_service.users()  # ty: ignore[unresolved-attribute]
+                        .threads()
+                        .list,
+                        list_key="threads",
+                        userId=user_email,
+                        fields=THREAD_LIST_FIELDS,
+                        q=f"rfc822msgid:{rfc_message_id}",
+                        continue_on_404_or_403=True,
+                    )
+                ]
+                threads, _ = _batch_get_threads(
+                    gmail_service, user_email, thread_ids, REINDEX_THREAD_FIELDS
+                )
+            except (HttpError, RefreshError) as e:
+                # Another member may hold a copy that can be read.
+                logger.warning(
+                    "Skipping mailbox %s while reindexing %s: %s",
+                    user_email,
+                    document_id,
+                    e,
+                )
+                continue
+            for thread in threads.values():
+                if not _pop_labels_and_check_crawl_listing(thread):
+                    continue
+                for doc in thread_to_documents(thread, user_email, self.inbox_lookup):
+                    if doc.id == document_id:
+                        return doc
+
+        return ConnectorFailure(
+            failed_document=DocumentFailure(
+                document_id=document_id,
+                document_link=_build_group_mail_link(rfc_message_id),
+            ),
+            failure_message=(
+                f"No mailbox of {group_email} that the connector reads holds "
+                f"the group message {rfc_message_id}"
+            ),
+        )
+
     def _reindex(
         self, errors: list[ConnectorFailure]
     ) -> Iterator[Document | ConnectorFailure]:
@@ -1139,23 +1228,27 @@ class GmailConnector(
         # mailbox. Crawl failures carry it in their document link. Other ids
         # are looked up in every mailbox, the admin's first.
         pending: dict[str, None] = {}
+        pending_group_mail: dict[str, tuple[str, str]] = {}
         hinted_ids_by_mailbox: dict[str, list[str]] = {}
         for failure in errors:
             if failure.failed_document is None:
                 continue
             thread_id = failure.failed_document.document_id
-            if thread_id in pending:
+            if thread_id in pending or thread_id in pending_group_mail:
                 continue
             if not _THREAD_ID_RE.match(thread_id):
+                group_mail_ids = self._split_group_mail_document_id(thread_id)
+                if group_mail_ids is not None:
+                    pending_group_mail[thread_id] = group_mail_ids
+                    continue
                 yield ConnectorFailure(
                     failed_document=DocumentFailure(
                         document_id=thread_id,
                         document_link=failure.failed_document.document_link,
                     ),
                     failure_message=(
-                        f"'{thread_id}' is not a Gmail thread id; targeted "
-                        "reindex reads threads, and a group document is "
-                        "reindexed with its thread"
+                        f"'{thread_id}' is neither a Gmail thread id nor the id "
+                        "of a group document of this connector"
                     ),
                 )
                 continue
@@ -1164,10 +1257,14 @@ class GmailConnector(
             if mailbox is not None:
                 hinted_ids_by_mailbox.setdefault(mailbox, []).append(thread_id)
 
-        if not pending:
+        if not pending and not pending_group_mail:
             return
 
         user_emails = self._get_all_user_emails()
+        for document_id, (group_email, rfc_message_id) in pending_group_mail.items():
+            yield self._reindex_group_mail(
+                document_id, group_email, rfc_message_id, user_emails
+            )
         # Only the mailboxes the crawl reads are in scope.
         mailbox_by_lower_email = {email.lower(): email for email in user_emails}
         for hinted_mailbox, hinted_ids in hinted_ids_by_mailbox.items():
