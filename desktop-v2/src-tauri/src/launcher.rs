@@ -307,7 +307,6 @@ mod platform {
         Ok(())
     }
 
-
     pub fn hide(app: &AppHandle) {
         if let Some(window) = app.get_webview_window(LAUNCHER) {
             let _ = window.hide();
